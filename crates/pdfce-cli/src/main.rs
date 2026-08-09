@@ -1427,6 +1427,67 @@ enum Command {
         verify_undo: bool,
     },
 
+    /// **Delete an annotation** — any subtype, addressed as `list-annotations`
+    /// reports it (ISO 32000-1 §12.5.2).
+    ///
+    /// The general deletion verb. Before it, pdfce could delete only the three
+    /// annotation kinds that had a verb of their own (a redaction mark, a ce
+    /// dimension, a form-field widget) — a highlight, a square, a stamp or a
+    /// FreeText note, including ones pdfce itself authored, could not be
+    /// removed at all.
+    ///
+    /// ADDRESSED BY `--page` + `--index`, the exact pair `list-annotations`
+    /// prints, so the two commands compose: list, read the index, delete it.
+    /// `--page` is 1-based, `--index` is 0-based within that page's `/Annots`
+    /// array — the same convention `list-annotations` uses on its own output,
+    /// not a second one invented here.
+    ///
+    /// FOUR THINGS CAN HAPPEN BESIDES THE OBVIOUS ONE, and the output line
+    /// reports each:
+    ///
+    /// - Its `/Popup` window goes with it. §12.5.6.14 says a pop-up "shall not
+    ///   appear alone", so this is the spec's requirement, not tidying —
+    ///   `popup_removed=1`.
+    /// - Replies to it (`/IRT`) SURVIVE, with their now-dangling link removed
+    ///   — `replies_orphaned=N`. They are somebody's text and you asked to
+    ///   delete one annotation; deleting a thread is N deletions.
+    /// - `/RT /Group` subordinates of it are counted separately
+    ///   (`group_promoted=N`) because the consequence is worse: while the
+    ///   primary existed a reader was instructed to IGNORE their own author
+    ///   and note text in favour of its, so removing it makes several other
+    ///   comments start displaying text that was previously suppressed.
+    /// - Appearance streams go only if nothing else uses them
+    ///   (`ap_removed=N`) — forty stamps sharing one "DRAFT" stream keep it.
+    ///
+    /// A `/Widget` is REFUSED, not deleted: use `delete-widget` for that one
+    /// widget or `delete-field` for the whole field. Deleting it here would
+    /// leave the field registered in `/AcroForm /Fields` with nothing on the
+    /// page, and which of the two you meant is not something this verb may
+    /// guess. A `/Redact` mark and a ce dimension ARE accepted and are routed
+    /// to their own verbs, so their sidecar/review semantics still apply —
+    /// `route=` says which ran.
+    DeleteAnnotation {
+        /// Input PDF.
+        input: PathBuf,
+        /// Page, 1-BASED — the `page=` value `list-annotations` prints.
+        #[arg(long)]
+        page: usize,
+        /// Index within that page's `/Annots`, 0-BASED — the `index=` value
+        /// `list-annotations` prints.
+        #[arg(long)]
+        index: usize,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Which save path to use.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Also verify that undoing the deletion reproduces the input byte
+        /// for byte.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+
     /// Delete ONE widget of a form field (ISO 32000-1 §12.5.6.19).
     ///
     /// The usual case is dropping a member from a radio group, or one of the
@@ -3586,6 +3647,14 @@ fn run() -> ExitCode {
             mode,
             verify_undo,
         } => cmd_delete_form_field(&input, &name, Some(index), &output, mode, verify_undo),
+        Command::DeleteAnnotation {
+            input,
+            page,
+            index,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_delete_annotation(&input, page, index, &output, mode, verify_undo),
         Command::MoveWidget {
             input,
             name,
@@ -4911,9 +4980,11 @@ flag; honoured (not painted) AND disclosed",
 ///
 /// ```text
 /// annot page=<P> index=<I> subtype=<Name|none> rect=<llx,lly,urx,ury|none> \
-///       flags=0x<hex> widget=<0|1> disposition=<D> ap=<A>
+///       flags=0x<hex> widget=<0|1> disposition=<D> ap=<A> \
+///       author=<none|"…"> note=<none|"…"> modified=<none|"…">
 /// list-annotations <input> pages=<N>; annots=<T> paint_ready=<P> no_ap=<Q> \
-///       state_missing=<S> suppressed=<H> popup=<U> widget=<W> need_appearances=<0|1>
+///       state_missing=<S> suppressed=<H> popup=<U> widget=<W> \
+///       with_note=<C> with_author=<A> need_appearances=<0|1>
 /// ```
 ///
 /// `disposition` is the **model-level** classification a reader would
@@ -4930,6 +5001,39 @@ flag; honoured (not painted) AND disclosed",
 /// - `no-rect` — a paintable appearance but no `/Rect` placement target.
 ///
 /// `ap` is the appearance shape: `stream`, `state-dict`, or `none`.
+///
+/// # The three note columns (Pass 38.5, closing this command's own named gap)
+///
+/// `author`, `note` and `modified` are `/T`, `/Contents` and `/M`
+/// (§12.5.2 Table 164, §12.5.6.2 Table 170), decoded by
+/// [`pdfce_core::annot`]'s §7.9.2 text-string reader so a UTF-16BE
+/// `/Contents` prints as text and not as mojibake. They are appended
+/// **last**, after `ap=`, so a parser that reads through the pre-existing
+/// columns is unaffected.
+///
+/// Each is either the bare token `none` or a `quoted_token` string, and
+/// the distinction is load-bearing rather than cosmetic — a document
+/// really can carry the literal author name `none`, and it prints as
+/// `author="none"`. Quoting also makes a note containing spaces,
+/// newlines or quotes a single field, which an unquoted value could not
+/// be.
+///
+/// **`author=none` never means "anonymous".** `/T` is a **Table 170
+/// markup-only** key: a `/Link` or a `/Widget` has no author concept at
+/// all, so its absence there is a statement about the subtype, not about
+/// the person. The same distinction the core model draws
+/// ([`pdfce_core::annot::Annotation::title`]) is preserved here rather
+/// than flattened into an empty string.
+///
+/// **`modified` is emitted RAW**, exactly as the file stores it, because
+/// §12.5.2 types `/M` as *"date **or** text string"* and obliges a reader
+/// to accept any format. Normalising it to ISO-8601 here would invent
+/// precision the document does not have, and would silently discard the
+/// producer-specific formats that are the whole reason the key is typed
+/// so loosely.
+///
+/// The summary line's `with_note` / `with_author` counts are over the
+/// **selected pages only**, like every other counter on that line.
 ///
 /// # Exit codes
 ///
@@ -4962,6 +5066,7 @@ fn cmd_list_annotations(input: &Path, pages_spec: &str) -> u8 {
     let (mut total, mut paint_ready, mut no_ap) = (0usize, 0usize, 0usize);
     let (mut state_missing, mut suppressed, mut popup, mut widget) =
         (0usize, 0usize, 0usize, 0usize);
+    let (mut with_note, mut with_author) = (0usize, 0usize);
 
     for &page_index in &selected {
         let Some(page) = pages.get(page_index) else {
@@ -4993,12 +5098,29 @@ fn cmd_list_annotations(input: &Path, pages_spec: &str) -> u8 {
                 Some(r) => format!("{},{},{},{}", r.llx, r.lly, r.urx, r.ury),
                 None => "none".to_owned(),
             };
+            if annot.contents.is_some() {
+                with_note += 1;
+            }
+            if annot.title.is_some() {
+                with_author += 1;
+            }
+            // `none` (bare) vs `"…"` (quoted): see this function's doc
+            // comment — the bare token is what makes an ABSENT key
+            // distinguishable from a key whose value happens to be the
+            // word "none".
+            let opt_token = |v: Option<&String>| match v {
+                Some(s) => quoted_token(s),
+                None => "none".to_owned(),
+            };
             println!(
                 "annot page={} index={array_index} subtype={subtype} rect={rect} \
-flags=0x{:X} widget={} disposition={disposition} ap={ap_shape}",
+flags=0x{:X} widget={} disposition={disposition} ap={ap_shape} author={} note={} modified={}",
                 page_index + 1,
                 annot.flags.0,
                 usize::from(annot.is_widget()),
+                opt_token(annot.title.as_ref()),
+                opt_token(annot.contents.as_ref()),
+                opt_token(annot.mod_date.as_ref()),
             );
         }
     }
@@ -5006,7 +5128,7 @@ flags=0x{:X} widget={} disposition={disposition} ap={ap_shape}",
     println!(
         "list-annotations {} pages={}; annots={total} paint_ready={paint_ready} no_ap={no_ap} \
 state_missing={state_missing} suppressed={suppressed} popup={popup} widget={widget} \
-need_appearances={need_appearances}",
+with_note={with_note} with_author={with_author} need_appearances={need_appearances}",
         input.display(),
         selected.len(),
     );
@@ -10195,6 +10317,193 @@ fn cmd_move_widget(
         r.objects_written,
         r.bytes_appended,
         r.bytes_written,
+    );
+    finish_edit(input, &outcome)
+}
+
+/// `delete-annotation` — the general annotation-deletion verb (Pass 38.5).
+///
+/// ## Resolving `--page`/`--index` to an object, and why NOT an object number
+///
+/// The core verb takes an [`ObjId`](pdfce_core::object::ObjId), because
+/// object identity is the only handle that stays correct while a session
+/// mutates. A CLI cannot use that: the operator's source of truth is
+/// `list-annotations`' own output, which prints `page=` and `index=` and
+/// deliberately does **not** print object numbers. So the pair is resolved
+/// here, against the SAME `page_annotations` walk `list-annotations` uses,
+/// which is what makes "list it, then delete that index" reliable rather
+/// than approximately right.
+///
+/// Both out-of-range cases are refused with the count that was actually
+/// there — an index past the end says how many annotations the page has,
+/// because "index 4 is out of range" without the bound sends the operator
+/// back to re-run the list command for a number this process already knew.
+///
+/// ## Contract
+///
+/// - One `delete-annotation …` line carrying `subtype=`, `route=`,
+///   `popup_removed=`, `parent_popup_cleared=`, `replies_orphaned=`,
+///   `group_promoted=` and `ap_removed=`, then the exit code from
+///   [`finish_edit`].
+/// - **Every non-obvious consequence is ALSO printed in prose to stderr**,
+///   for the same reason `delete-field` prints its `selection_cleared`
+///   disclosure twice: the machine-readable field is for a script, the
+///   sentence is for the person who will otherwise wonder an hour later why
+///   three other comments changed.
+/// - Refusals — no such page or index, a `/Widget` target, an encrypted
+///   document, a certification at `/P` below 3 — go through
+///   [`report_edit_error`] or their own message BEFORE any mutation.
+fn cmd_delete_annotation(
+    input: &Path,
+    page: usize,
+    index: usize,
+    output: &Path,
+    mode: SaveMode,
+    verify_undo: bool,
+) -> u8 {
+    if page == 0 {
+        eprintln!(
+            "pdfce-cli: {}: --page is 1-based; 0 is not a page",
+            input.display()
+        );
+        return exit::RUNTIME_ERROR;
+    }
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    // Resolved inside a block so the session borrow ends before the mutable
+    // call below.
+    let annot_id = {
+        let slots = match session.page_slots() {
+            Ok(slots) => slots,
+            Err(err) => {
+                eprintln!("pdfce-cli: {}: {err}", input.display());
+                return exit::RUNTIME_ERROR;
+            }
+        };
+        let Some(slot) = slots.get(page - 1) else {
+            eprintln!(
+                "pdfce-cli: {}: no page {page} — the document has {} page(s)",
+                input.display(),
+                slots.len()
+            );
+            return exit::RUNTIME_ERROR;
+        };
+        let annots = pdfce_core::annot::page_annotations(&session.graph(), slot.id);
+        let Some(annot) = annots.get(index) else {
+            eprintln!(
+                "pdfce-cli: {}: page {page} has no annotation at index {index} — it has {} (indices 0..{})",
+                input.display(),
+                annots.len(),
+                annots.len().saturating_sub(1)
+            );
+            return exit::RUNTIME_ERROR;
+        };
+        // An annotation reached as a DIRECT dictionary inside `/Annots` has no
+        // object identity to delete. Malformed (Table 164 dictionaries are
+        // indirect objects) and refused by name rather than silently skipped.
+        let Some(id) = annot.id else {
+            eprintln!(
+                "pdfce-cli: {}: page {page} index {index} is a direct dictionary inside /Annots, not an indirect object — it has no identity to delete, and rewriting the array around it would be a repair this command does not perform",
+                input.display()
+            );
+            return exit::EDIT_REFUSED;
+        };
+        id
+    };
+
+    let gone = match session.delete_annotation(annot_id) {
+        Ok(gone) => gone,
+        Err(err) => return report_edit_error(input, &err),
+    };
+
+    // The prose half of the disclosures. Ordered worst-first: the group
+    // promotion changes what a reader SEES on other annotations, which is
+    // the one an operator is least likely to predict.
+    if gone.group_members_promoted > 0 {
+        eprintln!(
+            "pdfce-cli: {}: {} other annotation(s) were subordinates of the one you deleted (/RT /Group). While it existed, a conforming reader was required to IGNORE their own author and note text and display its instead — so those now become visible. Their /IRT link was removed; nothing else about them changed.",
+            input.display(),
+            gone.group_members_promoted
+        );
+    }
+    if gone.replies_orphaned > 0 {
+        eprintln!(
+            "pdfce-cli: {}: {} repl(ies) pointed at the annotation you deleted. They were KEPT — they are separate annotations with their own text — and their now-dangling /IRT was removed, so each is a standalone comment. Deleting a whole thread means deleting each member.",
+            input.display(),
+            gone.replies_orphaned
+        );
+    }
+    if gone.popup_removed {
+        eprintln!(
+            "pdfce-cli: {}: its /Popup window was deleted with it — ISO 32000-1 12.5.6.14 says a pop-up \"shall not appear alone\", so leaving it would be non-conforming, not merely untidy.",
+            input.display()
+        );
+    }
+    if gone.parent_popup_cleared {
+        eprintln!(
+            "pdfce-cli: {}: you deleted a /Popup window; its parent annotation was kept (deleting a window does not delete the comment it belongs to) and its now-dangling /Popup key was removed.",
+            input.display()
+        );
+    }
+    // DELETE IS NOT REDACT, and this is the one warning that must not be
+    // conditional on anything. ISO 32000-1 Annex H.7.3: "although the two
+    // objects have been deleted, they are still present in the file" — an
+    // incremental save APPENDS a free-list entry, it does not go back and
+    // overwrite the bytes. So the note text of a deleted comment is still
+    // recoverable from the saved file with a hex editor.
+    //
+    // An operator deleting a comment because it was confidential is exactly
+    // the person who will not think to ask, and the redaction feature two
+    // subcommands away is the one that actually removes bytes. Printed on
+    // every incremental delete, with the remedy, rather than left to a
+    // manual page.
+    if matches!(mode, SaveMode::Incremental) {
+        eprintln!(
+            "pdfce-cli: {}: note — an incremental save APPENDS the deletion; the annotation's bytes, including its note text, are still present in the output file and recoverable (ISO 32000-1 Annex H.7.3). Deleting is not redacting. Pass --mode full if the content must not survive in the file — but note that a full rewrite destroys every existing signature.",
+            input.display()
+        );
+    }
+
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    let route = match gone.route {
+        pdfce_core::edit::AnnotationDeletionRoute::General => "general",
+        pdfce_core::edit::AnnotationDeletionRoute::RedactionMark => "redaction-mark",
+        pdfce_core::edit::AnnotationDeletionRoute::Dimension => "dimension",
+        // `AnnotationDeletionRoute` is #[non_exhaustive]: a future route must
+        // print an honest unknown rather than be mapped to the wrong verb.
+        _ => "other",
+    };
+    println!(
+        "delete-annotation {} page={page} index={index} subtype={} route={route} popup_removed={} parent_popup_cleared={} replies_orphaned={} group_promoted={} ap_removed={} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        input.display(),
+        sanitize_token(&gone.subtype),
+        u32::from(gone.popup_removed),
+        u32::from(gone.parent_popup_cleared),
+        gone.replies_orphaned,
+        gone.group_members_promoted,
+        gone.appearance_streams_removed,
+        mode.name(),
+        output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
     );
     finish_edit(input, &outcome)
 }

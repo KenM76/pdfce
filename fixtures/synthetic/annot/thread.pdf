@@ -1,0 +1,64 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Resources << >> /Annots [4 0 R 5 0 R 6 0 R 7 0 R 8 0 R 9 0 R 10 0 R] >>
+endobj
+4 0 obj
+<< /Type /Annot /Subtype /Square /Rect [20 220 120 280] /P 3 0 R /T (Alice) /Contents (the primary comment) /M (D:20260808120000Z) /Popup 5 0 R /AP << /N 11 0 R >> >>
+endobj
+5 0 obj
+<< /Type /Annot /Subtype /Popup /Rect [130 220 290 280] /P 3 0 R /Parent 4 0 R /Open false >>
+endobj
+6 0 obj
+<< /Type /Annot /Subtype /Text /Rect [20 180 40 200] /P 3 0 R /T (Bob) /Contents (first reply) /IRT 4 0 R /RT /R >>
+endobj
+7 0 obj
+<< /Type /Annot /Subtype /Text /Rect [50 180 70 200] /P 3 0 R /T (Carol) /Contents (second reply, no explicit /RT) /IRT 4 0 R >>
+endobj
+8 0 obj
+<< /Type /Annot /Subtype /Square /Rect [20 120 120 160] /P 3 0 R /T (Dave) /Contents (suppressed while the primary lives) /IRT 4 0 R /RT /Group >>
+endobj
+9 0 obj
+<< /Type /Annot /Subtype /Stamp /Rect [20 40 100 90] /P 3 0 R /Name /Draft /AP << /N 12 0 R >> >>
+endobj
+10 0 obj
+<< /Type /Annot /Subtype /Stamp /Rect [140 40 220 90] /P 3 0 R /Name /Draft /AP << /N 12 0 R >> >>
+endobj
+11 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0 0 100 60] /Length 15 >>
+stream
+0 0 100 60 re S
+endstream
+endobj
+12 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0 0 80 50] /Length 14 >>
+stream
+0 0 80 50 re S
+endstream
+endobj
+xref
+0 13
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000262 00000 n 
+0000000444 00000 n 
+0000000553 00000 n 
+0000000684 00000 n 
+0000000828 00000 n 
+0000000990 00000 n 
+0000001103 00000 n 
+0000001218 00000 n 
+0000001333 00000 n 
+trailer
+<< /Size 13 /Root 1 0 R >>
+startxref
+1446
+%%EOF

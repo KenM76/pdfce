@@ -73,12 +73,31 @@ Hidden full-page stamp, a no-`/AP` circle, and a `/Popup`. This is the
 file the Pass 6.0 completion demonstration renders (with and without
 `--no-annotations`) and lists with `list-annotations`.
 
+## Annotation DELETION (Pass 38.5) — three later additions
+
+Written by a **second** script, `tools/gen-annot-deletion-fixtures.py`,
+and kept apart from the sixteen above on purpose: those pin a *display*
+contract on 200×200 pages where every appearance fills its `/BBox` solid
+black, and none of that serves a deletion test. Folding these into the
+Pass 6.0 generator would have meant one script with two unrelated page
+conventions.
+
+Same `LEGAL.md` §5 category (a) as the rest of this directory: wholly
+synthetic, byte-authored, no PDF library involved, no attribution owed.
+
+| File | Claim it makes falsifiable |
+|---|---|
+| `thread.pdf` | The three deletion cascades. One 300×300 page, 7 annotations: a `/Square` **primary** (obj 4) with a `/Popup` companion (5), an **explicit** `/RT /R` reply (6), an **implicit** reply with no `/RT` at all (7 — Table 170's default is `R`, so this is the one that catches an implementation reading absence as "not a reply"), a `/RT /Group` **subordinate** (8), and two `/Stamp`s (9, 10) that **share one appearance stream** (12). Deleting object 4 must remove 5, un-link 6/7/8, and take stream 11; deleting stamp 9 must **not** take stream 12, and deleting 10 afterwards must. |
+| `certified-p3.pdf` | `/P 3` — *"the same as for 2, as well as annotation creation, deletion, and modification"* (§12.8.2.2 Table 254). **The corpus's first `/P 3` file**, and `delete_annotation` is the first pdfce operation any `P` value permits. Carries one `/Square` and one form field, so "annotation delete allowed, field delete still refused" is assertable on one document. |
+| `certified-p2-annot.pdf` | The falsifier for the row above — the same file with one digit changed. Without it, "permitted at `/P 3`" is equally consistent with the annotation verb never consulting the certification at all (R162). **The existing `forms/certified-p2-form.pdf` cannot serve**: it contains only widgets, so the annotation verb's widget refusal fires before the certification gate is reached. |
+
 ## Regenerating
 
 ```
-python tools/gen-annot-fixtures.py
+python tools/gen-annot-fixtures.py            # the sixteen Pass 6.0 files
+python tools/gen-annot-deletion-fixtures.py   # the three Pass 38.5 files
 ```
 
-The script is the single source of truth; do not hand-edit the `.pdf`
+The scripts are the single source of truth; do not hand-edit the `.pdf`
 files. Deleting and regenerating them must be a byte-for-byte no-op
-(the writer is deterministic).
+(both writers are deterministic).

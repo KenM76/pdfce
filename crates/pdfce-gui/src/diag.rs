@@ -189,6 +189,19 @@ pub enum Step {
     /// observation harness cannot open is a panel whose defects only the
     /// operator finds.
     Forms,
+    /// Open the comments/markup list (`panel:comments`).
+    ///
+    /// Added by `Pass 38.5`, when that panel's rows stopped being read-only
+    /// and grew a Delete control. The same argument as the two variants
+    /// above applies with more force now: a panel the harness cannot open
+    /// is a panel whose defects only the operator finds, and this one can
+    /// now change the document.
+    ///
+    /// `Action::ToggleCommentsPanel` already existed and the ribbon button
+    /// already pushed it — the only thing missing was a way for a script to
+    /// say so, which is exactly the shape of gap that leaves a surface
+    /// unverified without anybody deciding to leave it unverified.
+    Comments,
     /// Press and release a named navigation key (`key:left`, `key:right`,
     /// `key:up`, `key:down`, `key:home`, `key:end`).
     ///
@@ -375,6 +388,7 @@ fn parse_step(s: &str) -> Option<Step> {
         "panel" if rest.trim() == "groups" => Some(Step::Groups),
         "panel" if rest.trim() == "redact" => Some(Step::Redact),
         "panel" if rest.trim() == "forms" => Some(Step::Forms),
+        "panel" if rest.trim() == "comments" => Some(Step::Comments),
         "tab" => match rest.trim() {
             "file" => Some(Step::Tab("file")),
             "edit" => Some(Step::Tab("edit")),

@@ -351,6 +351,23 @@ pub enum CommandKind {
     /// This command is the *reverse of marking*, not a reverse of redacting
     /// (which has none — see [`crate::redact::apply_redactions`]).
     DeleteRedactionMark,
+    /// A general annotation was DELETED (`Pass 38.5`): its `/Annots`
+    /// reference, its dictionary, any unshared appearance streams, and its
+    /// `/Popup` companion, together as ONE undoable command — plus the
+    /// `/IRT` patches on any reply or group subordinate that referenced
+    /// it. See [`EditSession::delete_annotation`].
+    ///
+    /// **Distinct from [`Self::DeleteRedactionMark`] and
+    /// [`Self::DeleteDimension`] on purpose, and the general verb ROUTES to
+    /// those rather than absorbing them.** That earlier kind's own doc
+    /// comment made the requirement explicit — it *"cannot be repurposed
+    /// later into a general annotation delete without the compiler pointing
+    /// at every reader"* — because the operator-facing sentence differs:
+    /// *"Undo delete redaction mark"* means "I changed my mind about
+    /// redacting", which is not what *"Undo delete annotation"* says. The
+    /// routing preserves both sentences instead of flattening them into
+    /// one.
+    DeleteAnnotation,
     /// One in-place page-text REPLACE edit (Pass 14.3 §0.2): the page's
     /// content stream object (+ any collapsed extra content streams) was
     /// rewritten by the 14.1 advance-preserving surgery, recorded as ONE
@@ -2264,6 +2281,119 @@ pub enum EditError {
     #[error("object {id} is not an unapplied /Redact mark on any page of this document")]
     NotARedactionMark {
         /// The object that was asked for.
+        id: ObjId,
+    },
+    /// [`EditSession::delete_annotation`] was given an object that is not
+    /// listed in any page's `/Annots` array (§12.5.2).
+    ///
+    /// Refused by name for the same reason
+    /// [`EditError::NotARedactionMark`] is: annotations are addressed by
+    /// object id, object numbers are reused after a delete, and "remove
+    /// whatever that id is now" would let a stale handle from an undone
+    /// command silently destroy an unrelated object.
+    ///
+    /// Note the *"listed in a page's `/Annots`"* wording: an annotation
+    /// dictionary that exists in the file but is on no page is not
+    /// reachable as an annotation, and deleting it through this verb
+    /// would be deleting an object whose role pdfce has not established.
+    #[error("object {id} is not an annotation on any page of this document")]
+    AnnotationNotFound {
+        /// The object that was asked for.
+        id: ObjId,
+    },
+    /// [`EditSession::delete_annotation`] was given a `/Widget`.
+    ///
+    /// # Refused rather than routed, and that asymmetry is deliberate
+    ///
+    /// The general verb routes `/Redact` marks and ce dimensions to their
+    /// own deletion verbs, so routing widgets to
+    /// [`EditSession::delete_field`] would look like the consistent
+    /// choice. It is not, because **the widget-shaped question has two
+    /// different right answers and the caller has to pick**: §12.7.3.2
+    /// lets one field own widgets on several pages, so deleting *this
+    /// widget* ([`EditSession::delete_widget`]) and deleting *the field
+    /// this widget belongs to* ([`EditSession::delete_field`]) are
+    /// different operations with different blast radii — and the two
+    /// specialised verbs are addressed by **field name plus index**, not
+    /// by object id, precisely so the caller must say which it meant.
+    ///
+    /// A route would have to guess, and guessing wrong deletes a form
+    /// field on four other pages.
+    #[error(
+        "object {id} is a /Widget (form field {name:?}); use delete_widget to remove this one \
+         widget, or delete_field to remove the whole field — deleting a widget through the \
+         general annotation verb would leave the field registered in /AcroForm /Fields"
+    )]
+    AnnotationIsWidget {
+        /// The widget annotation that was asked for.
+        id: ObjId,
+        /// The fully-qualified name of the field it belongs to, so the
+        /// caller can pass it straight to the verb the message names.
+        /// `"(unresolved)"` when the widget is on no field pdfce can reach
+        /// — itself a document defect, reported rather than repaired.
+        name: String,
+    },
+    /// [`EditSession::delete_annotation`] was given an annotation whose
+    /// **`Locked`** flag (§12.5.3 Table 165, bit 8, value 128) is set.
+    ///
+    /// Table 165 verbatim: *"If set, do not allow the annotation to be
+    /// **deleted** or its properties (including position and size) to be
+    /// modified by the user."*
+    ///
+    /// # This is the ONLY gate the standard puts on this verb
+    ///
+    /// Every other refusal `delete_annotation` raises is pdfce policy or
+    /// a certification permission. This one is a `shall`-strength
+    /// instruction about deletion specifically, and it is worth saying so
+    /// because it is easy to mistake for cosmetic metadata: nothing about
+    /// a locked annotation *looks* different, so an implementation that
+    /// never read the flag would behave identically on every document
+    /// except the ones where it matters.
+    ///
+    /// **Deliberately not conflated with bit 10 `LockedContents`**, whose
+    /// own Table 165 text says it *"does not restrict deletion"*.
+    ///
+    /// The remedy is to clear the flag first — which is an annotation
+    /// **property** change, itself covered by the same clause, and pdfce
+    /// has no verb for it yet. Named in the message rather than implied,
+    /// so an operator is not left thinking the annotation is permanently
+    /// undeletable by pdfce when it is the document that says so.
+    #[error(
+        "annotation {id} ({subtype}) has the Locked flag set (ISO 32000-1 12.5.3 Table 165 \
+         bit 8), which says it shall not be deleted or moved; clear the flag in the \
+         producing application first — note this is NOT the LockedContents flag, which \
+         does not restrict deletion"
+    )]
+    AnnotationLocked {
+        /// The annotation that was asked for.
+        id: ObjId,
+        /// Its `/Subtype`, so the message names something the operator can
+        /// find on the page.
+        subtype: String,
+    },
+    /// [`EditSession::delete_annotation`] was given a `/TrapNet`
+    /// (§12.5.6.21).
+    ///
+    /// A trap network annotation *"shall be the last element of the
+    /// page's `Annots` array"* — a positional `shall` no other subtype
+    /// carries, and one this verb would silently satisfy or violate
+    /// depending on what else it removed in the same command.
+    ///
+    /// Refused rather than handled because a trap network is **prepress
+    /// output state**, not markup: it describes the trapping a RIP
+    /// applied to that page, and removing it makes the page claim it was
+    /// never trapped. That is a prepress decision, and pdfce's prepress
+    /// surface (`Pass 50.0`'s `/SeparationInfo` work) is where it
+    /// belongs — not in a comment-deletion verb reached from a comments
+    /// panel.
+    #[error(
+        "annotation {id} is a /TrapNet — prepress output state, not markup. ISO 32000-1 \
+         12.5.6.21 requires it to be the last element of the page's /Annots array, and \
+         removing it makes the page claim it was never trapped; pdfce refuses rather than \
+         deciding that on your behalf from a comment surface"
+    )]
+    AnnotationIsTrapNet {
+        /// The annotation that was asked for.
         id: ObjId,
     },
     /// A form-fill edit named a field the document's `/AcroForm` does not
@@ -4842,13 +4972,20 @@ pub struct ImportOutcome {
     pub skipped: usize,
 }
 
-/// What a [`flatten_fields`](EditSession::flatten_fields) operation did
-/// What a field or widget deletion actually did (decision 020 §3.6.3).
+/// What a [`move_widget`](EditSession::move_widget) call moved, and what it
+/// deliberately did not (`Pass 46.0`).
 ///
-/// Returned rather than inferred, because the two facts an operator cannot
-/// see afterwards — that a selection was cleared, and that emptied grouping
-/// nodes went with it — are exactly the ones that change what the document
-/// means.
+/// # Restored doc comment — this struct had none
+///
+/// Until this was noticed, an earlier edit had spliced two *other* structs'
+/// doc comments onto this one: [`FlattenOutcome`]'s opening line and the
+/// whole body of [`FieldDeletion`]'s. The result compiled and rendered
+/// cleanly in `rustdoc`, described a "selection cleared" and "emptied
+/// grouping nodes" this type has no fields for, and left both of the
+/// robbed types partly or wholly undocumented. A doc comment is attached
+/// to whatever declaration follows it, so a mis-placed one is invisible to
+/// every gate this project owns — `cargo doc` is happy, clippy is happy,
+/// and only reading the file finds it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WidgetMove {
     /// The `/Rect` before the move, normalised (§7.9.5).
@@ -4867,6 +5004,176 @@ pub struct WidgetMove {
     pub siblings_left_behind: usize,
 }
 
+/// The two cascades a deletion decides **before** it writes anything —
+/// computed once by `EditSession::plan_annotation_deletion` and consumed
+/// both by `EditSession::delete_annotation` (which acts on it) and by
+/// [`EditSession::annotation_deletion_preview`] (which only counts it).
+///
+/// Private: it is an implementation detail of that sharing, not an API.
+/// What a caller sees is [`AnnotationDeletion`].
+struct AnnotDeletionPlan {
+    /// Objects to delete outright: the target, plus its `/Popup`
+    /// companion when it has a real one.
+    removing: Vec<ObjId>,
+    /// Whether that companion was found and is being taken.
+    popup_removed: bool,
+    /// Annotations whose `/Popup` names the target — non-empty only when
+    /// the target IS a pop-up being deleted directly.
+    popup_parents_to_clear: Vec<ObjId>,
+    /// `/IRT` referrers that are replies (`/RT /R`, or absent — Table
+    /// 170's default).
+    replies: Vec<ObjId>,
+    /// `/IRT` referrers that are `/RT /Group` subordinates.
+    group_members: Vec<ObjId>,
+}
+
+/// Which of the four specialised deletion verbs
+/// [`EditSession::delete_annotation`] handed the work to, when it did.
+///
+/// The general verb is a **router first**. Three annotation kinds pdfce
+/// authors carry obligations a generic `/Annots` removal does not know
+/// about, and each already has a verb that does know: a redaction mark
+/// carries a review-surface meaning, a ce dimension carries a
+/// `/PieceInfo` sidecar record, a widget carries an `/AcroForm` `/Fields`
+/// registration. Routing to them — rather than reimplementing their rules
+/// generically — is what keeps two code paths from disagreeing about what
+/// *gone* means, the same argument
+/// [`EditSession::delete_widget`] uses when it delegates its last-member
+/// case to [`EditSession::delete_field`].
+///
+/// Surfaced to the caller rather than hidden because the **undo entry
+/// differs**: a delegated deletion commits its own
+/// [`CommandKind`], so an Undo control reads *"Undo delete redaction
+/// mark"*, not *"Undo delete annotation"*. A shell that printed its own
+/// wording would disagree with its own undo stack.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum AnnotationDeletionRoute {
+    /// Handled generically by [`EditSession::delete_annotation`] itself —
+    /// the ordinary markup/link/stamp case.
+    General,
+    /// Routed to [`EditSession::delete_redaction_mark`]: the target was an
+    /// unapplied `/Redact` mark, whose deletion means *"I decided not to
+    /// redact that after all"* and gets its own undo sentence.
+    RedactionMark,
+    /// Routed to [`EditSession::delete_dimension`]: the target was a ce
+    /// dimension, and its `/PieceInfo` sidecar record must go with it or
+    /// the document keeps a dimension the annotation no longer backs.
+    Dimension,
+}
+
+/// What a [`delete_annotation`](EditSession::delete_annotation) call
+/// removed, and every consequence an operator could not otherwise see
+/// (`Pass 38.5`).
+///
+/// # Why this is four disclosures and not a `()`
+///
+/// Deleting one annotation is almost never *only* deleting one
+/// annotation. Three of the four fields below report an object or a
+/// property that changed **without being named by the operator**, which is
+/// precisely the shape rule 4 (fuzzy, never sneaky) exists to cover. A
+/// caller that discards this and reports "deleted" is accurate about the
+/// verb and silent about the effect.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct AnnotationDeletion {
+    /// The deleted annotation's `/Subtype`, as
+    /// [`Annotation::subtype_label`](crate::annot::Annotation::subtype_label)
+    /// renders it.
+    ///
+    /// Captured **before** the delete, because afterwards there is nothing
+    /// left to ask. A shell that wants to say *"deleted the Highlight on
+    /// page 3"* has no other source for the noun.
+    pub subtype: String,
+    /// Which verb actually performed the deletion.
+    pub route: AnnotationDeletionRoute,
+    /// The `/Popup` companion went with it (§12.5.6.14).
+    ///
+    /// **Not an optimisation and not tidying — a `shall`.** A pop-up
+    /// *"shall not appear alone but is associated with a markup
+    /// annotation, its parent annotation"*, so a pop-up whose parent is
+    /// deleted is a clause violation, not merely an orphan. Disclosed
+    /// anyway: the operator named one annotation and two were removed,
+    /// and "the spec required it" is a reason, not a licence to stay
+    /// quiet.
+    pub popup_removed: bool,
+    /// The deleted annotation was itself a `/Popup`, and its **parent's**
+    /// `/Popup` key was removed so the parent stops naming a deleted
+    /// object.
+    ///
+    /// The mirror image of [`Self::popup_removed`], and it does **not**
+    /// cascade the other way: deleting a window does not delete the
+    /// comment it belonged to. §12.5.6.14 constrains the pop-up's
+    /// existence, not the parent's.
+    ///
+    /// **PDFCE POLICY, not a spec requirement**, and the distinction is
+    /// recorded because the neighbouring cascade *is* spec-driven and it
+    /// would be easy to read them as one rule. Table 170's `/Popup` row
+    /// carries no integrity statement at all, and §7.3.10 makes the
+    /// dangling reference legal (it resolves to null). pdfce removes the
+    /// key anyway — the graph stays symmetric, there is one invariant to
+    /// test rather than two, and a `/Popup` naming nothing is a fact no
+    /// consumer benefits from. Because it **dirties an object the
+    /// operator did not select**, it is disclosed rather than done
+    /// quietly (rule 4).
+    pub parent_popup_cleared: bool,
+    /// Annotations that were *in reply to* the deleted one (`/RT /R`, or
+    /// `/RT` absent — Table 170's default is `R`) and have had their now-
+    /// dangling `/IRT` removed. They **survive**, standing on their own.
+    ///
+    /// # The rule, and the precedent it follows
+    ///
+    /// This is `Pass 50.0`'s `/SeparationInfo` posture applied to a second
+    /// structure: **repair the STRUCTURAL invariant, refuse to guess the
+    /// SEMANTIC one.** The structural invariant is that no surviving
+    /// object may reference a deleted one, so `/IRT` goes. The semantic
+    /// question — *should this reply now be a top-level comment, or should
+    /// it have died with its thread?* — pdfce does not answer: it neither
+    /// deletes the reply (that is somebody else's text, and the operator
+    /// named one annotation) nor re-parents it to another thread member
+    /// (that would invent a conversation that never happened).
+    ///
+    /// Deleting a whole thread is therefore N deletions, and that is the
+    /// honest cost of not guessing.
+    pub replies_orphaned: usize,
+    /// `/RT /Group` **subordinates** of the deleted annotation, which was
+    /// their group **primary**. Their `/IRT` is removed for the same
+    /// structural reason as [`Self::replies_orphaned`] — but this is a
+    /// separate count because the consequence is materially worse.
+    ///
+    /// # Why these are counted apart: a reader is told to ignore what is left
+    ///
+    /// §12.5.6.2 makes a group's `Contents` (or `RC` and `DS`), `M`, `C`,
+    /// `T`, `Popup`, `CreationDate`, `Subj` and `Open` **group
+    /// attributes**: *"the corresponding entries in the subordinate
+    /// annotations shall be ignored"*. So while the primary existed, a
+    /// subordinate's own author and note text were dead keys — a
+    /// conforming reader displayed the primary's. Remove the primary and
+    /// those keys become the only copy in the file.
+    ///
+    /// Removing `/IRT` is what makes them readable again, since the
+    /// ignore-rule is scoped to annotations that are in a group. The
+    /// operator still has to be told, because **what they see change is
+    /// not what they asked to change**: deleting one comment made several
+    /// others start displaying text that was previously suppressed.
+    pub group_members_promoted: usize,
+    /// Appearance streams (`/AP` `/N`, `/R`, `/D`, including every entry of
+    /// a state sub-dictionary) deleted along with the annotation because
+    /// nothing else in the document referenced them.
+    ///
+    /// A stream **shared** with a surviving annotation is deliberately left
+    /// alone and is not counted here — see
+    /// [`EditSession::appearance_streams_owned_by`] for the reachability
+    /// rule and its stated bound.
+    pub appearance_streams_removed: usize,
+}
+
+/// What a field or widget deletion actually did (decision 020 §3.6.3).
+///
+/// Returned rather than inferred, because the two facts an operator cannot
+/// see afterwards — that a selection was cleared, and that emptied grouping
+/// nodes went with it — are exactly the ones that change what the document
+/// means.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct FieldDeletion {
@@ -4922,6 +5229,7 @@ pub struct FieldRename {
     pub descendants_renamed: usize,
 }
 
+/// What a [`flatten_fields`](EditSession::flatten_fields) operation did
 /// (Pass 7.1, R48).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -8128,6 +8436,778 @@ impl EditSession {
             trailer: None,
         });
         Ok(())
+    }
+
+    /// **Delete any annotation**, with every dependent object and reference
+    /// it leaves behind handled in the same undoable command (`Pass 38.5`).
+    ///
+    /// This is the general verb the four specialised ones
+    /// ([`Self::delete_redaction_mark`], [`Self::delete_dimension`],
+    /// [`Self::delete_field`], [`Self::delete_widget`]) were each carved out
+    /// of. Until it existed, an operator could *author* a highlight, a
+    /// square, a FreeText note or a stamp and had no way to remove one:
+    /// pdfce's only deletion paths were the three that knew about their own
+    /// annotation kind, and every other subtype — including every annotation
+    /// pdfce did not author — was permanent.
+    ///
+    /// # Routing, not absorbing (see [`AnnotationDeletionRoute`])
+    ///
+    /// Three kinds carry obligations a generic `/Annots` removal cannot know
+    /// about, so this verb dispatches to the verb that does:
+    ///
+    /// | Target | Route | Why it cannot be generic |
+    /// |---|---|---|
+    /// | `/Redact`, unapplied | [`Self::delete_redaction_mark`] | The undo sentence is *"I decided not to redact that"*, a different claim from *"delete annotation"* — that verb's own doc comment requires the distinction be kept. |
+    /// | ce dimension | [`Self::delete_dimension`] | A `/PieceInfo` sidecar record backs it; leaving it would keep a dimension the annotation no longer supports. |
+    /// | `/Widget` | **refused**, not routed | Widget-or-whole-field is the caller's choice, not a guess — see [`EditError::AnnotationIsWidget`]. |
+    ///
+    /// # First, the clause that reframes all three cascades
+    ///
+    /// **§7.3.10: *"An indirect reference to an undefined object shall not
+    /// be considered an error by a conforming reader; it shall be treated
+    /// as a reference to the null object."*** So a dangling `/IRT`,
+    /// `/Popup` or `/Parent` is **legal**, and none of what follows may be
+    /// justified as "otherwise the file is corrupt." It would not be. The
+    /// reasons below are narrower and better than that, and each is stated
+    /// at its real strength — which is the point of writing them down.
+    ///
+    /// # The three cascades
+    ///
+    /// 1. **`/Popup` companion — deleted.** §12.5.6.14 says a pop-up
+    ///    *"**shall not appear alone**"*, which is the `shall`; but the
+    ///    standard also makes Table 183's `/Parent` **Optional**, so it
+    ///    contradicts itself and this is an ambiguity, not a settled rule.
+    ///    **The deciding argument is §12.5.6.2 NOTE 2**, and it is a
+    ///    behavioural one: *"If an annotation has no parent, the `Contents`
+    ///    entry **shall** represent the text of the annotation, otherwise
+    ///    it shall be ignored by a conforming reader."* An orphaned pop-up
+    ///    therefore does not fall silent — **it starts displaying its own
+    ///    `/Contents`, which is a copy of the comment just deleted.** A
+    ///    deletion that made the deleted text reappear would be the worst
+    ///    possible outcome for this verb, so the pair goes together.
+    ///    Reported as [`AnnotationDeletion::popup_removed`] regardless: the
+    ///    operator named one object and two went.
+    /// 2. **`/IRT` referrers — kept, un-linked (`/IRT` **and** `/RT`), and
+    ///    counted.** The un-linking is **required**, and not for the reason
+    ///    it first appears: Table 170's `/IRT` row reads *"(**Required if
+    ///    an `RT` entry is present**, otherwise optional)"*, so an
+    ///    annotation left holding `/RT` with no `/IRT` is **missing a
+    ///    conditionally-required entry — the only actual conformance defect
+    ///    anywhere in this cascade.** Removing `/IRT` alone is equally
+    ///    wrong in the other direction: Table 170 gives `/RT` **default
+    ///    value `R`**, so stripping only `/IRT` would silently reclassify a
+    ///    `/Group` subordinate as a reply. **Both keys, or neither.**
+    ///
+    ///    What is *not* done — deleting the referrers, or re-parenting them
+    ///    to a surviving sibling — is `Pass 50.0`'s `/SeparationInfo`
+    ///    posture: **repair the structural invariant, refuse to guess the
+    ///    semantic one.** Deleting them would destroy text the operator did
+    ///    not name; re-parenting would invent a conversation. Deleting a
+    ///    whole thread is therefore N calls, and that is the honest cost.
+    /// 3. **`/AP` streams — deleted only when unshared.** See
+    ///    [`Self::appearance_streams_owned_by`].
+    ///
+    /// # What this verb does NOT do, named so it is not assumed
+    ///
+    /// - **It does not remove content from the file.** Per Annex H.7.3,
+    ///   *"although the two objects have been deleted, they are still
+    ///   present in the file"* — an incremental save appends a free-list
+    ///   entry, it does not overwrite bytes. **Deleting a comment is not
+    ///   redacting it**, and a caller whose operator might believe
+    ///   otherwise must say so. A full rewrite drops the bytes; the default
+    ///   save mode does not.
+    /// - **It does not chase `/S /Hide` actions.** §12.6.4.10 Table 210
+    ///   makes such an action's `/T` Required, and it may name this
+    ///   annotation. Left dangling — §7.3.10 makes that legal — and
+    ///   deliberately **not** reported, because finding them means walking
+    ///   every annotation's `/A` and `/AA`, every outline entry and every
+    ///   named JavaScript, which is a document-wide reference census this
+    ///   Pass does not build. Named here so the gap is a decision rather
+    ///   than an oversight.
+    /// - **It does not update `/StructParent` or the structure tree's
+    ///   `/OBJR` back-reference** (§14.7.4.3/.4). Same reasoning; tagged-PDF
+    ///   structure maintenance is its own unbuilt Pass.
+    ///
+    /// # Certification: this is the FIRST pdfce operation `/P 3` permits
+    ///
+    /// Every other structural verb in this module takes
+    /// [`Self::check_certification`], which refuses on **any** enforced
+    /// `/Perms` `/DocMDP` regardless of `/P` — correct until now, because as
+    /// [`crate::signature::SignatureCensus::forbids_structural_change`]'s own
+    /// doc comment put it, *"no `P` value's permitted list contains any
+    /// operation pdfce can currently perform."*
+    ///
+    /// Annotation deletion breaks that. §12.8.2.2 Table 254 `P = 3`:
+    /// *"Permitted changes shall be the same as for 2, as well as
+    /// **annotation creation, deletion, and modification**"*. So this verb
+    /// takes [`Self::check_certification_for_annotation`] — refusing at
+    /// `P = 1` and `P = 2`, permitting at `P = 3` — and a certified
+    /// comment-review document, which is exactly what `P = 3` is *for*,
+    /// stops being read-only for no reason.
+    ///
+    /// A delegated route runs the **destination verb's** gate, which is the
+    /// strict one. That is not an oversight: a ce dimension's deletion also
+    /// rewrites the catalog `/PieceInfo` sidecar, which is not an annotation
+    /// change and is not in Table 254's `P = 3` list.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::AnnotationNotFound`] for an id on no page's `/Annots`
+    /// (including a stale id from an undone command);
+    /// [`EditError::AnnotationLocked`] (§12.5.3 Table 165 bit 8 — the only
+    /// refusal here the standard itself requires);
+    /// [`EditError::AnnotationIsTrapNet`];
+    /// [`EditError::AnnotationIsWidget`]; [`EditError::DocumentEncrypted`];
+    /// [`EditError::CertificationForbidsChange`] at `/P` 1 or 2 with
+    /// `/Perms` enforced; [`EditError::PageTree`]. Every refusal happens
+    /// before any mutation.
+    ///
+    /// ```
+    /// # use pdfce_core::{document::Document, edit::EditSession, object::ObjId};
+    /// # fn demo(doc: Document, id: ObjId) -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut session = EditSession::new(doc);
+    /// let gone = session.delete_annotation(id)?;
+    /// if gone.replies_orphaned > 0 {
+    ///     // Rule 4: say it. These annotations still exist and are now
+    ///     // top-level comments, which is not what the operator asked for.
+    ///     eprintln!("{} repl(ies) are no longer part of a thread", gone.replies_orphaned);
+    /// }
+    /// # Ok(()) }
+    /// ```
+    pub fn delete_annotation(&mut self, annot_id: ObjId) -> Result<AnnotationDeletion, EditError> {
+        // ---- LOCATE first, so "not an annotation" is reported as such
+        // rather than masked by a certification refusal the caller would
+        // then chase on the wrong object. `all` is every annotation on every
+        // page, because a reply may live on a DIFFERENT page from the
+        // comment it replies to (nothing in §12.5.6.2 binds a thread to one
+        // page) and a per-page scan would miss it.
+        let (target, all) = self.locate_annotation(annot_id)?;
+        let subtype = target.subtype_label();
+
+        // ---- REFUSE. Same checks, same order, as the preview — shared so
+        // a shell's enabled/disabled decision cannot drift from this.
+        self.annotation_deletion_guards(annot_id, &target)?;
+
+        // ---- ROUTE. Each destination runs its OWN guards (the strict
+        // certification gate, in both cases), which is why routing happens
+        // after this verb's guards rather than instead of them.
+        match self.delegated_route_for(annot_id, &target) {
+            Some(AnnotationDeletionRoute::RedactionMark) => {
+                self.delete_redaction_mark(annot_id)?;
+                return Ok(AnnotationDeletion {
+                    subtype,
+                    route: AnnotationDeletionRoute::RedactionMark,
+                    popup_removed: false,
+                    parent_popup_cleared: false,
+                    replies_orphaned: 0,
+                    group_members_promoted: 0,
+                    appearance_streams_removed: 1,
+                });
+            }
+            Some(AnnotationDeletionRoute::Dimension) => {
+                // Re-resolved rather than threaded through the route enum:
+                // the route says WHICH verb, the model says which object,
+                // and a `DimensionId` smuggled through a routing enum would
+                // make the enum about two things.
+                let dim = self
+                    .read_dimension_model()
+                    .dimensions()
+                    .iter()
+                    .find(|d| d.annot == Some(annot_id))
+                    .map(|d| d.id)
+                    .ok_or(EditError::AnnotationNotFound { id: annot_id })?;
+                self.delete_dimension(dim)?;
+                return Ok(AnnotationDeletion {
+                    subtype,
+                    route: AnnotationDeletionRoute::Dimension,
+                    popup_removed: false,
+                    parent_popup_cleared: false,
+                    replies_orphaned: 0,
+                    group_members_promoted: 0,
+                    appearance_streams_removed: 1,
+                });
+            }
+            // `General` is not a route the router returns; `None` is how it
+            // says "handle it here". Both matched explicitly, and NO
+            // wildcard arm: `AnnotationDeletionRoute` is `#[non_exhaustive]`
+            // for downstream crates but exhaustive *here*, so omitting the
+            // wildcard makes a future variant a compile error at this exact
+            // site rather than a silent fall-through onto the general
+            // cascade — which would run the wrong deletion on it.
+            Some(AnnotationDeletionRoute::General) | None => {}
+        }
+
+        // ---- THE PLAN. Cascades 1 and 2 are decided here, by a pure
+        // function shared with `annotation_deletion_preview` — see
+        // `plan_annotation_deletion` for why that sharing is load-bearing
+        // rather than tidy.
+        let plan = Self::plan_annotation_deletion(annot_id, &target, &all);
+        let AnnotDeletionPlan {
+            removing,
+            popup_removed,
+            popup_parents_to_clear,
+            replies,
+            group_members,
+        } = plan;
+        let (replies_orphaned, group_members_promoted) = (replies.len(), group_members.len());
+        let mut objects: Vec<ObjectWrite> = Vec::new();
+
+        // ---- CASCADE 1 (write half): a parent that named this pop-up stops
+        // naming it. pdfce POLICY, not a spec requirement — §7.3.10 makes the
+        // dangling reference legal — so it is disclosed, not done quietly.
+        let mut parent_popup_cleared = false;
+        for parent in popup_parents_to_clear {
+            if let Some(Object::Dict(d)) = self.value(parent) {
+                let mut updated = d.clone();
+                updated.remove(b"Popup");
+                objects.push(ObjectWrite {
+                    id: parent,
+                    before: self.state.get(&parent).cloned(),
+                    after: Some(Object::Dict(updated)),
+                });
+                parent_popup_cleared = true;
+            }
+        }
+
+        // ---- CASCADE 2 (write half): /IRT referrers. Un-linked, never
+        // deleted.
+        for id in replies.iter().chain(group_members.iter()).copied() {
+            let Some(Object::Dict(d)) = self.value(id) else {
+                continue;
+            };
+            let mut updated = d.clone();
+            // BOTH KEYS, OR NEITHER — and each direction is wrong for its
+            // own reason, which is why this is two lines and a paragraph
+            // rather than one obvious line.
+            //
+            // Dropping `/IRT` and KEEPING `/RT` leaves a missing
+            // conditionally-required entry: Table 170's `/IRT` row is
+            // "Required if an RT entry is present". That is the only real
+            // conformance defect this whole cascade can produce.
+            //
+            // Dropping `/RT` and KEEPING `/IRT` is worse than untidy:
+            // Table 170 gives `/RT` DEFAULT VALUE `R`, so a `/Group`
+            // subordinate would silently become a reply — the model would
+            // change meaning with no key changing visibly.
+            //
+            // (Neither is about the dangling reference itself. §7.3.10
+            // makes a reference to a deleted object null, not an error.)
+            updated.remove(b"IRT");
+            updated.remove(b"RT");
+            objects.push(ObjectWrite {
+                id,
+                before: self.state.get(&id).cloned(),
+                after: Some(Object::Dict(updated)),
+            });
+        }
+
+        // ---- CASCADE 3: appearance streams nothing else needs.
+        let ap_ids = self.appearance_streams_owned_by(&removing, &all);
+
+        // ---- The /Annots patch. Same helper, same two array shapes, as
+        // redaction-mark and ce-dimension removal: `Some` for an indirect
+        // array (patch THAT object, leave the page dict alone), `None` for
+        // an inline one (already composed into `updated`).
+        //
+        // EVERY page that lists anything being removed is patched, not just
+        // the target's. §12.5.2 says an annotation dictionary *"shall be
+        // referenced from the `Annots` array of only one page"*, so in a
+        // conforming file this loop finds exactly one page per removed
+        // object — but a `/Popup` may legally sit on a different page from
+        // its parent, so "one page" is not "one page for the whole
+        // command". Sweeping every page also survives the malformed
+        // multiply-listed case without leaving half the references behind.
+        let mut pages_touched: Vec<ObjId> = Vec::new();
+        for slot in &self.page_slots()? {
+            let listed = crate::annot::page_annotations(&self.graph(), slot.id)
+                .iter()
+                .any(|a| a.id.is_some_and(|id| removing.contains(&id)));
+            if listed {
+                pages_touched.push(slot.id);
+            }
+        }
+        debug_assert!(
+            !pages_touched.is_empty(),
+            "the target was located on some page, so at least that page must be patched"
+        );
+        for pid in pages_touched {
+            let Some(Object::Dict(page_dict)) = self.value(pid) else {
+                return Err(EditError::NotADictionary {
+                    id: pid,
+                    key: "Annots",
+                });
+            };
+            let mut updated = page_dict.clone();
+            match self.remove_from_annots(&mut updated, &removing)? {
+                Some(shared) => objects.push(shared),
+                None => objects.push(self.page_write(pid, updated)),
+            }
+        }
+
+        let removals: Vec<Removal> = removing
+            .iter()
+            .copied()
+            .chain(ap_ids.iter().copied())
+            .filter(|id| self.base.get(*id).is_some() || self.state.contains_key(id))
+            .map(|id| Removal {
+                id,
+                was_deleted: self.deleted.contains(&id),
+                is_deleted: true,
+            })
+            .collect();
+
+        self.commit(Command {
+            kind: CommandKind::DeleteAnnotation,
+            objects,
+            removals,
+            trailer: None,
+        });
+        Ok(AnnotationDeletion {
+            subtype,
+            route: AnnotationDeletionRoute::General,
+            popup_removed,
+            parent_popup_cleared,
+            replies_orphaned,
+            group_members_promoted,
+            appearance_streams_removed: ap_ids.len(),
+        })
+    }
+
+    /// Find an annotation by object id, and hand back the whole document's
+    /// annotations alongside it.
+    ///
+    /// One walk, two results, deliberately: the caller needs the target
+    /// **and** every other annotation (a reply may be on a different page),
+    /// and walking twice would let the two views disagree if anything
+    /// mutated between them.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::AnnotationNotFound`] when no page's `/Annots` lists the
+    /// id; [`EditError::PageTree`] when the page tree cannot be walked.
+    fn locate_annotation(
+        &self,
+        annot_id: ObjId,
+    ) -> Result<(crate::annot::Annotation, Vec<crate::annot::Annotation>), EditError> {
+        let slots = self.page_slots()?;
+        let graph = self.graph();
+        let mut found = None;
+        let mut all: Vec<crate::annot::Annotation> = Vec::new();
+        for slot in &slots {
+            for annot in crate::annot::page_annotations(&graph, slot.id) {
+                if annot.id == Some(annot_id) {
+                    found = Some(annot.clone());
+                }
+                all.push(annot);
+            }
+        }
+        found
+            .map(|target| (target, all))
+            .ok_or(EditError::AnnotationNotFound { id: annot_id })
+    }
+
+    /// Every refusal [`Self::delete_annotation`] applies, in the order it
+    /// applies them — shared with [`Self::annotation_deletion_preview`] so
+    /// a shell's enable/disable decision cannot drift from the verb's.
+    ///
+    /// Order is part of the contract: the two `shall`-strength refusals the
+    /// **standard** imposes come before the pdfce-policy one, so a locked
+    /// widget reports the lock rather than the widget. Getting that
+    /// backwards would send an operator to `delete_widget`, which would
+    /// then also refuse, for a different reason, on the second try.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::AnnotationLocked`], [`EditError::AnnotationIsTrapNet`],
+    /// [`EditError::AnnotationIsWidget`], [`EditError::DocumentEncrypted`],
+    /// [`EditError::CertificationForbidsChange`].
+    fn annotation_deletion_guards(
+        &self,
+        annot_id: ObjId,
+        target: &crate::annot::Annotation,
+    ) -> Result<(), EditError> {
+        // §12.5.3 Table 165 bit 8 — the only clause in ISO 32000-1 that
+        // constrains this verb directly. Its message names the flag,
+        // because `LockedContents` (bit 10) looks identical from a menu and
+        // explicitly "does not restrict deletion".
+        if target.flags.locked() {
+            return Err(EditError::AnnotationLocked {
+                id: annot_id,
+                subtype: target.subtype_label(),
+            });
+        }
+        // §12.5.6.21: prepress output state with a positional `shall`, not
+        // markup. See the error's doc comment.
+        if target.subtype == b"TrapNet" {
+            return Err(EditError::AnnotationIsTrapNet { id: annot_id });
+        }
+        // Refused, not routed — widget-or-whole-field is the caller's
+        // choice. See the error's doc comment.
+        if target.is_widget() {
+            let name = crate::forms::parse_acroform(&self.graph())
+                .and_then(|form| {
+                    form.fields
+                        .iter()
+                        .find(|f| f.widgets.iter().any(|w| w.id == annot_id))
+                        .map(|f| f.fully_qualified_name.clone())
+                })
+                .unwrap_or_else(|| "(unresolved)".to_owned());
+            return Err(EditError::AnnotationIsWidget { id: annot_id, name });
+        }
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification_for_annotation()
+    }
+
+    /// Which specialised verb owns this annotation, if any — the routing
+    /// decision, shared between the real call and the preview.
+    ///
+    /// `None` means the general path handles it.
+    fn delegated_route_for(
+        &self,
+        annot_id: ObjId,
+        target: &crate::annot::Annotation,
+    ) -> Option<AnnotationDeletionRoute> {
+        if target.subtype == b"Redact"
+            && crate::redact::redaction_marks(&self.graph())
+                .iter()
+                .any(|m| m.annot_id == annot_id)
+        {
+            return Some(AnnotationDeletionRoute::RedactionMark);
+        }
+        if self
+            .read_dimension_model()
+            .dimensions()
+            .iter()
+            .any(|d| d.annot == Some(annot_id))
+        {
+            return Some(AnnotationDeletionRoute::Dimension);
+        }
+        None
+    }
+
+    /// Decide cascades 1 and 2 for a deletion, without touching anything.
+    ///
+    /// # Why this is extracted rather than inlined where it is used
+    ///
+    /// [`Self::annotation_deletion_preview`] must answer *"what would this
+    /// delete take with it?"* and [`Self::delete_annotation`] must then
+    /// **do** exactly that. If the two computed it separately, a shell's
+    /// warning and the engine's behaviour could disagree — and they would
+    /// disagree silently, since nothing compares them. A tooltip promising
+    /// *"2 replies will be kept"* over a verb that deletes them is worse
+    /// than no tooltip at all.
+    ///
+    /// So it is one function, it is pure (an associated function, taking
+    /// no `&self`, so it *cannot* consult session state the preview and
+    /// the delete might see differently), and both call it.
+    ///
+    /// `all` must be every annotation on every page. A reply may live on a
+    /// **different page** from the annotation it replies to — nothing in
+    /// §12.5.6.2 binds a thread to one page — so a per-page scan would
+    /// under-report, which is the failure mode that matters here: an
+    /// operator warned about 1 reply when there are 4.
+    fn plan_annotation_deletion(
+        annot_id: ObjId,
+        target: &crate::annot::Annotation,
+        all: &[crate::annot::Annotation],
+    ) -> AnnotDeletionPlan {
+        // CASCADE 1, forward: this annotation's own pop-up window goes with
+        // it. §12.5.6.14 says a pop-up "shall not appear alone"; §12.5.6.2
+        // NOTE 2 is the sharper reason — an orphaned pop-up starts
+        // displaying its OWN `/Contents`, i.e. a copy of the comment just
+        // deleted would reappear.
+        let mut removing: Vec<ObjId> = vec![annot_id];
+        let popup_removed = target.popup.is_some_and(|p| {
+            // Guarded rather than trusted: a `/Popup` pointing at something
+            // that is not a pop-up on this document's `/Annots` is a
+            // dangling or mis-typed reference, and following it would delete
+            // an object whose role pdfce has not established.
+            let is_real = all
+                .iter()
+                .any(|a| a.id == Some(p) && a.is_popup && a.id != Some(annot_id));
+            if is_real {
+                removing.push(p);
+            }
+            is_real
+        });
+
+        // CASCADE 1, reverse: a pop-up being deleted directly leaves its
+        // parent naming a gone object.
+        //
+        // The parent is found by scanning for whoever names THIS object,
+        // not by reading the pop-up's own Table 183 `/Parent`. The parent's
+        // `/Popup` is the authoritative direction, and this also copes with
+        // the malformed-but-real case of a `/Parent` that disagrees with
+        // its claimed parent's `/Popup`.
+        let popup_parents_to_clear: Vec<ObjId> = if target.is_popup {
+            all.iter()
+                .filter(|a| a.popup == Some(annot_id))
+                .filter_map(|a| a.id)
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        // CASCADE 2: split the `/IRT` referrers by what `/RT` says, because
+        // the two suffer different consequences and the operator is told
+        // about them separately. `is_group_subordinate` applies Table 170's
+        // default (`R`) for an absent `/RT`, so an implicit reply lands in
+        // `replies` — which is the ordinary case, not the exotic one.
+        let (mut replies, mut group_members): (Vec<ObjId>, Vec<ObjId>) = (Vec::new(), Vec::new());
+        for referrer in all
+            .iter()
+            .filter(|a| a.in_reply_to == Some(annot_id))
+            .filter(|a| a.id.is_some_and(|id| !removing.contains(&id)))
+        {
+            let Some(id) = referrer.id else { continue };
+            if referrer.is_group_subordinate() {
+                group_members.push(id);
+            } else {
+                replies.push(id);
+            }
+        }
+
+        AnnotDeletionPlan {
+            removing,
+            popup_removed,
+            popup_parents_to_clear,
+            replies,
+            group_members,
+        }
+    }
+
+    /// **What would [`Self::delete_annotation`] do, without doing it?**
+    ///
+    /// Runs every refusal and computes every cascade count, then returns
+    /// the [`AnnotationDeletion`] the real call would produce — and
+    /// **mutates nothing**. Safe to call every frame from a UI.
+    ///
+    /// # Why a shell needs this and cannot compute it itself
+    ///
+    /// Two of the counts describe consequences on **other** annotations —
+    /// replies that stop being replies, and group subordinates whose
+    /// previously-suppressed text becomes visible (§12.5.6.2). Those are
+    /// exactly the facts rule 4 says an operator must be able to see
+    /// *before* they act, and decision 024 §4.4's no-confirm carve-out is
+    /// conditioned on the result being visible — which a reply three rows
+    /// down a scrolled list is not.
+    ///
+    /// A shell could in principle scan `/IRT` itself; the fields are
+    /// public. It must not, and that is the point of offering this. The
+    /// scan encodes PDF-model rules — Table 170's default `/RT` of `R`,
+    /// the pop-up validity check, the same-object exclusions — and a
+    /// second copy of them in `pdfce-gui` would go stale the first time
+    /// this Pass's successor changes what counts as a reply, with nothing
+    /// to detect the drift. `plan_annotation_deletion` is shared between
+    /// this and the real verb precisely so the warning cannot disagree
+    /// with the act.
+    ///
+    /// # What is NOT previewed, and why the difference is safe
+    ///
+    /// - `appearance_streams_removed` is reported as **0**, not computed.
+    ///   It is the one field with no operator-facing meaning — nobody
+    ///   needs warning that an internal drawing object will be collected —
+    ///   and computing it costs a reachability scan over every annotation
+    ///   in the document for a number that would not be shown.
+    /// - A **delegated** target (a `/Redact` mark, a ce dimension) is
+    ///   reported with its [`AnnotationDeletionRoute`] and zeroed counts,
+    ///   which is what the real call also returns for those routes. The
+    ///   preview does **not** run the destination verb's certification
+    ///   gate, so a preview can say *"this would work"* where the real
+    ///   call refuses on a certified document. Named rather than fixed:
+    ///   the honest fix is for those verbs to grow refusal queries of
+    ///   their own, and inventing a half-answer here would be worse than
+    ///   a stated gap.
+    ///
+    /// # Errors
+    ///
+    /// Exactly the refusals [`Self::delete_annotation`] raises for the
+    /// same argument, from the same checks in the same order — so a shell
+    /// that disables a control on `Err` and enables it on `Ok` is right
+    /// by construction rather than by keeping two lists in step.
+    pub fn annotation_deletion_preview(
+        &self,
+        annot_id: ObjId,
+    ) -> Result<AnnotationDeletion, EditError> {
+        let (target, all) = self.locate_annotation(annot_id)?;
+        self.annotation_deletion_guards(annot_id, &target)?;
+        if let Some(route) = self.delegated_route_for(annot_id, &target) {
+            return Ok(AnnotationDeletion {
+                subtype: target.subtype_label(),
+                route,
+                popup_removed: false,
+                parent_popup_cleared: false,
+                replies_orphaned: 0,
+                group_members_promoted: 0,
+                appearance_streams_removed: 0,
+            });
+        }
+        let plan = Self::plan_annotation_deletion(annot_id, &target, &all);
+        Ok(AnnotationDeletion {
+            subtype: target.subtype_label(),
+            route: AnnotationDeletionRoute::General,
+            popup_removed: plan.popup_removed,
+            parent_popup_cleared: !plan.popup_parents_to_clear.is_empty(),
+            replies_orphaned: plan.replies.len(),
+            group_members_promoted: plan.group_members.len(),
+            appearance_streams_removed: 0,
+        })
+    }
+
+    /// Every appearance stream reachable from `removing`'s `/AP` that no
+    /// **surviving** annotation also reaches.
+    ///
+    /// # Why a reachability test rather than "delete the annotation's own"
+    ///
+    /// [`Self::delete_redaction_mark`] can delete its `/AP` `/N`
+    /// unconditionally because [`Self::add_redaction`] authored that stream
+    /// for that mark and nothing else can be pointing at it. The general
+    /// verb has no such knowledge: it deletes annotations pdfce did not
+    /// author, and a producer that stamps forty identical "DRAFT" marks on
+    /// forty pages by referencing **one** appearance stream is doing
+    /// something entirely legal (§12.5.5 places the same `/BBox` into forty
+    /// different `/Rect`s). Deleting that stream with the first stamp would
+    /// blank the other thirty-nine.
+    ///
+    /// The other direction is just as real: leaving every appearance stream
+    /// behind orphans a stream in every subsequent save, which is exactly
+    /// the outcome [`Self::delete_redaction_mark`] deletes its own `/AP` to
+    /// avoid.
+    ///
+    /// # What is collected, and the bound this test has
+    ///
+    /// All of `/AP` `/N`, `/R` and `/D` (Table 168), and for each, every
+    /// value if it is an appearance-**state sub-dictionary** rather than a
+    /// single stream — a check box's `/Off` state is as much this
+    /// annotation's stream as its `/Yes` state is.
+    ///
+    /// **The survivor set is the document's annotations, not the whole
+    /// object graph.** A stream referenced from somewhere that is not an
+    /// annotation `/AP` — a page's `/Resources` `/XObject`, another
+    /// stream's resource dictionary — is not seen, so it would be deleted.
+    /// The bound is stated rather than closed because closing it means a
+    /// whole-document reference count, which pdfce does not have and which
+    /// this Pass is not the place to introduce; and because an appearance
+    /// stream doubling as a page XObject is a shape no producer in the
+    /// corpus emits. **If that changes, this is the function to fix**, and
+    /// the fix is a reference census, not a special case here.
+    fn appearance_streams_owned_by(
+        &self,
+        removing: &[ObjId],
+        all: &[crate::annot::Annotation],
+    ) -> Vec<ObjId> {
+        let graph = self.graph();
+        let streams_of = |id: ObjId| -> Vec<ObjId> {
+            let mut out = Vec::new();
+            let Some(ap) = self
+                .value(id)
+                .and_then(Object::as_dict)
+                .and_then(|d| d.get(b"AP").cloned())
+                .map(|o| graph.resolve(&o).clone())
+            else {
+                return out;
+            };
+            let Some(ap) = ap.as_dict() else { return out };
+            for key in [b"N".as_slice(), b"R".as_slice(), b"D".as_slice()] {
+                let Some(entry) = ap.get(key) else { continue };
+                if let Some(r) = entry.as_reference() {
+                    // A `/N` that resolves to a DICTIONARY is a state
+                    // sub-dictionary reached through a reference; its own
+                    // object is not a stream to delete, but its members are.
+                    match graph.resolved(r) {
+                        Object::Dict(states) => {
+                            out.extend(states.iter().filter_map(|(_, v)| v.as_reference()));
+                        }
+                        _ => out.push(r),
+                    }
+                } else if let Some(states) = entry.as_dict() {
+                    out.extend(states.iter().filter_map(|(_, v)| v.as_reference()));
+                }
+            }
+            out
+        };
+
+        let mut doomed: BTreeSet<ObjId> = BTreeSet::new();
+        for id in removing {
+            doomed.extend(streams_of(*id));
+        }
+        // Anything a SURVIVOR also points at is spared. Survivors are every
+        // modelled annotation that is not itself being removed.
+        for annot in all {
+            let Some(id) = annot.id else { continue };
+            if removing.contains(&id) {
+                continue;
+            }
+            for shared in streams_of(id) {
+                doomed.remove(&shared);
+            }
+        }
+        doomed.into_iter().collect()
+    }
+
+    /// The certification gate for **annotation** changes — permissive at
+    /// `/P 3`, where [`Self::check_certification`] is not.
+    ///
+    /// §12.8.2.2 Table 254: `P = 3` *"Permitted changes shall be the same
+    /// as for 2, as well as **annotation creation, deletion, and
+    /// modification**"*. `P = 1` forbids every change; `P = 2` permits form
+    /// filling, template instantiation and signing, and annotations are not
+    /// on that list.
+    ///
+    /// Table 254 also makes `/P` **Optional with default 2**
+    /// ([`crate::signature`] applies that default), so a certified document
+    /// that never states a permission lands here as `P = 2` and is refused —
+    /// absence is permissive relative to `P = 1`, not relative to `P = 3`.
+    fn check_certification_for_annotation(&self) -> Result<(), EditError> {
+        let found = census(&self.graph());
+        if found.forbids_structural_change() {
+            let permission = found.certification_permission.unwrap_or(2);
+            if permission < 3 {
+                return Err(EditError::CertificationForbidsChange { permission });
+            }
+        }
+        Ok(())
+    }
+
+    /// Why [`Self::delete_annotation`] would refuse right now, or `None`.
+    ///
+    /// The third member of the [`Self::fill_refusal`] /
+    /// [`Self::deletion_refusal`] family, and a **third distinct answer** —
+    /// a shell that reused either of the others to gate an annotation-delete
+    /// control would get it wrong in both directions:
+    ///
+    /// | Document | `fill_refusal` | `deletion_refusal` | this |
+    /// |---|---|---|---|
+    /// | Certified, `/Perms` enforced, `P = 2` | allows | refuses | **refuses** |
+    /// | Certified, `/Perms` enforced, `P = 3` | allows | refuses | **allows** |
+    /// | `/FieldMDP` present, uncertified | refuses | allows | **allows** |
+    ///
+    /// The `P = 3` row is the one worth building a query for: it is the
+    /// *comment-review* certification, the case where a document was signed
+    /// specifically so that reviewers could annotate it, and the strict gate
+    /// turns it read-only for no reason the standard supports.
+    ///
+    /// A **pure query** — it reads the signature census and the trailer and
+    /// mutates nothing, so it is safe to call every frame from a UI (R83:
+    /// ask before offering the control).
+    ///
+    /// ```
+    /// # use pdfce_core::{document::Document, edit::EditSession};
+    /// # fn demo(doc: Document) {
+    /// let session = EditSession::new(doc);
+    /// if let Some(err) = session.annotation_deletion_refusal() {
+    ///     eprintln!("deleting comments is not available: {err}");
+    /// }
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn annotation_deletion_refusal(&self) -> Option<EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Some(EditError::DocumentEncrypted);
+        }
+        self.check_certification_for_annotation().err()
     }
 
     /// Mark every occurrence of `query` in the document's extracted text

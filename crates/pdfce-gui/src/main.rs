@@ -5385,12 +5385,42 @@ impl PdfceApp {
         let mut rows: Vec<(usize, pdfce_core::annot::Annotation)> = Vec::new();
         for (page_index, page) in doc.pages.iter().enumerate() {
             for annot in pdfce_core::annot::page_annotations(&graph, page.id) {
-                if annot.is_widget() || annot.is_popup {
+                // `/TrapNet` joins widgets and pop-ups on the excluded list
+                // (Pass 38.5). It is PREPRESS OUTPUT STATE — it records the
+                // trapping a RIP applied to the page — and it is neither a
+                // comment nor deletable through this surface (core refuses
+                // it by name). Listing it would put a row here whose only
+                // possible action is a refusal, which is the affordance R83
+                // forbids; excluding it says the same thing with no control
+                // at all. Same reasoning that already excludes widgets.
+                if annot.is_widget() || annot.is_popup || annot.subtype == b"TrapNet" {
                     continue;
                 }
                 rows.push((page_index, annot));
             }
         }
+
+        // The document-wide deletion gate, asked ONCE per frame rather than
+        // per row: it is a pure query over the signature census and the
+        // trailer, and its answer cannot differ between two rows.
+        //
+        // NOT `deletion_refusal()` — that is the FORM gate, and the two
+        // genuinely disagree. A certification at `/P 3` permits annotation
+        // changes (§12.8.2.2 Table 254) while still freezing the form, so
+        // reusing the form gate here would disable every Delete on exactly
+        // the documents that were certified to allow commenting.
+        let delete_refusal = doc.session.annotation_deletion_refusal();
+        // The master edit switch gates this exactly as it gates every other
+        // mutating panel. Folded into ONE boolean with the certification
+        // gate rather than checked separately, so there is a single place
+        // that decides whether these controls are live.
+        let deletes_enabled = doc.editing_enabled && delete_refusal.is_none();
+        let delete_disabled_note = delete_refusal
+            .as_ref()
+            .map(|err| ui_text::comments_delete_disabled_tooltip(&err.to_string()))
+            .or_else(|| {
+                (!doc.editing_enabled).then(|| ui_text::authoring_disabled_note().to_owned())
+            });
 
         diag::trace(|| {
             format!(
@@ -5422,6 +5452,12 @@ impl PdfceApp {
         }
         ui.separator();
 
+        // The click, collected during the draw and applied after it — the
+        // same deferred-apply shape every other panel action uses, because
+        // the row loop holds an immutable borrow of the session it would
+        // otherwise have to mutate mid-iteration.
+        let mut delete: Option<(pdfce_core::object::ObjId, String)> = None;
+
         egui::ScrollArea::vertical().show(ui, |ui| {
             for (page_index, annot) in &rows {
                 ui.label(ui_text::comment_row_heading(
@@ -5452,16 +5488,148 @@ impl PdfceApp {
                         );
                     }
                 }
-                if ui
-                    .button(ui_text::comment_row_goto())
-                    .on_hover_text(ui_text::comment_row_goto_tooltip(page_index + 1))
-                    .clicked()
-                {
-                    actions.push(Action::GoToPage(*page_index));
-                }
+                ui.horizontal(|ui| {
+                    if ui
+                        .button(ui_text::comment_row_goto())
+                        .on_hover_text(ui_text::comment_row_goto_tooltip(page_index + 1))
+                        .clicked()
+                    {
+                        actions.push(Action::GoToPage(*page_index));
+                    }
+
+                    // DELETE, and it is deliberately NOT flush against
+                    // "Go to". The two controls sit in one row because they
+                    // belong to one comment, but they have very different
+                    // consequences — navigate versus destroy — and adjacent
+                    // flush buttons of unequal weight invite the mis-click
+                    // that a single gap prevents. A judgment call, not a
+                    // rule: nothing in the project's standing rules decides
+                    // button spacing.
+                    ui.add_space(12.0);
+
+                    let Some(id) = annot.id else {
+                        // No object identity means nothing to address. An
+                        // annotation written as a DIRECT dictionary inside
+                        // `/Annots` is malformed (Table 164 dictionaries are
+                        // indirect objects); it is listed, because it is
+                        // really there, and it gets no control, because
+                        // there is no handle to delete by. R83: no
+                        // affordance without the capability.
+                        return;
+                    };
+
+                    // THE PRE-FLIGHT, asked of CORE rather than computed
+                    // here. `annotation_deletion_preview` runs the same
+                    // guards and the same cascade planner the real verb
+                    // does, so the warning this tooltip shows cannot
+                    // disagree with what the click performs. Re-deriving the
+                    // `/IRT` scan in the GUI would put PDF-model rules —
+                    // Table 170's default `/RT` of `R`, the pop-up validity
+                    // check — on the wrong side of the core boundary, where
+                    // nothing would notice them going stale.
+                    //
+                    // It is a pure query and egui redraws every frame, so
+                    // the numbers shown are this frame's session state,
+                    // which is the state the click will act on.
+                    let preview = doc.session.annotation_deletion_preview(id);
+
+                    // THREE distinct reasons a row's Delete can be off, and
+                    // each says which: the document-wide gate (certified,
+                    // encrypted, or editing switched off), and the
+                    // per-annotation refusals core reports through the
+                    // preview — `Locked` (§12.5.3 Table 165 bit 8) most of
+                    // all. A locked row keeps its button and DISABLES it,
+                    // rather than omitting it: R83's "omit, don't grey" is
+                    // about capabilities pdfce lacks, and this is a
+                    // capability pdfce has that this one document forbids
+                    // on this one object. An omitted control here would
+                    // leave the operator hunting for a Delete every
+                    // neighbouring row has, with nothing on screen saying
+                    // why.
+                    let row_refusal = preview.as_ref().err().map(std::string::ToString::to_string);
+                    let enabled = deletes_enabled && row_refusal.is_none();
+
+                    ui.add_enabled_ui(enabled, |ui| {
+                        let b = ui.button(ui_text::comment_row_delete());
+                        let b = match (&row_refusal, &delete_disabled_note) {
+                            // The per-ROW reason wins when both apply: it is
+                            // the more specific fact, and it is the one that
+                            // still holds after the operator fixes the other.
+                            (Some(reason), _) => b.on_disabled_hover_text(
+                                ui_text::comment_row_delete_refused_tooltip(reason),
+                            ),
+                            (None, Some(note)) => b.on_disabled_hover_text(note.clone()),
+                            (None, None) => {
+                                let p = preview.as_ref().ok();
+                                b.on_hover_text(ui_text::comment_row_delete_tooltip(
+                                    &annot.subtype_label(),
+                                    p.map_or(0, |p| p.replies_orphaned),
+                                    p.map_or(0, |p| p.group_members_promoted),
+                                ))
+                            }
+                        };
+                        // The button's own rect, so a scripted run can click
+                        // it by position instead of guessing one. Same trace
+                        // shape `form-delete-field` emits, and for the same
+                        // reason: a control the harness can only reach by
+                        // guessing a pixel re-breaks every time the panel's
+                        // layout changes.
+                        diag::trace(|| {
+                            // ui-text-exempt: diagnostic trace, never displayed in the UI
+                            format!(
+                                "comment-delete-button id={id} subtype={} enabled={enabled} \
+                                 replies={} group={} rect={:?}",
+                                annot.subtype_label(),
+                                preview.as_ref().map_or(0, |p| p.replies_orphaned),
+                                preview.as_ref().map_or(0, |p| p.group_members_promoted),
+                                b.rect
+                            )
+                        });
+                        if b.clicked() {
+                            delete = Some((id, annot.subtype_label()));
+                        }
+                    });
+                });
                 ui.separator();
             }
         });
+
+        // Applied after the loop. Reported through `pending_note` rather
+        // than succeeding silently, for the reason the Forms panel reports
+        // its own deletions: this verb changes things the operator did not
+        // name and cannot see the cause of — replies that stop being
+        // replies, and grouped comments whose previously-suppressed text
+        // becomes visible (§12.5.6.2). The pre-flight tooltip warned; this
+        // is the record, and both are built from the same counts.
+        //
+        // `parent_popup_cleared` can never fire from THIS surface — the row
+        // list excludes `is_popup`, so a pop-up's own id is never offered as
+        // a target — but it is passed through rather than dropped, because
+        // the note function serves any caller and a branch that silently
+        // discards a disclosure is how one goes missing later.
+        if let Some((id, subtype)) = delete {
+            let Status::Open(doc) = &mut self.status else {
+                return;
+            };
+            doc.pending_note = Some(match doc.session_mut().delete_annotation(id) {
+                Ok(outcome) => {
+                    doc.refresh_pages();
+                    ui_text::comment_deleted(
+                        &outcome.subtype,
+                        outcome.replies_orphaned,
+                        outcome.group_members_promoted,
+                        outcome.popup_removed,
+                        outcome.parent_popup_cleared,
+                    )
+                }
+                // Should be unreachable — the preview ran the same guards
+                // before the button was enabled — and is written anyway,
+                // because "should be" is a claim about two functions staying
+                // in step and a silent no-op is how a drift between them
+                // would go unnoticed. See the note function's doc comment.
+                Err(err) => ui_text::comment_delete_failed(&subtype, &err.to_string()),
+            });
+        }
     }
 
     /// The **Forms** pane — the document's interactive fields, listed and
@@ -9370,6 +9538,14 @@ impl eframe::App for PdfceApp {
             }
             diag::Step::Forms => {
                 self.apply(Action::ToggleFormsPanel, ctx, ctx.pixels_per_point());
+            }
+            diag::Step::Comments => {
+                // Through the SAME action the ribbon button pushes, per the
+                // two steps above: a scripted open that set `pane_subject`
+                // directly would skip whatever the real path does and
+                // produce a harness artefact indistinguishable from a
+                // working feature.
+                self.apply(Action::ToggleCommentsPanel, ctx, ctx.pixels_per_point());
             }
             diag::Step::ShowPoints => {
                 // Through the SAME action the toolbar toggle pushes, so a

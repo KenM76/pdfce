@@ -19,6 +19,25 @@
 //! counted, not drawn** — that counter is the measured demand signal for
 //! the later appearance-*generation* Passes (6.1/6.2/7).
 //!
+//! **That scope is unchanged by `Pass 38.5`, which is worth saying
+//! because the Pass added four things here.** This module still only
+//! reads;
+//! [`EditSession::delete_annotation`](crate::edit::EditSession::delete_annotation)
+//! does the writing and lives in `edit`. What arrived here is the model
+//! that verb needs, and each piece is a key this file previously skipped
+//! for being display-irrelevant:
+//!
+//! | Added | Clause | Why a DELETION verb needs it |
+//! |---|---|---|
+//! | [`Annotation::popup`] | §12.5.6.14, Table 170 | A pop-up *"shall not appear alone"*; deleting a markup annotation must take its window, or §12.5.6.2 NOTE 2 makes the orphan start displaying the deleted comment's own text. |
+//! | [`Annotation::in_reply_to`] | §12.5.6.2, Table 170 | Who refers to the annotation being removed. |
+//! | [`Annotation::reply_type`] + [`ReplyType`] | §12.5.6.2, Table 170 | `/RT /R` and `/RT /Group` are the SAME key with different deletion consequences — and Table 170's default is `R`, so an absent key is a reply. |
+//! | [`AnnotFlags::LOCKED`] | §12.5.3, Table 165 bit 8 | *"do not allow the annotation to be deleted"* — the only clause in ISO 32000-1 that gates this operation. Explicitly **not** bit 10 `LockedContents`, which *"does not restrict deletion"*. |
+//!
+//! `LOCKED` is a deliberate exception to [`AnnotFlags`]'s own
+//! display-flags-only rule, stated at the type. It must never gate
+//! rendering.
+//!
 //! ## Spec sources (PDF-spec RAG, ISO 32000-1:2008)
 //!
 //! - `iso32000__s__12.5.2.md` — §12.5.1–.2, Table 164 (entries common to
@@ -54,7 +73,26 @@
 //!   consistent deferral rather than a silent divergence.
 //! - **`/R` and `/D`** (rollover/down) are recognised but never selected —
 //!   they are interaction states no static display drives (§12.5.5); this
-//!   module models only `/N`.
+//!   module models only `/N`. **(`Pass 38.5` note: the deletion verb
+//!   nevertheless collects `/R` and `/D` streams when it removes an
+//!   annotation. "Never selected for painting" and "never cleaned up" are
+//!   different claims, and leaving them would orphan a stream in every
+//!   subsequent save.)**
+//! - **The pop-up's own `/Parent` back-reference** (Table 183) is not
+//!   modelled, and [`Annotation::popup`] is. Deliberate, not an
+//!   asymmetry to be tidied: the authoritative direction is the parent's
+//!   `/Popup`, and finding a parent by scanning for whoever names the
+//!   pop-up also copes with the malformed-but-real case of a `/Parent`
+//!   that disagrees with its claimed parent's `/Popup`. Modelling both
+//!   would mean two answers to one question.
+//! - **Reply-thread RESOLUTION.** [`Annotation::in_reply_to`] is a link,
+//!   not a walk: this module never follows it, never assembles a thread,
+//!   and never applies §12.5.6.2's group-attribute rule (a subordinate's
+//!   `Contents`/`T`/`M`/`C` *"shall be ignored"* in favour of its
+//!   primary's). Applying it here would make [`Annotation::contents`]
+//!   disagree with the dictionary it came from — see that field's own
+//!   note. A consumer that wants the resolved view builds it from the
+//!   links.
 
 use std::collections::BTreeSet;
 
@@ -117,6 +155,29 @@ impl AnnotFlags {
     /// annotation, and a document-forensics vector when paired with
     /// Print.
     pub const NO_VIEW: u32 = 1 << 5;
+    /// Bit 8 (value 128) — **Locked**: *"If set, do not allow the
+    /// annotation to be **deleted** or its properties (including position
+    /// and size) to be modified by the user."*
+    ///
+    /// # The only editing gate the standard puts on an annotation
+    ///
+    /// Added by `Pass 38.5`, and it is the exception to this type's own
+    /// "display flags only" scope note directly above — deliberately, and
+    /// with the reason: `Locked` is the one Table 165 bit that constrains
+    /// an operation pdfce performs. Every other non-display flag governs
+    /// interaction pdfce has no surface for.
+    ///
+    /// **It has NO display consequence and must never gate rendering.**
+    /// A locked annotation paints exactly like an unlocked one; the flag
+    /// is about who may change it.
+    ///
+    /// **Not to be confused with bit 10, `LockedContents`**, whose own
+    /// Table 165 text says it *"does not restrict deletion"* — it locks
+    /// the *contents* of the annotation, not its existence. Treating the
+    /// two as one would refuse deletions the standard permits; treating
+    /// `Locked` as cosmetic would perform deletions it forbids. Hence a
+    /// named constant for exactly one of them.
+    pub const LOCKED: u32 = 1 << 7;
 
     /// Whether the Hidden flag (Table 165 bit 2) is set.
     #[must_use]
@@ -153,6 +214,17 @@ impl AnnotFlags {
     #[must_use]
     pub const fn no_rotate(self) -> bool {
         self.0 & Self::NO_ROTATE != 0
+    }
+
+    /// Whether the **Locked** flag (Table 165 bit 8) is set — the
+    /// annotation may not be deleted, moved or resized by the user.
+    ///
+    /// See [`Self::LOCKED`] for why this one non-display flag has an
+    /// accessor when the other three do not, and for the
+    /// `LockedContents` trap.
+    #[must_use]
+    pub const fn locked(self) -> bool {
+        self.0 & Self::LOCKED != 0
     }
 
     /// Whether this annotation is suppressed from **on-screen** display,
@@ -253,9 +325,14 @@ pub struct Annotation {
     ///
     /// **Not resolved here:** §12.5.6.2 NOTE 2 says a markup annotation with
     /// a parent (`/IRT` reply) has its own `Contents` "shall be ignored".
-    /// That is a reply-chain rule needing `/IRT` modelling this struct does
-    /// not have, so the raw value is surfaced and the caveat is stated rather
-    /// than silently half-applied.
+    /// The `/IRT` link IS now modelled ([`Self::in_reply_to`],
+    /// [`Self::reply_type`], added by Pass 38.5 so annotation *deletion*
+    /// could reason about reply chains) — but the rule is still deliberately
+    /// **not applied here**: this field stays the raw value the dictionary
+    /// carries, and any consumer that wants the group-attribute resolution
+    /// walks the link itself. Silently substituting a primary's `/Contents`
+    /// for a subordinate's would make the model disagree with the file,
+    /// which is the one thing `pdfce-core`'s read half must never do.
     pub contents: Option<String>,
     /// `/T` — the annotation's title, conventionally the AUTHOR (Table 170,
     /// markup annotations only). `None` when absent.
@@ -288,6 +365,80 @@ pub struct Annotation {
     /// honouring — decision 011 §2.4; full content-stream BDC/EMC `/OC` stays
     /// deferred). `None` when the annotation is on no layer.
     pub oc: Option<ObjId>,
+    /// `/Popup` — this markup annotation's pop-up window companion
+    /// (Table 170, Optional, PDF 1.3). `None` when the annotation has no
+    /// pop-up, which includes every non-markup subtype.
+    ///
+    /// # Why the READ half models it: the popup cannot outlive its parent
+    ///
+    /// §12.5.6.14 is a `shall`: a pop-up annotation *"**shall not appear
+    /// alone** but is associated with a markup annotation, its parent
+    /// annotation"*. So this is not a decorative back-link — it is a
+    /// **structural dependency**, and any operation that removes the
+    /// parent must remove the pop-up in the same breath or leave the
+    /// document violating that clause. Modelling it here rather than
+    /// re-reading the dictionary at each call site is what lets
+    /// [`crate::edit::EditSession::delete_annotation`] and any future
+    /// mover/copier agree about the pair.
+    ///
+    /// The reference is surfaced **unresolved and unvalidated**: a
+    /// `/Popup` pointing at a missing object, or at something that is not
+    /// a `/Popup` annotation, is modelled as-is. Repairing it here would
+    /// be the read half inventing structure (R27).
+    pub popup: Option<ObjId>,
+    /// `/IRT` — the annotation this one is *in reply to* (Table 170,
+    /// Optional, PDF 1.5). `None` for an annotation that is not part of a
+    /// thread or a group.
+    ///
+    /// # A reference with TWO meanings, disambiguated by [`Self::reply_type`]
+    ///
+    /// The same key builds two different structures (§12.5.6.2), and they
+    /// behave differently under deletion, which is why both are modelled
+    /// and neither is collapsed into the other:
+    ///
+    /// - **`/RT /R`** (a *reply*, and the default): an ordinary threaded
+    ///   comment. It keeps its own author and text and is readable on its
+    ///   own; losing its target costs the thread's shape, not its content.
+    /// - **`/RT /Group`**: the target is the group **primary**, and
+    ///   §12.5.6.2 says the subordinate's own `Contents`/`RC`+`DS`, `M`,
+    ///   `C`, `T`, `Popup`, `CreationDate`, `Subj` and `Open` *"shall be
+    ///   ignored"* in favour of the primary's. A subordinate whose primary
+    ///   is gone therefore carries text a conforming reader is instructed
+    ///   not to use.
+    ///
+    /// Surfaced unresolved, same as [`Self::popup`]: a dangling `/IRT` is
+    /// modelled, not repaired.
+    pub in_reply_to: Option<ObjId>,
+    /// `/RT` — how [`Self::in_reply_to`] should be read (Table 170,
+    /// Optional, PDF 1.6).
+    ///
+    /// `None` when the key is absent. **`None` is NOT the same as
+    /// [`ReplyType::Reply`]** at the model level even though Table 170's
+    /// default value is `R`: the absent case is a document fact this
+    /// struct reports, and a consumer that wants the default applies it
+    /// with [`Self::effective_reply_type`] rather than being unable to
+    /// tell "the file said `R`" from "the file said nothing".
+    pub reply_type: Option<ReplyType>,
+}
+
+/// `/RT` — the relationship [`Annotation::in_reply_to`] expresses
+/// (ISO 32000-1 §12.5.6.2, Table 170, PDF 1.6).
+///
+/// Two values are defined by the standard; anything else is preserved
+/// rather than coerced, because a name pdfce does not recognise is a
+/// document fact and flattening it to the default would make the model
+/// claim the file said something it did not.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ReplyType {
+    /// `/R` — a threaded **reply**. Table 170's default value.
+    Reply,
+    /// `/Group` — this annotation is a **subordinate** of the primary named
+    /// by `/IRT`, and §12.5.6.2's group-attribute rule applies: its own
+    /// `Contents` (or `RC`+`DS`), `M`, `C`, `T`, `Popup`, `CreationDate`,
+    /// `Subj` and `Open` *"shall be ignored"* in favour of the primary's.
+    Group,
+    /// A `/RT` name that is neither `/R` nor `/Group`. Carried verbatim.
+    Other(Vec<u8>),
 }
 
 impl Annotation {
@@ -298,6 +449,42 @@ impl Annotation {
     #[must_use]
     pub fn is_widget(&self) -> bool {
         self.subtype == b"Widget"
+    }
+
+    /// Whether this annotation is a `/RT /Group` **subordinate** — it has
+    /// an `/IRT` target and that link is a grouping link, not a reply link
+    /// (§12.5.6.2).
+    ///
+    /// The distinction matters to anything that removes or moves the
+    /// primary: a subordinate's own `Contents`/`T`/`M`/`C`/`Popup`/
+    /// `CreationDate`/`Subj`/`Open` *"shall be ignored"* in favour of the
+    /// primary's, so losing the primary costs a subordinate its readable
+    /// identity in a way losing a reply's target does not.
+    ///
+    /// Note the `&&`: an `/RT /Group` with **no** `/IRT` is not a
+    /// subordinate of anything. Table 170 makes `/RT` meaningful only
+    /// alongside `/IRT`, so the pair is checked, never `/RT` alone.
+    #[must_use]
+    pub fn is_group_subordinate(&self) -> bool {
+        self.in_reply_to.is_some() && self.effective_reply_type() == Some(ReplyType::Group)
+    }
+
+    /// [`Self::reply_type`] with Table 170's **default value `R`** applied
+    /// when the key is absent but `/IRT` is present.
+    ///
+    /// Returns `None` only when there is no `/IRT` at all — because `/RT`
+    /// is meaningful only alongside `/IRT`, so "what relationship is this"
+    /// has no answer for an annotation that is in reply to nothing.
+    ///
+    /// This exists so callers stop re-deriving the default. Table 170's
+    /// defaults are permissive (§12.8.2.2's `/P` is the same trap), and a
+    /// call site that treats an absent `/RT` as "not a reply" is wrong in
+    /// the ordinary case: the ordinary case is a threaded comment that
+    /// simply relies on the default.
+    #[must_use]
+    pub fn effective_reply_type(&self) -> Option<ReplyType> {
+        self.in_reply_to?;
+        Some(self.reply_type.clone().unwrap_or(ReplyType::Reply))
     }
 
     /// A stable, human/diagnostic label for the subtype: the `/Subtype`
@@ -461,6 +648,28 @@ fn model_annotation<G: ObjectGraph + ?Sized>(
     let title = text_of(b"T");
     let mod_date = text_of(b"M");
 
+    // §12.5.6.2 Table 170 reply/grouping structure. Read for EVERY subtype,
+    // not only markup ones, for the same reason `/T` is: an absent key is
+    // `None`, which is exactly the truth, and a type-gated reader would make
+    // the model silently disagree with a file that carries the key anyway.
+    //
+    // All three are taken as REFERENCES rather than resolved dictionaries.
+    // Deletion needs identity (is THIS the object my `/IRT` names?), and a
+    // resolved copy cannot answer that; a `/Popup` written as a direct
+    // dictionary — illegal, since Table 164 dictionaries are indirect
+    // objects — yields `None` and is therefore reported as "no companion"
+    // rather than as a companion nothing can address.
+    let popup = dict.get(b"Popup").and_then(Object::as_reference);
+    let in_reply_to = dict.get(b"IRT").and_then(Object::as_reference);
+    let reply_type = graph
+        .resolve(dict.get(b"RT").unwrap_or(&Object::Null))
+        .as_name()
+        .map(|n| match n.as_bytes() {
+            b"R" => ReplyType::Reply,
+            b"Group" => ReplyType::Group,
+            other => ReplyType::Other(other.to_vec()),
+        });
+
     Annotation {
         id,
         subtype,
@@ -472,6 +681,9 @@ fn model_annotation<G: ObjectGraph + ?Sized>(
         contents,
         title,
         mod_date,
+        popup,
+        in_reply_to,
+        reply_type,
     }
 }
 

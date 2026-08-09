@@ -1146,3 +1146,94 @@ precedent is `ExtractOptions::word_gap_ratio` (default `0.20`): a named core
 field + documented default + `with_gap_ratios` builder, **with 0 CLI and 0 GUI
 hits** ⇒ the cheapest entry in the whole register is *exposing what already
 exists*, and it is the template for the other 17.
+
+**32. A DELETION/REFERENTIAL-INTEGRITY dispatch (Pass 38.5 `delete_annotation`)
+— the governing clause is a GENERAL one from a different part of the standard,
+and it INVERTS the dispatch's whole framing.** Established 2026-08-09 building
+`iso32000__ref__annotation_deletion_semantics.md` + a `## DELETION DIRECTION`
+axis section on `iso32000__s__12.5.6.md`. Seven sub-rules:
+
+- **★ Before answering "is a dangling reference to X malformed?", find the
+  clause that governs DANGLING REFERENCES IN GENERAL.** The four questions were
+  all posed inside clause 12.5 and the answer to three of them is **§7.3.10**:
+  *"An indirect reference to an undefined object **shall not be considered an
+  error** by a conforming reader; it **shall be treated as a reference to the
+  null object.**"* That single sentence makes every dangling `/IRT`, `/Popup`,
+  `/Parent` and Hide-action `/T` **legal by construction**, and it means the
+  cascade is needed for *semantic hygiene*, not for *validity*. Extends items
+  17/23/29 (trace to the consumer / the invariant / the defining clause) with a
+  fourth direction: **trace to the GENERIC clause governing the failure mode.**
+  A referential-integrity question is a clause-7 question wearing clause-12
+  clothes. `dangling` **0 hits**, `orphan` **0**, `"no longer exists"` **0**,
+  `"shall exist"` **2 both unrelated** — the concept does not exist in ISO
+  32000-1 at all.
+- **★★ THE CONFORMANCE OBLIGATION FOR KEY A CAN LIVE ENTIRELY IN KEY B's ROW.**
+  The dispatch asked "if `/IRT` is removed, is a surviving `/RT` merely inert?"
+  and pointed at `/RT`'s own text (*"meaningful only if `IRT` is present"*),
+  which is **semantic** and would indeed make it inert. The answer is in the
+  **sibling `/IRT` row**: *"**Required if an `RT` entry is present**, otherwise
+  optional"*. ⇒ `{RT present, IRT absent}` is a **missing conditionally-required
+  entry** — and it was the *only* conformance defect in the entire cascade.
+  Generalises item 25's "quote any row whose meaning is conditional on a sibling
+  key": **when a dispatch asks about key A's conditional clause, read key B's
+  optionality column too — the dependency is often stated in BOTH rows, in
+  opposite directions, with the binding half in the row nobody quotes.**
+- **A DEFAULT VALUE turns "strip the key" into a semantic CHANGE, not a no-op.**
+  `/RT`'s `Default value: R` means stripping `/RT` while keeping `/IRT` silently
+  reclassifies a `Group` **subordinate** into an `R` **reply**. Whenever a
+  deletion/cleanup pass proposes removing an optional key, **check whether that
+  key has a default** — removal then asserts the default rather than asserting
+  nothing.
+- **★ A cascade can make a SPEC AMBIGUITY UNREACHABLE — say so instead of
+  answering it.** The dispatch's Q4 ("does 'subordinate entries shall be ignored'
+  survive the primary's deletion? is that content loss?") is genuinely SILENT
+  (no lapse rule, no re-election rule). But the group's own *definition* requires
+  *"an `IRT` entry **that refers to the primary annotation**"*, and the Q2
+  cascade already strips `/IRT`+`/RT` ⇒ under **both** rival readings the
+  ex-subordinates become ordinary annotations showing their own text. **The best
+  answer to an unanswerable question is often a cascade ordering that makes it
+  moot** — and then naming the one variant that must never ship (delete the
+  primary, leave `/IRT` dangling: legal, unanswerable, and reader-divergent).
+- **A standard can FORBID and SPECIFY the same state — that is an ambiguity, not
+  a reading error.** §12.5.6.14: a popup *"**shall not appear alone**"*. Table
+  183 `/Parent`: *"**(Optional**; shall be an indirect reference)"*. §12.5.6.2
+  **NOTE 2**: *"If an annotation **has no parent**, the `Contents` entry **shall**
+  represent the text of the annotation, otherwise it shall be ignored."* Three
+  statements, one forbidding the state and two giving it defined behaviour.
+  Verdict shape that worked: **the `shall` is the only normative one ⇒ cascade;
+  but leaving it is not provably non-conforming ⇒ ambiguity row + setting.** The
+  operational sting is in the NOTE: **an orphaned popup does not go quiet, it
+  starts speaking in its own voice** (its own `/Contents` becomes its text).
+- **A NOTE's SCOPE is set by the bullet it hangs under, and the corpus had it
+  wrong.** §12.5.6.2 NOTE 2 sits inside the list *"The remaining annotation types
+  are **not** considered markup annotations"*, attached to the **pop-up** bullet;
+  `/Parent` is a **Table 183 (popup)** key, absent from Tables 164 and 170. The
+  file had recorded it as *"A markup annotation with a parent: its own `Contents`
+  shall be ignored"* — wrong subject **and** it dropped the no-parent half, which
+  is the half deletion needs. `CORRECTION` per item 3. **Test for any NOTE you
+  cite: which KEY does it name, and which table owns that key?**
+- **Fifth errata cluster (4: AD-E1..E4), and two were CONFIRMED UPSTREAM.**
+  §12.5.6.14 cites Table **174** for `/Popup` (it is 170); Table 183's `/Parent`
+  cites Table **168** for `Contents`/`M`/`C`/`T` (it is 164); §12.5.6.3 cites
+  Table **173** for `/IRT` **twice** (it is 170). The PDF Association's public
+  errata for ISO 32000-2:2020 makes exactly the §12.5.6.3 correction. **New
+  routine: after finding a `(see Table N)` erratum, check
+  `https://pdf-issues.pdfa.org/32000-2-2020/clause<N>.html` — it is free, HTTP
+  200, no auth, and it both CONFIRMS 1.7 errata and quotes 2.0 clause text in
+  strike-through/insert form, making it a legitimate narrow 1.7→2.0 delta
+  source.** It yielded two 2.0 deltas nobody asked for (grouping is PDF **1.5**
+  not 1.6, with `/RT` separately 1.6; 2.0 makes `/AP` mandatory for writers but
+  exempts `Popup`/`Projection`/`Link`).
+
+**Also this build — a LICENSING finding that outranks the dispatch:**
+`pdfa-inc.org` states ISO 32000-2:2020 (+ ISO/TS 32001–32005) has been available
+at **no cost** under PDF Association sponsored access **since 2023-04-05**
+(page HTTP 200, "Errata Collection 3", file updated June 2026). That contradicts
+`LEGAL.md` §2 and `LEGAL_NOTE.md`. **Not acquired** — it needs an account + a
+$0 checkout, i.e. a side effect outside the working tree, so it was **marked
+`NEEDS VERIFICATION` and escalated**, not corrected. And **zero cost ≠
+redistributable**: an acquired copy is still `user_provided_paywalled_copy`,
+never `free_primary` (licensing-memory item 6, third instance). **Note the host
+split: `pdfa.org` still 403s, but `pdfa-inc.org` and `pdf-issues.pdfa.org` both
+serve fine** — the 2026-07-31 "PDF Association is not machine-reachable" note
+was true only of one host.

@@ -153,6 +153,21 @@ and `pdfminer` installed. Extraction recipe that works:
      `tail -c 200 f.pdf | grep -q '%%EOF'` before extracting.** A single
      `curl -sL -C - -o same-file <url>` resume completed it.
   4. `archive.org/cdx/search/cdx` **504s** — don't rely on it for enumeration.
+- **PDF Association — the HOST SPLIT (verified 2026-08-09).** `pdfa.org` still
+  **403**s automated fetches, but two sibling hosts serve fine (both HTTP 200,
+  no auth, plain `curl` with a browser UA):
+  - **`https://pdf-issues.pdfa.org/32000-2-2020/clause<N>.html`** — the public
+    **errata for ISO 32000-2:2020**, per clause. Quotes 2.0 clause text in
+    strike-through/insertion form ⇒ it **confirms ISO 32000-1 errata** *and* is a
+    legitimate **narrow 1.7→2.0 delta source** (`free_secondary_paraphrase`).
+    Strip tags with a 3-line `re.sub` and grep the flat text; `clause12.html` is
+    ~135 kB → ~57 kB of text.
+  - **`https://www.pdfa-inc.org/product/iso-32000-2-pdf-2-0-bundle-sponsored-access/`**
+    — states ISO 32000-2:2020 + ISO/TS 32001–32005 are **$0.00 since 2023-04-05**
+    under sponsored access. **Acquisition needs an account + a $0 cart checkout =
+    a side effect outside the working tree ⇒ escalate to the operator, do not
+    perform it.** And **zero cost ≠ redistributable** — an acquired copy is
+    `user_provided_paywalled_copy`, never `free_primary`.
 - **Dead/blocked, 2026-07-31:** `www.adobe.com/content/dam/...` PDF paths **hang**
   (no response in 120 s; `curl` exit 92 on HTTP/2, then a 2-minute timeout on
   `--http1.1`) · `opensource.adobe.com/dc-acrobat-sdk-docs/standards/pdfstandards/pdf/adobe_supplement_iso32000*.pdf`

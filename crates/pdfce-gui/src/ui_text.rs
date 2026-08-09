@@ -3911,6 +3911,15 @@ pub fn command_label(kind: CommandKind) -> String {
         // imply removed content can come back, which is the one thing this
         // feature must never suggest.
         CommandKind::DeleteRedactionMark => "remove a redaction mark".to_owned(),
+        // Pass 38.5. Deliberately the plain word, and deliberately NOT
+        // shared with the line above: `delete_annotation` ROUTES a
+        // `/Redact` target to `delete_redaction_mark`, so a document where
+        // both wordings can appear is the ordinary case, and the two
+        // sentences mean different things ("I removed a comment" vs "I
+        // changed my mind about redacting"). The routing exists to keep
+        // that distinction; collapsing it here would throw it away at the
+        // last step.
+        CommandKind::DeleteAnnotation => "delete an annotation".to_owned(),
         // Pass 12.M2 dimensioning commands.
         CommandKind::AddDimension => "add dimension".to_owned(),
         CommandKind::SetGroupScale { members } => {
@@ -7647,6 +7656,153 @@ pub fn comment_row_goto() -> &'static str {
 /// Its tooltip — names the page, because the button sits in a list of many.
 pub fn comment_row_goto_tooltip(page_number: usize) -> String {
     format!("Show page {page_number}, where this is")
+}
+
+// -- Comment DELETION (Pass 38.5) --------------------------------------------
+
+/// The per-row delete control.
+///
+/// "Delete" and not "Delete comment": the row's own heading already names
+/// the subtype, and the panel lists things that are not comments in the
+/// everyday sense (a `/Link`, a ce dimension). A button that called a
+/// dimension a comment would be wrong on the rows where it matters most.
+pub fn comment_row_delete() -> &'static str {
+    "Delete"
+}
+
+/// The delete button's tooltip — a PRE-FLIGHT warning, not a description.
+///
+/// # Why the counts are on the button rather than only in the result
+///
+/// Deleting a threaded comment changes OTHER rows in the same visible
+/// list, and one of the two ways it does so makes text **appear**: while a
+/// `/RT /Group` primary exists, §12.5.6.2 requires a reader to ignore its
+/// subordinates' own author and note text, so removing it un-suppresses
+/// several other comments. That is not a consequence anybody predicts, and
+/// a report delivered afterwards explains a surprise rather than
+/// preventing one.
+///
+/// Rule 4 as narrowed by decision 024 §4.4 does **not** ask for a confirm
+/// click here — the deletion is visible and one undo away. It asks for the
+/// operator to be able to see what pdfce is about to do, which is what a
+/// hover gets them at zero cost to the ordinary single-comment case: with
+/// no replies and no subordinates, the tooltip is one plain sentence.
+/// The delete-is-not-redact sentence is carried here, unconditionally,
+/// and its wording follows [`form_delete_whole_field_tooltip`]'s rather
+/// than inventing a second phrasing for the same fact. That tooltip
+/// already tells an operator that a normal save leaves the deleted thing
+/// recoverable and points at Redact; two differently-worded versions of
+/// one caveat teach the reader that pdfce is not sure.
+///
+/// It lives on the control and not on the panel because the panel is also
+/// read by people who are only browsing, and a caveat that greets every
+/// visitor is one people stop reading. Here it appears at the moment
+/// someone is about to act on the mistaken belief.
+pub fn comment_row_delete_tooltip(subtype: &str, replies: usize, group_members: usize) -> String {
+    let mut s = format!("Delete this {subtype} from the document. One undo reverses it.");
+    if replies > 0 {
+        s.push_str(&format!(
+            "\n\n{replies} repl(ies) point at it. They are KEPT — they are separate comments with their own text — but they stop being part of a thread. To delete a whole thread, delete each comment in it."
+        ));
+    }
+    if group_members > 0 {
+        s.push_str(&format!(
+            "\n\n{group_members} other comment(s) are grouped under this one, and their own author and text are HIDDEN in its favour while it exists. Deleting it makes that text appear."
+        ));
+    }
+    s.push_str(
+        "\n\nNote: with the normal save, this comment is still present in the file's earlier revision — deleting is not a way to remove sensitive text. Use Redact for that.",
+    );
+    s
+}
+
+/// Why every row's delete control is disabled: the document-wide gate.
+///
+/// Deliberately distinct from the form-deletion string. The two gates give
+/// different answers on the same document: a certification at `/P 3`
+/// permits annotation changes and still freezes the form, so a shared
+/// string would tell an operator that comments cannot be deleted while
+/// they are deleting one.
+pub fn comments_delete_disabled_tooltip(reason: &str) -> String {
+    format!("Comments cannot be deleted in this document right now.\n\n{reason}")
+}
+
+/// Status note after a successful deletion — the post-hoc half.
+///
+/// Reports what HAPPENED, including every consequence the operator did not
+/// name. The pre-flight tooltip warned; this one is the record, and the
+/// two must agree, so both are built from the same three counts.
+pub fn comment_deleted(
+    subtype: &str,
+    replies_orphaned: usize,
+    group_members_promoted: usize,
+    popup_removed: bool,
+    parent_popup_cleared: bool,
+) -> String {
+    let mut s = format!("Deleted the {subtype}.");
+    if popup_removed {
+        s.push_str(" Its pop-up note window went with it.");
+    }
+    if parent_popup_cleared {
+        s.push_str(" The comment it belonged to was kept — deleting a note window does not delete the note.");
+    }
+    if replies_orphaned > 0 {
+        s.push_str(&format!(
+            " {replies_orphaned} repl(ies) were kept and are now standalone comments."
+        ));
+    }
+    if group_members_promoted > 0 {
+        s.push_str(&format!(
+            " {group_members_promoted} grouped comment(s) now show their own author and text, which was hidden while this one existed."
+        ));
+    }
+    s
+}
+
+/// Why ONE row's delete control is disabled while its neighbours' are not —
+/// a per-annotation refusal, wrapping the exact message
+/// `EditSession::annotation_deletion_preview` reported.
+///
+/// # The reason text is core's, verbatim, and that is the design
+///
+/// `EditError::AnnotationLocked` already names the remedy (*"clear the flag
+/// in the producing application first"*) and the trap (*"this is NOT the
+/// LockedContents flag"*) — facts an operator has no other way to learn,
+/// and facts a GUI-local paraphrase would drop the first time someone
+/// shortened the string to fit. So this wrapper adds one framing sentence
+/// and passes the rest through.
+///
+/// The third of three distinct disabled reasons — document-wide gate,
+/// master edit switch, per-annotation refusal — and they must stay
+/// distinct. A single "cannot delete" string across all three would repeat
+/// exactly the mistake [`form_delete_certification_disabled_tooltip`]'s own
+/// doc comment warns about, where one gate's wording explained a different
+/// gate's refusal.
+///
+/// Reused for the post-hoc failure note as well, so a refusal that somehow
+/// arrives after the click reads the same as one that arrives before it.
+pub fn comment_row_delete_refused_tooltip(reason: &str) -> String {
+    format!("This one cannot be deleted.\n\n{reason}")
+}
+
+/// The post-hoc failure note, when a delete that the preview allowed is
+/// nevertheless refused by the verb.
+///
+/// # It should be unreachable, and it is written anyway
+///
+/// `annotation_deletion_preview` runs the same guards in the same order as
+/// `delete_annotation`, so a control that was enabled should not then
+/// refuse. But "should not" is a claim about two functions staying in
+/// step, and the honest response to that is a message that names the
+/// annotation and states the reason — not a silent no-op, which is how a
+/// drift between the two would go unnoticed for months.
+///
+/// The subtype is captured at CLICK time rather than taken from the
+/// outcome, because on this path there is no outcome. "Could not delete
+/// the Highlight" locates the failure in a list of twenty rows where
+/// "could not delete" does not.
+pub fn comment_delete_failed(subtype: &str, reason: &str) -> String {
+    comment_row_delete_refused_tooltip(&format!("{subtype}: {reason}"))
 }
 
 // -- The master editing switch (2026-08-06 operator ruling) ------------------
