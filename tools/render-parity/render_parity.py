@@ -708,6 +708,28 @@ def render_pdfce(
             % (r.returncode, r.stderr.decode(errors="replace").strip()[:200])
         )
     diag = parse_diag_line(r.stdout.decode(errors="replace")) or {}
+    # `pdfce-cli` prints "note: N structural oddity(ies) tolerated" to
+    # STDERR, and this function parsed only stdout — so the one thing
+    # pdfce says when it could not act on something was structurally
+    # invisible to its own differential oracle.
+    #
+    # 442 of 3,714 measured pages (11.9%) emit it, and 202 of the 2,015
+    # CLEAN-BY-CONSTRUCTION pages do (10.0%). Every one of those helped
+    # define the band while privately reporting that pdfce had skipped
+    # something. That is the mechanism by which a silent bug raises the
+    # threshold that hides other bugs.
+    err = r.stderr.decode(errors="replace")
+    marker = "structural oddity"
+    if marker in err:
+        for line in err.splitlines():
+            if marker not in line:
+                continue
+            for tok in line.replace(":", " ").split():
+                if tok.isdigit():
+                    diag["tolerated"] = int(tok)
+                    break
+            break
+        diag.setdefault("tolerated", 1)
     arr = to_white_rgb(Image.open(out))
     return arr, diag
 
@@ -1326,7 +1348,26 @@ def measure_page(
     refs = ref_reasons(diag) if args.annots else []
     if dcmyk:
         gaps = gaps + ["devicecmyk-file"] if "devicecmyk-jpeg" not in gaps else gaps
-    clean = int(not gaps and not dcmyk and not refs and not dim_mismatch)
+    # `tolerated` disqualifies a page from DEFINING the band.
+    #
+    # "Clean by construction" means pdfce claims to have rendered the page
+    # fully, so whatever it diverges by can only be renderer noise. A page
+    # that tolerated a structural oddity is making the opposite claim: it
+    # says pdfce hit something it could not act on. Such a page may still
+    # be fine, but it cannot be part of the population that DEFINES what
+    # "fine" looks like.
+    #
+    # Deliberately NOT added to `gaps`. `tolerated` is a ~30-site catch-all
+    # that conflates "unbalanced Q" (harmless) with "gs was a no-op"
+    # (which was hiding a real bug until 2026-08-09), so treating it as an
+    # explanation would excuse divergences it does not explain. Excluding
+    # it from the band is the conservative half — it can only make the
+    # band tighter and bug candidates easier to see — and splitting the
+    # counter into content-affecting vs structural is the owed follow-up.
+    tolerated = int(diag.get("tolerated", 0) or 0)
+    clean = int(
+        not gaps and not dcmyk and not refs and not dim_mismatch and not tolerated
+    )
 
     pr = PageResult(
         rel=rel, page=pg, status="ok",
