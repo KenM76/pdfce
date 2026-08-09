@@ -72,8 +72,27 @@ THE THREE BUCKETS (decision 010 deliverable 3; R20 by-file-and-reason)
 ======================================================================
 Every (file, page) is classified:
 
-  (i)   benign-renderer-noise  — frac_over_32 <= band. AA/hinting/subpixel.
-  (ii)  known-disclosed-gap    — frac_over_32 > band AND pdfce disclosed a
+  (i)   below-band            — frac_over_32 <= band AND pdfce disclosed
+                                 nothing. NOT a verdict of "benign": it was
+                                 called `benign-renderer-noise` until
+                                 2026-08-09, which asserted a CAUSE from a
+                                 THRESHOLD. A structural audit measured
+                                 15.4% of that population as not
+                                 edge-shaped, and found four confirmed
+                                 pdfce bugs inside it. Small and
+                                 unexplained; nothing more.
+  (ii)  disclosed-gap[-small]  — pdfce disclosed a gap that explains it
+                                 (Type3, sh shading, /SMask, /OC, image
+                                 codec, DeviceCMYK, a substituted font
+                                 face, ...). Checked BEFORE the band: an
+                                 explanation does not stop being an
+                                 explanation because the divergence it
+                                 explains is small. The `-small` suffix
+                                 marks the below-band half. Formerly this
+                                 test ran AFTER the band, which filed
+                                 1,656 explained pages as renderer noise —
+                                 including a page pdfce rendered blank.
+  (ii-legacy) known-disclosed-gap — frac_over_32 > band AND pdfce disclosed a
                                  gap that explains it (Type3, sh shading,
                                  /SMask, /OC, image codec, DeviceCMYK, a
                                  substituted font face, ...). Cross-checked
@@ -1185,13 +1204,37 @@ def run(args: argparse.Namespace) -> int:
         )
 
     # ---- Phase 3: classify.
+    #
+    # THE GAP TEST COMES FIRST. It used to come after the band, and the
+    # ordering was not a detail: 1,656 of 3,668 pages in the old "benign"
+    # bucket (45.2%) were pages where pdfce ITSELF disclosed a gap —
+    # 1,032 deferred-op, 573 font-substituted, 139 font-unsupported, and
+    # so on. The worst single case was a page pdfce rendered COMPLETELY
+    # BLANK (`pdfbox/.../merge/multitiff.pdf`, `image-unsupported`
+    # disclosed): frac32 0.0798 under a band of 0.0882, so it was filed
+    # as renderer noise.
+    #
+    # A disclosed gap is an EXPLANATION, and an explanation should not be
+    # discarded because the divergence it explains happens to be small.
+    # Scoring below the band tells you the difference is small; it does
+    # not tell you the difference is anti-aliasing.
+    #
+    # The name changed with the ordering. "benign-renderer-noise"
+    # asserted a CAUSE from a THRESHOLD, and the structural audit of
+    # 2026-08-09 measured how often that assertion is wrong: 15.4% of the
+    # bucket contains a contiguous over-threshold region no shared edge
+    # explains, and four confirmed pdfce bugs were living in it. The
+    # buckets are now named for what is actually measured.
     for r in ok:
-        if r.frac32 <= band:
-            r.bucket = "benign"
-        elif r.refdiv:
+        if r.refdiv:
             r.bucket = "reference-divergence"
         elif r.gaps:
-            r.bucket = "known-gap"
+            # Below the band as well? Still a disclosed gap — but worth
+            # separating, because "small AND explained" is a very
+            # different follow-up from "large AND explained".
+            r.bucket = "disclosed-gap-small" if r.frac32 <= band else "disclosed-gap"
+        elif r.frac32 <= band:
+            r.bucket = "below-band"
         else:
             r.bucket = "unexplained"
     for r in results:
@@ -1376,7 +1419,13 @@ def write_reports(results, ok, clean, band, band_src, n_files_ok, n_files, args,
                 f"{r.gaps}\t{r.refdiv}\t{r.reason}\n"
             )
 
-    buckets = {"benign": 0, "known-gap": 0, "unexplained": 0, "reference-divergence": 0}
+    buckets = {
+        "below-band": 0,
+        "disclosed-gap-small": 0,
+        "disclosed-gap": 0,
+        "unexplained": 0,
+        "reference-divergence": 0,
+    }
     for r in ok:
         buckets[r.bucket] = buckets.get(r.bucket, 0) + 1
     skipped = [r for r in results if r.status == "skip"]
@@ -1404,7 +1453,7 @@ def write_reports(results, ok, clean, band, band_src, n_files_ok, n_files, args,
     # gap reasons histogram
     gap_hist: dict[str, int] = {}
     for r in ok:
-        if r.bucket == "known-gap":
+        if r.bucket in ("disclosed-gap", "disclosed-gap-small"):
             for g in r.gaps.split(","):
                 if g:
                     gap_hist[g] = gap_hist.get(g, 0) + 1
@@ -1519,10 +1568,16 @@ def write_reports(results, ok, clean, band, band_src, n_files_ok, n_files, args,
         else:
             P(f"  {label}: n=0")
     P("")
-    P("--- three buckets (by file+reason, R20) ---")
-    P(f"  (i)   benign-renderer-noise : {buckets['benign']}")
-    P(f"  (ii)  known-disclosed-gap   : {buckets['known-gap']}")
-    P(f"  (iii) unexplained-divergence: {buckets['unexplained']}")
+    P("--- buckets (by file+reason, R20) ---")
+    P(f"  (i)   below-band, nothing disclosed : {buckets['below-band']}")
+    P(f"  (ii)  disclosed gap, above band     : {buckets['disclosed-gap']}")
+    P(f"  (ii-) disclosed gap, below band     : {buckets['disclosed-gap-small']}")
+    P(f"  (iii) unexplained-divergence        : {buckets['unexplained']}")
+    P("        NOTE: (i) is a MEASUREMENT, not a verdict. It means the")
+    P("        divergence is small and pdfce disclosed nothing — not that")
+    P("        it is anti-aliasing. The 2026-08-09 structural audit found")
+    P("        15.4% of that population is not edge-shaped, and four")
+    P("        confirmed pdfce bugs were inside it.")
     if args.annots:
         P(f"  (ref) reference-divergence  : {buckets['reference-divergence']}")
     P(f"  (abt) reference-aborted     : {buckets['reference-aborted']}   "
