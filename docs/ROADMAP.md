@@ -224,6 +224,28 @@ names BOTH `delete_widget` and `delete_field`, because widget-or-
 whole-field is the caller's choice and guessing wrong could delete a
 field that appears on other pages too.
 
+> **[CORRECTED 2026-08-09, later the same day — pdfce-librarian, per
+> the dispatching engineer's account; not independently verified
+> against pre-`a4c1a8e` history — no shell/git access from this
+> dispatch, hard rule 8.]** "`delete_redaction_mark` (same annotation
+> gate)" describes HEAD, not what shipped in `0a727bb`. Per the
+> engineer: at the time this entry was filed, `delete_redaction_mark`
+> still took the STRICT gate — the SAME gate `delete_dimension` keeps
+> today — so a `/P 3` certified document let an operator delete every
+> annotation EXCEPT a redaction mark, the mirror image of the
+> ce-dimension asymmetry stated two sentences above. Commit `a4c1a8e`
+> (still 2026-08-09) widened `delete_redaction_mark` to
+> `check_certification_for_annotation()` alongside three AUTHORING
+> verbs (`add_markup`, `add_text_annotation`, `add_redaction` — see the
+> owed-item correction below), closing that gap. **Now genuinely true,
+> for a different reason than this entry gave it credit for at the
+> time.** Verified directly against `crates/pdfce-core/src/edit.rs`:
+> `delete_redaction_mark` (L8410) calls `check_certification_for_annotation()`
+> at L8425; `delete_dimension` (L12912) still calls the strict
+> `check_certification()` at L12916 — the two delegated routes now
+> differ **by clause**, not uniformly, and `delete_annotation`'s own
+> doc comment was rewritten in `a4c1a8e` to say so.
+
 **A shared planner, so a preview cannot promise what a delete does not
 do.** `annotation_deletion_preview` and `delete_annotation` both call
 one private `plan_annotation_deletion` function. This was a
@@ -295,10 +317,33 @@ two-occurrence promotion bar).
 entries filed under *Next up*, immediately below the `★ Pass
 38.1–38.5` family entry:**
 
-1. **Pass 6.1/6.2's markup-authoring verbs still take the STRICT
+1. ~~**Pass 6.1/6.2's markup-authoring verbs still take the STRICT
    certification gate on a `/P 3` document, over-refusing exactly the
    operations Table 254 names as permitted** (annotation creation and
-   modification, alongside deletion). Unscoped.
+   modification, alongside deletion). Unscoped.~~ **RAISED AND CLOSED
+   THE SAME SESSION — RESOLVED 2026-08-09 (`a4c1a8e`), later the same
+   day as this entry was filed, R170's pattern (a found defect gets
+   fixed in the same session, not queued).** Not performed by this
+   dispatch — three commits landed on `pass-8-redaction` after the
+   dispatch that produced this entry, before this correction was
+   written; see the amended entry immediately below this one, and the
+   matching correction on the *Next up* item this bullet's own owed
+   item spawned. `add_markup` (6.1), `add_text_annotation` (6.2) and
+   `add_redaction` (8.0/8.1's mark-authoring verb, named alongside the
+   other two because the same reasoning applies — a `/Redact` mark is
+   an annotation and marking removes no content) all now take
+   `check_certification_for_annotation()` instead of the strict gate.
+   Verified directly against `crates/pdfce-core/src/edit.rs`: the call
+   sites at L8170 (`add_markup`), L9471 (`add_text_annotation`) and
+   L8293 (`add_redaction`) all read `check_certification_for_annotation()`,
+   not `check_certification()`. New test
+   `p3_permits_authoring_an_annotation_as_well_as_deleting_one` in
+   `crates/pdfce-core/tests/annot_deletion.rs` (confirmed present)
+   asserts both directions on one fixture pair: authoring succeeds at
+   `/P 3`, refuses at `/P 2`, naming the permission read in the
+   refusal. `delete_dimension` is UNCHANGED (still `check_certification()`,
+   confirmed at L12916) — the ce-dimension asymmetry stated above under
+   "Routing, not absorbing" stands.
 2. **Two ambiguities, `AD-A1` and `AD-A3`, are documented in the new
    spec-RAG file but not yet back-filed into
    `iso32000__ref__ambiguity_settings_register.md`** — both
@@ -313,6 +358,75 @@ entries filed under *Next up*, immediately below the `★ Pass
    Zero cost does not by itself establish redistributability; that
    determination is still owed. A freely-reachable narrow delta source
    in the interim: `https://pdf-issues.pdfa.org/32000-2-2020/clauseN.html`.
+
+**AMENDMENT, 2026-08-09, later the same day — pdfce-librarian, correcting
+this entry against three commits (`a4c1a8e`, `b8e23c8`, `fcb6544`) that
+landed on `pass-8-redaction` after the dispatch that produced it. Every
+claim below was checked directly against the working tree by this
+correcting filing (`Read`/`Grep`, not relayed) — see the specific line
+numbers cited. No shell/git tool was available to this dispatch either,
+so what changed BETWEEN `0a727bb` and these three commits is relayed
+from the engineer's own account (hard rule 8); what the code reads NOW
+is independently confirmed.**
+
+1. **The `/P 3` annotation-authoring over-refusal is fixed** — see the
+   corrected "Owed items" list above and the corrected "Routing, not
+   absorbing" section above. Test count is **2567**, not the 2566
+   reported at the time of the original filing (2566 + the one new
+   `p3_permits_authoring_an_annotation_as_well_as_deleting_one` test =
+   2567; `annot_deletion.rs` now carries 17 `#[test]` functions, not 16).
+2. **`AnnotationDeletion::appearance_streams_removed` no longer reports
+   a hard-coded `1` on a delegated route.** It reads `0` at both
+   delegated-route call sites (`crates/pdfce-core/src/edit.rs` L8675 and
+   L8706, confirmed directly) — the field's own doc comment (L5169–5183)
+   now states plainly that `0` there is **"not a count of zero — a
+   'not tracked'"**, because `delete_redaction_mark` and `delete_dimension`
+   return `()` and report nothing back to the router to count, and a
+   fixed non-zero guess would be wrong whenever the routed-to annotation
+   happens to have no `/AP` at all. `ARCHITECTURE.md` §4.1(L) and §12's
+   second `Pass 38.5` entry, both of which name this field, are corrected
+   to match — see those documents' own dated entries.
+3. **A GUI performance defect was found and fixed in the same session,
+   not by this Pass's own scope.** The Comments panel's
+   `annotation_deletion_preview` call — described above as "a GUI calls
+   this once per frame while the pointer rests on a row" — was actually
+   being called **once per ROW, every frame, for every row**, because it
+   sat outside any pointer gate. `annotation_deletion_preview` walks
+   every annotation on every page (by necessity — a reply can sit on a
+   different page from what it replies to), so this was
+   O(rows × document) EVERY FRAME: roughly 200 full-document walks per
+   frame at 60 fps on a 200-comment review document, invisible on the
+   seven-annotation fixture this Pass tested against. Fixed by gating the
+   preview call on `Response::contains_pointer()` (at most one preview
+   computed per frame, only for the row under the pointer) rather than
+   `hovered()` — `hovered()` is false for a DISABLED widget, and the
+   disabled row is exactly the one whose tooltip needs to carry the
+   refusal reason. The enable/disable decision itself turned out to need
+   no preview at all: it reads only `annot.flags.locked()` and the
+   subtype, both already on the row's own `Annotation`. Verified in the
+   running application both ways (per the engineer's dispatch, relayed):
+   pointer away from the row → diag trace reports `replies=-1 group=-1`
+   (the `-1` is deliberate, not a bug — a `0` would claim a measurement
+   the harness never took); pointer on the Delete button → `replies=2
+   group=1`; on the `undeletable.pdf` refusal fixture the `Locked` (bit
+   8) row is disabled and the `LockedContents` (bit 10) row stays
+   enabled, matching Table 165's own reading. **Filed as its own
+   `D:\dev\rag\egui\` finding** (see below) — the generalizable claim is
+   that any per-row query with document-wide cost in an immediate-mode
+   list must be gated on `contains_pointer()`, not `hovered()`, because
+   `hovered()` silently excludes the disabled case.
+4. **Process note.** The engineer ran `git add -A` while this filing's
+   `ARCHITECTURE.md` edit was in progress, sweeping a partial state of
+   that edit into `b8e23c8` under a message that does not describe it.
+   Nothing was lost — the final state is committed correctly in
+   `d1f3582` — but the audit trail for that hunk is split across two
+   commits with only one describing it. Recorded here, and in
+   `SESSION_LOG.md`, so a future reader who `git blame`s that file is
+   not misled; the general rule (a doc-writing dispatch and a
+   `git add -A` must not overlap) is not minted as a standing rule by
+   this filing — single occurrence, against this project's own
+   two-occurrence promotion bar (the same bar the doc-comment-splice
+   finding above was held to).
 
 **Not shipped by this filing — restated for the ledger, so a later
 reader does not infer more than this entry claims:** the two
@@ -345,6 +459,11 @@ from the engineer's own dispatch text plus this filing's own re-grep of
   `ARCHITECTURE.md` per that same README's exclusion clause.
 - **`SESSION_LOG.md` filings:** this is the **forty-first** filing (the
   fortieth confirmed present by grep before this entry was appended).
+  **This entry's own 2026-08-09 AMENDMENT, above, was written as part
+  of the forty-second filing** — see `SESSION_LOG.md`'s own entry of
+  that number for the correction's ledger accounting (no new Pass ID,
+  no new standing rule, no new decision record; test-count figure
+  corrected 2566→2567).
 
 ---
 
@@ -24152,7 +24271,37 @@ the unnarrowed `PaneSubject`. That option is now moot — 38.2 shipped, and
 the `Activities` compartment exists to receive it. **38.4 shipped into it
 on 2026-08-06 as predicted, requiring no temporary hosting.**
 
-### ★ `/P 3` permits annotation CREATION and MODIFICATION too, and pdfce still refuses both on a certified comment-review document — UNDECIDED, filed 2026-08-09 with `Pass 38.5` (no Pass number assigned)
+### ★ `/P 3` permits annotation CREATION and MODIFICATION too, and pdfce still refuses both on a certified comment-review document — RESOLVED 2026-08-09 (`a4c1a8e`), same day as filed, `Pass 38.5` scope
+
+> **★★ RESOLVED 2026-08-09 (`a4c1a8e`) — pdfce-librarian, correcting
+> this entry after three commits landed on `pass-8-redaction`
+> subsequent to the dispatch that produced it. Raised and closed within
+> the same operator session — R170's pattern (a found defect gets fixed
+> the same session, not queued), even though it was queued for one
+> dispatch cycle before the fix landed.** `add_markup` (`Pass 6.1`),
+> `add_text_annotation` (`Pass 6.2`) and `add_redaction` (`Pass 8.0`/
+> `8.1`'s mark-authoring verb — the same reasoning applies: **marking is
+> not applying**, a `/Redact` mark is itself an annotation under
+> §12.5.6.23 and removes no content, so `add_redaction` was always the
+> same class of over-refusal as the other two even though this entry's
+> own title did not name it) all now call
+> `EditSession::check_certification_for_annotation()` instead of the
+> strict `check_certification()`. Verified directly against
+> `crates/pdfce-core/src/edit.rs`: the call sites at L8170, L9471 and
+> L8293 respectively. New test
+> `p3_permits_authoring_an_annotation_as_well_as_deleting_one`
+> (`crates/pdfce-core/tests/annot_deletion.rs`) asserts BOTH directions
+> on one fixture pair — authoring succeeds at `/P 3`, refuses at `/P 2`
+> naming the permission read — per project rule R162 (the probe must be
+> able to come out false). **`delete_dimension` is deliberately
+> UNCHANGED**, still the strict gate (its `/PieceInfo` sidecar rewrite
+> is not on Table 254's `/P 3` list) — the `/P 3`-refuses-a-ce-dimension
+> asymmetry this entry's sibling Shipped entry names is unaffected. The
+> "Why this was not fixed in the same Pass" reasoning below is left
+> as-written (append-only within an already-filed entry) — it correctly
+> describes why the engineer scoped it out of `Pass 38.5` itself; it
+> does not describe why it stayed unscoped for the rest of the
+> session, which it did not.
 
 **The finding, restated so this entry stands alone.** ISO 32000-1
 §12.8.2.2 Table 254, `/P = 3`: *"Permitted changes shall be the same as

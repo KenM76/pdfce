@@ -27276,3 +27276,127 @@ naming only the two remaining, invalidated layout items (`core`/`cli`
   acquire via the $0 PDF Association sponsored-access route and
   determine whether its terms permit the same paraphrase-and-cite
   treatment already applied to the freely-published standards.
+
+## 2026-08-09 (forty-second filing) — correcting the forty-first filing against three commits that landed after its dispatch: the `/P 3` annotation-authoring over-refusal is FIXED, a hard-coded field is FIXED, and a Comments-panel O(document)-per-row perf defect is FOUND AND FIXED
+
+**Filed by `pdfce-librarian`, dispatched by the operator specifically to
+correct the forty-first filing. No shell/git tool available to this
+dispatch (hard rule 8) — `git show` on the three named commits was
+requested by the dispatch but could not be run; every claim below about
+CURRENT code was instead independently verified via `Read`/`Grep`
+directly against the working tree (cited by exact line number below);
+every claim about what changed BETWEEN `0a727bb` and these three
+commits (i.e. what the code used to say) is relayed from the
+dispatching engineer's account and is labelled as such, not asserted as
+independently witnessed.**
+
+**Why this filing exists.** Three commits — `a4c1a8e`, `b8e23c8`,
+`fcb6544` — landed on `pass-8-redaction` after the dispatch that
+produced the forty-first filing, and two of them contradict claims that
+filing made. This is a sequencing artefact (the engineer's work
+continued between the librarian dispatch and the commits actually
+landing), not an error in how the forty-first filing was written from
+the information it had. The obligation is still to make the docs true
+at HEAD, per the dispatching engineer's own framing.
+
+**Shipped (by the engineer, this session, not by this librarian
+filing):**
+- `a4c1a8e` — widened `check_certification_for_annotation()` from ONE
+  caller (`annotation_deletion_refusal`, `Pass 38.5`'s own gate) to
+  FOUR: `add_markup` (`Pass 6.1`), `add_text_annotation` (`Pass 6.2`),
+  `add_redaction` (`Pass 8.0`/`8.1`), `delete_redaction_mark`. Closes
+  the `/P 3` annotation-authoring over-refusal the forty-first filing
+  raised as an owed item the same day. `add_redaction`'s inclusion
+  reasoning, worth repeating because it generalises: **marking is not
+  applying** — a `/Redact` mark is itself an annotation (§12.5.6.23)
+  and removes no content; `redact::apply_redactions` (the verb that
+  actually rewrites content streams) is untouched by this widening and
+  goes through no certification gate named here. `delete_dimension`
+  deliberately UNCHANGED (still strict — `/PieceInfo` sidecar rewrite
+  is not on Table 254's `/P 3` list). New test
+  `p3_permits_authoring_an_annotation_as_well_as_deleting_one`
+  (confirmed present, `crates/pdfce-core/tests/annot_deletion.rs`).
+  Test count **2567**, not 2566 (2566 + 1 new test; `annot_deletion.rs`
+  now 17 `#[test]` functions, confirmed by direct count, not 16).
+- `b8e23c8` — `AnnotationDeletion::appearance_streams_removed` stops
+  reporting a hard-coded `1` on a delegated route (`RedactionMark`/
+  `Dimension`); now `0` at both call sites (confirmed
+  `crates/pdfce-core/src/edit.rs` L8675, L8706), doc comment states `0`
+  there means "not tracked," never "none observed."
+- `fcb6544` — Comments-panel per-row deletion preview was being called
+  once per row, every frame (O(rows × document) per frame — the query
+  walks every annotation on every page because a reply can sit on a
+  different page from what it replies to), invisible on the
+  seven-annotation fixture the session tested against. Fixed: gated on
+  `Response::contains_pointer()` (at most one preview per frame),
+  deliberately not `hovered()`, which reads `false` for a disabled
+  widget — exactly the row whose tooltip must carry the refusal reason.
+  Confirmed `crates/pdfce-gui/src/main.rs` L5540–5566.
+
+**Decisions made this session:** none new — this filing corrects the
+record of decisions the forty-first filing already recorded (the `/P`-
+aware annotation gate, per §12.8.2.2 Table 254), it does not make a new
+one. The gate-widening in `a4c1a8e` is an application of the SAME
+decision to three more call sites, not a new decision.
+
+**Findings + decisions:**
+- **A record can misdescribe the world even when written honestly from
+  the information available at write time, if the world keeps moving
+  between the dispatch and the commit.** The forty-first filing stated
+  `delete_redaction_mark` used "the same annotation gate" as the general
+  verb — per the engineer's account this was not true when written (it
+  used the strict gate until `a4c1a8e`, landing later the same day) —
+  so between `0a727bb` and `a4c1a8e` a `/P 3` document let an operator
+  delete every annotation except a redaction mark, unfiled anywhere.
+  Not written up as a standalone RAG finding — it is process, not a
+  technical gotcha, and is fully covered by hard rule 8's existing
+  discipline (check, don't infer, and say which) plus the forty-first
+  filing's own explicit "No shell available to this dispatch" framing,
+  which already predicted exactly this kind of drift.
+- **`contains_pointer()` vs `hovered()` for a per-row O(document) query
+  in an immediate-mode list — filed as a `D:\dev\rag\egui\` finding**:
+  `D:\dev\rag\egui\per_row_document_cost_queries_must_gate_on_contains_pointer_not_hovered.md`.
+  `hovered()` is false for a disabled `Response`; a disabled row is
+  exactly the row whose tooltip needs the expensive query's answer (the
+  refusal reason), so gating on `hovered()` would have silently broken
+  the tooltip on every refused row even after fixing the frame-cost
+  problem.
+- **Process note.** The engineer ran `git add -A` while this filing's
+  (the forty-first's) `ARCHITECTURE.md` edit was in progress, sweeping
+  a partial state of that edit into `b8e23c8` under a message that does
+  not describe it. Nothing lost — final state is correctly committed in
+  `d1f3582` — but `git blame` on that file will show a hunk attributed
+  to an unrelated-sounding commit. Not promoted to a standing rule
+  (single occurrence).
+
+**`docs/FEATURES.md` updated in the same filing:** the *Delete an
+annotation* row's closing sentence — which read "Pass 6.1/6.2's
+annotation CREATION/MODIFICATION verbs still take the strict gate…an
+over-refusal this Pass did not fix" — corrected to state the fix
+(`a4c1a8e`) and name the four widened verbs plus the one deliberately
+unchanged (`delete_dimension`).
+
+**Still in flight:** unchanged from the forty-first filing's own list,
+minus item 1 of its "Owed items" (now resolved — see above). Items 2–4
+(the `AD-A1`/`AD-A3` spec-RAG back-fill, `LEGAL.md` §2's stale ISO
+32000-2 row, `Pass 38.5`'s two orphaned layout items) are unaffected by
+this correction and remain owed.
+
+**For next session:**
+- No new action items from this filing beyond what the forty-first
+  filing already listed, minus the now-closed authoring-gate item.
+- Both project checkers (`check-ledger-numbers.py`, `check-passes-filed.py`)
+  still have not been run against this session's state — no shell
+  available to any librarian dispatch this session.
+- **Ledger for this filing:** no new Pass ID (this is a documentation
+  correction, not new-Pass work — `a4c1a8e`/`b8e23c8`/`fcb6544` are all
+  recorded under the existing `Pass 38.5` scope). No new standing rule
+  minted (the `git add -A`-overlap note and the `contains_pointer()`
+  finding were both considered and are each single-occurrence, against
+  this project's own two-occurrence promotion bar). No new decision
+  record (routine engineering, covered by `ARCHITECTURE.md` §12's
+  fourth `Pass 38.5` entry, same exclusion clause the forty-first
+  filing already invoked). This is the **forty-second** `SESSION_LOG.md`
+  filing (the forty-first confirmed present by grep before this entry
+  was appended). Backup/git working-tree state is not asserted anywhere
+  in this filing — no shell, hard rule 8.

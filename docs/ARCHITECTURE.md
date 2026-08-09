@@ -1522,6 +1522,26 @@ subsection stands as the complete surface description:**
    (Table 254's `P = 3` list names annotations, not `/PieceInfo`
    metadata), not a pdfce inconsistency.
 
+   > **[CORRECTED 2026-08-09, later the same day — pdfce-librarian, per
+   > the dispatching engineer's account; the "same **annotation** gate"
+   > claim above describes HEAD (`a4c1a8e`), not what `0a727bb` actually
+   > shipped.** Per the engineer: at filing time `delete_redaction_mark`
+   > still took the STRICT gate, the same one `delete_dimension` keeps —
+   > so between `0a727bb` and `a4c1a8e` a `/P 3` certified document let
+   > an operator delete every annotation EXCEPT a redaction mark, the
+   > mirror of the ce-dimension asymmetry stated in the same paragraph.
+   > `a4c1a8e` widened `delete_redaction_mark` to
+   > `check_certification_for_annotation()` alongside three authoring
+   > verbs (`add_markup`, `add_text_annotation`, `add_redaction` — see
+   > the new §12 entry, this date). Verified directly:
+   > `crates/pdfce-core/src/edit.rs` L8425 (`delete_redaction_mark`) now
+   > calls `check_certification_for_annotation()`; L12916
+   > (`delete_dimension`) still calls the strict `check_certification()`.
+   > The two delegated routes now differ **by clause**, and
+   > `delete_annotation`'s own doc comment was rewritten in `a4c1a8e` to
+   > say so — not independently re-read by this correcting filing, no
+   > shell/git access, relayed from the engineer.]**
+
 **Three cascades the general (non-routed) case handles, all covered in
 `crates/pdfce-core/tests/annot_deletion.rs`'s 16 tests (independently
 counted against the file, matching the relayed figure): the `/Popup`
@@ -12728,14 +12748,15 @@ started).
   `crates/pdfce-core/tests/annot_deletion.rs`'s
   `the_three_refusal_queries_disagree_on_purpose` test, which runs all
   three queries against the same `/P 3` and `/P 2` fixtures and asserts
-  the disagreement is exactly the one predicted. **A named gap this
+  the disagreement is exactly the one predicted. ~~**A named gap this
   entry does NOT close, flagged rather than fixed:** Table 254's `/P 3`
   list also names annotation CREATION and MODIFICATION, and pdfce's
   markup-authoring verbs (`Pass 6.1`/`6.2`) still take the STRICT gate
   — so pdfce currently OVER-refuses annotation authoring on exactly the
   class of document `/P 3` exists to permit it on. See
   `docs/ROADMAP.md`'s `Pass 38.5` Shipped entry for the open item this
-  becomes.
+  becomes.~~ **CLOSED 2026-08-09 (`a4c1a8e`), later the same day — see
+  the new `Pass 38.5` fourth §12 entry, below, for the fix.**
 - **2026-08-09 (`Pass 38.5`, `0a727bb`, second entry) — a preview query
   and its mutating verb share ONE private planner, so they cannot
   structurally disagree; a GUI-side reimplementation was proposed and
@@ -12777,7 +12798,15 @@ started).
   each already had a verb that does. An unapplied `/Redact` mark
   routes to `EditSession::delete_redaction_mark` — same **annotation**
   gate as the general verb, because removing an unapplied mark IS
-  annotation deletion, nothing more. A ce dimension routes to
+  annotation deletion, nothing more.
+  **[CORRECTED 2026-08-09, later the same day — pdfce-librarian, per
+  the dispatching engineer's account, no shell/git access to verify
+  independently.** This described HEAD as of `a4c1a8e`, not `0a727bb`
+  as filed: at filing time `delete_redaction_mark` still took the
+  STRICT gate, the same one `delete_dimension` (next sentence) keeps —
+  so a `/P 3` document could delete every other annotation but not a
+  redaction mark until `a4c1a8e` widened it, same date. See the new
+  `Pass 38.5` fourth entry below.]** A ce dimension routes to
   `EditSession::delete_dimension` — which keeps the pre-existing
   **STRICT** gate, because it also rewrites the catalog `/PieceInfo`
   sidecar, an operation Table 254's `/P 3` list does not name.
@@ -12804,3 +12833,73 @@ started).
   redaction mark"*, never the generic *"Undo delete annotation"*; a
   shell that printed its own wording instead of reading the route would
   disagree with its own undo stack.
+- **2026-08-09 (`Pass 38.5`, `a4c1a8e`, fourth entry) — the `/P`-aware
+  annotation gate is widened from ONE verb to FOUR, closing the
+  over-refusal the first entry above flagged and did not fix.**
+  `check_certification_for_annotation()` (built for
+  `annotation_deletion_refusal` in the first entry, above) now also
+  backs `add_markup` (`Pass 6.1` — Ink/Square/Circle/Line/Polygon),
+  `add_text_annotation` (`Pass 6.2` — FreeText/Stamp), `add_redaction`
+  (`Pass 8.0`/`8.1`'s mark-authoring verb) and `delete_redaction_mark`
+  (previously, and incorrectly per the third entry's now-corrected
+  text above, described as already using this gate). **`add_redaction`
+  belongs in this set for a reason worth stating explicitly: marking is
+  not applying.** A `/Redact` mark is itself an annotation (§12.5.6.23)
+  and removes no page content — `redact::apply_redactions`, the verb
+  that actually rewrites content streams, does not go through any
+  certification gate named in this entry at all, and is unaffected by
+  this widening. `delete_dimension` is the one deliberate holdout,
+  unchanged, still the strict `check_certification()` — its
+  `/PieceInfo` sidecar rewrite is not on Table 254's `/P 3` list, so
+  the ce-dimension deletion asymmetry the third entry names is
+  unaffected by this widening and remains the standard's own answer,
+  not a gap. **Test:**
+  `p3_permits_authoring_an_annotation_as_well_as_deleting_one`
+  (`crates/pdfce-core/tests/annot_deletion.rs`) asserts both directions
+  on one fixture pair — `/P 3` permits authoring, `/P 2` still refuses
+  it, naming the permission read in the refusal — per R162 (the probe
+  must be able to come out false). Breaking? **No** — every call site
+  widened from a stricter gate to a laxer one on the SAME class of
+  document (`/P 3`); no site that previously succeeded can now fail.
+- **2026-08-09 (`Pass 38.5`, `b8e23c8`) — `AnnotationDeletion::appearance_streams_removed`
+  stops reporting a hard-coded `1` on a delegated route.** The two
+  `AnnotationDeletionRoute::{RedactionMark,Dimension}` arms in
+  `delete_annotation` used to report the field as `1` unconditionally;
+  wrong whenever the routed-to annotation had no `/AP` at all, because
+  `delete_redaction_mark` and `delete_dimension` both return `()` and
+  report nothing back to the router to count. Now `0` on both arms
+  (`crates/pdfce-core/src/edit.rs` L8675, L8706), and the field's own
+  doc comment states the reading directly: **`0` on a delegated route,
+  or on `annotation_deletion_preview`, means "not tracked," never
+  "none observed."** No test changed shape — the field was already
+  excluded from the preview/delete cross-check
+  (`the_preview_agrees_with_the_deletion_for_every_annotation_in_the_fixture`,
+  named in the second entry above) for the general route, and the
+  delegated routes were never asserted against this field at all before
+  this fix (a hard-coded return value has nothing a test could catch
+  short of asserting the literal `1`, which no test did). Breaking?
+  **No** — an internal accounting field with, per its own doc comment,
+  "no operator-facing meaning."
+- **2026-08-09 (`pdfce-gui`, `fcb6544`) — the Comments panel's per-row
+  deletion preview moves from once-per-row-per-frame to gated on
+  `contains_pointer()`, an O(document) cost bound, not a
+  micro-optimisation.** `annotation_deletion_preview` walks every
+  annotation on every page (necessarily — a reply may sit on a
+  different page than what it replies to), so calling it unconditionally
+  for every row in the Comments panel made the panel cost
+  O(rows × document) EVERY FRAME: roughly 200 full-document walks per
+  frame at 60 fps on a 200-comment review document. Invisible on the
+  seven-annotation fixture this Pass tested against. Fixed by computing
+  the preview only for the row under the pointer
+  (`b.contains_pointer().then(|| …)`), deliberately NOT gated on
+  `hovered()` — `hovered()` reads `false` for a DISABLED `Response`, and
+  the disabled row is exactly the one whose tooltip must carry the
+  refusal reason (`crates/pdfce-gui/src/main.rs` L5540–5566). The
+  enable/disable decision itself needed no preview at all: it reads only
+  `annot.flags.locked()` and the subtype, both already on the row's
+  `Annotation`. **General pattern, filed as its own
+  `D:\dev\rag\egui\` finding** (see the RAG index) because it will recur
+  in any immediate-mode list whose per-row query has document-wide
+  cost: gate on `contains_pointer()`, not `hovered()`, whenever the
+  disabled case must still show its reason. Breaking? **No** — GUI-only,
+  no public `pdfce-core`/`pdfce-cli` surface touched.
