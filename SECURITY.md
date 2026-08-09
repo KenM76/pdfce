@@ -9,9 +9,13 @@ slips through anyway.
 
 ## Supported versions
 
-Not applicable yet — pdfce is pre-release (no Cargo workspace exists
-as of 2026-07-23; see `docs/ROADMAP.md`). This section will be filled
-in with a real version-support table once there's a first release.
+Not applicable yet — pdfce is pre-1.0 with **no tagged release**. Only
+the current `main` is supported, and there is nothing older to support.
+This section gets a real version-support table once there is a first
+release.
+
+Note that `docs/FEATURES.md` is kept true at HEAD rather than at
+release time, so it may describe capabilities that no tag contains.
 
 ## Reporting a vulnerability
 
@@ -20,7 +24,7 @@ Until a dedicated security-contact channel exists (tracked as a
 pre-first-release TODO — GitHub's private vulnerability reporting
 feature, once this repository has a public GitHub presence, is the
 likely mechanism), report privately to the project maintainer through
-whatever private channel is currently in use for this project.
+a GitHub security advisory on this repository (Security -> Report a vulnerability), or a private issue if that is unavailable.
 
 When reporting, please include:
 

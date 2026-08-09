@@ -221,7 +221,8 @@ jobs:
           deny='reqwest|ureq|hyper|isahc|attohttpc|curl|surf|native-tls|openssl|rustls|webpki|tokio|socket2|hickory|trust-dns'
           fail=0
           for p in pdfce-core pdfce-render pdfce-cli pdfce-gui; do
-            if cargo tree -p "$p" --target x86_64-pc-windows-msvc 2>/dev/null \n                 | grep -Ei "(^|[[:space:]])($deny)[[:space:]]"; then
+            if cargo tree -p "$p" --target x86_64-pc-windows-msvc 2>/dev/null \
+                 | grep -Ei "(^|[[:space:]])($deny)[[:space:]]"; then
               echo "::error::$p has a network-client dependency — violates the no-network posture (ARCHITECTURE.md §1.1, decision 003 R12). Adding one requires a NEW decision record."
               fail=1
             fi

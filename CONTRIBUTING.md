@@ -6,18 +6,21 @@ first.
 
 ## Project status
 
-Pre-release as of 2026-07-23 — no Cargo workspace exists yet (see
-`docs/ROADMAP.md`, "Pass 0" is next). External contributions aren't
-being actively solicited at this stage; if you've found this repo
-early, feel free to open an issue with feedback, but larger PRs before
-the core architecture (`docs/ARCHITECTURE.md`) has stabilized past
-Pass 0/1 are likely to need significant rework.
+Pre-1.0 and moving fast. The Cargo workspace is real — four crates,
+a desktop GUI and a 60-subcommand CLI. `docs/FEATURES.md` is the
+current answer to what works, and it is kept true at HEAD rather than
+at release time, so it may describe capabilities newer than any tag.
+
+External contributions aren't actively solicited: this is a personal
+project developed in the open rather than one seeking contributors.
+Issues and observations are welcome. A large unsolicited PR is likely
+to need rework simply because the architecture is still moving — open
+an issue first if you are considering one.
 
 ## License — read before contributing code
 
-**pdfce's license is not yet finalized** (see `docs/LEGAL.md` §1).
-**Do not submit a PR expecting a specific license to apply until a
-`LICENSE` file exists at the repo root.** Once it does: by submitting
+**pdfce is MIT-licensed** — `LICENSE` at the repo root, chosen
+2026-08-01 (`docs/LEGAL.md` §1). By submitting
 a contribution, you agree it's licensed under the terms in `LICENSE`
 at the time of merge (the standard "inbound = outbound" convention
 most Rust-ecosystem projects use — no separate CLA). A

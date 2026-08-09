@@ -48,7 +48,7 @@ representing the project in public spaces.
 
 Instances of abusive, harassing, or otherwise unacceptable behavior
 may be reported to the project maintainer. **Report contact channel:
-not yet finalized — TODO before first public release**, tracked
+open a GitHub issue on this repository, or a private security advisory if the matter is sensitive**, tracked
 alongside `SECURITY.md`'s equivalent TODO. All complaints will be
 reviewed and investigated promptly and fairly.
 
