@@ -246,9 +246,38 @@ ecosystem's own norms is a debt every future consumer pays.
    stream hybrid-reference files, predictor functions in FlateDecode)
    are exactly the kind of thing that "sounds right" but is wrong in a
    way that only shows up on a real-world file six months later.
-3. **Grep `C:\personal_rag\pdf\` (once it exists), `D:\dev\rag\rust\`,
-   and `D:\dev\rag\egui\`** for prior findings before re-deriving
-   something already learned once.
+3. **Grep `C:\personal_rag\pdf\`, `D:\dev\rag\rust\`, and
+   `D:\dev\rag\egui\`** for prior findings before re-deriving something
+   already learned once. **(`personal_rag\pdf` exists and is in active
+   use — created 2026-08-04.)**
+
+   **★ AND BEFORE DRIVING THE GUI HARNESS, NOT ONLY BEFORE WRITING CODE
+   (R172, minted 2026-08-09 after this step was skipped TWICE IN ONE
+   SESSION).** This step already said what to do; it was not followed,
+   and the reason is worth more than the rule: **it reads as a
+   code-writing pre-flight.** `tools/gui-drive.ps1` and
+   `tools/gui-shot.ps1` are not code-writing, so the instruction did not
+   feel like it applied — and both misses landed there.
+
+   What it cost, twice, in one session:
+   - Clicks aimed from a `gui-shot` screenshot missed under `gui-drive`.
+     `D:\dev\rag\egui\two_gui_harnesses_with_different_default_window_sizes_make_coordinates_non_transferable.md`
+     already had it: the two scripts default to **different window
+     sizes** (1760×1150 vs 1600×1000), so coordinates are not
+     transferable between them. Read the trace's own `rect=`, never a
+     screenshot's pixels.
+   - Two scripted double-clicks in a row reported `double=false` on the
+     second, which reads exactly like "this control does not support
+     descent."
+     `D:\dev\rag\egui\egui_rapid_successive_double_clicks_coalesce_into_one_burst.md`
+     already had it, *and* the fix: **~45 idle frames between gestures.**
+     Without that, a working feature looks broken and a false defect
+     report is one step away.
+
+   **The harness misbehaving is not a signal to reason harder — it is
+   the signal to grep.** Its failure modes are almost all already
+   written down, precisely because they cost somebody a diagnostic cycle
+   before.
 4. **Verify the invariants** (`cargo tree`, a round-trip byte-diff
    test) before declaring a Pass touching core/render/writer done.
 5. **Test before/alongside code, not after.** Rust's type system
