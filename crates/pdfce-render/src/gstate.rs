@@ -158,6 +158,27 @@ pub struct GraphicsState {
     /// Dash pattern `(array, phase)` in user-space units (§8.4.3.6
     /// initial: solid — empty array, phase 0).
     pub dash: (Vec<f32>, f32),
+    /// Constant alpha for **non-stroking** painting — `/ca` (§11.6.4.4,
+    /// Table 58). Initial value 1.0.
+    ///
+    /// "Constant" distinguishes it from the alpha a `/SMask` would
+    /// supply per pixel: this is one number applied to everything the
+    /// operation paints. That is what makes it cheap to honour and what
+    /// makes ignoring it so visible — a 0.5 fill rendered opaque is not
+    /// subtly off, it is the wrong colour everywhere it covers.
+    ///
+    /// Lives on the graphics state rather than beside the paint so that
+    /// `q`/`Q` save and restore it for free (§8.4.2), which is the whole
+    /// reason Table 58's entries belong here.
+    pub fill_alpha: f32,
+    /// Constant alpha for **stroking** painting — `/CA` (§11.6.4.4,
+    /// Table 58). Initial value 1.0.
+    ///
+    /// Separate from [`Self::fill_alpha`] because the standard makes
+    /// them separate: a single `gs` may set either, both, or neither,
+    /// and a stroke and a fill in the same operation can legitimately
+    /// differ in opacity.
+    pub stroke_alpha: f32,
     /// Current clipping path as a device-space mask, `None` = the
     /// initial clip = the entire page (§8.5.4). Stored rasterized
     /// (tiny-skia `Mask`) because PDF only ever intersects clips —
@@ -215,6 +236,8 @@ impl GraphicsState {
             line_join: LineJoin::Miter,
             miter_limit: 10.0,
             dash: (Vec::new(), 0.0),
+            fill_alpha: 1.0,
+            stroke_alpha: 1.0,
             clip: None,
             clip_bbox: None,
             text: crate::text::TextState::default(),

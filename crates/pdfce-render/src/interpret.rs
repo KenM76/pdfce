@@ -1637,7 +1637,7 @@ impl Interpreter<'_> {
         };
         let skip_paint = crate::profile::skip_paint();
         if !skip_paint && self.gs.current.text.fills() {
-            let paint = solid(self.gs.current.fill_color);
+            let paint = solid(self.gs.current.fill_color, self.gs.current.fill_alpha);
             // Glyph outlines are filled with the NONZERO winding rule
             // (§9.3.6: filling has "the same effects for a text object
             // as… for a path object"; counters in `o`/`e` are wound in
@@ -1645,7 +1645,7 @@ impl Interpreter<'_> {
             pixmap.fill_path(&path, &paint, FillRule::Winding, ctm, clip);
         }
         if !skip_paint && self.gs.current.text.strokes() {
-            let paint = solid(self.gs.current.stroke_color);
+            let paint = solid(self.gs.current.stroke_color, self.gs.current.stroke_alpha);
             pixmap.stroke_path(&path, &paint, &self.stroke_params(), ctm, clip);
         }
     }
@@ -1786,7 +1786,29 @@ impl Interpreter<'_> {
                 .collect();
             self.gs.current.dash = (dashes, phase as f32);
         }
-        // Other Table 58 keys (CA/ca/BM/SMask/Font/…): deferred.
+        // §11.6.4.4 constant alpha. `/ca` is non-stroking, `/CA` is
+        // stroking, both in 0..1 and both initially 1.0.
+        //
+        // These were "deferred" with NO COUNTER until 2026-08-09, which
+        // made them invisible twice over: the page rendered fully opaque,
+        // and nothing told the operator a transparency instruction had
+        // been dropped. The benign-bucket audit found the cluster —
+        // ~120 flagged pages across the veraPDF PDF/A transparency and
+        // colour-space suites, where the fixture's own bookmark says
+        // "The ExtGState contains the /ca key with value 0.5" and pdfce
+        // painted the glyph solid black while pdfium and Acrobat painted
+        // it 50% grey.
+        //
+        // Clamped rather than refused: §11.6.4.4 gives the range but a
+        // malformed file is not a reason to abandon the page, and a
+        // value outside 0..1 has an obvious intended reading at each end.
+        if let Some(v) = ext.get(b"ca").and_then(Object::as_number) {
+            self.gs.current.fill_alpha = (v as f32).clamp(0.0, 1.0);
+        }
+        if let Some(v) = ext.get(b"CA").and_then(Object::as_number) {
+            self.gs.current.stroke_alpha = (v as f32).clamp(0.0, 1.0);
+        }
+        // Remaining Table 58 keys (BM/SMask/Font/…): still deferred.
     }
 
     // -----------------------------------------------------------------
@@ -2356,11 +2378,11 @@ impl Interpreter<'_> {
             && fill
             && let Some(rule) = fill_rule
         {
-            let paint = solid(self.gs.current.fill_color);
+            let paint = solid(self.gs.current.fill_color, self.gs.current.fill_alpha);
             pixmap.fill_path(&path, &paint, rule, ctm, clip);
         }
         if !skip_paint && stroke {
-            let paint = solid(self.gs.current.stroke_color);
+            let paint = solid(self.gs.current.stroke_color, self.gs.current.stroke_alpha);
             pixmap.stroke_path(&path, &paint, &self.stroke_params(), ctm, clip);
         }
 
@@ -2658,13 +2680,22 @@ fn last_name(op: &Operation<'_>) -> Option<Vec<u8>> {
 
 /// An opaque solid-colour paint, anti-aliased (the only paint kind this
 /// Pass produces — patterns and shadings are later work).
-fn solid(c: Rgb) -> Paint<'static> {
+/// A solid paint at a constant alpha (§11.6.4.4).
+///
+/// `alpha` is the graphics state's `/ca` or `/CA`. It took a parameter on
+/// 2026-08-09; before that it hard-coded 255 and every `gs`-set opacity
+/// in every document was silently discarded at this one line.
+///
+/// tiny-skia composites a non-opaque paint correctly on its own, so
+/// constant alpha needs nothing beyond passing the number through — which
+/// is what made the omission cheap to fix and expensive to have shipped.
+fn solid(c: Rgb, alpha: f32) -> Paint<'static> {
     let mut paint = Paint::default();
     paint.set_color_rgba8(
         (c.r * 255.0) as u8,
         (c.g * 255.0) as u8,
         (c.b * 255.0) as u8,
-        255,
+        (alpha.clamp(0.0, 1.0) * 255.0).round() as u8,
     );
     paint.anti_alias = true;
     paint
