@@ -27776,3 +27776,158 @@ descent) remain unbuilt.
   asserted anywhere in this filing — no shell, hard rule 8. This is the
   **forty-fifth** `SESSION_LOG.md` filing (the forty-fourth confirmed
   present by grep before this entry was appended).
+
+## 2026-08-09 (forty-sixth filing) — `Pass 32.0`'s core + CLI halves SHIP (`462fe0e`→`947ea5d`→`5bfb8fc`→`d26d269`): per-run text deletion closes the "one CAD label deletes all 237" defect; a font-resolver gap and a vacuous-fixture gap are both FOUND BY RUNNING; the GUI half stays OPEN and its uncalled substrate is flagged, not assumed built
+
+**Filed by `pdfce-librarian`, dispatched by the engineer to record four
+commits closing `Pass 32.0`'s core and CLI surfaces. No shell available
+to this dispatch (hard rule 8) — `cargo test`/`cargo fmt`/`cargo
+clippy`/`check-ui-strings.sh`/`check-bypass-paths.sh` gate results are
+RELAYED, not independently re-run.** **Independently confirmed via
+`Read`/`Grep` directly against the working tree, extensively, before
+filing**: every named type, function and error variant (`TextRun`,
+`RunPositioning`, `plan_delete_text_run`, `EditSession::delete_text_run`,
+`CommandKind::DeleteTextRun`, `VectorEditError::{TextRunOutOfRange,
+DeleteWouldMoveNextRun}`, `hit_test_text_runs`,
+`Command::TextRunDelete`), the exact `vector_surgery` font-resolver fix
+site and its inline comment, and — found independently by this filing,
+**not named in the dispatch** — four `pub(crate)` `pdfce-gui` adapters
+(`text_run_hits`/`text_run_count`/`text_run_bounds_canvas`/
+`text_run_delete_would_move_next`, `object_provider.rs:192-247`) that
+exist and are called from **nowhere else in the workspace**, grepped
+directly. Full record: `ROADMAP.md`'s new `Pass 32.0 (core + CLI)`
+Shipped entry (top of *Shipped*).
+
+**Shipped:**
+- `Pass 32.0` (core + CLI, NOT GUI) — per-run text deletion.
+  `TextObject::runs` widens `Vec<Bounds>` → `Vec<TextRun>` (byte span +
+  `RunPositioning::{Explicit, Inherited}`), `plan_delete_text_run` +
+  `EditSession::delete_text_run` + `pdfce-cli text-run-delete --object N
+  --run M`, the `DeleteWouldMoveNextRun` refusal (remedy: delete the
+  later run first), and `hit_test_text_runs`.
+
+**Findings + decisions:**
+- **The defect, restated because it is the whole Pass.** A SolidWorks
+  export puts every label on a sheet inside ONE `BT`…`ET` (237 dimension
+  labels, one text object, on the operator's own drawing). Deletion has
+  been object-granular since Pass 9c-min; the hit test has been
+  per-run since Pass 18.5 — so a label could already be *selected* and
+  could not be *removed*. `ROADMAP.md`'s own scoping note (continuation
+  87, 2026-08-05) named both prerequisites — a byte span per run, and a
+  guard for inherited-position runs — and this filing confirms both were
+  exactly what the work needed, in that order.
+- **★ The refusal.** `DeleteWouldMoveNextRun` fires when the FOLLOWING
+  run's position is `Inherited` — §9.4.2 leaves the pen advanced past
+  the drawn string, so such a run has no coordinates anywhere in the
+  file and excising its predecessor would silently slide it. A
+  byte-minimal, round-tripping, `--verify-undo`-clean edit that is still
+  WRONG — decision 027's refuse-rather-than-guess class, applied here
+  rather than merely cited. Materialising the missing `Td` needs the
+  deleted string's advance to font-metric precision; being wrong by a
+  fraction of a point moves a label nobody selected. The message names
+  its remedy, and a test asserts the remedy stays permitted.
+- **★★ Defect 1, found by RUNNING it: `vector_surgery` decomposed with
+  no font resolver.** Every prior caller was a path verb, which needs
+  none; `TextObject::runs` needs a resolvable `Tf` to lay out at all, so
+  every text object decomposed to ZERO runs and `text-run-delete`
+  refused every real document with "the object has 0 run(s)" — while
+  `object-list` (which does pass fonts through a different call path)
+  reported four for the same file. Would have shipped as "the verb
+  exists and never works." Fixed at the ONE shared decomposition point
+  (`decompose_with_fonts`), so no future text-touching verb routed
+  through `vector_surgery` can reintroduce the gap by forgetting fonts —
+  there is no longer a font-less call site inside the helper to forget
+  it at. **Escalated to `D:\dev\rag\rust\`**:
+  `a_resolver_never_passed_reads_correct_and_only_fails_when_run.md`.
+- **★★ Defect 2, found the same way: a testing constraint made five
+  tests vacuous.** The first draft's fixtures were inline
+  `ContentStream::parse` byte strings with no owning page and therefore
+  no `/Resources` dict — `/F1 10 Tf` resolved to nothing, no run laid
+  out, every deletion assertion would have passed against a verb doing
+  nothing. Five tests failed with `count: 0`, which is how it was
+  caught. Fixtures rebuilt as real PDFs with a standard-14 font;
+  every test now asserts a run count before asserting anything about
+  deletion. **Escalated to `C:\personal_rag\pdf\`**:
+  `lesson_20260809_bare_content_stream_has_no_resource_dict_so_tf_resolves_to_nothing.md`
+  — same underlying cause as Defect 1 (a resource that isn't there
+  resolves to nothing, silently), independently hit once in production
+  code and once in test code, same Pass.
+- **★ The GUI half is NOT built, and this filing found substrate the
+  dispatch did not name.** `crates/pdfce-gui/src/object_provider.rs`
+  already carries four `pub(crate)` adapters over the new core surface
+  (hit query, run count, run bounds, delete-would-move-next pre-check)
+  — **called from nowhere else in the crate**, grepped workspace-wide.
+  Exactly R151's shape, one layer up (a documented capability with no
+  caller), flagged at ship time rather than left to be rediscovered the
+  way `move_subpath` was after eight Pass-numbers. `docs/FEATURES.md`'s
+  new row keeps `gui` unticked; do not round it up when the
+  `pdfce-ui-specialist` rung-design ruling lands without confirming a
+  gesture actually reaches the verb.
+- **A gap this filing flags but does not resolve**: the relayed `cargo
+  clippy --workspace --all-targets -- -D warnings` figure is "0 errors,
+  0 warnings," yet the four `pdfce-gui` adapters above are genuinely
+  uncalled anywhere in the workspace — ordinarily exactly what a
+  `dead_code` lint exists to catch. This filing records the observation
+  and does not diagnose it (no invented cause, per the project's own
+  `trust_but_verify_doc_comments_are_not_evidence.md` discipline);
+  flagged for the engineer.
+
+**Test results — reconciled to within one doctest, independently
+counted.** Directly grepped: **14** `#[test]` fns in
+`crates/pdfce-core/tests/text_run_delete.rs`, **6** new in
+`crates/pdfce-core/tests/text_run_model.rs`, **3** new in
+`crates/pdfce-cli/tests/vector_edit.rs` (bringing that file from 11 to
+14) — **23**, plus the one doctest inside `plan_delete_text_run`'s own
+doc comment = **24**, matching the relayed net total exactly:
+`cargo test --workspace` **2592 → 2606 → 2613 → 2616 passed / 0 failed**
+across the four commits (2616 − 2592 = 24). `cargo fmt --all --check`
+clean (relayed). `cargo clippy --workspace --all-targets -- -D
+warnings`: 0 errors / 0 warnings (relayed — see the flagged gap above).
+`check-ui-strings.sh` / `check-bypass-paths.sh` clean (relayed). No
+`Cargo.toml` touched — `cargo tree` invariant unaffected, not re-run.
+
+**Verified end to end (engineer's own account, relayed).** Through the
+CLI: `runs=4` → `runs=3`, decoded text `ALPHABETAGAMMADELTA` →
+`ALPHABETAGAMMA`, undo byte-identical; run 2 refused with its remedy and
+no output file written; deleting the only run of `runs-single.pdf`
+leaves `text=0 paths=1`.
+
+**Still in flight:**
+- `Pass 32.0`'s GUI half — blocked on `pdfce-ui-specialist`'s
+  rung-design ruling, four uncalled adapters already waiting for it (see
+  above). This Pass stays open under its own ID.
+- The arrow-key SINGLE-node nudge (decision 028 items 10/11) — unchanged
+  since the forty-fifth filing, still owed under its own entry.
+- **The five unfiled commits first flagged at the forty-third filing**
+  (`d3ea5de`/`1edf4e3`/`9abf5b5`/`e167867`/`01b90c4`) — **still untouched
+  by this filing.** Not part of this dispatch's scope; the environment
+  snapshot at the head of this conversation still lists them as the most
+  recent commits on `pass-8-redaction` *before* the four `Pass 32.0`
+  commits this filing records, so they remain the oldest owed filing
+  gap on record. Flagged again so a third filing does not lose track of
+  them.
+
+**For next session:**
+- Confirm the `pdfce-ui-specialist` rung-design ruling for text-run
+  selection/deletion, then wire `Pass 32.0`'s GUI half against the
+  four adapters already sitting in `object_provider.rs`.
+- File the five still-unfiled commits flagged since the forty-third
+  filing.
+- Resolve or explain the `clippy`-vs-uncalled-adapters gap flagged
+  above, if it turns out to matter (it may simply mean the relayed gate
+  run predates `d26d269`, the hit-query commit — this filing does not
+  assume either way).
+- **Ledger for this filing:** two new `ARCHITECTURE.md` §12 entries
+  (the `TextRun`/`RunPositioning` model change, the `vector_surgery`
+  font-resolver fix) plus a new §4.1 subsection (N). No new standing
+  rule minted — the refusal is decision 027's existing posture, applied,
+  not a new rule; R151 is NOT yet discharged for this capability (the
+  GUI half has no caller for its own adapters, unlike `Pass 23.3` which
+  this ledger note's predecessor closed out). One new `D:\dev\rag\rust\`
+  file plus its `index.md` entry; one new `C:\personal_rag\pdf\` lesson
+  plus its subject-index and master-index entries. `Pass 32.0` stays the
+  Pass ID this filing used — PARTIALLY SHIPPED (core+CLI), not closed.
+  Backup/git working-tree state is not asserted anywhere in this filing
+  — no shell, hard rule 8. This is the **forty-sixth** `SESSION_LOG.md`
+  filing (the forty-fifth confirmed present by grep before this entry
+  was appended).

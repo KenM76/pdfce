@@ -1655,6 +1655,107 @@ functions. `cargo tree -p pdfce-core` unaffected: no `Cargo.toml`
 touched this Pass (relayed by the dispatching engineer; not
 independently re-run by this filing — no shell, hard rule 8).
 
+### (N) `Pass 32.0` (`462fe0e`→`947ea5d`→`5bfb8fc`→`d26d269`) — per-run text deletion: `TextRun`, `RunPositioning`, `plan_delete_text_run`, `EditSession::delete_text_run`, `hit_test_text_runs`, and a `vector_surgery` font-resolver defect fix — 2026-08-09
+
+**★★ BREAKING for anyone matching on `TextObject::runs`'s element type.**
+Verified directly in `vector/decompose.rs`, `vector/edit.rs`, `vector/hit.rs`
+and `edit.rs`:
+
+- **`TextObject::runs` is now `Vec<TextRun>`, not `Vec<Bounds>`**
+  (`decompose.rs:690`). `TextRun { bounds: Bounds, tokens: TokenRange,
+  bytes: ByteSpan, positioned_by: RunPositioning }` (`decompose.rs:753`).
+  The prior geometry is unchanged and reachable as `TextRun::bounds`; what
+  is added is the run's own byte span (the enabling change — without it
+  *"delete this run"* has no bytes to name, the direct text-side analogue
+  of `Subpath` gaining a span in (B), above) and its
+  `positioned_by: RunPositioning::{Explicit, Inherited}` (`decompose.rs:728`),
+  the text-side twin of a subpath's `starts_implicitly` (Pass 30.0).
+  `Explicit` means a positioning operator (`Tm`/`Td`/`TD`/`T*`, or the line
+  move built into `'`/`"`) set this run's origin, or it is the first run of
+  a `BT`…`ET` (`BT` itself resets both matrices to identity, §9.4.1).
+  `Inherited` means the run's origin is wherever the previous run's advance
+  left the pen (§9.4.2) — it has no coordinates anywhere in the file.
+- **The still-open run at `ET` is now folded in through the same
+  `close_text_run` helper** (`decompose.rs:2251`) every other run goes
+  through, replacing a second inline push site that existed only for that
+  one case and could disagree with the shared path about which bytes a run
+  owns.
+- **`vector::plan_delete_text_run(content: &ContentStream, obj:
+  &TextObject, run_index: usize) -> Result<PlannedEdit, VectorEditError>`**
+  (`vector/edit.rs:937`) — removes exactly one run's operator bytes (the
+  span recorded on `TextRun::bytes`, so the index and the bytes cannot
+  describe different things) plus trailing whitespace bounded by the text
+  object's own span, and re-emits everything else verbatim. Deleting the
+  only run deletes the text object, same rule as `plan_delete_subpath`'s
+  last-subpath case.
+- **`EditSession::delete_text_run(&mut self, page_index: usize,
+  object_index: usize, run_index: usize) -> Result<Vec<String>,
+  EditError>`** (`edit.rs:4265`), routed through
+  `vector_surgery(CommandKind::DeleteTextRun, ..)` — its own
+  `CommandKind` variant, not a reuse of an existing one, because "delete
+  this label" and "delete all 237 labels" are the whole Pass and an Undo
+  tooltip that couldn't distinguish them would describe exactly the
+  defect this Pass exists to fix.
+- **Two new `VectorEditError` variants** (`vector/edit.rs:329`, `:360`):
+  `TextRunOutOfRange { index, count }` and `DeleteWouldMoveNextRun {
+  index }`, the latter doc-commented as *"the exact twin of
+  `DeleteWouldMoveNextSubpath`, one object kind over."* **The refusal
+  exists because materialising the missing `Td` needs the deleted
+  string's advance to font-metric precision** — a byte-minimal,
+  round-tripping, `--verify-undo`-clean edit is still the WRONG edit if it
+  silently slides a label nobody selected. Decision 027's
+  refuse-what-has-no-good-reading posture, applied here rather than
+  merely cited; the message names its remedy (delete the later run
+  first), and a test asserts the remedy is actually permitted.
+- **`hit_test_text_runs(model: &PageObjects, object_index: usize, point:
+  Point, tolerance: f64) -> Vec<usize>`** (`vector/hit.rs:277`) — the twin
+  of `hit_test_subpaths`, nearest-first by distance to the run's box.
+  **Deliberately does NOT inherit `text_hit`'s page-bbox fallback**: that
+  fallback keeps an unmeasurable object selectable, the honest answer to
+  "did I hit this object"; here the question is "which run", and naming
+  run 0 for an object whose runs were never laid out would hand a caller a
+  deletable target that is the wrong one, silently.
+- **`pdfce-cli text-run-delete <input> --object N --run M -o out [--page
+  N] [--mode …] [--verify-undo]`** (`main.rs:2763`/`:13089`).
+
+**A defect in `EditSession::vector_surgery` found by running the new CLI
+verb against a fixture, not by reading the function.** `vector_surgery`
+(`edit.rs:4540`) decomposed the page's current content with an XObject
+resolver alone — no font resolver — because until this Pass every verb
+reaching it was a path verb, which needs none. `TextObject::runs` is
+populated by *laying out* each show operator, which needs a resolvable
+`Tf`; with no font resolver, every text object decomposed to **zero**
+runs, so `text-run-delete` refused every real document with "the object
+has 0 run(s)" while `object-list` (which does pass fonts) reported four
+for the identical file. **Fix:** `vector_surgery` now builds
+`DocumentFonts::new(&base_view, &page.resources)` and calls
+`decompose_with_fonts` (`edit.rs:4623`) instead of the bare `decompose` —
+same base-view reasoning already governing the XObject resolver two lines
+above it (page `/Resources` are not rewritten by content surgery, so base
+and session agree on them). **This is now the ONE font-and-XObject-aware
+decomposition point every `vector_surgery`-routed verb shares** — `path`
+verbs pay nothing extra (no `Tf` in their stream, resolver never called),
+and no future text-touching verb can reintroduce the gap by forgetting to
+pass fonts, because there is no longer a bare-decompose call site inside
+this helper to forget it at. **Escalated to `D:\dev\rag\rust\`** — see
+that RAG's index entry, this filing.
+
+**A testing-methodology finding, filed to `C:\personal_rag\pdf\`.** The
+first draft of `text_run_model.rs`/`text_run_delete.rs` used inline
+`ContentStream::parse` streams with no owning page and no `/Resources`
+dict, so `/F1 10 Tf` resolved to nothing, no run laid out, and every
+deletion assertion would have passed against a verb that did nothing —
+five tests failed with `count: 0` before the fixtures were rebuilt as real
+PDFs with a standard-14 font. See that lesson for the full account.
+
+**Breaking? YES, narrowly.** `TextObject::runs`'s element type changed
+from `Bounds` to `TextRun` — any downstream code (none inside this
+workspace; `pdfce-gui`'s object provider was updated in the same commit
+chain) pattern-matching or iterating `runs` as `Bounds` directly needs
+`.bounds` added. No `Cargo.toml` touched (relayed by the dispatching
+engineer; not independently re-run by this filing — no shell, hard rule
+8).
+
 ### (I) What this sync did NOT cover — stated so the edges are honest
 
 **A partial sync that names its edges is worth more than a
@@ -13061,3 +13162,53 @@ started).
   change. `ROADMAP.md`'s `Pass 23.3 (GUI half)` Shipped entry (top of
   *Shipped*) has the full build record, test list, and the R168-second-
   instance framing.
+- **2026-08-09 (`Pass 32.0` core+CLI, `462fe0e`→`947ea5d`→`5bfb8fc`→
+  `d26d269`) — `TextObject::runs` widens from `Vec<Bounds>` to
+  `Vec<TextRun>`, and the design decision worth recording is WHICH TWO
+  fields make a per-run edit expressible at all.** Full signatures in
+  §4.1's new subsection (N), above — recorded here as the decision-log
+  pointer that section requires. In one sentence: a run needed its OWN
+  byte span (so "delete this run" names bytes rather than only geometry
+  — the text-side twin of `Subpath` gaining a span in Pass 28.0) and its
+  OWN `positioned_by: RunPositioning` flag (so a run whose origin is
+  inherited from its predecessor's advance, and therefore has no
+  coordinates anywhere in the file, can be told apart from one that does
+  — the text-side twin of a subpath's `starts_implicitly`). Neither
+  addition is new information the decomposer didn't already compute in
+  passing; both were simply not being KEPT. **Breaking:** `runs`'s
+  element type changed; see (N)'s own breaking-change paragraph for the
+  narrow blast radius (one in-workspace consumer, updated same commit
+  chain).
+- **2026-08-09 (`Pass 32.0` CLI, `5bfb8fc`) — `EditSession::
+  vector_surgery` decomposes with a font resolver now, closing a gap
+  that was invisible for as long as every verb reaching it was a path
+  verb.** `vector_surgery` (the one decomposition point every
+  `move_object`/`delete_subpath`/`move_nodes`/`move_handle`/
+  `delete_text_run`/… vector verb shares) built its `PageObjects` model
+  from an XObject resolver alone. Harmless for every prior vector verb —
+  none of them are text-aware — and silently fatal for the first one
+  that was: `TextObject::runs` is populated by LAYING OUT each show
+  operator, which cannot resolve `/F1 10 Tf` without a font resolver, so
+  every text object decomposed to zero runs and `text-run-delete`
+  refused every real document with "the object has 0 run(s)." **Found
+  by running the new CLI subcommand against a fixture, not by reading
+  the function** — `object-list`, which does pass fonts through a
+  different call path, reported four runs for the identical file, which
+  is what exposed the disagreement. **Fixed at the ONE shared
+  decomposition point** (`decompose_with_fonts` instead of bare
+  `decompose`, `edit.rs:4623`), rather than adding a font resolver only
+  to the text-run verb — the same fix that closes this gap for
+  `delete_text_run` also means no FUTURE text-touching verb routed
+  through `vector_surgery` can reintroduce it by forgetting to pass
+  fonts, because there is no longer a font-less call site inside the
+  helper to forget it at. **The general shape, escalated to
+  `D:\dev\rag\rust\`**: a shared helper that silently degrades instead
+  of erroring when a caller's dependency (here, a resolver) is absent
+  reads as correct at every call site that happens not to need the
+  dependency, and only the first caller that DOES need it discovers the
+  gap — and discovers it by running, because the helper's return type
+  gives no signal that anything was skipped (an empty `Vec<TextRun>` is
+  indistinguishable from "this text object genuinely has no runs").
+  Breaking? **No** — internal helper, no public signature changed; every
+  existing path-only vector verb pays nothing extra (no `Tf` in a path
+  stream, the font resolver is never invoked for it).

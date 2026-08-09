@@ -81,6 +81,211 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 32.0 (core + CLI) — per-RUN text deletion: deleting one label stops deleting all 237 sharing its `BT`…`ET` — 2026-08-09, committed `462fe0e`→`947ea5d`→`5bfb8fc`→`d26d269`, branch `pass-8-redaction`
+
+> **★ GUI HALF NOT SHIPPED — this Pass stays OPEN, not closed.** As of
+> this filing the GUI is with `pdfce-ui-specialist` for a rung-design
+> ruling (where in the Object/Part/Point ladder a text run sits, and
+> what gesture deletes one). **Independently confirmed by this filing,
+> not merely relayed:** `crates/pdfce-gui/src/object_provider.rs` already
+> carries four `pub(crate)` adapters over the new core surface —
+> `text_run_hits` (`:192`, wraps `hit_test_text_runs`), `text_run_count`
+> (`:208`), `text_run_bounds_canvas` (`:222`), and
+> `text_run_delete_would_move_next` (`:240`, a pure pre-check over the
+> same `positioned_by` flag the core verb refuses on, so a disabled
+> affordance and the verb cannot disagree) — **called from nowhere else
+> in the crate** (grepped workspace-wide: zero hits outside this file,
+> and none of the file's own 16 `#[test]` functions exercise them
+> either). This is exactly R151's shape one layer up: a documented
+> capability with no caller. Flagged here, at ship time, precisely so it
+> is not rediscovered the way `move_subpath` was after eight Pass-numbers
+> — the adapters are real, tested-by-construction-of-their-callees
+> substrate for whatever the ui-specialist rules, not the GUI half
+> itself. `docs/FEATURES.md`'s new row (below) keeps `gui` unticked.
+
+**Filed by `pdfce-librarian`. No shell available to this dispatch (hard
+rule 8) — `cargo test`/`cargo fmt`/`cargo clippy`/`check-ui-strings.sh`/
+`check-bypass-paths.sh` gate results below are RELAYED from the
+engineer's own dispatch summary, not independently re-run.**
+**Independently confirmed by this filing via `Read`/`Grep` directly
+against the working tree, not relayed:** `pub struct TextRun { bounds,
+tokens, bytes, positioned_by }` and `pub enum RunPositioning {
+Explicit, Inherited }` at `crates/pdfce-core/src/vector/decompose.rs:753`
+and `:728`; `TextObject::runs` is `Vec<TextRun>`
+(`decompose.rs:690`); `pub fn plan_delete_text_run(content, obj,
+run_index) -> Result<PlannedEdit, VectorEditError>` at
+`crates/pdfce-core/src/vector/edit.rs:937`; `pub fn delete_text_run(&mut
+self, page_index, object_index, run_index) -> Result<Vec<String>,
+EditError>` at `crates/pdfce-core/src/edit.rs:4265`, routed through
+`vector_surgery(CommandKind::DeleteTextRun, ..)`; `VectorEditError::
+TextRunOutOfRange { index, count }` (`vector/edit.rs:329`) and
+`::DeleteWouldMoveNextRun { index }` (`:360`, doc-commented as *"the
+exact twin of `DeleteWouldMoveNextSubpath`, one object kind over"*);
+`pub fn hit_test_text_runs(model, object_index, point, tolerance) ->
+Vec<usize>` at `crates/pdfce-core/src/vector/hit.rs:277`; `pdfce-cli`'s
+`Command::TextRunDelete` at `crates/pdfce-cli/src/main.rs:2763`, its
+`cmd_text_run_delete` handler at `:13089`. **The font-resolver defect
+and its fix are confirmed at the exact site the report names**:
+`EditSession::vector_surgery` (`edit.rs:4540`) now builds
+`DocumentFonts::new(&base_view, &page.resources)` and calls
+`decompose_with_fonts` (`edit.rs:4623`), with a 12-line inline comment
+(`:4606–4621`) stating the defect in the engineer's own words —
+*"found by running the CLI subcommand against a fixture, not by
+reading this function."*
+
+**What shipped:**
+
+- **Substrate (`462fe0e`).** `TextObject::runs` widens from `Vec<Bounds>`
+  to `Vec<TextRun>`. Each run now carries its own **byte span**
+  (`TextRun::bytes: ByteSpan`, alongside its existing `tokens:
+  TokenRange`) — without which *"delete this run"* has no bytes to name,
+  the exact shape of Pass 28.0's subpath-span change — and
+  **`positioned_by: RunPositioning::{Explicit, Inherited}`**, the
+  text-side twin of a subpath's `starts_implicitly` (Pass 30.0). The
+  still-open run at `ET` is now folded in through the same
+  `close_text_run` helper (`decompose.rs:2251`) every other run goes
+  through, rather than a second inline push site that could disagree
+  with it about which bytes a run owns.
+- **Verb (`947ea5d`).** `plan_delete_text_run` + `EditSession::
+  delete_text_run` + its own `CommandKind::DeleteTextRun` — a distinct
+  Undo-history kind rather than reusing an existing one, because *"delete
+  this label"* and *"delete all 237 labels"* are the whole Pass, and an
+  Undo tooltip that couldn't tell them apart would describe exactly the
+  behaviour this Pass exists to stop. Removes the run's own recorded
+  span, extends over trailing whitespace bounded by the object's own
+  span (so removing 237 labels does not leave 237 orphaned runs of
+  spaces), and deletes the whole `BT`…`ET` when the last run goes —
+  same rule, same reason, as `plan_delete_subpath`'s "last one standing"
+  case.
+- **CLI (`5bfb8fc`).** `pdfce-cli text-run-delete <input> --object N
+  --run M -o out [--page N] [--mode …] [--verify-undo]`.
+- **Hit query (`d26d269`).** `hit_test_text_runs`, the twin of
+  `hit_test_subpaths` — nearest-first by distance to the run's box
+  (runs inside one text object share no z-order to inherit), and
+  **deliberately does NOT inherit `text_hit`'s page-bbox fallback**: that
+  fallback keeps an unmeasurable object *selectable* (the honest answer
+  to "did I hit this object"); here the question is *"which run"*, and
+  naming run 0 for an object whose runs were never laid out would hand a
+  caller a deletable target that is the wrong one, silently.
+
+**★ The refusal, and why it is refused rather than guessed at.**
+`VectorEditError::DeleteWouldMoveNextRun` fires when the **following**
+run's `positioned_by` is `Inherited`. §9.4.2 leaves the pen advanced
+past the string a show operator just drew, so such a run starts wherever
+this one ends and has **no coordinates anywhere in the file**. Excising
+it would be byte-minimal, would round-trip, would pass
+`--verify-undo`, and would be **wrong** — exactly decision 027's
+refuse-what-has-no-good-reading class. Materialising the missing `Td`
+is possible in principle but needs the deleted string's advance to
+font-metric precision, and being wrong by a fraction of a point moves a
+label nobody selected. The message names the remedy — **delete the
+later run first** — and a dedicated test
+(`text_run_delete_refuses_when_the_next_run_would_move`, both core and
+CLI) asserts the remedy is actually permitted, not merely stated.
+
+**★★ Two defects found by RUNNING it, not by reading it.**
+
+1. **`EditSession::vector_surgery` decomposed with an XObject resolver
+   alone — no font resolver.** `TextObject::runs` is populated by
+   *laying out* each show operator, which needs a resolvable `Tf`. With
+   no font resolver, every text object decomposed to **zero** runs, so
+   `text-run-delete` refused every real document with *"the object has
+   0 run(s)"* while `object-list` (which does pass fonts) reported four
+   for the identical file. Invisible for as long as every verb reaching
+   `vector_surgery` was a PATH verb, which needs none. **This would have
+   shipped as "the verb exists and never works" on every real
+   document.** Fixed by threading `decompose_with_fonts` through the
+   same helper every vector-edit verb shares — found by running the CLI
+   subcommand against a fixture, not by reading the function.
+2. **A testing constraint made five tests vacuous before the fixtures
+   were fixed.** The first test draft used inline `ContentStream::parse`
+   streams with no resource dictionary, so `/F1 10 Tf` resolved to
+   nothing, no run laid out, and every deletion assertion would have
+   passed against a verb that did nothing. Five tests failed with
+   `count: 0`, which is how it was found. Fixtures are now real PDFs
+   with a standard-14 font; every test asserts a run count before
+   asserting anything about deletion; the constraint is written into
+   `text_run_model.rs`'s own header comment.
+
+**Fixtures.** New generator `tools/gen-text-run-fixtures.py` →
+`fixtures/synthetic/text/{runs-inherited, runs-tj-array,
+runs-two-explicit, runs-single}.pdf`, added to `PROVENANCE.md`.
+`runs-inherited.pdf`'s four runs are Explicit / Inherited /
+Explicit-via-`Td` / Inherited — each kills a specific wrong
+implementation (all-Explicit; a `Tm`-only latch; a latch that clears
+once and never re-arms). `runs-tj-array.pdf` pins that a `TJ` array is
+ONE run however many strings it holds. `PROVENANCE.md` also records why
+the existing `scattered-text-one-object.pdf` fixture could not serve
+this Pass: it positions **both** its runs with an explicit `Tm`, so a
+hard-coded `Explicit` implementation would pass against it (R162's own
+lesson, applied here rather than merely cited).
+
+**Test results — independently confirmed, reconciled to within one
+doctest.** Directly counted via `Grep`: **14** `#[test]` functions in
+`crates/pdfce-core/tests/text_run_delete.rs` (delete verb + the
+`hit_test_text_runs` "WHICH run, not merely whether" section, both
+landed in this one file), **6** in the new
+`crates/pdfce-core/tests/text_run_model.rs` (substrate-level:
+`every_run_span_covers_its_own_show_operator_and_no_other`,
+`run_spans_are_ordered_and_disjoint`,
+`run_positioning_distinguishes_explicit_from_inherited`,
+`the_first_run_of_a_text_object_is_never_inherited`,
+`a_tj_array_is_one_run_however_many_strings_it_holds`,
+`the_scattered_text_fixture_has_only_explicit_runs`), and **3** new in
+`crates/pdfce-cli/tests/vector_edit.rs`
+(`text_run_delete_removes_one_label_and_leaves_the_rest`,
+`text_run_delete_refuses_when_the_next_run_would_move`,
+`text_run_delete_on_the_last_run_removes_the_text_object` — bringing
+that file from the 11 tests on record after `Pass 23.3` CLI half to 14).
+**14 + 6 + 3 = 23**, plus the one doctest inside
+`plan_delete_text_run`'s own doc comment (`vector/edit.rs:920–935`) =
+**24 — matching the relayed net total exactly** (`cargo test
+--workspace`: **2592 → 2606 → 2613 → 2616 passed / 0 failed** across the
+four commits, relayed; 2616 − 2592 = 24, nothing left over). `cargo fmt
+--all --check` clean (relayed). `cargo clippy --workspace --all-targets
+-- -D warnings`: **0 errors, 0 warnings** (relayed) — **flagged, not
+reconciled, by this filing**: the four `pdfce-gui` adapters named in the
+banner above are grepped as genuinely uncalled anywhere in the
+workspace, which would ordinarily be exactly what `dead_code` exists to
+catch; this filing does not diagnose why the relayed clippy run stayed
+clean over them, only records that it did. `check-ui-strings.sh` /
+`check-bypass-paths.sh` clean (relayed). No `Cargo.toml` touched — the
+`cargo tree -p pdfce-core` / `-p pdfce-render` GUI-dependency invariant
+is unaffected and was not re-run.
+
+**Verified end to end (engineer's own account, relayed).** Through the
+CLI: `runs=4` → `runs=3`, decoded text `ALPHABETAGAMMADELTA` →
+`ALPHABETAGAMMA`, undo byte-identical; run 2 of `runs-inherited.pdf`
+refused with its remedy and **no output file written**; deleting the
+only run of `runs-single.pdf` leaves `text=0 paths=1`.
+
+**★ The `Next up` scoping note (continuation 87, filed 2026-08-05) is
+CONFIRMED CORRECTLY CALLED.** It named exactly two prerequisites —
+per-run token spans on `TextObject`, and a guard for runs whose
+position is inherited — and both are exactly what this Pass needed and
+built, in that order, four days before the work started. Recorded here
+because the roadmap doing its own job (a scoping note a later session
+did not have to re-derive) is itself worth the line.
+
+**`docs/FEATURES.md`**: new *Implemented* row under Text — *Delete one
+text run without deleting every run sharing its text object* —
+`core [x]` / `cli [x]` / `gui [ ]`. The GUI box is left unticked on
+purpose, per the banner above; do not round it up when the ui-specialist's
+ruling lands without confirming a gesture actually reaches the verb.
+
+**Escalations, this filing.** `D:\dev\rag\rust\` — new file
+`a_resolver_never_passed_reads_correct_and_only_fails_when_run.md` (see
+that RAG's own index entry for the full finding): a decomposition helper
+missing the resolver it needs cannot be caught by reading the call
+site, because the call compiles, returns, and produces a well-typed
+empty result — only running it against a document that HAS the
+resource the resolver would have supplied shows the defect.
+`C:\personal_rag\pdf\` — new lesson
+`lesson_20260809_bare_content_stream_has_no_resource_dict_so_tf_resolves_to_nothing.md`:
+a content stream built without its owning page's `/Resources` dict lays
+out no text, which makes a test fixture built that way vacuous for
+anything that depends on font resolution, silently.
+
 ### Pass 23.3 (CLI half) — `pdfce-cli nodes-move`, and the last of 23.3's three named components now ships on every surface — 2026-08-09, committed `dbdd9a6`, branch `pass-8-redaction`
 
 **Filed by `pdfce-librarian`. No shell available to this dispatch (hard
@@ -25676,6 +25881,21 @@ it, and flagged so the Pass-29.0/30.0 gate figures are read with it in
 mind (see the gate block at the top of *Shipped*).
 
 ### Pass 32.0 — Per-RUN text deletion: deleting a label must not delete 236 of its neighbours (core + CLI + GUI)
+
+> **★ CORE + CLI SHIPPED 2026-08-09, chain `462fe0e`→`947ea5d`→`5bfb8fc`→
+> `d26d269`. Filed by `pdfce-librarian`.** See *Shipped* (top of that
+> section) for the full record — `TextObject::runs` widened to
+> `Vec<TextRun>` with a byte span + `RunPositioning`, `plan_delete_text_run`
+> + `EditSession::delete_text_run` + `pdfce-cli text-run-delete`, the
+> `DeleteWouldMoveNextRun` refusal, and `hit_test_text_runs`. **The GUI
+> half named in this entry's own title stays NOT STARTED** — with
+> `pdfce-ui-specialist` for a rung-design ruling as of this filing; four
+> `pdfce-gui` adapters exist as uncalled substrate (see the Shipped
+> entry's banner). This Pass stays open under its own ID until the GUI
+> gesture lands. **The scoping note appended below (continuation 87,
+> 2026-08-05) is confirmed to have named both prerequisites correctly** —
+> left in place, unedited, as the record of what the core work turned out
+> to need.
 
 **Pass ID librarian-assigned 2026-08-05** (next free after 31.0; engineer
 to confirm).
