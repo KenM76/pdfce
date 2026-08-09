@@ -202,3 +202,226 @@ fn an_out_of_range_object_is_refused() {
     assert_eq!(out.status.code(), Some(EDIT_REFUSED));
     assert!(!out_path.exists());
 }
+
+// ---------------------------------------------------------------------------
+// `nodes-move` — the batch form (`Pass 23.3`)
+// ---------------------------------------------------------------------------
+
+/// **The case a loop of `node-move` cannot express.** Both bottom corners of
+/// the rectangle move in ONE command, and the result undoes byte-identically.
+///
+/// Object 1 of the fixture is a closed 4-anchor rectangle at
+/// `bbox=200,50,280,110`. Corners 0 and 1 are its two bottom anchors; sending
+/// both to `y = 80` lifts that edge without touching the top one. All four
+/// corners of a rectangle are the same four operands of a single `re`
+/// operator, so this is precisely the shape that needs one surgery rather
+/// than two.
+#[test]
+fn nodes_move_lifts_two_corners_of_one_rectangle_in_one_command() {
+    let out_path = temp_path("nodesmove");
+    let out = run(
+        "nodes-move",
+        &[
+            fixture().to_str().unwrap(),
+            "--object",
+            "1",
+            "--move",
+            "0,200,80",
+            "--move",
+            "1,280,80",
+            "-o",
+            out_path.to_str().unwrap(),
+            "--verify-undo",
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let line = stdout(&out);
+    assert!(line.contains("nodes-move "), "report line missing: {line}");
+    assert!(
+        line.contains("object=1 nodes=2"),
+        "the line must say how many anchors moved: {line}",
+    );
+    assert!(
+        line.contains("undo_identical=1"),
+        "one command must undo byte-identically: {line}",
+    );
+    // ONE object written — the whole batch is a single content-stream surgery,
+    // not two.
+    assert!(
+        line.contains("objects=1"),
+        "expected one object written: {line}"
+    );
+
+    // The rectangle-expansion disclosure goes to STDERR, so the stdout record
+    // stays a fixed shape, and it is said ONCE for the pair.
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(
+        err.matches("stored as a rectangle").count(),
+        1,
+        "two corners of ONE rectangle owe the disclosure once, not twice: {err}",
+    );
+    assert!(
+        !err.contains("one corner"),
+        "the disclosure must not claim a corner COUNT — two moved here: {err}",
+    );
+
+    // And the geometry actually changed: the bottom edge lifted to y=80.
+    let listed = run("object-list", &[out_path.to_str().unwrap()]);
+    let listing = stdout(&listed);
+    assert!(
+        listing.contains("index=1 kind=path bbox=200,80,280,110"),
+        "bottom edge did not lift to y=80: {listing}",
+    );
+    assert!(
+        listing.contains("anchors=4 closed=1"),
+        "the shape must stay a closed 4-anchor path after the expansion: {listing}",
+    );
+    let _ = std::fs::remove_file(&out_path);
+}
+
+/// The same anchor twice is refused by name, before anything is written.
+#[test]
+fn nodes_move_refuses_a_duplicated_anchor() {
+    let out_path = temp_path("nodesdup");
+    let out = run(
+        "nodes-move",
+        &[
+            fixture().to_str().unwrap(),
+            "--object",
+            "1",
+            "--move",
+            "0,1,2",
+            "--move",
+            "0,3,4",
+            "-o",
+            out_path.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(out.status.code(), Some(EDIT_REFUSED));
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        err.contains("named more than once"),
+        "the refusal must say WHICH problem it is: {err}",
+    );
+    assert!(!out_path.exists(), "a refused batch must write nothing");
+}
+
+/// An out-of-range anchor refuses the WHOLE batch — never a partial apply.
+#[test]
+fn nodes_move_refuses_the_whole_batch_for_one_bad_index() {
+    let out_path = temp_path("nodesrange");
+    let out = run(
+        "nodes-move",
+        &[
+            fixture().to_str().unwrap(),
+            "--object",
+            "1",
+            "--move",
+            "0,210,60",
+            "--move",
+            "99,1,2",
+            "-o",
+            out_path.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(out.status.code(), Some(EDIT_REFUSED));
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("out of range"), "{err}");
+    assert!(
+        !out_path.exists(),
+        "anchor 0's move must NOT have been applied — the batch is all or nothing",
+    );
+}
+
+/// A malformed `--move` token is caught before the document is even opened,
+/// and the message names the token and what was wrong with it.
+#[test]
+fn nodes_move_rejects_a_malformed_move_token_by_name() {
+    for (token, needle) in [
+        ("0,1", "expected NODE,X,Y"),
+        ("a,1,2", "is not a 0-based anchor index"),
+        ("0,x,2", "is not a number"),
+    ] {
+        let out_path = temp_path("nodesbad");
+        let out = run(
+            "nodes-move",
+            &[
+                fixture().to_str().unwrap(),
+                "--object",
+                "1",
+                "--move",
+                token,
+                "-o",
+                out_path.to_str().unwrap(),
+            ],
+        );
+        assert!(!out.status.success(), "{token:?} must not succeed");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(err.contains(needle), "for {token:?}, got: {err}");
+        assert!(
+            err.contains(token),
+            "the message must quote the token: {err}"
+        );
+        assert!(!out_path.exists());
+    }
+}
+
+/// **`--move` must not be greedy.** `--move 0,1,2 -o out.pdf` has to read
+/// `-o` as the output flag, not as another move token.
+///
+/// This is a regression test for a real defect: the flag was first declared
+/// `num_args = 1..`, which swallowed `-o` and its value and made every
+/// invocation die reporting `--output` missing. The failure looked like a
+/// user error rather than an argument-definition bug.
+#[test]
+fn the_move_flag_does_not_swallow_the_output_flag() {
+    let out_path = temp_path("nodesgreedy");
+    let out = run(
+        "nodes-move",
+        &[
+            fixture().to_str().unwrap(),
+            "--object",
+            "1",
+            "--move",
+            "0,205,55",
+            "-o",
+            out_path.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "a single --move followed by -o must parse: {}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+    assert!(out_path.exists());
+    let _ = std::fs::remove_file(&out_path);
+}
+
+/// Negative page-space coordinates are legal and must survive the parser —
+/// `allow_hyphen_values` is what makes `0,-5,-5` a value rather than a flag.
+#[test]
+fn nodes_move_accepts_negative_coordinates() {
+    let out_path = temp_path("nodesneg");
+    let out = run(
+        "nodes-move",
+        &[
+            fixture().to_str().unwrap(),
+            "--object",
+            "1",
+            "--move",
+            "0,-5,-5",
+            "-o",
+            out_path.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "a negative coordinate must parse: {}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+    let _ = std::fs::remove_file(&out_path);
+}

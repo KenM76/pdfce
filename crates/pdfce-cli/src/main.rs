@@ -2838,6 +2838,69 @@ enum Command {
         #[arg(long)]
         verify_undo: bool,
     },
+    /// **Move SEVERAL anchors of one path object at once**, as a single
+    /// undoable surgery (`Pass 23.3`).
+    ///
+    /// The batch form of `node-move`. Repeat `--move NODE,X,Y` once per
+    /// anchor; every anchor named goes to its own absolute page-space point,
+    /// so this expresses a rigid translation and an arbitrary re-shaping
+    /// equally well — nothing here requires the targets be a uniform offset.
+    ///
+    /// WHY THIS IS NOT JUST A LOOP OVER `node-move`. Two reasons, and only
+    /// the first is about convenience:
+    ///
+    /// - One command, so ONE undo entry. A loop leaves N of them, and undoing
+    ///   a batch then means pressing undo N times and knowing what N was.
+    /// - Anchors that share an OPERATOR are rewritten together. All four
+    ///   corners of a rectangle are the same four operands of one `re`, and an
+    ///   `h`-reopened subpath's implicit start shares its byte range with the
+    ///   segment that inherits it — cases where two independent edits would
+    ///   overlap, and an overlapping edit is silently dropped rather than
+    ///   applied.
+    ///
+    /// REFUSED, all before any byte changes: naming no anchors at all; naming
+    /// the same anchor twice (last-wins and first-wins are equally defensible
+    /// and give different geometry, so pdfce will not pick one for you); and
+    /// any index the object does not have — which refuses the WHOLE batch,
+    /// never a partial application.
+    ///
+    /// Disclosures go to stderr, as `node-move`'s do, so the stdout record
+    /// stays machine-parseable. They are DE-DUPLICATED: rewriting three
+    /// rectangles says so once, not three times.
+    NodesMove {
+        /// Input PDF.
+        input: PathBuf,
+        /// 1-based page number.
+        #[arg(long, default_value_t = 1)]
+        page: u32,
+        /// 0-based paint-order object index on the page.
+        #[arg(long)]
+        object: usize,
+        /// One anchor's destination, as `NODE,X,Y` — a 0-based anchor index
+        /// (decomposition order, as `object-list` counts them) and an
+        /// absolute page-space point. Repeat once per anchor.
+        // NOT `num_args = 1..`: that makes the flag GREEDY, so
+        // `--move 0,1,2 -o out.pdf` swallows `-o` and `out.pdf` as further
+        // move tokens and the command dies reporting `--output` missing.
+        // A `Vec` field already appends on repeat, which is the behaviour
+        // wanted — one value per occurrence, occur as often as you like.
+        #[arg(
+            long = "move",
+            value_name = "NODE,X,Y",
+            required = true,
+            allow_hyphen_values = true
+        )]
+        moves: Vec<String>,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Save mode.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Reload and verify the edit undoes byte-identically.
+        #[arg(long)]
+        verify_undo: bool,
+    },
     /// **Drag a curve handle** of a path object (Pass 30.1): move one Bézier
     /// control point, leaving the on-curve node itself where it is. This is
     /// the operation that changes a curve's SHAPE — `node-move` can only move
@@ -4107,6 +4170,15 @@ fn run() -> ExitCode {
             mode,
             verify_undo,
         }),
+        Command::NodesMove {
+            input,
+            page,
+            object,
+            moves,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_nodes_move(&input, page, object, &moves, &output, mode, verify_undo),
         Command::HandleMove {
             input,
             page,
@@ -12835,6 +12907,123 @@ struct NodeMoveArgs<'a> {
     output: &'a Path,
     mode: SaveMode,
     verify_undo: bool,
+}
+
+/// Parse one `--move NODE,X,Y` triple.
+///
+/// # Why a custom parser rather than three repeated flags
+///
+/// The alternative — `--node 0 --x 200 --y 80 --node 1 --x 280 --y 80` —
+/// relies on three independent repeated lists staying the same length and
+/// in the same order. A dropped value silently pairs every anchor with the
+/// wrong point from there on, and the command succeeds. Keeping the three
+/// numbers in ONE token makes that unrepresentable.
+///
+/// # Errors
+///
+/// A message naming the offending token and what was expected. Negative
+/// coordinates are legal (the flag carries `allow_hyphen_values`), so
+/// `1,-5,-5` parses; a negative NODE does not, because an anchor index is
+/// a position in a list.
+fn parse_node_move(token: &str) -> Result<(usize, pdfce_core::vector::Point), String> {
+    let parts: Vec<&str> = token.split(',').collect();
+    let [n, x, y] = parts[..] else {
+        return Err(format!(
+            "--move {token:?}: expected NODE,X,Y (three comma-separated values), got {} \
+             value(s)",
+            parts.len()
+        ));
+    };
+    let node: usize = n
+        .trim()
+        .parse()
+        .map_err(|_| format!("--move {token:?}: {n:?} is not a 0-based anchor index"))?;
+    let x: f64 = x
+        .trim()
+        .parse()
+        .map_err(|_| format!("--move {token:?}: {x:?} is not a number"))?;
+    let y: f64 = y
+        .trim()
+        .parse()
+        .map_err(|_| format!("--move {token:?}: {y:?} is not a number"))?;
+    Ok((node, pdfce_core::vector::Point::new(x, y)))
+}
+
+/// `nodes-move` — move several anchors of one path object as ONE surgery
+/// (`Pass 23.3`).
+///
+/// ## Contract
+///
+/// - One `nodes-move …` line carrying `object=`, `nodes=` (how many were
+///   moved) and the usual save-report fields, then the exit code from
+///   [`finish_edit`].
+/// - Disclosures to **stderr**, like `node-move`'s, so the stdout record
+///   stays a fixed shape. De-duplicated by core: three rewritten rectangles
+///   say so once.
+/// - Every refusal — a malformed `--move` token, no anchors, a duplicated
+///   anchor, an out-of-range index — happens **before** any mutation, and
+///   the argument parsing is done up front for the same reason: a batch
+///   whose fourth token is malformed must not apply its first three.
+fn cmd_nodes_move(
+    input: &Path,
+    page: u32,
+    object: usize,
+    moves: &[String],
+    output: &Path,
+    mode: SaveMode,
+    verify_undo: bool,
+) -> u8 {
+    // ALL tokens parsed before the document is even opened. A partial parse
+    // followed by a partial edit is the failure this ordering removes.
+    let mut parsed = Vec::with_capacity(moves.len());
+    for token in moves {
+        match parse_node_move(token) {
+            Ok(m) => parsed.push(m),
+            Err(msg) => {
+                eprintln!("pdfce-cli: {}: {msg}", input.display());
+                return exit::RUNTIME_ERROR;
+            }
+        }
+    }
+
+    let page_index = (page.max(1) - 1) as usize;
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    match session.move_nodes(page_index, object, &parsed) {
+        Err(err) => return report_edit_error(input, &err),
+        Ok(disclosures) => report_disclosures(&disclosures),
+    }
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "nodes-move {} page {} object={} nodes={} mode={} -> {}; changed={} objects={} \
+appended={} out_bytes={} undo_verified={} undo_identical={}",
+        input.display(),
+        page.max(1),
+        object,
+        parsed.len(),
+        mode.name(),
+        output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    finish_edit(input, &outcome)
 }
 
 /// `node-move` — move one anchor to a page-space point via surgery
