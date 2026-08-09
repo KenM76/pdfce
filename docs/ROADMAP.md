@@ -81,6 +81,273 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 38.5 (annotation-deletion + CLI half only) — the general `delete_annotation` verb, three cascades, three routes, a shared preview planner, and the `/P`-aware annotation gate — 2026-08-09, committed `0a727bb`, branch `pass-8-redaction`
+
+**Filed by `pdfce-librarian`. No shell available to this dispatch (hard
+rule 8) — `cargo test`/`cargo fmt`/`cargo clippy`/`cargo tree` gate
+results below are RELAYED from the engineer's own dispatch summary, not
+independently re-run.** **Independently confirmed by this filing via
+`Read`/`Grep` directly against the working tree, not relayed:**
+`crates/pdfce-core/tests/annot_deletion.rs` exists and its own module
+doc comment states the reasoning summarised below in its own words;
+counted **16** `#[test]` functions in that file directly (matches the
+relayed figure); all four fixtures it depends on
+(`fixtures/synthetic/annot/thread.pdf`, `certified-p3.pdf`,
+`certified-p2-annot.pdf`, `undeletable.pdf`) exist on disk, built by
+`tools/gen-annot-deletion-fixtures.py`, which also exists and carries a
+`PROVENANCE.md` entry (`fixtures/synthetic/annot/PROVENANCE.md`,
+"Annotation DELETION (Pass 38.5) — three later additions"); the new
+spec-RAG file
+`D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__ref__annotation_deletion_semantics.md`
+exists — **named here**, discharging the engineer's own "a RAG
+deliverable is not handed off until a pdfce doc names it" rule; the
+`edit.rs` source itself was read directly for the routing table and the
+`/P = 3` certification reasoning (see `ARCHITECTURE.md` §4.1 (L) and
+§12, filed in this same session) rather than trusted from the dispatch
+summary alone; the harness step `panel:comments` and the
+`ToggleCommentsPanel` action/button both exist in
+`crates/pdfce-gui/src/{diag,main}.rs`.
+
+**★ SCOPE, STATED PRECISELY — this entry closes ONLY the annotation/CLI
+half of `Pass 38.5`.** The `★ Pass 38.1–38.5` family entry (below, under
+*Next up*) named FOUR items for `38.5`: the general `delete_annotation`
+verb + its Delete row action, `list-annotations` `contents=`/`author=`,
+and TWO layout items (four-compartment default-height tuning,
+four-compartment collapse-state reset) that a 2026-08-06 amendment
+already recorded as INVALIDATED by `Pass 43.0`'s dock retirement. **This
+filing ships the first two and leaves the two layout items exactly as
+already flagged — owed an engineer re-scope or a retirement, not
+shipped, not silently dropped.** `Pass 38.5` as a whole is therefore
+**NOT** being moved to *Shipped* in full; only its annotation/CLI scope
+is recorded here, and the family table entry below is updated to say
+so rather than marked complete.
+
+**What shipped, core (`pdfce-core`):**
+
+- `EditSession::delete_annotation(ObjId) -> Result<AnnotationDeletion, EditError>`
+  — the general verb, the fifth deletion path pdfce now has (alongside
+  `delete_field`/`delete_widget`/`delete_redaction_mark`/
+  `delete_dimension`) and the first that reaches every OTHER annotation
+  subtype pdfce authors or reads.
+- `EditSession::annotation_deletion_preview(ObjId)` and
+  `EditSession::annotation_deletion_refusal()` — a pure preview query
+  and a third `/P`-aware certification query, both detailed in
+  `ARCHITECTURE.md` §12's three new dated entries for this Pass.
+- New types `AnnotationDeletion` (7 fields) and `AnnotationDeletionRoute`
+  (`General`/`RedactionMark`/`Dimension`); new `EditError` variants
+  `AnnotationNotFound`/`AnnotationLocked`/`AnnotationIsTrapNet`/
+  `AnnotationIsWidget`; new `CommandKind::DeleteAnnotation`.
+- `pdfce_core::annot::Annotation` gains `popup`, `in_reply_to`,
+  `reply_type` (new `ReplyType` enum), `is_group_subordinate()`,
+  `effective_reply_type()`; `AnnotFlags` gains `LOCKED` + `locked()`.
+
+**What shipped, CLI (`pdfce-cli`):** `delete-annotation --page --index
+-o --mode --verify-undo`; `list-annotations` gains `author=`/`note=`/
+`modified=` columns and `with_note=`/`with_author=` summary counts —
+closing the specific gap the `★ Pass 38.1–38.5` family entry named as
+"the cheapest item left … since Pass 38.4 added the core fields."
+
+**What shipped, GUI (`pdfce-gui`):** a Delete control on every
+Comments-panel row, gated three ways (the master edit switch, the
+document-wide certification via `annotation_deletion_refusal`, and the
+per-annotation refusal via `annotation_deletion_preview`), with a
+pre-flight tooltip carrying the reply/group counts the core preview
+computed (not re-derived client-side — see the shared-planner decision
+below) and a post-hoc status-bar disclosure. `/TrapNet` rows are
+excluded from the list. New diag step `panel:comments`.
+
+**Three cascades, verified per-cascade rather than by one
+"does-it-delete" assertion (the test file's own stated reason: a
+single-annotation fixture would let all three regress silently while
+staying green):**
+
+1. **`/Popup` companion — deleted with its parent.** §12.5.6.14 says a
+   pop-up *"shall not appear alone."* The DECIDING argument recorded
+   here is behavioural, not the bare `shall` (Table 183's `/Parent` is
+   Optional, so the standard is internally ambiguous on this point):
+   §12.5.6.2 NOTE 2 — an orphaned pop-up does not go silent, it starts
+   DISPLAYING its own `/Contents`, i.e. a copy of the just-deleted
+   comment reappears. Deleting the pop-up alone (the mirror case) only
+   clears the parent's now-dangling `/Popup` key and does NOT delete
+   the parent — the obligation constrains the pop-up's existence, not
+   the parent's.
+2. **Every `/IRT` referrer — kept, un-linked on BOTH `/IRT` and `/RT`
+   together, never one alone.** The reason is NOT "avoid a dangling
+   reference" — §7.3.10 makes a reference to a deleted object resolve
+   to null, which is legal, so that argument was never available. The
+   real constraints, both from Table 170: `/IRT` is *Required if an
+   `RT` entry is present*, so removing only `/IRT` leaves a missing
+   conditionally-required key (the one genuine conformance defect
+   anywhere in this cascade); `/RT`'s documented DEFAULT VALUE is `R`,
+   so removing only `/RT` would silently reclassify a `/RT /Group`
+   subordinate as an ordinary reply. Deleting the referrers, or
+   re-parenting them, is deliberately NOT done — same posture as
+   `Pass 50.0`'s `/SeparationInfo` repair: fix the structural
+   invariant, refuse to guess the semantic one.
+3. **`/AP` streams — removed only when unshared.** A producer stamping
+   the same form XObject across many annotations (§12.5.5 — the same
+   `/BBox` maps into a different `/Rect` per annotation) is entirely
+   legal; an unconditional removal would blank every other annotation
+   sharing the stream. Verified by a two-stamp fixture pair: the first
+   deletion reports `appearance_streams_removed = 0`, the second
+   (now-sole) user reports `1`.
+
+**Certification: the first pdfce operation any `/P` value permits.**
+§12.8.2.2 Table 254, `/P = 3`: *"Permitted changes shall be the same as
+for 2, as well as annotation creation, deletion, and modification."*
+Until this Pass the strict gate (`deletion_refusal`) was correct for
+every structural verb pdfce had — `SignatureCensus::forbids_structural_change`'s
+own doc comment said so directly, and that sentence is now false. The
+new `annotation_deletion_refusal` returns `None` at `/P 3` (deletion
+permitted) while `deletion_refusal` still returns `Some` on the SAME
+document for a field delete (a field is not an annotation change) —
+both asserted on one fixture in one test
+(`p3_permits_deleting_a_comment_and_still_refuses_deleting_a_field`), so
+the divergence cannot be an artefact of comparing two different files.
+A `/P 2` sibling fixture (one digit changed) is the falsifier: without
+it, "permitted at `/P 3`" would be equally consistent with the gate
+never reading the certification at all (project rule R162 — the probe
+must be able to come out false).
+
+**Routing, not absorbing — the verb's own doc-comment section heading.**
+Three kinds route to the specialised verb that already knows their
+rules rather than having those rules re-implemented generically: an
+unapplied `/Redact` mark → `delete_redaction_mark` (same annotation
+gate); a ce dimension → `delete_dimension` (keeps the pre-existing
+STRICT gate, because it also rewrites the catalog `/PieceInfo` sidecar
+— not on Table 254's `/P 3` list). **Consequence worth stating
+plainly: on a `/P 3` certified document, deleting a ce dimension is
+REFUSED while deleting every other annotation is ALLOWED** — the
+standard's own answer, not a pdfce inconsistency. A `/Widget` is
+**refused, not routed**: `EditError::AnnotationIsWidget`'s message
+names BOTH `delete_widget` and `delete_field`, because widget-or-
+whole-field is the caller's choice and guessing wrong could delete a
+field that appears on other pages too.
+
+**A shared planner, so a preview cannot promise what a delete does not
+do.** `annotation_deletion_preview` and `delete_annotation` both call
+one private `plan_annotation_deletion` function. This was a
+`pdfce-ui-specialist` finding, not the engineer's first design: the
+specialist caught the GUI about to re-derive the `/IRT`/`/RT /Group`
+scan client-side to populate a tooltip, which would have put a PDF
+structural rule (Table 170's default `/RT`) on the wrong side of the
+crate boundary, invisible to any gate this project owns if it drifted.
+Tested directly: `the_preview_agrees_with_the_deletion_for_every_annotation_in_the_fixture`
+runs both over EVERY annotation in the seven-annotation fixture (not
+one — the interesting divergences are per-shape) and asserts
+field-for-field agreement; `previewing_changes_nothing` asserts
+`dirty_set().len()` is unchanged across seven preview calls, since a
+GUI calls this once per frame while the pointer rests on a row.
+
+**Table 165 bit 8 `Locked` is the only refusal the STANDARD requires
+here, and it was MISSED on the engineer's first implementation — found
+only by a `pdfce-spec-librarian` dispatch.** Bit 10 `LockedContents`
+explicitly *"does not restrict deletion"* per its own Table 165 row.
+The `undeletable.pdf` fixture carries BOTH flags deliberately, so
+"refuse on any lock-shaped flag" and an off-by-two bit index each fail
+one of the two assertions.
+
+**Deletion is not redaction — verified empirically, not merely
+asserted from the spec.** Annex H.7.3's own prose already says a
+deleted object's bytes remain present after an incremental update; this
+session MEASURED it on the saved bytes of one fixture under both save
+modes: the deleted note text `the primary comment` occurs **1 time in
+1 file (the default incremental-save output)** and **0 times in the
+same file re-saved `--mode full`** — filed as its own `personal_rag/pdf`
+lesson (see *Findings + decisions* in `SESSION_LOG.md`, this filing).
+
+**Gates, relayed from the engineer's own dispatch (not independently
+re-run — hard rule 8):** `cargo test --workspace`: **2566 passed / 0
+failed, across 66 test binaries** (16 of the 2566 in the new
+`annot_deletion.rs`, independently counted above). `cargo fmt --all
+--check` clean. `cargo clippy --workspace --all-targets -- -D warnings`
+clean. `tools/check-ui-strings.sh`, `check-bypass-paths.sh`,
+`check-passes-filed.py`, `check-settings-consumed.py`,
+`check-ledger-numbers.py`: all clean. `cargo tree -p pdfce-core` /
+`-p pdfce-render`: no GUI dependencies (rule 2 verified — no manifest
+was touched this Pass, so the check is a confirmation, not new
+evidence).
+
+**Verified in the running application (relayed, not independently
+viewed — no screenshot was supplied to this dispatch):** the Comments
+panel opened via the new `panel:comments` harness step, the Delete
+button clicked at its traced rect, the row count went 6→5, the title
+bar showed unsaved changes, the primary's artwork disappeared from
+page and thumbnail, and the status-bar disclosure read the exact
+counts (*"Deleted the Square. Its pop-up note window went with it. 2
+repl(ies) were kept and are now standalone comments. 1 grouped
+comment(s) now show their own author and text…"*).
+
+**A doc-comment splice defect found and fixed on discovery** (per
+project/global rule: fix on discovery, don't file for later) —
+`crates/pdfce-core/src/edit.rs` had `FlattenOutcome`'s opening line
+plus `FieldDeletion`'s entire doc-comment body glued onto `WidgetMove`'s
+`///` block, from an earlier edit's copy/paste boundary landing one
+declaration too early. It compiled, `cargo doc`'d, and clippy passed —
+none of this project's gates can see a doc comment that describes the
+wrong item, because `///` attaches by pure token-stream position with
+no content cross-check against its subject. Filed as its own
+`D:\dev\rag\rust\` finding (see below); not promoted to a pdfce
+standing rule (single occurrence, against this project's own
+two-occurrence promotion bar).
+
+**Owed items opened by this session, not resolved by it — see the new
+entries filed under *Next up*, immediately below the `★ Pass
+38.1–38.5` family entry:**
+
+1. **Pass 6.1/6.2's markup-authoring verbs still take the STRICT
+   certification gate on a `/P 3` document, over-refusing exactly the
+   operations Table 254 names as permitted** (annotation creation and
+   modification, alongside deletion). Unscoped.
+2. **Two ambiguities, `AD-A1` and `AD-A3`, are documented in the new
+   spec-RAG file but not yet back-filed into
+   `iso32000__ref__ambiguity_settings_register.md`** — both
+   register-local, blast-radius BYTES, evidence tier (d). `AD-A1` (does
+   the popup cascade match Acrobat's own behaviour?) could be lifted to
+   tier (a) by a `pdfce-acrobat-librarian` dispatch.
+3. **`LEGAL.md` §2's ISO 32000-2 row is stale** — it reads "No —
+   paywalled (~200 CHF), not freely redistributable," but ISO 32000-2:2020
+   has been $0.00 since 2023-04-05 under PDF Association sponsored
+   access. Not yet acquired (needs an account + checkout — a side
+   effect outside the working tree, so not performed by this filing).
+   Zero cost does not by itself establish redistributability; that
+   determination is still owed. A freely-reachable narrow delta source
+   in the interim: `https://pdf-issues.pdfa.org/32000-2-2020/clauseN.html`.
+
+**Not shipped by this filing — restated for the ledger, so a later
+reader does not infer more than this entry claims:** the two
+`Pass 38.5` layout items (four-compartment default-height tuning;
+four-compartment collapse-state reset), both already flagged
+INVALIDATED by `Pass 43.0` in the 2026-08-06 amendment to the family
+entry below, and still needing an engineer re-scope or a retirement.
+
+#### Ledger
+
+**Not independently run this filing — no shell (hard rule 8).** Derived
+from the engineer's own dispatch text plus this filing's own re-grep of
+`ROADMAP.md`:
+- **Pass families:** no new Pass ID minted by this filing —
+  `Pass 38.5` already existed (filed 2026-08-06 with the `★ Pass
+  38.1–38.5` family). Ceiling for the single-number family stays **51**
+  (unaffected — 38 is an existing family).
+- **Standing rules:** none minted. The doc-comment-splice finding was
+  considered as a candidate and **declined** — a single occurrence
+  against this project's own two-occurrence promotion bar. Ceiling
+  stays **R171**, next free **R172**.
+- **Decision records:** unchanged. Highest file on disk remains `033`;
+  `034` stays CLAIMED-by-citation/UNAUTHORED (unrelated write-side
+  CMYK/YCCK topic). The three architectural decisions this Pass makes
+  are recorded as `ARCHITECTURE.md` §12 dated entries (three separate
+  entries, same date) rather than a new numbered `docs/decisions/`
+  record — per that directory's own README, a numbered record is for
+  decisions routed through the `autonomous-builder`/KenAgent protocol,
+  and these three are routine engineering calls already covered by
+  `ARCHITECTURE.md` per that same README's exclusion clause.
+- **`SESSION_LOG.md` filings:** this is the **forty-first** filing (the
+  fortieth confirmed present by grep before this entry was appended).
+
+---
+
 ### Pass 51.3 — eight settings, wired to the sites that hard-coded them — 2026-08-08, committed `6d63d81`, branch `pass-8-redaction`
 
 **Filed by `pdfce-librarian`. No shell available to this dispatch (hard
@@ -23774,7 +24041,7 @@ candidate wanted a human to remember (see the Shipped entry's *Ledger*);
 **Sibling owed item, same class:** `tools/gui-drive.ps1`'s
 build-or-assert-freshness obligation.
 
-### ★ Pass 38.1–38.5 — the shell redesign (five operator-confirmed UI properties; spec `docs/ui_specs/shell-redesign.md`, 723 lines) — **family minted 2026-08-06; 38.1 · 38.2 · 38.4 SHIPPED — 38.3 blocked on an operator answer, 38.5 the only unbuilt slice**
+### ★ Pass 38.1–38.5 — the shell redesign (five operator-confirmed UI properties; spec `docs/ui_specs/shell-redesign.md`, 723 lines) — **family minted 2026-08-06; 38.1 · 38.2 · 38.4 SHIPPED — 38.3 blocked on an operator answer — 38.5 PARTIALLY SHIPPED 2026-08-09 (`0a727bb`): annotation-deletion + CLI half is SHIPPED (see *Shipped*, above); its two layout items remain owed a re-scope or a retirement**
 
 **Pass family 38 was minted on 38.2's ship** (ceiling had been 37.2).
 **The Pass IDs map ONE-TO-ONE onto the spec's own slices 1–5** — 38.1 is
@@ -23795,7 +24062,7 @@ all. Full record: the Pass 38.2 Shipped entry.
 | **2** — the left-dock restructure: four always-visible compartments, no tab container, `PaneSubject` narrowed to workflows | **38.2** | **✅ SHIPPED `aa48167` 2026-08-06 — ⚠ PARTIALLY REVERSED the same day by Pass 43.0 (`37a49e6`): `Properties` and `Activities` are retired as compartments and now render in `Tool` from the ribbon; the left dock is Pages + Tool. **No tab bar** and **neither pane can hide the other** survive unchanged. R157 survives; only its application to `Properties` did not. See both Shipped entries** |
 | **3** — property 4's exact intended reading; doc-comment corrections (spec folds this into slice 2's commit) | **38.3** | **PARTLY DISCHARGED / BLOCKED.** The **maximal** reading is **REFUSED** by the engineer and flagged — open operator question **(ba)**. The `dock.rs` doc-comment correction was **not reported either way**; treat as **owed and unverified** |
 | **4** — the Comments / annotation-list panel | **38.4** | **✅ SHIPPED `8228f44` 2026-08-06** — **blocker 1 REMOVED** (core gained `/Contents`, `/T`, `/M`); **blocker 2 DELIBERATELY LEFT** and is 38.5's |
-| **5** — P1 remainder | **38.5** | **UNBUILT — now the only unbuilt slice**, and it grew one cheap item (below) |
+| **5** — P1 remainder | **38.5** | **PARTIALLY SHIPPED `0a727bb` 2026-08-09** — the general `delete_annotation` verb + Delete row action + `list-annotations` `contents=`/`author=` are SHIPPED (see *Shipped*, above). The two layout items (four-compartment height tuning; four-compartment collapse-state reset) remain **UNBUILT and owed a re-scope or a retirement** — both were already INVALIDATED by `Pass 43.0` before this ship, unaffected by it |
 
 **★ Pass 38.1's own entry said it was "the one most likely to be silently
 dropped", because slice 2 shipped without it and the shell now *looked*
@@ -23819,12 +24086,16 @@ deleted, because the disposition is more useful than the absence:**
    three optional read-only fields, `/M` stored **raw** per §12.5.2, `/T`
    documented as **Table 170 markup-only**. See `ARCHITECTURE.md` §4.1
    (J).
-2. **STILL OPEN — there is no general `delete_annotation` verb** in
+2. ~~**STILL OPEN — there is no general `delete_annotation` verb** in
    `pdfce-core`. `edit.rs` L3664 names **THREE** hazards, one more than
    this entry originally recorded: dangling `/AcroForm /Fields`, `/Popup`
    companions, **and `/IRT` reply chains**. **Slice 5's, not slice 4's.**
    Per **R83** the Delete control is **OMITTED, not greyed**, in the
-   shipped panel.
+   shipped panel.~~ **RESOLVED 2026-08-09 (`Pass 38.5`, `0a727bb`)** —
+   `delete_annotation` exists, handles all three named hazards (plus a
+   fourth the implementation found, appearance-stream sharing) and the
+   Delete row action now reaches it. See *Shipped*, above, and
+   `ARCHITECTURE.md` §4.1 (L).
 3. **The honest ceiling HELD, and was handled by disclosure rather than
    by pretending otherwise:** **Pass 6.1's markup authoring never sets
    `/Contents`**, so on a pdfce-authored document **every row shows "No
@@ -23853,12 +24124,16 @@ and render **in the Tool compartment**. So —
 - *"`ResetScope`'s left-panels reset extended to also reset the four
   compartments' COLLAPSE state"* — **re-scope or retire.** The surface it
   named no longer exists in that shape.
-- **UNAFFECTED and still owed:** the `delete_annotation` core verb + its
+- ~~**UNAFFECTED and still owed:** the `delete_annotation` core verb + its
   Delete row action, and the `list-annotations` `contents=`/`author=`
   formatting item below. **Those two are the whole of 38.5 until an
-  engineer re-scopes the other two.** *(A librarian-flagged, not
-  librarian-made, call — hard rule 2's discipline applied to scope
-  rather than to numbers.)*
+  engineer re-scopes the other two.**~~ **★★ SHIPPED 2026-08-09
+  (`0a727bb`) — both items closed. See *Shipped*, above.** The two
+  layout items remain exactly as this amendment left them: owed a
+  re-scope or a retirement against the CURRENT two-compartment
+  (Pages + Tool) dock, not this filing's job to invent. *(A
+  librarian-flagged, not librarian-made, call — hard rule 2's
+  discipline applied to scope rather than to numbers.)*
 
 **★ Amended 2026-08-06 on Pass 38.4's ship — the CLI item just got
 cheap, and that is worth knowing when scoping 38.5.** `list-annotations`
@@ -23867,13 +24142,112 @@ exist**. **They exist now** (`annot::Annotation::contents` / `title` /
 `modified`, `8228f44`), so the CLI item is a **formatting change over a
 populated struct**, not a parsing job. It is the cheapest thing left in
 38.5 and the only one with **no design question attached** — take it
-first if 38.5 is ever picked up piecemeal.
+first if 38.5 is ever picked up piecemeal. **★★ SHIPPED 2026-08-09
+(`0a727bb`) — `list-annotations` gained `author=`/`note=`/`modified=`
+columns and `with_note=`/`with_author=` summary counts.**
 
 **Dependency note:** the spec states 38.4 is **independently shippable**
 and could in principle have shipped *before* 38.2, temporarily hosted in
 the unnarrowed `PaneSubject`. That option is now moot — 38.2 shipped, and
 the `Activities` compartment exists to receive it. **38.4 shipped into it
 on 2026-08-06 as predicted, requiring no temporary hosting.**
+
+### ★ `/P 3` permits annotation CREATION and MODIFICATION too, and pdfce still refuses both on a certified comment-review document — UNDECIDED, filed 2026-08-09 with `Pass 38.5` (no Pass number assigned)
+
+**The finding, restated so this entry stands alone.** ISO 32000-1
+§12.8.2.2 Table 254, `/P = 3`: *"Permitted changes shall be the same as
+for 2, as well as **annotation creation, deletion, and modification**"*
+— three verbs, not one. `Pass 38.5` built the `/P`-aware gate for the
+third (`EditSession::annotation_deletion_refusal`), and that gate is
+correct as far as it goes. **It does not go far enough**: pdfce's
+markup-authoring verbs (`Pass 6.1` geometric markup, `Pass 6.2`
+text-bearing markup — Ink/Square/Circle/Line/Polygon/FreeText/Stamp)
+still call the pre-existing STRICT certification gate, which refuses
+on any enforced `/DocMDP` regardless of `/P`. So on a document
+certified `/P 3` — a certification whose entire purpose, per the
+clause's own text, is to permit exactly this — **pdfce currently
+refuses to let an operator add a comment or edit an existing one**,
+while correctly permitting the delete. The asymmetry is invisible
+until someone tries the other two verbs on the same document.
+
+**Why this was not fixed in the same Pass.** `Pass 38.5`'s scope was
+deletion; widening `Pass 6.1`/`6.2`'s gate is a change to shipped,
+tested authoring verbs, not an addition, and (mirroring the
+already-open rich-text-fill item immediately below this one) that
+distinction is worth a deliberate scoping decision rather than a
+same-session drive-by fix. The two verbs are also not symmetric with
+deletion's already-solved shape: `delete_annotation` is one call site;
+authoring has TWO (`Pass 6.1`'s geometric path and `Pass 6.2`'s
+variable-text path), and it is not yet established whether both need
+the identical gate or whether creation and modification (Table 254
+lists them separately from deletion, and from each other) could
+legitimately diverge the way deletion and dimension-deletion already
+do within this Pass.
+
+**Not scoped to a Pass, and deliberately not given a number** —
+whichever Pass next touches `Pass 6.1`/`6.2`'s authoring path, or a
+dedicated certification-gate audit, should resolve it. See
+`annotation_deletion_refusal`'s own §12.8.2.2 reasoning
+(`ARCHITECTURE.md` §12, `Pass 38.5` first entry) for the gate shape
+this item's fix would most plausibly mirror.
+
+### ★ `AD-A1`/`AD-A3` spec-ambiguity register back-fill owed — filed 2026-08-09 with `Pass 38.5` (no Pass number; a spec-RAG maintenance item, not an engineering one)
+
+**The finding, restated so this entry stands alone.** The new spec-RAG
+file
+`D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__ref__annotation_deletion_semantics.md`
+(written this session by `pdfce-spec-librarian`, named here per the
+engineer's own "a RAG deliverable is not handed off until a pdfce doc
+names it" rule) documents two register-local ambiguities not yet
+back-filed into
+`iso32000__ref__ambiguity_settings_register.md`, the register
+`Pass 51.3`'s eight settings were built against:
+
+- **`AD-A1`** — does pdfce's popup-cascade-on-delete behaviour (§12.5.6.14
+  + §12.5.6.2 NOTE 2, this Pass's own reasoning) match Acrobat's actual
+  behaviour, or only the spec's? A `pdfce-acrobat-librarian` dispatch
+  could lift this from evidence tier **(d)** (reasoned guess) to tier
+  **(a)** (observed reference-implementation behaviour) — the same
+  lift the register's own tier scheme rewards elsewhere.
+- **`AD-A3`** — clearing the parent's `/Popup` key when the pop-up
+  itself is deleted (rather than the primary) is **pdfce POLICY, not a
+  spec requirement**, per `AnnotationDeletion::parent_popup_cleared`'s
+  own doc comment. Table 170's `/Popup` row carries no integrity
+  statement and §7.3.10 makes the dangling reference legal. Register-
+  worthy because it is exactly the shape of prior register entries
+  (a spec-silent choice pdfce made and should disclose as a choice,
+  not present as mandated).
+
+Both are blast-radius **BYTES**, evidence tier **(d)** as filed. Not
+built into the register's own file by this session — that write is
+`pdfce-spec-librarian`'s territory (hard rule 6), not this librarian's;
+flagged here so the back-fill is tracked rather than lost between the
+two RAGs.
+
+### ★ `LEGAL.md` §2's ISO 32000-2 row is stale — flagged 2026-08-09, not resolved (an operator/engineer action, not a librarian edit)
+
+**The finding.** `LEGAL.md` §2's table currently reads: *"ISO 32000-2:2020
+(PDF 2.0) | ISO | **No** — paywalled (~200 CHF), not freely
+redistributable."* That has been inaccurate since **2023-04-05**: ISO
+32000-2:2020 is available at **$0.00** through PDF Association
+sponsored access (an account + checkout is required — a side effect
+outside the working tree, so not performed by this filing). **Zero
+cost does not by itself establish redistributability** — those are two
+different questions, and only the first has changed; whether the
+sponsored-access terms permit the same paraphrase-and-cite treatment
+`LEGAL.md` §2's redistribution rule already applies to the freely-
+published standards is a separate determination still owed. In the
+interim, `https://pdf-issues.pdfa.org/32000-2-2020/clauseN.html` is
+freely reachable and usable as a narrow 1.7→2.0 delta source without
+needing the sponsored-access acquisition at all.
+
+**Not resolved by this filing** — `LEGAL.md` is not one of this
+librarian's owned files (ROADMAP/FEATURES/SESSION_LOG/`ARCHITECTURE.md`
+§12 are), and the acquisition step itself is a side effect outside the
+working tree per hard rule 8's spirit. Flagged for the engineer or the
+operator to act on; `pdfce-spec-librarian` is the natural owner of
+actually updating the §2 table once the redistribution-terms question
+is answered.
 
 ### ★ Rich-text fill: should `pdfce-core` refuse too, so `pdfce-cli fill-field` gets the same guard? — UNDECIDED, filed 2026-08-05 with Pass 37.2 (no Pass number assigned)
 

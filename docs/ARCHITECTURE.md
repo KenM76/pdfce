@@ -12706,3 +12706,101 @@ started).
   `docs/ROADMAP.md`'s `Pass 51.4` Shipped entry for the five-group
   layout, the per-setting evidence-tier disclosure, and the R86
   off-screen verification limits.
+- **2026-08-09 (`Pass 38.5`, `0a727bb`, first entry) — annotation
+  deletion gets a THIRD `/P`-aware certification query, and it is not a
+  laxer copy of the other two.** `EditSession::annotation_deletion_refusal()`
+  joins `fill_refusal()` (permits at `/P ≥ 2`) and `deletion_refusal()`
+  (the STRICT gate, refuses at any enforced `/DocMDP` regardless of
+  `/P`). Until this Pass the strict gate was correct for every
+  structural verb pdfce had, because — as
+  `crate::signature::SignatureCensus::forbids_structural_change`'s own
+  doc comment stated — *"no `P` value's permitted list contains any
+  operation pdfce can currently perform."* **That sentence is now
+  false, and annotation deletion is why:** ISO 32000-1 §12.8.2.2 Table
+  254, `/P = 3`: *"Permitted changes shall be the same as for 2, as
+  well as annotation creation, deletion, and modification."*
+  `delete_annotation` is the first pdfce verb any `/P` value's list
+  affirmatively names. The new query is deliberately a THIRD answer,
+  not a widened `fill_refusal` or a narrowed `deletion_refusal`: at
+  `/P 3` it returns `None` while `deletion_refusal()` still returns
+  `Some` (a form field is not an annotation change and stays refused on
+  the same certified document) — proven, not merely argued, by
+  `crates/pdfce-core/tests/annot_deletion.rs`'s
+  `the_three_refusal_queries_disagree_on_purpose` test, which runs all
+  three queries against the same `/P 3` and `/P 2` fixtures and asserts
+  the disagreement is exactly the one predicted. **A named gap this
+  entry does NOT close, flagged rather than fixed:** Table 254's `/P 3`
+  list also names annotation CREATION and MODIFICATION, and pdfce's
+  markup-authoring verbs (`Pass 6.1`/`6.2`) still take the STRICT gate
+  — so pdfce currently OVER-refuses annotation authoring on exactly the
+  class of document `/P 3` exists to permit it on. See
+  `docs/ROADMAP.md`'s `Pass 38.5` Shipped entry for the open item this
+  becomes.
+- **2026-08-09 (`Pass 38.5`, `0a727bb`, second entry) — a preview query
+  and its mutating verb share ONE private planner, so they cannot
+  structurally disagree; a GUI-side reimplementation was proposed and
+  rejected.** `annotation_deletion_preview` and `delete_annotation`
+  both call one private function, `plan_annotation_deletion`, and
+  differ only in whether the caller commits the resulting patch. This
+  is a `pdfce-ui-specialist` finding, not the engineer's first design:
+  the specialist caught that the GUI's pre-flight tooltip (which must
+  show the `/IRT`-reply and `/RT /Group`-subordinate counts BEFORE the
+  operator clicks Delete) was about to be built by re-deriving those
+  counts client-side in `pdfce-gui`, which would have encoded a PDF
+  structural rule (Table 170's default `/RT` value) on the wrong side
+  of the crate boundary — a duplicate that nothing in the project's
+  existing gates would detect drifting from the original if either
+  side were edited alone. **General pattern, recorded because it will
+  recur:** whenever a shell needs to show a caller what a core mutation
+  WOULD do before the caller commits to it, the shared-planner shape
+  (one private function, two public callers — one that commits, one
+  that doesn't) is preferred over independently deriving the same
+  answer twice. Tested directly:
+  `the_preview_agrees_with_the_deletion_for_every_annotation_in_the_fixture`
+  runs both the preview and the real delete over every annotation in
+  `fixtures/synthetic/annot/thread.pdf` and asserts field-for-field
+  agreement (deliberately excluding `appearance_streams_removed`,
+  which the preview does not compute — a documented, not accidental,
+  asymmetry, since that count needs a document-wide reachability scan
+  for a number nothing displays). `previewing_changes_nothing` confirms
+  the preview is a pure query: `dirty_set().len()` is asserted
+  unchanged across seven preview calls, because a GUI calls this once
+  per frame while the pointer rests on a row and a preview that dirtied
+  state would turn a hover into an edit.
+- **2026-08-09 (`Pass 38.5`, `0a727bb`, third entry) — the general
+  deletion verb ROUTES into its three siblings rather than absorbing
+  their rules, and a `/Widget` is the one case that is REFUSED rather
+  than routed.** `delete_annotation`'s own doc comment
+  (`crates/pdfce-core/src/edit.rs` L8490, section heading `# Routing,
+  not absorbing`) states the rule directly: three annotation kinds
+  carry obligations a generic `/Annots` removal cannot know about, and
+  each already had a verb that does. An unapplied `/Redact` mark
+  routes to `EditSession::delete_redaction_mark` — same **annotation**
+  gate as the general verb, because removing an unapplied mark IS
+  annotation deletion, nothing more. A ce dimension routes to
+  `EditSession::delete_dimension` — which keeps the pre-existing
+  **STRICT** gate, because it also rewrites the catalog `/PieceInfo`
+  sidecar, an operation Table 254's `/P 3` list does not name.
+  **Consequence worth stating plainly: on a `/P 3` certified document,
+  deleting a ce dimension is REFUSED while deleting every other
+  annotation is ALLOWED** — this is the standard's own answer (Table
+  254 names annotations; a `/PieceInfo` sidecar rewrite is not one),
+  not an inconsistency in pdfce's gate logic, and a future session
+  seeing the two behave differently on the same certified file should
+  not read it as a bug. A `/Widget` is the deliberate THIRD case:
+  **refused, not routed** — `EditError::AnnotationIsWidget` names both
+  `delete_widget` and `delete_field` in its message, because
+  widget-or-whole-field is the caller's choice (a field may have
+  widgets on other pages; guessing wrong deletes more than the caller
+  meant), never a guess this verb should make on the caller's behalf.
+  Verified by
+  `a_widget_is_refused_and_the_refusal_names_the_field_and_both_verbs`,
+  which asserts the message contains both verb names and the
+  `/AcroForm` consequence, not merely that an error was returned.
+  `AnnotationDeletionRoute` (`#[non_exhaustive]`) surfaces which path
+  fired to the caller specifically because the UNDO entry differs per
+  route — a delegated deletion commits the destination verb's own
+  `CommandKind`, so a shell's Undo control reads *"Undo delete
+  redaction mark"*, never the generic *"Undo delete annotation"*; a
+  shell that printed its own wording instead of reading the route would
+  disagree with its own undo stack.
