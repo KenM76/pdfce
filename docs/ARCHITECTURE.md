@@ -128,6 +128,17 @@ D:\Dev\pdfce\
                                    lives here — `fontdata/` stays metrics-only, even
                                    after this Pass. See §4 for the full contract and
                                    why the split runs this way.
+                                   **`export/dxf.rs` (`Pass 52.0`/`52.3`,
+                                   2026-08-09, `3c4aca4`→`1f4839d`; §12
+                                   decision 035, claimed by citation):**
+                                   a WRITE-only path out of pdfce-core's
+                                   `vector::PageObjects` model into ASCII
+                                   DXF — deliberately not governed by §5's
+                                   round-trip invariant (foreign output
+                                   format, not PDF-to-PDF), hand-written
+                                   with no new dependency, zero
+                                   GUI-symbol imports. See §12 for the
+                                   three data-model forks it decided.
     pdfce-render\               <- Takes pdfce-core's draw-op stream + resources
                                    (fonts, images, color spaces) and rasterizes to an
                                    in-memory pixel buffer via `tiny-skia` (CPU-only,
@@ -3117,7 +3128,13 @@ debug afterthought. Design points:
   in.pdf` (prints a conformance report, non-zero exit on failure —
   scriptable in CI/document-pipeline contexts), `pdfce-cli sign in.pdf
   --cert cert.p12 -o out.pdf`, `pdfce-cli render-page in.pdf 3 -o
-  page3.png --dpi 150`.
+  page3.png --dpi 150`. **Not every subcommand's output is a PDF**:
+  `pdfce-cli export-dxf in.pdf --page 1 -o out.dxf [--units in|mm]
+  [--scale S] [--no-fit-arcs] [--no-text]` (`Pass 52.1`, 2026-08-09)
+  writes ASCII DXF for CAD import, read-only on the input, with a
+  three-way stderr disclosure (`skipped_text`/`unreadable_text`/
+  `skipped_images`) before its stdout summary — see §3's `export/dxf.rs`
+  note and §12 decision 035.
 - **Exit codes matter.** Since this is meant to be genuinely scriptable
   (unlike Acrobat, which has no real CLI), follow normal Unix
   conventions: `0` success, non-zero on any failure, with a specific,
@@ -13684,3 +13701,109 @@ started).
   librarian's five storage tiers (`ROADMAP.md`, `SESSION_LOG.md`, this
   §12, `D:\dev\rag\rust\`/`egui\`, `personal_rag\pdf\`), so it is flagged
   here and in `ROADMAP.md` rather than edited on assumption.
+
+- **2026-08-09 — DXF export (`Pass 52.0`/`52.1`/`52.3`, `3c4aca4`→
+  `1f4839d`): three data-model forks decided by shipping, recorded here
+  as decision `035` (CLAIMED BY CITATION — see the caveat below).**
+  New module `crates/pdfce-core/src/export/dxf.rs` (+
+  `crates/pdfce-core/src/export/mod.rs`), hand-written, zero new Cargo
+  dependency, same crate-boundary posture as everything else in
+  `pdfce-core`: reads `PageObjects` (the existing `vector::decompose`
+  output) and writes ASCII DXF, with no GUI/windowing symbol anywhere
+  in its `use` statements. **Deliberately NOT governed by §5's round-
+  trip/minimal-diff invariant** — it is a write path OUT of pdfce's
+  model into a foreign, non-PDF format, the same posture `export/mod.rs`
+  states for the whole `export/` tree ("deliberately separate from
+  `writer`, which owns PDF-to-PDF serialisation"); the CLI side
+  (`cmd_export_dxf`) never opens an `EditSession` or a save path on the
+  input PDF. Full technical delivery record: `ROADMAP.md`'s matching
+  Shipped entry (top of *Shipped*, this same date).
+
+  **Three genuine forks, each determining the data model rather than
+  merely the implementation — the same bar `docs/decisions/032` was
+  opened on:**
+
+  1. **Bézier-to-DXF-entity mapping.** PDF has no arc primitive
+     (§8.5.2.1 has only `c`/`v`/`y`), so every circular feature arrives
+     as cubic Béziers. **Decided: recognise circular cubics as
+     `CIRCLE`/`ARC` by sampling (9 points against a candidate centre
+     from the tangent-normal intersection, not the chord bisectors —
+     the module's own doc comment records trying the wrong construction
+     first and why it failed), falling back to an EXACT degree-3
+     `SPLINE` (a cubic Bézier IS a degree-3 NURBS with a clamped knot
+     vector) for anything that does not fit an arc within tolerance.**
+     Both paths ship, toggled by one `fit_arcs` field (default on,
+     `--no-fit-arcs` in the CLI) — not a single exclusive choice.
+     Motivated by a measured precedent in `C:\personal_rag\dxf\
+     lesson_20260603_ezdxf_authoring_cut_files_lwpolyline.md`: ~40
+     washers flattened to fine polylines produced a 767 KB file: this
+     module never flattens.
+  2. **`$INSUNITS` default.** PDF user space is 1/72 inch (§8.3.2.3).
+     **Decided: inches is the `#[default]`**, because the conversion is
+     then the single factor `1.0/72.0` rather than compounding a second
+     irrational-in-binary factor (`25.4/72.0`) for millimetres, which
+     remains available (`DxfUnits::Millimetres`) but is not the default.
+  3. **Text-emission mapping.** Three candidates existed: omit text
+     entirely, convert glyphs to cut geometry (what SOLIDWORKS' own
+     flat-pattern export does for through-cut stencil text — correct
+     when the text IS meant to be cut, wrong for a reference label), or
+     `TEXT` entities on a dedicated layer. **Decided: `TEXT` entities,
+     one per RUN (not per text object — reusing `TextObject::run_text`,
+     built at `Pass 32.0` for an unrelated deletion feature, rather than
+     new decoding machinery), on a NEW layer `PDFCE_TEXT`, never on
+     `0`.** `MTEXT` was considered and rejected by name — it carries
+     formatting (`\f` font codes, stacking, columns) pdfce cannot
+     faithfully derive from a content stream, and older LT versions
+     support it least well, the same conservatism that chose `AC1015`
+     over `AC1032`. **The layer choice is sourced, not guessed**: `C:\
+     personal_rag\dxf\lesson_20260519_sheet_border_titleblock_furniture.md`
+     records, from the operator's own real drawings, that a title block
+     is "often drawn on layer `0`," which is exactly why downstream
+     layer filtering cannot remove it and why that lesson had to invent
+     geometric furniture-detection heuristics as a CONSUMER-side
+     workaround. This module is the UPSTREAM PRODUCER in this
+     transaction and declines to reproduce the mistake it produces work
+     for elsewhere in the operator's own toolchain.
+
+  **A fourth item is recorded here as a corrigendum, not a fork — the
+  version declaration was WRONG, not merely undecided, and the
+  correction is architecturally relevant on its own.** The writer first
+  declared `$ACADVER` `AC1009` (R12) on the engineer's own reasoning
+  that R12 is "more conservative than R2000 and therefore reaches
+  further" — while emitting `LWPOLYLINE` and `SPLINE`, entities R12
+  does not have (R12 draws polylines as `POLYLINE`/`VERTEX`/`SEQEND`
+  and has no spline entity at all). `personal_rag/dxf`'s
+  `lesson_20260603` file had **already named `AC1015`** as the
+  compatible baseline for AutoCAD LT 2004 and older plasma controllers;
+  the engineer had read it and substituted a guess anyway. **Every
+  string-grep test in the writer's own test suite passed throughout** —
+  what caught the incoherence was parsing the output with a real DXF
+  reader (`ezdxf`), which rejected it as *"missing 'AcDbPolyline'
+  subclass."* Fixed to `AC1015`, with the structural consequences R2000
+  actually requires and R12 does not (entity handles, `$HANDSEED`,
+  `100`-code subclass markers). This finding produced a widened
+  standing rule (`ROADMAP.md`'s `R172`, amended in place, not a new
+  rule number) and a new `D:\dev\rag\rust\` test-methodology finding
+  (string-grep tests cannot validate structural dialect coherence);
+  neither is architecture-log content on its own, which is why they are
+  filed at their own tiers rather than duplicated into this entry.
+
+  **Decision-number caveat, stated in the same terms `034` has carried
+  since the thirty-fifth filing.** `docs/decisions/README.md`'s
+  protocol routes a full, `NNN-slug.md` KenAgent decision record through
+  the `autonomous-builder` dispatch, not through `pdfce-librarian`
+  directly. The highest file on disk in `docs/decisions/` remains `033`;
+  `034` is CLAIMED-by-citation and UNAUTHORED (unrelated write-side
+  CMYK/YCCK topic, reserved since the thirty-fifth filing). **`035` is
+  the genuinely next-free number — by file count AND by not already
+  being claimed — and this entry CLAIMS it by citation for the three
+  forks above.** Unlike `034`, which was claimed while still an open
+  fork, these three are recorded here **already shipped**: the
+  architectural content lives in this §12 entry and in the shipped
+  module's own doc comments, which is why this entry does not merely
+  flag `035` as recommended (the fifty-second filing's posture) but
+  writes the decision down directly. Whether the engineer judges a
+  fuller `docs/decisions/035-*.md` KenAgent record still adds value on
+  top of this — e.g. to capture alternatives considered and rejected in
+  the KenAgent format the other decision records use — remains that
+  dispatch's call, not exercised by this entry.

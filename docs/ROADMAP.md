@@ -81,6 +81,375 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★ `Pass 52.0` (core DXF writer) + `Pass 52.1` (`pdfce-cli export-dxf`) + `Pass 52.3` (page text as `TEXT` entities on a dedicated layer) — three of the family's four slices SHIP; `Pass 52.2` (GUI) stays IN PROGRESS — 2026-08-09, committed `3c4aca4`→`1f4839d` (fifty-third filing)
+
+**Sourcing, stated once because it governs the whole entry.** This
+librarian was **not granted a shell in this dispatch** (no `Bash`/
+`PowerShell` tool on the invocation), so `git show --stat 3c4aca4` /
+`1f4839d` — as the dispatch instructed — could **not** be run, and
+hard rule 8 forbids inferring commit content from documents alone.
+**What follows is independently confirmed by `Read`/`Grep` against the
+current working tree**, not relayed from the dispatch text uncritically:
+`crates\pdfce-core\src\export\dxf.rs`, `crates\pdfce-core\src\export\mod.rs`,
+`crates\pdfce-core\tests\dxf_export.rs` (**17 tests, counted directly by
+`Grep -c '#\[test\]'`**), `crates\pdfce-cli\src\main.rs`'s `ExportDxf`
+subcommand + `cmd_export_dxf`, and the `runs-inherited.pdf` fixture
+(confirmed present at `fixtures\synthetic\text\`) are all present and
+internally consistent with the two commits' subject lines as given in
+the dispatch. **The two commit hashes and their one-line subjects are
+relayed from the dispatch, not independently confirmed against
+`git log`** — the branch currently checked out (`pass-8-redaction`) is a
+different work-stream by its own recent-commits list, so this librarian
+cannot confirm `3c4aca4`/`1f4839d` are actually ancestors of that branch
+tip, only that the code they are said to have introduced is present on
+disk. **The full-workspace `cargo test` total, `cargo tree` GUI-separation
+check, and `cargo fmt`/`cargo clippy` cleanliness are NOT independently
+verified here** — no shell, and none of these three figures were relayed
+in the dispatch text either. What IS confirmed by `Read` of the two new
+modules' own `use` statements: `crates/pdfce-core/src/export/dxf.rs` and
+`mod.rs` import only `crate::vector::{...}` — no `egui`/`eframe`/`winit`
+symbol appears — which is consistent with the GUI-core-separation
+invariant holding, but is an **observation from reading source, not a
+`cargo tree` run**, and is reported as such.
+
+**Why this is a THREE-of-FOUR ship, not a family completion.** The
+family was minted whole at the fifty-second filing (`Pass 52.0`–`52.3`,
+*Next up*, above) with `52.2` (GUI Export ▸ DXF + measure-tool scale
+wiring) as its own slice. Nothing in the working tree shows a GUI-side
+DXF export surface — `pdfce-gui`'s `main.rs` was not searched for one by
+this filing, but the operator's own dispatch states `Pass 52.2` is *"IN
+PROGRESS this session (ui-specialist dispatched)"*, which this entry
+takes at face value rather than independently confirming, per the same
+"relayed vs. confirmed" discipline stated above. **`Pass 52.2` stays in
+*Next up*, annotated, not moved here** — see the annotation on that
+entry, below.
+
+#### What `Pass 52.0` (core) actually built
+
+`crates/pdfce-core/src/export/dxf.rs` — hand-written ASCII DXF, **no new
+Cargo dependency**, matching the precedent `Pass 48.4` set for TIFF
+import (see that Pass's own entry). `HEADER` + `TABLES` (`LTYPE` +
+two-entry `LAYER` + `STYLE`) + `ENTITIES`. Emits `LWPOLYLINE`, `CIRCLE`,
+`ARC`, `SPLINE`, and (from `Pass 52.3`, below) `TEXT`.
+
+**★ THE R12/AC1015 MISTAKE — RECORDED IN FULL BECAUSE IT IS THE
+FINDING, NOT A FOOTNOTE TO ONE.** The writer's own module doc says it
+plainly, and this entry quotes rather than paraphrases: it first
+declared `$ACADVER` `AC1009` (R12) *"on my own reasoning that R12 is
+'one step more conservative than R2000 and therefore reaches
+further'"* — while emitting `LWPOLYLINE` and `SPLINE`, **entities R12
+does not have** (R12 draws polylines as `POLYLINE`/`VERTEX`/`SEQEND`
+and has no spline entity of any kind). The file claimed one DXF dialect
+and spoke another. **`C:\personal_rag\dxf\lesson_20260603_ezdxf_authoring_cut_files_lwpolyline.md`
+had ALREADY named `AC1015` (R2000) as the compatible baseline** for
+AutoCAD LT 2004 and older plasma controllers — the engineer had read
+that file (its constraints are cited throughout the module doc and the
+*Next up* entry that scoped this Pass) and **substituted a guess for
+its recommendation anyway.** Not merely wrong: *incoherent* — a
+version declaration and an entity set that could not both be true of
+the same file. **All twelve of the writer's tests passed throughout**,
+because every one of them grepped the output for strings and the
+strings were all present; the file self-reported success at every gate
+this project runs automatically. **What actually caught it: parsing the
+output with a real DXF reader (`ezdxf`) instead of grepping it**, which
+rejected every sample export with *"missing 'AcDbPolyline' subclass"* —
+the string was there, the STRUCTURE it was supposed to sit inside was
+not, because R2000's `LWPOLYLINE` needs a `100`-code `AcDbPolyline`
+subclass marker that R12 has no concept of and this writer, believing
+itself to be R12, never emitted.
+
+**Fixed to `AC1015`, with the structural consequences R2000 actually
+requires and R12 does not**: an entity **handle** (group code `5`) on
+every entity, `$HANDSEED` kept above every handle issued, and `100`
+subclass markers (`AcDbEntity` then `AcDbPolyline`/`AcDbCircle`/
+`AcDbArc`/`AcDbSpline`) in a fixed order — one `entity_head` helper
+function writes all four so the order cannot drift per call site. A
+regression test, `the_declared_version_matches_the_entities_actually_emitted`,
+now asserts the coherence the string-grep tests could not: `AC1015`
+present, `AC1009` absent, `AcDbEntity`/`AcDbPolyline` present, and the
+subclass marker's three-column group-code formatting exact (a
+four-character `" 100"` is a different token from the required
+three-character `"100"`, and a reader that finds the wrong one reports
+the same *"missing subclass"* error from a different cause — the test
+checks both).
+
+**The RAG-constraint compliance is by construction, not by
+post-processing** — the module doc states this as the deliberate payoff
+of hand-writing rather than reaching for `ezdxf`-equivalent tooling:
+`C:\personal_rag\dxf\lesson_20260424_autocad_lt_2004_compat.md`
+records that AutoCAD LT 2004 **refuses the entire file** on either a
+`MATERIAL` object (auto-created by modern writers in an `OBJECTS`
+section) or group code 94, and the operator's existing `ezdxf` pipeline
+has to strip both afterward. This writer never emits an `OBJECTS`
+section and has no code path that writes group code 94 — there is
+nothing to strip because there is nothing to violate the constraint
+with. `the_output_carries_nothing_autocad_lt_2004_rejects` asserts this
+on the OUTPUT TEXT rather than trusting the writer's own structure,
+because *"there is no code path that writes 94"* is exactly the kind of
+claim that silently stops being true the day someone adds a new entity
+kind.
+
+**Arcs and circles are RECOGNISED from the PDF's cubic Béziers, not
+flattened — this Pass's own fork on the Bézier→DXF-entity mapping,
+decided by shipping BOTH paths under one toggle rather than choosing
+one exclusively; see the `ARCHITECTURE.md` §12 entry below for why this
+counts as an architectural decision, not merely an implementation
+detail.** PDF has no arc primitive (§8.5.2.1 has only `c`/`v`/`y`), so
+every circular PDF feature arrives as cubic Bézier curves — the same
+"lesson_20260603" RAG file that named `AC1015` also measured what
+flattening those curves costs: **~40 washers flattened to fine
+polylines produced a 767 KB file.** `arc_fit`/`circle_fit` (in
+`dxf.rs`) recognise a circular cubic by SAMPLING it (9 points including
+both ends) against a candidate centre taken from the intersection of
+the **tangent normals** at the curve's two ends — not, as the function's
+own doc comment records having tried FIRST and gotten wrong, the
+perpendicular bisectors of the chords to the control points (a control
+point is not a point ON the curve; on a kappa quarter-circle the two
+constructions differ by half the control offset, and every arc failed
+to fit under the wrong construction until the first circle it was meant
+to export came out as four unnecessary splines — caught by the test
+that same session, not shipped wrong). A closed four-cubic subpath
+where all four arcs agree on ONE centre and radius becomes a single
+`CIRCLE`; a rounded rectangle — four genuine arcs at four DIFFERENT
+centres — is explicitly tested to NOT become one
+(`four_arcs_at_different_centres_are_not_a_circle`). Direction (CW vs.
+CCW) is corrected before the `ARC`'s start/end angles are written,
+because DXF's `ARC` is always CCW from group 50 to 51 and writing a
+clockwise PDF arc's angles unmodified would silently emit the
+**complementary** arc — a file that looks correct and cuts the wrong
+shape. Non-arc, non-circle cubics fall back to a degree-3 `SPLINE`
+carrying the Bézier's own four control points and a clamped knot
+vector — exact, not an approximation, "because a cubic Bézier IS a
+degree-3 NURBS with a clamped knot vector" (module doc), which is why
+curves that are not arcs still do not bloat the file the way flattening
+would. `fit_arcs` (default **on**) is a per-export toggle, both in core
+(`DxfOptions::fit_arcs`) and CLI (`--no-fit-arcs`); `without_arc_fitting_the_same_circle_becomes_splines`
+is the regression test that proves the fitting is doing real work and
+not merely reporting one entity per subpath regardless of geometry.
+
+**Closed polylines use the close FLAG (group 70 bit 1), never a
+repeated first vertex** — the same RAG file is explicit that a
+duplicated closing vertex reads to a CAM table as a zero-length
+segment, which some controllers treat as a pierce.
+`a_closed_rectangle_is_one_polyline_with_the_close_flag` asserts four
+vertices for a `re` rectangle, not five.
+
+**`$INSUNITS` is mandatory and defaults to inches — the second fork
+this Pass's own scoping entry flagged as a genuine decision, now made
+by shipping.** PDF user space is 1/72 inch (§8.3.2.3); `DxfUnits::Inches`
+is the `#[default]` because the conversion `1.0 / 72.0` is then the
+*only* scale factor in play and every other choice (millimetres,
+`25.4 / 72.0`) compounds a second irrational-in-binary factor onto it
+for no benefit stated anywhere in the code. `units_are_declared_and_the_coordinates_agree`
+asserts both directions: a 72-point line is exactly `1.000000` inch and
+exactly `25.400000` mm. **The drawing-scale field (`DxfOptions::scale`,
+CLI `--scale`) is the feature's actual selling point over a generic
+converter**, per this Pass's own module doc: *"every generic PDF→DXF
+converter exports at paper scale and says nothing, so a 1:2 detail
+view arrives at half size and looks entirely plausible."* pdfce already
+has the measure tool's "scale by known dimension" gesture; `Pass 52.2`
+(still open, see below) is what wires that gesture's answer into this
+field — until it ships, the CLI's `--scale` flag is the only way to
+supply it, and `cmd_export_dxf` discloses on stderr whenever a paper-
+scale (`--scale 1`, the default) export completes, naming the risk
+explicitly rather than only in `--help` prose.
+
+#### What `Pass 52.1` (CLI) actually built
+
+`pdfce-cli export-dxf <input> --page N -o out.dxf [--units in|mm]
+[--scale S] [--no-fit-arcs] [--no-text]` — read-only on the input (no
+`EditSession`, no save path; `cmd_export_dxf`'s own doc comment states
+this as part of its contract). **Disclosure is a first-class part of
+the command's contract, not an afterthought**: `skipped_text` (operator
+chose `--no-text`), `unreadable_text` (pdfce could not decode a run —
+different fact from the operator's own choice, and disclosed
+separately so one cannot hide inside the other), and `skipped_images`
+(DXF has no raster entity in this subset) each print a full prose
+sentence to stderr **before** the one-line summary to stdout, because,
+per the command's own doc comment, *"an operator who is not told opens
+it in SOLIDWORKS and concludes the export lost things at random"* — the
+same fuzzy-never-sneaky discipline (project rule 4) applied to a
+lossy-by-necessity format conversion rather than to an inferred edit.
+`--scale` is refused (`RUNTIME_ERROR`, not a panic or a silently
+mirrored/collapsed drawing) for any non-finite or non-positive value.
+
+#### What `Pass 52.3` (text as `TEXT` entities) actually built
+
+**The decision this slice records, verbatim from the enum's own doc
+comment: three text mappings were possible and only one survives
+contact with what a DXF export is actually FOR here.** (1) Omit text
+entirely — honest and disclosed, but the labels and dimensions printed
+on a legacy drawing are frequently the reason an operator is tracing it
+at all. (2) Convert glyphs to cut geometry — what SOLIDWORKS' own
+flat-pattern export does for through-cut stencil text
+(`C:\personal_rag\dxf\lesson_20260721_sketch_text_stencil_dropped_by_cleanup_lwpolyline_open_strokes.md`),
+correct when the text is MEANT to be cut and wrong here, because it
+makes a reference label indistinguishable from a cut path. (3) `TEXT`
+entities on a dedicated layer — readable, selectable, and removable in
+one click. **(3) is what shipped, as the default** (`DxfText::Entities`);
+(1) stays available (`DxfText::Omit`, CLI `--no-text`) for the cutting-
+table case where any stray entity is a hazard. `MTEXT` was considered
+and explicitly rejected in the same doc comment: it carries formatting
+(`\f` font codes, stacking, column layout) pdfce cannot faithfully
+derive from a content stream, and older LT versions handle it least
+well — the same conservatism that chose `AC1015` over `AC1032`.
+
+**Text lands on its own layer, `PDFCE_TEXT`, never on `0` — sourced,
+not guessed**, and this is the part of the finding worth carrying
+forward on its own (see the `personal_rag/dxf` footer, below).
+`C:\personal_rag\dxf\lesson_20260519_sheet_border_titleblock_furniture.md`
+records, from the operator's own real drawings, that a title block is
+**"often drawn on layer `0`"**, which is exactly why layer filtering
+cannot remove it downstream and why that lesson had to invent
+concentric-rectangle and title-block-grid geometric heuristics as a
+CONSUMER-side workaround. pdfce is the UPSTREAM PRODUCER in this
+transaction, and this Pass's own module doc says so explicitly: *"pdfce
+is that upstream producer here, so it declines to repeat the
+mistake."* Turning `PDFCE_TEXT` off in any DXF consumer is now a
+checkbox, not a heuristic. `text_entities_land_on_their_own_layer_and_geometry_does_not`
+asserts this on the ENTITY's own layer code (group 8), not merely on
+the layer table defining the name — a file can define a layer and still
+put everything on `0`, which is precisely the defect a table-only
+check would miss.
+
+**One `TEXT` entity per RUN, never per object — reusing existing
+substrate (`TextObject::run_text`, built at `Pass 32.0` for a different
+purpose, deletion) rather than building new text-decoding machinery.**
+The module doc names why per-object granularity would be a real
+regression: a CAD exporter routinely puts every label on a sheet inside
+ONE `BT`…`ET` — the operator's own drawing has 237 in a single object,
+already on record from `Pass 32.0`'s own shipped-entry finding — so a
+per-object mapping would concatenate every label into one `TEXT` at a
+single insertion point. `each_text_run_becomes_its_own_text_entity_with_its_own_string`
+uses a four-name fixture (`runs-inherited.pdf`) specifically because it
+makes that failure visible: the wrong implementation would read
+`"ALPHABETAGAMMADELTA"` in one entity: this one reads four.
+
+**Disclosure again catches its own near-miss, not merely the feature
+it was built for.** `a_text_object_that_yields_no_runs_is_still_counted`
+exists because, per its own doc comment, an earlier version of this
+same slice let a text object that decomposed to zero runs (an inline
+content stream with no `/Resources` — no font, so the walker cannot
+advance the pen and never closes a run) **vanish from the outcome
+entirely**, incrementing no counter. That is the exact failure mode
+`skipped_text` was written to prevent, in a new disguise: the operator
+opens the DXF, the labels are gone, and there is no sentence anywhere
+saying why. Fixed by counting empty-runs at object granularity into
+`unreadable_text` — a THIRD disclosure bucket, deliberately distinct
+from `skipped_text` (operator's own choice) and from omitting nothing
+(an empty `() Tj` run is a legal positioning no-op, not a failure, and
+is silently skipped with no disclosure at all).
+
+**A control character in decoded text cannot desynchronise the whole
+file.** DXF is line-oriented — a newline inside a group-1 value ends
+the value and the following line is read as a group CODE, so one such
+character would not corrupt one string, it would misparse every entity
+written after it. `sanitize_text` replaces control characters with
+spaces (not merely strips or escapes them) and truncates at 255
+characters (DXF's own limit for one `TEXT` value), silently — the
+module doc records this silence as a deliberate choice: counting
+truncation as a disclosure would fire on decorative rules and
+separators that are not text an operator is trying to read, and *"a
+disclosure that cries wolf gets ignored"*, citing this project's own
+`check-ui-strings.sh` finding as the precedent for that judgement in a
+different dialect.
+
+#### Tests
+
+**17 tests in `crates/pdfce-core/tests/dxf_export.rs`, counted directly
+by this librarian via `Grep -c '#\[test\]'` against the file on disk —
+not relayed.** Covering: the two LT-2004-refusal constructs' absence,
+DXF structural completeness, units/scale correctness in both
+directions, arc/circle recognition AND its negative case (a rounded
+rectangle is not a circle) AND arc-fitting-disabled falling back to
+splines, closed-polyline flag vs. repeated vertex, three-way text
+disclosure (`skipped_text`/`unreadable_text`/entity emission), an empty
+page producing a valid empty file, the version/entity-set coherence
+regression test described above, entity-handle uniqueness, per-run
+`TEXT` emission with no cross-run concatenation, the text-layer
+separation, `DxfText::Omit`'s disclosure, and the line/group-code
+parity invariant that catches an embedded control character. **Pass/
+fail counts for the full workspace, and whether these 17 currently
+pass, are NOT independently confirmed here** — no shell this dispatch;
+the tests exist and their assertions are read directly from source, but
+this librarian did not execute `cargo test`.
+
+#### Invariant checks
+
+- **GUI-core separation**: `crates/pdfce-core/src/export/{dxf.rs,mod.rs}`
+  import only `crate::vector::{...}` on `Read` inspection — no
+  `egui`/`eframe`/`winit` symbol appears. **Not a `cargo tree` run** (no
+  shell); reported as a source-level observation only.
+- **Round-trip / minimal-diff (`ARCHITECTURE.md` §5)**: not applicable
+  by construction, same reasoning `export/mod.rs`'s own module doc
+  states for the whole `export/` tree — this is a write path OUT of
+  pdfce's model into a foreign, non-PDF format, "deliberately separate
+  from `writer`, which owns PDF-to-PDF serialisation." `cmd_export_dxf`'s
+  own doc comment confirms the CLI side never opens an `EditSession` or
+  a save path on the input PDF.
+- **Packaging smoke test**: not addressed by this filing — no packaging
+  surface changed.
+
+#### What is NOT yet done, named so nobody assumes it
+
+- **`Pass 52.2` (GUI Export ▸ DXF, incl. wiring the measure tool's
+  "scale by known dimension" into `DxfOptions::scale`)** — stays IN
+  PROGRESS. See the annotated *Next up* entry, below.
+- **Text rotation is not carried** — `TEXT` is written at rotation 0
+  inside the run's axis-aligned bounding box, per `text_entities`'s own
+  doc comment; a vertical dimension label will read horizontally in the
+  DXF. Disclosed in the source, not fixed, because fixing it needs the
+  text-rendering matrix per run — a real slice, not a line.
+- **Ink-box height stands in for cap height** — an all-caps label
+  measures close to correct; an all-lowercase run with no ascender
+  measures its x-height and comes out visibly small. Named as an
+  honest limit in the source rather than left for an operator to find.
+- **Layer authoring is single-scheme today** — geometry on `0`, text on
+  `PDFCE_TEXT`; per-object layers from OCGs or by colour are named in
+  the source as a later, un-scoped slice.
+
+#### RAG escalation and standing-rule question, both addressed below
+
+See the `ARCHITECTURE.md` §12 entry (new, decision **035**, claimed by
+citation) for the Bézier-mapping/`$INSUNITS`/text-layer decisions
+formally recorded; the `Standing rules` amendment to **R172** (widened,
+not superseded — see that entry for the ruling and why it was not left
+at a single occurrence); and the `personal_rag/dxf` + `D:\dev\rag\rust\`
+entries filed this same session for the AC1015/R12 finding and the
+grep-tests-cannot-validate-dialect-coherence finding.
+
+**Ledger for this filing.** No new Pass ID minted — `Pass 52.0`,
+`Pass 52.1`, `Pass 52.3` were already headed/mentioned at the fifty-
+second filing; this entry is their completion record.
+`docs/FEATURES.md`: the DXF-export row's `core`/`cli` boxes tick `[x]`
+in this same filing (see the file itself); `gui` stays `[ ]`, and the
+row stays under *Planned* because the capability is not whole yet.
+Standing rules: **R172 amended in place** (see *Standing rules*,
+below) — ceiling stays **R172**, next free **R173**, same as every
+in-place amendment this project makes (R168, R171's own precedent).
+Decision records: **`033` on disk, `034` CLAIMED-by-citation/
+UNAUTHORED (unrelated, unchanged), `035` now CLAIMED BY CITATION in
+the new `ARCHITECTURE.md` §12 entry below** — recording decisions that
+are now SHIPPED, not merely proposed, which is why this filing goes
+ahead and writes the §12 entry itself rather than only flagging it as
+recommended (contrast the fifty-second filing's posture, where nothing
+had shipped yet). **A full `docs/decisions/035-*.md` KenAgent record
+remains something only the `autonomous-builder` dispatch can author**
+(`docs/decisions/README.md`'s protocol, same limit `034` has carried
+since the thirty-fifth filing) — this filing's §12 entry is the
+architecture-log account of a decision already reflected in shipped
+code, not a substitute for that fuller record if the engineer judges
+one still adds value. Operator-question ceiling unchanged at **(bh)**,
+next free **(bi)**. `docs/decisions/` untouched (no new file created).
+Backup/git working-tree state not asserted anywhere in this filing
+(hard rule 8; also see the sourcing note at the top of this entry —
+this librarian cannot even confirm the two cited hashes are on the
+checked-out branch). This is the **fifty-third** `SESSION_LOG.md`
+filing (the fifty-second confirmed present by direct read before this
+entry was written).
+
+---
+
 ### ★ tooling — the unfiled-commit backlog stops being found by accident: `check-disclosure-channel.sh` (new), `check-ledger-numbers.py`'s staged-ship key (stricter), `check-commits-filed.py` (new, exhaustive) — 2026-08-09 11:32:55 / 12:07:52, committed `e296a76`→`190c205` (fifty-first filing)
 
 **No Pass ID — ledger/gate infrastructure, same class as `check-passes-filed.py` (2026-08-06) and its own two amendments; no ARCHITECTURE.md §12 entry either, for the same reason those had none — no crate boundary, library choice or invariant is redrawn here, only enforcement of ones already written down (§4.1(P) for the first gate; the append-only Shipped convention for the second).**
@@ -24698,6 +25067,189 @@ at the Encryption Backlog bucket and in SESSION_LOG continuations 20 and
 
 ## Next up
 
+### Pass 52.0–52.3 — PDF → DXF export, so SOLIDWORKS can import pdfce output without an Acrobat Pro licence at all — operator request 2026-08-09, redirected from "make pdfce satisfy SOLIDWORKS' Acrobat gate" to "make the gate irrelevant"
+
+**★ THREE OF FOUR SLICES SHIPPED 2026-08-09 (`3c4aca4`→`1f4839d`). See
+the `Pass 52.0` + `Pass 52.1` + `Pass 52.3` Shipped entry (top of
+*Shipped*) for the delivery record — including the R12/AC1015 mistake
+this Pass's own module doc records against itself, and the two forks
+this entry (below) flagged as UNDECIDED, both now resolved by shipped
+code: the Bézier-mapping fork (arc-fit WITH a `SPLINE` fallback, both
+shipped under one toggle, not a single exclusive choice) and the text-
+emission fork (`TEXT` entities per run, `MTEXT` explicitly rejected).**
+Retained below in place (append-only discipline) because it is the
+record of how the family was scoped and why the acceptance criteria
+read the way they do. **`Pass 52.2` (GUI Export ▸ DXF + measure-tool
+scale wiring) is NOT shipped and stays open** — the operator's dispatch
+that produced this filing states it is in progress this session
+(`pdfce-ui-specialist` dispatched), relayed here rather than
+independently confirmed (this librarian has no shell this dispatch;
+see the Shipped entry's own sourcing note).
+
+**The operator's actual question, quoted in full because the redirect is
+this entry's whole shape:** *"SolidWorks has an option to import PDF
+files but only if Acrobat Pro is installed and licensed. Is there a way
+that pdfce can get that feature to enable with it instead?"* — i.e.
+make pdfce satisfy SOLIDWORKS' own Acrobat-presence check.
+
+**REFUSED, explicitly, and recorded as refused rather than silently
+declined.** Making pdfce impersonate a licensed Acrobat Pro install
+(spoofing Adobe's COM registration so SOLIDWORKS believes a licensed
+Acrobat is present) is circumventing a third party's licence gate —
+out of bounds on its own terms, independent of any pdfce project rule.
+It is also fragile in a way that would make it a bad bet even set that
+aside: it would break a real Acrobat install sharing the same machine,
+and it would break again on the next SOLIDWORKS service pack that
+tightens the check.
+
+**Redirected, with the operator's agreement, to the workflow that
+actually discharges the need: SOLIDWORKS imports DXF natively, with no
+Adobe dependency of any kind.** The standard PDF→SOLIDWORKS path is
+PDF → Illustrator/CorelDraw/Inkscape → DXF → SOLIDWORKS; Acrobat is a
+*converter* somewhere upstream of that chain, never a requirement of
+the SOLIDWORKS import step itself. So the feature that actually solves
+the operator's problem is **pdfce → DXF export** — it does not work
+around the Acrobat gate, it makes the gate irrelevant, on every seat,
+licensed or not.
+
+**Sourcing caveat, per the global claim-verification rule — stated as
+a flag, not presented as settled.** SOLIDWORKS Help's own "Adobe PDF
+Files" / "Adobe Illustrator Files" pages 403 to automated fetch, so
+"SOLIDWORKS' DXF import has no Adobe dependency" rests on the
+documented native DXF/DWG import capability plus multiple GrabCAD/
+SOLIDWORKS-forum accounts of the PDF→vector-tool→DXF workflow — not a
+page read end to end. **Flagged for the operator to confirm, not
+asserted as independently verified.**
+
+**Why this is a pdfce feature and not a generic converter — two
+reasons, both load-bearing for how the Pass is scoped below:**
+1. `decompose` already produces most of DXF's data model:
+   `Segment::Line`/`Segment::Cubic`, subpath decomposition, `re`
+   rectangles, text runs with font/size/bounds, OCG layers. The hard
+   half of the work already exists.
+2. **Scale is what usually breaks a PDF→DXF workflow**, and pdfce
+   already has the fix for it. A PDF drawing is at paper scale, so a
+   1:2 view imports at half size, and neither Illustrator nor Inkscape
+   has any input for the missing information. pdfce's measure tool
+   already has "scale by known dimension" — type the length the
+   drawing SAYS a feature is — which is exactly the missing input a
+   DXF export needs. Illustrator/Inkscape have no equivalent gesture.
+
+**RAG-derived constraints — cited from `C:\personal_rag\dxf\`
+(troubleshooting-librarian's territory, not re-derived or rewritten
+here; grep the index before touching the writer):**
+- **Target R2000 (`AC1015`)** for AutoCAD LT 2004 and older
+  plasma-table controllers; R2018 (`AC1032`) for modern consumers.
+  `C:\personal_rag\dxf\lesson_20260603_ezdxf_authoring_cut_files_lwpolyline.md`.
+- **Never emit `MATERIAL` objects or group code 94** — LT 2004 refuses
+  the WHOLE FILE ("Unknown entity" / "Drawing recovery" / silent
+  failure), not just the offending entity.
+  `C:\personal_rag\dxf\lesson_20260424_autocad_lt_2004_compat.md`.
+  **A hand-written pdfce writer avoids this BY CONSTRUCTION rather than
+  by post-stripping** — it never emits the forbidden constructs in the
+  first place, which is strictly better than the ezdxf-then-strip
+  recipe that lesson currently has to run for the operator's own
+  plasma-table work.
+- **Emit native `CIRCLE`/`ARC` for circular features, never a
+  flattened polyline.** Measured precedent, same lesson file: ~40
+  washers flattened to fine polylines produced a **767 KB** file. A
+  naive Bézier-to-polyline flattening of PDF circular geometry would
+  reproduce exactly that bloat — this is the argument FOR treating the
+  Bézier-mapping choice at `Pass 52.0` as a real decision rather than
+  "just flatten it," not a style preference.
+- **Closed `LWPOLYLINE` with the closed flag set**, never a repeated
+  first vertex.
+- **`$INSUNITS` in the header is mandatory, not optional.** PDF user
+  space is points (1/72"), so pdfce must pick and declare a unit
+  (1 = inches, 4 = mm) rather than emit unitless coordinates.
+
+**Scope — four slices:**
+
+| Pass | What | Surface |
+|---|---|---|
+| `Pass 52.0` | Core: `PathObject` → DXF entities. Lines and closed subpaths/`re` → `LWPOLYLINE`; header with `$INSUNITS`; R2000 (`AC1015`) default per the RAG constraint above. **Cubic Béziers as `SPLINE` vs. arc-fit approximation — UNDECIDED, this Pass's own fork; see the decision-record note below.** | core |
+| `Pass 52.1` | CLI: `pdfce-cli export-dxf` | cli |
+| `Pass 52.2` | GUI: an Export ▸ DXF surface, wiring the EXISTING measure-tool "scale by known dimension" gesture into the export as the paper-scale correction | gui |
+| `Pass 52.3` | Text runs: `TEXT`/`MTEXT` emission vs. leaving text as decomposed geometry — a real decision, not an obvious default | core |
+
+**Named non-goal, stated so nobody promises it later:** this does
+**not** round-trip to a parametric SOLIDWORKS model. A PDF of a
+SOLIDWORKS drawing is *printed output* — derived geometry, not the
+feature tree — so importing it into SOLIDWORKS via this path yields
+sketch entities only, never features, and never dimensions-as-
+constraints. A **ce dimension** exported this way becomes DXF geometry
+(lines/text), not a SOLIDWORKS smart dimension — see the Glossary's ce
+dimension/pdf dimension split, which this row does not change.
+
+**Decision-record status — CORRECTED against the live ledger, not
+accepted from the dispatch text.** The dispatch stated *"034 was the
+next free decision number."* Checked against this file's own ledger
+(the `Pass 48.1`/`48.2` entry, above, and its four repeated footers)
+and it is **wrong**: **`034` is already CLAIMED and UNAUTHORED**,
+reserved since the thirty-fifth filing for the write-side CMYK/YCCK
+decision R28 makes a hard precondition for the already-shipped
+`jpeg-encoder` dependency (`Pass 48.2`). **The genuinely next-free
+number, if this family earns a record, is `035`** — "genuinely next
+free" meaning "by file count AND not already claimed by citation," the
+same two-part test the CMYK entry itself states verbatim: *"do not
+assign 034 to unrelated content… a different decision takes the
+number."*
+
+**Whether to open `035` is a recommendation here, not a ruling, and
+not something this filing can execute.** `docs/decisions/README.md`'s
+own protocol: decision records are produced via the
+`autonomous-builder`/KenAgent consultant dispatch, not authored by
+`pdfce-librarian` directly — the identical limit that left `034`
+OWED-not-authored at the thirty-fifth filing. **This librarian's
+recommendation, offered because the shape matches decision 032's own
+justification closely enough to name it directly: yes, open one.**
+Two of the four slices above are genuine forks that determine the data
+model rather than merely the implementation — the Bézier-to-DXF-entity
+mapping (`SPLINE` preserves curvature exactly but is a less
+universally-supported entity than an arc-fit approximation; the choice
+is baked into every exported file the way decision 032 §2's
+wrap-vs-rewrite choice was) and the `$INSUNITS` default (inches vs. mm
+has no context-independent "obviously correct" answer, which is
+exactly the shape this project's spec-ambiguity-becomes-a-setting
+posture — R15, shipped as `Pass 51.0` — exists for). **Not opened by
+this filing** — flagged for the engineer to dispatch if agreed; **do
+not assign `035` to unrelated content** in the meantime, same
+instruction the `034` entry gives for itself.
+
+**Why `pdfce-acrobat-librarian` was NOT dispatched, recorded so the
+absence reads as a decision rather than an oversight (the engineer's
+own framing, endorsed here):** Acrobat Pro has no DXF export capability
+at all, so there is no Acrobat behaviour to source acceptance criteria
+from — project rule 12's scoping-dispatch does not apply to this
+bucket. **High-confidence claim, not formally RAG-sourced** — see the
+matching caveat on the `FEATURES.md` row's Acrobat column, below, which
+is the file that actually carries an Acrobat column and the sourcing
+obligation that goes with it.
+
+**`docs/FEATURES.md`: one new *Planned* row filed in this same edit**
+(maintenance contract) — see the file itself.
+
+**Ledger for this filing.** **`Pass 52.0`–`Pass 52.3` MINTED** — Pass-
+family ceiling was **51**, next free **52**; this filing claims the
+whole family. New Pass-family ceiling **52** (headed at `52.0`;
+`52.1`–`52.3` mentioned, not yet individually headed until each ships —
+same convention as the 20.x/46.x arcs), next free **53**. Standing
+rules unchanged at **R172**, next free **R173** — nothing minted; the
+RAG citations above are existing `personal_rag/dxf` lessons, not new
+rules. **Decision records: `033` on disk, `034` CLAIMED-by-citation/
+UNAUTHORED (unchanged, unrelated to this filing) — this filing does
+NOT claim `035`**; if the engineer opens the recommended record, `035`
+is the number to use, per the correction above. `ARCHITECTURE.md` §12
+NOT edited this filing — nothing has actually been decided yet, only
+proposed and correctly flagged as owed. Operator-question ceiling
+unchanged at **(bh)**, next free **(bi)**. `docs/decisions/` untouched
+by this filing. Backup/git working-tree state not asserted anywhere in
+this filing (hard rule 8). This is the **fifty-second**
+`SESSION_LOG.md` filing (the fifty-first confirmed present by direct
+read before this entry was written).
+
+---
+
 ### Pass 47.0–47.4 — ★★ DECISION 033 P0 — GUI usability: multi-target correctness fix, QAT restore, ribbon legibility, editor chrome, choice-field `/Opt` bug (decision 033, filed 2026-08-08 on the operator's direct instruction to plan an improved GUI layout/feature set AND *"rewrite any rules about the GUI that make it less usable and user friendly"*) — **★★ SCOPE DELIVERED 2026-08-08 (all five items). See the `Pass 47.0–47.4 + Pass 47.11` Shipped entry (top of *Shipped*) for the delivery record.** Retained below in place (append-only discipline) because it is the record of decision 033's original P0 planning. That same filing also delivered `Pass 47.11` — an operator-reported defect fix that arrived mid-Pass and was NOT part of decision 033's original five items — and corrected a Pass-ID collision found on an attempted `47.5` mint (`47.5` was already claimed for right-click menus; see the Shipped entry).
 
 **Source: `docs/decisions/033-gui-usability-and-the-workspace-that-does-
@@ -39939,6 +40491,56 @@ and
   `pdfce-engineer.md`'s own pre-flight checklist, where a session that
   has not yet reached `ROADMAP.md`'s Standing rules would see it sooner.
   Both amended RAG files carry a matching dated note pointing back here.
+
+  **★ WIDENED 2026-08-09 (fifty-third filing) — a THIRD instance, in a
+  domain R172 as first written did not cover, is the reason for a
+  widening rather than a third RAG cross-reference.** `Pass 52.0`'s DXF
+  writer declared `$ACADVER` `AC1009` (R12) on the engineer's own
+  reasoning that R12 is "more conservative and therefore reaches
+  further," while emitting `LWPOLYLINE` and `SPLINE` — entities R12
+  does not have. `C:\personal_rag\dxf\lesson_20260603_ezdxf_authoring_cut_files_lwpolyline.md`
+  had **already named `AC1015` (R2000)** as the compatible baseline, and
+  the engineer had read that file — its constraints are cited throughout
+  the Pass's own scoping entry above — and substituted a guess for its
+  recommendation anyway. **This is not a harness-driving miss; it is the
+  same root-cause SHAPE — a RAG file already read, and then not
+  applied — occurring in a third mechanism (an authoring choice, not a
+  live gesture-replay session) that R172's original wording ("before
+  driving the GUI observation/injection harness through a gesture
+  class") does not literally cover.** Per this project's own instance-
+  vs-new-rule discipline (R106/R162's amendment history: widen when the
+  new occurrence shares the root cause and only the surface mechanism
+  differs; mint a new rule when the root cause itself is distinct) —
+  **this is a widening, not a fourth rule.** The trigger condition is
+  restated to cover both:
+  > **Before acting on a judgment call in any domain where a
+  > project-adjacent RAG (`D:\dev\rag\rust\`, `D:\dev\rag\egui\`,
+  > `personal_rag\dxf\`, `personal_rag\pdf\`) has ALREADY BEEN READ this
+  > session for the matter at hand, re-check that file's own stated
+  > recommendation before overriding it with independent reasoning — a
+  > confident-sounding justification for departing from an already-read
+  > recommendation is not evidence the RAG was wrong, any more than a
+  > harness misbehaving live is evidence its RAG file was silent about
+  > it (the original two instances, above).**
+  **Two harness instances plus this one authoring instance is three
+  total, all sharing the identical mechanism** (read, then silently
+  overridden, then caught expensively): the widening is filed as an
+  amendment to R172 rather than a new rule for the reason its own
+  original text gives — a class costing real time against a file that
+  already closed it does not need a fresh occurrence count once the
+  underlying shape is already established. **What did NOT catch this
+  one, worth recording precisely because it generalises further than
+  R172 alone**: every one of the writer's OWN tests passed throughout,
+  because they grepped the output for strings and the strings were all
+  present — the mistake was caught only by parsing the output with a
+  real DXF reader (`ezdxf`) instead. That half of the finding is filed
+  separately (`D:\dev\rag\rust\`, this same session) rather than folded
+  into R172, because it is a distinct root cause (a test-methodology
+  gap, not a RAG-consultation gap) that happened to surface in the same
+  commit. **Ceiling stays `R172`** (amended in place, same convention
+  as `R168`/`R171`'s own in-place amendments); `R173` stays next free.
+  Full delivery record: the `Pass 52.0`+`52.1`+`52.3` Shipped entry
+  (top of *Shipped*).
 
 ## Update protocol
 
