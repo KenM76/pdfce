@@ -1833,6 +1833,51 @@ this commit (2616, same as the core+CLI figure) — verified instead by
 driven-harness traces, per `ROADMAP.md`'s `Pass 32.0 (GUI half)` Shipped
 entry.
 
+### (P) `set_edit_note` becomes the single choke point for every operator-facing note — 34 direct-assignment call sites converted, `b5b9f23` — 2026-08-09
+
+**`pdfce-gui`-internal, not core-crate public API — recorded here per
+this document's own practice of logging `pdfce-gui`-internal decisions
+that generalize beyond one commit's diff** (same footing as (N)/(O),
+above). Verified directly in `main.rs`:
+
+- **`fn set_edit_note(&mut self, note: String)`** (`main.rs:4020`) is now
+  the ONLY way any code in `pdfce-gui` may set `self.edit_note` to
+  `Some(_)`. It traces `edit-note {note:?}` (`:4021-4024`) before writing
+  the field (`:4025`). **35** occurrences of `set_edit_note(` in the
+  file, one of which is the definition — **34 call sites**, converted
+  from bare `self.edit_note = Some(...)` assignments. **1** remaining
+  bare assignment in the whole file, and it is inside the setter's own
+  body.
+- **The invariant this establishes, stated for future code**: no field
+  that carries a disclosure obligation (rule 4) may be written outside
+  its own traced setter. `edit_note`'s own 20-line doc comment
+  (`:4000-4019`) states the reasoning: the `pending_note`/`drain_edit_notes`
+  choke point (Pass 34.2) traced only the notes PANELS raise; every
+  CANVAS-level disclosure bypassed it by writing the field directly,
+  untraced, for as long as the field has existed. A "single choke point"
+  that has a second, unaudited door into it is not a choke point — the
+  fix is not a bigger drain, it is removing the second door.
+- **Found by using the instrument, not reading it**: driving `Pass
+  32.1`'s new scale disclosure through the observation harness produced
+  no `edit-note` trace line for a note that had certainly fired, which
+  is what led to auditing every assignment site rather than trusting the
+  drain's own doc comment that it was already the single choke point.
+- **Recorded as the fourth instance, in this project, of "a component
+  built to make something else observable acquires no observability
+  from that purpose" — and the first RECURSIVE one**: the channel cited
+  as instance #1 of that class (2026-08-07) turned out to have its own
+  second, untraced path into the same field. Full record:
+  `D:\dev\rag\rust\disclosure_channel_with_no_trace_makes_fired_and_never_fired_identical.md`
+  (amended this session with the fourth instance).
+- **Ruled NOT to warrant a new pdfce standing rule** — see this session's
+  `ROADMAP.md` Shipped entry (the un-Pass-ID'd `b5b9f23` gui/tooling
+  entry) for the full reasoning: the general methodology claim belongs
+  to the cross-project RAG (already does, amended this session); what
+  belongs HERE is the concrete, local invariant this subsection states.
+
+**Breaking? No** — `pdfce-gui`-internal only; `edit_note`'s public shape
+(`Option<String>`) is unchanged, only how it may be written changed.
+
 ### (I) What this sync did NOT cover — stated so the edges are honest
 
 **A partial sync that names its edges is worth more than a
@@ -13355,3 +13400,46 @@ started).
   beyond this one instance. No `ARCHITECTURE.md` body-section change —
   process note only, recorded here per this document's own practice of
   logging findings that generalize even when no API or invariant moved.
+- **2026-08-09 (`b5b9f23`) — `set_edit_note` is now the single traced
+  choke point for every operator-facing note; 34 direct-assignment call
+  sites converted.** Full signatures and reasoning in §4.1's new
+  subsection (P), above. **In one sentence**: `pending_note`/
+  `drain_edit_notes` (Pass 34.2) traced the notes PANELS raise, but every
+  CANVAS-level disclosure — delete, node/subpath edit, markup, copy,
+  refusals — wrote `self.edit_note` directly, at 34 sites, none traced;
+  found by driving `Pass 32.1`'s new disclosure through the observation
+  harness and seeing silence for a note that had certainly fired. Fixed
+  by removing the second door rather than widening the drain: `fn
+  set_edit_note(&mut self, note: String)` (`main.rs:4020`) traces at the
+  assignment and is now the only writer. **Recorded as the fourth
+  instance of this project's "a component built to make something else
+  observable acquires no observability from that purpose" finding, and
+  the first recursive one — the channel cited as instance #1 (2026-08-07)
+  had its own second, unaudited door into itself.** **Ruled NOT to
+  warrant a new pdfce standing rule** (see `ROADMAP.md`'s matching
+  Shipped entry for the reasoning: this is general engineering
+  epistemics, already the cross-project RAG's territory, not a contract
+  about pdfce's own shipped surface) — escalated instead as the fourth
+  instance in
+  `D:\dev\rag\rust\disclosure_channel_with_no_trace_makes_fired_and_never_fired_identical.md`,
+  amended, not a new file. Breaking? **No** — `pdfce-gui`-internal only;
+  `edit_note`'s public shape (`Option<String>`) unchanged.
+- **2026-08-09 (`Pass 32.1`, `e85824a`) — the object-rung delete
+  disclosure (`ui_text::vector_objects_deleted`) becomes scale-aware: it
+  now names how many PARTS the deleted object(s) held, not only how many
+  objects.** `vector_objects_deleted(count, parts)` appends *"They held N
+  separate part(s) between them"* only when `parts > count` — R168's own
+  argument one level deeper (an operator told "1 object deleted" cannot
+  tell whether that object held one line or 237). `parts` is counted via
+  the existing `part_count` (`Pass 32.0`'s `PartKind` dispatcher, kind-
+  aware for free) BEFORE the delete executes, since the count is
+  unrecoverable afterward. **The design point worth recording**: the
+  silence case is asserted as deliberately as the scale case
+  (`the_delete_note_reports_scale_only_when_it_is_news`, `main.rs:23609`)
+  — a disclosure that fires on every delete is one an operator learns to
+  skip, and a `parts=0` (uncountable) reading must never be misread as
+  "held nothing." No `ARCHITECTURE.md` body-section change — a
+  `pdfce-gui`-internal string-builder signature change, not an
+  invariant or API-surface shift; recorded here for the decision-log's
+  own completeness, per this document's practice of logging every
+  Pass-bearing decision even when no body section moves.

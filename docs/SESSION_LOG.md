@@ -28063,3 +28063,126 @@ specialist's advice — filed as new `docs/FEATURES.md` Planned rows
   not asserted anywhere in this filing — no shell, hard rule 8. This is
   the **forty-seventh** `SESSION_LOG.md` filing (the forty-sixth
   confirmed present by grep before this entry was appended).
+
+## 2026-08-09 (forty-eighth filing) — `Pass 32.1` SHIPS (`e85824a`): the object-delete disclosure names how many PARTS were held, not just how many objects; and `b5b9f23` finds a FOURTH, RECURSIVE instance of this project's observability-channel-is-unobservable finding — inside `edit_note`'s own drain
+
+**Filed by `pdfce-librarian`, dispatched by the engineer to record two
+follow-on commits to `Pass 32.0`'s GUI half. No shell available to this
+dispatch (hard rule 8) — `cargo test`/`cargo fmt`/`cargo clippy`/
+`check-ui-strings.sh` gate results below are RELAYED, measured at
+`b5b9f23`, the tip. Independently confirmed via `Read`/`Grep` directly
+against the working tree, not relayed**: `vector_objects_deleted(count,
+parts)` and its `parts > count` gate (`ui_text.rs:5297-5301`); the
+`part_count`-before-delete call site (`main.rs:4390-4394`); the pinning
+test `the_delete_note_reports_scale_only_when_it_is_news`
+(`main.rs:23609-23640`); `fn set_edit_note` (`main.rs:4020-4026`), its
+20-line doc comment, and **34** converted call sites (`set_edit_note(`
+matches 35 in `main.rs`, one being the definition; exactly **1** bare
+`self.edit_note = Some(...)` remains, inside the setter itself).
+
+**Shipped:**
+- `Pass 32.1` (`e85824a`) — the object-rung delete disclosure
+  (`vector_objects_deleted`) now names how many PARTS the deleted
+  object(s) held when that exceeds the object count: *"…They held 237
+  separate part(s) between them."* R168's own argument one level deeper —
+  an operator told *"1 object deleted"* cannot tell whether it held one
+  line or every label on the sheet. Both extremes are real on the
+  operator's own drawing (237 text runs; 1194 path subpaths). **Silent
+  when it is not news** — one part each, or an uncountable 0 — asserted
+  by name in the pinning test, four cases covered.
+- `b5b9f23`, **no Pass ID (instrumentation only)** — `set_edit_note`
+  becomes the single TRACED choke point for every operator-facing note;
+  34 direct `self.edit_note = Some(...)` assignments converted to call
+  it. See "Findings + decisions" below for why this is the session's
+  more important commit despite carrying no Pass ID.
+
+**Decisions made this session:**
+- **Ruled: this finding does NOT warrant a new pdfce standing rule.**
+  Precedent: `trust_but_verify_doc_comments_are_not_evidence.md`'s own
+  2026-08-05 ruling already drew this line for an adjacent finding — a
+  general engineering-epistemics claim (methodology true of any
+  codebase) stays a cross-project RAG entry; pdfce's `R`-numbered rules
+  are contracts about what THIS project's shipped surface promises an
+  operator. This finding is the former. Standing rules ceiling stays
+  **R172**, next free **R173** — unchanged by this filing.
+- `b5b9f23` filed with **no Pass ID**, matching this project's own
+  established convention for instrumentation-only commits (`9681112`'s
+  render-worker tracing, `1992d13`'s census) — no operator-visible
+  behaviour changed; the operator already saw all 34 notes before this
+  fix, what changed is whether a harness can too.
+
+**Findings + decisions:**
+- **★★ FOURTH instance, and the FIRST RECURSIVE one, of "a component
+  built to make something else observable acquires no observability
+  from that purpose."** The first three (found 2026-08-07, one day:
+  `edit_note`'s own missing trace, a stale-binary harness, a mute render
+  worker) are recorded in `D:\dev\rag\rust\`'s
+  `disclosure_channel_with_no_trace_makes_fired_and_never_fired_identical.md`.
+  **This one is the same channel as instance #1, found blind again two
+  days later, inside the exact fix instance #1 shipped**: the
+  `pending_note`/`drain_edit_notes` choke point (Pass 34.2) traced only
+  notes PANELS raise under a `&mut OpenDoc` borrow; every canvas-level
+  disclosure (delete, node/subpath edit, markup, copy, refusals) wrote
+  the field directly, untraced, at 34 sites. **Found by using the
+  instrument, not reading it**: driving `Pass 32.1`'s new disclosure
+  through the observation harness produced silence for a note that had
+  certainly fired, and the silence was briefly misread as the feature not
+  working before it was correctly read as the instrument not covering
+  that call site. **Lesson generalized**: a traced reader/drain proves
+  the reader works; it proves nothing about how many writers bypass it —
+  audit by grepping every ASSIGNMENT to the field, not by trusting the
+  drain's own doc comment that it is already the only door in. Escalated
+  as the RAG file's fourth instance (amended, not a new file — hard rule
+  4); `D:\dev\rag\rust\index.md`'s matching bullet updated in this same
+  filing.
+- **`docs/FEATURES.md`**: the *Move / delete a whole vector object* row
+  (Vector objects, Implemented) gains a note for `Pass 32.1`. The
+  matching Planned row from filing 47 ("Scale-aware delete disclosure for
+  a Part-rung deletion") is REMOVED — shipped, not merely scoped — with
+  a pointer note, matching this file's own established "moved, not
+  struck" convention.
+- **`ARCHITECTURE.md`**: two new §12 decision-log entries (`b5b9f23`,
+  `e85824a`) and a new §4.1 subsection (P) recording the concrete, local
+  invariant the RAG finding does NOT itself carry: no field feeding an
+  operator-facing note may be assigned outside its own traced setter.
+
+**Gates (relayed, measured at `b5b9f23`, the tip — covers both
+commits).** `cargo test --workspace`: **2617 passed, 0 failed** (+1, the
+new wording test). `cargo fmt --all --check` clean. `cargo clippy
+--workspace --all-targets -- -D warnings`: **0 errors, 0 warnings**.
+`check-ui-strings.sh` clean. No `Cargo.toml` touched.
+
+**Still in flight:**
+- Filing 47's other two named follow-ups (per-run decoded text in the
+  Part-rung readout; the cascading "delete this and everything after it"
+  verb, blocked on measurement) — unchanged, still unbuilt.
+- The arrow-key single-node nudge (decision 028 items 10/11) — unchanged.
+- The five commits flagged unfiled since the forty-third filing
+  (`d3ea5de`/`1edf4e3`/`9abf5b5`/`e167867`/`01b90c4`) — this dispatch's
+  scope was `e85824a`/`b5b9f23` only; **not re-verified by this filing
+  whether they remain unfiled** — no shell, hard rule 8, and the engineer
+  did not report on them this dispatch.
+
+**For next session:**
+- Confirm whether the five long-flagged commits are still unfiled, or
+  were folded into a prior filing this librarian was not dispatched for.
+- Consider whether `edit_note`'s new single-setter invariant should get a
+  standing lint/grep gate (`tools/check-*.py`) the way `pending_note`
+  itself never did — the fix that closed this gap was a manual audit, not
+  an enforced one; a future producer could still reintroduce a bare
+  assignment with nothing failing the build. Flagged, not ruled — the
+  engineer's call, this librarian's opinion is this is a plausible R173+
+  candidate on a DIFFERENT axis than the observability finding itself
+  (a build-time gate is squarely a pdfce-standing-rule-shaped guarantee,
+  where the observability finding was not).
+- **Ledger for this filing:** Pass family gains **32.1** (next free in
+  family 32 is **32.2**, unused — `b5b9f23` deliberately took no ID);
+  single-number family ceiling unchanged at **51**, next free **52**.
+  Standing rules unchanged: **R172**, next free **R173** — no new rule
+  minted, on the ruling above. Decision records untouched by this
+  filing. Two new `ARCHITECTURE.md` §12 entries + one new §4.1
+  subsection (P). One `D:\dev\rag\rust\` file amended (4th instance) +
+  its `index.md` bullet updated. Backup/git working-tree state is not
+  asserted anywhere in this filing — no shell, hard rule 8. This is the
+  **forty-eighth** `SESSION_LOG.md` filing (the forty-seventh confirmed
+  present by grep before this entry was appended).

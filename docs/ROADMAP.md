@@ -81,6 +81,189 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### gui/tooling — edit_note's drain traced its SHARE, not its WHOLE: `set_edit_note` becomes the single choke point, 34 direct-assignment call sites converted — 2026-08-09, committed `b5b9f23`, branch `pass-8-redaction`
+
+**Filed by `pdfce-librarian`. No shell available to this dispatch (hard
+rule 8) — `cargo test`/`cargo fmt`/`cargo clippy`/`check-ui-strings.sh`
+gate results below are RELAYED, measured at `b5b9f23`, not independently
+re-run.** **Independently confirmed via `Read`/`Grep` directly against
+the working tree, not relayed:** `fn set_edit_note(&mut self, note:
+String)` at `crates/pdfce-gui/src/main.rs:4020`, tracing `edit-note
+{note:?}` (`:4021-4024`) before writing `self.edit_note = Some(note)`
+(`:4025`), with a 20-line doc comment (`:4000-4019`) stating the defect
+in the engineer's own words. **35** matches for `set_edit_note(` in
+`main.rs`, one of which is the definition itself — **34 call sites**,
+exactly the count this dispatch reports. **1** remaining bare
+`self.edit_note = Some(...)` in the whole file, and it is inside the
+setter itself — nowhere else.
+
+**What this fixes, and why it is the SAME bug found again, inside the
+thing built to prevent it.** `drain_edit_notes`/`pending_note` has
+traced its own share of `edit_note` since Pass 34.2, and the existing
+`D:\dev\rag\rust\` finding built on that fact states the general rule: a
+single-choke-point channel carrying user-visible meaning must itself be
+traced, or *"the disclosure fired"* and *"the disclosure silently
+stopped firing"* produce identical evidence. **That reasoning was
+correct and it covered exactly a third of the channel.** `pending_note`
+is raised only by PANELS, under a `&mut OpenDoc` borrow; every
+CANVAS-level disclosure — object/part delete, node edit, subpath edit,
+markup, copy, refusals — bypassed it entirely and assigned
+`self.edit_note` directly, at 34 sites, none of them traced.
+
+**Found by using the instrument, not by reading it.** The engineer drove
+the new `Pass 32.1` scale disclosure (below) through the observation
+harness, saw no `edit-note` line, and for a moment concluded the
+disclosure had not fired. It had — the INSTRUMENT was silent, not the
+feature.
+
+**★★ Recorded as the FOURTH instance of a finding this project has now
+hit four times: a component built to make something else observable
+acquires NO observability from that purpose, and is in fact LESS likely
+to get any, because its own reason for existing reads as coverage.** The
+first three (`edit_note`'s own missing trace, the stale-binary harness,
+the mute render worker — all found 2026-08-07, one day) are recorded in
+`D:\dev\rag\rust\disclosure_channel_with_no_trace_makes_fired_and_never_fired_identical.md`'s
+existing amendment. **This one is recursive in a way the first three
+were not**: the exact channel cited as instance #1 of the class had ITS
+OWN second, unaudited path into the same field, invisible for the same
+reason every prior instance was — a trace at the DRAIN was believed to
+cover the CHANNEL, when it only covered the callers who used that
+drain.
+
+**Fix: one traced `set_edit_note` setter; all 34 direct assignments
+converted to call it.** The trace sits at the ASSIGNMENT, not at each
+producer — the identical argument the `pending_note` drain's own doc
+comment already made, applied one level further out: a "choke point"
+that is not actually the only door in is not a choke point.
+
+**★ Ruling on whether this warrants a new pdfce standing rule — NOT
+MINTED, on precedent.** This project already ruled, on an adjacent
+finding (`trust_but_verify_doc_comments_are_not_evidence.md`'s own
+2026-08-05 ruling, cited in that file), that a general engineering-
+epistemics finding stays a cross-project RAG entry rather than becoming
+a pdfce standing rule — pdfce's `R`-numbered rules are contracts about
+what THIS project's shipped surface promises an operator (a verb acts on
+the whole selection, a refusal names its remedy); this finding is a
+methodology fact about instrumentation that applies to any codebase with
+a disclosure channel, pdfce or not, and it is already the RAG's
+job to carry it. The RAG file already existed and already stated the
+general rule at the class level (2026-08-07); this session's correct
+action is to amend it with the fourth, recursive instance — not to
+mint a fifth family of standing rule for a class the RAG already owns.
+**Escalated to `D:\dev\rag\rust\`** — amendment, not a new file (hard
+rule 4). Ceiling stays **R172**, next free **R173**.
+
+**What DOES belong in this document, and is recorded separately below**:
+the concrete, local fix — "no field feeding an operator-facing note may
+be assigned outside its own traced setter" — as a `pdfce-gui`-internal
+decision, `ARCHITECTURE.md` §4.1 subsection (P) + a new §12 entry. That
+is an invariant about THIS codebase's own structure, which is exactly
+what the decision log is for; the general methodology claim is not.
+
+**Verified end to end (engineer's own account, relayed).** The
+object-delete scale disclosure (`Pass 32.1`, below) now produces an
+`edit-note` trace line where it previously produced none.
+
+**Gates (relayed, measured at `b5b9f23`, the tip — shared with `Pass
+32.1`, below, since both landed by this commit).** `cargo test
+--workspace`: **2617 passed, 0 failed** (+1 over the `Pass 32.0`-era
+2616 — the new wording test, `the_delete_note_reports_scale_only_when_it_is_news`,
+credited to `Pass 32.1`). `cargo fmt --all --check` clean. `cargo clippy
+--workspace --all-targets -- -D warnings`: **0 errors, 0 warnings**.
+`check-ui-strings.sh` clean. No `Cargo.toml` touched.
+
+**No Pass ID — instrumentation only, same class as `9681112`'s
+render-worker tracing and `1992d13`'s census: no operator-visible
+behaviour changes by this commit alone** (the operator already saw
+every one of these 34 notes before this fix; what changed is whether a
+harness can too). Recorded here in full, a Shipped entry rather than a
+footnote, because it closes a real gap in the project's own
+verification surface, and because an entry's importance and its
+Pass-ID eligibility are different questions — the same call already
+made for `9681112`.
+
+**`docs/FEATURES.md`**: no row — internal observability fix, no
+capability-facing effect, per that file's own scope (the same exclusion
+already applied to the `PartIndex` newtype follow-up, filing 47).
+
+**Ledger.** Pass family ceiling unchanged at **32.1** (this commit is
+deliberately un-Pass-ID'd, per the reasoning above); standing rules
+ceiling stays **R172**, next free **R173**; decision records untouched
+by this filing (no new number claimed). This is the **forty-eighth**
+`SESSION_LOG.md` filing.
+
+### Pass 32.1 — the object-delete disclosure now says how many PARTS the deleted object(s) held, not just that "N objects" went — 2026-08-09, committed `e85824a`, branch `pass-8-redaction`
+
+**Filed by `pdfce-librarian`, discharging the fourth of `Pass 32.0` GUI
+half's four named-but-unbuilt follow-ups (filing 47's "Deliberately NOT
+built" list, item 4). No shell available to this dispatch (hard rule
+8) — gate results below are RELAYED, measured at `b5b9f23` alongside
+the `Pass 32.2`-class fix above, not independently re-run.**
+**Independently confirmed via `Read`/`Grep` directly against the working
+tree:** `pub fn vector_objects_deleted(count: usize, parts: usize) ->
+String` (`crates/pdfce-gui/src/ui_text.rs:5297`), its `parts > count`
+gate (`:5300`), and its doc comment (`:5280-5296`) naming both measured
+extremes; the caller at `crates/pdfce-gui/src/main.rs:4390-4425`
+computing `parts` via `p.part_count(*i)` summed over every deleted index
+**BEFORE** the delete executes (`:4379-4394`, commented as to why:
+*"after the delete the objects are gone and the number is
+unrecoverable"*); the pinning test
+`the_delete_note_reports_scale_only_when_it_is_news`
+(`main.rs:23609-23640`).
+
+**What shipped.** `vector_objects_deleted` gains a `parts: usize`
+parameter and, when `parts > count`, appends *"They held N separate
+part(s) between them."* — **R168's own argument one level deeper**: R168
+was minted because an operator told *"object deleted"* could not tell
+whether six went or one did; the same operator, told *"1 object
+deleted,"* cannot tell whether that one object held one line or every
+label on the sheet. **Both extremes are measured on the operator's own
+drawing**: one text object with **237** dimension labels, one path
+object with **1194** subpaths for a single isometric view. `parts` is
+counted via the existing `part_count` (kind-aware for free — `PartKind`'s
+own dispatcher, `Pass 32.0`) BEFORE the delete, since the objects and
+their part counts are gone afterward.
+
+**★ The silence is the half that got tested, not just the sentence.** A
+disclosure that fires on every delete is one the operator learns to skip
+past, and then it is not there on the day it matters. The pinning test
+asserts all four cases: **(1)** one object, one part — byte-identical to
+the original sentence, no clause grown; **(2)** one object, 237 parts —
+the measured CAD case, clause appended, and the sentence EXTENDS rather
+than replaces the existing wording so an operator's existing reading
+habit still works; **(3)** three objects of one part each — flat, no
+clause (three objects of one part each tells the operator nothing they
+did not just do); **(4)** `parts=0` (uncountable — no object model) —
+must never read as "held nothing," and does not.
+
+**Verified on screen (screenshot inspected by the engineer).** *"Deleted
+the selected object. This is undoable, and is NOT redaction — to
+securely remove content, use Redact instead. They held 4 separate
+part(s) between them."*
+
+**Gates (relayed, measured at `b5b9f23`, the tip).** `cargo test
+--workspace`: **2617 passed, 0 failed** (+1, this Pass's own test).
+`cargo fmt --all --check` clean. `cargo clippy --workspace --all-targets
+-- -D warnings`: **0 errors, 0 warnings**. `check-ui-strings.sh` clean.
+No `Cargo.toml` touched.
+
+**`docs/FEATURES.md`**: the *Move / delete a whole vector object*
+Implemented row (Vector objects) gains a note recording this Pass; the
+matching Planned row filed at filing 47 (*"Scale-aware delete disclosure
+for a Part-rung deletion"*) is REMOVED from *Planned* — SHIPPED, not
+merely scoped.
+
+**Named follow-ups still unbuilt, unchanged from filing 47**: per-run
+decoded text in the Part-rung readout (item 1); the cascading "delete
+this and everything after it" verb, still blocked on real
+inherited-chain-length measurement (item 3). Neither reached this
+session.
+
+**Ledger.** Pass family: new sub-ID **32.1** minted (next free in family
+32 is **32.2**, unused so far — the sibling commit above deliberately
+took no ID). Standing rules stay **R172**, next free **R173**. Decision
+records untouched by this filing.
+
 ### Pass 32.0 (GUI half) — the Part rung shared between path subpaths and text runs, a kind-aware readout, and a pre-existing `SaveOutcome::Failed` misrouting fixed for BOTH kinds — 2026-08-09, committed `03c4c0f`, branch `pass-8-redaction`
 
 **★★ `Pass 32.0` IS NOW COMPLETE ACROSS ALL THREE SURFACES — core, CLI,
