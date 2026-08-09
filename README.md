@@ -1,74 +1,150 @@
 # pdfce
 
-An open-source, non-monetized, feature-for-feature replacement for
-**Adobe Acrobat Pro**.
+An open-source, non-monetized PDF editor for Windows, written in Rust.
+The long-term goal is feature parity with Adobe Acrobat Pro; **it is not
+there yet**, and the sections below say plainly what does and does not
+work today.
 
-The initial application is a native desktop GUI — no web server, no
-browser runtime, no local network listener. It runs from a single
-folder, dependencies included, no installer. It also ships **CLI
-capabilities** (`pdfce-cli`) alongside the GUI: scriptable batch
-subcommands (merge, split, stamp, convert, sign, validate) that Acrobat
-Pro itself has no real equivalent for — see `docs/ARCHITECTURE.md` §7.
-A later fork will turn the same core engine into a web application;
-the architecture is deliberately structured today to make that fork
-cheap (see `docs/ARCHITECTURE.md` §3).
+It is a native desktop application — no web server, no browser runtime,
+no local network listener. It runs from a single folder, dependencies
+included, no installer. Alongside the GUI it ships **`pdfce-cli`**, a
+first-class scriptable command line with 60 subcommands, which is
+deliberately not a debug tool: Acrobat Pro has no real equivalent.
 
-## Status
+## Status: pre-1.0, under active development
 
-**Pre-code.** As of 2026-07-23 this repository contains project
-scaffolding and the agent roster that will drive development — no
-Rust workspace exists yet. See `docs/ROADMAP.md` for the plan
-("Pass 0 — Workspace bootstrap" is next).
+**Working today**, among other things: opening and rendering PDFs;
+page operations (merge, split, extract, insert, delete, reorder,
+rotate); text extraction and text editing with reflow; AcroForm field
+creation, editing, filling, flattening and FDF/XFDF import/export;
+markup annotations; redaction (mark, review and apply); Bates
+numbering; PDF/A validation and conversion; digital-signature
+inspection; vector object and node editing; measurement and dimension
+authoring; image placement from PNG, JPEG, BMP and TIFF.
 
-## Stack
+**Not built yet**, among other things: OCR, JavaScript, XFA, encrypted
+documents, and a long tail of Acrobat Pro's surface. Some capabilities
+exist in `pdfce-core` and `pdfce-cli` but have no GUI yet.
 
-- **Language:** Rust
-- **GUI:** egui/eframe (recommended default; confirm at Pass 0 — see
-  `docs/ARCHITECTURE.md` §2.1)
-- **CLI:** `pdfce-cli`, a first-class batch/scriptable command-line
-  shell shipped alongside the GUI from the start (`docs/ARCHITECTURE.md` §7)
-- **Design invariant:** the core PDF engine (`pdfce-core`) and headless
-  rasterizer (`pdfce-render`) have zero GUI/windowing dependencies —
-  this is what keeps a future WASM/web fork a "swap the shell crate"
-  job instead of a rewrite, and is also what makes the GUI and CLI two
-  independent front ends over one shared core.
-- **Code style:** official Rust Style Guide (`cargo fmt`) + Rust API
-  Guidelines, condensed reference at
-  `D:\dev\rag\rust\rust-style-guide-and-api-guidelines.md`
-  (`docs/ARCHITECTURE.md` §8).
+**`docs/FEATURES.md` is the honest, current answer** — a capability
+list with per-surface (core / CLI / GUI) checkboxes, updated whenever a
+feature lands rather than at release time. Read that before assuming
+anything here is complete. There has been no tagged release yet.
 
-## Documentation map
+## Privacy, platform and signing
+
+> **pdfce does not use the network.** It contains no HTTP client and no
+> TLS stack — you can confirm this yourself in
+> `THIRD_PARTY_LICENSES.md`, which lists every library linked into the
+> binary. There is no telemetry, no analytics, no crash reporting, no
+> licence check, and no update check. Every document you open is
+> processed entirely on your machine.
+>
+> If you click a link inside pdfce, pdfce hands the address to your
+> operating system's default browser. The request is made by your
+> browser, not by pdfce.
+>
+> **Updates** are manual: download the new zip and replace the program
+> files (keep your `userdata` folder). pdfce will never update itself.
+>
+> **Supported platform:** Windows 10/11, 64-bit. pdfce's code is kept
+> portable and is compiled for Linux, macOS, and WebAssembly on every
+> change, but those builds are not tested or supported, and no artifact
+> is published for them.
+>
+> **The download is not code-signed.** Windows will show a SmartScreen
+> warning ("Windows protected your PC") the first time you run it;
+> choose *More info* → *Run anyway*. This warning will appear again for
+> each new version, because an unsigned program's reputation does not
+> carry across releases. Verify your download against the published
+> SHA-256 checksum if you want certainty about what you received.
+
+## Building
+
+```sh
+cargo build --release          # both binaries
+cargo run --release -p pdfce-gui -- path/to/file.pdf
+cargo run --release -p pdfce-cli -- --help
+```
+
+Rust toolchain version is pinned in `rust-toolchain.toml`. There are no
+system dependencies to install; the GUI uses a software/OpenGL backend
+rather than requiring a Vulkan/DX12 stack.
+
+## Design
+
+Four crates, and the split is load-bearing rather than cosmetic:
+
+| Crate | Role |
+|---|---|
+| `pdfce-core` | The PDF engine — parsing, the object model, editing, writing. **Zero GUI or windowing dependencies.** |
+| `pdfce-render` | Headless rasterizer. Also zero GUI dependencies. |
+| `pdfce-cli` | The scriptable shell. |
+| `pdfce-gui` | The desktop application (egui/eframe). |
+
+Two invariants shape most decisions:
+
+- **GUI–core separation.** `pdfce-core` and `pdfce-render` never gain a
+  GUI dependency, which is what keeps an eventual WebAssembly build a
+  shell-crate swap instead of a rewrite — and what makes the GUI and
+  CLI two independent front ends over one engine.
+- **Round-trip / minimal-diff editing.** Objects pdfce did not
+  logically touch are re-emitted byte-identically, or simply omitted
+  under the default incremental save. Redaction is the one deliberate
+  exception: it must genuinely remove covered content, not mask it.
+
+Where the PDF standard is genuinely ambiguous — and it often is —
+pdfce does not pick silently. The choice becomes an operator setting
+with a documented default, reachable from *File → Settings* or from a
+plain-text file beside the program. Each one states what the standard
+leaves open, how well-founded the default is, and whether changing it
+affects the file or only the view.
+
+## Documentation
 
 | Doc | What's in it |
 |---|---|
-| `docs/ARCHITECTURE.md` | Crate layout, core data model, round-trip invariant, packaging strategy, decision log. **The logic — read this before writing any code.** |
-| `docs/ROADMAP.md` | Pass-by-Pass plan and history. Shipped / in-progress / next-up / backlog / standing rules. |
-| `docs/LEGAL.md` | License (**MIT**, chosen 2026-08-01) — but **do not publish**: pushing to a public repo or cutting a release still needs an explicit operator go-ahead, which is a separate decision and has not been given. Also PDF-spec copyright/sourcing posture, patent/trademark notes, test-corpus sourcing rules, dependency licensing & attribution discipline, and the veraPDF MPL-2.0 election (§6.5). |
-| `docs/PRIOR_ART.md` | Survey/decision record of existing open-source crates and tools pdfce depends on or learned from — what was adopted, what was reference-only, and why. |
-| `docs/SESSION_LOG.md` | Append-only session-by-session record. |
-| `.claude/agents/` | The project's engineer, librarian, PDF-spec RAG builder, Acrobat feature-parity RAG builder, and GUI specialist agents — see `CLAUDE.md` for how they fit together. |
+| `docs/FEATURES.md` | **What pdfce can do today**, per surface. Start here. |
+| `docs/ARCHITECTURE.md` | Crate layout, data model, invariants, packaging, dated decision log. |
+| `docs/ROADMAP.md` | Pass-by-pass plan and history, with the full reasoning. Large. |
+| `docs/decisions/` | Numbered decision records for the choices that needed one. |
+| `docs/LEGAL.md` | Licensing posture, PDF-spec sourcing rules, test-corpus rules, dependency attribution. |
+| `docs/PRIOR_ART.md` | What existing crates and tools were adopted, what was reference-only, and why. |
+| `docs/SESSION_LOG.md` | Append-only development record. |
 
-## The reference RAGs
+The documentation is unusually detailed on purpose: the project's
+standing rule is that the docs are the logic and the code is the syntax
+that enacts it. `ROADMAP.md` in particular is a working engineering
+record, not a brochure.
 
-Two dedicated, LLM-optimized reference corpora inform pdfce's
-development — both private development aids, outside this repo,
-never shipped or committed (see `docs/LEGAL.md` §2 and each RAG's own
-`LEGAL_NOTE.md`). Both are written for LLM consumption, not human
-reading: dense, schema-consistent, no prose padding.
+## Testing
 
-- **`D:\Dev\Rag-Specialized\PDF_Spec\`** — the PDF standard itself
-  (ISO 32000, PDF/A, PDF/UA, PAdES, and embedded specs for fonts/
-  compression/color), so byte-level parsing/writing is spec-correct,
-  not guessed from fuzzy memory. Built/maintained by
-  `pdfce-spec-librarian`.
-- **`D:\Dev\Rag-Specialized\Acrobat_Features\`** — what Adobe Acrobat
-  Pro's features actually *do* (capability, behavior, edge cases,
-  limits) — explicitly **not** how its GUI is navigated. Grounds
-  `docs/ROADMAP.md` acceptance criteria in real product behavior;
-  pdfce's own UI is designed independently. Built/maintained by
-  `pdfce-acrobat-librarian`.
+```sh
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+cargo fmt --all --check
+```
+
+Test fixtures are synthetic and generated by committed scripts under
+`tools/`. A larger corpus of third-party PDFs is used for differential
+testing against pdfium, but it is **not** redistributed in this
+repository.
+
+## Contributing
+
+This is a personal project developed in the open rather than a project
+seeking contributors, and it moves fast. Issues and observations are
+welcome; please do not be surprised if a large unsolicited pull request
+does not fit the direction. If you are considering one, open an issue
+first.
 
 ## License
 
-**Not yet chosen.** See `docs/LEGAL.md` §1. Do not treat this project
-as publicly licensed or redistributable until that's resolved.
+**MIT** — see `LICENSE`.
+
+Third-party dependency licences are generated into
+`THIRD_PARTY_LICENSES.md` by `cargo-about` and are all permissive; no
+copyleft code is linked. pdfce deliberately does not use GPL/AGPL PDF
+engines (MuPDF, Poppler, Ghostscript), which is why several things were
+implemented from the specification rather than adapted from existing
+code.
