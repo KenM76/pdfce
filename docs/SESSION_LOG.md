@@ -3714,8 +3714,9 @@ continuation 31's entry is not rewritten.)
   regression harness `tools/font-parity/` (parses every embedded font,
   asserts routing-or-clean-fail, 0 misroutes, guards the NUL bug; standing
   rule **R68**); (b) `tools/realdrawings-smoke/` (operator's private
-  read-only `R:\Products` render smoke — **results gitignored, nothing
-  proprietary committed**; font fix holds across 339 real drawings,
+  read-only drawing-library render smoke — **the "nothing proprietary
+  committed" claim here was FALSE and is corrected in `ROADMAP.md`; the
+  harness was removed 2026-08-09**; font fix holds across 339 real drawings,
   `unsupported=0`); (c) OSS-corpus expansion — **+1,109 real-world PDFs**
   (pdfium BSD 331, qpdf Apache 639, PDFBox Apache 139) into gitignored
   `fixtures/external/` with per-source PROVENANCE (**pdf.js SKIPPED** —
@@ -11887,7 +11888,7 @@ down; and a FIVE-COMMIT FILING GAP was discovered in the ledger.**
 
 **Terminology note (rule 15).** This entry says **pdf dimension** only in
 the Pass 32.0 context — the 237 labels a CAD exporter wrote into one
-`BT`…`ET` object on `SW41177.pdf`. Nothing here is about **ce
+`BT`…`ET` object on `cad-drawing-a.pdf`. Nothing here is about **ce
 dimensions** (pdfce's own authored `/Line` + `/IT /LineDimension`
 objects). Pass 27.2, which *is* about ce dimensions, is named below only
 as an unfiled commit — no ce-dimension work is filed in this entry.
@@ -11897,10 +11898,10 @@ as an unfiled commit — no ce-dimension work is filed in this entry.
 - **Pass 29.0** (`a104536`) — **composite (`/Type0` / CIDFont) text is
   editable.** Every composite run had been refused by name (R-INV-4).
   This was not an edge case: the operator's SolidWorks drawing
-  `SW41177.pdf` is set in a **subset CenturyGothic `/Type0` font**, so
+  `cad-drawing-a.pdf` is set in a **subset CenturyGothic `/Type0` font**, so
   the shipped text-editing feature (Passes 14.x, 19.x) **did not apply to
   any file he actually works on**. Verified on that real file, from the
-  **saved bytes**: `edit-text --find "FAR SLOT" --replace "NEAR SLOT"`
+  **saved bytes**: `edit-text --find "<text-a>" --replace "<text-b>"`
   took the page from **3 FAR + 1 NEAR → 2 FAR + 2 NEAR**, re-extracted
   from the saved file, render reporting `notdef=0 substituted=0
   unsupported=0`. Synthetic `composite-editable.pdf` round-trips

@@ -14647,13 +14647,13 @@ burned.]**
 **In-place text editing now works on composite (`/Type0` / CIDFont)
 fonts.** Previously **every** composite run was refused by name
 (R-INV-4). This is not an edge case for this operator: his SolidWorks
-drawing `SW41177.pdf` is set in a **subset CenturyGothic `/Type0` font**,
+drawing `cad-drawing-a.pdf` is set in a **subset CenturyGothic `/Type0` font**,
 so **no text edit on his real file was possible at all** — the shipped
 text-editing feature (Passes 14.0–14.3, 19.x) did not apply to the files
 he actually works on.
 
 **Verified on the real file, from the SAVED bytes:**
-`edit-text SW41177.pdf --find "FAR SLOT" --replace "NEAR SLOT"` took the
+`edit-text cad-drawing-a.pdf --find "<text-a>" --replace "<text-b>"` took the
 page from **3 FAR + 1 NEAR to 2 FAR + 2 NEAR**, confirmed by
 **re-extracting text from the saved file** (not from in-memory state);
 render reported **`notdef=0 substituted=0 unsupported=0`**. Synthetic
@@ -19561,10 +19561,20 @@ a shipped dependency.**
   fail (0 misroutes). Guards the NUL-misroute bug permanently; its standing
   rule is **R68** (see Standing rules). Re-runs on any `font/program.rs` /
   font-layer change.
-- **(b) Real-drawings smoke — `tools/realdrawings-smoke/`.** The operator's
-  private **read-only** `R:\Products` render smoke test — **results are
-  gitignored, nothing proprietary is committed**. Confirmed the font fix
-  holds across **339 real drawings, `unsupported=0`**.
+- **(b) Real-drawings smoke — `tools/realdrawings-smoke/`, REMOVED
+  2026-08-09.** A read-only render smoke test over a private drawing
+  library. Confirmed the font fix holds across **339 real drawings,
+  `unsupported=0`** — the finding stands; the harness does not.
+  **The claim made here originally — "nothing proprietary is committed" —
+  was FALSE.** The results were gitignored, but the harness itself was
+  committed, and it named the third party whose drawings it read plus the
+  path to them. Its own README said "Nothing in this directory is to be
+  committed at all". Found by the pre-publication audit; the directory is
+  deleted and the identifiers are redacted from this file, `SESSION_LOG.md`
+  and `decisions/008`. Struck rather than quietly rewritten, because a
+  false assurance about confidentiality is exactly the sentence a later
+  reader would otherwise trust. **NOTE: deletion does not clear git
+  history** — see the publication open item.
 - **(c) OSS-corpus expansion (`fixtures/external/`, gitignored).** +1,109
   real-world PDFs added — pdfium (BSD, 331), qpdf (Apache, 639), PDFBox
   (Apache, 139) — each with per-source `PROVENANCE`. **pdf.js was SKIPPED**
@@ -24595,7 +24605,7 @@ mind (see the gate block at the top of *Shipped*).
 to confirm).
 
 **The defect, measured on the operator's own drawing.** Deleting a text
-object on `SW41177.pdf` removes **all 237 pdf-dimension labels at once**,
+object on `cad-drawing-a.pdf` removes **all 237 pdf-dimension labels at once**,
 because the producer puts **every** label on the sheet inside **one**
 `BT`…`ET` text object. Deletion is object-granular; the operator's mental
 unit is the **run**.

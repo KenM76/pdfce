@@ -74,7 +74,7 @@ Top subtypes: `/Link` 98, `/Widget` 87, `/Circle` 47, `/Popup` 34,
 `/Highlight` 14, `/3D` 14, `/FileAttachment` 13.
 
 **Organic sample — 2,500 randomly selected (seed 20260731) of 25,203
-PDFs discovered under `D:\Stanley Dropbox`:**
+PDFs discovered under `the operator's document store`:**
 
 | Metric | Count | Share |
 |---|---|---|
@@ -103,7 +103,7 @@ and roughly one in three carries a form.** pdfce draws none of it.
    minority of form-heavy documents dominate the count. Reason from
    32.6% and 30.1%, not from 48,781.
 2. **The organic population is this operator's**, Dropbox-dominated
-   business / engineering / tax work product. That is the *right*
+   the operator's own real-world working documents. That is the *right*
    population for prioritizing this operator's tool. It is not a claim
    about PDFs in general and must never be written as one.
 3. **R31 binds me too.** This census used pypdf 6.7.0 and I did not
@@ -888,7 +888,7 @@ and the operator has not been told.
   },
 
   "measurement": {
-    "methodology": "Read-only census with pypdf 6.7.0, aggregate counts only, nothing copied (LEGAL.md §5 posture, mirroring decision 007's /Encrypt census). Script at C:\\Users\\Ken\\AppData\\Local\\Temp\\pdfce_annot_census.py (temp, not in the repo). Two populations: the full 2,914-file conformance corpus at D:\\Dev\\pdfce\\fixtures\\external, and a seeded random sample (seed 20260731) of 2,500 of 25,203 PDFs discovered under D:\\Stanley Dropbox.",
+    "methodology": "Read-only census with pypdf 6.7.0, aggregate counts only, nothing copied (LEGAL.md §5 posture, mirroring decision 007's /Encrypt census). Script at C:\\Users\\Ken\\AppData\\Local\\Temp\\pdfce_annot_census.py (temp, not in the repo). Two populations: the full 2,914-file conformance corpus at D:\\Dev\\pdfce\\fixtures\\external, and a seeded random sample (seed 20260731) of 2,500 of 25,203 PDFs discovered under the operator's document store.",
     "conformance_corpus_2914_files": {
       "files_with_annots": 338,
       "files_with_annots_pct": 11.6,
@@ -918,7 +918,7 @@ and the operator has not been told.
     },
     "honest_caveats": [
       "PER-FILE figures (32.6% annots, 30.1% AcroForm, 11.6% conformance) are robust. PER-ANNOTATION figures are concentration-skewed: 47,774 /Tx fields across 753 files is ~63 fields/file on average, which almost certainly means a minority of form-heavy documents dominate the count. The per-file numbers are the ones to reason from.",
-      "The organic population is Dropbox-dominated business / engineering / tax work product. It is representative of THIS operator, which is the right population for prioritization, and is NOT representative of PDFs in general. State it that way in any user-facing claim.",
+      "The organic population is the operator's own real-world working documents. It is representative of THIS operator, which is the right population for prioritization, and is NOT representative of PDFs in general. State it that way in any user-facing claim.",
       "R31 applies to me as much as to a reference decoder: pypdf's conventions were not independently verified for this census (e.g. inherited /Annots resolution, malformed-array tolerance). The numbers are indicative and MUST be re-measured with pdfce's own machinery before they are used as a Pass gate denominator — the W16 'a gate whose denominator is uncertain cannot report an honest shortfall' discipline.",
       "The 4 conformance files reported as /XFA and the 2 organic ones are a MEASURED answer to the standing CLAUDE.md open item 'XFA scope — verify before committing engineering time': 0.08% of the operator's own files. That is not a mandate to build XFA. It stays Backlog."
     ]

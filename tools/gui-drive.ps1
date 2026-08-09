@@ -36,12 +36,12 @@
 
 .EXAMPLE
     # Does a click at this point select anything, and what?
-    pwsh tools/gui-drive.ps1 -Pdf D:\Dev\temp\pdfce\SW41177.pdf `
+    pwsh tools/gui-drive.ps1 -Pdf cad-drawing-a.pdf `
       -Script (("wait;"*25) + "move:819,513;wait;down:819,513;up:819,513;wait;wait")
 
 .EXAMPLE
     # Double-click to descend into an object, then click away to leave.
-    pwsh tools/gui-drive.ps1 -Pdf D:\Dev\temp\pdfce\SW41177.pdf `
+    pwsh tools/gui-drive.ps1 -Pdf cad-drawing-a.pdf `
       -Script (("wait;"*25) + "down:819,513;up:819,513;down:819,513;up:819,513;wait;wait;move:600,300;wait;down:600,300;up:600,300;wait")
 
 .NOTES

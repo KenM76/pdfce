@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-Measured 2026-08-04 on Ken's own export (`D:\Dev\temp\pdfce\SW41177.pdf`,
+Measured 2026-08-04 on Ken's own export (`cad-drawing-a.pdf`,
 36 pages, page 1 has ~5900 objects):
 
 | What | Structure |
