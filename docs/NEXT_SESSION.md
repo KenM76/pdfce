@@ -12,7 +12,9 @@ filing.
 
 ## State at handoff
 
-- Branch `pass-8-redaction`, working tree clean, HEAD = **`d2d03a5`**.
+- Branch `pass-8-redaction`, working tree clean, HEAD = **`07b78ea`**.
+- **`tools/check-commits-filed.py` is RED, deliberately, on two commits.**
+  This is left visible rather than papered over — see *First task* below.
 - **2643 workspace tests, 0 failed.** `cargo clippy --workspace
   --all-targets` = 0. `cargo fmt --all --check` clean.
 - All pre-existing gates under `tools/` were clean at last run.
@@ -69,6 +71,31 @@ instead of working around it.
 rationale: the AC1015-vs-R12 correction, the AutoCAD LT 2004 constraints
 that hold by construction, why arcs are recognised rather than flattened,
 and why text goes on its own layer.
+
+---
+
+## FIRST TASK — clear the red filing gate (5 minutes)
+
+`python tools/check-commits-filed.py` exits 1 on **two** commits:
+
+| Commit | Subject | Why unfiled |
+|---|---|---|
+| `d2d03a5` | the drawing's own calibration reaches the dxf… | Landed after the librarian's Pass 52 filing had already been dispatched. |
+| `39593e1` | two gates stop scanning a window and start scanning the history | Missed earlier the same day. This is the commit that *created this very gate* — it did not file itself. |
+
+Dispatch `pdfce-librarian` with each commit's **full message** (`git show
+-s --format=%B <hash>`) — they carry the defect, the measurement and the
+owed follow-up, which is what a filing needs and a one-line subject
+cannot supply.
+
+**Do not add either to `tools/commits-filed-baseline.txt`.** That file is
+the pre-existing eleven-commit debt this gate was written around;
+extending it silences exactly what the gate exists to catch, which is the
+false-green shape R106 has been amended four times over.
+
+The gate was left red on purpose. A gate quietly made green at the end of
+a session is how the original eleven-commit backlog accumulated twice
+without anyone noticing.
 
 ---
 
