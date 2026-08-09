@@ -87,7 +87,7 @@ use tiny_skia::Transform;
 
 use crate::font::coredata::{self, BaseEncoding, Std14};
 use crate::font::program::FontProgram;
-use crate::font::{FontData, FontEnvironment, GlyphSource, select};
+use crate::font::{FallbackKey, FontData, FontEnvironment, GlyphSource, select};
 
 /// `/Widths` and `/W` are expressed in glyph space, where 1000 units =
 /// one text-space unit (§9.2.4; `iso32000__ref__text_pipeline.md` Stage
@@ -627,7 +627,48 @@ fn load_simple(
     let program = FontProgram::parse(data.bytes()).map_err(|_| UnsupportedFont::UnusableProgram)?;
     let names = encoding_table(doc, font_dict, embedded_program_present, flags, std14);
     let gids = resolve_gids(&program, &names);
-    let widths = width_table(doc, font_dict, &names, &program, std14, missing_width);
+
+    // METRICS-ONLY std-14 widening (§9.6.2.2 has no answer for this file).
+    //
+    // A font with no `/Widths`, no embedded program, and a name that is
+    // not literally one of the fourteen — `/BaseFont /Arial` is the
+    // canonical case — used to fall all the way through to
+    // `/MissingWidth`, whose default is **0**. Every glyph then advanced
+    // by nothing and the whole run stacked on one point. Measured on
+    // `pdfium/testing/resources/bookmarks.pdf`: "Page1" rendered as an
+    // unreadable pile, while pdfium and Acrobat both laid it out
+    // correctly — both alias Arial to Helvetica. pdfce disclosed only
+    // `substituted=1`, which says the SHAPES are pdfce's and says nothing
+    // about the positions being wrong.
+    //
+    // `select::by_name` already knew: it maps Arial to `Sans` in order to
+    // pick the face. That knowledge simply never reached the width
+    // ladder. Taking the metrics from the family pdfce is ALREADY drawing
+    // keeps shapes and advances from disagreeing about which font this
+    // is, and matches what both reference renderers do.
+    //
+    // Deliberately NOT reused for `encoding_table` above: `std14` there
+    // drives §9.6.6.1's symbolic classification, and widening it would
+    // change which encoding a non-embedded Arial gets. This is a metrics
+    // fix; it must not become an encoding change.
+    //
+    // Gated on `!embedded_program_present`, because a font that ships its
+    // own program and omits `/Widths` should take advances from that
+    // program, not from Helvetica's AFM table. That case is left alone.
+    let metrics_std14 = std14.or_else(|| {
+        if embedded_program_present {
+            return None;
+        }
+        select::by_name(select::strip_subset_tag(&base_font)).map(std14_for_fallback)
+    });
+    let widths = width_table(
+        doc,
+        font_dict,
+        &names,
+        &program,
+        metrics_std14,
+        missing_width,
+    );
 
     Ok(LoadedFont {
         base_font,
@@ -1051,6 +1092,36 @@ fn width_table(
         }
     }
     out
+}
+
+/// The standard-14 face whose AFM metrics stand in for a substitute slot.
+///
+/// The two enumerations describe the same fourteen faces from opposite
+/// ends — [`FallbackKey`] names the slot pdfce draws GLYPHS from,
+/// [`Std14`] names the table pdfce reads WIDTHS from — so this is a
+/// total, information-preserving mapping rather than a guess.
+///
+/// It exists because those two answers were previously reached
+/// independently: a non-embedded `/BaseFont /Arial` selected the `Sans`
+/// face for shapes and found no std-14 match for metrics, so it drew
+/// Helvetica glyphs and advanced them by zero.
+const fn std14_for_fallback(key: FallbackKey) -> Std14 {
+    match key {
+        FallbackKey::Sans => Std14::Helvetica,
+        FallbackKey::SansBold => Std14::HelveticaBold,
+        FallbackKey::SansItalic => Std14::HelveticaOblique,
+        FallbackKey::SansBoldItalic => Std14::HelveticaBoldOblique,
+        FallbackKey::Serif => Std14::TimesRoman,
+        FallbackKey::SerifBold => Std14::TimesBold,
+        FallbackKey::SerifItalic => Std14::TimesItalic,
+        FallbackKey::SerifBoldItalic => Std14::TimesBoldItalic,
+        FallbackKey::Fixed => Std14::Courier,
+        FallbackKey::FixedBold => Std14::CourierBold,
+        FallbackKey::FixedItalic => Std14::CourierOblique,
+        FallbackKey::FixedBoldItalic => Std14::CourierBoldOblique,
+        FallbackKey::Symbol => Std14::Symbol,
+        FallbackKey::Dingbats => Std14::ZapfDingbats,
+    }
 }
 
 /// Decode the embedded font program from a `FontDescriptor` (§9.8,
