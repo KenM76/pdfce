@@ -27522,3 +27522,146 @@ family).
   `SESSION_LOG.md` filing (the forty-second confirmed present by grep
   before this entry was appended). Backup/git working-tree state is not
   asserted anywhere in this filing — no shell, hard rule 8.
+
+## 2026-08-09 (forty-fourth filing) — `Pass 23.3`'s GUI half SHIPS (`6fb7ffb`): the multi-node drag gesture wired, `Commit::Node` retired for `Commit::Nodes`, and R168's SECOND instance closed — plus two RAG process findings on skipping the harness RAG before driving
+
+**Filed by `pdfce-librarian`, dispatched by the engineer to record the
+GUI half of `Pass 23.3` (this session's forty-third filing recorded the
+core half an hour earlier). No shell available to this dispatch (hard
+rule 8) — `cargo test`/`cargo fmt`/`cargo clippy`/`check-ui-strings.sh`/
+`check-bypass-paths.sh` gate results are RELAYED, not independently
+re-run.** **Independently confirmed via `Read`/`Grep` directly against
+the working tree:** `Commit::Node` is fully gone (zero hits);
+`Commit::Nodes { idx, moves }` at `main.rs:19200`; `fn node_drag_moves`
+at `:21527`, called from the shared preview/commit site at `:19625`;
+exactly **6** `#[test]` functions exercise it, read in full and named
+individually in `ROADMAP.md`'s new Shipped entry; `ObjectProvider::
+object_node_points` at `object_provider.rs:292`; the disclosure fix at
+`pdfce-core/src/vector/edit.rs:1323` (*"Moving a corner
+independently…"*), its own doc comment stating the exact reasoning
+relayed.
+
+**Shipped:**
+- `Pass 23.3` (GUI half) — `Commit::Node` → `Commit::Nodes`, every node
+  drag (single-node grabs included) routed through
+  `EditSession::move_nodes`, `node_drag_moves` computing one move list
+  shared by the live preview and the eventual commit. Filed under the
+  existing Pass ID (this librarian's recommendation, matching last
+  filing's own call), not a fresh mint — see `ROADMAP.md`'s new `Pass
+  23.3 (GUI half)` Shipped entry (top of *Shipped*) for the full record.
+
+**★ Framing, carried forward from the dispatch rather than softened:
+this is R168's SECOND instance, not only a feature.** `Pass 47.0` closed
+R168 at the object rung (a multi-object Delete silently acting on one).
+`Commit::Node` carried the identical defect one rung down — the canvas
+painted every member of `selected_nodes` as selected since `Pass 41.0`,
+while a drag committed `move_node` for the grabbed anchor alone. The
+shipped code's own doc comments name both the defect and the `Pass
+47.0` precedent verbatim. `R168`'s Standing-rules entry is amended in
+place with this as its second named consumer.
+
+**Decisions made this session:** the preview-and-commit-share-one-
+computed-list design (`node_drag_moves` called once, both the live
+preview and the commit read its output, so what the operator watches is
+by construction what lands) is recorded as a new `ARCHITECTURE.md` §12
+dated entry — the engineer's own code comment states the reasoning
+almost verbatim (*"the one that disagrees silently is the preview — the
+operator would simply have been shown a lie"*).
+
+**Findings + decisions:**
+- **The rule for three cases, all decided the same way, unprompted:** a
+  grab inside the selection translates the whole set rigidly (delta from
+  the grabbed anchor); a grab outside the selection moves only itself
+  (no precedent in this app for dragging a selection by a handle outside
+  it); a stale selection index (an undo shrank the anchor count) is
+  dropped, not guessed — moving "whichever anchor now carries that
+  number" would move something the operator never selected.
+- **A defect a unit test could not have caught, caught only by driving
+  the gesture.** `RECT_EXPANDED_DISCLOSURE` read *"Moving **one
+  corner**…"* and went false the moment a real run moved TWO corners of
+  one rectangle in one gesture. Every existing test asserted the
+  constant against ITSELF, so the wrong sentence was invisible to the
+  suite — such a test can only catch a source typo, never a sentence
+  that stopped being true. Fixed count-agnostic (*"Moving a corner
+  independently…"*). **Escalated to `D:\dev\rag\rust\` as a NEW sibling
+  file** (judged distinct in mechanism from the existing
+  `disclosure_text_must_be_tested_against_producing_branch.md`, which is
+  about a NEW branch beside a described one, not a constant embedding a
+  variable axis) —
+  `a_string_shared_by_singular_and_plural_paths_tested_against_itself_is_unfalsifiable.md`,
+  indexed this filing.
+- **`docs/FEATURES.md`'s "Node rung unreachable through the scripted
+  harness" claim was STALE — corrected this filing.** The blocker was
+  documented rapid-successive-double-click coalescing
+  (`D:\dev\rag\egui\egui_rapid_successive_double_clicks_coalesce_into_one_burst.md`,
+  fix = ~45 idle frames between gestures). Driven end to end this
+  session: `tool:obj` → double-click → Object → double-click → Part →
+  double-click a corner → Point → Ctrl-click a second corner → drag →
+  `commit-nodes idx=1 n=2 moves=[(0, (200,80)), (1, (280,80))]`, both
+  corners translated +30 exactly.
+- **★ Two RAG process findings, both about the SAME class of miss
+  recurring twice in one session — named against itself by the
+  dispatching engineer, not discovered by this librarian.** Before this
+  Pass's own verification, the engineer re-derived the double-click
+  coalescing symptom live rather than checking the file that already
+  held it; earlier the same session, the two-harnesses-different-default-
+  window-sizes finding was re-derived the same way. **Two is this
+  project's own promotion bar** (`R171` was minted at three; the
+  engineer named two here and asked this librarian to rule on whether it
+  was rule-shaped). **Ruling: yes — minted `R172`** (Standing rules) —
+  *"grep the relevant harness RAG before driving a gesture class not yet
+  exercised this session; hitting a documented failure mode live is not
+  evidence the RAG was silent."* Minted as a `ROADMAP.md` standing rule
+  rather than a `pdfce-engineer.md` edit, because this librarian does not
+  edit agent files (own hard rule 9) — flagged for the engineer to
+  consider mirroring it there too, where it would be seen sooner. Both
+  amended RAG files (`egui_rapid_successive_double_clicks_…` and its
+  `index.md` entry) carry a matching dated note.
+
+**Test results — reconciled, exact.** `cargo test --workspace`: **2586
+passed / 0 failed** (relayed). Baseline into this Pass was **2580**
+(the forty-third filing's own confirmed figure) — **+6, exactly the 6
+`node_drag_moves` tests counted directly against the source. 2580 + 6 =
+2586 — nothing left over**, no repeat of the forty-third filing's own
+first-draft arithmetic gap. `cargo fmt --all --check` clean (relayed).
+`cargo clippy --workspace --all-targets -- -D warnings`: 0 errors / 0
+warnings (relayed). `check-ui-strings.sh` clean (relayed) — the
+disclosure fix lives in `pdfce-core`, outside the GUI-crate `ui_text.rs`
+catalog rule's scope, worth noting since it is exactly the sort of
+core-vs-gui string-ownership question `CLAUDE.md` rule 15 exists to keep
+visible. `check-bypass-paths.sh` clean (relayed). No `Cargo.toml`
+touched — `cargo tree` invariant unaffected, not re-run.
+
+**Still in flight:**
+- A `pdfce-cli` subcommand for multi-node move — the only piece of
+  `Pass 23.3` (all four named components: selection, delete, move-core,
+  move-GUI) still unbuilt.
+- Arrow-key node nudge for a SINGLE node (decision 028 items 10/11) —
+  unaffected by this filing, still owed, still coupled to this
+  capability's scoping.
+- The five unfiled commits flagged by the forty-third filing
+  (`d3ea5de`/`1edf4e3`/`9abf5b5`/`e167867`/`01b90c4`) — untouched by
+  this filing, still owed by the engineer.
+
+**For next session:**
+- Scope/ship the `pdfce-cli` multi-node-move subcommand, or confirm it
+  is deliberately deferred.
+- Consider whether `R172` should also be mirrored into
+  `pdfce-engineer.md`'s pre-flight checklist (flagged, not this
+  librarian's file to edit).
+- File the five flagged commits, still owed from the forty-third filing.
+- **Ledger for this filing:** one new standing rule minted (`R172`,
+  RAG-grep-before-drive) — ceiling was `R171`, now `R172`, next free
+  `R173`. `R168`'s Standing-rules entry amended in place with a second
+  named consumer. One new `ARCHITECTURE.md` §12 dated entry (preview-
+  and-commit-share-one-list). One new `D:\dev\rag\rust\` file plus its
+  `index.md` entry. One amendment to an existing `D:\dev\rag\egui\` file
+  plus its `index.md` entry — no new egui file, per hard rule 4
+  (grepped the index first, found the existing file already covered the
+  mechanism). `Pass 23.3` is the Pass ID this filing used — COMPLETED,
+  not minted (per the engineer's own recommendation, endorsed by this
+  librarian: the GUI half is the same feature 23.3 always named).
+  Backup/git working-tree state is not asserted anywhere in this
+  filing — no shell, hard rule 8. This is the **forty-fourth**
+  `SESSION_LOG.md` filing (the forty-third confirmed present by grep
+  before this entry was appended).

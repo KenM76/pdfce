@@ -13030,3 +13030,34 @@ started).
   same commit, and the falsifying test was preserved as the refutation's
   permanent record rather than discarded once superseded. Breaking?
   **No** — additive core surface only; see §4.1 (M) for the signatures.
+- **2026-08-09 (`Pass 23.3` GUI half, `6fb7ffb`) — a multi-step
+  drag's live PREVIEW and its eventual COMMIT must read the SAME
+  computed result, never two independent derivations of "where do these
+  things end up."** `pdfce-gui`'s node-drag handling calls one pure
+  function, `node_drag_moves(grabbed, target, selected, anchors) ->
+  Vec<(usize, Point)>`, exactly once per frame; the per-frame preview
+  painter and the mouse-up commit path (`Commit::Nodes`) both consume
+  its output rather than each computing their own answer. The source
+  comment states the reasoning directly enough to record verbatim as
+  the decision: *"what the operator watches is by construction what
+  lands. Two derivations of 'where do these nodes go' would be two
+  chances to disagree, and the one that disagrees silently is the
+  preview — the operator would simply have been shown a lie and had no
+  way to tell."* **The reusable shape, generalized beyond this one
+  gesture:** any GUI feature with a live preview of a multi-step or
+  multi-target edit (drag, marquee-resize, batch rename-preview) should
+  isolate the "what will this change to" computation into one pure,
+  unit-testable function and have BOTH the preview-paint path and the
+  commit path call it, rather than letting the preview be a
+  visually-similar-but-independently-coded approximation of the commit.
+  A silently-diverging preview is a worse failure mode than no preview
+  at all, because it is trusted. **Applied here specifically to
+  discharge R168 at the node rung**: `node_drag_moves` also decides the
+  grabbed-inside-vs-outside-the-selection rule and the stale-index-
+  dropped-not-guessed rule (§4.1 has no corresponding subsection — this
+  is `pdfce-gui`-internal, not core-crate public API, so it is recorded
+  here rather than in §4.1). Breaking? **No** — `pdfce-gui`-internal
+  refactor (`Commit::Node` → `Commit::Nodes`), no core/CLI surface
+  change. `ROADMAP.md`'s `Pass 23.3 (GUI half)` Shipped entry (top of
+  *Shipped*) has the full build record, test list, and the R168-second-
+  instance framing.
