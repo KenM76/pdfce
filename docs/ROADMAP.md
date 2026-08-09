@@ -81,6 +81,492 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 51.3 — eight settings, wired to the sites that hard-coded them — 2026-08-08, committed `6d63d81`, branch `pass-8-redaction`
+
+**Filed by `pdfce-librarian`. No shell available to this dispatch (hard
+rule 8) — the gate results below are RELAYED from the operator's own
+dispatch summary, not independently re-run.** **What IS independently
+confirmed by this filing, via `Read`/`Grep` directly against the
+working tree and the spec RAG, not relayed:** `Settings`
+(`crates/pdfce-core/src/settings/mod.rs`) carries **11** `pub` fields
+(counted directly); `pdfce_render::font::RenderPolicy` exists at
+`crates/pdfce-render/src/font/mod.rs:375` with exactly the 5 fields
+named below; and the register's own ranking table
+(`D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__ref__ambiguity_settings_register.md`
+§3.1–§3.3) was read directly to verify the arithmetic in this entry,
+not taken from the operator's dispatch text. `Pass 51.3` is **MINTED**
+by this filing, a sub-pass of the existing family **51** — grepped
+`ROADMAP.md` for `Pass 51.3` first and found nothing.
+
+**Eight settings, each wired to the exact site that used to hard-code
+its answer, closing eight of the register's `18 SETTING` rows in one
+commit:**
+
+| Register ID | `Settings` field | Site it now reaches | Radius |
+|---|---|---|---|
+| `SM-A1` | `mask_resample` | `pdfce-render/src/mask.rs` (`/SMask`/`/Mask` resample) | RENDER |
+| `IM-A1` | `image_minify` | `pdfce-render/src/interpret.rs` (image-XObject minification) | RENDER |
+| `DCT-A1` | `cmyk_jpeg_polarity` | `pdfce-core/src/image_codec/dct.rs` (CMYK JPEG, no `/Decode`) | RENDER + BYTES |
+| `TX-A1` | `unmappable_code` | `pdfce-core/src/text_extract/font.rs` (§9.10.2 ladder rung 4) | EXTRACT |
+| `AT-A1` | `actual_text` | `pdfce-core/src/text_extract/mod.rs` + `layout.rs` (`/ActualText` precedence) | EXTRACT |
+| `AS-A1` | `missing_as` | `pdfce-core/src/annot.rs` + `pdfce-render/src/annot.rs` (`/AP` `/N` with no `/AS`) | RENDER |
+| `EOL-A1` | `xref_entry_eol` | `pdfce-core/src/writer/xref_out.rs` (classic xref entry terminator) | BYTES |
+| `EOL-A2` | `trailing_eol` | `pdfce-core/src/writer/save.rs` (byte after final `%%EOF`) | BYTES |
+
+**Every default is the pre-existing shipped behaviour, not a new
+choice** — pinned by tests asserting a default render/save is
+byte-identical to one where the setting is never mentioned. Nothing
+in this Pass changes what pdfce does out of the box; it only makes
+each choice nameable and changeable.
+
+**New: `pdfce_render::font::RenderPolicy`, a `Copy` bundle projected
+from `RenderOptions`** — `cmyk_intent`, `mask_resample`,
+`image_minify`, `cmyk_jpeg_polarity`, `missing_as` — **replacing the
+bare `cmyk_intent` parameter Pass 51.0 threaded through the
+interpreter chain.** The type's own doc comment gives the reason
+directly: `crate::interpret::run` already carries an
+`#[allow(clippy::too_many_arguments)]`, and R169 turned one such
+parameter (the CMYK intent) into what would have been **four more**
+independently-threaded scalars through `run`, `run_nested`,
+`run_form_at`, `trace_paths` and the annotation walk — four chances
+for one to be silently dropped at a recursion seam, where a dropped
+setting looks exactly like a setting nobody changed. A `static`/
+thread-local was rejected for the same R83 reason `cmyk_intent`
+already was: two renders of the same page must never differ for a
+reason invisible at the call site, the property `tools/render-parity`
+depends on. `missing_as` travels in the same bundle even though it is
+read by the annotation walk, not the interpreter — the type's own
+comment: splitting the bundle by consumer would mean two bundles that
+must be kept in step, which is the exact failure this Pass exists to
+avoid. **This is an architectural decision** — see the new
+`ARCHITECTURE.md` §12 entry, below.
+
+**Register arithmetic, verified against the register file directly by
+this filing (not relayed):** `§5 BUCKET 1 — SETTING (18)` ranks
+exactly 18 rows: 1 `QP-A1`, 2 `NF-A1`, 3 `DCT-A1`, 4 `SM-A1`, 5
+`TX-A1`, 6 `WB-A1`, 7 `AT-A1`, 8 `VT1`, 9 `AS-A1`, 10 `IM-A1`, 11
+`EOL-A1`, 12 `EOL-A2`, 13 `MA3`, 14 `PA-1`, 15 `LLO-A1`, 16 `LLE-A1`,
+17 `ARR-A1`, 18 `RT-N4`. `IM-A1` **is** one of the 18 (rank 10, its
+own §5.5 subsection exists) — a prior ROADMAP filing's phrasing ("new
+ambiguity... not yet back-filed to the corpus") described only that
+the per-clause spec file (`iso32000__s__8.9.md`) does not cross-
+reference it yet, not that the register itself omits it from the 18;
+noted here so the two readings are not left to disagree.
+
+**Before this Pass: 1 of 18 built (`WB-A1`, `Pass 51.1`). After: 9 of
+18 built** (`WB-A1` + the 8 rows in the table above), **9 of 18
+unbuilt**: `QP-A1` (blocked on the QuadPoints producer-order
+verification), `NF-A1`, `VT1`, `MA3`, `PA-1`, `LLO-A1`, `LLE-A1`,
+`ARR-A1`, `RT-N4`. Of the original P0-ranked 6, only `QP-A1` and
+`NF-A1` remain.
+
+**Evidence tiers, read directly from the register's own §5 entries for
+these 8 rows — the honest headline, not smoothed over:** `DCT-A1` is
+tier **(c)**, the strongest of the eight. `EOL-A1` is nominally tier
+**(c)** for the `SP LF` fallback but **carries no citation and is
+labelled "downgrade pending" in the register's own §11.3** — treated
+here as effectively unresourced pending that citation, not quoted as
+settled. The other six (`SM-A1`, `IM-A1`, `TX-A1`, `AT-A1`, `AS-A1`,
+`EOL-A2`) are tier **(d)** — reasoned guesses, written as guesses per
+R169, not as "matches common practice." **Across all 11 fields in the
+`Settings` struct** (the 8 above, plus `word_gap_ratio`/`WB-A1` tier
+(d), `separations` — a product-policy choice, not a spec ambiguity, so
+no tier applies — and `cmyk_intent`, whose best-evidenced answer is
+tier (a)/(c) but whose **shipped default deliberately does not follow
+that evidence**, see `Pass 51.2` immediately below): **exactly ONE
+field (`cmyk_jpeg_polarity`) is both tier-(c)-or-better AND followed
+as shipped.** That is the figure the settings window (`Pass 51.4`,
+below) discloses per-setting rather than asserting in the aggregate.
+
+**Finding: `UnmappableCode::Omit` loses glyph RECORDS, not only
+characters.** `pdfce-core/src/text_extract/layout.rs`'s
+`Builder::close_run` drops a run whose text is empty after mapping, so
+on a page where every code on a line fails the §9.10.2 ladder,
+`omit` yields **zero runs for that line** — positions gone, not merely
+text. `ladder_failures` still counts every occurrence, so nothing is
+hidden from the diagnostics, but the module's own prior doc comment
+described `omit` as dropping characters only; corrected at three call
+sites in the same commit. Recorded here because it is a
+documented-behaviour-vs-actual-behaviour catch, not a functional
+regression — `Omit`'s behaviour is unchanged, only its description
+was wrong.
+
+**Gates, per the operator's dispatch (relayed, not re-run):** `cargo
+fmt --check` clean · `cargo clippy --workspace --all-targets -- -D
+warnings` clean · `cargo test --workspace` 0 failed suites ·
+`check-ui-strings.sh` clean · `check-settings-consumed.py` clean,
+**11/11** — every `Settings` field now parsed, written and consumed ·
+`cargo tree -p pdfce-core` 0 GUI/windowing dependencies (rule 2
+verified).
+
+**Still open, unchanged by this Pass:** `QP-A1` and `NF-A1` (2 of the
+original P0 6) remain fully unbuilt; `VT1`, `MA3`, `PA-1`, `LLO-A1`,
+`LLE-A1`, `ARR-A1`, `RT-N4` (7 more of the 18) likewise. None of the 9
+built settings has a dedicated CLI flag or GUI control of its own
+outside `Pass 51.4`'s window (below) — `userdata/settings.txt` was the
+only surface before that Pass shipped in the same commit.
+
+#### Ledger
+
+**Not independently run this filing — no shell (hard rule 8).** Derived
+from the operator's own dispatch text (Pass ceiling **51.1**, standing
+rules **R170**, decisions **033**, `SESSION_LOG.md` **39** filings, all
+predating this filing's own two later commits) plus this filing's own
+re-grep of `ROADMAP.md`:
+- **Pass families:** `Pass 51.3` absent before this filing (grepped) —
+  **MINTED here**, sub-pass of existing family **51**. Ceiling for
+  family 51 becomes **51.3** pending the two sibling entries below;
+  next free single-number family remains **52**.
+- **Standing rules:** **R171 MINTED this filing** (see *Standing
+  rules*, above) — "a value spelled twice drifts," generalising the
+  `word_gap_ratio` derived-default finding and this session's doctest-
+  constant finding (`Pass 48.4`, below). Ceiling moves **R170 → R171**;
+  next free **R172**.
+- **Decision records:** unchanged. Highest file on disk remains `033`;
+  `034` stays CLAIMED-by-citation/UNAUTHORED (unrelated write-side
+  CMYK/YCCK topic). No new numbered record minted by this Pass — the
+  `RenderPolicy` seam is recorded as an `ARCHITECTURE.md` §12 dated
+  entry instead (this librarian's judgment call, flagged in the closing
+  report).
+- **`SESSION_LOG.md` filings:** this is the **fortieth** filing (the
+  thirty-ninth confirmed present by grep before this entry was
+  appended).
+
+---
+
+### Pass 51.4 — a settings window, at last — 2026-08-08, committed `6d63d81`, branch `pass-8-redaction`
+
+**Filed by `pdfce-librarian`. No shell available to this dispatch (hard
+rule 8) — the gate results below are RELAYED, not re-run.** **Read
+directly by this filing, not relayed:**
+`crates/pdfce-gui/src/settings_panel.rs` exists and its module-level
+doc comment states the reasoning summarised below in its own words.
+`Pass 51.4` is **MINTED**, sub-pass of family **51** — grepped
+`ROADMAP.md` for `Pass 51.4` first and found nothing.
+
+**A File-tab window, not a dock panel — the module's own doc comment
+gives the reasoning as a direct application of existing project
+precedent, not a new judgment call:** the dock's own record states the
+test *"selection state is watched, workflows are entered"* — watched
+things (page rail, object tree, the armed tool's options) earn a
+permanent compartment because they are consulted continuously while
+doing something else; Settings are the opposite, consulted in bursts
+when there is something to change. `Properties` was moved OUT of the
+dock on 2026-08-06 for exactly this reason after the operator found
+the pairing wrong (see that Pass's own entry) — putting Settings in
+would repeat the mistake with a different noun. Opened from the
+**File** tab's Settings group, matching the shape of the existing
+reset-layout chooser and shortcuts reference, and the *File → Options*
+convention an operator arriving from Office or PDF-XChange already
+expects.
+
+**Five subject groups, not a flat list of 11 radio groups.** The
+module's own reasoning: an operator opens this window with a
+*symptom* ("my black lines look grey," "copied text has no spaces"),
+and the group headings are how a symptom finds its setting — a flat
+eleven-item list makes the reader scan every one. **Colour starts
+expanded**, because it holds `cmyk_intent`, the one setting most
+likely to have brought someone here, and the only one whose default
+knowingly differs from other PDF viewers (`Pass 51.2`, below).
+
+**Every setting states three things a conventional settings dialog
+omits, per the module's own stated obligations:** (1) **what the
+default rests on** — the register's own (a)/(b)/(c)/(d) evidence tier,
+so "pdfce matched the dominant reader" and "pdfce guessed" read as the
+different claims they are (see `Pass 51.3`'s tier tally, above — most
+are (d), and the window says so rather than presenting every default
+alike); (2) **that a choice was made at all** — each group states what
+its clause leaves open, so an operator who diffs pdfce against Acrobat
+does not read the difference as a pdfce bug; (3) **which way costs
+what** — BYTES-radius settings (change the saved file) are visually
+distinguished from RENDER/EXTRACT-radius ones (change only the
+preview/extraction), because rule 3's round-trip discipline is the
+operator's concern here too, not only the engine's.
+
+**Divergence is labelled at the setting, not in a footnote.**
+`cmyk_intent = NeutralBlack`'s window text says explicitly that it
+knowingly departs from what Acrobat and pdfium do — so a future
+operator or session sees the choice was deliberate rather than
+re-investigating it as a render-parity regression.
+
+**Cancel is real: the window edits a working copy.** Nothing reaches
+the live configuration or `userdata/settings.txt` until *Save*;
+*Cancel* discards every change made in the session. Several of these
+settings change saved BYTES, so an accidental click taking effect
+immediately would be an edit the operator never intended and cannot
+see — the same reasoning behind every other direct-manipulation
+control in this project's fuzzy-never-sneaky discipline (rule 4),
+applied to a settings dialog rather than a canvas gesture.
+
+**Closes an R151-shaped gap named in both `Pass 51.0` and `Pass
+51.1`'s own filings: `Settings::save` finally has a caller.** Until
+this Pass, the store's write path was hand-edit-only — `Settings::save`
+existed, was tested, and was called from nowhere in either shell. This
+window is that caller.
+
+**Test: the panel's own source is read and the test fails if any
+`Settings` field has no control** — a source-level completeness check
+distinct from, and a stronger guarantee than, `check-settings-
+consumed.py`'s consumption check (`Pass 51.1`): a field can be
+consumed by exactly one hard-coded default with no operator-facing
+control at all, which is a different gap than being unconsumed, and
+this test is what closes it specifically for the GUI surface.
+
+**R86 discharged without taking the screen — a limitation stated
+outright, not implied by a workaround.** A `gui-shot.ps1` capture
+returned a text editor mid-edit — the operator was at the machine — so
+verification went through `gui-drive.ps1` (off-screen, never touches
+focus) via a new `settings` diagnostic step instead. **Observed:**
+`dirty=false / all_default=true` against a clean profile; `all_
+default=false` against a stored non-default settings file. **What this
+does NOT verify, stated explicitly rather than left implicit: the
+window's visual appearance.** The diagnostic confirms the panel reads
+the correct state; it does not confirm any control renders, is
+legible, or is positioned correctly. That verification remains owed.
+
+**Gates, per the operator's dispatch (relayed, not re-run):** `cargo
+fmt --check` clean · `cargo clippy --workspace --all-targets -- -D
+warnings` clean · `cargo test --workspace` 0 failed suites ·
+`check-ui-strings.sh` clean · `check-settings-consumed.py` clean,
+11/11 (shared gate with `Pass 51.3`, same commit).
+
+**`docs/FEATURES.md` updated in the same filing:** the *Persisted user
+settings* row (Shell & UX) is corrected — the "no in-app settings
+editor exists" limitation is struck, not silently removed, and
+replaced with the window's existence and its three disclosure
+obligations. Boxes were already `[x]`/`[x]`/`[x]` as of `Pass 51.0`
+(the GUI box reflected that `pdfce-gui` reads the store at startup,
+not that an editor existed) and stay unchanged — this Pass changes
+what the row says the GUI does, not its ticks.
+
+**Still open:** the rendered appearance is unverified by screenshot
+(above); no dedicated CLI surface exists for any individual setting —
+`userdata/settings.txt` and this window remain the only two ways to
+change one; ribbon-layout and keymap persistence remain unblocked-but-
+unbuilt, sharing the R15 store but needing their own document format
+per that store's own grammar note (`Pass 51.0`).
+
+#### Ledger
+
+**Not independently run this filing — no shell (hard rule 8).**
+- **Pass families:** `Pass 51.4` absent before this filing (grepped) —
+  **MINTED here**, sub-pass of family **51**, same commit as `Pass
+  51.3`. Ceiling for family 51 becomes **51.4** pending `Pass 48.4`/
+  `Pass 51.2` below; next free single-number family remains **52**.
+- **Standing rules:** unchanged by this entry — `R171` was minted by
+  the sibling `Pass 51.3` entry, above, in the same filing. Ceiling
+  **R171**, next free **R172**.
+- **Decision records:** unchanged, **034** stays CLAIMED/UNAUTHORED.
+  The settings-window-as-File-tab-window-not-dock-panel choice is
+  recorded as an `ARCHITECTURE.md` §12 dated entry (below), not a
+  numbered decision record — this librarian's judgment call, flagged
+  in the closing report.
+- **`SESSION_LOG.md` filings:** this is still the **fortieth** filing
+  (same filing as `Pass 51.3`, above).
+
+---
+
+### Pass 48.4 — TIFF joins the drag-and-drop image formats — 2026-08-08, committed `6d63d81`, branch `pass-8-redaction`
+
+**Filed by `pdfce-librarian`. No shell available to this dispatch (hard
+rule 8) — test counts and gate results below are RELAYED, not re-run.**
+**Read directly by this filing, not relayed:**
+`crates/pdfce-core/src/image_import/tiff.rs` exists; its module-level
+doc comment states the accepted-tag table and the two traps summarised
+below in its own words. `Pass 48.4` is **MINTED**, a sub-pass of the
+existing family **48** (`Pass 48.0`–`48.3` already headed) — grepped
+`ROADMAP.md` for `Pass 48.4` first and found nothing.
+
+**Closes the gap `Pass 48.0`'s own Shipped entry named by scope: "TIFF
+was scoped OUT by name, with a costed MVP recorded in the dispatch
+reaching this filing but not reproduced here"** — see the struck note
+added to that Pass's own Limits section, below, per this file's
+append-only correction discipline (struck, not rewritten). **Hand-
+written, no new `Cargo.toml` dependency** — reuses pdfce's existing
+PackBits/LZW/Flate filter machinery rather than pulling a TIFF crate.
+
+**Accepted (baseline TIFF 6.0, 1992-06-03), per the module's own
+table:** both byte orders (`II`/`MM`); classic (version 42) only;
+compression none/LZW/Deflate/PackBits; photometric WhiteIsZero/
+BlackIsZero/RGB/Palette; bits-per-sample 1/2/4/8/16 uniform across
+samples; strips only (chunky planar config); predictor none/horizontal
+differencing; orientation 1–8, applied in the placement matrix;
+resolution in inches or centimetres; multi-page files read the first
+IFD only, with the remaining pages counted and disclosed rather than
+silently dropped. **The module's own framing: TIFF is a directory of
+tags describing an arbitrary sample grid, not a single fixed layout —
+so the module's shape is "decide whether every declared tag
+combination can be represented faithfully, and refuse by name the
+moment it cannot," not "decode and hope."**
+
+**Two traps the module's own doc comment names as the reason a generic
+TIFF reader would have gotten this quietly wrong — flagged here rather
+than filed to any RAG, because both are two CANONICAL FORMAT
+SPECIFICATIONS disagreeing with each other, not a real-world file
+diverging from a spec (hard rule 6: that class belongs to
+`pdfce-spec-librarian`'s territory, not `personal_rag/pdf`'s — engineer
+should dispatch the spec-librarian if either is worth a citeable RAG
+entry):**
+1. **16-bit sample byte order is independent of the header's own byte
+   order.** Every IFD *tag* is read in the header's declared order —
+   every implementation gets that part right — but ISO 32000-1 §8.9.3
+   requires PDF image samples stored **high-order byte first**
+   regardless of source byte order, so a 16-bit little-endian (`II`)
+   TIFF's **pixel data**, not merely its tags, must be byte-swapped.
+   `Plan::swap16` performs this, and it runs **before** un-prediction,
+   because TIFF 6.0 §14's horizontal differencing operates on the
+   16-bit sample **values**, which `predictor::unpredict` reads
+   big-endian per §7.4.4.4 rule 3 — swapping in the wrong order would
+   un-predict scrambled values.
+2. **PackBits and PDF's `RunLengthDecode` disagree on exactly one
+   byte**, despite ISO 32000-1 §7.4.5 and TIFF 6.0 §9 defining
+   byte-identical run semantics otherwise (`0..=127` = `L+1` literal
+   bytes, `129..=255` = `257−L` copies): length byte `128`/`0x80` means
+   **EOD, stop** under §7.4.5 and **no-op, skip and continue** under
+   TIFF 6.0 §9. TIFF has no end-of-data marker at all — a strip ends
+   when the expected decoded byte count is reached — so real TIFF
+   writers do emit `0x80` as alignment padding, and
+   `crate::filters::runlength::decode` (the PDF-side decoder) cannot be
+   reused without silently truncating those strips. TIFF got its own
+   decoder rather than a shared one with a flag.
+
+**20 tests** covering baseline + PackBits/LZW/Flate, both byte orders,
+associated-vs-unassociated alpha (relayed count).
+
+**`SUPPORTED_FORMATS` now reads "PNG, JPEG, BMP and TIFF."** Closes
+the drag-and-drop image-format gap named in `Pass 48.0`'s own Limits
+section.
+
+**Finding: a test whose premise the feature itself changed.**
+`image_placement.rs::an_unsupported_format_refuses_by_name` asserted
+TIFF was refused; removed with an explanatory note rather than
+silently deleted, because a shrinking refusal test is normally how
+coverage erodes unnoticed, and "we support it now" vs. "something
+broke" needs to be distinguishable by whoever reads the diff later.
+
+**Finding: a doctest hard-coded a copy of `SUPPORTED_FORMATS` and went
+stale the moment TIFF landed** — now references the constant instead
+of restating its contents, so the next format update keeps the doctest
+correct by construction. **This is the third instance of the same
+defect class in one session** (alongside `Pass 51.0`'s
+`word_gap_ratio` derived-default divergence and the settings-file
+token-spelling pattern already documented in `settings/mod.rs`'s own
+comments) — promoted to standing rule **R171**, minted in `Pass
+51.3`'s own entry, above.
+
+**Gates, per the operator's dispatch (relayed, not re-run):** `cargo
+fmt --check` clean · `cargo clippy --workspace --all-targets -- -D
+warnings` clean · `cargo test --workspace` 0 failed suites ·
+`check-ui-strings.sh` clean · `cargo tree -p pdfce-core` 0 GUI/
+windowing dependencies (rule 2 verified — no new dependency of any
+kind, GUI or otherwise).
+
+**Still open:** no operator-facing quality/format-preference control
+for TIFF import (same posture as JPEG's write-side quality control,
+`Pass 48.2`); the two canonical-spec disagreements above are flagged
+to the engineer for a possible spec-RAG dispatch, not filed by this
+librarian.
+
+#### Ledger
+
+**Not independently run this filing — no shell (hard rule 8).**
+- **Pass families:** `Pass 48.4` absent before this filing (grepped) —
+  **MINTED here**, sub-pass of existing family **48** (`48.0`–`48.3`
+  already headed). Next free single-number family remains **52**.
+- **Standing rules:** unchanged by this entry — `R171` minted by the
+  sibling `Pass 51.3` entry, same filing. Ceiling **R171**, next free
+  **R172**.
+- **Decision records:** unchanged, **034** stays CLAIMED/UNAUTHORED.
+- **`SESSION_LOG.md` filings:** this is still the **fortieth** filing.
+
+---
+
+### Pass 51.2 — black ink is black by default: a knowing divergence, not a corrected guess — 2026-08-08, committed `780b2fb`, branch `pass-8-redaction`
+
+**Filed by `pdfce-librarian`. No shell available to this dispatch (hard
+rule 8).** `Pass 51.2` is **MINTED**, sub-pass of family **51** —
+grepped `ROADMAP.md` for `Pass 51.2` first and found nothing. Filed
+chronologically BELOW `Pass 51.3`/`51.4`/`48.4` in this reverse-
+chronological section because `780b2fb` is the PARENT of `6d63d81`,
+the commit those three entries record — the numbering (`51.2` <
+`51.3`) tracks shipment order, the section position tracks recency.
+
+**The operator's own ruling, verbatim: "flip it."** The shipped
+`cmyk_intent` default moves from `Calibrated` to `NeutralBlack`
+(`crates/pdfce-core/src/settings/mod.rs:297–298`, read directly by
+this filing — the type's own doc comment states the ruling and the
+date). **This is filed as a KNOWING DIVERGENCE, not as a corrected
+guess, and the distinction is load-bearing:** standing rule R169 says
+an installed default is "the best-sourced guess of common practice" —
+and by that rule alone the default would have STAYED `Calibrated`,
+because `Calibrated` is the tier-(a)/(c)-evidenced answer (`Pass
+51.0`'s own entry: what Acrobat's own default profile and pdfium's
+calibrated table both produce). Ken overrode that evidence having seen
+its effect on pure-K CAD line art — a `0 0 0 1 k` line rendering
+`#231F20` instead of `#000000` reads as wrong on the documents he
+actually opens, whatever a corpus of other viewers does. **A future
+session must not read this default as evidence about what other PDF
+readers do** — it is evidence about what the operator wants pdfce to
+show him, which is a different claim, and the settings window
+(`Pass 51.4`, above) discloses the divergence at the setting for
+exactly this reason.
+
+**The divergence is narrow by construction, not a reversion of `Pass
+49.0`'s calibration work.** Only the **pure-K axis** moves: with
+`C = M = Y = 0`, `NeutralBlack` renders a true neutral `1 − K` (so
+solid black is `#000000` again); every **mixed** colour keeps using
+the calibrated table `Pass 49.0` built, untouched. `Calibrated` remains
+available as an explicit, non-default choice for an operator who wants
+Acrobat/pdfium's own warm near-black.
+
+**Correction required at three sites that stated the OLD default as
+current fact, applied here and cross-referenced at each site, struck
+not rewritten per this file's own append-only discipline:** `Pass
+51.0`'s own Shipped entry above (its "solid black ink renders `#231F1F`
+by default" sentence), `ARCHITECTURE.md` §12's `Pass 51.0` entry, and
+`docs/FEATURES.md`'s CMYK-conversion row (Fonts & rendering) all
+described the shipped default as producing `#231F20`/`#231F1F`. As of
+this Pass, the SHIPPED DEFAULT renders solid K as `#000000` again;
+`#231F20` is now what `Calibrated` produces as an explicit,
+non-default choice. All three are corrected in this same filing.
+
+**"fix it" — `docs/decisions/003-distribution-posture.md` §6.3's
+literal `<user-state>` placeholder is now resolved on disk.** Flagged
+unresolved in both `Pass 51.0` and `Pass 51.1`'s own filings (this
+librarian explicitly declining to rewrite a decision record's authored
+text, per this librarian's own tier boundary). **The engineer made the
+substitution directly in this commit** — `<user-state>` → `userdata`,
+with a dated `AMENDED IN PLACE 2026-08-08` header on the decision
+record itself, per the same "an amendment is filed against every
+editable location, in the same filing" discipline this project already
+applies elsewhere (`ROADMAP.md`'s own *Update protocol* section). This
+librarian did not perform the edit and is not claiming credit for it —
+recorded here so the open item stops appearing unresolved in future
+filings.
+
+**Gates, per the operator's dispatch (relayed, not re-run):** `cargo
+fmt --check` clean · `cargo clippy --workspace --all-targets -- -D
+warnings` clean · `cargo test --workspace` 0 failed suites ·
+`check-ui-strings.sh` clean.
+
+#### Ledger
+
+**Not independently run this filing — no shell (hard rule 8).**
+- **Pass families:** `Pass 51.2` absent before this filing (grepped) —
+  **MINTED here**, sub-pass of family **51**. Family 51 now spans
+  `51.0`–`51.4`; next free single-number family remains **52**.
+- **Standing rules:** unchanged by this entry — R171 minted above in
+  the same filing's `Pass 51.3` entry. Ceiling **R171**, next free
+  **R172**.
+- **Decision records:** unchanged, **034** stays CLAIMED/UNAUTHORED.
+  Decision **003**'s §6.3 amendment (above) is a correction to an
+  EXISTING record, not a new one — no ledger number consumed.
+- **`SESSION_LOG.md` filings:** this is still the **fortieth** filing —
+  all four Pass entries in this filing (`51.3`, `51.4`, `48.4`, `51.2`)
+  share one `SESSION_LOG.md` entry, appended once, below.
+
+---
+
 ### Pass 51.1 — two settings that did nothing, and a gate so that cannot recur — 2026-08-08, committed `7e33d52`, branch `pass-8-redaction`
 
 **Filed by `pdfce-librarian`. No shell available to this dispatch (hard
@@ -369,6 +855,17 @@ figure (`r∈[0x20,0x27]`, `g∈[0x1C,0x23]`, `b∈[0x1D,0x24]`), not the exact
 value, and `#231F1F` falls inside it on every channel — filed here per
 hard rule 10 (a figure that could disagree with another one gets checked
 against it, not silently assumed consistent), and it checks out.
+
+**★ CORRECTED 2026-08-08 (`Pass 51.2`, `780b2fb`) — this paragraph
+described the SHIPPED DEFAULT as `calibrated` (rendering `#231F1F`).
+That is no longer true and is left visible rather than silently fixed,
+per this file's own append-only correction discipline.** The operator
+ruled "flip it" the same session: the shipped default is now
+`neutral_black` (solid `0 0 0 1 k` renders `#000000` by default);
+`#231F1F`/`#231F20` is what `calibrated` produces as an explicit,
+non-default choice. See `Pass 51.2`'s own Shipped entry, above, for the
+full ruling and why it is filed as a knowing divergence rather than a
+correction to this Pass's own evidence.
 
 **Independently confirmed by this filing (via `Read`/`Grep`, not
 relayed) — narrows the operator's own "17 of 18 unbuilt" framing rather
@@ -1060,11 +1557,15 @@ build via `PrintWindow` captures, not inferred from source reading alone.
   cases were not itemised in the dispatch reaching this filing; owed to
   whoever picks up the remainder — see *For next session*,
   `SESSION_LOG.md`.)
-- **TIFF was scoped OUT by name**, with a costed MVP recorded in the
+- ~~**TIFF was scoped OUT by name**, with a costed MVP recorded in the
   dispatch reaching this filing but not reproduced here — see
   `SESSION_LOG.md`'s *Findings + decisions* for what is preserved of it,
   and flag to the engineer that the full costing belongs in `ROADMAP.md`
-  proper once re-supplied.
+  proper once re-supplied.~~ **★ BUILT 2026-08-08 (`Pass 48.4`, `6d63d81`,
+  same session) — struck, not deleted, per this file's append-only
+  correction discipline. See `Pass 48.4`'s own Shipped entry, above, for
+  the accepted-tag baseline, the two TIFF/PDF-spec byte-level traps it
+  found, and the 20-test coverage.**
 
 #### Ledger
 
@@ -28821,10 +29322,18 @@ nothing gets forgotten, not as a commitment to build in this order.
     |---|---|---|---|---|
     | 1 | `QP-A1` | `annots.quadpoints_order` | BYTES | Unbuilt. pdfce authors Z/reading order **against** §12.5.6.10's stated CCW — the highest-BYTES-radius undisclosed pick in the register (its severity was mis-stated as R35/redaction territory by an earlier filing; **corrected above** — it does not affect redaction). **Blocked on the QuadPoints producer-order verification** — see the `Pass 50.0` Shipped entry's "Open item"; the engineer is investigating separately |
     | 2 | `NF-A1` | `forms.needappearances_policy` | BYTES+RENDER | Unbuilt. tier-(a) default already available (Acrobat's own guidance: don't trust the flag) |
-    | 3 | `DCT-A1` | `images.cmyk_jpeg_polarity` | RENDER+BYTES | Unbuilt. wrong = a photographic negative; already disclosed (R30) — the knob is the missing half |
-    | 4 | `SM-A1` | `images.mask_resample_filter` | RENDER | Unbuilt. live since Pass 48.x; every size-mismatched mask hits it |
-    | 5 | `TX-A1` | `text.unmappable_code_sentinel` | EXTRACT | Unbuilt. an EXTRACT setting is a correctness setting — changes redaction-by-text coverage (R35) |
+    | 3 | `DCT-A1` | `images.cmyk_jpeg_polarity` | RENDER+BYTES | ~~Unbuilt. wrong = a photographic negative; already disclosed (R30) — the knob is the missing half~~ **★ DONE (`Pass 51.3`, `6d63d81`, 2026-08-08).** Tier **(c)**, the strongest of this session's 8 — see `Pass 51.3`'s own entry |
+    | 4 | `SM-A1` | `images.mask_resample_filter` | RENDER | ~~Unbuilt. live since Pass 48.x; every size-mismatched mask hits it~~ **★ DONE (`Pass 51.3`, `6d63d81`, 2026-08-08).** Tier (d) |
+    | 5 | `TX-A1` | `text.unmappable_code_sentinel` | EXTRACT | ~~Unbuilt. an EXTRACT setting is a correctness setting — changes redaction-by-text coverage (R35)~~ **★ DONE (`Pass 51.3`, `6d63d81`, 2026-08-08).** Tier (d) — see `Pass 51.3`'s own finding that `UnmappableCode::Omit` drops glyph RECORDS, not only characters |
     | 6 | `WB-A1` | `text.word_gap_ratio` | EXTRACT | **★ DONE (`Pass 51.1`, `7e33d52`, 2026-08-08).** `ExtractOptions::with_word_gap_ratio(settings.word_gap_ratio)` reaches `pdfce-cli`'s `extract-text` subcommand and its block recogniser (`main.rs:8064`, `:8454`) — **CLI only; the GUI has no text-extraction surface to wire it into, so there is nothing there to be missing.** No dedicated `--word-gap-ratio` CLI flag exists — `userdata/settings.txt` is still the only way to change it, same as `cmyk_intent` |
+
+    **★ CORRECTED 2026-08-08 (`Pass 51.3`, `6d63d81`) — of the original
+    P0-ranked 6, only rows 1 (`QP-A1`, blocked) and 2 (`NF-A1`, unbuilt)
+    remain. Rows 3–6 are all done.** `Pass 51.3` also built 5 more of the
+    register's 18 outside this P0 ranking (`AT-A1` rank 7, `AS-A1` rank
+    9, `IM-A1` rank 10, `EOL-A1` rank 11, `EOL-A2` rank 12 — see that
+    Pass's own table) — the "Register-level arithmetic" paragraph below
+    is corrected to match.
 
     **Not on the original P0 list, shipped anyway as `Pass 51.0`:**
     `cmyk_intent` (§8.6.4.4's screen-conversion silence) — a **new**
@@ -28849,7 +29358,7 @@ nothing gets forgotten, not as a commitment to build in this order.
     above — it is a `Pass 50.0` product-policy choice, not a spec
     ambiguity.**
 
-    **Register-level arithmetic, made exact by this correction:** of the
+    ~~**Register-level arithmetic, made exact by this correction:** of the
     18 SETTING-classified register rows, `WB-A1` is now the first
     genuinely built — **1 of 18 done, 17 of 18 unbuilt**, a figure that
     is now literally true rather than approximately so (`Pass 51.0`'s
@@ -28857,27 +29366,59 @@ nothing gets forgotten, not as a commitment to build in this order.
     `WB-A1` was merely stored — this Pass is what makes that sentence
     correct rather than optimistic-by-one-notch). `cmyk_intent` is not
     counted in the 18 — it is a new entry Pass 51.0 minted, not
-    back-filed to the corpus (above).
+    back-filed to the corpus (above).~~ **★ CORRECTED 2026-08-08 (`Pass
+    51.3`, `6d63d81`), struck rather than silently fixed, per this
+    file's own append-only correction discipline. `IM-A1` IS one of the
+    18** (rank 10, §5.5 exists in the register) — the struck paragraph's
+    "not counted in the 18" was wrong; only `cmyk_intent` and
+    `separations` sit outside the 18 (the former a new entry the
+    register itself marks "(new)" at its own rank, the latter a
+    product-policy choice, not a spec ambiguity). **Current arithmetic,
+    verified directly against the register's §3.1–§3.3 ranking table:
+    9 of 18 built** (`WB-A1`, `DCT-A1`, `SM-A1`, `TX-A1`, `AT-A1`,
+    `AS-A1`, `IM-A1`, `EOL-A1`, `EOL-A2`), **9 of 18 unbuilt** (`QP-A1`,
+    `NF-A1`, `VT1`, `MA3`, `PA-1`, `LLO-A1`, `LLE-A1`, `ARR-A1`,
+    `RT-N4`). See `Pass 51.3`'s own Shipped entry for the full table and
+    per-ID sourcing.
 
-  - **Evidence tiers came out thin, and that is reported rather than
+  - ~~**Evidence tiers came out thin, and that is reported rather than
     smoothed over.** Only **2 of 18** bucket-1 defaults reach tier (a)
     (observed Acrobat behaviour); **1 reaches tier (c)**; the rest are
     tier (d) — reasoned guesses, written as guesses per R169. Do not
     describe a tier-(d) default to the operator as "matches common
-    practice" — it does not have that evidence yet.
+    practice" — it does not have that evidence yet.~~ **★ UPDATED
+    2026-08-08 (`Pass 51.3`) — of the 9 now built, `DCT-A1` is tier (c);
+    `EOL-A1` is nominally tier (c) but carries no citation and is
+    labelled "downgrade pending" in the register's own §11.3; the other
+    7 (`WB-A1`, `SM-A1`, `IM-A1`, `TX-A1`, `AT-A1`, `AS-A1`, `EOL-A2`)
+    are tier (d). Across ALL 11 `Settings` fields including `cmyk_intent`
+    (whose best evidence is tier (a)/(c) but whose SHIPPED DEFAULT
+    deliberately does not follow it, per `Pass 51.2`) and `separations`
+    (no tier applies, product policy): exactly ONE field
+    (`cmyk_jpeg_polarity`) is both tier-(c)-or-better AND followed as
+    shipped — the settings window (`Pass 51.4`) discloses this per
+    setting rather than presenting every default alike.**
   - **`10 of the 18` bucket-1 settings are ALREADY hard-coded in
     shipped source**, with `file:line` given in the register's §4 —
     pdfce has silently picked a side ten times. `QP-A1` (above) is
     named the urgent one: every other row picked the conservative side
     or discloses at runtime; QuadPoints picked the side the standard's
-    own sentence argues against, invisibly.
-  - **New ambiguity minted by the register's dispatch, not yet
+    own sentence argues against, invisibly. **This bullet describes the
+    state BEFORE `Pass 51.0`–`51.3` built any settings and is left
+    unamended as a historical record of what the register's §4 grep
+    found** — most of the 10 have since become disclosed, changeable
+    settings rather than silent picks (see the arithmetic above).
+  - ~~**New ambiguity minted by the register's dispatch, not yet
     back-filed to the corpus: `IM-A1`** — §8.9.5.3 defines
     `/Interpolate` only for *magnification* and is silent on
     *minification*; pdfce point-samples on the way down today, which
     the register argues is defensible but unverified against real
     viewer behaviour. Register-local until `iso32000__s__8.9.md` gains
-    the entry — owed to `pdfce-spec-librarian`.
+    the entry — owed to `pdfce-spec-librarian`.~~ **★ BUILT 2026-08-08
+    (`Pass 51.3`, `6d63d81`) as `images.image_minify`** — see that
+    Pass's own table. Still owed to `pdfce-spec-librarian`: back-filing
+    `IM-A1` into `iso32000__s__8.9.md` itself, which is unaffected by
+    pdfce now shipping the setting.
   - **Corrections owed to the spec RAG, deliberately NOT applied by the
     register's own dispatch (concurrent-write avoidance with the
     colour work) — flagged here so they are not lost:** most urgently,
@@ -28902,6 +29443,56 @@ nothing gets forgotten, not as a commitment to build in this order.
     underlying producer-order question now, separately from this
     filing** — check `SESSION_LOG.md` for the outcome before treating
     `QP-A1`'s default as settled.
+  - **OPEN DECISION, NOT RESOLVED BY THIS FILING: `EOL-A1`'s register
+    recommendation is not what pdfce ships.** The register's §5.11
+    RECOMMENDED DEFAULT is option **(iv)** — *"match the base file's
+    existing form on a full rewrite; `SP LF` for a new file"* — while
+    `Pass 51.3` ships a FIXED `SP LF` regardless of the base file's own
+    form. `pdfce-core/src/settings/mod.rs`'s own doc comment on
+    `xref_entry_eol` (read directly by this filing) states the tension
+    itself: *"a full rewrite changing two bytes in every xref entry of
+    an otherwise-untouched file"* is precisely the diff rule 3 exists to
+    prevent — so the shipped default is arguably wrong on pdfce's own
+    round-trip/minimal-diff invariant, not merely under-evidenced.
+    Option (iv) is UNIMPLEMENTED and needs a channel carrying the base
+    file's observed EOL form into the writer, which does not exist
+    today. **Two related inconsistencies, each documented at its own
+    site, not fixed by this filing:** `pageops/assemble.rs:1254`
+    (extract/split/merge output) and `pdfce-cli`'s redaction save
+    (`main.rs:7628`) both use EOL **defaults** rather than the
+    operator's persisted choice, so a document pdfce ASSEMBLES ignores
+    `xref_entry_eol`/`trailing_eol` while one it plain SAVES honours
+    them — an inconsistency inherited from `Pass 51.3`'s own wiring
+    scope, not introduced by this filing. **Also unresolved:** the
+    tier-(c) evidence claimed for the shipped `SP LF` fallback has **no
+    citation** in the register and is labelled "downgrade pending" in
+    its own §11.3 (cross-referenced above). This librarian is
+    DELIBERATELY NOT RESOLVING any of the three — filed as an open
+    decision for the engineer, not a defect to silently patch.
+- **OPEN ITEM, NOT RESOLVED: the render-parity band is corpus-relative
+  and silently reclassifies bugs as the corpus grows.** Per the
+  `render-parity` harness's own derivation (above, *Tolerance band —
+  EMPIRICAL, not tuned*): the band is **p99.9 of `frac_over_32` over
+  the clean-by-construction population**, so growing that population
+  MOVES the bucket boundary — a page can change classification with NO
+  change to its own measurement. Reported this session: `veraPDF TWG
+  A019-pdfa2-pass-a.pdf` p1, whose measurement is identical to the last
+  decimal place across two runs, moved from `unexplained-divergence`
+  into `benign-renderer-noise` between corpus sizes. **`unexplained: 1`
+  and `unexplained: 3` are therefore different PARTITIONS of the same
+  population, not two values of one quantity** — a bare count cannot be
+  compared across runs without also stating the corpus size and band
+  value it was computed against, per hard rule 10. **This needs a
+  decision record, not a patch** — a fixed band (set once, never
+  re-derived) trades the self-tuning property W14 relies on for
+  run-to-run comparability; a corpus-relative band (current behaviour)
+  trades comparability for self-tuning. Neither is free, and this
+  librarian is not choosing between them. **First full external corpus
+  run now completes, filed per hard rule 10 with the total beside its
+  per-item form and the denominator stated:** 4,023 files, 641 s total
+  (**159 ms/file over 4,023 files**), 3,714 pages measured, 3
+  `unexplained-divergence` candidates (untriaged as of this filing), 1
+  reference-render (pdfium) abort.
 - **UI font coverage for non-Latin file paths and document metadata**
   (filed 2026-07-30 from decision 002 §3.2 / §10 item 10). A **live
   rendering-correctness bug today**, independent of localization:
@@ -36946,6 +37537,34 @@ and
   (which govern genuine spec silence) — R170 is about the engineer's
   own work-queue discipline when a defect is found, not about how
   pdfce handles an ambiguous or malformed file.
+- **R171 — A constant, default, or token that must agree with another
+  place in the codebase is READ off the one place that owns it, never
+  RESTATED at the second place** (librarian-proposed, minted 2026-08-08
+  on the engineer's invitation, after this exact defect class recurred
+  three times in one session). A restated copy is not a stronger
+  guarantee than a single source of truth plus a test — it is a weaker
+  one, because it adds a second sentence that can drift from the first
+  and a test only catches the drift *after* it has already shipped.
+  **Three instances in the session that minted this rule, escalating in
+  cost:** (1) `Settings::default()`'s `#[derive(Default)]` gave
+  `word_gap_ratio = 0.0` against `ExtractOptions::default()`'s real
+  `0.20` — caught by a round-trip test in minutes (`Pass 51.0`); fixed
+  by reading the value off `ExtractOptions::default()` instead of a
+  literal. (2) `crates/pdfce-core/src/settings/mod.rs`'s own doc
+  comments on `separation_token`/`cmyk_token`/`mask_resample_token`/etc.
+  already named the failure generically ("spelling a token in two
+  places is how a writer and a parser come to disagree") — this rule
+  promotes that per-function comment to a project-wide standing rule
+  rather than leaving the lesson local to one module. (3) A doctest in
+  the image-import module hard-coded a **copy** of `SUPPORTED_FORMATS`
+  and silently went stale the moment TIFF was added (`Pass 48.4`,
+  6d63d81) — fixed by having the doctest read the constant instead of
+  restating its contents. **The fix is never "add a test asserting the
+  two copies still match"** — that test itself is a second place that
+  must be kept in step with a first; the fix is deleting the second
+  copy so there is only one place to keep in step with anything. Applies
+  to defaults, enum-to-string tables, generated-file grammars, and any
+  doctest or fixture that quotes a value the source already names.
 
 ## Update protocol
 

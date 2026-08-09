@@ -159,10 +159,44 @@ pub fn show(
 ) -> Outcome {
     let mut outcome = Outcome::Idle;
 
+    // Centred by DEFAULT POSITION, not by anchor. Both centre the window;
+    // only one of them lets the operator then move it, and a settings
+    // window that cannot be dragged aside to look at the document behind
+    // it is the same "pinned thing in the way" complaint that got the
+    // accept/reject boxes moved off the page in decision 024.
+    //
+    // Centring at all is the fix for what the first screenshot showed:
+    // egui's own default put the window at the top-left, directly over the
+    // Quick Access Toolbar and the ribbon tabs — so opening Settings hid
+    // the control that opened it.
+    // egui 0.35 renamed this: it is `InputState::content_rect`, not
+    // `Context::screen_rect`. `content_rect` rather than `viewport_rect`
+    // because it subtracts safe-area insets, so the window is centred in
+    // the space actually usable rather than in the raw surface.
+    let screen = ctx.input(egui::InputState::content_rect);
+    // Sized FROM THE SCREEN rather than a fixed 620x620. The fixed size
+    // left roughly half the available height unused on a normal display
+    // while still scrolling — the worst combination, because the reader
+    // pays the cost of scrolling without getting the room that would have
+    // avoided it. Capped so it does not become a full-height wall on a
+    // tall monitor, and floored so it stays usable on a short one.
+    let size = egui::vec2(
+        620.0_f32.min(screen.width() - 40.0).max(420.0),
+        (screen.height() * 0.82).clamp(420.0, 900.0),
+    );
+    let centred = egui::pos2(
+        (screen.width() - size.x).max(0.0) / 2.0,
+        // Slightly above centre. A tall dialog centred exactly tends to sit
+        // low once its own title bar is counted, and the bottom row of
+        // buttons is the part that must not fall off a short screen.
+        ((screen.height() - size.y).max(0.0) / 2.0 - 20.0).max(0.0),
+    );
+
     egui::Window::new(ui_text::settings_window_title())
         .collapsible(false)
         .resizable(true)
-        .default_width(600.0)
+        .default_pos(centred)
+        .default_size(size)
         .open(open)
         .show(ctx, |ui| {
             ui.label(ui_text::settings_intro());
@@ -178,8 +212,19 @@ pub fn show(
             );
             ui.separator();
 
+            // The scroll area takes whatever the window has left after the
+            // intro and the button row, rather than a fixed 460 pt.
+            //
+            // The fixed height was wrong in a way the screenshot showed
+            // plainly: it clipped the last group's heading in half, so
+            // "Saving files" read as a rendering fault rather than as
+            // something to scroll to. Sizing from the window also means
+            // resizing the window actually gains reading room, which is
+            // what a resizable window implies.
+            let reserved = 96.0;
+            let available = (ui.available_height() - reserved).max(180.0);
             egui::ScrollArea::vertical()
-                .max_height(460.0)
+                .max_height(available)
                 .show(ui, |ui| {
                     group(ui, ui_text::settings_group_colour(), true, |ui| {
                         cmyk_intent_setting(ui, draft);

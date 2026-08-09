@@ -2627,9 +2627,15 @@ instances (`delete_object`, `delete_redaction_mark`, and now
   both `pdfce-cli` and `pdfce-gui` load it once at startup. User state
   never sits loose among the binaries; the update instructions name
   exactly which files to keep. The packaging smoke test verifies the
-  partition. **Still open:** no in-app settings editor exists yet —
+  partition. ~~**Still open:** no in-app settings editor exists yet —
   `Settings::save` has no caller anywhere in the workspace; the file is
-  hand-edit-only until a future Pass adds a write path.
+  hand-edit-only until a future Pass adds a write path.~~ **★ BUILT
+  2026-08-08 (`Pass 51.4`, `6d63d81`) — a File-tab settings window now
+  exists** (`crates/pdfce-gui/src/settings_panel.rs`), grouped by
+  subject, disclosing each setting's evidence tier and BYTES-vs-RENDER/
+  EXTRACT blast radius, editing a working copy that only reaches disk
+  on Save. `Settings::save` has its first caller. See §12's `Pass 51.4`
+  entry and `docs/ROADMAP.md`'s own Shipped entry for the full record.
 - No registry writes, no `%APPDATA%` requirement for the app to run
   (per-user settings/recents may still use a conventional config dir,
   but the app must run read-only-folder-clean with no config present).
@@ -12519,3 +12525,72 @@ started).
     recurrence of this exact defect class (parsed + written +
     documented, read by nothing) — see `docs/ROADMAP.md`'s `Pass 51.1`
     Shipped entry for the full record.
+    **★★ CORRECTED AGAIN 2026-08-08 (`780b2fb`, `Pass 51.2`), struck
+    rather than silently fixed.** This entry's own "closing... with
+    `#231F20`" clause described `calibrated` as the SHIPPED DEFAULT.
+    The operator ruled "flip it" the same session: the shipped default
+    is now `neutral_black`, rendering solid `0 0 0 1 k` as `#000000`
+    again; `#231F20` is what `calibrated` now produces as an explicit,
+    non-default choice. Filed as a KNOWING DIVERGENCE from R169's own
+    "best-sourced guess" framing, not a correction to the evidence —
+    `calibrated` remains the tier-(a)/(c)-evidenced answer; the operator
+    overrode it for the pure-K CAD line art pdfce actually opens. See
+    `docs/ROADMAP.md`'s `Pass 51.2` Shipped entry for the full ruling.
+- **2026-08-08 (`Pass 51.3`, `6d63d81`) — `pdfce_render::font::
+  RenderPolicy` is a new type, not merely a new field: the register's
+  settings henceforth reach the interpreter as ONE bundled, `Copy`
+  struct, never as independently-threaded scalars.** R169 turned what
+  was one threaded parameter (`cmyk_intent`, `Pass 51.0`) into what
+  would otherwise have been five independently-threaded scalars through
+  `crate::interpret::run`, `run_nested`, `run_form_at`, `trace_paths`
+  and the annotation walk — five chances for one to be silently dropped
+  at a recursion seam, where a dropped setting looks exactly like a
+  setting the operator never changed. `RenderPolicy` (`crates/
+  pdfce-render/src/font/mod.rs:375`, `#[derive(Debug, Clone, Copy,
+  PartialEq, Eq, Default)]`, `#[non_exhaustive]`) bundles `cmyk_intent`,
+  `mask_resample`, `image_minify`, `cmyk_jpeg_polarity` and
+  `missing_as` — every field of `RenderOptions` whose effect is a
+  rendering decision, projected into one value passed at the call
+  sites that need it. **A parameter, deliberately not a global**, for
+  the same R83 reason `cmyk_intent` already was: two renders of the
+  same page must never differ for a reason invisible at the call site,
+  the property `tools/render-parity` depends on — a `static` or
+  thread-local would make a render's output depend on when the
+  settings file was last read, answerable by neither a caller nor a
+  test. **`missing_as` travels in the bundle despite being read by the
+  annotation walk (`pdfce-render/src/annot.rs`), not the content-stream
+  interpreter** — a deliberate choice, not an oversight: splitting the
+  bundle by consumer would produce two bundles that must be kept in
+  step with each other, which is the exact class of defect this type
+  exists to prevent. **No `pdfce-core`/`pdfce-render` crate-boundary
+  change** — `RenderPolicy` lives inside `pdfce-render`'s existing
+  `font` module (re-exported at the crate root); §3's layout is
+  unchanged. See `docs/ROADMAP.md`'s `Pass 51.3` Shipped entry for the
+  full delivery record and the register-arithmetic update (9 of 18
+  `SETTING` rows now built).
+- **2026-08-08 (`Pass 51.4`, `6d63d81`) — the operator settings surface
+  is a File-tab WINDOW, not a dock panel, on a reasoned application of
+  existing project precedent rather than a fresh judgment call.**
+  `crates/pdfce-gui/src/settings_panel.rs`'s own module doc states the
+  test directly: the dock's own record already establishes *"selection
+  state is watched, workflows are entered"* — watched things (the page
+  rail, the object tree, the armed tool's own options) earn a permanent
+  dock compartment because they are consulted continuously while doing
+  something else; settings are the opposite, consulted in bursts, only
+  when there is something to change. `Properties` was moved OUT of the
+  dock on 2026-08-06 for exactly this reason, after the operator used
+  the paired layout and found it wrong (§4 SYNC's own history); putting
+  Settings into the dock would repeat that mistake with a different
+  noun rather than test a new hypothesis. Opened from the File tab's
+  Settings group, matching the existing reset-layout chooser and
+  shortcuts-reference windows, and the *File → Options* shape an
+  operator arriving from Office or PDF-XChange already expects. **This
+  closes an R151-shaped gap named in both the `Pass 51.0` and `Pass
+  51.1` §12 entries above: `Settings::save` had no caller anywhere in
+  the workspace until this Pass** — the window's Save button is that
+  caller, and Cancel discards a working copy rather than mutating the
+  live configuration, so a settings screen that changes SAVED BYTES for
+  several of its rows cannot take effect on an accidental click. See
+  `docs/ROADMAP.md`'s `Pass 51.4` Shipped entry for the five-group
+  layout, the per-setting evidence-tier disclosure, and the R86
+  off-screen verification limits.
