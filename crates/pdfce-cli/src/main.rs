@@ -2741,6 +2741,47 @@ enum Command {
     /// visible), and when the subpaths found in the operators disagree in count
     /// with the geometry (the index could then name a different line from the
     /// one intended). Deleting the only subpath deletes the object.
+    /// **Delete ONE text run** — one show operator — out of a text object
+    /// (`Pass 32.0`, ISO 32000-1 §9.4).
+    ///
+    /// The text-side twin of `subpath-delete`. Deletion is otherwise
+    /// object-granular, and a CAD exporter puts every label on a sheet inside
+    /// ONE `BT`...`ET` — measured on a real drawing, one text object holding
+    /// all 237 dimension labels — so deleting "a label" deleted all of them.
+    ///
+    /// `--run` is 0-based in content order, the same numbering `object-list`
+    /// reports as `runs=`.
+    ///
+    /// REFUSED when the FOLLOWING run has no position of its own. §9.4.2
+    /// leaves the pen advanced past the string just drawn, so such a run
+    /// starts wherever this one ends; removing this one would slide it, in an
+    /// edit that round-trips and passes `--verify-undo` and is still wrong.
+    /// The remedy is in the message and always works: delete the later run
+    /// first.
+    ///
+    /// Deleting the only run deletes the text object.
+    TextRunDelete {
+        /// Input PDF.
+        input: PathBuf,
+        /// 1-based page number.
+        #[arg(long, default_value_t = 1)]
+        page: u32,
+        /// 0-based paint-order object index on the page.
+        #[arg(long)]
+        object: usize,
+        /// 0-based show-operator index within that text object, content order.
+        #[arg(long)]
+        run: usize,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Save mode.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Reload and verify the edit undoes byte-identically.
+        #[arg(long)]
+        verify_undo: bool,
+    },
     SubpathDelete {
         /// Input PDF.
         input: PathBuf,
@@ -4115,6 +4156,15 @@ fn run() -> ExitCode {
             mode,
             verify_undo,
         }),
+        Command::TextRunDelete {
+            input,
+            page,
+            object,
+            run,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_text_run_delete(&input, page, object, run, &output, mode, verify_undo),
         Command::SubpathDelete {
             input,
             page,
@@ -13014,6 +13064,64 @@ appended={} out_bytes={} undo_verified={} undo_identical={}",
         page.max(1),
         object,
         parsed.len(),
+        mode.name(),
+        output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    finish_edit(input, &outcome)
+}
+
+/// `text-run-delete` — remove one show operator from a text object
+/// (`Pass 32.0`).
+///
+/// ## Contract
+///
+/// - One `text-run-delete …` line with the usual save-report fields, then
+///   the exit code from [`finish_edit`].
+/// - Refusals — an out-of-range run, and the §9.4.2 guard when the next run
+///   inherits its position — go through [`report_edit_error`] before any
+///   mutation. The guard's message names its own remedy.
+fn cmd_text_run_delete(
+    input: &Path,
+    page: u32,
+    object: usize,
+    run: usize,
+    output: &Path,
+    mode: SaveMode,
+    verify_undo: bool,
+) -> u8 {
+    let page_index = (page.max(1) - 1) as usize;
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    match session.delete_text_run(page_index, object, run) {
+        Err(err) => return report_edit_error(input, &err),
+        Ok(disclosures) => report_disclosures(&disclosures),
+    }
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "text-run-delete {} page {} object={} run={} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        input.display(),
+        page.max(1),
+        object,
+        run,
         mode.name(),
         output.display(),
         outcome.changed,

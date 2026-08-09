@@ -4603,8 +4603,29 @@ impl EditSession {
                 view: &base_view,
                 resources: &page.resources,
             };
-            let model =
-                crate::vector::decompose(&stream, crate::vector::Matrix::IDENTITY, &resolver);
+            // ★ FONTS TOO, since `Pass 32.0`. This used to be a bare
+            // `decompose` with the XObject resolver alone, and that was
+            // invisible for as long as every verb reachable through here
+            // was a PATH verb — paths need no font.
+            //
+            // `TextObject::runs` is populated by LAYING OUT each show
+            // operator, which needs a resolvable `Tf`. With no font
+            // resolver every text object decomposes with **zero** runs, so
+            // `delete_text_run` refused every real document with "the
+            // object has 0 run(s)" while `object-list` — which does pass a
+            // font resolver — reported four. Found by running the CLI
+            // subcommand against a fixture, not by reading this function.
+            //
+            // Same base-view reasoning as the XObject resolver directly
+            // above: page `/Resources` are not rewritten by content
+            // surgery, so base and session agree on them.
+            let fonts = crate::vector::DocumentFonts::new(&base_view, &page.resources);
+            let model = crate::vector::decompose_with_fonts(
+                &stream,
+                crate::vector::Matrix::IDENTITY,
+                &resolver,
+                &fonts,
+            );
             let planned = plan(&stream, &model)?;
             (planned.content, planned.disclosures)
         };

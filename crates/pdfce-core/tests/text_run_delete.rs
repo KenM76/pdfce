@@ -200,3 +200,78 @@ fn the_edited_stream_re_parses() {
         "the surviving run keeps its text object: {s}",
     );
 }
+
+// ---------------------------------------------------------------------------
+// The `EditSession` layer — where the verb is actually reached from
+// ---------------------------------------------------------------------------
+
+use pdfce_core::edit::EditSession;
+
+fn session(name: &str) -> EditSession {
+    let bytes = std::fs::read(fixture(name)).expect("fixture");
+    EditSession::new(Document::from_bytes(bytes).expect("parses"))
+}
+
+/// **★ REGRESSION: the session's own decomposition must see text runs.**
+///
+/// `EditSession::vector_surgery` decomposed with an XObject resolver and
+/// **no font resolver**. That was invisible for as long as every verb
+/// reaching it was a PATH verb — paths need no font — but `runs` is
+/// populated by *laying out* each show operator, which needs a resolvable
+/// `Tf`. So every text object arrived with **zero** runs and
+/// `delete_text_run` refused every real document with "the object has 0
+/// run(s)", while `object-list` (which does pass fonts) reported four for
+/// the same file.
+///
+/// Found by running the CLI against a fixture, not by reading the code —
+/// and it would have shipped as "the verb exists and never works".
+#[test]
+fn the_session_decomposition_resolves_fonts_and_therefore_sees_runs() {
+    let mut s = session("runs-inherited.pdf");
+    // If fonts are not resolved this is `TextRunOutOfRange { count: 0 }`.
+    s.delete_text_run(0, 0, 3)
+        .expect("the session must see the fixture's four runs");
+}
+
+/// One run deleted is one undoable command, and undo restores it.
+#[test]
+fn deleting_a_run_is_one_command_and_undoes() {
+    let mut s = session("runs-two-explicit.pdf");
+    s.delete_text_run(0, 0, 0).expect("delete run 0");
+    assert!(s.is_modified(), "the edit must be staged");
+
+    s.undo().expect("one undo");
+    assert!(
+        s.undo().is_none(),
+        "one run deletion is ONE command — a second undo has nothing to take",
+    );
+}
+
+/// The §9.4.2 guard reaches the session verb, not only the planner.
+#[test]
+fn the_session_verb_refuses_a_move_inducing_deletion() {
+    let mut s = session("runs-inherited.pdf");
+    let err = s.delete_text_run(0, 0, 0).expect_err("must refuse");
+    assert!(
+        err.to_string().contains("delete the later run first"),
+        "the remedy must survive the trip through EditSession: {err}",
+    );
+    assert!(!s.is_modified(), "a refused edit must change nothing");
+}
+
+/// Pointing the text verb at a PATH object is refused by name rather than
+/// silently doing nothing.
+#[test]
+fn aiming_the_text_verb_at_a_path_object_is_refused() {
+    let mut s = session("runs-single.pdf");
+    // Object 0 is the rule; object 1 is the text.
+    let err = s
+        .delete_text_run(0, 0, 0)
+        .expect_err("object 0 is the path, not the text");
+    assert!(
+        err.to_string().contains("path"),
+        "the refusal must name the kind that WAS found: {err}",
+    );
+    // ...and the real text object still works.
+    s.delete_text_run(0, 1, 0).expect("object 1 is the text");
+}

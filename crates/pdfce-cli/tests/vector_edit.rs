@@ -425,3 +425,128 @@ fn nodes_move_accepts_negative_coordinates() {
     );
     let _ = std::fs::remove_file(&out_path);
 }
+
+// ---------------------------------------------------------------------------
+// `text-run-delete` — one label, not all 237 (`Pass 32.0`)
+// ---------------------------------------------------------------------------
+
+fn text_fixture(name: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/synthetic/text")
+        .join(name)
+}
+
+/// **The Pass, end to end.** Four labels in one text object; deleting one
+/// leaves three, where `object-delete` would have removed all four.
+///
+/// Asserted through `object-list`'s own `runs=` and decoded `text=`, so the
+/// check is on what a reader sees rather than on the bytes the edit wrote.
+#[test]
+fn text_run_delete_removes_one_label_and_leaves_the_rest() {
+    let src = text_fixture("runs-inherited.pdf");
+    let before = stdout(&run("object-list", &[src.to_str().unwrap()]));
+    assert!(
+        before.contains("runs=4") && before.contains(r#"text="ALPHABETAGAMMADELTA""#),
+        "the fixture must start with four runs: {before}",
+    );
+
+    let out_path = temp_path("textrun");
+    let out = run(
+        "text-run-delete",
+        &[
+            src.to_str().unwrap(),
+            "--object",
+            "0",
+            "--run",
+            "3",
+            "-o",
+            out_path.to_str().unwrap(),
+            "--verify-undo",
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+    let line = stdout(&out);
+    assert!(line.contains("object=0 run=3"), "{line}");
+    assert!(
+        line.contains("undo_identical=1"),
+        "one run removal must undo byte-identically: {line}",
+    );
+
+    let after = stdout(&run("object-list", &[out_path.to_str().unwrap()]));
+    assert!(
+        after.contains("runs=3"),
+        "one run must be gone, not the object: {after}",
+    );
+    assert!(
+        after.contains(r#"text="ALPHABETAGAMMA""#),
+        "the other three labels must survive intact: {after}",
+    );
+    let _ = std::fs::remove_file(&out_path);
+}
+
+/// The §9.4.2 guard reaches the CLI, and its message carries the remedy.
+#[test]
+fn text_run_delete_refuses_when_the_next_run_would_move() {
+    let out_path = temp_path("textrunrefuse");
+    let out = run(
+        "text-run-delete",
+        &[
+            text_fixture("runs-inherited.pdf").to_str().unwrap(),
+            "--object",
+            "0",
+            "--run",
+            "2",
+            "-o",
+            out_path.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(out.status.code(), Some(EDIT_REFUSED));
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        err.contains("would move the run after it"),
+        "the refusal must say WHY: {err}",
+    );
+    assert!(
+        err.contains("delete the later run first"),
+        "and must name the remedy, which always works: {err}",
+    );
+    assert!(!out_path.exists(), "a refused edit must write nothing");
+}
+
+/// Deleting the only run removes the text object and leaves the rest of the
+/// page — asserted via `object-list`'s own object census.
+#[test]
+fn text_run_delete_on_the_last_run_removes_the_text_object() {
+    let out_path = temp_path("textrunlast");
+    let out = run(
+        "text-run-delete",
+        &[
+            text_fixture("runs-single.pdf").to_str().unwrap(),
+            "--object",
+            "1",
+            "--run",
+            "0",
+            "-o",
+            out_path.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+    let after = stdout(&run("object-list", &[out_path.to_str().unwrap()]));
+    assert!(
+        after.contains("text=0"),
+        "the text object must be gone: {after}",
+    );
+    assert!(
+        after.contains("paths=1"),
+        "and the unrelated path must remain: {after}",
+    );
+    let _ = std::fs::remove_file(&out_path);
+}
