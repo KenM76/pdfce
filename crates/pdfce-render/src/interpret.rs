@@ -2244,13 +2244,52 @@ impl Interpreter<'_> {
     /// SPACE rather than in text space", i.e. a 12 pt and a 72 pt glyph
     /// stroked at the same `w` have the same stroke thickness.
     fn stroke_params(&self) -> Stroke {
-        Stroke {
-            // §8.4.3.2: width 0 is legal ("thinnest line the device can
-            // render"); map to a hairline-ish minimum.
-            width: if self.gs.current.line_width == 0.0 {
-                0.1
+        // A ONE-DEVICE-PIXEL FLOOR, computed through the CTM.
+        //
+        // `tiny_skia::stroke_path` is handed the CTM and applies it, so
+        // `Stroke::width` is in USER space. The old code mapped `0 w` to a
+        // fixed `0.1` user units, which is not what §8.4.3.2 asks for and
+        // is wrong in both directions: at low zoom 0.1 user units is a
+        // fraction of a pixel and anti-aliases to near-invisible, and at
+        // high zoom it becomes a visibly thick line. "The thinnest line
+        // the device can render" is a statement about DEVICE space, so it
+        // has to be converted into user space through the current scale.
+        //
+        // The same floor also rescues thin-but-nonzero widths. Measured by
+        // the benign-bucket audit: `0.1 w` lands at 0.17 device pixels and
+        // pdfce anti-aliased it to grey 233 — about 9% contrast — across
+        // nine qpdf `form-*.pdf` files with an identical 482-pixel
+        // signature, silently. pdfium and Acrobat both draw a solid ~1 px
+        // line.
+        //
+        // §8.4.3.2 mandates the minimum only for `0 w`, so clamping a
+        // NON-ZERO sub-pixel width is a product choice rather than a
+        // requirement — the standard is silent, and rendering it literally
+        // is a defensible reading. It is not offered as a setting yet;
+        // both reference renderers clamp, so clamping is the right
+        // default, and the knob is owed rather than skipped.
+        let scale = {
+            let t = self.gs.current.ctm;
+            // Geometric mean of the transform's singular values — the
+            // scale-invariant "how much does this CTM magnify area", which
+            // behaves correctly under rotation and shear where taking
+            // `sx` alone would not.
+            let det = t.sx.mul_add(t.sy, -(t.kx * t.ky)).abs();
+            if det.is_finite() && det > 0.0 {
+                det.sqrt()
             } else {
-                self.gs.current.line_width
+                1.0
+            }
+        };
+        let min_user_width = if scale > 0.0 { 1.0 / scale } else { 0.0 };
+        Stroke {
+            // §8.4.3.2: width 0 means "thinnest line the device can
+            // render", which is exactly the floor; a non-zero width takes
+            // the floor only when it would otherwise land under a pixel.
+            width: if self.gs.current.line_width <= 0.0 {
+                min_user_width
+            } else {
+                self.gs.current.line_width.max(min_user_width)
             },
             miter_limit: self.gs.current.miter_limit,
             line_cap: match self.gs.current.line_cap {
