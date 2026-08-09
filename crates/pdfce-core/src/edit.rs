@@ -5165,6 +5165,22 @@ pub struct AnnotationDeletion {
     /// alone and is not counted here — see
     /// [`EditSession::appearance_streams_owned_by`] for the reachability
     /// rule and its stated bound.
+    ///
+    /// # Always `0` on a delegated route, and on a preview
+    ///
+    /// **Not a count of zero — a "not tracked".** The specialised verbs
+    /// [`EditSession::delete_redaction_mark`] and
+    /// [`EditSession::delete_dimension`] return `()`; they do not report
+    /// what they collected, and a mark or ce dimension with no `/AP` at all
+    /// collects nothing, so any fixed number here would be a guess that is
+    /// sometimes false.
+    /// [`EditSession::annotation_deletion_preview`] reports `0` for its own
+    /// stated reason (the reachability scan is not worth running for a
+    /// number nothing displays).
+    ///
+    /// Read [`Self::route`] before reading this field. It is the one field
+    /// on this struct with no operator-facing meaning, which is exactly why
+    /// leaving it plausible-but-wrong would have gone unnoticed.
     pub appearance_streams_removed: usize,
 }
 
@@ -8648,7 +8664,15 @@ impl EditSession {
                     parent_popup_cleared: false,
                     replies_orphaned: 0,
                     group_members_promoted: 0,
-                    appearance_streams_removed: 1,
+                    // NOT 1. The destination verb returns `()` and does
+                    // not say how many streams it took — a redaction mark
+                    // or a ce dimension with no `/AP` at all takes none —
+                    // and this project has already paid for a wrong number
+                    // sitting beside a right one more than once. 0 with a
+                    // documented meaning ("not tracked across a
+                    // delegation", see `AnnotationDeletion`) beats a
+                    // plausible guess that is sometimes false.
+                    appearance_streams_removed: 0,
                 });
             }
             Some(AnnotationDeletionRoute::Dimension) => {
@@ -8671,7 +8695,15 @@ impl EditSession {
                     parent_popup_cleared: false,
                     replies_orphaned: 0,
                     group_members_promoted: 0,
-                    appearance_streams_removed: 1,
+                    // NOT 1. The destination verb returns `()` and does
+                    // not say how many streams it took — a redaction mark
+                    // or a ce dimension with no `/AP` at all takes none —
+                    // and this project has already paid for a wrong number
+                    // sitting beside a right one more than once. 0 with a
+                    // documented meaning ("not tracked across a
+                    // delegation", see `AnnotationDeletion`) beats a
+                    // plausible guess that is sometimes false.
+                    appearance_streams_removed: 0,
                 });
             }
             // `General` is not a route the router returns; `None` is how it

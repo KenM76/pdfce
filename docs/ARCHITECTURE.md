@@ -1322,6 +1322,14 @@ widened to print these (`list-annotations` gains `contents=`/`author=` in
 Pass 38.5) — a live instance of the **R151** core-ahead-of-shell pattern,
 recorded rather than rounded up.
 
+> **[★ AMENDED 2026-08-09 (`Pass 38.5`, `0a727bb`) — the first sentence's
+> first clause is now FALSE.** `EditSession::delete_annotation` exists,
+> reaches `list-annotations`' `contents=`/`author=` widening in the same
+> commit, and closes the R151 gap this subsection recorded. `/IRT` is
+> now modelled (`Annotation::in_reply_to`, `ReplyType`). `/CreationDate`
+> and `/RC` remain genuinely absent — the sentence is corrected, not
+> retired. See §4.1 subsection (L) for the full new surface.]**
+
 ### (K) `e4256f2` — ★★ BREAKING for downstream implementors: `ObjectGraph` gains `Send + Sync`; `pdfce-render` gains `RenderCancel` and `RenderOptions.cancel` — 2026-08-07
 
 **Two public-surface changes, in two crates, taken together because the
@@ -1437,6 +1445,110 @@ changed and §4.1 is the living truth.**
 > alternative than 40 — but the figure was wrong, it was relayed, and this
 > project has had **five wrong relayed figures in one day**. See the
 > `Pass 44.0` *Shipped* entry §4.]**
+
+### (L) `Pass 38.5` (`0a727bb`) — `EditSession::delete_annotation`, the general annotation-deletion verb, ROUTING (not absorbing) into the three specialised deletion verbs it was carved out of — 2026-08-09
+
+**Closes the gap (J) named and R151 flagged: annotation deletion had a
+core surface (`delete_field`/`delete_widget`/`delete_redaction_mark`/
+`delete_dimension`) for four kinds and NO verb at all for the fifth and
+largest — every annotation pdfce authors or reads that is not one of
+those four (highlight, square, FreeText, stamp, link, and every
+annotation pdfce did not author).**
+
+**New public surface, `crates/pdfce-core/src/edit.rs`:**
+
+- `EditSession::delete_annotation(ObjId) -> Result<AnnotationDeletion, EditError>`
+  — the general verb.
+- `EditSession::annotation_deletion_preview(ObjId) -> Result<AnnotationDeletion, EditError>`
+  — a pure query returning the SAME `AnnotationDeletion` the real call
+  would, sharing one private planner with `delete_annotation` (see
+  below) rather than being a second, independently-maintained
+  implementation.
+- `EditSession::annotation_deletion_refusal(&self) -> Option<EditError>`
+  — the third member of the `fill_refusal`/`deletion_refusal` family
+  first built in this document's earlier §12 entries. Reads `/P`-aware
+  certification state and answers a genuinely different question from
+  either sibling — see the decision-log entry below.
+- `AnnotationDeletion` (`#[non_exhaustive]` struct, 7 fields: `subtype`,
+  `route`, `popup_removed`, `parent_popup_cleared`, `replies_orphaned`,
+  `group_members_promoted`, `appearance_streams_removed`) — every
+  consequence an operator could not otherwise see, per rule 4 (fuzzy,
+  never sneaky): three of the seven fields report an object or a
+  property that changed WITHOUT being named by the caller.
+- `AnnotationDeletionRoute` (`#[non_exhaustive]` enum: `General`,
+  `RedactionMark`, `Dimension`) — which of the four specialised verbs
+  actually performed the work, surfaced because the undo entry differs
+  per route (a delegated deletion commits the DESTINATION verb's own
+  `CommandKind`, so an Undo control reads *"Undo delete redaction
+  mark"*, never *"Undo delete annotation"*).
+- New `EditError` variants: `AnnotationNotFound`, `AnnotationLocked`,
+  `AnnotationIsTrapNet`, `AnnotationIsWidget`.
+- New `CommandKind::DeleteAnnotation`.
+- `pdfce_core::annot::Annotation` gains `popup`, `in_reply_to`,
+  `reply_type` (new `ReplyType` enum) and two derived methods,
+  `is_group_subordinate()` / `effective_reply_type()`; `AnnotFlags`
+  gains the `LOCKED` bit and a `locked()` accessor.
+
+**Three architectural decisions this Pass makes, each recorded in full
+in the §12 dated entries immediately below — summarised here so this
+subsection stands as the complete surface description:**
+
+1. **A `/P`-aware annotation gate, distinct from both existing
+   certification queries** — `annotation_deletion_refusal` reads
+   §12.8.2.2 Table 254's `/P = 3` row, which `fill_refusal` and
+   `deletion_refusal` do not and should not (see §12).
+2. **Preview and deletion share ONE planner** — `plan_annotation_deletion`
+   is called by both `annotation_deletion_preview` and
+   `delete_annotation` itself, so a GUI tooltip's predicted counts and
+   the actual deletion's reported counts cannot structurally disagree
+   (see §12; this was a `pdfce-ui-specialist` finding, not the
+   engineer's own first design).
+3. **Routing, not absorbing** — the verb's own doc comment names this
+   directly (`edit.rs` L8490, "`# Routing, not absorbing`"). Three
+   kinds carry obligations a generic `/Annots` removal cannot know
+   about: an unapplied `/Redact` mark routes to
+   `EditSession::delete_redaction_mark` (same **annotation** gate,
+   since removing an unapplied mark is annotation deletion and nothing
+   else); a ce dimension routes to `EditSession::delete_dimension`
+   (which keeps the **STRICT** gate, because it also rewrites the
+   catalog `/PieceInfo` sidecar — not an annotation change, and not on
+   Table 254's `P = 3` list); a `/Widget` is **refused, not routed** —
+   widget-or-whole-field is the caller's choice, not a guess the verb
+   should make, and the refusal message names both `delete_widget` and
+   `delete_field` so the caller does not have to re-derive which verb
+   was meant. **Consequence, stated because it is easy to miss:** on a
+   `/P 3` certified document, deleting a ce dimension is REFUSED while
+   deleting every other annotation is ALLOWED — the standard's answer
+   (Table 254's `P = 3` list names annotations, not `/PieceInfo`
+   metadata), not a pdfce inconsistency.
+
+**Three cascades the general (non-routed) case handles, all covered in
+`crates/pdfce-core/tests/annot_deletion.rs`'s 16 tests (independently
+counted against the file, matching the relayed figure): the `/Popup`
+companion (deleted, §12.5.6.14 — deliberately, because leaving an
+orphaned pop-up makes it start DISPLAYING its own `/Contents` per
+§12.5.6.2 NOTE 2, i.e. the just-deleted text would reappear); every
+`/IRT` referrer (kept, un-linked on BOTH `/IRT` and `/RT` together —
+Table 170 makes `/RT`'s default value `R`, so removing only `/IRT`
+would silently reclassify a `/RT /Group` subordinate as a reply, and
+`/IRT` alone is Table-170-Required whenever `/RT` is present, so
+removing only `/RT` leaves a missing conditionally-required entry); and
+`/AP` streams (removed only when unshared — a producer stamping the
+same form XObject across many annotations is legal under §12.5.5, and
+an unconditional removal would blank every other user).**
+
+**Verified in the running application** (not merely unit-tested,
+per this Pass's own screenshot-backed check): the Comments panel's new
+Delete control, a status-bar disclosure quoting the exact
+`popup_removed`/`replies_orphaned`/`group_members_promoted` counts, and
+the row count decrementing correctly on the canvas and the thumbnail.
+New diag harness step `panel:comments` closes the gap that had made the
+Comments panel unreachable to the scripted observation harness — the
+`ToggleCommentsPanel` action and its ribbon button existed with no
+script-driven path to them.
+
+**Breaking? NO.** All additions. `cargo tree -p pdfce-core` re-verified
+at this commit: 0 GUI/windowing dependencies (§3 invariant held).
 
 ### (I) What this sync did NOT cover — stated so the edges are honest
 
