@@ -5518,49 +5518,72 @@ impl PdfceApp {
                         return;
                     };
 
-                    // THE PRE-FLIGHT, asked of CORE rather than computed
-                    // here. `annotation_deletion_preview` runs the same
-                    // guards and the same cascade planner the real verb
-                    // does, so the warning this tooltip shows cannot
-                    // disagree with what the click performs. Re-deriving the
-                    // `/IRT` scan in the GUI would put PDF-model rules —
-                    // Table 170's default `/RT` of `R`, the pop-up validity
-                    // check — on the wrong side of the core boundary, where
-                    // nothing would notice them going stale.
-                    //
-                    // It is a pure query and egui redraws every frame, so
-                    // the numbers shown are this frame's session state,
-                    // which is the state the click will act on.
-                    let preview = doc.session.annotation_deletion_preview(id);
-
                     // THREE distinct reasons a row's Delete can be off, and
                     // each says which: the document-wide gate (certified,
                     // encrypted, or editing switched off), and the
-                    // per-annotation refusals core reports through the
-                    // preview — `Locked` (§12.5.3 Table 165 bit 8) most of
-                    // all. A locked row keeps its button and DISABLES it,
-                    // rather than omitting it: R83's "omit, don't grey" is
-                    // about capabilities pdfce lacks, and this is a
+                    // per-annotation refusal `Locked` (§12.5.3 Table 165
+                    // bit 8). A locked row keeps its button and DISABLES
+                    // it, rather than omitting it: R83's "omit, don't grey"
+                    // is about capabilities pdfce lacks, and this is a
                     // capability pdfce has that this one document forbids
                     // on this one object. An omitted control here would
                     // leave the operator hunting for a Delete every
                     // neighbouring row has, with nothing on screen saying
                     // why.
-                    let row_refusal = preview.as_ref().err().map(std::string::ToString::to_string);
-                    let enabled = deletes_enabled && row_refusal.is_none();
+                    //
+                    // `/TrapNet` is the other per-annotation refusal and
+                    // does not appear here, because those rows are excluded
+                    // from the list entirely — see the filter above.
+                    let locked = annot.flags.locked();
+                    let enabled = deletes_enabled && !locked;
 
                     ui.add_enabled_ui(enabled, |ui| {
                         let b = ui.button(ui_text::comment_row_delete());
-                        let b = match (&row_refusal, &delete_disabled_note) {
+
+                        // ★ THE PREVIEW IS COMPUTED ONLY UNDER THE POINTER,
+                        // AND THAT IS A CORRECTNESS-OF-COST DECISION, NOT A
+                        // MICRO-OPTIMISATION.
+                        //
+                        // `annotation_deletion_preview` walks EVERY
+                        // annotation on EVERY page — it has to, because a
+                        // reply may sit on a different page from what it
+                        // replies to. Calling it once per row, as this code
+                        // first did, makes the panel cost
+                        // O(rows x document) EVERY FRAME: on a review
+                        // document with 200 comments that is 200 full-document
+                        // walks per frame, at 60 fps, to populate tooltips
+                        // nobody is looking at. It was invisible on a
+                        // six-annotation fixture and would have arrived as
+                        // "the comments panel makes the app crawl" on a real
+                        // file.
+                        //
+                        // Gated on `contains_pointer()` rather than
+                        // `hovered()`: `hovered()` is false for a DISABLED
+                        // widget, and the disabled case is exactly the one
+                        // whose tooltip carries the reason.
+                        let preview = b
+                            .contains_pointer()
+                            .then(|| doc.session.annotation_deletion_preview(id));
+
+                        let b = match (locked, &delete_disabled_note) {
                             // The per-ROW reason wins when both apply: it is
                             // the more specific fact, and it is the one that
                             // still holds after the operator fixes the other.
-                            (Some(reason), _) => b.on_disabled_hover_text(
-                                ui_text::comment_row_delete_refused_tooltip(reason),
-                            ),
-                            (None, Some(note)) => b.on_disabled_hover_text(note.clone()),
-                            (None, None) => {
-                                let p = preview.as_ref().ok();
+                            // Its wording comes from core's own error, which
+                            // names the remedy and the `LockedContents` trap.
+                            (true, _) => {
+                                let reason = preview
+                                    .as_ref()
+                                    .and_then(|p| p.as_ref().err())
+                                    .map(std::string::ToString::to_string)
+                                    .unwrap_or_default();
+                                b.on_disabled_hover_text(
+                                    ui_text::comment_row_delete_refused_tooltip(&reason),
+                                )
+                            }
+                            (false, Some(note)) => b.on_disabled_hover_text(note.clone()),
+                            (false, None) => {
+                                let p = preview.as_ref().and_then(|p| p.as_ref().ok());
                                 b.on_hover_text(ui_text::comment_row_delete_tooltip(
                                     &annot.subtype_label(),
                                     p.map_or(0, |p| p.replies_orphaned),
@@ -5574,14 +5597,23 @@ impl PdfceApp {
                         // reason: a control the harness can only reach by
                         // guessing a pixel re-breaks every time the panel's
                         // layout changes.
+                        //
+                        // The counts are `-1` when the pointer is elsewhere,
+                        // because the preview genuinely was not run — a `0`
+                        // there would be a measurement the harness never
+                        // took, reported as one it did.
                         diag::trace(|| {
                             // ui-text-exempt: diagnostic trace, never displayed in the UI
+                            let (r, g) = preview
+                                .as_ref()
+                                .and_then(|p| p.as_ref().ok())
+                                .map_or((-1_i64, -1_i64), |p| {
+                                    (p.replies_orphaned as i64, p.group_members_promoted as i64)
+                                });
                             format!(
                                 "comment-delete-button id={id} subtype={} enabled={enabled} \
-                                 replies={} group={} rect={:?}",
+                                 locked={locked} replies={r} group={g} rect={:?}",
                                 annot.subtype_label(),
-                                preview.as_ref().map_or(0, |p| p.replies_orphaned),
-                                preview.as_ref().map_or(0, |p| p.group_members_promoted),
                                 b.rect
                             )
                         });
