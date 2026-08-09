@@ -64,9 +64,9 @@ pub use centerline::{
 pub use decompose::{
     DecomposeDiagnostics, DocumentFonts, DocumentXObjects, FillRule, FontResolver, ImageObject,
     ImageSource, MAX_FONT_NAME_BYTES, MAX_NODES, MAX_OBJECTS, MAX_TEXT_PREVIEW_CHARS, NoFonts,
-    NoXObjects, PageObjects, PaintStyle, PathObject, Segment, Subpath, TextBoundsBasis, TextFont,
-    TextObject, TextPreview, TokenRange, VectorObject, XObjectResolver, XObjectShape, decompose,
-    decompose_page, decompose_with_fonts,
+    NoXObjects, PageObjects, PaintStyle, PathObject, RunPositioning, Segment, Subpath,
+    TextBoundsBasis, TextFont, TextObject, TextPreview, TextRun, TokenRange, VectorObject,
+    XObjectResolver, XObjectShape, decompose, decompose_page, decompose_with_fonts,
 };
 pub use edit::{
     Handle, PlannedEdit, VectorEditError, anchor_count, plan_delete, plan_delete_many,

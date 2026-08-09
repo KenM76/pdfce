@@ -677,7 +677,17 @@ pub struct TextObject {
     /// previous behaviour, which is the honest answer when nothing finer is
     /// known. Also empty past [`MAX_TEXT_RUNS`], where retaining more costs
     /// more than the precision is worth.
-    pub runs: Vec<Bounds>,
+    /// **★ `Pass 32.0` substrate:** each entry is now a [`TextRun`] rather
+    /// than a bare `Bounds`. The geometry is unchanged and reachable as
+    /// [`TextRun::bounds`] (or in bulk via [`Self::run_bounds`]); what is
+    /// added is the run's own **byte span** and whether its position is
+    /// **inherited** from the previous run's advance.
+    ///
+    /// Without those two, *"delete this run"* is not expressible against
+    /// this model at all — exactly as `move_subpath` was not expressible
+    /// before `Pass 28.0` gave [`Subpath`] its span. The span is the
+    /// enabling change; the verb is downstream of it.
+    pub runs: Vec<TextRun>,
     /// Always `true` — no variant of the bbox is measured glyph ink.
     ///
     /// Kept as a `bool` rather than folded into
@@ -696,6 +706,60 @@ pub struct TextObject {
     pub tokens: TokenRange,
     /// The equivalent byte span.
     pub bytes: ByteSpan,
+}
+
+/// How a show operator's origin was established — the text-side analogue of
+/// a subpath's start being explicit or reused (`Pass 30.0`).
+///
+/// # Why a deletion verb cannot proceed without this
+///
+/// §9.4.2: a show operator leaves the text matrix advanced past the string
+/// it drew, and the **next** show operator starts from wherever the pen was
+/// left unless a positioning operator (`Td`, `TD`, `Tm`, `T*`, or the line
+/// move built into `'` and `"`) moves it first.
+///
+/// So a run with no positioning operator between it and its predecessor has
+/// **no coordinates of its own**. Delete the predecessor and this run does
+/// not stay where it was drawn — it slides back to wherever the pen now
+/// ends up. That is invisible in the saved bytes (the file is well-formed
+/// and round-trips) and visible only when someone looks at the page, which
+/// is the worst combination a text edit can have.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RunPositioning {
+    /// A positioning operator set this run's origin after the previous run
+    /// ended, so the run stands on its own coordinates. Deleting anything
+    /// before it cannot move it.
+    ///
+    /// The **first** run of a `BT`…`ET` is always this: `BT` resets both the
+    /// text and line matrices to the identity (§9.4.1), which is an origin
+    /// of its own even when no `Tm` follows.
+    Explicit,
+    /// The run inherits its origin from the previous run's **advance**. It
+    /// has no coordinates anywhere in the file, and deleting its predecessor
+    /// moves it.
+    Inherited,
+}
+
+/// One show operator inside a `BT`…`ET`: where it drew, which bytes drew it,
+/// and whether it owns its own position.
+///
+/// # A `TJ` array is ONE run, deliberately
+///
+/// Its numeric elements are kerning *within* a single positioned string, not
+/// separate placements, so splitting on them would fragment a word into
+/// per-glyph boxes for no gain — and would make "delete this run" mean
+/// something no operator asked for.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TextRun {
+    /// The laid-out page-space extent of this one show operator.
+    pub bounds: Bounds,
+    /// The operation's token range — its operands through its operator.
+    pub tokens: TokenRange,
+    /// The equivalent byte span in the decoded content buffer. **This is
+    /// what a per-run edit rewrites**, and the reason this struct exists.
+    pub bytes: ByteSpan,
+    /// Whether deleting what precedes this run would move it.
+    pub positioned_by: RunPositioning,
 }
 
 /// A selectable object on a page — the unit the GUI target provider hands
@@ -1319,9 +1383,26 @@ struct TextAccum {
     /// produced an object at all, and it is the input to the
     /// [`TextBoundsBasis::EmBox`] fallback.
     origins: Bounds,
-    /// Per-show-operator boxes, page space — the un-unioned form of
-    /// [`Self::ink`]. See [`TextObject::runs`] for why they are kept.
-    runs: Vec<Bounds>,
+    /// Per-show-operator runs — the un-unioned form of [`Self::ink`], plus
+    /// each run's byte span and positioning. See [`TextObject::runs`].
+    runs: Vec<TextRun>,
+    /// The token range of the show operation currently being laid out, set
+    /// by [`Walker::operation`] before it dispatches a show operator.
+    ///
+    /// `None` would mean a run closed without the walker having recorded
+    /// which operation produced it — impossible through the dispatch, and
+    /// guarded rather than unwrapped: a wrong span here would delete a
+    /// DIFFERENT run from the one picked, and the result would be
+    /// well-formed and round-trip cleanly, so nothing downstream could
+    /// catch it.
+    current_run_tokens: Option<TokenRange>,
+    /// Whether a positioning operator has run since the last show operator
+    /// closed — see [`RunPositioning`].
+    ///
+    /// Starts `true`, because `BT` resets the text and line matrices to the
+    /// identity (§9.4.1) and that is an origin of its own: the first run of
+    /// a text object is never inherited.
+    positioned_since_run: bool,
     /// The box of the show operator currently being laid out, folded into
     /// `runs` when it ends. Separate from `ink` because `ink` must stay the
     /// running union for the existing basis logic.
@@ -1380,6 +1461,8 @@ impl TextAccum {
             token_start,
             origins: Bounds::EMPTY,
             runs: Vec::new(),
+            current_run_tokens: None,
+            positioned_since_run: true,
             current_run: Bounds::EMPTY,
             runs_overflowed: false,
             ink: Bounds::EMPTY,
@@ -1526,6 +1609,29 @@ impl<'a> Decomposer<'a> {
             return;
         };
         let nums = operand_nums(operands);
+
+        // `Pass 32.0` substrate, recorded here because this is the only
+        // place that knows an operation's token bounds.
+        //
+        // The SHOW operators get their span stashed for `close_text_run`;
+        // the POSITIONING operators latch that the next run owns its origin
+        // (§9.4.2 — without one, a run starts wherever the previous string
+        // left the pen). `'` and `"` are in BOTH lists on purpose: Table 109
+        // defines each as a line move followed by a show, so they position
+        // themselves and then draw.
+        if let Some(t) = self.text.as_mut() {
+            match name {
+                b"Td" | b"TD" | b"Tm" | b"T*" | b"'" | b"\"" => t.positioned_since_run = true,
+                _ => {}
+            }
+            if matches!(name, b"Tj" | b"TJ" | b"'" | b"\"") {
+                t.current_run_tokens = Some(TokenRange {
+                    start: first,
+                    end: op_index + 1,
+                });
+            }
+        }
+
         match name {
             // ---- graphics state (Table 57) ----
             b"q" => self.stack.push(self.gs.clone()),
@@ -2143,11 +2249,30 @@ impl<'a> Decomposer<'a> {
     /// so splitting on them would fragment a word into per-glyph boxes for
     /// no gain.
     fn close_text_run(&mut self) {
+        // Read out of `self` before the mutable borrow: the span helper
+        // needs `&self.content`, which cannot coexist with `self.text`
+        // being mutably borrowed below.
+        let tokens = self.text.as_ref().and_then(|t| t.current_run_tokens);
+        let bytes = tokens.map(|r| self.span_of(r.start, r.end.saturating_sub(1)));
+
         let Some(t) = self.text.as_mut() else { return };
+        // Whatever happens to the box, the positioning latch resets: the pen
+        // has moved, so anything shown next inherits unless something moves
+        // it. Done FIRST so every early return below still resets it —
+        // leaving it set would make the NEXT run read as explicitly placed
+        // when it is not, which is the direction that loses data.
+        let positioned_by = if t.positioned_since_run {
+            RunPositioning::Explicit
+        } else {
+            RunPositioning::Inherited
+        };
+        t.positioned_since_run = false;
+        let run_tokens = t.current_run_tokens.take();
+
         if t.current_run.is_empty() {
             return;
         }
-        let run = std::mem::replace(&mut t.current_run, Bounds::EMPTY);
+        let bounds = std::mem::replace(&mut t.current_run, Bounds::EMPTY);
         if t.runs_overflowed {
             return;
         }
@@ -2159,7 +2284,21 @@ impl<'a> Decomposer<'a> {
             t.runs_overflowed = true;
             return;
         }
-        t.runs.push(run);
+        // A run whose operation the walker did not record is DROPPED rather
+        // than pushed with a guessed span. It cannot happen through
+        // `operation`, and if it ever does, a run missing from the list
+        // costs a hit-test miss — while a run carrying the WRONG span would
+        // let a later edit delete a different label and leave a file that
+        // round-trips perfectly.
+        let (Some(tokens), Some(bytes)) = (run_tokens.and(tokens), bytes) else {
+            return;
+        };
+        t.runs.push(TextRun {
+            bounds,
+            tokens,
+            bytes,
+            positioned_by,
+        });
     }
 
     /// Apply a `TJ` array's numeric element to the text matrix (Table 109).
@@ -2313,6 +2452,15 @@ impl<'a> Decomposer<'a> {
     }
 
     fn end_text(&mut self, op_index: usize) {
+        // Close any run still open at `ET` through the SAME path every other
+        // run takes. It used to be pushed inline further down, which was one
+        // more place that had to remember the span and the positioning latch
+        // — and the `Pass 32.0` substrate made that duplication a place the
+        // two could disagree about which bytes a run owns.
+        //
+        // Harmless when nothing is open: `close_text_run` returns early on
+        // an empty box.
+        self.close_text_run();
         let Some(mut t) = self.text.take() else {
             return; // unbalanced ET
         };
@@ -2348,11 +2496,8 @@ impl<'a> Decomposer<'a> {
         };
         let bytes = self.span_of(t.token_start, op_index);
         let token_start = t.token_start;
-        // Taken BEFORE `finish()`, which consumes the accumulator.
-        if !t.current_run.is_empty() && !t.runs_overflowed && t.runs.len() < MAX_TEXT_RUNS {
-            let open = t.current_run;
-            t.runs.push(open);
-        }
+        // The still-open run was already folded in by the `close_text_run`
+        // at the top of this function.
         let runs = std::mem::take(&mut t.runs);
         let (preview, font) = t.finish();
         self.diag.text += 1;

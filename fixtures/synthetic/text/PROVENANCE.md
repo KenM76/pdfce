@@ -99,3 +99,30 @@ python tools/gen-cidfont-nocmap-fixtures.py
 
 Deterministic (no timestamps, no `/ID`); running it twice produces a
 byte-identical file.
+
+## Per-RUN text model (Pass 32.0) — two later additions
+
+Written by `tools/gen-text-run-fixtures.py`. Same `LEGAL.md` §5 category
+(a) as the rest of this directory: wholly synthetic, byte-authored, no
+PDF library involved, no attribution owed. Non-embedded Helvetica
+(§9.6.2.2 permits omitting `/Widths` and `/FontDescriptor` for the
+standard 14) — which is what lets the runs lay out and therefore be
+measured at all.
+
+| File | Claim it makes falsifiable |
+|---|---|
+| `runs-inherited.pdf` | Per-run **byte spans** and **positioning**. One `BT`…`ET`, four runs — `(ALPHA)` Explicit (a `Tm` precedes it, and it is first), `(BETA)` **Inherited** (nothing between it and ALPHA), `(GAMMA)` Explicit **via `Td`** (so a `Tm`-only latch fails), `(DELTA)` **Inherited again** (so a latch that clears once and never re-arms fails). The four strings are distinct single words appearing exactly once each, so a test can assert a span covers its own run and **none** of the other three. |
+| `runs-tj-array.pdf` | A `TJ` **array** is ONE run. `[(A) -120 (B) -120 (C)] TJ` — its numeric elements are kerning within a single positioned string, not separate placements. An implementation counting show *strings* rather than show *operators* reports 3, and "delete this run" would then mean deleting one letter out of a word. |
+
+**Why `scattered-text-one-object.pdf` could not serve.** It positions
+**both** its runs with an explicit `Tm`, so every run in it is
+`Explicit` — an implementation that hard-coded `Explicit` would pass
+against it. That is R162 (an assertion that cannot come out false), and
+it is the whole reason `runs-inherited.pdf` exists.
+
+## Regenerating
+
+```
+python tools/gen-scattered-text-fixtures.py   # scattered-text-one-object.pdf
+python tools/gen-text-run-fixtures.py         # runs-inherited.pdf, runs-tj-array.pdf
+```

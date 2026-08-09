@@ -234,7 +234,9 @@ fn text_hit(t: &TextObject, point: Point, tolerance: f64) -> bool {
     if t.runs.is_empty() {
         return t.page_bbox.inflate(tolerance).contains(point);
     }
-    t.runs.iter().any(|r| r.inflate(tolerance).contains(point))
+    t.runs
+        .iter()
+        .any(|r| r.bounds.inflate(tolerance).contains(point))
 }
 
 /// Which **subpaths** of the path object at `object_index` a point hits,
