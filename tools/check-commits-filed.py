@@ -28,6 +28,21 @@ throughout, correctly, because none of the eleven claimed a Pass ID.
 **A backlog found twice by accident will be found a third time by
 accident.** This is the exhaustive walk that replaces the accident.
 
+KNOWN WEAKNESS, stated rather than discovered later
+---------------------------------------------------
+The join is "this commit's short hash appears somewhere in the record". A
+hash cited in an OWED list — an entry naming commits that still need
+filing — therefore counts as filed. This is the same limit
+`check-passes-filed.py`'s own docstring names, and it is live here rather
+than theoretical: `ROADMAP.md`'s filing-51 entry lists the eleven
+baseline commits by hash as owed work, so this gate now sees them as
+cited.
+
+That is why the baseline file exists as well, and why it is the thing to
+read for the real debt. Two records of one obligation, deliberately —
+the same "an obligation needs a record on both sides" pattern this
+project applied to the `FEATURES.md` Acrobat column.
+
 WHAT COUNTS AS FILED
 --------------------
 The commit's abbreviated hash appears in `docs/ROADMAP.md` or
@@ -109,7 +124,13 @@ def load_baseline() -> set[str]:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--since", default="2026-08-01")
+    # The whole history by default, not a window. `check-passes-filed.py`
+    # defaulted to the last 60 commits until 2026-08-09 and missed a
+    # Pass-claiming commit five days old for exactly that reason — a gate
+    # whose coverage is a function of how fast the project moves reports
+    # "clean" most reliably when there is most to find. 0.5 s over 323
+    # commits buys nothing worth that.
+    ap.add_argument("--since", default="")
     args = ap.parse_args()
 
     record = "\n".join(
@@ -117,7 +138,10 @@ def main() -> int:
     )
     baseline = load_baseline()
 
-    hashes = [h for h in git("log", "--format=%h", f"--since={args.since}").split() if h]
+    log_args = ["log", "--format=%h"]
+    if args.since:
+        log_args.append(f"--since={args.since}")
+    hashes = [h for h in git(*log_args).split() if h]
     unfiled: list[tuple[str, str]] = []
     checked = 0
 
@@ -153,7 +177,7 @@ def main() -> int:
 
     known = len(baseline)
     print(
-        f"commits-filed: clean — {checked} code commit(s) checked since {args.since}; "
+        f"commits-filed: clean — {checked} code commit(s) checked ({args.since or 'whole history'}); "
         f"{known} known-unfiled carried in the baseline"
     )
     if known:

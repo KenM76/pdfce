@@ -58,7 +58,8 @@ USAGE
 =====
     python tools/check-passes-filed.py [--since <rev>] [--stats]
 
-`--since` defaults to the last 60 commits, which spans several days of this
+`--since` defaults to the WHOLE HISTORY (0.5 s over 323 commits). It used to be
+the last 60 commits, which missed a Pass-claiming commit five days old — see the
 project's cadence; widen it for an audit.
 """
 
@@ -99,7 +100,21 @@ def main() -> int:
     ap.add_argument("--stats", action="store_true")
     args = ap.parse_args()
 
-    rng = f"{args.since}..HEAD" if args.since else "-60"
+    # EXHAUSTIVE BY DEFAULT since 2026-08-09, not a rolling window.
+    #
+    # This was `-60` — the last sixty commits — on the reasoning, stated in
+    # the usage text, that sixty "spans several days of this project's
+    # history". That assumption stopped being true: this project does sixty
+    # commits in about two days, and `ae59ce3` ("Pass 24.0 (part): tool
+    # panels anchor to the viewport") sat five days back, claiming a Pass ID,
+    # with its hash in no filing — and this gate reported CLEAN throughout,
+    # because the commit was outside the window it happened to be looking at.
+    #
+    # A gate whose coverage is a function of how fast the project is moving
+    # reports "clean" most reliably when there is most to find. The whole
+    # history is 323 commits and scanning it takes 0.5 s, so the window was
+    # buying nothing and costing exactly the case it exists for.
+    rng = f"{args.since}..HEAD" if args.since else "--all"
     raw = git("log", rng, "--format=%h\x1f%s")
 
     roadmap = ROADMAP.read_text(encoding="utf-8", errors="replace")
