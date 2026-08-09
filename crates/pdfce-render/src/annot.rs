@@ -60,7 +60,6 @@
 //!   6.0 report / ROADMAP residuals.
 
 use pdfce_core::annot::{Annotation, Appearance};
-use pdfce_core::settings::CmykIntent;
 // decision 018: read paths take a `DocumentView` (graph + byte source), so
 // the same code renders a loaded file or an editing session's unsaved state.
 use pdfce_core::graph::ObjectGraph;
@@ -69,7 +68,7 @@ use pdfce_core::page_tree::{Page, Rect};
 use pdfce_core::view::DocumentView;
 use tiny_skia::{Pixmap, Point, Transform};
 
-use crate::font::FontEnvironment;
+use crate::font::{FontEnvironment, RenderPolicy};
 use crate::gstate::GraphicsState;
 use crate::interpret::{self, Diagnostics};
 
@@ -116,7 +115,7 @@ pub(crate) fn survey_page_annotations(
     diag: &mut Diagnostics,
     pixmap: &mut Pixmap,
     cancel: Option<&crate::cancel::RenderCancel>,
-    cmyk_intent: CmykIntent,
+    policy: RenderPolicy,
 ) {
     // Pass 12.M2 (§8.11.3.3): the set of optional-content groups the catalog
     // /OCProperties /D config leaves OFF by default. An annotation whose /OC
@@ -126,7 +125,14 @@ pub(crate) fn survey_page_annotations(
     // content, so this is a no-op on every pre-12.M2 file.
     let oc_off = pdfce_core::annot::optional_content_default_off(doc);
 
-    for annot in &pdfce_core::annot::page_annotations(doc, page.id) {
+    // `AS-A1` (R169): what to show for a multi-entry /AP /N subdictionary
+    // that carries no /AS. §12.5.5 makes /AS Required there and states no
+    // recovery, so the direction is the operator's — and it is decided
+    // HERE, at appearance SELECTION, not at paint time, which is why the
+    // policy goes into `page_annotations_with` rather than being consulted
+    // below. The default paints nothing and the annotation is counted as
+    // state-unresolved either way.
+    for annot in &pdfce_core::annot::page_annotations_with(doc, page.id, policy.missing_as) {
         diag.annotations_total += 1;
         if annot.is_widget() {
             diag.annotations_widget += 1;
@@ -161,16 +167,7 @@ pub(crate) fn survey_page_annotations(
                 // the annotation is disclosed by `annotations_total` alone.
                 if paint {
                     paint_appearance(
-                        doc,
-                        page,
-                        base_ctm,
-                        fonts,
-                        annot,
-                        *stream_id,
-                        diag,
-                        pixmap,
-                        cancel,
-                        cmyk_intent,
+                        doc, page, base_ctm, fonts, annot, *stream_id, diag, pixmap, cancel, policy,
                     );
                 }
             }
@@ -205,7 +202,7 @@ fn paint_appearance(
     diag: &mut Diagnostics,
     pixmap: &mut Pixmap,
     cancel: Option<&crate::cancel::RenderCancel>,
-    cmyk_intent: CmykIntent,
+    policy: RenderPolicy,
 ) {
     // /Rect is Required (Table 164) and is the §12.5.5 placement target.
     let Some(rect) = annot.rect else {
@@ -262,7 +259,7 @@ fn paint_appearance(
         initial,
         pixmap,
         cancel,
-        cmyk_intent,
+        policy,
     );
     diag.merge(sub);
     diag.annotations_painted += 1;

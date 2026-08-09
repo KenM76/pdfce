@@ -88,6 +88,7 @@ use crate::document::Document;
 use crate::graph::ObjectGraph;
 use crate::object::{Dict, Name, ObjId, Object, Stream};
 use crate::page_tree::{self, PageTreeError, Rect};
+use crate::settings::UnmappableCode;
 use crate::span::ByteSpan;
 use crate::text_extract::font::ExtractFont;
 use crate::writer::content::{ContentBuilder, Paint, emit_literal_string, emit_number};
@@ -856,7 +857,15 @@ impl<'a> Surgeon<'a> {
                     elems.push(TjElem::Str(std::mem::take(&mut seg_bytes)));
                 }
                 removed_tx += *tx;
-                let (chars, _) = font.to_unicode(*code_val);
+                // `TX-A1` is deliberately PINNED here rather than
+                // taking the operator's setting. `removed_text` is the
+                // audit record of what this redaction destroyed, and an
+                // audit record must show that something was there:
+                // `UnmappableCode::Omit` would report a removed
+                // unmappable glyph as nothing removed at all. The
+                // sentinel is fixed to the length-preserving, visible one
+                // so the record cannot understate the removal.
+                let (chars, _) = font.to_unicode(*code_val, UnmappableCode::ReplacementChar);
                 removed_text.push_str(&chars);
                 self.glyphs_removed += 1;
             } else {

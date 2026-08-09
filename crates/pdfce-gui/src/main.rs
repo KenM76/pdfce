@@ -230,6 +230,7 @@ mod raster;
 mod redact_apply;
 mod render_worker;
 mod ribbon;
+mod settings_panel;
 mod ui_text;
 mod vector_edit_tool;
 mod viewer;
@@ -580,6 +581,20 @@ const DENSE_ROW_SPACING_Y: f32 = 2.0;
 struct PdfceApp {
     /// What, if anything, is open.
     status: Status,
+    /// The settings window's working copy, `None` when it is closed.
+    ///
+    /// A DRAFT rather than direct edits to [`Self::settings`]: several of
+    /// these choices change saved bytes, so a radio click that took effect
+    /// immediately would be an edit the operator never asked for and
+    /// cannot see. Cancel has to be real.
+    settings_draft: Option<settings_panel::Draft>,
+    /// Where the settings file lives, resolved once at startup.
+    ///
+    /// Held now that something SAVES: the window shows it (the operator's
+    /// update procedure differs between the two homes) and `Save` writes
+    /// to it. It was deliberately not held when nothing wrote — R151, no
+    /// state a surface cannot reach.
+    settings_store: pdfce_core::settings::StoreLocation,
     /// The operator's persisted settings (R15), loaded once at startup.
     ///
     /// The FIRST thing in this program to survive a restart. Everything
@@ -1147,6 +1162,8 @@ impl Default for PdfceApp {
         // a disclosure nothing displays is not a disclosure.
         let edit_note = ui_text::settings_load_note(&settings_report.notes, &settings_store);
         Self {
+            settings_draft: None,
+            settings_store: settings_store.clone(),
             settings,
             status: Status::Idle,
             rail_expanded: true,
@@ -3821,6 +3838,14 @@ enum Action {
     /// real tree has been restored from the borrow-dance swap.
     /// Open the reset-layout chooser (Pass 24.1).
     OpenResetLayout,
+    /// Open the settings window on a fresh draft.
+    OpenSettings,
+    /// Write the draft to disk and adopt it.
+    SaveSettings,
+    /// Throw the draft away.
+    CancelSettings,
+    /// Replace the draft with pdfce's shipped answers, without saving.
+    RestoreDefaultSettings,
     /// Close the chooser without resetting anything.
     CancelResetLayout,
     /// Open the panel on the Font-folders tool (Pass 24.1 follow-up).
@@ -5254,6 +5279,33 @@ impl PdfceApp {
             self.pending_reset = Some(scope);
         } else {
             self.pending_reset = None;
+        }
+    }
+
+    /// The settings window (R15 store, R169 directive).
+    ///
+    /// Renders nothing when no draft is open, which is the normal state —
+    /// this is an *entered* surface, not a watched one, which is also why
+    /// it is a window rather than a dock panel. See
+    /// [`crate::settings_panel`] for that reasoning in full.
+    fn settings_window(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
+        let Some(draft) = self.settings_draft.as_mut() else {
+            return;
+        };
+        let mut open = true;
+        let outcome = settings_panel::show(ctx, draft, &self.settings_store, &mut open);
+        match outcome {
+            settings_panel::Outcome::Save => actions.push(Action::SaveSettings),
+            settings_panel::Outcome::Cancel => actions.push(Action::CancelSettings),
+            settings_panel::Outcome::RestoreDefaults => {
+                actions.push(Action::RestoreDefaultSettings);
+            }
+            settings_panel::Outcome::Idle => {}
+        }
+        // The window's own close button is a cancel, so the two paths agree
+        // — the same contract the reset-layout chooser holds itself to.
+        if !open {
+            actions.push(Action::CancelSettings);
         }
     }
 
@@ -7757,6 +7809,60 @@ impl PdfceApp {
                 self.pending_reset = None;
                 return;
             }
+            Action::OpenSettings => {
+                // Opens on a copy of the LIVE configuration, not on whatever
+                // is on disk: if a previous save failed, the window must show
+                // what pdfce is actually doing, not what it wishes it had
+                // written.
+                self.settings_draft = Some(settings_panel::Draft::new(&self.settings));
+                return;
+            }
+            Action::CancelSettings => {
+                self.settings_draft = None;
+                return;
+            }
+            Action::RestoreDefaultSettings => {
+                // Replaces the DRAFT only. The operator still has to Save,
+                // and still has Cancel — "restore defaults" is not the kind
+                // of button that should be able to discard a configuration
+                // in one click with no way back.
+                if let Some(draft) = self.settings_draft.as_mut() {
+                    draft.working = pdfce_core::settings::Settings::default();
+                }
+                return;
+            }
+            Action::SaveSettings => {
+                let Some(draft) = self.settings_draft.take() else {
+                    return;
+                };
+                // Adopt FIRST, then persist. The operator asked for this
+                // configuration; if the disk refuses, the session should
+                // still behave as they asked while telling them it will not
+                // survive a restart. Adopting only on a successful write
+                // would silently ignore a deliberate choice.
+                self.settings = draft.working;
+                self.edit_note = Some(match self.settings.save(&self.settings_store) {
+                    Ok(()) => self
+                        .settings_store
+                        .path
+                        .as_deref()
+                        .map_or_else(String::new, ui_text::settings_saved),
+                    Err(err) => ui_text::settings_save_failed(&err.to_string()),
+                });
+                // Every cached raster — the canvas texture AND the thumbnail
+                // rail — was produced under the OLD settings. Without this
+                // the operator changes how black is drawn and nothing on
+                // screen moves until something else happens to invalidate
+                // the cache, which reads as the setting not working.
+                //
+                // `refresh_pages` is the established funnel for exactly this
+                // (decision 018 §10 hazard 2) and clears both, so this reuses
+                // it rather than reaching into the two caches by hand.
+                if let Status::Open(doc) = &mut self.status {
+                    doc.refresh_pages();
+                }
+                return;
+            }
             Action::OpenResetLayout => {
                 // Opens with everything ticked — the common case is "put it
                 // all back" — but the choice is on screen before it applies.
@@ -8230,6 +8336,14 @@ impl PdfceApp {
             | Action::ToggleProperties
             | Action::OpenResetLayout
             | Action::CancelResetLayout
+            // The settings actions belong in THIS arm, not a new one: they
+            // are meaningful with no document open (every setting is
+            // document-independent) and they need `&mut self` rather than
+            // `&mut OpenDoc`, which is exactly what this arm collects.
+            | Action::OpenSettings
+            | Action::SaveSettings
+            | Action::CancelSettings
+            | Action::RestoreDefaultSettings
             | Action::OpenFontFolders
             | Action::ApplyResetLayout(_)
             | Action::SelectRibbonTab(_)
@@ -9262,6 +9376,24 @@ impl eframe::App for PdfceApp {
                 // scripted flip takes the identical path a real one does.
                 self.apply(Action::ToggleShowPoints, ctx, ctx.pixels_per_point());
             }
+            diag::Step::Settings => {
+                // Through the SAME action the ribbon button pushes, for the
+                // reason `Step::Tool` gives just below: a scripted entry that
+                // set `settings_draft` directly would skip whatever the real
+                // path does and produce a harness artefact indistinguishable
+                // from a working feature.
+                self.apply(Action::OpenSettings, ctx, ctx.pixels_per_point());
+                eprintln!(
+                    "diag: settings window open={} dirty={} all_default={}", // ui-text-exempt: diagnostic trace to stderr under PDFCE_DIAG, never shown in the UI
+                    self.settings_draft.is_some(),
+                    self.settings_draft
+                        .as_ref()
+                        .is_some_and(settings_panel::Draft::is_dirty),
+                    self.settings_draft
+                        .as_ref()
+                        .is_some_and(settings_panel::Draft::is_all_default),
+                );
+            }
             diag::Step::Tool(which) => {
                 // Routed through the SAME action the toolbar pushes, so a
                 // scripted tool entry builds exactly the per-tool state a real
@@ -9683,6 +9815,7 @@ impl eframe::App for PdfceApp {
         // so it never blocks the canvas. R81 permits this as a TRANSIENT,
         // modeless reference; it is not something an operator keeps open
         // while working, which is what would make it owe a dock panel.
+        self.settings_window(&ctx, &mut actions);
         self.shortcuts_window(&ctx);
 
         for action in actions {
@@ -11180,6 +11313,21 @@ impl PdfceApp {
                     .clicked()
                 {
                     actions.push(Action::OpenResetLayout);
+                }
+            });
+            Self::ribbon_group_ui(ui, tab, RG::Settings, |ui| {
+                // Its own group, not a button inside LayoutReset: that
+                // group is about the WINDOW, these are about how pdfce
+                // reads and writes DOCUMENTS. Always shown — every one of
+                // these choices is document-independent, so gating it on a
+                // file being open would hide it exactly when a new user
+                // goes looking for it.
+                if ui
+                    .button(ui_text::settings_button())
+                    .on_hover_text(ui_text::settings_tooltip())
+                    .clicked()
+                {
+                    actions.push(Action::OpenSettings);
                 }
             });
             Self::ribbon_group_ui(ui, tab, RG::Help, |ui| {

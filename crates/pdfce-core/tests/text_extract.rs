@@ -16,6 +16,7 @@
 use std::path::{Path, PathBuf};
 
 use pdfce_core::document::Document;
+use pdfce_core::settings::{ActualTextPrecedence, UnmappableCode};
 use pdfce_core::text_extract::{
     self, ArtifactKind, ExtractOptions, ExtractedText, LadderRung, TextOrigin,
 };
@@ -278,6 +279,173 @@ fn no_derived_word_space_is_inserted_next_to_a_replacement() {
     let text = extract("actual-text-drucker.pdf");
     assert!(!text.plain_text().contains(' '));
     assert_eq!(text.diagnostics.spaces_derived, 0);
+}
+
+// ---------------------------------------------------------------------------
+// TX-A1 / AT-A1 — the two EXTRACT-radius operator settings (R169)
+// ---------------------------------------------------------------------------
+//
+// Both are genuine spec silences, both default to exactly what pdfce
+// extracted before the settings existed, and both change CHARACTER
+// OFFSETS — which is why they are tested at the pipeline level rather
+// than as unit tests on the ladder. An offset change is what moves a text
+// search's hit and a text-based redaction's coverage (R35), and that only
+// becomes visible once runs have been assembled.
+
+#[test]
+fn the_unmappable_sentinel_defaults_to_the_shipped_one() {
+    // R169's non-negotiable: the knob exists, the behaviour does not
+    // move. `identity-h-no-tounicode.pdf` is the fixture where every rung
+    // fails, so every character is the sentinel.
+    let with_default = extract("identity-h-no-tounicode.pdf");
+    let explicit = extract_with(
+        "identity-h-no-tounicode.pdf",
+        &ExtractOptions::default().with_unmappable_code(UnmappableCode::ReplacementChar),
+    );
+    assert_eq!(with_default.sourced_text(), explicit.sourced_text());
+    assert!(
+        with_default
+            .sourced_text()
+            .contains(char::REPLACEMENT_CHARACTER)
+    );
+}
+
+#[test]
+fn the_unmappable_sentinel_changes_the_characters_but_never_the_count() {
+    // §9.10.2 names NO sentinel, so all three values are equally
+    // conforming. What must NOT change is the honesty metric:
+    // `ladder_failures` is documented as "the headline honesty metric",
+    // and a setting that could quietly reduce it would be a setting that
+    // hides the failure rather than styling it.
+    let baseline = extract("identity-h-no-tounicode.pdf");
+    let failures = baseline.diagnostics.ladder_failures;
+    assert!(failures > 0, "the fixture must actually fail the ladder");
+    let baseline_sentinels = baseline
+        .sourced_text()
+        .chars()
+        .filter(|c| *c == char::REPLACEMENT_CHARACTER)
+        .count();
+
+    let question = extract_with(
+        "identity-h-no-tounicode.pdf",
+        &ExtractOptions::default().with_unmappable_code(UnmappableCode::QuestionMark),
+    );
+    assert_eq!(question.diagnostics.ladder_failures, failures);
+    assert!(
+        !question
+            .sourced_text()
+            .contains(char::REPLACEMENT_CHARACTER)
+    );
+    assert_eq!(
+        question
+            .sourced_text()
+            .chars()
+            .filter(|c| *c == '?')
+            .count(),
+        baseline_sentinels,
+        "`question_mark` must be length-preserving, like the default"
+    );
+
+    let omitted = extract_with(
+        "identity-h-no-tounicode.pdf",
+        &ExtractOptions::default().with_unmappable_code(UnmappableCode::Omit),
+    );
+    assert_eq!(
+        omitted.diagnostics.ladder_failures, failures,
+        "omitting the CHARACTERS must not omit the FAILURE"
+    );
+    assert!(!omitted.sourced_text().contains(char::REPLACEMENT_CHARACTER));
+    assert!(!omitted.sourced_text().contains('?'));
+    assert!(
+        omitted.sourced_text().chars().count() < baseline.sourced_text().chars().count(),
+        "`omit` must actually shorten the text"
+    );
+
+    // AND THE THING TO KNOW ABOUT `omit`, pinned here because it is
+    // surprising and is documented on the setting itself: on this fixture
+    // EVERY code fails the ladder, so every run's text is empty, and
+    // `layout::Builder::close_run` drops a character-less run — glyph
+    // records included. So `omit` does not merely shorten the text; where
+    // a whole run is unmappable it removes the run. The failure is still
+    // fully counted (asserted above), which is what keeps this honest
+    // rather than silent, but a caller that needs per-glyph positions for
+    // unmappable codes must not choose `omit`.
+    let glyphs = omitted
+        .pages
+        .iter()
+        .flat_map(|p| p.runs.iter())
+        .flat_map(|r| r.glyphs.iter())
+        .count();
+    assert_eq!(
+        glyphs, 0,
+        "an all-unmappable page under `omit` yields no runs at all — if          this starts failing, `close_run` changed and the setting's docs          need updating with it"
+    );
+}
+
+#[test]
+fn actual_text_precedence_defaults_to_replacement() {
+    // §14.9.4's `shall` is the only one in the set, so `always` is the
+    // default — and the clause's own worked example is the assertion.
+    let explicit = extract_with(
+        "actual-text-drucker.pdf",
+        &ExtractOptions::default().with_actual_text(ActualTextPrecedence::Always),
+    );
+    assert_eq!(explicit.sourced_text(), "Drucker");
+    assert_eq!(
+        explicit.sourced_text(),
+        extract("actual-text-drucker.pdf").sourced_text(),
+        "the default must be `always`"
+    );
+}
+
+#[test]
+fn glyphs_precedence_shows_the_page_and_still_counts_the_entry() {
+    // The forensic setting: what is extracted is what the page draws. The
+    // §14.9.4 example's glyphs read "Dru" / "k-" / "ker" with the middle
+    // pair covered by the replacement, so turning substitution off must
+    // bring the covered glyphs back.
+    let text = extract_with(
+        "actual-text-drucker.pdf",
+        &ExtractOptions::default().with_actual_text(ActualTextPrecedence::Glyphs),
+    );
+    assert!(
+        !text.sourced_text().contains("Drucker"),
+        "the replacement must not have been applied: {:?}",
+        text.sourced_text()
+    );
+    assert!(
+        text.pages
+            .iter()
+            .flat_map(|p| p.runs.iter())
+            .all(|r| r.origin != TextOrigin::ActualText),
+        "no replacement run may be emitted"
+    );
+    assert_eq!(
+        text.diagnostics.actual_text_applied, 1,
+        "the COUNT is a property of the document, not of the setting — an \
+         operator who turned substitution off still needs to see the entry \
+         is there"
+    );
+}
+
+#[test]
+fn tagged_only_precedence_declines_an_untagged_span() {
+    // "Inside tagged content" is tested as an /MCID in scope, because
+    // §14.7.4.2 makes /MCID the join key between a marked-content
+    // sequence and a structure element. This fixture's /Span carries
+    // /ActualText and no /MCID — it is not part of any structure tree —
+    // so `tagged_only` behaves as `glyphs` here, and would behave as
+    // `always` on a genuinely tagged file.
+    let tagged_only = extract_with(
+        "actual-text-drucker.pdf",
+        &ExtractOptions::default().with_actual_text(ActualTextPrecedence::TaggedOnly),
+    );
+    let glyphs = extract_with(
+        "actual-text-drucker.pdf",
+        &ExtractOptions::default().with_actual_text(ActualTextPrecedence::Glyphs),
+    );
+    assert_eq!(tagged_only.sourced_text(), glyphs.sourced_text());
+    assert_eq!(tagged_only.diagnostics.actual_text_applied, 1);
 }
 
 // ---------------------------------------------------------------------------

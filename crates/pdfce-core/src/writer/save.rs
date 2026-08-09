@@ -292,7 +292,12 @@ pub struct SaveReport {
 pub fn save_incremental(
     doc: &Document,
     dirty: &DirtySet,
-    _options: &SaveOptions,
+    // Was `_options` until R169 gave `SaveOptions` two knobs an
+    // incremental save DOES honour: the §7.5.4 entry terminator and the
+    // §7.5.5 trailing EOL both describe bytes this path writes into the
+    // appended revision. `producer` is still ignored here — that one is
+    // about `/Info`, which an append must never touch.
+    options: &SaveOptions,
 ) -> Result<(Vec<u8>, SaveReport), WriteError> {
     // Decision 013 (the recovered-base rule): a document loaded via
     // cross-reference recovery had an INVALID base xref, so an incremental
@@ -468,8 +473,8 @@ pub fn save_incremental(
     let section_offset = out.len() as u64;
     match doc.section_shape() {
         SectionShape::Classic { .. } => {
-            xref_out::write_classic_table(&mut out, &entries)?;
-            xref_out::write_classic_tail(&mut out, &trailer, section_offset);
+            xref_out::write_classic_table(&mut out, &entries, options.xref_entry_eol)?;
+            xref_out::write_classic_tail(&mut out, &trailer, section_offset, options.trailing_eol);
         }
         SectionShape::Stream { id, widths } => {
             // §7.5.8.3: the xref stream is a top-level indirect object
@@ -485,7 +490,7 @@ pub fn save_incremental(
             let widths = xref_out::Widths::fit(&entries, widths);
             let stream = xref_out::build_xref_stream(id, &entries, widths, &trailer)?;
             out.extend_from_slice(&stream.bytes);
-            xref_out::write_stream_tail(&mut out, section_offset);
+            xref_out::write_stream_tail(&mut out, section_offset, options.trailing_eol);
         } // NO WILDCARD ARM. A third cross-reference form would have to
           // be emitted, not guessed at — R33 forbids substituting one
           // form for another — so a new `SectionShape` variant must break
@@ -842,8 +847,8 @@ pub fn save_full(
     let section_offset = out.len() as u64;
     match xref_stream_id {
         None => {
-            xref_out::write_classic_table(&mut out, &entries)?;
-            xref_out::write_classic_tail(&mut out, &trailer, section_offset);
+            xref_out::write_classic_table(&mut out, &entries, options.xref_entry_eol)?;
+            xref_out::write_classic_tail(&mut out, &trailer, section_offset, options.trailing_eol);
         }
         Some(id) => {
             entries.insert(
@@ -856,7 +861,7 @@ pub fn save_full(
             let widths = xref_out::Widths::fit(&entries, base_widths);
             let stream = xref_out::build_xref_stream(id, &entries, widths, &trailer)?;
             out.extend_from_slice(&stream.bytes);
-            xref_out::write_stream_tail(&mut out, section_offset);
+            xref_out::write_stream_tail(&mut out, section_offset, options.trailing_eol);
         }
     }
 

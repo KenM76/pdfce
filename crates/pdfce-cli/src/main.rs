@@ -4520,7 +4520,18 @@ numbered 1..={})",
     report_settings(&settings_report);
     let mut render_options = pdfce_render::RenderOptions::default()
         .with_annotations(annotations)
-        .with_cmyk_intent(settings.cmyk_intent);
+        .with_cmyk_intent(settings.cmyk_intent)
+        // The other four R169 rendering knobs, all spec silences the
+        // standard declines to fill: the mask resampling filter
+        // (`SM-A1`, §8.9.6.3), the minification filter (`IM-A1`,
+        // §8.9.5.3), the CMYK-JPEG polarity rule (`DCT-A1`, §7.4.8) and
+        // the missing-`/AS` policy (`AS-A1`, §12.5.5). Every default is
+        // the behaviour pdfce shipped before the setting existed, so a
+        // machine with no settings file renders exactly as it always did.
+        .with_mask_resample(settings.mask_resample)
+        .with_image_minify(settings.image_minify)
+        .with_cmyk_jpeg_polarity(settings.cmyk_jpeg_polarity)
+        .with_missing_as(settings.missing_as);
     render_options.fonts = font_env;
     let rendered = match pdfce_render::render_page_with(&doc, page, scale, &render_options) {
         Ok(rendered) => rendered,
@@ -6044,14 +6055,36 @@ fn save_edited(
 ) -> Result<EditOutcome, u8> {
     use pdfce_core::writer::{ProducerPolicy, SaveOptions};
 
-    let options = SaveOptions::default().with_producer(match producer {
+    // The two BYTES-radius R169 knobs: §7.5.4's cross-reference entry
+    // terminator (`EOL-A1`) and §7.5.5's trailing end-of-line (`EOL-A2`).
+    // Both are genuine spec ambiguities — three legal forms and no stated
+    // preference, and two self-consistent readings of the last line — and
+    // both default to exactly what pdfce has always emitted, so a machine
+    // with no settings file writes byte-identical output.
+    //
+    // Applied to BOTH save modes, unlike `producer`: these describe bytes
+    // the appended revision writes for itself, not a rewrite of anything
+    // the operator did not touch, so rule 3 is untroubled. The
+    // undo-verification save further down deliberately keeps pure
+    // `identity()` — it is a byte comparison against the source and must
+    // not acquire a dependency on a settings file.
+    let (settings, settings_report) =
+        pdfce_core::settings::Settings::load(pdfce_core::settings::resolve_store());
+    report_settings(&settings_report);
+    let eol = |options: SaveOptions| {
+        options
+            .with_xref_entry_eol(settings.xref_entry_eol)
+            .with_trailing_eol(settings.trailing_eol)
+    };
+
+    let options = eol(SaveOptions::default().with_producer(match producer {
         ProducerArg::Set => ProducerPolicy::Set,
         ProducerArg::Preserve => ProducerPolicy::Preserve,
-    });
+    }));
     let changed = session.dirty_set().len();
 
     let saved = match mode {
-        SaveMode::Incremental => session.to_incremental_bytes(&SaveOptions::identity()),
+        SaveMode::Incremental => session.to_incremental_bytes(&eol(SaveOptions::identity())),
         SaveMode::Full => session.to_full_bytes(&options),
     };
     let (bytes, report) = saved.map_err(|err| {
@@ -8061,7 +8094,13 @@ fn cmd_extract_text(
     report_settings(&settings_report);
     let options = ExtractOptions::default()
         .with_artifacts(include_artifacts)
-        .with_word_gap_ratio(settings.word_gap_ratio);
+        .with_word_gap_ratio(settings.word_gap_ratio)
+        // The two EXTRACT-radius R169 knobs. Both move character offsets,
+        // so both move what a text search and a text-based redaction
+        // match (R35) — which is why they are honoured here rather than
+        // left to a hard-coded constant nobody can see.
+        .with_unmappable_code(settings.unmappable_code)
+        .with_actual_text(settings.actual_text);
     let extracted = match text_extract::extract_pages(&doc, &indices, &options) {
         Ok(extracted) => extracted,
         Err(err) => {
@@ -8451,7 +8490,11 @@ fn cmd_inspect_text_blocks(input: &Path, pages_spec: &str, json: bool) -> u8 {
     report_settings(&settings_report);
     let options = ExtractOptions::default()
         .with_provenance(true)
-        .with_word_gap_ratio(settings.word_gap_ratio);
+        .with_word_gap_ratio(settings.word_gap_ratio)
+        // As the `extract-text` path: `TX-A1` and `AT-A1` both change the
+        // characters this subcommand reports, so both are the operator's.
+        .with_unmappable_code(settings.unmappable_code)
+        .with_actual_text(settings.actual_text);
     let recog = BlockRecognitionOptions::default();
 
     // Accumulators for the stable summary line.

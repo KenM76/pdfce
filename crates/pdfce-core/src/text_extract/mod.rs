@@ -139,6 +139,7 @@ use std::sync::Arc;
 use crate::content::ContentError;
 use crate::document::Document;
 use crate::page_tree::{self, Page, PageTreeError, Rect};
+use crate::settings::{ActualTextPrecedence, UnmappableCode};
 use crate::span::ByteSpan;
 use crate::text_state::AmbientTextState;
 use crate::view::DocumentView;
@@ -766,6 +767,29 @@ pub struct ExtractOptions {
     /// Pass 14.1) build on; the flag exists so that cost is paid only by
     /// callers that need it.
     pub capture_provenance: bool,
+    /// What to emit for a character code no rung of the §9.10.2 ladder
+    /// could map (spec ambiguity `TX-A1`, R169).
+    ///
+    /// Default [`UnmappableCode::ReplacementChar`] — **evidence tier (d)**,
+    /// the ambiguity register's vocabulary for a reasoned guess: §9.10.2
+    /// names **no** sentinel, and no Acrobat citation, census or documented
+    /// third-party behaviour backs U+FFFD over the alternatives. It is
+    /// chosen because it is the only length-preserving *and* visibly wrong
+    /// option, which is what rule 4 asks for.
+    ///
+    /// Whatever this is set to, the rung-4 failure counter
+    /// ([`TextDiagnostics::ladder_failures`]) still counts every occurrence
+    /// — the setting chooses the sentinel, never whether to admit to it.
+    pub unmappable_code: UnmappableCode,
+    /// Whether an `/ActualText` entry replaces the glyph-derived
+    /// characters it covers (spec ambiguity `AT-A1`, R169).
+    ///
+    /// Default [`ActualTextPrecedence::Always`] — **evidence tier (d)**, a
+    /// reasoned guess, though the best-supported one available: §14.9.4's
+    /// *"shall be used as a replacement"* is the only `shall` in the set,
+    /// and the statements pointing the other way are §14.8.2.4.2 NOTE 2's
+    /// `may` (informative) and §9.10.1's `may`.
+    pub actual_text: ActualTextPrecedence,
 }
 
 impl Default for ExtractOptions {
@@ -777,6 +801,11 @@ impl Default for ExtractOptions {
             backward_jump_ratio: 0.50,
             max_form_depth: 64,
             capture_provenance: false,
+            // Read off the enum rather than restated, so the settings
+            // store, the engine and the file's own documentation cannot
+            // disagree about what the default is.
+            unmappable_code: UnmappableCode::default(),
+            actual_text: ActualTextPrecedence::default(),
         }
     }
 }
@@ -854,6 +883,47 @@ impl ExtractOptions {
         self.word_gap_ratio = word;
         self.line_gap_ratio = line;
         self.backward_jump_ratio = backward;
+        self
+    }
+
+    /// Set the unmappable-code sentinel (`TX-A1`), consuming and returning
+    /// `self`.
+    ///
+    /// The seam the operator's persisted setting arrives through:
+    /// `ExtractOptions::default().with_unmappable_code(settings.unmappable_code)`.
+    /// Same `#[non_exhaustive]` reasoning as [`Self::with_artifacts`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pdfce_core::settings::UnmappableCode;
+    /// use pdfce_core::text_extract::ExtractOptions;
+    ///
+    /// let quiet = ExtractOptions::default().with_unmappable_code(UnmappableCode::Omit);
+    /// assert_eq!(quiet.unmappable_code, UnmappableCode::Omit);
+    /// ```
+    #[must_use]
+    pub const fn with_unmappable_code(mut self, sentinel: UnmappableCode) -> Self {
+        self.unmappable_code = sentinel;
+        self
+    }
+
+    /// Set the `/ActualText` precedence rule (`AT-A1`), consuming and
+    /// returning `self`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pdfce_core::settings::ActualTextPrecedence;
+    /// use pdfce_core::text_extract::ExtractOptions;
+    ///
+    /// let forensic =
+    ///     ExtractOptions::default().with_actual_text(ActualTextPrecedence::Glyphs);
+    /// assert_eq!(forensic.actual_text, ActualTextPrecedence::Glyphs);
+    /// ```
+    #[must_use]
+    pub const fn with_actual_text(mut self, precedence: ActualTextPrecedence) -> Self {
+        self.actual_text = precedence;
         self
     }
 

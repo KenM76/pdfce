@@ -167,6 +167,7 @@ pub use save::{SaveReport, save_full, save_incremental};
 pub use xref_out::XrefOutError;
 
 use crate::object::{Dict, Name, ObjId, Object};
+use crate::settings::{TrailingEol, XrefEntryEol};
 
 /// The set of objects a save must write into the new revision.
 ///
@@ -567,17 +568,68 @@ pub struct SaveOptions {
     /// `/Producer` handling for [`save_full`]. Ignored by
     /// [`save_incremental`], which never touches `/Info`.
     pub producer: ProducerPolicy,
+    /// Which of §7.5.4's three permitted two-byte terminators ends a
+    /// classic cross-reference **entry** (spec ambiguity `EOL-A1`, R169).
+    ///
+    /// Default [`XrefEntryEol::SpaceLf`] — the form pdfce has always
+    /// emitted. **Evidence tier (c), downgrade pending**: the spec RAG
+    /// calls `SP LF` *"the common choice"* but the register's §11.3 flags
+    /// that the claim carries no citation and should either gain one or
+    /// drop to tier (d).
+    ///
+    /// Applies to **newly written** cross-reference entries only, so an
+    /// incremental save changes nothing about the base revision's bytes.
+    pub xref_entry_eol: XrefEntryEol,
+    /// Whether an end-of-line byte follows the final `%%EOF` (spec
+    /// ambiguity `EOL-A2`, R169).
+    ///
+    /// Default [`TrailingEol::Lf`] — what pdfce has always emitted.
+    /// **Evidence tier (d)**, a reasoned guess and the safe side of one:
+    /// §7.2.3 needs an EOL before a following `N G obj` on the append
+    /// path anyway, and a trailing EOL never breaks a backward `%%EOF`
+    /// scan.
+    pub trailing_eol: TrailingEol,
 }
 
 impl SaveOptions {
     /// Options that leave every byte pdfce did not have to change
     /// exactly as it was — the settings the round-trip harness and the
     /// per-object byte-identity gate run under.
+    ///
+    /// The two §7.5 end-of-line knobs stay at their **defaults** here
+    /// rather than tracking the operator's persisted choice, and that is
+    /// deliberate: `identity()` names a byte-comparison posture, and a
+    /// harness whose expected bytes depend on a settings file is a harness
+    /// that fails on one machine and passes on another. An operator-facing
+    /// save path applies the persisted values explicitly; this one does
+    /// not, and says so.
     #[must_use]
     pub fn identity() -> Self {
         Self {
             producer: ProducerPolicy::Preserve,
+            xref_entry_eol: XrefEntryEol::default(),
+            trailing_eol: TrailingEol::default(),
         }
+    }
+
+    /// Set the classic cross-reference entry terminator (`EOL-A1`),
+    /// consuming and returning `self`.
+    ///
+    /// **BYTES blast radius.** Every value §7.5.4 permits is conforming,
+    /// so this changes bytes and nothing else; it exists so an operator
+    /// matching another tool's output byte-for-byte can.
+    #[must_use]
+    pub const fn with_xref_entry_eol(mut self, eol: XrefEntryEol) -> Self {
+        self.xref_entry_eol = eol;
+        self
+    }
+
+    /// Set whether a trailing end-of-line follows `%%EOF` (`EOL-A2`),
+    /// consuming and returning `self`.
+    #[must_use]
+    pub const fn with_trailing_eol(mut self, eol: TrailingEol) -> Self {
+        self.trailing_eol = eol;
+        self
     }
 
     /// Set the `/Producer` policy, consuming and returning `self`.

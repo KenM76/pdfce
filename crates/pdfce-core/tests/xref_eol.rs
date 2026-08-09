@@ -143,3 +143,160 @@ fn old_mac_bare_cr_everywhere_loads() {
 fn mixed_eol_forms_load() {
     assert_loads_cleanly("mixed-eol.pdf");
 }
+
+// ---------------------------------------------------------------------------
+// The WRITE side — `EOL-A1` / `EOL-A2` as operator settings (R169)
+// ---------------------------------------------------------------------------
+//
+// Everything above is the READ side: pdfce accepts every EOL form §7.5.4
+// and §7.5.1 permit. These prove the other direction — that pdfce can now
+// *emit* each of §7.5.4's three permitted entry terminators and either
+// answer to §7.5.5's trailing-EOL question, that each choice produces a
+// file pdfce itself reloads cleanly, and (the part that matters most)
+// that the DEFAULTS are byte-for-byte what pdfce emitted before the
+// settings existed.
+//
+// Why the round trip is asserted rather than just the bytes: an entry
+// terminator that changed the entry's length would still "look right" in
+// a byte assertion on the last two bytes while silently breaking every
+// offset in the table. Reloading is what catches that, and it is exactly
+// decision 007 W10's named failure mode ("a file most readers repair
+// silently and pdfce's own lenient parser will happily reload") from the
+// opposite side.
+
+use pdfce_core::settings::{TrailingEol, XrefEntryEol};
+use pdfce_core::writer::{DirtySet, SaveOptions, save_full};
+
+/// A small, well-formed classic-xref document to rewrite.
+fn classic_source() -> Vec<u8> {
+    bytes("entry-splf.pdf")
+}
+
+/// Every 20-byte entry line in a classic table, as raw bytes.
+///
+/// Located by scanning for the `xref` keyword rather than by parsing,
+/// because the point is to inspect the bytes the writer actually laid
+/// down — a check routed through the parser would be checking the parser.
+///
+/// Scanned from the END, and matching `\nxref\n` rather than bare `xref`:
+/// these fixtures' own content streams draw the literal string
+/// `(xref EOL fixture)`, so a forward search for four bytes finds the
+/// page's text and walks off into the body. (Found the hard way; left as
+/// a warning, because every PDF byte-scanner meets this eventually.)
+fn classic_entries(pdf: &[u8]) -> Vec<Vec<u8>> {
+    let at = pdf
+        .windows(6)
+        .rposition(|w| w == b"\nxref\n")
+        .expect("a classic table")
+        + 1;
+    // Skip `xref` + its EOL + the `0 N` subsection header + its EOL.
+    let mut cursor = at + 4;
+    let mut newlines = 0;
+    while cursor < pdf.len() && newlines < 2 {
+        if pdf[cursor] == b'\n' {
+            newlines += 1;
+        }
+        cursor += 1;
+    }
+    let mut out = Vec::new();
+    while cursor + 20 <= pdf.len() && pdf[cursor].is_ascii_digit() {
+        out.push(pdf[cursor..cursor + 20].to_vec());
+        cursor += 20;
+    }
+    out
+}
+
+#[test]
+fn the_writer_emits_every_permitted_entry_terminator_and_reloads_each() {
+    for (eol, want) in [
+        (XrefEntryEol::SpaceLf, &b" \n"[..]),
+        (XrefEntryEol::SpaceCr, &b" \r"[..]),
+        (XrefEntryEol::CrLf, &b"\r\n"[..]),
+    ] {
+        let doc = Document::from_bytes(classic_source()).expect("fixture loads");
+        let options = SaveOptions::identity().with_xref_entry_eol(eol);
+        let (out, _) = save_full(&doc, &DirtySet::empty(), &options).expect("save_full");
+
+        let entries = classic_entries(&out);
+        assert!(!entries.is_empty(), "{eol:?}: no entries found");
+        for entry in &entries {
+            assert_eq!(entry.len(), 20, "{eol:?}: §7.5.4's 20-byte rule broken");
+            assert!(
+                entry.ends_with(want),
+                "{eol:?}: entry ended {:?}",
+                &entry[18..]
+            );
+        }
+
+        // The whole point of the 20-byte rule: every stored offset still
+        // addresses what it claims to.
+        let reloaded = Document::from_bytes(out).expect("pdfce reloads its own output");
+        let catalog = reloaded
+            .catalog()
+            .unwrap_or_else(|e| panic!("{eol:?}: catalog unresolvable after rewrite: {e}"));
+        assert_eq!(
+            catalog
+                .get(b"Type")
+                .and_then(Object::as_name)
+                .map(|n| n.as_bytes()),
+            Some(&b"Catalog"[..]),
+            "{eol:?}: rewritten file lost its catalog"
+        );
+    }
+}
+
+#[test]
+fn the_writer_honours_both_answers_to_the_trailing_eol_question() {
+    let doc = Document::from_bytes(classic_source()).expect("fixture loads");
+
+    let (with, _) = save_full(
+        &doc,
+        &DirtySet::empty(),
+        &SaveOptions::identity().with_trailing_eol(TrailingEol::Lf),
+    )
+    .expect("save_full");
+    let (without, _) = save_full(
+        &doc,
+        &DirtySet::empty(),
+        &SaveOptions::identity().with_trailing_eol(TrailingEol::None),
+    )
+    .expect("save_full");
+
+    assert!(with.ends_with(b"%%EOF\n"));
+    assert!(without.ends_with(b"%%EOF"));
+    assert_eq!(
+        with.len(),
+        without.len() + 1,
+        "the trailing-EOL setting must move exactly one byte"
+    );
+    // Both must still be a PDF. §7.5.5's `%%EOF` scan is backward from
+    // the end, so an unterminated last line is the case a naive scanner
+    // gets wrong.
+    Document::from_bytes(without).expect("an unterminated %%EOF still loads");
+}
+
+#[test]
+fn the_defaults_are_exactly_what_pdfce_emitted_before_the_settings_existed() {
+    // R169's non-negotiable: adding a knob changes no observable
+    // behaviour. `SaveOptions::identity()` carries the defaults, and the
+    // explicit-default save must be byte-identical to it.
+    let doc = Document::from_bytes(classic_source()).expect("fixture loads");
+    let (implicit, _) =
+        save_full(&doc, &DirtySet::empty(), &SaveOptions::identity()).expect("save_full");
+    let (explicit, _) = save_full(
+        &doc,
+        &DirtySet::empty(),
+        &SaveOptions::identity()
+            .with_xref_entry_eol(XrefEntryEol::SpaceLf)
+            .with_trailing_eol(TrailingEol::Lf),
+    )
+    .expect("save_full");
+    assert_eq!(implicit, explicit, "the defaults moved");
+    for entry in classic_entries(&implicit) {
+        assert!(entry.ends_with(b" \n"), "default entry EOL is not `SP LF`");
+    }
+    assert!(
+        implicit.ends_with(b"%%EOF\n"),
+        "default lost its trailing EOL"
+    );
+}

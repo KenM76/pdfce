@@ -116,6 +116,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use crate::object::{Dict, Name, ObjId, Object, Stream};
 use crate::page_tree::{self, PageSlot};
 use crate::pageops::separation::{self, SeparationImpact, SeparationPolicy};
+use crate::settings::{TrailingEol, XrefEntryEol};
 use crate::span::ByteSpan;
 use crate::writer::encoder::IdentityEncoder;
 use crate::writer::{fileid, serialize, xref_out};
@@ -1251,8 +1252,20 @@ impl Copier {
         // an unopenable PDF, so the result is deliberately swallowed here
         // and the (unreachable) case leaves the section empty rather than
         // panicking, per the crate's panic-free policy.
-        let _ = xref_out::write_classic_table(&mut out, &entries);
-        xref_out::write_classic_tail(&mut out, &trailer, section_offset);
+        //
+        // The two §7.5 end-of-line knobs (`EOL-A1`/`EOL-A2`, R169) are at
+        // their **defaults** here, not at the operator's persisted values,
+        // and that is a stated limitation rather than an oversight: this
+        // builder is reached through `pageops::extract_with` and friends,
+        // whose parameter is a `SeparationPolicy`, not a `SaveOptions`.
+        // Carrying the writer options down to it is a separate change with
+        // its own call-site churn. The consequence is narrow and worth
+        // naming: a document pdfce ASSEMBLES (page extraction, split) ends
+        // with `SP LF` entries and a trailing `LF` even for an operator who
+        // set otherwise, whereas a document pdfce SAVES honours the
+        // setting. Both are conforming; they are simply not identical.
+        let _ = xref_out::write_classic_table(&mut out, &entries, XrefEntryEol::default());
+        xref_out::write_classic_tail(&mut out, &trailer, section_offset, TrailingEol::default());
         out
     }
 }

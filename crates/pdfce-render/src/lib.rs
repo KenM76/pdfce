@@ -78,7 +78,7 @@ use tiny_skia::{Pixmap, Transform};
 #[doc(inline)]
 pub use pdfce_core::view::DocumentView;
 
-pub use font::{FallbackKey, FontData, FontEnvironment, GlyphSource, RenderOptions};
+pub use font::{FallbackKey, FontData, FontEnvironment, GlyphSource, RenderOptions, RenderPolicy};
 pub use interpret::Diagnostics;
 // `RenderedPage::pixmap` is a public field of a `tiny_skia` type, so this
 // crate must re-export `tiny_skia` or every consumer has to add its own
@@ -245,7 +245,7 @@ pub fn render_page_with_view(
         initial,
         &mut pixmap,
         options.cancel.as_ref(),
-        options.cmyk_intent,
+        options.policy(),
     );
     // Carry the page-level omission into the render diagnostics. The
     // interpreter cannot observe it — the streams it never received leave
@@ -270,7 +270,7 @@ pub fn render_page_with_view(
         &mut diagnostics,
         &mut pixmap,
         options.cancel.as_ref(),
-        options.cmyk_intent,
+        options.policy(),
     );
 
     // THE ONE PLACE A CANCELLED RENDER BECOMES AN ERROR.

@@ -84,6 +84,7 @@ use crate::content::{ContentError, ContentStream, ContentTokenKind, Operation};
 use crate::document::Document;
 use crate::object::{Dict, Name, Object, Stream};
 use crate::page_tree::{self, Page, PageTreeError};
+use crate::settings::UnmappableCode;
 use crate::span::ByteSpan;
 use crate::text_edit::encoding::{CompositeEncoding, InverseEncoding, RInvTrigger, Refusal};
 use crate::text_extract::font::ExtractFont;
@@ -1141,7 +1142,11 @@ impl<'a> Walk<'a> {
                 ShowElem::Str(bytes) => {
                     if simple && let Some(f) = font.as_ref() {
                         for (bi, &byte) in bytes.iter().enumerate() {
-                            let (chars, _) = f.to_unicode(u32::from(byte));
+                            // `TX-A1` PINNED — see the composite arm
+                            // below for the reasoning; it applies
+                            // identically to simple fonts.
+                            let (chars, _) =
+                                f.to_unicode(u32::from(byte), UnmappableCode::ReplacementChar);
                             let t0 = text.len();
                             text.push_str(&chars);
                             let t1 = text.len();
@@ -1191,7 +1196,17 @@ impl<'a> Walk<'a> {
                         for (pi, pair) in bytes.chunks_exact(2).enumerate() {
                             let [hi, lo] = pair else { continue };
                             let code = u32::from(*hi) << 8 | u32::from(*lo);
-                            let (chars, _) = f.to_unicode(code);
+                            // `TX-A1` PINNED to the length-preserving
+                            // sentinel, not the operator's extraction
+                            // setting. This table maps CHARACTER offsets
+                            // in `text` onto byte positions in the content
+                            // stream, and `UnmappableCode::Omit` would
+                            // give an unmappable code a zero-length span —
+                            // a glyph the operator can see on the page and
+                            // literally cannot address. Length
+                            // preservation is load-bearing here in a way
+                            // it is not in extraction output.
+                            let (chars, _) = f.to_unicode(code, UnmappableCode::ReplacementChar);
                             let t0 = text.len();
                             text.push_str(&chars);
                             let t1 = text.len();

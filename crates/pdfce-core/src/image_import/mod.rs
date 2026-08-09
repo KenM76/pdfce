@@ -1,4 +1,4 @@
-//! # Raster-image import — turning a PNG/JPEG/BMP file into a PDF image XObject
+//! # Raster-image import — turning a PNG/JPEG/BMP/TIFF file into a PDF image XObject
 //!
 //! The **write** direction of `crate::image_codec`. That module reads image
 //! XObjects *out of* a document so `pdfce-render` can paint them; this one
@@ -46,6 +46,19 @@
 //! | PNG colour type 4/6 (alpha interleaved in the rows) | decode + re-deflate | `/FlateDecode` |
 //! | PNG interlaced (Adam7) | **refused by name** | — |
 //! | BMP (no compressed form pdfce accepts) | decode + deflate | `/FlateDecode` |
+//! | TIFF, single-strip Deflate, no predictor, nothing to transform | **verbatim strip** | `/FlateDecode` |
+//! | TIFF, everything else in the baseline | decode + deflate | `/FlateDecode` |
+//! | TIFF, tiled / planar / CCITT / JPEG-in-TIFF / BigTIFF / … | **refused by name** | — |
+//!
+//! TIFF is the one row where the rule usually **cannot** be honoured, and the
+//! reason is worth stating rather than reading as a shortcut: two of the three
+//! compressions pdfce accepts have no PDF encoder in the project at all (R28 —
+//! LZW and PackBits are readable, neither is writable), a multi-strip image is
+//! several independent zlib streams where a PDF stream is one, and any sample
+//! that has to be byte-swapped, complemented or un-differenced has stopped
+//! being the bytes the dictionary would describe. The narrow case where none
+//! of that applies **is** passed through, and is verified before it is (see
+//! [`tiff`]).
 //!
 //! Re-deflating a PNG is **lossless** — the pixels are bit-identical, only
 //! the deflate stream differs — so branch 3 costs nothing but bytes. It is
@@ -139,11 +152,12 @@
 //! failed.'"*), and every operator-facing message names the formats that
 //! **do** work. A drag-and-drop gesture that fails silently, or that places
 //! something wrong-looking, is worse than one that says *"pdfce places PNG,
-//! JPEG and BMP; that file is a TIFF."*
+//! JPEG, BMP and TIFF; that file is a WebP."*
 //!
 //! | Refusal | Key | Why not supported |
 //! |---|---|---|
-//! | TIFF | `TIFF` | Multi-page, strips vs tiles, both endiannesses, planar configuration, six photometric interpretations, and its own predictor. A G3/G4 TIFF *could* passthrough into `/CCITTFaxDecode` — the parameters map cleanly onto Table 11 — but the container work dwarfs the codec work, and half a TIFF reader is worse than none. **Scoped out by name.** |
+//! | BigTIFF | `BigTIFF` | 8-byte offsets and a different directory layout — a different parser, not a superset of classic TIFF. Declined under its OWN name so the message ("pdfce places … TIFF") is advice rather than a contradiction. |
+//! | TIFF sub-features | `TIFF/tiled`, `TIFF/ccitt-g4`, … | Classic TIFF **is** placed ([`tiff`]); the sub-features it declines carry their own keys. The largest gap is CCITT G3/G4, which is what fax-lineage scanners emit — pdfce has a fuzzed CCITT decoder, but it is reachable only through a PDF image dictionary. |
 //! | GIF | `GIF` | LZW with GIF's own LSB bit packing and sub-block framing, plus animation frames and a per-frame transparent index. A real surface, not a cheap one. |
 //! | WebP / AVIF / HEIC / JPEG 2000 files | `WEBP` etc. | Need a decoder dependency. Project rule 13 makes adding one a licence-classified, `PRIOR_ART.md`-recorded decision, not something a feature Pass does in passing. |
 //! | Arithmetic / lossless / differential / 12-bit JPEG | `JPEG/arithmetic` … | These are different codecs wearing JPEG's marker syntax. `/DCTDecode` is defined against *"the JPEG baseline format"* (§7.4.8) plus the PDF 1.3 progressive extension; nothing else is in scope. |
@@ -216,14 +230,15 @@ pub mod jpeg;
 /// four-component path.
 pub mod jpeg_encode;
 pub mod png;
+pub mod tiff;
 
 use crate::image_codec::{MAX_IMAGE_DIMENSION, MAX_IMAGE_PIXELS, MAX_IMAGE_SAMPLE_BYTES};
 
 /// The raster container formats pdfce can place on a page.
 ///
 /// Deliberately small, and deliberately not a superset of what
-/// [`sniff`] can *recognise*: recognising TIFF is how pdfce refuses it by
-/// name instead of saying "unknown file".
+/// [`sniff`] can *recognise*: recognising GIF, WebP, HEIC and BigTIFF is how
+/// pdfce refuses them by name instead of saying "unknown file".
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[non_exhaustive]
 pub enum ImageFormat {
@@ -233,6 +248,13 @@ pub enum ImageFormat {
     Jpeg,
     /// Windows Bitmap (`BITMAPINFOHEADER`, uncompressed `BI_RGB`).
     Bmp,
+    /// Tagged Image File Format (TIFF 6.0, classic 42-magic — **not**
+    /// BigTIFF, which [`sniff`] declines under its own name).
+    ///
+    /// Only the baseline subset [`tiff`] accepts; everything else is refused
+    /// with a stable feature key rather than mis-decoded. See that module's
+    /// docs for the accepted/refused tables.
+    Tiff,
 }
 
 impl ImageFormat {
@@ -243,6 +265,7 @@ impl ImageFormat {
             Self::Png => "PNG",
             Self::Jpeg => "JPEG",
             Self::Bmp => "BMP",
+            Self::Tiff => "TIFF",
         }
     }
 }
@@ -254,7 +277,7 @@ impl ImageFormat {
 /// day a format is added is the day the third copy of that sentence starts
 /// lying — and a stale "PNG, JPEG or BMP" in one error path is exactly the
 /// kind of drift nothing tests.
-pub const SUPPORTED_FORMATS: &str = "PNG, JPEG and BMP";
+pub const SUPPORTED_FORMATS: &str = "PNG, JPEG, BMP and TIFF";
 
 /// Why an image file could not be turned into a PDF image XObject.
 ///
@@ -501,6 +524,26 @@ pub enum RecompressReason {
     /// The source format has no compressed form PDF can express — an
     /// uncompressed BMP.
     NoCompressedSource,
+    /// The source **is** compressed, but its compressed bytes could not be
+    /// reused as a PDF stream payload — the ordinary TIFF case.
+    ///
+    /// Distinct from [`Self::NoCompressedSource`] because the two are
+    /// different facts about the operator's file, and a front end that
+    /// conflates them tells a TIFF owner their file was uncompressed. There
+    /// were bytes; they were simply not reusable, for one of four reasons,
+    /// none of which pdfce can do anything about:
+    ///
+    /// - the codec has no PDF **encoder** in pdfce (R28 — LZW and PackBits
+    ///   are readable but pdfce writes neither);
+    /// - the image is stored in several independently-compressed strips, and
+    ///   two concatenated zlib streams are not one zlib stream;
+    /// - the samples needed a transform before they meant what the PDF
+    ///   dictionary would say they mean (a 16-bit little-endian byte swap, a
+    ///   `WhiteIsZero` complement, `Predictor 2` un-differencing);
+    /// - an extra sample had to be de-interleaved.
+    ///
+    /// Lossless in every case: the pixels are exactly the source's.
+    SourceCodecNotReusable,
     /// The operator asked for [`ImageCompression::Lossless`] on a source
     /// stored in a lossy codec, so it was decoded and stored as
     /// `/FlateDecode`.
@@ -533,6 +576,7 @@ impl RecompressReason {
         match self {
             Self::AlphaSplit => "alpha-split",
             Self::NoCompressedSource => "no-compressed-source",
+            Self::SourceCodecNotReusable => "source-codec-not-reusable",
             Self::LosslessRequested => "lossless-requested",
             Self::JpegRequested => "jpeg-requested",
         }
@@ -705,6 +749,14 @@ pub enum DpiSource {
     PngPhys,
     /// A BMP `biXPelsPerMeter`/`biYPelsPerMeter` pair.
     BmpPelsPerMeter,
+    /// TIFF `XResolution`/`YResolution` (282/283) under a `ResolutionUnit`
+    /// (296) of 2 (inch) or 3 (centimetre).
+    ///
+    /// Unit **1** deliberately does not produce this: it means "no absolute
+    /// unit", so the two numbers are an aspect ratio rather than a
+    /// resolution, and reading them as dpi would invent a physical size the
+    /// file explicitly declined to state.
+    TiffResolution,
 }
 
 /// The EXIF orientation an imported JPEG declared (`IFD0` tag `0x0112`).
@@ -952,6 +1004,71 @@ pub struct ImportNotes {
     /// "what quality is this stored at?" should not have to match on an enum
     /// whose other variants have no quality at all.
     pub jpeg_quality: Option<u8>,
+    /// A multi-page TIFF's **further** pages, which pdfce did not place.
+    ///
+    /// `0` for every single-page image and for every other format. A
+    /// sheet-fed scanner's ordinary output is one TIFF with one IFD per
+    /// sheet; pdfce places the first and says how many it left, because
+    /// silently dropping the rest is precisely the shape rule 4 forbids and
+    /// refusing outright would turn the commonest scanner output into a dead
+    /// end. See [`tiff`]'s module docs.
+    ///
+    /// A **lower bound** in the one pathological case where the IFD chain is
+    /// damaged (a cycle, or more than the walk's ceiling): the walk stops
+    /// rather than failing, because the first page is already complete and
+    /// placeable.
+    pub tiff_pages_ignored: u32,
+    /// A TIFF's colour samples were stored **premultiplied by alpha**
+    /// (`ExtraSamples 1`, "associated alpha" — TIFF 6.0 §18) and pdfce
+    /// un-premultiplied them so they could be carried by a straight-alpha
+    /// `/SMask`.
+    ///
+    /// Its own disclosure because the reconstruction is **lossy in the
+    /// low-alpha tail** and nothing on screen shows it: a sample stored at
+    /// alpha 8/255 retains about three bits of colour, and no later step can
+    /// put back what the premultiplication quantised away. Exact at full
+    /// opacity, and good everywhere the pixel is actually visible.
+    ///
+    /// The alternative — keeping the premultiplied samples and declaring
+    /// `/SMask << … /Matte [0 0 0] >>` (§11.6.5.3), which is exactly what
+    /// TIFF's associated alpha is — is the faithful representation and is not
+    /// yet available: [`SoftMask`] carries no matte through to the writer.
+    pub tiff_associated_alpha_unpremultiplied: bool,
+    /// A TIFF declared `PhotometricInterpretation 0` (`WhiteIsZero`) and
+    /// pdfce complemented every sample into `/DeviceGray`'s polarity
+    /// (§8.6.4.2, where 0.0 is black).
+    ///
+    /// Not the "Adobe CMYK inversion" R29 forbids, and the difference is the
+    /// whole point: R29 governs a polarity **nothing in the file declares**,
+    /// where any inversion is a guess. Here a required tag declares it
+    /// unambiguously, and the complement is exact at every bit depth. It is
+    /// still disclosed, because the stored bytes are no longer the file's.
+    pub tiff_white_is_zero_inverted: bool,
+    /// Extra samples per pixel a TIFF declared as **unspecified**
+    /// (`ExtraSamples 0`, or the tag omitted entirely) which pdfce dropped
+    /// rather than reading as opacity.
+    ///
+    /// Dropping is the safe direction: a channel of undeclared meaning read
+    /// as alpha can make an otherwise-perfect image entirely invisible — the
+    /// same trap [`ImportNotes::bmp_fourth_byte_ignored`] names for a 32-bit
+    /// BMP's padding byte. The count is reported so an operator whose file
+    /// *did* carry alpha in an undeclared channel can see why it vanished.
+    pub tiff_extra_samples_dropped: u32,
+    /// A TIFF `ColorMap`'s values were all ≤ 255 and were therefore read as
+    /// **already 8-bit**, against TIFF 6.0 §16's own definition (*"0
+    /// represents the minimum intensity and 65535 represents the maximum"*).
+    ///
+    /// A real standard-vs-practice divergence, not a shortcut: a long tail of
+    /// writers stores 0–255 in those `SHORT`s, and a reader that trusts the
+    /// specification renders such a palette almost entirely black. libtiff
+    /// and everything built on it apply this heuristic. pdfce applies it and
+    /// says so, because its one false positive — a genuine 16-bit palette
+    /// every component of which is darker than 1/257 of full intensity — is
+    /// possible, however unlikely, and the operator can see the result.
+    ///
+    /// A candidate for an operator setting under R169; hard-coded here only
+    /// because this module does not reach the settings surface.
+    pub tiff_palette_assumed_8bit: bool,
     /// Bytes of the source **file** handed to [`import_with`].
     ///
     /// Populated for every policy, not only the re-encoding ones, so that
@@ -1124,7 +1241,7 @@ impl ImportedImage {
 ///
 /// Returns `Ok(format)` for what pdfce places, and `Err` naming the format
 /// for what it recognises but declines — never a bare "unknown" for a file
-/// that is plainly a TIFF.
+/// that is plainly a GIF, a WebP or a BigTIFF.
 ///
 /// # Errors
 ///
@@ -1144,19 +1261,22 @@ pub fn sniff(data: &[u8]) -> Result<ImageFormat, ImageImportError> {
     if data.starts_with(b"BM") {
         return Ok(ImageFormat::Bmp);
     }
+    // TIFF: "II" + 42 little-endian, or "MM" + 42 big-endian (TIFF 6.0 §2).
+    if data.starts_with(b"II\x2a\x00") || data.starts_with(b"MM\x00\x2a") {
+        return Ok(ImageFormat::Tiff);
+    }
 
     let declined = |format| Err(ImageImportError::UnsupportedFormat { format });
     if data.starts_with(b"GIF87a") || data.starts_with(b"GIF89a") {
         return declined("GIF");
     }
-    // TIFF: "II" + 42 little-endian, or "MM" + 42 big-endian. BigTIFF uses
-    // 43 and is the same refusal.
-    if data.starts_with(b"II\x2a\x00")
-        || data.starts_with(b"MM\x00\x2a")
-        || data.starts_with(b"II\x2b\x00")
-        || data.starts_with(b"MM\x00\x2b")
-    {
-        return declined("TIFF");
+    // BigTIFF's magic is 43, and it is a DIFFERENT parse — 8-byte offsets, a
+    // different directory layout, a 16-byte header. Declined under its own
+    // name rather than as "TIFF", so the message reads "pdfce does not place
+    // BigTIFF images — it places … TIFF", which is exactly the actionable
+    // sentence (re-save as classic TIFF) rather than a contradiction.
+    if data.starts_with(b"II\x2b\x00") || data.starts_with(b"MM\x00\x2b") {
+        return declined("BigTIFF");
     }
     // RIFF....WEBP
     if data.starts_with(b"RIFF") && data.get(8..12) == Some(b"WEBP") {
@@ -1211,12 +1331,18 @@ pub fn sniff(data: &[u8]) -> Result<ImageFormat, ImageImportError> {
 /// # Examples
 ///
 /// ```
-/// use pdfce_core::image_import::{self, ImageImportError};
+/// use pdfce_core::image_import::{self, ImageImportError, SUPPORTED_FORMATS};
 ///
 /// // Refusals name the format rather than failing generically.
 /// let err = image_import::import(b"GIF89a\0\0\0\0").unwrap_err();
 /// assert!(matches!(err, ImageImportError::UnsupportedFormat { format: "GIF" }));
-/// assert!(err.to_string().contains("PNG, JPEG and BMP"));
+///
+/// // Asserted against the constant, not a copy of it. This line said
+/// // "PNG, JPEG and BMP" until TIFF support landed and turned it into a
+/// // failing doctest — the message had moved on and the assertion had
+/// // not. Referencing `SUPPORTED_FORMATS` makes that impossible: the
+/// // next format to arrive updates this example by construction.
+/// assert!(err.to_string().contains(SUPPORTED_FORMATS));
 /// ```
 pub fn import(data: &[u8]) -> Result<ImportedImage, ImageImportError> {
     import_with(data, &ImportOptions::new())
@@ -1286,6 +1412,7 @@ pub fn import_with(
         ImageFormat::Png => png::import(data)?,
         ImageFormat::Jpeg => jpeg::import(data)?,
         ImageFormat::Bmp => bmp::import(data)?,
+        ImageFormat::Tiff => tiff::import(data)?,
     };
 
     // The two cases where a policy changes the bytes the importers produced.
@@ -1526,10 +1653,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn sniff_recognises_the_three_supported_formats() {
+    fn sniff_recognises_the_four_supported_formats() {
         assert_eq!(sniff(b"\x89PNG\r\n\x1a\nrest").unwrap(), ImageFormat::Png);
         assert_eq!(sniff(&[0xFF, 0xD8, 0xFF, 0xE0]).unwrap(), ImageFormat::Jpeg);
         assert_eq!(sniff(b"BM\0\0\0\0").unwrap(), ImageFormat::Bmp);
+        // Both byte orders of classic TIFF (TIFF 6.0 §2, version magic 42).
+        assert_eq!(sniff(b"II\x2a\x00\x08\0\0\0").unwrap(), ImageFormat::Tiff);
+        assert_eq!(sniff(b"MM\x00\x2a\0\0\0\x08").unwrap(), ImageFormat::Tiff);
     }
 
     /// The load-bearing property of every refusal: it names the format the
@@ -1538,8 +1668,11 @@ mod tests {
     fn declined_formats_are_refused_by_name() {
         for (bytes, name) in [
             (b"GIF89a\0\0\0\0".to_vec(), "GIF"),
-            (b"II\x2a\x00\0\0\0\0".to_vec(), "TIFF"),
-            (b"MM\x00\x2a\0\0\0\0".to_vec(), "TIFF"),
+            // BigTIFF (magic 43) is a DIFFERENT parser, refused under its own
+            // name — classic TIFF (magic 42) is placed, so refusing BigTIFF
+            // as "TIFF" would produce a message that contradicts itself.
+            (b"II\x2b\x00\0\0\0\0".to_vec(), "BigTIFF"),
+            (b"MM\x00\x2b\0\0\0\0".to_vec(), "BigTIFF"),
             (b"RIFF\0\0\0\0WEBPVP8 ".to_vec(), "WebP"),
             (b"\0\0\0\x20ftypavif\0\0\0\0".to_vec(), "AVIF"),
             (b"\0\0\0\x20ftypheic\0\0\0\0".to_vec(), "HEIC"),

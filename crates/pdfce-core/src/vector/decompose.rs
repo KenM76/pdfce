@@ -102,6 +102,7 @@ use crate::content::{ContentStream, ContentToken, ContentTokenKind};
 use crate::graph::ObjectGraph;
 use crate::object::{Dict, Object};
 use crate::page_tree::Page;
+use crate::settings::UnmappableCode;
 use crate::span::ByteSpan;
 use crate::text_extract::{ExtractFont, LadderRung};
 use crate::text_state::TextStateParams;
@@ -2286,7 +2287,12 @@ impl<'a> Decomposer<'a> {
                 t.truncated = true;
                 return;
             }
-            let (text, rung) = font.to_unicode(code.value);
+            // `TX-A1` PINNED. This is a bounded PREVIEW string shown
+            // beside a decomposed text object, and its whole job is to let
+            // an operator recognise the object; a sentinel that renders as
+            // nothing would make an undecodable run look like an empty
+            // one. `failed_codes` counts either way.
+            let (text, rung) = font.to_unicode(code.value, UnmappableCode::ReplacementChar);
             if rung == LadderRung::Failed {
                 t.failed_codes += 1;
             } else {

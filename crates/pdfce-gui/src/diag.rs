@@ -119,6 +119,15 @@ pub enum Step {
     /// question "is its toolbar button wired up". A harness that could only
     /// reach a tool through its button would confuse the two.
     Tool(ScriptTool),
+    /// Open the settings window, through the same action the ribbon
+    /// button pushes.
+    ///
+    /// Exists so R86 can be discharged for a window WITHOUT taking the
+    /// operator's screen. `gui-shot.ps1` answers visual questions but
+    /// raises a real window and grabs the foreground; this harness runs
+    /// off-screen and never touches focus, which is the only option when
+    /// someone is working at the machine.
+    Settings,
     /// Choose the Create Field tool's field TYPE
     /// (`field-kind:text|check|radio|choice`).
     ///
@@ -384,6 +393,10 @@ fn parse_step(s: &str) -> Option<Step> {
             "end" => Some(Step::NavKey("end")),
             _ => None,
         },
+        // A top-level step, NOT `tool:settings`: settings are not a tool,
+        // and filing them under one would make the harness vocabulary lie
+        // about the application's own structure.
+        "settings" => Some(Step::Settings),
         "view" if rest.trim() == "points" => Some(Step::ShowPoints),
         // NOT `rest.trim()`: leading and trailing spaces are legitimate text.
         "type" if !rest.is_empty() => Some(Step::Text(rest.to_owned())),

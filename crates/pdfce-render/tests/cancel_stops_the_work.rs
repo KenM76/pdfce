@@ -124,7 +124,9 @@ fn a_cancelled_render_paints_nothing() {
         GraphicsState::default_with_ctm(base_ctm),
         &mut cancelled_pixmap,
         Some(&token),
-        CmykIntent::Calibrated,
+        RenderOptions::default()
+            .with_cmyk_intent(CmykIntent::Calibrated)
+            .policy(),
     );
 
     let mut painted_pixmap = Pixmap::new(w, h).expect("pixmap allocates");
@@ -137,7 +139,9 @@ fn a_cancelled_render_paints_nothing() {
         GraphicsState::default_with_ctm(base_ctm),
         &mut painted_pixmap,
         None,
-        CmykIntent::Calibrated,
+        RenderOptions::default()
+            .with_cmyk_intent(CmykIntent::Calibrated)
+            .policy(),
     );
 
     let blank = Pixmap::new(w, h).map(|mut p| {

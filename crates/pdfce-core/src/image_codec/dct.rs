@@ -128,6 +128,24 @@
 //! for that classification is permitted by R26's decision-006
 //! clarification (*observing is not applying*); actually applying
 //! `/Decode` remains `pdfce-render`'s job alone.
+//!
+//! ## R169: the operator gets an escape hatch, R29 keeps the default
+//!
+//! Standing rule **R169** (2026-08-08) says a genuine spec ambiguity
+//! becomes an operator setting whose installed default is the best guess
+//! at what is usually followed. `DCT-A1` is exactly that shape, and its
+//! best guess is R29 — so [`CmykJpegPolarity::NeverInvert`] is the
+//! default and the paragraph above still describes what pdfce does out of
+//! the box. What R169 adds is [`CmykJpegPolarity::InvertOnApp14`], for the
+//! operator who *knows* their corpus is old Photoshop output: it
+//! complements all four components for the ambiguous shape alone, and
+//! [`complement_in_place`] documents why that is a convention rather than
+//! a transform. The R30 note is raised either way — it describes the file,
+//! not the configuration. R29 is narrowed from "pdfce never inverts" to
+//! "pdfce never inverts **unless the operator explicitly asked, for the
+//! one shape nothing can decide**", which is a disclosure gain, not a
+//! weakening: the alternative to a named setting is an operator silently
+//! living with negatives.
 
 use zune_jpeg::JpegDecoder;
 use zune_jpeg::zune_core::bytestream::ZCursor;
@@ -138,6 +156,7 @@ use super::{
     Codec, CodecColorModel, CodecNotes, CodedImage, ImageCodecError, MAX_IMAGE_DIMENSION,
     MAX_IMAGE_PIXELS, MAX_IMAGE_SAMPLE_BYTES,
 };
+use crate::settings::CmykJpegPolarity;
 // decision 018: the codecs resolve indirect entries through a `DocumentView`
 // rather than a `&Document`, so an image whose dictionary lives in an
 // editing session decodes as the operator currently has it. `Document` is
@@ -178,6 +197,7 @@ pub(super) fn decode(
     data: &[u8],
     parms: Option<&Dict>,
     dict: &Dict,
+    polarity: CmykJpegPolarity,
     notes: &mut CodecNotes,
 ) -> Result<CodedImage, ImageCodecError> {
     let frame = sniff(data)?;
@@ -246,6 +266,23 @@ pub(super) fn decode(
             notes.cmyk_image = true;
         } else if !has_decode_array(doc, dict) {
             notes.cmyk_polarity_unverifiable = true;
+            // `DCT-A1` (R169). THIS, and only this, is the configurable
+            // case: four components, effective transform 0, an Adobe
+            // marker present, and nothing in the dictionary to say which
+            // way round the ink is stored. The note above is raised first
+            // and unconditionally — the ambiguity is a property of the
+            // FILE, so an operator who set a polarity still gets told the
+            // file could not settle it (R30).
+            //
+            // `frame.adobe_transform.is_some()` is the whole test the
+            // option's name promises, and it is deliberately a presence
+            // test: APP14 carries **no polarity flag**, so there is no bit
+            // to consult. That absence is exactly why R29 makes
+            // `NeverInvert` the default and why the alternative can only
+            // ever be a blunt instrument for a known-bad corpus.
+            if polarity == CmykJpegPolarity::InvertOnApp14 && frame.adobe_transform.is_some() {
+                complement_in_place(&mut samples);
+            }
         }
     }
     notes.geometry_mismatch = geometry_disagrees(doc, dict, width, height);
@@ -464,6 +501,35 @@ fn ycck_to_cmyk_in_place(samples: &mut [u8]) {
             *slot = invert(b);
         }
         // pixel[3] — K — is carried through untouched.
+    }
+}
+
+/// Complement every byte: `x → 255 − x` (`DCT-A1`,
+/// [`CmykJpegPolarity::InvertOnApp14`]).
+///
+/// ## This is NOT a colour transform, and the distinction is the point
+///
+/// [`ycck_to_cmyk_in_place`] above implements a transform Table 13
+/// **mandates** — it is compliance, and it runs whatever the operator
+/// configured. This function implements a **convention no document
+/// defines**: some 1990s Photoshop output stores four-component JPEG
+/// samples complemented, declares nothing, and leaves a reader with
+/// nothing in the codestream or the dictionary to detect it by. It runs
+/// only when the operator has explicitly asked, only for the one shape
+/// that is genuinely undecidable, and never by default (R29).
+///
+/// All **four** components are complemented, K included — unlike the YCCK
+/// inverse, where K is already true ink and is carried through untouched.
+/// The convention being undone complemented the whole pixel.
+///
+/// Operating over the flat buffer rather than `chunks_exact(4)` is
+/// deliberate: the operation is per-byte, so a buffer whose length is not
+/// a multiple of four (which the ceilings above should already have made
+/// impossible) still comes out consistently complemented rather than with
+/// a differently-treated tail.
+fn complement_in_place(samples: &mut [u8]) {
+    for byte in samples.iter_mut() {
+        *byte = 255 - *byte;
     }
 }
 

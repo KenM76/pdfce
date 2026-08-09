@@ -81,6 +81,15 @@ pub enum RibbonGroup {
     Clipboard,
     /// Reset the panel arrangement, with a choice of what to reset.
     LayoutReset,
+    /// Operator settings — the persisted choices in `userdata/settings.txt`
+    /// (R15, R169).
+    ///
+    /// Its own group rather than a button inside `LayoutReset`: that group
+    /// is about the WINDOW, and these are about how pdfce reads and writes
+    /// DOCUMENTS. Filing a colour-rendering choice under "reset layout"
+    /// would be the R123 failure (one command, one place) from the other
+    /// direction — a command findable only somewhere it does not belong.
+    Settings,
     /// Keyboard-shortcut reference.
     Help,
     /// Whole-page operations — rotation today.
@@ -191,10 +200,11 @@ impl RibbonGroup {
         dead_code,
         reason = "the group enumeration; swept by this module's taxonomy test and by main.rs's gated-widget test, and the list any future group-picker must read rather than re-derive" // ui-text-exempt: clippy lint justification, never displayed
     )]
-    pub const ALL: [Self; 17] = [
+    pub const ALL: [Self; 18] = [
         Self::DocumentProperties,
         Self::Clipboard,
         Self::LayoutReset,
+        Self::Settings,
         Self::Help,
         Self::Pages,
         Self::ContentTools,
@@ -218,6 +228,7 @@ impl RibbonGroup {
             Self::DocumentProperties => ui_text::ribbon_group_document_properties(),
             Self::Clipboard => ui_text::ribbon_group_clipboard(),
             Self::LayoutReset => ui_text::ribbon_group_layout_reset(),
+            Self::Settings => ui_text::ribbon_group_settings(),
             Self::Help => ui_text::ribbon_group_help(),
             Self::Pages => ui_text::ribbon_group_pages(),
             Self::ContentTools => ui_text::ribbon_group_content_tools(),
@@ -382,6 +393,7 @@ impl RibbonTab {
                 RibbonGroup::DocumentProperties,
                 RibbonGroup::Clipboard,
                 RibbonGroup::LayoutReset,
+                RibbonGroup::Settings,
                 RibbonGroup::Help,
             ],
             Self::Edit => &[

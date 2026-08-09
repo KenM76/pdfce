@@ -61,6 +61,7 @@ use std::collections::BTreeSet;
 use crate::graph::ObjectGraph;
 use crate::object::{Dict, Name, ObjId, Object};
 use crate::page_tree::Rect;
+use crate::settings::MissingAppearanceState;
 
 /// Maximum annotations modelled from one page's `/Annots` array
 /// (pdfce policy, ARCHITECTURE.md §10.1 adversarial-input posture).
@@ -341,6 +342,46 @@ impl Annotation {
 /// The result is bounded by [`MAX_ANNOTS_PER_PAGE`].
 #[must_use]
 pub fn page_annotations<G: ObjectGraph + ?Sized>(graph: &G, page_id: ObjId) -> Vec<Annotation> {
+    page_annotations_with(graph, page_id, MissingAppearanceState::default())
+}
+
+/// [`page_annotations`] with an explicit `AS-A1` policy (R169).
+///
+/// ## What `missing_as` decides, and what it does not
+///
+/// **Only** the malformed configuration §12.5.5 leaves undefined: an
+/// `/AP` `/N` subdictionary of **two or more** entries with **no `/AS`**.
+/// Table 164 makes `/AS` *required* there, and NOTE 3 covers only the
+/// neighbouring case (`/AS` present, naming an absent state), so the
+/// standard states no recovery at all. Every other path through
+/// [`select_normal_appearance`] is spec-determined and this parameter
+/// cannot reach it — a `/N` stream still wins outright, a present `/AS`
+/// still selects, an absent named state is still
+/// [`Appearance::StateUnresolved`], and a **single**-entry subdictionary
+/// with no `/AS` is still painted (there are no alternatives to choose
+/// between, so painting it is not a guess).
+///
+/// The default is [`MissingAppearanceState::PaintNothing`] — the shipped
+/// behaviour, **evidence tier (d)**, a reasoned guess and deliberately the
+/// conservative one. The spec RAG's row is explicit that "paint the first"
+/// and "paint `/Off`" are *empirical* guesses belonging to
+/// `C:\personal_rag\pdf\`, and installing one as the default would put a
+/// plausible appearance on screen with nothing to say pdfce chose it.
+///
+/// ## A separate function rather than a changed signature
+///
+/// [`page_annotations`] has callers in `pdfce-gui`, `pdfce-cli` and four
+/// test crates, none of which have an opinion about this. Following the
+/// crate's existing `*_with` convention (`pageops::extract_with`,
+/// `EditSession::delete_pages_with`) keeps the policy explicit at the one
+/// call site that carries the operator's setting — the renderer — and
+/// keeps it out of the way everywhere else.
+#[must_use]
+pub fn page_annotations_with<G: ObjectGraph + ?Sized>(
+    graph: &G,
+    page_id: ObjId,
+    missing_as: MissingAppearanceState,
+) -> Vec<Annotation> {
     let page = graph.resolved(page_id);
     let Some(page_dict) = page.as_dict() else {
         return Vec::new();
@@ -364,7 +405,7 @@ pub fn page_annotations<G: ObjectGraph + ?Sized>(graph: &G, page_id: ObjId) -> V
             // an error; skip it.
             continue;
         };
-        out.push(model_annotation(graph, id, dict));
+        out.push(model_annotation(graph, id, dict, missing_as));
     }
     out
 }
@@ -375,6 +416,7 @@ fn model_annotation<G: ObjectGraph + ?Sized>(
     graph: &G,
     id: Option<ObjId>,
     dict: &Dict,
+    missing_as: MissingAppearanceState,
 ) -> Annotation {
     let subtype = graph
         .resolve(dict.get(b"Subtype").unwrap_or(&Object::Null))
@@ -395,7 +437,7 @@ fn model_annotation<G: ObjectGraph + ?Sized>(
             .unwrap_or(0),
     );
 
-    let appearance = select_normal_appearance(graph, dict);
+    let appearance = select_normal_appearance(graph, dict, missing_as);
 
     // §8.11.3.3 annotation /OC entry — an OCG or OCMD indirect reference. Only
     // the reference is modelled here; the render path resolves its default
@@ -520,7 +562,11 @@ fn oc_refs<G: ObjectGraph + ?Sized>(graph: &G, obj: Option<&Object>) -> Vec<ObjI
 ///
 /// Returns the full negative-result taxonomy ([`Appearance`]); it never
 /// guesses and never synthesises (R43).
-fn select_normal_appearance<G: ObjectGraph + ?Sized>(graph: &G, annot: &Dict) -> Appearance {
+fn select_normal_appearance<G: ObjectGraph + ?Sized>(
+    graph: &G,
+    annot: &Dict,
+    missing_as: MissingAppearanceState,
+) -> Appearance {
     // /AP (Table 164) — a dictionary. Absent or non-dictionary ⇒ nothing
     // to paint.
     let Some(ap) = annot
@@ -550,7 +596,7 @@ fn select_normal_appearance<G: ObjectGraph + ?Sized>(graph: &G, annot: &Dict) ->
                 .get(b"AS")
                 .map(|o| graph.resolve(o))
                 .and_then(Object::as_name);
-            select_state(graph, subdict, state)
+            select_state(graph, subdict, state, missing_as)
         }
         // /N present but neither stream nor dictionary (malformed). Under
         // R43 there is no usable appearance; named-not-painted.
@@ -564,6 +610,7 @@ fn select_state<G: ObjectGraph + ?Sized>(
     graph: &G,
     subdict: &Dict,
     state: Option<&Name>,
+    missing_as: MissingAppearanceState,
 ) -> Appearance {
     match state {
         // /AS present: paint the sub-entry it names, or display nothing if
@@ -576,7 +623,8 @@ fn select_state<G: ObjectGraph + ?Sized>(
         // subdictionaries, so this is malformed. The RAG's negative
         // result: the spec gives NO rule for choosing among entries, so
         // "display nothing" is the conservative extension of NOTE 3 —
-        // pdfce must NOT guess a first/On/Off key.
+        // pdfce must NOT guess a first/On/Off key *by default*. Under
+        // R169 the guesses are available, named, and opt-in (`AS-A1`).
         None => {
             let mut present = subdict.iter().filter(|(_, v)| !matches!(v, Object::Null));
             match (present.next(), present.next()) {
@@ -586,10 +634,33 @@ fn select_state<G: ObjectGraph + ?Sized>(
                 // possible appearance, so painting it is not "guessing
                 // among alternatives" that the RAG forbids — there are no
                 // alternatives. (The forbidden case is a *multi-entry*
-                // subdictionary with no /AS.)
+                // subdictionary with no /AS.) The setting does NOT reach
+                // this arm: there is nothing here to have a policy about.
                 (Some((_, only)), None) => classify_state_entry(graph, only),
-                // Two or more entries, no /AS ⇒ display nothing, counted.
-                (Some(_), Some(_)) => Appearance::StateUnresolved,
+                // Two or more entries, no /AS ⇒ the one genuinely
+                // undefined case, and the only one `missing_as` governs.
+                // Whichever way it goes the annotation is still surfaced
+                // as state-unresolved when nothing is painted, so the
+                // count never depends on the setting.
+                (Some((_, first)), Some(_)) => match missing_as {
+                    MissingAppearanceState::PaintNothing => Appearance::StateUnresolved,
+                    // "First" is the dictionary's own iteration order,
+                    // which `Dict` preserves from the file — so this is
+                    // the PRODUCER's first entry, not an alphabetical
+                    // invention of pdfce's.
+                    MissingAppearanceState::FirstEntry => classify_state_entry(graph, first),
+                    // The checkbox-shaped guess. `/Off` is Table 164's own
+                    // conventional name for an unset widget state, and it
+                    // is the state that misleads least if the guess is
+                    // wrong. Absent ⇒ back to painting nothing rather than
+                    // falling through to a second guess.
+                    MissingAppearanceState::OffElseNothing => subdict
+                        .get(b"Off")
+                        .filter(|v| !matches!(v, Object::Null))
+                        .map_or(Appearance::StateUnresolved, |entry| {
+                            classify_state_entry(graph, entry)
+                        }),
+                },
             }
         }
     }
@@ -885,6 +956,132 @@ mod tests {
             page_annotations(&doc, PAGE_ID)[0].appearance,
             Appearance::StateUnresolved
         );
+    }
+
+    #[test]
+    fn missing_as_policy_offers_the_two_empirical_guesses_as_opt_ins() {
+        // `AS-A1` (R169). The default above stays "paint nothing"; these
+        // are the guesses the spec RAG explicitly forbids INSTALLING but
+        // does not forbid OFFERING. `/On` is written first, so the
+        // producer's first entry is object 6.
+        let doc = doc_with_annots(
+            "[5 0 R]",
+            &[
+                (
+                    5,
+                    b"<< /Subtype /Widget /Rect [0 0 10 10] \
+                      /AP << /N << /On 6 0 R /Off 7 0 R >> >> >>"
+                        .to_vec(),
+                ),
+                (6, ap_stream("")),
+                (7, ap_stream("")),
+            ],
+        );
+        assert_eq!(
+            page_annotations_with(&doc, PAGE_ID, MissingAppearanceState::FirstEntry)[0].appearance,
+            Appearance::Normal {
+                stream_id: Some(ObjId::new(6, 0))
+            },
+            "`first_entry` must take the FILE's first key, not an \
+             alphabetical one"
+        );
+        assert_eq!(
+            page_annotations_with(&doc, PAGE_ID, MissingAppearanceState::OffElseNothing)[0]
+                .appearance,
+            Appearance::Normal {
+                stream_id: Some(ObjId::new(7, 0))
+            }
+        );
+        assert_eq!(
+            page_annotations_with(&doc, PAGE_ID, MissingAppearanceState::PaintNothing)[0]
+                .appearance,
+            Appearance::StateUnresolved,
+            "the default must be unchanged by the setting existing"
+        );
+        assert_eq!(
+            page_annotations(&doc, PAGE_ID)[0].appearance,
+            page_annotations_with(&doc, PAGE_ID, MissingAppearanceState::default())[0].appearance,
+            "the convenience wrapper must be the default policy"
+        );
+    }
+
+    #[test]
+    fn off_else_nothing_falls_back_rather_than_guessing_twice() {
+        // The guess is specifically "/Off", not "some entry". A
+        // subdictionary with no /Off must go back to painting nothing —
+        // falling through to the first entry would be a second, unnamed
+        // guess stacked on the operator's chosen one.
+        let doc = doc_with_annots(
+            "[5 0 R]",
+            &[
+                (
+                    5,
+                    b"<< /Subtype /Widget /Rect [0 0 10 10] \
+                      /AP << /N << /Yes 6 0 R /No 7 0 R >> >> >>"
+                        .to_vec(),
+                ),
+                (6, ap_stream("")),
+                (7, ap_stream("")),
+            ],
+        );
+        assert_eq!(
+            page_annotations_with(&doc, PAGE_ID, MissingAppearanceState::OffElseNothing)[0]
+                .appearance,
+            Appearance::StateUnresolved
+        );
+    }
+
+    #[test]
+    fn the_missing_as_policy_cannot_reach_a_well_formed_annotation() {
+        // Blast-radius containment. The setting governs ONE malformed
+        // configuration; a present /AS and a single-entry subdictionary
+        // are both spec-determined and must be identical under all three
+        // values, or the knob is wider than its documentation claims.
+        let with_as = doc_with_annots(
+            "[5 0 R]",
+            &[
+                (
+                    5,
+                    b"<< /Subtype /Widget /Rect [0 0 10 10] /AS /On \
+                      /AP << /N << /On 6 0 R /Off 7 0 R >> >> >>"
+                        .to_vec(),
+                ),
+                (6, ap_stream("")),
+                (7, ap_stream("")),
+            ],
+        );
+        let single = doc_with_annots(
+            "[5 0 R]",
+            &[
+                (
+                    5,
+                    b"<< /Subtype /Widget /Rect [0 0 10 10] \
+                      /AP << /N << /Only 6 0 R >> >> >>"
+                        .to_vec(),
+                ),
+                (6, ap_stream("")),
+            ],
+        );
+        for policy in [
+            MissingAppearanceState::PaintNothing,
+            MissingAppearanceState::FirstEntry,
+            MissingAppearanceState::OffElseNothing,
+        ] {
+            assert_eq!(
+                page_annotations_with(&with_as, PAGE_ID, policy)[0].appearance,
+                Appearance::Normal {
+                    stream_id: Some(ObjId::new(6, 0))
+                },
+                "{policy:?} disturbed a present /AS"
+            );
+            assert_eq!(
+                page_annotations_with(&single, PAGE_ID, policy)[0].appearance,
+                Appearance::Normal {
+                    stream_id: Some(ObjId::new(6, 0))
+                },
+                "{policy:?} disturbed a single-entry subdictionary"
+            );
+        }
     }
 
     #[test]

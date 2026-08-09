@@ -24,7 +24,9 @@ pub mod select;
 /// plain-data `FontEmbedPlan` that `pdfce-core::font_embed` emits from.
 pub mod subset;
 
-use pdfce_core::settings::CmykIntent;
+use pdfce_core::settings::{
+    CmykIntent, CmykJpegPolarity, MaskResample, MinifyFilter, MissingAppearanceState,
+};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -310,6 +312,81 @@ pub struct RenderOptions {
     /// [`CmykIntent::NeutralBlack`] is the answer for CAD and line
     /// drawings, where every stroke is pure K and true black is expected.
     pub cmyk_intent: CmykIntent,
+    /// Which filter resamples a size-mismatched `/SMask` or explicit
+    /// `/Mask` (spec ambiguity `SM-A1`, §8.9.6.3 / Table 145).
+    ///
+    /// **Default [`MaskResample::Nearest`]** — the shipped behaviour.
+    /// **Evidence tier (d)**: a reasoned guess, not a sourced claim. The
+    /// spec fixes where the two grids line up and says nothing at all
+    /// about the filter, and no Acrobat citation, census, or documented
+    /// third-party behaviour exists for this question.
+    pub mask_resample: MaskResample,
+    /// How an image drawn smaller than its own pixel grid is sampled
+    /// (spec ambiguity `IM-A1`, §8.9.5.3).
+    ///
+    /// **Default [`MinifyFilter::PointSample`]** — the shipped behaviour.
+    /// **Evidence tier (d)**: a guess. §8.9.5.3 defines interpolation only
+    /// for magnification and never mentions minification, so
+    /// `/Interpolate false` does not actually legislate this direction.
+    pub image_minify: MinifyFilter,
+    /// How a four-component JPEG that declares no `/Decode` is read
+    /// (spec ambiguity `DCT-A1`, §7.4.8 + Table 13).
+    ///
+    /// **Default [`CmykJpegPolarity::NeverInvert`]** — the shipped
+    /// behaviour and standing rule R29. **Evidence tier (c)**, the
+    /// strongest-sourced default in the ambiguity register.
+    pub cmyk_jpeg_polarity: CmykJpegPolarity,
+    /// What to paint for an annotation whose `/AP` `/N` is a multi-entry
+    /// subdictionary with no `/AS` (spec ambiguity `AS-A1`, §12.5.5).
+    ///
+    /// **Default [`MissingAppearanceState::PaintNothing`]** — the shipped
+    /// behaviour. **Evidence tier (d)**: a guess, and deliberately the
+    /// conservative one; the alternatives are empirical guesses that would
+    /// put a plausible appearance on screen with nothing to say pdfce
+    /// picked it.
+    pub missing_as: MissingAppearanceState,
+}
+
+/// The subset of [`RenderOptions`] that has to reach the interpreter and
+/// the annotation walk — every operator setting whose effect is a
+/// rendering decision.
+///
+/// # Why this is a struct and not four more parameters
+///
+/// [`crate::interpret::run`] already carries an
+/// `#[allow(clippy::too_many_arguments)]` whose comment explains that its
+/// parameters are `RenderOptions` *decomposed into the pieces the
+/// interpreter actually uses*. R169 turns one such piece (the CMYK intent)
+/// into four, and four scalars threaded independently through `run`,
+/// `run_nested`, `run_form_at`, `trace_paths` and the annotation walk is
+/// four chances for one of them to be dropped at a recursion seam —
+/// silently, because a dropped setting looks exactly like a setting the
+/// operator never changed.
+///
+/// # Why a parameter and not a global
+///
+/// Two renders of the same page must never differ for a reason invisible
+/// at the call site. That is the property `tools/render-parity` depends
+/// on, and a `static` or thread-local would destroy it: a render's output
+/// would depend on when the settings file was last read, which is not a
+/// question a caller can answer or a test can pin.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub struct RenderPolicy {
+    /// See [`RenderOptions::cmyk_intent`].
+    pub cmyk_intent: CmykIntent,
+    /// See [`RenderOptions::mask_resample`].
+    pub mask_resample: MaskResample,
+    /// See [`RenderOptions::image_minify`].
+    pub image_minify: MinifyFilter,
+    /// See [`RenderOptions::cmyk_jpeg_polarity`].
+    pub cmyk_jpeg_polarity: CmykJpegPolarity,
+    /// See [`RenderOptions::missing_as`]. Read by the annotation walk
+    /// ([`crate::annot`]), not by the content-stream interpreter — it
+    /// travels here because it is one of the same operator's rendering
+    /// choices and splitting the bundle by consumer would mean two
+    /// bundles that must be kept in step.
+    pub missing_as: MissingAppearanceState,
 }
 
 impl Default for RenderOptions {
@@ -322,7 +399,17 @@ impl Default for RenderOptions {
             fonts: FontEnvironment::default(),
             annotations: true,
             cancel: None,
+            // Every R169 knob reads its default off the enum that models
+            // the choice, never a literal — so `RenderOptions::default()`,
+            // `Settings::default()` and the generated settings file's own
+            // comments cannot come to disagree about what pdfce does out
+            // of the box. `settings_defaults_match_render_defaults` in
+            // this module pins that.
             cmyk_intent: CmykIntent::default(),
+            mask_resample: MaskResample::default(),
+            image_minify: MinifyFilter::default(),
+            cmyk_jpeg_polarity: CmykJpegPolarity::default(),
+            missing_as: MissingAppearanceState::default(),
         }
     }
 }
@@ -365,5 +452,103 @@ impl RenderOptions {
     pub fn with_cancel(mut self, cancel: crate::cancel::RenderCancel) -> Self {
         self.cancel = Some(cancel);
         self
+    }
+
+    /// Set the mask resampling filter (`SM-A1`), returning `self` for
+    /// chaining. Same `#[non_exhaustive]` reasoning as
+    /// [`Self::with_annotations`].
+    #[must_use]
+    pub fn with_mask_resample(mut self, filter: MaskResample) -> Self {
+        self.mask_resample = filter;
+        self
+    }
+
+    /// Set the image minification filter (`IM-A1`), returning `self` for
+    /// chaining.
+    #[must_use]
+    pub fn with_image_minify(mut self, filter: MinifyFilter) -> Self {
+        self.image_minify = filter;
+        self
+    }
+
+    /// Set the CMYK-JPEG polarity rule (`DCT-A1`), returning `self` for
+    /// chaining.
+    #[must_use]
+    pub fn with_cmyk_jpeg_polarity(mut self, polarity: CmykJpegPolarity) -> Self {
+        self.cmyk_jpeg_polarity = polarity;
+        self
+    }
+
+    /// Set the missing-`/AS` policy (`AS-A1`), returning `self` for
+    /// chaining.
+    #[must_use]
+    pub fn with_missing_as(mut self, policy: MissingAppearanceState) -> Self {
+        self.missing_as = policy;
+        self
+    }
+
+    /// The rendering-decision subset of these options, as the one value
+    /// the interpreter and the annotation walk thread down.
+    ///
+    /// Deliberately a *projection* rather than a stored field: the
+    /// builders above set individual options, and a stored bundle would
+    /// have to be rebuilt by every one of them or go stale. Projecting on
+    /// demand makes staleness unrepresentable.
+    #[must_use]
+    pub const fn policy(&self) -> RenderPolicy {
+        RenderPolicy {
+            cmyk_intent: self.cmyk_intent,
+            mask_resample: self.mask_resample,
+            image_minify: self.image_minify,
+            cmyk_jpeg_polarity: self.cmyk_jpeg_polarity,
+            missing_as: self.missing_as,
+        }
+    }
+}
+
+#[cfg(test)]
+mod render_policy_tests {
+    use super::{RenderOptions, RenderPolicy};
+
+    #[test]
+    fn settings_defaults_match_render_defaults() {
+        // The two halves of every R169 knob: `Settings` is what the
+        // operator's file says, `RenderOptions` is what the renderer does
+        // when nobody said anything. If they disagree, "the default"
+        // silently means two different things depending on whether a
+        // settings file happens to exist — which is the exact failure the
+        // settings module's own docs warn about, one crate boundary over.
+        let settings = pdfce_core::settings::Settings::default();
+        let options = RenderOptions::default();
+        assert_eq!(settings.cmyk_intent, options.cmyk_intent);
+        assert_eq!(settings.mask_resample, options.mask_resample);
+        assert_eq!(settings.image_minify, options.image_minify);
+        assert_eq!(settings.cmyk_jpeg_polarity, options.cmyk_jpeg_polarity);
+        assert_eq!(settings.missing_as, options.missing_as);
+    }
+
+    #[test]
+    fn the_policy_projection_carries_every_field() {
+        // A field added to `RenderPolicy` but forgotten in `policy()`
+        // would compile and would silently ignore the operator's choice.
+        // Building a non-default options value and comparing the whole
+        // projection catches that without naming the fields twice.
+        let options = RenderOptions::default()
+            .with_cmyk_intent(pdfce_core::settings::CmykIntent::Naive)
+            .with_mask_resample(pdfce_core::settings::MaskResample::Bilinear)
+            .with_image_minify(pdfce_core::settings::MinifyFilter::Smooth)
+            .with_cmyk_jpeg_polarity(pdfce_core::settings::CmykJpegPolarity::InvertOnApp14)
+            .with_missing_as(pdfce_core::settings::MissingAppearanceState::FirstEntry);
+        assert_eq!(
+            options.policy(),
+            RenderPolicy {
+                cmyk_intent: pdfce_core::settings::CmykIntent::Naive,
+                mask_resample: pdfce_core::settings::MaskResample::Bilinear,
+                image_minify: pdfce_core::settings::MinifyFilter::Smooth,
+                cmyk_jpeg_polarity: pdfce_core::settings::CmykJpegPolarity::InvertOnApp14,
+                missing_as: pdfce_core::settings::MissingAppearanceState::FirstEntry,
+            }
+        );
+        assert_ne!(options.policy(), RenderPolicy::default());
     }
 }

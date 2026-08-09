@@ -32,8 +32,16 @@
 //! The end-of-line pair is one of exactly three (§7.5.4): `SP CR`
 //! (20 0D), `SP LF` (20 0A), `CR LF` (0D 0A). **`SP CR LF` is not one
 //! of them** — it is 21 bytes and the single most common way to get
-//! this wrong. pdfce emits `SP LF`, recorded as a choice rather than a
-//! requirement because §7.5.4 states no preference.
+//! this wrong. §7.5.4 states no preference among the three, so under
+//! **R169** the choice is the operator's: it arrives as
+//! [`crate::settings::XrefEntryEol`] on
+//! [`crate::writer::SaveOptions::xref_entry_eol`] and defaults to
+//! `SP LF`, the form pdfce has always emitted. The enum can express only
+//! the three legal pairs, so no setting value can produce a
+//! non-conforming entry. Ambiguity ID `EOL-A1`.
+//!
+//! The tail's trailing end-of-line (`EOL-A2`) is the same story one
+//! clause over — see [`write_classic_tail`].
 //!
 //! ## No comments, ever
 //!
@@ -57,6 +65,7 @@
 use std::collections::BTreeMap;
 
 use crate::object::{Dict, Name, ObjId, Object};
+use crate::settings::{TrailingEol, XrefEntryEol};
 use crate::xref::XrefEntry;
 
 use super::encoder::IdentityEncoder;
@@ -171,6 +180,11 @@ pub enum XrefOutError {
 ///
 /// `entries` must be ascending, which [`BTreeMap`] guarantees.
 ///
+/// `eol` chooses which of §7.5.4's three permitted two-byte terminators
+/// closes each 20-byte entry (spec ambiguity `EOL-A1`, R169). It is a
+/// **parameter, never a global**: two saves of the same document must not
+/// differ for a reason invisible at the call site.
+///
 /// # Errors
 ///
 /// [`XrefOutError::OffsetTooLarge`] or
@@ -178,6 +192,7 @@ pub enum XrefOutError {
 pub fn write_classic_table(
     out: &mut Vec<u8>,
     entries: &BTreeMap<u32, XrefEntry>,
+    eol: XrefEntryEol,
 ) -> Result<(), XrefOutError> {
     // §7.5.4: "Each cross-reference section shall begin with a line
     // containing the keyword `xref`" — the keyword alone on its line.
@@ -193,7 +208,7 @@ pub fn write_classic_table(
         out.extend_from_slice(run.entries.len().to_string().as_bytes());
         out.push(b'\n');
         for entry in &run.entries {
-            write_classic_entry(out, entry, run.first)?;
+            write_classic_entry(out, entry, run.first, eol)?;
         }
     }
     Ok(())
@@ -211,11 +226,22 @@ pub fn write_classic_table(
 /// | 11–15 | 5 | `ggggg`, zero-padded left |
 /// | 16 | 1 | `SP` |
 /// | 17 | 1 | `n` or `f` |
-/// | 18–19 | 2 | EOL pair — `SP LF` here |
+/// | 18–19 | 2 | EOL pair — whichever of §7.5.4's three `eol` names |
+///
+/// ## Why bytes 18–19 are a setting and not a constant (`EOL-A1`, R169)
+///
+/// §7.5.4 permits exactly three forms — `SP CR`, `SP LF`, `CR LF` — and
+/// states no preference among them. It is a genuine spec ambiguity, so
+/// under R169 the operator chooses, with the shipped default being what
+/// pdfce already emitted (`SP LF`). The three legal forms are the *only*
+/// ones [`XrefEntryEol`] can express: `LF CR`, a bare `LF`, a bare `CR`,
+/// `SP SP` and `SP CR LF` are non-conforming (the last would also make the
+/// entry 21 bytes), and a settings file is not a licence to emit them.
 fn write_classic_entry(
     out: &mut Vec<u8>,
     entry: &XrefEntry,
     run_first: u32,
+    eol: XrefEntryEol,
 ) -> Result<(), XrefOutError> {
     let (field1, generation, keyword) = match *entry {
         XrefEntry::InUse { offset, generation } => {
@@ -251,9 +277,14 @@ fn write_classic_entry(
     out.extend_from_slice(format!("{generation:05}").as_bytes());
     out.push(b' ');
     out.push(keyword);
-    // The EOL pair. `SP LF` — one of §7.5.4's three permitted forms.
-    // NOT `SP CR LF`, which would make the entry 21 bytes.
-    out.extend_from_slice(b" \n");
+    // The EOL pair — one of §7.5.4's three permitted forms, chosen by the
+    // operator's `EOL-A1` setting. Each is exactly two bytes, which is
+    // what keeps the entry at 20 and the `debug_assert_eq!` below honest.
+    out.extend_from_slice(match eol {
+        XrefEntryEol::SpaceLf => b" \n",
+        XrefEntryEol::SpaceCr => b" \r",
+        XrefEntryEol::CrLf => b"\r\n",
+    });
     debug_assert_eq!(out.len() - start, CLASSIC_ENTRY_LEN);
     Ok(())
 }
@@ -268,12 +299,24 @@ fn write_classic_entry(
 /// dictionary."* So `startxref 1234` on one line is non-conforming, and
 /// so is anything sharing the `%%EOF` line.
 ///
-/// A trailing LF follows `%%EOF`. Whether the file's final byte may be
-/// an EOL is a genuine, recorded spec ambiguity (§7.5.1 requires every
-/// line to be terminated; §7.5.5 says the last line "contains only"
-/// `%%EOF`); terminating satisfies §7.5.1's `shall` and every reader's
-/// backward `%%EOF` scan finds the marker either way.
-pub fn write_classic_tail(out: &mut Vec<u8>, trailer: &Dict, section_offset: u64) {
+/// Whether the file's final byte may be an EOL is a genuine, recorded
+/// spec ambiguity (`EOL-A2`: §7.5.1 requires every line to be terminated;
+/// §7.5.5 says the last line "contains only" `%%EOF`), so under R169
+/// `trailing` is the operator's choice. Terminating — the shipped default
+/// — satisfies §7.5.1's `shall`, and every reader's backward `%%EOF` scan
+/// finds the marker either way.
+///
+/// **Not optional on the append path.** §7.2.3 requires an EOL between
+/// `%%EOF` and a following `N G obj`, so an incremental save that appends
+/// onto this revision must emit its own separator regardless of what this
+/// setting said when the previous revision was written. `save.rs` owns
+/// that; see its `SEPARATOR` handling.
+pub fn write_classic_tail(
+    out: &mut Vec<u8>,
+    trailer: &Dict,
+    section_offset: u64,
+    trailing: TrailingEol,
+) {
     out.extend_from_slice(b"trailer\n");
     // The trailer is not an indirect object (§7.5.5) — no `obj`, no
     // object number — so it is serialized as a bare dictionary. `ObjId`
@@ -290,7 +333,8 @@ pub fn write_classic_tail(out: &mut Vec<u8>, trailer: &Dict, section_offset: u64
     );
     out.extend_from_slice(b"\nstartxref\n");
     out.extend_from_slice(section_offset.to_string().as_bytes());
-    out.extend_from_slice(b"\n%%EOF\n");
+    out.extend_from_slice(b"\n%%EOF");
+    write_trailing_eol(out, trailing);
 }
 
 /// Emit the §7.5.8.1 tail for a cross-reference-stream revision:
@@ -301,10 +345,31 @@ pub fn write_classic_tail(out: &mut Vec<u8>, trailer: &Dict, section_offset: u64
 /// dictionary carries the trailer's keys instead. `startxref` names the
 /// offset of the **stream object** (the first byte of `N G obj`), not
 /// of an `xref` keyword.
-pub fn write_stream_tail(out: &mut Vec<u8>, section_offset: u64) {
+///
+/// `trailing` is `EOL-A2`, exactly as for [`write_classic_tail`] — the
+/// ambiguity is about the file's last byte and is therefore identical
+/// whichever cross-reference form produced the revision.
+pub fn write_stream_tail(out: &mut Vec<u8>, section_offset: u64, trailing: TrailingEol) {
     out.extend_from_slice(b"startxref\n");
     out.extend_from_slice(section_offset.to_string().as_bytes());
-    out.extend_from_slice(b"\n%%EOF\n");
+    out.extend_from_slice(b"\n%%EOF");
+    write_trailing_eol(out, trailing);
+}
+
+/// Append (or deliberately do not append) the `EOL-A2` byte after
+/// `%%EOF`.
+///
+/// One function rather than two copies of a two-line `match`, because the
+/// classic and stream tails must never be able to disagree about the
+/// file's final byte — a divergence there would show up as "the same
+/// document ends differently depending on which cross-reference form it
+/// happened to use", which is the least debuggable shape a byte-level
+/// difference can take.
+fn write_trailing_eol(out: &mut Vec<u8>, trailing: TrailingEol) {
+    match trailing {
+        TrailingEol::Lf => out.push(b'\n'),
+        TrailingEol::None => {}
+    }
 }
 
 /// Field widths for a cross-reference stream's `/W` (§7.5.8.2).
@@ -611,7 +676,7 @@ mod tests {
         // would accept a 19-byte bare-LF variant and produce a false
         // green.
         let mut out = Vec::new();
-        write_classic_entry(&mut out, &in_use(1234), 1).unwrap();
+        write_classic_entry(&mut out, &in_use(1234), 1, XrefEntryEol::default()).unwrap();
         assert_eq!(out.len(), CLASSIC_ENTRY_LEN);
         assert_eq!(&out, b"0000001234 00000 n \n");
 
@@ -623,6 +688,7 @@ mod tests {
                 generation: 65_535,
             },
             0,
+            XrefEntryEol::default(),
         )
         .unwrap();
         assert_eq!(out.len(), CLASSIC_ENTRY_LEN);
@@ -635,7 +701,7 @@ mod tests {
         // notably SP CR LF (21 bytes) or a bare LF (19) — is
         // non-conforming.
         let mut out = Vec::new();
-        write_classic_entry(&mut out, &in_use(0), 1).unwrap();
+        write_classic_entry(&mut out, &in_use(0), 1, XrefEntryEol::default()).unwrap();
         let eol = &out[18..20];
         assert!(
             eol == b" \n" || eol == b" \r" || eol == b"\r\n",
@@ -659,12 +725,86 @@ mod tests {
             (7, in_use(200)),
         ]);
         let mut out = Vec::new();
-        write_classic_table(&mut out, &t).unwrap();
+        write_classic_table(&mut out, &t, XrefEntryEol::default()).unwrap();
         let text = String::from_utf8_lossy(&out).into_owned();
         assert!(text.starts_with("xref\n0 3\n"), "{text}");
         assert!(text.contains("\n7 1\n"), "{text}");
         // Body length: 4 entries × 20 bytes, plus the three headers.
         assert_eq!(out.len(), 5 + 4 + 3 * 20 + 4 + 20);
+    }
+
+    #[test]
+    fn every_permitted_entry_terminator_keeps_the_entry_at_twenty_bytes() {
+        // `EOL-A1` (R169). §7.5.4 permits exactly three two-byte forms and
+        // states no preference, so all three are offered — and the whole
+        // reason `XrefEntryEol` is an enum rather than a `[u8; 2]` is that
+        // an operator must not be able to reach the 21-byte `SP CR LF`
+        // form, which is decision 007 W10's named failure mode.
+        for (eol, want) in [
+            (XrefEntryEol::SpaceLf, &b" \n"[..]),
+            (XrefEntryEol::SpaceCr, &b" \r"[..]),
+            (XrefEntryEol::CrLf, &b"\r\n"[..]),
+        ] {
+            let mut out = Vec::new();
+            write_classic_entry(&mut out, &in_use(1234), 1, eol).unwrap();
+            assert_eq!(
+                out.len(),
+                CLASSIC_ENTRY_LEN,
+                "{eol:?} changed the entry length"
+            );
+            assert!(out.ends_with(want), "{eol:?} emitted {out:?}");
+            // Bytes 0..18 are the fields and must not vary with the
+            // terminator — a setting that shifted the `n`/`f` keyword
+            // would produce a file every reader repairs silently.
+            assert_eq!(&out[..18], b"0000001234 00000 n");
+        }
+    }
+
+    #[test]
+    fn the_default_entry_terminator_is_the_one_pdfce_always_emitted() {
+        // The no-behaviour-change guard for `EOL-A1`: adding the knob must
+        // not move the default off `SP LF`.
+        let mut out = Vec::new();
+        write_classic_entry(&mut out, &in_use(1234), 1, XrefEntryEol::default()).unwrap();
+        assert_eq!(&out, b"0000001234 00000 n \n");
+    }
+
+    #[test]
+    fn the_trailing_eol_is_the_only_byte_that_moves() {
+        // `EOL-A2` (R169). §7.5.1 says every line is terminated; §7.5.5
+        // says the last line contains only `%%EOF`. Both readings are
+        // legitimate, so both are offered — and the difference must be
+        // exactly one byte, on both tail forms, or something other than
+        // the ambiguity changed.
+        let mut trailer = Dict::new();
+        trailer.insert(Name::from(b"Size"), Object::Integer(3));
+
+        let mut with = Vec::new();
+        write_classic_tail(&mut with, &trailer, 4096, TrailingEol::Lf);
+        let mut without = Vec::new();
+        write_classic_tail(&mut without, &trailer, 4096, TrailingEol::None);
+        assert!(with.ends_with(b"%%EOF\n"));
+        assert!(without.ends_with(b"%%EOF"));
+        assert_eq!(with.len(), without.len() + 1);
+        assert_eq!(&with[..without.len()], &without[..]);
+
+        let mut with = Vec::new();
+        write_stream_tail(&mut with, 77, TrailingEol::Lf);
+        let mut without = Vec::new();
+        write_stream_tail(&mut without, 77, TrailingEol::None);
+        assert!(with.ends_with(b"%%EOF\n"));
+        assert!(without.ends_with(b"%%EOF"));
+        assert_eq!(with.len(), without.len() + 1);
+    }
+
+    #[test]
+    fn the_default_tail_still_terminates_the_last_line() {
+        // The no-behaviour-change guard for `EOL-A2`.
+        let mut trailer = Dict::new();
+        trailer.insert(Name::from(b"Size"), Object::Integer(3));
+        let mut out = Vec::new();
+        write_classic_tail(&mut out, &trailer, 4096, TrailingEol::default());
+        assert!(out.ends_with(b"%%EOF\n"));
     }
 
     #[test]
@@ -682,7 +822,7 @@ mod tests {
             (1, in_use(9)),
         ]);
         let mut out = Vec::new();
-        write_classic_table(&mut out, &t).unwrap();
+        write_classic_table(&mut out, &t, XrefEntryEol::default()).unwrap();
         assert!(!out.contains(&b'%'), "comment leaked into an xref table");
     }
 
@@ -699,7 +839,7 @@ mod tests {
         )]);
         let mut out = Vec::new();
         assert!(matches!(
-            write_classic_table(&mut out, &t),
+            write_classic_table(&mut out, &t, XrefEntryEol::default()),
             Err(XrefOutError::CompressedInClassicTable {
                 num: 4,
                 container: 9
@@ -712,13 +852,13 @@ mod tests {
         let t = table(&[(1, in_use(MAX_CLASSIC_OFFSET + 1))]);
         let mut out = Vec::new();
         assert!(matches!(
-            write_classic_table(&mut out, &t),
+            write_classic_table(&mut out, &t, XrefEntryEol::default()),
             Err(XrefOutError::OffsetTooLarge { .. })
         ));
         // The boundary value itself must still be writable.
         let t = table(&[(1, in_use(MAX_CLASSIC_OFFSET))]);
         let mut out = Vec::new();
-        write_classic_table(&mut out, &t).unwrap();
+        write_classic_table(&mut out, &t, XrefEntryEol::default()).unwrap();
         assert!(out.ends_with(b"9999999999 00000 n \n"));
     }
 
@@ -730,7 +870,7 @@ mod tests {
         trailer.insert(Name::from(b"Size"), Object::Integer(9));
         trailer.insert(Name::from(b"Root"), Object::Reference(ObjId::new(1, 0)));
         let mut out = Vec::new();
-        write_classic_tail(&mut out, &trailer, 4096);
+        write_classic_tail(&mut out, &trailer, 4096, TrailingEol::default());
         let text = String::from_utf8(out).unwrap();
         assert_eq!(
             text,
@@ -743,7 +883,7 @@ mod tests {
         // §7.5.8.1: in an xref-stream file "the keywords xref and
         // trailer shall no longer be used".
         let mut out = Vec::new();
-        write_stream_tail(&mut out, 77);
+        write_stream_tail(&mut out, 77, TrailingEol::default());
         assert_eq!(String::from_utf8(out).unwrap(), "startxref\n77\n%%EOF\n");
     }
 
@@ -939,7 +1079,7 @@ mod tests {
         // thing with one fewer line.
         let t: BTreeMap<u32, XrefEntry> = BTreeMap::new();
         let mut out = Vec::new();
-        write_classic_table(&mut out, &t).unwrap();
+        write_classic_table(&mut out, &t, XrefEntryEol::default()).unwrap();
         assert_eq!(&out, b"xref\n");
     }
 }

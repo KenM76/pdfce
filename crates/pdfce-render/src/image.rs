@@ -140,6 +140,7 @@ use pdfce_core::settings::CmykIntent;
 use pdfce_core::view::DocumentView;
 use tiny_skia::{Pixmap, PremultipliedColorU8};
 
+use crate::font::RenderPolicy;
 use crate::gstate::Rgb;
 use crate::mask::{self, AlphaPlane};
 
@@ -466,7 +467,7 @@ pub fn decode(
     resources: &Dict,
     fill: Rgb,
     origin: ImageOrigin,
-    intent: CmykIntent,
+    policy: RenderPolicy,
 ) -> Result<DecodedImage, ImageError> {
     let width = positive_dimension(doc, dict, b"Width")?;
     let height = positive_dimension(doc, dict, b"Height")?;
@@ -480,8 +481,18 @@ pub fn decode(
         return Err(ImageError::TooLarge);
     }
 
-    let coded = image_codec::decode_image_view(doc, dict, raw, origin == ImageOrigin::Inline)
-        .map_err(map_codec_error)?;
+    // `DCT-A1` (R169) travels with the decode rather than being read
+    // from anywhere ambient: the polarity rule changes the SAMPLES, so a
+    // cached or re-run decode under a different setting must be a
+    // different call, not the same call with a different global.
+    let coded = image_codec::decode_image_view_with(
+        doc,
+        dict,
+        raw,
+        origin == ImageOrigin::Inline,
+        policy.cmyk_jpeg_polarity,
+    )
+    .map_err(map_codec_error)?;
 
     let mut notes = ImageNotes {
         codec_geometry_mismatch: coded.notes.geometry_mismatch,
@@ -532,7 +543,7 @@ pub fn decode(
         tr.alpha.as_ref(),
         tr.colour_key,
         tr.matte.as_deref(),
-        intent,
+        policy,
     )
 }
 
@@ -890,8 +901,12 @@ fn decode_sampled(
     alpha: Option<&AlphaPlane>,
     colour_key_entry: Option<&Object>,
     matte: Option<&[f32]>,
-    intent: CmykIntent,
+    policy: RenderPolicy,
 ) -> Result<DecodedImage, ImageError> {
+    // Two independent operator choices ride in on `policy` here, and they
+    // touch different halves of the loop below: `cmyk_intent` decides
+    // COLOUR (§8.6.4.4) and `mask_resample` decides ALPHA (`SM-A1`).
+    let intent = policy.cmyk_intent;
     let data = &coded.samples;
     // Table 89 makes this filter — and only this filter — able to
     // supply its own colour space, bit depth and (non-)`Decode`.
@@ -1070,7 +1085,12 @@ fn decode_sampled(
             // Read the plane BEFORE the colour work: §11.6.5.3's
             // un-premultiply divides by this very value, and it must be
             // applied before the colour-space conversion below.
-            let plane_alpha = alpha.map_or(255u8, |p| p.at(x as u32, y as u32, width, height));
+            // `SM-A1` (R169): the mask→base resampling filter. Passed
+            // per call, not stored on the plane, so the same decoded mask
+            // can be sampled two ways in one session without a rebuild.
+            let plane_alpha = alpha.map_or(255u8, |p| {
+                p.at(x as u32, y as u32, width, height, policy.mask_resample)
+            });
             // The pre-`/Decode` integers, kept alive across the colour
             // conversion because §8.9.6.4 tests THESE, not the colours
             // they become ("representing colour values BEFORE decoding

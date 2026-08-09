@@ -2044,6 +2044,688 @@ pub fn ribbon_group_panels() -> &'static str {
 
 // --- Reset-layout dialog (Pass 24.1) ---------------------------------------
 
+// ---------------------------------------------------------------------------
+// Settings window (R15 store, R169 directive)
+// ---------------------------------------------------------------------------
+//
+// Every string here obeys one rule the rest of this file does not have to
+// think about: it must be readable by someone who has never opened the PDF
+// standard. These settings exist BECAUSE the standard is silent, so the
+// operator is being asked to make a judgement -- and a judgement cannot be
+// made from a clause number. The clause is named for traceability; the
+// SENTENCE has to stand on its own.
+
+/// Title of the settings window.
+pub fn settings_window_title() -> &'static str {
+    "Settings"
+}
+
+/// The window's opening paragraph — says why these choices exist at all.
+///
+/// Load-bearing, not decoration. An operator who does not know the standard
+/// declines to specify these things reads any difference between pdfce and
+/// Acrobat as a pdfce defect.
+pub fn settings_intro() -> &'static str {
+    "The PDF standard leaves some things genuinely undefined, so different \
+programs can open the same file and be equally correct while showing you \
+different results. Where that happens, pdfce asks you rather than deciding \
+quietly. Each choice below says what the standard does not settle, what \
+pdfce ships as its answer and why, and what changing it affects."
+}
+
+/// Where the settings file lives, and which of the two homes that is.
+///
+/// Always shown. The two locations behave differently when pdfce is
+/// updated — the portable one is the operator's to keep, the platform one
+/// survives a folder replace by itself — so an operator who does not know
+/// which is live cannot follow the update instructions correctly.
+pub fn settings_store_location(store: &pdfce_core::settings::StoreLocation) -> String {
+    use pdfce_core::settings::StoreKind;
+    match store.kind {
+        StoreKind::Portable => store.path.as_ref().map_or_else(
+            || "Your choices are kept beside the program.".to_owned(),
+            |path| {
+                format!(
+                    "Kept in {} — this folder is yours. When you update pdfce by \
+replacing the program files, keep it.",
+                    path.display()
+                )
+            },
+        ),
+        StoreKind::PlatformFallback => store.path.as_ref().map_or_else(
+            || {
+                "Kept in your system settings folder, because pdfce's own folder is \
+not writable."
+                    .to_owned()
+            },
+            |path| {
+                format!(
+                    "Kept in {} because pdfce's own folder is not writable. These \
+choices will NOT travel with the program folder if you move or copy it.",
+                    path.display()
+                )
+            },
+        ),
+        _ => "No writable location was found, so anything you change here lasts \
+only until you close pdfce."
+            .to_owned(),
+    }
+}
+
+/// Save button.
+pub fn settings_save() -> &'static str {
+    "Save"
+}
+
+/// Why Save is unavailable — shown on hover when nothing has changed.
+pub fn settings_save_disabled_tooltip() -> &'static str {
+    "Nothing has changed yet."
+}
+
+/// Cancel button.
+pub fn settings_cancel() -> &'static str {
+    "Cancel"
+}
+
+/// Cancel's tooltip. Says plainly that nothing has happened yet, because
+/// several of these settings change saved bytes and an operator who has
+/// been clicking radio buttons needs to know none of it took effect.
+pub fn settings_cancel_tooltip() -> &'static str {
+    "Close without changing anything. Nothing you have clicked here has \
+taken effect yet."
+}
+
+/// Restore-defaults button.
+pub fn settings_restore_defaults() -> &'static str {
+    "Restore defaults"
+}
+
+/// Why Restore defaults is unavailable.
+pub fn settings_restore_disabled_tooltip() -> &'static str {
+    "Everything is already set to pdfce's own answer."
+}
+
+/// Status line after the settings are written.
+pub fn settings_saved(path: &std::path::Path) -> String {
+    format!("Settings saved to {}.", path.display())
+}
+
+/// Status line when saving failed. Loud, because the operator asked for
+/// something to be remembered and it was not.
+pub fn settings_save_failed(reason: &str) -> String {
+    format!("Settings could NOT be saved: {reason}")
+}
+
+// --- CMYK rendering -------------------------------------------------------
+
+/// Heading for the CMYK conversion setting.
+pub fn setting_cmyk_title() -> &'static str {
+    "How CMYK colour is shown on screen"
+}
+
+/// What the standard does not settle here.
+pub fn setting_cmyk_silence() -> &'static str {
+    "The standard (section 8.6.4.4) defines no conversion from CMYK ink to \
+screen colour at all — it depends on the device. Acrobat's answer is a \
+profile you can change; this is pdfce's."
+}
+
+/// What changing it affects.
+pub fn setting_cmyk_radius() -> &'static str {
+    "Affects what you see. Does not change the file."
+}
+
+/// The shipped default's label.
+pub fn setting_cmyk_neutral_black() -> &'static str {
+    "Black ink is black (pdfce's default)"
+}
+
+/// The shipped default's explanation.
+pub fn setting_cmyk_neutral_black_note() -> &'static str {
+    "Pure black ink shows as true black. Right for CAD and engineering \
+drawings, where every line is drawn in black ink alone. Only pure black \
+changes; every mixed colour is still the measured one."
+}
+
+/// The reference-matching option's label.
+pub fn setting_cmyk_calibrated() -> &'static str {
+    "Match other PDF viewers"
+}
+
+/// The reference-matching option's explanation.
+pub fn setting_cmyk_calibrated_note() -> &'static str {
+    "Colours are measured to match what Acrobat and most other viewers \
+show. Solid black ink appears as a very dark warm grey rather than true \
+black, because that is what those viewers do. Choose this when you want to \
+see a document the way someone else will."
+}
+
+/// The legacy option's label.
+pub fn setting_cmyk_naive() -> &'static str {
+    "The old pdfce formula"
+}
+
+/// The legacy option's explanation.
+pub fn setting_cmyk_naive_note() -> &'static str {
+    "A rough calculation pdfce used before it was measured. Only useful for \
+comparing against something pdfce produced earlier."
+}
+
+/// The divergence disclosure — pdfce's default is not the consensus, and
+/// says so where the operator is choosing rather than in a footnote.
+pub fn setting_cmyk_divergence() -> &'static str {
+    "Note: pdfce's default deliberately differs from Acrobat here. \"Match \
+other PDF viewers\" is the option that agrees with them; black-ink-is-black \
+was chosen because line drawings are what this is mostly used for."
+}
+
+// --- Preseparated page sets -----------------------------------------------
+
+/// Heading for the separation-policy setting.
+pub fn setting_separations_title() -> &'static str {
+    "When pages are printing separations"
+}
+
+/// What the standard does not settle here.
+///
+/// Honest about the SHAPE of this ambiguity, which differs from the CMYK
+/// one: the standard is perfectly clear about the file format and silent
+/// about what an editor should do. Blurring the two would misrepresent
+/// both.
+pub fn setting_separations_silence() -> &'static str {
+    "Some print-ready files split one page into several — one per printing \
+plate (cyan, magenta, yellow, black). The standard says those pages must \
+list each other, but says nothing about what an editor should do when you \
+delete or extract only some of them."
+}
+
+/// What changing it affects.
+pub fn setting_separations_radius() -> &'static str {
+    "Affects the file you save."
+}
+
+/// Repair option label.
+pub fn setting_separations_repair() -> &'static str {
+    "Keep them and fix the list (pdfce's default)"
+}
+
+/// Repair option explanation.
+pub fn setting_separations_repair_note() -> &'static str {
+    "The pages you keep still know which plate they are, and their list is \
+updated to name only the plates that are still there. Nothing is left \
+pointing at a page that has gone."
+}
+
+/// Discard option label.
+pub fn setting_separations_discard() -> &'static str {
+    "Turn them into ordinary pages"
+}
+
+/// Discard option explanation.
+pub fn setting_separations_discard_note() -> &'static str {
+    "The pages are kept but forget they were printing plates. Simpler, and \
+loses the record of which ink each page was."
+}
+
+/// Refuse option label.
+pub fn setting_separations_refuse() -> &'static str {
+    "Refuse the operation"
+}
+
+/// Refuse option explanation.
+pub fn setting_separations_refuse_note() -> &'static str {
+    "pdfce declines rather than splitting a set of plates apart, and tells \
+you why. Use this if such files should never be edited a page at a time."
+}
+
+// --- Text extraction ------------------------------------------------------
+
+/// Heading for the word-gap setting.
+pub fn setting_word_gap_title() -> &'static str {
+    "Where extracted text gets its spaces"
+}
+
+/// What the standard does not settle here.
+pub fn setting_word_gap_silence() -> &'static str {
+    "A PDF does not have to store spaces between words at all — it can just \
+leave a gap. Nothing in the standard says how wide a gap means a space, so \
+every program guesses, and they guess differently."
+}
+
+/// What changing it affects.
+pub fn setting_word_gap_radius() -> &'static str {
+    "Affects copied and extracted text. Does not change the file."
+}
+
+/// The slider's own label.
+pub fn setting_word_gap_slider_label() -> &'static str {
+    "Gap width"
+}
+
+/// The slider's explanation, including which way to move it, and an
+/// honest statement of how well-founded the default is.
+pub fn setting_word_gap_note() -> &'static str {
+    "Measured as a fraction of the text size. Raise it if words are being \
+split apart; lower it if separate words are running together. pdfce's \
+default of 0.2 is a considered guess rather than a rule from anywhere — no \
+standard or reference program defines this."
+}
+
+// --- Mask resampling ------------------------------------------------------
+
+/// Heading for the soft-mask resampling setting.
+pub fn setting_mask_title() -> &'static str {
+    "Smoothing a transparency mask that is a different size"
+}
+
+/// What the standard does not settle here.
+pub fn setting_mask_silence() -> &'static str {
+    "An image's transparency mask can be a different size from the image it \
+applies to. The standard says the two are stretched over the same area, and \
+says nothing at all about how to fill in the in-between values."
+}
+
+/// What changing it affects.
+pub fn setting_mask_radius() -> &'static str {
+    "Affects what you see. Does not change the file."
+}
+
+/// Nearest option label.
+pub fn setting_mask_nearest() -> &'static str {
+    "Use the nearest value (pdfce's default)"
+}
+
+/// Nearest option explanation — includes WHY it is the default.
+pub fn setting_mask_nearest_note() -> &'static str {
+    "Never invents a transparency value that is not in the mask. Matters for \
+a hard-edged cut-out, where blending would fabricate soft edges that were \
+never there. Edges can look slightly stepped. This is pdfce's own reasoning, \
+not a rule from anywhere — no standard or reference program defines it."
+}
+
+/// Box-average option label.
+pub fn setting_mask_box() -> &'static str {
+    "Average the surrounding values"
+}
+
+/// Box-average option explanation.
+pub fn setting_mask_box_note() -> &'static str {
+    "Smoother on photographic masks, at the cost of softening edges that \
+were meant to be sharp."
+}
+
+/// Bilinear option label.
+pub fn setting_mask_bilinear() -> &'static str {
+    "Blend smoothly"
+}
+
+/// Bilinear option explanation.
+pub fn setting_mask_bilinear_note() -> &'static str {
+    "The smoothest result, and the most likely to invent transparency \
+values the mask never contained."
+}
+
+// --- Image minification ---------------------------------------------------
+
+/// Heading for the minification setting.
+pub fn setting_minify_title() -> &'static str {
+    "Shrinking a large image to fit"
+}
+
+/// What the standard does not settle here.
+pub fn setting_minify_silence() -> &'static str {
+    "The standard describes smoothing only for images being ENLARGED. It \
+says nothing about images being shrunk, which is what happens whenever a \
+high-resolution scan is displayed at page size."
+}
+
+/// What changing it affects.
+pub fn setting_minify_radius() -> &'static str {
+    "Affects what you see. Does not change the file."
+}
+
+/// Point-sample label.
+pub fn setting_minify_point() -> &'static str {
+    "Take one pixel in each area (pdfce's default)"
+}
+
+/// Point-sample explanation, honest about the trade.
+pub fn setting_minify_point_note() -> &'static str {
+    "Fast, and follows the standard's wording literally. Fine detail such as \
+thin lines or small text in a scan can shimmer or disappear entirely."
+}
+
+/// Smooth label.
+pub fn setting_minify_smooth() -> &'static str {
+    "Average the area"
+}
+
+/// Smooth explanation.
+pub fn setting_minify_smooth_note() -> &'static str {
+    "Better-looking on scanned pages and photographs — detail is averaged \
+rather than dropped. Slower, and goes beyond what the standard describes."
+}
+
+// --- CMYK JPEG polarity ---------------------------------------------------
+
+/// Heading for the CMYK JPEG polarity setting.
+pub fn setting_cmyk_jpeg_title() -> &'static str {
+    "Reading a CMYK JPEG that does not say which way round it is"
+}
+
+/// What the standard does not settle here.
+pub fn setting_cmyk_jpeg_silence() -> &'static str {
+    "Some CMYK JPEGs store their ink values inverted and nothing in the file \
+says so. No document defines how to tell — the marker people point at \
+carries no such flag."
+}
+
+/// What changing it affects.
+pub fn setting_cmyk_jpeg_radius() -> &'static str {
+    "Affects what you see, and the saved file if pdfce re-compresses the \
+image."
+}
+
+/// Never-invert label.
+pub fn setting_cmyk_jpeg_never() -> &'static str {
+    "Take the values as stored (pdfce's default)"
+}
+
+/// Never-invert explanation — the best-evidenced default in the whole set.
+pub fn setting_cmyk_jpeg_never_note() -> &'static str {
+    "The best-supported answer here: the reference document never mentions \
+inverting, the marker carries no flag to test, and all four major PDF \
+engines make the same choice."
+}
+
+/// Invert label.
+pub fn setting_cmyk_jpeg_invert() -> &'static str {
+    "Invert when an Adobe marker is present"
+}
+
+/// Invert explanation.
+pub fn setting_cmyk_jpeg_invert_note() -> &'static str {
+    "For a library of old Photoshop-authored images that genuinely do store \
+inverted ink. Getting this wrong renders a photographic negative — an \
+obvious failure rather than a subtle one, so it is easy to tell which way \
+your files need."
+}
+
+// --- Unmappable characters ------------------------------------------------
+
+/// Heading for the unmappable-code setting.
+pub fn setting_unmappable_title() -> &'static str {
+    "Text pdfce cannot read"
+}
+
+/// What the standard does not settle here.
+pub fn setting_unmappable_silence() -> &'static str {
+    "Some documents draw text without recording which characters it is. The \
+standard's own sentence about what to do here is incomplete, and defines no \
+answer."
+}
+
+/// What changing it affects.
+pub fn setting_unmappable_radius() -> &'static str {
+    "Affects copied and extracted text. Does not change the file."
+}
+
+/// Replacement-char label.
+pub fn setting_unmappable_replacement() -> &'static str {
+    "Insert the replacement character (pdfce's default)"
+}
+
+/// Replacement-char explanation.
+pub fn setting_unmappable_replacement_note() -> &'static str {
+    "Puts a visible marker where the text could not be read, so the gap is \
+obvious and countable rather than silently swallowed."
+}
+
+/// Question-mark label.
+pub fn setting_unmappable_question() -> &'static str {
+    "Insert a question mark"
+}
+
+/// Question-mark explanation.
+pub fn setting_unmappable_question_note() -> &'static str {
+    "Plainer in software that cannot display the replacement character, at \
+the cost of being indistinguishable from a question mark the document \
+really contains."
+}
+
+/// Omit label.
+pub fn setting_unmappable_omit() -> &'static str {
+    "Leave it out"
+}
+
+/// Omit explanation — with the warning that makes it a real choice.
+pub fn setting_unmappable_omit_note() -> &'static str {
+    "Cleanest-looking output, and the most dangerous: text you extract will \
+read as complete when characters are missing from it."
+}
+
+// --- ActualText precedence ------------------------------------------------
+
+/// Heading for the ActualText setting.
+pub fn setting_actual_text_title() -> &'static str {
+    "When a document supplies replacement text"
+}
+
+/// What the standard does not settle here.
+pub fn setting_actual_text_silence() -> &'static str {
+    "A document can attach replacement text to a piece of content — used for \
+things like ligatures, where the drawn shape and the real characters differ. \
+The standard does not say how far to trust it over the shapes themselves."
+}
+
+/// What changing it affects.
+pub fn setting_actual_text_radius() -> &'static str {
+    "Affects copied and extracted text. Does not change the file."
+}
+
+/// Always label.
+pub fn setting_actual_text_always() -> &'static str {
+    "Always use it (pdfce's default)"
+}
+
+/// Always explanation.
+pub fn setting_actual_text_always_note() -> &'static str {
+    "The author said what this text really is, so pdfce believes them. \
+Extraction marks which text came from this source, so it stays traceable."
+}
+
+/// Tagged-only label.
+pub fn setting_actual_text_tagged() -> &'static str {
+    "Only in properly tagged documents"
+}
+
+/// Tagged-only explanation.
+pub fn setting_actual_text_tagged_note() -> &'static str {
+    "Trusts the replacement text only where the document is structured well \
+enough for it to be reliable, and falls back to the drawn characters \
+elsewhere."
+}
+
+/// Glyphs label.
+pub fn setting_actual_text_glyphs() -> &'static str {
+    "Ignore it"
+}
+
+/// Glyphs explanation.
+pub fn setting_actual_text_glyphs_note() -> &'static str {
+    "Always uses the drawn characters. Useful when a document's replacement \
+text is wrong, which does happen."
+}
+
+// --- Missing appearance state ---------------------------------------------
+
+/// Heading for the missing-/AS setting.
+pub fn setting_missing_as_title() -> &'static str {
+    "An annotation that does not say which of its looks to use"
+}
+
+/// What the standard does not settle here.
+pub fn setting_missing_as_silence() -> &'static str {
+    "A checkbox or stamp can carry several appearances — on, off, and so on \
+— and is supposed to say which one applies. The standard does not say what a \
+reader should do when that is missing."
+}
+
+/// What changing it affects.
+pub fn setting_missing_as_radius() -> &'static str {
+    "Affects what you see and what prints. Does not change the file."
+}
+
+/// Paint-nothing label.
+pub fn setting_missing_as_nothing() -> &'static str {
+    "Draw nothing (pdfce's default)"
+}
+
+/// Paint-nothing explanation.
+pub fn setting_missing_as_nothing_note() -> &'static str {
+    "Refuses to guess. Nothing appears, and pdfce counts it so you can see \
+how many were affected — better than inventing a state the document never \
+chose."
+}
+
+/// First-entry label.
+pub fn setting_missing_as_first() -> &'static str {
+    "Draw the first one"
+}
+
+/// First-entry explanation.
+pub fn setting_missing_as_first_note() -> &'static str {
+    "Shows something rather than nothing. Which appearance is \"first\" is \
+arbitrary, so this can show a ticked box that should be empty."
+}
+
+/// Off-else-nothing label.
+pub fn setting_missing_as_off() -> &'static str {
+    "Draw the \"off\" one if there is one"
+}
+
+/// Off-else-nothing explanation.
+pub fn setting_missing_as_off_note() -> &'static str {
+    "Assumes an unset control is off, which is usually right for checkboxes \
+and meaningless for stamps."
+}
+
+// --- File-writing details -------------------------------------------------
+
+/// Heading for the xref EOL setting.
+pub fn setting_xref_eol_title() -> &'static str {
+    "Line endings inside the file's index"
+}
+
+/// What the standard does not settle here.
+pub fn setting_xref_eol_silence() -> &'static str {
+    "The standard fixes the length of each index entry but allows more than \
+one way to end the line. This is a genuine, recorded ambiguity."
+}
+
+/// What changing it affects.
+pub fn setting_xref_eol_radius() -> &'static str {
+    "Changes the bytes pdfce writes. Nothing visible."
+}
+
+/// Space+LF label.
+pub fn setting_xref_eol_space_lf() -> &'static str {
+    "Space then newline (pdfce's default)"
+}
+
+/// Space+LF explanation.
+pub fn setting_xref_eol_space_lf_note() -> &'static str {
+    "What pdfce has always written. Change this only if a specific tool in \
+your workflow demands otherwise."
+}
+
+/// Space+CR label.
+pub fn setting_xref_eol_space_cr() -> &'static str {
+    "Space then carriage return"
+}
+
+/// CRLF label.
+pub fn setting_xref_eol_crlf() -> &'static str {
+    "Carriage return then newline"
+}
+
+/// Heading for the trailing-EOL setting.
+pub fn setting_trailing_eol_title() -> &'static str {
+    "A final line ending at the end of the file"
+}
+
+/// What the standard does not settle here.
+pub fn setting_trailing_eol_silence() -> &'static str {
+    "The standard does not say whether anything may follow the end-of-file \
+marker."
+}
+
+/// What changing it affects.
+pub fn setting_trailing_eol_radius() -> &'static str {
+    "Changes the bytes pdfce writes. Nothing visible."
+}
+
+/// Trailing-LF label.
+pub fn setting_trailing_eol_lf() -> &'static str {
+    "End with a newline (pdfce's default)"
+}
+
+/// Trailing-LF explanation.
+pub fn setting_trailing_eol_lf_note() -> &'static str {
+    "Conventional, and what most tools produce."
+}
+
+/// No-trailing label.
+pub fn setting_trailing_eol_none() -> &'static str {
+    "End immediately after the marker"
+}
+
+/// No-trailing explanation.
+pub fn setting_trailing_eol_none_note() -> &'static str {
+    "For a strict checker that objects to trailing bytes."
+}
+
+/// Settings group: colour rendering.
+pub fn settings_group_colour() -> &'static str {
+    "Colour"
+}
+
+/// Settings group: images and transparency.
+pub fn settings_group_images() -> &'static str {
+    "Images and transparency"
+}
+
+/// Settings group: text extraction.
+pub fn settings_group_text() -> &'static str {
+    "Copying and extracting text"
+}
+
+/// Settings group: pages and printing.
+pub fn settings_group_pages() -> &'static str {
+    "Pages and printing"
+}
+
+/// Settings group: how files are written.
+pub fn settings_group_saving() -> &'static str {
+    "Saving files"
+}
+
+/// Ribbon group caption for the operator's persisted settings.
+pub fn ribbon_group_settings() -> &'static str {
+    "Settings"
+}
+
+/// The ribbon button that opens the settings window.
+pub fn settings_button() -> &'static str {
+    "Settings…"
+}
+
+/// Tooltip for the settings button — says WHEN to reach for it rather
+/// than restating the label (decision 017 §8.6).
+pub fn settings_tooltip() -> &'static str {
+    "Choose how pdfce reads and writes documents where the PDF standard leaves the answer open — colour, printing separations, text extraction. Your choices are kept in a file beside the program and survive restarts."
+}
+
 /// The button that opens the reset-layout chooser.
 pub fn reset_layout_button() -> &'static str {
     "Reset layout…"

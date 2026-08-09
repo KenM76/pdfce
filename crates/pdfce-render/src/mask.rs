@@ -62,7 +62,8 @@
 //! exception is the `/Matte` case, where equality is a `shall` — see
 //! [`undo_matte`] and [`crate::image::ImageNotes::matte_not_undone`].
 //!
-//! ## Sampling is nearest-neighbour — a disclosed pdfce choice
+//! ## Sampling is nearest-neighbour BY DEFAULT — a disclosed pdfce
+//! choice, and now an operator setting
 //!
 //! **ISO 32000-1 specifies no resampling algorithm for a size-mismatched
 //! mask** (spec-ambiguity `SM-A1` in `iso32000__s__11.6.5.md`: the words
@@ -75,14 +76,26 @@
 //! onto the page and is applied by the pattern shader in
 //! `interpret::paint_image`, downstream of this module. The mask→base
 //! resampling here is a different question: it happens in image space,
-//! before any page geometry exists. Nearest-neighbour is chosen because
-//! it is the only choice that cannot invent an alpha value that appears
-//! nowhere in the mask — a bilinear blend across a stencil mask's 0/1
-//! boundary would produce half-transparent edge texels the document
-//! never asked for. It also matches the spirit of `/Interpolate` being
-//! an explicit opt-in: smoothing is something a PDF asks for, not
-//! something a reader supplies. `fuzzy, never sneaky` applies to alpha
-//! too.
+//! before any page geometry exists.
+//!
+//! Nearest-neighbour is the **default** because it is the only choice
+//! that cannot invent an alpha value that appears nowhere in the mask — a
+//! bilinear blend across a stencil mask's 0/1 boundary would produce
+//! half-transparent edge texels the document never asked for. It also
+//! matches the spirit of `/Interpolate` being an explicit opt-in:
+//! smoothing is something a PDF asks for, not something a reader
+//! supplies. `fuzzy, never sneaky` applies to alpha too.
+//!
+//! That reasoning is **evidence tier (d)** in the ambiguity register's
+//! vocabulary — a reasoned inference, i.e. a guess, with no Acrobat
+//! citation, no corpus census and no documented third-party behaviour
+//! behind it. Under **R169** a guess about a genuine spec silence becomes
+//! the operator's choice, so [`AlphaPlane::at`] takes a
+//! [`MaskResample`] and the two alternatives are real: a box average for
+//! a mask supplied FINER than its base image (where nearest-neighbour
+//! throws most of the mask away), and a bilinear blend for a soft
+//! photographic mask supplied COARSER. Neither is offered as more correct
+//! — the standard has no opinion, and neither does this module.
 //!
 //! ## Polarity — the classic silent-inversion bug
 //!
@@ -116,7 +129,7 @@
 use pdfce_core::graph::ObjectGraph;
 use pdfce_core::image_codec::{self, Codec, MAX_IMAGE_PIXELS};
 use pdfce_core::object::{Dict, Object};
-use pdfce_core::settings::CmykIntent;
+use pdfce_core::settings::{CmykIntent, MaskResample};
 use pdfce_core::view::DocumentView;
 
 use crate::image::{decode_pairs, read_sample, resolve_space, row_stride};
@@ -241,44 +254,100 @@ impl AlphaPlane {
         (self.width, self.height)
     }
 
-    /// Alpha for base-image texel `(bx, by)` of a `bw × bh` base image.
+    /// Alpha for base-image texel `(bx, by)` of a `bw × bh` base image,
+    /// resampled by `filter`.
     ///
-    /// ## The mapping
+    /// ## The mapping (fixed by the spec)
     ///
     /// Both images occupy §8.9.4's unit square, so base texel `bx`
     /// spans `[bx/bw, (bx+1)/bw)` horizontally and its **centre** is at
-    /// `(bx + ½)/bw`. The mask sample containing that centre is
-    /// `floor((bx + ½)/bw × mw)`, computed in integer arithmetic as
-    /// `((2·bx + 1) · mw) / (2·bw)` so no float rounding can put a
-    /// boundary texel on the wrong side.
+    /// `(bx + ½)/bw`. That geometry is normative and is **not** what
+    /// `filter` chooses between — every filter below agrees about where
+    /// the texel sits and differs only in how many mask samples it
+    /// consults once it is there.
     ///
     /// The `==` fast path is not merely an optimization: it makes the
     /// overwhelmingly common equal-dimensions case exactly a direct
     /// index, so a producer that matched the dimensions (as pdfce's own
     /// `image_import` always does) gets a bit-exact 1:1 mapping with no
-    /// dependence on the rounding rule above.
+    /// dependence on the rounding rule below **and** with no dependence
+    /// on the filter — all three settings are identical when the grids
+    /// coincide, which is why flipping this setting is a no-op on the
+    /// files pdfce writes itself.
     ///
-    /// Out-of-range reads return **255 (opaque)** rather than 0. A mask
-    /// that cannot be consulted must not make content disappear —
-    /// "invisible" is the failure mode an operator cannot see, so the
-    /// safe direction is toward showing too much.
+    /// ## The filter (chosen by the operator — `SM-A1`, R169)
+    ///
+    /// ISO 32000-1 specifies no resampling algorithm at all (`resample*`
+    /// 0 hits, `nearest neigh*` 0 hits, `bilinear` 3 hits none
+    /// image-related, over the whole source), and §8.9.5.3's NOTE grants
+    /// a reader *"any specific implementation of interpolation that it
+    /// wishes"*. So this is pdfce's call, it is disclosed as such, and
+    /// under R169 the direction is the operator's:
+    ///
+    /// | [`MaskResample`] | Samples consulted | Good at |
+    /// |---|---|---|
+    /// | `Nearest` (default) | the one containing the centre | hard stencil edges; never invents an alpha |
+    /// | `BoxAverage` | every sample the texel's footprint covers | a mask FINER than the base image |
+    /// | `Bilinear` | the four nearest, weighted | a soft mask COARSER than the base image |
+    ///
+    /// The default is **evidence tier (d)** — a reasoned guess, not a
+    /// sourced claim. See [`MaskResample`].
+    ///
+    /// Out-of-range reads return **255 (opaque)** rather than 0, under
+    /// every filter. A mask that cannot be consulted must not make
+    /// content disappear — "invisible" is the failure mode an operator
+    /// cannot see, so the safe direction is toward showing too much.
     #[must_use]
-    pub fn at(&self, bx: u32, by: u32, bw: u32, bh: u32) -> u8 {
-        let (mx, my) = if self.width == bw && self.height == bh {
-            (bx, by)
-        } else {
-            (
+    pub fn at(&self, bx: u32, by: u32, bw: u32, bh: u32, filter: MaskResample) -> u8 {
+        // Grids coincide ⇒ every filter degenerates to a direct index.
+        // Checked before the filter is even looked at, so the common case
+        // costs one comparison and cannot acquire a rounding behaviour
+        // from a setting.
+        if self.width == bw && self.height == bh {
+            return self.sample(bx, by);
+        }
+        match filter {
+            MaskResample::Nearest => self.sample(
                 Self::project(bx, bw, self.width),
                 Self::project(by, bh, self.height),
-            )
-        };
+            ),
+            MaskResample::BoxAverage => self.box_average(bx, by, bw, bh),
+            MaskResample::Bilinear => self.bilinear(bx, by, bw, bh),
+            // A WILDCARD, reluctantly. `MaskResample` is
+            // `#[non_exhaustive]` and lives in `pdfce-core`, so a
+            // cross-crate `match` on it cannot be exhaustive however
+            // complete it actually is — the compiler will not let this
+            // arm be omitted. It falls back to the DEFAULT filter rather
+            // than to a panic or a blank alpha, so a filter added in
+            // `pdfce-core` and not yet implemented here renders exactly
+            // as pdfce does today instead of failing. If you are adding a
+            // variant: this arm is the one that will silently absorb it,
+            // and `mask_resample_covers_every_filter` in this module's
+            // tests is what will tell you.
+            _ => self.sample(
+                Self::project(bx, bw, self.width),
+                Self::project(by, bh, self.height),
+            ),
+        }
+    }
+
+    /// One mask sample by its own coordinates, 255 (opaque) out of range.
+    ///
+    /// The single place the buffer is indexed, so the out-of-range rule
+    /// on [`Self::at`] is stated once and cannot differ between filters.
+    fn sample(&self, mx: u32, my: u32) -> u8 {
         let idx = (my as usize)
             .checked_mul(self.width as usize)
             .and_then(|row| row.checked_add(mx as usize));
         idx.and_then(|i| self.alpha.get(i).copied()).unwrap_or(255)
     }
 
-    /// One axis of the unit-square mapping described on [`Self::at`].
+    /// One axis of the unit-square mapping described on [`Self::at`]:
+    /// which mask sample contains the base texel's **centre**.
+    ///
+    /// `floor((index + ½)/base_extent × mask_extent)`, computed in integer
+    /// arithmetic as `((2·index + 1) · mask_extent) / (2·base_extent)` so
+    /// no float rounding can put a boundary texel on the wrong side.
     fn project(index: u32, base_extent: u32, mask_extent: u32) -> u32 {
         if base_extent == 0 || mask_extent == 0 {
             return 0;
@@ -294,6 +363,113 @@ impl AlphaPlane {
         u32::try_from(projected)
             .unwrap_or(mask_extent - 1)
             .min(mask_extent - 1)
+    }
+
+    /// One axis of the base texel's **footprint** in mask samples: the
+    /// half-open range `[lo, hi)` of mask indices its span covers.
+    ///
+    /// Base texel `index` spans `[index/base, (index+1)/base)` of the unit
+    /// square, which is mask samples `[index·mask/base,
+    /// (index+1)·mask/base)`. `lo` floors and `hi` ceils so a texel whose
+    /// span touches part of a sample still counts that sample — dropping
+    /// it would let a one-pixel stencil hole vanish under downscaling,
+    /// which is the failure a box filter exists to prevent.
+    ///
+    /// Always non-empty: `hi` is forced at least `lo + 1`, so a
+    /// magnifying map (several texels per sample) yields exactly the one
+    /// sample the texel sits in, and the averaging loop below can never
+    /// divide by zero.
+    fn footprint(index: u32, base_extent: u32, mask_extent: u32) -> (u32, u32) {
+        if base_extent == 0 || mask_extent == 0 {
+            return (0, 1);
+        }
+        let base = u64::from(base_extent);
+        let mask = u64::from(mask_extent);
+        let lo = (u64::from(index) * mask) / base;
+        let hi = ((u64::from(index) + 1) * mask).div_ceil(base);
+        let lo = u32::try_from(lo)
+            .unwrap_or(mask_extent - 1)
+            .min(mask_extent - 1);
+        let hi = u32::try_from(hi)
+            .unwrap_or(mask_extent)
+            .clamp(lo + 1, mask_extent);
+        (lo, hi)
+    }
+
+    /// Average every mask sample the base texel's footprint covers.
+    ///
+    /// Rounds half-up (`+ half` before the divide) rather than truncating,
+    /// so a footprint that averages to exactly 127.5 becomes 128 instead
+    /// of drifting one step toward transparent on every image.
+    ///
+    /// The accumulator is `u64`: a pathological footprint is bounded by
+    /// the mask's own dimensions, and `MAX_IMAGE_PIXELS` already bounds
+    /// those, but a `u32` accumulator would still overflow on a mask of
+    /// more than ~16 M fully-opaque samples covered by one base texel —
+    /// which a 1×1 base image over a large mask produces exactly.
+    fn box_average(&self, bx: u32, by: u32, bw: u32, bh: u32) -> u8 {
+        let (x0, x1) = Self::footprint(bx, bw, self.width);
+        let (y0, y1) = Self::footprint(by, bh, self.height);
+        let mut total: u64 = 0;
+        let mut count: u64 = 0;
+        for my in y0..y1 {
+            for mx in x0..x1 {
+                total += u64::from(self.sample(mx, my));
+                count += 1;
+            }
+        }
+        if count == 0 {
+            // Unreachable — `footprint` guarantees a non-empty range —
+            // but the crate is panic-free by policy, and "opaque" is the
+            // same safe direction the out-of-range rule takes.
+            return 255;
+        }
+        u8::try_from((total + count / 2) / count).unwrap_or(255)
+    }
+
+    /// Linear interpolation between the four mask samples nearest the
+    /// base texel's centre.
+    ///
+    /// The centre sits at `(bx + ½)/bw` of the unit square, i.e. at
+    /// `(bx + ½)·mw/bw` in mask-sample coordinates; subtracting the ½ that
+    /// puts a sample's own centre at its index gives the continuous
+    /// position `p`. `floor(p)` and `floor(p) + 1` are the two samples
+    /// that bracket it and `p − floor(p)` is the weight.
+    ///
+    /// Clamped at both edges (`p < 0` at the first half-sample, `p >
+    /// mw − 1` at the last), which is the same edge-extend behaviour
+    /// `SpreadMode::Pad` gives the base image — the alternative would
+    /// blend the far edge into the near one on a wrapped read.
+    ///
+    /// Computed in `f32` rather than fixed point because the inputs are
+    /// already bounded to 0–255 and the output is rounded back to `u8`
+    /// immediately; there is no accumulation for error to grow in.
+    fn bilinear(&self, bx: u32, by: u32, bw: u32, bh: u32) -> u8 {
+        let axis = |index: u32, base_extent: u32, mask_extent: u32| -> (u32, u32, f32) {
+            if base_extent == 0 || mask_extent == 0 {
+                return (0, 0, 0.0);
+            }
+            let last = mask_extent - 1;
+            let p =
+                (f64::from(index) + 0.5) * f64::from(mask_extent) / f64::from(base_extent) - 0.5;
+            if p <= 0.0 {
+                return (0, 0, 0.0);
+            }
+            let floor = p.floor();
+            let lo = u32::try_from(floor as i64).unwrap_or(last).min(last);
+            let hi = lo.saturating_add(1).min(last);
+            (lo, hi, (p - floor) as f32)
+        };
+        let (x0, x1, fx) = axis(bx, bw, self.width);
+        let (y0, y1, fy) = axis(by, bh, self.height);
+        let lerp = |a: u8, b: u8, t: f32| f32::from(a) + (f32::from(b) - f32::from(a)) * t;
+        let top = lerp(self.sample(x0, y0), self.sample(x1, y0), fx);
+        let bottom = lerp(self.sample(x0, y1), self.sample(x1, y1), fx);
+        let value = top + (bottom - top) * fy;
+        // `round` then clamp: the interpolation of two in-range values is
+        // in range, so the clamp is belt-and-braces against a NaN weight
+        // rather than an expected path.
+        value.round().clamp(0.0, 255.0) as u8
     }
 }
 
@@ -848,10 +1024,10 @@ mod tests {
     #[test]
     fn equal_dimensions_index_directly() {
         let p = plane(2, 2, &[0, 64, 128, 255]);
-        assert_eq!(p.at(0, 0, 2, 2), 0);
-        assert_eq!(p.at(1, 0, 2, 2), 64);
-        assert_eq!(p.at(0, 1, 2, 2), 128);
-        assert_eq!(p.at(1, 1, 2, 2), 255);
+        assert_eq!(p.at(0, 0, 2, 2, MaskResample::Nearest), 0);
+        assert_eq!(p.at(1, 0, 2, 2, MaskResample::Nearest), 64);
+        assert_eq!(p.at(0, 1, 2, 2, MaskResample::Nearest), 128);
+        assert_eq!(p.at(1, 1, 2, 2, MaskResample::Nearest), 255);
     }
 
     #[test]
@@ -861,7 +1037,9 @@ mod tests {
         // A 2x1 mask over a 4x1 base gives each mask sample two base
         // texels; indexing 1:1 would read past the end for x >= 2.
         let p = plane(2, 1, &[0, 255]);
-        let got: Vec<u8> = (0..4).map(|x| p.at(x, 0, 4, 1)).collect();
+        let got: Vec<u8> = (0..4)
+            .map(|x| p.at(x, 0, 4, 1, MaskResample::Nearest))
+            .collect();
         assert_eq!(got, vec![0, 0, 255, 255]);
     }
 
@@ -871,8 +1049,118 @@ mod tests {
         // which lands in mask sample 1; texel 1's centre is at 0.75,
         // which lands in mask sample 3.
         let p = plane(4, 1, &[10, 20, 30, 40]);
-        assert_eq!(p.at(0, 0, 2, 1), 20);
-        assert_eq!(p.at(1, 0, 2, 1), 40);
+        assert_eq!(p.at(0, 0, 2, 1, MaskResample::Nearest), 20);
+        assert_eq!(p.at(1, 0, 2, 1, MaskResample::Nearest), 40);
+    }
+
+    #[test]
+    fn equal_dimensions_are_the_same_under_every_filter() {
+        // `SM-A1`'s most important property, and the reason flipping this
+        // setting is a no-op on every file pdfce writes itself: when the
+        // grids coincide there is nothing to resample, so all three
+        // filters must agree exactly — including on a 0/255 stencil edge,
+        // where a filter that reached the interpolation path would
+        // manufacture a mid-grey.
+        let p = plane(2, 2, &[0, 255, 255, 0]);
+        for filter in [
+            MaskResample::Nearest,
+            MaskResample::BoxAverage,
+            MaskResample::Bilinear,
+        ] {
+            let got: Vec<u8> = [(0, 0), (1, 0), (0, 1), (1, 1)]
+                .into_iter()
+                .map(|(x, y)| p.at(x, y, 2, 2, filter))
+                .collect();
+            assert_eq!(got, vec![0, 255, 255, 0], "{filter:?} disturbed a 1:1 map");
+        }
+    }
+
+    #[test]
+    fn box_average_sees_the_mask_detail_nearest_neighbour_discards() {
+        // The case `BoxAverage` exists for: a mask FINER than its base
+        // image. A 4x1 mask over a 1x1 base means one base texel covers
+        // all four mask samples. Nearest-neighbour reports one of them and
+        // throws away three quarters of what the producer supplied; the
+        // box average reports their mean.
+        let p = plane(4, 1, &[0, 0, 255, 255]);
+        // The base texel's centre is at 0.5 of the unit square, i.e. mask
+        // sample floor(0.5 x 4) = 2 — so NN reports 255 and the two zero
+        // samples are invisible to it.
+        assert_eq!(p.at(0, 0, 1, 1, MaskResample::Nearest), 255);
+        // Mean of 0, 0, 255, 255 = 127.5, rounded half-up.
+        assert_eq!(p.at(0, 0, 1, 1, MaskResample::BoxAverage), 128);
+    }
+
+    #[test]
+    fn box_average_rounds_half_up_rather_than_drifting_transparent() {
+        // Truncating instead of rounding would bias every averaged mask
+        // one step toward transparent, which over a whole image is a
+        // visible haze rather than a rounding detail.
+        let p = plane(2, 1, &[127, 128]);
+        assert_eq!(p.at(0, 0, 1, 1, MaskResample::BoxAverage), 128);
+    }
+
+    #[test]
+    fn bilinear_blends_between_samples_and_pins_the_edges() {
+        // A 2x1 mask over a 4x1 base. Base texel centres sit at 0.125,
+        // 0.375, 0.625, 0.875 of the unit square, i.e. at continuous mask
+        // positions -0.25, 0.25, 0.75, 1.25. The first and last are
+        // outside the sample centres and clamp (edge-extend, matching the
+        // base image's own `SpreadMode::Pad`); the middle two interpolate.
+        let p = plane(2, 1, &[0, 255]);
+        let got: Vec<u8> = (0..4)
+            .map(|x| p.at(x, 0, 4, 1, MaskResample::Bilinear))
+            .collect();
+        assert_eq!(got, vec![0, 64, 191, 255]);
+
+        // The same map under nearest-neighbour is a hard step, which is
+        // exactly the difference the setting exists to offer.
+        let got: Vec<u8> = (0..4)
+            .map(|x| p.at(x, 0, 4, 1, MaskResample::Nearest))
+            .collect();
+        assert_eq!(got, vec![0, 0, 255, 255]);
+    }
+
+    #[test]
+    fn every_filter_reads_opaque_rather_than_invisible_off_the_end() {
+        // The direction-of-failure rule is a property of the module, not
+        // of one filter: a mask that cannot be consulted must never make
+        // content disappear. `sample` is the single place that decides
+        // it, and this pins that every filter goes through it.
+        let broken = AlphaPlane {
+            width: 4,
+            height: 4,
+            alpha: vec![0, 0],
+        };
+        for filter in [
+            MaskResample::Nearest,
+            MaskResample::BoxAverage,
+            MaskResample::Bilinear,
+        ] {
+            assert_eq!(
+                broken.at(7, 7, 8, 8, filter),
+                255,
+                "{filter:?} made unreadable alpha invisible"
+            );
+        }
+    }
+
+    #[test]
+    fn mask_resample_covers_every_filter() {
+        // `MaskResample` is `#[non_exhaustive]` and lives in another
+        // crate, so `at`'s match needs a wildcard and a NEW variant would
+        // be silently absorbed by it (rendering as nearest-neighbour).
+        // This is the tripwire that comment promises: it fails when a
+        // variant is added whose behaviour is indistinguishable from
+        // `Nearest` on a map where the three known filters all differ.
+        let p = plane(4, 1, &[0, 0, 255, 255]);
+        let nearest = p.at(0, 0, 1, 1, MaskResample::Nearest);
+        assert_ne!(p.at(0, 0, 1, 1, MaskResample::BoxAverage), nearest);
+        let p = plane(2, 1, &[0, 255]);
+        assert_ne!(
+            p.at(1, 0, 4, 1, MaskResample::Bilinear),
+            p.at(1, 0, 4, 1, MaskResample::Nearest)
+        );
     }
 
     #[test]
@@ -880,12 +1168,15 @@ mod tests {
         // The one place the integer mapping can overshoot.
         let p = plane(3, 3, &[1, 2, 3, 4, 5, 6, 7, 8, 9]);
         for n in 1..=9u32 {
-            assert_eq!(p.at(n - 1, n - 1, n, n), p.at(n - 1, n - 1, n, n));
-            let _ = p.at(n - 1, n - 1, n, n);
+            assert_eq!(
+                p.at(n - 1, n - 1, n, n, MaskResample::Nearest),
+                p.at(n - 1, n - 1, n, n, MaskResample::Nearest)
+            );
+            let _ = p.at(n - 1, n - 1, n, n, MaskResample::Nearest);
         }
         // 100x100 base over a 3x3 mask: the bottom-right corner must be
         // the mask's own bottom-right sample, not a read past the end.
-        assert_eq!(p.at(99, 99, 100, 100), 9);
+        assert_eq!(p.at(99, 99, 100, 100, MaskResample::Nearest), 9);
     }
 
     #[test]
@@ -898,7 +1189,7 @@ mod tests {
             height: 2,
             alpha: vec![0, 0],
         };
-        assert_eq!(p.at(1, 1, 2, 2), 255);
+        assert_eq!(p.at(1, 1, 2, 2, MaskResample::Nearest), 255);
     }
 
     #[test]

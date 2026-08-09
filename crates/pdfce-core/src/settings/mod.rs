@@ -343,6 +343,437 @@ pub enum CmykIntent {
     Naive,
 }
 
+/// Which filter resamples a `/SMask` or explicit `/Mask` whose pixel grid
+/// differs from its base image's (spec ambiguity `SM-A1`).
+///
+/// # The silence being filled
+///
+/// ISO 32000-1 fixes the **geometry** and says nothing about the
+/// **filter**. Table 145's `Width` row, verbatim: *"Both images shall be
+/// mapped to the unit square in user space (as are all images),
+/// **regardless of whether the samples coincide individually**."* §8.9.6.3
+/// says the same for an explicit mask (*"need not have the same
+/// resolution … their boundaries on the page will coincide"*).
+///
+/// The spec RAG records the sourced negatives that establish the silence
+/// is real rather than merely unfound (`iso32000__s__11.6.5.md` § SM-A1):
+/// over the whole 756-page source, `resample*` **0 hits**,
+/// `nearest neigh*` **0 hits**, `bilinear` **3 hits, none image-related**.
+/// §8.9.5.3's NOTE then grants a conforming reader *"any specific
+/// implementation of interpolation that it wishes"*.
+///
+/// # Default: [`Self::Nearest`] — **EVIDENCE TIER (d)**
+///
+/// Tier (d) is the register's vocabulary for **reasoned inference only —
+/// this is a guess and is written as one**. No tier-(a)/(b)/(c) evidence
+/// exists: `Acrobat_Features` does not cover mask resampling, no census
+/// has been run, and no other implementation's documented behaviour was
+/// located. The reasoning (good, but still reasoning) is that
+/// nearest-neighbour is the only filter that cannot invent an alpha value
+/// appearing nowhere in the mask — decisive for a 1-bit stencil supplied
+/// as an `/SMask`, where a blend across a 0/1 edge fabricates
+/// half-transparent texels the document never asked for.
+///
+/// Do not read this default as evidence of what other readers do.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum MaskResample {
+    /// Take the single mask sample containing the base texel's centre.
+    ///
+    /// **The shipped default.** Never invents an alpha; preserves a
+    /// stencil's hard edges exactly. Aliases (staircases) when a small
+    /// mask is stretched over a large base image.
+    #[default]
+    Nearest,
+    /// Average every mask sample the base texel's footprint covers.
+    ///
+    /// The right answer when the mask is *higher* resolution than the base
+    /// image, where nearest-neighbour throws away most of the mask: a
+    /// 4× mask read one-sample-per-texel discards fifteen sixteenths of
+    /// what the producer supplied. Degenerates to [`Self::Nearest`] when
+    /// the footprint covers one sample.
+    BoxAverage,
+    /// Interpolate linearly between the four mask samples nearest the base
+    /// texel's centre.
+    ///
+    /// Smooth on magnification, which is what makes it the wrong default:
+    /// across a stencil's 0↔255 boundary it manufactures intermediate
+    /// alphas. Offered for a continuous-tone `/SMask` (a photographic
+    /// vignette) supplied at lower resolution than its base image, which
+    /// is the case it is actually good at.
+    Bilinear,
+}
+
+/// How an image XObject is sampled when it is drawn **smaller** than its
+/// own pixel grid (spec ambiguity `IM-A1`).
+///
+/// # The silence being filled
+///
+/// §8.9.5.3 (*Image Interpolation*) defines interpolation **only for
+/// magnification** — *"When the resolution of a source image is
+/// significantly **lower** than that of the output device …"* — and its
+/// NOTE grants a reader leave to *"not implement this feature"* or to
+/// *"use any specific implementation of interpolation that it wishes"*.
+///
+/// It says nothing at all about minification. Term-frequency evidence over
+/// the source (`iso32000__ref__ambiguity_settings_register.md` §5.5):
+/// `minif` **0 hits**, `mipmap` **0**, `decimat` **0**, `down-sampl` **0**,
+/// `downsampl` **2 hits, both unrelated** (multimedia rate conversion in
+/// clause 13; the thumbnail note in §8.9.5.4). So `/Interpolate false`
+/// does **not** mandate point-sampling on the way *down* — it switches off
+/// the *up*-scaling smoothing the clause actually defines, and a reader
+/// minifying an image is unconstrained.
+///
+/// # Default: [`Self::PointSample`] — **EVIDENCE TIER (d)**
+///
+/// Tier (d): reasoned inference only, i.e. **a guess**. The register
+/// deliberately declines to recommend the flip despite pdfce's own
+/// `interpret.rs` asserting *"Most production viewers smooth on
+/// minification regardless of `/Interpolate`"* — **that assertion is
+/// unverified**, it is exactly the shape of claim the claim-bearing-copy
+/// rule targets, and moving a default onto it would be churn dressed as
+/// research. A viewer-behaviour check filed to `C:\personal_rag\pdf\`
+/// would raise this to tier (c) and, if it confirms, flip the default.
+/// Until then the status quo stands and is labelled a guess.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum MinifyFilter {
+    /// Take one texel per output pixel, in both directions — treat
+    /// `/Interpolate` as the only switch there is.
+    ///
+    /// **The shipped default.** Spec-literal, and it is what makes a 2×2
+    /// test image's pixels exactly assertable. Its cost is aliasing
+    /// (shimmer, dropped hairlines) on a heavily downscaled image.
+    #[default]
+    PointSample,
+    /// Smooth when the image is drawn smaller than its pixel grid, while
+    /// still honouring `/Interpolate` on the way up.
+    ///
+    /// Removes the aliasing at the price of a departure from the clause's
+    /// stated switch — which is legitimate precisely because the clause
+    /// never legislated this direction.
+    Smooth,
+}
+
+/// How to read a four-component `DCTDecode` image that declares no
+/// `/Decode` array (spec ambiguity `DCT-A1`).
+///
+/// # The question
+///
+/// A CMYK JPEG with **effective `ColorTransform` 0** and **no `/Decode`**:
+/// are the stored samples direct CMYK, or Adobe-complemented CMYK? Nothing
+/// in the codestream or the image dictionary disambiguates it — the
+/// undocumented 1990s Photoshop convention stores complemented values, and
+/// there is no marker bit that says so.
+///
+/// # Default: [`Self::NeverInvert`] — **EVIDENCE TIER (c)**
+///
+/// Tier (c) means *what other major implementations do, as documented* —
+/// and this is the **strongest-sourced default in the whole ambiguity
+/// register**, the one place it is not a guess:
+///
+/// - the word `"invert"` occurs **zero times** in Adobe TN #5116, the
+///   document ISO 32000-1 §7.4.8 footnote *a* makes normative by
+///   reference (verified 2026-07-31);
+/// - **APP14 carries no polarity flag** — there is no bit to test, so
+///   "invert when the marker is present" keys off mere presence;
+/// - `filter__dct.md` records that all four reference engines accept the
+///   ambiguity rather than inverting on APP14 presence.
+///
+/// This is also pdfce's standing rule **R29** (decision 006), and the
+/// residual risk is already disclosed rather than repaired by
+/// [`crate::image_codec::CodecNotes::cmyk_polarity_unverifiable`] (R30).
+/// The setting adds the operator's escape hatch; it does not weaken R29,
+/// which remains what pdfce does unless the operator says otherwise.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum CmykJpegPolarity {
+    /// Take the samples as stored. `/Decode` is the sole polarity control
+    /// (`/Decode [1 0 1 0 1 0 1 0]` *is* the sanctioned way for a producer
+    /// to declare inverted storage).
+    ///
+    /// **The shipped default**, and the standing rule.
+    #[default]
+    NeverInvert,
+    /// Complement all four components (`255 − x`) when the codestream
+    /// carries an Adobe APP14 marker, the effective transform is 0, and
+    /// the image dictionary declares no `/Decode`.
+    ///
+    /// For a library of old Photoshop-authored CMYK JPEGs that genuinely
+    /// do store complemented ink and say so nowhere. Getting this wrong in
+    /// either direction renders a photographic negative — which is at
+    /// least an obvious failure, not a subtle one.
+    InvertOnApp14,
+}
+
+/// What character extraction emits for a code no rung of the §9.10.2
+/// ladder could map (spec ambiguity `TX-A1`).
+///
+/// # The silence being filled
+///
+/// §9.10.2's failure clause is *grammatically broken* — it says a
+/// conforming reader *"may choose a character code of their choosing"*
+/// where a **Unicode value** is what is being produced — and **no
+/// sentinel is specified anywhere in the standard**: not U+FFFD, not
+/// omission, not a placeholder.
+///
+/// # Default: [`Self::ReplacementChar`] — **EVIDENCE TIER (d)**
+///
+/// Tier (d): reasoned inference only — **a guess**. The reasoning is that
+/// U+FFFD is the only option that is simultaneously length-preserving
+/// *and* visibly wrong, which is what rule 4 wants; omission silently
+/// shortens the text and makes the failure invisible. No census, no
+/// Acrobat citation, no documented third-party behaviour backs it.
+///
+/// # This is an EXTRACT-radius setting, which makes it a correctness knob
+///
+/// Downstream of extraction sit search, clipboard copy, **and
+/// redaction-by-text**. Changing the sentinel changes character offsets,
+/// therefore changes which runs a redaction pattern matches (**R35**). A
+/// redaction built under one value is not equivalent under another.
+/// Whatever is chosen, the rung-4 counter keeps counting — that counter is
+/// documented as *"the headline honesty metric"* and the setting must not
+/// be able to switch it off.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum UnmappableCode {
+    /// U+FFFD REPLACEMENT CHARACTER, one per unmappable code.
+    ///
+    /// **The shipped default.** Length-preserving and visibly wrong.
+    #[default]
+    ReplacementChar,
+    /// `?`, one per unmappable code.
+    ///
+    /// Also length-preserving, but it survives being pasted into tools
+    /// that mangle U+FFFD, and it reads as a question rather than as a
+    /// font problem. It is *less* honest than U+FFFD in one specific way:
+    /// a genuine `?` in the document is indistinguishable from a failure.
+    QuestionMark,
+    /// Nothing at all — the code contributes no characters.
+    ///
+    /// The failure is still counted (`ladder_failures`), so it is never
+    /// hidden from the operator; only the text is shorter, and the
+    /// shortening is invisible **in the text itself**. Choose this when
+    /// the extracted text is being fed to something that chokes on
+    /// sentinels.
+    ///
+    /// **Two consequences worth knowing before choosing it**, both
+    /// measured rather than assumed:
+    ///
+    /// 1. **Character offsets move**, so a search hit and a
+    ///    redaction-by-text match land in different places than they do
+    ///    under the other two values (R35). That is true of any change
+    ///    here, but `omit` is the one that changes them the most.
+    /// 2. **A run whose codes are ALL unmappable disappears entirely** —
+    ///    glyph records included. The layout pass drops a run with no
+    ///    characters (it has nothing a caller can index into), so under
+    ///    `omit` a page of `Identity-H` text with no `/ToUnicode` yields
+    ///    zero runs rather than runs of sentinels. A caller that needs
+    ///    per-glyph positions for unmappable codes must not choose this.
+    ///    Pinned by
+    ///    `the_unmappable_sentinel_changes_the_characters_but_never_the_count`.
+    ///
+    /// **Scope: extraction output only.** Three internal paths pin the
+    /// sentinel to [`Self::ReplacementChar`] regardless, because in each
+    /// of them a zero-length character would break something structural
+    /// rather than merely look different — the text-editing slot table
+    /// (a zero-length span is a glyph the operator can see and cannot
+    /// address), the redaction audit record (which must not report a
+    /// removal as nothing), and the vector-object text preview (which must
+    /// not make an undecodable run look empty). Each site says so at the
+    /// call.
+    Omit,
+}
+
+/// Whether `/ActualText` replaces the glyph-derived characters
+/// (spec ambiguity `AT-A1`).
+///
+/// # The disagreement being resolved
+///
+/// Three statements in ISO 32000-1 do not agree, and none dislodges the
+/// others:
+///
+/// - **§14.9.4**: `/ActualText` *"shall be used as a replacement"* — the
+///   only **`shall`** in the set.
+/// - **§14.8.2.4.2 NOTE 2**: readers *"may choose to use"* it, and *"some
+///   conforming readers"* do — a `may`, inside an **informative NOTE**.
+/// - **§9.10.1**: it *"may be used"*.
+///
+/// The only sentence that addresses precedence is the `may`, and it sits
+/// in a NOTE, so neither reading can be eliminated from the standard.
+///
+/// # Default: [`Self::Always`] — **EVIDENCE TIER (d)**
+///
+/// Tier (d) — **a guess**, though the best-supported guess available:
+/// §14.9.4's is the only `shall`, and its competitors are a NOTE and a
+/// `may`. Per the standing normative-vs-informative rule, the NOTE is
+/// **not** cited alone as authority anywhere in the code.
+///
+/// # A bound that is NOT a setting
+///
+/// **No length correspondence exists** between `/ActualText` and the
+/// content it replaces — the standard's own example maps two shown
+/// characters to one. Character-level mapping back to glyph positions is
+/// therefore *impossible* across an `/ActualText` run, which bounds
+/// search-highlight, selection and redaction-by-text to **sequence**
+/// granularity whichever value is chosen. That is a fact to disclose, not
+/// a direction to pick.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum ActualTextPrecedence {
+    /// `/ActualText` replaces the glyphs it covers, wherever it appears.
+    ///
+    /// **The shipped default.** §14.9.4's `shall`, applied literally.
+    #[default]
+    Always,
+    /// `/ActualText` replaces the glyphs only when the marked-content
+    /// sequence carrying it is part of the structure tree.
+    ///
+    /// "Part of the structure tree" is tested as **an `/MCID` in scope** —
+    /// on the sequence itself or on an enclosing one. That is the only
+    /// test available inside a content stream: `/MCID` is precisely what
+    /// §14.7.4.2 uses to join a marked-content sequence to a structure
+    /// element, so a sequence without one in scope is not tagged content
+    /// in any sense the page itself can express. Elsewhere the glyphs win.
+    ///
+    /// Choose this when a producer sprinkles `/ActualText` outside its
+    /// tagged content and the replacements are worse than the glyphs.
+    TaggedOnly,
+    /// The glyphs always win; `/ActualText` is counted and reported but
+    /// never substituted.
+    ///
+    /// The forensic setting: what is extracted is what the page draws.
+    /// Note that this **loses** genuinely unrecoverable text — a ligature
+    /// whose only Unicode identity was in its `/ActualText` extracts as
+    /// whatever the ladder makes of the glyph, which may be U+FFFD.
+    Glyphs,
+}
+
+/// What to paint for an annotation whose `/AP` `/N` is a subdictionary of
+/// two or more entries and which carries **no `/AS`**
+/// (spec ambiguity `AS-A1`).
+///
+/// # The gap being filled
+///
+/// Table 164 makes `/AS` *required* in exactly that configuration, so such
+/// a file is **malformed**. §12.5.5 NOTE 3 covers only the neighbouring
+/// case — `/AS` present but naming an absent state — and states no
+/// recovery for `/AS` being absent altogether.
+///
+/// A single-entry subdictionary is **not** covered by this setting and
+/// never was: with one entry there are no alternatives to choose between,
+/// so painting it is not a guess. The forbidden case is specifically the
+/// multi-entry one.
+///
+/// # Default: [`Self::PaintNothing`] — **EVIDENCE TIER (d)**
+///
+/// Tier (d) — **a guess**, and deliberately the conservative one. The spec
+/// RAG's row is explicit that the other two options are *empirical*
+/// guesses belonging to `C:\personal_rag\pdf\`: *"do NOT silently pick
+/// first/`Off`/`On`."* Offering them as opt-ins is legitimate; making one
+/// the installed default would be exactly the "sneaky" failure rule 4
+/// forbids, because the operator would see a plausible appearance with no
+/// indication that pdfce chose it.
+///
+/// Whatever is chosen, the case stays **counted** — pdfce never repairs
+/// the file by writing an `/AS`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum MissingAppearanceState {
+    /// Paint nothing, and count the annotation as state-unresolved.
+    ///
+    /// **The shipped default.**
+    #[default]
+    PaintNothing,
+    /// Paint the subdictionary's first entry in key order.
+    ///
+    /// "First" is the dictionary's own iteration order, which pdfce
+    /// preserves from the file, so this is *the producer's* first entry
+    /// and not an alphabetical invention.
+    FirstEntry,
+    /// Paint the `/Off` entry if there is one, otherwise nothing.
+    ///
+    /// The checkbox-shaped guess: for a widget the unchecked state is the
+    /// one that misleads least if it is wrong.
+    OffElseNothing,
+}
+
+/// Which of §7.5.4's three permitted two-byte terminators ends a classic
+/// cross-reference **entry** (spec ambiguity `EOL-A1`).
+///
+/// # The choice being made
+///
+/// §7.5.4 fixes the entry at exactly 20 bytes and permits three, and only
+/// three, forms for bytes 18–19. `LF CR`, a bare `LF`, a bare `CR`,
+/// `SP SP` and `SP CR LF` are **not** legal and are deliberately not
+/// offered here — a settings file is not a licence to emit a
+/// non-conforming file.
+///
+/// # Default: [`Self::SpaceLf`] — **EVIDENCE TIER (c), DOWNGRADE PENDING**
+///
+/// The spec RAG records `SP LF` as *"the common choice"*, which is tier-(c)
+/// shaped (*what other implementations do, as documented*). But the
+/// register's own §11.3 flags that this claim **carries no citation** and
+/// should either gain one or be down-graded to tier (d) in place. Treat it
+/// as tier (c) provisionally and tier (d) if pressed; do not quote it as
+/// settled.
+///
+/// # The register recommends a fourth option pdfce does not implement
+///
+/// `iso32000__ref__ambiguity_settings_register.md` §5.11's RECOMMENDED
+/// DEFAULT is **not** a fixed form at all — it is *"match the base file's
+/// existing form on a full rewrite; `SP LF` for a new file"*, on the
+/// ground that a full rewrite changing two bytes in every xref entry of an
+/// otherwise-untouched file is precisely the diff rule 3 / R34 exists to
+/// avoid. That option is **not offered here**, because implementing it
+/// means carrying an observation of the base file's bytes into the writer
+/// and pdfce has no such channel today. The shipped fixed `SP LF` is kept
+/// as the default per the no-behaviour-change rule; the divergence from
+/// the register's recommendation is recorded rather than quietly resolved.
+///
+/// **BYTES blast radius, zero render effect.** Every value is conforming,
+/// so no operator disclosure is needed when one is chosen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum XrefEntryEol {
+    /// `SP LF` (`20 0A`). **The shipped default.**
+    #[default]
+    SpaceLf,
+    /// `SP CR` (`20 0D`).
+    SpaceCr,
+    /// `CR LF` (`0D 0A`).
+    CrLf,
+}
+
+/// Whether the writer puts an end-of-line byte after the final `%%EOF`
+/// (spec ambiguity `EOL-A2`).
+///
+/// # The disagreement being resolved
+///
+/// §7.5.1 requires every line to be EOL-terminated; §7.5.5 says the last
+/// line *"contains only"* `%%EOF`. **Both readings are self-consistent and
+/// the standard does not choose between them.**
+///
+/// # Default: [`Self::Lf`] — **EVIDENCE TIER (d)**
+///
+/// Tier (d) — **a guess**, and the safe side of one: §7.2.3 requires the
+/// incremental-append path to have an EOL before a following `12 0 obj`
+/// anyway, and a trailing EOL never breaks a reader's backward `%%EOF`
+/// scan. Low value as a knob; it exists because the choice is currently
+/// hard-coded, is labelled in the source as a recorded spec ambiguity, and
+/// an engineer who finds that label will ask where the switch is.
+///
+/// **BYTES blast radius — one byte.** No disclosure needed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum TrailingEol {
+    /// Terminate the `%%EOF` line with `LF`. **The shipped default.**
+    #[default]
+    Lf,
+    /// End the file at the final `F` of `%%EOF`.
+    None,
+}
+
 /// The operator's persisted choices.
 ///
 /// Deliberately a flat struct of plain values. Grouping into
@@ -377,6 +808,35 @@ pub struct Settings {
     /// callers, which is what made it the register's cheapest win: the
     /// setting was built, just unreachable.
     pub word_gap_ratio: f32,
+    /// Which filter resamples a size-mismatched `/SMask` or `/Mask`
+    /// (`SM-A1`, §8.9.6.3 / Table 145). RENDER radius.
+    pub mask_resample: MaskResample,
+    /// How an image drawn smaller than its own pixel grid is sampled
+    /// (`IM-A1`, §8.9.5.3). RENDER radius.
+    pub image_minify: MinifyFilter,
+    /// How a CMYK JPEG that declares no `/Decode` is read (`DCT-A1`,
+    /// §7.4.8 + Table 13). RENDER radius, and BYTES wherever pdfce
+    /// re-encodes — a re-encode under the wrong polarity bakes the
+    /// inversion in permanently.
+    pub cmyk_jpeg_polarity: CmykJpegPolarity,
+    /// What extraction emits for a code the §9.10.2 ladder cannot map
+    /// (`TX-A1`). **EXTRACT radius** — it moves character offsets, so it
+    /// moves redaction-by-text coverage (R35).
+    pub unmappable_code: UnmappableCode,
+    /// Whether `/ActualText` replaces the glyphs it covers (`AT-A1`,
+    /// §14.9.4). **EXTRACT radius**, same R35 note as
+    /// [`Self::unmappable_code`].
+    pub actual_text: ActualTextPrecedence,
+    /// What to paint for a multi-entry `/AP` `/N` subdictionary with no
+    /// `/AS` (`AS-A1`, §12.5.5). RENDER radius only — pdfce never writes
+    /// an `/AS` to repair the file.
+    pub missing_as: MissingAppearanceState,
+    /// The two-byte terminator on a classic cross-reference entry
+    /// (`EOL-A1`, §7.5.4). **BYTES radius.**
+    pub xref_entry_eol: XrefEntryEol,
+    /// Whether a byte follows the final `%%EOF` (`EOL-A2`, §7.5.5).
+    /// **BYTES radius** — one byte.
+    pub trailing_eol: TrailingEol,
 }
 
 impl Default for Settings {
@@ -399,16 +859,39 @@ impl Default for Settings {
             separations: SeparationPolicy::default(),
             cmyk_intent: CmykIntent::default(),
             word_gap_ratio: crate::text_extract::ExtractOptions::default().word_gap_ratio,
+            // The ambiguity-register enums declare their own default on
+            // the variant, the same way `CmykIntent` does, because the
+            // *choice* is the thing they exist to model — there is no
+            // other type that "owns the behaviour" for, say, a mask
+            // resampling filter. The consuming option structs
+            // (`ExtractOptions`, `RenderOptions`, `SaveOptions`) read
+            // `Enum::default()` in turn, so there is still exactly one
+            // answer to "what does pdfce do by default?", and tests in
+            // this module and in `pdfce-render` pin that agreement.
+            mask_resample: MaskResample::default(),
+            image_minify: MinifyFilter::default(),
+            cmyk_jpeg_polarity: CmykJpegPolarity::default(),
+            unmappable_code: crate::text_extract::ExtractOptions::default().unmappable_code,
+            actual_text: crate::text_extract::ExtractOptions::default().actual_text,
+            missing_as: MissingAppearanceState::default(),
+            xref_entry_eol: crate::writer::SaveOptions::default().xref_entry_eol,
+            trailing_eol: crate::writer::SaveOptions::default().trailing_eol,
         }
     }
 }
 
 /// Lowest accepted `word_gap_ratio`. Zero would break a word at every
 /// glyph pair.
-const MIN_WORD_GAP_RATIO: f32 = 0.01;
+///
+/// Public so a front end can bound its own control by the **same** number
+/// the parser clamps to. A slider whose range is a restated literal is a
+/// slider that eventually disagrees with the file's own validation, and
+/// then the operator drags to a value that silently clamps.
+pub const MIN_WORD_GAP_RATIO: f32 = 0.01;
 /// Highest accepted `word_gap_ratio`. Beyond this a line never breaks
-/// into words at all.
-const MAX_WORD_GAP_RATIO: f32 = 5.0;
+/// into words at all. Public for the same reason as
+/// [`MIN_WORD_GAP_RATIO`].
+pub const MAX_WORD_GAP_RATIO: f32 = 5.0;
 
 /// The settings-file token for a separation policy.
 ///
@@ -431,6 +914,83 @@ const fn cmyk_token(intent: CmykIntent) -> &'static str {
         CmykIntent::Calibrated => "calibrated",
         CmykIntent::NeutralBlack => "neutral_black",
         CmykIntent::Naive => "naive",
+    }
+}
+
+/// The settings-file token for a mask resampling filter. See
+/// [`separation_token`] for why every enum gets one of these.
+const fn mask_resample_token(filter: MaskResample) -> &'static str {
+    match filter {
+        MaskResample::Nearest => "nearest",
+        MaskResample::BoxAverage => "box_average",
+        MaskResample::Bilinear => "bilinear",
+    }
+}
+
+/// The settings-file token for a minification filter. See
+/// [`separation_token`].
+const fn minify_token(filter: MinifyFilter) -> &'static str {
+    match filter {
+        MinifyFilter::PointSample => "point_sample",
+        MinifyFilter::Smooth => "smooth",
+    }
+}
+
+/// The settings-file token for a CMYK-JPEG polarity rule. See
+/// [`separation_token`].
+const fn cmyk_jpeg_polarity_token(polarity: CmykJpegPolarity) -> &'static str {
+    match polarity {
+        CmykJpegPolarity::NeverInvert => "never_invert",
+        CmykJpegPolarity::InvertOnApp14 => "invert_on_app14",
+    }
+}
+
+/// The settings-file token for an unmappable-code sentinel. See
+/// [`separation_token`].
+const fn unmappable_token(sentinel: UnmappableCode) -> &'static str {
+    match sentinel {
+        UnmappableCode::ReplacementChar => "replacement_char",
+        UnmappableCode::QuestionMark => "question_mark",
+        UnmappableCode::Omit => "omit",
+    }
+}
+
+/// The settings-file token for an `/ActualText` precedence rule. See
+/// [`separation_token`].
+const fn actual_text_token(precedence: ActualTextPrecedence) -> &'static str {
+    match precedence {
+        ActualTextPrecedence::Always => "always",
+        ActualTextPrecedence::TaggedOnly => "tagged_only",
+        ActualTextPrecedence::Glyphs => "glyphs",
+    }
+}
+
+/// The settings-file token for a missing-`/AS` policy. See
+/// [`separation_token`].
+const fn missing_as_token(policy: MissingAppearanceState) -> &'static str {
+    match policy {
+        MissingAppearanceState::PaintNothing => "paint_nothing",
+        MissingAppearanceState::FirstEntry => "first_entry",
+        MissingAppearanceState::OffElseNothing => "off_else_nothing",
+    }
+}
+
+/// The settings-file token for a cross-reference entry terminator. See
+/// [`separation_token`].
+const fn xref_entry_eol_token(eol: XrefEntryEol) -> &'static str {
+    match eol {
+        XrefEntryEol::SpaceLf => "space_lf",
+        XrefEntryEol::SpaceCr => "space_cr",
+        XrefEntryEol::CrLf => "cr_lf",
+    }
+}
+
+/// The settings-file token for the trailing-EOL rule. See
+/// [`separation_token`].
+const fn trailing_eol_token(eol: TrailingEol) -> &'static str {
+    match eol {
+        TrailingEol::Lf => "lf",
+        TrailingEol::None => "none",
     }
 }
 
@@ -562,6 +1122,91 @@ impl Settings {
                     using: Self::default().word_gap_ratio.to_string(),
                 }),
             },
+            "mask_resample" => match value {
+                "nearest" => self.mask_resample = MaskResample::Nearest,
+                "box_average" => self.mask_resample = MaskResample::BoxAverage,
+                "bilinear" => self.mask_resample = MaskResample::Bilinear,
+                _ => notes.push(SettingNote::BadValue {
+                    key: key.to_owned(),
+                    value: value.to_owned(),
+                    line,
+                    using: mask_resample_token(Self::default().mask_resample).to_owned(),
+                }),
+            },
+            "image_minify" => match value {
+                "point_sample" => self.image_minify = MinifyFilter::PointSample,
+                "smooth" => self.image_minify = MinifyFilter::Smooth,
+                _ => notes.push(SettingNote::BadValue {
+                    key: key.to_owned(),
+                    value: value.to_owned(),
+                    line,
+                    using: minify_token(Self::default().image_minify).to_owned(),
+                }),
+            },
+            "cmyk_jpeg_polarity" => match value {
+                "never_invert" => self.cmyk_jpeg_polarity = CmykJpegPolarity::NeverInvert,
+                "invert_on_app14" => self.cmyk_jpeg_polarity = CmykJpegPolarity::InvertOnApp14,
+                _ => notes.push(SettingNote::BadValue {
+                    key: key.to_owned(),
+                    value: value.to_owned(),
+                    line,
+                    using: cmyk_jpeg_polarity_token(Self::default().cmyk_jpeg_polarity).to_owned(),
+                }),
+            },
+            "unmappable_code" => match value {
+                "replacement_char" => self.unmappable_code = UnmappableCode::ReplacementChar,
+                "question_mark" => self.unmappable_code = UnmappableCode::QuestionMark,
+                "omit" => self.unmappable_code = UnmappableCode::Omit,
+                _ => notes.push(SettingNote::BadValue {
+                    key: key.to_owned(),
+                    value: value.to_owned(),
+                    line,
+                    using: unmappable_token(Self::default().unmappable_code).to_owned(),
+                }),
+            },
+            "actual_text" => match value {
+                "always" => self.actual_text = ActualTextPrecedence::Always,
+                "tagged_only" => self.actual_text = ActualTextPrecedence::TaggedOnly,
+                "glyphs" => self.actual_text = ActualTextPrecedence::Glyphs,
+                _ => notes.push(SettingNote::BadValue {
+                    key: key.to_owned(),
+                    value: value.to_owned(),
+                    line,
+                    using: actual_text_token(Self::default().actual_text).to_owned(),
+                }),
+            },
+            "missing_as" => match value {
+                "paint_nothing" => self.missing_as = MissingAppearanceState::PaintNothing,
+                "first_entry" => self.missing_as = MissingAppearanceState::FirstEntry,
+                "off_else_nothing" => self.missing_as = MissingAppearanceState::OffElseNothing,
+                _ => notes.push(SettingNote::BadValue {
+                    key: key.to_owned(),
+                    value: value.to_owned(),
+                    line,
+                    using: missing_as_token(Self::default().missing_as).to_owned(),
+                }),
+            },
+            "xref_entry_eol" => match value {
+                "space_lf" => self.xref_entry_eol = XrefEntryEol::SpaceLf,
+                "space_cr" => self.xref_entry_eol = XrefEntryEol::SpaceCr,
+                "cr_lf" => self.xref_entry_eol = XrefEntryEol::CrLf,
+                _ => notes.push(SettingNote::BadValue {
+                    key: key.to_owned(),
+                    value: value.to_owned(),
+                    line,
+                    using: xref_entry_eol_token(Self::default().xref_entry_eol).to_owned(),
+                }),
+            },
+            "trailing_eol" => match value {
+                "lf" => self.trailing_eol = TrailingEol::Lf,
+                "none" => self.trailing_eol = TrailingEol::None,
+                _ => notes.push(SettingNote::BadValue {
+                    key: key.to_owned(),
+                    value: value.to_owned(),
+                    line,
+                    using: trailing_eol_token(Self::default().trailing_eol).to_owned(),
+                }),
+            },
             _ => notes.push(SettingNote::UnknownKey {
                 key: key.to_owned(),
                 line,
@@ -639,7 +1284,151 @@ impl Settings {
              # extraction is splitting words; lower it if it is running them\n\
              # together. Accepted range 0.01 to 5.0.\n",
         );
-        let _ = writeln!(out, "word_gap_ratio = {}", self.word_gap_ratio);
+        let _ = writeln!(out, "word_gap_ratio = {}\n", self.word_gap_ratio);
+
+        out.push_str(
+            "# When a picture carries a separate transparency image at a different\n\
+             # size, this decides how that transparency is stretched to fit. The PDF\n\
+             # standard fixes where the two line up and says nothing about how to\n\
+             # stretch (section 8.9.6.3).\n\
+             #   nearest     = take the single nearest transparency pixel (default).\n\
+             #                 Keeps hard cut-out edges perfectly sharp and can never\n\
+             #                 invent a half-transparent pixel that was not there.\n\
+             #                 Can look stair-stepped.\n\
+             #   box_average = average every transparency pixel the picture pixel\n\
+             #                 covers. Best when the transparency is FINER than the\n\
+             #                 picture, where `nearest` throws most of it away.\n\
+             #   bilinear    = blend smoothly between transparency pixels. Best for a\n\
+             #                 soft photographic fade supplied coarser than the\n\
+             #                 picture; softens hard cut-out edges, which is usually\n\
+             #                 not wanted.\n",
+        );
+        let _ = writeln!(
+            out,
+            "mask_resample = {}\n",
+            mask_resample_token(self.mask_resample)
+        );
+
+        out.push_str(
+            "# How a picture is drawn when it is shown SMALLER than its own pixel\n\
+             # grid. The standard only describes smoothing for making a picture\n\
+             # bigger and never mentions making one smaller (section 8.9.5.3), so\n\
+             # this direction is pdfce's choice.\n\
+             #   point_sample = take one pixel per dot on screen (default). Exact, and\n\
+             #                  what the document's own smoothing switch literally\n\
+             #                  asks for; thin lines can shimmer or vanish when the\n\
+             #                  picture is shrunk a lot.\n\
+             #   smooth       = average when shrinking. Cleaner shrunken photographs;\n\
+             #                  a deliberate departure from the document's switch.\n",
+        );
+        let _ = writeln!(out, "image_minify = {}\n", minify_token(self.image_minify));
+
+        out.push_str(
+            "# How to read a four-ink (CMYK) JPEG that does not say which way round\n\
+             # its ink values are stored. No document anywhere defines this; some\n\
+             # 1990s Photoshop output stores the values back-to-front and says so\n\
+             # nowhere. Getting it wrong turns the picture into a photographic\n\
+             # negative, so the mistake is at least obvious.\n\
+             #   never_invert    = take the values as stored (default). What every\n\
+             #                     other major PDF reader does; a document can still\n\
+             #                     declare inverted storage the proper way, and pdfce\n\
+             #                     honours that.\n\
+             #   invert_on_app14 = flip the values when the file carries an Adobe\n\
+             #                     marker and declares nothing. Only for a library of\n\
+             #                     old Photoshop CMYK JPEGs that really are stored\n\
+             #                     back-to-front.\n",
+        );
+        let _ = writeln!(
+            out,
+            "cmyk_jpeg_polarity = {}\n",
+            cmyk_jpeg_polarity_token(self.cmyk_jpeg_polarity)
+        );
+
+        out.push_str(
+            "# What copied or searched text shows for a character pdfce cannot read\n\
+             # at all — a font that carries no way back to real characters. The\n\
+             # standard names no stand-in (section 9.10.2). CHANGING THIS CHANGES\n\
+             # WHICH TEXT A SEARCH OR A TEXT-BASED REDACTION MATCHES.\n\
+             #   replacement_char = the standard black-diamond question mark, one per\n\
+             #                      unreadable character (default). Keeps the text the\n\
+             #                      same length and is unmistakably a failure.\n\
+             #   question_mark    = a plain ? instead. Survives being pasted anywhere,\n\
+             #                      but is indistinguishable from a real ? in the\n\
+             #                      document.\n\
+             #   omit             = show nothing. The text gets shorter with no sign\n\
+             #                      in the text that anything was lost, and a line\n\
+             #                      whose characters are ALL unreadable disappears\n\
+             #                      from the results entirely. pdfce still counts\n\
+             #                      every such character whichever setting you use.\n",
+        );
+        let _ = writeln!(
+            out,
+            "unmappable_code = {}\n",
+            unmappable_token(self.unmappable_code)
+        );
+
+        out.push_str(
+            "# Some documents attach a \"what this really says\" note to a piece of\n\
+             # text — for a ligature, a logo, or an abbreviation. This decides\n\
+             # whether that note replaces what is drawn on the page. The standard\n\
+             # says one thing in section 14.9.4 and something else in a note to\n\
+             # section 14.8, so both readings are defensible.\n\
+             #   always      = the note wins wherever it appears (default).\n\
+             #   tagged_only = the note wins only inside properly tagged content, and\n\
+             #                 the drawn characters win everywhere else. Use it when a\n\
+             #                 producer scatters bad notes outside its tagging.\n\
+             #   glyphs      = the drawn characters always win; the note is reported\n\
+             #                 but never substituted. Use it when you need what the\n\
+             #                 page actually shows. Text whose ONLY real identity was\n\
+             #                 in the note becomes unreadable.\n",
+        );
+        let _ = writeln!(
+            out,
+            "actual_text = {}\n",
+            actual_text_token(self.actual_text)
+        );
+
+        out.push_str(
+            "# What to show for a stamp, checkbox or other marked-up item that\n\
+             # supplies several alternative appearances but forgets to say which one\n\
+             # is current. Such a file is malformed and the standard states no\n\
+             # recovery (section 12.5.5). pdfce never repairs the file; it only\n\
+             # decides what to put on screen, and counts every occurrence.\n\
+             #   paint_nothing    = show nothing, and report it (default). The honest\n\
+             #                      answer: pdfce will not pick one for you.\n\
+             #   first_entry      = show the first alternative the file lists.\n\
+             #   off_else_nothing = show the \"off\" alternative if there is one,\n\
+             #                      otherwise nothing. The checkbox-shaped guess.\n",
+        );
+        let _ = writeln!(out, "missing_as = {}\n", missing_as_token(self.missing_as));
+
+        out.push_str(
+            "# Two invisible bookkeeping bytes at the end of every line of a saved\n\
+             # file's index table. The standard permits exactly these three and no\n\
+             # others (section 7.5.4). Nothing on screen changes; only the saved\n\
+             # bytes do. Change it only to match another tool byte-for-byte.\n\
+             #   space_lf = space then line-feed (default)\n\
+             #   space_cr = space then carriage-return\n\
+             #   cr_lf    = carriage-return then line-feed\n",
+        );
+        let _ = writeln!(
+            out,
+            "xref_entry_eol = {}\n",
+            xref_entry_eol_token(self.xref_entry_eol)
+        );
+
+        out.push_str(
+            "# Whether a saved file ends with a line break after its final end-of-file\n\
+             # marker. The standard requires every line to be terminated AND says the\n\
+             # last line contains only the marker; both readings are legitimate.\n\
+             #   lf   = end with a line break (default). Always safe.\n\
+             #   none = end at the last character of the marker.\n",
+        );
+        let _ = writeln!(
+            out,
+            "trailing_eol = {}",
+            trailing_eol_token(self.trailing_eol)
+        );
 
         out
     }
@@ -804,6 +1593,83 @@ mod tests {
         assert!((Settings::default().word_gap_ratio - engine.word_gap_ratio).abs() < f32::EPSILON);
         assert_eq!(Settings::default().separations, SeparationPolicy::default());
         assert_eq!(Settings::default().cmyk_intent, CmykIntent::default());
+
+        // The ambiguity-register settings whose value is carried by an
+        // option struct elsewhere in the crate: the same rule applies, and
+        // the assertion is what stops the two drifting.
+        assert_eq!(
+            Settings::default().unmappable_code,
+            engine.unmappable_code,
+            "the extraction engine owns the sentinel default"
+        );
+        assert_eq!(
+            Settings::default().actual_text,
+            engine.actual_text,
+            "the extraction engine owns the /ActualText precedence default"
+        );
+        let writer = crate::writer::SaveOptions::default();
+        assert_eq!(Settings::default().xref_entry_eol, writer.xref_entry_eol);
+        assert_eq!(Settings::default().trailing_eol, writer.trailing_eol);
+
+        // And the ones whose only home is the enum itself.
+        assert_eq!(Settings::default().mask_resample, MaskResample::default());
+        assert_eq!(Settings::default().image_minify, MinifyFilter::default());
+        assert_eq!(
+            Settings::default().cmyk_jpeg_polarity,
+            CmykJpegPolarity::default()
+        );
+        assert_eq!(
+            Settings::default().missing_as,
+            MissingAppearanceState::default()
+        );
+    }
+
+    #[test]
+    fn every_shipped_default_is_the_behaviour_that_shipped_before_the_setting() {
+        // R169 says a shipped default is "the best guess of what is usually
+        // followed", and for every entry the ambiguity register triaged out
+        // of already-shipped code that guess is, by construction, WHAT
+        // PDFCE ALREADY DID. This test is the guard against a later session
+        // flipping one of them on its own authority: adding the knob must
+        // not change a single observable behaviour, so each default is
+        // pinned to the variant the pre-settings code hard-coded.
+        let d = Settings::default();
+        assert_eq!(d.mask_resample, MaskResample::Nearest, "mask.rs was NN");
+        assert_eq!(
+            d.image_minify,
+            MinifyFilter::PointSample,
+            "interpret.rs point-sampled in both directions"
+        );
+        assert_eq!(
+            d.cmyk_jpeg_polarity,
+            CmykJpegPolarity::NeverInvert,
+            "R29: pdfce never inverted"
+        );
+        assert_eq!(
+            d.unmappable_code,
+            UnmappableCode::ReplacementChar,
+            "the ladder's rung 4 emitted U+FFFD"
+        );
+        assert_eq!(
+            d.actual_text,
+            ActualTextPrecedence::Always,
+            "/ActualText always won"
+        );
+        assert_eq!(
+            d.missing_as,
+            MissingAppearanceState::PaintNothing,
+            "a multi-entry /N with no /AS painted nothing"
+        );
+        assert_eq!(
+            d.xref_entry_eol,
+            XrefEntryEol::SpaceLf,
+            "xref_out.rs emitted `SP LF`"
+        );
+        assert_eq!(
+            d.trailing_eol,
+            TrailingEol::Lf,
+            "xref_out.rs emitted an LF after %%EOF"
+        );
     }
 
     #[test]
@@ -827,11 +1693,28 @@ mod tests {
         // The test that keeps `write_to_string` and `apply` from drifting:
         // a setting that can be written but not read back is a setting
         // that silently resets on the next launch.
+        //
+        // Every field is set to a value that is NOT its default, so a key
+        // that `write_to_string` forgot cannot pass by accidentally
+        // matching the default on the way back in.
         let written = Settings {
             separations: SeparationPolicy::Discard,
-            cmyk_intent: CmykIntent::NeutralBlack,
+            cmyk_intent: CmykIntent::Calibrated,
             word_gap_ratio: 0.35,
+            mask_resample: MaskResample::BoxAverage,
+            image_minify: MinifyFilter::Smooth,
+            cmyk_jpeg_polarity: CmykJpegPolarity::InvertOnApp14,
+            unmappable_code: UnmappableCode::Omit,
+            actual_text: ActualTextPrecedence::Glyphs,
+            missing_as: MissingAppearanceState::FirstEntry,
+            xref_entry_eol: XrefEntryEol::CrLf,
+            trailing_eol: TrailingEol::None,
         };
+        assert_ne!(
+            written,
+            Settings::default(),
+            "the round-trip fixture must not be the default settings"
+        );
         let mut notes = Vec::new();
         let read = Settings::parse(&written.write_to_string(), &mut notes);
         assert_eq!(read, written);
@@ -958,7 +1841,7 @@ mod tests {
         assert!(report.is_quiet(), "and a first run is not a fault");
 
         let written = Settings {
-            cmyk_intent: CmykIntent::NeutralBlack,
+            cmyk_intent: CmykIntent::Calibrated,
             ..Settings::default()
         };
         written.save(&location).expect("save must succeed");
@@ -995,6 +1878,27 @@ mod tests {
             "calibrated",
             "neutral_black",
             "naive",
+            "nearest",
+            "box_average",
+            "bilinear",
+            "point_sample",
+            "smooth",
+            "never_invert",
+            "invert_on_app14",
+            "replacement_char",
+            "question_mark",
+            "omit",
+            "always",
+            "tagged_only",
+            "glyphs",
+            "paint_nothing",
+            "first_entry",
+            "off_else_nothing",
+            "space_lf",
+            "space_cr",
+            "cr_lf",
+            "lf",
+            "none",
         ] {
             assert!(
                 text.contains(token),

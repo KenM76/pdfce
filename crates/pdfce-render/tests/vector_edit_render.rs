@@ -32,6 +32,7 @@ use pdfce_core::settings::CmykIntent;
 use pdfce_core::vector::{Matrix, Point, Segment, VectorObject, decompose_page};
 use pdfce_core::writer::SaveOptions;
 
+use pdfce_render::RenderOptions;
 use pdfce_render::gstate::GraphicsState;
 use pdfce_render::interpret::{TracedNode, TracedPath, trace_paths};
 use pdfce_render::render_page;
@@ -110,7 +111,9 @@ fn cross_check(doc: &Document) -> Vec<Vec<(f64, f64)>> {
         &page.resources,
         &pdfce_render::FontEnvironment::bundled(),
         GraphicsState::default_with_ctm(Transform::identity()),
-        CmykIntent::Calibrated,
+        RenderOptions::default()
+            .with_cmyk_intent(CmykIntent::Calibrated)
+            .policy(),
     );
     let render: Vec<Vec<(f64, f64)>> = traced.iter().map(render_points).collect();
 

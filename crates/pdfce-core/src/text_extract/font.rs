@@ -84,6 +84,7 @@ use crate::filters;
 use crate::fontdata::{self, BaseEncoding, Std14};
 use crate::graph::ObjectGraph;
 use crate::object::{Dict, Object};
+use crate::settings::UnmappableCode;
 use crate::view::DocumentView;
 
 use super::cmap::ToUnicodeCMap;
@@ -607,11 +608,30 @@ impl ExtractFont {
     ///
     /// Returns the characters produced (possibly several — one code to
     /// many code points is normal, see [`super::cmap`]) and the rung
-    /// that produced them. A [`LadderRung::Failed`] result carries
-    /// U+FFFD: §9.10.2 N3 records that the standard names **no**
-    /// sentinel, so this is disclosed pdfce policy, and the count is
-    /// what keeps it from being a silent lie.
-    pub(crate) fn to_unicode(&self, code: u32) -> (String, LadderRung) {
+    /// that produced them.
+    ///
+    /// ## The rung-4 sentinel is the operator's choice (`TX-A1`, R169)
+    ///
+    /// §9.10.2 N3 records that the standard names **no** sentinel — not
+    /// U+FFFD, not omission, not a placeholder — and its failure sentence
+    /// is grammatically broken besides (*"may choose a character code of
+    /// their choosing"* where a **Unicode value** is what is produced).
+    /// So this is disclosed pdfce policy rather than conformance, and
+    /// under R169 a genuine spec silence becomes a setting: `sentinel`
+    /// carries [`UnmappableCode`], defaulting to U+FFFD — the shipped
+    /// behaviour, **evidence tier (d)**, a reasoned guess.
+    ///
+    /// A **parameter, not a field on `ExtractFont`**: the same resolved
+    /// font can legitimately be walked twice under two different
+    /// extraction options within one session (a redaction preview versus
+    /// a clipboard copy), and baking the sentinel into the font would make
+    /// which one you got depend on which walk loaded the font first.
+    ///
+    /// The rung is returned unchanged in every case. Whatever the sentinel
+    /// is, [`LadderRung::Failed`] is still reported and still counted —
+    /// the setting chooses what the failure *looks like*, never whether
+    /// the failure is admitted.
+    pub(crate) fn to_unicode(&self, code: u32, sentinel: UnmappableCode) -> (String, LadderRung) {
         // Rung 1 — presence of /ToUnicode is the entire precondition,
         // for every Subtype including Type 3.
         if let Some(cmap) = &self.to_unicode
@@ -640,8 +660,25 @@ impl ExtractFont {
         // Rung 3 would go here. It cannot: see `Rung3Gap`.
 
         // Rung 4 — "there is no way to determine what the character code
-        // represents".
-        (char::REPLACEMENT_CHARACTER.to_string(), LadderRung::Failed)
+        // represents". What that looks like is `TX-A1`, above.
+        let text = match sentinel {
+            UnmappableCode::ReplacementChar => char::REPLACEMENT_CHARACTER.to_string(),
+            UnmappableCode::QuestionMark => "?".to_owned(),
+            // Deliberately an empty string rather than an early return
+            // with a different rung: the code still HAPPENED, it still
+            // advances the text matrix, and it is still a rung-4 failure
+            // in the diagnostics. Only the text is empty.
+            //
+            // Downstream consequence, documented on the variant and
+            // pinned by a test: `layout::Builder::close_run` drops a run
+            // whose text is empty, glyph records and all — so a run of
+            // wholly-unmappable codes vanishes under this setting rather
+            // than surviving as positioned, character-less glyphs. The
+            // COUNT survives regardless, which is what keeps `omit`
+            // honest; the positions do not.
+            UnmappableCode::Omit => String::new(),
+        };
+        (text, LadderRung::Failed)
     }
 
     /// Advance width for a code, in **text space** (already divided by

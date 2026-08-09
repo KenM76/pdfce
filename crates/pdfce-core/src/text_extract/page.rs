@@ -69,6 +69,7 @@ use crate::content::{ContentError, ContentStream, ContentTokenKind, Operation};
 use crate::graph::ObjectGraph;
 use crate::object::{Dict, Object};
 use crate::page_tree::{Page, Rect};
+use crate::settings::ActualTextPrecedence;
 use crate::span::ByteSpan;
 use crate::text_state::{AmbientTextState, TextStateParam};
 use crate::textstring::decode_text_string;
@@ -855,7 +856,11 @@ impl Walk<'_> {
     /// therefore applies each adjustment to the text matrix as it meets
     /// it.
     fn show_code(&mut self, font: &ExtractFont, code: u32, word_spacing: bool) {
-        let (chars, rung) = font.to_unicode(code);
+        // `TX-A1` (R169): what an unmappable code looks like is the
+        // operator's setting, threaded from `ExtractOptions` rather than
+        // read from anywhere global — two walks in one session may
+        // legitimately use different sentinels.
+        let (chars, rung) = font.to_unicode(code, self.options.unmappable_code);
         self.diagnostics.codes_total += 1;
         match rung {
             LadderRung::ToUnicode => self.diagnostics.via_to_unicode += 1,
@@ -1095,7 +1100,39 @@ impl Walk<'_> {
                     } else {
                         self.diagnostics.actual_text_applied += 1;
                     }
-                    level.actual_text = Some(decoded.text);
+                    // `AT-A1` (R169). §14.9.4 says the value "shall be
+                    // used as a replacement"; §14.8.2.4.2 NOTE 2 says a
+                    // reader "may choose to use" it and that only "some
+                    // conforming readers" do; §9.10.1 says "may be used".
+                    // The only sentence about PRECEDENCE is a `may` inside
+                    // an informative NOTE, so neither reading is
+                    // dislodgeable and the direction is the operator's.
+                    //
+                    // The counters above run BEFORE this test on purpose:
+                    // "how many /ActualText entries does this page carry"
+                    // is a property of the document, not of pdfce's
+                    // settings, and an operator who turned substitution off
+                    // still needs to see that the entries are there.
+                    let substitute = match self.options.actual_text {
+                        ActualTextPrecedence::Always => true,
+                        // "Inside tagged content" is tested as an /MCID in
+                        // scope — on this sequence or an enclosing one.
+                        // That is the only test a content stream can
+                        // answer: §14.7.4.2 makes /MCID precisely the join
+                        // key between a marked-content sequence and a
+                        // structure element, so a sequence with none in
+                        // scope is not part of the structure tree in any
+                        // sense the page itself expresses. `level.mcid`
+                        // already carries the inherited value (set from
+                        // `self.mcid()` when the level was built) and has
+                        // been overwritten by this sequence's own /MCID
+                        // above if it had one.
+                        ActualTextPrecedence::TaggedOnly => level.mcid.is_some(),
+                        ActualTextPrecedence::Glyphs => false,
+                    };
+                    if substitute {
+                        level.actual_text = Some(decoded.text);
+                    }
                 }
             }
         }

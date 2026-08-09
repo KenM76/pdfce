@@ -121,6 +121,7 @@ use crate::document::Document;
 use crate::filters::{self, FilterError, FilterNotes};
 use crate::graph::ObjectGraph;
 use crate::object::{Dict, Object};
+use crate::settings::CmykJpegPolarity;
 use crate::view::DocumentView;
 
 /// Maximum `width × height` accepted for a single decoded image
@@ -522,6 +523,52 @@ pub fn decode_image_view(
     raw: &[u8],
     inline: bool,
 ) -> Result<CodedImage, ImageCodecError> {
+    decode_image_view_with(doc, dict, raw, inline, CmykJpegPolarity::default())
+}
+
+/// [`decode_image_view`] with an explicit `DCT-A1` polarity rule (R169).
+///
+/// ## What `polarity` decides, and what it does not
+///
+/// **Only** the one configuration nothing in the file disambiguates: a
+/// `DCTDecode` image with **four components**, an **effective
+/// `ColorTransform` of 0**, an **Adobe APP14 marker present**, and **no
+/// `/Decode` array** in the image dictionary. Everything else about the
+/// decode is unchanged, and in particular:
+///
+/// - the YCCK→CMYK inverse for effective transform 1 or 2 is **mandated**
+///   by Table 13 (*"transformed … from YUVK to CMYK after decoding"*) and
+///   is not a polarity guess — no setting reaches it;
+/// - `/Decode` remains the sanctioned polarity control and remains
+///   `pdfce-render`'s to apply (rule R26);
+/// - the R30 disclosure
+///   ([`CodecNotes::cmyk_polarity_unverifiable`]) is still raised for the
+///   ambiguous shape whichever way the setting points, because the shape
+///   is a fact about the file and not about pdfce's configuration.
+///
+/// The default is [`CmykJpegPolarity::NeverInvert`] — standing rule
+/// **R29**, and **evidence tier (c)**: the strongest-sourced default in
+/// the whole ambiguity register (Adobe TN #5116 contains `"invert"` zero
+/// times; APP14 carries no polarity flag to test; all four reference
+/// engines accept the ambiguity rather than inverting on marker presence).
+///
+/// ## A separate function rather than a changed signature
+///
+/// [`decode_image_view`] has callers in `image_import`, which this change
+/// deliberately leaves alone, and in four fuzz targets. Adding a parameter
+/// there would have made an unrelated module's re-decode path carry an
+/// opinion it has none.
+///
+/// # Errors
+///
+/// As [`decode_image`].
+pub fn decode_image_view_with(
+    doc: &DocumentView<'_>,
+    dict: &Dict,
+    raw: &[u8],
+    inline: bool,
+    polarity: CmykJpegPolarity,
+) -> Result<CodedImage, ImageCodecError> {
     let names = filters::filter_names(dict)?;
 
     // Locate the terminal codec. A codec anywhere but the last position
@@ -559,7 +606,7 @@ pub fn decode_image_view(
 
     let parms = codec_parms(dict, names.len());
     match codec {
-        Codec::Dct => dct::decode(doc, &data, parms, dict, &mut notes),
+        Codec::Dct => dct::decode(doc, &data, parms, dict, polarity, &mut notes),
         Codec::Ccitt => ccitt::decode(doc, &data, parms, dict, &mut notes),
         Codec::Jbig2 => jbig2::decode(doc, &data, parms, dict, &mut notes),
         // No `parms` argument: Table 6 gives `JPXDecode` no parameters

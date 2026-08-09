@@ -110,7 +110,6 @@
 //!   rendering mode 3 (the invisible OCR text layer), a `.notdef`
 //!   fallback, and a space all move `Tm` (§9.4.4).
 
-use pdfce_core::settings::CmykIntent;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
@@ -128,11 +127,12 @@ use tiny_skia::{
 };
 
 use crate::cancel::RenderCancel;
-use crate::font::FontEnvironment;
 use crate::font::program::FontProgram;
+use crate::font::{FontEnvironment, RenderPolicy};
 use crate::gstate::{GStateStack, GraphicsState, LineCap, LineJoin, Rgb};
 use crate::image::{self, ImageError, ImageNotes, ImageOrigin};
 use crate::text::{LoadedFont, TextObject};
+use pdfce_core::settings::MinifyFilter;
 
 /// Maximum nesting of `Do`-invoked form XObjects (pdfce policy,
 /// ARCHITECTURE.md §10.1).
@@ -666,7 +666,7 @@ pub fn run(
     initial: GraphicsState,
     pixmap: &mut Pixmap,
     cancel: Option<&RenderCancel>,
-    cmyk_intent: CmykIntent,
+    policy: RenderPolicy,
 ) -> Diagnostics {
     run_nested(
         doc,
@@ -678,7 +678,7 @@ pub fn run(
         0,
         Vec::new(),
         cancel,
-        cmyk_intent,
+        policy,
     )
 }
 
@@ -742,7 +742,7 @@ pub fn trace_paths(
     resources: &Dict,
     fonts: &FontEnvironment,
     initial: GraphicsState,
-    cmyk_intent: CmykIntent,
+    policy: RenderPolicy,
 ) -> Vec<TracedPath> {
     // A tiny throwaway target: we discard the pixels, so its size only has
     // to be non-zero for `Pixmap::new` to succeed.
@@ -750,7 +750,7 @@ pub fn trace_paths(
         return Vec::new();
     };
     let mut interp = Interpreter {
-        cmyk_intent,
+        policy,
         gs: GStateStack::new(initial),
         diag: Diagnostics::default(),
         path: PathBuilder::new(),
@@ -800,10 +800,10 @@ fn run_nested(
     depth: usize,
     active: Vec<ObjId>,
     cancel: Option<&RenderCancel>,
-    cmyk_intent: CmykIntent,
+    policy: RenderPolicy,
 ) -> Diagnostics {
     let mut interp = Interpreter {
-        cmyk_intent,
+        policy,
         gs: GStateStack::new(initial),
         diag: Diagnostics::default(),
         path: PathBuilder::new(),
@@ -900,10 +900,10 @@ pub fn run_form_at(
     initial: GraphicsState,
     pixmap: &mut Pixmap,
     cancel: Option<&RenderCancel>,
-    cmyk_intent: CmykIntent,
+    policy: RenderPolicy,
 ) -> Diagnostics {
     let mut interp = Interpreter {
-        cmyk_intent,
+        policy,
         gs: GStateStack::new(initial),
         diag: Diagnostics::default(),
         path: PathBuilder::new(),
@@ -956,9 +956,15 @@ struct Interpreter<'a> {
     doc: &'a DocumentView<'a>,
     /// Substitute faces available to `Tf` (R19: supplied, never found).
     fonts: &'a FontEnvironment,
-    /// The operator's DeviceCMYK conversion choice (§8.6.4.4), carried
-    /// per render rather than globally — see `Rgb::from_cmyk`.
-    cmyk_intent: CmykIntent,
+    /// The operator's rendering choices for the questions ISO 32000-1
+    /// leaves open (R169) — the DeviceCMYK conversion (§8.6.4.4), the
+    /// mask resampling filter (`SM-A1`), the minification filter
+    /// (`IM-A1`) and the CMYK-JPEG polarity rule (`DCT-A1`).
+    ///
+    /// Carried **per render**, never read from a global: two renders of
+    /// the same page must not be able to differ for a reason invisible at
+    /// the call site. See `RenderPolicy`'s own docs.
+    policy: RenderPolicy,
     /// `Tm`/`Tlm`, live only between `BT` and `ET` (§9.4.1). `None`
     /// outside a text object — which is how the positioning and showing
     /// operators detect the "shall only appear within text objects"
@@ -1109,12 +1115,14 @@ impl Interpreter<'_> {
             }
             b"k" => {
                 if let &[c, m, y, kk] = nums.as_slice() {
-                    self.gs.current.fill_color = Rgb::from_cmyk(self.cmyk_intent, c, m, y, kk);
+                    self.gs.current.fill_color =
+                        Rgb::from_cmyk(self.policy.cmyk_intent, c, m, y, kk);
                 }
             }
             b"K" => {
                 if let &[c, m, y, kk] = nums.as_slice() {
-                    self.gs.current.stroke_color = Rgb::from_cmyk(self.cmyk_intent, c, m, y, kk);
+                    self.gs.current.stroke_color =
+                        Rgb::from_cmyk(self.policy.cmyk_intent, c, m, y, kk);
                 }
             }
 
@@ -1970,7 +1978,7 @@ impl Interpreter<'_> {
             self.depth + 1,
             active,
             self.cancel,
-            self.cmyk_intent,
+            self.policy,
         );
         self.diag.merge(nested);
         self.diag.forms_rendered += 1;
@@ -2004,7 +2012,7 @@ impl Interpreter<'_> {
         let doc = self.doc;
         let resources = self.resources;
         let fill = self.gs.current.fill_color;
-        match image::decode(doc, dict, raw, resources, fill, origin, self.cmyk_intent) {
+        match image::decode(doc, dict, raw, resources, fill, origin, self.policy) {
             Ok(decoded) => {
                 self.diag.note_image_divergence(decoded.notes);
                 // §8.9.5.3: `/Interpolate` asks for smoothing on
@@ -2077,17 +2085,43 @@ impl Interpreter<'_> {
     /// [`SpreadMode::Pad`] keeps edge sampling inside the texels when
     /// anti-aliased coverage lands a fraction outside the square.
     ///
-    /// ## Known quality limitation (not a correctness one)
+    /// ## Sampling, and the one direction the spec never legislated
     ///
-    /// Sampling follows §8.9.5.3 literally: `/Interpolate` false — the
-    /// default — means nearest-neighbour. That is right for *up*-scaling
-    /// (and is what makes a 2×2 test image's pixels exactly assertable),
-    /// but on heavy *down*-scaling it aliases, because tiny-skia has no
-    /// mipmapping and a minifying pattern therefore point-samples. Most
-    /// production viewers smooth on minification regardless of
-    /// `/Interpolate`. Matching them is a deliberate later choice, not an
-    /// oversight: it is a departure from the spec's stated switch, so it
-    /// wants a decision record rather than a quiet tweak here.
+    /// *Up*-scaling follows §8.9.5.3 literally: `/Interpolate` false — the
+    /// default — means nearest-neighbour, which is right for magnification
+    /// and is what makes a 2×2 test image's pixels exactly assertable.
+    ///
+    /// *Down*-scaling is a different question, and it took until the R169
+    /// ambiguity sweep to see why. §8.9.5.3 defines interpolation **only**
+    /// for magnification — *"when the resolution of a source image is
+    /// significantly **lower** than that of the output device"* — and the
+    /// standard never mentions minification at all (`minif` 0 hits,
+    /// `mipmap` 0, `decimat` 0, `down-sampl` 0 over the whole source). So
+    /// `/Interpolate false` does not in fact ask for point-sampling on the
+    /// way down; it switches off the *up*-scaling feature the clause
+    /// actually defines, and a reader minifying an image is unconstrained.
+    ///
+    /// That makes it spec ambiguity `IM-A1` and therefore the operator's
+    /// choice ([`MinifyFilter`]). The default remains **point-sample**, the
+    /// shipped behaviour, at **evidence tier (d)** — a guess. This comment
+    /// used to assert that *"most production viewers smooth on
+    /// minification regardless of `/Interpolate`"*; that assertion was
+    /// never verified against anything, so it is not being used to move a
+    /// default. It is restated here as the open question it is: a
+    /// viewer-behaviour check filed to `C:\personal_rag\pdf\` would raise
+    /// this to tier (c), and if it confirms, the default flips.
+    ///
+    /// ## Detecting minification
+    ///
+    /// The CTM maps the unit square to the painted region, so
+    /// `|CTM.sx|` and `|CTM.sy|` are the device-space extents of the whole
+    /// image in each axis. Dividing by the texel counts gives device
+    /// pixels per texel; **below one in either axis** the image is being
+    /// squeezed and texels are being skipped. A skew or rotation makes
+    /// those extents approximate rather than exact, which is acceptable
+    /// here: the consequence of being slightly wrong at the boundary is
+    /// one filter rather than another on an image that is very nearly
+    /// 1:1, where the two agree anyway.
     fn paint_image(&self, texels: &Pixmap, interpolate: bool, pixmap: &mut Pixmap) {
         let (w, h) = (texels.width(), texels.height());
         if w == 0 || h == 0 {
@@ -2095,15 +2129,23 @@ impl Interpreter<'_> {
         }
         let image_to_user =
             Transform::from_row(1.0 / w as f32, 0.0, 0.0, -1.0 / h as f32, 0.0, 1.0);
+        // `IM-A1`: smoothing on the way DOWN is a separate question from
+        // `/Interpolate`, and only the operator's setting can turn it on.
+        // `/Interpolate true` still wins outright — a document that asked
+        // for smoothing gets it in both directions, whatever this is set
+        // to, because that request IS spec-governed.
+        let smooth_minified =
+            matches!(self.policy.image_minify, MinifyFilter::Smooth) && self.is_minified(w, h);
+        let quality = if interpolate || smooth_minified {
+            FilterQuality::Bilinear
+        } else {
+            FilterQuality::Nearest
+        };
         let paint = Paint {
             shader: Pattern::new(
                 texels.as_ref(),
                 SpreadMode::Pad,
-                if interpolate {
-                    FilterQuality::Bilinear
-                } else {
-                    FilterQuality::Nearest
-                },
+                quality,
                 1.0,
                 image_to_user,
             ),
@@ -2122,6 +2164,28 @@ impl Interpreter<'_> {
             self.gs.current.ctm,
             self.gs.current.clip.as_deref(),
         );
+    }
+
+    /// Whether a `w × h` image is being drawn smaller than its own pixel
+    /// grid under the current CTM — the trigger for `IM-A1`.
+    ///
+    /// The image occupies §8.9.4's unit square, so the CTM's x- and y-
+    /// scale factors ARE the device-space width and height of the whole
+    /// image. Dividing each by the texel count in that axis gives device
+    /// pixels per texel; strictly below one means texels are being
+    /// discarded, which is the only case where a minification filter can
+    /// change anything.
+    ///
+    /// Returns `false` for a degenerate or non-finite CTM: an image with
+    /// no extent paints nothing, and choosing a filter for it is not a
+    /// decision worth making from a NaN.
+    fn is_minified(&self, w: u32, h: u32) -> bool {
+        let ctm = self.gs.current.ctm;
+        let (sx, sy) = (ctm.sx.abs(), ctm.sy.abs());
+        if !sx.is_finite() || !sy.is_finite() || sx <= 0.0 || sy <= 0.0 {
+            return false;
+        }
+        sx < w as f32 || sy < h as f32
     }
 
     /// The graphics state's stroke geometry (§8.4.3), shared by path
