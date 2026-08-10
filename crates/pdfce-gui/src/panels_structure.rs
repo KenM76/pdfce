@@ -271,6 +271,19 @@ impl PdfceApp {
                     .clicked();
             });
         }
+        // §8.11.4.4: some of these states are not the document's to
+        // state — a viewer recomputes them from the magnification. The
+        // rows below show what the document OPENS in, so a zoom-banded
+        // layer can read "shown" while its content is off the page.
+        // Said here rather than left to be discovered as a defect.
+        if read.diagnostics.auto_managed_groups > 0 {
+            ui.label(
+                egui::RichText::new(ui_text::layers_auto_managed(
+                    read.diagnostics.auto_managed_groups,
+                ))
+                .small(),
+            );
+        }
         ui.separator();
 
         // Collected while the read is borrowed, applied after — the

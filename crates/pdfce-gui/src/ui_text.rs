@@ -8669,6 +8669,21 @@ pub fn layer_design_intent_tooltip() -> &'static str {
     "This layer is marked for design use, not viewing, so the document's on/off setting for it does not affect what is drawn."
 }
 
+/// Some layers' states are managed automatically (§8.11.4.4).
+///
+/// Says what the list IS rather than apologising for what it is not:
+/// the states shown are the document's opening states, and for these
+/// layers the page may legitimately disagree at the current zoom.
+pub fn layers_auto_managed(n: usize) -> String {
+    if n == 1 {
+        "1 layer switches itself on or off as you zoom. The state shown here is the one the document opens in.".to_owned()
+    } else {
+        format!(
+            "{n} layers switch themselves on or off as you zoom. The states shown here are the ones the document opens in."
+        )
+    }
+}
+
 /// Label on the control that drops every session override.
 pub fn layers_reset_label() -> &'static str {
     "Reset"

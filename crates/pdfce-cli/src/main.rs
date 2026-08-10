@@ -1190,6 +1190,24 @@ enum Command {
         /// Repeatable. See `--show-layer`.
         #[arg(long = "hide-layer", value_name = "NAME")]
         hide_layers: Vec<String>,
+        /// Render the state a PRINTING or aggregating application would
+        /// use: the `/D` default configuration alone, with `/AS` usage
+        /// application dictionaries **not** applied (ISO 32000-1
+        /// §8.11.4.5).
+        ///
+        /// Without this flag `render-page` behaves as a viewer and
+        /// applies `View`-event usage at `--scale`, so a layer banded to
+        /// a magnification range appears or disappears with it. With it,
+        /// magnification is irrelevant and you get the state the
+        /// document opens in.
+        ///
+        /// §8.11.4.5 NOTE 2 names this exact affordance: viewers "may
+        /// also provide users with an option to view documents in this
+        /// state … [permitting] an accurate preview of the content as it
+        /// will appear when placed into an aggregating application or
+        /// sent to a stand-alone printing system."
+        #[arg(long)]
+        print_state: bool,
     },
 
     /// List a document's annotations per page (ISO 32000-1 §12.5).
@@ -3962,6 +3980,7 @@ fn run() -> ExitCode {
             font_dirs,
             show_layers,
             hide_layers,
+            print_state,
         } => cmd_render_page(
             &input,
             page,
@@ -3971,6 +3990,7 @@ fn run() -> ExitCode {
             &font_dirs,
             &show_layers,
             &hide_layers,
+            print_state,
         ),
         Command::ListAnnotations { input, pages } => cmd_list_annotations(&input, &pages),
         Command::ListFields {
@@ -5058,6 +5078,7 @@ fn cmd_render_page(
     font_dirs: &[PathBuf],
     show_layers: &[String],
     hide_layers: &[String],
+    print_state: bool,
 ) -> u8 {
     // Build the font environment from any `--font-dir` BEFORE loading the
     // document: the walk is pure shell-side I/O (R61), and a bad font dir
@@ -5133,7 +5154,13 @@ numbered 1..={})",
     // under §8.11.4.5 and applies `View`-event `/AS` usage at the
     // requested scale. The print path is the one the clause forbids this
     // on, and pdfce's printing does not come through here.
-    render_options.view_magnification = Some(scale);
+    // §8.11.4.5: only a viewer examines `/AS`; printing and aggregating
+    // applications "shall not apply the changes based on usage
+    // application dictionaries". `--print-state` is that mode, and NOTE 2
+    // licenses offering it.
+    if !print_state {
+        render_options.view_magnification = Some(scale);
+    }
 
     // §8.11 layer overrides. Resolved by NAME against the document's own
     // registry, because a name is what an operator has (`list-layers`
@@ -6113,6 +6140,11 @@ fn cmd_list_layers(input: &Path) -> u8 {
     }
     for (c, name) in [
         (d.unregistered_groups, "unregistered_groups"),
+        // Not a fault — the file is fine and its state simply moves.
+        // Reported because `visible=` on the rows above is the
+        // /D-initial answer, and for these groups a viewer's answer
+        // depends on magnification (§8.11.4.5).
+        (d.auto_managed_groups, "auto_managed_groups"),
         // Decision 038: the file says two things about these groups and
         // pdfce resolved it. The count is emitted here; the sentence
         // naming the RESOLUTION goes to stderr below, because an
@@ -6145,6 +6177,12 @@ fn cmd_list_layers(input: &Path) -> u8 {
         eprintln!(
             "pdfce-cli: {} group(s) are listed in BOTH /D /ON and /D /OFF. Resolved per ISO 32000-1 §8.11.4.5 b): the array OPPOSITE /BaseState decides, so with the usual /BaseState ON they are OFF. The document is not malformed — nothing forbids a writer from listing a group twice.",
             read.diagnostics.contradictory_on_off_groups
+        );
+    }
+    if read.diagnostics.auto_managed_groups > 0 {
+        eprintln!(
+            "pdfce-cli: {} group(s) have their state managed automatically by /AS usage application dictionaries (ISO 32000-1 §8.11.4.4). The visible= column above is the state the document OPENS in; a viewer re-computes it from the current magnification, so what render-page draws at a given --scale may differ. Use --print-state on render-page for the state a printing or aggregating application uses.",
+            read.diagnostics.auto_managed_groups
         );
     }
     if read.diagnostics.base_state_unrecognised {

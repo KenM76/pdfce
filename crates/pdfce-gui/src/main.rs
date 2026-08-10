@@ -4122,6 +4122,11 @@ impl OpenDoc {
             layers_generation,
             view_magnification,
         });
+        // §8.11.4.4's magnification, traced because it is the one input
+        // here whose WRONG value (the raster scale, which differs by
+        // pixels_per_point) produces a page that is correct on this
+        // monitor and wrong on another.
+        diag::trace(|| format!("render-view-magnification zoom={view_magnification}"));
         if let Some(result) = outcome {
             self.absorb_render(ctx, result);
         }
@@ -11936,6 +11941,21 @@ impl eframe::App for PdfceApp {
                 raw_input.modifiers = alt;
             }
             diag::Step::Zoom(factor) => raw_input.events.push(egui::Event::Zoom(factor)),
+            diag::Step::DocumentZoom(z) => {
+                if let Status::Open(doc) = &mut self.status {
+                    // `set_zoom`, not a bare field write: it also drops
+                    // out of any fit mode, and the default IS a fit mode,
+                    // which recomputes `zoom` from the window size every
+                    // frame. A bare write is silently overwritten before
+                    // the next raster — which is exactly what happened,
+                    // and read as "the magnification never reaches the
+                    // renderer" rather than as a harness fault.
+                    let max =
+                        viewer::max_zoom_for_page(doc.current_extent(), ctx.pixels_per_point());
+                    doc.view.set_zoom(z, max);
+                    doc.zoom_commanded = true;
+                }
+            }
             diag::Step::ReadMode => {
                 self.apply(Action::ToggleReadMode, ctx, ctx.pixels_per_point());
             }

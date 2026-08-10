@@ -785,6 +785,29 @@ pub struct LayerDiagnostics {
     /// would make `/OFF` inert and paint every layer the author turned
     /// off, so this is also the safe direction.
     pub base_state_unrecognised: bool,
+    /// Groups whose state a `View`-event `/AS` usage application
+    /// auto-manages (§8.11.4.4).
+    ///
+    /// # Why a read-only listing has to say this
+    ///
+    /// [`Layer::visible_by_default`] is the `/D`-initial state, and that
+    /// is the honest quantity for an enumerator to report: §8.11.4.5
+    /// makes the viewer's state a function of magnification, so "the"
+    /// state of an auto-managed group is not a property of the document
+    /// at all.
+    ///
+    /// But a panel listing that state beside a canvas rendering the
+    /// usage-adjusted one shows two different answers to the same
+    /// question. A layer banded to a zoom range reads "visible" here
+    /// while its content is absent from the page, and the operator has
+    /// no way to tell that from a defect.
+    ///
+    /// So the count is reported and the shells say what it means. Not a
+    /// fault — nothing is malformed — which is why it does NOT count
+    /// against [`LayerDiagnostics::is_faithful`]: the listing is a
+    /// faithful transcription of the file, and the file simply declares
+    /// a state that moves.
+    pub auto_managed_groups: usize,
     /// The listing stopped at [`MAX_LAYERS`].
     pub layer_truncation: bool,
     /// The page sweep stopped at [`MAX_RESOURCE_NODES`].
@@ -1022,6 +1045,10 @@ pub fn read_layers_with<G: ObjectGraph + ?Sized>(graph: &G, scan: LayerScan) -> 
                 note(*id, LayerSource::DefaultConfig, &mut found, &mut seen);
             }
         }
+        // Counted from `/D` only: `/Configs` are alternate
+        // configurations pdfce never applies, so their `/AS` entries
+        // describe a state this document is not in.
+        diag.auto_managed_groups = usage_application_groups(graph, d.get(b"AS")).len();
         for id in usage_application_groups(graph, d.get(b"AS")) {
             note(id, LayerSource::DefaultConfig, &mut found, &mut seen);
         }

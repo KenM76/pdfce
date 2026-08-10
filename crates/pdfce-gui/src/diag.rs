@@ -155,6 +155,9 @@ pub enum Step {
     ReadMode,
     /// Leave read mode or full screen, as Escape does.
     ExitViewMode,
+    /// Set the DOCUMENT zoom (`docszoom:2.0`), as distinct from
+    /// [`Step::Zoom`]'s pinch gesture, which moves egui's UI scale.
+    DocumentZoom(f32),
     /// Toggle the Find bar, through the same action Ctrl+F pushes.
     ///
     /// A step rather than a synthesised Ctrl+F because the chord itself
@@ -497,6 +500,13 @@ fn parse_step(s: &str) -> Option<Step> {
         "down" => xy().map(|(x, y)| Step::Down(x, y)),
         "up" => xy().map(|(x, y)| Step::Up(x, y)),
         "zoom" => rest.trim().parse().ok().map(Step::Zoom),
+        // `zoom:` pushes a PINCH event, which egui applies to its own UI
+        // scale factor — not to the document's zoom. That is the right
+        // thing for testing pinch handling and useless for testing
+        // anything that depends on MAGNIFICATION (§8.11.4.4's `/Zoom`
+        // usage category, for one), which is a distinction that cost a
+        // verification run to notice.
+        "docszoom" => rest.trim().parse().ok().map(Step::DocumentZoom),
         "scroll" => rest.trim().parse().ok().map(Step::Scroll),
         "altdown" => xy().map(|(x, y)| Step::AltClick(true, x, y)),
         "ctrldown" => xy().map(|(x, y)| Step::CtrlClick(true, x, y)),

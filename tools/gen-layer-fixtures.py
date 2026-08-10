@@ -779,6 +779,77 @@ def base_state_off_unregistered() -> bytes:
     return serialize(objects)
 
 
+def usage_auto_state() -> bytes:
+    """``/AS`` usage application: a zoom-banded layer and a view-off one.
+
+    The only fixture whose visible content depends on the MAGNIFICATION
+    rather than on the file alone -- which is the whole point of
+    SS8.11.4.4, and the reason it needs its own file: every other layer
+    fixture has one right answer, and this one has three.
+
+    ==== ===================== ======================================
+    obj  layer                 behaviour
+    ==== ===================== ======================================
+    4    "Zoomed detail"       ``/Zoom << /min 2.0 /max 8.0 >>``
+    5    "Hidden on view"      ``/View << /ViewState /OFF >>``
+    6    "No usage"            no ``/Usage`` at all -- the control
+    ==== ===================== ======================================
+
+    Expected, and the reason each row exists:
+
+    * below 2x: only obj 6 paints. Obj 4 is out of band, obj 5 is
+      view-off.
+    * at exactly 2.0: obj 4 JOINS it. ``min`` is inclusive.
+    * at exactly 8.0: obj 4 leaves again. ``max`` is EXCLUSIVE, and this
+      is the boundary an implementation using ``<=`` gets wrong at
+      precisely one magnification.
+    * obj 6 paints at every zoom, in every configuration. A group with no
+      ``/Usage`` is "left unchanged", and a reader that treated an absent
+      category as a recommendation of OFF would blank it -- so this
+      square is what separates the two readings of the aggregation
+      sentence.
+    * obj 5 never paints while viewing, and DOES paint when the
+      ``/D``-initial state is used, because SS8.11.4.5 forbids printing
+      and aggregating applications from applying usage at all. Rendering
+      this file with no magnification supplied is the print answer and
+      must show it.
+
+    Marks are painted through ``BDC``/``EMC`` so all of the above is
+    something to look at rather than a counter to read.
+    """
+    objects, nxt = pages_doc(
+        1,
+        catalog_extra=(
+            "/OCProperties << /OCGs [4 0 R 5 0 R 6 0 R] "
+            "/D << /Name (Default) /Order [4 0 R 5 0 R 6 0 R] "
+            "/AS [ << /Event /View /Category [/Zoom /View] "
+            "/OCGs [4 0 R 5 0 R 6 0 R] >> ] >> >>"
+        ),
+        page_extra={
+            0: (
+                "/Contents 7 0 R /Resources << /Properties << "
+                "/Zoomed 4 0 R /Hidden 5 0 R /Plain 6 0 R >> >>"
+            )
+        },
+    )
+    objects[4] = ocg(
+        pdf_string(b"Zoomed detail"),
+        extra="/Usage << /Zoom << /min 2.0 /max 8.0 >> >>",
+    )
+    objects[5] = ocg(
+        pdf_string(b"Hidden on view"),
+        extra="/Usage << /View << /ViewState /OFF >> >>",
+    )
+    objects[6] = ocg(pdf_string(b"No usage"))
+    content = b"""/OC /Zoomed BDC 0 0 0 rg 60 600 120 120 re f EMC
+/OC /Hidden BDC 0 0 0 rg 240 600 120 120 re f EMC
+/OC /Plain BDC 0 0 0 rg 420 600 120 120 re f EMC
+"""
+    objects[7] = stream("", content)
+    assert nxt == 4
+    return serialize(objects)
+
+
 def no_layers() -> bytes:
     """One page, no ``/OCProperties``.
 
@@ -806,6 +877,7 @@ def main() -> int:
         "on-off-contradiction.pdf": on_off_contradiction(),
         "base-state-unchanged.pdf": base_state_unchanged(),
         "base-state-off-unregistered.pdf": base_state_off_unregistered(),
+        "usage-auto-state.pdf": usage_auto_state(),
         "no-layers.pdf": no_layers(),
     }
     for name, data in files.items():
