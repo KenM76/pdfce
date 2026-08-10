@@ -10,7 +10,6 @@
       "Bash(cargo tree:*)",
       "Bash(cargo run -q -p pdfce-cli:*)",
       "Bash(cargo run -p pdfce-cli:*)",
-
       "Bash(git status:*)",
       "Bash(git log:*)",
       "Bash(git diff:*)",
@@ -20,12 +19,10 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git branch:*)",
-
       "Bash(python tools/check-:*)",
       "Bash(python tools/gen-:*)",
       "Bash(bash tools/check-:*)",
       "Bash(pwsh -NoProfile -File tools/:*)",
-
       "Bash(sed:*)",
       "Bash(awk:*)",
       "Bash(sort:*)",
@@ -36,15 +33,17 @@
       "Bash(printf:*)",
       "Bash(mkdir:*)",
       "Bash(cp:*)",
-
       "Read",
       "Glob",
       "Grep",
       "Edit",
-      "Write"
+      "Write",
+      "Bash(gh release create:*)",
+      "Bash(gh release upload:*)",
+      "Bash(gh release view:*)",
+      "Bash(gh release list:*)"
     ],
     "deny": [
-      "Bash(gh release:*)",
       "Bash(cargo publish:*)"
     ]
   }
