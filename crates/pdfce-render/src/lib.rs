@@ -2646,4 +2646,246 @@ mod tests {
             "justified ink right edge {x1} should reach the ~65px box margin"
         );
     }
+    // -----------------------------------------------------------------
+    // §8.11.3.2 — optional content in CONTENT STREAMS (BDC/EMC /OC)
+    //
+    // The half of §8.11 that was deferred through Pass 12.M2, when only
+    // an annotation's /OC entry was honoured. Annotation /OC covers
+    // pdfce's OWN authored layers; content-stream /OC is how every CAD
+    // exporter, and every "Layers" panel in a real drawing, works.
+    // -----------------------------------------------------------------
+
+    /// A one-page doc whose content stream is `content`, with one OCG
+    /// (object 5) registered in `/OCProperties` under `d_config`, and
+    /// reachable from the page's `/Properties` resource as `/oc1`.
+    fn doc_with_oc_content(content: &str, d_config: &str) -> (Document, Page) {
+        let objects: Vec<(u32, Vec<u8>)> = vec![
+            (
+                1,
+                format!(
+                    "<< /Type /Catalog /Pages 2 0 R /OCProperties \
+                     << /OCGs [5 0 R] /D << {d_config} >> >> >>"
+                )
+                .into_bytes(),
+            ),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 100 100] >>".to_vec(),
+            ),
+            (
+                3,
+                b"<< /Type /Page /Parent 2 0 R /Contents 4 0 R \
+                  /Resources << /Properties << /oc1 5 0 R >> >> >>"
+                    .to_vec(),
+            ),
+            (4, stream_object("", content.as_bytes())),
+            (5, b"<< /Type /OCG /Name (Layer 1) >>".to_vec()),
+        ];
+        build_pdf(&objects)
+    }
+
+    /// **Content inside an OFF layer is not drawn.**
+    ///
+    /// The base case, and the one the deferral cost: before this, every
+    /// layer in a CAD drawing painted regardless of its state, so pdfce
+    /// showed construction geometry and title-block alternates that the
+    /// producer had explicitly turned off.
+    #[test]
+    fn content_in_an_off_oc_section_is_not_painted() {
+        let (doc, page) = doc_with_oc_content(
+            "/OC /oc1 BDC 0 0 0 rg 10 10 50 50 re f EMC",
+            "/Order [5 0 R] /OFF [5 0 R]",
+        );
+        let out = render_page(&doc, &page, 1.0).unwrap();
+        assert!(
+            ink_bbox(&out.pixmap).is_none(),
+            "a filled rectangle inside an OFF /OC section must leave no ink"
+        );
+        assert_eq!(
+            out.diagnostics.oc_sections_hidden, 1,
+            "the page must be able to say WHY it is empty"
+        );
+    }
+
+    /// The same content with the layer ON paints normally — the guard
+    /// suppresses by layer state, not by the presence of `BDC`.
+    #[test]
+    fn content_in_an_on_oc_section_is_painted() {
+        let (doc, page) = doc_with_oc_content(
+            "/OC /oc1 BDC 0 0 0 rg 10 10 50 50 re f EMC",
+            "/Order [5 0 R]",
+        );
+        let out = render_page(&doc, &page, 1.0).unwrap();
+        assert!(ink_bbox(&out.pixmap).is_some(), "an ON layer paints");
+        assert_eq!(out.diagnostics.oc_sections_hidden, 0);
+    }
+
+    /// ★ **A hidden section's CLIP still applies to what follows.**
+    ///
+    /// §8.11.3.1: hidden content "shall not be drawn", but the graphics
+    /// state it establishes persists. Here the hidden section clips to
+    /// the left half of the page and the VISIBLE rectangle after it
+    /// spans the whole width — so if the clip were skipped along with
+    /// the paint, ink would appear on the right.
+    ///
+    /// This is the test that distinguishes "do not draw it" from "do not
+    /// run it", and getting it wrong makes a page's LAYOUT depend on
+    /// layer state — the one thing a layer toggle must never do.
+    #[test]
+    fn a_hidden_sections_clip_still_applies_to_later_visible_content() {
+        let (doc, page) = doc_with_oc_content(
+            "/OC /oc1 BDC 0 0 50 100 re W n EMC 0 0 0 rg 0 0 100 100 re f",
+            "/Order [5 0 R] /OFF [5 0 R]",
+        );
+        let out = render_page(&doc, &page, 1.0).unwrap();
+        let bbox = ink_bbox(&out.pixmap).expect("the visible fill must paint");
+        assert!(
+            bbox.2 <= 51,
+            "the hidden section's clip must still bound the visible fill; \
+             ink reached x={} which means the clip was skipped with the paint",
+            bbox.2
+        );
+    }
+
+    /// **A nested section inside a hidden one cannot un-hide itself.**
+    ///
+    /// Visibility is not a stack of independent answers: §8.11.3.1 says
+    /// hidden content shall not be drawn, and an ON group nested inside
+    /// an OFF one is still inside an OFF one. The inner `EMC` must
+    /// restore "hidden", not "visible".
+    #[test]
+    fn an_on_section_nested_inside_an_off_one_stays_hidden() {
+        let (doc, page) = doc_with_oc_content(
+            "/OC /oc1 BDC /Span /oc1 BDC 0 0 0 rg 10 10 50 50 re f EMC \
+             0 0 0 rg 60 60 30 30 re f EMC",
+            "/Order [5 0 R] /OFF [5 0 R]",
+        );
+        let out = render_page(&doc, &page, 1.0).unwrap();
+        assert!(
+            ink_bbox(&out.pixmap).is_none(),
+            "nothing inside an OFF section paints, at any nesting depth"
+        );
+    }
+
+    /// **A non-`/OC` `BDC` still balances the stack.**
+    ///
+    /// If `/Span` and friends were not pushed, their `EMC` would close
+    /// the enclosing `/OC` section instead — un-hiding the rest of the
+    /// page from the middle of a hidden layer. Tagged PDFs mix these
+    /// constantly, so this is the common case, not a corner one.
+    #[test]
+    fn a_non_oc_marked_content_level_does_not_close_the_oc_section() {
+        let (doc, page) = doc_with_oc_content(
+            "/OC /oc1 BDC /Span << /ActualText (x) >> BDC EMC 0 0 0 rg 10 10 50 50 re f EMC",
+            "/Order [5 0 R] /OFF [5 0 R]",
+        );
+        let out = render_page(&doc, &page, 1.0).unwrap();
+        assert!(
+            ink_bbox(&out.pixmap).is_none(),
+            "the /Span EMC must close the /Span, not the /OC section"
+        );
+    }
+
+    /// **A surplus `EMC` does not un-hide an open section.**
+    ///
+    /// Malformed streams are real. Underflowing the hidden depth would
+    /// make a stray operator reveal content the producer turned off,
+    /// which is the worse of the two failure directions.
+    #[test]
+    fn a_surplus_emc_does_not_reveal_hidden_content() {
+        let (doc, page) = doc_with_oc_content(
+            "EMC /OC /oc1 BDC 0 0 0 rg 10 10 50 50 re f EMC",
+            "/Order [5 0 R] /OFF [5 0 R]",
+        );
+        let out = render_page(&doc, &page, 1.0).unwrap();
+        assert!(ink_bbox(&out.pixmap).is_none());
+        assert!(
+            out.diagnostics.tolerated >= 1,
+            "the unmatched EMC is tolerated, and counted"
+        );
+    }
+
+    /// **A `/Properties` entry that is not an indirect reference shows.**
+    ///
+    /// §8.11.3.2 requires the operand to name an indirect object,
+    /// because visibility is keyed on object identity. A direct
+    /// dictionary has no identity to key on, so pdfce cannot classify it
+    /// — and shows it. Content shown by mistake is visible and therefore
+    /// arguable; content hidden by mistake is missing with nothing on
+    /// screen to suggest it.
+    #[test]
+    fn an_unclassifiable_oc_property_shows_rather_than_hides() {
+        let objects: Vec<(u32, Vec<u8>)> = vec![
+            (
+                1,
+                b"<< /Type /Catalog /Pages 2 0 R /OCProperties \
+                  << /OCGs [5 0 R] /D << /OFF [5 0 R] >> >> >>"
+                    .to_vec(),
+            ),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 100 100] >>".to_vec(),
+            ),
+            (
+                3,
+                b"<< /Type /Page /Parent 2 0 R /Contents 4 0 R \
+                  /Resources << /Properties << /oc1 << /Type /OCG /Name (direct) >> >> >> >>"
+                    .to_vec(),
+            ),
+            (
+                4,
+                stream_object("", b"/OC /oc1 BDC 0 0 0 rg 10 10 50 50 re f EMC"),
+            ),
+            (5, b"<< /Type /OCG /Name (Layer 1) >>".to_vec()),
+        ];
+        let (doc, page) = build_pdf(&objects);
+        let out = render_page(&doc, &page, 1.0).unwrap();
+        assert!(
+            ink_bbox(&out.pixmap).is_some(),
+            "an /OC pdfce cannot resolve to an object must not silently hide content"
+        );
+        assert!(out.diagnostics.tolerated >= 1, "and it is counted");
+    }
+
+    /// **An image XObject carrying its own OFF `/OC` is not drawn**
+    /// (§8.11.3.3, the XObject half — deferred alongside the
+    /// content-stream half until now).
+    #[test]
+    fn an_image_xobject_on_an_off_layer_is_not_drawn() {
+        let objects: Vec<(u32, Vec<u8>)> = vec![
+            (
+                1,
+                b"<< /Type /Catalog /Pages 2 0 R /OCProperties \
+                  << /OCGs [5 0 R] /D << /OFF [5 0 R] >> >> >>"
+                    .to_vec(),
+            ),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 100 100] >>".to_vec(),
+            ),
+            (
+                3,
+                b"<< /Type /Page /Parent 2 0 R /Contents 4 0 R \
+                  /Resources << /XObject << /Im0 6 0 R >> >> >>"
+                    .to_vec(),
+            ),
+            (4, stream_object("", b"q 50 0 0 50 10 10 cm /Im0 Do Q")),
+            (5, b"<< /Type /OCG /Name (Layer 1) >>".to_vec()),
+            (
+                6,
+                stream_object(
+                    "/Type /XObject /Subtype /Image /Width 1 /Height 1 \
+                     /ColorSpace /DeviceGray /BitsPerComponent 8 /OC 5 0 R",
+                    &[0u8],
+                ),
+            ),
+        ];
+        let (doc, page) = build_pdf(&objects);
+        let out = render_page(&doc, &page, 1.0).unwrap();
+        assert!(
+            ink_bbox(&out.pixmap).is_none(),
+            "an image XObject whose own /OC is OFF must not be drawn"
+        );
+        assert_eq!(out.diagnostics.oc_sections_hidden, 1);
+    }
 }

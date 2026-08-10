@@ -573,6 +573,76 @@ def malformed_groups() -> bytes:
     return serialize(objects)
 
 
+def painted_layers() -> bytes:
+    """The first fixture whose layers are actually PAINTED (§8.11.3.2).
+
+    Every other fixture in this directory exercises the *enumerator* --
+    ``/OCProperties`` structure, name decoding, ``/Order`` hazards. None
+    of them draws anything, because until 2026-08-10 pdfce honoured
+    optional content only on an **annotation's** ``/OC`` entry and
+    content-stream ``BDC``/``EMC`` was deferred. A fixture that paints
+    through ``BDC`` had nothing to pin.
+
+    This one paints four marks and turns two of them off, so the file
+    answers "is content-stream optional content honoured?" by LOOKING at
+    it -- which is the check an operator can perform and a diff cannot:
+
+    ==== ======================= ============ ==========================
+    obj  layer                   state        mark
+    ==== ======================= ============ ==========================
+    4    "Visible Box"           ON           filled square, lower-left
+    5    "Hidden Box"            ``/OFF``     filled square, lower-right
+    6    "Clip Only"             ``/OFF``     NO mark; sets a clip
+    7    "Nested Inner"          ON           inside 5's section
+    ==== ======================= ============ ==========================
+
+    Three separate claims, one file:
+
+    * obj 5's square must not appear.
+    * obj 7 is ON but sits *inside* obj 5's hidden section, and must not
+      appear either -- visibility is inherited, and an inner ``EMC``
+      restores "hidden", not "visible" (Sec. 8.11.3.1).
+    * obj 6's section is hidden but establishes a **clip** that the
+      unlayered content after it must still obey. Sec. 8.11.3.1 says
+      hidden content "shall not be drawn"; it does not say the graphics
+      state it sets is discarded. If a renderer skips the clip along
+      with the paint, the final full-width bar spills past x=300 and the
+      page is visibly wrong in a way no counter reports.
+
+    The unlayered bar is drawn LAST and full width on purpose: it is the
+    only mark that must appear at partial width, so the fixture fails
+    visibly rather than by an assertion.
+    """
+    objects, nxt = pages_doc(
+        1,
+        catalog_extra=(
+            "/OCProperties << /OCGs [4 0 R 5 0 R 6 0 R 7 0 R] "
+            "/D << /Name (Default) /Order [4 0 R 5 0 R 6 0 R 7 0 R] "
+            "/OFF [5 0 R 6 0 R] >> >>"
+        ),
+        page_extra={
+            0: (
+                "/Contents 8 0 R /Resources << /Properties << "
+                "/L1 4 0 R /L2 5 0 R /L3 6 0 R /L4 7 0 R >> >>"
+            )
+        },
+    )
+    objects[4] = ocg(pdf_string(b"Visible Box"))
+    objects[5] = ocg(pdf_string(b"Hidden Box"))
+    objects[6] = ocg(pdf_string(b"Clip Only"))
+    objects[7] = ocg(pdf_string(b"Nested Inner"))
+    content = b"""/OC /L1 BDC 0 0 0 rg 60 60 120 120 re f EMC
+/OC /L2 BDC 0 0 0 rg 400 60 120 120 re f
+  /OC /L4 BDC 0 0 0 rg 400 220 120 120 re f EMC
+EMC
+/OC /L3 BDC 0 0 300 792 re W n EMC
+0.5 g 0 600 612 60 re f
+"""
+    objects[8] = stream("", content)
+    assert nxt == 4
+    return serialize(objects)
+
+
 def no_layers() -> bytes:
     """One page, no ``/OCProperties``.
 
@@ -596,6 +666,7 @@ def main() -> int:
         "order-cycle.pdf": order_cycle(),
         "ocmd-membership.pdf": ocmd_membership(),
         "malformed-groups.pdf": malformed_groups(),
+        "painted-layers.pdf": painted_layers(),
         "no-layers.pdf": no_layers(),
     }
     for name, data in files.items():

@@ -378,6 +378,10 @@ fn renders_a_single_page_to_png_with_the_stable_stdout_line() {
             "masks_resampled",
             "mattes_undone",
             "mattes_not_undone",
+            // §8.11.3.2 hidden layers, appended 2026-08-10. Appended, never
+            // inserted: this list IS the contract, and a caller that
+            // splits on position breaks the moment a key moves.
+            "oc_hidden",
         ],
         "metrics key order is part of the stable contract"
     );

@@ -104,7 +104,7 @@
 //!               unsupported_unknown_subtype=<e> unsupported_unusable_program=<f> \
 //!               supplied=<g> supplied_registered=<h> contents_unresolved=<i> \
 //!               images_masked=<j> images_mask_unsupported=<k> masks_resampled=<l> \
-//!               mattes_undone=<m> mattes_not_undone=<n>
+//!               mattes_undone=<m> mattes_not_undone=<n> \n//!               oc_hidden=<o>
 //! ```
 //!
 //! `render-page`'s line is deliberately split by the first `"; "` into a
@@ -5139,7 +5139,7 @@ unsupported_type3={} unsupported_noncmap={} unsupported_vertical={} \
 unsupported_composite_not_embedded={} unsupported_unknown_subtype={} \
 unsupported_unusable_program={} supplied={} supplied_registered={} \
 contents_unresolved={} images_masked={} images_mask_unsupported={} \
-masks_resampled={} mattes_undone={} mattes_not_undone={}",
+masks_resampled={} mattes_undone={} mattes_not_undone={} oc_hidden={}",
         input.display(),
         output.display(),
         rendered.pixmap.width(),
@@ -5199,6 +5199,13 @@ masks_resampled={} mattes_undone={} mattes_not_undone={}",
         d.masks_resampled,
         d.mattes_undone,
         d.mattes_not_undone,
+        // §8.11.3.2 optional content, appended after every pre-existing
+        // key. A page that renders emptier than expected because a
+        // producer turned a layer OFF is indistinguishable from a render
+        // that failed — unless this number is on the line. It is the
+        // disclosure channel for the one feature whose correct behaviour
+        // is "draw less" (R183).
+        d.oc_sections_hidden,
     );
     report_diagnostics(d);
 

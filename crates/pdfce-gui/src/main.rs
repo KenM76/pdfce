@@ -15876,6 +15876,18 @@ impl PdfceApp {
             if d.unknown_ops > 0 {
                 ui.label(ui_text::diagnostics_unknown_ops(d.unknown_ops));
             }
+            // §8.11.3.2 hidden layers. Deliberately NOT part of the
+            // `unsupported` headline sum above: a hidden layer is pdfce
+            // doing the right thing, and rolling it into the "pdfce could
+            // not draw this" total would make correct behaviour read as a
+            // shortfall. It still has to be SAID, because a page that
+            // renders emptier than the operator expected is otherwise
+            // indistinguishable from one that failed.
+            if d.oc_sections_hidden > 0 {
+                ui.label(ui_text::diagnostics_oc_sections_hidden(
+                    d.oc_sections_hidden,
+                ));
+            }
             if d.images_unsupported > 0 {
                 ui.label(ui_text::diagnostics_images_unsupported(
                     d.images_unsupported,

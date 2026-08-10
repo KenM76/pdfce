@@ -8651,6 +8651,23 @@ pub fn bookmark_untitled() -> &'static str {
     "(untitled)"
 }
 
+/// Hidden optional-content sections on this page (§8.11.3.2).
+///
+/// Worded as the producer's choice, not as a pdfce limitation: the
+/// content is missing because the document says to hide it, and an
+/// operator told "pdfce could not draw 2 sections" would go looking for
+/// a bug that is not there.
+pub fn diagnostics_oc_sections_hidden(n: usize) -> String {
+    if n == 1 {
+        "1 layer on this page is turned off in the document, so its content is not drawn."
+            .to_owned()
+    } else {
+        format!(
+            "{n} layers on this page are turned off in the document, so their content is not drawn."
+        )
+    }
+}
+
 /// Tooltip on the Bookmarks ribbon toggle.
 pub fn bookmarks_open_tooltip() -> &'static str {
     "Show the document's bookmarks. Click one to jump to its page."

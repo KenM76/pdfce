@@ -196,6 +196,16 @@ pub struct Diagnostics {
     /// clipping modes 4–7), with occurrence counts folded into one
     /// number.
     pub deferred_ops: usize,
+    /// `/OC` marked-content sections that were HIDDEN, and so not drawn
+    /// (§8.11.3.2).
+    ///
+    /// Counted per section entered, not per operator suppressed, because
+    /// the question an operator asks is "is something on this page not
+    /// being shown?" — and one section can hide a whole drawing. A
+    /// non-zero value with a page that looks empty is the difference
+    /// between a layer turned off and a render that failed, which is
+    /// exactly the distinction the diagnostics exist to make.
+    pub oc_sections_hidden: usize,
     /// Operators not recognized at all (outside `BX`/`EX`).
     pub unknown_ops: usize,
     /// Operators skipped inside `BX`/`EX` compatibility sections
@@ -563,6 +573,7 @@ polarity unverifiable (decision 006 R30)",
     /// same dedup-and-cap policy as direct notes.
     pub(crate) fn merge(&mut self, other: Self) {
         self.deferred_ops += other.deferred_ops;
+        self.oc_sections_hidden += other.oc_sections_hidden;
         self.unknown_ops += other.unknown_ops;
         self.compat_skipped += other.compat_skipped;
         self.tolerated += other.tolerated;
@@ -679,6 +690,9 @@ pub fn run(
         Vec::new(),
         cancel,
         policy,
+        // A page's own content stream has nothing above it to inherit
+        // hiddenness from; `/OC` sections inside it start the stack.
+        false,
     )
 }
 
@@ -760,6 +774,9 @@ pub fn trace_paths(
         needs_move: false,
         pending_clip: None,
         compat_depth: 0,
+        mc_stack: Vec::new(),
+        hidden_depth: 0,
+        oc_off: None,
         resources,
         doc,
         fonts,
@@ -801,6 +818,16 @@ fn run_nested(
     active: Vec<ObjId>,
     cancel: Option<&RenderCancel>,
     policy: RenderPolicy,
+    // `true` if the `Do` that invoked this form sits inside a hidden
+    // `/OC` section, or the form's own `/OC` is off.
+    //
+    // Hiddenness is INHERITED and cannot be revoked from inside: a
+    // visible `/OC` section nested within a hidden one stays hidden
+    // (§8.11.3.1 — hidden content shall not be drawn, full stop). The
+    // stream is still WALKED rather than skipped, so its fonts, images
+    // and structural oddities are still counted; a form that vanishes
+    // from the diagnostics is a form nobody can tell was there.
+    hidden: bool,
 ) -> Diagnostics {
     let mut interp = Interpreter {
         policy,
@@ -813,6 +840,9 @@ fn run_nested(
         needs_move: false,
         pending_clip: None,
         compat_depth: 0,
+        mc_stack: Vec::new(),
+        hidden_depth: usize::from(hidden),
+        oc_off: None,
         resources,
         doc,
         fonts,
@@ -913,6 +943,9 @@ pub fn run_form_at(
         needs_move: false,
         pending_clip: None,
         compat_depth: 0,
+        mc_stack: Vec::new(),
+        hidden_depth: 0,
+        oc_off: None,
         resources: resources_fallback,
         doc,
         fonts,
@@ -927,7 +960,7 @@ pub fn run_form_at(
         // is where the poll actually lives.
         cancel,
     };
-    interp.do_form(id, stream, pixmap);
+    interp.do_form(id, stream, pixmap, false);
     interp.diag
 }
 
@@ -951,6 +984,35 @@ struct Interpreter<'a> {
     pending_clip: Option<FillRule>,
     /// `BX`/`EX` nesting depth (§7.8.2 Table 32; may nest).
     compat_depth: usize,
+    /// One entry per open `BMC`/`BDC`, `true` if THAT level opened a
+    /// hidden `/OC` section (§8.11.3.2).
+    ///
+    /// A stack rather than a counter because `EMC` closes the innermost
+    /// section and only the stack knows whether that particular one was
+    /// the hiding one. Marked content nests freely and mixes tags, so
+    /// non-`/OC` levels are pushed as `false` — dropping them would make
+    /// `EMC` pop the wrong entry, which is the difference between
+    /// hiding one layer and hiding the rest of the page.
+    ///
+    /// Unbalanced streams are real: a surplus `EMC` pops nothing rather
+    /// than underflowing, and levels left open at end of stream simply
+    /// end with it.
+    mc_stack: Vec<bool>,
+    /// How many enclosing sections are hidden; `> 0` suppresses PAINT
+    /// and nothing else (§8.11.3.1: hidden content "shall not be drawn",
+    /// but colour, CTM, clip and text advance still apply).
+    ///
+    /// Derived from `mc_stack` but kept alongside it so the per-operator
+    /// check is a comparison rather than a scan.
+    hidden_depth: usize,
+    /// OCGs that are OFF in the default configuration, computed lazily.
+    ///
+    /// `None` until the first `/OC` marked content or `/OC` XObject is
+    /// met. Most content streams have neither, and the set costs a
+    /// catalog walk — so a page without optional content pays nothing,
+    /// and a nested form XObject inside one does not recompute it per
+    /// invocation beyond its own first use.
+    oc_off: Option<std::collections::BTreeSet<ObjId>>,
     resources: &'a Dict,
     /// The document, for resolving indirect resource/font entries.
     doc: &'a DocumentView<'a>,
@@ -1348,9 +1410,27 @@ impl Interpreter<'_> {
             // ---- external objects (Table 87, §8.8) ----
             b"Do" => self.do_xobject(op, pixmap),
 
+            // ---- marked content, for optional content only (§14.6) ----
+            //
+            // pdfce does not build a marked-content TREE — structure,
+            // artifacts and tagging are later work. It tracks marked
+            // content for exactly one reason: `/OC` sections decide what
+            // gets drawn (§8.11.3.2), and that cannot be answered without
+            // knowing which sections are open.
+            b"BDC" => self.begin_marked_content(op),
+            b"BMC" => {
+                // No property list, so it can never be an `/OC` section —
+                // but it MUST be stacked, or the matching `EMC` closes
+                // someone else's section.
+                self.mc_stack.push(false);
+                self.diag.deferred_ops += 1;
+                self.diag.note(name);
+            }
+            b"EMC" => self.end_marked_content(),
+
             // ---- recognized, deferred to later slices ----
-            b"sh" | b"cs" | b"CS" | b"sc" | b"scn" | b"SC" | b"SCN" | b"BMC" | b"BDC" | b"EMC"
-            | b"MP" | b"DP" | b"d0" | b"d1" => {
+            b"sh" | b"cs" | b"CS" | b"sc" | b"scn" | b"SC" | b"SCN" | b"MP" | b"DP" | b"d0"
+            | b"d1" => {
                 self.diag.deferred_ops += 1;
                 self.diag.note(name);
             }
@@ -1635,7 +1715,12 @@ impl Interpreter<'_> {
         } else {
             clip
         };
-        let skip_paint = crate::profile::skip_paint();
+        // A glyph inside a hidden `/OC` section is not drawn — but the
+        // caller has already advanced the text position, which is what
+        // §8.11.3.1's "text advance still applies" requires. Suppressing
+        // the ADVANCE would reflow the visible text around the hidden
+        // run, so a layer toggle would move the rest of the line.
+        let skip_paint = crate::profile::skip_paint() || self.oc_hidden();
         if !skip_paint && self.gs.current.text.fills() {
             let paint = solid(self.gs.current.fill_color, self.gs.current.fill_alpha);
             // Glyph outlines are filled with the NONZERO winding rule
@@ -1832,6 +1917,114 @@ impl Interpreter<'_> {
     /// An unresolvable `name`, a non-stream target, and a missing
     /// `Subtype` are all spec-undefined or malformed; each is a no-op
     /// plus a `tolerated` diagnostic rather than a failed page.
+    /// Is painting currently suppressed by an enclosing hidden `/OC`
+    /// section?
+    ///
+    /// The ONLY thing this may gate is the blit. §8.11.3.1 is explicit
+    /// that hidden content still participates in everything else —
+    /// colour, CTM, clip and text advance persist — so a hidden run of
+    /// text must still move the text position, and a hidden `W n` must
+    /// still tighten the clip for the visible content that follows.
+    /// Gating anything wider makes the page LAYOUT depend on layer
+    /// state, which is the one thing toggling a layer must not do.
+    fn oc_hidden(&self) -> bool {
+        self.hidden_depth > 0
+    }
+
+    /// The default configuration's OFF set, computed on first use.
+    ///
+    /// Lazy because most content streams contain no optional content at
+    /// all, and the set costs a walk of `/OCProperties` (§8.11.4.2).
+    fn oc_off_set(&mut self) -> &std::collections::BTreeSet<ObjId> {
+        self.oc_off
+            .get_or_insert_with(|| pdfce_core::annot::optional_content_default_off(self.doc))
+    }
+
+    /// `BDC` — open a marked-content section, and decide whether it hides.
+    ///
+    /// # Only the `/OC` tag is interpreted
+    ///
+    /// Every `BDC` is stacked so `EMC` stays balanced, but only tag
+    /// `/OC` can hide. `/Span`, `/Artifact`, `/P` and the rest are
+    /// structure and tagging — later work, and irrelevant to painting.
+    ///
+    /// # The property list must be an INDIRECT resource
+    ///
+    /// §8.11.3.2: the operand "shall be a named resource in the
+    /// `/Properties` subdictionary" precisely because OCGs and OCMDs are
+    /// indirect objects, and visibility is keyed on object identity. An
+    /// inline dictionary therefore has no identity to key on, so it
+    /// cannot be resolved against the OFF set and the section is treated
+    /// as VISIBLE and counted as tolerated.
+    ///
+    /// Showing content pdfce could not classify is the right way to be
+    /// wrong here: a hidden-by-mistake region is content silently
+    /// missing from the page with nothing on screen to suggest it, while
+    /// a shown-by-mistake region is visible and therefore arguable.
+    fn begin_marked_content(&mut self, op: &Operation<'_>) {
+        let mut names = op.operands.iter().filter_map(|t| match &t.kind {
+            ContentTokenKind::Operand(Object::Name(n)) => Some(n.as_bytes().to_vec()),
+            _ => None,
+        });
+        let tag = names.next();
+        if tag.as_deref() != Some(b"OC".as_slice()) {
+            self.mc_stack.push(false);
+            self.diag.deferred_ops += 1;
+            self.diag.note(b"BDC");
+            return;
+        }
+        // The second name is the /Properties key. Absent = an inline
+        // dictionary operand, which §8.11.3.2 forbids for /OC.
+        let Some(key) = names.next() else {
+            self.mc_stack.push(false);
+            self.diag.tolerated += 1;
+            self.diag.note(b"BDC(/OC without a /Properties name)");
+            return;
+        };
+        let doc = self.doc;
+        let id = self
+            .resources
+            .get(b"Properties")
+            .map(|o| doc.resolve(o))
+            .and_then(Object::as_dict)
+            .and_then(|props| props.get(&key))
+            .and_then(|entry| entry.as_reference());
+        let Some(id) = id else {
+            self.mc_stack.push(false);
+            self.diag.tolerated += 1;
+            self.diag
+                .note(b"BDC(/OC name not an indirect /Properties entry)");
+            return;
+        };
+        let hidden = {
+            let off = self.oc_off_set().clone();
+            pdfce_core::annot::oc_is_hidden(doc, id, &off)
+        };
+        self.mc_stack.push(hidden);
+        if hidden {
+            self.hidden_depth += 1;
+            self.diag.oc_sections_hidden += 1;
+        }
+    }
+
+    /// `EMC` — close the innermost marked-content section.
+    ///
+    /// A surplus `EMC` (more closes than opens) pops nothing and is
+    /// counted. Real files do this, and the alternative — underflowing
+    /// the hidden depth — would un-hide content that is still inside an
+    /// open hidden section, which is strictly worse than ignoring a
+    /// stray operator.
+    fn end_marked_content(&mut self) {
+        match self.mc_stack.pop() {
+            Some(true) => self.hidden_depth = self.hidden_depth.saturating_sub(1),
+            Some(false) => {}
+            None => {
+                self.diag.tolerated += 1;
+                self.diag.note(b"EMC(without a matching BMC/BDC)");
+            }
+        }
+    }
+
     fn do_xobject(&mut self, op: &Operation<'_>, pixmap: &mut Pixmap) {
         // Copy the two shared references out before any `&mut self`
         // call so the borrow checker sees them as independent of `self`
@@ -1865,6 +2058,26 @@ impl Interpreter<'_> {
             return;
         };
 
+        // §8.11.3.3: a form or image XObject may carry its OWN `/OC`, and
+        // its visibility is that group's state AND the visibility where
+        // the `Do` occurs. The second half is why this ORs with the
+        // marked-content state rather than replacing it — an ON XObject
+        // invoked inside a hidden section is still hidden.
+        //
+        // For a form this is threaded into the nested run (so the stream
+        // is still walked and still counted); for an image there is
+        // nothing to walk, so it is simply not drawn.
+        let oc_hidden_here = match stream.dict.get(b"OC").and_then(|o| o.as_reference()) {
+            Some(oc) => {
+                let off = self.oc_off_set().clone();
+                pdfce_core::annot::oc_is_hidden(doc, oc, &off)
+            }
+            None => false,
+        };
+        if oc_hidden_here {
+            self.diag.oc_sections_hidden += 1;
+        }
+
         let subtype = stream
             .dict
             .get(b"Subtype")
@@ -1872,8 +2085,12 @@ impl Interpreter<'_> {
             .and_then(Object::as_name)
             .map(|n| n.as_bytes());
         match subtype {
-            Some(b"Image") => self.do_image(&stream.dict, stream.data_span, pixmap),
-            Some(b"Form") => self.do_form(id, stream, pixmap),
+            Some(b"Image") => {
+                if !oc_hidden_here {
+                    self.do_image(&stream.dict, stream.data_span, pixmap);
+                }
+            }
+            Some(b"Form") => self.do_form(id, stream, pixmap, oc_hidden_here),
             // §8.8.2: ignored by a conforming non-PostScript reader.
             Some(b"PS") => {}
             _ => {
@@ -1884,9 +2101,11 @@ impl Interpreter<'_> {
                 self.diag.tolerated += 1;
                 self.diag.note(b"Do(XObject without /Subtype)");
                 if stream.dict.contains_key(b"Width") && stream.dict.contains_key(b"Height") {
-                    self.do_image(&stream.dict, stream.data_span, pixmap);
+                    if !oc_hidden_here {
+                        self.do_image(&stream.dict, stream.data_span, pixmap);
+                    }
                 } else if stream.dict.contains_key(b"BBox") {
-                    self.do_form(id, stream, pixmap);
+                    self.do_form(id, stream, pixmap, oc_hidden_here);
                 }
             }
         }
@@ -1912,7 +2131,7 @@ impl Interpreter<'_> {
     /// current state and its stack is discarded, so an unbalanced `Q`
     /// inside the form cannot pop the caller's state (§8.4.2's balance
     /// requirement is per content stream, and producers break it).
-    fn do_form(&mut self, id: Option<ObjId>, stream: &Stream, pixmap: &mut Pixmap) {
+    fn do_form(&mut self, id: Option<ObjId>, stream: &Stream, pixmap: &mut Pixmap, oc_off: bool) {
         // --- recursion guards (module docs, ARCHITECTURE.md §10.1) ---
         if self.depth >= MAX_XOBJECT_DEPTH {
             self.diag.xobject_depth_overflows += 1;
@@ -2028,6 +2247,7 @@ impl Interpreter<'_> {
             active,
             self.cancel,
             self.policy,
+            self.oc_hidden() || oc_off,
         );
         self.diag.merge(nested);
         self.diag.forms_rendered += 1;
@@ -2412,7 +2632,11 @@ impl Interpreter<'_> {
         } else {
             clip
         };
-        let skip_paint = crate::profile::skip_paint();
+        // Hidden content is not drawn, and everything else in this
+        // function still runs: the path is consumed, the CTM is taken,
+        // and the pending clip below is applied exactly as if it had
+        // been painted (§8.11.3.1).
+        let skip_paint = crate::profile::skip_paint() || self.oc_hidden();
         if !skip_paint
             && fill
             && let Some(rule) = fill_rule

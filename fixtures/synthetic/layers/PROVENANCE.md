@@ -1,6 +1,6 @@
 # layers — provenance and attribution
 
-Nine minimal PDFs for the optional-content (layer / OCG) **reader** in
+Ten minimal PDFs for the optional-content (layer / OCG) **reader** in
 `crates/pdfce-core/src/layers.rs` — ISO 32000-1:2008 §8.11 (optional
 content), specifically Table 98 (the OCG dictionary), Table 99 (the
 optional content membership dictionary), Table 100 (`/OCProperties`) and
@@ -50,8 +50,22 @@ asking a real producer for it:
   Required.
 
 Page content streams appear only where a fixture needs a resource
-dictionary to hang an OCG off; the optional-content structure is the whole
-subject, and painted marks would only add bytes no test reads.
+dictionary to hang an OCG off; for nine of the ten files the
+optional-content *structure* is the whole subject, and painted marks would
+only add bytes no test reads.
+
+`painted-layers.pdf` is the exception, and it exists because the reader
+stopped being the whole story on 2026-08-10: until then pdfce honoured
+optional content only on an **annotation's** `/OC` entry, and
+content-stream `BDC`/`EMC` (§8.11.3.2) was deferred — so a layer a
+producer had turned OFF still painted. That fixture paints four marks
+through `BDC` and turns two of them off, which makes "is content-stream
+optional content honoured?" a question an operator can answer by LOOKING
+at the page. Its third claim is the subtle one: a hidden section that
+sets a **clip** must still bound the visible content after it
+(§8.11.3.1 — hidden content "shall not be drawn", which is not the same
+as "shall not run"), so the file's unlayered bar is drawn full width and
+must come out half width.
 
 ## What each file pins
 
@@ -61,6 +75,7 @@ subject, and painted marks would only add bytes no test reads.
 |---|---|
 | `basic-layers.pdf` | The **happy path**, entirely well-formed. `LayerDiagnostics::is_faithful()` must be **true** — a diagnostic that is noisy on good files gets ignored on bad ones, which is the only way a diagnostic can do harm. Four registered groups; `/Order` lists three; `/OFF` names one. |
 | `nested-order.pdf` | `/Order`'s tree structure and its **declared** sequence. |
+| `painted-layers.pdf` | The only fixture that **paints** through `BDC`/`EMC` `/OC` (§8.11.3.2). Three claims in one file: an OFF layer's mark is absent; an ON layer *nested inside* an OFF one is also absent (visibility is inherited, and the inner `EMC` restores "hidden"); and a hidden section's **clip** still bounds the unlayered content that follows. |
 | `no-layers.pdf` | No `/OCProperties` at all. §8.11.4.2: a reader "shall ignore any optional content structures". Empty and faithful, not an error — and overwhelmingly the common real-world case. |
 
 `basic-layers.pdf` carries two name-decoding traps that are worth
