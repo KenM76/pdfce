@@ -947,6 +947,38 @@ enum Command {
     /// many fell through it to U+FFFD, which fonts carry no recoverable
     /// Unicode at all, and how many spaces and line breaks pdfce
     /// invented.
+    /// **List the document's bookmarks** (ISO 32000-1 §12.3.3).
+    ///
+    /// Reports the outline tree with each item's nesting level, its
+    /// open/closed state, and where it points. Read-only.
+    ListOutline {
+        /// Input PDF.
+        input: PathBuf,
+        /// Print one line per bookmark with no indentation, for scripts
+        /// that parse rather than read. `level=` is present either way.
+        #[arg(long)]
+        flat: bool,
+    },
+
+    /// **List a document's embedded files** (§7.11.4, §12.5.6.15).
+    ///
+    /// Reports BOTH kinds — document-level `/Names /EmbeddedFiles` and
+    /// page-level `/FileAttachment` annotations — in one list, each
+    /// labelled by kind, because they behave differently on save and on
+    /// page deletion but an operator asking what is in a file should not
+    /// need to know that to get a complete answer.
+    ///
+    /// Names are reported RAW. An attachment name is attacker-controlled
+    /// and may contain path separators or a right-to-left override that
+    /// makes `gnp.exe` render as `exe.png`; a sanitised alternative is
+    /// printed alongside when the two differ.
+    ///
+    /// Read-only: it never writes a file out.
+    ListAttachments {
+        /// Input PDF.
+        input: PathBuf,
+    },
+
     /// **Report what printing this document WOULD do**, without printing.
     ///
     /// Resolves the printer, reads its resolution and printable area,
@@ -3845,6 +3877,8 @@ fn run() -> ExitCode {
         Command::ToPdfa { .. } => unimplemented_stub("to-pdfa"),
         Command::ValidatePdfa { .. } => unimplemented_stub("validate-pdfa"),
         Command::Sign { .. } => unimplemented_stub("sign"),
+        Command::ListOutline { input, flat } => cmd_list_outline(&input, flat),
+        Command::ListAttachments { input } => cmd_list_attachments(&input),
         Command::ListPrinters => cmd_list_printers(),
         Command::PrintPreview {
             input,
@@ -5565,6 +5599,246 @@ with_note={with_note} with_author={with_author} need_appearances={need_appearanc
 /// Read-only. One `field …` line per terminal field, then a `list-fields …`
 /// summary line carrying the document-level form disclosures. The value is
 /// emitted as a sanitised token so the line stays field-splittable.
+/// `list-outline` — the document's bookmarks, as a tree.
+///
+/// # Why the indentation is real output and not decoration
+///
+/// An outline's SHAPE is its meaning: "Chapter 3" nested under "Part II"
+/// says something a flat list of titles does not. So the level is both
+/// rendered as indentation for a person and printed as `level=` for a
+/// script, rather than one or the other.
+///
+/// # `read_outline`, not `parse_outline`
+///
+/// The core module offers both. `parse_outline` is the thin wrapper that
+/// returns items alone and **silently discards the diagnostics** —
+/// including "this tree was truncated because it contained a cycle".
+/// A command that reported a partial outline as if it were the whole
+/// thing would be making a claim about the document it cannot support.
+fn cmd_list_outline(input: &Path, flat: bool) -> u8 {
+    let doc = match pdfce_core::document::Document::load(input) {
+        Ok(doc) => doc,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit_code_for_doc(&err);
+        }
+    };
+    let session = pdfce_core::edit::EditSession::new(doc);
+    let outline = pdfce_core::outline::read_outline(&session.graph());
+
+    fn emit(items: &[pdfce_core::outline::OutlineItem], flat: bool) -> usize {
+        let mut n = 0;
+        for it in items {
+            n += 1;
+            let dest = match &it.destination {
+                Some(d) => format!("{d:?}"),
+                // Distinguished from a destination pdfce could not
+                // resolve: an item with no destination at all is a
+                // heading, which is legal and common.
+                None => "-".to_owned(),
+            };
+            let indent = if flat {
+                String::new()
+            } else {
+                "  ".repeat(it.level)
+            };
+            println!(
+                "{indent}bookmark level={} open={} title={:?} dest={dest}",
+                it.level,
+                u32::from(it.open),
+                it.title,
+            );
+            n += emit(&it.children, flat);
+        }
+        n
+    }
+    let shown = emit(&outline.items, flat);
+
+    // The diagnostics are not a footnote. A truncated tree looks exactly
+    // like a short one from the outside, and only this line distinguishes
+    // them.
+    //
+    // Reported as only the NON-ZERO counters. The struct carries twenty-odd
+    // fields and on a healthy document every one is zero — dumping them all
+    // put the two that matter inside a wall of `foo: 0`, which is how a real
+    // warning gets skimmed past. The cycle fixture made it obvious:
+    // `cycles_broken: 3` was in there, and invisible. Found by reading the
+    // command's own output (R174).
+    let d = &outline.diagnostics;
+    let mut notes: Vec<String> = Vec::new();
+    if d.item_budget_exhausted {
+        notes.push("item_budget_exhausted".to_owned());
+    }
+    if d.root_count_disagreement {
+        notes.push("root_count_disagreement".to_owned());
+    }
+    for (c, name) in [
+        (d.depth_truncations, "depth_truncations"),
+        (d.cycles_broken, "cycles_broken"),
+        (d.unreadable_items, "unreadable_items"),
+        (d.titles_unreadable, "titles_unreadable"),
+        (d.titles_inexact, "titles_inexact"),
+        (d.unmapped_pages, "unmapped_pages"),
+        (d.unresolved_names, "unresolved_names"),
+        (d.count_disagreements, "count_disagreements"),
+        (d.unknown_views, "unknown_views"),
+        (d.malformed_views, "malformed_views"),
+        (d.cross_namespace_resolutions, "cross_namespace_resolutions"),
+        (d.non_reference_links, "non_reference_links"),
+        (d.unreadable_actions, "unreadable_actions"),
+        (
+            d.dest_and_action_both_present,
+            "dest_and_action_both_present",
+        ),
+    ] {
+        if c > 0 {
+            notes.push(format!("{name}={c}"));
+        }
+    }
+    if let Some(e) = &d.page_tree_error {
+        notes.push(format!("page_tree_error={e:?}"));
+    }
+    let warnings = if notes.is_empty() {
+        "clean".to_owned()
+    } else {
+        notes.join(" ")
+    };
+    println!(
+        "list-outline {} bookmarks={shown} max_depth={} {warnings}",
+        input.display(),
+        d.max_depth,
+    );
+    exit::SUCCESS
+}
+
+/// `list-attachments` — embedded files, both kinds, in one list.
+///
+/// # Why both kinds in one list, each labelled
+///
+/// Document-level (`/Names /EmbeddedFiles`) and page-level
+/// (`/FileAttachment` annotations) are structurally distinct and behave
+/// differently on save and on page deletion, so a caller must be able to
+/// tell them apart. But an operator asking "what is in this file" should
+/// not have to know the distinction exists in order to get a complete
+/// answer, so it is one command and one list.
+///
+/// # ★ The encryption warning is a REFUSAL condition, not a note
+///
+/// Since PDF 1.5 an otherwise-unencrypted document can carry ENCRYPTED
+/// embedded files via `/EFF` + `DefEmbeddedFile` (§7.6.5). The intuitive
+/// guard — no password prompt, so plaintext — is wrong, and wrong
+/// silently: the filter chain runs and returns garbage that looks like
+/// success. pdfce cannot decrypt yet, so when the flag is set this
+/// command says so loudly on stderr rather than letting a caller treat
+/// the listing as safe to extract from.
+///
+/// # What a listing means, and what it does not
+///
+/// Complete enumeration is impossible **by the standard's own admission**
+/// (§7.11.7 NOTE 1/3), not by pdfce's limitation: no `shall` requires an
+/// embedded file to appear in `/EmbeddedFiles`. So this reports what is
+/// reachable by the two standard paths, and the summary line says so
+/// rather than implying exhaustiveness.
+fn cmd_list_attachments(input: &Path) -> u8 {
+    let doc = match pdfce_core::document::Document::load(input) {
+        Ok(doc) => doc,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit_code_for_doc(&err);
+        }
+    };
+    let session = pdfce_core::edit::EditSession::new(doc);
+    let (items, notes) = pdfce_core::attachments::list_attachments_with_notes(&session.graph());
+
+    for a in &items {
+        // The RAW name, deliberately — it is what the document says, and
+        // an operator investigating a suspicious file needs pdfce's
+        // evidence rather than pdfce's cleanup. `safe_name()` exists for
+        // the moment bytes are written somewhere, which this command
+        // never does.
+        let safe = a.safe_name();
+        let changed = if safe.changed {
+            format!(
+                " UNSAFE_NAME safe={:?} hazards={:?}",
+                safe.value, safe.hazards
+            )
+        } else {
+            String::new()
+        };
+        // A COMPACT kind, not the derived Debug. The real one prints
+        // `tree_key: [254, 255, 0, 115, ...]` — UTF-16BE bytes where a
+        // reader expects a name, plus object ids nobody asked for. The
+        // page number is the part that matters for a page-level
+        // attachment; the tree key IS the name, already printed.
+        let kind = match &a.kind {
+            pdfce_core::attachments::AttachmentKind::DocumentLevel { .. } => "document".to_owned(),
+            pdfce_core::attachments::AttachmentKind::PageAnnotation { page_index, .. } => {
+                format!("page:{}", page_index + 1)
+            }
+            // `AttachmentKind` is `#[non_exhaustive]`, so a kind added
+            // later lands here. Reported as unknown rather than folded
+            // into "document" — a wrong label is worse than an honest
+            // gap, because only one of the two prompts anyone to look.
+            _ => "unknown".to_owned(),
+        };
+        println!(
+            "attachment name={:?} kind={kind} desc={:?} source={:?}{changed}",
+            a.name,
+            a.description.as_deref().unwrap_or("-"),
+            a.name_source,
+        );
+    }
+
+    if notes.may_be_encrypted {
+        eprintln!(
+            "pdfce-cli: WARNING — this document's embedded files may be ENCRYPTED (§7.6.5 \
+             /EFF). pdfce cannot decrypt them yet, and extracting one would produce \
+             ciphertext that looks like a successful read. Do not treat these bytes as \
+             the file's contents."
+        );
+    }
+    // Same reasoning as the outline diagnostics: only what is not clean.
+    let mut n: Vec<String> = Vec::new();
+    if notes.page_tree_unwalkable {
+        n.push("page_tree_unwalkable".to_owned());
+    }
+    if notes.truncated {
+        n.push("truncated".to_owned());
+    }
+    if notes.name_tree_budget_exhausted {
+        n.push("name_tree_budget_exhausted".to_owned());
+    }
+    for (c, name) in [
+        (notes.name_tree_cycles, "name_tree_cycles"),
+        (notes.malformed_tree_entries, "malformed_tree_entries"),
+        (
+            notes.annotations_without_filespec,
+            "annotations_without_filespec",
+        ),
+        (notes.filespecs_without_stream, "filespecs_without_stream"),
+        (notes.unresolvable_streams, "unresolvable_streams"),
+    ] {
+        if c > 0 {
+            n.push(format!("{name}={c}"));
+        }
+    }
+    if notes.may_be_encrypted {
+        n.push("MAY_BE_ENCRYPTED".to_owned());
+    }
+    let warnings = if n.is_empty() {
+        "clean".to_owned()
+    } else {
+        n.join(" ")
+    };
+    println!(
+        "list-attachments {} attachments={} {warnings} (reachable by the two standard \
+         paths; ISO 32000-1 §7.11.7 does not require completeness)",
+        input.display(),
+        items.len(),
+    );
+    exit::SUCCESS
+}
+
 /// The scaling modes, as command-line words.
 ///
 /// A separate type from `printing::ScaleMode` because that one carries a
