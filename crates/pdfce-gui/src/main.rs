@@ -8188,16 +8188,19 @@ impl PdfceApp {
         // How many rich-text fields this document has, counted BEFORE the
         // write so the operator is told at the moment the data leaves.
         //
-        // pdfce's FDF/XFDF model carries field VALUES only — `<value-richtext>`
-        // / the FDF `/RV` key are a named non-goal of Pass 7.1, and both
-        // formats exist precisely to carry formatting alongside the plain
-        // value. So exporting a rich-text field today writes its plain-text
-        // equivalent and silently drops the formatting.
+        // ★ THIS COMMENT SAID THE EXPORT DROPPED THE FORMATTING. It did,
+        // until Pass 37.3's first slice, and the sentence outlived the
+        // behaviour by one commit — found by grepping for the sentences that
+        // described a limitation just after lifting it.
         //
-        // That was a defensible scope call while this was CLI-only, where the
-        // limit is in `--help` and the caller is a scripter. It is NOT
-        // defensible behind a GUI button labelled "Export data…", where the
-        // operator has no way to learn it. Disclosed rather than left to be
+        // The export now CARRIES the formatting: `/RV` (FDF Table 246) and
+        // `<value-richtext>` (XFDF) are read off the field and written.
+        //
+        // The disclosure stays, because there is still something true and
+        // non-obvious to say — pdfce cannot APPLY a rich value on import, so
+        // the data file is complete while a round trip back through pdfce is
+        // not. An operator who is told nothing would reasonably assume the
+        // journey works in both directions. Disclosed rather than left to be
         // discovered by a re-import that comes back unstyled.
         //
         // Conditional, so it is a signal and not noise: a document with no

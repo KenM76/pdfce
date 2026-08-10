@@ -35,9 +35,30 @@
 //!
 //! ## What is NOT modelled (named non-goals)
 //!
-//! FDF and XFDF can also carry annotations, page references, JavaScript, an
-//! `/F` source-file path, and rich-text `<value-richtext>` bodies. Pass 7.1
-//! models **field values only** — the must-have data-round-trip capability.
+//! FDF and XFDF can also carry annotations, page references, JavaScript and
+//! an `/F` source-file path. Pass 7.1 modelled **field values only** — the
+//! must-have data-round-trip capability.
+//!
+//! **★ RICH TEXT IS NO LONGER ON THIS LIST (Pass 37.3, 2026-08-10).** This
+//! paragraph named `<value-richtext>` bodies among the non-goals, and that
+//! stopped being true the moment `FieldData::rich_value` landed. Corrected
+//! here by acting on the finding the same change produced: *when a
+//! limitation is lifted, grep for the sentences that described it.* This
+//! paragraph, and a comment block in `pdfce-gui`'s export path, were what
+//! that grep found.
+//!
+//! What is modelled now, precisely, because "supports rich text" would be
+//! its own overstatement:
+//!
+//! - **Export CARRIES it.** `/RV` (FDF Table 246) and `<value-richtext>`
+//!   (XFDF) are read off the field, written, and parsed back.
+//! - **Import does NOT APPLY it**, and a rich-text field is skipped
+//!   entirely rather than filled with plain text. §12.7.3.3 makes `/DS` +
+//!   `/RV` the inputs to appearance generation (RT-M9), so a fresh plain
+//!   `/V` beside an existing `/RV` renders the OLD text in a conforming
+//!   reader.
+//! - **Authoring rich text is not built at all.**
+//!
 //! An `/F`/`href` source hint is emitted on export (so a reader knows which
 //! PDF the data came from) and ignored on import. Embedded FDF JavaScript is
 //! **never executed** (decision 009, R53); it is not even modelled here.

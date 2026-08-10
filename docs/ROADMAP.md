@@ -81,6 +81,149 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★ `252ffde` + `62ba5ac` FILED — `Pass 37.3` slices 1 and 2: form-data export carries `/RV`, and the disclosure that export loses formatting is corrected in the SAME session before it could sit false in the field; `462d468` re-cited (already filed sixty-third filing); `R180` MINTED — baseline debt unchanged at **5** — 2026-08-10 (sixty-sixth filing)
+
+**Sourcing.** This librarian has no shell this dispatch (hard rule 8). Both
+commit messages were supplied in full in the dispatch (not truncated, per
+the dispatch's own header) and are quoted/summarized below as received —
+not independently confirmed against `git log`. Independently verified **by
+direct read**, not relayed: `tools/commits-filed-baseline.txt` (still **5**
+lines — `338076a`, `1f319c0`, `55a0732`, `587e520`, `9141ded` — neither
+`252ffde` nor `62ba5ac` was ever a baseline-debt line, so this is a fresh
+citation of new commits, not a debt discharge); the `Pass 37.3` acceptance
+criteria on the *Next up* entry this filing amends further, in full; the
+existing `ARCHITECTURE.md` §12 `RT-N2` entry (2026-08-10, sixty-fifth
+filing) this filing's Part 3 extends; and, for the `462d468` question below,
+a direct grep of both `ROADMAP.md` (10+ hits by hash) and `SESSION_LOG.md`
+(3 hits by hash), confirming it is already cited in both files from the
+sixty-third filing.
+
+**Part 1 — `252ffde` FILED: export stops throwing formatting away.**
+`/RV` (FDF Table 246) and `<value-richtext>` (XFDF) exist precisely so a
+field's formatting travels beside its plain value; pdfce modelled neither
+— `Field` had no `/RV` at all, so a styled field exported and came back
+plain, discoverable only on re-import, by which point the styled original
+might be gone. `Field::rich_value` now reads `/RV` off the field
+dictionary, `FieldData::rich_value` carries it through both writers and
+both parsers (FDF and XFDF, per acceptance criterion 1 of the `Pass 37.3`
+scoping below — neither format is the "lesser" one for this capability).
+Verified through the real CLI, not only in unit tests: `export-data` on a
+fixture form produced `value-richtext` elements for both rich-text fields
+present, escaped as XML TEXT rather than embedded raw (a new pinned test,
+`a_plain_form_gains_no_rich_text_markup`, checks the other end — a plain
+form's export gains no rich-text markup it didn't have). `/RV` is read
+**ungated by the `RichText` flag**, deliberately: a file may carry `/RV`
+with bit 26 clear (malformed under Table 228), and dropping it on export
+in that case would destroy the only copy of the formatting rather than
+correct a spec violation. **Import is deliberately NOT done in this
+slice** — §12.7.3.4 makes `/DS`+`/RV` the inputs to appearance generation
+with an unconditional `shall` to regenerate on every value change
+(`RT-M9`, not gated by `/NeedAppearances` — `RT-N7`, both IDs corrected
+from the wrong `A5` pointer the dispatch that scoped `Pass 37.3` had
+originally cited, per the sixty-fifth filing's own correction), and pdfce
+cannot yet generate a rich-text appearance — writing `/RV` back in now
+would leave the stored value and the rendered one disagreeing. Gate
+figures as supplied, not re-run: 2687 workspace tests, 0 failed, 3 new;
+clippy 0; fmt clean; gates green.
+
+**Part 2 — `62ba5ac` FILED: the disclosure that slice 1 itself falsified.**
+`b8f96b1` (2026-08-07) shipped a correct, conditionally-gated warning that
+export does not carry rich-text formatting. `252ffde`, four commits and
+three days later in the SAME session, made that warning **false** — it now
+told an operator they had lost formatting they still had, which is
+confidently wrong about the operator's own data and worse than no
+disclosure at all. Fixed by splitting one string into two, because export
+and import no longer share a fact: **export** now says the formatting IS
+in the data file, and — anticipating the actual next question — that
+pdfce cannot yet put it back; **import** says the rich-text field was left
+ENTIRELY untouched, not even its plain value applied (`RT-M9` again: a
+fresh plain `/V` beside an existing `/RV` renders the OLD text in any
+conforming reader, so applying the plain value would be a silent partial
+corruption, not a lesser service). **The CLI previously had zero rich-text
+disclosure of any kind** — `b8f96b1` was GUI-only, so a scripter got
+`skipped=1` with no reason. Both shells now say the same thing, verified
+in the real binary (`export-data` prints the "formatting IS in the data
+file" line; `import-data` prints the untouched-field line with
+`applied=4 skipped=1` on a mixed fixture). The import count is taken
+BEFORE the import runs, off the live form, because a skipped field leaves
+no trace in the outcome to count afterwards. Gate figures as supplied, not
+re-run: 2687 workspace tests, 0 failed; clippy 0; fmt clean; ui-strings
+clean.
+
+**Part 3 — `ARCHITECTURE.md` §12 extended, no new decision number.** The
+sixty-fifth filing recorded, before any `Pass 37.3` code existed, that
+rich-text `/AP` generation is pdfce's own rendering POLICY, never a
+spec-conformance claim (`RT-N2`). The first code to exist for this Pass
+now honours that posture **by construction, not merely by intent**: it
+carries `/RV` without generating any appearance from it at all — nothing
+in `252ffde`/`62ba5ac` renders rich text, so the policy this project
+decided in advance has nothing to violate yet. Worth one line recording
+that the prediction held on first contact with real code, per this
+librarian's own remit to keep the body sections (not only the decision
+log) reflecting current reality. See *Standing rules* update below.
+
+**★ New standing rule `R180` MINTED — see *Standing rules*, below.** The
+dispatching engineer flagged this as a candidate rule and named the
+reason it is a genuinely new member of the R93/R174/R178 family rather
+than an instance of one of them: every existing member describes a
+statement that was wrong when written, or never checked against the right
+instrument. This one was **true when written and falsified by a later
+improvement to the very thing it described** — `b8f96b1` wrote a correct
+warning on 2026-08-07; `252ffde` falsified it on 2026-08-10, in the same
+session, four commits later. See *Standing rules* for the full text and
+the reasoning for why it is a new number rather than an amendment to
+R178 (short version: R178 asks whether a true string is still
+*reachable*; R180 asks whether a true string is still *true*, and the two
+failure directions do not collapse into one check).
+
+**`462d468` re-cited, no new substance.** The dispatch reported
+`check-commits-filed.py` still flagging `462d468` alongside the two new
+commits. Direct grep confirms it is **already** cited by hash in both
+`ROADMAP.md` (this file's own sixty-third-filing entry, 10+ hits) and
+`SESSION_LOG.md` (3 hits) — its substance is not re-filed here. If the
+gate is genuinely still red on it, that is a gate question (short-hash
+matching, or a window this librarian cannot inspect without a shell) for
+the engineer to look at directly, not a citation gap this filing can
+close by writing the same sentence a third time. Named here so the hash
+is not silently dropped from this filing's own account.
+
+**`Pass 37.3` status: still IN PROGRESS, not fully Shipped.** These two
+commits close the export half of the acceptance criteria only (criterion
+1, both formats; part of criterion 5's disclosure obligation). Import/
+authoring — writing `/RV` back via either of the two remaining honest
+options named in the scoping amendment (explicit lossy downgrade, or true
+`/RV`-preserving fill) — is still open; see the `★★★ AMENDMENT` on the
+*Next up* "Rich-text fill" entry, below.
+
+**Numbers.** Baseline debt: **5 lines, unchanged** (neither `252ffde` nor
+`62ba5ac` predates the gate, so filing them here is a fresh citation, not
+a debt discharge — the same distinction the sixty-fifth filing drew for
+`1e3422e`). `docs/FEATURES.md`: the Planned *Rich-text fill* row's `core`
+and `cli` columns move `[ ] → ◐` (export half only; the row names its own
+split, per the file's own `◐` convention); `gui` is unaffected by either
+commit and stays as it was. `docs/ARCHITECTURE.md` §12: **edited** — new
+dated entry, Part 3 above.
+
+**Invariant checks.** Not stated as such in either supplied message; both
+commits touch only `pdfce-core`'s FDF/XFDF model and `pdfce-cli`'s two
+subcommands, with no `pdfce-gui` change reported in either message, so
+GUI-core separation is not implicated by anything relayed here. Not
+independently re-run (no shell).
+
+**Ledger for this filing.** **Pass family ceiling: UNCHANGED at 53
+(53.1 highest).** `Pass 37.3` itself: **unchanged, still in progress** —
+no new Pass ID minted (these are slices of the ID already assigned
+sixty-fifth filing). `docs/ARCHITECTURE.md` §12: **edited** (Part 3,
+above) — a plain dated entry extending the existing `RT-N2` posture, no
+new decision number claimed; ceiling stays **035**, next free **036**.
+Standing rules: **`R180` MINTED** (below) — ceiling moves `R179` → `R180`,
+next free `R181`. Operator-question ceiling **unchanged at (bh)** (closed
+ACCEPT), next free **(bi)** — no new lettered question minted. Backup/git
+working-tree state not independently asserted — this librarian has no
+shell this dispatch (hard rule 8).
+
+---
+
 ### ★ `1e3422e` FILED — a form-data import that refuses one rich-text field no longer costs the operator every OTHER field in the batch, and no longer leaves the document half-changed behind a reported failure; the reusable shape MINTED as `R179` and written to `D:\dev\rag\rust\`; `Pass 37.3` SCOPED (acceptance criteria written against the now-verified Acrobat/spec RAG record) — baseline debt unchanged at **5** — 2026-08-10 (sixty-fifth filing)
 
 **Sourcing.** This librarian has no shell this dispatch (hard rule 8).
@@ -28993,6 +29136,28 @@ than carry it.
 > meanwhile. This scoping supplies acceptance criteria for the
 > DESTINATION, not a ruling on build order.
 
+> **★★★ AMENDMENT 2026-08-10 (sixty-sixth filing) — SLICES 1 AND 2 OF
+> `Pass 37.3` HAVE SHIPPED. `Pass 37.3` remains IN PROGRESS, not
+> Shipped in full.** `252ffde` closes criterion 1 for the EXPORT
+> direction only — `/RV` round-trips through both FDF and XFDF on
+> export, with `Field::rich_value`/`FieldData::rich_value` carrying it
+> and both writers/parsers honouring it, ungated by the `RichText` flag
+> so a malformed file (bit 26 clear, `/RV` present) does not lose its
+> only copy of the formatting on export. `62ba5ac`, the same session,
+> corrected the export/import disclosure strings that `252ffde` itself
+> had just made false — see the new `Shipped` entry above (head of
+> *Shipped*) for the full account, and `R180` (new, *Standing rules*)
+> for the reusable finding it produced. **What is still open, unchanged
+> from the prior amendment: which of options (2) [explicit lossy
+> downgrade] and (3) [true `/RV`-preserving fill] ships for IMPORT, and
+> in which order.** Neither slice writes `/RV` back into a document —
+> import still refuses a rich-text field outright (correctly, per
+> `RT-M9`/`RT-N7`), now disclosed as a full skip rather than a partial
+> or silent one (`1e3422e`, sixty-fifth filing). `docs/FEATURES.md`'s
+> Planned *Rich-text fill* row's `core`/`cli` columns move to `◐` for
+> this reason — export is built, import/authoring is not, and the row
+> names its own split per that file's own `◐` convention.
+
 ### ★ Operator request 2026-08-05 — GUI usability: docked tool options, implicit gesture-commit, and the ce-dimension property surface (Pass families 34 and 35, decision 031, question (aw))
 
 **Verbatim, 2026-08-05** (operator, relayed through `pdfce-engineer`):
@@ -43284,6 +43449,49 @@ and
   shape — `R179` is the checklist question that audit applies at each
   hit, not the audit itself. **Ceiling moves `R178` → `R179`; next free
   `R180`.**
+
+- **R180 — An accurate disclosure can be FALSIFIED by a later
+  improvement to the very thing it describes, not only by having been
+  wrong when written or never checked against the right instrument;
+  lifting a limitation is a trigger to grep for the sentences that
+  described it, not merely to write new ones (2026-08-10, `252ffde`+
+  `62ba5ac`; librarian-minted).** `b8f96b1` (2026-08-07) shipped a
+  correct, conditionally-gated warning — exporting form data does not
+  carry rich-text formatting — true the day it was written and true for
+  three days after. `252ffde` (2026-08-10, same session) made export
+  carry `/RV`, and that improvement silently falsified the warning
+  sitting beside the code it had just changed: the sentence now told an
+  operator they had lost formatting they still had, which is confidently
+  wrong about the operator's own data — worse than no disclosure at all.
+  **Caught the same session, in the very next commit (`62ba5ac`), by the
+  same engineer who made the improvement** — the safety net worked here,
+  but only because the person who improved the code happened to also
+  remember the warning existed; nothing mechanical looked for it, and
+  nothing in the test suite failed, because the disclosure's own test
+  (if one existed) would have asserted the string's PRESENCE, not its
+  continued truth. **Distinct from every existing member of this
+  family, and the reason it is a new number rather than an amendment:**
+  R93 asks whether a cross-module claim was ever verified true at all
+  (and names comment-vs-comment agreement as false corroboration); R174
+  asks whether an accurate string is informative to the reader who
+  actually receives it; R178 asks whether an accurate, informative
+  string is still standing on ground a real caller crosses. All three
+  assume the string's CONTENT is stable and interrogate verification,
+  audience, or reachability. **R180 is the case where the content
+  itself goes stale — through no defect in how it was written, purely
+  as a side effect of the very code it describes getting better** — and
+  it is the harder case of the four, because the person making the
+  improvement has no reason to suspect the surrounding prose: they did
+  not touch it, and it was correct yesterday. **Practical form: when a
+  Pass LIFTS a limitation, grep for the sentence(s) that described that
+  limitation** — `--help` text, module docs, GUI status strings,
+  `FEATURES.md` rows — **before considering the Pass shipped, the same
+  reflex a rename already triggers for an old name.** The trigger is
+  not "did I write something new" (R93/R174/R178's territory) but "did
+  I just make something that used to be true stop being true." Full
+  record: `ROADMAP.md`'s `252ffde`+`62ba5ac` *Shipped* entry (head of
+  *Shipped*), Part 2. **Ceiling moves `R179` → `R180`; next free
+  `R181`.**
 
 ## Update protocol
 
