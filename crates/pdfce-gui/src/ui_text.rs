@@ -7847,6 +7847,207 @@ pub fn form_field_rich_text_convert_tooltip() -> &'static str {
     "Turn this into an ordinary text field so you can type in it. The stored bold, colours and fonts are DISCARDED — only the plain words are kept. One undo reverses it."
 }
 
+/// Names the formatting THIS field actually holds, above the Convert
+/// button that would discard it.
+///
+/// # Why a generic warning was not enough
+///
+/// [`form_field_rich_text_convert_tooltip`] already says "bold, colours
+/// and fonts are DISCARDED". That is a category, not this document: it
+/// reads the same on a field whose only formatting is 12 pt Helvetica as
+/// on one carrying six colours and a superscript. An operator cannot
+/// weigh a loss they cannot see, and unlike the plain value — which is
+/// right there in the read-only box — the formatting is invisible.
+///
+/// So this is rendered ALWAYS, not on hover, for the same reason the
+/// Grouped Fields roster lists its terminals rather than counting them:
+/// the thing about to be destroyed has to be on screen before the click,
+/// and a gesture in front of that fact defeats it.
+///
+/// # What it says, and what it deliberately does not
+///
+/// The DISTINCT features present across all runs, deduplicated — not a
+/// run-by-run breakdown. A form row has room for one line, and "this
+/// field has bold, italic and a colour in it" is the shape of the
+/// decision being made.
+///
+/// The per-run detail lives in this label's TOOLTIP
+/// ([`form_field_rich_text_runs_tooltip`]) — progressive disclosure, the
+/// summary always visible and the breakdown a hover away. An earlier
+/// draft ended this sentence by telling the operator to run
+/// `pdfce-cli list-fields --rich-text` instead, which was honest about
+/// where the detail existed and wrong as an answer: a GUI should not
+/// send someone to a terminal for something it can show, and a GUI user
+/// may not have one open or at all.
+///
+/// Only features actually SET appear. `richtext::Style` uses `None` for
+/// "neither the run nor `/DS` specified this", which is not the same as
+/// a default, and listing unset properties would both bury the real ones
+/// and assert something the file does not say.
+pub fn form_field_rich_text_summary(runs: &[pdfce_core::richtext::Run]) -> String {
+    use pdfce_core::richtext::Align;
+
+    // ★ COLLECTED BY CATEGORY, EMITTED IN A FIXED ORDER — not in the
+    // order the runs happen to mention things.
+    //
+    // A single accumulate-as-you-go list produced, on the shipped
+    // fixture, "bold, 12 pt, Helvetica, #FF0000, italic": run 0 is the
+    // bold one and contributes the /DS size, family and colour with it,
+    // so `italic` from run 2 landed at the far end, three items away
+    // from `bold`. The two facts an operator most needs to compare were
+    // the two furthest apart. Found by reading the rendered panel, not
+    // the code (R174).
+    //
+    // So emphasis first (what the words LOOK like), then the typographic
+    // settings, then layout. Within each bucket, first-seen order — which
+    // is stable because it comes from document order.
+    let mut emphasis: Vec<String> = Vec::new();
+    let mut typography: Vec<String> = Vec::new();
+    let mut layout: Vec<String> = Vec::new();
+    let push = |bucket: &mut Vec<String>, s: String| {
+        if !bucket.contains(&s) {
+            bucket.push(s);
+        }
+    };
+
+    for r in runs {
+        let st = &r.style;
+        if st.weight.is_some_and(|w| w >= 700) {
+            push(&mut emphasis, "bold".to_owned());
+        }
+        if st.italic == Some(true) {
+            push(&mut emphasis, "italic".to_owned());
+        }
+        if st.underline == Some(true) {
+            push(&mut emphasis, "underlined".to_owned());
+        }
+        if st.strikethrough == Some(true) {
+            push(&mut emphasis, "struck through".to_owned());
+        }
+        if let Some(v) = st.baseline_shift_pt {
+            // Named by meaning: Table 225's positive-is-superscript is the
+            // opposite of the intuition CSS gives, so the sign alone would
+            // mislead anyone who checked.
+            let s = if v > 0.0 { "superscript" } else { "subscript" };
+            push(&mut emphasis, s.to_owned());
+        }
+        if let Some(sz) = st.size_pt {
+            push(&mut typography, format!("{sz} pt"));
+        }
+        if let Some(f) = st.family.first() {
+            push(&mut typography, f.clone());
+        }
+        if let Some([r, g, b]) = st.color {
+            let byte = |v: f64| (v * 255.0).round().clamp(0.0, 255.0) as u8;
+            push(
+                &mut typography,
+                format!("#{:02X}{:02X}{:02X}", byte(r), byte(g), byte(b)),
+            );
+        }
+        if let Some(a) = st.align {
+            // Left is this interface's own reading direction, so naming it
+            // adds a word without distinguishing anything; the other two
+            // are choices someone made.
+            match a {
+                Align::Center => push(&mut layout, "centred".to_owned()),
+                Align::Right => push(&mut layout, "right-aligned".to_owned()),
+                Align::Left => {}
+            }
+        }
+    }
+
+    emphasis.extend(typography);
+    emphasis.extend(layout);
+    if emphasis.is_empty() {
+        return "This field is marked as formatted text, but no formatting is actually set on it. Converting it to a plain field loses nothing.".to_owned();
+    }
+    format!(
+        "Formatting in this field: {}. Converting to plain text discards all of it.",
+        emphasis.join(", ")
+    )
+}
+
+/// Shown in place of the summary when the field's `/RV` cannot be read.
+///
+/// Reported rather than silently omitted, and the wording is careful:
+/// this is NOT "the field has no formatting". It is the one field where
+/// every decision is being made blind, so the operator is told the
+/// difference explicitly — otherwise an unreadable `/RV` and an
+/// unformatted field look identical, and only one of them is a reason to
+/// stop before converting.
+/// The per-run breakdown, on hover over the summary.
+///
+/// The summary answers "what formatting is in here"; this answers "which
+/// words have which". Both are wanted and only one fits on a form row,
+/// so the frequent question is always visible and the occasional one is
+/// a hover away — progressive disclosure rather than a choice between
+/// them.
+///
+/// A tooltip is the right home precisely because this is the OCCASIONAL
+/// question. It is not a disclosure obligation: the destructive act's
+/// consequence is already stated in the always-visible summary, so
+/// nothing here is a fact the operator must see before clicking. If it
+/// were, a hover would be the wrong place for it.
+///
+/// Text is shown quoted and elided so one long run cannot push the rest
+/// off the screen — the point is which run, not the whole value, and the
+/// value is already in the read-only box above.
+pub fn form_field_rich_text_runs_tooltip(runs: &[pdfce_core::richtext::Run]) -> String {
+    let mut s = String::from("Each formatted part of this field:");
+    for r in runs {
+        let text: String = if r.text.chars().count() > 32 {
+            let head: String = r.text.chars().take(32).collect();
+            format!("{head}…")
+        } else {
+            r.text.clone()
+        };
+        let mut bits: Vec<&str> = Vec::new();
+        if r.style.weight.is_some_and(|w| w >= 700) {
+            bits.push("bold");
+        }
+        if r.style.italic == Some(true) {
+            bits.push("italic");
+        }
+        if r.style.underline == Some(true) {
+            bits.push("underlined");
+        }
+        if r.style.strikethrough == Some(true) {
+            bits.push("struck through");
+        }
+        // "as the rest" rather than "plain": a run with no emphasis of its
+        // own still carries the field's default size, family and colour,
+        // and calling it plain would say it has none.
+        let how = if bits.is_empty() {
+            "as the rest".to_owned()
+        } else {
+            bits.join(" + ")
+        };
+        s.push_str(&format!("\n  “{text}” — {how}"));
+    }
+    s
+}
+
+/// The `/RV` bytes are not valid UTF-8, so it cannot even be parsed.
+///
+/// A separate, COMPLETE entry rather than a reason fragment fed to
+/// [`form_field_rich_text_unreadable`]: that function's `reason` comes
+/// from core's own `RichTextError` Display, which core owns and writes
+/// as a whole clause. A fragment hand-written in the shell to look like
+/// one is R2's failure mode — a message assembled from pieces nobody
+/// reviews as a sentence.
+///
+/// Says the same load-bearing thing as its sibling: this is NOT an
+/// unformatted field.
+pub fn form_field_rich_text_not_utf8() -> String {
+    "This field holds formatted text that pdfce could not read — the stored formatting is not valid text. It is NOT unformatted: converting it would discard formatting nobody has seen. Consider leaving it alone.".to_owned()
+}
+
+pub fn form_field_rich_text_unreadable(reason: &str) -> String {
+    format!(
+        "This field holds formatted text that pdfce could not read ({reason}). It is NOT unformatted — converting it would discard formatting nobody has seen. Consider leaving it alone."
+    )
+}
+
 /// Report after converting a rich-text field.
 pub fn form_field_rich_text_converted(label: &str) -> String {
     format!("“{label}” is now an ordinary text field — you can type in it. Undo reverses this.")

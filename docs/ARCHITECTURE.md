@@ -3100,8 +3100,33 @@ instances (`delete_object`, `delete_redaction_mark`, and now
   settings/mod.rs`) has zero GUI/windowing dependencies (rule 2 holds);
   both `pdfce-cli` and `pdfce-gui` load it once at startup. User state
   never sits loose among the binaries; the update instructions name
-  exactly which files to keep. The packaging smoke test verifies the
-  partition. ~~**Still open:** no in-app settings editor exists yet —
+  exactly which files to keep. ~~The packaging smoke test verifies the
+  partition.~~ **CORRECTED 2026-08-10 (`pdfce-librarian`, from
+  `tools/package-portable.py`, `9146b41`) — this sentence had no test
+  behind it when written and still does not name a real one.** No
+  automated "packaging smoke test" existed anywhere in the repo until
+  this correction was written, and none exists now either — what
+  exists is `tools/package-portable.py`, which assembles the payload
+  into a dated `D:\builds\pdfce-<stamp>-<hash>\` folder and stops; it
+  performs no verification of its own (no launch, no partition check,
+  nothing). The one confirmation on record that `userdata/` truly stays
+  absent until first run, and that the partition behaves as designed,
+  was a MANUAL run of the built binaries from inside the output folder
+  (`--version`, `list-fields` against a fixture) — done once, by hand,
+  not wired into any script or gate that would repeat it on the next
+  packaging pass. The **intended** procedure is still the one three
+  paragraphs below (§6's own "Verify every packaging pass with a real
+  smoke test": zip, unzip to an unrelated path, launch, confirm it
+  renders a fixture) — that procedure is design intent, not yet built
+  either, and this sentence's error was stating a downstream consequence
+  of an unbuilt test as though the test existed. R175's shape (a
+  document's claim about the state of the world, uncorroborated by
+  anything that checks it) applied to this document's own body text
+  rather than to an external fact. **Still open, and worth a Pass of its
+  own:** an automated smoke test — zip/unzip/launch/render, or at minimum
+  a scripted post-build check that `userdata/` is absent — that runs
+  every packaging pass rather than depending on someone remembering to
+  check by hand. ~~**Still open:** no in-app settings editor exists yet —
   `Settings::save` has no caller anywhere in the workspace; the file is
   hand-edit-only until a future Pass adds a write path.~~ **★ BUILT
   2026-08-08 (`Pass 51.4`, `6d63d81`) — a File-tab settings window now

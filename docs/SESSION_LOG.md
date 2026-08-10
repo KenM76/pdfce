@@ -31055,3 +31055,146 @@ rule 8). This is the **seventy-second** `SESSION_LOG.md` filing (the
 seventy-first confirmed present by direct read before this entry was
 appended, and confirmed to still be the true end of file after the
 `7c6ef0f` repair).
+
+## 2026-08-10 (seventy-third filing) — `9146b41`: portable builds land in `D:\builds` per a new operator standing request, and `ARCHITECTURE.md` §6's "packaging smoke test" claim is corrected; `944ef0d`: `BUILD-INFO.txt` stops mangling commit subjects, a THIRD instance this session of one root cause; `c4cce95`: `Pass 37.3`'s fifth slice — `list-fields` discloses WHAT rich-text formatting a field has
+
+**Sourcing.** This librarian has Grep/Read/Glob but no shell this dispatch
+(hard rule 8) — none of the three hashes confirmed against `git log`/`git
+show` directly. Independently verified by direct read: `tools/package-portable.py`
+in full; `docs/ARCHITECTURE.md` §6 before correcting it (no automated
+smoke test named or found anywhere in the repo); `tools/commits-filed-baseline.txt`
+(still 5 lines, none of this filing's hashes among them);
+`docs/FEATURES.md` row 285. Independently corroborated beyond the
+dispatch's own claims via `Glob`/`Read` against live artefacts: `D:\builds\`
+holds exactly the two `pdfce-*` folders the dispatch describes
+(`pdfce-20260810-0647-944ef0d\`, `pdfce-20260810-0655-c4cce95\`), each
+with the six expected files and no `userdata/`; the later build's own
+`BUILD-INFO.txt` renders its em-dash correctly, confirming `944ef0d`'s
+fix in the built artefact rather than only in the dispatch's account.
+`C:\personal_rag\python\lesson_20260807_subprocess_text_true_locale_decode_dies_in_a_reader_thread.md`
+grepped and read before writing (hard rule 4) — found already covering
+the exact mechanism from an earlier pdfce commit, so this session's
+finding is filed as an UPDATE, not a new lesson. Not independently
+verified: `c4cce95`'s stated test count and gate results (no `cargo` run
+by this librarian).
+
+**Shipped:**
+- `9146b41` (2026-08-10) — `tools/package-portable.py`, per the operator's
+  verbatim standing request (*"put a portable app build in d:\builds...
+  while you are working on the actual code"*). One dated, never-overwritten
+  folder per build (Windows cannot replace a running exe's own files);
+  `-dirty` suffix + warning on an uncommitted tree so a folder name is
+  never a claim that could be false; `BUILD-INFO.txt` changelog reads the
+  delta from the PREVIOUS build's own info file, not its folder name;
+  `userdata/` deliberately NOT shipped (decision 003 R15). No new Pass
+  ID — infrastructure tooling. In passing, corrected `ARCHITECTURE.md` §6's
+  "the packaging smoke test verifies the partition" — no such test existed
+  when written and none exists now; the one confirmation on record was a
+  manual, unrepeated run.
+- `944ef0d` (2026-08-10) — `git()`'s `subprocess.run(text=True)` decoded
+  git's output with the LOCALE codec (cp1252), silently mangling every
+  em-dash in a commit subject into `â€"` inside `BUILD-INFO.txt` — no
+  crash, because cp1252 maps almost every byte to *something*. Fixed with
+  explicit `encoding="utf-8", errors="replace"`. Third independent
+  mechanism this session under one root cause (Windows defaults to cp1252
+  wherever UTF-8 is not demanded explicitly) — the other two were a
+  `print()`-to-console `?`-substitution and a PowerShell 5.1 `.ps1` parse
+  failure, both already in `personal_rag`. Found by reading the artefact
+  the fix was for (R174's shape, cited not re-minted).
+- `c4cce95` (2026-08-10) — `Pass 37.3` gains a fifth slice, no new Pass
+  ID (checked against grep before filing, per `R156`). `list-fields`
+  gains `rich=<n>runs`/`rich=-`/`rich=unparsed` on its summary line and a
+  `--rich-text` flag printing each run's resolved style — colour as
+  `#RRGGBB`, weight as `700(bold)`, vertical-align by meaning
+  (`superscript(+4pt)`, Table 225's sign convention being the opposite of
+  CSS). Only SET properties print. `docs/FEATURES.md` row 285 addendum
+  only, split unchanged (`◐`/`◐`/`—`) — a diagnostic surface, not a fill/
+  import capability.
+
+**Decisions made this session:**
+- The `D:\builds` portable-build practice is filed as a new, UNNUMBERED
+  Standing rules bullet, not an R-numbered rule — it is an operator-
+  directed standing practice, not a reusable engineering-failure shape of
+  the kind R174-R182 name, and this project has otherwise kept that
+  distinction clean.
+- `ARCHITECTURE.md` §6's stale "packaging smoke test" claim is corrected
+  in place (struck-and-replaced) rather than silently edited — R175's
+  shape (a document's unmeasured claim about the state of the world)
+  applied to this project's own body text rather than an external fact,
+  cited rather than re-minted.
+- The `944ef0d` finding is filed as an UPDATE to the existing 2026-08-07
+  `personal_rag/python` subprocess lesson, not a new file — grepped first
+  per hard rule 4, found the mechanism already documented (from a
+  different pdfce commit, a hard crash rather than silent mojibake), so
+  this is the QUIET SIBLING of an existing finding, recorded as such with
+  a cross-mechanism table (three independent Windows-encoding boundaries
+  hit this one session) rather than duplicated.
+
+**Findings + decisions:**
+- **One root cause, three independent mechanisms, in one session, and
+  knowing two did not prevent the third**: `print()`-to-console
+  substitution, `.ps1`-source parse failure, and `subprocess`-capture
+  decode are three different APIs with three different failure shapes
+  (silent `?`, hard parse error, silent mojibake) under the single shared
+  fact that Windows defaults to cp1252 wherever UTF-8 is not demanded
+  explicitly. The generalizable content is the suspicion, not one fix.
+- **"It has never crashed" is not evidence a `subprocess.` call site is
+  correct.** cp1252 is close to total over the byte space; most non-ASCII
+  UTF-8 sequences decode to *something* rather than raising, and the
+  something is silently wrong. The 2026-08-07 lesson's crash-shaped
+  framing invited auditing only sites that HAD crashed; this instance
+  never had, and was wrong the entire time regardless.
+- **A design sentence with no test behind it reads identically to one
+  that does**, until someone checks. `ARCHITECTURE.md` §6 stated a
+  packaging invariant was verified in present tense before any script
+  existed that could verify it, and the sentence survived unchanged
+  through the Pass that finally built packaging tooling — because
+  building the tool and auditing the claim are different acts, and
+  nobody had reason to do the second until asked to record why a gap
+  exists.
+
+**Still in flight:**
+- `Pass 37.3`: true `/RV`-preserving CLI fill (option 3) still open,
+  unchanged.
+- `tools/commits-filed-baseline.txt` unchanged at **5 lines**: `338076a`,
+  `1f319c0`, `55a0732`, `587e520`, `9141ded`.
+- `pdfce-spec-librarian` dispatch still owed (FDF `/Ff` namespace
+  collision; bit 23 precondition asymmetry) — unchanged.
+- A `troubleshooting-librarian` dispatch is still owed for the Windows-
+  console-mojibake finding family in `C:\personal_rag\python\`/
+  `claude_code\` — unchanged from the seventieth filing; this librarian
+  has continued writing there directly in the interim (consistent with
+  this file's own coordinating-section precedent), but the curation
+  dispatch itself remains unmade.
+- An automated packaging smoke test (zip/unzip/launch/render, or at
+  minimum a scripted `userdata/`-absence check) is newly named as owed
+  this filing — `tools/package-portable.py` performs no verification of
+  its own, and the one confirmation on record was manual and unrepeated.
+
+**For next session:**
+- Run `package-portable.py` at the next milestone without being asked
+  again — this is now a standing practice, not a one-off.
+- Consider whether the automated packaging smoke test named above is
+  worth its own Pass ID, or folds into whichever Pass next touches
+  packaging.
+
+**Ledger for this filing.** No new Pass ID for any of the three commits.
+Pass family ceiling unchanged at **54.1**. `docs/FEATURES.md`: row 285
+amended (addendum only, split unchanged). `docs/ARCHITECTURE.md` §6 body
+text corrected; §12 **not edited** (documentation-accuracy fix, not a new
+decision). Standing rules: no new R-number (`R174`/`R175` cited for
+further instances; ceiling unchanged at **R182**, next free **R183**);
+one new unnumbered bullet added (`D:\builds` practice). Decision records:
+unchanged, ceiling **035**, next free **036**. Operator-question ceiling
+unchanged at **(bh)**, next free **(bi)**. `tools/commits-filed-baseline.txt`:
+unchanged at **5 lines** — confirmed by direct read; none of this
+filing's three hashes was ever a baseline line. `C:\personal_rag\python\`:
+one lesson amended, its subject `index.md` one-liner amended; no master-
+index change (existing lesson, not a new file). `C:\personal_rag\claude_code\`:
+one lesson amended (cross-reference only); its `index.md` one-liner
+unchanged. Gate status for `c4cce95` (2716 tests / 0 failed, clippy/fmt
+clean) RELAYED from the dispatch, NOT independently re-run — no shell
+this dispatch. Backup/git working-tree state not independently asserted
+(hard rule 8). This is the **seventy-third** `SESSION_LOG.md` filing (the
+seventy-second confirmed present by direct read before this entry was
+appended).

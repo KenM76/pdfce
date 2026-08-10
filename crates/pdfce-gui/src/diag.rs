@@ -108,6 +108,28 @@ pub enum Step {
     /// only in `canvas::zoom_anchor_offset`'s unit tests — the unit tests prove
     /// the solve, this proves it is wired to the wheel and to the scroll area.
     Zoom(f32),
+    /// A plain wheel scroll by this many points — positive scrolls the
+    /// content DOWN the list (the direction a wheel-away gesture moves it).
+    ///
+    /// # Why this exists, and what it unblocked
+    ///
+    /// [`Self::Zoom`] was the only wheel step, and it is Ctrl+wheel. Every
+    /// panel in this application is a `ScrollArea`, so any control far
+    /// enough down one was **unreachable by the harness** — and R86 makes
+    /// "verified in the running application" a shipping condition, so an
+    /// unreachable control is an unverifiable one.
+    ///
+    /// Found the first time it mattered: the rich-text summary on the
+    /// Forms panel's `Notes` row traced at y=1121 in a 1000-high window,
+    /// below the fold, with no way to bring it into view. The screenshot
+    /// showed the panel ending three fields above the one under test.
+    ///
+    /// Points, not "lines" or "notches": egui's own
+    /// [`egui::Event::MouseWheel`] takes points in
+    /// [`egui::MouseWheelUnit::Point`], and converting through a
+    /// notion of line height here would put a second, disagreeing
+    /// definition of a scroll notch in the codebase.
+    Scroll(f32),
     /// Press and release the Escape key.
     Escape,
     /// Press and release the Delete key.
@@ -432,6 +454,7 @@ fn parse_step(s: &str) -> Option<Step> {
         "down" => xy().map(|(x, y)| Step::Down(x, y)),
         "up" => xy().map(|(x, y)| Step::Up(x, y)),
         "zoom" => rest.trim().parse().ok().map(Step::Zoom),
+        "scroll" => rest.trim().parse().ok().map(Step::Scroll),
         "altdown" => xy().map(|(x, y)| Step::AltClick(true, x, y)),
         "ctrldown" => xy().map(|(x, y)| Step::CtrlClick(true, x, y)),
         "ctrlup" => xy().map(|(x, y)| Step::CtrlClick(false, x, y)),

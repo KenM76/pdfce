@@ -7604,6 +7604,66 @@ impl PdfceApp {
                                 .small()
                                 .weak(),
                         );
+
+                        // WHAT would be lost, named, above the button that
+                        // loses it. The note above says a category ("this
+                        // field holds formatted text"); this says the
+                        // document. Always rendered, never on hover — the
+                        // same rule the Grouped Fields roster follows, and
+                        // for the same reason: the plain value is visible
+                        // in the read-only box above, the formatting is
+                        // not, and a gesture in front of the one invisible
+                        // fact defeats the disclosure.
+                        //
+                        // Parsed per frame. The alternative is a cache
+                        // keyed by fqn, which would then need invalidating
+                        // on every edit, undo and reload — a correctness
+                        // problem in exchange for parsing a few hundred
+                        // bytes of XML on a panel that is already
+                        // re-laying-out its whole field list. Measure
+                        // before trading one for the other.
+                        // Three outcomes, three COMPLETE messages — never a
+                        // hand-written fragment substituted into a sentence
+                        // (R2). The parse-failure arm's reason comes from
+                        // core's own `RichTextError` Display, which is a
+                        // complete clause core owns; the not-UTF-8 arm gets
+                        // its own catalog entry rather than a fragment
+                        // written here to look like one.
+                        // `(message, per-run tooltip)`. Only the parsed case
+                        // has a breakdown to hover for; the two failure
+                        // cases have a message and nothing behind it.
+                        let summary: Option<(String, Option<String>)> =
+                            field.rich_value.as_ref().map(|rv| {
+                                let Ok(text) = String::from_utf8(rv.clone()) else {
+                                    return (ui_text::form_field_rich_text_not_utf8(), None);
+                                };
+                                let ds = field
+                                    .default_style
+                                    .as_ref()
+                                    .map(|d| String::from_utf8_lossy(d).into_owned());
+                                match pdfce_core::richtext::parse(&text, ds.as_deref()) {
+                                    Ok(runs) => (
+                                        ui_text::form_field_rich_text_summary(&runs),
+                                        Some(ui_text::form_field_rich_text_runs_tooltip(&runs)),
+                                    ),
+                                    Err(e) => (
+                                        ui_text::form_field_rich_text_unreadable(&e.to_string()),
+                                        None,
+                                    ),
+                                }
+                            });
+                        // `None` is bit 26 set with no `/RV` at all — Table
+                        // 228 makes that malformed, and there is nothing to
+                        // describe. The note above already covers it, and
+                        // inventing a summary would assert formatting the
+                        // file does not contain.
+                        if let Some((s, detail)) = summary {
+                            let l = ui.label(egui::RichText::new(s).small().weak());
+                            if let Some(d) = detail {
+                                l.on_hover_text(d);
+                            }
+                        }
+
                         let b = ui
                             .button(ui_text::form_field_rich_text_convert())
                             .on_hover_text(ui_text::form_field_rich_text_convert_tooltip());
@@ -11347,6 +11407,18 @@ impl eframe::App for PdfceApp {
                 raw_input.modifiers = alt;
             }
             diag::Step::Zoom(factor) => raw_input.events.push(egui::Event::Zoom(factor)),
+            // A plain wheel scroll. `modifiers: default` is what makes it a
+            // SCROLL rather than a zoom: egui routes Ctrl+wheel to zoom, so
+            // reusing this path with a modifier set would silently do the
+            // other thing.
+            diag::Step::Scroll(points) => raw_input.events.push(egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: egui::vec2(0.0, -points),
+                modifiers: egui::Modifiers::default(),
+                // A discrete wheel notch, not a trackpad gesture: no
+                // begin/end phase to model.
+                phase: egui::TouchPhase::Move,
+            }),
             diag::Step::Middle(pressed, x, y) => {
                 raw_input
                     .events
