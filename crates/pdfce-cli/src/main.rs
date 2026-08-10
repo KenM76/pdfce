@@ -6509,35 +6509,42 @@ fn cmd_print(
         }
     };
 
-    // The resolution cap is a MEMORY decision, disclosed because pdfce
-    // chose a number the operator did not ask for (rule 4). An A4 page at
-    // 600 DPI is 4960x7016 px — about 139 MB at RGBA for ONE page.
-    let dpi = caps.dpi_x.min(caps.dpi_y).min(dpi_cap);
-    let capped = dpi < caps.dpi_x.min(caps.dpi_y);
-
     let mode = match scale_percent {
         Some(pct) => pdfce_print::ScaleMode::Custom(f64::from(pct) / 100.0),
         None => scale.to_mode(),
     };
+    // The placement and resolution arithmetic comes from `pdfce-print`
+    // rather than being repeated here, so the GUI and the CLI cannot
+    // come to disagree about where a page lands — the drift whose
+    // symptom is a GUI print landing differently from a CLI print of the
+    // same document, which nobody thinks to compare.
+    let device = pdfce_print::DeviceGeometry::from(&caps);
+    let page_sizes: Vec<(f64, f64)> = page_list
+        .iter()
+        .map(|p| {
+            let mb = p.media_box;
+            ((mb.urx - mb.llx).abs(), (mb.ury - mb.lly).abs())
+        })
+        .collect();
+    let spec = pdfce_print::JobSpec {
+        pages: selected.clone(),
+        mode,
+        max_dpi: dpi_cap,
+    };
+    let resolution = pdfce_print::job_resolution(&device, &spec);
+    let plans = pdfce_print::plan_job(&device, &page_sizes, &spec);
+    let dpi = resolution.dpi;
+    let capped = resolution.capped;
+    let clipped = plans.iter().filter(|p| p.placement.clipped).count();
     let mut bitmaps: Vec<pdfce_print::PageBitmap> = Vec::new();
-    let mut clipped = 0usize;
 
-    for &index in &selected {
-        let Some(page) = page_list.get(index) else {
+    for plan in &plans {
+        let (Some(page), Some(&size)) = (page_list.get(plan.index), page_sizes.get(plan.index))
+        else {
             continue;
         };
-        let mb = page.media_box;
-        let size = ((mb.urx - mb.llx).abs(), (mb.ury - mb.lly).abs());
-        let placement = pdfce_print::place_page(size, caps.printable_pt, mode);
-        if placement.clipped {
-            clipped += 1;
-        }
-        // Render at the DEVICE's resolution scaled by the placement, so
-        // the pixels handed to GDI already carry the print scale and the
-        // blit is a 1:1 copy rather than a resample. Resampling twice —
-        // once here and once in `StretchDIBits` — is how a printed line
-        // ends up softer than the same line on screen.
-        let render_scale = (f64::from(dpi) / 72.0) * placement.scale;
+        let placement = plan.placement;
+        let render_scale = plan.render_scale;
         let options = pdfce_render::RenderOptions::default();
         let rendered = match pdfce_render::render_page_with_view(
             &session.view(),
@@ -6547,7 +6554,7 @@ fn cmd_print(
         ) {
             Ok(r) => r,
             Err(err) => {
-                eprintln!("pdfce-cli: page {}: {err}", index + 1);
+                eprintln!("pdfce-cli: page {}: {err}", plan.index + 1);
                 return exit::RUNTIME_ERROR;
             }
         };
@@ -6580,7 +6587,7 @@ fn cmd_print(
              the memory.",
             caps.dpi_x,
             caps.dpi_y,
-            (u64::from(caps.dpi_x) * u64::from(caps.dpi_y) * 8 * 11 * 4) / 1_000_000
+            resolution.uncapped_page_mb()
         );
     }
     if clipped > 0 {

@@ -563,7 +563,9 @@ pub fn place_page(page: (f64, f64), printable: (f64, f64), mode: ScaleMode) -> P
     clippy::indexing_slicing
 )]
 mod tests {
-    use super::{Placement, ScaleMode, place_page};
+    use super::{
+        DeviceGeometry, JobSpec, Placement, ScaleMode, job_resolution, place_page, plan_job,
+    };
 
     /// A4 in points.
     const A4: (f64, f64) = (595.0, 842.0);
@@ -655,6 +657,290 @@ mod tests {
             assert!(p.clipped, "a degenerate placement must not claim to fit");
         }
     }
+
+    // ---- job planning ----
+
+    /// Capabilities standing in for a 600-DPI Letter printer with a
+    /// quarter-inch unprintable margin all round.
+    fn letter_600() -> DeviceGeometry {
+        DeviceGeometry {
+            dpi: (600, 600),
+            printable_pt: (576.0, 756.0),
+        }
+    }
+
+    fn spec(pages: Vec<usize>, mode: ScaleMode, max_dpi: u32) -> JobSpec {
+        JobSpec {
+            pages,
+            mode,
+            max_dpi,
+        }
+    }
+
+    /// **The render scale already carries the print scale.**
+    ///
+    /// This is the property that keeps a printed line as sharp as the
+    /// same line on screen: the pixels handed to GDI are the size they
+    /// will occupy on paper, so the blit is a copy rather than a
+    /// resample. If this ever becomes plain `dpi / 72`, output softens
+    /// everywhere and nothing else fails.
+    #[test]
+    fn the_render_scale_folds_in_the_placement_scale() {
+        let caps = letter_600();
+        // A Letter page shrunk to the printable area: 576/612 ≈ 0.941.
+        let plans = plan_job(
+            &caps,
+            &[(612.0, 792.0)],
+            &spec(vec![0], ScaleMode::Fit, 600),
+        );
+        let p = plans.first().expect("one page planned");
+        assert!(p.placement.scale < 1.0, "Fit shrinks a full-bleed page");
+        let expected = (600.0 / 72.0) * p.placement.scale;
+        assert!(
+            (p.render_scale - expected).abs() < 1e-9,
+            "render_scale must be dpi/72 × placement.scale, not dpi/72"
+        );
+    }
+
+    /// The cap binds, is reported, and changes the render scale with it.
+    #[test]
+    fn the_dpi_cap_binds_and_is_disclosed() {
+        let caps = letter_600();
+        let res = job_resolution(&caps, &spec(vec![0], ScaleMode::ActualSize, 300));
+        assert_eq!(res.dpi, 300);
+        assert_eq!(res.device_dpi, 600);
+        assert!(res.capped, "300 < 600, so the operator is told");
+
+        let uncapped = job_resolution(&caps, &spec(vec![0], ScaleMode::ActualSize, 1200));
+        assert_eq!(uncapped.dpi, 600, "the cap never RAISES beyond the device");
+        assert!(!uncapped.capped);
+    }
+
+    /// ★ **An asymmetric device renders at its SMALLER axis.**
+    ///
+    /// 600×300 is real on plotters. Rendering at 600 for a device that
+    /// can only place 300 dots vertically makes the driver resample —
+    /// which undoes the entire reason for rendering at device
+    /// resolution, silently, and on exactly the machines whose output
+    /// people care most about.
+    #[test]
+    fn an_asymmetric_device_renders_at_its_smaller_axis() {
+        let caps = DeviceGeometry {
+            dpi: (600, 300),
+            ..letter_600()
+        };
+        assert_eq!(
+            job_resolution(&caps, &spec(vec![0], ScaleMode::ActualSize, 2400)).dpi,
+            300
+        );
+    }
+
+    /// **A stale page index is skipped, not fatal.**
+    ///
+    /// A page range is operator input and can name a page a since-edited
+    /// document no longer has. Refusing the whole job because one index
+    /// is stale is worse than printing what exists and reporting the
+    /// count — the operator wanted paper, and nine of ten pages is
+    /// recoverable where zero is not.
+    #[test]
+    fn an_out_of_range_page_is_skipped_rather_than_failing_the_job() {
+        let caps = letter_600();
+        let sizes = [(612.0, 792.0), (612.0, 792.0)];
+        let plans = plan_job(&caps, &sizes, &spec(vec![0, 7, 1], ScaleMode::Fit, 300));
+        assert_eq!(plans.len(), 2, "two real pages survive");
+        assert_eq!(plans[0].index, 0);
+        assert_eq!(plans[1].index, 1, "and the order given is preserved");
+    }
+
+    /// The page ORDER in the spec is the print order, including
+    /// duplicates and reversals — the shells build ranges, and reverse
+    /// order is an option Acrobat offers.
+    #[test]
+    fn the_planned_order_is_the_requested_order() {
+        let caps = letter_600();
+        let sizes = [(612.0, 792.0); 3];
+        let plans = plan_job(&caps, &sizes, &spec(vec![2, 0, 2], ScaleMode::Fit, 300));
+        assert_eq!(
+            plans.iter().map(|p| p.index).collect::<Vec<_>>(),
+            vec![2, 0, 2]
+        );
+    }
+
+    /// Mixed page sizes each get their own placement — a document with a
+    /// landscape drawing among portrait pages must not scale them all to
+    /// the first page's factor.
+    #[test]
+    fn each_page_is_placed_on_its_own_size() {
+        let caps = letter_600();
+        let sizes = [(612.0, 792.0), (792.0, 612.0)];
+        let plans = plan_job(&caps, &sizes, &spec(vec![0, 1], ScaleMode::Fit, 300));
+        assert!(
+            (plans[0].placement.scale - plans[1].placement.scale).abs() > 1e-6,
+            "a portrait and a landscape page cannot share a fit scale"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Job planning — the arithmetic both shells share
+// ---------------------------------------------------------------------------
+
+/// What to print, in the caller's terms.
+///
+/// # Why planning is separate from rendering
+///
+/// Both shells need the same answer to "at what scale, and where on the
+/// sheet, does page N land, and what resolution should it be rendered
+/// at" — and that arithmetic is the part that drifts when it is written
+/// twice. The symptom of drift here is a GUI print landing differently
+/// from a CLI print of the same document at the same settings, which
+/// nobody would think to compare.
+///
+/// So the arithmetic lives here and the RENDERING stays in the shells.
+/// That keeps this crate free of `pdfce-render` — see the crate docs on
+/// why a printing crate that also rendered would need the whole render
+/// stack to be testable, when the failures worth testing here (a wrong
+/// `DEVMODE`, an upside-down DIB, a job left open) have nothing to do
+/// with PDF.
+#[derive(Debug, Clone, PartialEq)]
+pub struct JobSpec {
+    /// Zero-based page indices, in the order they should print.
+    pub pages: Vec<usize>,
+    /// How each page is sized onto the sheet.
+    pub mode: ScaleMode,
+    /// Upper bound on rendering resolution, in DPI.
+    ///
+    /// A MEMORY bound, not a quality preference: an A4 page at 600 DPI is
+    /// 4960×7016 px, about 139 MB at RGBA for one page. Whoever sets it
+    /// is choosing a number the operator did not, so both shells disclose
+    /// it when it binds (rule 4).
+    pub max_dpi: u32,
+}
+
+/// Where one page lands, and how big to render it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PagePlan {
+    /// The page this describes, as given in [`JobSpec::pages`].
+    pub index: usize,
+    /// Placement on the sheet.
+    pub placement: Placement,
+    /// The scale to rasterise at, in device pixels per PDF point.
+    ///
+    /// # It already carries the print scale, deliberately
+    ///
+    /// This is `dpi / 72 × placement.scale`, so the pixels handed to the
+    /// spooler are already the size they will occupy on paper and the
+    /// blit is a 1:1 copy.
+    ///
+    /// The alternative — render at device resolution and let
+    /// `StretchDIBits` scale — resamples twice, once in the renderer's
+    /// own transform and once in GDI's, and the visible result is a
+    /// printed line softer than the same line on screen. On a CAD
+    /// drawing, whose value is thin lines, that is the difference the
+    /// operator would notice first.
+    pub render_scale: f64,
+}
+
+/// The resolution a job will render at, and whether the cap bound.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct JobResolution {
+    /// The DPI actually used.
+    pub dpi: u32,
+    /// The device's own resolution, before the cap.
+    pub device_dpi: u32,
+    /// Whether [`JobSpec::max_dpi`] reduced it — the case that must be
+    /// disclosed, because pdfce chose a number the operator did not.
+    pub capped: bool,
+}
+
+impl JobResolution {
+    /// Rough memory cost of ONE page at the DEVICE's resolution, in
+    /// megabytes, for a US-Letter sheet at RGBA.
+    ///
+    /// Approximate on purpose, and the figure a disclosure quotes: an
+    /// operator deciding whether to raise the cap needs an order of
+    /// magnitude, not a precise number for a page size they may not be
+    /// printing.
+    #[must_use]
+    pub const fn uncapped_page_mb(self) -> u64 {
+        (self.device_dpi as u64 * self.device_dpi as u64 * 8 * 11 * 4) / 1_000_000
+    }
+}
+
+/// The device geometry planning needs, with no platform type in it.
+///
+/// # Why not just take `PrinterCaps`
+///
+/// `PrinterCaps` is `cfg(windows)` — it is what a Win32 driver reported.
+/// The planning arithmetic is pure geometry, and this module's own note
+/// says that half stays un-gated so it compiles and TESTS on the Linux
+/// and macOS CI jobs.
+///
+/// Taking `PrinterCaps` here would have quietly moved the most
+/// test-worthy code in the crate behind a `cfg` that CI does not build —
+/// the tests would still pass on Windows and simply stop existing
+/// elsewhere, which is the kind of coverage loss nothing reports.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DeviceGeometry {
+    /// Resolution in dots per inch, horizontal and vertical.
+    pub dpi: (u32, u32),
+    /// The printable area in points — smaller than the sheet by the
+    /// unprintable margins the driver reports.
+    pub printable_pt: (f64, f64),
+}
+
+#[cfg(windows)]
+impl From<&PrinterCaps> for DeviceGeometry {
+    fn from(caps: &PrinterCaps) -> Self {
+        Self {
+            dpi: (caps.dpi_x, caps.dpi_y),
+            printable_pt: caps.printable_pt,
+        }
+    }
+}
+
+/// Resolve the rendering resolution for a job.
+#[must_use]
+pub fn job_resolution(device: &DeviceGeometry, spec: &JobSpec) -> JobResolution {
+    // The SMALLER axis, not an average: a device with asymmetric
+    // resolution (600×300 is real on some plotters) must not be rendered
+    // at a resolution one axis cannot reproduce, because the driver then
+    // resamples and undoes the point of rendering at device resolution.
+    let smaller = device.dpi.0.min(device.dpi.1);
+    let dpi = smaller.min(spec.max_dpi);
+    JobResolution {
+        dpi,
+        device_dpi: smaller,
+        capped: dpi < smaller,
+    }
+}
+
+/// Plan every page of a job.
+///
+/// `page_sizes` is indexed by the document's page order, in PDF points.
+/// Indices in [`JobSpec::pages`] that fall outside it are SKIPPED rather
+/// than erroring: a page range is operator input, and a job that refuses
+/// wholesale because one index is stale is worse than one that prints
+/// what it can and reports the count.
+#[must_use]
+pub fn plan_job(
+    device: &DeviceGeometry,
+    page_sizes: &[(f64, f64)],
+    spec: &JobSpec,
+) -> Vec<PagePlan> {
+    let resolution = job_resolution(device, spec);
+    spec.pages
+        .iter()
+        .filter_map(|&index| {
+            let size = *page_sizes.get(index)?;
+            let placement = place_page(size, device.printable_pt, spec.mode);
+            Some(PagePlan {
+                index,
+                placement,
+                render_scale: (f64::from(resolution.dpi) / 72.0) * placement.scale,
+            })
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
