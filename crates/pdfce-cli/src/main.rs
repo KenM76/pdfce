@@ -6049,6 +6049,19 @@ fn cmd_list_layers(input: &Path) -> u8 {
         if !l.name_exact {
             flags.push("name-inexact");
         }
+        // §8.11.2.3: a group whose `/Intent` excludes `View` does not
+        // participate in visibility, so `visible=1` on it is not a
+        // statement about the document's `/OFF` array — it is a
+        // statement that the array does not reach this group.
+        //
+        // Printed only when it is NOT `View`, like every other flag
+        // here: the common case says nothing, and a token on every line
+        // is a token nobody reads. Without it, a `Design` layer named in
+        // `/OFF` prints `visible=1` with no way to tell intent
+        // filtering from a pdfce defect.
+        if !l.intent_view {
+            flags.push("intent-not-view");
+        }
         let rb = match l.radio_group {
             Some(g) => format!(" radio_group={g}"),
             None => String::new(),

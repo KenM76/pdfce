@@ -7617,6 +7617,21 @@ impl PdfceApp {
                             l.visible_by_default,
                         ));
                     }
+                    // §8.11.2.3: a group whose `/Intent` excludes `View`
+                    // does not participate in visibility, so its state in
+                    // `/OFF` has no effect on what a reader draws.
+                    //
+                    // Said out loud because the alternative is an
+                    // operator seeing a layer marked visible that the
+                    // file's own `/OFF` array names, with no way to tell
+                    // whether that is intent filtering or a pdfce bug.
+                    // pdfce inferred something (this group does not
+                    // count) and the inference changed the page — rule
+                    // 4 says the inference is visible, not merely
+                    // correct.
+                    if !l.intent_view {
+                        label = label.on_hover_text(ui_text::layer_design_intent_tooltip());
+                    }
                     if l.locked {
                         label = label.on_hover_text(ui_text::layer_locked_tooltip());
                     }
@@ -7629,8 +7644,8 @@ impl PdfceApp {
                 });
                 diag::trace(|| {
                     format!(
-                        "layer-row name={:?} visible={effective} default={} locked={} registered={}",
-                        l.name, l.visible_by_default, l.locked, l.in_default_config
+                        "layer-row name={:?} visible={effective} default={} locked={} registered={} intent_view={}",
+                        l.name, l.visible_by_default, l.locked, l.in_default_config, l.intent_view
                     )
                 });
             }

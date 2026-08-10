@@ -8602,6 +8602,14 @@ pub fn layers_overridden(n: usize) -> String {
     }
 }
 
+/// Tooltip on a layer whose `/Intent` excludes viewing (§8.11.2.3).
+///
+/// Explains why a layer the document lists as off is shown anyway —
+/// otherwise the only available reading is "pdfce got it wrong".
+pub fn layer_design_intent_tooltip() -> &'static str {
+    "This layer is marked for design use, not viewing, so the document's on/off setting for it does not affect what is drawn."
+}
+
 /// Label on the control that drops every session override.
 pub fn layers_reset_label() -> &'static str {
     "Reset"
