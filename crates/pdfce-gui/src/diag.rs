@@ -164,6 +164,26 @@ pub enum Step {
     /// is the single most valuable thing about this feature to be able to
     /// check from outside.
     ExportDxfCommit,
+    /// Dump every editable text LINE's screen rectangle, once
+    /// (`text:lines`), Pass 24.0 follow-up.
+    ///
+    /// # Why the harness could not test canvas text without this
+    ///
+    /// Enter now commits an Edit Text draft, and that path could not be
+    /// driven at all: a script has to CLICK a text run — both to place the
+    /// caret and because typing is gated on `image_response.has_focus()`,
+    /// which only a real click grants — and nothing emitted where a run
+    /// was. R172 forbids guessing coordinates, and the two harnesses use
+    /// different window sizes, so a screenshot's pixels are not
+    /// transferable either. That left the feature verifiable only by hand.
+    ///
+    /// **One-shot, not per-frame.** A real drawing puts every label on a
+    /// sheet in one text object — measured at 237 runs — and a script runs
+    /// for hundreds of frames, so tracing this every frame would emit tens
+    /// of thousands of lines to say something that does not change. The
+    /// step sets a flag; the tool's own draw consumes it, emits once, and
+    /// clears it.
+    DumpTextLines,
     /// Choose the Create Field tool's field TYPE
     /// (`field-kind:text|check|radio|choice`).
     ///
@@ -465,6 +485,7 @@ fn parse_step(s: &str) -> Option<Step> {
         // not a canvas tool and arms nothing, so filing it under `tool:`
         // would make the harness vocabulary lie about the application's
         // structure — the objection `settings` records just above.
+        "text" if rest.trim() == "lines" => Some(Step::DumpTextLines),
         "export" if rest.trim() == "dxf" => Some(Step::ExportDxf),
         "export" if rest.trim() == "dxf-go" => Some(Step::ExportDxfCommit),
         "view" if rest.trim() == "points" => Some(Step::ShowPoints),
@@ -598,6 +619,8 @@ mod tests {
         assert_eq!(parse_step("export: dxf "), Some(Step::ExportDxf));
         assert_eq!(parse_step("export:dxf-go"), Some(Step::ExportDxfCommit));
         assert_eq!(parse_step("key:enter"), Some(Step::NavKey("enter")));
+        assert_eq!(parse_step("text:lines"), Some(Step::DumpTextLines));
+        assert_eq!(parse_step("text"), None);
         // Rejected, not silently coerced — and a reject is TRACED by
         // `Script::from_env`, which is the whole point of the 2026-08-07
         // `placefield` lesson recorded on this module.

@@ -814,6 +814,18 @@ struct PdfceApp {
     copy_result: Option<CopyTextOutcome>,
     /// Whether the copy-result detail is expanded.
     copy_detail_expanded: bool,
+    /// One-shot request from the `text:lines` diag step: the Edit Text tool
+    /// should dump every line's screen rectangle on its next draw and clear
+    /// this.
+    ///
+    /// A flag rather than a direct dump because the geometry only exists
+    /// inside `run_text_edit_tool` — `image_rect`, `extent` and `zoom` are
+    /// the frame's, and the model is borrowed there. The step dispatcher has
+    /// none of them.
+    ///
+    /// Always `false` unless `PDFCE_DIAG_SCRIPT` asked for it, and never
+    /// load-bearing: with it unset the tool behaves exactly as before.
+    diag_dump_text_lines: bool,
     /// The Export-DXF options window's draft, `None` when it is closed
     /// (Pass 52.2).
     ///
@@ -1434,6 +1446,7 @@ impl Default for PdfceApp {
             // summary is always visible and the detail is there for when
             // the summary says there is something to read.
             copy_detail_expanded: false,
+            diag_dump_text_lines: false,
             dxf_export: None,
             dxf_export_result: None,
             pending_copy: None,
@@ -10953,6 +10966,13 @@ impl eframe::App for PdfceApp {
                         .is_some_and(settings_panel::Draft::is_all_default),
                 );
             }
+            diag::Step::DumpTextLines => {
+                // Consumed by `run_text_edit_tool`, which is the only place
+                // the page geometry and the model are both in scope. Arm the
+                // Edit Text tool FIRST in the script (`tool:text`), or there
+                // is no model to dump and the flag simply expires unused.
+                self.diag_dump_text_lines = true;
+            }
             diag::Step::ExportDxf => {
                 // Through the SAME action the ribbon button pushes, for the
                 // reason `Step::Settings` gives above: a scripted entry that
@@ -15303,7 +15323,19 @@ impl PdfceApp {
             // The click/drag belonged to a ce dimension. Nothing below runs, so
             // the drawing underneath is neither selected nor moved by it.
         } else if doc.active_tool() == Some(CanvasTool::TextEdit) {
-            run_text_edit_tool(doc, ui, &image_response, image_rect, extent, zoom);
+            // `std::mem::take` so the request is consumed exactly once even
+            // if the tool's own draw returns early — the flag must not
+            // survive to a later frame and dump again.
+            let dump_lines = std::mem::take(&mut self.diag_dump_text_lines);
+            run_text_edit_tool(
+                doc,
+                ui,
+                &image_response,
+                image_rect,
+                extent,
+                zoom,
+                dump_lines,
+            );
         } else if doc.active_tool() == Some(CanvasTool::AddText) {
             // Pass 16.2: the Add-Page-Text tool owns the canvas — click places a
             // point caret, drag rubber-bands a wrap box, typing composes a live
@@ -15933,6 +15965,9 @@ fn run_text_edit_tool(
     image_rect: egui::Rect,
     extent: (f32, f32),
     zoom: f32,
+    // One-shot `text:lines` request from the diag harness — see
+    // `PdfceApp::diag_dump_text_lines`. Already cleared by the caller.
+    dump_lines: bool,
 ) {
     use pdfce_core::text_edit::{
         BlockAlignment, BlockRecognitionOptions, EditableTextModel, FontSelector, FormatOptions,
@@ -16000,6 +16035,50 @@ fn run_text_edit_tool(
             viewer::canvas_to_pdf_space(canvas, page)
                 .and_then(|pdf| model.hit_test(f64::from(pdf.x), f64::from(pdf.y)))
         };
+
+        // ★ `text:lines` — where every editable line IS, in the coordinates a
+        // script clicks with. The exact inverse of `hit_at` above, which is
+        // why it lives beside it: if the two ever disagree, the harness aims
+        // at points the hit-test does not resolve, and a working feature
+        // reads as broken.
+        //
+        // This is the first live consumer of `viewer::pdf_space_to_canvas`,
+        // which was built and tested in an earlier Pass for a projection that
+        // was never written — its own `dead_code` note names Pass 9a's
+        // selection outline as the intended caller. That is the R151 shape (a
+        // capability with no caller), and it is discharged here rather than
+        // by writing a second inverse.
+        if dump_lines {
+            for (i, line) in model.lines().iter().enumerate() {
+                let b = line.bbox;
+                // The line's CENTRE, because that is the point a script should
+                // aim at: a corner sits on the boundary the hit-test compares
+                // against, and `hit_in_line` clamps x within the box anyway.
+                let mid = egui::pos2(
+                    ((b.llx + b.urx) / 2.0) as f32,
+                    ((b.lly + b.ury) / 2.0) as f32,
+                );
+                let screen = viewer::pdf_space_to_canvas(mid, page)
+                    .map(|c| viewer::page_to_screen(c, image_rect, extent, zoom));
+                diag::trace(|| {
+                    // ui-text-exempt: diagnostic trace, never displayed in the UI
+                    format!(
+                        "text-line index={i} pdf_bbox=[{:.2},{:.2},{:.2},{:.2}] click={}",
+                        b.llx,
+                        b.lly,
+                        b.urx,
+                        b.ury,
+                        screen.map_or_else(
+                            // A page whose transform will not invert has no
+                            // well-defined canvas point; say so rather than
+                            // emit a plausible wrong number.
+                            || "none".to_owned(),
+                            |p| format!("{:.0},{:.0}", p.x, p.y),
+                        )
+                    )
+                });
+            }
+        }
         if canvas::primary_drag_started(image_response) {
             // §4.1: press sets BOTH ends to the start caret; the drag then moves
             // the focus end (the `dragged()` arm below) while the anchor holds.
