@@ -50,12 +50,21 @@ because the payload and the state are distinguishable.
 THE `-dirty` SUFFIX IS LOAD-BEARING
 ===================================
 
-A build made from an uncommitted working tree gets `-dirty` in its name
-and a warning in `BUILD-INFO.txt`. Without it, a folder named for a
+A build whose BINARIES are not the named commit gets `-dirty` in its
+name and a warning in `BUILD-INFO.txt`. Without it, a folder named for a
 commit would be a claim the operator could reasonably rely on and that
 would sometimes be false — which is exactly the class of error this
 project keeps finding in its own documents (R175: a document asserting
 an unmeasured fact about its environment).
+
+The test is deliberately narrower than "the working tree has changes".
+Modifications under `docs/`, `fixtures/` and `.claude/` cannot reach a
+compiler, so a package built while a documentation agent was writing is
+still, exactly, the named commit. Flagging those produced a warning that
+said the build "cannot be recovered from the hash alone" when it could
+— and a warning that fires when nothing is wrong is one that gets
+ignored when something is. Non-build changes are still REPORTED in
+`BUILD-INFO.txt`, just not as a claim about the payload.
 
 EXIT CODES
 ==========
@@ -69,6 +78,7 @@ something else is writing there.
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import subprocess
 import sys
@@ -169,7 +179,49 @@ def main() -> int:
     # --- identity, before anything is built --------------------------------
     short = git("rev-parse", "--short", "HEAD") or "unknown"
     subject = git("log", "-1", "--format=%s")
-    dirty = bool(git("status", "--porcelain"))
+    # ★ DIRTY MEANS "THE BINARIES ARE NOT THIS COMMIT", NOT "THE TREE MOVED".
+    #
+    # This was `bool(git("status", "--porcelain"))`, which flags a build as
+    # unrecoverable whenever ANY file differs — including `docs/`, agent
+    # memory under `.claude/`, and `fixtures/`, none of which reach a
+    # compiler. A package built while a librarian agent was editing
+    # `ROADMAP.md` got `-dirty` and a warning saying its code "is in no
+    # commit and cannot be recovered from the hash", which was false: the
+    # binaries were exactly that commit.
+    #
+    # A warning that fires when nothing is wrong is a warning that gets
+    # ignored when something is, so the two states are now separated
+    # rather than merged into one flag. The build-affecting set is
+    # deliberately GENEROUS — anything that could plausibly reach the
+    # compiler counts, because under-reporting here produces the false
+    # reassurance the suffix exists to prevent, and over-reporting only
+    # costs an unnecessary suffix.
+    porcelain = git("status", "--porcelain").splitlines()
+    def _path_of(line):
+        # `XY <path>`, or `XY <old> -> <new>` for a rename; the destination
+        # is what exists on disk now.
+        #
+        # ★ Parsed with a regex rather than `line[3:]`, because the status
+        # field is two columns and either may be a SPACE — and this
+        # module's `git()` helper strips its output, which removes the
+        # leading space from the FIRST line only. A fixed offset therefore
+        # ate one character of exactly one path per run: the list read
+        # `claude/agent-memory/...` where the file is `.claude/...`.
+        #
+        # One wrong entry in a list of correct ones is the worst version
+        # of this bug — the list looks right, so the reader trusts the
+        # entry that is not, and a path that does not exist reads as a
+        # file that was deleted rather than as a parse error.
+        m = re.match(r"^\s*\S{1,2}\s+(.*)$", line)
+        if not m:
+            return ""
+        return m.group(1).split(" -> ")[-1].strip().strip('"')
+
+    BUILD_AFFECTING = ("crates/", "Cargo.toml", "Cargo.lock", "rust-toolchain", ".cargo/", "build.rs")
+    changed = [_path_of(line) for line in porcelain if line.strip()]
+    dirty_build = [p for p in changed if p.startswith(BUILD_AFFECTING)]
+    dirty_other = [p for p in changed if p not in dirty_build]
+    dirty = bool(dirty_build)
     stamp = datetime.now().strftime("%Y%m%d-%H%M")
     name = f"pdfce-{stamp}-{short}" + ("-dirty" if dirty else "")
     out = args.dest / name
@@ -224,6 +276,15 @@ def main() -> int:
         changes = "\n".join(f"  {line}" for line in changes.splitlines())
 
     warn = ""
+    if dirty_other and not dirty:
+        listed = "\n".join(f"  {q}" for q in dirty_other[:10])
+        more = "\n  ..." if len(dirty_other) > 10 else ""
+        warn = (
+            "\nWorking tree note: files outside the build were modified when this\n"
+            "was packaged (documentation, fixtures, or agent memory). None of them\n"
+            "reach the compiler, so the binaries here ARE the commit below:\n"
+            f"{listed}{more}\n"
+        )
     if dirty:
         warn = (
             "\n*** BUILT FROM AN UNCOMMITTED WORKING TREE ***\n"
