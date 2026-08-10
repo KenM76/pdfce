@@ -1016,6 +1016,47 @@ enum Command {
     /// Acrobat clips an oversized page silently. This names the pages
     /// that would lose content, so a scripted caller can refuse before
     /// paper is consumed rather than discover it afterwards.
+    /// **Send pages to a printer.** Does a DRY RUN unless `--send` is
+    /// given.
+    ///
+    /// Every step runs either way — the device is opened, its resolution
+    /// and printable area are read, placement is computed and the pages
+    /// are rasterised. `--send` is the only thing that starts a job.
+    ///
+    /// That default is inverted from most tools on purpose: printing is
+    /// irreversible, consumes paper, and occupies a device other people
+    /// may share.
+    Print {
+        /// Input PDF.
+        input: PathBuf,
+        /// Printer name, as `list-printers` reports it. Defaults to the
+        /// system default printer.
+        #[arg(long)]
+        printer: Option<String>,
+        /// How the page is sized onto the sheet.
+        #[arg(long, value_enum, default_value_t = PrintScaleArg::Fit)]
+        scale: PrintScaleArg,
+        /// An explicit percentage, where 100 is actual size. OVERRIDES
+        /// `--scale` when given.
+        #[arg(long, value_parser = clap::value_parser!(u32).range(1..=1000))]
+        scale_percent: Option<u32>,
+        /// 1-based pages: `all`, `3`, `1-4`, `5,1-2`.
+        #[arg(long, default_value = "all")]
+        pages: String,
+        /// **Actually print.** Without this the command stops before
+        /// starting the job and reports what it would have done.
+        #[arg(long)]
+        send: bool,
+        /// Cap the rendering resolution, in DPI.
+        ///
+        /// A memory decision, not a quality one: an A4 page at 600 DPI is
+        /// 4960x7016 px, about 139 MB at RGBA for a single page. The cap
+        /// is disclosed on stderr whenever it binds, because it is pdfce
+        /// choosing a number the operator did not.
+        #[arg(long, default_value_t = 300, value_parser = clap::value_parser!(u32).range(36..=2400))]
+        max_dpi: u32,
+    },
+
     PrintPreview {
         /// Input PDF.
         input: PathBuf,
@@ -3950,6 +3991,23 @@ fn run() -> ExitCode {
         Command::ListLayers { input } => cmd_list_layers(&input),
         Command::ListSignatures { input } => cmd_list_signatures(&input),
         Command::ListPrinters => cmd_list_printers(),
+        Command::Print {
+            input,
+            printer,
+            scale,
+            scale_percent,
+            pages,
+            send,
+            max_dpi,
+        } => cmd_print(
+            &input,
+            printer.as_deref(),
+            scale,
+            scale_percent,
+            &pages,
+            send,
+            max_dpi,
+        ),
         Command::PrintPreview {
             input,
             printer,
@@ -6363,6 +6421,196 @@ impl PrintScaleArg {
     }
 }
 
+/// `print` — send pages to a printer.
+///
+/// # ★ It does a DRY RUN unless told otherwise
+///
+/// `--send` is required to start a job. Without it every step runs —
+/// device context, capability query, placement, rasterisation, the page
+/// loop — and stops before `StartDoc`.
+///
+/// That default is the opposite of most tools and is deliberate. Printing
+/// is irreversible, consumes a physical resource, and occupies a device
+/// other people may be waiting for. A command whose safe mode is the one
+/// you get by *not* thinking is a command that fails safely for the
+/// person who mistyped a page range at 2 a.m.
+///
+/// It also makes the command testable by its own author on a machine
+/// with one printer whose owner is sitting at it — which is how this was
+/// written.
+///
+/// # Rasterised, and it says so
+///
+/// pdfce renders each page to pixels and sends the bitmap. Reader sends
+/// vector and text to the driver and lets it RIP, keeping "print as
+/// image" as an explicitly-invoked fallback for driver bugs
+/// (`printing__rendering_pipeline_and_resolution.md`).
+///
+/// So pdfce's default IS Reader's fallback. On a CAD drawing that is
+/// visibly coarser than the driver's own output, and an operator
+/// printing a drawing needs telling before the paper comes out, not
+/// after. The result line says `mode=raster` on every run for that
+/// reason.
+fn cmd_print(
+    input: &Path,
+    printer: Option<&str>,
+    scale: PrintScaleArg,
+    scale_percent: Option<u32>,
+    pages_spec: &str,
+    send: bool,
+    dpi_cap: u32,
+) -> u8 {
+    let doc = match pdfce_core::document::Document::load(input) {
+        Ok(doc) => doc,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit_code_for_doc(&err);
+        }
+    };
+    let all = match pdfce_print::list_printers() {
+        Ok(p) => p,
+        Err(err) => {
+            eprintln!("pdfce-cli: {err}");
+            return exit::IO_ERROR;
+        }
+    };
+    let name = match printer {
+        Some(name) => name.to_owned(),
+        None => match all.iter().find(|p| p.is_default) {
+            Some(p) => p.name.clone(),
+            None => {
+                eprintln!(
+                    "pdfce-cli: no default printer is set — pass --printer with one of the names from `pdfce-cli list-printers`"
+                );
+                return exit::EDIT_REFUSED;
+            }
+        },
+    };
+    let session = pdfce_core::edit::EditSession::new(doc);
+    let page_list = match session.pages() {
+        Ok(p) => p,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit::RUNTIME_ERROR;
+        }
+    };
+    let selected = match parse_pages(pages_spec, page_list.len()) {
+        Ok(s) => s,
+        Err(msg) => {
+            eprintln!("pdfce-cli: {msg}");
+            return exit::RUNTIME_ERROR;
+        }
+    };
+    let caps = match pdfce_print::printer_caps(&name) {
+        Ok(c) => c,
+        Err(err) => {
+            eprintln!("pdfce-cli: {err}");
+            return exit::EDIT_REFUSED;
+        }
+    };
+
+    // The resolution cap is a MEMORY decision, disclosed because pdfce
+    // chose a number the operator did not ask for (rule 4). An A4 page at
+    // 600 DPI is 4960x7016 px — about 139 MB at RGBA for ONE page.
+    let dpi = caps.dpi_x.min(caps.dpi_y).min(dpi_cap);
+    let capped = dpi < caps.dpi_x.min(caps.dpi_y);
+
+    let mode = match scale_percent {
+        Some(pct) => pdfce_print::ScaleMode::Custom(f64::from(pct) / 100.0),
+        None => scale.to_mode(),
+    };
+    let mut bitmaps: Vec<pdfce_print::PageBitmap> = Vec::new();
+    let mut clipped = 0usize;
+
+    for &index in &selected {
+        let Some(page) = page_list.get(index) else {
+            continue;
+        };
+        let mb = page.media_box;
+        let size = ((mb.urx - mb.llx).abs(), (mb.ury - mb.lly).abs());
+        let placement = pdfce_print::place_page(size, caps.printable_pt, mode);
+        if placement.clipped {
+            clipped += 1;
+        }
+        // Render at the DEVICE's resolution scaled by the placement, so
+        // the pixels handed to GDI already carry the print scale and the
+        // blit is a 1:1 copy rather than a resample. Resampling twice —
+        // once here and once in `StretchDIBits` — is how a printed line
+        // ends up softer than the same line on screen.
+        let render_scale = (f64::from(dpi) / 72.0) * placement.scale;
+        let options = pdfce_render::RenderOptions::default();
+        let rendered = match pdfce_render::render_page_with_view(
+            &session.view(),
+            page,
+            render_scale as f32,
+            &options,
+        ) {
+            Ok(r) => r,
+            Err(err) => {
+                eprintln!("pdfce-cli: page {}: {err}", index + 1);
+                return exit::RUNTIME_ERROR;
+            }
+        };
+        bitmaps.push(pdfce_print::PageBitmap {
+            width: rendered.pixmap.width(),
+            height: rendered.pixmap.height(),
+            rgba: rendered.pixmap.data().to_vec(),
+            placement,
+            page_pt: size,
+        });
+    }
+
+    let dry = if send {
+        pdfce_print::DryRun::No
+    } else {
+        pdfce_print::DryRun::Yes
+    };
+    let report = match pdfce_print::spool(&name, &bitmaps, dry) {
+        Ok(r) => r,
+        Err(err) => {
+            eprintln!("pdfce-cli: {err}");
+            return exit::RUNTIME_ERROR;
+        }
+    };
+
+    if capped {
+        eprintln!(
+            "pdfce-cli: rendering at {dpi} DPI, below the printer's {}x{}. A full-resolution page \
+             costs about {} MB of memory each; raise --max-dpi if you need the detail and have \
+             the memory.",
+            caps.dpi_x,
+            caps.dpi_y,
+            (u64::from(caps.dpi_x) * u64::from(caps.dpi_y) * 8 * 11 * 4) / 1_000_000
+        );
+    }
+    if clipped > 0 {
+        eprintln!(
+            "pdfce-cli: {clipped} page(s) do not fit the printable area and will lose content off \
+             the edges. Acrobat clips silently here; pdfce says so. Use --scale fit to avoid it."
+        );
+    }
+    if !report.printed {
+        eprintln!(
+            "pdfce-cli: DRY RUN — nothing was printed and no job was queued. Everything up to \
+             starting the job ran against the real device. Add --send to print."
+        );
+    }
+
+    println!(
+        "print {} printer={name:?} pages={} printed={} dpi={}x{} clipped={} mode=raster job={}",
+        input.display(),
+        report.pages,
+        u8::from(report.printed),
+        report.dpi.0,
+        report.dpi.1,
+        report.clipped_pages,
+        report
+            .job_id
+            .map_or_else(|| "-".to_owned(), |j| j.to_string()),
+    );
+    exit::SUCCESS
+}
+
 /// `print-preview` — what a print WOULD do, without doing it.
 ///
 /// # Why this exists before `print` does
@@ -6417,8 +6665,7 @@ fn cmd_print_preview(
             Some(p) => p.name.clone(),
             None => {
                 eprintln!(
-                    "pdfce-cli: no default printer is set — pass --printer with one of the \
-                     names from `pdfce-cli list-printers`"
+                    "pdfce-cli: no default printer is set — pass --printer with one of the names from `pdfce-cli list-printers`"
                 );
                 return exit::EDIT_REFUSED;
             }

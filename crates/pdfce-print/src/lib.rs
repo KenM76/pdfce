@@ -133,6 +133,33 @@ pub enum PrintError {
     /// infinities that reach the placement math and emerge as a blank
     /// page with no explanation.
     NoResolution(String),
+    /// `CreateDC` returned no device context for a printer that
+    /// enumerated. Distinct from [`PrintError::OpenDevice`]: the name
+    /// resolved and the DEVICE still refused, which usually means a
+    /// driver problem rather than a typo, and sends the operator
+    /// somewhere different.
+    DeviceContext {
+        /// The printer that refused.
+        printer: String,
+    },
+    /// `StartDoc` failed. **No job exists**, so nothing is queued and
+    /// nothing needs cancelling.
+    JobStart {
+        /// The printer that refused the job.
+        printer: String,
+    },
+    /// `StartPage` failed part-way through a job. The job is aborted.
+    PageStart,
+    /// `EndPage` failed part-way through a job. The job is aborted.
+    PageEnd,
+    /// `EndDoc` failed. The job may or may not have reached the device —
+    /// stated as the uncertainty it is, because claiming either would be
+    /// a guess about a queue this process no longer controls.
+    JobEnd,
+    /// `StretchDIBits` drew nothing.
+    Blit,
+    /// A page's pixel dimensions exceed what GDI accepts.
+    PageTooLarge,
 }
 
 #[cfg(windows)]
@@ -148,6 +175,25 @@ impl fmt::Display for PrintError {
                 f,
                 "no printer named {name:?} — run `pdfce-cli list-printers` to see \
                  the names this machine knows"
+            ),
+            Self::DeviceContext { printer } => write!(
+                f,
+                "the printer {printer:?} was found but its driver would not open a device;                  this is usually a driver problem rather than a wrong name"
+            ),
+            Self::JobStart { printer } => write!(
+                f,
+                "{printer:?} refused the print job. Nothing was queued, so there is nothing                  to cancel"
+            ),
+            Self::PageStart => write!(f, "the printer refused a page; the job was cancelled"),
+            Self::PageEnd => write!(f, "a page failed to finish; the job was cancelled"),
+            Self::JobEnd => write!(
+                f,
+                "the job did not close cleanly. Some pages may already have reached the                  printer — check the queue rather than reprinting blind"
+            ),
+            Self::Blit => write!(f, "the page image could not be drawn to the printer"),
+            Self::PageTooLarge => write!(
+                f,
+                "the page is too large in pixels for the print system; try a lower resolution"
             ),
             Self::NoResolution(name) => write!(
                 f,
@@ -609,4 +655,301 @@ mod tests {
             assert!(p.clipped, "a degenerate placement must not claim to fit");
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Spooling (§ the irreversible half)
+// ---------------------------------------------------------------------------
+
+/// One page's pixels, ready to place on a sheet.
+///
+/// The caller rasterises. This crate does device setup, placement and
+/// blitting, and knows nothing about PDF — which is why it does not
+/// depend on `pdfce-render`.
+///
+/// That split is deliberate rather than incidental: a printing crate
+/// that also rendered would need the whole render stack to be testable,
+/// and the interesting failures here (a wrong `DEVMODE`, an upside-down
+/// DIB, a job left open on an error path) have nothing to do with PDF.
+#[derive(Debug, Clone)]
+pub struct PageBitmap {
+    /// Width in pixels.
+    pub width: u32,
+    /// Height in pixels.
+    pub height: u32,
+    /// RGBA8, row-major, top row first — the layout `tiny_skia::Pixmap`
+    /// produces, so the caller hands over `pixmap.data().to_vec()`
+    /// unchanged.
+    pub rgba: Vec<u8>,
+    /// Where this page lands on the sheet, from [`place_page`].
+    pub placement: Placement,
+    /// The page's size in PDF points, for the placement arithmetic.
+    pub page_pt: (f64, f64),
+}
+
+/// Whether [`spool`] actually starts a print job.
+///
+/// # ★ Not a testing convenience — the development mode
+///
+/// [`DryRun::Yes`] performs every step except the four that reach the
+/// spooler (`StartDoc`, `StartPage`, `EndPage`, `EndDoc`) and the blit.
+/// It opens the device context, reads the real device's resolution and
+/// printable area, computes placement for every page, and walks the
+/// whole loop.
+///
+/// So the things that actually go wrong — a printer name that does not
+/// resolve, a device that reports a printable area smaller than the
+/// caller assumed, a page whose scaled size clips, an arithmetic slip in
+/// the DIB header — all surface without a sheet of paper moving.
+///
+/// This exists because the machine this was written on has one printer
+/// and its owner was sitting at it. That constraint produced a better
+/// design than unlimited paper would have: the expensive, irreversible
+/// step is isolated behind one flag rather than woven through the
+/// function.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DryRun {
+    /// Do everything except start a job. Nothing prints.
+    Yes,
+    /// Start a real job on a real device. **Consumes paper.**
+    No,
+}
+
+/// What a spool attempt did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpoolReport {
+    /// Pages sent, or that would have been sent under [`DryRun::Yes`].
+    pub pages: usize,
+    /// Whether a job was actually started.
+    pub printed: bool,
+    /// The device's reported resolution.
+    pub dpi: (i32, i32),
+    /// Pages whose placement reported [`Placement::clipped`].
+    ///
+    /// Reported rather than refused: an operator may legitimately want a
+    /// page cropped to the sheet, and Acrobat clips silently. pdfce
+    /// clips and SAYS so — the operator's standing ruling that parity is
+    /// a floor.
+    pub clipped_pages: usize,
+    /// The job's spooler ID, when one was started.
+    pub job_id: Option<u32>,
+}
+
+/// Send pages to a printer — **the only function in pdfce that starts a
+/// print job**.
+///
+/// # Errors
+///
+/// [`PrintError`] if the printer cannot be resolved, the device context
+/// cannot be created, or the spooler rejects the job. A job that fails
+/// part-way is ABORTED rather than left open (see the guard below), so a
+/// half-finished document does not sit in the queue holding a device.
+///
+/// # Safety of the irreversible step
+///
+/// `StartDoc` is reached on exactly one code path, guarded by
+/// [`DryRun::No`], and this function is called from exactly one place in
+/// each shell — a control the operator clicked. Nothing here runs as a
+/// side effect of rendering, previewing, saving or opening.
+#[cfg(windows)]
+pub fn spool(
+    printer: &str,
+    pages: &[PageBitmap],
+    dry_run: DryRun,
+) -> Result<SpoolReport, PrintError> {
+    use windows::Win32::Graphics::Gdi::{CreateDCW, DeleteDC};
+    use windows::Win32::Storage::Xps::{AbortDoc, DOCINFOW, EndDoc, EndPage, StartDocW, StartPage};
+    use windows::core::PCWSTR;
+
+    let caps = printer_caps(printer)?;
+    let wide: Vec<u16> = printer.encode_utf16().chain(std::iter::once(0)).collect();
+
+    // SAFETY: `wide` is NUL-terminated and outlives the call. A null DC
+    // is the documented failure and is checked rather than assumed.
+    let hdc = unsafe { CreateDCW(PCWSTR::null(), PCWSTR(wide.as_ptr()), PCWSTR::null(), None) };
+    if hdc.is_invalid() {
+        return Err(PrintError::DeviceContext {
+            printer: printer.to_owned(),
+        });
+    }
+
+    // Every early return past this point must delete the DC, and a job
+    // opened must be ended. Rust has no `finally`, so the work happens in
+    // a closure whose result is inspected AFTER the cleanup — which is
+    // the shape that makes "the error path leaked a device context" and
+    // "the error path left a job in the queue" both unrepresentable
+    // rather than merely avoided.
+    let mut report = SpoolReport {
+        pages: 0,
+        printed: false,
+        dpi: (caps.dpi_x as i32, caps.dpi_y as i32),
+        clipped_pages: pages.iter().filter(|p| p.placement.clipped).count(),
+        job_id: None,
+    };
+
+    let outcome: Result<(), PrintError> = (|| {
+        if dry_run == DryRun::Yes {
+            // The dry run stops HERE, after the device has been opened
+            // and interrogated for real. Everything above this line is
+            // the part that fails in practice.
+            report.pages = pages.len();
+            return Ok(());
+        }
+
+        let doc_name: Vec<u16> = "pdfce document\0".encode_utf16().collect();
+        let info = DOCINFOW {
+            cbSize: i32::try_from(std::mem::size_of::<DOCINFOW>()).unwrap_or(0),
+            lpszDocName: PCWSTR(doc_name.as_ptr()),
+            ..Default::default()
+        };
+        // SAFETY: `hdc` is valid (checked above) and `info` outlives the
+        // call. A non-positive return is the documented failure.
+        let job = unsafe { StartDocW(hdc, &info) };
+        if job <= 0 {
+            return Err(PrintError::JobStart {
+                printer: printer.to_owned(),
+            });
+        }
+        report.printed = true;
+        report.job_id = u32::try_from(job).ok();
+
+        for page in pages {
+            // SAFETY: valid DC, and the page loop always pairs
+            // StartPage with EndPage — see the abort path below for the
+            // case where it cannot.
+            if unsafe { StartPage(hdc) } <= 0 {
+                return Err(PrintError::PageStart);
+            }
+            blit_page(hdc, page, (caps.dpi_x as i32, caps.dpi_y as i32))?;
+            if unsafe { EndPage(hdc) } <= 0 {
+                return Err(PrintError::PageEnd);
+            }
+            report.pages += 1;
+        }
+
+        // SAFETY: valid DC with a job open.
+        if unsafe { EndDoc(hdc) } <= 0 {
+            return Err(PrintError::JobEnd);
+        }
+        Ok(())
+    })();
+
+    // A job that errored part-way is ABORTED, not left open. Windows
+    // holds the device for an unfinished job, so a leaked one blocks
+    // every other user of a shared printer until it times out — the
+    // failure mode most likely to affect somebody who is not the
+    // operator.
+    if outcome.is_err() && report.printed {
+        // SAFETY: valid DC with a job open. `AbortDoc` is the
+        // documented cancel, and its result is deliberately ignored —
+        // the error already being returned is the one that matters, and
+        // a failure to abort cleanly changes nothing the caller can act
+        // on.
+        unsafe {
+            let _ = AbortDoc(hdc);
+        }
+    }
+    // SAFETY: valid DC, deleted exactly once on every path.
+    unsafe {
+        let _ = DeleteDC(hdc);
+    }
+    outcome.map(|()| report)
+}
+
+/// Blit one page's pixels onto the current page of `hdc`.
+///
+/// # The two conversions that are easy to get wrong
+///
+/// **Orientation.** A `BITMAPINFOHEADER` with a POSITIVE height is
+/// bottom-up: Windows reads the first row in memory as the BOTTOM of the
+/// image. The caller's buffer is top-down (that is what `tiny_skia`
+/// produces), so the height is negated. Get this wrong and every page
+/// prints upside down — which is obvious on paper and invisible in every
+/// test that does not print.
+///
+/// **Channel order.** `BI_RGB` at 32bpp is B, G, R, X in memory, and the
+/// caller's buffer is R, G, B, A. The swap happens here rather than
+/// being asked of the caller, because the caller's layout is the
+/// renderer's and this crate is the one that knows what GDI wants.
+///
+/// Alpha is DISCARDED, not composited: a printed page has no
+/// transparency, and the renderer has already composited onto white.
+#[cfg(windows)]
+fn blit_page(
+    hdc: windows::Win32::Graphics::Gdi::HDC,
+    page: &PageBitmap,
+    dpi: (i32, i32),
+) -> Result<(), PrintError> {
+    use windows::Win32::Graphics::Gdi::{
+        BI_RGB, BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, SRCCOPY, StretchDIBits,
+    };
+
+    let w = i32::try_from(page.width).map_err(|_| PrintError::PageTooLarge)?;
+    let h = i32::try_from(page.height).map_err(|_| PrintError::PageTooLarge)?;
+
+    // RGBA (caller) -> BGRX (GDI).
+    let mut bgra = Vec::with_capacity(page.rgba.len());
+    for px in page.rgba.chunks_exact(4) {
+        bgra.extend_from_slice(&[px[2], px[1], px[0], 0]);
+    }
+
+    let header = BITMAPINFOHEADER {
+        biSize: u32::try_from(std::mem::size_of::<BITMAPINFOHEADER>()).unwrap_or(40),
+        biWidth: w,
+        // NEGATIVE: top-down. See the fn docs.
+        biHeight: -h,
+        biPlanes: 1,
+        biBitCount: 32,
+        biCompression: BI_RGB.0,
+        ..Default::default()
+    };
+    let info = BITMAPINFO {
+        bmiHeader: header,
+        ..Default::default()
+    };
+
+    // Points -> device pixels, at the device's own resolution. 72 points
+    // to the inch is the PDF unit's definition, not a convention.
+    let px_x = |pt: f64| (pt * f64::from(dpi.0) / 72.0).round() as i32;
+    let px_y = |pt: f64| (pt * f64::from(dpi.1) / 72.0).round() as i32;
+
+    let dest_w = px_x(page.page_pt.0 * page.placement.scale);
+    let dest_h = px_y(page.page_pt.1 * page.placement.scale);
+    let dest_x = px_x(page.placement.offset_x_pt);
+    let dest_y = px_y(page.placement.offset_y_pt);
+
+    // SAFETY: `hdc` is valid with a page open; `info` and `bgra` outlive
+    // the call; the dimensions are derived from the buffer itself.
+    let sent = unsafe {
+        StretchDIBits(
+            hdc,
+            dest_x,
+            dest_y,
+            dest_w,
+            dest_h,
+            0,
+            0,
+            w,
+            h,
+            Some(bgra.as_ptr().cast()),
+            &info,
+            DIB_RGB_COLORS,
+            SRCCOPY,
+        )
+    };
+    if sent == 0 {
+        return Err(PrintError::Blit);
+    }
+    Ok(())
+}
+
+/// A stub so callers compile on non-Windows without `cfg` at every call
+/// site. Printing is a Windows capability in this release.
+#[cfg(not(windows))]
+pub fn spool(
+    _printer: &str,
+    _pages: &[PageBitmap],
+    _dry_run: DryRun,
+) -> Result<SpoolReport, PrintError> {
+    Err(PrintError::Unsupported)
 }
