@@ -482,6 +482,32 @@ pub struct Field {
     ///
     /// `None` on any field without the entry, which is nearly all of them.
     pub rich_value: Option<Vec<u8>>,
+    /// `/DS` — the field's **default style string** (§12.7.3.4).
+    ///
+    /// A bare CSS declaration list (`font: 12pt Helvetica; color: #FF0000`)
+    /// with **no element around it** — not XML, unlike [`Self::rich_value`].
+    /// Feeding it to an XML reader is a natural mistake that produces
+    /// nothing useful and no error worth reading; [`crate::richtext::parse`]
+    /// takes it as a separate parameter for that reason.
+    ///
+    /// # Not optional decoration — a required input
+    ///
+    /// RT-M6 is a `shall`: *"This string, in addition to the `RV` or `RC`
+    /// entry, shall be used to generate the appearance."* It supplies the
+    /// default for every Table 225 attribute a run does not set itself, so
+    /// a field whose `/RV` says only `<b>x</b>` gets its size, family and
+    /// colour from here and from nowhere else. Modelling `/RV` without
+    /// `/DS` leaves a run's style unresolvable.
+    ///
+    /// # What this does NOT settle
+    ///
+    /// `/DA` remains Required (Table 222) on a variable-text field, and
+    /// **its precedence against `/DS` is undefined** when both could set
+    /// the same attribute (RT-A6) — ISO 32000-1 states no rule and no
+    /// Acrobat tiebreak has been found. That resolution is a setting, not a
+    /// default to be picked here; this field's presence deliberately does
+    /// not imply it wins.
+    pub default_style: Option<Vec<u8>>,
     /// The resolved field type, or `None` for a terminal field with no
     /// resolvable `/FT` (a malformed field — surfaced, not repaired).
     pub field_type: Option<FieldType>,
@@ -1236,6 +1262,17 @@ fn walk_field<G: ObjectGraph + ?Sized>(
         // destroy the only copy of the formatting.
         rich_value: dict
             .get(b"RV")
+            .map(|o| graph.resolve(o))
+            .and_then(string_bytes),
+        // Read on the same terms and for the same reason: `/DS` is not
+        // decoration beside `/RV`, it is a REQUIRED input to the same
+        // appearance generation (RT-M6 — "This string, in addition to the
+        // RV or RC entry, shall be used to generate the appearance"), and
+        // it supplies the default for every Table 225 attribute a run does
+        // not set. A model carrying `/RV` without `/DS` cannot resolve a
+        // run's style at all.
+        default_style: dict
+            .get(b"DS")
             .map(|o| graph.resolve(o))
             .and_then(string_bytes),
         mapping_name: dict
@@ -2184,6 +2221,7 @@ mod tests {
             partial_name: None,
             alternate_name: None,
             rich_value: None,
+            default_style: None,
             mapping_name: None,
             field_type: Some(FieldType::Button),
             button_kind: Some(ButtonKind::Radio),
@@ -2226,6 +2264,7 @@ mod tests {
             partial_name: None,
             alternate_name: None,
             rich_value: None,
+            default_style: None,
             mapping_name: None,
             field_type: Some(FieldType::Text),
             button_kind: None,
@@ -2262,6 +2301,7 @@ mod tests {
             partial_name: None,
             alternate_name: None,
             rich_value: None,
+            default_style: None,
             mapping_name: None,
             field_type: Some(FieldType::Signature),
             button_kind: None,

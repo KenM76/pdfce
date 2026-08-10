@@ -30884,3 +30884,174 @@ librarian has no shell this dispatch (hard rule 8). This is the
 **seventy-first** `SESSION_LOG.md` filing (the seventieth confirmed
 present by direct read before this entry was appended, with the
 misplaced sixty-ninth ledger paragraph noted above rather than moved).
+
+## 2026-08-10 (seventy-second filing) — `7c6ef0f`: the seventy-first filing's flagged ordering defect is REPAIRED and independently re-verified by direct read; `03f86a1`: `Pass 37.3` gains a fourth slice — the FDF/XFDF XML parser now records mixed-content order, the substrate true `/RV`-preserving fill needs; four Acrobat/spec findings recorded; `RT-A6` filed as a new spec-ambiguity settings candidate before either build branch could decide it by accident
+
+**Sourcing.** This librarian has Grep/Read but no shell this dispatch
+(hard rule 8) — neither hash is confirmed against `git log`/`git show`.
+Independently verified by direct read: `docs/SESSION_LOG.md` lines
+30521–30631 (the sixty-ninth entry's header, body and own "Ledger for
+this filing" paragraph now sit contiguously, ending with its own filing
+count sentence, immediately followed by the seventieth entry's header —
+the misplacement is gone); the file's own line count (30,886 lines,
+confirmed by direct count) with the seventy-first entry still the true
+end of file; `crates/pdfce-core/src/fdf.rs:506–567` (`XmlNode` enum,
+`XmlElement::nodes` field, doc comment in full) and `:902–957` (both new
+tests, asserted in full — the flattened view unchanged, the ordered view
+correct, the two-child test distinguishing a real index from a
+hard-coded `0`); `fuzz/fuzz_targets/fdf_parse.rs` (fuzz-target claim
+confirmed); `C:\personal_rag\pdf\index.md` and `D:\dev\rag\rust\index.md`
+grepped for `rich text`/`mixed content`/`XmlNode` before writing anything
+— zero hits, nothing duplicated. Not independently verified: the four
+Acrobat/spec findings' own sourcing (relayed from the dispatch's citation
+of the returning librarians' work); no gate results were stated in the
+dispatch for either commit and none are asserted here.
+
+**Shipped:**
+- `7c6ef0f` (2026-08-10) — moves the sixty-ninth filing's own "Ledger for
+  this filing" paragraph back inside its own entry, correctly
+  distinguished from a REVISION (hard rule 1 forbids revising what a past
+  entry says; this repairs where it sits, which the paragraph never
+  reached in the first place). Verified above: sixty-ninth entry now
+  closes cleanly before the seventieth entry's header; seventieth's own
+  ledger untouched; seventy-first entry unmoved as the true end of file.
+- `03f86a1` (2026-08-10) — `Pass 37.3` gains a fourth slice, no new Pass
+  ID. `fdf.rs`'s hand-written XML reader gains `XmlNode`
+  (`Text(String)`/`Child(usize)`) and `XmlElement::nodes: Vec<XmlNode>`,
+  recording mixed-content order ADDITIVELY alongside the existing
+  flattened `text`/`children` fields — every existing XFDF-reading caller
+  untouched. Closes the specific gap true `/RV`-preserving rich-text fill
+  needs: `<p>Hello <b>bold</b> world</p>` flattens to `"Hello  world"`,
+  losing exactly where the bold run belonged, which option (3) [true
+  `/RV`-preserving fill] cannot regenerate an appearance from. Extending
+  the existing fuzzed parser, not writing a second one, per project rule
+  2/13's don't-duplicate-a-grammar posture. Two tests: order-and-spacing
+  preservation, and a two-child case distinguishing a real index from a
+  hard-coded `0`. No `richtext` property-set module yet — deliberately,
+  the shape was still being verified against the spec/Acrobat RAG record
+  in parallel. `docs/FEATURES.md` row 285 gets an addendum only, no
+  checkbox change.
+
+**Decisions made this session:**
+- The ordering defect is a REPAIR, not a revision — hard rule 1 forbids
+  changing what a past entry says; the misplaced paragraph never reached
+  its own entry, so relocating it makes the file match what the sixty-
+  ninth filing actually wrote. Recorded as a general distinction (append-
+  only forbids REVISING content, not correcting WHERE a filing accident
+  left it), not only as this-instance reasoning.
+- `Pass 37.3` gains a fourth slice under its EXISTING ID rather than a
+  new mint — checked against grep before filing, per `R156`.
+- `RT-A6` (`/DA`-vs-`/DS` precedence, undefined) is filed as a new
+  spec-ambiguity SETTINGS candidate in `ROADMAP.md` *Backlog*, per the
+  operator's standing never-hard-code-an-open-question instruction —
+  filed before either `Pass 37.3` build branch reaches the point of
+  deciding it by whichever code path is written first. Not yet given a
+  register rank/ID by a `pdfce-spec-librarian` corpus-wide triage
+  dispatch — same status `cmyk_intent`/`IM-A1` carried before their own
+  back-fill.
+- A recommended architecture (`/V` always derived from `/RV`+`/DS`, never
+  independently editable) is filed as a decision CANDIDATE, explicitly
+  NOT authored — decision records come from the autonomous-builder/
+  KenAgent dispatch, not from this librarian directly (the same limit
+  that has left `034`/`035` CLAIMED-by-citation/UNAUTHORED). `036` named
+  as the next genuinely free number if the engineer opens it, not claimed
+  here.
+- No RAG file written to `D:\dev\rag\rust\` for the additive-order-
+  alongside-flattened-view parser technique — grepped first (zero hits),
+  then judged as a reasonably standard technique once the requirement is
+  stated, not a non-obvious gotcha this project had to fight for. The
+  four Acrobat/spec findings are not written to `C:\personal_rag\pdf\`
+  either — they are canonical spec-interpretation/Acrobat-behavior
+  content, already the two feature-parity librarians' own territory and
+  already cited by RAG file/ID, not empirical producer-divergence
+  content.
+
+**Findings + decisions:**
+- **A repair correctly distinguished from a revision, worth carrying as
+  a reusable distinction**: append-only is a rule about not REVISING the
+  record's content; a paragraph that never reached its own entry can be
+  moved to where it belongs without that being a rewrite of history — the
+  two are different operations even though both involve editing an
+  append-only file's existing text.
+- **The general "check the RAG first" instruction and a NARROWER
+  check-before-writing instruction are different rules, confirmed again
+  this session by contrast with the prior filing's `R182`.** The general
+  instruction fired on the prior filing's BOM mistake, but only at
+  write-up time — after the wrong artifact was already on disk. `R182`
+  exists precisely because catching a conflict at write-up is real but
+  insufficient; catching it before the change is written is what
+  prevents the wrong artifact from ever reaching commit history.
+- **The rich-text grammar is small and fully bounded at PDF 1.5** — five
+  elements, ten CSS2 attributes, Acrobat's own `Span` object a 1:1
+  run-length-encoded mapping onto them. A tractable feature, not
+  open-ended.
+- **Rich-text appearance generation is reader-defined POLICY, not
+  conformance (`RT-N2`)** — §12.7.3.3's generation conventions are
+  explicitly switched off with nothing put in their place. pdfce's
+  rendering choices there must be disclosed as pdfce's own (rule 4), not
+  presented as spec-mandated.
+- **The existing plain-fill refusal on a flagged field is spec-conformant
+  (`RT-M4`), not merely cautious** — a plain-`/V`-only write to a
+  `RichText`-flagged field with a value is itself a conformance
+  violation; pdfce's explicit-downgrade escape hatch is the correct
+  alternative shape, not merely a safe one.
+- **`/DA`-vs-`/DS` precedence is undefined (`RT-A6`)** — no spec rule, no
+  Acrobat tiebreak found by either librarian this session. Filed as a
+  settings candidate rather than left to be decided by accident.
+- **An exceed-Acrobat opening, mechanistically explained**: Acrobat
+  disables `/DA` size-0 auto-size the instant `RichText` is set because a
+  run array can carry a different `textSize` per span with no defined
+  single shrink target; a per-run-aware auto-size (shrink from the
+  neediest run) is well-defined and unattempted by Acrobat.
+- All four claims relayed from `b8f96b1` (2026-08-07) came back CONFIRMED
+  this session with live citations, one upgraded to spec-primary (FDF's
+  own `/RV`, Table 246, §12.7.7.3.2). Two gaps remain NAMED, not assumed:
+  Acrobat's behavior on a plain-text fill of a flagged field (checked
+  fresh, not found), and its handling of a malformed `/RV`.
+
+**Still in flight:**
+- `Pass 37.3`: which of options (2) [explicit lossy downgrade] and (3)
+  [true `/RV`-preserving fill] ships for IMPORT, and in which order —
+  unchanged; this slice is substrate for option (3), not a build-order
+  ruling.
+- `RT-A6`'s formal registration in
+  `iso32000__ref__ambiguity_settings_register.md` — owed to
+  `pdfce-spec-librarian`, not this librarian's file to write (rule 6).
+- The recommended `/V`-derived-from-`/RV` decision record — owed to the
+  autonomous-builder/KenAgent dispatch if the engineer agrees to open it;
+  `036` is the number to use, not claimed here.
+- `tools/commits-filed-baseline.txt` unchanged at **5 lines**: `338076a`,
+  `1f319c0`, `55a0732`, `587e520`, `9141ded`.
+- `pdfce-spec-librarian` dispatch still owed (FDF `/Ff` namespace
+  collision; bit 23 precondition asymmetry) — unchanged.
+- A `troubleshooting-librarian` dispatch is still owed for the
+  Windows-console mojibake finding (`C:\personal_rag\python\`) —
+  unchanged.
+
+**For next session:**
+- Gate results (`cargo fmt`/`clippy`/`cargo test`) for `7c6ef0f` and
+  `03f86a1` were not stated in the dispatch that produced this filing and
+  are not asserted here — worth confirming green before either commit is
+  relied on as a clean baseline.
+- When the `richtext` property-set module is designed, source its shape
+  from the now-confirmed `Span`-axis enumeration (font family/style/
+  weight/stretch/size/color, underline, strikethrough, sub/superscript,
+  alignment) rather than re-deriving it.
+
+**Ledger for this filing.** No new Pass ID; `Pass 37.3` gains a fourth
+slice under its existing ID. Pass family ceiling unchanged at **54.1**.
+`docs/FEATURES.md`: row 285 amended (addendum only, no checkbox change).
+`docs/ARCHITECTURE.md` §12: **not edited** — nothing decided this filing,
+only recommended and flagged as owed. Standing rules: no new number,
+ceiling unchanged at **R182**, next free **R183** (per this file's own
+grep; not independently confirmed via `check-ledger-numbers.py`, no
+shell). Decision records: unchanged, `033` on disk, `034`/`035`
+CLAIMED-by-citation/UNAUTHORED; `036` named as next-free-if-opened, not
+claimed. Operator-question ceiling unchanged at **(bh)**, next free
+**(bi)**. `tools/commits-filed-baseline.txt` not read this filing,
+unrelated to either commit. Backup/git working-tree state not
+independently asserted — this librarian has no shell this dispatch (hard
+rule 8). This is the **seventy-second** `SESSION_LOG.md` filing (the
+seventy-first confirmed present by direct read before this entry was
+appended, and confirmed to still be the true end of file after the
+`7c6ef0f` repair).

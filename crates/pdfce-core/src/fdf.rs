@@ -610,7 +610,7 @@ const MAX_XML_DEPTH: usize = 256;
 ///
 /// A description string on any structural error (unterminated tag or string,
 /// mismatched end tag, no root element, depth overflow).
-fn parse_xml_document(input: &str) -> Result<XmlElement, String> {
+pub(crate) fn parse_xml_document(input: &str) -> Result<XmlElement, String> {
     let bytes: Vec<char> = input.chars().collect();
     let mut p = XmlParser {
         chars: &bytes,
