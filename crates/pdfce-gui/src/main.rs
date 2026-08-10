@@ -7281,6 +7281,89 @@ impl PdfceApp {
     /// document itself declares, so the list matches the printed form far more
     /// often than an alphabetical sort would. Computed `/Tabs` ordering is a
     /// named P2 residual.
+    /// The Signatures panel — what each signature covers.
+    ///
+    /// # It is not a validity check, and the panel says so first
+    ///
+    /// pdfce performs no cryptographic verification. A panel headed
+    /// "Signatures", listing byte counts, is the single most likely place
+    /// in this application for an operator to take away more than was
+    /// said — so the caveat is the first line, above the list, not a
+    /// tooltip and not a footnote.
+    ///
+    /// # The file length is read from DISK each time, deliberately
+    ///
+    /// `/ByteRange` is a claim about bytes, so it can only be checked
+    /// against bytes. The length used is the file **on disk right now**,
+    /// not a length captured when the document was opened, and that
+    /// choice changes what the number means: it answers *"does the
+    /// signature cover the file as it currently exists"*, which is the
+    /// question worth asking. A captured length would answer "did it
+    /// cover the file when you opened it" and would go stale the moment
+    /// anything appended to it — including pdfce's own incremental save.
+    ///
+    /// Unsaved edits are not counted, and cannot be: they are not in the
+    /// file yet. The panel says which state it is describing rather than
+    /// leaving an operator to assume.
+    fn signatures_panel(&mut self, ui: &mut egui::Ui, _actions: &mut [Action]) {
+        let Status::Open(doc) = &self.status else {
+            return;
+        };
+        // A stat, not a read. Cheap enough per frame, and the alternative
+        // is a cached number that silently describes a file that no
+        // longer exists in that form.
+        let Ok(meta) = std::fs::metadata(&doc.path) else {
+            ui.label(ui_text::signatures_file_unreadable());
+            return;
+        };
+        let graph = doc.session.graph();
+        let coverage = pdfce_core::signature::byte_range_coverage(&graph, meta.len());
+
+        if coverage.is_empty() {
+            ui.label(ui_text::signatures_none());
+            return;
+        }
+
+        // The caveat FIRST. Everything below it is a measurement, and a
+        // measurement read as a verdict is the failure this prevents.
+        ui.label(
+            egui::RichText::new(ui_text::signatures_not_a_validity_check())
+                .small()
+                .weak(),
+        );
+        ui.separator();
+
+        for c in &coverage {
+            let name = c
+                .field_name
+                .clone()
+                .unwrap_or_else(|| ui_text::signature_unnamed().to_owned());
+            ui.label(egui::RichText::new(name).strong());
+
+            // Malformed is reported BEFORE coverage, because it changes
+            // what the coverage numbers mean: a reader that rejects the
+            // array computes something else, or nothing.
+            if !c.ranges_well_formed {
+                ui.label(ui_text::signature_range_malformed());
+            }
+            if c.pair_count == 1 {
+                ui.label(ui_text::signature_single_range());
+            }
+            ui.label(if c.covers_to_eof() {
+                ui_text::signature_covers_whole_file(c.covered)
+            } else {
+                ui_text::signature_leaves_tail(c.covered, c.uncovered_tail)
+            });
+            diag::trace(|| {
+                format!(
+                    "signature-row field={:?} covered={} tail={} pairs={} well_formed={}",
+                    c.field_name, c.covered, c.uncovered_tail, c.pair_count, c.ranges_well_formed
+                )
+            });
+            ui.separator();
+        }
+    }
+
     /// The Layers panel — the document's optional-content groups.
     ///
     /// # Read-only, and the reason is not laziness
@@ -12008,6 +12091,9 @@ impl eframe::App for PdfceApp {
             diag::Step::ExitViewMode => {
                 self.apply(Action::ExitViewMode, ctx, ctx.pixels_per_point());
             }
+            diag::Step::Signatures => {
+                self.show_pane_subject(ribbon::PaneSubject::Signatures);
+            }
             diag::Step::Layers => {
                 self.show_pane_subject(ribbon::PaneSubject::Layers);
             }
@@ -14433,6 +14519,7 @@ impl PdfceApp {
             ribbon::PaneSubject::Forms => self.forms_panel(ui, actions),
             ribbon::PaneSubject::Bookmarks => self.bookmarks_panel(ui, actions),
             ribbon::PaneSubject::Layers => self.layers_panel(ui, actions),
+            ribbon::PaneSubject::Signatures => self.signatures_panel(ui, actions),
             ribbon::PaneSubject::Comments => self.comments_panel(ui, actions),
             // Never reached from `tool_options_panel`'s dispatch, which sends
             // these two elsewhere; an arm rather than a catch-all so a future

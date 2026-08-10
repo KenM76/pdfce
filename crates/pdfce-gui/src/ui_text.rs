@@ -8494,7 +8494,70 @@ pub fn tool_pane_subject_name(subject: crate::ribbon::PaneSubject) -> &'static s
         S::Comments => activities_comments_label(),
         S::Bookmarks => activities_bookmarks_label(),
         S::Layers => activities_layers_label(),
+        S::Signatures => activities_signatures_label(),
     }
+}
+
+/// Label of the Signatures activity.
+pub fn activities_signatures_label() -> &'static str {
+    "Signatures"
+}
+
+/// The caveat, shown ABOVE the list on every visit.
+///
+/// A panel headed "Signatures" listing byte counts is the likeliest
+/// place in this application for an operator to take away more than was
+/// said. The sentence is first, not a tooltip, because the person who
+/// most needs it is the one who will not hover.
+pub fn signatures_not_a_validity_check() -> &'static str {
+    "pdfce does not check whether these signatures are valid — it cannot yet. What follows is what each signature COVERS: which parts of the file it would protect if it is valid."
+}
+
+/// No signature carries a byte range.
+pub fn signatures_none() -> &'static str {
+    "This document has no signatures. (An empty signature field, waiting to be signed, is not one.)"
+}
+
+/// The file could not be measured.
+///
+/// Distinct from "no signatures": pdfce could not read the file's length
+/// from disk, so it has nothing to compare a byte range against. Saying
+/// "no signatures" here would be a claim about the document made from an
+/// inability to look.
+pub fn signatures_file_unreadable() -> &'static str {
+    "pdfce could not read this file's size from disk, so it cannot say what the signatures cover. Nothing here is a statement about the document."
+}
+
+/// A signature field with no name of its own.
+pub fn signature_unnamed() -> &'static str {
+    "(unnamed signature)"
+}
+
+/// The good case.
+pub fn signature_covers_whole_file(covered: u64) -> String {
+    format!("Covers the whole file — {covered} bytes, up to the last one.")
+}
+
+/// The case that matters: content exists beyond the signed range.
+///
+/// Worded as under-protection rather than as damage. ISO 32000-1
+/// §12.8.1 makes whole-file coverage a `should`, so this document is
+/// CONFORMING — and an operator told "invalid" about a legal file has
+/// been misled just as surely as one told nothing.
+pub fn signature_leaves_tail(covered: u64, tail: u64) -> String {
+    format!(
+        "Covers {covered} bytes, but {tail} bytes come after the signed range — content this signature does not protect. That is allowed by the standard, and it means the signature guarantees less than its presence suggests."
+    )
+}
+
+/// Overlapping or backwards ranges.
+pub fn signature_range_malformed() -> &'static str {
+    "This signature's byte range is malformed — its parts overlap or run backwards, which the standard does not permit. The numbers below are what the file claims; another reader may compute something different, or refuse it."
+}
+
+/// A single range, which cannot verify.
+pub fn signature_single_range() -> &'static str {
+    "This signature declares one continuous range, so it includes its own signature value in what it signs. A signature in that shape cannot verify anywhere."
 }
 
 /// Label of the Layers activity.

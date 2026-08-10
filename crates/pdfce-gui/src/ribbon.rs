@@ -598,6 +598,9 @@ pub enum PaneSubject {
     /// Read-only for now: toggling a layer is session state a viewer
     /// keeps, and pdfce's renderer takes no visibility override yet.
     Layers,
+    /// What each digital signature COVERS (§12.8.1) — never whether it
+    /// is valid, which pdfce cannot determine and does not claim.
+    Signatures,
 }
 
 #[cfg(test)]
