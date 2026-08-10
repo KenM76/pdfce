@@ -89,6 +89,7 @@ pub mod forms_author;
 pub mod graph;
 pub mod image_codec;
 pub mod image_import;
+pub mod layers;
 pub mod lexer;
 pub mod linearization;
 pub mod linebreak;

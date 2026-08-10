@@ -9068,11 +9068,11 @@ impl PdfceApp {
                 {
                     actions.push(Action::StepFind(false));
                 }
-                if ui
+                let nb = ui
                     .button(ui_text::find_next_label())
-                    .on_hover_text(ui_text::find_next_tooltip())
-                    .clicked()
-                {
+                    .on_hover_text(ui_text::find_next_tooltip());
+                diag::trace(|| format!("find-next-btn rect={:?}", nb.rect));
+                if nb.clicked() {
                     actions.push(Action::StepFind(true));
                 }
             });
@@ -16357,6 +16357,101 @@ impl PdfceApp {
         // substrate's canonical canvas response; its `.rect` is the
         // `image_rect` every §2 geometry call takes this frame.
         let image_rect = image_response.rect;
+
+        // ★ FIND-MATCH HIGHLIGHTS.
+        //
+        // Drawn here rather than in a tool's overlay because they belong to
+        // the DOCUMENT VIEW, not to any tool: an operator searching while
+        // the measure tool is armed still wants to see where the hits are.
+        //
+        // The mapping is `viewer::pdf_space_to_canvas` followed by
+        // `viewer::page_to_screen` — the pair the canvas already uses,
+        // never a formula written here. `pdfce-ui-specialist` flagged
+        // exactly this when Find was scoped, and it was right to: I went
+        // on to write a duplicate of the first function before noticing it
+        // existed, and the version already in `viewer.rs` is the better one
+        // (it guards on invertibility, so both directions accept the same
+        // pages).
+        //
+        // Only matches on the CURRENT page are drawn — the viewer is
+        // single-page, so there is no surface for the others to appear on.
+        if self.find_open && !self.find_matches.is_empty() {
+            let painter = ui.painter_at(image_rect);
+            let current = doc.view.page_index;
+            let visuals = ui.visuals().clone();
+            if let Some(page) = doc.pages.get(current) {
+                let mut drawn = 0usize;
+                for (i, m) in self.find_matches.iter().enumerate() {
+                    if m.page_index != current {
+                        continue;
+                    }
+                    // All four corners, not two: `Quad` is a general
+                    // quadrilateral (§12.5.6.10), and although every quad
+                    // Find produces today is axis-aligned, taking a corner
+                    // pair would under-report the box the day a rotated one
+                    // arrives.
+                    let corners = [m.quad.ul, m.quad.ur, m.quad.ll, m.quad.lr];
+                    let mut pts = Vec::with_capacity(4);
+                    for (x, y) in corners {
+                        let Some(c) =
+                            viewer::pdf_space_to_canvas(egui::pos2(x as f32, y as f32), page)
+                        else {
+                            // A page whose transform will not round-trip
+                            // cannot place this hit. Skipped rather than
+                            // drawn at a guessed position: a highlight in
+                            // the wrong place is worse than none, because
+                            // it points the operator at innocent text.
+                            continue;
+                        };
+                        pts.push(viewer::page_to_screen(c, image_rect, extent, zoom));
+                    }
+                    if pts.len() != 4 {
+                        continue;
+                    }
+                    let min = egui::pos2(
+                        pts.iter().map(|p| p.x).fold(f32::INFINITY, f32::min),
+                        pts.iter().map(|p| p.y).fold(f32::INFINITY, f32::min),
+                    );
+                    let max = egui::pos2(
+                        pts.iter().map(|p| p.x).fold(f32::NEG_INFINITY, f32::max),
+                        pts.iter().map(|p| p.y).fold(f32::NEG_INFINITY, f32::max),
+                    );
+                    let rect = egui::Rect::from_min_max(min, max);
+                    // The CURRENT match is stroked as well as filled. Every
+                    // hit tinted identically answers "where are they" and
+                    // not "which one am I on" — and the counter in the bar
+                    // says "Match 3 of 7", so the canvas has to agree about
+                    // which one that is.
+                    let is_current = i == self.find_index;
+                    painter.rect_filled(
+                        rect,
+                        2.0,
+                        if is_current {
+                            visuals.selection.bg_fill.gamma_multiply(0.55)
+                        } else {
+                            visuals.selection.bg_fill.gamma_multiply(0.25)
+                        },
+                    );
+                    if is_current {
+                        painter.rect_stroke(
+                            rect,
+                            2.0,
+                            visuals.selection.stroke,
+                            egui::StrokeKind::Outside,
+                        );
+                    }
+                    drawn += 1;
+                }
+                diag::trace(|| {
+                    format!(
+                        "find-highlights page={} drawn={drawn} total={} index={}",
+                        current + 1,
+                        self.find_matches.len(),
+                        self.find_index
+                    )
+                });
+            }
+        }
 
         // A dropped image and where it landed, applied AFTER the read borrows
         // of `doc` end — placing needs `&mut doc.session` while the canvas
