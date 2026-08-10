@@ -143,6 +143,8 @@ pub enum Step {
     Tool(ScriptTool),
     /// Show the Bookmarks activity.
     Bookmarks,
+    /// Show the Layers activity.
+    Layers,
     /// Toggle read mode (chrome hidden, window kept).
     ///
     /// Full screen is deliberately NOT drivable: it would take over the
@@ -486,6 +488,7 @@ fn parse_step(s: &str) -> Option<Step> {
         "panel" if rest.trim() == "forms" => Some(Step::Forms),
         "panel" if rest.trim() == "find" => Some(Step::Find),
         "panel" if rest.trim() == "bookmarks" => Some(Step::Bookmarks),
+        "panel" if rest.trim() == "layers" => Some(Step::Layers),
         "view" if rest.trim() == "read" => Some(Step::ReadMode),
         "view" if rest.trim() == "escape" => Some(Step::ExitViewMode),
         "panel" if rest.trim() == "comments" => Some(Step::Comments),

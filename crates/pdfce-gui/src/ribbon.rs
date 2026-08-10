@@ -593,6 +593,11 @@ pub enum PaneSubject {
     /// distinguishes it from the Find bar, a momentary toggle that
     /// deliberately is NOT a subject.
     Bookmarks,
+    /// The document's optional-content groups — layers (§8.11).
+    ///
+    /// Read-only for now: toggling a layer is session state a viewer
+    /// keeps, and pdfce's renderer takes no visibility override yet.
+    Layers,
 }
 
 #[cfg(test)]

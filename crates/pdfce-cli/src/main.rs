@@ -960,6 +960,21 @@ enum Command {
         flat: bool,
     },
 
+    /// **List a document's optional-content groups** — layers (§8.11).
+    ///
+    /// Reports each layer's name and whether a reader would DRAW it with
+    /// no interaction, which is the fact a name cannot carry: a
+    /// "Confidential" watermark layer that is off by default is a
+    /// different document from one where it is on.
+    ///
+    /// Read-only. Toggling a layer is session state in a viewer with no
+    /// file-format footprint unless explicitly saved, and pdfce has no
+    /// save path for it — so there is no toggle to offer here.
+    ListLayers {
+        /// Input PDF.
+        input: PathBuf,
+    },
+
     /// **List a document's embedded files** (§7.11.4, §12.5.6.15).
     ///
     /// Reports BOTH kinds — document-level `/Names /EmbeddedFiles` and
@@ -3879,6 +3894,7 @@ fn run() -> ExitCode {
         Command::Sign { .. } => unimplemented_stub("sign"),
         Command::ListOutline { input, flat } => cmd_list_outline(&input, flat),
         Command::ListAttachments { input } => cmd_list_attachments(&input),
+        Command::ListLayers { input } => cmd_list_layers(&input),
         Command::ListPrinters => cmd_list_printers(),
         Command::PrintPreview {
             input,
@@ -5707,6 +5723,140 @@ fn cmd_list_outline(input: &Path, flat: bool) -> u8 {
         "list-outline {} bookmarks={shown} max_depth={} {warnings}",
         input.display(),
         d.max_depth,
+    );
+    exit::SUCCESS
+}
+
+/// `list-layers` — the document's optional-content groups.
+///
+/// # Why the default-visibility column is the interesting one
+///
+/// A layer's name says what it is; `visible=` says whether a reader
+/// showing this document with no interaction would draw it. Those come
+/// apart constantly — a "Confidential" watermark layer that is OFF by
+/// default is a very different document from one where it is ON, and the
+/// name alone cannot tell them apart.
+///
+/// The value comes from `annot.rs`'s `optional_content_default_off`, the
+/// same resolver the renderer uses to decide whether an annotation is
+/// drawn. Sharing it is the point: a listing that said "on" about
+/// content the renderer hides would be worse than no listing.
+///
+/// # Read-only, and layers are not editable here
+///
+/// Toggling a layer in a viewer is **session-scoped with zero
+/// file-format footprint** unless the operator explicitly saves
+/// (`Acrobat_Features/layers__ocg_visibility_and_defaults.md`). pdfce has
+/// no save path for it, so there is nothing to offer — and offering a
+/// toggle that silently did not persist would be worse than not offering
+/// one (R83).
+fn cmd_list_layers(input: &Path) -> u8 {
+    let doc = match pdfce_core::document::Document::load(input) {
+        Ok(doc) => doc,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit_code_for_doc(&err);
+        }
+    };
+    let session = pdfce_core::edit::EditSession::new(doc);
+    let read = pdfce_core::layers::read_layers(&session.graph());
+
+    for l in &read.layers {
+        // An undeclared name is reported as `-`, never invented. Table 98
+        // marks `/Name` Required, so its absence is a real malformation,
+        // and a synthesised "Layer 3" would hide it behind something that
+        // looks like data from the file.
+        let name = if l.name_declared {
+            format!("{:?}", l.name)
+        } else {
+            "-".to_owned()
+        };
+        // Only the flags that are TRUE, and only where true is the
+        // interesting case. `in_order=false` matters (the layer will not
+        // appear in a conforming panel); `in_order=true` is the norm and
+        // says nothing.
+        let mut flags: Vec<&str> = Vec::new();
+        if l.locked {
+            flags.push("locked");
+        }
+        if !l.in_default_config {
+            flags.push("UNREGISTERED");
+        }
+        if !l.in_order {
+            flags.push("not-in-order");
+        }
+        if !l.name_exact {
+            flags.push("name-inexact");
+        }
+        let rb = match l.radio_group {
+            Some(g) => format!(" radio_group={g}"),
+            None => String::new(),
+        };
+        println!(
+            "layer name={name} visible={}{rb}{}{}",
+            u32::from(l.visible_by_default),
+            if flags.is_empty() {
+                String::new()
+            } else {
+                format!(" {}", flags.join(" "))
+            },
+            // Inlined rather than a nested `format!`: clippy's
+            // `format_in_format_args` is right that the inner allocation
+            // is pointless when the outer macro can format it directly.
+            format_args!(" via={:?}", l.discovered_via),
+        );
+    }
+
+    // Only the diagnostics that fired — the struct has seventeen fields
+    // and on a healthy document every one is quiet. Burying the two that
+    // matter in fifteen `false`s is how a real warning gets skimmed past;
+    // that lesson cost an outline listing earlier today.
+    let d = &read.diagnostics;
+    let mut notes: Vec<String> = Vec::new();
+    for (on, name) in [
+        (d.no_optional_content, "no_optional_content"),
+        (d.missing_default_config, "missing_default_config"),
+        (d.missing_registry, "missing_registry"),
+        (d.order_node_truncation, "order_node_truncation"),
+        (d.base_state_off_in_default, "base_state_off_in_default"),
+        (
+            d.base_state_off_with_unregistered,
+            "BASE_STATE_OFF_WITH_UNREGISTERED",
+        ),
+        (d.layer_truncation, "layer_truncation"),
+        (d.resource_scan_truncated, "resource_scan_truncated"),
+        (d.page_scan_failed, "page_scan_failed"),
+    ] {
+        if on {
+            notes.push(name.to_owned());
+        }
+    }
+    for (c, name) in [
+        (d.unregistered_groups, "unregistered_groups"),
+        (d.groups_without_name, "groups_without_name"),
+        (d.names_inexact, "names_inexact"),
+        (d.direct_group_dicts, "direct_group_dicts"),
+        (d.dangling_group_references, "dangling_group_references"),
+        (d.order_depth_truncations, "order_depth_truncations"),
+        (d.order_cycles, "order_cycles"),
+        (d.malformed_group_elements, "malformed_group_elements"),
+        (d.overlapping_radio_groups, "overlapping_radio_groups"),
+    ] {
+        if c > 0 {
+            notes.push(format!("{name}={c}"));
+        }
+    }
+    let warnings = if notes.is_empty() {
+        "clean".to_owned()
+    } else {
+        notes.join(" ")
+    };
+    let config = read.config_name.as_deref().unwrap_or("-");
+    println!(
+        "list-layers {} layers={} config={config:?} radio_groups={} {warnings}",
+        input.display(),
+        read.layers.len(),
+        read.radio_groups.len(),
     );
     exit::SUCCESS
 }

@@ -8493,7 +8493,80 @@ pub fn tool_pane_subject_name(subject: crate::ribbon::PaneSubject) -> &'static s
         S::Forms => activities_forms_label(),
         S::Comments => activities_comments_label(),
         S::Bookmarks => activities_bookmarks_label(),
+        S::Layers => activities_layers_label(),
     }
+}
+
+/// Label of the Layers activity.
+pub fn activities_layers_label() -> &'static str {
+    "Layers"
+}
+
+/// Shown when the document declares no optional content at all.
+///
+/// Distinct from "no layers I could read": most PDFs simply have none,
+/// and saying so plainly stops an operator hunting for a panel fault.
+pub fn layers_none() -> &'static str {
+    "This document has no layers."
+}
+
+/// Count above the list.
+pub fn layers_count(total: usize) -> String {
+    if total == 1 {
+        "1 layer.".to_owned()
+    } else {
+        format!("{total} layers.")
+    }
+}
+
+/// The read-only disclosure, always shown.
+///
+/// An operator who sees a layer list and no way to change it will
+/// reasonably assume the control is missing or broken. Saying pdfce
+/// cannot change them yet is shorter than the confusion it prevents —
+/// and it names what "visible" means here, which is the state a reader
+/// would START in, not one pdfce is holding.
+pub fn layers_read_only_note() -> &'static str {
+    "Shown as the document defines them. pdfce cannot switch layers on or off yet, so this is the state a reader would open the document in."
+}
+
+/// Placeholder for a layer whose /Name is absent.
+///
+/// `/Name` is Required (Table 98), so its absence is a real malformation.
+/// The placeholder says so rather than inventing "Layer 3", which would
+/// disguise a defect as data from the file.
+pub fn layer_unnamed() -> &'static str {
+    "(no name in the file)"
+}
+
+/// Text marker for a layer drawn by default. TEXT, never colour alone.
+pub fn layer_visible_marker() -> &'static str {
+    "shown"
+}
+
+/// Text marker for a layer hidden by default.
+pub fn layer_hidden_marker() -> &'static str {
+    "hidden"
+}
+
+/// Tooltip on a locked layer.
+///
+/// States what the lock actually is: the specification's own table
+/// blesses JavaScript and `/AS` bypass, so calling it "cannot be changed"
+/// would overstate it.
+pub fn layer_locked_tooltip() -> &'static str {
+    "The document marks this layer locked, so a viewer should not offer to switch it. It is a interface lock, not a guarantee — the document's own scripts can still change it."
+}
+
+/// Tooltip on a layer that content references but the default
+/// configuration never registered.
+pub fn layer_unregistered_tooltip() -> &'static str {
+    "Page content uses this layer, but the document never listed it in its layer configuration. Some readers will not show it in their own layer panel at all."
+}
+
+/// Tooltip on a layer in a radio-button group.
+pub fn layer_radio_tooltip() -> &'static str {
+    "One of a group where switching this layer on switches the others off."
 }
 
 /// Label of the Bookmarks activity.

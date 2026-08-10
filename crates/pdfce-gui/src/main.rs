@@ -7281,6 +7281,89 @@ impl PdfceApp {
     /// document itself declares, so the list matches the printed form far more
     /// often than an alphabetical sort would. Computed `/Tabs` ordering is a
     /// named P2 residual.
+    /// The Layers panel — the document's optional-content groups.
+    ///
+    /// # Read-only, and the reason is not laziness
+    ///
+    /// Toggling a layer in a viewer is **session state with no
+    /// file-format footprint** unless the operator explicitly saves
+    /// (`Acrobat_Features/layers__ocg_visibility_and_defaults.md`). pdfce
+    /// has neither: the renderer takes no visibility override, and there
+    /// is no save path for one.
+    ///
+    /// So the panel lists and does not offer a checkbox. A checkbox that
+    /// did nothing, or that changed the screen and silently failed to
+    /// persist, would be worse than its absence — R83, no affordance
+    /// without capability. The toggle is owed and named, not implied.
+    ///
+    /// # What it shows that a name cannot
+    ///
+    /// Whether a reader opening this document with no interaction would
+    /// DRAW each layer. A "Confidential" watermark that is off by default
+    /// is a different document from one where it is on, and the two are
+    /// indistinguishable by name.
+    ///
+    /// That value comes from `annot.rs`'s `optional_content_default_off`
+    /// — the same resolver the renderer consults for annotations — so the
+    /// panel cannot say "on" about content the page hides.
+    fn layers_panel(&mut self, ui: &mut egui::Ui, _actions: &mut [Action]) {
+        let Status::Open(doc) = &self.status else {
+            return;
+        };
+        let read = pdfce_core::layers::read_layers(&doc.session.graph());
+
+        if read.diagnostics.no_optional_content {
+            ui.label(ui_text::layers_none());
+            return;
+        }
+        ui.label(ui_text::layers_count(read.layers.len()));
+        ui.label(
+            egui::RichText::new(ui_text::layers_read_only_note())
+                .small()
+                .weak(),
+        );
+        ui.separator();
+
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            for l in &read.layers {
+                // An undeclared name shows as a placeholder, never as an
+                // invented one. `/Name` is Required (Table 98), so its
+                // absence is a real malformation and a synthesised
+                // "Layer 3" would disguise it as data from the file.
+                let name = if l.name_declared {
+                    l.name.clone()
+                } else {
+                    ui_text::layer_unnamed().to_owned()
+                };
+                ui.horizontal(|ui| {
+                    // The visibility state as TEXT, not as a colour or an
+                    // icon alone — rule 6's no-colour-only-cue.
+                    ui.label(if l.visible_by_default {
+                        ui_text::layer_visible_marker()
+                    } else {
+                        ui_text::layer_hidden_marker()
+                    });
+                    let mut label = ui.label(name);
+                    if l.locked {
+                        label = label.on_hover_text(ui_text::layer_locked_tooltip());
+                    }
+                    if !l.in_default_config {
+                        label = label.on_hover_text(ui_text::layer_unregistered_tooltip());
+                    }
+                    if l.radio_group.is_some() {
+                        label.on_hover_text(ui_text::layer_radio_tooltip());
+                    }
+                });
+                diag::trace(|| {
+                    format!(
+                        "layer-row name={:?} visible={} locked={} registered={}",
+                        l.name, l.visible_by_default, l.locked, l.in_default_config
+                    )
+                });
+            }
+        });
+    }
+
     /// The Bookmarks panel — the document's outline, as navigation.
     ///
     /// # Why the tree is read fresh each frame rather than cached
@@ -11920,6 +12003,9 @@ impl eframe::App for PdfceApp {
             diag::Step::ExitViewMode => {
                 self.apply(Action::ExitViewMode, ctx, ctx.pixels_per_point());
             }
+            diag::Step::Layers => {
+                self.show_pane_subject(ribbon::PaneSubject::Layers);
+            }
             diag::Step::Bookmarks => {
                 self.show_pane_subject(ribbon::PaneSubject::Bookmarks);
             }
@@ -14330,6 +14416,7 @@ impl PdfceApp {
             ribbon::PaneSubject::Redact => self.redact_panel(ui, actions),
             ribbon::PaneSubject::Forms => self.forms_panel(ui, actions),
             ribbon::PaneSubject::Bookmarks => self.bookmarks_panel(ui, actions),
+            ribbon::PaneSubject::Layers => self.layers_panel(ui, actions),
             ribbon::PaneSubject::Comments => self.comments_panel(ui, actions),
             // Never reached from `tool_options_panel`'s dispatch, which sends
             // these two elsewhere; an arm rather than a catch-all so a future
