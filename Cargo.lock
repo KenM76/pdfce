@@ -2289,6 +2289,7 @@ dependencies = [
  "clap",
  "pdfce-core",
  "pdfce-render",
+ "windows",
 ]
 
 [[package]]

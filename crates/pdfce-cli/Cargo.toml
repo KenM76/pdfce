@@ -33,3 +33,23 @@ pdfce-core.workspace = true
 # docs/LEGAL.md §6.1, already covered by the generated
 # THIRD_PARTY_LICENSES.md. No new package enters the graph for this Pass.
 pdfce-render.workspace = true
+
+# Windows printing (Reader-parity sweep). TARGET-GATED so the Linux and
+# macOS CI jobs still compile this crate — printing is the one genuinely
+# platform-bound capability in the CLI, and v1 ships Windows-only
+# (decision 003 §4.1) while the codebase stays platform-clean (R10).
+#
+# NOT a new licensing question: the `windows` crate is ALREADY in the
+# workspace tree at 0.62 via eframe/winit, MIT-OR-Apache-2.0, and already
+# listed in THIRD_PARTY_LICENSES.md. Verified with `cargo tree` before
+# adding rather than assumed (rule 13).
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_Graphics_Printing",
+    # PRINTER_INFO_2W embeds a SECURITY_DESCRIPTOR pointer, so the struct
+    # is feature-gated behind Win32_Security even though pdfce never reads it.
+    "Win32_Security",
+    "Win32_Storage_Xps",
+] }

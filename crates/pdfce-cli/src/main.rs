@@ -280,6 +280,9 @@
 //! off by default; a failure exits [`exit::NOT_BYTE_IDENTICAL`], because
 //! it is a correctness result, not a crash.
 
+#[cfg(windows)]
+mod printing;
+
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -945,6 +948,17 @@ enum Command {
     /// many fell through it to U+FFFD, which fonts carry no recoverable
     /// Unicode at all, and how many spaces and line breaks pdfce
     /// invented.
+    /// **List the printers this machine can reach** (Windows only).
+    ///
+    /// Read-only. It queries the print spooler and reports nothing else;
+    /// it does not open a document and cannot start a print job.
+    ///
+    /// The first slice of pdfce's printing support, which does not spool
+    /// yet: printing consumes paper and occupies a shared device, so the
+    /// half that can be built and checked without side effects is built
+    /// first.
+    ListPrinters,
+
     /// **Find text in a document's pages**, reporting where each hit is.
     ///
     /// Reports the page and the on-page bounding box of every occurrence,
@@ -3797,6 +3811,7 @@ fn run() -> ExitCode {
         Command::ToPdfa { .. } => unimplemented_stub("to-pdfa"),
         Command::ValidatePdfa { .. } => unimplemented_stub("validate-pdfa"),
         Command::Sign { .. } => unimplemented_stub("sign"),
+        Command::ListPrinters => cmd_list_printers(),
         Command::FindText {
             input,
             needle,
@@ -5509,6 +5524,55 @@ with_note={with_note} with_author={with_author} need_appearances={need_appearanc
 /// Read-only. One `field …` line per terminal field, then a `list-fields …`
 /// summary line carrying the document-level form disclosures. The value is
 /// emitted as a sanitised token so the line stays field-splittable.
+/// `list-printers` — what the print spooler can see.
+///
+/// # Why a whole subcommand for a list
+///
+/// Every later printing feature needs a printer NAME, and an operator
+/// cannot supply one they cannot see. Shipping the query before the
+/// action also means the platform binding is exercised and correct
+/// before anything can put marks on paper.
+///
+/// Not built on non-Windows: the subcommand exists in the parser on
+/// every platform (so `--help` is honest about what pdfce offers) and
+/// reports that it is unavailable rather than being silently missing —
+/// a command that vanishes by platform is indistinguishable from a typo.
+#[cfg(windows)]
+fn cmd_list_printers() -> u8 {
+    let printers = match printing::list_printers() {
+        Ok(p) => p,
+        Err(err) => {
+            eprintln!("pdfce-cli: {err}");
+            return exit::IO_ERROR;
+        }
+    };
+    for p in &printers {
+        println!(
+            "printer name={:?} driver={:?} port={:?} default={}",
+            p.name,
+            p.driver,
+            p.port,
+            u32::from(p.is_default),
+        );
+    }
+    // Zero printers is a successful query of a machine with none — not a
+    // failure. A non-zero exit would make "no printers installed"
+    // indistinguishable from "the spooler is down", which is the one
+    // distinction a caller actually needs here.
+    println!("list-printers count={}", printers.len());
+    exit::SUCCESS
+}
+
+/// The non-Windows arm — see the Windows version's docs for why this
+/// reports rather than disappears.
+#[cfg(not(windows))]
+fn cmd_list_printers() -> u8 {
+    eprintln!(
+        "pdfce-cli: printing is available on Windows only in this build          (docs/decisions/003-distribution-posture.md §4.1)"
+    );
+    exit::EDIT_REFUSED
+}
+
 /// `find-text` — locate every occurrence of a string in the page text.
 ///
 /// # Why the geometry is in the output and not just the page number
