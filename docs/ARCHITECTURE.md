@@ -781,6 +781,43 @@ D:\Dev\pdfce\
                                    for the `Option`-default enforcement
                                    rationale and the absent-usage-category
                                    (`DA-A13`) interpretation in full.
+                                   **`layers.rs` — `LayerDiagnostics::
+                                   auto_managed_groups` (`21910fa`,
+                                   2026-08-10, eighty-third filing):**
+                                   shipping `apply_view_usage` (immediately
+                                   above) created a disagreement this field
+                                   closes. The Layers panel enumerates the
+                                   `/D`-INITIAL state; the canvas now paints
+                                   the USAGE-ADJUSTED one; for a zoom-banded
+                                   group these differ whenever the current
+                                   magnification falls outside its band, so
+                                   the panel could read "shown" while the
+                                   group's content is absent from the page,
+                                   with nothing to tell an operator that
+                                   from a defect. Neither half is wrong —
+                                   §8.11.4.5 makes a viewer's applied state a
+                                   FUNCTION OF MAGNIFICATION, so "the" state
+                                   of an auto-managed group is not a
+                                   property of the document at all, only of
+                                   the moment it is asked. `auto_managed_groups`
+                                   names every OCG carrying a `/Usage` entry
+                                   any `View`-event category can act on, and
+                                   is surfaced (not merely available) in
+                                   both shells: the GUI Layers panel prints
+                                   a small label (`ui_text::
+                                   layers_auto_managed`) whenever the count
+                                   is nonzero, and CLI `list-layers` counts
+                                   it and, when nonzero, prints an stderr
+                                   note naming `--print-state` as the way
+                                   to see what a printing/aggregating
+                                   application would use instead.
+                                   Deliberately EXCLUDED from
+                                   `LayerDiagnostics::is_faithful()` — the
+                                   file is a faithful transcription either
+                                   way; the disclosure is about a state that
+                                   moves, not a defect in reading it. See
+                                   §12's 2026-08-10 (eighty-third filing)
+                                   entry for the full ruling.
     pdfce-gui\                  <- The native desktop shell. egui/eframe application,
                                    window chrome, file dialogs (rfd crate), menus,
                                    docking layout (egui_dock or hand-rolled), the
@@ -15680,3 +15717,105 @@ than a fork the operator should be asked to pick. No knob is offered.
 this filing** — see the new §3 paragraph under `pdfce-render\annot.rs`,
 added in this same filing (immediately above the entry preceding this
 one).
+
+### 2026-08-10 (eighty-third filing, `21910fa`) — an auto-managed OCG's Layers-panel state is REPORTED AS `/D`-INITIAL AND SAID SO, not corrected to the viewer's current usage-adjusted state
+
+**Filed by `pdfce-librarian`, no shell tool this dispatch — relaying a
+staged evidence file (hash/date/subject/`--stat`/full commit message for
+`21910fa`, functionally equivalent to `git show` but not independently
+confirmed against the commit graph).** **Independently verified by
+direct read of current source:** `crates/pdfce-core/src/layers.rs:664`-
+`:810`,`:1051` (`LayerDiagnostics::auto_managed_groups` field, its doc
+comment, and the one call site that populates it — `usage_application_groups(graph,
+d.get(b"AS")).len()`, counted from `/D` only, deliberately not from
+alternate `/Configs`); `:832`-`:841` (`is_faithful()` — confirmed the
+field is absent from its conjunction); `crates/pdfce-cli/src/main.rs
+:6140`-`:6186` (the counter line plus the conditional stderr note naming
+`--print-state`); `crates/pdfce-gui/src/panels_structure.rs:273`-`:286`
+(the panel's conditional label via `ui_text::layers_auto_managed`).
+Full build record: `ROADMAP.md`'s `21910fa` Shipped entry (eighty-third
+filing, filed against the existing `Pass 56.0` per R170 — the fifth
+commit under that convention for this Pass, after `5c4ff08`/`57f0c8f`/
+`e5c6870`/`6171313`).
+
+**Plain entry, no decision number — a UX/reporting posture that
+constrains the Layers panel's design going forward, not a crate-boundary
+or library choice.** Shipping `apply_view_usage` (immediately above, same
+Pass) created a disagreement this entry rules on. `layers.rs`'s
+enumerator reads the document's `/D`-INITIAL default configuration; the
+renderer, as of `6171313`, now paints the USAGE-ADJUSTED state for any
+group carrying a `/Usage` entry a `View`-event category can act on. For a
+zoom-banded group these two answers differ whenever the current
+magnification falls outside the group's band — the panel can legitimately
+read "shown" for a group whose content is, at that instant, off the page
+— and an operator has no way to distinguish that from a defect without
+being told.
+
+**Ruling: the panel keeps reporting the `/D`-initial state, and now SAYS
+that it is doing so, rather than being changed to track the renderer's
+live usage-adjusted answer.** Two reasons, not one:
+
+1. **The `/D`-initial state is the only one that is a property of the
+   FILE.** §8.11.4.5 makes a viewer's applied state a function of the
+   current magnification (and, for `Print`/`Export` categories, of an
+   operation that has not happened yet) — "the" state of an auto-managed
+   group is not a fixed fact about the document at all, only an answer to
+   "what would a viewer show right now." A panel that tracked the live
+   answer would be reporting a quantity that changes every time the
+   operator scrolls the zoom slider, with no document edit having
+   occurred — a far stranger UX than a labelled static answer.
+2. **The honest reportable quantity for an enumerator is the `/D`-initial
+   state, LABELLED — not silently corrected to match the canvas.**
+   Silently rewriting the panel to chase the canvas's zoom-adjusted
+   answer would still be wrong the instant the operator changes zoom
+   again, and would hide the more useful fact: which groups are
+   auto-managed at all, so their listed state is understood as
+   provisional rather than authoritative.
+
+**Mechanism: `LayerDiagnostics::auto_managed_groups` (a count, populated
+from `/D`'s own `/AS` array only — alternate `/Configs` are discovery-only
+per this file's earlier §3 note and contribute nothing), surfaced in both
+shells** — a conditional label in the GUI Layers panel
+(`ui_text::layers_auto_managed`) and a conditional stderr note in CLI
+`list-layers` naming `render-page --print-state` as the way to see the
+state a printing/aggregating application would actually use. **Not
+counted as a fault**, and deliberately excluded from
+`LayerDiagnostics::is_faithful()`: nothing is malformed, the file is a
+faithful transcription of a state that itself moves. This is the same
+shape as the `no_optional_content`/`dangling_group_references` exclusions
+already on that method (§7.3.10-legal, or simply not a defect) — a third
+instance of "measured and reported, but never a strike against
+faithfulness," now for a case where the reported thing is true only at
+one particular magnification.
+
+**A companion fixture now exists**: `fixtures/synthetic/layers/
+usage-auto-state.pdf` (three painted squares — one zoom-banded
+`[2.0, 8.0)`, one `/View /ViewState /OFF`, one with no `/Usage` at all as
+a control), verified through the CLI at four scales (`1.0`/`2.0`/`7.99`/
+`8.0`) to hold both half-open band boundaries: the group joins AT `2.0`
+and leaves AT `8.0`, not adjacent to those values. **Relayed from the
+staged evidence file, not independently re-run** — no shell this
+dispatch.
+
+**Harness finding from the same commit, escalated to the cross-project
+RAGs rather than recorded here** (this file is for pdfce's own
+architecture, not tooling methodology): the verification's first attempt
+used the GUI harness's `zoom:` step, which drives `egui::Event::Zoom` — a
+PINCH gesture egui applies to its own UI scale, not the document's — and
+returned a flat, wrong-but-plausible reading indistinguishable from "the
+feature never reaches the renderer." A second defect surfaced by the fix:
+`Viewer::set_zoom` has to drop out of the default FIT mode in the same
+call, because a fit mode recomputes zoom from the window size every
+frame and would otherwise silently overwrite a bare field write before
+the next raster. Full findings: `D:\dev\rag\egui\
+egui_035_synthetic_zoom_event_is_pinch_not_document_zoom.md` (the
+egui-specific mechanism) and `C:\personal_rag\claude_code\
+lesson_20260810_harness_step_reaches_a_route_that_shares_a_name_with_the_intended_one.md`
+(the tool-agnostic methodology finding — distinct from `R184`: there the
+harness had no production route at all, here it had a real one that
+belonged to a different feature sharing a name).
+
+**No `docs/ARCHITECTURE.md` body-section change beyond what accompanies
+this filing** — see the new §3 paragraph under `pdfce-render\layers.rs`
+(immediately following the `apply_view_usage` paragraph, above), added in
+this same filing.

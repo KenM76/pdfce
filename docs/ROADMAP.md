@@ -81,6 +81,204 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★ `21910fa` filed against `Pass 56.0`: `/AS`+`/Usage` VERIFIED end to end (a zoom-banded fixture, both half-open boundaries, `--print-state` demonstrated) — plus a disagreement `/AS` created between the Layers panel and the canvas, now disclosed rather than silent, and a GUI harness gap that produced two wrong diagnoses from one measurement — 2026-08-10 (eighty-third filing)
+
+**Sourcing.** No shell tool this dispatch. The engineer staged a file
+containing the hash, author date, subject, `--stat` file list and the
+complete commit message for `21910fa3dae055398bf93b297d35ab1e94587af3` —
+the same material a `git show` would give, not independently
+re-confirmed against `git log`/`git show` (no shell). **Where a claim
+could be checked a different way — by reading the LIVE SOURCE this
+commit is described as having produced — it was, and is marked so
+below.**
+
+**Confirmed live in source:**
+- `crates/pdfce-core/src/layers.rs:664`–`:810`,`:1051` —
+  `LayerDiagnostics::auto_managed_groups: usize`, its doc comment (states
+  the panel/canvas disagreement and the reason it is not a fault), and
+  the population site `usage_application_groups(graph, d.get(b"AS")).len()`
+  — confirmed counted from `/D` only, not from alternate `/Configs`.
+- `:832`–`:841` — `is_faithful()` confirmed excludes the field, alongside
+  `no_optional_content`/`page_scan_failed`/`dangling_group_references`,
+  which the method's own doc comment already carried as "not a defect"
+  exclusions before this commit.
+- `crates/pdfce-cli/src/main.rs:6140`–`:6186` — confirmed
+  `auto_managed_groups` printed among `list-layers`'s non-zero counters,
+  and a conditional `eprintln!` naming `render-page --print-state` as the
+  way to see the state a printing/aggregating application would use.
+- `crates/pdfce-gui/src/panels_structure.rs:273`–`:286` — confirmed a
+  conditional label via `ui_text::layers_auto_managed`, gated on
+  `auto_managed_groups > 0`.
+- `crates/pdfce-gui/src/ui_text.rs:8677`–`:8685` — confirmed
+  `layers_auto_managed(n)` text: *"switches itself on or off as you
+  zoom… the states shown here are the ones the document opens in"*.
+- `crates/pdfce-gui/src/viewer.rs:149`–`:152` — confirmed `set_zoom`
+  clamps and then sets `self.fit = FitMode::None` in the same call —
+  the fix for the fit-mode-recompute-overwrites-a-bare-write defect
+  the verification found.
+- `crates/pdfce-gui/src/diag.rs:158`–`:160`,`:504`–`:509` — confirmed
+  `Step::DocumentZoom`/`docszoom:` exists as a step distinct from
+  `Step::Zoom`, with a doc comment naming the distinction explicitly
+  (`Step::Zoom` = egui's pinch gesture onto UI scale; `docszoom:` = the
+  document's own zoom).
+- `tools/gen-layer-fixtures.py:793`–`:844`,`:880` — confirmed
+  `usage_auto_state()` builds three OCGs — `/Usage << /Zoom << /min 2.0
+  /max 8.0 >> >>` ("Zoomed detail"), `/Usage << /View << /ViewState
+  /OFF >> >>` ("Hidden"), and a no-`/Usage` control ("Plain") — each
+  painting a 120×120 rect via `/OC ... BDC ... EMC`, registered as
+  `"usage-auto-state.pdf"` in the fixture map.
+
+**Not independently verified:** the exact CLI scale-sweep readings
+(`oc_hidden=2/1/1/2` at scales `1.0/2.0/7.99/8.0`), the `--print-state`
+before/after comparison, the `docszoom:2.0`→magnification-2 /
+`docszoom:8.0`→magnification-8 harness readings, and the stated
+test/clippy/fmt figures (2912 tests, clippy 0 `--all-features`, fmt
+clean, ui-strings clean) — all relayed from the staged file, not
+re-run. The fixture's existence and the CODE that would produce those
+readings ARE confirmed above; the readings themselves are not.
+
+**Shipped:**
+- `21910fa` — **filed against the existing `Pass 56.0` (R170: same-day
+  extension of the shared §8.11 resolver stays on the capability's own
+  ID), no new mint** — the fifth commit this convention has covered for
+  this Pass, after `5c4ff08`/`57f0c8f`/`e5c6870`/`6171313`. This is the
+  **verification half** of `6171313`'s `/AS`+`/Usage` work (immediately
+  below in this file) — not new scope, disclosure and proof for
+  already-shipped behaviour.
+  - **New fixture with more than one right answer:** `fixtures/synthetic/
+    layers/usage-auto-state.pdf` — the first layer fixture whose visible
+    content genuinely depends on the viewer's MAGNIFICATION, not merely
+    on document state. Both half-open band boundaries exercised through
+    the CLI: the zoom-banded layer JOINS at exactly `2.0` (`min`
+    inclusive) and LEAVES at exactly `8.0` (`max` exclusive) — the
+    `[min, max)` reading made observable, not only asserted in a doc
+    comment. The third square (no `/Usage`) is the control, painting at
+    every scale.
+  - **`render-page --print-state` demonstrated against a live document**
+    for the first time since the flag shipped — §8.11.4.5 NOTE 2 licenses
+    a print/aggregate-state preview by name (*"an accurate preview of the
+    content as it will appear when placed into an aggregating application
+    or sent to a stand-alone printing system"*), so this affordance is
+    sourced rather than invented. A viewer at `4.0` hides the zoom-banded
+    layer; `--print-state` hides nothing, matching the `/D`-initial state
+    the standard requires for that path.
+  - **★ A disagreement shipping `/AS` created, found and fixed the same
+    session, not carried silently:** the Layers panel lists the `/D`-
+    initial state; the canvas, as of `6171313`, now paints the
+    usage-adjusted one. A zoom-banded layer can therefore read "shown" in
+    the panel while its content is absent from the page at the current
+    zoom — indistinguishable from a defect without disclosure. **Neither
+    half is wrong** — §8.11.4.5 makes a viewer's applied state a function
+    of magnification, so "the" state of an auto-managed group is not a
+    fixed property of the document. What was missing is that the panel
+    never said so. New `LayerDiagnostics::auto_managed_groups` (a count,
+    `/D`-only), surfaced as a conditional label in the GUI Layers panel
+    and a conditional stderr note in CLI `list-layers`, and deliberately
+    **excluded from `is_faithful()`** — nothing is malformed; the file is
+    a faithful transcription of a state that itself moves. New plain
+    `ARCHITECTURE.md` §12 entry, below — this posture constrains the
+    Layers panel's design going forward and the reasoning is not obvious
+    from the code alone.
+  - **★ A harness gap that produced two wrong diagnoses from one
+    measurement.** The existing `zoom:` diag step pushes `egui::Event::
+    Zoom`, which egui applies to its own UI-scale zoom factor — a PINCH
+    gesture — not the document's zoom. Driving it to test the
+    magnification-dependent fixture above returned a near-constant
+    reading (`~1.0063`) regardless of what was requested, which reads
+    exactly like "the feature never reaches the renderer": a plausible,
+    alarming, and entirely wrong diagnosis of `/AS`+`/Usage` itself. New
+    `docszoom:` step calls `Viewer::set_zoom` directly, bypassing egui's
+    event layer. **The fix surfaced a second, previously-latent defect
+    one layer deeper:** `set_zoom` also has to drop out of any active
+    `FitMode` in the same call — the default view mode IS a fit mode,
+    recomputed from the window size every frame, so a bare zoom-field
+    write was silently overwritten before the next raster. Verified
+    after both fixes: `docszoom:2.0` → magnification `2`; `docszoom:8.0`
+    → magnification `8` — the value passed is the operator's ZOOM, never
+    the raster scale (those differ by `pixels_per_point`, and passing the
+    raster scale would make a layer's visibility depend on the monitor
+    at the same nominal zoom). Escalated to the cross-project RAGs, not
+    recorded as a pdfce-only finding — see *Findings + decisions*, below.
+
+**Decisions made this session:**
+- **Plain `ARCHITECTURE.md` §12 entry — the Layers panel keeps reporting
+  the `/D`-initial state for an auto-managed group, and now SAYS it is
+  doing so, rather than being rewritten to chase the renderer's live
+  usage-adjusted answer.** Recorded because it constrains the panel's
+  design from here on: the `/D`-initial state is the only one that is a
+  property of the FILE (the usage-adjusted state is a property of the
+  current moment, not the document), and the honest reportable quantity
+  for an enumerator is that state, LABELLED — not silently corrected to
+  match whatever the canvas currently shows.
+- **No new standing rule.** R170 cited for the fifth time against the
+  same Pass; no new shape to name. The harness finding is a RAG
+  escalation (egui-specific mechanism + tool-agnostic methodology), not
+  a project-local standing rule — it is explicitly distinguished from
+  `R184` in both new lesson files (R184: no production route existed at
+  all; here: a real, always-live route existed, it just belonged to a
+  different feature sharing a name).
+
+**Findings + decisions:**
+- The harness finding above is filed in full at
+  `D:\dev\rag\egui\egui_035_synthetic_zoom_event_is_pinch_not_document_zoom.md`
+  (the egui-specific mechanism: `Event::Zoom` = pinch onto UI scale, and
+  the fit-mode-recompute hazard) and
+  `C:\personal_rag\claude_code\lesson_20260810_harness_step_reaches_a_route_that_shares_a_name_with_the_intended_one.md`
+  (the tool-agnostic methodology finding: a harness step CAN have a real
+  production route and still be the wrong one, when a lower layer already
+  owns the shared name). Both index files updated in this filing, plus
+  the master `C:\personal_rag\index.md`.
+- No `personal_rag/pdf` finding filed — nothing in this commit is a
+  real-world-producer-divergence finding; the fixture is synthetic and
+  the panel/canvas disagreement is a pdfce UX-disclosure question, not an
+  observation about how real files behave.
+
+**Still owed, carried forward, unaffected by this filing:** printer job
+SPOOLING (operator go-ahead); attachment EXTRACTION-to-file (R151);
+decisions `037`/`038` still CLAIMED, NOT YET AUTHORED; which theme preset
+becomes the shipped default (open operator question). §8.11 itself still
+has no remaining unimplemented piece — this filing is verification and
+disclosure, not new scope.
+
+**Ledger for this filing.** **No new Pass ID** — `21910fa` filed against
+the existing `Pass 56.0` (R170), the fifth commit under that convention;
+Pass-family ceiling unchanged at **58.1**, next free **59**.
+`docs/FEATURES.md`: row 187 (content-stream optional content) and the
+*Document layers (OCG)* row both get a short addendum for the
+panel/canvas disclosure — no checkbox changes, since both rows' `core`/
+`cli`/`gui` boxes were already `[x]` before this filing and the new
+surface is disclosure on an already-ticked capability, not a new one.
+`docs/ARCHITECTURE.md`: **one new plain dated §12 entry** (the
+`/D`-initial-and-say-so panel posture) plus a matching new §3 paragraph
+under `pdfce-render\layers.rs` — decision-record ceiling unchanged,
+`037`/`038` still CLAIMED-not-authored, next genuinely free **039**.
+Standing rules: no new mint — R170 cited; ceiling stays **R185**, next
+free **R186**. `D:\dev\rag\egui\`: **one new file**
+(`egui_035_synthetic_zoom_event_is_pinch_not_document_zoom.md`), indexed
+in `D:\dev\rag\egui\index.md`. `C:\personal_rag\claude_code\`: **one new
+lesson**
+(`lesson_20260810_harness_step_reaches_a_route_that_shares_a_name_with_the_intended_one.md`),
+indexed in both `claude_code/index.md` and the master
+`C:\personal_rag\index.md` this filing. `C:\personal_rag\pdf\`: no new
+lesson (see *Findings + decisions*, above). Operator-question ceiling
+unchanged at **(bh)**, next free **(bi)**. Gate figures relayed per
+commit (2912 tests, clippy 0 `--all-features`, fmt clean, ui-strings
+clean) RELAYED, NOT independently re-run — no shell this dispatch.
+**Backup/git working-tree state not asserted anywhere in this filing**
+(hard rule 8) — the engineer should check `D:\Dev\pdfce-backups\` and
+`git log`/`git status` directly before any push; this librarian had no
+shell and worked entirely from the staged evidence file plus direct
+reads of current source. **A mid-dispatch operator message instructing
+a GitHub release + portable-zip push was received and explicitly
+withdrawn/redirected by the coordinating engineer before this filing was
+completed — nothing about a release, a tag, a push, or any upstream
+state is asserted anywhere in this entry, and none of that has
+happened.** This is the **eighty-third** `SESSION_LOG.md`/`ROADMAP.md`
+joint filing (the eighty-second confirmed present by direct read before
+this entry was written).
+
+---
+
 ### ★★ `6171313` COMPLETES `Pass 56.0`: §8.11.4.4/.4.5 `/AS`+`/Usage` auto-state ships — §8.11 has no remaining unimplemented piece on the render side; a rendered-but-unlisted OCG group fixed in the Layers panel; two corrections to the eighty-first filing's own `/VE` work; the `§8.11.2.4`/`§8.11.2.2` citation discrepancy ADJUDICATED — 2026-08-10 (eighty-second filing)
 
 **Sourcing.** No shell tool this dispatch. The engineer staged a file

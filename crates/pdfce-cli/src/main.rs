@@ -280,8 +280,6 @@
 //! off by default; a failure exits [`exit::NOT_BYTE_IDENTICAL`], because
 //! it is a correctness result, not a crash.
 
-mod printing;
-
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -6330,7 +6328,7 @@ fn cmd_list_attachments(input: &Path) -> u8 {
 
 /// The scaling modes, as command-line words.
 ///
-/// A separate type from `printing::ScaleMode` because that one carries a
+/// A separate type from `pdfce_print::ScaleMode` because that one carries a
 /// free-form `Custom(f64)` which clap cannot express as a value-enum
 /// variant, and because the CLI's vocabulary is allowed to differ from
 /// the engine's — `shrink` reads better than `ShrinkOversized` in a
@@ -6348,11 +6346,11 @@ enum PrintScaleArg {
 }
 
 impl PrintScaleArg {
-    fn to_mode(self) -> printing::ScaleMode {
+    fn to_mode(self) -> pdfce_print::ScaleMode {
         match self {
-            Self::Fit => printing::ScaleMode::Fit,
-            Self::Actual => printing::ScaleMode::ActualSize,
-            Self::Shrink => printing::ScaleMode::ShrinkOversized,
+            Self::Fit => pdfce_print::ScaleMode::Fit,
+            Self::Actual => pdfce_print::ScaleMode::ActualSize,
+            Self::Shrink => pdfce_print::ScaleMode::ShrinkOversized,
         }
     }
 
@@ -6406,7 +6404,7 @@ fn cmd_print_preview(
     // Resolve the printer: the named one, else the system default. An
     // unnamed preview on a machine with no default is a real dead end,
     // so it says which of the two problems it is.
-    let all = match printing::list_printers() {
+    let all = match pdfce_print::list_printers() {
         Ok(p) => p,
         Err(err) => {
             eprintln!("pdfce-cli: {err}");
@@ -6427,7 +6425,7 @@ fn cmd_print_preview(
         },
     };
 
-    let caps = match printing::printer_caps(&chosen) {
+    let caps = match pdfce_print::printer_caps(&chosen) {
         Ok(c) => c,
         Err(err) => {
             eprintln!("pdfce-cli: {err}");
@@ -6472,7 +6470,7 @@ fn cmd_print_preview(
     // 1..=1000, so the conversion cannot produce a non-positive or
     // non-finite multiplier.
     let mode = match scale_percent {
-        Some(pct) => printing::ScaleMode::Custom(f64::from(pct) / 100.0),
+        Some(pct) => pdfce_print::ScaleMode::Custom(f64::from(pct) / 100.0),
         None => scale.to_mode(),
     };
     let mode_name = match scale_percent {
@@ -6490,7 +6488,7 @@ fn cmd_print_preview(
         // prints the page.
         let mb = page.media_box;
         let size = ((mb.urx - mb.llx).abs(), (mb.ury - mb.lly).abs());
-        let p = printing::place_page(size, caps.printable_pt, mode);
+        let p = pdfce_print::place_page(size, caps.printable_pt, mode);
         if p.clipped {
             clipped += 1;
         }
@@ -6562,7 +6560,7 @@ fn cmd_print_preview(
 /// a command that vanishes by platform is indistinguishable from a typo.
 #[cfg(windows)]
 fn cmd_list_printers() -> u8 {
-    let printers = match printing::list_printers() {
+    let printers = match pdfce_print::list_printers() {
         Ok(p) => p,
         Err(err) => {
             eprintln!("pdfce-cli: {err}");

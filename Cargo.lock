@@ -2288,8 +2288,8 @@ version = "0.0.0"
 dependencies = [
  "clap",
  "pdfce-core",
+ "pdfce-print",
  "pdfce-render",
- "windows",
 ]
 
 [[package]]
@@ -2315,6 +2315,14 @@ dependencies = [
  "pdfce-core",
  "pdfce-render",
  "rfd",
+]
+
+[[package]]
+name = "pdfce-print"
+version = "0.0.0"
+dependencies = [
+ "thiserror 2.0.19",
+ "windows",
 ]
 
 [[package]]

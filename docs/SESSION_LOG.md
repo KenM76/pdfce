@@ -32433,3 +32433,104 @@ shell and worked entirely from the staged evidence file plus direct
 reads of current source. This is the **eighty-second**
 `SESSION_LOG.md`/`ROADMAP.md` joint filing (the eighty-first confirmed
 present by direct read before this entry was appended).
+
+## 2026-08-10 (eighty-third filing) — `21910fa`: the verification half of `/AS`+`/Usage` — a zoom-banded fixture with both half-open boundaries proved through the CLI, `--print-state` demonstrated; shipping `/AS` created a Layers-panel/canvas disagreement, now disclosed rather than silent; a GUI harness gap gave two wrong diagnoses from one measurement, escalated to `D:\dev\rag\egui\` and `C:\personal_rag\claude_code\`
+
+**Shipped:**
+- `21910fa` — filed against `Pass 56.0` (R170, fifth commit under that
+  convention). The verification and disclosure half of `6171313`'s
+  `/AS`+`/Usage` work (immediately above), not new scope.
+  - New fixture `fixtures/synthetic/layers/usage-auto-state.pdf` — the
+    first layer fixture whose right answer depends on the viewer's
+    MAGNIFICATION. Three squares: one zoom-banded `[2.0, 8.0)`, one
+    `/View /ViewState /OFF`, one control with no `/Usage`. Both
+    half-open boundaries proved through the CLI: joins AT `2.0`, leaves
+    AT `8.0`.
+  - `render-page --print-state` demonstrated for the first time against
+    a live document — §8.11.4.5 NOTE 2 licenses this preview by name.
+    Viewer at `4.0` hides the banded layer; `--print-state` hides
+    nothing.
+  - **★ A disagreement shipping `/AS` created, found and disclosed the
+    same session:** the Layers panel lists the `/D`-initial state; the
+    canvas now paints the usage-adjusted one. A zoom-banded layer can
+    read "shown" in the panel while off the page at the current zoom —
+    neither half wrong, since §8.11.4.5 makes the canvas's answer a
+    function of magnification. New `LayerDiagnostics::auto_managed_groups`
+    (count, `/D`-only), surfaced in both shells, deliberately EXCLUDED
+    from `is_faithful()` — nothing malformed, the file just declares a
+    state that moves. New plain `ARCHITECTURE.md` §12 entry: the panel
+    keeps the `/D`-initial answer and now SAYS so, rather than chasing
+    the canvas.
+  - **★ A harness gap that produced two wrong diagnoses from one
+    measurement:** the `zoom:` diag step pushes `egui::Event::Zoom`,
+    which egui applies to its own UI scale (a pinch gesture), not the
+    document's zoom — driving it returned a near-constant reading that
+    read exactly like "the feature never reaches the renderer." New
+    `docszoom:` step calls `Viewer::set_zoom` directly. The fix surfaced
+    a second defect one layer deeper: `set_zoom` also has to drop the
+    active `FitMode` in the same call, or the default fit-mode's
+    per-frame recompute silently overwrites the write before the next
+    raster. Verified after both fixes: `docszoom:2.0`→magnification `2`,
+    `docszoom:8.0`→magnification `8`.
+
+**Decisions made this session:**
+- Plain `ARCHITECTURE.md` §12 entry — the Layers panel's `/D`-initial
+  posture, disclosed rather than corrected to track the canvas. The
+  `/D`-initial state is the only one that is a property of the FILE; the
+  usage-adjusted state is a property of the moment it's asked, and
+  silently chasing it would just be wrong again at the next zoom change.
+- No new standing rule — R170 cited a fifth time against `Pass 56.0`.
+  The harness finding is a RAG escalation, explicitly distinguished from
+  `R184` in both new lesson files: R184 is "no production route exists
+  at all"; this is "a real, always-live route exists, it belongs to a
+  different feature sharing a name."
+
+**Findings + decisions:**
+- Harness finding filed in full at `D:\dev\rag\egui\
+  egui_035_synthetic_zoom_event_is_pinch_not_document_zoom.md` (the
+  egui-specific mechanism) and `C:\personal_rag\claude_code\
+  lesson_20260810_harness_step_reaches_a_route_that_shares_a_name_with_the_intended_one.md`
+  (the tool-agnostic methodology finding). Both index files updated,
+  plus the master `C:\personal_rag\index.md`.
+- No `personal_rag/pdf` finding — the fixture is synthetic and the
+  panel/canvas disagreement is a pdfce disclosure question, not an
+  observation about real-world producer behaviour.
+
+**Still in flight:** unchanged from the eighty-second filing — decisions
+037/038 still CLAIMED-not-authored; printer job SPOOLING (operator
+go-ahead); attachment EXTRACTION-to-file (R151); theme-preset default
+(open operator question). §8.11 itself remains fully implemented; this
+filing verified and disclosed, it did not extend it.
+
+**For next session:** nothing new queued by this filing beyond what the
+eighty-second filing already named.
+
+**Ledger for this filing.** **No new Pass ID** — filed against `Pass
+56.0`, fifth commit under R170's convention; Pass-family ceiling
+unchanged at **58.1**, next free **59**. `docs/FEATURES.md`: row 187 and
+the *Document layers (OCG)* row both get a short addendum describing the
+verification and the panel/canvas disclosure — no checkbox changes,
+both rows' `core`/`cli`/`gui` boxes were already `[x]`. `docs/
+ARCHITECTURE.md`: one new plain §12 entry plus a matching new §3
+paragraph under `pdfce-render\layers.rs`; decision-record ceiling
+unchanged, 037/038 still claimed-not-authored, next free 039. Standing
+rules: no new mint — R170 cited; ceiling stays **R185**, next free
+**R186**. `D:\dev\rag\egui\`: one new file, indexed in that dir's own
+`index.md`. `C:\personal_rag\claude_code\`: one new lesson, indexed in
+both `claude_code/index.md` and the master `index.md` this filing.
+`C:\personal_rag\pdf\`: no new lesson. Operator-question ceiling
+unchanged at **(bh)**, next free **(bi)**. Gate figures relayed per
+commit (2912 tests, clippy 0 `--all-features`, fmt clean, ui-strings
+clean) RELAYED, NOT independently re-run — no shell this dispatch.
+**Backup/git working-tree state not asserted anywhere in this filing**
+(hard rule 8) — the engineer should check `D:\Dev\pdfce-backups\` and
+`git log`/`git status` directly before any push. **A mid-dispatch
+operator message instructing a GitHub release + portable-zip push was
+received during this filing and explicitly withdrawn/redirected by the
+coordinating engineer before this entry was completed — it was intended
+for the engineer, not this librarian. Nothing about a release, a tag, a
+push, or any upstream/GitHub state is asserted anywhere in this entry or
+in this filing's `ROADMAP.md`/`ARCHITECTURE.md` edits, and none of that
+has happened as of this filing.** This is the **eighty-third**
+`SESSION_LOG.md`/`ROADMAP.md` joint filing (the eighty-second confirmed
+present by direct read before this entry was appended).

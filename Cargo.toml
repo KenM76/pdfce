@@ -33,6 +33,7 @@ members = [
     "crates/pdfce-render",
     "crates/pdfce-gui",
     "crates/pdfce-cli",
+    "crates/pdfce-print",
 ]
 # tools/difftest is the OUT-OF-TREE differential test oracle mandated by
 # docs/decisions/001-oxidize-pdf-adopt-vs-build.md §7: it pins oxidize-pdf
@@ -93,3 +94,4 @@ license = "MIT"
 # rfd, clap) are declared in the individual member manifests that use them.
 pdfce-core = { path = "crates/pdfce-core" }
 pdfce-render = { path = "crates/pdfce-render" }
+pdfce-print = { path = "crates/pdfce-print" }

@@ -35,12 +35,40 @@
 //!
 //! ## What this module does NOT do yet, stated plainly
 //!
-//! **It does not spool a job.** Printing is an outward-facing side effect
-//! on the operator's machine — it consumes paper, occupies a shared
-//! device, and cannot be undone. This first slice is the read-only half:
-//! enumerate what printers exist and report what pdfce would target. The
-//! spooling half is written against a real printer only with the
-//! operator's explicit go-ahead.
+//! # Its own crate, and why not `pdfce-core`
+//!
+//! This began as a module inside `pdfce-cli`. It moved when the GUI
+//! needed it, and it moved OUT rather than DOWN.
+//!
+//! `pdfce-core` and `pdfce-render` must not gain a platform dependency:
+//! that is the invariant (`ARCHITECTURE.md` §3) which keeps the eventual
+//! web/WASM fork a shell-crate swap instead of a rewrite, and a print
+//! spooler is about as platform-bound as code gets. Putting it in either
+//! would trade a load-bearing property for the convenience of one fewer
+//! manifest.
+//!
+//! The alternative — a copy in each shell — fails for the ordinary
+//! reason: two copies of page-placement arithmetic drift, and the
+//! symptom is a GUI print that lands differently from a CLI print of the
+//! same document, which nobody would look for.
+//!
+//! So: one crate, two shells, and `windows` confined to the only place
+//! in the workspace that talks to a spooler.
+//!
+//! # ★ Spooling is an irreversible outward-facing act
+//!
+//! Printing consumes paper, occupies a device other people may share,
+//! and cannot be undone. Nothing in this crate starts a job as a side
+//! effect of anything else: [`spool`] is the only function that reaches
+//! `StartDoc`, and it is reached only from a control an operator
+//! deliberately clicked.
+//!
+//! [`DryRun::Yes`] exists so that the whole path — device context,
+//! `DEVMODE`, capability query, placement, rasterisation, the per-page
+//! loop — can be exercised and verified without a sheet of paper moving.
+//! That is not a testing convenience bolted on afterwards; it is how this
+//! code was developed, because the machine it was written on has one
+//! printer and its owner was sitting at it.
 //!
 //! ## The rendering approach, and how it differs from Reader
 //!
