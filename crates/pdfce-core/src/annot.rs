@@ -761,7 +761,26 @@ pub fn oc_is_hidden<G: ObjectGraph + ?Sized>(graph: &G, oc: ObjId, off: &BTreeSe
 
 /// Collect the OCG references an `/OCGs`/`/ON`/`/OFF` entry names — either a
 /// single indirect reference or an array of them (§8.11 Table 99/100/101).
-fn oc_refs<G: ObjectGraph + ?Sized>(graph: &G, obj: Option<&Object>) -> Vec<ObjId> {
+///
+/// # `pub(crate)` on purpose, and it must stay that way
+///
+/// [`crate::layers`] calls this. It briefly carried a byte-for-byte copy,
+/// because this was private — and its own doc comment said so and asked
+/// for the copy to be deleted if this ever became reachable. It has, and
+/// it was.
+///
+/// The duplication mattered for a specific reason worth keeping: the
+/// layers panel and the renderer must agree about **which groups a `/D`
+/// array names**, or `locked` and `off` end up computed over different
+/// sets of the same document — and the visible symptom is a panel that
+/// says "shown" about content the page hides. Two functions cannot
+/// guarantee that; one can.
+///
+/// Note the tolerance being shared as well as the behaviour: a single
+/// reference is accepted where Table 101 says array. Both callers must
+/// tolerate exactly the same malformed shapes, not merely the same
+/// well-formed ones.
+pub(crate) fn oc_refs<G: ObjectGraph + ?Sized>(graph: &G, obj: Option<&Object>) -> Vec<ObjId> {
     match obj.map(|o| graph.resolve(o)) {
         Some(Object::Reference(r)) => vec![*r],
         Some(Object::Array(items)) => items.iter().filter_map(Object::as_reference).collect(),

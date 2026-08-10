@@ -889,7 +889,7 @@ pub fn read_layers_with<G: ObjectGraph + ?Sized>(graph: &G, scan: LayerScan) -> 
             .and_then(Object::as_name)
             .is_some_and(|n| n.0 == b"OFF");
 
-        locked.extend(group_refs(graph, d.get(b"Locked")));
+        locked.extend(crate::annot::oc_refs(graph, d.get(b"Locked")));
         out.radio_groups = radio_groups(graph, d.get(b"RBGroups"));
         // `entry().or_insert()`, not `insert()`: the documented rule is
         // that the FIRST array a group belongs to is the one
@@ -952,7 +952,7 @@ pub fn read_layers_with<G: ObjectGraph + ?Sized>(graph: &G, scan: LayerScan) -> 
 
     if let Some(d) = d {
         for key in [b"ON".as_slice(), b"OFF", b"Locked"] {
-            for id in group_refs(graph, d.get(key)) {
+            for id in crate::annot::oc_refs(graph, d.get(key)) {
                 note(id, LayerSource::DefaultConfig, &mut found, &mut seen);
             }
         }
@@ -979,7 +979,7 @@ pub fn read_layers_with<G: ObjectGraph + ?Sized>(graph: &G, scan: LayerScan) -> 
                 continue;
             };
             for key in [b"ON".as_slice(), b"OFF", b"Locked"] {
-                for id in group_refs(graph, cfg.get(key)) {
+                for id in crate::annot::oc_refs(graph, cfg.get(key)) {
                     note(id, LayerSource::AlternateConfig, &mut found, &mut seen);
                 }
             }
@@ -1098,25 +1098,6 @@ fn record_group_element<G: ObjectGraph + ?Sized>(
     }
 }
 
-/// The OCG references an `/ON` / `/OFF` / `/Locked` entry names.
-///
-/// Mirrors `annot.rs`'s private `oc_refs` deliberately, including its
-/// tolerance of a single reference where Table 101 says array: the two
-/// must agree about which groups a `/D` array names, or `locked` and
-/// `off` would be computed over different sets of the same document.
-///
-/// (`annot::oc_refs` is private, so this is a duplication rather than a
-/// call. It is intentionally byte-for-byte equivalent in behaviour; if
-/// that function is ever made `pub(crate)`, this should be deleted in
-/// favour of it.)
-fn group_refs<G: ObjectGraph + ?Sized>(graph: &G, obj: Option<&Object>) -> Vec<ObjId> {
-    match obj.map(|o| graph.resolve(o)) {
-        Some(Object::Reference(r)) => vec![*r],
-        Some(Object::Array(items)) => items.iter().filter_map(Object::as_reference).collect(),
-        _ => obj.and_then(Object::as_reference).into_iter().collect(),
-    }
-}
-
 /// `/RBGroups` (Table 101) — an array of arrays of OCG references.
 ///
 /// Inner elements that are not references are skipped silently here; the
@@ -1157,7 +1138,7 @@ fn usage_application_groups<G: ObjectGraph + ?Sized>(
     entries
         .iter()
         .filter_map(|e| graph.resolve(e).as_dict())
-        .flat_map(|d| group_refs(graph, d.get(b"OCGs")))
+        .flat_map(|d| crate::annot::oc_refs(graph, d.get(b"OCGs")))
         .collect()
 }
 
@@ -1506,7 +1487,7 @@ fn expand_oc<G: ObjectGraph + ?Sized>(
         .and_then(Object::as_name)
         .is_some_and(|n| n.0 == b"OCMD");
     if is_ocmd {
-        for id in group_refs(graph, dict.get(b"OCGs")) {
+        for id in crate::annot::oc_refs(graph, dict.get(b"OCGs")) {
             note(id, source, found, seen);
         }
     } else {
