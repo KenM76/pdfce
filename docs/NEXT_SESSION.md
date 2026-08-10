@@ -11,13 +11,13 @@ Not owned by `pdfce-librarian`. Safe to edit without racing a filing.
 
 ## State
 
-- Branch `pass-8-redaction`, HEAD **`42b86cd`**.
-- **2804 workspace tests, 0 failed.** clippy 0 with `--all-features`,
+- Branch `pass-8-redaction`, HEAD **`77e0b50`**.
+- **2834 workspace tests, 0 failed.** clippy 0 with `--all-features`,
   `cargo fmt --all --check` clean.
 - **Seven of eight gates green.** `check-commits-filed.py` is RED on the
   most recent commits — file them; that is the normal state after a run
   of work, not a defect.
-- **86 commits unpushed**, and `main` upstream still does not compile on
+- **92 commits unpushed**, and `main` upstream still does not compile on
   Linux (`ef88973` fixes it, locally). Pushing is permitted on request
   and is the operator's call, never an agent's. **R176.**
 - Baseline debt: **5 hashes** in `tools/commits-filed-baseline.txt`. The
@@ -34,36 +34,38 @@ Chosen by the operator on 2026-08-10 after an audit found the gap
 Acrobat Reader on editing — text, vector objects, redaction, form
 authoring, page operations — and was BEHIND on plain consumption.
 
-Seven gaps were verified absent IN SOURCE. Six are now closed:
+Seven gaps were verified absent IN SOURCE. **All seven are now closed** —
+the campaign is complete:
 
 | Gap | State |
 |---|---|
-| Find | **DONE** — core + CLI (`find-text`) + GUI bar, `Pass 55.0` |
+| Find | **DONE** — core + CLI + GUI bar + on-page match highlighting |
 | Printing | **PARTIAL** — `list-printers`, `print-preview`; **spooling deliberately unbuilt** |
 | Bookmarks | **DONE** — core + `list-outline` + a clickable panel |
 | Attachments | **DONE (listing)** — core + `list-attachments`; extraction BLOCKED, see below |
 | Read mode / full screen | **DONE** — two separate toggles, Ctrl+H and F11 |
-| Document layers (OCG) | **IN FLIGHT** — see the next section |
+| Document layers (OCG) | **DONE (read-only)** — core + `list-layers` + panel; no toggle, see below |
 | Signature validation | **NOT STARTED**, lowest priority |
 
-### The layers module is written but NOT REGISTERED
+### Layers: shipped, with one piece of debt
 
-`crates/pdfce-core/src/layers.rs` exists (~1969 lines) with nine fixtures
-under `fixtures/synthetic/layers/`, written by a subagent that had not
-reported when this file was written. **It is not in `lib.rs`.** Register
-it, run the tests, wire `list-layers` in the CLI and a panel in the GUI.
+`pdfce-core::layers` is registered, tested, and has both surfaces. It
+reuses `annot.rs`'s `optional_content_default_off` rather than
+reimplementing it, so the panel cannot say "shown" about content the
+renderer hides.
 
-The hard part already existed and the agent was told to reuse it rather
-than reimplement: `annot.rs`'s `optional_content_default_off` resolves
-`/OCProperties /D` including `/BaseState`/`/ON`/`/OFF`, and `oc_is_hidden`
-resolves an `/OC` against it. If the agent duplicated them because they
-were private, **make the originals `pub(crate)` and delete the copy** —
-two resolvers disagreeing means a layers panel that says "on" about
-content the renderer hides.
+**The one duplication left**: `annot::oc_refs` is private, so
+`layers::group_refs` reimplements it. Make the original `pub(crate)` and
+delete the copy.
 
-Per the Acrobat RAG: toggling layers in a viewer is **session-scoped with
-zero file-format footprint** unless the operator explicitly saves, and
-**locked layers** cannot be toggled at all.
+**Two things the layers subagent flagged for a decision, not yet made:**
+`optional_content_default_off` treats "all groups" as "everything in
+`/OCGs`", so an unregistered group under `/BaseState /OFF` reports
+visible where the spec would say hidden — it kept the renderer's answer
+(agreement beats purity) and set a diagnostic. And Table 101 vs
+§8.11.4.5 disagree about processing both `/ON` and `/OFF` after
+`/BaseState`. Both fixes belong in `annot.rs` so all surfaces move
+together.
 
 ---
 
@@ -98,29 +100,60 @@ Stated by the operator on 2026-08-10: he is using this PC.
   but 5.1 leaves `$Exe` unresolved in that one file for reasons that were
   investigated and not identified.
 - New diag steps this session: `scroll:<points>`, `panel:find`,
-  `panel:bookmarks`, `view:read`, `view:escape`. **Full screen is
-  deliberately NOT drivable** — a step that seized the operator's display
-  would defeat the reason the harness exists.
+  `panel:bookmarks`, `panel:layers`, `view:read`, `view:escape`. **Full
+  screen is deliberately NOT drivable** — a step that seized the
+  operator's display would defeat the reason the harness exists.
+
+### THERE IS NO `nav:` PREFIX — every navigation key is `key:`
+
+`key:left`, `key:right`, `key:up`, `key:down`, `key:home`, `key:end`,
+`key:enter`. **`nav:home` and `nav:enter` are not steps and never were.**
+
+This cost two false bug reports on features that worked — Find's Enter
+(twice) and the keyboard guard's verification. Both tests sent
+`nav:something`, so neither ever pressed a key.
+
+**ALWAYS include the harness's own warning channel in `-Filter`.** It
+traced `script-step-UNPARSEABLE step="nav:enter" skipped=1` on every
+single run; the filters matched only the traces each test expected, so
+the explanation never appeared. A filter that matches only your
+expectation cannot tell you your input was wrong. Use something like:
+
+    -Filter "UNPARSEABLE|stale|<the thing you actually want>"
+
+**And when a trace reads zero, walk upstream before concluding.** The
+sequence that found it: trace the condition's parts separately; all
+false, so is the event in the frame at all; zero, but the probe sat
+AFTER the consumer, so move it before; still zero, so is the apply arm
+reached; never reached, so read the parse table. **A probe placed
+downstream of the suspect measures its output, not its input.**
 
 ---
 
 ## THE NEXT TASK — ranked
 
-### 1. Land the layers module (above), then its CLI and panel
+### 1. The campaign is COMPLETE — pick the next thing
 
-### 2. Owed items on Find, all named and none silent
+All seven gaps have a surface. What the sweep left owed, in order:
 
-- **Enter does not trigger the search.** Two idioms tried —
-  `has_focus()` + key peek, then `lost_focus()` like every other draft in
-  the app. Both silently no-op while the trace shows `focus=true
-  query="third"`. The explicit **Find** button is the working path, and
-  exists precisely because Enter must never be the only way in.
+- **Printing's spooling half** (item 3 below) — needs an operator
+  go-ahead before any job reaches paper.
+- **Attachment extraction** — blocked on `/EFF`, see above.
+- **A layer toggle** — needs a renderer visibility override AND a
+  session-state model. `layers.rs` is read-only by design, which is
+  correct: a checkbox with no engine behind it is worse than none.
+- **Signature validation** — the one gap never started.
+
+### 2. Owed items on Find
+
 - **Whole-word matching is absent, not faked.** `TextMatch` returns only
   the matched substring with no surrounding context, so a shell-side
-  boundary check has nothing to check against. A `pdfce-core` gap.
-- Match highlighting on the canvas is not drawn. `TextMatch.quad` is in
-  page space; invert `pdfce-render`'s Transform rather than hand-deriving
-  a second mapping.
+  boundary check has nothing to check against. A `pdfce-core` gap — the
+  fix is to return context, not to guess at a boundary.
+- ~~Enter does not trigger the search~~ — **it always worked**. See the
+  harness section below; corrected in `1bf6ab2`.
+- ~~Match highlighting is not drawn~~ — **drawn** in `4810b49`, through
+  the existing `pdf_space_to_canvas` + `page_to_screen` pair.
 
 ### 3. Printing: the spooling half
 
@@ -135,17 +168,14 @@ pdfce making Reader's *fallback* the default is an honest limitation that
 belongs in the disclosure), and a resolution cap is needed because A4 at
 600 DPI is ~139 MB of RGBA per page.
 
-### 4. `R86` is NOT discharged for `e46c3a8`
+### 4. ~~`R86` is NOT discharged for `e46c3a8`~~ — DISCHARGED
 
-The unmodified-key guard is right by two independent code analyses —
-mine and `pdfce-ui-specialist`'s, which found the codebase's own comment
-at `main.rs:17107` stating the ordering. But the empirical test does not
-work: type `hello`, press Home, type `X` gives `helloX` **both before and
-after** the guard, while a trace confirms the guard is active. egui 0.35
-does handle `Key::Home` (`text_selection/cursor_range.rs:134`) and the
-harness injects real events. **A harness question, not a product one** —
-but until it is answered, that commit's verification claim stays "not
-verified".
+Verified in `77e0b50`: `query="hello"` then `key:home` then
+`query="Xhello"`, with `pre-collect-home n=2 typing=true` measured
+upstream of `collect_keyboard_actions`. The guard works and the key
+reaches the field.
+
+The "harness question" had the same answer as Find's Enter — below.
 
 ---
 
