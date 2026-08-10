@@ -2768,12 +2768,31 @@ enum Command {
     ExportDxf {
         /// Input PDF.
         input: PathBuf,
-        /// 1-based page number.
-        #[arg(long, default_value_t = 1)]
+        /// 1-based page number. One page, one `--output` file.
+        #[arg(long, default_value_t = 1, conflicts_with = "pages")]
         page: u32,
-        /// Output `.dxf` path.
-        #[arg(short, long)]
-        output: PathBuf,
+        /// 1-based pages to export, one DXF each into `--output-dir`:
+        /// `all`, `3`, `1-4`, `5,1-2`.
+        ///
+        /// Files are named `<stem>_p<n>.dxf`, zero-padded to the widest
+        /// page number in the run so they sort in page order — the same
+        /// naming the GUI's multi-page export uses, deliberately, so a
+        /// batch script and an operator produce interchangeable output.
+        ///
+        /// The drawing scale is derived from the ce dimensions on **all**
+        /// the selected pages together, because one `--scale` serves the
+        /// whole run. Pages at different scales are therefore a REFUSAL,
+        /// exactly as two disagreeing groups on one page are: export them
+        /// in separate runs, or pass `--scale`.
+        #[arg(long, conflicts_with = "page")]
+        pages: Option<String>,
+        /// Output `.dxf` path (single-page mode).
+        #[arg(short, long, conflicts_with = "output_dir")]
+        output: Option<PathBuf>,
+        /// Existing directory to write one DXF per page into
+        /// (multi-page mode; requires `--pages`).
+        #[arg(long, conflicts_with = "output", requires = "pages")]
+        output_dir: Option<PathBuf>,
         /// Output units.
         #[arg(long, value_enum, default_value_t = DxfUnitArg::In)]
         units: DxfUnitArg,
@@ -4235,12 +4254,24 @@ fn run() -> ExitCode {
         Command::ExportDxf {
             input,
             page,
+            pages,
             output,
+            output_dir,
             units,
             scale,
             no_fit_arcs,
             no_text,
-        } => cmd_export_dxf(&input, page, &output, units, scale, !no_fit_arcs, !no_text),
+        } => cmd_export_dxf(ExportDxfArgs {
+            input: &input,
+            page,
+            pages: pages.as_deref(),
+            output: output.as_deref(),
+            output_dir: output_dir.as_deref(),
+            units,
+            scale,
+            fit_arcs: !no_fit_arcs,
+            text: !no_text,
+        }),
         Command::TextRunDelete {
             input,
             page,
@@ -13196,7 +13227,7 @@ appended={} out_bytes={} undo_verified={} undo_identical={}",
 ///   wrong by a factor of five, and it would look entirely plausible.
 ///   `--scale` resolves it, which is what the refusal says.
 ///
-/// The inference is scoped to **the page being exported**, not to the
+/// The inference is scoped to **the pages being exported**, not to the
 /// document. It shipped document-wide, which was wrong in both directions
 /// on a multi-page sheet set: an unambiguous page-1 export could be
 /// refused because page 3 held a 1:5 detail, and — the half that actually
@@ -13205,18 +13236,66 @@ appended={} out_bytes={} undo_verified={} undo_identical={}",
 /// looking odd. `dimension_groups_on_page` resolves each ce dimension's
 /// owning page through its annotation's `/P`, and only those groups get a
 /// vote.
-fn cmd_export_dxf(
-    input: &Path,
+///
+/// ## Two modes, and why multi-page shares ONE scale
+///
+/// - `--page N -o file.dxf` — one page, one file.
+/// - `--pages <spec> --output-dir <dir>` — one DXF per page, named
+///   `<stem>_p<n>.dxf` zero-padded to the widest page number in the run.
+///   Identical naming to the GUI's multi-page export, so a batch script
+///   and an operator produce interchangeable output (project rule 11).
+///
+/// The scale is inferred from the union of every selected page's ce
+/// dimension groups and applied to all of them, because `--scale` is one
+/// value and a run that silently used a different scale per file would be
+/// the plausible-wrong-answer failure this whole feature exists to close.
+/// The consequence is deliberate: **pages at different scales are a
+/// refusal**, reported exactly like two disagreeing groups on one page,
+/// with the same two remedies (separate runs, or an explicit `--scale`).
+/// Everything `export-dxf` was asked for.
+///
+/// A struct rather than nine positional parameters: the flag set grew past
+/// the point where a call site reads as documentation, and
+/// `clippy::too_many_arguments` is the lint that says so. Field names at
+/// the call site also make the two mutually-exclusive destination flags
+/// legible — `output: None, output_dir: Some(..)` states the mode, where a
+/// pair of bare `Option`s in argument position would not.
+struct ExportDxfArgs<'a> {
+    input: &'a Path,
+    /// 1-based, single-page mode. Ignored when `pages` is set (clap makes
+    /// them mutually exclusive).
     page: u32,
-    output: &Path,
+    /// A `parse_pages` spec — multi-page mode.
+    pages: Option<&'a str>,
+    /// Single-page destination file.
+    output: Option<&'a Path>,
+    /// Multi-page destination directory.
+    output_dir: Option<&'a Path>,
     units: DxfUnitArg,
+    /// Explicit override; `None` means "derive it from the ce dimensions".
     scale: Option<f64>,
     fit_arcs: bool,
+    /// Whether page text becomes `TEXT` entities.
     text: bool,
-) -> u8 {
+}
+
+fn cmd_export_dxf(args: ExportDxfArgs<'_>) -> u8 {
     use pdfce_core::export::dxf::{
-        DxfOptions, DxfScaleSuggestion, DxfText, DxfUnits, suggest_scale_for_groups, write_dxf,
+        DxfOptions, DxfOutcome, DxfScaleSuggestion, DxfText, DxfUnits, suggest_scale_for_groups,
+        write_dxf,
     };
+
+    let ExportDxfArgs {
+        input,
+        page,
+        pages: pages_spec,
+        output,
+        output_dir,
+        units,
+        scale,
+        fit_arcs,
+        text,
+    } = args;
 
     if let Some(s) = scale
         && (!s.is_finite() || s <= 0.0)
@@ -13227,6 +13306,27 @@ fn cmd_export_dxf(
         );
         return exit::RUNTIME_ERROR;
     }
+    // Clap enforces that `--output` and `--output-dir` are mutually
+    // exclusive and that `--output-dir` requires `--pages`. What it cannot
+    // express is that ONE of them must be present, because which one is
+    // legal depends on the other flag — so that is checked here, with a
+    // message naming the flag the operator actually wants rather than a
+    // generic "required argument missing".
+    if output.is_none() && output_dir.is_none() {
+        eprintln!(
+            "pdfce-cli: {}: nowhere to write — pass --output <file.dxf> for a single page, or --output-dir <dir> with --pages",
+            input.display()
+        );
+        return exit::RUNTIME_ERROR;
+    }
+    if pages_spec.is_some() && output_dir.is_none() {
+        eprintln!(
+            "pdfce-cli: {}: --pages writes one DXF per page and needs --output-dir <dir>; --output names a single file",
+            input.display()
+        );
+        return exit::RUNTIME_ERROR;
+    }
+
     let doc = match pdfce_core::document::Document::load(input) {
         Ok(doc) => doc,
         Err(err) => {
@@ -13238,33 +13338,77 @@ fn cmd_export_dxf(
     // `/PieceInfo` sidecar the drawing's calibration lives in.
     let session = pdfce_core::edit::EditSession::new(doc);
     let doc = &session;
-    let pages = match doc.pages() {
+    let page_list = match doc.pages() {
         Ok(p) => p,
         Err(err) => {
             eprintln!("pdfce-cli: {}: {err}", input.display());
             return exit::RUNTIME_ERROR;
         }
     };
-    let index = (page.max(1) - 1) as usize;
-    let Some(target) = pages.get(index) else {
-        eprintln!(
-            "pdfce-cli: {}: no page {page} — the document has {} page(s)",
-            input.display(),
-            pages.len()
-        );
-        return exit::RUNTIME_ERROR;
-    };
-    let model = match pdfce_core::vector::decompose_page(
-        &doc.view(),
-        target,
-        pdfce_core::vector::Matrix::IDENTITY,
-    ) {
-        Ok(m) => m,
-        Err(err) => {
-            eprintln!("pdfce-cli: {}: {err}", input.display());
-            return exit::RUNTIME_ERROR;
+
+    // ---- which pages ----
+    //
+    // `parse_pages` is the established spec parser and REFUSES an
+    // out-of-range page rather than dropping it (see its own docs on why
+    // silently handing back 30 pages of a requested 50 is how a mistake
+    // ships to a thousand documents). The single-page path keeps its own
+    // bounds message, which names the page the operator typed.
+    let indices: Vec<usize> = match pages_spec {
+        Some(spec) => match parse_pages(spec, page_list.len()) {
+            Ok(v) => v,
+            Err(message) => {
+                eprintln!("pdfce-cli: {}: {message}", input.display());
+                return exit::RUNTIME_ERROR;
+            }
+        },
+        None => {
+            let index = (page.max(1) - 1) as usize;
+            if page_list.get(index).is_none() {
+                eprintln!(
+                    "pdfce-cli: {}: no page {page} — the document has {} page(s)",
+                    input.display(),
+                    page_list.len()
+                );
+                return exit::RUNTIME_ERROR;
+            }
+            vec![index]
         }
     };
+
+    // ---- decompose every page BEFORE writing anything ----
+    //
+    // All-or-nothing on purpose. A run that wrote four files and then died
+    // on page five would leave a directory an operator has to reconcile by
+    // hand against a page list, and the usual cause of a decompose failure
+    // (a malformed content stream) is a property of the document rather
+    // than of the moment, so retrying gains nothing.
+    let mut models = Vec::with_capacity(indices.len());
+    for index in &indices {
+        let Some(target) = page_list.get(*index) else {
+            eprintln!(
+                "pdfce-cli: {}: no page {} — the document has {} page(s)",
+                input.display(),
+                index + 1,
+                page_list.len()
+            );
+            return exit::RUNTIME_ERROR;
+        };
+        match pdfce_core::vector::decompose_page(
+            &doc.view(),
+            target,
+            pdfce_core::vector::Matrix::IDENTITY,
+        ) {
+            Ok(m) => models.push(m),
+            Err(err) => {
+                eprintln!(
+                    "pdfce-cli: {}: page {}: {err} — nothing was written",
+                    input.display(),
+                    index + 1
+                );
+                return exit::RUNTIME_ERROR;
+            }
+        }
+    }
 
     // ---- resolve the drawing scale (see this function's contract) ----
     //
@@ -13272,10 +13416,23 @@ fn cmd_export_dxf(
     // rather than on a scale question the operator would then have answered
     // for nothing.
     //
-    // Scoped to THIS page's groups — see this function's contract for the
-    // sheet-set failure the document-wide version had.
-    let suggestion =
-        suggest_scale_for_groups(&doc.dimension_model(), &doc.dimension_groups_on_page(index));
+    // Scoped to the SELECTED pages' groups, deduplicated: a group present
+    // on two pages must not vote twice, or it would inflate `agreeing` and
+    // read as corroboration of itself.
+    let mut groups: Vec<pdfce_core::dimension::GroupId> = Vec::new();
+    for index in &indices {
+        for id in doc.dimension_groups_on_page(*index) {
+            if !groups.contains(&id) {
+                groups.push(id);
+            }
+        }
+    }
+    let multi = indices.len() > 1;
+    let scope = if multi { "these pages'" } else { "this page's" };
+    let suggestion = suggest_scale_for_groups(&doc.dimension_model(), &groups);
+    // Whether pdfce chose this number or the operator did — read before
+    // `scale` is shadowed. See the paper-scale disclosure at the end.
+    let scale_was_derived = scale.is_none();
     let scale = match scale {
         Some(explicit) => explicit,
         None => match &suggestion {
@@ -13302,7 +13459,7 @@ fn cmd_export_dxf(
             DxfScaleSuggestion::Uncalibrated => 1.0,
             DxfScaleSuggestion::Conflicting { candidates } => {
                 eprintln!(
-                    "pdfce-cli: {}: REFUSED — this page's ce dimension groups disagree about its scale, and a DXF carries only one. Nothing was written.",
+                    "pdfce-cli: {}: REFUSED — {scope} ce dimension groups disagree about the scale, and a DXF carries only one. Nothing was written.",
                     input.display()
                 );
                 for c in candidates {
@@ -13330,68 +13487,127 @@ fn cmd_export_dxf(
         },
         ..DxfOptions::default()
     };
-    let (dxf, out) = write_dxf(&model, &opts);
-    if let Err(err) = std::fs::write(output, dxf.as_bytes()) {
-        eprintln!("pdfce-cli: {}: {err}", output.display());
-        return exit::IO_ERROR;
+
+    // Zero-padded to the LARGEST page number in the run, not to the
+    // document's page count: exporting pages 8-10 of a 400-page file
+    // should not produce `_p008`.
+    let width = indices
+        .iter()
+        .map(|i| (i + 1).to_string().len())
+        .max()
+        .unwrap_or(1);
+    let stem = input
+        .file_stem()
+        .map_or_else(|| "export".to_owned(), |s| s.to_string_lossy().into_owned());
+
+    let mut total = DxfOutcome::default();
+    for (index, model) in indices.iter().zip(&models) {
+        let (dxf, out) = write_dxf(model, &opts);
+        let path = match output_dir {
+            Some(dir) => dir.join(format!("{stem}_p{:0width$}.dxf", index + 1)),
+            // Unreachable: the guard above rejects both-absent, and clap
+            // rejects both-present. Handled rather than unwrapped so a
+            // future flag change cannot turn this into a panic.
+            None => match output {
+                Some(path) => path.to_path_buf(),
+                None => return exit::RUNTIME_ERROR,
+            },
+        };
+        if let Err(err) = std::fs::write(&path, dxf.as_bytes()) {
+            eprintln!("pdfce-cli: {}: {err}", path.display());
+            return exit::IO_ERROR;
+        }
+        let entities = out.polylines + out.circles + out.arcs + out.splines + out.text_entities;
+        println!(
+            "export-dxf {} page {} -> {}; entities={entities} polylines={} circles={} arcs={} splines={} text={} unreadable_text={} skipped_text={} skipped_images={} units={} scale={} fit_arcs={}",
+            input.display(),
+            index + 1,
+            path.display(),
+            out.polylines,
+            out.circles,
+            out.arcs,
+            out.splines,
+            out.text_entities,
+            out.unreadable_text,
+            out.skipped_text,
+            out.skipped_images,
+            match units {
+                DxfUnitArg::In => "in",
+                DxfUnitArg::Mm => "mm",
+            },
+            scale,
+            u32::from(fit_arcs),
+        );
+        total.polylines += out.polylines;
+        total.circles += out.circles;
+        total.arcs += out.arcs;
+        total.splines += out.splines;
+        total.skipped_text += out.skipped_text;
+        total.skipped_images += out.skipped_images;
+        total.text_entities += out.text_entities;
+        total.unreadable_text += out.unreadable_text;
     }
 
-    // The disclosures, in prose, on stderr — see this function's contract.
-    if out.skipped_text > 0 {
+    // ---- the disclosures, in prose, on stderr ----
+    //
+    // SUMMED across the run and emitted ONCE. Per-file would be the
+    // obvious choice and is the wrong one: a forty-page batch would print
+    // forty near-identical paragraphs, and a disclosure repeated forty
+    // times is one an operator scrolls past — which is the same
+    // learned-past failure the paper-scale gating below was written to
+    // avoid, arriving through volume instead of through wording. The
+    // per-page machine-readable line above already carries each page's
+    // own counts for anything that needs them.
+    if total.skipped_text > 0 {
         eprintln!(
             "pdfce-cli: {}: {} text object(s) were NOT exported — this DXF carries geometry only, so any dimensions, labels and notes on the drawing are absent from it. Their outlines are not there either; the text was never converted to curves.",
             input.display(),
-            out.skipped_text
+            total.skipped_text
         );
     }
-    if out.unreadable_text > 0 {
+    if total.unreadable_text > 0 {
         eprintln!(
             "pdfce-cli: {}: {} text run(s) could NOT be read and are absent from the DXF — pdfce could not map their character codes to characters (a font with no /ToUnicode, typically). This is different from --no-text: these are labels you can see on the page that pdfce cannot transcribe, so the DXF is missing text you will expect to find in it.",
             input.display(),
-            out.unreadable_text
+            total.unreadable_text
         );
     }
-    if out.skipped_images > 0 {
+    if total.skipped_images > 0 {
         eprintln!(
             "pdfce-cli: {}: {} image(s) were NOT exported — DXF has no raster entity in the subset pdfce writes, so a scanned or rendered region of the page is simply missing rather than blank.",
             input.display(),
-            out.skipped_images
+            total.skipped_images
         );
     }
-    // Gated on the page being UNCALIBRATED, not merely on the scale being
-    // 1. A group calibrated to an explicit 1:1 is a real answer that the
-    // operator gave, and warning them that pdfce might not know the scale
-    // when it demonstrably does is the shape of disclosure that gets
-    // learned-past and then ignored when it matters.
-    if (scale - 1.0).abs() < f64::EPSILON && matches!(suggestion, DxfScaleSuggestion::Uncalibrated)
+    // Gated on THREE things, and each rules out a different way of telling
+    // the operator something they already know:
+    //
+    //   * the scale is 1 — there is nothing to warn about otherwise;
+    //   * the pages are UNCALIBRATED — a group calibrated to an explicit
+    //     1:1 is a real answer the operator gave, and warning them that
+    //     pdfce might not know the scale when it demonstrably does is the
+    //     shape of disclosure that gets learned past and then ignored when
+    //     it matters;
+    //   * ★ the 1 was DERIVED, not typed. This third clause was missing
+    //     and it produced a genuinely absurd message: `--scale 1` on an
+    //     uncalibrated drawing printed "pdfce does not know what scale the
+    //     drawing is at … pass --scale 2 for 1:2, and so on" — instructing
+    //     the operator to do the thing they had just done. It is the same
+    //     objection as the second clause arriving from the other side: an
+    //     explicit `--scale 1` is the operator answering, exactly as an
+    //     explicit 1:1 calibration is. Found by running the command rather
+    //     than by reading it.
+    if scale_was_derived
+        && (scale - 1.0).abs() < f64::EPSILON
+        && matches!(suggestion, DxfScaleSuggestion::Uncalibrated)
     {
         eprintln!(
-            "pdfce-cli: {}: exported at PAPER scale. Nothing on this page is calibrated, so pdfce does not know what scale the drawing is at — if it is a scaled view, a 1:2 detail say, the geometry is that fraction of real size and will look entirely plausible. Either measure a known feature in the GUI (the scale then comes across automatically) or pass --scale 2 for 1:2, and so on.",
-            input.display()
+            "pdfce-cli: {}: exported at PAPER scale. Nothing on {} is calibrated, so pdfce does not know what scale the drawing is at — if it is a scaled view, a 1:2 detail say, the geometry is that fraction of real size and will look entirely plausible. Either measure a known feature in the GUI (the scale then comes across automatically) or pass --scale 2 for 1:2, and so on.",
+            input.display(),
+            if multi { "these pages" } else { "this page" }
         );
     }
 
-    let entities = out.polylines + out.circles + out.arcs + out.splines + out.text_entities;
-    println!(
-        "export-dxf {} page {} -> {}; entities={entities} polylines={} circles={} arcs={} splines={} text={} unreadable_text={} skipped_text={} skipped_images={} units={} scale={} fit_arcs={}",
-        input.display(),
-        page.max(1),
-        output.display(),
-        out.polylines,
-        out.circles,
-        out.arcs,
-        out.splines,
-        out.text_entities,
-        out.unreadable_text,
-        out.skipped_text,
-        out.skipped_images,
-        match units {
-            DxfUnitArg::In => "in",
-            DxfUnitArg::Mm => "mm",
-        },
-        scale,
-        u32::from(fit_arcs),
-    );
     exit::SUCCESS
 }
 

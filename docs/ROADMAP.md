@@ -81,6 +81,308 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★ `Pass 52.2` (GUI half: File ▸ Export ▸ Export DXF…, and the `Pass 52.0`–`52.3` DXF-export family closes COMPLETE across core+CLI+GUI) — 2026-08-09, committed `0466281` (fifty-fifth filing)
+
+**Sourcing.** This librarian has no shell this dispatch (hard rule 8).
+The dispatching engineer reports `0466281` verified directly against
+`git log` this session — one hop, not relayed through a chain of prior
+dispatches, and recorded as such rather than folded into an
+identical-looking "relayed" caveat. The technical content below is
+drawn from the dispatch's own description of the shipped code; the
+`cargo test`/`clippy`/`fmt` totals and the fixture-export results are
+relayed, not independently re-run or re-`Read` against the working
+tree by this librarian this dispatch.
+
+**The feature.** `File ▸ Export ▸ Export DXF…` — a new
+`RibbonGroup::Export` on `RibbonTab::File`, beside `Clipboard`. Opens a
+non-modal `egui::Window`; **Export stays disabled until a scale
+resolves.** Three states, matching `DxfScaleSuggestion`'s own three
+variants (decision 035):
+- **Calibrated** — field pre-filled; caption names the source
+  ce-dimension group and restates its calibration through the SHARED
+  `ui_text::group_scale_summary` formatter ("1 m = 40.00 pt"), not a
+  second, competing notation.
+- **Uncalibrated** — field left EMPTY, never defaulted to `1.0`;
+  unlocks only on a typed number or an explicit *"Export at paper
+  scale (1:1) — this drawing has no scale set"* tick.
+- **Conflicting** — radio list, nothing pre-selected, plus "enter a
+  scale myself." Typing alone does not unlock Export.
+
+Also shipped: units radio (in/mm), text include/omit, an `Advanced`
+collapsing header (fit-arcs toggle + arc tolerance), multi-page export
+driven by `doc.selected_pages` (one DXF per page into a picked folder,
+`{stem}_p{n}.dxf`, zero-padded to the widest page number in the run),
+every write through the existing `write_atomic`, and a new
+`dxf_export_result` status-bar disclosure.
+
+**★ The defect this Pass fixes, and why it is dangerous rather than
+merely annoying.** `suggest_scale` (as shipped in `d2d03a5`) reads the
+WHOLE `DimensionModel` — document-wide. On a one-page drawing that
+equals the page; on a sheet set it is wrong in **two** directions, and
+the wrong one is the silent one:
+- **Dangerous:** page 1 uncalibrated, page 3 a 1:5 detail → page 1
+  exports at **five times real size**, with nothing on screen, in the
+  file, or in the exit code saying so.
+- **Annoying (the one an operator would actually report):** an
+  unambiguous page refused because a DIFFERENT page disagrees.
+
+Fixed by two ADDITIVE core APIs, both new in THIS commit — not, per a
+correction below, already present in `d2d03a5`:
+- `EditSession::dimension_groups_on_page(page_index) -> Vec<GroupId>`
+  — resolves page ownership through each ce dimension's annotation
+  `/P` against the page object id, the same way `dimension_rects`
+  already does (the sidecar deliberately does not itself record a
+  page). Deduplicated, model-group order, overlay-aware, omits
+  unwired dimensions.
+- `export::dxf::suggest_scale_for_groups(model, &[GroupId])` — the
+  page-scoped sibling of `suggest_scale`; both delegate to one private
+  `suggest_scale_from` so the unit-cancellation arithmetic has exactly
+  one implementation.
+
+**The CLI adopted it too, same commit.** `cmd_export_dxf` exports ONE
+page and was, until this commit, inheriting the whole document's
+opinion — a live defect, not an "inherited, still-open limitation" as
+the fifty-fourth filing's flagged note left it. Closed here.
+
+**★ Correction to this librarian's own fifty-fourth filing, and to
+`ARCHITECTURE.md` §12's decision-035 fourth-fork text — both named
+because they were WRONG, not merely early.** The fifty-fourth filing
+flagged, without being able to resolve it (no shell): *"this
+librarian's own independent Read of the current working tree already
+shows the CLI calling a page-scoped `suggest_scale_for_groups`,
+contradicting the dispatch's own framing of the scale detection as
+still document-wide."* **Resolved, by the dispatching engineer's
+direct account this session: what that Read saw was this session's
+UNCOMMITTED work, not the content of `d2d03a5`.** `d2d03a5` shipped
+`suggest_scale` — document-wide — and that WAS a real, correctly
+described limitation at the time it was filed. The page-scoped
+`suggest_scale_for_groups`/`dimension_groups_on_page` pair shipped
+here, in `0466281`, not in `d2d03a5`. `ARCHITECTURE.md` §12's
+decision-035 fourth-fork entry, which names `suggest_scale_for_groups`
+under a paragraph headed by the `d2d03a5` hash, is corrected by a
+dated footer filed alongside this entry — the substance (a
+three-variant enum beats `Option<f64>`) was and remains correct; only
+the commit attribution for page-scoping moves.
+
+**A general shape worth stating, since the dispatch itself asked for
+it in these terms: an inference drawn from a document-global model,
+consumed by a page-scoped operation, is silently wrong on multi-page
+documents in the OVER-CONFIDENT direction.** The failure that reaches
+the operator as a bug report is the safe one (an unambiguous page
+refused); the failure that reaches the operator as a wrong drawing is
+the one nothing complains about. This is the general form
+`D:\dev\rag\rust\` gets a new finding for (see below) — it is not
+specific to DXF export, ce dimensions, or pdfce.
+
+**Two findings from the RUNNING application, after every automated
+test was already green (R86).**
+1. **Raw `f64` precision reached the operator.** The conflict list
+   printed `"Default" says 283.46456692913387`; the pre-filled field
+   showed `70.866141732`. A derived scale is a division, so it is never
+   round, and seventeen significant figures is not a number an
+   operator can read, compare, or retype. New
+   `ui_text::export_dxf_scale_number` renders six decimals, trailing
+   zeros stripped. Because the rendered value is written INTO the
+   field and re-parsed on export, the rounding is checked against the
+   original and falls back to the full representation rather than
+   silently rounding to a zero that would disable Export with no
+   explanation. Measured residual: **9 nm over a 2.5 m coordinate**
+   (9e-9 m / 2.5 m).
+2. **The export was entirely undrivable by the observation harness.**
+   `commit_dxf_export` asks for its destination through a NATIVE
+   file/folder dialog — the same wall `diag::font_dirs` was built to
+   get past. Added `export:dxf`, `export:dxf-go`, and
+   `PDFCE_DIAG_EXPORT_DIR`, which substitutes the dialog's ANSWER and
+   nothing else, so the harness exercises the same code path a real
+   click would. **This is the SECOND instance of this exact fix in
+   this project** (first: `diag::font_dirs`) — by this project's own
+   two-occurrence promotion bar, this is now a pattern, escalated to
+   `D:\dev\rag\egui\` (see below), not left as an anecdote.
+
+**Correctness trap avoided, flagged unprompted by `pdfce-ui-specialist`
+last session and confirmed right.** `decompose_page` runs against
+`doc.session.view()`, never a fresh `Document::load`. The CLI
+legitimately loads from disk (it has no session); copying that call
+into the GUI would export a DXF that silently does not match what is
+on screen for anyone with unsaved edits.
+
+**Disclosure-channel discipline.** `dxf_export_result` is a SIBLING of
+`SaveOutcome`, not a member — `SaveOutcome` is about writing the open
+document's own edits, and a DXF export never touches it. Added to
+`tools/check-disclosure-channel.sh`'s `GUARDED` list from ITS FIRST
+LINE, not retrofitted after a disclosure was found invisible (which is
+how `edit_note`, the list's first entry, got there) — proven to bite
+by planting a second assignment and watching the gate fail.
+
+**Verification, live (relayed from the dispatch, not independently
+re-run):**
+
+| Fixture | State | Result |
+|---|---|---|
+| `linear-dim.pdf` | Calibrated 70.866142 | wrote 1166 bytes; ezdxf audit **0 errors / 0 fixes**; AC1015; `$INSUNITS 4`; `LWPOLYLINE (2500,5000)-(7500,5000)` mm = **5.000 m**, exactly the operator-typed calibration |
+| `linear-base.pdf` | Uncalibrated | `resolved=None`, "wrote nothing" — gate held |
+| `two-group.pdf` | Conflicting | `resolved=None`, "wrote nothing" — gate held |
+
+Ribbon band and all three dialog states confirmed by screenshot.
+
+**Numbers.** **2656 workspace tests, 0 failed** over the full suite (13
+new for this Pass: 6 core page-scope tests in
+`crates/pdfce-core/tests/dxf_scale.rs`, 4 GUI `resolved_scale` gate
+tests, 2 `ui_text` number-format tests, 1 diag step-parse test).
+`cargo clippy --workspace --all-targets`: 0. `cargo fmt --all --check`:
+clean. **All seven gates green** (relayed, not independently re-run).
+`cargo tree -p pdfce-core` / `-p pdfce-render`: no GUI dependency
+(relayed).
+
+**Invariant checks**
+- **GUI-core separation**: relayed as clean via `cargo tree`; not
+  independently re-run this dispatch (no shell).
+- **Round-trip / minimal-diff**: not applicable — same reasoning as
+  the whole `export/` tree (write path OUT of pdfce's model),
+  reinforced by `decompose_page`'s session-view sourcing above.
+- **Packaging smoke test**: not addressed — no packaging surface
+  changed.
+
+**Ledger for this filing.** No new Pass ID — `Pass 52.2` was already
+named (fifty-second filing) and given its core+CLI substrate
+(fifty-fourth filing, `d2d03a5`); this is its GUI-half completion
+record, and **`Pass 52.2` is now COMPLETE across core/cli/gui — the
+whole `Pass 52.0`–`52.3` DXF-export family is COMPLETE.**
+`docs/FEATURES.md`: DXF-export row's `gui` box ticked `[x]` in this
+same filing; row MOVED from *Planned* to *Implemented* (new *Export*
+subsection). Standing rules: no rule minted or amended by this entry —
+`R172`/`R173` unaffected, ceiling stays **R173**, next free **R174**.
+Decision records: `035` gets a same-day extension (fifth fork,
+page-scoping) PLUS the correction footer named above — same
+`ARCHITECTURE.md` §12 filing; no new number claimed (`033` on disk,
+`034` unauthored/unchanged, `035` extended). Operator-question ceiling
+unchanged at **(bh)**, next free **(bi)**. `docs/decisions/`
+untouched. Backup/git working-tree state not asserted beyond the
+sourcing note above (hard rule 8). This is the **fifty-fifth**
+`SESSION_LOG.md` filing (the fifty-fourth confirmed present by direct
+read before this entry was written).
+
+---
+
+### ★ FILING GAP CLOSED — `Pass 24.0 (part)` (decision 024, fixed-anchor confirm strip) SHIPPED 2026-08-04, committed `ae59ce3`, unfiled for five days, resolved today by direct `git` evidence — 2026-08-09 (fifty-fifth filing)
+
+**Sourcing.** This librarian has no shell this dispatch (hard rule 8).
+The evidence below is the dispatching engineer's own `git show -s
+ae59ce3`, `git log -S "tool_strip_anchor"`, and `grep -c "fn
+tool_strip_anchor"` output, quoted or paraphrased from what the
+dispatch itself quotes verbatim, reported as run directly this session
+against the working tree. Not independently re-run by this librarian.
+
+**The contradiction, as it stood at the fifty-third and fifty-fourth
+filings.** `ae59ce3`'s subject, *"Pass 24.0 (part): tool panels anchor
+to..."*, plausibly matched decision 024's own `R121` acceptance
+criterion for Pass 24.0 (anchor the confirm to the viewport, not the
+page) — but the `★ Pass 24.0–24.5` family's own 2026-08-05 update
+banner stated, unambiguously, that Pass 24.0 "has **not** shipped
+under that name," attributing the operator-visible fix instead to
+Pass 34.0/34.1. Two forks were left open: (1) is `ae59ce3` really
+decision 024's `24.0`, or the pre-renumber `24.0a` (colliding with it,
+filed the same day, later renamed)? (2) if it is, is the same fix now
+double-attributed to both `ae59ce3` and Pass 34.0/34.1?
+
+**Fork 1 — RESOLVED: decision 024's `24.0`, in the commit's own
+words.** `git show -s ae59ce3` (2026-08-04 12:48:58 -0400) contains,
+verbatim: *"This is PART of decision 024's Pass 24.0, not all of it.
+The rest — merging each tool's two floating Areas into ONE strip, and
+wiring universal Enter/Escape — is deliberately not attempted here...
+The placement fix loses no strings at all."* The commit body also
+opens by quoting the operator's own founding complaint for decision
+024 — *"there is a separate accept / reject box somewhere on the
+screen to click"* — and answers it: *"The word doing the work is
+SOMEWHERE."* It cannot be the pre-renumber `24.0a` on the merits
+either: that workstream was renamed, this document's own
+canonical-assignment table records, to **Pass 25.0** (`7fc943a`,
+subpath-level hit testing) — an unrelated subject, confirmed from
+`ROADMAP.md` alone with no shell required.
+
+**Fork 2 — RESOLVED: not double-attributed. A two-stage fix, and the
+later code narrates its own handover.** `git log -S
+"tool_strip_anchor"` returns EXACTLY ONE commit — `ae59ce3` — so the
+placement fix belongs to it alone; nothing in Pass 34.0/34.1 re-did
+it. What Pass 34.1 did was SUPERSEDE it: `tool_strip_anchor`/
+`StripCorner` no longer exist at HEAD (`grep -c "fn
+tool_strip_anchor"` = 0), and `crates/pdfce-gui/src/canvas.rs:251`
+carries a retirement comment narrating the sequence in order —
+decision 024 anchored the strips to the viewport, which stopped them
+moving (the right fix for POSITION, and it left the category alone:
+they still floated); Pass 34.1 then finished the job the operator
+actually asked for (*"all of the options should be shown in a side
+bar tab docked with the page navigation tab"*) by moving all six into
+`DockPanel::ToolOptions`, emptying the corners `StripCorner` used to
+name. **One operator complaint, two Passes, two distinct changes,
+correctly sequenced — not a duplicate attribution.** (Pass 34.0,
+`GestureInterrupt::Commit`, is a third, unrelated thing — clicking
+away keeps your edit — sharing no code with either.)
+
+**What this settles, stated as corrections rather than silent fixes:**
+1. **`ROADMAP.md`'s Pass 24.0 status of "NOT STARTED" was stale.**
+   Corrected in place at the family's own *Next up* entry (see below)
+   to "PARTIALLY SHIPPED `ae59ce3`, 2026-08-04" — the hash is now
+   cited against the EXISTING Pass 24.0 acceptance criterion, not
+   filed as a new Pass.
+2. **The 2026-08-05 update banner claiming Pass 24.0 "has not shipped
+   under that name" was WRONG WHEN WRITTEN, by one day** — struck in
+   place at the family's *Next up* entry, per this project's own
+   convention for a false assurance (the wrong figure is the record;
+   the correction sits beside it, not over it).
+3. Of `ae59ce3`'s own two explicitly-deferred items: **(a) "merge each
+   tool's two floating Areas into ONE strip" is now MOOT, not done**
+   — Pass 34.1 deleted the floating Areas outright, so nothing is left
+   to merge; the requirement was SUPERSEDED, not satisfied, and those
+   are different facts. **(b) "universal Enter/Escape" is UNVERIFIED
+   either way** — not confirmed shipped and not confirmed owed by this
+   filing; flagged for whoever next touches `DockPanel::ToolOptions`'s
+   commit gestures.
+4. **The `~40 disclosure strings` acceptance criterion `ae59ce3`
+   attached to its deferred half was never discharged by either
+   commit** — Pass 34.1 moved the strings to a new home rather than
+   proving them enumerated. If `R121` still carries that criterion, it
+   is now owed against `DockPanel::ToolOptions`, not against Pass
+   24.0.
+
+**R141 cross-check — the SECOND open fork the fifty-fourth filing
+named, also resolved rather than left standing.** `R141`'s own
+corollary text — *"which is exactly what Pass 24.0 (part) already
+does"* — was written 2026-08-04, continuation 82, the SAME real day
+`ae59ce3` was committed (12:48:58 -0400). It cites decision 024's Pass
+24.0, consistent with Fork 1's resolution, not the pre-renumber
+`24.0a` (renamed that same day to Pass 25.0, an unrelated subject).
+Read this way, `R141`'s corollary was describing a filing shape that
+should already have existed in *Shipped* on 2026-08-04 and did not —
+this entry IS that filing, five days late per `39593e1`'s own
+gate-coverage finding, plus one more day added while this librarian
+had no shell to close it.
+
+**What this cost, worth a line because the dispatching engineer named
+it unprompted.** Both open questions this librarian has surfaced in
+two consecutive filings (`d2d03a5`'s unverified hashes at the
+fifty-third/fifty-fourth filings, and this contradiction) were
+shell-shaped, not evidence-shaped — three `git` invocations and one
+`grep` closed what two filings in a row could only flag. Recorded as a
+coordination finding in this librarian's own persistent memory
+(`D:\Dev\pdfce\.claude\agent-memory\pdfce-librarian\`) rather than as
+a `ROADMAP.md` standing rule — it is guidance about how THIS role gets
+dispatched, not a project-engineering rule the roster follows.
+
+**No new Pass ID.** This is Pass 24.0's own completion record, five
+days late. `docs/FEATURES.md`: not touched — no capability box changes
+(the fixed-anchor-confirm BEHAVIOUR was already covered by Pass
+34.0/34.1's shipped rows; this entry only corrects WHICH Pass shipped
+WHAT, not what pdfce can do today). Standing rules: `R141` CITED, not
+amended — its corollary text was already correct; ceiling unchanged at
+**R173**, next free **R174**. Decision records: decision 024
+unaffected in substance (its *Next up* tracking entry gets the
+correction, below); no number claimed by this entry. Operator-question
+ceiling unchanged at **(bh)**, next free **(bi)**. `docs/decisions/`
+untouched.
+
+---
+
 ### ★ `Pass 52.2` (core + CLI substrate: the drawing's OWN calibration reaches the DXF export, and a disagreement stops it) — 2026-08-09, committed `d2d03a5` (fifty-fourth filing)
 
 **Sourcing, stated once because it governs the whole entry.** This
@@ -235,6 +537,16 @@ re-run by this librarian** — no shell.
   filing with a shell should confirm which and correct this note if
   needed, per hard rule 8's own discipline about not asserting what
   cannot be checked.
+
+  > **⚠ RESOLVED 2026-08-09 (fifty-fifth filing).** What this librarian's
+  > `Read` saw was this session's UNCOMMITTED work, not the content of
+  > `d2d03a5`. **`d2d03a5` shipped only the document-wide `suggest_scale`**
+  > — a real, correctly described limitation at the time this entry was
+  > filed. **The page-scoped `suggest_scale_for_groups`/
+  > `dimension_groups_on_page` pair shipped separately, in `0466281`**
+  > (the GUI half, filed the same day above this entry, new top of
+  > *Shipped*) — same session, later commit. See that entry's own
+  > correction note for the matching `ARCHITECTURE.md` §12 fix.
 
 #### Invariant checks
 
@@ -25459,6 +25771,18 @@ at the Encryption Backlog bucket and in SESSION_LOG continuations 20 and
 
 ### Pass 52.0–52.3 — PDF → DXF export, so SOLIDWORKS can import pdfce output without an Acrobat Pro licence at all — operator request 2026-08-09, redirected from "make pdfce satisfy SOLIDWORKS' Acrobat gate" to "make the gate irrelevant"
 
+> **⚠ FAMILY COMPLETE 2026-08-09 (fifty-fifth filing) — all four slices
+> now SHIPPED, `3c4aca4`→`1f4839d`→`d2d03a5`→`0466281`.** `Pass 52.2`'s
+> GUI half (File ▸ Export ▸ Export DXF…) shipped in `0466281`, closing
+> the last open slice named in the fifty-fourth filing's annotation
+> below. See the new top-of-*Shipped* entry for the full delivery
+> record, including the page-scoped `suggest_scale_for_groups` fix (the
+> commit that finally closes the "document-wide scale inference"
+> limitation this entry's own scoping table implicitly carried) and the
+> `docs/FEATURES.md` DXF-export row's move from *Planned* to
+> *Implemented*. Retained below in place (append-only discipline) as
+> the scoping record.
+
 **★ THREE OF FOUR SLICES SHIPPED 2026-08-09 (`3c4aca4`→`1f4839d`). See
 the `Pass 52.0` + `Pass 52.1` + `Pass 52.3` Shipped entry (top of
 *Shipped*) for the delivery record — including the R12/AC1015 mistake
@@ -27803,7 +28127,24 @@ which is the Pass 8.0 advance-preserving-surgery problem, not the Pass
 > own drawing **one text object holds all 237 pdf-dimension labels**, so
 > deleting *"a label"* today deletes **all of them**.
 
-### ★ Pass 24.0–24.5 — Ribbon command surface + the end of the floating Accept/Reject box (decision 024, filed 2026-08-04, DECIDED — Pass 24.1 SHIPPED, remainder NOT STARTED)
+### ★ Pass 24.0–24.5 — Ribbon command surface + the end of the floating Accept/Reject box (decision 024, filed 2026-08-04, DECIDED — Pass 24.1 SHIPPED; Pass 24.0 PARTIALLY SHIPPED `ae59ce3` 2026-08-04 (superseded by Pass 34.1, see the 2026-08-09 banner below); 24.2–24.5 NOT STARTED)
+
+> **⚠ UPDATE 2026-08-09 (fifty-fifth filing) — the "Pass 24.0 … NOT
+> STARTED" claim in the 2026-08-05 banner immediately below was WRONG
+> WHEN WRITTEN, by one day.** Full evidence trail:
+> `ROADMAP.md`'s new *Shipped* entry, above, *"FILING GAP CLOSED — Pass
+> 24.0 (part) SHIPPED 2026-08-04, committed `ae59ce3`."* Summary: the
+> commit's own message names decision 024's Pass 24.0 explicitly (not
+> the pre-renumber `24.0a`, which became Pass 25.0); `git log -S
+> "tool_strip_anchor"` shows the placement fix belongs to `ae59ce3`
+> alone, with Pass 34.1 later SUPERSEDING it (removing the floating
+> strips entirely) rather than duplicating it. Of the two items
+> `ae59ce3` deliberately deferred, "merge the floating Areas into one
+> strip" is now MOOT (Pass 34.1 deleted them outright — nothing left to
+> merge) and "universal Enter/Escape" remains UNVERIFIED either way.
+> The `~40 disclosure strings` criterion the deferred half carried was
+> never discharged by either commit and, if `R121` still requires it,
+> is now owed against `DockPanel::ToolOptions`, not against Pass 24.0.
 
 > **⚠ UPDATE 2026-08-05 — Pass 24.1 (ribbon shell) SHIPPED, chain
 > `6449859` → `2b12efe`. Filed by `pdfce-librarian`.** See *Shipped* (top
@@ -27817,12 +28158,21 @@ which is the Pass 8.0 advance-preserving-surgery problem, not the Pass
 > contextual ribbon tab, which stays in `DockPanel::ToolOptions` (Pass
 > 34.1) as this banner's neighbor already says. No contradiction between
 > this filing and the continuation-94 banner below; read them together.
-> **24.0, 24.2–24.5 are unaffected by this filing and remain NOT
+> ~~**24.0, 24.2–24.5 are unaffected by this filing and remain NOT
 > STARTED** — in particular Pass 24.0 (the fixed-anchor confirm strip)
 > has **not** shipped under that name; the operator-visible fix for the
 > *floating Accept/Reject box* complaint that named this whole family
 > arrived instead via Pass 34.0 (`GestureInterrupt::Commit`, a defect fix)
-> and Pass 34.1 (the dock relocation) — see those Shipped entries.
+> and Pass 34.1 (the dock relocation) — see those Shipped entries.~~
+> **★ WRONG WHEN WRITTEN — CORRECTED 2026-08-09 (fifty-fifth filing).**
+> Pass 24.0 DID ship under that name, the same day this banner was
+> written minus one (`ae59ce3`, 2026-08-04 12:48:58 -0400) — this
+> librarian had not yet connected the commit to the family when this
+> banner was filed. Pass 34.0/34.1 are correctly named as the LATER
+> half of the story (Pass 34.1 superseded `ae59ce3`'s fix rather than
+> duplicating it), not as the whole of it. See the 2026-08-09 banner
+> above this one for the full resolution. 24.2–24.5 remain NOT STARTED,
+> unaffected by this correction.
 > `docs/FEATURES.md`'s Planned row for "Pass 24.0, 24.2–24.5" is updated
 > in this same filing to drop 24.1 from that list (it already excluded
 > 24.1, so no change was needed there).

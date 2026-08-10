@@ -139,6 +139,18 @@ D:\Dev\pdfce\
                                    with no new dependency, zero
                                    GUI-symbol imports. See §12 for the
                                    three data-model forks it decided.
+                                   **`Pass 52.2` (`d2d03a5`→`0466281`,
+                                   2026-08-09) adds `suggest_scale_for_groups`/
+                                   `dimension_groups_on_page` — the
+                                   PAGE-SCOPED sibling of the document-wide
+                                   `suggest_scale`, because a document-global
+                                   inference consumed by a page-scoped export
+                                   is silently wrong on multi-page sheets.
+                                   Landed in `0466281`, not `d2d03a5` — see
+                                   §12's decision-035 correction footer,
+                                   dated 2026-08-09. GUI half (File ▸ Export
+                                   ▸ Export DXF…) also `0466281`; the family
+                                   is now COMPLETE across core/cli/gui.
     pdfce-render\               <- Takes pdfce-core's draw-op stream + resources
                                    (fonts, images, color spaces) and rasterizes to an
                                    in-memory pixel buffer via `tiny-skia` (CPU-only,
@@ -13870,3 +13882,64 @@ started).
   forks) rather than a candidate for `036` — the same crate boundary,
   the same module, the same "shipped, not merely proposed" posture that
   justified writing `035` directly rather than only flagging it.
+
+- **2026-08-09 (fifty-fifth filing) — CORRECTION to the fourth-fork
+  entry immediately above, plus a fifth fork: `Pass 52.2`'s GUI half
+  ships (`0466281`), and the family closes COMPLETE across
+  core/cli/gui.** Full technical delivery record: `ROADMAP.md`'s new
+  top-of-*Shipped* entry, same date.
+
+  **The correction, named because it was wrong, not merely
+  incomplete.** The fourth-fork paragraph above states that
+  `export/dxf.rs` "gains `suggest_scale`/`suggest_scale_for_groups`"
+  under a heading dated to `d2d03a5`. That is imprecise: **only
+  `suggest_scale` — the DOCUMENT-WIDE inference — shipped in
+  `d2d03a5`.** `suggest_scale_for_groups` and its companion
+  `EditSession::dimension_groups_on_page` — the PAGE-SCOPED pair —
+  shipped separately, in `0466281`, the same session's later commit.
+  What produced the imprecision: this librarian's own `Read` of the
+  working tree, one dispatch prior, observed the page-scoped functions
+  already present and (correctly, per hard rule 8) flagged rather than
+  asserted which commit they belonged to — but the fourth-fork
+  paragraph's phrasing did not carry that uncertainty forward into its
+  own wording. Per this project's append-only decision-log convention,
+  the earlier sentence is not deleted; this paragraph is the dated
+  correction, pointing back at it.
+
+  **The fifth fork — the general shape, not merely the fix.** The
+  reason `suggest_scale_for_groups` exists at all: `suggest_scale`
+  reads the WHOLE `DimensionModel`, and a multi-page sheet set can
+  disagree with itself — a 1:1 plan on page 1, a 1:5 detail on page 3.
+  Consumed page-by-page (as both `cmd_export_dxf` and the new GUI
+  export window are), a document-global answer is silently wrong in
+  the OVER-CONFIDENT direction: an uncalibrated page can inherit a
+  DIFFERENT page's real scale and export at the wrong size with
+  nothing in the file, the screen, or the exit code suggesting
+  anything went wrong. The safe failure — an unambiguous page refused
+  because an unrelated page conflicts — is the one that gets reported;
+  the dangerous one is the one that doesn't. **Decided: page-scope the
+  inference at the same rung the export itself operates (one page,
+  one DXF file), and keep the document-wide function as a distinct,
+  separately-named sibling rather than silently narrowing its
+  contract** — a caller that genuinely wants the document-wide answer
+  (none currently exists) is not surprised by a signature that changed
+  meaning under it. `EditSession::dimension_groups_on_page` resolves
+  page ownership the same way `dimension_rects` already does, through
+  each ce dimension's annotation `/P` against the page object id — the
+  `/PieceInfo` sidecar deliberately does not itself record a page.
+  Escalated to `D:\dev\rag\rust\` as a finding that generalizes past
+  DXF export or pdfce: any inference drawn from a document-global model
+  and consumed by a page-scoped (or otherwise narrower-scoped)
+  operation should be re-examined for this exact asymmetry.
+
+  **GUI ship, recorded as a completion, not a new fork.** `File ▸
+  Export ▸ Export DXF…` — a non-modal window disabled until a scale
+  resolves, three states matching `DxfScaleSuggestion`'s own three
+  variants, reusing the shared `ui_text::group_scale_summary`
+  formatter for the Calibrated caption rather than inventing a second
+  notation. No new architectural fork — the enum design (fourth fork,
+  above) and the page-scoping design (this entry) already determined
+  the shape; the GUI is a consumer of both.
+
+  **Decision-number status: no new number claimed.** Extension of
+  `035`, same as the fourth fork.

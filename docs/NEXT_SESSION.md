@@ -1,9 +1,10 @@
 # NEXT SESSION — start here
 
-**Written 2026-08-09.** Read this, then `docs/ROADMAP.md` and the latest
-`docs/SESSION_LOG.md` entry as usual. This file is a *handoff*, not a
-record — the record is the librarian's. Delete or overwrite it once its
-contents have been acted on.
+**Written 2026-08-09** (replacing the previous handoff of the same date,
+whose contents were acted on and are now filed). Read this, then
+`docs/ROADMAP.md` and the latest `docs/SESSION_LOG.md` entry as usual.
+This file is a *handoff*, not a record — the record is the librarian's.
+Delete or overwrite it once its contents have been acted on.
 
 Not owned by `pdfce-librarian`. It is safe to edit here without racing a
 filing.
@@ -12,260 +13,163 @@ filing.
 
 ## State at handoff
 
-- Branch `pass-8-redaction`, working tree clean, HEAD = **`07b78ea`**.
-- **`tools/check-commits-filed.py` is RED, deliberately, on two commits.**
-  This is left visible rather than papered over — see *First task* below.
-- **2643 workspace tests, 0 failed.** `cargo clippy --workspace
+- Branch `pass-8-redaction`, HEAD = **`0466281`**.
+- **2656 workspace tests, 0 failed.** `cargo clippy --workspace
   --all-targets` = 0. `cargo fmt --all --check` clean.
-- All pre-existing gates under `tools/` were clean at last run.
-
-### Permissions were changed this session
-
-The operator reported being *"constantly nagged for permissions"*.
-`.claude/settings.local.json` now sets `defaultMode: "bypassPermissions"`.
-It is machine-local and **not** checked in (a global gitignore rule at
-`C:\Users\Ken/.config/git/ignore` covers `**/.claude/settings.local.json`).
-
-**This did not weaken project rule 8.** `bypassPermissions` skips
-*prompts*; it does not skip *denials*, and deny rules are evaluated first.
-`git push`, `git remote add/set-url`, `gh repo create`, `gh release`,
-`gh pr create`, `cargo publish` and `npm publish` are all **denied**, so
-publishing is still mechanically blocked rather than merely remembered.
-History-rewriting commands are on `ask`, which `bypassPermissions`
-explicitly does not skip.
+- **All seven gates under `tools/` green**, including
+  `check-commits-filed.py`, which was left deliberately red at the last
+  handoff and was cleared **by filing the two commits, not by extending
+  the baseline**. `tools/commits-filed-baseline.txt` is still eleven
+  lines and untouched.
+- `cargo tree -p pdfce-core` / `-p pdfce-render`: no GUI dependency.
 
 ---
 
-## What shipped this session (Pass 52 — PDF→DXF export)
+## What shipped this session
 
-| Slice | What | Commit | Filed? |
-|---|---|---|---|
-| 52.0 | Core DXF writer (`crates/pdfce-core/src/export/dxf.rs`) | `3c4aca4` | librarian dispatched |
-| 52.1 | `pdfce-cli export-dxf` | `3c4aca4` | librarian dispatched |
-| 52.3 | Page text → `TEXT` entities on layer `PDFCE_TEXT` | `1f4839d` | librarian dispatched |
-| 52.2 | **core+CLI half only** — scale derived from ce dimensions | `d2d03a5` | **NOT filed — owed** |
+### Pass 52.2 GUI half — `0466281`
 
-52.0/52.1/52.3 were filed by `pdfce-librarian` (ROADMAP Shipped entry,
-FEATURES row `core`/`cli` ticked with `gui` still open, SESSION_LOG entry,
-ARCHITECTURE §12 **decision 035**, plus RAG escalations to
-`C:\personal_rag\dxf\` and a new `D:\dev\rag\rust\` methodology file).
-**`d2d03a5` post-dates that filing and is not in it** — file it first
-thing, together with the GUI half when that lands.
+`File ▸ Export ▸ Export DXF…`. The Export button is **disabled until a
+scale resolves**, which is the entire point: the CLI can only warn after
+the file exists, and the destination is frequently a cutting table.
 
-One caveat the librarian raised itself: it was dispatched without a shell,
-so it could not run `git show` and the two commit hashes in its filing are
-**relayed from the dispatch, not verified against `git log`**. It said so
-in every file it touched. Worth a spot-check.
+Three states, and the difference between them is rule 4 — calibrated
+pre-fills and names its source group, uncalibrated leaves the field
+**empty** (never 1.0) and needs a typed number or an explicit
+paper-scale tick, conflicting shows a radio list with nothing selected.
+All three verified in the running application, not reasoned about.
 
-**Origin.** The operator asked whether pdfce could satisfy SOLIDWORKS'
-"PDF import needs Acrobat Pro licensed" gate. Answer given: no, and it
-does not matter — doing so would mean impersonating Adobe's COM
-registration to defeat another vendor's licence check (**declined by
-name**), and it would buy nothing, because SOLIDWORKS imports DXF
-natively with no Adobe dependency. Pass 52 makes the gate irrelevant
-instead of working around it.
+**The defect it fixed is worth carrying forward as a shape:**
+`suggest_scale` read the whole `DimensionModel`, so on a sheet set an
+uncalibrated page 1 would silently export at page 3's 1:5 — five times
+real size, with nothing anywhere saying so. Now page-scoped via
+`EditSession::dimension_groups_on_page` +
+`suggest_scale_for_groups`. The CLI adopted it too; it exports one page
+and was inheriting the document's opinion.
 
-### Read before touching any of it
+`crates/pdfce-core/tests/dxf_scale.rs` pins **both halves** — the
+document-wide reading is asserted as the *wrong* answer so a future
+"simplification" back to `suggest_scale` fails loudly.
 
-`crates/pdfce-core/src/export/dxf.rs`'s module docs carry the full
-rationale: the AC1015-vs-R12 correction, the AutoCAD LT 2004 constraints
-that hold by construction, why arcs are recognised rather than flattened,
-and why text goes on its own layer.
+### `LEGAL.md` §1.1 — the git-history publishing blocker
+
+Owed by the engineer since the last handoff (the librarian correctly
+declined it as outside its remit). Now written. See *Publishing* below.
 
 ---
 
-## FIRST TASK — clear the red filing gate (5 minutes)
+## THE NEXT TASK — pick one; nothing is half-finished
 
-`python tools/check-commits-filed.py` exits 1 on **two** commits:
+There is **no in-flight work.** The tree is clean, every gate is green,
+and nothing was left mid-refactor. What follows is ranked, not queued.
 
-| Commit | Subject | Why unfiled |
-|---|---|---|
-| `d2d03a5` | the drawing's own calibration reaches the dxf… | Landed after the librarian's Pass 52 filing had already been dispatched. |
-| `39593e1` | two gates stop scanning a window and start scanning the history | Missed earlier the same day. This is the commit that *created this very gate* — it did not file itself. |
+### 1. Pass 24.0's remaining half — status corrected this session, work not done
 
-Dispatch `pdfce-librarian` with each commit's **full message** (`git show
--s --format=%B <hash>`) — they carry the defect, the measurement and the
-owed follow-up, which is what a filing needs and a one-line subject
-cannot supply.
+`ae59ce3`'s own body defers two things from decision 024's Pass 24.0:
 
-**Do not add either to `tools/commits-filed-baseline.txt`.** That file is
-the pre-existing eleven-commit debt this gate was written around;
-extending it silences exactly what the gate exists to catch, which is the
-false-green shape R106 has been amended four times over.
+- **"merging each tool's two floating Areas into ONE strip"** — now
+  **moot**. Pass 34.1 slices 3–4 deleted the floating Areas entirely and
+  moved all six into `DockPanel::ToolOptions`; `tool_strip_anchor` and
+  `StripCorner` no longer exist. *Superseded, not satisfied* — those are
+  different facts.
+- **"wiring universal Enter/Escape"** — **not verified either way, and
+  probably still open.** This is the concrete next thing to check.
 
-The gate was left red on purpose. A gate quietly made green at the end of
-a session is how the original eleven-commit backlog accumulated twice
-without anyone noticing.
+The acceptance criterion attached to that deferred half — *"every one of
+the ~40 disclosure strings from the three strips is provably still
+emitted, via an enumerated test"* — was **never discharged**. 34.1 moved
+the strings to a new home rather than proving them enumerated. That test
+is real, owed, and exactly the kind this project keeps discovering it
+needed after the fact (R151/R152's family).
 
----
+### 2. `pdfce-cli export-dxf` has no multi-page mode
 
-## THE NEXT TASK — Pass 52.2, GUI half
+The GUI grew one this session (selected pages → one DXF each into a
+folder, `{stem}_p{n}.dxf`); the CLI still takes a single `--page`. The
+shells have diverged on a capability, which is the drift rule 11 exists
+to prevent. Small, well-specified, and the core substrate is already
+there.
 
-The core substrate is **done and tested**; what remains is GUI wiring.
+### 3. The eleven owed commits in `tools/commits-filed-baseline.txt`
 
-### Substrate that already exists
-
-```rust
-// crates/pdfce-core/src/export/dxf.rs
-pub enum DxfScaleSuggestion {
-    Uncalibrated,
-    Calibrated { scale: f64, units: DxfUnits, group: String, agreeing: usize },
-    Conflicting { candidates: Vec<DxfScaleCandidate> },
-}
-pub fn suggest_scale(model: &DimensionModel) -> DxfScaleSuggestion;
-pub const fn DxfUnits::for_unit(unit: Unit) -> DxfUnits;
-```
-
-Tested in `crates/pdfce-core/tests/dxf_scale.rs` (6 tests). The
-unit-cancellation (`effective_scale(u) / u.baseline_per_point()`) is
-load-bearing — without it a millimetre group and an inch group describing
-the same 1:1 sheet look like a conflict.
-
-### `pdfce-ui-specialist` design (dispatched and returned this session)
-
-Its verdict, condensed. It read `ribbon.rs`, `main.rs`, `ui_text.rs`,
-`split.rs`, `edit.rs` and both disclosure gates before answering.
-
-**1. Placement — `RibbonTab::File`, new `RibbonGroup::Export`.**
-Not `Edit`: DXF export does not change the open document, it produces a
-derivative file — the same shape as Save-As. Do **not** copy the
-`Action::ExportFormData` precedent (a button inside the Forms dock); that
-is scoped to a panel that exists for an unrelated reason. One button,
-labelled `Export DXF…` (ellipsis = dialog-opener, matching `Set scale…`).
-`pdfce_core::export` holds only `dxf.rs`, so a menu would be premature.
-
-**2. Options — one non-modal `egui::Window`**, not a wizard:
-
-```
-Export DXF
-├─ Page(s):  <read-only, from doc.selected_pages / current page>
-├─ Units:    ( ) Inches   ( ) Millimetres        [radio row, not a ComboBox]
-├─ Scale:    [________]   <caption — see 3>
-├─ Text:     ( ) Include as TEXT entities  ( ) Omit entirely
-├─ ▸ Advanced                                    [CollapsingHeader, closed]
-│    ├─ Fit circles/arcs  [x]
-│    └─ Arc tolerance (pt): [0.05]   <enabled only when Fit is checked>
-└─ [ Cancel ]                        [ Export… ]  <- disabled until scale resolves
-```
-
-`fit_arcs=true` / `arc_tolerance=0.05` stay implicit — they match
-`DxfOptions::default()` and the core docs already justify them.
-
-**3. Scale disclosure — the load-bearing part.**
-
-A `File`-tab window has a fixed position, so decision 024 §4.4's complaint
-(a confirm box anchored to page geometry that moves on zoom/scroll) does
-not apply here. It was never at risk.
-
-Reuse `ui_text::group_scale_summary(scale, unit)` (`ui_text.rs` ~L5619) —
-it already renders the tri-state as `"no scale set"` / `"1:1 (set by
-operator)"` / `"1 mm = 28.35 pt"`. **Do not invent a "(1:2)" ratio
-string**; the established convention is `1 unit = n pt`.
-
-- **Calibrated** → pre-fill the field; caption underneath:
-  *"pre-filled from group "Floor Plan" — 1 mm = 28.35 pt. Change it if
-  this isn't the right one."* An editable field the operator can see and
-  overwrite before a fixed Export button **already satisfies rule 4** —
-  this action mutates nothing in the open document, so no Accept/Reject
-  step. (`MeasureScale`'s Accept exists because accepting re-values every
-  dimension in the group; nothing here does.)
-- **Uncalibrated** → **do not pre-fill 1.0.** Leave blank, disable
-  `Export…` until the operator either types a number or ticks a distinct
-  toggle: *"Export at paper scale (1:1) — this drawing has no scale set."*
-  The CLI can only warn after the fact; the GUI can gate before it. The
-  destination is a plasma table and a wrongly-scaled cut is metal.
-- **Conflicting** → radio list, nothing pre-selected, plus "Enter a scale
-  manually". `Export…` disabled until one is picked.
-
-**4. Accessor gap — this is a real blocker, and it is a `pdfce-core`
-change.** `DimensionRecord` carries **no page association**;
-`DimensionModel::groups()`/`dimensions()` are document-global. The only
-place page ownership is resolved is `EditSession::dimension_rects(page_index)`
-(`edit.rs` ~L12796), which cross-references each dimension's annotation
-`/P` against the page object id. Needed:
-
-```rust
-/// Every distinct group with at least one dimension on `page_index`,
-/// resolved the way `dimension_rects` resolves page ownership.
-pub fn dimension_groups_on_page(&self, page_index: usize) -> Vec<GroupId>
-```
-
-Additive, mirrors an existing pattern. Per rule 2 the GUI must not
-reconstruct `/P` ownership itself.
-
-*Note:* `suggest_scale` currently takes the whole `DimensionModel` and is
-therefore document-wide. Once the accessor exists it likely wants a
-page-scoped sibling, or a filtered model. **The CLI's behaviour is
-document-wide today and that is a known, unstated limitation** — worth
-deciding rather than inheriting.
-
-**5. Outcome disclosure — a new sibling field, not `SaveOutcome`.**
-`SaveOutcome` is specifically about writing the open document's edits;
-DXF export never touches it. Add `dxf_export_result: Option<…>` rendered
-by its own `dxf_export_result_bar(ui)` beside `copy_result_bar` in
-`status_bar_body`. Not a toast (fades before *"are labels missing?"* gets
-asked), not a modal (friction this doesn't earn). Show only non-zero
-lines; warn-colour `unreadable_text` and `skipped_images`; plain colour
-for `skipped_text` (that was the operator's own choice). Must go through
-a traced setter or `tools/check-disclosure-channel.sh` fails.
-
-**6. Multi-page.** Reuse `doc.selected_pages` (already driven by the Pages
-dock, used by rotate/delete). Empty → current page, `save_file()`.
-Non-empty → one DXF per page into `pick_folder()`, named
-`"{stem}_p{page}.dxf"` zero-padded to the widest page number. Don't expose
-an editable template in P0. If the selected pages don't share one detected
-scale, leave the field blank and say so.
-
-**7. Correctness trap flagged unprompted — heed this one.** The GUI must
-call `decompose_page` against **`doc.session.view()`** (the overlay-aware
-`EditSession::view()`), never a fresh `Document::load` of the on-disk
-bytes. The CLI legitimately uses `Document::load` because it has no
-session. Copying that call into the GUI would export a DXF that silently
-does not match what is on screen for anyone with unsaved edits.
-
-**8. Strings** — full list of `ui_text.rs` names in the specialist's
-reply; naming follows the existing `forms_export_*` / `group_*`
-convention. Port the CLI's existing stderr prose verbatim where it already
-says the right thing (`cmd_export_dxf`, `pdfce-cli/src/main.rs` ~L13241+)
-rather than re-deriving new wording.
-
-**9. Write path** — go through the existing `write_atomic(path, bytes)`
-helper (`main.rs` ~L18234). Rule 5 is not scoped to the primary document;
-a half-written DXF is the same failure for a file headed to a CNC pipeline.
+Still DEBT, not an allowlist. Shortening it is the intended direction
+and `check-commits-filed.py`'s header explains why adding to it is
+forbidden. Two were cleared this session by proper filing; eleven remain.
 
 ---
 
-## Also outstanding (carried, not new)
+## Publishing is blocked on TWO independent things, and only one is the licence
 
-- **Eleven owed commits** in `tools/commits-filed-baseline.txt` still need
-  proper filing. That file is DEBT, not an allowlist — shortening it is
-  the intended direction, and `tools/check-commits-filed.py` explains why
-  adding to it is forbidden.
-- **`ae59ce3` claims "Pass 24.0 (part)"** while `ROADMAP.md` files 24.0 as
-  NOT STARTED. Unresolved contradiction; untouched this session.
-- **`LEGAL.md` needs the git-history blocker entry.** The librarian
-  declined it as outside its remit, so it is owed by the engineer.
-- **Publishing is blocked on an operator decision** (open question (bh)):
-  confidential third-party material removed in `817d518` still exists in
-  288 earlier commits. Options are rewrite history, squash to a fresh
-  initial commit, or accept it. **Only Ken can decide this** — do not pick.
-- **Decision record** for the Bézier→DXF mapping / `$INSUNITS` default /
-  text-layer choice — librarian was asked to open one (likely **035**;
-  034 is claimed for write-side CMYK) and to confirm the free number
-  itself.
+Both are the operator's calls. **Do not resolve either.**
 
-## A finding worth acting on
+1. **The go-ahead itself.** MIT settles the licence (`LEGAL.md` §1);
+   the decision to push is a separate act and has not been given. No
+   git remote is configured, and `git push` / `gh` / `cargo publish`
+   are denied outright in `.claude/settings.local.json` rather than
+   merely remembered.
+2. **`LEGAL.md` §1.1 — git history carries a third party's confidential
+   material.** `817d518` removed it from the *tree* and says in its own
+   final paragraph, in capitals, that this does not reach history. It is
+   still recoverable from the **288 commits before it** — verified this
+   session: `git show 817d518^:tools/realdrawings-smoke/README.md` still
+   prints the file whose own text said *"Nothing in this directory is to
+   be committed at all."* Three options (rewrite history / squash to a
+   fresh initial commit / accept), each with a real cost, written out in
+   §1.1. **Open operator question (bh).**
 
-Twice this session I read a RAG file and then substituted my own guess for
-its recommendation — the AC1015-vs-R12 mistake is the sharp one: the RAG
-had already named AC1015, all 12 tests passed because they *grepped* the
-output for strings, and it was caught only by parsing with the operator's
-`ezdxf`. Standing rule **R172** currently reads "grep the RAG before
-driving the harness"; it has now been **widened in place** by the
-librarian to cover *substituting judgment for a recommendation already
-read*, outside the GUI-harness domain it was minted for. Ceiling stays
-R172, next free R173. Nothing further owed on this.
+---
 
-**Generalisable:** a grep-based test cannot validate a structured format.
-Parse it with a real reader. `ezdxf` 1.4.3 is installed and
-`d.audit()` returns errors/fixes — that is what caught this.
+## Two things learned this session that will save the next one time
+
+### A librarian dispatched without a shell cannot close a shell-shaped question
+
+Twice in a row now, `pdfce-librarian` has correctly refused to guess and
+correctly recorded an open discrepancy — and both times the gap between
+*"cannot be resolved from the record"* and *resolved* was **three `git`
+invocations**, not more evidence. The `ae59ce3` / Pass-24.0 contradiction
+had sat open across two filings; it took ninety seconds with a shell.
+
+The mitigation is on the **dispatching** side, not the librarian's:
+**paste the `git show -s --format=%B <hash>` output into the dispatch.**
+Done for the two-commit filing this session, and it worked; not done for
+the Pass 52.2 filing initially, and that is what produced the
+discrepancy the librarian then had to flag. A one-line subject cannot
+carry a defect, a measurement, or an owed follow-up — and those are
+precisely what a filing is made of.
+
+Related and worth knowing: a librarian reading the **working tree** while
+filing a **commit** can see the future relative to what it is filing.
+That is what produced its "the CLI already calls
+`suggest_scale_for_groups`" flag — correct observation, uncommitted code.
+
+### Green tests said nothing about two real defects
+
+Both were found by *looking at the running application* after everything
+was green (R86), and neither was a thing a test would have been written
+for:
+
+- The conflict list rendered `"Default" says 283.46456692913387`. A
+  derived scale is a division, so it is never round, and seventeen
+  significant figures is not a number an operator can read, compare, or
+  retype. The sharp part: that value is written **into** the field and
+  **re-parsed on export**, so the formatter and the parser are one
+  contract and rounding it changes the exported result. It is bounded
+  and stated (9 nm on a 2.5 m coordinate), not assumed harmless.
+- The whole export was **undrivable**. `commit_dxf_export` asks for its
+  destination through a native dialog — the identical wall
+  `diag::font_dirs` was built to get past, now the **second** instance
+  in this project. `export:dxf`, `export:dxf-go` and
+  `PDFCE_DIAG_EXPORT_DIR` substitute the dialog's *answer* and nothing
+  else, so the harness exercises the same path.
+
+**R172 was followed and it paid.** The egui RAG was grepped before the
+harness was driven, and
+`only_the_active_tab_is_emitted_so_scripted_harnesses_cannot_reach_other_tabs.md`
+plus the two-harness window-size finding are why no coordinate was ever
+guessed. Keep doing this.
+
+And the R172-adjacent one from last session held again: **a grep-based
+test cannot validate a structured format.** Every DXF written this
+session was parsed with `ezdxf` and `d.audit()` — 0 errors, 0 fixes —
+and the coordinates were checked against the calibration the operator
+typed (5.000 m in, 5000 mm out).

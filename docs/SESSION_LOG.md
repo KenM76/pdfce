@@ -29050,3 +29050,147 @@ and `tools/commits-filed-baseline.txt`'s unchanged 11 hashes.
   asserted beyond the sourcing note above (hard rule 8). This is the
   **fifty-fourth** `SESSION_LOG.md` filing (the fifty-third confirmed
   present by direct read before this entry was appended).
+
+## 2026-08-09 (fifty-fifth filing) — `Pass 52.2`'s GUI half ships (`0466281`), completing the DXF-export family across core/cli/gui; the `ae59ce3`/Pass-24.0 contradiction carried open across two prior filings is RESOLVED by direct `git` evidence; `docs/LEGAL.md` §1.1 records a second, independent publish-blocker
+
+**Filed by `pdfce-librarian`, dispatched with two tasks: file the shipped
+GUI half of `Pass 52.2`, and — mid-task, via a coordinator message
+carrying the engineer's own `git show`/`git log -S`/`grep` output — close
+the `ae59ce3`/Pass-24.0 contradiction this librarian had flagged as
+unresolvable-without-a-shell at both the fifty-third and fifty-fourth
+filings.** Full technical delivery record for both: `ROADMAP.md`'s two
+new top-of-*Shipped* entries (this same date). This entry is the
+session-log mirror.
+
+**Sourcing, stated once because it governs the whole entry.** No shell
+this dispatch (hard rule 8). For `Pass 52.2`'s GUI half: the dispatching
+engineer reports `0466281` verified directly against `git log` this
+session — relayed one hop, not re-verified by this librarian. For the
+`ae59ce3` resolution: the evidence is the engineer's own `git show -s
+ae59ce3`, `git log -S "tool_strip_anchor"`, and `grep -c "fn
+tool_strip_anchor"` output, quoted or closely paraphrased from what the
+coordinator message itself quoted verbatim — again relayed, not
+independently re-run.
+
+**Shipped:**
+- `Pass 52.2` GUI half (`0466281`) — `File ▸ Export ▸ Export DXF…`, a
+  non-modal window disabled until a scale resolves, three states
+  matching `DxfScaleSuggestion`'s variants (Calibrated pre-filled and
+  named / Uncalibrated empty with an explicit paper-scale opt-in /
+  Conflicting a radio list with nothing pre-selected). Units, text
+  include/omit, an Advanced fit-arcs/tolerance header, multi-page export
+  via `doc.selected_pages`. **The `Pass 52.0`–`52.3` DXF-export family is
+  now COMPLETE across core/cli/gui.**
+- `Pass 24.0 (part)` (`ae59ce3`, 2026-08-04) — filed today, five days
+  late, as a `⚠ FILING GAP CLOSED` entry. Was genuinely shipped and
+  genuinely unfiled; not new work.
+- No Pass ID — `docs/LEGAL.md` §1.1 (engineer-authored this session, not
+  by this librarian) — records that `817d518` removed a third party's
+  confidential material from the working tree only, that it remains
+  recoverable from the 288 commits preceding it (verified: `git show
+  817d518^:tools/realdrawings-smoke/README.md` still prints its
+  contents), the three history options (rewrite/squash/accept) and their
+  costs, and that an agent may not pick one. A second, independent
+  publish-blocker alongside the license go-ahead (rule 8/(bh)).
+
+**Decisions made this session:**
+- **The `d2d03a5`/`0466281` scale-inference discrepancy this librarian
+  flagged at the fifty-fourth filing is RESOLVED, not merely explained
+  away**: `d2d03a5` shipped the document-wide `suggest_scale` only —
+  correctly described as a limitation at the time. The page-scoped
+  `suggest_scale_for_groups`/`dimension_groups_on_page` pair, which this
+  librarian's own `Read` of the working tree had already spotted one
+  filing prior, shipped separately in `0466281`. What that prior
+  discrepancy actually was: a librarian reading a working tree mid-session
+  can see work not yet in the commit it is filing — worth recording
+  because it will happen again to whoever files next while a session is
+  still live.
+- **The `ae59ce3`/Pass-24.0 contradiction is resolved on both forks named
+  at the fifty-fourth filing.** Fork 1 (which Pass does `ae59ce3` belong
+  to): decision 024's Pass 24.0, in the commit's own message, not the
+  pre-renumber `24.0a` (which became Pass 25.0, an unrelated subject).
+  Fork 2 (is the fix double-attributed to Pass 34.0/34.1): no —
+  `ae59ce3` alone owns the placement fix (`git log -S
+  "tool_strip_anchor"` returns exactly one commit); Pass 34.1 later
+  SUPERSEDED it (removed the floating strips outright) rather than
+  duplicating it. `R141`'s corollary text, written the SAME day as
+  `ae59ce3`, is now read as describing a filing that should already have
+  existed and did not — this session's entry is that filing.
+- **`ARCHITECTURE.md` §12's decision-035 fourth-fork paragraph gets a
+  dated correction** (page-scoping attribution moved from `d2d03a5` to
+  `0466281`) plus a fifth-fork extension recording the general
+  document-global-vs-page-scoped-consumer shape and the GUI ship. No new
+  decision number claimed — extension of `035`, same as the fourth fork.
+
+**Findings + decisions:**
+- **General shape, escalated to `D:\dev\rag\rust\`**: an inference drawn
+  from a document-global model, consumed by a page-scoped (or otherwise
+  narrower-scoped) operation, is silently wrong in the OVER-CONFIDENT
+  direction on multi-page/multi-part inputs — the failure that gets
+  reported (an unambiguous case refused because an unrelated part
+  disagrees) is the safe one; the failure that doesn't get reported (a
+  wrong answer inherited silently) is the dangerous one. Sourced from
+  `suggest_scale` vs. `suggest_scale_for_groups`, but the shape is not
+  DXF-specific.
+- **Escalated to `D:\dev\rag\egui\`**: a native file/folder dialog is a
+  hard wall for a scripted-input GUI harness; the fix is an
+  environment-variable seam that substitutes the dialog's *answer* only
+  (`PDFCE_DIAG_EXPORT_DIR`, mirroring `diag::font_dirs`). **Second
+  instance of this exact fix in this project** — by this project's own
+  two-occurrence bar, now filed as a pattern rather than an anecdote.
+- **Escalated (this librarian's own call) to `D:\dev\rag\rust\`**: a
+  value that is *computed* (a derived scale, `f64` division) rather than
+  *entered* has no natural precision; printing it with a default
+  formatter gives an operator seventeen significant figures to read and
+  possibly retype. Sharper point: when the rendered value round-trips
+  back through re-parsing (as this field does on Export), the formatter
+  and the parser are one contract, and rounding it is a change to the
+  exported result that must be bounded and stated (measured here: 9 nm
+  over a 2.5 m coordinate), not assumed harmless.
+- **Coordination finding, filed to this librarian's own persistent
+  memory rather than as a `ROADMAP.md` standing rule** (it is guidance
+  about how this role gets dispatched, not a project-engineering rule
+  the whole roster follows): both open questions this librarian has
+  surfaced in two consecutive filings (`d2d03a5`'s unverified hashes,
+  and the `ae59ce3` contradiction) were shell-shaped, not
+  evidence-shaped — three `git` invocations and one `grep` closed what
+  two filings in a row could only flag. Where the librarian genuinely
+  has no shell, the fastest closure is the dispatch carrying the raw
+  `git`/`grep` output directly, as the coordinator message did for this
+  filing.
+
+**Still in flight:**
+- Whether a fuller `docs/decisions/035-*.md` KenAgent record adds value
+  beyond the §12 entries — the engineer's call, not exercised by this
+  filing.
+- `docs/LEGAL.md` §1.1's three-way history decision (rewrite/squash/
+  accept) — open operator question (bh), unchanged by this filing.
+- `R121`'s `~40 disclosure strings` acceptance criterion, now understood
+  to be owed against `DockPanel::ToolOptions` rather than Pass 24.0 —
+  not discharged by this filing, only correctly re-targeted.
+- Item (b) of `ae59ce3`'s deferred scope, "universal Enter/Escape" —
+  genuinely unverified either way, not resolved by this session.
+
+**For next session:**
+- The DXF-export family and the `ae59ce3` gap are both closed; no
+  specific follow-up owed from either unless the operator wants the
+  fuller decision-035 KenAgent record authored.
+- If `R121`'s disclosure-string criterion is ever re-checked, check it
+  against `DockPanel::ToolOptions`'s current commit gestures, not
+  against any Pass-24.0-named code (which no longer exists — superseded
+  by Pass 34.1).
+- **Ledger for this filing.** No new Pass ID (`Pass 52.2`'s GUI half and
+  `Pass 24.0 (part)` were both already-named work; this is their
+  completion record). `docs/FEATURES.md`: DXF-export row's `gui` box
+  ticked `[x]`, row MOVED from *Planned* to *Implemented* (new *Export*
+  subsection) — no other row touched (the `ae59ce3` resolution changes
+  attribution, not capability). Standing rules: `R141` CITED, not
+  amended; ceiling unchanged at **R173**, next free **R174**. Decision
+  records: `035` extended twice this filing (correction footer + fifth
+  fork), no new number claimed; `033` on disk, `034`
+  CLAIMED-by-citation/UNAUTHORED (unchanged, unrelated). Operator-
+  question ceiling unchanged at **(bh)**, next free **(bi)**. `docs/
+  decisions/` untouched. Backup/git working-tree state not asserted
+  beyond the sourcing notes above (hard rule 8). This is the
+  **fifty-fifth** `SESSION_LOG.md` filing (the fifty-fourth confirmed
+  present by direct read before this entry was appended).
