@@ -1092,6 +1092,16 @@ enum Command {
         /// Which annotation classes print.
         #[arg(long, value_enum, default_value_t = CommentsArg::Document)]
         comments: CommentsArg,
+        /// Print several pages per sheet (2, 4, 6, 9, 16, …).
+        ///
+        /// The grid is chosen to place the first page as large as
+        /// possible, rotation included — so 2-up on a portrait page
+        /// turns the pages and stacks them, which is what fits.
+        #[arg(long, value_name = "N", value_parser = clap::value_parser!(u32).range(2..=1024))]
+        n_up: Option<u32>,
+        /// Draw a border around each page's cell when using `--n-up`.
+        #[arg(long)]
+        n_up_border: bool,
     },
 
     PrintPreview {
@@ -4045,6 +4055,8 @@ fn run() -> ExitCode {
             duplex,
             pick_tray,
             comments,
+            n_up,
+            n_up_border,
         } => cmd_print(
             &input,
             printer.as_deref(),
@@ -4062,6 +4074,8 @@ fn run() -> ExitCode {
             duplex,
             pick_tray,
             comments,
+            n_up,
+            n_up_border,
         ),
         Command::PrintPreview {
             input,
@@ -6623,6 +6637,8 @@ fn cmd_print(
     duplex: DuplexArg,
     pick_tray: bool,
     comments: CommentsArg,
+    n_up: Option<u32>,
+    n_up_border: bool,
 ) -> u8 {
     let doc = match pdfce_core::document::Document::load(input) {
         Ok(doc) => doc,
@@ -6715,34 +6731,129 @@ fn cmd_print(
     let clipped = plans.iter().filter(|p| p.placement.clipped).count();
     let mut bitmaps: Vec<pdfce_print::PageBitmap> = Vec::new();
 
-    for plan in &plans {
-        let (Some(page), Some(&size)) = (page_list.get(plan.index), page_sizes.get(plan.index))
-        else {
-            continue;
+    // ---- N-up: several source pages composited onto one sheet ----
+    //
+    // Handled as its own path rather than as another `ScaleMode`,
+    // because it changes the SHAPE of the job: N source pages become one
+    // sheet, so the one-plan-per-page arithmetic above no longer
+    // describes it. Trying to express that as a placement would mean a
+    // plan whose `index` is a lie.
+    if let Some(count) = n_up {
+        let nup = pdfce_print::imposition::NUpSpec {
+            grid: pdfce_print::imposition::NUpGrid::Count(count),
+            order: pdfce_print::imposition::PageOrder::Horizontal,
+            border: n_up_border,
+            auto_rotate: true,
         };
-        let placement = plan.placement;
-        let render_scale = plan.render_scale;
-        let options =
-            pdfce_render::RenderOptions::default().with_annotation_scope(comments.to_scope());
-        let rendered = match pdfce_render::render_page_with_view(
-            &session.view(),
-            page,
-            render_scale as f32,
-            &options,
-        ) {
-            Ok(r) => r,
-            Err(err) => {
-                eprintln!("pdfce-cli: page {}: {err}", plan.index + 1);
+        let sequence = spec.sequence();
+        let ordered_sizes: Vec<(f64, f64)> = sequence
+            .iter()
+            .filter_map(|&i| page_sizes.get(i).copied())
+            .collect();
+        let layout =
+            match pdfce_print::imposition::plan_n_up(device.printable_pt, &ordered_sizes, &nup) {
+                Ok(l) => l,
+                Err(err) => {
+                    eprintln!("pdfce-cli: {err}");
+                    return exit::RUNTIME_ERROR;
+                }
+            };
+        let mut sheets: Vec<pdfce_print::PageBitmap> = Vec::new();
+        for sheet_index in 0..layout.sheets {
+            // One pixmap per SHEET, at the device resolution, with each
+            // source page drawn into its own cell. Compositing here
+            // rather than sending one blit per cell keeps the spooler
+            // loop unchanged — it still sees one bitmap per physical
+            // sheet, which is what a sheet is.
+            let px = |pt: f64| (pt * f64::from(resolution.dpi) / 72.0).round().max(1.0) as u32;
+            let (sw, sh) = (px(device.printable_pt.0), px(device.printable_pt.1));
+            let Some(mut sheet) = pdfce_render::tiny_skia::Pixmap::new(sw, sh) else {
+                eprintln!("pdfce-cli: a sheet of {sw}x{sh} pixels is too large to compose");
                 return exit::RUNTIME_ERROR;
+            };
+            sheet.fill(pdfce_render::tiny_skia::Color::WHITE);
+            for slot in layout.slots.iter().filter(|s| s.sheet == sheet_index) {
+                let Some(&source) = sequence.get(slot.source) else {
+                    continue;
+                };
+                let (Some(page), Some(&size)) = (page_list.get(source), page_sizes.get(source))
+                else {
+                    continue;
+                };
+                let scale = (f64::from(resolution.dpi) / 72.0) * slot.fit.scale;
+                let options = pdfce_render::RenderOptions::default()
+                    .with_annotation_scope(comments.to_scope());
+                let rendered = match pdfce_render::render_page_with_view(
+                    &session.view(),
+                    page,
+                    scale as f32,
+                    &options,
+                ) {
+                    Ok(r) => r,
+                    Err(err) => {
+                        eprintln!("pdfce-cli: page {}: {err}", source + 1);
+                        return exit::RUNTIME_ERROR;
+                    }
+                };
+                let _ = size;
+                sheet.draw_pixmap(
+                    px(slot.fit.rect.x) as i32,
+                    px(slot.fit.rect.y) as i32,
+                    rendered.pixmap.as_ref(),
+                    &pdfce_render::tiny_skia::PixmapPaint::default(),
+                    pdfce_render::tiny_skia::Transform::identity(),
+                    None,
+                );
             }
-        };
-        bitmaps.push(pdfce_print::PageBitmap {
-            width: rendered.pixmap.width(),
-            height: rendered.pixmap.height(),
-            rgba: rendered.pixmap.data().to_vec(),
-            placement,
-            page_pt: size,
-        });
+            sheets.push(pdfce_print::PageBitmap {
+                width: sheet.width(),
+                height: sheet.height(),
+                rgba: sheet.data().to_vec(),
+                // The sheet is already the printable area at device
+                // resolution, so it is placed 1:1 with no further
+                // scaling — the imposition did the fitting.
+                placement: pdfce_print::Placement {
+                    scale: 1.0,
+                    offset_x_pt: 0.0,
+                    offset_y_pt: 0.0,
+                    clipped: false,
+                },
+                page_pt: device.printable_pt,
+            });
+        }
+        bitmaps = sheets;
+    }
+
+    if n_up.is_none() {
+        for plan in &plans {
+            let (Some(page), Some(&size)) = (page_list.get(plan.index), page_sizes.get(plan.index))
+            else {
+                continue;
+            };
+            let placement = plan.placement;
+            let render_scale = plan.render_scale;
+            let options =
+                pdfce_render::RenderOptions::default().with_annotation_scope(comments.to_scope());
+            let rendered = match pdfce_render::render_page_with_view(
+                &session.view(),
+                page,
+                render_scale as f32,
+                &options,
+            ) {
+                Ok(r) => r,
+                Err(err) => {
+                    eprintln!("pdfce-cli: page {}: {err}", plan.index + 1);
+                    return exit::RUNTIME_ERROR;
+                }
+            };
+            bitmaps.push(pdfce_print::PageBitmap {
+                width: rendered.pixmap.width(),
+                height: rendered.pixmap.height(),
+                rgba: rendered.pixmap.data().to_vec(),
+                placement,
+                page_pt: size,
+            });
+        }
     }
 
     let dry = if send {

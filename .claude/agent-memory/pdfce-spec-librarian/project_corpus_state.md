@@ -48,6 +48,7 @@ heading (`**<N>. `).**
 | 34 | READER/ENUMERATION shape: the standard conceding its subject is not enumerable; merged-cell extraction artifacts |
 | 35 | UI-PRESENTATION/TREE shape + the CLAIM-OF-CONTRADICTION ruling: the resolution is a third sentence in the same table; "process both" is a wrong shape for state assignment |
 | 36 | NAMED-TABLE shape: DIVERGENT SIBLING ROWS; a correct summary is the hardest gap to see; a purpose clause corroborates; global conjunction vs order-critical algebra; a `shall not` as a NEGATIVE WIRING constraint |
+| 38 | VERBATIM-COLUMN / partition dispatch: the corpus's DERIVED list is what's under test (promoting a topic out of a summary silently breaks its lists); a spec's own PROSE goes stale vs its own TABLE in version cohorts; look for the THIRD list; answer the unstated IDENTITY test with the wrong-implementation it rules out; x-position check is mandatory for one-word classification columns |
 | 37 | ADJUDICATING A CLAUSE-NUMBER CONFLICT: rule from the source's own enumeration, never from your heading (headings are RECONSTRUCTED); "the sub-clause does not exist" beats "the other one is right"; status leaks to anywhere the PRODUCT NAME appears, not just to headings and the index |
 
 ---
@@ -1826,3 +1827,58 @@ the SOURCE'S OWN ENUMERATION, never from your corpus's heading.** Established
   NOT IMPLEMENTED cell was hiding a shipped feature *and* a live defect — **when
   a dispatch says "the first half is now false, verify the second half", the
   deliverable is usually a ROW SPLIT, not an edit.**
+
+**38. VERBATIM-COLUMN dispatch (a partition/classification lookup) — the corpus's
+own DERIVED list is the thing under test; expect the source's own PROSE to be
+STALE relative to its own TABLE; and expect MORE THAN ONE list to exist.**
+Established 2026-08-10 on Table 169's "Markup" column (`pdfce-render`'s four-way
+annotation print/paint scope). This is item 36's NAMED-TABLE shape narrowed to
+the case where the dispatch says *"the corpus gives a list, but that is derived,
+not the verbatim column"* — which is itself the tell that the derived list is
+wrong. Four sub-findings:
+
+- **The dispatch's suspicion was correct and the defect was an OMISSION of
+  exactly one row.** The derived list had 16 names; Table 169 has **17** Markup =
+  Yes. `Redact` was missing — because it had been *promoted to its own file*
+  (`iso32000__s__12.5.6.23.md`) and the summarising paragraph in the parent file
+  was never swept. **Promoting a topic out of a summary file creates a silent
+  off-by-one in every list the summary still carries.** Add "sweep the parent
+  file's enumerations" to any promote/split operation. Same shape as item 36's
+  "a correct summary is the hardest gap to see", new cause.
+- **A standard's PROSE can be stale relative to its OWN normative table, and the
+  staleness is version-shaped.** §12.5.6.2's *"For all other annotation types
+  (Link, Movie, Widget, PrinterMark, and TrapNet)"* names 5; Table 169 marks 9
+  non-markup. The 3 missing (`Screen` 1.5, `Watermark` 1.6, `3D` 1.6) are
+  **exactly the additions after the prose was last touched** — so when a prose
+  list and a table disagree, **diff them and check whether the difference is a
+  version cohort.** If it is, that is an erratum, not a subtlety, and the table
+  wins. Confirm against the PDF Association 2.0 errata; state precisely that the
+  errata showing no change is evidence *the errata did not fix it*, **not**
+  evidence about 2.0's base text (that stays NEEDS VERIFICATION).
+- **Look for the THIRD list.** Two lists that disagree invites picking a winner;
+  there was a third — **Table 243's FDF `/Annots` exclusion** (6 names, includes
+  `Screen`, excludes `Popup`//`Watermark`//`3D`) — with a *completely different
+  meaning* (transportability, not markup status). Grep the whole source for other
+  references to the table under test (`Table 169` = 5 hits, one of them this) and
+  tabulate every list side by side with **what each one actually means**. Without
+  that table an implementer merges two of them.
+- **A classification dispatch usually has a second, unstated question: the
+  IDENTITY test.** Here, "which subtype is the form field?" → `/Widget`, sole,
+  §12.5.6.19 — and the useful part is the **trap**, not the answer: in the ~88 %
+  merged case the field dict *is* the widget dict, so keying the test on `/FT`
+  instead of `/Subtype` misses Shape-B `/Kids` widgets that inherit `/FT`. Answer
+  the identity test with the clause AND the wrong-implementation it rules out.
+- **Close with the product-meaning negative.** ISO 32000-1 attaches no
+  print-scope semantics to "markup" at all; the four-way scope is Acrobat's
+  framing. Say so (`T169-N3`) so the partition is trusted and the *meaning* is
+  correctly located in the parity RAG. Extends item 21's "separate the
+  guarantors" to "separate the partition from the product meaning hung on it".
+
+**Extraction note for this shape:** the table was **single-page with no
+continuation**, and `pypdf` returned it row-aligned on the first pass (memory
+item 3's score is now 6 for 6). The `pdfminer` x-position run (item 4a) is what
+makes a Yes/No column trustworthy — the values landed in their own geometric
+column at `x0 ≈ 297–299`, distinct from Description (`148`) and sub-clause
+(`337`), which proves no row inherited a neighbour's value through reflow.
+**For any one-word-per-cell classification column, run the x-position check —
+it is the only thing that rules out reading-order contamination.**
