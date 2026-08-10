@@ -176,6 +176,24 @@ deviates only with a recorded reason. Three deviations:
    reviewed, they still go through the same accessible-name wrapper
    (`PdfceApp::glyph_button`), so nothing about them regressed.
 
+4. **`bookmarks.svg`, `layers.svg`, `signatures.svg` are additions the
+   spec does not cover** — the same situation as `edit-objects.svg`
+   above. The three panels they open (outline, optional content,
+   signature coverage) all shipped after the ui-spec was written, and
+   all three shipped with **no operator-reachable control at all**: a
+   `PaneSubject` variant, a panel body, a diag step, and nothing to
+   click. The glyphs were authored to close that, in the same §1
+   contract.
+
+   `signatures.svg` is the one with a constraint beyond style. It is
+   deliberately **not** a seal, badge, shield or checkmark, because each
+   of those reads as VALIDATED and pdfce performs no cryptographic
+   verification whatsoever. The panel's first line says so; an icon that
+   said otherwise would have made the claim before the panel was even
+   open. An icon is a claim too, and this set's one rule about meaning
+   (see `redact.svg`'s fill) already establishes that a glyph can carry
+   semantics the label does not repeat.
+
 ## 6. Rendering, and why no new dependency appears here
 
 These SVGs are **not** rasterized by any SVG library. `icons.rs` parses

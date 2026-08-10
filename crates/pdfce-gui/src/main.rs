@@ -4111,6 +4111,12 @@ enum Action {
     /// same one gesture that entering it did, and dropping both at once
     /// would strand an operator who only wanted the chrome back.
     ExitViewMode,
+    /// Open the Bookmarks activity.
+    ShowBookmarks,
+    /// Open the Layers activity.
+    ShowLayers,
+    /// Open the Signatures activity.
+    ShowSignatures,
     /// Show or hide the Find bar (Ctrl+F).
     ToggleFind,
     /// Run the current Find query and cache its hits.
@@ -10985,6 +10991,18 @@ impl PdfceApp {
             // the document's text, so the panel cannot call it while it
             // holds the document borrow. Same shape as
             // `search_and_mark_for_redaction` directly above.
+            Action::ShowBookmarks => {
+                self.show_pane_subject(ribbon::PaneSubject::Bookmarks);
+                return;
+            }
+            Action::ShowLayers => {
+                self.show_pane_subject(ribbon::PaneSubject::Layers);
+                return;
+            }
+            Action::ShowSignatures => {
+                self.show_pane_subject(ribbon::PaneSubject::Signatures);
+                return;
+            }
             Action::ToggleFind => {
                 self.find_open = !self.find_open;
                 return;
@@ -11061,7 +11079,10 @@ impl PdfceApp {
             // open-document guard — these are the actions that are
             // meaningful with no document open, or that need `&mut self`
             // rather than `&mut OpenDoc`.
-            Action::ToggleFind
+            Action::ShowBookmarks
+            | Action::ShowLayers
+            | Action::ShowSignatures
+            | Action::ToggleFind
             | Action::ToggleReadMode
             | Action::ToggleFullScreen
             | Action::ExitViewMode
@@ -13673,6 +13694,72 @@ impl PdfceApp {
                 {
                     actions.push(Action::ToggleRail);
                 }
+                // ★ THREE PANELS THAT HAD NO WAY IN.
+                //
+                // Bookmarks, Layers and Signatures each shipped with a
+                // `PaneSubject`, a panel body and a `diag` step — and no
+                // operator-reachable control at all. Their ONLY callers
+                // were the harness step handlers, so all three were
+                // unreachable in a real build while being reported as
+                // working, and a build note told the operator to open one.
+                //
+                // The diag step made them look driveable, which is exactly
+                // how the gap survived: the harness could reach them, so
+                // every verification passed. A `PaneSubject` variant is not
+                // a feature until something an operator can click sets it.
+                //
+                // Here rather than on their own tab: the View tab's Panels
+                // group is already "what is shown beside the page", and
+                // R123 forbids a second entry point for one command.
+                //
+                // Disabled-and-explained with no document (R83), never
+                // hidden — a control that vanishes teaches nothing.
+                let has_doc = matches!(self.status, Status::Open(_));
+                ui.add_enabled_ui(has_doc, |ui| {
+                    if Self::icon_text_toggle(
+                        ui,
+                        icons::Icon::Bookmarks,
+                        self.pane_subject == ribbon::PaneSubject::Bookmarks,
+                        ui_text::activities_bookmarks_label(),
+                        ui_text::bookmarks_open_tooltip(),
+                    )
+                    .clicked()
+                    {
+                        actions.push(Action::ShowBookmarks);
+                    }
+                    if Self::icon_text_toggle(
+                        ui,
+                        icons::Icon::Layers,
+                        self.pane_subject == ribbon::PaneSubject::Layers,
+                        ui_text::activities_layers_label(),
+                        ui_text::layers_open_tooltip(),
+                    )
+                    .clicked()
+                    {
+                        actions.push(Action::ShowLayers);
+                    }
+                    if Self::icon_text_toggle(
+                        ui,
+                        icons::Icon::Signatures,
+                        self.pane_subject == ribbon::PaneSubject::Signatures,
+                        ui_text::activities_signatures_label(),
+                        ui_text::signatures_open_tooltip(),
+                    )
+                    .clicked()
+                    {
+                        actions.push(Action::ShowSignatures);
+                    }
+                });
+                // Traced because the compile-time gate proves the CALL exists,
+                // and only a running frame proves the CONTROL was drawn. Those
+                // are different claims, and the panels this replaces were
+                // reported working on the strength of the weaker one.
+                diag::trace(|| {
+                    format!(
+                        "ribbon-panel-toggles drawn=3 enabled={has_doc} subject={:?}",
+                        self.pane_subject
+                    )
+                });
                 // THE OBJECT-TREE SIDEBAR'S OWN TOGGLE (2026-08-06, operator
                 // instruction: *"these can be activated from the view menu"*).
                 //
@@ -24898,6 +24985,80 @@ mod tests {
             assert!(
                 src.contains(&needle),
                 "{group:?} is declared in ribbon.rs but no widget in main.rs is gated on                  `{needle}` — the tab shows a caption with nothing under it"
+            );
+        }
+    }
+
+    /// **Every pane subject can be opened without the diagnostic harness.**
+    ///
+    /// # The defect this exists to catch, which nothing caught
+    ///
+    /// `PaneSubject::Bookmarks`, `::Layers` and `::Signatures` each shipped
+    /// with a variant, a panel body, a rail entry and a `diag` step — and
+    /// **no control an operator could click**. All three were unreachable in
+    /// a real build. Worse, they were reported as working and a build note
+    /// told the operator to open one of them, because every verification the
+    /// engineer ran drove the harness, and the harness could reach them.
+    ///
+    /// That is the trap worth naming: a `diag` step makes a surface look
+    /// driveable, and driving it proves only that the harness can. A
+    /// `PaneSubject` variant is not a feature until something outside
+    /// `raw_input_hook` constructs it.
+    ///
+    /// # Why it scans source text
+    ///
+    /// Same reason as [`tests::every_ribbon_group_is_gated_to_a_widget`]: the
+    /// connection between "a subject exists" and "a widget opens it" exists
+    /// nowhere in the type system — the unreachable version compiled
+    /// perfectly for three whole panels. Textual is the only place the
+    /// relationship is written down, so textual is where it gets checked
+    /// (R163: a mechanical gate beats a remembered rule).
+    ///
+    /// The harness handler lives inside `raw_input_hook`, so that function's
+    /// body is cut out and the variant must still appear in what remains.
+    ///
+    /// # ★ The first draft of this gate passed on the broken source
+    ///
+    /// It looked for the bare variant name `PaneSubject::Bookmarks` outside
+    /// the hook, and found one — in the panel-dispatch `match`, which decides
+    /// what to DRAW once the subject is already set. That is a read, not a
+    /// route, and every unreachable panel had one. The gate would have
+    /// certified the exact bug it was written for.
+    ///
+    /// So the needle is the **call that sets the subject**, not the variant:
+    /// only `show_pane_subject(..)` (or a direct assignment, for the one
+    /// subject that arms rather than opens) puts a panel on screen. Checked
+    /// by running the gate's logic against the pre-fix source, where all
+    /// three must fail. Writing a gate is not the same as knowing it fires.
+    ///
+    /// A false PASS is still possible — an `Action` arm with no button behind
+    /// it would satisfy this — and that is the right way to be wrong. The
+    /// failure guarded here is *nothing but the harness reaches it*, which is
+    /// what actually happened.
+    #[test]
+    fn every_pane_subject_is_reachable_without_the_harness() {
+        let src = include_str!("main.rs");
+        let hook = src
+            .find("fn raw_input_hook(")
+            .expect("the diag step handler's enclosing function must be findable by name");
+        // The next method definition at the same indentation ends the body.
+        let after = src[hook..]
+            .find(
+                "
+    fn ",
+            )
+            .map(|off| hook + off)
+            .unwrap_or(src.len());
+        let outside = format!("{}{}", &src[..hook], &src[after..]);
+        for subject in ribbon::PaneSubject::ALL {
+            // Two ways a subject legitimately becomes the visible one: the
+            // helper, or a direct assignment. `ArmedTool` uses the second —
+            // it is not "opened", it FOLLOWS the armed tool — so both count.
+            let opened = format!("show_pane_subject(ribbon::PaneSubject::{subject:?})");
+            let assigned = format!("pane_subject = ribbon::PaneSubject::{subject:?}");
+            assert!(
+                outside.contains(&opened) || outside.contains(&assigned),
+                "{subject:?} is only ever set inside `raw_input_hook` — the diagnostic                  harness can open that panel and an operator cannot. A `match` arm that                  DRAWS it does not count; something has to SET it. Give it a control."
             );
         }
     }

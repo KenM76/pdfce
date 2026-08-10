@@ -340,6 +340,26 @@ pub enum Icon {
     /// this one puts three on a straight run with the middle one filled (the
     /// points themselves, and the canvas's selected-node vocabulary).
     ShowPoints,
+    /// Bookmarks panel toggle (View → Panels) — the document's outline.
+    ///
+    /// A ribbon with a notch, which is the one shape read as "bookmark"
+    /// without a label. Deliberately not a page-with-lines: that is
+    /// [`Icon::Properties`]/document territory, and this panel is about
+    /// places IN a document rather than the document itself.
+    Bookmarks,
+    /// Layers panel toggle (View → Panels) — optional content, §8.11.
+    ///
+    /// Three stacked sheets. Three rather than two so it does not read as
+    /// [`Icon::Combine`]'s linked pair at 16px.
+    Layers,
+    /// Signatures panel toggle (View → Panels) — §12.8 coverage.
+    ///
+    /// A written flourish over a signing rule, and emphatically **not** a
+    /// seal, badge, shield or checkmark: each of those reads as VALIDATED,
+    /// and pdfce performs no cryptographic verification. The panel's first
+    /// line says so; the glyph must not contradict it before the panel is
+    /// open. An icon is a claim too.
+    Signatures,
     /// Markup → Rectangle (§3.3).
     ShapeRect,
     /// Markup → Ellipse (§3.3).
@@ -423,6 +443,9 @@ impl Icon {
         Icon::Tools,
         Icon::Keyboard,
         Icon::ShowPoints,
+        Icon::Bookmarks,
+        Icon::Layers,
+        Icon::Signatures,
         Icon::ShapeRect,
         Icon::ShapeEllipse,
         Icon::ShapeArrow,
@@ -471,6 +494,9 @@ impl Icon {
             Icon::FormField => include_str!("../assets/icons/form-field.svg"),
             Icon::EditObjects => include_str!("../assets/icons/edit-objects.svg"),
             Icon::ShowPoints => include_str!("../assets/icons/show-points.svg"),
+            Icon::Bookmarks => include_str!("../assets/icons/bookmarks.svg"),
+            Icon::Layers => include_str!("../assets/icons/layers.svg"),
+            Icon::Signatures => include_str!("../assets/icons/signatures.svg"),
             Icon::Measure => include_str!("../assets/icons/ruler.svg"),
             Icon::Undo => include_str!("../assets/icons/undo.svg"),
             Icon::Redo => include_str!("../assets/icons/redo.svg"),
@@ -524,6 +550,9 @@ impl Icon {
             Icon::FormField => "form-field",
             Icon::EditObjects => "edit-objects",
             Icon::ShowPoints => "show-points",
+            Icon::Bookmarks => "bookmarks",
+            Icon::Layers => "layers",
+            Icon::Signatures => "signatures",
             Icon::Measure => "measure",
             Icon::Undo => "undo",
             Icon::Redo => "redo",

@@ -1469,7 +1469,7 @@ fn sweep_pages<G: ObjectGraph + ?Sized>(
 /// resolves against. Only `/Type /OCMD` takes the membership branch.
 ///
 /// Table 99's `/OCGs` may be a single dictionary **or** an array, and both
-/// forms are handled by [`group_refs`]. `/VE` is not traversed — see the
+/// forms are handled inline below. `/VE` is not traversed — see the
 /// module's "Not covered here".
 fn expand_oc<G: ObjectGraph + ?Sized>(
     graph: &G,

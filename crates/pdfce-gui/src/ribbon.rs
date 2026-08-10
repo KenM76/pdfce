@@ -603,6 +603,26 @@ pub enum PaneSubject {
     Signatures,
 }
 
+impl PaneSubject {
+    /// Every pane subject, in declaration order.
+    ///
+    /// Exists for `main.rs`'s `every_pane_subject_is_reachable_without_the_harness`
+    /// gate — a new variant MUST be added here or it ships unchecked, exactly
+    /// as [`RibbonGroup::ALL`] works for groups.
+    #[allow(dead_code)]
+    pub const ALL: &'static [PaneSubject] = &[
+        PaneSubject::ArmedTool,
+        PaneSubject::Properties,
+        PaneSubject::BatchTools,
+        PaneSubject::Redact,
+        PaneSubject::Comments,
+        PaneSubject::Forms,
+        PaneSubject::Bookmarks,
+        PaneSubject::Layers,
+        PaneSubject::Signatures,
+    ];
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

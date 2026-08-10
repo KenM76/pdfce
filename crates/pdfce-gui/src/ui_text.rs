@@ -8651,6 +8651,25 @@ pub fn bookmark_untitled() -> &'static str {
     "(untitled)"
 }
 
+/// Tooltip on the Bookmarks ribbon toggle.
+pub fn bookmarks_open_tooltip() -> &'static str {
+    "Show the document's bookmarks. Click one to jump to its page."
+}
+
+/// Tooltip on the Layers ribbon toggle.
+pub fn layers_open_tooltip() -> &'static str {
+    "Show the document's layers and which of them a reader draws by default."
+}
+
+/// Tooltip on the Signatures ribbon toggle.
+///
+/// Says what the panel does NOT do, in the tooltip as well as the panel,
+/// because a control labelled "Signatures" invites the assumption before
+/// the panel is even open.
+pub fn signatures_open_tooltip() -> &'static str {
+    "Show what each digital signature covers. pdfce does not check whether they are valid."
+}
+
 /// Shown when the document has an outline but no items pdfce could read.
 pub fn bookmarks_empty() -> &'static str {
     "This document has no bookmarks."
