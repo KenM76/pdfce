@@ -9102,20 +9102,25 @@ impl PdfceApp {
                 )
             });
 
-            // ★ `lost_focus()`, NOT `has_focus()` + a key peek.
-            //
-            // A singleline `TextEdit` CONSUMES Enter itself and surrenders
-            // focus, so by the time a peek placed after `ui.add` runs, the
-            // event is gone. My first version peeked on `has_focus()` and
-            // silently never fired: the trace showed
-            // `focus=true query="third"` and a status of "Type text above
-            // to search" — the box had the text, had focus, and the search
-            // never ran.
-            //
-            // `lost_focus()` is the condition every other draft in this
+            // `lost_focus()` — the condition every other draft in this
             // application commits on (the field-rename editor, the Forms
-            // panel's text drafts), for exactly this reason. Copying it
-            // rather than inventing a second Enter idiom is the point.
+            // panel's text drafts). A singleline `TextEdit` consumes Enter
+            // and surrenders focus, so this is the frame the commit belongs
+            // in.
+            //
+            // ★ THIS WAS NEVER BROKEN, and the two commits that said it was
+            // are wrong. `fbddda5` recorded "Enter does not work, two
+            // idioms tried, cause unknown" and `42b86cd` repeated it. Both
+            // were measuring nothing: the harness step is `key:enter`, and
+            // every test sent `nav:enter`, which is not a step name. The
+            // harness traced `script-step-UNPARSEABLE step="nav:enter"`
+            // each time; the `-Filter` argument matched only what the test
+            // expected to see, so the one line that would have explained it
+            // was filtered out.
+            //
+            // A filter that matches only your expectation cannot tell you
+            // your input was wrong. Verified now with the right step name:
+            // `frame-enter-events n=2` then `Match 1 of 9 - page 1`.
             if box_response.lost_focus() {
                 let (enter, shift) =
                     ui.input(|i| (i.key_pressed(egui::Key::Enter), i.modifiers.shift));
