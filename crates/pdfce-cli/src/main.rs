@@ -960,6 +960,20 @@ enum Command {
         flat: bool,
     },
 
+    /// **Report what each signature COVERS** — not whether it is valid.
+    ///
+    /// pdfce performs no cryptographic verification. This measures each
+    /// signature's `/ByteRange` (§12.8.1) against the file's real length
+    /// and reports what it protects, which answers a question a validity
+    /// badge does not: was anything added beyond the signed range?
+    ///
+    /// A signature can be cryptographically perfect over the first 40 KB
+    /// of a 900 KB file.
+    ListSignatures {
+        /// Input PDF.
+        input: PathBuf,
+    },
+
     /// **List a document's optional-content groups** — layers (§8.11).
     ///
     /// Reports each layer's name and whether a reader would DRAW it with
@@ -3895,6 +3909,7 @@ fn run() -> ExitCode {
         Command::ListOutline { input, flat } => cmd_list_outline(&input, flat),
         Command::ListAttachments { input } => cmd_list_attachments(&input),
         Command::ListLayers { input } => cmd_list_layers(&input),
+        Command::ListSignatures { input } => cmd_list_signatures(&input),
         Command::ListPrinters => cmd_list_printers(),
         Command::PrintPreview {
             input,
@@ -5723,6 +5738,126 @@ fn cmd_list_outline(input: &Path, flat: bool) -> u8 {
         "list-outline {} bookmarks={shown} max_depth={} {warnings}",
         input.display(),
         d.max_depth,
+    );
+    exit::SUCCESS
+}
+
+/// `list-signatures` — what each signature COVERS, not whether it is valid.
+///
+/// # The caveat is on the output, not in the help text
+///
+/// This is the one command in the CLI where a reader is most likely to
+/// take away more than was said. "list-signatures" on a signed document,
+/// printing offsets and byte counts, looks exactly like a verification
+/// report — and pdfce performs no cryptography at all.
+///
+/// So every run ends with a line saying so. Not a `--verbose` extra, not
+/// the man page: the summary line itself, on every invocation, because
+/// the operator who most needs it is the one who did not read the docs.
+///
+/// # What the numbers mean
+///
+/// `covered` is how many bytes the digest spans. `tail` is how many lie
+/// PAST the end of everything it covers — the number that matters, and
+/// the shape an incremental save takes when a revision is appended after
+/// signing. A non-zero tail does not mean the signature is broken; it
+/// means it protects less than the whole file.
+///
+/// §12.8.1 makes whole-file coverage a `should`, not a `shall`, so a
+/// short range is reported and never called malformed. Overlapping
+/// ranges violate Table 252's "exact byte range" and ARE reported as
+/// malformed. The two are deliberately distinguishable in the output.
+fn cmd_list_signatures(input: &Path) -> u8 {
+    // The file's real length on disk. `/ByteRange` is a claim about
+    // BYTES, and only the bytes can check it — the object model cannot
+    // check a claim about the file against itself.
+    let file_len = match std::fs::metadata(input) {
+        Ok(m) => m.len(),
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit::IO_ERROR;
+        }
+    };
+    let doc = match pdfce_core::document::Document::load(input) {
+        Ok(doc) => doc,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit_code_for_doc(&err);
+        }
+    };
+    let session = pdfce_core::edit::EditSession::new(doc);
+    let graph = session.graph();
+
+    let census = pdfce_core::signature::census(&graph);
+    let coverage = pdfce_core::signature::byte_range_coverage(&graph, file_len);
+
+    for c in &coverage {
+        let ranges: Vec<String> = c.ranges.iter().map(|(o, l)| format!("{o}+{l}")).collect();
+        let mut flags: Vec<&str> = Vec::new();
+        if !c.ranges_well_formed {
+            flags.push("MALFORMED_RANGE");
+        }
+        if c.uncovered_tail > 0 {
+            // Named as what it is, not as an error. A short range is
+            // conforming (§12.8.1's `should`).
+            flags.push("does-not-cover-whole-file");
+        }
+        if c.pair_count == 1 {
+            // One pair means /Contents sits inside its own digest, which
+            // cannot verify — a different and worse problem than a short
+            // range.
+            flags.push("SINGLE_RANGE_CANNOT_VERIFY");
+        }
+        println!(
+            "signature field={:?} covered={} of {} tail={} pairs={} ranges=[{}]{}",
+            c.field_name.as_deref().unwrap_or("-"),
+            c.covered,
+            c.file_len,
+            c.uncovered_tail,
+            c.pair_count,
+            ranges.join(" "),
+            if flags.is_empty() {
+                String::new()
+            } else {
+                format!(" {}", flags.join(" "))
+            },
+        );
+    }
+
+    // TWO warnings, and they must not be conflated. The first draft
+    // emitted the "this is permitted, the document is not malformed"
+    // reassurance for a document whose ranges OVERLAP — so one run
+    // printed `MALFORMED_RANGE` on the row and a line saying nothing was
+    // malformed underneath it. Found by reading the output across all
+    // three fixtures rather than by any test (R174).
+    let malformed = coverage.iter().any(|c| !c.ranges_well_formed);
+    if malformed {
+        eprintln!(
+            "pdfce-cli: WARNING — at least one signature's /ByteRange is MALFORMED: its \
+             ranges overlap or run backwards, which Table 252's \"exact byte range\" does \
+             not permit. The numbers above are what the file DECLARES; a reader that \
+             rejects the array will compute something else, or nothing at all."
+        );
+    }
+    // Only reassure about conformance when there is nothing to be
+    // unreassured about.
+    if !malformed && coverage.iter().any(|c| c.uncovered_tail > 0) {
+        eprintln!(
+            "pdfce-cli: WARNING — at least one signature does not cover the whole file. \
+             Content exists beyond what it protects. This is permitted by ISO 32000-1 \
+             §12.8.1 (whole-file coverage is a \"should\"), so the document is not \
+             malformed — but the signature guarantees less than its presence suggests."
+        );
+    }
+
+    println!(
+        "list-signatures {} signatures={} certifications={} with_byte_range={} \
+         (COVERAGE ONLY — pdfce performs no cryptographic verification, so this says \
+         what each signature would protect, never whether it is valid)",
+        input.display(),
+        census.signatures,
+        census.certifications,
+        coverage.len(),
     );
     exit::SUCCESS
 }
