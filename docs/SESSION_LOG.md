@@ -30273,6 +30273,122 @@ it is already cited by hash in both `ROADMAP.md` (10+ hits) and this file
 `docs/FEATURES.md`: two rows edited — Planned *Rich-text fill* (`core`/
 `cli` `[ ]` → `◐`, row names its own split) and Forms *Import/export form
 data* (stale sentence corrected, no checkbox change). `docs/ARCHITECTURE.md`
+§12: extended, no new decision number. Standing rules: `R180` MINTED —
+ceiling `R179` → `R180`, next free `R181`. Decision records: unchanged,
+ceiling **035**, next free **036**. Operator-question ceiling unchanged
+at **(bh)**, next free **(bi)**. Baseline debt unchanged at **5**.
+
+---
+
+## 2026-08-10 (sixty-seventh filing) — `b2574f6`: the `R179` audit is RUN, not only proposed, and finds `import_form_data` had TWO more untouched instances of its own already-"fixed" bug; `6a42ffa`: `R180` applied to itself one commit after minting, correcting two now-false sentences in SOURCE plus a clippy doc-list gotcha; `c46a6ce`: an export disclosure count wired to the wrong predicate disagreed with the file it described in BOTH directions; `R181` MINTED
+
+**Sourcing.** This librarian has no shell this dispatch (hard rule 8). All
+three commit messages were supplied in full and are quoted/summarized
+below as received. Independently verified by direct read:
+`tools/commits-filed-baseline.txt` (still 5 lines, none of the three
+commits ever on it — fresh citations, not a debt discharge); the Backlog
+audit entry this filing partially discharges; `docs/FEATURES.md` rows
+155/157 before editing row 157 further; the `R180` standing rule this
+filing's second item corroborates. The dispatch also reported, via its
+own shell check (not independently re-run here): `check-commits-filed.py`
+no longer flags `462d468` (9 `ROADMAP.md` citations, 6 `SESSION_LOG.md`
+citations) — consistent with, not contradicting, the sixty-sixth filing's
+narrower count, which predates this filing's own citations of the same
+hash.
+
+**Shipped:**
+- `b2574f6` (2026-08-10) — the `?`-in-mutating-loop audit the sixty-fifth
+  filing owed to Backlog was RUN, not only proposed: eleven loops in
+  `edit.rs` use `self.<verb>(..)?` per item, nine build-then-commit-once
+  (safe), two share `R179`'s shape. `import_form_data`'s `1e3422e` fix
+  only closed ONE of its three field-kind arms (`fill_text_field`) — the
+  regression test written for it exercised only that arm and would have
+  passed forever with `set_button_state`/`set_choice_value` still bare-`?`.
+  `b2574f6` closes both. The redaction-search loop (`add_redaction`,
+  commits per match) shares the identical shape and is deliberately left
+  UNFIXED — it needs a contract decision this audit correctly declined to
+  make on its own (is a partial redaction set better or worse than none?).
+  Gate figures as supplied: 2684 tests / 0 failed, 4 new across `1e3422e` +
+  `b2574f6` together.
+- `6a42ffa` (2026-08-10) — `R180`'s own practical-form instruction ("grep
+  for the sentences that described a lifted limitation") applied literally,
+  one commit after `R180` was minted, by the same engineer who minted it.
+  Found two sentences `252ffde`/`62ba5ac` had made false without touching:
+  `fdf.rs:36`'s module doc ("rich-text … Pass 7.1 models field values
+  only") and `main.rs:8191`'s GUI status string ("exporting a rich-text
+  field today … silently drops the formatting"). Both true 2026-08-07,
+  false the moment `252ffde` shipped 2026-08-10, in the same session.
+  Corrected to the three-way split (export carries it / import does not
+  apply / authoring not built). Also found and fixed: a bullet list with
+  no blank line before the following paragraph parses as CommonMark lazy
+  continuation — clippy caught it, three warnings for one missing blank
+  line.
+- `c46a6ce` (2026-08-10) — the export disclosure's own COUNT was wired to
+  `Field::is_rich_text()` (the gated flag) while the export write path
+  (`252ffde`) reads `/RV` ungated by that same flag, deliberately. The two
+  disagreed in both directions: flag clear + `/RV` present told the
+  operator zero formatting existed in a file that had some; flag set + no
+  `/RV` told them formatting existed in a file that had none. Fixed by
+  counting off `data.fields` directly, matching what the CLI count already
+  did. Import's count is unchanged — it legitimately asks a different
+  question (which fields will be skipped, not what the file contains).
+  Gate figures: 2687 tests / 0 failed, clippy 0, fmt clean.
+
+**Decisions made this session:**
+- **`b2574f6`'s correction is filed as a NEW entry, not an edit to
+  `1e3422e`'s Shipped entry** — hard rule 1 (append-only). `1e3422e` fixed
+  one of three arms sharing the bug it named; this entry supplies the rest
+  by cross-reference.
+
+**Findings + decisions:**
+- **New standing rule `R181` MINTED**, also written to `D:\dev\rag\rust\`
+  as `a_disclosure_count_must_use_the_same_predicate_as_the_write_it_describes.md`
+  (judged generalizable, same reasoning that sent `R179` to the same tree
+  rather than keeping it pdfce-internal — an observability/API-design
+  hazard with no PDF-domain content). A disclosure count must be computed
+  from the SAME predicate the write path it describes actually uses, never
+  a proxy that can diverge from it in either direction. **Distinct from
+  R180**: R180 is a statement true-when-written and falsified by a LATER
+  improvement; this count was wrong from its own first commit, wired to a
+  predicate the write path had already stopped using three commits earlier
+  in the same session. Full text: `ROADMAP.md` *Standing rules*.
+- **`R180`'s second independent application within about an hour of
+  minting.** The dispatching engineer applied it to `docs/FEATURES.md` in
+  the sixty-sixth filing itself; `6a42ffa` applies it to source one commit
+  later, by the same engineer acting on the rule they had just proposed.
+  Unusually fast corroboration that the rule names a real, recurring gap.
+- **Rustdoc/clippy doc-list finding written to `D:\dev\rag\rust\`** as
+  `rustdoc_doc_comment_bullet_list_needs_blank_line_before_continuation_paragraph.md`
+  — a `///`/`//!` bullet list with no blank line before the following
+  paragraph swallows that paragraph as a CommonMark lazy continuation of
+  the last list item. `D:\dev\rag\rust\index.md` updated with both new
+  entries plus an amendment note on the pre-existing `R179` bullet and its
+  own finding file.
+
+**Still in flight:**
+- The redaction-search loop (`add_redaction`) shares `R179`'s shape and
+  needs an operator/engineer contract ruling before it can be fixed —
+  filed to `ROADMAP.md` *Backlog* as its own entry, split out from the
+  now-closed `import_form_data` audit item.
+- `Pass 37.3` remains IN PROGRESS — neither `6a42ffa` nor `c46a6ce` touches
+  import/authoring.
+- Baseline debt unchanged at **5 lines** (none of the three commits
+  predates the gate).
+
+**For next session:**
+- The redaction-loop contract question ("partial redaction set: better or
+  worse than none?") is a genuine open decision, not a coding task — worth
+  a direct operator ruling before anyone touches `add_redaction`.
+- `check-commits-filed.py`'s `462d468` flag is resolved per the engineer's
+  own shell check this dispatch (9 `ROADMAP.md` + 6 `SESSION_LOG.md`
+  citations) — no further action expected on that hash.
+
+**Ledger for this filing.** Pass family ceiling **UNCHANGED at 53** (53.1
+highest); no new Pass ID (`b2574f6` completes an unscoped Backlog audit
+item; `6a42ffa`/`c46a6ce` extend `Pass 37.3`'s existing ID without moving
+its status). `docs/FEATURES.md`: one row edited — Forms *Import/export
+form data* (addendum naming the completed skip-and-count fix and the
+corrected export count; no checkbox change). `docs/ARCHITECTURE.md`
 §12: **edited** — new dated entry, no new decision number; ceiling stays
 **035**, next free **036**. Standing rules: **`R180` MINTED** — ceiling
 moves **R179 → R180**, next free **R181**. Operator-question ceiling

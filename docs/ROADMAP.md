@@ -81,6 +81,216 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★ `b2574f6` FILED — the `R179` audit is RUN, not only proposed, and finds `import_form_data` had TWO more untouched instances of its own already-"fixed" bug; `6a42ffa` FILED — `R180` applied to itself one commit after being minted, correcting two now-false sentences in SOURCE plus a clippy doc-list gotcha; `c46a6ce` FILED — an export disclosure count wired to the wrong predicate disagreed with the file it described in BOTH directions; `R181` MINTED — baseline debt unchanged at **5** — 2026-08-10 (sixty-seventh filing)
+
+**Sourcing.** This librarian has no shell this dispatch (hard rule 8). All
+three commit messages were supplied in full in the dispatch and are
+quoted/summarized below as received — not independently confirmed against
+`git log`. Independently verified **by direct read**, not relayed:
+`tools/commits-filed-baseline.txt` (still **5** lines — `338076a`,
+`1f319c0`, `55a0732`, `587e520`, `9141ded` — none of the three commits
+below was ever a baseline-debt line, so filing them is a fresh citation,
+not a debt discharge); the Backlog audit entry (`Audit every other
+pdfce-core mutating-loop verb for R179's shape`) this filing partially
+discharges, in full, before editing it further; `docs/FEATURES.md` rows
+155 and 157 (Forms section) before editing row 157 further; and the `R180`
+*Standing rules* entry this filing's Part 2 corroborates. **The dispatch
+also reported, via its own shell check** (not independently re-run by this
+librarian, no shell): `check-commits-filed.py` no longer flags `462d468`
+— 9 citations by hash in `ROADMAP.md`, 6 in `SESSION_LOG.md` — consistent
+with, not contradicting, the sixty-sixth filing's own narrower count
+(10+/3), which predates this filing's own citations of the same hash.
+Raising the suspicion rather than assuming a gate defect, and then
+checking it with the tool available, was the right call — a phantom gate
+defect filed as real would have cost more than the question did.
+
+**Part 1 — `b2574f6` FILED: the `R179` audit closes on `import_form_data`,
+leaves the redaction loop open by design.** The dispatch runs the very
+audit the sixty-fifth filing owed to *Backlog* rather than only proposing
+it, and reports what it found: **eleven** loops in `edit.rs` use
+`self.<verb>(..)?` per item. **Nine** build a `Vec` of writes and commit
+once at the end (safe — no state is written before the loop's own `?` can
+abort it). **Two** commit per iteration, both real instances of `R179`'s
+shape: `import_form_data`'s three field-kind arms (`set_button_state` /
+`set_choice_value` / `fill_text_field`), and a redaction-search loop
+(`add_redaction`, committed per match).
+
+Sixty-fifth filing's fix (`1e3422e`) closed exactly ONE of the three
+`import_form_data` arms — the rich-text refusal reached only through
+`fill_text_field`. The regression test written for it (`FieldIsRichText`
+on a mixed fixture) exercised only that path and would have passed
+forever with the button and choice arms still bare-`?`. **This is the
+shape a test written against the triggering instance, rather than against
+the checklist, misses by construction** — it proves the fixed arm is
+fixed and says nothing about its two siblings. `b2574f6` applies the
+identical skip-and-count fix to `set_button_state` and `set_choice_value`,
+closing `import_form_data` completely: all three field-kind arms now
+share one disposition for a per-item refusal, and `applied + skipped`
+sums to the entries examined for every field kind, not just text.
+
+**Two gates, two policies, and the split is why the function's
+document-wide certification check was correctly left untouched.**
+Document-wide refusals (a certification signature that forbids filling at
+all) are asked ONCE, before anything is written — discovering that on
+entry seventeen would be both late and destructive, so it correctly stays
+a `?` at the top of the function, outside the loop. With those removed,
+everything the loop can still refuse is per-field and local, so the loop
+skips-and-counts.
+
+**The redaction loop is deliberately NOT fixed here.** `add_redaction`
+commits per match and has the identical shape, but it is a different verb
+with a different contract: a partial redaction set is not obviously worse
+than none (an operator who asked for five redactions and got three
+applied before a refusal may prefer the three over none), and guessing at
+that during an unrelated cleanup is exactly how a drive-by fix becomes an
+undiscussed behavior change. **This needs an operator/engineer contract
+decision before it is fixed** — filed as its own *Backlog* note below,
+not resolved here.
+
+Gate figures as supplied (not independently re-run — no shell): 2684
+workspace tests, 0 failed, 4 new across `1e3422e` + `b2574f6` together.
+
+**Part 2 — `6a42ffa` FILED: `R180` applied to itself, one commit after it
+was minted.** The commit acts on `R180`'s own practical-form instruction
+— "when a Pass lifts a limitation, grep for the sentences that described
+it" — literally, one commit after the rule it belongs to was minted
+(sixty-sixth filing). The grep found two sentences that neither
+`252ffde` nor `62ba5ac`, the commits that made them false, had touched:
+
+- `crates/pdfce-core/src/fdf.rs:36` — module doc: *"What is NOT modelled
+  (named non-goals) … rich-text `<value-richtext>` bodies. Pass 7.1 models
+  field values only."*
+- `crates/pdfce-gui/src/main.rs:8191` — GUI status string: *"exporting a
+  rich-text field today writes its plain-text equivalent and silently
+  drops the formatting."*
+
+Both were correct on 2026-08-07 (`b8f96b1`'s own date) and false by
+2026-08-10 — falsified in the SAME session that falsified them, by the
+same author who wrote `252ffde`/`62ba5ac`, who did not think to check the
+module doc sitting directly above the code they were changing. **The
+module doc is the worse of the two**: it is the first thing anyone reads
+before touching `fdf.rs`, and would have told a future reader not to
+bother looking for a feature that was already there. Corrected to the
+same three-way split this project has now used twice (`FEATURES.md`'s own
+row, sixty-sixth filing; here, in source): **export CARRIES it** (`/RV` +
+`<value-richtext>` read, written, re-parsed); **import does NOT APPLY** (a
+rich-text field is skipped entirely — `RT-M9`); **authoring** is not
+built at all. Deliberately NOT rewritten to "supports rich text" — that
+would be the identical overstatement pointing the other direction.
+
+**A second, smaller finding on the way.** Adding a bullet list to that
+module doc without a blank line before the following paragraph made the
+paragraph parse as a continuation of the last list item under CommonMark
+— invisible to a human reading the source, wrong to `rustdoc`'s Markdown
+parser. `clippy` caught it: three warnings for one missing blank line.
+Judged a generalizable Rust/rustdoc finding, not pdfce-specific — see
+*Findings + decisions* below.
+
+**Worth flagging by itself: this is `R180`'s SECOND independent
+application within roughly an hour of its own minting.** The dispatching
+engineer applied it to `docs/FEATURES.md` in the sixty-sixth filing
+itself; this commit applies it to source, one commit later, by the same
+engineer acting on the rule they had just proposed. Two independent hits
+that fast is unusually strong corroboration that the rule names a real,
+recurring gap rather than a one-off.
+
+Gate figures: not stated in the message as supplied (the report covers
+the doc/clippy fix only; not independently re-run — no shell).
+
+**Part 3 — `c46a6ce` FILED: a disclosure count wired to a proxy predicate
+disagreed with the file it described, in BOTH directions.** `252ffde`
+reads `/RV` on export **ungated** by the `RichText` flag, deliberately
+(Part 1 of the sixty-sixth filing: a file may carry `/RV` with bit 26
+clear, and dropping it in that case destroys the only copy of the
+formatting). `62ba5ac`, the same session, wrote the export disclosure's
+COUNT off `Field::is_rich_text()` — the gated flag — not off the same
+ungated test the export logic actually uses. The two came apart in both
+directions:
+
+- flag clear, `/RV` present — the file DOES carry formatting; the count
+  said zero, and the operator learns nothing about data sitting in the
+  file they just wrote.
+- flag set, no `/RV` — the count said one; the sentence implies
+  formatting is in the file when none exists.
+
+Fixed by counting off `data.fields` (rich-value presence) directly — the
+disclosure describes the FILE, so it now counts the file, matching what
+the CLI half of the same disclosure already did (the CLI count was
+written fresh against the data in `62ba5ac`; the GUI's older flag-based
+count was left alone, which is how the two came to disagree with each
+other as well as with the file).
+
+**The IMPORT count is deliberately NOT changed** — it legitimately still
+asks the flag, because it answers a different question (which fields will
+be SKIPPED on import), not the export count's question (does the file
+already carry formatting). Worth carrying forward verbatim: *"two counts
+that look identical and are not is exactly the shape that makes someone
+simplify them into one later."*
+
+Gate figures as supplied: 2687 workspace tests, 0 failed; clippy 0; fmt
+clean.
+
+**Findings + decisions.**
+- **★ New standing rule `R181` MINTED — see *Standing rules*, below**, and
+  also written to `D:\dev\rag\rust\` as
+  `a_disclosure_count_must_use_the_same_predicate_as_the_write_it_describes.md`
+  (judged generalizable — a disclosure count diverging from the write
+  path it summarizes is an ordinary observability/API-design hazard with
+  no PDF-domain content, the same reasoning that sent `R179` to the same
+  tree rather than kept it pdfce-internal).
+- **`b2574f6`'s amendment recorded, not a rewrite of history.** Per hard
+  rule 1, `1e3422e`'s Shipped entry (below) is not edited — this entry
+  supplies the correction by cross-reference. `1e3422e` fixed one of three
+  arms sharing the bug it named; `b2574f6` fixes the other two.
+- **The rustdoc/clippy doc-list finding is written to `D:\dev\rag\rust\`**
+  as
+  `rustdoc_doc_comment_bullet_list_needs_blank_line_before_continuation_paragraph.md`
+  — a pure Markdown-parsing/toolchain gotcha, no PDF-domain content.
+  `D:\dev\rag\rust\index.md` updated with both new entries plus an
+  amendment note on the pre-existing `a_loop_that_mutates_...md` bullet.
+
+**New Backlog note filed** (see *Backlog*, below) for the redaction-loop
+contract question Part 1 left open: is a partial redaction set better or
+worse than none? Blocks fixing `add_redaction`'s identical `?`-in-a-
+mutating-loop shape.
+
+**Numbers.** Baseline debt: **5 lines, unchanged** (none of the three
+commits predates the gate — a fresh citation, not a discharge, same
+distinction the sixty-fifth and sixty-sixth filings drew for `1e3422e`
+and `252ffde`/`62ba5ac`). `docs/FEATURES.md`: one row edited — *Import/
+export form data* (Forms section) gains an addendum naming both the
+completed skip-and-count fix (all three field kinds) and the corrected
+export-disclosure count; no checkbox moves (a robustness/disclosure
+correction to an already-`[x]`/`[x]` capability, not a new one).
+`docs/ARCHITECTURE.md` §12: **not edited** — none of the three commits
+redraws a crate boundary, picks a library, or defines/refines an
+invariant; all three are coding-pattern/disclosure-correctness findings,
+exactly the class `R179`/`R180`/`R181` exist for.
+
+**Invariant checks.** Not stated as such in any of the three supplied
+messages. `b2574f6` touches only `pdfce-core`'s `edit.rs`; `6a42ffa`
+touches `pdfce-core`'s `fdf.rs` doc comment and `pdfce-gui`'s `main.rs`
+status string; `c46a6ce` touches `pdfce-gui` only (per the dispatch, "That
+is what the CLI half already did" — CLI unaffected). GUI-core separation
+is not implicated by anything relayed here. Not independently re-run (no
+shell).
+
+**Ledger for this filing.** **Pass family ceiling: UNCHANGED at 53 (53.1
+highest).** No new Pass ID — `b2574f6` completes an unscoped Backlog audit
+item (no Pass ID, per this ledger's established convention for that
+class); `6a42ffa` and `c46a6ce` extend `Pass 37.3`'s already-assigned ID
+without moving its status (still IN PROGRESS — neither commit builds
+import/authoring, the open half named in the *Next up* amendment).
+`docs/ARCHITECTURE.md` §12: **not edited** — see *Numbers* above. Standing
+rules: **`R181` MINTED** (below) — ceiling moves `R180` → `R181`, next
+free `R182`. Decision records: no new number claimed; ceiling stays
+**035**, next free **036**. Operator-question ceiling **unchanged at
+(bh)**, next free **(bi)** — no new lettered question minted. Backup/git
+working-tree state not independently asserted — this librarian has no
+shell this dispatch (hard rule 8).
+
+---
+
 ### ★ `252ffde` + `62ba5ac` FILED — `Pass 37.3` slices 1 and 2: form-data export carries `/RV`, and the disclosure that export loses formatting is corrected in the SAME session before it could sit false in the field; `462d468` re-cited (already filed sixty-third filing); `R180` MINTED — baseline debt unchanged at **5** — 2026-08-10 (sixty-sixth filing)
 
 **Sourcing.** This librarian has no shell this dispatch (hard rule 8). Both
@@ -32800,20 +33010,34 @@ Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
 
-- **Audit every other `pdfce-core` mutating-loop verb for `R179`'s shape**
-  (owed by `1e3422e`, 2026-08-10 — see that *Shipped* entry, top of
-  *Shipped*). `import_form_data` propagated a per-item refusal with a
-  bare `?` inside a loop that had already mutated the session overlay for
-  earlier entries, abandoning the import half-applied behind a reported
-  failure — fixed by matching the sibling arm that already did the right
-  thing (skip-and-count). **Not audited: whether any other verb that
-  iterates and mutates as it goes shares the shape** — `git grep` for `?`
-  inside a `for`/`while` loop in a function whose signature takes
-  `&mut EditSession` (or an equivalent mutable receiver) is the concrete
-  starting point; `R179` (Standing rules, below) is the checklist
-  question to ask at each hit. Not yet scoped to a Pass — a review/audit
-  task, not necessarily a feature-shaped one; may turn into several
-  one-line fixes or zero, depending what the grep turns up.
+- ~~**Audit every other `pdfce-core` mutating-loop verb for `R179`'s
+  shape**~~ **[★ AUDIT RUN 2026-08-10 (`b2574f6`, sixty-seventh filing) —
+  DONE, not merely proposed.** Eleven loops in `edit.rs` use
+  `self.<verb>(..)?` per item; nine build a `Vec` and commit once at the
+  end (safe); TWO share `R179`'s shape — `import_form_data`'s three
+  field-kind arms (`fill_text_field`/`set_button_state`/
+  `set_choice_value`) and a redaction-search loop (`add_redaction`,
+  committed per match). `import_form_data` is now FULLY FIXED — all three
+  arms skip-and-count (`1e3422e` fixed the first, `b2574f6` the other
+  two). The redaction loop is the one remaining item; see the new entry
+  immediately below, split out because it needs a decision this audit
+  correctly declined to make on its own.]**
+- **Redaction-search loop (`add_redaction`) shares `R179`'s shape and is
+  DELIBERATELY UNFIXED, pending a contract decision** (found by the audit
+  above, `b2574f6`, 2026-08-10). `add_redaction` commits per match found,
+  identical to `import_form_data`'s pre-fix shape — a mid-search refusal
+  would leave earlier matches already redacted while the caller receives
+  an `Err`. Not fixed alongside `import_form_data` because it is a
+  different verb with a different open question: **is a partial
+  redaction set better or worse than none?** An operator who asked for
+  five redactions and got three applied before a refusal may prefer the
+  three over none — or may not; unlike form-import (every field
+  independently applicable, skip-and-count is obviously right),
+  redaction's correctness expectations are not obviously the same
+  shape, and picking a disposition without asking is exactly how a
+  drive-by cleanup becomes an undiscussed behavior change. **Needs an
+  operator or engineer ruling on the contract question before this is
+  fixed** — not yet scoped to a Pass.
 - ~~**Rename a pure grouping node — not reachable from the GUI, and
   nothing tells the operator so** (owed by `Pass 53.0`, `a3ba0f8`,
   2026-08-09). `form.fields` is a projection of TERMINAL fields only
@@ -43492,6 +43716,43 @@ and
   record: `ROADMAP.md`'s `252ffde`+`62ba5ac` *Shipped* entry (head of
   *Shipped*), Part 2. **Ceiling moves `R179` → `R180`; next free
   `R181`.**
+
+- **R181 — A disclosure COUNT must be computed from the same predicate
+  the write path it describes actually uses, never a proxy predicate
+  that can diverge from it in either direction (2026-08-10, `c46a6ce`;
+  librarian-minted, also written to `D:\dev\rag\rust\`).** `252ffde`
+  reads `/RV` on export **ungated** by the `RichText` flag, by deliberate
+  design (a malformed file can carry `/RV` with bit 26 clear, and gating
+  on the flag would drop the only copy of real formatting). `62ba5ac`,
+  the same session, wrote the export disclosure's count off the gated
+  flag anyway — a different, easier-to-reach-for predicate that happened
+  to already exist — and the two disagreed in BOTH directions: flag
+  clear + `/RV` present told the operator zero formatting existed in a
+  file that had some; flag set + no `/RV` told them formatting existed
+  in a file that had none. **Distinct from R180**: R180 is a STATEMENT
+  that was true when written and became false through a LATER, separate
+  improvement to the code it described; this count was wrong from
+  `62ba5ac`'s own first commit, because it was wired to a predicate the
+  write path it claims to summarize had already stopped using three
+  commits earlier in the same session — no later change was needed to
+  falsify it, only a moment's inattention at write time. **Also distinct
+  from R174** (an accurate string's informativeness to its audience) —
+  this is about the NUMBER's correctness, not its reach. **Practical
+  form:** when a disclosure counts "how many X happened," find the
+  actual write/read call it is summarizing and use the SAME condition
+  that call uses to decide what it does — never a nearby flag, cached
+  field, or "this should mean the same thing" proxy, even when the two
+  predicates look interchangeable at a glance. **A second, narrower
+  caution from the same finding, worth keeping attached rather than
+  promoted to its own rule**: two counts on the same feature that look
+  identical (import's skip-count, export's carries-formatting-count) are
+  not automatically the same question, and treating them as one is
+  exactly how a future "simplification" reintroduces this defect. Full
+  record: `ROADMAP.md`'s `b2574f6`/`6a42ffa`/`c46a6ce` *Shipped* entry
+  (sixty-seventh filing), Part 3. Cross-project twin (no PDF-domain
+  content, judged generalizable the same way `R179` was):
+  `D:\dev\rag\rust\a_disclosure_count_must_use_the_same_predicate_as_the_write_it_describes.md`.
+  **Ceiling moves `R180` → `R181`; next free `R182`.**
 
 ## Update protocol
 

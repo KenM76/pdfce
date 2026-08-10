@@ -9541,6 +9541,35 @@ impl EditSession {
         use crate::text_extract::{self, ExtractOptions, TextOrigin};
         use crate::vartext::Quadding;
 
+        // R179: the two DOCUMENT-WIDE gates, hoisted ahead of the scan.
+        //
+        // `add_redaction` re-checks both, so this is not the thing that
+        // enforces them — it is what makes the loop below *provably* safe
+        // and the refusal cheap. Two distinct reasons, both load-bearing:
+        //
+        // 1. **The loop mutates and uses `?`.** That is the exact shape of
+        //    the `import_form_data` defect (`b2574f6`): a call that reports
+        //    failure having already changed the document. It is harmless
+        //    *here* only because every reachable failure is document-wide —
+        //    `spec.quads` is always `vec![quad]` so `EmptyGeometry` cannot
+        //    fire, and `page_index` comes from the scan so `PageOutOfRange`
+        //    cannot either — meaning `add_redaction` fails on the FIRST
+        //    iteration or never, and a partial mark set is unreachable.
+        //    That argument depends on facts outside this function. Checking
+        //    the gates here makes it hold locally instead: whatever
+        //    per-entry errors `add_redaction` may grow later, the ones that
+        //    exist today are already excluded before the first mutation.
+        //
+        // 2. **A refusal should not cost a full-document text extraction.**
+        //    Without this, `mark_redactions_by_search` on an encrypted file
+        //    extracts and scans every page, then throws all of it away at
+        //    the first `add_redaction`. On a large document that is a long
+        //    stall with no output — the worst shape of "no" there is.
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification_for_annotation()?;
+
         let extracted =
             text_extract::extract_document_view(&self.view(), &ExtractOptions::default())
                 .map_err(|e| EditError::TextExtraction(e.to_string()))?;
