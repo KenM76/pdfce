@@ -1805,6 +1805,23 @@ enum Command {
         /// for byte.
         #[arg(long)]
         verify_undo: bool,
+        /// Allow filling a RICH-TEXT field by converting it to a plain text
+        /// field, discarding the stored formatting.
+        ///
+        /// Without this, a rich-text field is refused: writing /V while a
+        /// live /RV remains would make conforming readers regenerate the
+        /// appearance from the OLD text (§12.7.3.4), so the file would
+        /// display something the operator never typed. Refusing is right,
+        /// but it leaves the field unfillable, and this flag is the
+        /// deliberate way through.
+        ///
+        /// It is LOSSY and irreversible within the fill: the /RV is removed
+        /// and the RichText flag cleared, so bold, colour and every other
+        /// span property in the stored rich text is gone. Every converted
+        /// field is named individually on stderr — a count would not tell
+        /// the operator WHICH field lost its formatting.
+        #[arg(long)]
+        downgrade_rich_text: bool,
     },
 
     /// Regenerate widget appearances and clear /NeedAppearances (Pass 7.1).
@@ -3953,7 +3970,15 @@ fn run() -> ExitCode {
             output,
             mode,
             verify_undo,
-        } => cmd_fill_field(&input, &sets, &output, mode, verify_undo),
+            downgrade_rich_text,
+        } => cmd_fill_field(
+            &input,
+            &sets,
+            &output,
+            mode,
+            verify_undo,
+            downgrade_rich_text,
+        ),
         Command::RegenerateAppearances {
             input,
             output,
@@ -5550,12 +5575,46 @@ that Adobe Acrobat/Reader would run; pdfce recognizes them but NEVER executes an
 /// [`EditSession::set_button_state`]. All assignments land in one session
 /// (so the save carries them as one incremental revision), then the shared
 /// [`save_edited`]/[`finish_edit`] plumbing writes and reports.
+///
+/// # `downgrade_rich_text`, and why the CLI needed it
+///
+/// Until this flag existed, a rich-text field was **unfillable from the
+/// CLI at all**: this function called [`EditSession::fill_text_field`],
+/// which refuses one with [`EditError::FieldIsRichText`], and never
+/// exposed [`EditSession::fill_text_field_downgrading_rich_text`]. The GUI
+/// had shipped the disclosed downgrade; the CLI had no route to it, and
+/// `docs/FEATURES.md` asserted the exact opposite of both facts until
+/// `aac321c`.
+///
+/// The flag is **opt-in and lossy**, which is the whole design. Making it
+/// the default would silently discard `/RV` formatting on a plain
+/// `fill-field` — the "sneaky" half of rule 4, on a batch surface where
+/// nobody is watching a screen. Refusing without any escape leaves a real
+/// document permanently unfillable. An explicit flag is the only option
+/// that is neither.
+///
+/// Disclosure is **per field, by name, on stderr** — not a count. A count
+/// tells the operator that something lost its formatting; it does not tell
+/// them WHICH, and on a scripted run that is the only question worth
+/// answering. This is the same reasoning as `R181`, arrived at from the
+/// other direction: there, a count described the wrong thing; here, a count
+/// would be the wrong SHAPE for the thing.
+///
+/// # Loop safety (`R179`)
+///
+/// The assignment loop mutates and returns early on error, which is
+/// `R179`'s shape. It is safe here because the early return happens
+/// **before** [`save_edited`] — the partially-mutated session is dropped
+/// and the output file is never written, so a failed run leaves no partial
+/// fill anywhere an operator can observe. Atomicity by not saving, not by
+/// rollback.
 fn cmd_fill_field(
     input: &Path,
     sets: &[String],
     output: &Path,
     mode: SaveMode,
     verify_undo: bool,
+    downgrade_rich_text: bool,
 ) -> u8 {
     let (source, mut session) = match open_for_edit(input) {
         Ok(pair) => pair,
@@ -5598,6 +5657,39 @@ fn cmd_fill_field(
                 let sels: Vec<&str> = value.split('|').collect();
                 session
                     .set_choice_value(name, &sels)
+                    .map(|out| disclose_fill(name, &out))
+            }
+            // Text, and the `None`/unmodelled fallback.
+            //
+            // The lossy verb is taken ONLY for a field the model says is
+            // actually rich text, never merely because the flag is set.
+            // Routing every text field through it would be wrong twice
+            // over: `--downgrade-rich-text` must not change the outcome
+            // for a field that has no formatting to lose, and the note
+            // below would then have to guess whether anything happened.
+            // Asking `is_rich_text()` — which resolves `/FT` first, so it
+            // cannot mistake a radio group's bit 26 for RichText
+            // (`587e520`) — makes both exact.
+            //
+            // Without the flag this falls through to `fill_text_field`,
+            // which refuses a rich-text field. That refusal is the
+            // default and stays the default.
+            _ if downgrade_rich_text
+                && form
+                    .field_by_name(name)
+                    .is_some_and(pdfce_core::forms::Field::is_rich_text) =>
+            {
+                // Announced BEFORE the write, so an operator watching a
+                // batch run sees which field is about to lose formatting
+                // even if a later assignment aborts the whole run. stderr,
+                // so a script capturing stdout still shows a human.
+                eprintln!(
+                    "pdfce-cli: {name}: rich-text formatting discarded \
+                     (--downgrade-rich-text) — /RV removed, RichText flag \
+                     cleared"
+                );
+                session
+                    .fill_text_field_downgrading_rich_text(name, value)
                     .map(|out| disclose_fill(name, &out))
             }
             _ => session
