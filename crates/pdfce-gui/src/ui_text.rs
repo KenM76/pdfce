@@ -8651,6 +8651,32 @@ pub fn bookmark_untitled() -> &'static str {
     "(untitled)"
 }
 
+/// Label on the Find bar's whole-word checkbox.
+pub fn find_whole_word_label() -> &'static str {
+    "Whole word"
+}
+
+/// Tooltip on the Find bar's whole-word checkbox.
+///
+/// Says what it excludes rather than what it includes — "whole word" is
+/// only unambiguous once you have been shown the case it rules out.
+pub fn find_whole_word_tooltip() -> &'static str {
+    "Only match the word on its own. Searching for \"cat\" stops matching \"category\"."
+}
+
+/// Label on the Find bar's wildcard checkbox.
+pub fn find_wildcards_label() -> &'static str {
+    "Wildcards"
+}
+
+/// Tooltip on the Find bar's wildcard checkbox.
+///
+/// Names both metacharacters, because the whole point of the control is
+/// that they used to act without being named.
+pub fn find_wildcards_tooltip() -> &'static str {
+    "Treat # as any digit and ? as any single character. Off, so a search finds exactly what you type."
+}
+
 /// Hidden optional-content sections on this page (§8.11.3.2).
 ///
 /// Worded as the producer's choice, not as a pdfce limitation: the

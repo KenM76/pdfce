@@ -927,12 +927,35 @@ struct PdfceApp {
     /// Case-sensitive matching. Core takes `case_insensitive`, so this is
     /// its inverse at the call site.
     ///
-    /// Whole-word matching is deliberately absent rather than faked:
-    /// [`pdfce_core::edit::TextMatch`] carries only the matched substring
-    /// with no surrounding context, so a shell-side boundary check has
-    /// nothing to check against. That is a core gap, and post-filtering
-    /// on data core does not return would be inventing an answer.
     find_case_sensitive: bool,
+    /// Whole-word matching (`pdfce_core::edit::TextSearchOptions`).
+    ///
+    /// This field's doc used to explain why the option did NOT exist:
+    /// `TextMatch` carried only the matched substring with no surrounding
+    /// context, so a shell-side boundary check had nothing to check
+    /// against, and post-filtering on data core does not return would
+    /// have been inventing an answer. The right fix was in core, and that
+    /// is where it happened — the boundary test runs against the page's
+    /// text, walks through soft hyphens and joiners, and crosses run
+    /// edges (which are not word boundaries: a `/Span` opened mid-word
+    /// splits `Water` into two runs).
+    find_whole_word: bool,
+    /// Treat `#` and `?` as wildcards rather than as themselves.
+    ///
+    /// # ★ Off, because it used to be permanently ON and invisible
+    ///
+    /// The Find bar ran through `find_text`, which is a PATTERN search.
+    /// So typing `?` matched every character on the page, and `A#`
+    /// matched `A1` — with no control, no label and nothing in the
+    /// counter to say the search that ran was not the search that was
+    /// typed. An operator looking for a literal question mark in a
+    /// contract got every character highlighted and no explanation.
+    ///
+    /// That is rule 4's "sneaky" half exactly: pdfce reinterpreted the
+    /// query and did not disclose it. Now the box searches for what was
+    /// typed, and the reinterpretation is something you ask for and can
+    /// see you asked for.
+    find_wildcards: bool,
     /// The last search's hits, cached between frames.
     ///
     /// Cached because `find_text` takes `&mut self` and extracts the
@@ -1538,6 +1561,8 @@ impl Default for PdfceApp {
             find_open: false,
             find_query: String::new(),
             find_case_sensitive: false,
+            find_whole_word: false,
+            find_wildcards: false,
             find_matches: Vec::new(),
             find_index: 0,
             find_searched_query: None,
@@ -9269,6 +9294,26 @@ impl PdfceApp {
                 actions.push(Action::RunFind);
             }
 
+            // Same re-run rule as case-sensitivity, for the same reason:
+            // a checkbox that describes a search other than the one whose
+            // count is on screen is worse than no checkbox.
+            if ui
+                .checkbox(&mut self.find_whole_word, ui_text::find_whole_word_label())
+                .on_hover_text(ui_text::find_whole_word_tooltip())
+                .changed()
+                && self.find_searched_query.is_some()
+            {
+                actions.push(Action::RunFind);
+            }
+            if ui
+                .checkbox(&mut self.find_wildcards, ui_text::find_wildcards_label())
+                .on_hover_text(ui_text::find_wildcards_tooltip())
+                .changed()
+                && self.find_searched_query.is_some()
+            {
+                actions.push(Action::RunFind);
+            }
+
             if ui
                 .button(ui_text::find_close_label())
                 .on_hover_text(ui_text::find_close_tooltip())
@@ -9332,7 +9377,15 @@ impl PdfceApp {
         let Status::Open(doc) = &mut self.status else {
             return;
         };
-        self.find_matches = doc.session_mut().find_text(&query, case_insensitive);
+        // `find_text_with`, never `find_text`: the legacy verb hard-codes
+        // pattern matching, which is the behaviour that made a literal
+        // `?` match everything. Every option the bar shows is passed, so
+        // what ran is what the checkboxes claim ran.
+        let options = pdfce_core::edit::TextSearchOptions::default()
+            .with_case_insensitive(case_insensitive)
+            .with_whole_word(self.find_whole_word)
+            .with_wildcards(self.find_wildcards);
+        self.find_matches = doc.session_mut().find_text_with(&query, &options);
         self.find_searched_query = Some(query);
         self.go_to_current_find_match();
     }
@@ -12123,6 +12176,29 @@ impl eframe::App for PdfceApp {
             }
             diag::Step::Find => {
                 self.apply(Action::ToggleFind, ctx, ctx.pixels_per_point());
+            }
+            diag::Step::Search {
+                ref query,
+                whole_word,
+                wildcards,
+            } => {
+                // Set the same fields the checkboxes set, then run the
+                // same action the box's Enter pushes — so what is driven
+                // is the bar's own path, not a private search.
+                self.find_open = true;
+                self.find_query = query.clone();
+                self.find_whole_word = whole_word;
+                self.find_wildcards = wildcards;
+                self.apply(Action::RunFind, ctx, ctx.pixels_per_point());
+                diag::trace(|| {
+                    format!(
+                        "search query={:?} whole_word={} wildcards={} hits={}",
+                        self.find_query,
+                        self.find_whole_word,
+                        self.find_wildcards,
+                        self.find_matches.len()
+                    )
+                });
             }
             // A plain wheel scroll. `modifiers: default` is what makes it a
             // SCROLL rather than a zoom: egui routes Ctrl+wheel to zoom, so

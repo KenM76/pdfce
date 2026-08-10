@@ -162,6 +162,23 @@ pub enum Step {
     /// what needs driving is the BAR, and going through the action keeps
     /// the harness testing the surface rather than the keymap.
     Find,
+    /// Type a query into the Find bar and run the search, with the two
+    /// option checkboxes set from the step: `search:<query>`,
+    /// `search:whole:<query>`, `search:wild:<query>`.
+    ///
+    /// Exists because the Find bar's OPTIONS are the part that cannot be
+    /// checked any other way. Core pins what each option means; only a
+    /// running frame can show that the box passes the ones the
+    /// checkboxes claim — which is exactly the gap that let the bar ship
+    /// treating `?` as a wildcard with no control for it.
+    Search {
+        /// The query text, as if typed.
+        query: String,
+        /// Set the whole-word checkbox.
+        whole_word: bool,
+        /// Set the wildcard checkbox.
+        wildcards: bool,
+    },
     /// Open the settings window, through the same action the ribbon
     /// button pushes.
     ///
@@ -489,6 +506,29 @@ fn parse_step(s: &str) -> Option<Step> {
         "panel" if rest.trim() == "redact" => Some(Step::Redact),
         "panel" if rest.trim() == "forms" => Some(Step::Forms),
         "panel" if rest.trim() == "find" => Some(Step::Find),
+        "search" => {
+            // `whole:` / `wild:` prefixes may be combined in either
+            // order; whatever is left is the query, verbatim (a query
+            // may legitimately contain a colon).
+            let mut q = rest.trim_start();
+            let (mut whole_word, mut wildcards) = (false, false);
+            loop {
+                if let Some(r) = q.strip_prefix("whole:") {
+                    whole_word = true;
+                    q = r;
+                } else if let Some(r) = q.strip_prefix("wild:") {
+                    wildcards = true;
+                    q = r;
+                } else {
+                    break;
+                }
+            }
+            Some(Step::Search {
+                query: q.to_owned(),
+                whole_word,
+                wildcards,
+            })
+        }
         "panel" if rest.trim() == "bookmarks" => Some(Step::Bookmarks),
         "panel" if rest.trim() == "layers" => Some(Step::Layers),
         "panel" if rest.trim() == "signatures" => Some(Step::Signatures),

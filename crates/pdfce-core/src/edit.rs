@@ -5429,6 +5429,584 @@ pub struct TextMatch {
     pub text: String,
 }
 
+/// How pdfce decides what a **word** is, for whole-word text search.
+///
+/// # Why this is a setting and not a constant (R169)
+///
+/// ISO 32000-1 §14.8.2.5 NOTE 1 declines to define the term, in as many
+/// words: *"Unlike a character, the notion of a word is not precisely
+/// defined but depends on the purpose for which the text is being
+/// processed … It is not important for a Tagged PDF document to identify
+/// the words within the text stream according to a single, unambiguous
+/// definition that satisfies all of these clients."* Its NOTE 4 then
+/// offers a **menu** of reader strategies and makes every one of them
+/// optional: split at every SPACE; also treat hyphens and em dashes as
+/// separators; or use *"an algorithm similar to the one in Unicode
+/// Standard Annex #29, Text Boundaries"*.
+///
+/// §14.8's negative result **S9** goes further — **no clause anywhere
+/// defines "word" for an UNTAGGED document**, which is most documents
+/// pdfce will ever open. And §14.8.2.5's one normative sentence (the
+/// spacing characters *shall* be present) binds the **writer** of a
+/// Tagged PDF, not the reader of anything.
+///
+/// So there is no correct answer to import, only a choice to make. That
+/// is exactly the shape the operator's 2026-08-08 directive names —
+/// *"where standards are ambiguous those should become settings that the
+/// user can choose direction on, with the initial installed default as
+/// the best guess of what is usually followed"* — so the choice is
+/// exposed on the search request ([`TextSearchOptions::word_boundary`])
+/// rather than hard-coded, and the three variants below are NOTE 4's own
+/// menu rather than three inventions of pdfce's.
+///
+/// # What this enum actually controls
+///
+/// A whole-word hit is one whose flanking characters are **not** word
+/// characters. This enum answers only "which characters are word
+/// characters"; the flanking rules themselves (start/end of the page's
+/// text, and the treatment of invisible format characters) are the same
+/// for every variant and are documented on
+/// [`TextSearchOptions::whole_word`].
+///
+/// # UAX #29 is deliberately absent
+///
+/// NOTE 4's third option would need a Unicode word-segmentation table
+/// (a `unicode-segmentation`-class dependency and its data). ISO 32000-1
+/// cites UAX #9/#29 exactly once each and never normatively for
+/// extraction (§14.8's **B1**), so this would be pdfce importing a
+/// segmentation model the standard does not ask for, to resolve a
+/// question the standard says has no single answer. It is a defensible
+/// future variant — the enum is `#[non_exhaustive]` so it can be added
+/// without a breaking change — but it is not worth a new dependency and
+/// a licence classification for a search toggle today.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum WordBoundary {
+    /// A word is a maximal run of Unicode **alphanumerics** plus the
+    /// connector `_` (U+005F LOW LINE). Everything else — spaces,
+    /// punctuation, symbols, currency, dashes — separates.
+    ///
+    /// **The shipped default — EVIDENCE TIER (c)**, the tier meaning
+    /// *what other major implementations do, as documented*, rather than
+    /// a bare guess:
+    ///
+    /// - `Acrobat_Features/find__match_semantics_and_scope.md` records
+    ///   Reader's own **Whole Words Only** as *"an exact-boundary match —
+    ///   searching `stick` does NOT match `tick` or `sticky`"*, off by
+    ///   default and independent of Case-Sensitive. This variant
+    ///   reproduces that, and [`TextSearchOptions`] reproduces the two
+    ///   toggles' independence and their off-by-default.
+    /// - It is `\w`/`\b` — the boundary model every mainstream search UI
+    ///   and regex engine ships, so it is what an operator's habits
+    ///   already predict.
+    ///
+    /// It is **not** tier (a)/(b): no clause and no Adobe primary source
+    /// states a character class, and the same RAG file records an
+    /// explicit **GAP** on how Reader treats a soft hyphen. Where this
+    /// variant's behaviour is therefore a reasoned inference rather than
+    /// a match to documented behaviour, it is called out at the point of
+    /// inference (see [`WordBoundary::is_word_char`] on U+00AD).
+    ///
+    /// Consequences worth knowing before choosing it, because they are
+    /// the ones operators notice:
+    ///
+    /// - `don't` contains the whole word `don` (the apostrophe
+    ///   separates), which is `\b`'s long-standing behaviour and
+    ///   surprises people every time.
+    /// - `H2O` contains no whole word `H` — a digit is alphanumeric.
+    /// - `ﬁ` (U+FB01, a ligature that some fonts map to one code point
+    ///   rather than to `f` + `i`) is a letter, so `ﬁle` is one word
+    ///   under this variant. An ASCII-only test would have split it, and
+    ///   whether a given file yields `ﬁ` or `fi` depends entirely on the
+    ///   font's `/ToUnicode` (§9.10.3, whose own example decomposes
+    ///   `ff`/`fi`/`ffl`). This variant is insensitive to that choice.
+    #[default]
+    Alphanumeric,
+    /// §14.8.2.5 NOTE 4's **first** option, literally: *"split at every
+    /// SPACE"*. A word is a maximal run of non-space characters, so
+    /// punctuation is part of the word it touches.
+    ///
+    /// Under this variant `(total)` does **not** contain the whole word
+    /// `total` — the parentheses are word characters. That is a real and
+    /// often unwanted consequence, which is why it is not the default;
+    /// it is here for the operator whose text is code, identifiers,
+    /// part numbers or file paths, where `A-12/B` genuinely is one token
+    /// and splitting it at every punctuation mark is the wrong answer.
+    ///
+    /// "Space" means the Unicode `White_Space` property, not `== ' '`,
+    /// so U+00A0 NO-BREAK SPACE and U+202F NARROW NO-BREAK SPACE
+    /// separate — see [`WordBoundary::is_word_char`] for why that matters
+    /// in extracted PDF text.
+    NonSpace,
+    /// §14.8.2.5 NOTE 4's **second** option: as [`Self::NonSpace`], and
+    /// *"hyphens and em dashes"* separate too.
+    ///
+    /// The middle setting. `A-12/B` splits at the hyphen but not at the
+    /// slash, and `well-known` contains the whole words `well` and
+    /// `known` — which is what a reader looking for hyphenated compounds
+    /// wants and what [`Self::NonSpace`] refuses to give them.
+    NonSpaceOrDash,
+}
+
+impl WordBoundary {
+    /// Whether `c` counts as part of a word under this rule.
+    ///
+    /// Pure, total, and deliberately public: this predicate **is** the
+    /// setting's meaning, and a front end that wants to explain the
+    /// choice — or a test that wants to pin it — should be reading the
+    /// same function the search uses rather than a second copy of the
+    /// rules that can drift from it.
+    ///
+    /// # Invisible format characters are NOT decided here
+    ///
+    /// U+00AD SOFT HYPHEN reports `false` from this function under every
+    /// variant, and that is **not** the whole story: the search treats it
+    /// (and the other invisible format controls) as *transparent* — it
+    /// looks straight through it to the next real character — so the
+    /// answer this function gives for U+00AD is never the answer the
+    /// search uses. The reason is §14.8.2.2.3, which classifies a soft
+    /// hyphen as an **incidental artifact**: a hyphen the producer
+    /// inserted at a line break, *"distinct from an ordinary hard hyphen,
+    /// whose Unicode value is U+002D"*. It sits **inside one word**.
+    /// Treating it as a separator would report `inter` as a whole word in
+    /// `inter<SHY>national`, which is precisely the false positive
+    /// whole-word matching exists to prevent.
+    ///
+    /// That transparency rule lives in the search (see
+    /// [`TextSearchOptions::whole_word`]) rather than here because it is
+    /// *not* a claim that a soft hyphen is a letter — it is a claim that
+    /// it carries no word/non-word signal at all, and a two-valued
+    /// predicate cannot say that.
+    ///
+    /// Acrobat's own behaviour on U+00AD is an explicit **GAP** in
+    /// `Acrobat_Features/find__match_semantics_and_scope.md` (no source
+    /// found, 2026-08-10), so this is **evidence tier (d)** — reasoned
+    /// inference from the ISO clause, not a match to observed behaviour.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pdfce_core::edit::WordBoundary;
+    ///
+    /// assert!(WordBoundary::Alphanumeric.is_word_char('a'));
+    /// assert!(WordBoundary::Alphanumeric.is_word_char('7'));
+    /// assert!(WordBoundary::Alphanumeric.is_word_char('_'));
+    /// assert!(!WordBoundary::Alphanumeric.is_word_char('-'));
+    ///
+    /// // NOTE 4's first option keeps punctuation inside the word.
+    /// assert!(WordBoundary::NonSpace.is_word_char('-'));
+    /// assert!(!WordBoundary::NonSpaceOrDash.is_word_char('-'));
+    ///
+    /// // A no-break space separates under every variant.
+    /// assert!(!WordBoundary::NonSpace.is_word_char('\u{00A0}'));
+    /// ```
+    #[must_use]
+    pub fn is_word_char(self, c: char) -> bool {
+        match self {
+            // `char::is_alphanumeric` is Alphabetic ∪ {Nd, Nl, No} — the
+            // Unicode properties, not `is_ascii_alphanumeric`. Extracted
+            // PDF text is Unicode by construction (§9.10.2's ladder
+            // produces Unicode values, not bytes), and an ASCII test
+            // would classify every accented letter, every CJK ideograph
+            // and every precomposed ligature as a word BOUNDARY — which
+            // would make whole-word search silently useless outside
+            // English rather than visibly wrong.
+            //
+            // `_` is added for the same reason `\w` adds it: it is
+            // Unicode connector punctuation (Pc) and reads as part of an
+            // identifier everywhere identifiers exist. Only U+005F, not
+            // all of Pc — the rest (undertie, various wavy low lines) are
+            // typographic, not identifier characters, and pdfce carries
+            // no Unicode character database to test the category with.
+            Self::Alphanumeric => c.is_alphanumeric() || c == '_',
+            Self::NonSpace => !is_space_like(c),
+            Self::NonSpaceOrDash => !is_space_like(c) && !is_dash(c),
+        }
+    }
+}
+
+/// Whether `c` separates words under [`WordBoundary::NonSpace`] and
+/// [`WordBoundary::NonSpaceOrDash`] — the Unicode `White_Space` property,
+/// plus U+200B.
+///
+/// # Why `White_Space` and not `== ' '`
+///
+/// §14.8.2.5's normative sentence says only that *"the spacing characters
+/// that would be present to separate words in a pure text representation
+/// shall be present"* — it names no code point, and pdfce's own
+/// extraction can produce several. Real producers emit U+00A0 NO-BREAK
+/// SPACE between a label and its number (`Fig.<NBSP>3`) precisely so a
+/// layout engine will not break there, and U+202F NARROW NO-BREAK SPACE
+/// before French punctuation and in numeric groupings. Both are
+/// `White_Space`; neither is `' '`. Testing for the ASCII space alone
+/// would fuse `Fig.` and `3` into one token and lose the hit.
+///
+/// # Why U+200B is added by hand
+///
+/// U+200B ZERO WIDTH SPACE is **not** `White_Space` (Unicode moved it out
+/// of `Zs` in 4.0.1), so `char::is_whitespace` reports `false` for it. It
+/// is nonetheless a line-break opportunity a producer inserts *between*
+/// words, and a variant whose whole definition is "split at every SPACE"
+/// that then refuses to split at a character named ZERO WIDTH SPACE would
+/// be indefensible. It is listed here rather than made transparent for
+/// exactly that reason: it is a separator, not an invisible modifier of
+/// its neighbours.
+///
+/// Irrelevant to [`WordBoundary::Alphanumeric`], which rejects all of
+/// these as non-alphanumeric anyway; this function exists for the two
+/// NOTE 4 variants that define words by what *isn't* in them.
+fn is_space_like(c: char) -> bool {
+    c.is_whitespace() || c == '\u{200B}'
+}
+
+/// Whether `c` is a dash, for [`WordBoundary::NonSpaceOrDash`] —
+/// §14.8.2.5 NOTE 4's *"hyphens and em dashes"*.
+///
+/// # Why the list is written out
+///
+/// This is the Unicode `Dash_Punctuation` (Pd) general category as of
+/// Unicode 15.1, plus U+2212 MINUS SIGN (category Sm, but the character a
+/// mathematically-minded producer emits where a reader sees a dash).
+/// Enumerated rather than derived because `core` carries no Unicode
+/// character database and pdfce is not adding one — with its licence
+/// classification, its megabytes and its version-skew problem — to
+/// service one variant of one search toggle.
+///
+/// The cost of that choice, stated rather than discovered: **this list
+/// can lag a future Unicode revision.** A dash added to Pd after 15.1
+/// will be a word character under [`WordBoundary::NonSpaceOrDash`] until
+/// this list is updated. The failure is a missed *split*, never a wrong
+/// match on the needle itself, and it affects only the non-default
+/// variant.
+fn is_dash(c: char) -> bool {
+    matches!(
+        c,
+        '\u{002D}'          // HYPHEN-MINUS
+            | '\u{058A}'    // ARMENIAN HYPHEN
+            | '\u{05BE}'    // HEBREW PUNCTUATION MAQAF
+            | '\u{1400}'    // CANADIAN SYLLABICS HYPHEN
+            | '\u{1806}'    // MONGOLIAN TODO SOFT HYPHEN
+            | '\u{2010}'..='\u{2015}' // HYPHEN .. HORIZONTAL BAR (incl. EN/EM DASH)
+            | '\u{2212}'    // MINUS SIGN (Sm, not Pd — see the doc comment)
+            | '\u{2E17}'    // DOUBLE OBLIQUE HYPHEN
+            | '\u{2E1A}'    // HYPHEN WITH DIAERESIS
+            | '\u{2E3A}'..='\u{2E3B}' // TWO-EM DASH, THREE-EM DASH
+            | '\u{2E40}'    // DOUBLE HYPHEN
+            | '\u{2E5D}'    // OBLIQUE HYPHEN
+            | '\u{301C}'    // WAVE DASH
+            | '\u{3030}'    // WAVY DASH
+            | '\u{30A0}'    // KATAKANA-HIRAGANA DOUBLE HYPHEN
+            | '\u{FE31}'..='\u{FE32}' // PRESENTATION FORM FOR VERTICAL EM/EN DASH
+            | '\u{FE58}'    // SMALL EM DASH
+            | '\u{FE63}'    // SMALL HYPHEN-MINUS
+            | '\u{FF0D}'    // FULLWIDTH HYPHEN-MINUS
+            | '\u{10EAD}' // YEZIDI HYPHENATION MARK
+    )
+}
+
+/// Whether `c` is an invisible format character that carries **no**
+/// word/non-word signal, and which the whole-word flanking test therefore
+/// looks straight through.
+///
+/// # The third class, and why two were not enough
+///
+/// A whole-word test naturally wants two classes: word character, and
+/// separator. These characters are neither. They are zero-width controls
+/// that modify how their *neighbours* are laid out, joined or ordered,
+/// and putting them in either class produces a wrong answer:
+///
+/// - as **separators**, `inter<U+00AD>national` reports `inter` as a whole
+///   word — the exact false positive the option exists to suppress;
+/// - as **word characters**, `<U+200F>` before an Arabic word would fuse
+///   it to whatever punctuation precedes it.
+///
+/// So they are skipped, and the flanking test continues outward to the
+/// next character that means something.
+///
+/// # The list, and its sourcing
+///
+/// | Code point | Why it is transparent |
+/// |---|---|
+/// | U+00AD SOFT HYPHEN | §14.8.2.2.3 — an **incidental artifact**, a hyphen the producer inserted at a line break, *"distinct from an ordinary hard hyphen, whose Unicode value is U+002D"*. It is interior to one word by definition. |
+/// | U+061C ARABIC LETTER MARK | Invisible bidi control; §14.8's **B2** records `/ReversedChars` as the standard's only RTL mechanism, so any such mark in extracted text came from the file's own characters and is not content. |
+/// | U+200C ZWNJ, U+200D ZWJ | Intra-word joining controls (Indic, Arabic, and emoji sequences). Both occur *between* letters of one word. |
+/// | U+200E LRM, U+200F RLM | Invisible bidi marks, as U+061C. |
+/// | U+2060 WORD JOINER, U+FEFF ZWNBSP | Their entire meaning is *"there is no break here"*. Treating either as a break inverts the character. |
+/// | U+202A–U+202E, U+2066–U+2069 | Bidi embedding, override and isolate controls — invisible, and always in matched pairs around content. |
+///
+/// U+200B ZERO WIDTH SPACE is **deliberately absent**: it is a break
+/// opportunity, i.e. a separator, and [`is_space_like`] lists it as one.
+///
+/// # Evidence tier (d)
+///
+/// Reasoned inference from §14.8.2.2.3 and from what each control means
+/// in Unicode — not a match to observed Acrobat behaviour, which
+/// `Acrobat_Features/find__match_semantics_and_scope.md` records as an
+/// explicit **GAP** for the soft-hyphen case (no source found,
+/// 2026-08-10). If that gap is ever closed and Reader turns out to break
+/// words at U+00AD, this is the function to revisit — and the divergence
+/// would then be a deliberate exceed-the-reference call, not an accident.
+fn is_transparent_format_char(c: char) -> bool {
+    matches!(
+        c,
+        '\u{00AD}'          // SOFT HYPHEN
+            | '\u{061C}'    // ARABIC LETTER MARK
+            | '\u{200C}'..='\u{200F}' // ZWNJ, ZWJ, LRM, RLM
+            | '\u{202A}'..='\u{202E}' // LRE, RLE, PDF, LRO, RLO
+            | '\u{2060}'    // WORD JOINER
+            | '\u{2066}'..='\u{2069}' // LRI, RLI, FSI, PDI
+            | '\u{FEFF}' // ZERO WIDTH NO-BREAK SPACE
+    )
+}
+
+/// The first character of `chars` that carries a word/non-word signal, or
+/// `None` if the iterator holds nothing but transparent format characters
+/// (or is empty).
+///
+/// `chars` runs **outward from the match**, so the caller reverses the
+/// preceding text and leaves the following text forward. Lazy by
+/// construction: the caller chains the run's own text with its
+/// neighbours', and in the overwhelmingly common case this consumes
+/// exactly one character and never touches the chained tail.
+fn first_significant(mut chars: impl Iterator<Item = char>) -> Option<char> {
+    chars.find(|c| !is_transparent_format_char(*c))
+}
+
+/// Whether the character flanking a match satisfies the whole-word rule
+/// on that side.
+///
+/// `None` — nothing there at all — is a boundary **by definition**: the
+/// page's text has to end somewhere, and a hit at the very first or very
+/// last character of a document is as whole a word as one flanked by
+/// spaces. Any other reading would make the first word of every document
+/// unfindable with the option on.
+fn flank_is_boundary(flank: Option<char>, rule: WordBoundary) -> bool {
+    flank.is_none_or(|c| !rule.is_word_char(c))
+}
+
+/// How a text search matches. Passed to
+/// [`EditSession::find_text_with`] and
+/// [`EditSession::mark_redactions_by_search_with`].
+///
+/// # Why an options struct rather than more `bool` parameters
+///
+/// [`EditSession::find_text`] already takes a bare `bool` for
+/// case-insensitivity, and the next knob would make its call sites read
+/// `find_text(q, true, false, ...)` — three anonymous booleans a reader
+/// has to count positions to decode. The workspace already answers this
+/// the same way in five places (`ExtractOptions`, `SaveOptions`,
+/// `ImportOptions`, `SplitOptions`, `ExtractRange`), so this is the house
+/// pattern rather than a new one.
+///
+/// `#[non_exhaustive]` for the usual reason and one specific one: search
+/// options are exactly the kind of thing that grows (regex, diacritic
+/// folding, scope widening to bookmarks and comments — the last of which
+/// Reader has and pdfce does not yet), and every one of those should be
+/// an additive change rather than a breaking one. The cost is that a
+/// downstream crate cannot write a struct expression, so the `with_*`
+/// setters below are the construction route (C-BUILDER).
+///
+/// # Defaults are Reader's defaults
+///
+/// [`Default`] is *case-sensitive, substring, whole-word off*, which is
+/// byte-for-byte `find_text(needle, false)` — today's behaviour, so an
+/// existing caller that migrates to the options form gets identical
+/// results. It is also Reader's own documented default posture
+/// (`Acrobat_Features/find__match_semantics_and_scope.md`: both toggles
+/// off, and independent of one another).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub struct TextSearchOptions {
+    /// Match ASCII letters regardless of case. Default `false`.
+    ///
+    /// **ASCII-only, and byte-offset preserving**, exactly as
+    /// [`EditSession::find_text`]'s `case_insensitive` flag has always
+    /// been: the matchers compare with
+    /// [`char::eq_ignore_ascii_case`] rather than lower-casing, because
+    /// lower-casing shifts byte offsets for non-ASCII text (`İ` → `i̇` is
+    /// 2 bytes → 3) and the offsets are what maps a match back to its
+    /// glyphs. A full Unicode case fold would need that mapping rebuilt,
+    /// which is a different piece of work from this one.
+    pub case_insensitive: bool,
+    /// Treat `#` and `?` in the needle as **wildcards** — `#` matches any
+    /// ASCII digit, `?` matches any single character. Default `false`,
+    /// i.e. a literal search.
+    ///
+    /// # ★ Why the default is `false` when the old behaviour was `true`
+    ///
+    /// [`EditSession::find_text`] has always routed through the pattern
+    /// engine, so a GUI Find bar built on it treated `?` as "any
+    /// character" **without saying so**. Searching a contract for `?`
+    /// matched every character on the page; searching a parts list for
+    /// `A#` matched `A1` and `A7` and looked, to an operator who had
+    /// never heard of the convention, like a search that had gone wrong.
+    ///
+    /// A search box that silently reinterprets two ordinary punctuation
+    /// marks is the "sneaky" half of rule 4: the operator typed one
+    /// thing and pdfce searched for another, with nothing on screen to
+    /// say so. So wildcards became a thing you ask for.
+    ///
+    /// `find_text` keeps its documented pattern behaviour by passing
+    /// `true` here — its contract is unchanged, and every existing
+    /// caller of it gets byte-identical results. It is the DEFAULT that
+    /// moved, for callers who construct options and reasonably expect a
+    /// search to search for what they typed.
+    pub wildcards: bool,
+    /// Require each hit to be a whole word. Default `false` — substring
+    /// matching, which is what every existing caller gets and what Reader
+    /// does with the toggle off.
+    ///
+    /// # The rule, exactly
+    ///
+    /// A hit is kept when the character **immediately outside** it on
+    /// each side is not a word character under
+    /// [`Self::word_boundary`], where:
+    ///
+    /// 1. invisible format characters are **skipped**, not tested — the
+    ///    test walks outward past them to the next character that means
+    ///    something (`is_transparent_format_char` in this module, and
+    ///    U+00AD in particular);
+    /// 2. **nothing at all** on a side is a boundary on that side — a hit
+    ///    at the very first or very last character of the page's text is
+    ///    as whole a word as one flanked by spaces;
+    /// 3. "immediately outside" is measured across the **page**, not the
+    ///    text run — see below, because this is the part that differs
+    ///    from the obvious implementation.
+    ///
+    /// # Flanking characters are read across run boundaries
+    ///
+    /// The naive rule is that a match at the start or end of the run it
+    /// was found in has a boundary there by definition. pdfce does not do
+    /// that, and the reason is in how extraction builds runs
+    /// (`text_extract::layout`): a run is closed not only at a derived
+    /// word space or line break, but also at **any change of
+    /// marked-content context** — a different `/MCID`, or crossing into
+    /// or out of an `/Artifact`. Neither of those is a space on the page.
+    /// A producer that opens a new marked-content sequence in the middle
+    /// of a word (styled fragments and tagged output both do) would hand
+    /// the run-local rule two runs reading `Wa` and `ter`, and it would
+    /// report `Wa` as a whole word — a **false positive**, and precisely
+    /// the thing the operator switched the option on to eliminate.
+    ///
+    /// So the flanking test continues into the neighbouring runs of the
+    /// same page, in page-content order, and stops at the first character
+    /// that is not transparent. Derived word-space and line-break runs
+    /// are ordinary runs holding `' '` and `'\n'`
+    /// (`TextOrigin::DerivedWordSpace`/`DerivedLineBreak`), so genuine
+    /// gaps still read as boundaries — they are simply read from the
+    /// separator run rather than assumed from a run edge.
+    ///
+    /// The residual error is inverted, and that is the point: it is now a
+    /// possible **false negative** (two runs that are far apart on the
+    /// page with no derived separator between them would be read as
+    /// adjacent), and for a filter whose entire job is to *exclude*
+    /// partial-word hits, wrongly excluding is a strictly better failure
+    /// than wrongly including.
+    ///
+    /// # What it still cannot do
+    ///
+    /// Matching itself remains **per run** — see
+    /// [`EditSession::find_text`]'s own limits. Whole-word does not
+    /// change that, so a needle split across two runs is still not found
+    /// at all, with or without this option. That is Acrobat's failure
+    /// too, verbatim: `find__match_semantics_and_scope.md` records the
+    /// hyphenated line-wrap case as a *documented, still-open* Reader
+    /// defect, and names cross-run stitching as the exceed-the-reference
+    /// opportunity. Reading flanking characters across runs is a step
+    /// toward that; it is not that.
+    pub whole_word: bool,
+    /// Which characters count as word characters when [`Self::whole_word`]
+    /// is set. Default [`WordBoundary::Alphanumeric`].
+    ///
+    /// Ignored entirely when `whole_word` is `false`. It is a separate
+    /// field rather than a payload on the flag so that a front end can
+    /// remember the operator's choice of rule across toggles of the
+    /// option itself — turning whole-word off and on again should not
+    /// silently reset it to the default, which would be pdfce discarding
+    /// a setting the operator made.
+    pub word_boundary: WordBoundary,
+}
+
+impl TextSearchOptions {
+    /// Set [`Self::case_insensitive`], consuming and returning `self`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pdfce_core::edit::TextSearchOptions;
+    ///
+    /// let options = TextSearchOptions::default().with_case_insensitive(true);
+    /// assert!(options.case_insensitive);
+    /// ```
+    #[must_use]
+    pub const fn with_case_insensitive(mut self, yes: bool) -> Self {
+        self.case_insensitive = yes;
+        self
+    }
+
+    /// Set [`Self::whole_word`], consuming and returning `self`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pdfce_core::edit::TextSearchOptions;
+    ///
+    /// // The Find bar's two toggles are independent, as Reader's are.
+    /// let options = TextSearchOptions::default()
+    ///     .with_whole_word(true)
+    ///     .with_case_insensitive(true);
+    /// assert!(options.whole_word && options.case_insensitive);
+    /// ```
+    #[must_use]
+    pub const fn with_whole_word(mut self, yes: bool) -> Self {
+        self.whole_word = yes;
+        self
+    }
+
+    /// Set [`Self::word_boundary`], consuming and returning `self`.
+    ///
+    /// Setting this does **not** imply [`Self::whole_word`]: choosing a
+    /// rule and switching the option on are separate acts, and a caller
+    /// that restores a remembered rule at startup is not asking for the
+    /// option to be on.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pdfce_core::edit::{TextSearchOptions, WordBoundary};
+    ///
+    /// let options = TextSearchOptions::default().with_word_boundary(WordBoundary::NonSpace);
+    /// assert_eq!(options.word_boundary, WordBoundary::NonSpace);
+    /// assert!(!options.whole_word, "choosing a rule does not switch the option on");
+    /// ```
+    #[must_use]
+    pub const fn with_word_boundary(mut self, rule: WordBoundary) -> Self {
+        self.word_boundary = rule;
+        self
+    }
+
+    /// Turn `#`/`?` wildcard matching on or off (see [`Self::wildcards`]).
+    #[must_use]
+    pub const fn with_wildcards(mut self, yes: bool) -> Self {
+        self.wildcards = yes;
+        self
+    }
+
+    /// The whole-word rule to apply, or `None` when the option is off.
+    ///
+    /// Collapsing the flag and the rule into one `Option` at the boundary
+    /// of the scan makes "off" unrepresentable-as-a-rule inside it: the
+    /// scan never has to remember to check the flag before consulting the
+    /// rule, because with the option off there is no rule to consult.
+    const fn boundary_rule(self) -> Option<WordBoundary> {
+        if self.whole_word {
+            Some(self.word_boundary)
+        } else {
+            None
+        }
+    }
+}
+
 /// What deleting a **grouping node** would remove, or did remove.
 ///
 /// # Why this is a named type and not a `usize`
@@ -9831,8 +10409,56 @@ impl EditSession {
         if query.is_empty() {
             return Ok(Vec::new());
         }
+        self.mark_redactions_by_search_with(
+            query,
+            &TextSearchOptions::default().with_case_insensitive(case_insensitive),
+        )
+    }
+
+    /// [`EditSession::mark_redactions_by_search`], with the full
+    /// [`TextSearchOptions`] — whole-word matching in particular.
+    ///
+    /// # Why this exists at all, rather than only on the search side
+    ///
+    /// A front end that offers *"redact every hit"* next to its Find bar
+    /// has two verbs that must agree about **which hits exist**. If Find
+    /// gained a whole-word toggle and this verb did not, then with the
+    /// toggle on the operator would see three highlights and get eleven
+    /// redaction marks — including marks over the fragments they had just
+    /// told pdfce not to count. On the one operation whose whole purpose
+    /// is removing content irreversibly, "the mark set is a superset of
+    /// what you were shown" is not a cosmetic mismatch.
+    ///
+    /// That is the same argument that made `scan_text_matches` shared
+    /// between the two paths in the first place — *"a redaction covering
+    /// a slightly different box than the search that found it"* — applied
+    /// one level up, to which matches exist rather than to where each one
+    /// sits.
+    ///
+    /// # This is still literal matching
+    ///
+    /// Like [`EditSession::mark_redactions_by_search`] and unlike
+    /// [`EditSession::find_text`], `query` is taken **literally**: `#`
+    /// and `?` are ordinary characters here.
+    /// [`EditSession::mark_redactions_by_pattern`] is the wildcard verb.
+    ///
+    /// # Errors
+    ///
+    /// As [`EditSession::mark_redactions_by_search`].
+    pub fn mark_redactions_by_search_with(
+        &mut self,
+        query: &str,
+        options: &TextSearchOptions,
+    ) -> Result<Vec<ObjId>, EditError> {
+        if query.is_empty() {
+            return Ok(Vec::new());
+        }
         let q = query.to_string();
-        self.author_text_matches(|text| find_matches(text, &q, case_insensitive))
+        let case_insensitive = options.case_insensitive;
+        self.author_text_matches(
+            |text| find_matches(text, &q, case_insensitive),
+            options.boundary_rule(),
+        )
     }
 
     /// Mark every match of a simple pattern for redaction (Pass 8). In the
@@ -9856,7 +10482,16 @@ impl EditSession {
             return Ok(Vec::new());
         }
         let p = pattern.to_string();
-        self.author_text_matches(|text| find_pattern_matches(text, &p, case_insensitive))
+        // `None`: no whole-word option is exposed on the pattern verb.
+        // Not an oversight — nothing calls for it yet, and R151 says an
+        // uncalled API is a cost, not a courtesy. The plumbing below is
+        // already generic over the rule, so adding
+        // `mark_redactions_by_pattern_with` when a caller wants it is a
+        // one-line delegation.
+        self.author_text_matches(
+            |text| find_pattern_matches(text, &p, case_insensitive),
+            None,
+        )
     }
 
     /// Shared engine for search/pattern redaction: extract the document's
@@ -9886,7 +10521,16 @@ impl EditSession {
     /// It also makes the search itself honest: text the operator typed this
     /// session is findable, and text they deleted is not offered for
     /// redaction.
-    fn author_text_matches<F>(&mut self, matcher: F) -> Result<Vec<ObjId>, EditError>
+    ///
+    /// `whole_word` is passed straight through to
+    /// [`Self::scan_text_matches`] and is `None` for every caller that
+    /// predates the option — a redaction authored without it covers
+    /// exactly what it always covered.
+    fn author_text_matches<F>(
+        &mut self,
+        matcher: F,
+        whole_word: Option<WordBoundary>,
+    ) -> Result<Vec<ObjId>, EditError>
     where
         F: Fn(&str) -> Vec<(usize, usize)>,
     {
@@ -9929,7 +10573,7 @@ impl EditSession {
         // glyph-span-to-quad geometry would drift, and the way they would
         // drift is the worst possible: a redaction covering a slightly
         // different box than the search that found it.
-        let matches: Vec<TextMatch> = self.scan_text_matches(&matcher)?;
+        let matches: Vec<TextMatch> = self.scan_text_matches(&matcher, whole_word)?;
 
         let mut created = Vec::with_capacity(matches.len());
         for m in matches {
@@ -9993,13 +10637,135 @@ impl EditSession {
     /// certification gate**: this reads and reports, and refusing to
     /// SEARCH a certified document would be a restriction the signature
     /// does not ask for.
+    ///
+    /// Note this returns `Vec` rather than `Result` and swallows that
+    /// error into an empty result; [`EditSession::find_text_with`] has the
+    /// same shape and the same reason (a Find bar has nowhere to put an
+    /// error, and "no hits" is the honest thing to show for a document
+    /// whose text will not come out).
+    ///
+    /// # Match modes
+    ///
+    /// Substring by default, case-sensitive unless the flag says
+    /// otherwise. [`EditSession::find_text_with`] is the same search with
+    /// the full [`TextSearchOptions`], and is where **whole-word**
+    /// matching lives.
+    ///
+    /// ## ★ `needle` is a PATTERN, not a literal — and its sibling is not
+    ///
+    /// This verb matches through the same simple-pattern engine
+    /// [`EditSession::mark_redactions_by_pattern`] uses: **`#` matches any
+    /// ASCII digit and `?` matches any single character.** Searching for a
+    /// literal `?` therefore matches every character on the page.
+    ///
+    /// [`EditSession::mark_redactions_by_search`] — the verb a front end
+    /// naturally pairs with this one behind a *"redact every hit"* control
+    /// — matches **literally**, so the two disagree for any query
+    /// containing `#` or `?`: the search highlights hits the redaction
+    /// then declines to mark.
+    ///
+    /// # ★ The divergence was real, and the FRONT END is where it was fixed
+    ///
+    /// That mismatch was found and reported the same day this option set
+    /// was added, and it was not hypothetical: pdfce's own Find bar ran
+    /// through this verb, so typing `?` into it matched every character
+    /// on the page and nothing said why.
+    ///
+    /// It is not fixed by changing this function, because this
+    /// function's pattern behaviour is its documented contract and
+    /// silently altering it would change results for every existing
+    /// caller. It is fixed by [`TextSearchOptions::wildcards`]
+    /// defaulting to **off** and the front end asking for wildcards
+    /// explicitly — so a search box searches for what was typed unless
+    /// the operator says otherwise, while this verb keeps its meaning.
+    ///
+    /// `find_text` therefore passes `with_wildcards(true)`: its results
+    /// are byte-identical to what they have always been.
     pub fn find_text(&mut self, needle: &str, case_insensitive: bool) -> Vec<TextMatch> {
+        self.find_text_with(
+            needle,
+            &TextSearchOptions::default()
+                .with_case_insensitive(case_insensitive)
+                .with_wildcards(true),
+        )
+    }
+
+    /// [`EditSession::find_text`], with the full [`TextSearchOptions`] —
+    /// **whole-word matching** in particular. Changes nothing.
+    ///
+    /// `find_text(needle, flag)` is exactly
+    /// `find_text_with(needle, &TextSearchOptions::default().with_case_insensitive(flag))`,
+    /// and delegates to it: [`TextSearchOptions`]'s default is
+    /// whole-word-off, which is substring matching, which is what
+    /// `find_text` has always done. Adding the option changed no existing
+    /// result.
+    ///
+    /// # What "whole word" means here
+    ///
+    /// The rule is stated in full on [`TextSearchOptions::whole_word`],
+    /// and which characters make a word is
+    /// [`TextSearchOptions::word_boundary`] — a **setting**, because
+    /// ISO 32000-1 §14.8.2.5 NOTE 1 says outright that *"the notion of a
+    /// word is not precisely defined"* and NOTE 4 offers a menu rather
+    /// than a rule. See [`WordBoundary`] for the sourcing.
+    ///
+    /// Two properties are worth stating at the call site because they are
+    /// the ones a front end will be asked about:
+    ///
+    /// - a hit at the very start or very end of a page's text **is** a
+    ///   whole word — there is nothing on that side to bound it;
+    /// - a soft hyphen (U+00AD) does **not** split a word, so
+    ///   `inter<SHY>national` — the shape §14.8.2.2.3 describes for a
+    ///   producer's line-break hyphen — contains no whole word `inter`.
+    ///
+    /// # Inherited limits
+    ///
+    /// Everything [`EditSession::find_text`] documents still holds and is
+    /// not repeated here: page content text only (not fields, annotations,
+    /// bookmarks or attachments), glyph-backed runs only, and **matching
+    /// is per text run**, so a needle the producer split across two runs
+    /// is not found with or without this option.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use pdfce_core::{document::Document, edit::{EditSession, TextSearchOptions}};
+    /// # fn demo(doc: Document) {
+    /// let mut session = EditSession::new(doc);
+    /// let options = TextSearchOptions::default()
+    ///     .with_whole_word(true)
+    ///     .with_case_insensitive(true);
+    /// // Finds "Total" and "TOTAL"; does not find the "total" inside
+    /// // "subtotal" or "totals".
+    /// for hit in session.find_text_with("total", &options) {
+    ///     println!("page {}: {}", hit.page_index + 1, hit.text);
+    /// }
+    /// # }
+    /// ```
+    pub fn find_text_with(&mut self, needle: &str, options: &TextSearchOptions) -> Vec<TextMatch> {
         if needle.is_empty() {
             return Vec::new();
         }
         let n = needle.to_owned();
-        self.scan_text_matches(&|text| find_pattern_matches(text, &n, case_insensitive))
-            .unwrap_or_default()
+        let case_insensitive = options.case_insensitive;
+        // The matcher is chosen ONCE, here, and both arms return the same
+        // `(start, end)` byte-offset shape — so whole-word filtering and
+        // the quad mapping downstream cannot come to depend on which one
+        // ran. A literal search is not a pattern search with the
+        // metacharacters escaped; it is a different function, and keeping
+        // them separate is what makes "no wildcards" mean it.
+        if options.wildcards {
+            self.scan_text_matches(
+                &|text| find_pattern_matches(text, &n, case_insensitive),
+                options.boundary_rule(),
+            )
+        } else {
+            self.scan_text_matches(
+                &|text| find_matches(text, &n, case_insensitive),
+                options.boundary_rule(),
+            )
+        }
+        .unwrap_or_default()
     }
 
     /// The shared scan: extract the session's text, run `matcher` over
@@ -10012,9 +10778,28 @@ impl EditSession {
     /// `page_slots` agree only until a page is deleted, inserted or
     /// reordered, and a search that reports the wrong page is a
     /// mis-targeting hazard rather than mere staleness.
+    ///
+    /// # The whole-word filter is applied HERE, not in the matcher
+    ///
+    /// `matcher` is deliberately kept as *"find raw ranges in this
+    /// string"*, and `whole_word` — `Some(rule)` to require whole-word
+    /// hits, `None` for today's substring behaviour — is a filter this
+    /// function applies afterwards. The split is not tidiness: the
+    /// flanking-character test has to read **neighbouring runs** (see
+    /// [`TextSearchOptions::whole_word`] for why a run edge is not a word
+    /// boundary), and the matcher, which sees one `&str` and nothing
+    /// else, structurally cannot do that. Pushing the filter into the
+    /// matcher would have silently locked in the run-local rule and its
+    /// false positives.
+    ///
+    /// It also means the filter is applied identically on the search path
+    /// and the redaction path, for the same reason the *scan* is shared:
+    /// a highlight and the redaction made from it must not be able to
+    /// disagree about which hits exist.
     fn scan_text_matches(
         &mut self,
         matcher: &dyn Fn(&str) -> Vec<(usize, usize)>,
+        whole_word: Option<WordBoundary>,
     ) -> Result<Vec<TextMatch>, EditError> {
         use crate::annot_author::Quad;
         use crate::page_tree::Rect;
@@ -10026,12 +10811,50 @@ impl EditSession {
 
         let mut matches: Vec<TextMatch> = Vec::new();
         for page in &extracted.pages {
-            for run in &page.runs {
+            let runs = page.runs.as_slice();
+            for (run_index, run) in runs.iter().enumerate() {
                 // Glyph-backed runs only — see `find_text`'s own docs.
                 if run.origin != TextOrigin::Glyphs || run.glyphs.is_empty() {
                     continue;
                 }
                 for (start, end) in matcher(&run.text) {
+                    // The whole-word filter, before any geometry is
+                    // computed: a rejected hit costs nothing but two
+                    // character lookups, and the quad it would have
+                    // produced must never reach a caller — on the
+                    // redaction path it would become a mark over text the
+                    // operator did not ask to remove.
+                    //
+                    // Both context walks are LAZY. The first `chars()`
+                    // source is the run's own text on the relevant side;
+                    // the chained tail (the neighbouring runs, in
+                    // page-content order) is touched only when the match
+                    // sits flush against a run edge, and even then only
+                    // until the first non-transparent character.
+                    if let Some(rule) = whole_word {
+                        let before = run.text.get(..start).unwrap_or_default();
+                        let after = run.text.get(end..).unwrap_or_default();
+                        let left = first_significant(
+                            before.chars().rev().chain(
+                                runs.get(..run_index)
+                                    .unwrap_or_default()
+                                    .iter()
+                                    .rev()
+                                    .flat_map(|r| r.text.chars().rev()),
+                            ),
+                        );
+                        let right = first_significant(
+                            after.chars().chain(
+                                runs.get(run_index + 1..)
+                                    .unwrap_or_default()
+                                    .iter()
+                                    .flat_map(|r| r.text.chars()),
+                            ),
+                        );
+                        if !flank_is_boundary(left, rule) || !flank_is_boundary(right, rule) {
+                            continue;
+                        }
+                    }
                     // Every glyph whose text span OVERLAPS the match, not
                     // whose start falls inside it: one glyph may cover
                     // several characters (a ligature) and one character
@@ -16370,6 +17193,621 @@ mod tests {
             Object::String(s) => Some(s.as_slice()),
             _ => None,
         }
+    }
+
+    // -----------------------------------------------------------------
+    // Whole-word text search
+    //
+    // Every test below guards a way whole-word matching can be wrong
+    // while still looking plausible on the happy path. The shared
+    // fixture is one page of short lines, each line a separate `Tj` on
+    // its own baseline so extraction closes a run per line — the shape
+    // real page text has, rather than one giant string that would hide
+    // every run-boundary question.
+    // -----------------------------------------------------------------
+
+    /// A one-page PDF whose page content is `content`, with a
+    /// standard-14 Helvetica at `/F1` (WinAnsi, non-embedded).
+    ///
+    /// Standard-14 rather than an embedded font because the AFM widths
+    /// are exact, so glyph advances — and therefore the derived word/line
+    /// segmentation these tests depend on — are the real ones rather than
+    /// a synthetic approximation.
+    fn content_pdf(content: &str) -> Vec<u8> {
+        let stream = format!(
+            "<< /Length {} >>
+stream
+{content}
+endstream",
+            content.len()
+        );
+        build(
+            &[
+                "<< /Type /Catalog /Pages 2 0 R >>",
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]                  /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+                &stream,
+                "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+            ],
+            "",
+        )
+    }
+
+    /// One `Tj` per line, 20 units apart, all in standard-14 Helvetica.
+    ///
+    /// A baseline movement of 20 against a 12-point size is well past
+    /// `ExtractOptions::line_gap_ratio`, so extraction emits a
+    /// `TextOrigin::DerivedLineBreak` run between consecutive lines —
+    /// which is exactly what makes the first and last lines useful for
+    /// the "nothing on that side" cases and the middle lines useful for
+    /// everything else.
+    fn lines_pdf(lines: &[&str]) -> Vec<u8> {
+        let mut content = String::from("BT /F1 12 Tf 20 700 Td");
+        for (i, line) in lines.iter().enumerate() {
+            if i > 0 {
+                content.push_str(" 0 -20 Td");
+            }
+            content.push_str(" (");
+            content.push_str(line);
+            content.push_str(") Tj");
+        }
+        content.push_str(" ET\n");
+        content_pdf(&content)
+    }
+
+    /// Every whole-word case that can be expressed as ASCII on a page,
+    /// in one document so the *contrast* between them is asserted rather
+    /// than assumed. Line order is load-bearing: line 0 is the first
+    /// text on the page and the last line is the last.
+    const CAT_LINES: &[&str] = &[
+        "cat opens",     // 0 — hit at the very start of the page's text
+        "the cat sat",   // 1 — flanked by spaces
+        "[cat], right?", // 2 — flanked by punctuation
+        "concatenate",   // 3 — substring of a longer word: must NOT match
+        "cat5 and 5cat", // 4 — digit on the right, then on the left
+        "CAT here",      // 5 — case-insensitive whole-word hit
+        "ends with cat", // 6 — hit at the very end of the page's text
+    ];
+
+    fn cat_session() -> EditSession {
+        session(lines_pdf(CAT_LINES))
+    }
+
+    fn hit_texts(hits: &[TextMatch]) -> Vec<String> {
+        hits.iter().map(|h| h.text.clone()).collect()
+    }
+
+    /// **The contract of the whole change, in one assertion**: with the
+    /// option off, `find_text_with` is `find_text`, hit for hit, in
+    /// order, including geometry.
+    ///
+    /// Whole-word matching was added by threading an `Option<WordBoundary>`
+    /// through `author_text_matches` → `scan_text_matches`, i.e. through
+    /// the same scanner search-and-redact uses. A defect there would not
+    /// announce itself — it would quietly shift a quad or drop a hit on
+    /// the path that authors REDACTION marks. `TextMatch` derives
+    /// `PartialEq` over the page index, the quad and the matched text, so
+    /// comparing the vectors compares all three.
+    #[test]
+    fn whole_word_off_is_byte_for_byte_todays_search() {
+        for case_insensitive in [false, true] {
+            let mut a = cat_session();
+            let old = a.find_text("cat", case_insensitive);
+            let mut b = cat_session();
+            let new = b.find_text_with(
+                "cat",
+                &TextSearchOptions::default().with_case_insensitive(case_insensitive),
+            );
+            assert_eq!(old, new, "the default options must change nothing");
+            assert!(!old.is_empty(), "the fixture must actually find something");
+        }
+        // And the substring counts themselves, so a change in the
+        // fixture cannot silently make the comparison above vacuous.
+        assert_eq!(cat_session().find_text("cat", true).len(), 8);
+        assert_eq!(cat_session().find_text("cat", false).len(), 7);
+    }
+
+    /// ★ **`?` searches for `?` unless wildcards are asked for.**
+    ///
+    /// The defect this pins was live in the shipped Find bar: it ran
+    /// through [`EditSession::find_text`], which is a *pattern* search, so
+    /// typing a question mark matched every character on the page and
+    /// nothing on screen said why. The operator typed one thing and pdfce
+    /// searched for another.
+    ///
+    /// Both halves are asserted together, because either alone is
+    /// satisfiable by a mistake: the default must find only the real `?`,
+    /// and `with_wildcards(true)` must still find everything — otherwise
+    /// the fix would have been "remove the feature" rather than "ask for
+    /// it".
+    #[test]
+    fn a_question_mark_is_literal_by_default_and_a_wildcard_on_request() {
+        let mut s = session(lines_pdf(&["is it? yes"]));
+        let literal = s.find_text_with("?", &TextSearchOptions::default());
+        assert_eq!(
+            literal.len(),
+            1,
+            "the default must match the one real question mark, not every character"
+        );
+
+        let mut s = session(lines_pdf(&["is it? yes"]));
+        let wild = s.find_text_with("?", &TextSearchOptions::default().with_wildcards(true));
+        assert!(
+            wild.len() > 1,
+            "wildcards, when asked for, still match any single character"
+        );
+    }
+
+    /// `#` is the same story: a part number, not "any digit", by default.
+    #[test]
+    fn a_hash_is_literal_by_default_and_a_digit_class_on_request() {
+        let mut s = session(lines_pdf(&["item #4 and item 7"]));
+        let literal = s.find_text_with("#4", &TextSearchOptions::default());
+        assert_eq!(hit_texts(&literal), ["#4"]);
+
+        let mut s = session(lines_pdf(&["item #4 and item 7"]));
+        let wild = s.find_text_with("#", &TextSearchOptions::default().with_wildcards(true));
+        assert_eq!(
+            hit_texts(&wild),
+            ["4", "7"],
+            "as a wildcard, # is the ASCII-digit class and matches neither the literal # nor a letter"
+        );
+    }
+
+    /// **`find_text`'s own results did not move.**
+    ///
+    /// The default changed for callers who construct options; the legacy
+    /// verb passes `with_wildcards(true)` precisely so its documented
+    /// pattern contract is untouched. If this ever fails, the fix was
+    /// applied in the wrong place.
+    #[test]
+    fn find_texts_pattern_contract_survived_the_default_change() {
+        let mut s = session(lines_pdf(&["is it? yes"]));
+        let legacy = s.find_text("?", false);
+        let mut s = session(lines_pdf(&["is it? yes"]));
+        let explicit = s.find_text_with("?", &TextSearchOptions::default().with_wildcards(true));
+        assert_eq!(legacy, explicit);
+        assert!(legacy.len() > 1, "find_text is still a pattern search");
+    }
+
+    /// Wildcards and whole-word compose: `#` matches a digit, and the
+    /// digit still has to stand alone as a word.
+    ///
+    /// Worth pinning because the two options are applied by different
+    /// pieces of code — the matcher chooses the hits, the boundary rule
+    /// filters them — and a refactor that moved the filter inside one
+    /// matcher arm would break only this combination.
+    #[test]
+    fn wildcards_and_whole_word_compose() {
+        let mut s = session(lines_pdf(&["page 7 of 12"]));
+        let hits = s.find_text_with(
+            "#",
+            &TextSearchOptions::default()
+                .with_wildcards(true)
+                .with_whole_word(true),
+        );
+        assert_eq!(
+            hit_texts(&hits),
+            ["7"],
+            "the 1 and 2 of `12` are digits but neither is a whole word"
+        );
+    }
+
+    /// A hit with a space on each side is a whole word — the case that
+    /// works under any implementation, pinned so a regression in the
+    /// flanking test is visible as "found nothing" rather than as a
+    /// subtle miscount.
+    #[test]
+    fn whole_word_matches_a_hit_flanked_by_spaces() {
+        let mut s = session(lines_pdf(&["the cat sat"]));
+        let hits = s.find_text_with("cat", &TextSearchOptions::default().with_whole_word(true));
+        assert_eq!(hit_texts(&hits), ["cat"]);
+    }
+
+    /// Punctuation bounds a word. Under the default
+    /// [`WordBoundary::Alphanumeric`] rule `[`, `]` and `,` are all
+    /// non-word characters, so `[cat],` contains the whole word `cat`.
+    ///
+    /// This is the case that separates the default rule from
+    /// [`WordBoundary::NonSpace`], where the same line yields nothing —
+    /// see `word_boundary_variants_answer_note_4s_menu`.
+    #[test]
+    fn whole_word_matches_a_hit_flanked_by_punctuation() {
+        let mut s = session(lines_pdf(&["[cat], right?"]));
+        let hits = s.find_text_with("cat", &TextSearchOptions::default().with_whole_word(true));
+        assert_eq!(hit_texts(&hits), ["cat"]);
+    }
+
+    /// **The defect the option exists to prevent**: `concatenate`
+    /// contains the letters `cat` and is not a hit.
+    ///
+    /// Asserted against the substring baseline in the same test, because
+    /// "0 hits" alone would also be produced by a search that had stopped
+    /// working entirely.
+    #[test]
+    fn whole_word_rejects_a_hit_inside_a_longer_word() {
+        let mut s = session(lines_pdf(&["concatenate"]));
+        assert_eq!(
+            s.find_text("cat", false).len(),
+            1,
+            "substring still finds it"
+        );
+        assert!(
+            s.find_text_with("cat", &TextSearchOptions::default().with_whole_word(true))
+                .is_empty()
+        );
+    }
+
+    /// Nothing on a side is a boundary on that side. Both ends, in one
+    /// document, because the two are separate code paths — the left walk
+    /// runs out of preceding runs, the right walk runs out of following
+    /// ones — and an implementation can easily get one right and the
+    /// other wrong.
+    ///
+    /// Note the right-hand case depends on extraction *popping* a
+    /// trailing derived break (`text_extract::layout`'s `finish`); if it
+    /// ever stopped doing that, the last line's hit would be flanked by
+    /// `'\n'`, which is still a boundary. The test therefore stays
+    /// correct either way, which is deliberate: it pins the observable
+    /// contract, not the internal shape.
+    #[test]
+    fn whole_word_matches_at_the_very_start_and_very_end_of_the_page_text() {
+        let mut s = session(lines_pdf(&["cat opens", "ends with cat"]));
+        let hits = s.find_text_with("cat", &TextSearchOptions::default().with_whole_word(true));
+        assert_eq!(hit_texts(&hits), ["cat", "cat"]);
+    }
+
+    /// A digit is a word character, so `cat5` and `5cat` are single
+    /// words and neither contains the whole word `cat`.
+    ///
+    /// This is the case a `char::is_alphabetic` test would get wrong, and
+    /// it is not academic — part numbers, `H2O`, `Rev2` and dimension
+    /// callouts are exactly the text a CAD-adjacent PDF is full of.
+    #[test]
+    fn whole_word_rejects_a_hit_adjacent_to_a_digit() {
+        let mut s = session(lines_pdf(&["cat5 and 5cat"]));
+        assert_eq!(s.find_text("cat", false).len(), 2, "substring finds both");
+        assert!(
+            s.find_text_with("cat", &TextSearchOptions::default().with_whole_word(true))
+                .is_empty()
+        );
+    }
+
+    /// The two toggles are independent, as Reader's own are
+    /// (`Acrobat_Features/find__match_semantics_and_scope.md`): a
+    /// case-insensitive whole-word search finds `CAT` and still refuses
+    /// `concatenate`, and the returned `text` is what the document says
+    /// rather than what was typed.
+    #[test]
+    fn whole_word_and_case_insensitivity_are_independent() {
+        let options = TextSearchOptions::default()
+            .with_whole_word(true)
+            .with_case_insensitive(true);
+
+        let mut s = cat_session();
+        assert_eq!(
+            hit_texts(&s.find_text_with("cat", &options)),
+            ["cat", "cat", "cat", "CAT", "cat"],
+            "lines 0,1,2,5,6 — never 3 (concatenate) or 4 (digits)"
+        );
+
+        // Case-sensitive whole-word drops only the `CAT` line.
+        let mut s = cat_session();
+        assert_eq!(
+            s.find_text_with("cat", &TextSearchOptions::default().with_whole_word(true))
+                .len(),
+            4
+        );
+    }
+
+    /// **A run edge is not a word boundary**, and this is the test that
+    /// says so.
+    ///
+    /// `text_extract::layout` closes a run at any change of
+    /// marked-content context, not only at a derived space or line break.
+    /// So a producer that opens a `/Span` in the middle of a word — which
+    /// styled and tagged output both do routinely — hands the scanner two
+    /// adjacent runs, `Wa` and `ter`, with no separator between them and
+    /// no gap on the page. An implementation that treated "start/end of
+    /// this run" as a boundary would report `Wa` as a whole word: a
+    /// **false positive**, on the one option whose entire job is
+    /// suppressing false positives, and worse on the redaction path where
+    /// it becomes a mark over text nobody asked to remove.
+    ///
+    /// The two-run shape is asserted first, so that if extraction ever
+    /// stops splitting there this test fails loudly instead of passing
+    /// for the wrong reason (one run reading `Water`, in which `Wa` is
+    /// also not a whole word).
+    #[test]
+    fn a_run_edge_is_not_treated_as_a_word_boundary() {
+        use crate::text_extract::{self, ExtractOptions, TextOrigin};
+
+        let bytes =
+            content_pdf("BT /F1 12 Tf 20 700 Td (Wa) Tj /Span << /MCID 0 >> BDC (ter) Tj EMC ET\n");
+        let mut s = session(bytes);
+
+        let extracted =
+            text_extract::extract_document_view(&s.view(), &ExtractOptions::default()).unwrap();
+        let glyph_runs: Vec<&str> = extracted.pages[0]
+            .runs
+            .iter()
+            .filter(|r| r.origin == TextOrigin::Glyphs)
+            .map(|r| r.text.as_str())
+            .collect();
+        assert_eq!(
+            glyph_runs,
+            ["Wa", "ter"],
+            "fixture precondition: the /MCID change must split the word across two runs"
+        );
+
+        assert_eq!(s.find_text("Wa", false).len(), 1, "substring finds it");
+        assert!(
+            s.find_text_with("Wa", &TextSearchOptions::default().with_whole_word(true))
+                .is_empty(),
+            "the flanking test must read across the run edge into `ter`"
+        );
+        // The whole word IS there, spelled across the two runs, and is
+        // still not findable — matching remains per-run (a limit
+        // `find_text` documents and this change does not lift).
+        assert!(s.find_text("Water", false).is_empty());
+    }
+
+    /// A hyphen and a page of Helvetica, twice, differing only in
+    /// `/ToUnicode`: `to_unicode` remaps code `0x2D` to **U+00AD SOFT
+    /// HYPHEN**, leaving the content stream, the glyph and the page
+    /// geometry byte-identical.
+    ///
+    /// §14.8.2.2.3 is what makes the two documents mean different things:
+    /// a soft hyphen is an *incidental artifact*, a hyphen the producer
+    /// inserted at a line break and *"distinct from an ordinary hard
+    /// hyphen, whose Unicode value is U+002D"*.
+    fn hyphen_pdf(to_unicode: bool) -> Vec<u8> {
+        let cmap = "/CIDInit /ProcSet findresource begin
+                    12 dict begin
+begincmap
+                    /CMapName /SoftHyphen def
+/CMapType 2 def
+                    1 begincodespacerange
+<00> <FF>
+endcodespacerange
+                    1 beginbfchar
+<2D> <00AD>
+endbfchar
+                    endcmap
+CMapName currentdict /CMap defineresource pop
+end
+end
+";
+        let cmap_obj = format!(
+            "<< /Length {} >>
+stream
+{cmap}
+endstream",
+            cmap.len()
+        );
+        let content = "BT /F1 12 Tf 20 700 Td (inter-national) Tj ET
+";
+        let stream = format!(
+            "<< /Length {} >>
+stream
+{content}
+endstream",
+            content.len()
+        );
+        let font = if to_unicode {
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica              /Encoding /WinAnsiEncoding /ToUnicode 6 0 R >>"
+        } else {
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica              /Encoding /WinAnsiEncoding >>"
+        };
+        build(
+            &[
+                "<< /Type /Catalog /Pages 2 0 R >>",
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]                  /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+                &stream,
+                font,
+                &cmap_obj,
+            ],
+            "",
+        )
+    }
+
+    /// **The non-obvious half of the boundary decision.** A soft hyphen
+    /// is transparent to the whole-word test: it neither is a word
+    /// character nor bounds one, so `inter<SHY>national` contains no
+    /// whole word `inter` — while the visually identical
+    /// `inter-national`, spelled with a hard hyphen, contains two.
+    ///
+    /// The two documents differ ONLY in the font's `/ToUnicode`. Same
+    /// content stream, same glyph on the page, same box — which is the
+    /// point: the distinction §14.8.2.2.3 draws is invisible on paper and
+    /// decisive for search, and an implementation that classified U+00AD
+    /// as ordinary punctuation would report the *fragment* of a
+    /// line-broken word as a whole word every time a producer hyphenated
+    /// one.
+    ///
+    /// Acrobat's own behaviour here is an explicit unsourced **GAP**
+    /// (`Acrobat_Features/find__match_semantics_and_scope.md`,
+    /// 2026-08-10), so this is pdfce's reasoned call from the ISO clause,
+    /// not observed parity — recorded as such here so that a future
+    /// session that *does* source Reader's behaviour knows exactly which
+    /// assertion to re-examine.
+    #[test]
+    fn a_soft_hyphen_does_not_bound_a_word_but_a_hard_hyphen_does() {
+        let whole = TextSearchOptions::default().with_whole_word(true);
+
+        let mut hard = session(hyphen_pdf(false));
+        assert_eq!(
+            hit_texts(&hard.find_text_with("inter", &whole)),
+            ["inter"],
+            "U+002D is ordinary punctuation and bounds the word"
+        );
+        assert_eq!(hard.find_text_with("national", &whole).len(), 1);
+
+        let mut soft = session(hyphen_pdf(true));
+        assert_eq!(
+            soft.find_text("inter", false).len(),
+            1,
+            "fixture precondition: the letters are still there as a substring"
+        );
+        assert!(
+            soft.find_text_with("inter", &whole).is_empty(),
+            "U+00AD is interior to one word (§14.8.2.2.3) — it must not bound it"
+        );
+        assert!(soft.find_text_with("national", &whole).is_empty());
+    }
+
+    /// The three variants really are §14.8.2.5 NOTE 4's three answers,
+    /// and they really do differ on the same text — pinned because a
+    /// setting whose variants behave alike is worse than no setting: it
+    /// asks the operator a question and then ignores the answer.
+    #[test]
+    fn word_boundary_variants_answer_note_4s_menu() {
+        // Alphanumeric: punctuation separates, so `[cat],` has a hit.
+        // NonSpace ("split at every SPACE"): the brackets and comma are
+        // part of the token `[cat],` — no whole-word hit.
+        let alnum = TextSearchOptions::default().with_whole_word(true);
+        let nonspace = alnum.with_word_boundary(WordBoundary::NonSpace);
+        let nodash = alnum.with_word_boundary(WordBoundary::NonSpaceOrDash);
+
+        let mut s = session(lines_pdf(&["[cat], right?"]));
+        assert_eq!(s.find_text_with("cat", &alnum).len(), 1);
+        let mut s = session(lines_pdf(&["[cat], right?"]));
+        assert!(s.find_text_with("cat", &nonspace).is_empty());
+
+        // The hyphen is what separates NonSpace from NonSpaceOrDash.
+        let mut s = session(lines_pdf(&["well-known"]));
+        assert!(s.find_text_with("well", &nonspace).is_empty());
+        let mut s = session(lines_pdf(&["well-known"]));
+        assert_eq!(s.find_text_with("well", &nodash).len(), 1);
+        let mut s = session(lines_pdf(&["well-known"]));
+        assert_eq!(s.find_text_with("known", &alnum).len(), 1);
+    }
+
+    /// Character-class decisions that have no convenient page-text
+    /// expression, asserted against the predicates the scan itself calls.
+    ///
+    /// Each line is a decision that could plausibly have gone the other
+    /// way, and would then be wrong in a way no ASCII fixture would
+    /// reveal.
+    #[test]
+    fn the_word_character_classes_hold_at_the_edges() {
+        // A no-break space separates — producers emit it between a label
+        // and its number precisely so layout will not break there, and a
+        // `== ' '` test would fuse `Fig.` to `3`.
+        for rule in [
+            WordBoundary::Alphanumeric,
+            WordBoundary::NonSpace,
+            WordBoundary::NonSpaceOrDash,
+        ] {
+            assert!(!rule.is_word_char('\u{00A0}'), "NO-BREAK SPACE separates");
+            assert!(!rule.is_word_char('\u{202F}'), "NARROW NBSP separates");
+            assert!(!rule.is_word_char('\u{200B}'), "ZERO WIDTH SPACE separates");
+            assert!(rule.is_word_char('a'));
+        }
+
+        // A precomposed ligature is ONE letter. Whether a file yields
+        // U+FB01 or `f`+`i` depends entirely on its /ToUnicode (§9.10.3),
+        // and whole-word matching must not depend on that choice.
+        assert!(WordBoundary::Alphanumeric.is_word_char('\u{FB01}'));
+        // Non-ASCII letters and CJK are word characters — an ASCII-only
+        // test would make the option silently useless outside English.
+        assert!(WordBoundary::Alphanumeric.is_word_char('é'));
+        assert!(WordBoundary::Alphanumeric.is_word_char('中'));
+        assert!(WordBoundary::Alphanumeric.is_word_char('٣')); // ARABIC-INDIC DIGIT THREE
+        // `\w`'s connector, and only that one.
+        assert!(WordBoundary::Alphanumeric.is_word_char('_'));
+        assert!(!WordBoundary::Alphanumeric.is_word_char('\''));
+        assert!(!WordBoundary::Alphanumeric.is_word_char('-'));
+        assert!(!WordBoundary::Alphanumeric.is_word_char('€'));
+
+        // NOTE 4's second option covers the whole dash family, not just
+        // ASCII: an em dash and a fullwidth hyphen separate too.
+        assert!(!WordBoundary::NonSpaceOrDash.is_word_char('\u{2014}'));
+        assert!(!WordBoundary::NonSpaceOrDash.is_word_char('\u{FF0D}'));
+        assert!(WordBoundary::NonSpace.is_word_char('\u{2014}'));
+    }
+
+    /// The transparency and end-of-text rules, at the two helpers the
+    /// scan calls.
+    ///
+    /// Held here rather than only end-to-end because several of these
+    /// characters (bidi controls, the word joiner) cannot be produced by
+    /// a standard-14 Helvetica fixture at all, and a decision that only
+    /// exists in a doc comment is a decision that drifts.
+    #[test]
+    fn invisible_format_characters_are_looked_through_not_tested() {
+        // Outward from the match: a soft hyphen, then a letter.
+        assert_eq!(first_significant("\u{00AD}n".chars()), Some('n'));
+        // Several in a row, and a bidi control among them.
+        assert_eq!(
+            first_significant("\u{200D}\u{200F}\u{2060}x".chars()),
+            Some('x')
+        );
+        // Nothing but transparent characters is nothing at all.
+        assert_eq!(first_significant("\u{FEFF}\u{00AD}".chars()), None);
+        // ZWSP is NOT transparent — it is a separator, and stops the walk.
+        assert_eq!(first_significant("\u{200B}n".chars()), Some('\u{200B}'));
+
+        // Nothing on a side is a boundary on that side, under every rule.
+        for rule in [
+            WordBoundary::Alphanumeric,
+            WordBoundary::NonSpace,
+            WordBoundary::NonSpaceOrDash,
+        ] {
+            assert!(flank_is_boundary(None, rule));
+            assert!(flank_is_boundary(Some(' '), rule));
+            assert!(!flank_is_boundary(Some('a'), rule));
+        }
+    }
+
+    /// An empty needle finds nothing, with the options form as with the
+    /// bare one — and in particular does not become "every position in
+    /// the document is a zero-length whole word".
+    #[test]
+    fn an_empty_needle_finds_nothing_under_every_option() {
+        let mut s = cat_session();
+        assert!(
+            s.find_text_with("", &TextSearchOptions::default())
+                .is_empty()
+        );
+        assert!(
+            s.find_text_with("", &TextSearchOptions::default().with_whole_word(true))
+                .is_empty()
+        );
+    }
+
+    /// The redaction path takes the same options and therefore marks
+    /// exactly the hits the search reports.
+    ///
+    /// The defect this guards is a front end offering *"redact every
+    /// hit"* beside a Find bar: with whole-word on, the operator is shown
+    /// one highlight and — if this verb ignored the option — would get
+    /// three marks, two of them over word fragments they had explicitly
+    /// excluded. On the one operation that removes content irreversibly,
+    /// a mark set that is a superset of what was displayed is not a
+    /// cosmetic mismatch.
+    #[test]
+    fn search_and_redact_honours_the_same_whole_word_option() {
+        let whole = TextSearchOptions::default().with_whole_word(true);
+
+        let mut s = session(lines_pdf(&["cat concatenate cat5"]));
+        assert_eq!(
+            s.mark_redactions_by_search("cat", false).unwrap().len(),
+            3,
+            "substring: the word, the one inside `concatenate`, and `cat5`"
+        );
+
+        let mut s = session(lines_pdf(&["cat concatenate cat5"]));
+        let marks = s.mark_redactions_by_search_with("cat", &whole).unwrap();
+        assert_eq!(marks.len(), 1, "only the standalone word is marked");
+
+        // …and the mark sits on the same quad the search reported, which
+        // is the property `scan_text_matches` is shared to guarantee.
+        let mut s = session(lines_pdf(&["cat concatenate cat5"]));
+        let hits = s.find_text_with("cat", &whole);
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].page_index, 0);
     }
 }
 
