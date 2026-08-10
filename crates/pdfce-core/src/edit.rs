@@ -7292,17 +7292,14 @@ impl EditSession {
         }
 
         // The blast radius, counted BEFORE the write, off the reader's
-        // projection. A descendant is anything whose FQN sits under this
-        // node's path — `Address` renames `Address.City`, but not `Addressed`,
-        // which is why the prefix carries the separator.
-        let prefix = format!("{fqn}.");
+        // projection. `descendants_of` owns the definition — including the
+        // separator in the prefix, which is what makes `Address` rename
+        // `Address.City` and leave `Addressed` alone. Shared rather than
+        // inlined so a shell needing the same notion (to re-key per-field
+        // state it holds under the old names) cannot re-derive it slightly
+        // differently.
         let descendants_renamed = forms::parse_acroform(&self.graph())
-            .map(|form| {
-                form.fields
-                    .iter()
-                    .filter(|f| f.fully_qualified_name.starts_with(&prefix))
-                    .count()
-            })
+            .map(|form| form.descendants_of(fqn).count())
             .unwrap_or(0);
 
         let Some(Object::Dict(dict)) = self.value(target) else {

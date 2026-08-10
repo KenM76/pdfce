@@ -820,3 +820,155 @@ fn a_widget_without_a_rect_is_refused_rather_than_placed() {
         "the refusal names the index the operator gave; got {msg:?}",
     );
 }
+
+// ---------------------------------------------------------------------------
+// `AcroForm::descendants_of` — the blast radius, and the separator that
+// bounds it (Pass 20.7 extracted it out of `rename_field`)
+// ---------------------------------------------------------------------------
+//
+// The function is a one-line filter, and that is exactly why it is a shared
+// function: the line contains a subtlety that is invisible once written and
+// wrong once forgotten. It now has two consumers — `rename_field`'s
+// `descendants_renamed` disclosure, and the GUI's re-keying of the per-field
+// value drafts it holds under the old names — and a definition that drifted
+// between them would make the count the operator is shown disagree with the
+// set of drafts that actually moved.
+
+/// **A node's descendants are the fields BENEATH it, by path.**
+///
+/// `nested-form.pdf` is `Personal.Name`, `Personal.Address.City`,
+/// `Personal.Address.Zip`.
+#[test]
+fn descendants_of_reports_the_fields_beneath_a_node() {
+    let f = form(&session("nested-form.pdf"));
+
+    let mut under_personal: Vec<String> = f
+        .descendants_of("Personal")
+        .map(|d| d.fully_qualified_name.clone())
+        .collect();
+    under_personal.sort();
+    assert_eq!(
+        under_personal,
+        vec![
+            "Personal.Address.City".to_owned(),
+            "Personal.Address.Zip".to_owned(),
+            "Personal.Name".to_owned(),
+        ],
+        "renaming `Personal` re-derives all three terminals' names"
+    );
+
+    let mut under_address: Vec<String> = f
+        .descendants_of("Personal.Address")
+        .map(|d| d.fully_qualified_name.clone())
+        .collect();
+    under_address.sort();
+    assert_eq!(
+        under_address,
+        vec![
+            "Personal.Address.City".to_owned(),
+            "Personal.Address.Zip".to_owned(),
+        ],
+        "`Personal.Name` is a sibling of `Address`, not beneath it"
+    );
+
+    assert_eq!(
+        f.descendants_of("Personal.Name").count(),
+        0,
+        "a leaf has nothing beneath it — the common case, and the one where \
+         the operator's mental model and the effect coincide"
+    );
+}
+
+/// **A node is not its own descendant.**
+///
+/// A rename writes the target's dictionary, so the target is the subject of
+/// the operation rather than a consequence of it. Counting it would inflate
+/// every disclosure by one and make a leaf rename claim it changed a field
+/// "beneath" itself.
+#[test]
+fn a_node_is_not_its_own_descendant() {
+    let f = form(&session("nested-form.pdf"));
+    assert!(
+        f.descendants_of("Personal.Address")
+            .all(|d| d.fully_qualified_name != "Personal.Address"),
+        "the node itself must not appear in its own descendant list"
+    );
+}
+
+/// **★ A name that merely SHARES A PREFIX is not a descendant.**
+///
+/// The assertion the separator exists for, and the one a correct-looking
+/// `starts_with(fqn)` fails. `Address.` matches `Address.City`; a bare
+/// `Address` would also match `Addressed`, which is a different field
+/// entirely — so renaming `Address` would claim to have renamed it, and the
+/// GUI would move its half-typed value onto a name that was never created.
+///
+/// No fixture contains the near miss (nothing would; it is the shape nobody
+/// thinks to build), so the sibling is synthesised here by cloning a real
+/// parsed field and renaming it. That tests the FUNCTION, which is where the
+/// subtlety lives, without perturbing a fixture three other tests assert the
+/// exact contents of.
+#[test]
+fn a_shared_prefix_without_the_separator_is_not_a_descendant() {
+    let mut f = form(&session("nested-form.pdf"));
+
+    let near_miss = {
+        let mut clone = f
+            .field_by_name("Personal.Name")
+            .expect("fixture has Personal.Name")
+            .clone();
+        // `Personal.Addressed` — one character past `Personal.Address`, and
+        // NOT beneath it.
+        clone.fully_qualified_name = "Personal.Addressed".to_owned();
+        clone
+    };
+    f.fields.push(near_miss);
+
+    let got: Vec<String> = f
+        .descendants_of("Personal.Address")
+        .map(|d| d.fully_qualified_name.clone())
+        .collect();
+    assert!(
+        !got.contains(&"Personal.Addressed".to_owned()),
+        "`Personal.Addressed` is a sibling that happens to start with the same \
+         letters; got {got:?}"
+    );
+    assert_eq!(got.len(), 2, "still exactly City and Zip; got {got:?}");
+}
+
+/// **The count `rename_field` discloses is this function's count.**
+///
+/// The two must not drift: the number the operator reads and the set of
+/// fields whose names actually changed are the same claim, and a disclosure
+/// that overstates its blast radius trains the operator to discount it.
+#[test]
+fn the_renames_disclosed_count_matches_the_descendant_list() {
+    let mut s = session("nested-form.pdf");
+    let expected = form(&s).descendants_of("Personal.Address").count();
+    assert_eq!(
+        expected, 2,
+        "the fixture's shape, pinned so this test is real"
+    );
+
+    let outcome = s
+        .rename_field("Personal.Address", "Location")
+        .expect("renaming a grouping node is allowed");
+    assert_eq!(outcome.to, "Personal.Location");
+    assert_eq!(
+        outcome.descendants_renamed, expected,
+        "the disclosure and the descendant set are one claim, not two"
+    );
+
+    // And the effect is real: the terminals' names re-derive with no object
+    // of theirs written.
+    let mut after = names(&form(&s));
+    after.sort();
+    assert_eq!(
+        after,
+        vec![
+            "Personal.Location.City".to_owned(),
+            "Personal.Location.Zip".to_owned(),
+            "Personal.Name".to_owned(),
+        ],
+    );
+}

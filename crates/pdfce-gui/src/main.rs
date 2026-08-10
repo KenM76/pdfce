@@ -924,6 +924,36 @@ struct PdfceApp {
     /// from the session every frame — an index would silently re-target the
     /// draft the moment a field's position changed.
     form_drafts: std::collections::HashMap<String, String>,
+    /// In-flight field RENAMES, keyed by the field's fully-qualified name,
+    /// holding the new **partial** name being typed (Pass 20.7).
+    ///
+    /// # The key's presence IS the editor's open/closed state
+    ///
+    /// There is no separate `renaming: Option<String>` flag. A key exists
+    /// exactly while that row's editor is on screen, which makes "two rows
+    /// editing at once" representable — deliberately, because in a scrolling
+    /// list of forty fields an operator who starts a rename, scrolls away and
+    /// starts another has done nothing wrong, and a single-slot model would
+    /// silently discard the first.
+    ///
+    /// # Why this is a SECOND map rather than a field on the first
+    ///
+    /// [`Self::form_drafts`] holds a field's **value**; this holds its
+    /// **name**. They have different lifetimes (a value draft survives a
+    /// rename; a name draft is closed by one), different commit conditions,
+    /// and one is present for every text field on screen while the other is
+    /// present only for the row being renamed. Folding them into one map of
+    /// pairs would make every value edit allocate a name slot it never uses.
+    ///
+    /// # ★ Keyed by FQN, which a rename CHANGES — see `apply_field_rename`
+    ///
+    /// `form_drafts`'s own doc comment chose the FQN as its key because the
+    /// row list is rebuilt every frame and an index "would silently re-target
+    /// the draft the moment a field's position changed." A rename changes the
+    /// key itself, which is the one motion that key is not stable against, so
+    /// both maps are re-keyed explicitly after a successful rename rather
+    /// than left to be discovered.
+    form_rename_drafts: std::collections::HashMap<String, String>,
     /// The narrator line describing the most recent edit — a delete's
     /// dangling-reference disclosure, a reorder's page count.
     ///
@@ -1412,6 +1442,7 @@ impl Default for PdfceApp {
             redact_search_is_pattern: false,
             parked: Vec::new(),
             form_drafts: std::collections::HashMap::new(),
+            form_rename_drafts: std::collections::HashMap::new(),
             edit_note,
             recovery_note: None,
             // Pass 6.1: a visible red pen and a 2-point stroke — sensible
@@ -6613,6 +6644,251 @@ impl PdfceApp {
         }
     }
 
+    /// Move every in-flight value draft from under `from` to under `to`,
+    /// including the drafts of fields nested beneath it (Pass 20.7).
+    ///
+    /// # ★ Why a rename has to do this, and what happens if it does not
+    ///
+    /// [`PdfceApp::form_drafts`] is keyed by fully-qualified name, and its own
+    /// doc comment explains why: the row list is rebuilt from the session
+    /// every frame, so an index *"would silently re-target the draft the
+    /// moment a field's position changed."* That reasoning is right and it
+    /// has exactly one blind spot — **a rename changes the key itself**,
+    /// which is the one motion an FQN key is not stable against.
+    ///
+    /// Left alone, two things go wrong, and the second is the bad one:
+    ///
+    /// 1. The renamed field's half-typed value is orphaned under a name
+    ///    nothing looks up any more, so the operator's typing silently
+    ///    reverts to the stored value.
+    /// 2. **The orphan is still there.** A later field created or renamed
+    ///    into the vacated name inherits it — and the next `lost_focus()`
+    ///    writes one field's half-typed text into a different field. Nothing
+    ///    about that looks like a bug at the moment it happens.
+    ///
+    /// # Descendants too, from core's definition
+    ///
+    /// Renaming a node re-derives the FQN of everything beneath it, so their
+    /// draft keys go stale by the same mechanism. The prefix rewrite uses the
+    /// same separator-bearing form [`AcroForm::descendants_of`](pdfce_core::forms::AcroForm::descendants_of)
+    /// documents, so `Address` moves `Address.City`'s draft and leaves
+    /// `Addressed`'s alone.
+    ///
+    /// Collisions cannot arise: `rename_field` refuses a rename onto an
+    /// occupied name, so the destination keys were vacant before this ran.
+    fn rekey_form_drafts(
+        drafts: &mut std::collections::HashMap<String, String>,
+        from: &str,
+        to: &str,
+    ) {
+        if from == to {
+            return;
+        }
+        let from_prefix = format!("{from}.");
+        // Collected first rather than mutated during iteration — and the
+        // exact-match key is handled in the same pass so the two cannot
+        // disagree about what counts as affected.
+        let moves: Vec<(String, String)> = drafts
+            .keys()
+            .filter_map(|k| {
+                if k == from {
+                    Some((k.clone(), to.to_owned()))
+                } else {
+                    k.strip_prefix(&from_prefix)
+                        .map(|rest| (k.clone(), format!("{to}.{rest}")))
+                }
+            })
+            .collect();
+        for (old, new) in moves {
+            if let Some(v) = drafts.remove(&old) {
+                drafts.insert(new, v);
+            }
+        }
+    }
+
+    /// One field row's **rename** affordance (Pass 20.7 — the GUI half of
+    /// Pass 20.6's `rename-field`).
+    ///
+    /// # What the operator is editing, and why that needed deciding
+    ///
+    /// The row's LABEL prefers `/TU`, the accessible name a screen reader
+    /// announces. A rename edits `/T`, the field's own internal name segment.
+    /// **They are different strings and a field can have both.** Prefilling
+    /// the editor from the label would put the operator's cursor in a box
+    /// showing one string while the commit replaced a different one — a
+    /// rule-4 violation of the sharpest kind, because the inference is
+    /// invisible and the operator has no way to notice it.
+    ///
+    /// So the editor is prefilled from `field.partial_name` and never from
+    /// the label, and the tooltip states the distinction rather than leaving
+    /// it to be inferred.
+    ///
+    /// # Rows with NO name of their own
+    ///
+    /// `Field::partial_name` is `None` exactly when `shares_parent_name` is
+    /// true — a `/T`-less representation whose FQN belongs to an ancestor and
+    /// is shared with sibling representations (§12.7.3.2). There is no name
+    /// at such a row to change; renaming "it" would rename the ancestor, at a
+    /// scope the row gives no hint of. Disabled-and-explained (R83), never
+    /// hidden: the operator is entitled to know the control exists and why it
+    /// does not apply here.
+    ///
+    /// # A PARTIAL name, which is why the field is narrow
+    ///
+    /// The editor takes one path segment. `desired_width` is bounded rather
+    /// than `INFINITY` deliberately — a full-width box invites a full dotted
+    /// path, which §12.7.3.2 has no escape for and which `rename_field`
+    /// refuses with `DottedPartialName`. The shape of the control should
+    /// agree with what it accepts.
+    ///
+    /// # Disclosure BEFORE the commit, without a confirm step
+    ///
+    /// The live captions show the resulting full name (always) and the count
+    /// of fields nested beneath it (when non-zero). Both are free — a string
+    /// substitution and a prefix filter over `form.fields`, already in hand
+    /// this frame — so the operator can read the consequence before acting on
+    /// it rather than after.
+    ///
+    /// This is deliberately **not** a confirm gate. Decision 024 §4.4
+    /// narrowed rule 4 so a deliberate direct manipulation commits with undo
+    /// as the escape hatch, and typing a name and pressing Enter is exactly
+    /// that. A confirm that fired only when something was nested beneath
+    /// would also fire only on the mixed-`/Kids` shape — which no file in the
+    /// measured corpus has and which pdfce's own merge is the main producer
+    /// of — i.e. an operator would meet it for the first time when least
+    /// expecting it, which is the hazard §4.4 exists to prevent.
+    ///
+    /// The period and collision captions ride the same free scan. They do
+    /// **not** disable the commit: a validation message that flickers while
+    /// someone types a name that will be valid two characters later costs
+    /// nothing, whereas a flickering *enabled state* is a real defect. If the
+    /// operator commits anyway, `rename_field` returns the same refusal and
+    /// the row reports it through the established error path.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "every parameter is a distinct piece of per-row state the caller already holds; bundling them into a struct would build one per field per frame to be read once" // ui-text-exempt: clippy lint justification, never displayed
+    )]
+    fn form_rename_row(
+        ui: &mut egui::Ui,
+        field: &pdfce_core::forms::Field,
+        form: &pdfce_core::forms::AcroForm,
+        fqn: &str,
+        enabled: bool,
+        refusal: Option<&'static str>,
+        drafts: &mut std::collections::HashMap<String, String>,
+        out: &mut Option<(String, String)>,
+    ) {
+        // No `/T` of its own — nothing here to rename. See the doc comment.
+        let Some(partial) = field.partial_name.as_ref() else {
+            ui.add_enabled_ui(false, |ui| {
+                ui.button(ui_text::form_rename_field_button())
+                    .on_disabled_hover_text(ui_text::form_rename_no_own_name_tooltip());
+            });
+            return;
+        };
+        let stored = String::from_utf8_lossy(partial).into_owned();
+
+        ui.add_enabled_ui(enabled, |ui| {
+            let Some(draft) = drafts.get_mut(fqn) else {
+                // Closed: just the opener.
+                let b = ui.button(ui_text::form_rename_field_button());
+                let b = match refusal {
+                    Some(note) => b.on_disabled_hover_text(note),
+                    None => b.on_hover_text(ui_text::form_rename_field_tooltip()),
+                };
+                diag::trace(|| {
+                    // ui-text-exempt: diagnostic trace, never displayed in the UI
+                    format!(
+                        "form-rename-open fqn={fqn:?} partial={stored:?} enabled={enabled} rect={:?}",
+                        b.rect
+                    )
+                });
+                if b.clicked() {
+                    drafts.insert(fqn.to_owned(), stored.clone());
+                }
+                return;
+            };
+
+            // Open: the editor, its live captions, and a cancel.
+            let resp = ui.add(egui::TextEdit::singleline(draft).desired_width(120.0));
+
+            // The resulting FQN: this path with its LAST segment replaced —
+            // the same substitution `rename_field` performs, so the caption
+            // cannot promise a name the commit would not produce.
+            let mut path: Vec<&str> = fqn.split('.').collect();
+            path.pop();
+            let typed = draft.clone();
+            path.push(&typed);
+            let new_fqn = path.join(".");
+
+            ui.label(
+                egui::RichText::new(ui_text::form_rename_new_fqn_caption(&new_fqn))
+                    .small()
+                    .weak(),
+            );
+
+            // The rule-4 disclosure, from core's own definition of
+            // "descendant" rather than a second prefix match written here
+            // (project rule 2 — `AcroForm::descendants_of` owns the
+            // separator subtlety that makes `Address` rename `Address.City`
+            // and leave `Addressed` alone).
+            let descendants = form.descendants_of(fqn).count();
+            if descendants > 0 {
+                ui.colored_label(
+                    ui.visuals().warn_fg_color,
+                    ui_text::form_rename_descendant_caption(descendants),
+                );
+            }
+
+            // Advisory only — neither disables the commit. See the doc
+            // comment for why a flickering caption is acceptable where a
+            // flickering enabled-state would not be.
+            if draft.contains('.') {
+                ui.colored_label(
+                    ui.visuals().warn_fg_color,
+                    ui_text::form_rename_period_caption(),
+                );
+            } else if form
+                .fields
+                .iter()
+                .any(|f| f.fully_qualified_name == new_fqn && f.id != field.id)
+            {
+                ui.colored_label(
+                    ui.visuals().warn_fg_color,
+                    ui_text::form_rename_collision_caption(&new_fqn),
+                );
+            }
+
+            diag::trace(|| {
+                // ui-text-exempt: diagnostic trace, never displayed in the UI
+                format!(
+                    "form-rename-edit fqn={fqn:?} draft={draft:?} new_fqn={new_fqn:?} \
+                     descendants={descendants} lost_focus={} rect={:?}",
+                    resp.lost_focus(),
+                    resp.rect
+                )
+            });
+
+            let cancelled = ui.button(ui_text::form_rename_cancel_button()).clicked();
+            // Committed on the SAME condition every other draft in this panel
+            // uses — `lost_focus()` and a real change — so a rename is not a
+            // second thing to learn. `form_field_commit`'s own docs argue the
+            // shape; the reason it applies unchanged here is that
+            // `rename_field` pushes one undo entry per call exactly as
+            // `fill_text_field` does.
+            let commit = form_field_commit(resp.lost_focus(), draft.as_str(), &stored);
+
+            // Cancel is read FIRST. Clicking it takes focus off the editor,
+            // so both fire on the same frame — and a cancel that also
+            // committed would be the control doing the opposite of its label.
+            if cancelled {
+                drafts.remove(fqn);
+            } else if let Some(new_partial) = commit {
+                *out = Some((fqn.to_owned(), new_partial));
+            }
+        });
+    }
+
     /// The **Forms** pane — the document's interactive fields, listed and
     /// fillable (`docs/ui_specs/forms-panel.md`, P0).
     ///
@@ -6796,7 +7072,27 @@ impl PdfceApp {
         // The master edit switch gates authoring the same way it gates every
         // other mutation. Disabled-and-explained (R83), never hidden.
         let deletes_enabled = doc.editing_enabled && delete_refusal_note.is_none();
+        // RENAME TAKES THE SAME GATE AS DELETION, from the same query.
+        //
+        // Verified rather than assumed: `rename_field` guards with
+        // `trailer().contains_key(b"Encrypt")` then `check_certification()`,
+        // and `deletion_refusal()` runs the identical two checks in the
+        // identical order. Both are structural changes to the form, which is
+        // what a certification signature freezes.
+        //
+        // So the `Option<EditError>` is asked ONCE (above) and mapped to TWO
+        // strings — not asked twice, and not one string reused. Deletion's
+        // wording says fields cannot be "added or removed", which is true and
+        // is not what an operator who pressed Rename just tried to do.
+        let rename_refusal_note: Option<&'static str> =
+            delete_refusal_note.map(|_| ui_text::form_rename_certification_disabled_tooltip());
+        let renames_enabled = deletes_enabled;
+        let mut rename_field: Option<(String, String)> = None;
         let drafts = &mut self.form_drafts;
+        // Hoisted before the closure like `drafts`, and for the same reason:
+        // the body holds `&mut self.status` throughout, so reaching a second
+        // `self` field from inside it has to be a disjoint borrow taken here.
+        let rename_drafts = &mut self.form_rename_drafts;
 
         egui::ScrollArea::vertical().show(ui, |ui| {
             for field in &form.fields {
@@ -7192,6 +7488,31 @@ impl PdfceApp {
                 }
                 }
 
+                // -- RENAME. Outside `fill_blocked`, and that is not an
+                // oversight. --
+                //
+                // `rename_field` has no read-only check: a signature field's
+                // `/T`, a push button's and a read-only text field's are all
+                // exactly as renameable as any other. That is the SAME
+                // argument the deletion block below already states in full
+                // ("None of them stops it being DELETED … denied an
+                // affordance the capability actually has, which is R83 read
+                // in the wrong direction"), and it transfers unchanged.
+                //
+                // Never per-widget: a field has ONE `/T` however many
+                // appearances it owns, so this sits with the whole-field
+                // controls and not inside the per-widget rows.
+                Self::form_rename_row(
+                    ui,
+                    field,
+                    &form,
+                    &fqn,
+                    renames_enabled,
+                    rename_refusal_note,
+                    rename_drafts,
+                    &mut rename_field,
+                );
+
                 // -- DELETION. The field/widget distinction is STRUCTURAL. --
                 //
                 // The operator never has to work out which verb they are
@@ -7348,6 +7669,38 @@ impl PdfceApp {
                         )
                     }
                 }
+                Err(err) => err.to_string(),
+            });
+        }
+        if let Some((fqn, new_partial)) = rename_field {
+            doc.pending_note = Some(match doc.session_mut().rename_field(&fqn, &new_partial) {
+                Ok(outcome) => {
+                    // Deliberately NO `refresh_pages()`. A rename writes `/T`
+                    // and nothing else; no appearance, no page content and no
+                    // rendered pixel depends on it, and the row labels are
+                    // re-read from the session every frame anyway. Calling it
+                    // would throw away every page texture and the whole
+                    // thumbnail cache to redraw an identical document —
+                    // deletion needs it because a widget left the page, and
+                    // this is the case that shows why that call is not
+                    // boilerplate to copy alongside every core verb.
+                    self.form_rename_drafts.remove(&fqn);
+                    Self::rekey_form_drafts(&mut self.form_drafts, &fqn, &outcome.to);
+                    if outcome.descendants_renamed > 0 {
+                        ui_text::form_field_renamed_with_descendants(
+                            &outcome.from,
+                            &outcome.to,
+                            outcome.descendants_renamed,
+                        )
+                    } else {
+                        ui_text::form_field_renamed(&outcome.from, &outcome.to)
+                    }
+                }
+                // The draft is deliberately LEFT OPEN on a refusal — a
+                // collision or a period is a name the operator is mid-way
+                // through choosing, and discarding what they typed would
+                // compound a refusal with data loss. Every other row-level
+                // failure in this function reports the same way.
                 Err(err) => err.to_string(),
             });
         }
@@ -22898,6 +23251,111 @@ mod tests {
     }
 
     use super::*;
+
+    // ---- Pass 20.7: a rename moves the value drafts with it ----
+
+    fn drafts(pairs: &[(&str, &str)]) -> std::collections::HashMap<String, String> {
+        pairs
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+            .collect()
+    }
+
+    /// **The renamed field's own half-typed value follows it.**
+    ///
+    /// Without this the operator's typing is orphaned under a key nothing
+    /// looks up, so the box silently reverts to the stored value the next
+    /// frame.
+    #[test]
+    fn a_rename_carries_the_fields_own_draft_to_the_new_name() {
+        let mut d = drafts(&[("Name", "half-typed"), ("Other", "untouched")]);
+        PdfceApp::rekey_form_drafts(&mut d, "Name", "FullName");
+        assert_eq!(d.get("FullName").map(String::as_str), Some("half-typed"));
+        assert!(!d.contains_key("Name"), "the stale key must not survive");
+        assert_eq!(
+            d.get("Other").map(String::as_str),
+            Some("untouched"),
+            "an unrelated field's draft is not disturbed"
+        );
+    }
+
+    /// **★ THE DANGEROUS HALF — the vacated key must not be left behind for
+    /// the next field to inherit.**
+    ///
+    /// An orphan under the old name is not merely lost: a field later created
+    /// or renamed INTO that name picks it up, and the next `lost_focus()`
+    /// writes one field's half-typed text into a different field. Nothing
+    /// about that looks like a bug at the moment it happens, which is why it
+    /// is asserted rather than left to the previous test's `!contains_key`.
+    #[test]
+    fn the_vacated_key_cannot_be_inherited_by_a_later_field() {
+        let mut d = drafts(&[("Name", "belongs to the old field")]);
+        PdfceApp::rekey_form_drafts(&mut d, "Name", "FullName");
+        // Simulate a later field arriving at the freed name and asking for
+        // its draft the way the panel does.
+        let inherited = d
+            .entry("Name".to_owned())
+            .or_insert_with(|| "stored value".to_owned());
+        assert_eq!(
+            inherited, "stored value",
+            "a new field at the freed name must start from the DOCUMENT's value, \
+             not from another field's abandoned typing"
+        );
+    }
+
+    /// **Descendants' drafts move too, and the separator is what decides
+    /// which ones.**
+    ///
+    /// `Address` renames `Address.City`; it does not rename `Addressed`. The
+    /// prefix carries the dot for exactly that reason, and a version of this
+    /// function written with a bare `starts_with(from)` passes every test
+    /// that has no near-miss sibling in it.
+    #[test]
+    fn descendant_drafts_move_and_a_shared_prefix_does_not() {
+        let mut d = drafts(&[
+            ("Personal.Address", "the node itself"),
+            ("Personal.Address.City", "Ottawa"),
+            ("Personal.Address.Zip", "K1A"),
+            ("Personal.Addressed", "NOT a descendant"),
+            ("Personal.Name", "elsewhere"),
+        ]);
+        PdfceApp::rekey_form_drafts(&mut d, "Personal.Address", "Personal.Location");
+
+        assert_eq!(
+            d.get("Personal.Location").map(String::as_str),
+            Some("the node itself")
+        );
+        assert_eq!(
+            d.get("Personal.Location.City").map(String::as_str),
+            Some("Ottawa")
+        );
+        assert_eq!(
+            d.get("Personal.Location.Zip").map(String::as_str),
+            Some("K1A")
+        );
+        assert_eq!(
+            d.get("Personal.Addressed").map(String::as_str),
+            Some("NOT a descendant"),
+            "a name that merely SHARES a prefix is a different field"
+        );
+        assert_eq!(
+            d.get("Personal.Name").map(String::as_str),
+            Some("elsewhere")
+        );
+        assert_eq!(d.len(), 5, "nothing was created or lost, only re-keyed");
+    }
+
+    /// **A no-op rename does nothing at all.**
+    ///
+    /// `rename_field` returns early on a no-op without reaching the undo
+    /// stack or the file; the draft map must agree rather than churning.
+    #[test]
+    fn a_no_op_rename_leaves_the_drafts_alone() {
+        let before = drafts(&[("Name", "x"), ("Name.Sub", "y")]);
+        let mut after = before.clone();
+        PdfceApp::rekey_form_drafts(&mut after, "Name", "Name");
+        assert_eq!(before, after);
+    }
 
     // ---- Pass 52.2: the Export-DXF scale gate ----
     //

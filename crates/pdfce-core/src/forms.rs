@@ -702,6 +702,54 @@ impl AcroForm {
             .iter()
             .filter(move |f| f.fully_qualified_name == fqn)
     }
+
+    /// Every field lying **under** `fqn` in the §12.7.3.2 name tree — the
+    /// fields whose fully-qualified name would change if `fqn`'s partial
+    /// name changed, **without any of their own objects being written**.
+    ///
+    /// # Why this is a shared function and not a one-line filter
+    ///
+    /// It is a one-line filter, and that is exactly the problem: the line
+    /// contains a subtlety that is invisible once written and wrong once
+    /// forgotten. **The prefix carries the separator.** `Address.` matches
+    /// `Address.City` and does *not* match `Addressed` — and a caller who
+    /// writes `starts_with(fqn)` instead of `starts_with(&format!("{fqn}."))`
+    /// gets a count that is right on every form anyone tests with and wrong
+    /// on the first form that happens to contain two fields whose names
+    /// share a prefix.
+    ///
+    /// It had one caller ([`EditSession::rename_field`](crate::edit::EditSession::rename_field),
+    /// for [`FieldRename::descendants_renamed`](crate::edit::FieldRename::descendants_renamed))
+    /// and now has more: a shell renaming a field must re-key any in-flight
+    /// per-field state it holds under the old names, which needs the same
+    /// notion of descendant and must not re-derive it. Project rule 2 —
+    /// a shell reconstructing core's own definition is how the two drift.
+    ///
+    /// # The projection this inherits, stated because it affects the count
+    ///
+    /// [`Self::fields`] is a projection of **terminal** fields: `walk_field`
+    /// stops at a pure grouping node, which has no presence and no type of
+    /// its own (Table 220). So renaming a group containing three
+    /// intermediate nodes and five terminals reports **five**, not eight.
+    ///
+    /// That is the right number for what the count is FOR. The disclosure it
+    /// feeds is about breakage outside the document — FDF entries, JavaScript
+    /// references, submit mappings — and every one of those names a terminal
+    /// field. An intermediate node's name changing breaks nothing on its own;
+    /// it breaks things by changing the terminals beneath it, which are
+    /// already counted.
+    ///
+    /// Excludes `fqn` itself: a rename writes that node's dictionary, so it
+    /// is the subject of the operation rather than a consequence of it.
+    pub fn descendants_of<'a>(&'a self, fqn: &'a str) -> impl Iterator<Item = &'a Field> {
+        // Built once, outside the closure, rather than per element — and
+        // bound to a name so the trailing separator is visible at a glance
+        // instead of buried in a `format!` inside a filter.
+        let prefix = format!("{fqn}.");
+        self.fields
+            .iter()
+            .filter(move |f| f.fully_qualified_name.starts_with(&prefix))
+    }
 }
 
 /// The inheritable attributes carried down the field tree during the walk

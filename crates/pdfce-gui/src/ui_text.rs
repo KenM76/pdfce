@@ -7405,6 +7405,146 @@ pub fn form_delete_certification_disabled_tooltip() -> &'static str {
 still be filled in, but none can be added or removed without invalidating the signature."
 }
 
+// ---------------------------------------------------------------------------
+// Forms — RENAME a field (Pass 20.7, the GUI half of Pass 20.6's `rename-field`)
+// ---------------------------------------------------------------------------
+//
+// The distinction every string here has to carry, because getting it wrong is
+// the one way this control can quietly do the wrong thing:
+//
+//   the row's LABEL is `/TU`, the accessible name.
+//   the rename edits `/T`, the field's own internal name segment.
+//
+// They are different strings, a field can have both, and the label is the one
+// the operator is looking at. So the tooltip says so outright rather than
+// leaving it to be inferred, and the editor is prefilled from `/T` and never
+// from the label.
+
+/// The per-row rename control.
+pub fn form_rename_field_button() -> &'static str {
+    "Rename"
+}
+
+/// Tooltip on the rename control.
+///
+/// Names what the field's internal name is FOR — that is what makes the
+/// distinction from the visible label matter to the operator rather than
+/// being a piece of PDF trivia. Someone who has never heard of `/T` still
+/// understands "the thing your form data refers to".
+pub fn form_rename_field_tooltip() -> &'static str {
+    "Change this field's own internal name — what form data (FDF), JavaScript and submit mappings refer to. This is not the label shown above, which comes from the field's accessible name and is left alone."
+}
+
+/// The live caption under the rename editor: what the field's full name will
+/// be once committed.
+///
+/// Shown ALWAYS, not only when something is nested beneath. The editor takes
+/// one path segment while the field's identity is the whole dotted path, and
+/// an operator typing `Town` into a field called `Address.City` should be
+/// able to see `Address.Town` without assembling it in their head.
+pub fn form_rename_new_fqn_caption(new_fqn: &str) -> String {
+    format!("Full name after rename: \u{201c}{new_fqn}\u{201d}")
+}
+
+/// The live caption warning that a rename reaches fields beneath this one.
+///
+/// The rule-4 disclosure, shown BEFORE the commit rather than only after —
+/// it costs nothing (the count is a prefix filter over a list already in
+/// hand) and a consequence the operator can read before acting on is worth
+/// more than the same sentence afterwards.
+///
+/// It states that nothing of theirs is written, because that is the fact
+/// that makes the change both cheap and dangerous: cheap in the file,
+/// dangerous outside it.
+pub fn form_rename_descendant_caption(count: usize) -> String {
+    format!(
+        "Also changes the full name of {count} field(s) nested beneath it — only their path changes, nothing of theirs is written."
+    )
+}
+
+/// The live caption for a period typed into the editor.
+///
+/// §12.7.3.2 reserves the period as the path separator and offers no escape,
+/// so this is not a preference. Worded as what the box IS for rather than as
+/// a bare prohibition, because "no periods" alone invites the operator to
+/// wonder how they are meant to type a nested name.
+pub fn form_rename_period_caption() -> &'static str {
+    "Cannot contain a period — this sets only this field's own name segment, not a full path."
+}
+
+/// The live caption for a name already in use.
+pub fn form_rename_collision_caption(new_fqn: &str) -> String {
+    format!("A field already uses the name \u{201c}{new_fqn}\u{201d}.")
+}
+
+/// Abandon the rename without committing it.
+pub fn form_rename_cancel_button() -> &'static str {
+    "Cancel"
+}
+
+/// Why the rename control is disabled on a row with no `/T` of its own.
+///
+/// `Field::shares_parent_name` — one of several representations sharing one
+/// field name (§12.7.3.2). There is genuinely no name at this row to change;
+/// what such a row displays belongs to an ancestor. Disabled-and-explained
+/// (R83) rather than hidden: the operator is entitled to know the control
+/// exists and why it does not apply here.
+pub fn form_rename_no_own_name_tooltip() -> &'static str {
+    "This row is one of several appearances that share one field name; there is no name of its own here to change."
+}
+
+/// Why the rename control is disabled — the STRICT certification gate.
+///
+/// The SAME gate deletion uses (`EditSession::deletion_refusal` — encryption,
+/// then `check_certification`), and deliberately NOT the same string. That
+/// one says fields cannot be "added or removed", which is true and is not
+/// what the operator just tried to do.
+pub fn form_rename_certification_disabled_tooltip() -> &'static str {
+    "This document is certified, and its signature freezes the form's structure. Fields can \
+still be filled in, but none can be renamed without invalidating the signature."
+}
+
+/// Report after a rename that touched nothing else — the common case.
+///
+/// # Both halves are FULLY-QUALIFIED NAMES, and that is a correction
+///
+/// This first took the row's LABEL for the "from" half, on the reasoning
+/// that the operator should be told which field changed in the terms they
+/// were looking at. Driving it produced:
+///
+/// > `Renamed "Personal.Name (p. 1)" to "Personal.NameX".`
+///
+/// Two things wrong, neither visible in the code. The page suffix is a row
+/// decoration and reads as part of the old name. Worse, the label prefers
+/// `/TU` — which a rename does **not** change — so on any field carrying an
+/// accessible name the sentence would announce that a string was renamed
+/// when that string is still exactly where it was.
+///
+/// `from` and `to` come straight off [`FieldRename`](pdfce_core::edit::FieldRename)
+/// instead: one kind of name on both sides, both of them the thing that
+/// actually changed.
+pub fn form_field_renamed(from_fqn: &str, to_fqn: &str) -> String {
+    format!("Renamed \u{201c}{from_fqn}\u{201d} to \u{201c}{to_fqn}\u{201d}.")
+}
+
+/// Report after a rename that re-derived the names of fields beneath it.
+///
+/// Wording ported from `pdfce-cli`'s `cmd_rename_field` rather than
+/// reinvented: the two shells must not develop different accounts of the same
+/// consequence, and the CLI's was written against what actually breaks.
+///
+/// The second sentence is the whole point of the count existing. A one-field
+/// request renamed several, and every FDF, JavaScript reference and submit
+/// mapping that named them is now pointing at nothing — which is a fact about
+/// the world outside this document that undo cannot reach.
+/// Both halves are fully-qualified names, for the reason
+/// [`form_field_renamed`] records.
+pub fn form_field_renamed_with_descendants(from_fqn: &str, to_fqn: &str, count: usize) -> String {
+    format!(
+        "Renamed \u{201c}{from_fqn}\u{201d} to \u{201c}{to_fqn}\u{201d}. {count} field(s) beneath it now have different names as a result — nothing else was written, but any external form data (FDF), JavaScript or submit mapping that named them no longer matches."
+    )
+}
+
 /// The file-dialog filter label for form data.
 pub fn forms_data_filter_label() -> &'static str {
     "Form data (FDF, XFDF)"
