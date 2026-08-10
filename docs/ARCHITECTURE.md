@@ -14237,3 +14237,38 @@ started).
   with `format!`, an unrelated but adjacent gate hit in the same diff.
   Full record: `ROADMAP.md`'s `Pass 53.1` Shipped entry (top of
   *Shipped*).
+
+- **2026-08-10 (`2b41b77`) — a hover-scoped disclosure needs a named
+  ATTENTION predicate, not the presence of keyed state, the moment the
+  gesture that reads the disclosure MOVES the pointer away from what it
+  is disclosing.** `Pass 47.3`'s per-row widget highlight was keyed on
+  `pointer_over_row` alone — correct while the operator's literal cursor
+  sits over the row, and wrong the instant a legitimate in-row action
+  (the Rename button) requires moving the pointer OFF the row to reach a
+  control that then opens an editor for that same row. The highlight
+  died at the first of those moves, so the operator typed a new name for
+  a widget they could no longer see on the page. **Decided: the
+  highlight predicate is `pointer_over_row || drafts_open_for(field)`** —
+  a named function, not a bare `rename_drafts.contains_key(id)` inlined
+  at the call site, because the actual question is "is the operator's
+  attention on THIS field," and that comes apart from "is a draft keyed
+  to this id present" the moment a tree of ancestor crumbs exists
+  (`Pass 53.1`, same session): an open editor for a grouping node's
+  ancestor segment must NOT hold the highlight on an unrelated
+  descendant's widget, because a pure grouping node has no widget of its
+  own (§12.7.3.2 — no `/Kids` widget entry for a grouping-only node), and
+  highlighting an arbitrary descendant would be pointing at the wrong
+  rectangle with total confidence. **General form, stated because this
+  is the second time a disclosure keyed on "the pointer is here" has
+  needed widening to "or the operator's attention is provably still
+  here, evidenced by open state, even if the pointer moved"** — any
+  future hover-scoped disclosure in this project that sits behind a
+  control the operator must leave the row to reach needs the same
+  `‖`-widened predicate, named for what it actually asks rather than
+  left as the field-presence check that happens to produce the right
+  answer today. No new decision number claimed — a plain dated entry,
+  extending the `Pass 47.3` disclosure convention (R124/rule 4 territory)
+  rather than forking a new one. Not filed to `D:\dev\rag\egui\` —
+  judged pdfce-specific (the FQN/grouping-node distinction it turns on is
+  this project's own field model, not an egui mechanic). Full record:
+  `ROADMAP.md`'s `2b41b77` Shipped entry (top of *Shipped*), Part 1.

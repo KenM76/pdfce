@@ -29769,3 +29769,88 @@ Backlog items above (one amended, one new).
   both indexed in this same filing. This is the **sixty-first**
   `SESSION_LOG.md` filing (the sixtieth confirmed present by direct read
   before this entry was appended).
+
+## 2026-08-10 (sixty-second filing) — `2b41b77` closes `Pass 53.0`'s entire polish list; `ae59ce3`'s baseline-debt discharge CONFIRMED at 63 citations; `24b392c` + `b0b387b` FILED, and a stale "review is owed" comment is corrected against a record showing the review already happened and closed
+
+**Shipped:**
+- `2b41b77` (no new Pass ID, filed as `Pass 53.0`'s own completion) — the
+  `Pass 47.3` hover highlight now also holds while a rename editor for
+  that field is open, via a named `drafts_open_for` predicate rather than
+  bare hover. Closes `pdfce-ui-specialist`'s entire `Pass 53.0` change
+  list (items 1–7 shipped with the Pass, item 8 closed by `ef88973`, item
+  9 shipped inline, item 10 closes here). No open items remain.
+- `24b392c` (2026-08-04, no Pass ID, tooling) — `gui-drive.ps1` now drives
+  through `PDFCE_DIAG_SCRIPT` injection instead of raw Win32
+  `PostMessage`, which silently failed against an off-screen window
+  (winit's `TrackMouseEvent` reads the physical cursor; egui-winit drops
+  the button because it never sees a resolved pointer position).
+- `b0b387b` (2026-08-04, no Pass ID, investigative/comment-fix only, no
+  behaviour change) — corrects two stale comments claiming left-drag
+  panning was on when the arithmetic (`suppress_pan = !t || t`, always
+  true) proves it has been off since Pass 9a.
+
+**Decisions made this session:**
+- **The `ae59ce3` baseline-debt discharge (11 → 10 lines in
+  `tools/commits-filed-baseline.txt`) is CONFIRMED, not merely trusted.**
+  Independently counted by `Grep`: `ae59ce3` appears 63 times across
+  `docs/ROADMAP.md` (32) and `docs/SESSION_LOG.md` (31), against exactly
+  1 citation each for `24b392c` and `b0b387b` (the debt-list line only) —
+  matching the false-positive shape the gate's own header warns about.
+  The removal was correct. This filing removes `24b392c` and `b0b387b`
+  from the same file, taking the debt from 10 to **8**.
+- **`b0b387b`'s "a UX review is owed... the review never happened" claim
+  is FALSE, corrected against `ROADMAP.md`'s own record.** That review
+  happened at **Pass 12.M1, 2026-08-01** — `pdfce-ui-specialist` was
+  dispatched on exactly this question, found no conflict between
+  marquee-select-drag and the dimension tools' click-point interaction,
+  and ruled KEPT; the Backlog entry recording it is explicitly marked
+  "This flag is now closed — no outstanding action." The commit's claim
+  traced to a stale code comment that was never updated after the review
+  it described had already happened and closed — making the commit's own
+  framing a fresh instance of the exact failure (R93) it was otherwise
+  correctly diagnosing elsewhere in the same commit. Separately, whatever
+  navigation gap the operator felt was closed the SAME DAY by `Pass 18.9`
+  (`f69edd9`) — middle-drag panning, already shipped, already filed. No
+  new Backlog item results from `b0b387b`.
+- **R93 stays at one number; R174/R175/R176 stay separate, on purpose.**
+  Asked explicitly whether R93 needed a formal instance counter and
+  whether R174–R176 are R93 renumbered: no to both. R93 covers a code
+  comment's claim about code BEHAVIOR; R174 covers a disclosure STRING's
+  informativeness to its audience; R175 covers a DOCUMENT's claim about
+  environment state. Same family (confident, unverified assertion),
+  different artifact classes and different discharge mechanisms — merging
+  them would lose which check discharges which claim.
+
+**Findings + decisions:**
+- `24b392c`'s coordinate-projection advice (project screen points from
+  PDF space through the traced rect/zoom, never hard-code them) is the
+  same discipline the sixtieth filing's `text:lines` diag step later
+  built out properly for text runs — read together, not as unrelated
+  tooling notes. Its "hard-coded point silently stops hitting anything"
+  failure is now a third occurrence of this harness-fragility class.
+
+**Still in flight:**
+- Nothing new opened by this filing. `Pass 53.0`/`53.1`'s polish list is
+  fully closed. The two commits filed today (`24b392c`, `b0b387b`) were
+  the last of the original eleven-hash debt tied to specific fixes rather
+  than to pure ledger-housekeeping (`338076a`, `17131b6`, `1f319c0`,
+  `b8f96b1`, `55a0732`, `587e520`, `0febeb6`, `9141ded` — 8 remain).
+
+**For next session:**
+- The 8 remaining baseline-debt commits are unread by this librarian
+  beyond their subject lines — read each in full before filing, same
+  discipline the forty-third-through-fiftieth chain used.
+- `b8f96b1` (disclose: exporting form data silently dropped rich-text
+  formatting) was flagged by a prior dispatching engineer as
+  operator-visible AND a rule-4 disclosure defect — should not sit at the
+  bottom of the queue.
+
+**Ledger for this filing.** No new Pass ID. Pass family ceiling unchanged
+at **53.1**. Standing rules: no new rule minted; ceiling stays **R176**,
+next free **R177**. Decision records: one plain dated `ARCHITECTURE.md`
+§12 entry added (the `drafts_open_for` attention-vs-presence pattern);
+ceiling stays **035**, next free **036**. Operator-question ceiling
+unchanged at **(bh)**, next free **(bi)**. Backup/git working-tree state
+not independently asserted (hard rule 8). This is the **sixty-second**
+`SESSION_LOG.md` filing (the sixty-first confirmed present by direct read
+before this entry was appended).

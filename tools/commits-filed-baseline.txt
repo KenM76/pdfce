@@ -25,6 +25,4 @@ b8f96b1  # disclose: exporting form data silently dropped rich-text formatting
 55a0732  # GUI-gap sweep 5/N: radio groups and choice fields are editable
 587e520  # harden: /Ff bit 26 cannot be decoded wrong any more
 0febeb6  # fix: the group controls fitted a 520 px window, not a 370 px dock
-24b392c  # tools: gui-drive.ps1 drives through the diag script, not PostMessage
-b0b387b  # Correct two false claims about panning
 9141ded  # Tool property bars: draggable, and the measure box closable

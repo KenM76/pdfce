@@ -81,6 +81,198 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★ `2b41b77` closes `Pass 53.0`'s entire polish list; `ae59ce3`'s baseline-debt discharge is CONFIRMED at 63 citations; `24b392c` + `b0b387b` are FILED, and a stale "review is owed" comment is corrected against a record showing the review already happened — 2026-08-10, tip of `pass-8-redaction` (sixty-second filing)
+
+**Sourcing.** This librarian has no shell this dispatch (hard rule 8). The
+technical content of all four commits is the engineer's own account,
+relayed. What is **independently verified**, by direct `Grep` against
+`docs/ROADMAP.md`, `docs/SESSION_LOG.md` and
+`tools/commits-filed-baseline.txt` rather than relayed: the `ae59ce3`
+citation counts (Part 2), the single-citation counts for `24b392c` and
+`b0b387b` (Part 2), and the closed-Backlog text quoted in Part 4.
+
+**Part 1 — `2b41b77`: `Pass 53.0`'s owed polish item 10 is DISCHARGED.**
+`Pass 47.3`'s hover highlight (dashed/tinted widget outline, keyed on
+pointer-over-row) went dark the instant the pointer left the row to reach
+the Rename button — exactly the window in which an operator is typing a
+new name for a field they can no longer see on the page. Fixed with a
+named predicate, `drafts_open_for`, not a bare `contains_key`: the
+question being asked is "is the operator's attention on THIS field," and
+that comes apart from "is a draft keyed to this FQN present" the moment
+ancestor crumbs exist (`Pass 53.1`, same session) — an open editor for a
+grouping node's ancestor segment must not hold the highlight on an
+unrelated descendant's widget, because a grouping node has no widget of
+its own (§12.7.3.2 — no `/Kids` widget entry for a pure grouping node)
+and highlighting an arbitrary descendant would be confidently pointing at
+the wrong rectangle. Hover stays the primary signal; "or an editor for
+this field is open" is strictly stronger than hovering, lasts exactly as
+long as the operator's attention is on the field, and clears with no new
+state to manage when the operator commits or cancels. Verified no
+regression: the crumb rename still commits. **2680 workspace tests, 0
+failed; clippy 0; fmt clean; seven gates green** (relayed, not
+independently re-run).
+
+**This closes `pdfce-ui-specialist`'s entire `Pass 53.0` change list.**
+Load-bearing items 1–7 shipped with the Pass itself; polish item 8
+(`rename_refusal`, the GUI disabling a Rename button through a method
+literally named `deletion_refusal`) closed by `ef88973`'s Part 3 (above);
+item 9 (live period/collision captions) shipped inside the original Pass
+rather than deferred; item 10 closes here. **No open items remain against
+that list** — worth recording so a future session does not re-derive what
+was outstanding.
+
+**Ledger note:** no new Pass ID — filed as `Pass 53.0`'s own completion,
+same convention as `Pass 24.0`'s Enter-commit half and `ef88973`'s Part 3.
+`docs/FEATURES.md` line 201 (*Editor chrome for form-field widgets*,
+`R167`/`Pass 47.3`) gets a one-line addendum noting the highlight now also
+holds while a rename editor for that field is open — a refinement of the
+existing row, not a new one.
+
+**Part 2 — the `ae59ce3` baseline-debt discharge is CONFIRMED, checked
+independently rather than trusted.** The engineer removed `ae59ce3` from
+`tools/commits-filed-baseline.txt` (11 → 10 lines), on the reasoning that
+it is now genuinely filed rather than merely cited inside an owed-list
+(the exact false positive the gate's own header warns about — "a hash
+cited in an OWED list counts as filed"). Checked directly: `ae59ce3`
+appears **32 times in `docs/ROADMAP.md` and 31 times in
+`docs/SESSION_LOG.md` — 63 total**, spanning this session's `Pass 24.0`
+filings (the fifty-fourth and fifty-fifth filings' full evidence-trail
+resolution — see lines 1134–1219 and the standing-rules entry near line
+42279, above/below). Spot-checked against two OTHER lines still in the
+baseline file at the time of this dispatch — `24b392c` and `b0b387b`,
+Part 3/4 below — each returns **exactly 1** hit in `ROADMAP.md`: the
+single mention the debt list itself produces, nothing else. **Agreed: the
+discharge is correct**, both on the gate's own behavior (`check-commits-
+filed.py` stopped flagging `ae59ce3` and flagged `2b41b77` instead, per
+the dispatch) and on this independent count. Baseline debt: **11 → 10**
+(this correction, already made) **→ 8** (Parts 3–4 below; this librarian
+removes both remaining lines from `tools/commits-filed-baseline.txt` in
+this same filing, per the file's own stated workflow: "removing a line,
+once that commit is filed, is the intended workflow").
+
+**Part 3 — `24b392c` FILED (2026-08-04, `tools:` — `gui-drive.ps1` drives
+through the diag script, not `PostMessage`).** No Pass ID — test/tooling
+infrastructure, same class as other tooling-only entries in this ledger.
+The old driver posted raw Win32 `WM_MOUSEMOVE`/`WM_LBUTTONDOWN` and
+silently failed against an off-screen window: winit's `TrackMouseEvent`
+reads the *physical* cursor position, Windows answers `WM_MOUSELEAVE`
+because the real cursor is elsewhere, and `egui-winit` drops the button
+entirely because it only emits `PointerButton` once it already knows a
+pointer position — observed trace `[PointerMoved, PointerGone]` in every
+message ordering tried, including move and button posted back to back.
+Now drives through `PDFCE_DIAG_SCRIPT`, injection at egui's own seam —
+the mechanism that actually works; the dead `PostMessage` approach is
+kept in the script's `NOTES` block so nobody rebuilds it. Two guards
+added, because a silent empty trace is exactly the failure mode this tool
+exists to prevent: it throws on an empty trace, and separately on a trace
+with no `start` line — distinguishing "the process produced nothing" from
+"`PDFCE_DIAG` never reached it," two different bugs on 2026-08-04 that
+cost one run to tell apart. **Cross-reference, not a duplicate**: the
+`NOTES` block's coordinate-projection advice (project screen points from
+PDF space through the traced rect/zoom rather than hard-coding them) is
+the same discipline `45a88f2`'s `text:lines` diag step later built out
+properly for text runs (this ledger's `45a88f2` Shipped entry, sixtieth
+filing) — worth reading together, not as two unrelated tooling notes. The
+"hard-coded point silently stops hitting anything the moment the panel
+changes height" failure this commit names is also exactly what the
+sixtieth filing's own harness work independently ran into from a
+different direction (a two-harness window-size mismatch) — third
+occurrence of this class of harness fragility, worth a future session's
+attention if a fourth turns up.
+
+**Part 4 — `b0b387b` FILED (2026-08-04 — correct two false claims about
+panning), WITH A CORRECTION TO THE COMMIT'S OWN CLAIM.** The commit's
+arithmetic finding stands and is real:
+`suppress_pan = selection_mode || canvas_suppresses_pan(t, None)` reduces
+to `!t || t`, true in every state, so plain left-drag-to-pan is
+unconditionally off — and two comments said the opposite (one claiming
+`DragScroll::Always` "since `suppress_pan` is always `false`," the module
+doc still claiming "drag pans, via the scroll area's own drag-to-scroll").
+Both wrong, both left in the running code contradicting the running
+behavior — a real instance of R93's failure shape (a code comment
+asserting a behavior is not evidence the behavior holds).
+
+**What is NOT correct, checked against this project's own record rather
+than trusted from the commit message: the claim that "a UX review by
+`pdfce-ui-specialist` is owed on this default" and that "the review never
+happened."** `ROADMAP.md`'s own Backlog ledger (the `★ UX flag —
+marquee-vs-pan canvas-drag default change at Pass 9a` entry, above) records
+that review happening at **Pass 12.M1, 2026-08-01**: `pdfce-ui-specialist`
+was dispatched specifically on this question during that Pass's own
+dispatch, found no conflict with the dimensioning tool (Measure/dimension
+tools use click-point-A-then-click-point-B, never drag, so marquee-select
+and dimension-picking never contend for the same gesture), and ruled
+**KEPT, no further change** — the Backlog entry is explicitly marked *"This
+flag is now closed — no outstanding action."* The commit's claim traces to
+a stale code comment (*"a UX review... is owed on this default"*) that was
+never updated after the review it describes actually happened and closed.
+**This makes the commit's own framing a fresh instance of the exact thing
+it is correcting**: it trusted a comment describing a state of the world
+(review owed) instead of checking the project's own record (review closed
+three days earlier). Separately, and independent of that correction:
+whatever navigation gap the operator was actually feeling was closed the
+SAME DAY by **`Pass 18.9`** (`f69edd9`, also 2026-08-04, above) — middle-
+drag panning, implemented against the scroll offset rather than by
+reversing the marquee default, with `canvas::primary_drag_started`/
+`primary_dragged`/`primary_drag_stopped` making every canvas drag consumer
+button-specific so a middle-drag pan could never be misread as an
+object-edit gesture (standing rule R126). **No open item filed from this**:
+the marquee-vs-pan question is closed at Pass 12.M1; the navigation gap is
+closed at Pass 18.9; `b0b387b`'s only surviving content is the pair of
+comment fixes, filed here as investigative history with no behavior change
+of its own (per the commit's own statement — "No behaviour change in this
+commit").
+
+**On whether R93 needs a formal instance count, and whether R174/R175/
+R176 are R93 wearing three numbers (both asked for explicitly): no to
+both.** R93 ("a code comment asserting a behavior is not evidence the
+behavior holds") already names its own occurrence count informally in its
+minting text (four, as of Pass 19.3) and has since been cited by name at
+least twice more without a formal re-mint (this document, "R93-adjacent"/
+"R93's exact failure shape," near the `snap_glyph()`/`targets_in_rect`
+`allow(dead_code)` findings) — `b0b387b`'s own framing is a further
+instance, cited the same way, not a fifth standing-rule number. **R174,
+R175 and R176 are NOT R93 wearing three numbers** — each names a distinct
+claim-type over a distinct artifact class: R93 is a code comment
+describing code BEHAVIOR (discharged by running the code); R174 is a
+disclosure STRING read as its audience (discharged by asking whether the
+sentence is informative, not whether the code path fired); R175 is a
+DOCUMENT's claim about environment state — git/CI/backup — (discharged by
+re-running the check, never by re-reading the prose). All three share a
+family resemblance — confident assertion, unverified against the world —
+and that resemblance is exactly why R93's own text already warns that
+"agreement between two confident assertions is not corroboration":
+collapsing three artifact-specific rules into one number would lose the
+thing that makes each independently actionable, namely which check
+discharges THIS claim. Kept separate, on purpose.
+
+**Numbers.** `ae59ce3` citations: **63** (32 `ROADMAP.md` + 31
+`SESSION_LOG.md`), independently counted by `Grep`, not relayed.
+`24b392c`/`b0b387b` citations before this filing: **1 each**, both in
+`ROADMAP.md` (the debt-list line only), independently counted. Baseline
+debt: **10 lines → 8 lines**, both removals made in this same filing.
+
+**Invariant checks.** No code changed by this filing itself (a librarian
+dispatch, not an engineering one). `2b41b77`'s own invariant checks —
+GUI-core separation, round-trip/minimal-diff, packaging — are relayed as
+unaffected (pure `pdfce-gui` UI-state predicate, no object-write path
+touched); not independently re-verified.
+
+**Ledger for this filing.** No new Pass ID (Part 1 is `Pass 53.0`'s own
+completion; Parts 2–4 are tooling/process, no Pass ID per established
+convention). `docs/FEATURES.md`: one-line addendum to the *Editor chrome*
+row (line 201) only — no row moved, no capability newly complete.
+Standing rules: **no new rule minted** — R93 cited (a further instance,
+not re-numbered); ceiling stays **R176**, next free **R177**. Decision
+records: one plain dated `ARCHITECTURE.md` §12 entry added (the
+`drafts_open_for` attention-vs-presence pattern) — no new number claimed;
+ceiling stays **035**, next free **036**. Operator-question ceiling
+unchanged at **(bh)**, next free **(bi)**. Backup/git working-tree state
+not independently asserted — this librarian has no shell this dispatch
+(hard rule 8).
+
+---
+
 ### ★ `Pass 53.1` — the field-name tree's INTERIOR becomes readable, and grouping-node rename reaches the GUI as a breadcrumb; a split-the-FQN trap caught before it was written; a shared draft rendered three times turns out not to be shared state — 2026-08-10, tip of `pass-8-redaction` (sixty-first filing, commits `0c102e4` + `6611812`)
 
 **Sourcing.** This librarian has no shell this dispatch (hard rule 8). Both
@@ -490,7 +682,9 @@ owed.** `EditSession::rename_refusal()` — a thin core wrapper returning
 through a method literally named `deletion_refusal`. `pdfce-ui-specialist`'s
 item 10 (extending `Pass 47.3`'s hover-highlight to persist while a rename
 editor is open) is **not** touched by this commit and stays owed under
-`Pass 53.0`.
+`Pass 53.0`. **[★ DISCHARGED 2026-08-10, `2b41b77` (sixty-second filing) —
+see this document's own `2b41b77` Shipped entry, top of *Shipped*, Part 1.
+`Pass 53.0`'s entire `pdfce-ui-specialist` change list is now closed.]**
 
 **Numbers.** **2675 workspace tests, 0 failed** (1 more than `Pass 53.0`'s
 2674). `cargo clippy --workspace --all-targets`: 0. `cargo fmt --all
@@ -2056,9 +2250,9 @@ present by direct read before this entry was written).
 5. `55a0732` — GUI-gap sweep 5/N: radio groups and choice fields are editable.
 6. `587e520` — harden: `/Ff` bit 26 cannot be decoded wrong any more.
 7. `0febeb6` — fix: the group controls fitted a 520 px window, not a 370 px dock.
-8. `24b392c` — tools: gui-drive.ps1 drives through the diag script, not PostMessage.
-9. `ae59ce3` — **Pass 24.0 (part): tool panels anchor to the viewport.** ★ Flagged specifically: this subject line claims the **already-named** `Pass 24.0` (see the `★ Pass 24.0–24.5` entry under *Next up*, "the confirm leaves the page"), staged per R141's "Pass N (part)" convention. If the code matches, this is not a new Pass entry — it is a citation this commit's hash is owed against the *existing* Pass 24.0 entry, and possibly a partial-ship status correction on that entry (currently reads "NOT STARTED" for everything but 24.1). **Not resolved by this filing** — reading the commit is what settles it, and this librarian has not.
-10. `b0b387b` — correct two false claims about panning.
+8. `24b392c` — tools: gui-drive.ps1 drives through the diag script, not PostMessage. **[FILED 2026-08-10, sixty-second filing — see this document's own `2b41b77` Shipped entry, Part 3, above. Removed from `tools/commits-filed-baseline.txt` in that same filing.]**
+9. `ae59ce3` — **Pass 24.0 (part): tool panels anchor to the viewport.** ★ Flagged specifically: this subject line claims the **already-named** `Pass 24.0` (see the `★ Pass 24.0–24.5` entry under *Next up*, "the confirm leaves the page"), staged per R141's "Pass N (part)" convention. If the code matches, this is not a new Pass entry — it is a citation this commit's hash is owed against the *existing* Pass 24.0 entry, and possibly a partial-ship status correction on that entry (currently reads "NOT STARTED" for everything but 24.1). **Not resolved by this filing** — reading the commit is what settles it, and this librarian has not. **[RESOLVED 2026-08-09, fifty-fifth filing — see the "FILING GAP CLOSED" Shipped entry, near the top of this document, for the full evidence trail. Discharge from `tools/commits-filed-baseline.txt` CONFIRMED 2026-08-10, sixty-second filing, at 63 independent citations across `ROADMAP.md`+`SESSION_LOG.md` — see this document's own `2b41b77` Shipped entry, Part 2, above.]**
+10. `b0b387b` — correct two false claims about panning. **[FILED 2026-08-10, sixty-second filing — see this document's own `2b41b77` Shipped entry, Part 4, above, which also CORRECTS this commit's own "the review never happened" claim against the closed `★ UX flag — marquee-vs-pan` Backlog entry. Removed from `tools/commits-filed-baseline.txt` in that same filing.]**
 11. `9141ded` — tool property bars: draggable, and the measure box closable.
 
 **`docs/FEATURES.md`: not touched by this entry.** Nothing in `e296a76`/`190c205` is a user-facing capability — both are CI/tooling. None of the eleven owed commits are ticked either, for the same reason the Pass 24.0 flag above is a flag and not a resolution: ticking a box on a subject line, with no read of the actual change, is exactly the over-optimism this librarian is told never to commit.
