@@ -1420,3 +1420,75 @@ that tree are not**" means a plain `/EmbeddedFiles` walk already sees the whole
 portfolio ⇒ **no portfolio-specific parsing is needed to enumerate or extract**,
 only to *present*. A "just give me a pointer" sub-request that collapses a
 whole feature is worth answering in full.
+
+**34. A UI-PRESENTATION/TREE dispatch (optional-content `/Order`, layers panel,
+2026-08-10) — the parent/child rule can be stated NOWHERE in prose, so a WORKED
+EXAMPLE is the sole evidence, not a corroboration.** Established building
+`iso32000__ref__optional_content_order.md` + a `## VERBATIM DEPTH AXIS` on
+`iso32000__s__8.11.md` for `crates\pdfce-core\src\layers.rs`. This was memory
+item 11's **coverage-depth** axis in pure form: §8.11 was already on disk at
+summary depth (Pass 12.M2 authored ONE annotation onto ONE flat layer ⇒ no
+`/Order` grammar was ever needed) and **nothing in it was wrong**. Six
+sub-findings:
+
+- **The oracle can be the ONLY evidence.** Item 33's Annex-H.6 finding was "a
+  worked example CORROBORATES a recursion"; item 25's Figure 60 was "a figure
+  REFUTES a rival reading". Here ISO 32000-1 Table 101's `Order` row never says
+  what a nested array hangs off — the entire parent/child rule is recoverable
+  only from §8.11.4.3 EXAMPLE 2 rendering `/Order [1 0 R [2 0 R 3 0 R]]` as
+  `Layer 1` + two indented children, **and that rendering is introduced by a
+  `should`**. ⇒ write the grammar out as numbered productions with a **grade per
+  production** (SOURCED / DERIVED / NOT STATED), then **enumerate the
+  combinations the examples do NOT exhibit**. Two examples covered
+  labelled-at-top-level and unlabelled-under-an-OCG; **three of the four
+  label×parent cells are undefined**, and the missing one (a *labelled* array
+  after an OCG) is exactly the shape a producer emits for "a named sublayer
+  folder" — i.e. the gap is at the *likely* input, not an exotic one.
+- **A `shall` on a DEFAULT VALUE is a distinct trap class.** "In the default
+  configuration dictionary, the default value **shall be** an empty array",
+  combined with "An empty array `[]` explicitly specifies that no groups shall be
+  presented", means **an absent `/Order` yields an EMPTY panel** — not "show
+  everything", which is what every implementation instinct says. Skimming a
+  Default-value line as boilerplate is how this ships wrong. Whenever a default
+  is stated with `shall`, read the *other* sentence that gives that value meaning.
+- **Answer a "does the spec say X about key K?" question by SIBLING-ROW CONTRAST
+  across CLAUSES, not just across rows.** `/RBGroups` is silent on an OCG in two
+  inner arrays — but §8.11.4.4 states exactly that rule for `/AS /OCGs` and
+  §12.6.4.12 states it for `SetOCGState` ("A group **may** appear more than once
+  in the `State` array"). Three structurally identical questions, two answered
+  explicitly, one silent ⇒ the silence is a **genuine ambiguity**, evidenced.
+  (Extends the §7.11 `Renditions`-vs-`EmbeddedFiles` contrast from *adjacent rows
+  in one table* to *the same question asked in three different clauses*.)
+- **A row can DEFEAT its own apparent strength in its last paragraph.**
+  `/Locked` reads like an immutability guarantee until its final sentence blesses
+  state changes "by means other than the user interface, **such as** JavaScript
+  or items in the `AS` entry" — so it is a UI-only lock, and the "such as" makes
+  the bypass list non-exhaustive (is a link-triggered `SetOCGState` "through the
+  user interface"? undefined). **Read a table cell to its last line before
+  characterising the key.**
+- **An ASYMMETRY ACROSS SIBLING ROWS OF ONE TABLE is an erratum worth a row.**
+  `/Order` and `/RBGroups` both carry "in other configuration dictionaries, the
+  default is the … value from the default configuration dictionary"; `/Locked`
+  does **not**. Read as written, a non-default config with no `/Locked` locks
+  nothing. Record what is written + flag the asymmetry; do not silently
+  "fix" it by analogy. (2.0's errata do not touch it.)
+- **The "shall" that governs the whole feature had TWO qualifiers the dispatch's
+  paraphrase dropped, and one of them is the product hook.** "Any groups not
+  listed in this array shall not be presented in **any** user interface **that
+  uses the configuration**." The scoping clause is what licenses a *labelled,
+  non-default* "show unregistered/unordered groups" view — the difference
+  between a defensible pdfce feature and a conformance violation. **Quote a
+  governing `shall` in full and interrogate every prepositional phrase in it.**
+
+**Also this build:** the "is X a real layer if it is not in `/OCProperties
+/OCGs`?" question is the **DEFENSIBLE-READING** shape — the answer is a *chain*
+of sourced links (no registration precondition in Table 98; `BaseState` applies
+to "all the groups **in a document**"; visibility defined without reference to
+`/OCProperties`) ending in one DERIVED step and one pdfce-POLICY step, plus an
+explicit statement of **what is NOT defensible** (repairing `/OCGs` on save =
+rule 3 / R34). Give the bound, not just the permission. And an **extraction
+finding became an explanation**: Table 101's `Order` cell has **no bullet glyphs
+and no indentation** (`pdfminer`: every line at `x0 = 210.1`, vs `•` in
+§8.11.3.1's real bullet list), so the "bullet list" is a list semantically only —
+which is *why* the enumeration reads open-ended. A layout measurement that
+explains an ambiguity is worth recording alongside the ambiguity.
