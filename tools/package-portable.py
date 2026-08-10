@@ -94,12 +94,26 @@ BINARIES = ["pdfce-gui.exe", "pdfce-cli.exe"]
 
 
 def git(*args: str) -> str:
-    """Run a git command in the repo and return its stripped stdout."""
+    """Run a git command in the repo and return its stripped stdout.
+
+    `encoding="utf-8"` is not optional. `text=True` alone decodes with the
+    LOCALE codec, which on this machine is cp1252, and this project's
+    commit subjects are full of em-dashes — so the changelog in
+    `BUILD-INFO.txt` rendered `Pass 54.1 â€” a group can be deleted`.
+
+    Third instance of this same encoding class in one session, after the
+    Python gates' console output and the PowerShell harness's source. The
+    common root is that Windows defaults to cp1252 everywhere UTF-8 is not
+    demanded explicitly. `errors="replace"` so a stray non-UTF-8 byte in
+    some future commit degrades one character instead of failing a build.
+    """
     return subprocess.run(
         ["git", *args],
         cwd=REPO,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
     ).stdout.strip()
 
