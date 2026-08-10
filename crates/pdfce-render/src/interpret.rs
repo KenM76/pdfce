@@ -2074,6 +2074,12 @@ impl Interpreter<'_> {
         // For a form this is threaded into the nested run (so the stream
         // is still walked and still counted); for an image there is
         // nothing to walk, so it is simply not drawn.
+        //
+        // NOTE the division of labour, because getting it wrong is what
+        // let images paint inside hidden sections: this flag covers the
+        // XObject's OWN `/OC` only. The "current visibility at the place
+        // the `Do` occurs" half is enforced inside `draw_image` and
+        // `do_form`, at the blit, where inline images are also covered.
         let oc_hidden_here = match stream.dict.get(b"OC").and_then(|o| o.as_reference()) {
             Some(oc) => {
                 let off = self.oc_off_set().clone();
@@ -2285,6 +2291,31 @@ impl Interpreter<'_> {
     /// colour shall be painted"), which is why the decode cannot be
     /// cached across graphics states without keying on the colour.
     fn draw_image(&mut self, dict: &Dict, raw: &[u8], pixmap: &mut Pixmap, origin: ImageOrigin) {
+        // ★ THE IMAGE GATE, WHICH SHIPPED MISSING.
+        //
+        // §8.11.3.1's "shall not be drawn" is not media-typed, but the
+        // first cut of optional content gated only the PATH blit and the
+        // GLYPH blit. An image inside a hidden `/OC` section still
+        // painted — and so did an inline `BI`/`ID`/`EI` image, which has
+        // no XObject dictionary and therefore no `/OC` of its own to
+        // check. Found by rendering a fixture and reading the pixel,
+        // after `do_xobject`'s comment claimed an OR that only ever
+        // reached the FORM branch.
+        //
+        // Here rather than at the call sites because this is the one
+        // place every image path converges: the XObject branch, the
+        // no-`/Subtype` repair heuristic, and the inline arm.
+        //
+        // Returning BEFORE the decode, not after: an image that is not
+        // drawn does not need to be decoded, and on a drawing with
+        // hidden raster layers that is the difference between skipping
+        // the work and doing all of it invisibly. The cost is that a
+        // hidden image's codec diagnostics are absent — which is honest
+        // (`images_rendered` means rendered), and `oc_sections_hidden`
+        // is what discloses that something was withheld.
+        if self.oc_hidden() {
+            return;
+        }
         let doc = self.doc;
         let resources = self.resources;
         let fill = self.gs.current.fill_color;

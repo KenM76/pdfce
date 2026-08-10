@@ -2958,6 +2958,149 @@ mod tests {
         assert!(out.diagnostics.tolerated >= 1, "and it is counted");
     }
 
+    /// ★ **An image XObject inside a hidden section is not drawn.**
+    ///
+    /// This shipped BROKEN. The first cut of optional content gated the
+    /// path blit and the glyph blit and nothing else, so an image inside
+    /// a hidden `/OC` section painted normally — and `do_xobject`'s own
+    /// comment claimed the visibility of the enclosing section was
+    /// ORed in, which was true only of the FORM branch.
+    ///
+    /// The image here carries **no `/OC` of its own**, which is the
+    /// whole point: its hiddenness can only come from the section it sits
+    /// in. An image with its own OFF `/OC` was already handled and would
+    /// have passed while this failed.
+    ///
+    /// §8.11.3.1's "shall not be drawn" is not media-typed.
+    #[test]
+    fn an_image_inside_a_hidden_section_is_not_drawn() {
+        let objects: Vec<(u32, Vec<u8>)> = vec![
+            (
+                1,
+                b"<< /Type /Catalog /Pages 2 0 R /OCProperties \
+                  << /OCGs [5 0 R] /D << /OFF [5 0 R] >> >> >>"
+                    .to_vec(),
+            ),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 100 100] >>".to_vec(),
+            ),
+            (
+                3,
+                b"<< /Type /Page /Parent 2 0 R /Contents 4 0 R /Resources << \
+                  /Properties << /oc1 5 0 R >> /XObject << /Im0 6 0 R >> >> >>"
+                    .to_vec(),
+            ),
+            (
+                4,
+                stream_object("", b"/OC /oc1 BDC q 50 0 0 50 10 10 cm /Im0 Do Q EMC"),
+            ),
+            (5, b"<< /Type /OCG /Name (Layer 1) >>".to_vec()),
+            (
+                6,
+                stream_object(
+                    "/Type /XObject /Subtype /Image /Width 1 /Height 1 \
+                     /ColorSpace /DeviceGray /BitsPerComponent 8",
+                    &[0u8],
+                ),
+            ),
+        ];
+        let (doc, page) = build_pdf(&objects);
+        let out = render_page(&doc, &page, 1.0).unwrap();
+        assert!(
+            ink_bbox(&out.pixmap).is_none(),
+            "an image with no /OC of its own is still hidden by the section it is drawn inside"
+        );
+    }
+
+    /// **An INLINE image inside a hidden section is not drawn either.**
+    ///
+    /// `BI`/`ID`/`EI` has no XObject dictionary, so it has no `/OC` to
+    /// consult and can *only* be hidden by its enclosing section. It was
+    /// the least gated path of all — the XObject branch at least checked
+    /// the XObject's own `/OC`, and this one checked nothing.
+    #[test]
+    fn an_inline_image_inside_a_hidden_section_is_not_drawn() {
+        let objects: Vec<(u32, Vec<u8>)> = vec![
+            (
+                1,
+                b"<< /Type /Catalog /Pages 2 0 R /OCProperties \
+                  << /OCGs [5 0 R] /D << /OFF [5 0 R] >> >> >>"
+                    .to_vec(),
+            ),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 100 100] >>".to_vec(),
+            ),
+            (
+                3,
+                b"<< /Type /Page /Parent 2 0 R /Contents 4 0 R \
+                  /Resources << /Properties << /oc1 5 0 R >> >> >>"
+                    .to_vec(),
+            ),
+            (
+                4,
+                stream_object(
+                    "",
+                    b"/OC /oc1 BDC q 50 0 0 50 10 10 cm \
+                      BI /W 1 /H 1 /CS /G /BPC 8 ID \x00 EI Q EMC",
+                ),
+            ),
+            (5, b"<< /Type /OCG /Name (Layer 1) >>".to_vec()),
+        ];
+        let (doc, page) = build_pdf(&objects);
+        let out = render_page(&doc, &page, 1.0).unwrap();
+        assert!(
+            ink_bbox(&out.pixmap).is_none(),
+            "an inline image has no /OC of its own, so the section is the only thing that can hide it"
+        );
+    }
+
+    /// The same inline image with the layer ON still paints — so the
+    /// gate above is suppressing by layer state and has not simply
+    /// broken inline images.
+    ///
+    /// Worth its own test rather than an inverted assertion: "nothing
+    /// painted" passes just as well when the fixture never painted at
+    /// all, and an inline image assembled by hand is exactly the kind of
+    /// fixture that can silently fail to draw.
+    #[test]
+    fn the_same_inline_image_paints_when_its_layer_is_on() {
+        let objects: Vec<(u32, Vec<u8>)> = vec![
+            (
+                1,
+                b"<< /Type /Catalog /Pages 2 0 R /OCProperties \
+                  << /OCGs [5 0 R] /D << >> >> >>"
+                    .to_vec(),
+            ),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 100 100] >>".to_vec(),
+            ),
+            (
+                3,
+                b"<< /Type /Page /Parent 2 0 R /Contents 4 0 R \
+                  /Resources << /Properties << /oc1 5 0 R >> >> >>"
+                    .to_vec(),
+            ),
+            (
+                4,
+                stream_object(
+                    "",
+                    b"/OC /oc1 BDC q 50 0 0 50 10 10 cm \
+                      BI /W 1 /H 1 /CS /G /BPC 8 ID \x00 EI Q EMC",
+                ),
+            ),
+            (5, b"<< /Type /OCG /Name (Layer 1) >>".to_vec()),
+        ];
+        let (doc, page) = build_pdf(&objects);
+        let out = render_page(&doc, &page, 1.0).unwrap();
+        assert!(
+            ink_bbox(&out.pixmap).is_some(),
+            "the fixture must actually paint, or the hidden-case test above proves nothing"
+        );
+    }
+
     /// **An image XObject carrying its own OFF `/OC` is not drawn**
     /// (§8.11.3.3, the XObject half — deferred alongside the
     /// content-stream half until now).

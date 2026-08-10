@@ -751,7 +751,46 @@ pub fn oc_is_hidden<G: ObjectGraph + ?Sized>(graph: &G, oc: ObjId, off: &BTreeSe
         .is_some_and(|n| n.as_bytes() == b"OCMD");
     if is_ocmd {
         let members = oc_refs(graph, d.get(b"OCGs"));
-        !members.is_empty() && members.iter().all(|g| off.contains(g))
+        if members.is_empty() {
+            // Table 99: with no `/OCGs` there is nothing to test, and
+            // §8.11.3.3 makes visibility the default. `/VE` could still
+            // decide it, but pdfce does not evaluate visibility
+            // expressions (see the fn docs), and refusing to guess shows
+            // the content rather than hiding it.
+            return false;
+        }
+        // Table 99 `/P` — the visibility POLICY, default `AnyOn`.
+        //
+        // ★ This was not read at all until 2026-08-10, so every
+        // membership dictionary was evaluated as `AnyOn`. The divergence
+        // is not a rounding error: under `/P /AllOff` with every member
+        // group OFF the standard says the content is VISIBLE, and pdfce
+        // hid it — the exact inverse of the answer, on the policy whose
+        // whole purpose is "show this when the layers are off".
+        //
+        // Note that each arm is written as the VISIBILITY test from the
+        // table and then negated once, rather than as four hand-derived
+        // hidden-tests. Deriving them by hand is how `AnyOff` and
+        // `AllOff` get swapped: the negation of "any member is off" is
+        // "every member is on", which is not any of the other three
+        // policies and is easy to write as one by mistake.
+        let on = |g: &ObjId| !off.contains(g);
+        let visible = match graph
+            .resolve(d.get(b"P").unwrap_or(&Object::Null))
+            .as_name()
+            .map(|n| n.as_bytes().to_vec())
+            .as_deref()
+        {
+            Some(b"AllOn") => members.iter().all(on),
+            Some(b"AnyOff") => members.iter().any(|g| !on(g)),
+            Some(b"AllOff") => members.iter().all(|g| !on(g)),
+            // `AnyOn` explicitly, and every other value: Table 99 names
+            // four policies and gives `AnyOn` as the default, so an
+            // unrecognised name falls back to the default rather than
+            // inventing a fifth behaviour.
+            _ => members.iter().any(on),
+        };
+        !visible
     } else {
         // Treat the reference itself as the OCG (Type /OCG or an untyped
         // group-shaped dict — the authored-layer case, §8.11 NOTE 3).
@@ -1475,5 +1514,131 @@ mod tests {
         );
         let annots = page_annotations(&doc, PAGE_ID);
         assert_eq!(annots[0].mod_date.as_deref(), Some("last Tuesday"));
+    }
+    // ---- Table 99 `/P`, the OCMD visibility policy ----
+
+    /// A document with one OCMD over two OCGs, `off` naming which of the
+    /// two the default configuration hides, and `policy` the `/P` value
+    /// (empty for "absent", which must behave as `AnyOn`).
+    fn ocmd_is_hidden(policy: &str, first_off: bool, second_off: bool) -> bool {
+        let p = if policy.is_empty() {
+            String::new()
+        } else {
+            format!("/P /{policy}")
+        };
+        let mut off = String::from("/OFF [");
+        if first_off {
+            off.push_str("5 0 R ");
+        }
+        if second_off {
+            off.push_str("6 0 R");
+        }
+        off.push(']');
+        let objects: Vec<(u32, Vec<u8>)> = vec![
+            (
+                1,
+                format!(
+                    "<< /Type /Catalog /Pages 2 0 R /OCProperties \
+                     << /OCGs [5 0 R 6 0 R] /D << {off} >> >> >>"
+                )
+                .into_bytes(),
+            ),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 10 10] >>".to_vec(),
+            ),
+            (3, b"<< /Type /Page /Parent 2 0 R >>".to_vec()),
+            (
+                4,
+                format!("<< /Type /OCMD /OCGs [5 0 R 6 0 R] {p} >>").into_bytes(),
+            ),
+            (5, b"<< /Type /OCG /Name (A) >>".to_vec()),
+            (6, b"<< /Type /OCG /Name (B) >>".to_vec()),
+        ];
+        let doc = build_pdf(&objects);
+        let graph = doc.view();
+        let off_set = optional_content_default_off(&graph);
+        oc_is_hidden(&graph, ObjId::new(4, 0), &off_set)
+    }
+
+    /// ★ **`/P /AllOff` with every member off is VISIBLE.**
+    ///
+    /// The case that was inverted. Until `/P` was read, every OCMD was
+    /// evaluated as `AnyOn`, so "show this when the layers are off" —
+    /// which is the entire purpose of `AllOff` — produced exactly the
+    /// opposite answer. A "no layers shown" placeholder would have been
+    /// hidden precisely when it was meant to appear.
+    #[test]
+    fn an_all_off_membership_is_visible_when_every_member_is_off() {
+        assert!(
+            !ocmd_is_hidden("AllOff", true, true),
+            "Table 99 /P /AllOff: visible iff all members are OFF"
+        );
+        assert!(
+            ocmd_is_hidden("AllOff", true, false),
+            "one member still on means not all off, so hidden"
+        );
+    }
+
+    /// The default, and an absent `/P`, are both `AnyOn` — the behaviour
+    /// every OCMD had before `/P` was read, pinned so implementing the
+    /// other three policies cannot have moved it.
+    #[test]
+    fn an_absent_p_behaves_as_any_on() {
+        for policy in ["", "AnyOn"] {
+            assert!(ocmd_is_hidden(policy, true, true), "{policy:?}: none on");
+            assert!(!ocmd_is_hidden(policy, true, false), "{policy:?}: one on");
+            assert!(!ocmd_is_hidden(policy, false, false), "{policy:?}: both on");
+        }
+    }
+
+    /// `AllOn` and `AnyOff` are each other's inverse over the same two
+    /// groups, which is the property that catches the likeliest mistake:
+    /// deriving the hidden-test by hand and swapping them.
+    #[test]
+    fn all_on_and_any_off_are_complementary() {
+        for (a, b) in [(false, false), (true, false), (false, true), (true, true)] {
+            assert_ne!(
+                ocmd_is_hidden("AllOn", a, b),
+                ocmd_is_hidden("AnyOff", a, b),
+                "AllOn and AnyOff must disagree for off=({a}, {b})"
+            );
+        }
+    }
+
+    /// An unrecognised `/P` falls back to the default rather than
+    /// inventing a fifth policy — Table 99 names exactly four.
+    #[test]
+    fn an_unknown_p_falls_back_to_the_default() {
+        assert_eq!(
+            ocmd_is_hidden("Sometimes", true, false),
+            ocmd_is_hidden("AnyOn", true, false)
+        );
+    }
+
+    /// An OCMD with no `/OCGs` is visible: there is nothing to test, and
+    /// hiding content because a membership dictionary was empty would
+    /// remove marks no clause asks to remove.
+    #[test]
+    fn an_empty_membership_is_visible() {
+        let objects: Vec<(u32, Vec<u8>)> = vec![
+            (
+                1,
+                b"<< /Type /Catalog /Pages 2 0 R /OCProperties \
+                  << /OCGs [5 0 R] /D << /OFF [5 0 R] >> >> >>"
+                    .to_vec(),
+            ),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 10 10] >>".to_vec(),
+            ),
+            (3, b"<< /Type /Page /Parent 2 0 R >>".to_vec()),
+            (4, b"<< /Type /OCMD /P /AllOn >>".to_vec()),
+            (5, b"<< /Type /OCG /Name (A) >>".to_vec()),
+        ];
+        let doc = build_pdf(&objects);
+        let graph = doc.view();
+        let off_set = optional_content_default_off(&graph);
+        assert!(!oc_is_hidden(&graph, ObjId::new(4, 0), &off_set));
     }
 }
