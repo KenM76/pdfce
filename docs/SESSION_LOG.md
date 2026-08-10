@@ -30749,3 +30749,137 @@ working-tree state not independently asserted — this librarian has no
 shell this dispatch (hard rule 8). This is the **sixty-ninth**
 `SESSION_LOG.md` filing (the sixty-eighth confirmed present by direct
 read before this entry was appended).
+
+## 2026-08-10 (seventy-first filing) — `6798e8b`: `Pass 54.1` ships — grouping-node deletion reaches the GUI as a "Grouped Fields" roster, one button per group built AS ONE control; `e8de47c`: two self-corrections to `6798e8b`'s own commit message (a BOM fix reverted for violating an existing `personal_rag` lesson by name; an unmeasured `$PSScriptRoot` causal claim retracted); `R182` MINTED; a structural ordering defect found in this very file, flagged not fixed
+
+**Sourcing.** This librarian has Grep/Read but no shell this dispatch
+(hard rule 8). Independently verified by direct read: the `form_group_*`
+string family (`crates/pdfce-gui/src/ui_text.rs:7501-7600`); the roster
+build (`crates/pdfce-gui/src/main.rs:7396-7483` — `nameable_groups`
+filter, absent-not-disabled per R124, the `crumb_edited`-vs-destructive-
+control reasoning as a code comment, the `descendants_of`-not-
+`field_group_deletion_preview` borrow-checker note, the childless-node
+skip, the `diag::trace` line shape) and the commit handler
+(`main.rs:8080-8100` — `outcome.terminals.iter().chain(outcome.nodes.iter())`
+purging both `form_drafts` and `form_rename_drafts`); `tools/gui-drive.ps1:89-111`
+(the `ContainsKey('Exe')`-guarded body recompute and the narrowed,
+non-general code comment); a `Grep` for `[^\x00-\x7F]` across all four
+`tools/*.ps1`, **zero matches**, independently run this dispatch;
+`C:\personal_rag\claude_code\lesson_20260506_powershell_ps1_ascii_only.md`
+in full including its own 2026-08-10 update (confirmed present, not
+duplicated) and its index entry. Not independently verified: the quoted
+GUI trace's exact byte values and the "10 traces per host" harness claim
+(relayed by the engineer). Full citation list:
+`ROADMAP.md`'s own `6798e8b`/`e8de47c` *Shipped* entry, Sourcing
+paragraph (top of *Shipped*).
+
+**Shipped:**
+- `6798e8b` (2026-08-10) — `Pass 54.1`, the GUI half of grouping-node
+  deletion, closing `Pass 54.0`'s Backlog remainder across all three
+  surfaces. "Grouped Fields" roster section, absent (not disabled) when
+  a form has no nameable grouping node; one row per group built as ONE
+  control by construction, not deduplicated from per-row state (the
+  rename breadcrumb's `crumb_edited` pattern was the engineer's first
+  instinct and is explicitly wrong here — fine for a shared draft
+  multiple crumbs open identically, wrong for a destructive control
+  whose click target must not depend on frame draw order); affected
+  fields listed always, never behind a tooltip; no confirm step
+  (decision 024 §4.4, `forms_flatten_button`'s own precedent). Closes
+  the cache-invalidation gap `b1d7858` opened core support for: the
+  commit handler purges both draft caches for every name in
+  `terminals.iter().chain(nodes.iter())`.
+- `e8de47c` (2026-08-10) — not a Pass; two self-corrections to
+  `6798e8b`'s own commit message, filed in full below.
+
+**Decisions made this session:**
+- `Pass 54.1` minted (not folded into `Pass 54.0` under its existing ID)
+  — reconciled, not contradicted, against the sixty-ninth filing's
+  stated intent to track the GUI as `Pass 54.0`'s own remainder "since
+  no core surface changed to earn one": `b1d7858` (seventieth filing)
+  DID change the core surface between that statement and this filing,
+  which is exactly the condition that statement's own "since" clause
+  named. Checked for collision (R156) before assignment — zero prior
+  hits for `54.1`.
+- `R182` MINTED, not folded into an existing rule — narrower than the
+  general "check the RAG first" instruction already in force (which DID
+  fire here, at write-up time): the gap is that a habit of checking
+  before DOCUMENTING a fix readily substitutes for checking before
+  WRITING it, and only the latter prevents the wrong artifact from ever
+  reaching the commit history.
+- `R175` cited as a close relative for the `$PSScriptRoot` claim, not
+  filed as a formal instance — R175's founding wording is about a
+  *tracked project document's* claim about environment state (git
+  remote, CI, backup); this was a *commit message's* causal claim about
+  a specific host's parameter-binding behavior. Kept distinct rather
+  than stretched to fit.
+- A structural defect in this file (below) is flagged, not repaired, on
+  the reasoning that moving already-appended text is closer to
+  rewriting history than appending a dated correction — left for the
+  engineer's judgment.
+
+**Findings + decisions:**
+- **A fix applied against a `personal_rag` lesson this project already
+  had, caught by grepping before write-up rather than before writing the
+  fix.** `6798e8b` originally added UTF-8 BOMs to all four
+  `tools/*.ps1` harness scripts to fix a PowerShell 5.1 parse failure —
+  a fix that works, and the exact one
+  `lesson_20260506_powershell_ps1_ascii_only.md` rules against by name
+  ("pure-ASCII is the cleaner default"). Reverted to pure ASCII in the
+  same commit; zero non-ASCII confirmed by independent grep this
+  dispatch. See `R182`.
+- **A causal claim retracted after the test that would have proven it
+  was finally run.** `6798e8b`'s message asserted `$PSScriptRoot` "comes
+  back empty in `param()` defaults" under PS 5.1, as a general host
+  fact. A minimal reproduction does not reproduce it under either host.
+  What IS true and reproducible, confirmed by direct read: in
+  `gui-drive.ps1` specifically, `$Exe`'s param default resolved without
+  its `$PSScriptRoot` prefix under `powershell -File`. Cause left
+  unidentified rather than guessed at twice; fixed by recomputing in the
+  body, guarded on `ContainsKey('Exe')`, independent of the retracted
+  explanation.
+- **The `§`/`›`/`★` glyphs predate this session** — the harness has been
+  un-runnable under Windows PowerShell 5.1 for as long as those comments
+  existed; nobody hit it because the project is driven from Git Bash,
+  where `pwsh` is what gets typed.
+- **A structural ordering defect found in this very file.** The
+  sixty-ninth filing's own "Ledger for this filing" paragraph is
+  physically misplaced — it appears AFTER the seventieth filing's header
+  and ledger, inside what should have been the sixty-ninth entry's own
+  section, immediately before this entry. Content is unchanged and
+  nothing in it is factually wrong; only the ORDER is. Not moved in this
+  filing — see *Decisions*, above.
+
+**Still in flight:**
+- `Pass 37.3`: true `/RV`-preserving CLI fill (option 3) still open,
+  unchanged.
+- `tools/commits-filed-baseline.txt` unchanged at **5 lines**: `338076a`,
+  `1f319c0`, `55a0732`, `587e520`, `9141ded`.
+- `pdfce-spec-librarian` dispatch still owed (FDF `/Ff` namespace
+  collision; bit 23 precondition asymmetry) — unchanged.
+- A `troubleshooting-librarian` dispatch is still owed for the
+  Windows-console mojibake finding (`C:\personal_rag\python\`) —
+  unchanged from the seventieth filing.
+- The `SESSION_LOG.md` ordering defect named above — a repair, if the
+  engineer wants one, is still owed.
+
+**For next session:**
+- `check-passes-filed.py` and `check-commits-filed.py` should now go
+  green on `6798e8b`/`e8de47c` — both are cited by hash in this entry
+  and in `ROADMAP.md`, and `Pass 54.1` is claimed and filed together.
+- `Pass 54` family is now closed across core/CLI/GUI (`Pass 54.0` +
+  `Pass 54.1`) — no further remainder tracked under either ID.
+
+**Ledger for this filing.** **New Pass ID minted: `Pass 54.1`**
+(grouping-node deletion GUI). `e8de47c` carries no Pass ID. Pass family
+ceiling moves **54.0 → 54.1**. `docs/FEATURES.md`: row 160 `gui` column
+ticked `[ ]` → `[x]`, addendum added. `docs/ARCHITECTURE.md` §12: **not
+edited**. Standing rules: **`R182` MINTED** — ceiling moves `R181` →
+`R182`, next free `R183`; `R175` CITED, not a formal instance, ceiling
+unaffected. Decision records: unchanged, ceiling **035**, next free
+**036**. Operator-question ceiling unchanged at **(bh)**, next free
+**(bi)**. `tools/commits-filed-baseline.txt`: unchanged at **5 lines**.
+Backup/git working-tree state not independently asserted — this
+librarian has no shell this dispatch (hard rule 8). This is the
+**seventy-first** `SESSION_LOG.md` filing (the seventieth confirmed
+present by direct read before this entry was appended, with the
+misplaced sixty-ninth ledger paragraph noted above rather than moved).

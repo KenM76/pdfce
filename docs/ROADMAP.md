@@ -81,6 +81,240 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★ `6798e8b` FILED — `Pass 54.1` ships: grouping-node deletion reaches the GUI as a "Grouped Fields" roster, one button per group built AS ONE control rather than deduplicated from per-row state, closing the GUI half `Pass 54.0`'s own Backlog entry left owed; `e8de47c` FILED — two self-corrections to `6798e8b`'s own commit message: a UTF-8-BOM fix REVERTED for violating an existing `personal_rag` lesson by name, and an unmeasured `$PSScriptRoot` causal claim RETRACTED after the test that would have proven it was finally run; `R182` MINTED (grep institutional memory before making the change it would have prevented, not only before writing the change up) — baseline debt unchanged at **5** — 2026-08-10 (seventy-first filing)
+
+**Sourcing.** This librarian has Grep/Read but no shell this dispatch (hard
+rule 8) — no `git log`/`git show`, so neither hash is independently
+confirmed against `git`; both are taken from the dispatch and cross-checked
+against the live tree instead. **Independently verified by direct read**:
+`crates/pdfce-gui/src/ui_text.rs:7501-7600` (the `form_group_*` string
+family in full — `form_group_section_heading`/`_intro`/
+`_deletes_caption`/`_delete_button`/`_delete_tooltip`/`_deleted`, and the
+`// ★ EVERY NAME HERE IS form_group_*, DELIBERATELY` header comment);
+`crates/pdfce-gui/src/main.rs:7396-7483` (the `nameable_groups` filter —
+`partial_name.is_some()`, absent rather than disabled when empty, per R124;
+the roster built as one row per group by construction, with the
+`crumb_edited`-vs-destructive-control reasoning recorded inline as a code
+comment, not only in the dispatch's prose; the `descendants_of`-not-
+`field_group_deletion_preview` comment naming the exact `&mut self`-across-
+an-immutable-borrow reason; the childless-node `continue` skip;
+`diag::trace` emitting `form-group-row fqn=... terminals=... widgets=...
+enabled=... rect=...`) and `main.rs:8080-8100` (the commit-time handler:
+`outcome.terminals.iter().chain(outcome.nodes.iter())` purging BOTH
+`form_drafts` and `form_rename_drafts` — the exact consumer `b1d7858`'s
+`nodes: Vec<String>` field was added for, now confirmed to have a real
+caller rather than sitting unread); `tools/gui-drive.ps1:89-111` (the
+`$PSBoundParameters.ContainsKey('Exe')`-guarded recompute in the body, and
+the code comment recording that a minimal reproduction did NOT show the
+general "`$PSScriptRoot` unavailable in `param()` defaults" failure,
+narrowing the claim to this script's own invocation rather than stating it
+as a fact about PowerShell 5.1 generally); a `Grep` for `[^\x00-\x7F]`
+across all four `tools/*.ps1` files, returning **zero matches** (independent
+confirmation of "0 non-ASCII" — command and result on file, not relayed);
+`C:\personal_rag\claude_code\lesson_20260506_powershell_ps1_ascii_only.md`
+in full, including its own 2026-08-10 "UPDATE" section (already carrying
+the "grep the RAG BEFORE fixing, not before documenting" sentence,
+verbatim, and the two new glyphs `§`/`›`/`★`) — **already written by the
+engineer this session**, confirmed present rather than duplicated by this
+librarian, and confirmed indexed in `C:\personal_rag\claude_code\index.md`.
+**Not independently verified this dispatch**: the CLI-transcript-style GUI
+trace block quoted in the dispatch (`panel:forms -> form-group-row ...`),
+the "10 traces each" harness-verification claim under both hosts, and the
+Python-side `check-commits-filed.py` mojibake-fix cross-reference (already
+filed, seventieth entry — not re-checked here).
+
+**Part 1 — `6798e8b`: `Pass 54.1` — the GUI half of grouping-node
+deletion, built to `pdfce-ui-specialist`'s design from the seventieth
+filing's Backlog entry, not re-derived.** Core (`Pass 54.0`, `649017c`)
+and CLI (`Pass 54.0`, same commit) shipped 2026-08-10; this closes the
+third surface, so the capability is now `[x]`/`[x]`/`[x]` across the
+board — see `docs/FEATURES.md` row 160, below.
+
+**One button per group, built as one control, not deduplicated from
+per-row state.** The engineer's own first instinct was the rename
+breadcrumb's `crumb_edited` pattern (first row this frame wins) —
+correct for the rename editor, where every crumb for one ancestor opens
+the SAME shared draft, and wrong here, because a group with three
+terminal descendants would put three visually identical "Delete
+Personal" buttons on screen and let frame draw order decide which one
+is real. The fix the specialist gave is structural rather than a dedup
+patch: a new **Grouped Fields** roster section lists each nameable
+grouping node exactly once, so there is one button by construction.
+**Absent, not disabled, when the form has no grouping node with a name
+of its own** (R124) — the common case for most real forms, which is why
+this section is easy to miss existed at all until a form actually needs
+it.
+
+**Affected fields listed always, never behind a tooltip.** A group's
+terminal descendants are by definition fields the operator did not
+individually navigate to before reaching for the delete button — the
+`form_group_deletes_caption` line is on screen unconditionally, not
+gated on hover, because the one fact that makes the click safe should
+not require a gesture to reveal.
+
+**No confirm step, on `forms_flatten_button`'s own precedent.** That
+control already ships confirm-free while operating on 100% of a form's
+fields (decision 024 §4.4); a control that deletes a SUBSET of a form's
+fields cannot carry more friction than one that deletes all of them
+without contradicting that precedent. Decision 024 §4.4's "fully visible
++ one-undo-reversible" exemption from rule 4's disclosure requirement is
+satisfied because the always-on caption **is** the visibility — the
+answer to "not fully visible" is to make it visible, not to add a click.
+
+**A cache-invalidation bug this Pass exists specifically to close.**
+`b1d7858` (seventieth filing) added `FieldGroupDeletion.nodes:
+Vec<String>` because `pdfce-ui-specialist`, reviewing this still-unbuilt
+panel, found that an open rename draft or cached selection keyed on an
+INTERMEDIATE grouping node's FQN would survive a deletion that purged
+only terminals, and resurface stale if a later add reused the freed
+name. Verified above by direct read: `main.rs:8084` purges both
+`form_drafts` and `form_rename_drafts` for every name in
+`outcome.terminals.iter().chain(outcome.nodes.iter())` — the `nodes`
+field now has the caller it was added for, one filing later, rather than
+sitting shipped-but-unread the way `EditSession::move_subpath` did
+between Pass 28.0 and Pass 36.0 (the incident R151 is named for).
+
+**Verified in the running application (R86), driven not read** (per the
+dispatch; the trace SHAPE is consistent with the `diag::trace` call site
+confirmed above, though this librarian did not independently re-run the
+harness):
+```
+panel:forms -> form-group-row fqn="Personal.Address" terminals=2 widgets=2
+               form-group-row fqn="Personal"         terminals=3 widgets=3
+click       -> edit-note "Deleted the group Personal › Address and the 2 fields under it."
+               form-group-row fqn="Personal" terminals=1 widgets=1
+```
+Two rows for three fields on a nested form — the "one button per group"
+property is ABSENT the repetition problem, not merely mitigated by
+dedup. `Personal.Name` (the sibling terminal, not under `Address`)
+survives, and the panel correctly reports no further released names
+beyond the two it names.
+
+**`docs/FEATURES.md` row 160's `gui` column ticks to `[x]` in this
+filing** — see below. **The Backlog entry this Pass closes is amended in
+place, not deleted**, per hard rule 1 — see below.
+
+**Part 2 — `e8de47c`: two self-corrections to `6798e8b`'s own commit
+message, filed carefully because the finding is more valuable than the
+fix.**
+
+**★ A fix applied against a RAG rule this project already had, caught
+only by grepping before writing up rather than before writing the fix.**
+`6798e8b` originally fixed the harness's PS 5.1 parse failure (all four
+`tools/*.ps1` were UTF-8 without BOM, 12-24 non-ASCII characters each —
+em-dashes, arrows, section signs, stars — and `powershell -File` cannot
+parse them) by adding UTF-8 BOMs to all four files. That works, and it
+is the option `C:\personal_rag\claude_code\lesson_20260506_powershell_ps1_ascii_only.md`
+explicitly rules against, by name, in its own "Encoding" section: *"a
+BOM... changes the file shape and can confuse downstream tools...
+pure-ASCII is the cleaner default."* That lesson had already been
+reinforced once at scale (36 em-dashes purged across six SWRecovery
+files, 2026-06-07). The engineer found the conflict only because they
+grepped `C:\personal_rag\` before writing what they assumed would be a
+NEW lesson, and found this one already saying so. **Reverted to pure
+ASCII in this same commit** — verified above, zero non-ASCII across all
+four files. **The transferable form, and the reason `R182` is minted
+rather than merely noted**: the check ran at the WRONG TIME. Checking
+before documenting still catches the conflict — it did, here — but only
+after the wrong change is already committed; checking before FIXING
+would have caught it before the BOM ever existed on disk. See *Standing
+rules*, below.
+
+**★ A causal claim in `6798e8b`'s own message, disproved by the
+engineer's own later probe and corrected rather than left standing.**
+That message asserted `$PSScriptRoot` "comes back empty in the
+`param()` defaults" under PowerShell 5.1, stated as a general fact about
+the host. A minimal reproduction — `param([string]$P =
+"$PSScriptRoot\x")` — does **not** reproduce the failure under either
+host, so the general claim is false. What IS true and reproducible,
+confirmed above by direct read of `tools/gui-drive.ps1:89-111`: in THIS
+script specifically, `$Exe`'s `param()` default resolved without its
+`$PSScriptRoot` prefix under `powershell -File`; passing `-Exe`
+explicitly worked. **Cause left unidentified rather than guessed at
+twice** — the code comment records the negative result of the
+reproduction attempt instead of restating the disproved explanation, and
+the fix recomputes `$Exe` in the script BODY (where `$PSScriptRoot` is
+confirmed to work under both hosts) guarded on
+`$PSBoundParameters.ContainsKey('Exe')`, so the fix does not depend on
+the retracted claim being true. **Same shape as `R175`** — a claim about
+the state of the world (here, a specific host's parameter-binding
+behavior) asserted without the measurement that would have proven or
+disproved it, then corrected once the measurement was actually taken —
+though this instance sits in a commit message rather than one of the
+project's own tracked documents, so it is cited as a close relative
+rather than filed as a formal instance of `R175` itself.
+
+**Harness now verified working under BOTH hosts** (per the dispatch, not
+independently re-run this session): 10 diagnostic traces each under
+`powershell` (5.1) and `pwsh` (7). **The `§`/`›`/`★` glyphs predate this
+session** — the harness has been un-runnable under Windows PowerShell 5.1
+for as long as those comments existed, and nobody hit it because this
+project is driven from Git Bash, where `pwsh` is what gets typed first.
+
+**`personal_rag` work already done by the engineer this session, verified
+present rather than duplicated**: the recurrence appended to
+`lesson_20260506_powershell_ps1_ascii_only.md` (2026-08-10 UPDATE
+section, third recurrence in a third project); the two new glyphs added
+to the substitution-map table (`§` flagged as sneakiest — a single byte
+in Windows-1252, so it looks safe, and two bytes as UTF-8 that 5.1
+misreads); the Python-side twin recorded in the same lesson (mojibake
+breaks the PARSER in `.ps1`, only the DISPLAY in Python, so the two
+languages need different fixes — ASCII content vs. a
+`sys.stdout.reconfigure` stream fix); both `personal_rag` indexes
+updated. **Outside this librarian's remit to write** (`personal_rag/claude_code`
+belongs to `troubleshooting-librarian`) — noted here only to confirm the
+dispatch's claim against source, per this librarian's own sourcing
+discipline, not to re-file it.
+
+**`R182` MINTED** — see *Standing rules*, below.
+
+**A reconciliation, not a contradiction, with the sixty-ninth filing's
+stated intent.** That filing (`649017c`'s own ledger) said the GUI would
+be "tracked as `Pass 54.0`'s own remainder rather than a new sub-ID,
+since no core surface changed to earn one." Between that filing and this
+one, `b1d7858` (seventieth filing) DID change the core surface
+(`FieldGroupDeletion.nodes: Vec<String>`) — precisely the condition the
+sixty-ninth filing's own "since" clause named as the thing that would
+earn a new sub-ID. `Pass 54.1` is minted for the GUI slice on that
+basis: consistent with the earlier statement's own stated condition,
+not an override of it. Checked before minting, per `R156`: `Pass 54.1`
+does not collide with any prior filing (grepped this session, zero
+prior hits in `ROADMAP.md`, `SESSION_LOG.md`, or `docs/FEATURES.md`).
+
+**Ledger for this filing.** **New Pass ID minted: `Pass 54.1`**
+(grouping-node deletion GUI, closing the `Pass 54.0` family's owed
+remainder across core/CLI/GUI). `e8de47c` carries no Pass ID (a
+self-correction commit; both defects it fixes belong to `6798e8b`'s own
+still-open `Pass 54.1`). Pass family ceiling moves **54.0 → 54.1**.
+`docs/FEATURES.md`: row 160 `gui` column ticked `[ ]` → `[x]`; row's own
+prose addendum records the `outcome.nodes`-purges-both-drafts detail.
+`docs/ARCHITECTURE.md` §12: **not edited** — neither commit redraws a
+crate boundary, picks a library, or defines/refines an invariant (the
+`&mut self`/immutable-borrow note was already recorded there at
+`b1d7858`'s filing). Standing rules: **`R182` MINTED** (see below) —
+ceiling moves `R181` → `R182`, next free `R183`; `R175` CITED as a close
+relative (commit-message causal claim, not a tracked-document
+environmental claim), not a formal instance, ceiling unaffected.
+Decision records: unchanged, ceiling **035**, next free **036**.
+Operator-question ceiling unchanged at **(bh)** (closed ACCEPT), next
+free **(bi)**. `tools/commits-filed-baseline.txt`: unchanged at **5
+lines** — confirmed by direct read; neither `6798e8b` nor `e8de47c` was
+ever a baseline line. Backup/git working-tree state not independently
+asserted — this librarian has no shell this dispatch (hard rule 8).
+**A structural finding in `SESSION_LOG.md`, flagged rather than
+repaired**: the sixty-ninth filing's own "Ledger for this filing"
+paragraph is physically misplaced — it appears AFTER the seventieth
+filing's header and ledger rather than before it, inside what should
+have been the sixty-ninth entry's own section. Content is unchanged and
+nothing is factually wrong; the ORDER is. Not moved in this filing —
+moving text is closer to rewriting history than appending a dated
+correction is, and the append-only discipline this project holds for
+`SESSION_LOG.md` argues for flagging over silent reordering. Left for
+the engineer's judgment on whether a moved-not-altered correction is
+warranted. This is the **seventy-first** `SESSION_LOG.md` filing (the
+seventieth confirmed present by direct read before this entry was
+appended).
+
 ### ★ `eac0853` FILED — the `R179` audit finishes by MECHANISM (a 17-site scan, not the sixty-seventh filing's 11-site manual count) and ships as an enforcing gate, `tools/check-one-commit-per-command.py`; a Windows-console encoding defect that had been degrading FIVE Python gates' own failure text is found by reading a gate's output as its audience and fixed uniformly; `b1d7858` FILED — `Pass 54.0` gains the grouping-node NAMES a deletion frees (`FieldGroupDeletion.nodes: Vec<String>`), closing a shell-side cache-invalidation gap `pdfce-ui-specialist` found while designing the still-unbuilt GUI, and a `&mut self`/immutable-borrow bug is avoided before it was written; `R174` gains an AMENDMENT naming gate/tool output as a covered audience, not only product-facing disclosure — baseline debt unchanged at **5** — 2026-08-10 (seventieth filing)
 
 **Sourcing.** This librarian has Grep/Read but no shell this dispatch (hard
@@ -33866,6 +34100,25 @@ nothing gets forgotten, not as a commitment to build in this order.
   string for this feature is `form_group_*`-prefixed, not bare "group".
   Full record: `ROADMAP.md`'s `eac0853`/`b1d7858` *Shipped* entry
   (seventieth filing), Part 2.]**
+  **[★★★ GUI SHIPPED 2026-08-10, `Pass 54.1` (`6798e8b`) — grouping-node
+  deletion is now `[x]`/`[x]`/`[x]` across core/CLI/GUI. Built exactly to
+  the design recorded above: a "Grouped Fields" roster, absent (not
+  disabled) when the form has no nameable grouping node (R124); one row
+  per group, built as ONE control rather than deduplicated from per-row
+  state — the `crumb_edited` pattern was explicitly not reused, because a
+  destructive control cannot be allowed to have its click target decided
+  by frame draw order; affected fields listed always, not behind a
+  tooltip; no confirm step, on `forms_flatten_button`'s precedent
+  (decision 024 §4.4). The cache-invalidation gap `b1d7858` closed
+  (`FieldGroupDeletion.nodes`) now has its caller: the commit handler
+  purges both `form_drafts` and `form_rename_drafts` for every name in
+  `outcome.terminals.iter().chain(outcome.nodes.iter())`. `e8de47c`,
+  filed alongside, is a pair of self-corrections to `6798e8b`'s own
+  commit message (a reverted BOM fix; a retracted unmeasured
+  `$PSScriptRoot` claim) and is unrelated to this capability's own scope
+  — see `R182` in *Standing rules*. Full record: `ROADMAP.md`'s
+  `6798e8b`/`e8de47c` *Shipped* entry (seventy-first filing), top of
+  *Shipped*.]**
 - **★ NEW R169 register entry, named but not built — sub-pixel
   stroke-width clamp policy** (owed by the render fix filed 2026-08-09
   under *Shipped*, `9abf5b5` — "sub-pixel strokes stop rendering at 9%
@@ -44646,6 +44899,40 @@ and
   content, judged generalizable the same way `R179` was):
   `D:\dev\rag\rust\a_disclosure_count_must_use_the_same_predicate_as_the_write_it_describes.md`.
   **Ceiling moves `R180` → `R181`; next free `R182`.**
+
+- **R182 — Grep the relevant institutional memory (a `personal_rag`
+  lesson, a cross-project RAG file, a standing rule) BEFORE making the
+  change it would have prevented, not only before writing up the change
+  already made (2026-08-10, `e8de47c`; librarian-minted, from
+  `C:\personal_rag\claude_code\lesson_20260506_powershell_ps1_ascii_only.md`'s
+  own 2026-08-10 update).** `6798e8b` fixed the GUI harness's PowerShell
+  5.1 parse failure by adding UTF-8 BOMs to all four `tools/*.ps1`
+  scripts — a working fix, and the exact one an existing lesson already
+  ruled against by name: *"a BOM... changes the file shape and can
+  confuse downstream tools... pure-ASCII is the cleaner default,"*
+  reinforced once already at project scale (36 em-dashes across six
+  files, 2026-06-07). The conflict was found only because the engineer
+  grepped `C:\personal_rag\` before writing what they assumed would be a
+  NEW lesson, and found this one already saying so — the project's own
+  standing habit of "check the RAG before documenting a finding" is what
+  caught it. **The gap this rule names is narrower than "check the RAG"
+  in general** (which this project and the user's global instructions
+  already require, and did fire here): checking before DOCUMENTING a fix
+  still catches a conflict, as it did here, but only AFTER the wrong
+  artifact is already in the commit history; checking before WRITING the
+  fix would have caught it before the BOM ever existed on disk. Both
+  habits feel like "did the diligence," and only one of them is cheap to
+  get wrong. **Practical form: grep the relevant RAG/lesson tree for the
+  SYMPTOM before writing the FIX, not only before writing up the fix
+  afterward.** For this project specifically: a `.ps1` parse failure
+  greps `C:\personal_rag\claude_code\`; a Rust/Cargo/toolchain surprise
+  greps `D:\dev\rag\rust\`; an egui/eframe surprise greps
+  `D:\dev\rag\egui\`; a PDF-producer-behavior surprise greps
+  `C:\personal_rag\pdf\` — before the fix is written, not after. Reverted
+  to the lesson's own prescribed fix (pure ASCII, verified 0 non-ASCII
+  across all four files) in the very next commit, same session. Full
+  record: `ROADMAP.md`'s `6798e8b`/`e8de47c` *Shipped* entry (seventy-first
+  filing), Part 2. **Ceiling moves `R181` → `R182`; next free `R183`.**
 
 ## Update protocol
 

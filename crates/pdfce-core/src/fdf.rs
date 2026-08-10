@@ -507,13 +507,50 @@ fn xml_escape_attr(s: &str) -> String {
 // A tiny scoped XML reader — the XFDF subset only (no XML dependency, rule 13)
 // ---------------------------------------------------------------------------
 
+/// One item of an element's content, in document order.
+///
+/// # Why this exists alongside `text` and `children`
+///
+/// XFDF only ever needs a `<value>`'s character data, so [`XmlElement`]
+/// originally kept text and child elements in two separate buckets and said
+/// so: *"Mixed content (text interleaved with children) is flattened."*
+///
+/// **Rich text (§12.7.3.4) cannot use a flattened model.** In
+/// `<p>Hello <b>bold</b> world</p>` the position of `<b>` relative to the
+/// surrounding character data IS the content — flattened, `text` is
+/// `"Hello  world"` and nothing records where the bold run belonged. Any
+/// renderer built on that emits the words in the wrong order.
+///
+/// So order is recorded here, **additively**: `text` and `children` keep
+/// their exact previous meaning and every existing consumer is untouched.
+/// The alternative was a second XML parser for rich text, which project
+/// rule 2 warns against directly — two parsers of one grammar drift, and
+/// this one is the one with a fuzz target.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum XmlNode {
+    /// A run of character data (entity-decoded), exactly as it appeared.
+    ///
+    /// **Not** whitespace-trimmed: in rich text the space in
+    /// `</b> world` is content, and trimming it joins two words.
+    Text(String),
+    /// A child element, by its index in [`XmlElement::children`].
+    ///
+    /// An index rather than a nested `XmlElement` so the child is stored
+    /// once. Stable because children are only ever appended during a parse
+    /// and never reordered or removed.
+    Child(usize),
+}
+
 /// One parsed XML element: tag name, attributes, child elements, and the
 /// concatenated text of its direct text nodes.
 ///
 /// Deliberately minimal — enough for XFDF's `xfdf`/`fields`/`field`/`value`
-/// shape and nothing more. Mixed content (text interleaved with children) is
-/// flattened: `text` is the run of character data directly inside this
-/// element, which for a `<value>` is exactly the field value.
+/// shape and for the §12.7.3.4 rich-text grammar, and nothing more.
+///
+/// `text` is the concatenated run of character data directly inside this
+/// element, which for a `<value>` is exactly the field value. It discards
+/// the position of that text relative to child elements; [`Self::nodes`]
+/// preserves it for callers that need mixed content.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct XmlElement {
     /// The element's tag name (namespace prefix, if any, kept verbatim).
@@ -522,8 +559,11 @@ pub struct XmlElement {
     pub attributes: Vec<(String, String)>,
     /// Child elements, in document order.
     pub children: Vec<XmlElement>,
-    /// The element's direct character data (entity-decoded).
+    /// The element's direct character data (entity-decoded), concatenated.
     pub text: String,
+    /// This element's content in document order — text runs and child
+    /// references interleaved. See [`XmlNode`] for why.
+    pub nodes: Vec<XmlNode>,
 }
 
 impl XmlElement {
@@ -706,13 +746,23 @@ impl XmlParser<'_> {
                         self.skip_until("-->")?;
                     } else {
                         let child = self.parse_element(depth + 1)?;
+                        // Order recorded BEFORE the push, so the index is
+                        // the position this child is about to occupy.
+                        el.nodes.push(XmlNode::Child(el.children.len()));
                         el.children.push(child);
                     }
                 }
                 Some(_) => {
                     // Character data up to the next '<'.
                     let text = self.parse_char_data();
-                    el.text.push_str(&decode_entities(&text));
+                    let decoded = decode_entities(&text);
+                    // `text` stays concatenated for XFDF's leaf values;
+                    // `nodes` keeps this run separate and in place, because
+                    // rich text needs to know it sat between two elements.
+                    // Kept verbatim — trimming would weld `</b>` to the word
+                    // after it.
+                    el.nodes.push(XmlNode::Text(decoded.clone()));
+                    el.text.push_str(&decoded);
                 }
             }
         }
@@ -858,6 +908,53 @@ fn parse_char_ref(body: &str) -> Option<char> {
 )]
 mod tests {
     use super::*;
+
+    /// Mixed content keeps its order, and the text runs keep their spaces.
+    ///
+    /// This is the property rich text (§12.7.3.4) needs and XFDF never did.
+    /// `text` alone says `"Hello  world"` — two words and a gap where the
+    /// bold run belonged, which is unrenderable. The assertion on the
+    /// LEADING and TRAILING spaces is the part that matters most: trim the
+    /// text runs and `</b>` welds to the next word.
+    #[test]
+    fn mixed_content_records_order_and_keeps_its_spaces() {
+        let root = parse_xml_document("<p>Hello <b>bold</b> world</p>").expect("parses");
+
+        // The flattened view, unchanged — every existing caller sees this.
+        assert_eq!(root.text, "Hello  world");
+        assert_eq!(root.children.len(), 1);
+        assert_eq!(root.children[0].name, "b");
+
+        // The ordered view, which is the point.
+        assert_eq!(
+            root.nodes,
+            vec![
+                XmlNode::Text("Hello ".to_owned()),
+                XmlNode::Child(0),
+                XmlNode::Text(" world".to_owned()),
+            ]
+        );
+    }
+
+    /// Two children resolve to two DIFFERENT indices, in document order.
+    ///
+    /// A single-child case cannot distinguish "the index of this child"
+    /// from a hard-coded `0`, which is exactly how an off-by-one in the
+    /// order/push sequence would survive the test above.
+    #[test]
+    fn each_child_reference_indexes_its_own_element() {
+        let root = parse_xml_document("<p><b>one</b>mid<i>two</i></p>").expect("parses");
+        assert_eq!(
+            root.nodes,
+            vec![
+                XmlNode::Child(0),
+                XmlNode::Text("mid".to_owned()),
+                XmlNode::Child(1),
+            ]
+        );
+        assert_eq!(root.children[0].name, "b");
+        assert_eq!(root.children[1].name, "i");
+    }
 
     fn form(fields: &[(&str, &[&str])]) -> FormData {
         FormData {
