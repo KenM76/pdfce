@@ -63,6 +63,19 @@ import re
 import sys
 from pathlib import Path
 
+# Windows consoles default to a code page that cannot encode the em-dashes,
+# arrows and stars this file prints, so Python substitutes "?" for exactly
+# the characters that make a failure message readable. One reconfigure fixes
+# every message in the file without flattening the typography.
+#
+# This is not theoretical: `check-commits-filed.py` was observed printing
+# "each commit's full message ? they carry" while doing its job correctly.
+# Found by reading a gate's output as its audience (R174), not by reading
+# its source.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+
 ROOT = Path(__file__).resolve().parent.parent
 SETTINGS = ROOT / "crates" / "pdfce-core" / "src" / "settings" / "mod.rs"
 
