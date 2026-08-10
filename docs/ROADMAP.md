@@ -81,6 +81,183 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★ `462d468` is cited by hash for a discharge already filed; `17131b6` (the GUI harness refuses to drive a stale binary) and `0febeb6` (a dock-pane layout defect no trace could see) are FILED; `R177` MINTED — baseline debt **8 → 6** — 2026-08-10, tip of `pass-8-redaction` (sixty-third filing)
+
+**Sourcing.** This librarian has no shell this dispatch (hard rule 8).
+The technical content of all three commits is the engineer's own
+account, relayed verbatim from the commit messages supplied in the
+dispatch. Independently checked, by direct read rather than trust: the
+baseline-file line count before this filing (**8** — `338076a`,
+`17131b6`, `1f319c0`, `b8f96b1`, `55a0732`, `587e520`, `0febeb6`,
+`9141ded`) and after (**6** — `17131b6` and `0febeb6` removed by this
+filing, per `tools/commits-filed-baseline.txt`'s own stated workflow:
+"removing a line, once that commit is filed, is the intended workflow").
+
+**Part 1 — `462d468` cited by hash; no new substance filed.** Flagged by
+`check-commits-filed.py` because it touches `tools/` (specifically,
+`tools/commits-filed-baseline.txt` itself), which the gate counts as
+code. **This is the gate working correctly, not a defect**, and worth
+one line saying so: a future reader who sees the very commit that
+repays this project's own debt list flagged BY that debt list's gate
+could otherwise read it as circular or wrong. `462d468` **is** the edit
+that removed `ae59ce3` from the baseline file (11 → 10 lines) — its
+commit message narrates the identical reasoning this document's
+`2b41b77` Shipped entry (immediately below) already recorded in full at
+Part 2 (the 63-citation confirmation: 32 in `ROADMAP.md`, 31 in
+`SESSION_LOG.md`, against 1-each false-positive citations for the two
+commits filed alongside it) and the same proof-not-assertion check (the
+gate stopped flagging `ae59ce3` and flagged `2b41b77` instead, ten
+minutes later). That substance was filed at the sixty-second filing;
+what had not yet been filed was the **hash itself**. This entry closes
+that gap by citation, not by re-narrating content already on record.
+
+**Part 2 — `17131b6` FILED (2026-08-07, `tools:` — `gui-drive.ps1`
+refuses to drive a binary older than the code it is meant to be
+testing).** The harness checked that `target\release\<binary>` EXISTS
+and never that it was BUILT AFTER the source it was about to exercise
+against — it defaults to a release binary while `cargo test` (and most
+edit-then-check loops) build debug, so a developer who had been editing
+and testing, then reached for the harness, was silently measuring a
+binary that predated everything they had just written. **The failure
+mode is the worst kind available to a testing tool**: the traces a
+change should produce are simply ABSENT, which reads as "the feature
+does not work" rather than "the feature was never compiled into what
+just ran." Not hypothetical — on 2026-08-07 an agent building the
+field-deletion panel got zero form-delete traces from a binary that had
+never seen the code, and nearly concluded the controls did not render
+at all.
+
+**Framed by the engineer against R163** (prefer a compile-error-shaped
+mechanical gate over a rule that asks a human to remember) — "rebuild
+release before driving the GUI" is exactly R163's shape, so it was
+carried here as owed tooling rather than left as a rule nobody would
+remember. **Refuses by default**, naming both the binary's and the
+source's timestamps and the specific offending file, with an
+`-AllowStaleBinary` escape hatch that downgrades the refusal to a
+warning for a developer who genuinely means to drive an older build.
+**Proven to actually FIRE, not merely assumed to** — per R162, a copy of
+the binary was deliberately backdated thirty days and the refusal
+observed before shipping; the escape hatch was separately observed to
+warn-and-proceed rather than silently doing nothing. The two code paths
+also print **different verbs** — the pre-fix version said "refusing to
+run" on both branches, including the one where it runs anyway, which is
+precisely the self-contradicting-instrument shape this gate exists to
+prevent elsewhere.
+
+**Live relevance, worth recording rather than treating as inert
+history:** this gate fired ahead of every `gui-drive` run this session
+that followed a source edit, silently earning its keep for three days
+before its hash reached this ledger.
+
+**Part 3 — `0febeb6` FILED (2026-08-07, `fix:` — the Dimension Groups
+new-group row fitted a 520 px floating window, not the ~370 pt Properties
+dock pane it actually lives in since `Pass 34.2`); standing rule `R177`
+MINTED.** `Pass 34.2` moved the "Dimension Groups" surface out of a
+floating `egui::Window` (`default_width(520.0)`) into the Properties
+dock pane. The new-group row — a label, a text field, a unit dropdown
+and a "+ New Group" button in one `ui.horizontal` — overflowed the
+narrower pane: the dropdown clipped at the pane edge and **the create
+button was pushed off the pane entirely.** An operator could type a
+group name and then have no control on screen that would create it —
+the one thing the section exists to do.
+
+Fixed by splitting into two stacked rows (name alone on its own line;
+unit + button below), and the button is now **disabled** while the name
+field is empty rather than accepting the click and silently dropping it
+on an `!trim().is_empty()` guard — from the operator's side, a guard
+behind an enabled button is a control that does nothing and says
+nothing, the exact shape rule 4 exists to forbid for anything the
+operator directly acted on.
+
+**How this was caught is the more important half of the finding.** The
+headless trace was fully green throughout: `show-pane-subject
+Properties`, `dim-props-draw sel=Some(DimensionId(0))`, `dim-props id=0
+circular=true group="Default"` — the pane drew, the section was reached,
+the controls were constructed, and a driven click on the traced
+Diameter rect flipped the value. **Every one of those assertions is true
+of a widget that is clipped off the edge of its parent** — a driven
+synthetic click that lands on a control proves the OPPOSITE of a
+clipping bug, because it proves the harness's pointer can reach a
+rectangle a human pointer, bounded by the pane's real screen edge,
+cannot. This layout defect had exactly one working oracle, and it was a
+picture — it only became available to catch because `gui-shot.ps1`'s
+window-raise fix had landed the same session; before that fix the
+capture returned a screenshot of SolidWorks, and this would have
+shipped invisibly. Re-verified by a second capture, not by re-running
+the trace script, which had been green through the entire defect: name
+field full width, unit dropdown and button both inside the pane, button
+correctly greyed with no name typed. Gates otherwise unchanged: 1960
+tests, `cargo fmt --check` clean, `clippy --workspace --all-targets -D
+warnings` clean, `check-ui-strings.sh` clean.
+
+**`R177` MINTED** (Standing rules, below), from this finding plus its
+live recurrence: on 2026-08-09 the engineer aimed a `gui-shot` click
+from screenshot pixels at a field-rename row and hit **Delete** instead
+of the intended **Rename**, because `gui-shot.ps1` and `gui-drive.ps1`
+default to different window sizes and Delete/Rename sit side by side,
+right-anchored — exactly the failure mode
+`D:\dev\rag\egui\two_gui_harnesses_with_different_default_window_sizes_make_coordinates_non_transferable.md`
+already predicted, now confirmed against a real, destructive control
+rather than a harmless miss. **The two facts are one incident's two
+halves**, per the engineer's own framing, and are recorded together
+rather than as separate rules: a layout defect's only oracle is a
+picture, and that picture's coordinates are valid in exactly the harness
+that produced them, never in a sibling harness with a different default
+viewport. Both RAG findings written this filing:
+`D:\dev\rag\egui\headless_trace_asserts_reached_not_visible_a_clipped_widget_needs_a_pixel_oracle.md`
+(new file, this filing) and an **AMENDMENT** to the existing
+`two_gui_harnesses_...md` (2026-08-09 recurrence recorded, same filing).
+
+**On amending R86 instead of minting a new number (the engineer's own
+question, decided here): R177 is a new number, not an R86 amendment.**
+R86 asks "was this behavior observed working in the running
+application" — a PASS-level gate about whether shipping happened
+responsibly. R177 answers a narrower, prior question that R86's own
+text does not reach: **which class of check is even CAPABLE of
+observing a given defect.** A green headless trace can satisfy every
+letter of R86's "observed working" bar while a control sits off-screen,
+because R86 does not distinguish "the code path ran" from "a human
+pointer could reach the resulting rectangle" — R177 names that gap
+directly, the way R174 named a gap R86 also could not reach (a string
+firing correctly is not the same claim as a string being informative).
+Same family as R174/R175/R176 (confident assertion, unverified against
+the right instrument), same reason kept separate: merging them into R86
+would lose which check discharges which claim.
+
+**Numbers.** Baseline debt: **8 lines → 6 lines**, both removals
+(`17131b6`, `0febeb6`) made in this same filing. `462d468` citation
+count before this filing: **0** by hash (its substance was filed under
+`ae59ce3`'s and `2b41b77`'s own entries, never under its own hash) — the
+gate's flag was correct on that narrow technical point even though the
+work itself was not owed.
+
+**Invariant checks.** No code changed by this filing itself (a librarian
+dispatch, not an engineering one). `0febeb6`'s own invariant checks —
+GUI-core separation, round-trip/minimal-diff, packaging — are relayed as
+unaffected (pure `pdfce-gui` layout change, no object-write path
+touched); `17131b6` is test/tooling infrastructure with no product-code
+surface. Neither independently re-verified.
+
+**Ledger for this filing.** No new Pass ID (`462d468` is a citation of
+already-filed work; `17131b6` and `0febeb6` are tooling/bugfix entries
+with no Pass ID, per this ledger's established convention for that
+class). `docs/FEATURES.md`: **not edited** — the *ce-dimension groups*
+row (line 133) was already `[x]`/`[x]`/`[x]` before this filing, and
+`0febeb6` is a layout bugfix to an existing capability, not a new one;
+substantiating a tick that was already there needs no addendum.
+`docs/ARCHITECTURE.md` §12: **not edited** — neither commit redraws a
+crate boundary, picks a library, or defines/refines an invariant; the
+layout-oracle finding is a testing-methodology rule, which is exactly
+what `R177` (a standing rule, not a decision record) is for. Standing
+rules: **`R177` MINTED** (see below) — ceiling moves `R176` → `R177`,
+next free `R178`. Decision records: no new number claimed; ceiling stays
+**035**, next free **036**. Operator-question ceiling unchanged at
+**(bh)**, next free **(bi)**. Backup/git working-tree state not
+independently asserted — this librarian has no shell this dispatch (hard
+rule 8).
+
+---
+
 ### ★ `2b41b77` closes `Pass 53.0`'s entire polish list; `ae59ce3`'s baseline-debt discharge is CONFIRMED at 63 citations; `24b392c` + `b0b387b` are FILED, and a stale "review is owed" comment is corrected against a record showing the review already happened — 2026-08-10, tip of `pass-8-redaction` (sixty-second filing)
 
 **Sourcing.** This librarian has no shell this dispatch (hard rule 8). The
@@ -42578,6 +42755,52 @@ and
   that a workflow file exists — before treating "tests pass" as true of
   every platform the matrix claims to cover. **Ceiling moves `R175` →
   `R176`; next free `R177`.**
+
+- **R177 — A green headless trace proves a control was CONSTRUCTED and
+  RUN, never that it is VISIBLE inside its parent's on-screen bounds;
+  layout/overflow/clipping defects have exactly one working oracle, a
+  rendered screenshot, and that oracle's coordinates are valid only in
+  the harness that produced them (2026-08-07, `0febeb6`; librarian-
+  minted, recurrence confirmed 2026-08-09).** `Pass 34.2`'s Dimension
+  Groups new-group row was moved from a 520 px floating `egui::Window`
+  into a ~370 pt Properties dock pane and overflowed it — the dropdown
+  clipped and the "+ New Group" button was pushed off the pane entirely,
+  leaving no on-screen way to commit a typed group name. Every headless
+  assertion available (`show-pane-subject Properties`, `dim-props-draw`,
+  `dim-props id=…`) stayed green throughout: the pane drew, the section
+  was reached, the controls were constructed, and a driven click on a
+  traced rect worked. **Every one of those assertions is true of a
+  widget that is clipped off the edge of its parent** — a synthetic
+  click landing on a control proves the OPPOSITE of a clipping bug,
+  because it proves the harness's pointer reaches a rectangle a bounded
+  human pointer cannot. **Distinct from R86** (asks whether a behavior
+  was observed working at all) **and from R174** (asks whether a
+  disclosure string is informative to its reader) — R177 answers a
+  question neither reaches: which CLASS of check is even capable of
+  observing a given defect. A trace-based harness answers "did this run"
+  and is structurally the wrong instrument for "is this where an
+  operator would see it"; only a pixel capture, at the control's real
+  container width, can. **Confirmed to recur, and worse, once the
+  picture becomes the only oracle:** on 2026-08-09 a click aimed from
+  `gui-shot.ps1` screenshot pixels at a field-rename row hit **Delete**
+  instead of the intended **Rename**, because `gui-shot.ps1` and
+  `gui-drive.ps1` default to different window sizes and the two controls
+  sit side by side, right-anchored — the exact failure mode
+  `D:\dev\rag\egui\two_gui_harnesses_with_different_default_window_sizes_make_coordinates_non_transferable.md`
+  already predicted, now against a destructive control rather than a
+  harmless miss. Practical form: (1) any Pass that reshapes a control's
+  *container* (floating window → dock pane, panel resize, ribbon re-flow)
+  needs a screenshot at the new container's real dimensions before it
+  ships, regardless of trace-suite state; (2) a click point read off a
+  screenshot is never handed directly to a different driving harness
+  unless both share a window-size contract — script document coordinates
+  and convert in-app, or refuse a coordinate captured under a different
+  viewport. Full record:
+  `D:\dev\rag\egui\headless_trace_asserts_reached_not_visible_a_clipped_widget_needs_a_pixel_oracle.md`
+  (new file) and the AMENDMENT to
+  `two_gui_harnesses_with_different_default_window_sizes_make_coordinates_non_transferable.md`
+  (2026-08-09 recurrence), both `D:\dev\rag\egui\`. **Ceiling moves
+  `R176` → `R177`; next free `R178`.**
 
 ## Update protocol
 

@@ -29854,3 +29854,113 @@ unchanged at **(bh)**, next free **(bi)**. Backup/git working-tree state
 not independently asserted (hard rule 8). This is the **sixty-second**
 `SESSION_LOG.md` filing (the sixty-first confirmed present by direct read
 before this entry was appended).
+
+## 2026-08-10 (sixty-third filing) — `462d468` cited by hash for a discharge already filed; `17131b6` + `0febeb6` FILED from the baseline debt; `R177` MINTED (a picture is the only oracle for a clipping defect, and its coordinates don't travel to a sibling harness); debt **8 → 6**
+
+**Shipped:**
+- `462d468` (tip of `pass-8-redaction`, no new Pass ID) — flagged by
+  `check-commits-filed.py` for touching `tools/`. Correct behaviour: this
+  IS the commit that removed `ae59ce3` from
+  `tools/commits-filed-baseline.txt`, already narrated in full at the
+  sixty-second filing's `2b41b77` entry (Part 2). Cited by hash here so
+  the gate stops flagging it; no new content filed.
+- `17131b6` (2026-08-07, `tools:`, no Pass ID) — `gui-drive.ps1` now
+  refuses by default to drive a release binary older than the source it
+  is testing (naming both timestamps and the offending file), with an
+  `-AllowStaleBinary` warning-only escape hatch. Root incident: an agent
+  building the field-deletion panel got zero traces from a binary that
+  predated every change it had made, and nearly read "never compiled" as
+  "does not work." Proven to actually fire (R162): a binary backdated
+  thirty days was staged and the refusal observed, then the escape hatch
+  observed to warn-and-proceed. Framed against R163 (prefer a mechanical
+  gate over a rule asking a human to remember). Has been firing silently
+  ahead of every post-edit `gui-drive` run this session for three days
+  before its hash reached this ledger.
+- `0febeb6` (2026-08-07, `fix:`, no Pass ID) — `Pass 34.2`'s Dimension
+  Groups new-group row, migrated from a 520 px floating window into a
+  ~370 pt Properties dock pane, overflowed: the unit dropdown clipped and
+  the "+ New Group" button was pushed off the pane entirely, leaving no
+  way to commit a typed group name. Fixed with two stacked rows and a
+  disabled-not-silently-dropped button. Caught with every headless trace
+  fully green — `show-pane-subject`, `dim-props-draw`, `dim-props id=…`
+  all passed, because a driven synthetic click proves the OPPOSITE of a
+  clipping bug (it reaches a rectangle a bounded human pointer cannot).
+  Re-verified by a second screenshot, not by the trace script.
+
+**Decisions made this session:**
+- **`R177` MINTED, not an R86 amendment (the engineer's own question,
+  answered explicitly).** R86 asks whether a behavior was observed
+  working at all; R177 answers a narrower, prior question R86's text
+  does not reach — which CLASS of check is even capable of observing a
+  given defect. A headless trace answers "did this run," not "is this
+  where an operator would see it"; only a pixel capture at the control's
+  real container width can see clipping/overflow. Same family as
+  R174/R175/R176 (confident assertion, unverified against the right
+  instrument), kept as a separate number for the same reason those were:
+  merging loses which check discharges which claim.
+- **The layout-oracle finding and the harness-coordinate finding are
+  filed as ONE incident's two halves, per the engineer's own framing,
+  not as two unrelated rules.** `0febeb6` establishes a screenshot is the
+  *only* oracle for a clipping defect. A live recurrence on 2026-08-09 —
+  a `gui-shot`-pixel-aimed click hit **Delete** instead of **Rename**
+  because `gui-shot.ps1`/`gui-drive.ps1` default to different window
+  sizes — confirms the predictable next failure: once a layout bug
+  forces the picture, the picture's own coordinates don't transfer to
+  the driving harness. Both recorded under `R177` and cross-referenced
+  in `D:\dev\rag\egui\`.
+- **`docs/FEATURES.md` and `docs/ARCHITECTURE.md` §12 both left
+  unedited, deliberately.** The *ce-dimension groups* row was already
+  fully ticked before `0febeb6` — a layout bugfix to an existing
+  capability substantiates a tick already present, it does not earn a
+  new one. Neither commit redraws a crate boundary, picks a library, or
+  defines/refines an invariant, so §12 has nothing to record; R177 (a
+  standing rule) is the correct home for a testing-methodology finding,
+  not a decision entry.
+
+**Findings + decisions:**
+- Two `D:\dev\rag\egui\` files updated: a new file,
+  `headless_trace_asserts_reached_not_visible_a_clipped_widget_needs_a_pixel_oracle.md`
+  (the `0febeb6` finding, generalised past pdfce — any egui project with
+  a trace-based harness can ship an invisible control the same way), and
+  an AMENDMENT to the existing
+  `two_gui_harnesses_with_different_default_window_sizes_make_coordinates_non_transferable.md`
+  recording the 2026-08-09 Delete/Rename recurrence as that file's own
+  predicted failure mode happening for real, against a destructive
+  control. Both cross-reference each other and `R177`. `D:\dev\rag\egui\
+  index.md` updated with both bullets in the same filing.
+
+**Still in flight:**
+- Baseline debt now **6 lines**: `338076a`, `1f319c0`, `b8f96b1`,
+  `55a0732`, `587e520`, `9141ded` — unread by this librarian beyond
+  their subject lines. `b8f96b1` (disclose: exporting form data silently
+  dropped rich-text formatting) is still flagged by a prior dispatching
+  engineer as operator-visible AND a rule-4 disclosure defect; still
+  should not sit at the bottom of the queue.
+- None of the three durability-ordered fixes for the harness-coordinate
+  mismatch (script document coordinates, share one size constant, refuse
+  a foreign-viewport coordinate) has been built at the tooling level —
+  `R177` records the rule; the mechanical fix is still owed.
+
+**For next session:**
+- Continue working the 6-line baseline debt, `b8f96b1` first per the
+  standing flag above.
+- Consider whether `gui-shot.ps1`/`gui-drive.ps1` should share one
+  window-size constant (fix #2 in the harness-coordinate RAG file) — the
+  cheapest of the three durable fixes and the one most likely to prevent
+  a fourth recurrence before it happens.
+
+**Ledger for this filing.** No new Pass ID. `462d468`/`17131b6`/
+`0febeb6` all filed with no Pass ID (a citation and two tooling/bugfix
+entries, per established convention). Pass family ceiling unchanged at
+**53.1**. `docs/FEATURES.md`: not edited (row already fully ticked).
+`docs/ARCHITECTURE.md` §12: not edited (no crate/library/invariant
+decision here). Standing rules: **`R177` MINTED** — ceiling moves
+**R176 → R177**, next free **R178**. Decision records: no new number
+claimed; ceiling stays **035**, next free **036**. Operator-question
+ceiling unchanged at **(bh)**, next free **(bi)**. Baseline-debt count:
+**8 → 6** lines in `tools/commits-filed-baseline.txt`, independently
+verified by direct read both before and after edit. Backup/git
+working-tree state not independently asserted — this librarian has no
+shell this dispatch (hard rule 8). This is the **sixty-third**
+`SESSION_LOG.md` filing (the sixty-second confirmed present by direct
+read before this entry was appended).
