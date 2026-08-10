@@ -257,3 +257,40 @@ pdfium `LICENSE` + `core/fxge/fontdata/chromefontdata/` listing via
 
 Re-verify URLs each session before fetching (agent hard rule 4). See
 [[pdf-spec-corpus-state]] and [[pdf-spec-embeddable-data-licensing]].
+
+---
+
+## EMPIRICAL VERIFICATION ROUTE — render a synthetic fixture (added 2026-08-10)
+
+For a "does the implementation actually honour clause C?" question, code-reading
+plus grep gives a suspicion; **rendering settles it**, and a spec librarian can do
+it read-only without touching the repo.
+
+1. **A built CLI usually already exists** — `ls -la D:/Dev/pdfce/target/debug/pdfce-cli.exe`
+   (and `target/release/`). Check its mtime against the commit under test. No
+   `cargo build` needed, so no repo mutation and no wait.
+2. **Hand-write the PDF in Python** into the scratchpad — catalog + pages + one
+   page + one content stream + the feature's objects, then a real `xref` table
+   (offsets captured while appending, `%010d 00000 n `, object 0 as
+   `0000000000 65535 f `) and a `trailer`/`startxref`. ~40 lines. Keep the page
+   small (`/MediaBox [0 0 200 200]`) and paint in **black on white** so a single
+   pixel probe is decisive.
+3. **Put a KNOWN-GOOD control in the same file.** The 8.11 test put an image AND
+   a filled rectangle inside the same hidden `/OC` section: the rectangle came out
+   white (suppressed, as claimed) and the image came out black (the defect). One
+   file proves the mechanism works *and* localises where it does not — a fixture
+   with only the failing case cannot distinguish "unimplemented" from "my fixture
+   is malformed".
+4. `pdfce-cli render-page <in> -o <out.png>` — and **read the result line**, not
+   only the raster. It prints the disclosure counters (`oc_hidden=1`,
+   `images=1`), which independently confirm the feature *fired* while the pixels
+   show what it did.
+5. **Probe the PNG with pure Python** (no Pillow dependency): walk the chunks for
+   `IHDR`/`IDAT`, `zlib.decompress`, then un-filter row by row (filter types 0–4,
+   Paeth included) and index `rows[y][x*ch:(x+1)*ch]`. ~20 lines, reusable.
+   Remember **device y is flipped** from user space: user `y=10..60` on a 200-tall
+   page is device row `140..190`.
+
+Also verified this session: `pypdf` is not needed for this route at all — it is a
+*source-extraction* tool; this is an *implementation-behaviour* tool. See
+[[pdf-spec-corpus-state]] § "a STATUS-CORRECTION dispatch" for when to reach for it.

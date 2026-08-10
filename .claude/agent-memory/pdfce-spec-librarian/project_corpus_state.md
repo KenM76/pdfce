@@ -1492,3 +1492,150 @@ and no indentation** (`pdfminer`: every line at `x0 = 210.1`, vs `•` in
 §8.11.3.1's real bullet list), so the "bullet list" is a list semantically only —
 which is *why* the enumeration reads open-ended. A layout measurement that
 explains an ambiguity is worth recording alongside the ambiguity.
+
+---
+
+## 2026-08-10 — a STATUS-CORRECTION dispatch (`iso32000__s__8.11.md`, OC "DEFERRED" retraction)
+
+The engineer dispatched "these status annotations are false as of commit
+`71592d3`; correct them and sweep the corpus." A distinct shape from ingestion,
+consolidation and claim-verification, with its own failure modes.
+
+- **A status claim encoded in a HEADING goes stale UN-GREPPABLY.** Two headings
+  read "§8.11.3.2 … (the **DEFERRED** path)" and "§8.11.3.3 … (**the beta's
+  path**)". Nothing in a `grep DEFERRED` sweep tells you that the *name of a
+  clause section* is the lie, and you cannot fix it without renaming. **Rule now
+  binding on this corpus: a heading names its CLAUSE. pdfce status lives in
+  exactly ONE dated, source-verified table per file**, with a line in it saying
+  so. The `8.11` file now carries `## pdfce implementation status
+  (SOURCE-VERIFIED <date>, commit <sha>)` and a sentence forbidding re-encoding
+  status into headings.
+- **The dispatch's list of "what genuinely REMAINS unimplemented" is a hypothesis
+  too — and its OMISSIONS are the payload.** The dispatch named `/VE`, `/AS`//
+  `/Usage` and `/RBGroups`; all three checked out. But reading
+  `pdfce-core/src/annot.rs::oc_is_hidden` showed it reads only `/Type` and
+  `/OCGs` — **the OCMD `/P` policy is never read**, so every OCMD is evaluated
+  as the default `AnyOn`. Under `/P /AllOff` with all groups OFF the spec says
+  VISIBLE and pdfce hides. Also unlisted: `/Intent` (§8.11.2.3) is not consulted
+  when computing the OFF set. **Enumerate the clause's OWN key list and check
+  each against the code; do not check only the keys the dispatch names.**
+- **★ A CODE COMMENT can state an intent the code implements on only ONE
+  BRANCH.** `do_xobject`'s comment says "this ORs with the marked-content state
+  … an ON XObject invoked inside a hidden section is still hidden." True for
+  forms (the OR happens inside `do_form`). **False for images** — the image
+  branch is gated on the XObject's OWN `/OC` only, and the inline-image arm has
+  no gate at all. Result: an image inside a hidden `/OC` section is still
+  painted, while the rectangle beside it is correctly suppressed. **Read the
+  BRANCH, not the comment.** A comment is a claim about intent; only the control
+  flow is a claim about behaviour.
+- **A spec librarian can settle a behaviour question EMPIRICALLY** — see
+  [[spec-source-extraction-toolchain]] for the recipe. Grep gave a strong
+  suspicion; the render settled it. When the finding is "the implementation does
+  not honour clause C", run it before writing it.
+- **A correction can make a SIBLING file's hazard WORSE rather than obsolete.**
+  Both redaction files said "pdfce implements no OC ⇒ redact by geometry". The
+  advice is unchanged, but the *reason it matters* inverted: before, an OFF layer
+  was painted anyway, so an operator drawing a redaction box could see it; now
+  the operator sees exactly what a conforming reader sees, so the OFF-layer bytes
+  under the box are the ones nobody is looking at. **Ask of every swept file "did
+  this change make the risk go away, or make it invisible?"** — do not
+  reflexively downgrade a hazard when the blocking gap closes.
+- **The sweep picks up UNRELATED stale markers riding along.** Grepping `/OC` +
+  `GAP` turned up `iso32000__s__12.5.2.md` and `iso32000__s__12.5.5.md` still
+  saying "§8.11 … not yet ingested" (closed 2026-07-31, nine days stale) and a
+  `/NeedAppearances → AcroForm file, GAP` pointer (closed the same day). Fix
+  them in the same pass — but **verify the closing file exists and contains the
+  term before writing the pointer** (I wrote `iso32000__s__12.7.md`, which does
+  not exist; the file is `12.7.2.md`).
+- **Retain the superseded text, and add the STRUCTURAL lesson to the AMENDMENT
+  block**, not just the factual correction. The block here says what was wrong
+  (3 items), what was RIGHT and kept (the independence claim — a property of the
+  standard, which is why it never needed retracting), and why the file went
+  stale (headings carrying status).
+- **Separate SPEC claims from PROGRESS claims in the prose you keep.** The
+  "annotation `/OC` is independent of content-stream `/OC`" finding was correct
+  and stayed correct through the implementation. It had been *filed under* a
+  heading about deferral, which is what made it look retractable. Restating it as
+  "a property of the standard, not of pdfce's progress" is the fix.
+
+**35. A CLAIM-OF-CONTRADICTION dispatch ("Table X and clause Y disagree — rule on
+it") is most often resolved by a THIRD sentence in the SAME table, and the
+resolution can REVERSE a recommendation the corpus already gave three times.**
+Established 2026-08-10 ruling on `DA-A10` (ISO 32000-1 §8.11.4.3 Table 101
+`BaseState` "the `ON` **and** `OFF` arrays shall be processed" vs §8.11.4.5 b)
+"either … depending on which one is **opposite** to `BaseState`"). Verdict:
+**they do not conflict**, and the corpus's standing advice ("process both, it is
+a superset and cannot lose information") was **wrong** and had propagated into
+three sites plus the index. Seven sub-rules:
+
+- **Read the WHOLE table, not the row the dispatch named.** The dispatch quoted
+  the `BaseState` row. The answer is two rows lower: the `ON` row says *"If the
+  `BaseState` entry is `ON`, this entry is redundant"* and the `OFF` row mirrors
+  it. **"Redundant" is a TESTABLE claim** — delete the entry and compare — and
+  applying that test to a group listed in *both* arrays **falsifies every
+  processing order except matching-array-first / opposite-array-last**. Under
+  that forced order the table computes *exactly* the clause's answer. General
+  move: when a table states an ORDER-DEPENDENT operation without an order, look
+  for a sibling row whose factual self-description constrains it.
+- **Distinguish INTERPRETIVE from DEONTIC force, out loud.** The redundancy
+  sentences are descriptive, not `shall`s; they bind nobody. The argument is
+  "an interpretation that falsifies the standard's own factual statement about
+  its data model is the wrong interpretation" — strong, but state its class, or
+  a decision record will cite it as a `shall`.
+- **"Is there a drafting convention that settles table-vs-clause precedence?"
+  is answered by MEASURED ABSENCE, and the source is free.** ISO/IEC Directives
+  Part 2 (9th ed.) is fetchable as one HTML file from
+  `https://metanorma.github.io/mn-samples-iso/documents/directives/part2/document.html`
+  (~4 MB): **`precedence` = 0 occurrences**. And ISO 32000-1 itself:
+  **`in case of conflict` = 0 hits** in 756 pages. Never assert a precedence
+  convention; there is nothing to cite in either direction.
+- **A clause can SELF-DECLARE as a summary — and that evidence can point the
+  WRONG way.** §8.11.4.5 opens *"This sub-clause **summarizes the rules** …"*,
+  and `summarizes the rules` occurs **exactly once in the whole document**. Read
+  naively that says "the table is where the rule lives, so process both arrays"
+  — i.e. it argues *against* the correct answer. **The strongest-looking
+  meta-evidence still loses to reading the content.** Report it, then defeat it.
+- **A dispatch's scoping of the divergence is a hypothesis, like its clause
+  numbers (items 15/18/21).** The dispatch said "the readings diverge **only**
+  for a group named in BOTH arrays." True for `BaseState` `ON`//`OFF`; **false
+  for `Unchanged`**, where the clause's "opposite" selector has no referent at
+  all and would process *neither* array while the table processes both — a
+  divergence for every listed group. And in the other direction the real
+  divergence is **narrower** than four cells: it is **one** (`BaseState /OFF`
+  with a both-listed group, under the *naive* textual order). Answer the 2×2
+  concretely; the cell count is the deliverable.
+- **"Process both, it's a superset" is a recurring WRONG shape for STATE
+  ASSIGNMENT.** Union/superset reasoning is safe for *discovery* (which groups
+  exist) and unsafe for *assignment* (what state each gets), because assignment
+  is last-writer-wins and the writer order was the unstated thing. Watch for it
+  wherever a corpus file recommends "do both to be safe".
+- **A prior RECOMMENDATION is a retractable claim, and it spreads further than
+  a fact does.** "Process both arrays" had reached: the clause file's analysis
+  paragraph (DA.8), its ambiguity table (DA-A10), its consumer-facing summary
+  (DA.14 item 3) **and the derived consolidator's pseudo-code**
+  (`iso32000__ref__optional_content_order.md` §5) **and** `index.md`'s ambiguity
+  row. Retract with the item-3 blockquote shape at **every** site, and grep for
+  the *advice sentence*, not just the ambiguity ID.
+
+**Also this build — three operational findings:**
+
+- **`pdf-issues.pdfa.org` does NOT maintain ISO 32000-1:2008 errata at all** —
+  it says so explicitly ("Errata on PDF 1.7 … are **not** supported"). Refines
+  the earlier memory line: the site is useful for 1.7 only *indirectly*, by
+  showing what 2.0 changed. And a **0-hit grep of the raw clause page**
+  (`curl … clause08.html` then `grep -o 'BaseState\|opposite\|8\.11\.4\.5'`) is
+  the cheapest way to prove "2.0 did not touch this" — stronger than the
+  WebFetch summary, which can only report what it noticed.
+- **The "one dated status table per file" rule works, and the leak is the
+  INDEX.** Task 2 (three rows stale) was **4 edits inside the owning file** —
+  exactly what the rule promised. But status had also been mirrored into
+  `index.md` in **4 more places**: the file-summary row, a Known-gaps row, a
+  historical-build note, and a "GAP CLOSED" row. **The rule must extend: after
+  editing a status table, `grep index.md` for the COMMIT HASH**, which is the
+  one token every mirrored status claim carries. (Two of the four hits were
+  legitimate *history* — "implemented at `71592d3`" — and must be left alone;
+  only the ones asserting *present* state get edited.)
+- **Re-run `git log` immediately before pinning a hash.** `b6a9ca0` landed
+  between the start of this session and the status edit; pinning `57f0c8f`
+  would have shipped a table that was stale on arrival. Same class as the
+  concurrency rule in item 15 (index.md) and the `ls -lt` rule for GAP claims.

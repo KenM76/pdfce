@@ -893,7 +893,13 @@ fn eval_ve_resolved<G: ObjectGraph + ?Sized>(
                 // evaluated rather than resolved by a house rule.
                 return None;
             }
-            Some(!eval_ve_operand(graph, operands.first()?, off, depth, visited)?)
+            Some(!eval_ve_operand(
+                graph,
+                operands.first()?,
+                off,
+                depth,
+                visited,
+            )?)
         }
         b"And" => {
             // Every operand must be evaluable: one unreadable operand

@@ -1,6 +1,6 @@
 # layers — provenance and attribution
 
-Ten minimal PDFs for the optional-content (layer / OCG) **reader** in
+Twelve minimal PDFs for the optional-content (layer / OCG) **reader** in
 `crates/pdfce-core/src/layers.rs` — ISO 32000-1:2008 §8.11 (optional
 content), specifically Table 98 (the OCG dictionary), Table 99 (the
 optional content membership dictionary), Table 100 (`/OCProperties`) and
@@ -76,6 +76,8 @@ must come out half width.
 | `basic-layers.pdf` | The **happy path**, entirely well-formed. `LayerDiagnostics::is_faithful()` must be **true** — a diagnostic that is noisy on good files gets ignored on bad ones, which is the only way a diagnostic can do harm. Four registered groups; `/Order` lists three; `/OFF` names one. |
 | `nested-order.pdf` | `/Order`'s tree structure and its **declared** sequence. |
 | `painted-layers.pdf` | The only fixture that **paints** through `BDC`/`EMC` `/OC` (§8.11.3.2). Three claims in one file: an OFF layer's mark is absent; an ON layer *nested inside* an OFF one is also absent (visibility is inherited, and the inner `EMC` restores "hidden"); and a hidden section's **clip** still bounds the unlayered content that follows. |
+| `on-off-contradiction.pdf` | A group listed in **both** `/D /ON` and `/D /OFF` — conforming (both Table 101 rows bind the *reader*, and §8.11 has no `shall not` about array membership) and self-contradictory. Pins decision 038's resolution: Table 101's `ON` row calls the array *redundant* under `/BaseState ON`, and an array carrying no information cannot override anything, so the **opposite** array decides — which is §8.11.4.5 b). A second group in neither array is the control, so a reader that simply hid everything fails too. |
+| `base-state-unchanged.pdf` | `/D /BaseState /Unchanged` — violates Table 101's *"shall be ON"* for the default configuration, and is semantically empty there besides (§8.11.2.1: states are initialised at open, so nothing exists to leave unchanged). Pins that pdfce **recovers** as `ON` rather than applying a clause, and discloses the recovery: the rival reading ("process no arrays") would make `/OFF` inert and paint every layer the author turned off. |
 | `no-layers.pdf` | No `/OCProperties` at all. §8.11.4.2: a reader "shall ignore any optional content structures". Empty and faithful, not an error — and overwhelmingly the common real-world case. |
 
 `basic-layers.pdf` carries two name-decoding traps that are worth

@@ -713,6 +713,42 @@ D:\Dev\pdfce\
                                    YET AUTHORED, and apply equally to this new
                                    content-stream path — it consumes the same
                                    `oc_off_set()` the annotation path already did.
+                                   **★ Two §8.11 defects in the above, found and
+                                   fixed the same day (`5c4ff08`, `57f0c8f`,
+                                   2026-08-10):** `draw_image` was missing the
+                                   `oc_hidden()` gate entirely (a self-regression
+                                   of `71592d3` itself — the two `skip_paint`
+                                   call sites named above covered paths and
+                                   glyphs, not images; fixed by gating
+                                   `draw_image` before decode, the one point
+                                   every image path converges); `oc_is_hidden`
+                                   was not reading Table 99 `/P` (every OCMD
+                                   evaluated as `AnyOn` regardless of its actual
+                                   policy — `/P /AllOff` with every member off
+                                   is the inverse case, spec-visible not
+                                   spec-hidden); `optional_content_default_off`
+                                   was not reading §8.11.2.3 `/Intent` (a
+                                   `Design`-only group hid content in a `View`
+                                   render). All three now fixed at the shared
+                                   resolver — see §12's seventy-ninth-filing
+                                   entry.
+                                   **`layer_state.rs` — `LayerVisibility`, the
+                                   OPERATOR's session-scoped override (`Pass
+                                   57.0`, 2026-08-10, `6ab72ec`).** Distinct
+                                   from `annot.rs::optional_content_default_off`
+                                   (what the DOCUMENT wants hidden): this is
+                                   what the OPERATOR currently wants hidden,
+                                   and it REPLACES the document's default
+                                   configuration rather than merging with it —
+                                   see §12's seventy-ninth-filing entry for the
+                                   full contract and why a merge was rejected.
+                                   Held by the GUI shell's own state
+                                   (`layer_overrides`/`layers_generation`), not
+                                   by `EditSession` — session-only, never saved,
+                                   never marks the document dirty. `RenderOptions.layers:
+                                   Option<LayerVisibility>` is the seam;
+                                   `RenderPolicy` stays `Copy` because the set
+                                   travels by reference, owned by the caller.
     pdfce-gui\                  <- The native desktop shell. egui/eframe application,
                                    window chrome, file dialogs (rfd crate), menus,
                                    docking layout (egui_dock or hand-rolled), the
@@ -14921,6 +14957,40 @@ stop. Next engineer session: either author `034`–`036` from this log's
 own existing content, or correct the "on disk" framing to "claimed in
 `ROADMAP.md`/`ARCHITECTURE.md`, not yet filed" wherever it is asserted.
 
+**★★ FURTHER CORRECTION, seventy-ninth filing (2026-08-10): the paragraph
+immediately above is accurate on the file-count fact and MISLEADING in
+its framing, and the "for next session" line compounded it.** "No `034`,
+`035`, or `036` file exists on disk" is true and stays true. What was
+missing from this entry — and from `ROADMAP.md`'s matching seventy-eighth
+filing text, corrected there in the same session — is the statement that
+this is the NORMAL, expected shape of `docs/decisions/`, not a defect
+needing reconciliation. Decisions 034, 035 and 036 are not bare citations
+sitting on nothing: each has full reasoning recorded directly in THIS
+section — 034 at the thirty-fifth-filing entry above (`jpeg-encoder`
+write-side CMYK/YCCK polarity), 035 at its own entry (the three DXF
+scale-inference forks plus a fourth extension), 036 at the entry this
+paragraph follows (the entire Reader-parity-sweep campaign, marked
+**★ COMPLETE**). `docs/decisions/README.md` itself states the reason: a
+numbered file here is produced only when the `autonomous-builder`
+consultant was actually used, §12 is the canonical index for the shared
+number space, and "the highest filename is NOT the highest decision
+number" — a statement the operator added to that file this session,
+after this exact inference (file count read as decision count) was made
+TWICE, once by this entry and once independently by the seventy-eighth
+filing's own Sourcing section (`ROADMAP.md`). **The "for next session:
+author or retire" framing was itself part of the error** — it read as
+though 034–036 were incomplete or provisional, when the only thing
+actually missing is an OPTIONAL secondary artifact. `037` and `038`
+remain the genuinely open items: unlike 034–036, neither has been ruled
+on at all (see the entry two above this one), and THOSE are the ones
+worth "author or retire" language. Full record: `ROADMAP.md`'s
+`6ab72ec`+`5c4ff08`+`57f0c8f`+`c098e9b` Shipped entry (top of *Shipped*,
+seventy-ninth filing), and `docs/decisions/README.md`'s own "★ ONE NUMBER
+SPACE, AND GAPS IN THIS DIRECTORY ARE NORMAL" section (added by the
+operator this session, not this librarian). **No crate-boundary or
+library-choice change; decision ceiling unaffected — 037/038 still
+CLAIMED-not-authored, next genuinely free 039.**
+
 ### 2026-08-10 (seventy-eighth filing, `71592d3`) — §8.11.3.1 recorded as a load-bearing invariant: hidden optional content is not drawn, not not run; suppression is blit-only and everything upstream of the blit still executes
 
 **Filed by `pdfce-librarian`, no shell available — relaying the
@@ -15065,3 +15135,112 @@ list).
 standing rule `R185` for the full derivation and practical form, and
 `ROADMAP.md`'s `df874ca` Shipped entry for the exact file/line citations
 substantiating every claim above.
+
+### 2026-08-10 (seventy-ninth filing, `6ab72ec`) — `pdfce_render::LayerVisibility` REPLACES the document's default OCG configuration rather than merging with it; the operator's layer toggle is session state, held nowhere the save path can see it
+
+**Filed by `pdfce-librarian`, no shell available — relaying the
+dispatching engineer's account for commit-level detail, independently
+confirmed by direct source read for the technical claims below.** Full
+build record: `ROADMAP.md`'s `6ab72ec`+`5c4ff08`+`57f0c8f`+`c098e9b`
+Shipped entry (top of *Shipped*, seventy-ninth filing).
+
+**Plain entry, no decision number — an invariant/contract definition per
+this librarian's own charter, same convention as the §8.11.3.1 blit-only
+entry immediately above and the `annot::oc_refs` consolidation (76th
+filing): worth recording because it governs every future caller of
+`LayerVisibility`, but not a crate-boundary or library choice.**
+
+**The contract.** `crates/pdfce-render/src/layer_state.rs` gives the
+renderer one new input: which optional-content groups the OPERATOR
+currently wants hidden, distinct from `pdfce_core::annot`'s
+`optional_content_default_off`, which reads what the DOCUMENT itself
+wants hidden. `LayerVisibility` is a **complete answer, not a patch** —
+when a caller supplies one, the renderer uses it INSTEAD OF the
+document's default configuration, never unioned or subtracted against
+it. The reason, stated in the module's own docs and worth repeating
+here because it is the entire design: a merge needs rules for three
+cases nobody can state confidently (a group the operator turned on that
+the document turns off; a group the operator turned off that the
+document never registered; a group in neither), and every one of those
+rules would silently decide what appears on a page. The caller instead
+computes the FULL set — starting from `optional_content_default_off`,
+applying the operator's toggles on top — and the renderer just obeys it.
+**`None` (no override — obey the document) is a distinct state from
+`Some(``empty set``)` (show everything)** — collapsing the two would mean
+opening the Layers panel silently reveals every layer the document
+itself had turned off, the first thing a caller must not do.
+
+**Why `RenderPolicy` holds this by reference, not by value.**
+`RenderPolicy` is `Copy`; a `BTreeSet` is not. `LayerVisibility` travels
+as `Option<&LayerVisibility>`, owned by the caller's `RenderOptions` for
+the render's duration, keeping `RenderPolicy` `Copy` while the set itself
+is never a `static` or thread-local a second render could see mutated —
+`RenderPolicy`'s own existing doc comment already states "two renders of
+the same page must never differ for a reason invisible at the call
+site," and a shared mutable set would violate exactly that.
+
+**Where the operator's choice actually lives, and why that is a
+deliberate limit, not an oversight.** `crates/pdfce-gui`'s
+`layer_overrides`/`layers_generation` are fields on the GUI SHELL's own
+app state, not on `EditSession` (the type the save-dirty-set is computed
+from). Confirmed by grep: no call site adjacent to either field touches
+a dirty flag or a save path. The consequence, stated plainly rather than
+left implicit: toggling a layer in the panel changes what the CANVAS
+shows for the rest of the session and nothing else — reopening the file
+restores the document's own default state, and there is currently no way
+to make an operator's chosen visibility state outlive the session. This
+was a scope decision for `Pass 57.0`, not a discovered defect; whether
+pdfce should ever gain a persistence path (writing the operator's chosen
+state back into `/OCProperties /D` on save) is now an open question,
+unscoped, recorded in `ROADMAP.md`'s Backlog rather than decided here.
+
+**A finding considered for a new standing rule and explicitly NOT
+minted this filing, recorded here because a decision log is where a
+declined candidate belongs as much as an accepted one.** The same
+session's `5c4ff08` fixed a defect shaped like this: `draw_image`'s
+optional-content gate was added at two of the three points that needed
+it (path blit, glyph blit), and `do_xobject`'s own comment claimed the
+missing third case (images) was covered by an OR that, read literally,
+only ever reached the FORM branch. The gated call sites created no
+alarm — they worked — and that is precisely what let the gap survive a
+code read by the same engineer who wrote it. **Candidate wording:** *"a
+suppression or visibility gate applied at SOME of the call sites a rule
+governs, and not others, is worse than no gate at all, because the gated
+sites manufacture confidence the rule is fully enforced; a comment
+asserting blanket coverage is not evidence of it — enumerate the
+convergence points, don't trust the ones already checked to imply the
+rest."* **Not minted**, per this project's own two-instance promotion
+bar (the precedent decision 036 set for the "parallel-agent `git add
+-A`" finding): this is a first instance, caught same-session by the
+code's own author, distinct in severity from `R184`'s three-panel,
+entire-shipped-lifetime case that justified a first-instance mint.
+Related but not the same shape as `R184` — `R184` is about WHERE the one
+existing call site lives (harness vs. production); this is about a
+cross-cutting concern's coverage being incomplete across its OWN
+convergence points. If this shape recurs, the second instance should
+mint it.
+
+**A correction this filing makes to two prior entries in this same
+section, per the operator's explicit instruction not to leave it
+standing** — see the "★★ FURTHER CORRECTION" paragraph appended to the
+seventy-seventh filing's entry, above, and `docs/SESSION_LOG.md`'s
+matching amendment to its seventy-eighth-filing entry: decisions 034,
+035 and 036 are fully decided, in full, directly in this section: the
+"CLAIMED, NOT YET AUTHORED" status line on each refers only to the
+absence of an optional `docs/decisions/NNN-*.md` KenAgent file, not to
+whether the decision has content. `037`/`038` remain the genuinely open
+items — unlike 034–036, neither has been ruled on at all.
+
+**Body-section sync:** none required beyond the correction above — no
+crate boundary, public API surface, or data-model invariant changed by
+this entry; `LayerVisibility` is a new `pdfce-render` public type,
+already covered by the rule-10 API-surface discipline at the point it
+was added (`ROADMAP.md`'s `Pass 57.0` entry carries the full symbol
+list).
+
+**No decision-record ceiling change** (037/038 remain CLAIMED-not-
+authored, unaffected; 034–036 reaffirmed as fully decided per the
+correction above, next genuinely free decision number 039). Cross-
+reference: `ROADMAP.md`'s `6ab72ec` Shipped entry for the full sourcing
+(exact file/line citations for every claim above) and the `Pass 57.0`
+ledger note.

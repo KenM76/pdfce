@@ -6093,6 +6093,7 @@ fn cmd_list_layers(input: &Path) -> u8 {
         (d.missing_registry, "missing_registry"),
         (d.order_node_truncation, "order_node_truncation"),
         (d.base_state_off_in_default, "base_state_off_in_default"),
+        (d.base_state_unrecognised, "base_state_unrecognised"),
         (
             d.base_state_off_with_unregistered,
             "BASE_STATE_OFF_WITH_UNREGISTERED",
@@ -6107,6 +6108,12 @@ fn cmd_list_layers(input: &Path) -> u8 {
     }
     for (c, name) in [
         (d.unregistered_groups, "unregistered_groups"),
+        // Decision 038: the file says two things about these groups and
+        // pdfce resolved it. The count is emitted here; the sentence
+        // naming the RESOLUTION goes to stderr below, because an
+        // operator who sees only a count cannot predict what they are
+        // looking at.
+        (d.contradictory_on_off_groups, "contradictory_on_off_groups"),
         (d.groups_without_name, "groups_without_name"),
         (d.names_inexact, "names_inexact"),
         (d.direct_group_dicts, "direct_group_dicts"),
@@ -6125,6 +6132,21 @@ fn cmd_list_layers(input: &Path) -> u8 {
     } else {
         notes.join(" ")
     };
+    // The sentence that makes the count actionable. A bare
+    // `contradictory_on_off_groups=2` says a file is self-contradictory
+    // and leaves the operator unable to predict which state pdfce chose;
+    // naming the rule lets them work it out for any group (decision 038).
+    if read.diagnostics.contradictory_on_off_groups > 0 {
+        eprintln!(
+            "pdfce-cli: {} group(s) are listed in BOTH /D /ON and /D /OFF. Resolved per ISO 32000-1 §8.11.4.5 b): the array OPPOSITE /BaseState decides, so with the usual /BaseState ON they are OFF. The document is not malformed — nothing forbids a writer from listing a group twice.",
+            read.diagnostics.contradictory_on_off_groups
+        );
+    }
+    if read.diagnostics.base_state_unrecognised {
+        eprintln!(
+            "pdfce-cli: /D /BaseState is a name other than ON or OFF. Table 101 requires the default configuration's /BaseState to be ON, so this file is non-conforming; pdfce recovers by treating it as ON, which is both the stated default and the only value /D was allowed to carry."
+        );
+    }
     let config = read.config_name.as_deref().unwrap_or("-");
     println!(
         "list-layers {} layers={} config={config:?} radio_groups={} {warnings}",

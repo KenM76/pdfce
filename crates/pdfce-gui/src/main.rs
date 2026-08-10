@@ -7432,18 +7432,35 @@ impl PdfceApp {
 
     /// The Layers panel — the document's optional-content groups.
     ///
-    /// # Read-only, and the reason is not laziness
+    /// # Session state, with no file-format footprint
     ///
-    /// Toggling a layer in a viewer is **session state with no
-    /// file-format footprint** unless the operator explicitly saves
-    /// (`Acrobat_Features/layers__ocg_visibility_and_defaults.md`). pdfce
-    /// has neither: the renderer takes no visibility override, and there
-    /// is no save path for one.
+    /// Toggling a layer in a viewer is **session state that does not
+    /// touch the document** unless the operator explicitly saves
+    /// (`Acrobat_Features/layers__ocg_visibility_and_defaults.md`).
+    /// pdfce does the first half and not the second: the checkbox
+    /// changes what is drawn, `/OCProperties /D` is untouched, nothing
+    /// marks the document dirty, and nothing survives reopening. The
+    /// panel says so in its first line rather than leaving it inferred.
     ///
-    /// So the panel lists and does not offer a checkbox. A checkbox that
-    /// did nothing, or that changed the screen and silently failed to
-    /// persist, would be worse than its absence — R83, no affordance
-    /// without capability. The toggle is owed and named, not implied.
+    /// # ★ This doc said the opposite for three commits
+    ///
+    /// It read: *"the renderer takes no visibility override, and there
+    /// is no save path for one. So the panel lists and does not offer a
+    /// checkbox."* That was true when written and false from `6ab72ec`,
+    /// which added [`pdfce_render::LayerVisibility`], the override the
+    /// renderer consumes, and the checkbox this comment denies exists.
+    ///
+    /// It was found by a consultant reading the file, not by any check —
+    /// nothing compiles a doc comment against the behaviour it
+    /// describes. Same shape as the `git remote` error rule 8 records: a
+    /// document asserting a capability fact nobody re-measured. Noted
+    /// here rather than silently overwritten, because the correction is
+    /// cheap and the class of error is not.
+    ///
+    /// R83 still governs what the panel offers, and it is why the
+    /// checkbox could not have shipped before `71592d3`: until the
+    /// renderer honoured content-stream `/OC`, a tick against a CAD
+    /// drawing's layers would have changed nothing on the page.
     ///
     /// # What it shows that a name cannot
     ///

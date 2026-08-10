@@ -31895,3 +31895,193 @@ working-tree state **not independently asserted anywhere in this filing**
 push. This is the **seventy-eighth** `SESSION_LOG.md` filing (the
 seventy-seventh confirmed present by direct read before this entry was
 appended).
+
+**★ AMENDMENT, seventy-ninth filing (2026-08-10): the "034–038 currently
+all CLAIMED-only, no files on disk" framing above ("For next session")
+is corrected, not merely restated.** "No `034`, `035`, `036` file exists
+on disk" is true and stays true — that part of this entry is not wrong.
+What was missing is the statement that this is the NORMAL, expected
+shape of `docs/decisions/`, not a defect calling for "author or retire."
+Decisions 034, 035 and 036 are fully decided, in full, directly in
+`ARCHITECTURE.md` §12 (034: `jpeg-encoder` write-side CMYK/YCCK polarity;
+035: the DXF scale-inference forks; 036: the Reader-parity-sweep
+campaign, marked COMPLETE) — the "CLAIMED, NOT YET AUTHORED" status line
+on each refers only to the absence of an OPTIONAL `docs/decisions/
+NNN-*.md` KenAgent-formatted file, which `docs/decisions/README.md`
+itself (amended by the operator this session) now states is produced
+only when the `autonomous-builder` consultant was actually used, not for
+every decision. `037` and `038` remain the genuinely open items —
+neither has been ruled on at all, unlike 034–036 — and those are the
+ones this entry's "author or retire" language actually fits. **The same
+inference (file count read as decision count) was made TWICE**, once by
+this entry and once independently by the seventy-seventh filing's
+`ARCHITECTURE.md` correction — recorded so a third instance does not
+happen. Full record: `ROADMAP.md`'s `6ab72ec`+`5c4ff08`+`57f0c8f`+
+`c098e9b` Shipped entry and `ARCHITECTURE.md` §12's matching seventy-
+ninth-filing correction (appended to the seventy-seventh filing's own
+entry there).
+
+## 2026-08-10 (seventy-ninth filing) — `6ab72ec`: the document-wide OCG/layers panel gets a real, session-only TOGGLE (`Pass 57.0`), closing decision 036's last open Reader-parity gap; `5c4ff08`+`57f0c8f` fix two §8.11 defects inside `Pass 56.0` (a same-day self-regression, Table 99 `/P`, §8.11.2.3 `/Intent`); `c098e9b` corrects the 76th–78th filings' "files on disk" framing
+
+**Sourcing.** No shell tool this dispatch — `git log`/`git show --stat`
+could not be run for any of the four commits; every hash-to-content
+mapping and the stated test count (**2889, 0 failed** at `57f0c8f`) are
+relayed from the dispatching engineer, not confirmed against the commit
+graph. **Independently verified by direct read of current source**
+(full file/line citations in `ROADMAP.md`'s matching Shipped entry, not
+repeated here): `layer_state.rs` in full (the replace-not-merge
+contract, `None`-vs-empty-set distinction); the CLI's `--show-layer`/
+`--hide-layer` flags and both refusal paths (name-in-both-flags →
+`RUNTIME_ERROR`, unmatched name → stderr note, rest still applied); the
+GUI's `layer_visibility`/`set_layer_visible`/`layers_panel` (whole-set
+recomputation, `/Locked` disables the checkbox, `/RBGroups` sibling
+behaviour, Reset gated on non-empty overrides); the render worker's five
+staleness keys (`layers_generation` is the fifth); that `layer_overrides`
+lives on the GUI shell's own state, not `EditSession` (session-only,
+confirmed by grep — no adjacent dirty-marking); `draw_image`'s gate now
+sitting before decode, the one convergence point for XObject/no-`/Subtype`-
+repair/inline-`BI`/`ID`/`EI` image paths; `oc_is_hidden`'s Table 99 `/P`
+read (four policy arms, each the table's own visibility test negated
+once); `optional_content_default_off`'s §8.11.2.3 `/Intent` set
+intersection and the present-but-empty-array-means-all-visible case.
+`docs/decisions/README.md` read in full — the operator's own "ONE NUMBER
+SPACE" addition confirmed present. **Also independently confirmed:**
+decisions 034/035/036 have full reasoning recorded directly in
+`ARCHITECTURE.md` §12, contradicting the "CLAIMED-only" framing this
+entry corrects, above. **Not independently verified:** the stated test
+count and gate results; the four commits' relative order (assumed from
+the dispatch's presentation order).
+
+**Shipped:**
+- `6ab72ec` — **`Pass 57.0`, a new Pass ID**, grepped free before filing
+  per R156; Pass family ceiling **56.0 → 57.0**. The document-wide OCG/
+  layers panel gets a session-scoped visibility override
+  (`pdfce_render::LayerVisibility`): a checkbox per layer + Reset in the
+  GUI, `pdfce-cli render-page --show-layer`/`--hide-layer`. REPLACES the
+  document's default configuration rather than merging with it; `None`
+  (obey the document) is distinct from an empty override set (show
+  everything). Honours Table 101 `/Locked` (checkbox disabled, tooltip
+  explains why) and `/RBGroups` (one member on turns siblings off; one
+  off turns no sibling on). CLI: a name given to both flags is refused
+  (`RUNTIME_ERROR`, pdfce will not guess); an unmatched name is a stderr
+  note, rest of the override still applies. **SESSION-ONLY by design** —
+  nothing saved, nothing marks the document dirty; confirmed by grep,
+  the override lives on the GUI shell's own state, not `EditSession`.
+  New fifth render-staleness key, `layers_generation`. **Closes decision
+  036's last-named open Reader-parity gap** — printer job SPOOLING is
+  now the only residual, still blocked on an operator go-ahead.
+- `5c4ff08` — **filed against the existing `Pass 56.0` (R170), no new
+  mint.** Two §8.11 defects: (1) a self-regression of `71592d3` — images
+  inside a hidden `/OC` section still painted, because the first cut
+  gated only the path and glyph blits and `do_xobject`'s own comment
+  claimed coverage an OR only ever gave the FORM branch; fixed by gating
+  `draw_image` before decode, the one point every image path converges.
+  (2) Table 99 `/P` was never read, so every OCMD evaluated as `AnyOn`;
+  under `/P /AllOff` with every member off the spec says VISIBLE and
+  pdfce hid it, the exact inverse of the policy's own purpose. Fixed by
+  writing each policy arm as the table's visibility test negated once,
+  not four independently hand-derived hidden-tests.
+- `57f0c8f` — **filed against `Pass 56.0`, no new mint.** §8.11.2.3
+  `/Intent` was not consulted — a `Design`-only OCG in `/OFF` was hiding
+  content in a `View` render. Fixed as a set intersection between the
+  configuration's intent and each group's, Table 101's `All` matching
+  everything, and a present-but-empty configuration intent array
+  correctly read as "all content visible" — the one case where fewer
+  intents means MORE visible content.
+- `c098e9b` — **no Pass ID, a documentation correction.** See the
+  amendment above this entry and `ARCHITECTURE.md` §12's matching
+  correction: decisions 034–036 are fully decided in §12; only the
+  optional `docs/decisions/NNN-*.md` file is absent, which
+  `docs/decisions/README.md` (amended by the operator) now states is
+  the normal case, not a defect.
+
+**Decisions made this session:**
+- **A candidate standing rule considered, NOT MINTED** (project's
+  two-instance promotion bar) — "a gate applied at some call sites and
+  not others is worse than none; a comment claiming coverage is not
+  evidence of it." First instance, caught same-session by the code's own
+  author; related but distinct from `R184`. Recorded in `ARCHITECTURE.md`
+  §12 for findability if it recurs.
+- **Plain `ARCHITECTURE.md` §12 entry** for `LayerVisibility`'s
+  replace-not-merge contract.
+- **Two dated correction footers**, per the operator's explicit
+  instruction: this entry's own amendment above, and `ARCHITECTURE.md`
+  §12's matching correction appended to the seventy-seventh filing's
+  entry there.
+
+**Findings + decisions:**
+- The image-gate defect and the R184 reachability defect are both
+  instances of "the check that would have caught this looked like it
+  already existed" — a comment, in one case; a call site, in the other.
+  Neither defect was findable by reading the gated/reachable evidence in
+  isolation; both needed either a rendered pixel or an excised-function
+  search to surface.
+- File count is not decision count. This project's decision numbers and
+  `docs/decisions/` filenames share one sequence, but a file here is
+  produced only when `autonomous-builder` was actually used — the
+  majority of decisions are recorded directly in `ARCHITECTURE.md` §12
+  with no file at all. Two prior filings independently rediscovered the
+  file-count fact without drawing this conclusion.
+
+**Still in flight:** decisions `037`/`038` still CLAIMED, NOT YET
+AUTHORED (unaffected — both apply equally to the shared resolver
+`5c4ff08`/`57f0c8f` touched); printer job SPOOLING (operator go-ahead);
+attachment EXTRACTION-to-file (R151); general-purpose OCG layer
+AUTHORING (unbuilt); whether the session-only layer toggle should ever
+gain a persistence path is a new open question, not scoped to a Pass;
+test-count reconciliation still open (2889 relayed, not reconciled
+term-by-term against 2870).
+
+**For next session:** author decisions `034`–`038` via `autonomous-
+builder`/KenAgent if a fuller KenAgent-format record is judged to add
+value on top of what §12 already has (optional, not required — 034–036
+are already decided); rule on `037`/`038` (the two genuinely open
+items); escalate the `PDF_Spec` §8.11 RAG correction (below) to
+`pdfce-spec-librarian`.
+
+**RAG escalation (per this filing's dispatch, item 5):**
+- **`D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__s__8.11.md`**
+  lists Table 99 `/P` and §8.11.2.3 `/Intent` as NOT IMPLEMENTED —
+  **now false as of `5c4ff08`/`57f0c8f`.** §8.11's remaining genuinely
+  unimplemented pieces are exactly `/VE` visibility expressions and
+  `/AS`+`/Usage` auto-state. **Flagged for the engineer to dispatch
+  `pdfce-spec-librarian`**, not edited by this librarian (hard rule 6).
+- No new `C:\personal_rag\pdf\` lesson this filing — the two defect
+  fixes are pdfce implementation gaps against an already-identified
+  spec clause, not a real-world-producer-divergence finding.
+- No new `D:\dev\rag\rust\`/`D:\dev\rag\egui\` file this filing — the
+  candidate standing rule was judged pdfce-specific/project-discipline,
+  same reasoning applied to `R185` at the 78th filing.
+
+**Ledger for this filing.** **One new Pass ID: `Pass 57.0`** (OCG layer
+toggle), grepped free before filing per R156; Pass family ceiling moves
+**56.0 → 57.0**. `5c4ff08`/`57f0c8f` filed against `Pass 56.0`, no new
+mint. `docs/FEATURES.md`: "Document layers (OCG)" row updated (Acrobat
+`◐`→`[x]`, VIEW+TOGGLE text, `Pass 57.0` named); the content-stream `/OC`
+row gains a note on the two same-day defect fixes; Planned row
+"Document-wide OCG/layers panel — TOGGLE" REMOVED (shipped, not
+annotated — this file's own concision mandate); the *Reading, navigation
+& printing* section intro updated (only printer SPOOLING remains a named
+residual). `docs/ARCHITECTURE.md`: new §12 entry (`LayerVisibility`
+contract, seventy-ninth filing) plus two dated correction footers (the
+seventy-seventh filing's entry, and this file's own seventy-eighth-
+filing entry above); §3's `pdfce-render` module note gains two new
+paragraphs (the two defect fixes; `layer_state.rs`/`LayerVisibility`).
+Standing rules: **no new mint** — a candidate considered and explicitly
+declined; ceiling stays **R185**, next free **R186**. Decision ceiling:
+**unchanged** — `037`/`038` remain CLAIMED-not-authored; 034–036
+reaffirmed as fully decided (content in §12), corrected framing only.
+`docs/decisions/README.md`: not edited by this librarian — the
+operator's own addition, read and cited above. Operator-question
+ceiling unchanged at **(bh)**, next free **(bi)**. `C:\personal_rag\pdf\`:
+no new lesson. `D:\dev\rag\rust\`/`D:\dev\rag\egui\`: no new file. Gate
+figures (**2889 tests, 0 failed**, per the dispatch) RELAYED, NOT
+independently re-run — no shell this dispatch; delta against the last
+confirmed figure (2870, 78th filing) is **+19**, plausible for one new
+toggle feature's tests plus two defect-fix regression tests, not
+reconciled term-by-term. Backup/git working-tree state **not
+independently asserted** (hard rule 8) — no shell this dispatch; the
+engineer should check `D:\Dev\pdfce-backups\` and `git log`/`git status`
+directly before any push. This is the **seventy-ninth** `SESSION_LOG.md`
+filing (the seventy-eighth confirmed present by direct read before this
+entry was appended).

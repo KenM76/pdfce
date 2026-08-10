@@ -745,6 +745,46 @@ pub struct LayerDiagnostics {
     /// is knowingly more permissive than Table 101's wording. See the
     /// module docs' caveat section.
     pub base_state_off_with_unregistered: bool,
+    /// Groups named in **both** `/D /ON` and `/D /OFF` — a
+    /// self-contradictory configuration (decision 038).
+    ///
+    /// # Why this is disclosed rather than merely resolved
+    ///
+    /// It IS resolved, and correctly: §8.11.4.5 b) and Table 101 agree
+    /// that the array matching `/BaseState` is redundant, so the
+    /// **opposite** array decides. Under `/D` — where `/BaseState` shall
+    /// be `ON` — a both-listed group is therefore OFF.
+    ///
+    /// But the file said two things, and pdfce picked one. An operator
+    /// looking at a layer that is off, in a document whose `/ON` array
+    /// names it, has no way to tell a correct resolution from a bug
+    /// without being told. The disclosure names the RESOLUTION, not just
+    /// the fault: "this file is contradictory" leaves the operator
+    /// unable to predict what they are looking at, which is the opposite
+    /// of the point.
+    ///
+    /// Nothing forbids a writer from doing this — both Table 101 rows
+    /// bind the reader ("whose state **shall be** set to…"), not the
+    /// writer, and §8.11 has no `shall not` about array membership. So it
+    /// is a disclosure, not an error.
+    pub contradictory_on_off_groups: usize,
+    /// `/D /BaseState` is a name other than `ON` or `OFF` — `Unchanged`,
+    /// or something Table 101 does not define.
+    ///
+    /// **This is recovery from non-conforming input, not a clause being
+    /// applied**, and the distinction is the whole reason the field
+    /// exists. Table 101 requires `/D`'s `/BaseState` to be `ON` if
+    /// present, so any other value violates a `shall`; and §8.11.2.1's
+    /// "states are not part of the document" means `Unchanged` has no
+    /// prior state to preserve at first open — it is meaningful only for
+    /// an alternate configuration applied to an already-open document.
+    ///
+    /// pdfce recovers by treating it as `ON`, which is both Table 101's
+    /// stated default and the only value `/D` was allowed to carry. The
+    /// rival recovery — "leave everything as found, process no arrays" —
+    /// would make `/OFF` inert and paint every layer the author turned
+    /// off, so this is also the safe direction.
+    pub base_state_unrecognised: bool,
     /// The listing stopped at [`MAX_LAYERS`].
     pub layer_truncation: bool,
     /// The page sweep stopped at [`MAX_RESOURCE_NODES`].
@@ -780,6 +820,8 @@ impl LayerDiagnostics {
             && self.malformed_group_elements == 0
             && self.overlapping_radio_groups == 0
             && !self.base_state_off_in_default
+            && self.contradictory_on_off_groups == 0
+            && !self.base_state_unrecognised
             && !self.layer_truncation
             && !self.resource_scan_truncated
     }
@@ -883,11 +925,30 @@ pub fn read_layers_with<G: ObjectGraph + ?Sized>(graph: &G, scan: LayerScan) -> 
             .map(|o| graph.resolve(o))
             .and_then(Object::as_name)
             .map(|n| String::from_utf8_lossy(&n.0).into_owned());
-        diag.base_state_off_in_default = d
+        let base_state = d
             .get(b"BaseState")
             .map(|o| graph.resolve(o))
             .and_then(Object::as_name)
-            .is_some_and(|n| n.0 == b"OFF");
+            .map(|n| n.0.clone());
+        diag.base_state_off_in_default = base_state.as_deref().is_some_and(|n| n == b"OFF");
+        // Absent is conforming (Table 101 gives `ON` as the default);
+        // a name that is neither is not (decision 038's addendum).
+        diag.base_state_unrecognised = base_state
+            .as_deref()
+            .is_some_and(|n| n != b"ON" && n != b"OFF");
+        // Decision 038: a group in BOTH arrays is resolved by the
+        // opposite-array rule and disclosed rather than silently picked.
+        // Computed over the arrays as read, before any state is derived,
+        // so it counts what the FILE says rather than what pdfce made of
+        // it.
+        let on_listed: std::collections::BTreeSet<ObjId> =
+            crate::annot::oc_refs(graph, d.get(b"ON"))
+                .into_iter()
+                .collect();
+        diag.contradictory_on_off_groups = crate::annot::oc_refs(graph, d.get(b"OFF"))
+            .into_iter()
+            .filter(|g| on_listed.contains(g))
+            .count();
 
         locked.extend(crate::annot::oc_refs(graph, d.get(b"Locked")));
         out.radio_groups = radio_groups(graph, d.get(b"RBGroups"));

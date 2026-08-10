@@ -448,3 +448,82 @@ fn list_layers_matches_read_layers_on_a_real_file() {
     let doc = Document::from_bytes(bytes).expect("fixture did not parse");
     assert_eq!(list_layers(&doc), read_layers(&doc).layers);
 }
+
+/// ★ **A group in both `/ON` and `/OFF` resolves to the OPPOSITE
+/// array's answer, and is disclosed** (decision 038).
+///
+/// Table 101's `/ON` row says the array is *redundant* when
+/// `/BaseState` is `ON` — and an array carrying no information
+/// cannot override anything, so the opposite array decides. That is
+/// exactly §8.11.4.5 b), which is why the two loci that look like a
+/// contradiction are one function.
+///
+/// The second assertion matters as much as the first: a resolution
+/// nobody is told about leaves an operator unable to tell it from a
+/// bug, in a document whose `/ON` array plainly names the layer they
+/// are looking at.
+#[test]
+fn a_group_in_both_arrays_is_off_and_said_so() {
+    let read = layers_of("on-off-contradiction.pdf");
+    let both = read
+        .layers
+        .iter()
+        .find(|l| l.name == "In both arrays")
+        .expect("the fixture's both-listed group");
+    assert!(
+        !both.visible_by_default,
+        "with /BaseState ON the opposite array (/OFF) decides"
+    );
+    let neither = read
+        .layers
+        .iter()
+        .find(|l| l.name == "In neither")
+        .expect("the control group");
+    assert!(
+        neither.visible_by_default,
+        "a group in neither array is unaffected — a reader that just hid everything \
+             would pass the first assertion and fail this one"
+    );
+    assert_eq!(read.diagnostics.contradictory_on_off_groups, 1);
+    assert!(!read.diagnostics.is_faithful());
+}
+
+/// **`/BaseState /Unchanged` recovers as `ON`, and says it is
+/// recovering.**
+///
+/// Table 101 requires `/D`'s `/BaseState` to be `ON` if present, so
+/// this file violates a `shall`; and §8.11.2.1's "states are not part
+/// of the document" means there is no prior state for `Unchanged` to
+/// preserve at first open. There is therefore no clause to apply,
+/// only a recovery to choose — and `ON` is both Table 101's stated
+/// default and the only value `/D` was allowed to carry.
+///
+/// The rival recovery is what the disclosure exists for: "leave
+/// everything as found, process no arrays" would make `/OFF` inert
+/// and paint every layer the author turned off, so the two readings
+/// produce visibly different pages.
+#[test]
+fn an_unrecognised_base_state_recovers_as_on_and_discloses_it() {
+    let read = layers_of("base-state-unchanged.pdf");
+    let off = read
+        .layers
+        .iter()
+        .find(|l| l.name == "In OFF")
+        .expect("the group named in /OFF");
+    assert!(
+        !off.visible_by_default,
+        "recovering as ON means /OFF is processed, so this group is hidden"
+    );
+    let untouched = read
+        .layers
+        .iter()
+        .find(|l| l.name == "Left alone")
+        .expect("the control group");
+    assert!(untouched.visible_by_default);
+    assert!(read.diagnostics.base_state_unrecognised);
+    assert!(
+        !read.diagnostics.base_state_off_in_default,
+        "Unchanged is not OFF — the two diagnostics must not collapse into one"
+    );
+    assert!(!read.diagnostics.is_faithful());
+}

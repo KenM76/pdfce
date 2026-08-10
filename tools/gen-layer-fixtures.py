@@ -643,6 +643,81 @@ EMC
     return serialize(objects)
 
 
+def on_off_contradiction() -> bytes:
+    """A group listed in **both** ``/D /ON`` and ``/D /OFF`` (decision 038).
+
+    Nothing forbids this. Both Table 101 rows are worded as obligations
+    on the *reader* ("whose state **shall be** set to..."), not as
+    restrictions on the writer, and SS8.11 contains no ``shall not`` about
+    array membership. So the file is conforming and says two things.
+
+    The resolution is not a coin toss and this fixture pins it. Table
+    101's own ``ON`` row says the array is *redundant* when ``/BaseState``
+    is ``ON``, and an array carrying no information cannot override
+    anything -- so the **opposite** array decides, which is exactly what
+    SS8.11.4.5 b) says. With the conforming ``/BaseState ON``, a
+    both-listed group is **OFF**.
+
+    Object 4 is in both arrays and must report hidden; object 5 is in
+    neither and must report visible, so a reader that simply hid
+    everything would fail too.
+
+    The point of the fixture is the DISCLOSURE as much as the answer:
+    ``contradictory_on_off_groups`` must be 1, because an operator
+    looking at a layer that is off, in a document whose ``/ON`` array
+    names it, cannot otherwise tell a correct resolution from a bug.
+    """
+    objects, nxt = pages_doc(
+        1,
+        catalog_extra=(
+            "/OCProperties << /OCGs [4 0 R 5 0 R] "
+            "/D << /Name (Default) /BaseState /ON /Order [4 0 R 5 0 R] "
+            "/ON [4 0 R] /OFF [4 0 R] >> >>"
+        ),
+    )
+    objects[4] = ocg(pdf_string(b"In both arrays"))
+    objects[5] = ocg(pdf_string(b"In neither"))
+    assert nxt == 4
+    return serialize(objects)
+
+
+def base_state_unchanged() -> bytes:
+    """``/D /BaseState /Unchanged`` -- non-conforming, and empty.
+
+    Table 101: *"If BaseState is present in the document's default
+    configuration dictionary, its value shall be ON."* ``/Unchanged``
+    violates that ``shall`` outright.
+
+    It is also semantically empty in ``/D``. SS8.11.2.1 says states are not
+    part of the document and are initialised when it opens, so at first
+    open there is no prior state to leave unchanged. ``/Unchanged``
+    exists for the *other* consumer of Table 101 -- an alternate
+    ``/Configs`` configuration applied to an already-open document.
+
+    pdfce recovers by treating it as ``ON`` and processing ``/OFF``, so
+    object 5 is hidden. That is Table 101's stated default and the only
+    value ``/D`` was allowed to carry; the rival recovery ("leave
+    everything as found, process no arrays") would make ``/OFF`` inert
+    and paint every layer the author turned off.
+
+    Pins the recovery AND its disclosure: ``base_state_unrecognised``
+    must fire, because a reader following the *shall* and a reader
+    following the file produce different pages here.
+    """
+    objects, nxt = pages_doc(
+        1,
+        catalog_extra=(
+            "/OCProperties << /OCGs [4 0 R 5 0 R] "
+            "/D << /Name (Default) /BaseState /Unchanged /Order [4 0 R 5 0 R] "
+            "/OFF [5 0 R] >> >>"
+        ),
+    )
+    objects[4] = ocg(pdf_string(b"Left alone"))
+    objects[5] = ocg(pdf_string(b"In OFF"))
+    assert nxt == 4
+    return serialize(objects)
+
+
 def no_layers() -> bytes:
     """One page, no ``/OCProperties``.
 
@@ -667,6 +742,8 @@ def main() -> int:
         "ocmd-membership.pdf": ocmd_membership(),
         "malformed-groups.pdf": malformed_groups(),
         "painted-layers.pdf": painted_layers(),
+        "on-off-contradiction.pdf": on_off_contradiction(),
+        "base-state-unchanged.pdf": base_state_unchanged(),
         "no-layers.pdf": no_layers(),
     }
     for name, data in files.items():
