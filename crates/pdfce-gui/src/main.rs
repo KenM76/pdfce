@@ -8220,7 +8220,7 @@ impl PdfceApp {
                     ui_text::forms_data_exported(data.fields.len(), &path.display().to_string());
                 if rich > 0 {
                     note.push(' ');
-                    note.push_str(&ui_text::forms_data_rich_text_dropped(rich));
+                    note.push_str(&ui_text::forms_data_export_carries_rich_text(rich));
                 }
                 note
             }
@@ -8286,7 +8286,7 @@ impl PdfceApp {
                 let mut note = ui_text::forms_data_imported(outcome.applied, outcome.skipped);
                 if rich > 0 {
                     note.push(' ');
-                    note.push_str(&ui_text::forms_data_rich_text_dropped(rich));
+                    note.push_str(&ui_text::forms_data_import_skipped_rich_text(rich));
                 }
                 self.set_edit_note(note);
             }

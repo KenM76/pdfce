@@ -5796,6 +5796,26 @@ fn cmd_export_data(input: &Path, output: &Path, format: DataFormat) -> u8 {
         DataFormat::Fdf => data.to_fdf(Some(&src_hint)),
         DataFormat::Xfdf => data.to_xfdf(Some(&src_hint)),
     };
+    // Rich-text disclosure, on stderr in prose like every other one this
+    // binary emits. Counted from the data itself rather than re-derived from
+    // the form, so it describes the FILE that was written.
+    //
+    // Note what it does NOT say. Until Pass 37.3's first slice this export
+    // dropped the formatting entirely and the GUI warned about that; the
+    // warning is now false there and has been corrected. The CLI never had
+    // one at all, which is its own gap — the two shells must not develop
+    // different accounts of the same behaviour.
+    let rich = data
+        .fields
+        .iter()
+        .filter(|f| f.rich_value.is_some())
+        .count();
+    if rich > 0 {
+        eprintln!(
+            "pdfce-cli: {}: {rich} field(s) hold formatted (rich) text, and the formatting IS in the data file. pdfce cannot yet apply it on import, though — another reader can, but a round trip back through pdfce will not restore it.",
+            input.display()
+        );
+    }
     if let Err(err) = std::fs::write(output, &bytes) {
         eprintln!("pdfce-cli: {}: {err}", output.display());
         return exit::IO_ERROR;
@@ -5847,10 +5867,31 @@ fn cmd_import_data(input: &Path, data_path: &Path, output: &Path, mode: SaveMode
         Ok(pair) => pair,
         Err(code) => return code,
     };
+    // Counted BEFORE the import, off the live form, because a rich-text
+    // field is skipped and so leaves no trace in the outcome to count after.
+    let rich_targets = pdfce_core::forms::parse_acroform(&session.graph()).map_or(0, |form| {
+        data.fields
+            .iter()
+            .filter(|e| {
+                form.field_by_name(&e.name)
+                    .is_some_and(pdfce_core::forms::Field::is_rich_text)
+            })
+            .count()
+    });
     let outcome = match session.import_form_data(&data) {
         Ok(o) => o,
         Err(err) => return report_edit_error(input, &err),
     };
+    // WHY a field was skipped, not just that it was. `skipped=1` on the
+    // result line is a number an operator cannot act on; this is the
+    // sentence that tells them the field still holds what it held, and that
+    // pdfce declined on purpose rather than failed.
+    if rich_targets > 0 {
+        eprintln!(
+            "pdfce-cli: {}: {rich_targets} rich-text field(s) were left untouched — not even their plain value was applied. Writing plain text beside a field's existing formatting makes conforming readers display the OLD text (ISO 32000-1 §12.7.3.3), so pdfce leaves such a field alone rather than corrupt what it shows.",
+            input.display()
+        );
+    }
     let saved = match save_edited(
         &mut session,
         &source,

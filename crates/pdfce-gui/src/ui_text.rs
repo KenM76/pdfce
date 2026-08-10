@@ -7697,22 +7697,43 @@ pub fn form_field_choice_set(label: &str, count: usize) -> String {
         format!("“{label}” set to {count} selection(s).")
     }
 }
-
-/// Disclosure appended to a form-data export/import report when the document
-/// carries rich-text fields.
+/// Shown after an EXPORT when the form holds rich-text fields.
 ///
-/// pdfce's FDF/XFDF model carries field VALUES only. Both formats have a
-/// dedicated slot for formatted content (`<value-richtext>` in XFDF, `/RV` in
-/// FDF) that pdfce does not yet read or write, so a rich-text field
-/// round-trips as its plain-text equivalent and loses its formatting.
+/// # ★ This used to say the formatting was dropped, and that became false
 ///
-/// Said out loud because the alternative is an operator discovering it when a
-/// re-import comes back unstyled, by which point the styled original may be
-/// gone. Conditional on the document actually having such a field, so it is a
-/// signal rather than boilerplate.
-pub fn forms_data_rich_text_dropped(count: usize) -> String {
+/// `b8f96b1` added this string when pdfce's FDF/XFDF model carried values
+/// only. Pass 37.3's first slice made the export carry `/RV` and
+/// `<value-richtext>`, at which point the warning was actively wrong —
+/// telling an operator they had lost something they still had. A stale
+/// disclosure is worse than none: it is a false statement the operator has
+/// no way to check.
+///
+/// So it now says what is true of an export, and — because this is the
+/// question they will actually have — what is still true of the return
+/// journey. The data file is complete; pdfce is the half that cannot yet
+/// put the formatting back.
+pub fn forms_data_export_carries_rich_text(count: usize) -> String {
     format!(
-        "⚠ {count} field(s) hold formatted (rich) text. Only the plain text is carried in the data file — bold, colours and fonts are not, and will not come back on import."
+        "{count} field(s) hold formatted (rich) text, and the formatting IS in the data file. Note that pdfce cannot yet apply it on import — another reader can, but a round trip back through pdfce will not restore it."
+    )
+}
+
+/// Shown after an IMPORT when the data file named rich-text fields.
+///
+/// Distinct from the export string because the facts are different, and
+/// worse here: a rich-text field is **skipped entirely** on import, so not
+/// even its plain value lands.
+///
+/// That is not timidity. §12.7.3.3 makes `/DS` + `/RV` the inputs to
+/// appearance generation with an unconditional `shall` to regenerate on
+/// every value change (RT-M9; not gated by `/NeedAppearances`, RT-N7).
+/// Writing a fresh plain `/V` next to the field's existing `/RV` would make
+/// every conforming reader render the OLD text — a wrong value on screen,
+/// not a lost style. Leaving the field alone is the only honest option
+/// until pdfce can write the pair together.
+pub fn forms_data_import_skipped_rich_text(count: usize) -> String {
+    format!(
+        "⚠ {count} rich-text field(s) were left untouched — not even their plain value was applied. Writing plain text beside a field's existing formatting makes conforming readers display the OLD text, so pdfce leaves such a field alone rather than corrupt what it shows."
     )
 }
 
