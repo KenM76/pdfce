@@ -790,6 +790,156 @@ fn intent_set<G: ObjectGraph + ?Sized>(graph: &G, obj: Option<&Object>) -> Vec<V
     }
 }
 
+/// How deep a `/VE` visibility expression may nest before pdfce stops
+/// descending (§8.11.2.2).
+///
+/// The standard sets no limit, and a boolean expression tree is a shape
+/// a hostile or broken file can nest arbitrarily. 32 matches
+/// [`crate::layers::MAX_ORDER_DEPTH`] deliberately — both are
+/// optional-content trees walked from the same document, and two
+/// different caps would mean a file that renders but cannot be listed,
+/// or the reverse.
+///
+/// A real expression is two or three levels deep; anything past 32 is
+/// not an expression an author wrote.
+pub const MAX_VE_DEPTH: usize = 32;
+
+/// Evaluate a `/VE` visibility expression (§8.11.2.2), or `None` if it
+/// is not one pdfce can evaluate.
+///
+/// # Returning `None` rather than a default is the whole design
+///
+/// `None` means *"this is not an expression I can evaluate"*, and the
+/// caller responds by falling back to `/OCGs` + `/P`. That fallback is
+/// not a guess: §8.11.2.2 NOTE 2 tells authors to supply `/OCGs` and
+/// `/P` **alongside** `/VE` precisely so a reader without visibility-
+/// expression support has something correct to use. Falling back is
+/// therefore the behaviour the standard designed for, not a repair
+/// pdfce invented.
+///
+/// The alternative — treating a malformed `/VE` as "visible" — would
+/// discard the author's `/P` for no reason, and treating it as "hidden"
+/// would remove content because pdfce could not read a *hint*.
+///
+/// # Grammar
+///
+/// An array whose first element is the name `And`, `Or` or `Not`.
+/// Remaining elements are operands: either an OCG (ON = true) or a
+/// nested expression array. `Not` takes exactly one operand; `And` and
+/// `Or` take one or more.
+///
+/// `visited` carries the object ids of indirect arrays already entered,
+/// because an expression may reference itself through an indirect
+/// reference — legal syntax describing an infinite tree, the same hazard
+/// `/Order` has and the same guard.
+fn eval_ve<G: ObjectGraph + ?Sized>(
+    graph: &G,
+    obj: &Object,
+    off: &BTreeSet<ObjId>,
+    depth: usize,
+    visited: &mut Vec<ObjId>,
+) -> Option<bool> {
+    if depth > MAX_VE_DEPTH {
+        return None;
+    }
+    // Capture identity BEFORE resolving: the cycle guard's key exists
+    // only on the reference.
+    let id = obj.as_reference();
+    if let Some(id) = id {
+        if visited.contains(&id) {
+            return None;
+        }
+        visited.push(id);
+    }
+    let result = eval_ve_resolved(graph, graph.resolve(obj), off, depth, visited);
+    if id.is_some() {
+        visited.pop();
+    }
+    result
+}
+
+/// [`eval_ve`] once the reference (if any) has been resolved and the
+/// cycle guard has recorded it.
+fn eval_ve_resolved<G: ObjectGraph + ?Sized>(
+    graph: &G,
+    resolved: &Object,
+    off: &BTreeSet<ObjId>,
+    depth: usize,
+    visited: &mut Vec<ObjId>,
+) -> Option<bool> {
+    let Object::Array(items) = resolved else {
+        return None;
+    };
+    let op = graph
+        .resolve(items.first()?)
+        .as_name()
+        .map(|n| n.as_bytes().to_vec())?;
+    // `get(1..)` rather than `&items[1..]`: `first()?` above proves
+    // the array is non-empty, but the slicing lint is right that the
+    // proof lives in another expression and a later edit could move it.
+    let operands = items.get(1..)?;
+    if operands.is_empty() {
+        // `And`/`Or` take "one or more"; an operator with none is not an
+        // expression, and inventing an identity element (`And` of
+        // nothing = true) would be pdfce deciding what the author meant.
+        return None;
+    }
+    match op.as_slice() {
+        b"Not" => {
+            if operands.len() != 1 {
+                // §8.11.2.2: `Not` takes EXACTLY one operand. A `Not`
+                // with two is ambiguous — it could be read as
+                // `Not(And(a, b))` or as a typo for `Or` — so it is not
+                // evaluated rather than resolved by a house rule.
+                return None;
+            }
+            Some(!eval_ve_operand(graph, operands.first()?, off, depth, visited)?)
+        }
+        b"And" => {
+            // Every operand must be evaluable: one unreadable operand
+            // makes the whole conjunction unknown, because it is the
+            // operand that could have been the false one.
+            let mut all = true;
+            for o in operands {
+                all &= eval_ve_operand(graph, o, off, depth, visited)?;
+            }
+            Some(all)
+        }
+        b"Or" => {
+            let mut any = false;
+            for o in operands {
+                any |= eval_ve_operand(graph, o, off, depth, visited)?;
+            }
+            Some(any)
+        }
+        // §8.11.2.2 names three operators. A fourth is not an expression
+        // pdfce can evaluate, and guessing at it is how a reader shows
+        // content an author hid.
+        _ => None,
+    }
+}
+
+/// One operand of a `/VE` array: a nested expression, or an OCG whose
+/// state is its truth value (ON = true).
+fn eval_ve_operand<G: ObjectGraph + ?Sized>(
+    graph: &G,
+    obj: &Object,
+    off: &BTreeSet<ObjId>,
+    depth: usize,
+    visited: &mut Vec<ObjId>,
+) -> Option<bool> {
+    // An array is a nested expression whatever it contains; try that
+    // first, because an OCG is never an array.
+    if matches!(graph.resolve(obj), Object::Array(_)) {
+        return eval_ve(graph, obj, off, depth + 1, visited);
+    }
+    // Otherwise it must be an OCG, and it must be an indirect reference
+    // — visibility is keyed on object identity, so a direct dictionary
+    // has nothing to look up in `off`.
+    let id = obj.as_reference()?;
+    Some(!off.contains(&id))
+}
+
 /// Whether an annotation's `/OC` reference resolves to a hidden state, given
 /// the default-OFF set from [`optional_content_default_off`] (§8.11.3.3).
 ///
@@ -808,6 +958,20 @@ pub fn oc_is_hidden<G: ObjectGraph + ?Sized>(graph: &G, oc: ObjId, off: &BTreeSe
         .as_name()
         .is_some_and(|n| n.as_bytes() == b"OCMD");
     if is_ocmd {
+        // §8.11.2.2: `/VE` is a full boolean expression and OVERRIDES
+        // `/OCGs` + `/P` where a reader supports it. Tried first for
+        // that reason, and `None` — "not an expression pdfce can
+        // evaluate" — falls through to the `/P` path below, which NOTE 2
+        // tells authors to supply for exactly this reader.
+        if let Some(visible) = eval_ve(
+            graph,
+            d.get(b"VE").unwrap_or(&Object::Null),
+            off,
+            0,
+            &mut Vec::new(),
+        ) {
+            return !visible;
+        }
         let members = oc_refs(graph, d.get(b"OCGs"));
         if members.is_empty() {
             // Table 99: with no `/OCGs` there is nothing to test, and
@@ -1794,5 +1958,168 @@ mod tests {
     fn an_empty_config_intent_array_shows_everything() {
         assert_eq!(design_intent_off_set("/View", "[]"), 0);
         assert_eq!(design_intent_off_set("", "[]"), 0);
+    }
+    // ---- §8.11.2.2 `/VE` visibility expressions ----
+
+    /// An OCMD carrying `ve` (raw PDF for the `/VE` value) plus an
+    /// `/OCGs` + `/P` pair that would answer DIFFERENTLY, so every test
+    /// below shows which of the two was actually consulted.
+    ///
+    /// Groups 5 and 6 exist; `off` says which are hidden. `/P /AllOn`
+    /// with both listed means the fallback answers "visible only when
+    /// both are on".
+    fn ocmd_ve_hidden(ve: &str, five_off: bool, six_off: bool) -> bool {
+        let mut off = String::from("/OFF [");
+        if five_off {
+            off.push_str("5 0 R ");
+        }
+        if six_off {
+            off.push_str("6 0 R");
+        }
+        off.push(']');
+        let ve_entry = if ve.is_empty() {
+            String::new()
+        } else {
+            format!("/VE {ve}")
+        };
+        let objects: Vec<(u32, Vec<u8>)> = vec![
+            (
+                1,
+                format!(
+                    "<< /Type /Catalog /Pages 2 0 R /OCProperties \
+                     << /OCGs [5 0 R 6 0 R] /D << {off} >> >> >>"
+                )
+                .into_bytes(),
+            ),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 10 10] >>".to_vec(),
+            ),
+            (3, b"<< /Type /Page /Parent 2 0 R >>".to_vec()),
+            (
+                4,
+                format!("<< /Type /OCMD /OCGs [5 0 R 6 0 R] /P /AllOn {ve_entry} >>").into_bytes(),
+            ),
+            (5, b"<< /Type /OCG /Name (A) >>".to_vec()),
+            (6, b"<< /Type /OCG /Name (B) >>".to_vec()),
+        ];
+        let doc = build_pdf(&objects);
+        let graph = doc.view();
+        let off_set = optional_content_default_off(&graph);
+        oc_is_hidden(&graph, ObjId::new(4, 0), &off_set)
+    }
+
+    /// ★ **`/VE` overrides `/OCGs` + `/P`.**
+    ///
+    /// The fixture's `/P /AllOn` says "visible only when BOTH groups are
+    /// on". The expression says `Or`, which is satisfied by one. With
+    /// group B off, the two answers differ — so this test says which one
+    /// pdfce used, and §8.11.2.2 requires the expression.
+    #[test]
+    fn a_visibility_expression_overrides_the_p_policy() {
+        assert!(
+            !ocmd_ve_hidden("[/Or 5 0 R 6 0 R]", false, true),
+            "Or is satisfied by A alone; /P /AllOn would have hidden it"
+        );
+        assert!(
+            ocmd_ve_hidden("[/Or 5 0 R 6 0 R]", true, true),
+            "with both off, Or is false and the content is hidden"
+        );
+    }
+
+    /// `And` and `Not`, including the nesting that makes `/VE` worth
+    /// having at all — no `/P` policy can express "A but not B".
+    #[test]
+    fn and_or_and_not_compose() {
+        assert!(!ocmd_ve_hidden("[/And 5 0 R 6 0 R]", false, false));
+        assert!(ocmd_ve_hidden("[/And 5 0 R 6 0 R]", false, true));
+        assert!(ocmd_ve_hidden("[/Not 5 0 R]", false, false));
+        assert!(!ocmd_ve_hidden("[/Not 5 0 R]", true, false));
+        // A but not B — the case /P cannot express.
+        let expr = "[/And 5 0 R [/Not 6 0 R]]";
+        assert!(!ocmd_ve_hidden(expr, false, true), "A on, B off => visible");
+        assert!(ocmd_ve_hidden(expr, false, false), "B on => hidden");
+        assert!(ocmd_ve_hidden(expr, true, true), "A off => hidden");
+    }
+
+    /// ★ **An expression pdfce cannot evaluate falls back to `/P`,
+    /// rather than defaulting to visible or hidden.**
+    ///
+    /// §8.11.2.2 NOTE 2 tells authors to supply `/OCGs` + `/P` alongside
+    /// `/VE` precisely so a reader without expression support has
+    /// something correct to use. So the fallback is the behaviour the
+    /// standard designed for, not a repair pdfce invented — and it is
+    /// strictly better than the alternatives, which would either discard
+    /// the author's `/P` or remove content because a *hint* was
+    /// unreadable.
+    ///
+    /// Each malformation here is checked against the `/P /AllOn` answer
+    /// with one group off — which is "hidden" — and against the `Or`
+    /// answer, which would be "visible". Getting `/P`'s answer is the
+    /// proof that the fallback ran.
+    #[test]
+    fn an_unevaluable_expression_falls_back_to_the_p_policy() {
+        for bad in [
+            "[/Xor 5 0 R 6 0 R]", // not one of the three operators
+            "[/Not 5 0 R 6 0 R]", // Not takes exactly one operand
+            "[/And]",             // an operator with no operands
+            "[5 0 R 6 0 R]",      // no operator at all
+            "42",                 // not an array
+            "[/Or (text)]",       // an operand that is neither OCG nor expression
+        ] {
+            assert!(
+                ocmd_ve_hidden(bad, false, true),
+                "{bad} must fall back to /P /AllOn, which hides when B is off"
+            );
+        }
+        // And the control: a WELL-FORMED Or over the same state is
+        // visible, so the assertions above are detecting the fallback
+        // rather than an evaluator that hides everything.
+        assert!(!ocmd_ve_hidden("[/Or 5 0 R 6 0 R]", false, true));
+    }
+
+    /// An absent `/VE` is the ordinary case and must reach `/P`
+    /// untouched.
+    #[test]
+    fn an_absent_ve_leaves_the_p_policy_alone() {
+        assert!(ocmd_ve_hidden("", false, true), "/P /AllOn with B off");
+        assert!(!ocmd_ve_hidden("", false, false), "/P /AllOn with both on");
+    }
+
+    /// **A self-referential expression terminates.**
+    ///
+    /// `/VE` operands may be indirect, so an array can reference itself
+    /// — legal syntax describing an infinite tree, the same hazard
+    /// `/Order` carries. Without the guard this recurses until the stack
+    /// ends; with it the expression is unevaluable and `/P` answers.
+    #[test]
+    fn a_self_referential_expression_does_not_recurse_forever() {
+        let objects: Vec<(u32, Vec<u8>)> = vec![
+            (
+                1,
+                b"<< /Type /Catalog /Pages 2 0 R /OCProperties \
+                  << /OCGs [5 0 R] /D << /OFF [5 0 R] >> >> >>"
+                    .to_vec(),
+            ),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 10 10] >>".to_vec(),
+            ),
+            (3, b"<< /Type /Page /Parent 2 0 R >>".to_vec()),
+            (
+                4,
+                b"<< /Type /OCMD /OCGs [5 0 R] /P /AnyOn /VE 6 0 R >>".to_vec(),
+            ),
+            (5, b"<< /Type /OCG /Name (A) >>".to_vec()),
+            // The expression's only operand is the expression.
+            (6, b"[/Or 6 0 R]".to_vec()),
+        ];
+        let doc = build_pdf(&objects);
+        let graph = doc.view();
+        let off_set = optional_content_default_off(&graph);
+        assert!(
+            oc_is_hidden(&graph, ObjId::new(4, 0), &off_set),
+            "the cycle makes the expression unevaluable, so /P /AnyOn answers: A is off, so hidden"
+        );
     }
 }
