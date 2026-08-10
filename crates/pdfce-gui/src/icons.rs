@@ -888,6 +888,10 @@ impl IconArt {
             .pixels()
             .iter()
             .map(|p| {
+                // NOT A THEME COLOUR: arithmetic on an existing pixel, not
+                // a choice of one — the rasteriser reassembles a colour the
+                // caller already picked (icons are tinted by the widget's
+                // own foreground stroke, which the theme sets).
                 egui::Color32::from_rgba_premultiplied(p.red(), p.green(), p.blue(), p.alpha())
             })
             .collect();

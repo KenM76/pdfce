@@ -2710,6 +2710,65 @@ pub fn settings_group_colour() -> &'static str {
     "Colour"
 }
 
+/// Settings group: how the application itself looks.
+pub fn settings_group_appearance() -> &'static str {
+    "Appearance"
+}
+
+/// Title of the theme setting.
+pub fn setting_theme_title() -> &'static str {
+    "Theme"
+}
+
+/// What the theme setting does NOT affect.
+///
+/// Every setting in this panel states its silence and its radius. This
+/// one's silence is the reassuring direction, and it is the sentence an
+/// operator most needs: a theme cannot change a document.
+pub fn setting_theme_silence() -> &'static str {
+    "Changes the window only. It never alters a document, and nothing here is written into a PDF you save."
+}
+
+/// The theme setting's blast radius.
+pub fn setting_theme_radius() -> &'static str {
+    "Applies as soon as you pick it, so you can see it. Cancel puts it back."
+}
+
+/// A theme preset's display name.
+pub fn theme_preset_label(preset: crate::theme::Preset) -> &'static str {
+    match preset {
+        crate::theme::Preset::Quiet => "Quiet",
+        crate::theme::Preset::Airy => "Airy",
+        crate::theme::Preset::Dark => "Dark",
+    }
+}
+
+/// One line on what a preset is for.
+pub fn theme_preset_note(preset: crate::theme::Preset) -> &'static str {
+    match preset {
+        crate::theme::Preset::Quiet => {
+            "Muted greys, one accent, tight spacing. The page dominates and the window recedes."
+        }
+        crate::theme::Preset::Airy => {
+            "Lighter and roomier, with softer edges and clearer grouping. Easier to scan; uses more screen."
+        }
+        crate::theme::Preset::Dark => {
+            "A dark window against a light page, as CAD tools do it. Strong page edge, easier on a long session."
+        }
+    }
+}
+
+/// The settings file names a theme this build does not have.
+///
+/// Quotes the token, because the likeliest cause is a settings file
+/// written by a newer pdfce — and says the name is kept, so an operator
+/// does not "fix" it by overwriting a preference that will work again.
+pub fn setting_theme_unknown(token: &str) -> String {
+    format!(
+        "This settings file asks for a theme named \"{token}\", which this version does not have.          Using Quiet for now. The name is kept, not overwritten."
+    )
+}
+
 /// Settings group: images and transparency.
 pub fn settings_group_images() -> &'static str {
     "Images and transparency"

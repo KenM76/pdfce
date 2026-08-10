@@ -226,7 +226,10 @@ pub fn show(
             egui::ScrollArea::vertical()
                 .max_height(available)
                 .show(ui, |ui| {
-                    group(ui, ui_text::settings_group_colour(), true, |ui| {
+                    group(ui, ui_text::settings_group_appearance(), true, |ui| {
+                        theme_setting(ui, draft);
+                    });
+                    group(ui, ui_text::settings_group_colour(), false, |ui| {
                         cmyk_intent_setting(ui, draft);
                         ui.add_space(10.0);
                         cmyk_jpeg_setting(ui, draft);
@@ -339,6 +342,59 @@ fn option<T: PartialEq>(
 // ---------------------------------------------------------------------------
 // Colour
 // ---------------------------------------------------------------------------
+
+/// The theme picker.
+///
+/// # It applies while you are looking at it
+///
+/// Every other setting here is a *draft* until Save — that is the panel's
+/// whole contract, and it is right for settings that change how a
+/// document is interpreted, where an accidental keystroke should not
+/// silently alter a render.
+///
+/// A theme is the one setting where that contract is wrong. You cannot
+/// choose a look from a radio button's label; you choose it by seeing it.
+/// So the selection takes effect on the next frame, and Cancel puts it
+/// back — the draft still governs what is SAVED, it just no longer
+/// governs what is SHOWN.
+///
+/// Stated in the panel rather than left for the operator to discover,
+/// because a setting that behaves differently from its neighbours and
+/// does not say so is a surprise even when the behaviour is the better
+/// one.
+fn theme_setting(ui: &mut egui::Ui, draft: &mut Draft) {
+    header(
+        ui,
+        ui_text::setting_theme_title(),
+        ui_text::setting_theme_silence(),
+        ui_text::setting_theme_radius(),
+    );
+    let current = crate::theme::Preset::from_key(&draft.working.theme);
+    for preset in crate::theme::Preset::ALL {
+        let mut selected = current == Some(*preset);
+        if ui
+            .radio(selected, ui_text::theme_preset_label(*preset))
+            .clicked()
+        {
+            selected = true;
+            draft.working.theme = preset.key().to_owned();
+        }
+        let _ = selected;
+        ui.label(
+            egui::RichText::new(ui_text::theme_preset_note(*preset))
+                .small()
+                .weak(),
+        );
+    }
+    // The token in the file names a theme this build does not have.
+    // Said out loud, with the token quoted, because the alternative is an
+    // operator seeing none of the three selected and no explanation —
+    // and the most likely cause is a settings file from a newer pdfce,
+    // whose token is being PRESERVED rather than overwritten.
+    if current.is_none() {
+        ui.label(egui::RichText::new(ui_text::setting_theme_unknown(&draft.working.theme)).small());
+    }
+}
 
 fn cmyk_intent_setting(ui: &mut egui::Ui, draft: &mut Draft) {
     header(

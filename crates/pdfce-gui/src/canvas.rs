@@ -2989,14 +2989,17 @@ mod tests {
             SnapKind::Axis,
         ];
         for k in kinds {
+            // NOT A THEME COLOUR: an arbitrary argument; this asserts geometry.
             assert!(!snap_marker_shapes(Pos2::new(10.0, 10.0), k, Color32::RED, 4.0).is_empty());
         }
         // The derived centerline's glyph must not be visually confused with the
         // routine centerline tick (§2.3.1) — here proven by a different shape
         // composition (a hatched square vs. two dashes).
         let derived =
+            // NOT A THEME COLOUR: an arbitrary argument; this asserts geometry.
             snap_marker_shapes(Pos2::ZERO, SnapKind::DerivedCenterline, Color32::RED, 4.0);
         let routine =
+            // NOT A THEME COLOUR: an arbitrary argument; this asserts geometry.
             snap_marker_shapes(Pos2::ZERO, SnapKind::SegmentCenterline, Color32::RED, 4.0);
         assert_ne!(derived.len(), routine.len());
     }

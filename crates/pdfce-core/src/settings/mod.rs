@@ -849,6 +849,27 @@ pub struct Settings {
     pub separations: SeparationPolicy,
     /// How `DeviceCMYK` is converted for display.
     pub cmyk_intent: CmykIntent,
+    /// Which visual theme the GUI uses, as an opaque token.
+    ///
+    /// # A `String`, deliberately, and core does not validate it
+    ///
+    /// The set of themes is a **shell** concern — `pdfce-gui` owns the
+    /// palettes, and `pdfce-core` must never gain a GUI dependency
+    /// (`ARCHITECTURE.md` §3, the invariant that keeps a future WASM
+    /// fork a shell swap rather than a rewrite). An enum here would put
+    /// the shell's vocabulary in the core crate for no benefit, and
+    /// would have to be extended in core every time the shell added a
+    /// look.
+    ///
+    /// So core stores and round-trips the token and takes no view on
+    /// what it means. The shell resolves it, and is responsible for
+    /// saying so when it cannot — an unknown token is a note the
+    /// operator sees, not a silent reset, because silently discarding a
+    /// preference is indistinguishable from losing it.
+    ///
+    /// A consequence worth having: a settings file written by a NEWER
+    /// pdfce keeps its theme when an older one opens and re-saves it.
+    pub theme: String,
     /// The gap, as a multiple of the current font size, at which
     /// text extraction inserts a word break.
     ///
@@ -907,6 +928,12 @@ impl Default for Settings {
         Self {
             separations: SeparationPolicy::default(),
             cmyk_intent: CmykIntent::default(),
+            // The shell's default preset name, as a literal rather than
+            // an import, for the layering reason on the field. The GUI's
+            // `theme::Preset::default().key()` must agree, and
+            // `the_core_default_theme_token_is_one_the_shell_knows` in
+            // `pdfce-gui` is what checks that it does.
+            theme: "quiet".to_owned(),
             word_gap_ratio: crate::text_extract::ExtractOptions::default().word_gap_ratio,
             // The ambiguity-register enums declare their own default on
             // the variant, the same way `CmykIntent` does, because the
@@ -1149,6 +1176,8 @@ impl Settings {
                     using: cmyk_token(Self::default().cmyk_intent).to_owned(),
                 }),
             },
+            // Unvalidated on purpose — see the field docs.
+            "theme" => self.theme = value.to_owned(),
             "word_gap_ratio" => match value.parse::<f32>() {
                 Ok(parsed) if parsed.is_finite() => {
                     let clamped = parsed.clamp(MIN_WORD_GAP_RATIO, MAX_WORD_GAP_RATIO);
@@ -1359,6 +1388,18 @@ impl Settings {
             "mask_resample = {}\n",
             mask_resample_token(self.mask_resample)
         );
+
+        out.push_str(
+            "# Which look the window uses. The application's own colours and spacing\n\
+             # ONLY -- it never changes a document, and nothing here is written into\n\
+             # a PDF you save.\n\
+             #   quiet = muted greys, one accent, tight spacing (the default)\n\
+             #   airy  = lighter, roomier, softer edges\n\
+             #   dark  = a dark window against a light page, as CAD tools do it\n\
+             # An unrecognised name is reported when pdfce starts and the default is\n\
+             # used for that run; the name you wrote is kept, not overwritten.\n",
+        );
+        let _ = writeln!(out, "theme = {}\n", self.theme);
 
         out.push_str(
             "# How a picture is drawn when it is shown SMALLER than its own pixel\n\
@@ -1789,6 +1830,11 @@ mod tests {
             missing_as: MissingAppearanceState::FirstEntry,
             xref_entry_eol: XrefEntryEol::CrLf,
             trailing_eol: TrailingEol::None,
+            // A token core does NOT know, on purpose: this pins that the
+            // round trip preserves whatever the shell wrote rather than
+            // normalising it to something core recognises — which is the
+            // whole point of storing it opaquely.
+            theme: "dark".to_owned(),
         };
         assert_ne!(
             written,

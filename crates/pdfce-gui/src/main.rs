@@ -231,6 +231,7 @@ mod redact_apply;
 mod render_worker;
 mod ribbon;
 mod settings_panel;
+mod theme;
 mod ui_text;
 mod vector_edit_tool;
 mod viewer;
@@ -289,14 +290,16 @@ const FIND_PANEL_HEIGHT_PTS: f32 = 96.0;
 /// Amber, matching the "in progress / not yet an edit" hue the measure and
 /// add-text previews already use, because an entered object IS a transient
 /// working state rather than a committed one.
-const SUBPATH_OUTLINE_COLOR: egui::Color32 = egui::Color32::from_rgb(210, 140, 40);
+fn subpath_outline_color(ctx: &egui::Context) -> egui::Color32 {
+    theme::Theme::of(ctx).palette.subpath_outline
+}
 
 /// Outline colour of a node (anchor) mark — deliberately NOT
-/// [`SUBPATH_OUTLINE_COLOR`] (Pass 36.3).
+/// [`subpath_outline_color(ui.ctx())`] (Pass 36.3).
 ///
 /// # The defect this constant exists to fix
 ///
-/// The node marks used to be stroked in `SUBPATH_OUTLINE_COLOR`: the same hue
+/// The node marks used to be stroked in `subpath_outline_color(ui.ctx())`: the same hue
 /// as the part outline they are drawn on top of. That is invisible in exactly
 /// the case that matters most. Most subpaths of a CAD drawing are single
 /// straight lines, so the part outline degenerates to a thin band
@@ -316,7 +319,9 @@ const SUBPATH_OUTLINE_COLOR: egui::Color32 = egui::Color32::from_rgb(210, 140, 4
 /// colour-vision difference alike. Shape still does the primary work (R84) —
 /// squares for nodes, circles for handles, rectangles for outlines — this
 /// makes the shape legible rather than replacing it.
-const NODE_MARK_COLOR: egui::Color32 = egui::Color32::from_rgb(30, 110, 220);
+fn node_mark_color(ctx: &egui::Context) -> egui::Color32 {
+    theme::Theme::of(ctx).palette.node_mark
+}
 
 /// Fill colour of an UNSELECTED node mark (Pass 36.3).
 ///
@@ -325,8 +330,10 @@ const NODE_MARK_COLOR: egui::Color32 = egui::Color32::from_rgb(30, 110, 220);
 /// line through it, and a square filled with the *panel* colour is invisible
 /// the moment the operator turns on a dark theme while viewing a white page.
 /// The page under a node is white in every document pdfce has drawn, and where
-/// it is not, the [`NODE_MARK_COLOR`] border is what carries the mark.
-const NODE_MARK_FILL: egui::Color32 = egui::Color32::from_rgb(250, 250, 252);
+/// it is not, the [`node_mark_color(ui.ctx())`] border is what carries the mark.
+fn node_mark_fill(ctx: &egui::Context) -> egui::Color32 {
+    theme::Theme::of(ctx).palette.node_mark_fill
+}
 
 /// Outline colour for a SELECTED ce dimension (Pass 25.5).
 ///
@@ -334,13 +341,17 @@ const NODE_MARK_FILL: egui::Color32 = egui::Color32::from_rgb(250, 250, 252);
 /// selection cue says so: a distinct teal, not the page-object accent and not
 /// the amber "inside an object" hue. Three states, three cues — an operator
 /// should never have to work out which kind of thing is selected from context.
-const DIMENSION_SELECT_COLOR: egui::Color32 = egui::Color32::from_rgb(40, 150, 160);
+fn dimension_select_color(ctx: &egui::Context) -> egui::Color32 {
+    theme::Theme::of(ctx).palette.dimension_selected
+}
 
 /// Outline colour while a ce dimension is being dragged — the same
 /// "in progress, not yet an edit" orange every other live preview uses, so the
 /// distinction being drawn is committed-vs-pending rather than a fourth
 /// unrelated colour.
-const DIMENSION_DRAG_COLOR: egui::Color32 = egui::Color32::from_rgb(210, 90, 40);
+fn dimension_drag_color(ctx: &egui::Context) -> egui::Color32 {
+    theme::Theme::of(ctx).palette.preview
+}
 
 /// How long a continuous zoom gesture must be idle before the view
 /// commits to a real re-rasterization. See the module docs.
@@ -794,6 +805,9 @@ struct PdfceApp {
     /// A `BTreeMap` rather than a `HashMap` so the derived
     /// `LayerVisibility` is built in a stable order — two renders of the
     /// same state must be identical, including in their diagnostics.
+    /// The look. See [`crate::theme`] — this is the whole of pdfce's
+    /// appearance, and the only place a colour or a metric is decided.
+    theme: theme::Theme,
     layer_overrides: std::collections::BTreeMap<pdfce_core::object::ObjId, bool>,
     /// Bumped whenever [`Self::layer_overrides`] changes, so the cached
     /// page texture invalidates. Without it the toggle would appear to do
@@ -1562,6 +1576,7 @@ impl Default for PdfceApp {
             font_folders: diag::font_dirs(),
             font_env: pdfce_render::FontEnvironment::bundled(),
             font_env_generation: 0,
+            theme: theme::Theme::default(),
             layer_overrides: std::collections::BTreeMap::new(),
             layers_generation: 0,
             font_notes: Vec::new(),
@@ -1599,6 +1614,10 @@ impl Default for PdfceApp {
             recovery_note: None,
             // Pass 6.1: a visible red pen and a 2-point stroke — sensible
             // defaults an operator can change before authoring.
+            // DOCUMENT COLOUR: written into the annotation's `/C` and its
+            // appearance stream, so it is the operator's choice about
+            // document content and NOT chrome. A theme must never move
+            // it — see `theme`'s module docs.
             markup_color: egui::Color32::from_rgb(0xE0, 0x30, 0x30),
             markup_width: 2.0,
             pending_text_kind: None,
@@ -3411,6 +3430,7 @@ impl OpenDoc {
             prop_font: default_font,
             prop_donor: None,
             prop_size: 12.0,
+            // DOCUMENT COLOUR: same as `markup_color` — reaches the file.
             prop_color: egui::Color32::BLACK,
             prop_alignment: pdfce_core::text_edit::BlockAlignment::Left,
             prop_leading: 0.0,
@@ -12664,6 +12684,30 @@ impl eframe::App for PdfceApp {
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        // FIRST, before any widget is built: the style the rest of the
+        // frame draws against. Per frame rather than at startup so a
+        // theme change takes effect on the next paint with no restart
+        // and nothing to invalidate — see `Theme::apply`.
+        //
+        // The DRAFT wins while the Settings panel is open, which is what
+        // makes the picker a live preview rather than a radio button
+        // whose effect you see after saving. Every other setting in that
+        // panel is deliberately draft-until-Save; a theme is the one
+        // where you cannot judge the choice from the label. Cancel
+        // discards the draft, so the look reverts with it — no separate
+        // undo path, and nothing to get out of step.
+        let token = self
+            .settings_draft
+            .as_ref()
+            .map_or(self.settings.theme.as_str(), |d| d.working.theme.as_str());
+        self.theme = theme::Theme::new(theme::Preset::from_key(token).unwrap_or_default());
+        self.theme.apply(&ctx);
+        diag::trace(|| {
+            format!(
+                "theme token={token:?} preset={:?} surface={:?} node_mark={:?}",
+                self.theme.preset, self.theme.palette.surface, self.theme.palette.node_mark
+            )
+        });
         let pixels_per_point = ctx.pixels_per_point();
         let mut actions: Vec<Action> = Vec::new();
 
@@ -18030,7 +18074,7 @@ fn run_text_edit_tool(
         {
             let covered = model.resolve_range(a, c);
             cross_run = canvas::selection_spans_multiple_runs(&covered);
-            let fill = egui::Color32::from_rgba_unmultiplied(90, 140, 220, 70);
+            let fill = theme::Theme::of(ui.ctx()).palette.selection_fill;
             for g in &covered {
                 if let Some(glyph) = model.glyph(*g) {
                     let b = glyph_pdf_box(glyph);
@@ -18071,7 +18115,7 @@ fn run_text_edit_tool(
         // this Pass (they need a core persistence API + FF-A reflow to
         // consume a correction); this is read-only visualization only.
         if state.show_block_overlay {
-            let stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(200, 120, 40));
+            let stroke = egui::Stroke::new(1.0, theme::Theme::of(ui.ctx()).palette.guide);
             for block in model.blocks() {
                 let b = block.bbox;
                 if let (Some(min), Some(max)) = (
@@ -18114,7 +18158,7 @@ fn run_text_edit_tool(
                 painter.rect_filled(
                     screen_box,
                     0.0,
-                    egui::Color32::from_rgba_unmultiplied(250, 250, 250, 220),
+                    theme::Theme::of(ui.ctx()).palette.label_backdrop,
                 );
                 let size = (run.glyphs.first().map_or(12.0, |g| g.size) * zoom).clamp(6.0, 96.0);
                 painter.text(
@@ -18122,9 +18166,9 @@ fn run_text_edit_tool(
                     egui::Align2::LEFT_BOTTOM,
                     &pending.draft_text,
                     egui::FontId::proportional(size),
-                    egui::Color32::from_rgb(20, 20, 20),
+                    theme::Theme::of(ui.ctx()).palette.label_text,
                 );
-                let dash = egui::Stroke::new(1.5, egui::Color32::from_rgb(210, 90, 40));
+                let dash = egui::Stroke::new(1.5, theme::Theme::of(ui.ctx()).palette.preview);
                 for (a, z) in [
                     (screen_box.left_top(), screen_box.right_top()),
                     (screen_box.right_top(), screen_box.right_bottom()),
@@ -18138,7 +18182,7 @@ fn run_text_edit_tool(
                     egui::Align2::LEFT_BOTTOM,
                     ui_text::preview_tag(),
                     egui::FontId::proportional(11.0),
-                    egui::Color32::from_rgb(210, 90, 40),
+                    theme::Theme::of(ui.ctx()).palette.preview,
                 );
             }
         }
@@ -18149,8 +18193,8 @@ fn run_text_edit_tool(
         // nothing is applied until Accept (rule 4). Same painter, same
         // `to_screen`, no re-raster.
         if let Some(r) = state.reflow.as_ref() {
-            let amber = egui::Color32::from_rgb(200, 120, 40);
-            let preview_orange = egui::Color32::from_rgb(210, 90, 40);
+            let amber = theme::Theme::of(ui.ctx()).palette.guide;
+            let preview_orange = theme::Theme::of(ui.ctx()).palette.preview;
 
             // §5.1: the targeted block's SOLID (not dashed) highlight, 2.5px —
             // shape + weight is the signal, not a new colour (rule 6). May span
@@ -18190,7 +18234,7 @@ fn run_text_edit_tool(
                 painter.rect_filled(
                     old_box,
                     0.0,
-                    egui::Color32::from_rgba_unmultiplied(250, 250, 250, 220),
+                    theme::Theme::of(ui.ctx()).palette.label_backdrop,
                 );
                 let muted = egui::Stroke::new(1.0, visuals.weak_text_color());
                 for (a, z) in [
@@ -18240,7 +18284,7 @@ fn run_text_edit_tool(
                             egui::Align2::LEFT_BOTTOM,
                             &line.text,
                             egui::FontId::proportional(size),
-                            egui::Color32::from_rgb(20, 20, 20),
+                            theme::Theme::of(ui.ctx()).palette.label_text,
                         );
                     }
                 }
@@ -18268,7 +18312,8 @@ fn run_text_edit_tool(
                     // §5.2 item 5: the re-flushed right edge, for right/centre/
                     // justified (all three place text relative to it).
                     if pv.alignment.alignment != BlockAlignment::Left {
-                        let guide = egui::Stroke::new(1.0, egui::Color32::from_rgb(160, 90, 40));
+                        let guide =
+                            egui::Stroke::new(1.0, theme::Theme::of(ui.ctx()).palette.guide);
                         painter.add(egui::Shape::dashed_line(
                             &[new_box.right_top(), new_box.right_bottom()],
                             guide,
@@ -18280,7 +18325,7 @@ fn run_text_edit_tool(
                             egui::Align2::RIGHT_TOP,
                             ui_text::reflow_wrap_width_label(),
                             egui::FontId::proportional(10.0),
-                            egui::Color32::from_rgb(160, 90, 40),
+                            theme::Theme::of(ui.ctx()).palette.guide,
                         );
                     }
                 }
@@ -18303,7 +18348,10 @@ fn run_text_edit_tool(
                     painter.rect_filled(
                         handle_rect,
                         2.0,
-                        egui::Color32::from_rgba_unmultiplied(210, 90, 40, 70),
+                        theme::Theme::of(ui.ctx())
+                            .palette
+                            .preview
+                            .gamma_multiply(0.3),
                     );
                     if resp.dragged()
                         && let Some(sp) = resp.interact_pointer_pos()
@@ -19288,6 +19336,11 @@ fn add_text_options_ui(
 /// widget for a colour model core would silently coerce.
 fn add_text_color(c: egui::Color32) -> pdfce_core::text_edit::NewTextColor {
     use pdfce_core::text_edit::NewTextColor;
+    // DOCUMENT COLOUR: `c` is the operator's chosen TEXT colour, on its
+    // way into the content stream. The comparison decides which PDF
+    // colour operator gets written, so it must track pure black exactly
+    // — a themed "black" would silently emit an RGB triple for text the
+    // operator asked to be black.
     if c == egui::Color32::BLACK {
         NewTextColor::Black
     } else {
@@ -19677,7 +19730,7 @@ fn run_place_field_tool(
         ui.painter_at(image_rect).rect_stroke(
             egui::Rect::from_two_pos(a, b),
             0.0,
-            egui::Stroke::new(1.5, egui::Color32::from_rgb(210, 90, 40)),
+            egui::Stroke::new(1.5, theme::Theme::of(ui.ctx()).palette.preview),
             egui::StrokeKind::Middle,
         );
     }
@@ -20011,9 +20064,9 @@ fn run_add_text_tool(
         let crop = page.crop_box;
         let painter = ui.painter_at(image_rect);
         let text_color = ui.visuals().text_color();
-        let preview_orange = egui::Color32::from_rgb(210, 90, 40);
-        let mask_fill = egui::Color32::from_rgba_unmultiplied(250, 250, 250, 220);
-        let ink = egui::Color32::from_rgb(20, 20, 20);
+        let preview_orange = theme::Theme::of(ui.ctx()).palette.preview;
+        let mask_fill = theme::Theme::of(ui.ctx()).palette.label_backdrop;
+        let ink = theme::Theme::of(ui.ctx()).palette.label_text;
         // Coordinate bridges — capture `page` (immutable) + Copy values, never
         // `state`, so they coexist with the mutable state borrow below. The
         // SAME canvas→PDF bridge 14.3 §3 established (never `screen_to_page`
@@ -22004,7 +22057,7 @@ fn draw_form_field_chrome(
     // A hue of its own, distinct from the object-selection accent, because it
     // means something different: "a control lives here", not "this is
     // selected". R84 — the dash carries the distinction too, not colour alone.
-    let chrome = egui::Color32::from_rgb(150, 90, 200);
+    let chrome = theme::Theme::of(ui.ctx()).palette.field_chrome;
 
     let page_index = doc.view.page_index;
     let Some(page_id) = doc.pages.get(page_index).map(|p| p.id) else {
@@ -22153,7 +22206,7 @@ fn draw_selection_outlines(
         painter.rect_stroke(
             rect,
             0.0,
-            egui::Stroke::new(2.0, SUBPATH_OUTLINE_COLOR),
+            egui::Stroke::new(2.0, subpath_outline_color(ui.ctx())),
             egui::StrokeKind::Outside,
         );
 
@@ -22239,7 +22292,7 @@ fn draw_selection_outlines(
                     egui::Align2::LEFT_TOP,
                     ui_text::subpath_node_view_off(nodes.len(), canvas::MAX_DRAWN_NODES),
                     egui::FontId::proportional(12.0),
-                    SUBPATH_OUTLINE_COLOR,
+                    subpath_outline_color(ui.ctx()),
                 );
             } else {
                 // ---- Bézier handles, drawn UNDER the node marks ----------
@@ -22282,7 +22335,7 @@ fn draw_selection_outlines(
                     // rather than inventing a fourth (decision 028 §Q2).
                     painter.add(egui::Shape::dashed_line(
                         &[ac, hc],
-                        egui::Stroke::new(1.0, SUBPATH_OUTLINE_COLOR),
+                        egui::Stroke::new(1.0, subpath_outline_color(ui.ctx())),
                         3.0,
                         3.0,
                     ));
@@ -22297,7 +22350,11 @@ fn draw_selection_outlines(
                     if selected {
                         painter.circle_filled(hc, r, ui.visuals().selection.stroke.color);
                     } else {
-                        painter.circle_stroke(hc, r, egui::Stroke::new(1.5, SUBPATH_OUTLINE_COLOR));
+                        painter.circle_stroke(
+                            hc,
+                            r,
+                            egui::Stroke::new(1.5, subpath_outline_color(ui.ctx())),
+                        );
                     }
                     let _ = side;
                 }
@@ -22343,13 +22400,13 @@ fn draw_selection_outlines(
                         if selected {
                             ui.visuals().selection.stroke.color
                         } else {
-                            NODE_MARK_FILL
+                            node_mark_fill(ui.ctx())
                         },
                     );
                     painter.rect_stroke(
                         r,
                         0.0,
-                        egui::Stroke::new(1.5, NODE_MARK_COLOR),
+                        egui::Stroke::new(1.5, node_mark_color(ui.ctx())),
                         egui::StrokeKind::Middle,
                     );
                 }
@@ -22406,11 +22463,11 @@ fn draw_selection_outlines(
                     // marks, for the same legibility reason; smaller, so the
                     // two populations are told apart by SIZE rather than by
                     // presence-of-fill (which is what selection means).
-                    painter.rect_filled(r, 0.0, NODE_MARK_FILL);
+                    painter.rect_filled(r, 0.0, node_mark_fill(ui.ctx()));
                     painter.rect_stroke(
                         r,
                         0.0,
-                        egui::Stroke::new(1.0, NODE_MARK_COLOR),
+                        egui::Stroke::new(1.0, node_mark_color(ui.ctx())),
                         egui::StrokeKind::Middle,
                     );
                 }
@@ -22429,7 +22486,7 @@ fn draw_selection_outlines(
                     egui::Align2::LEFT_TOP,
                     ui_text::other_parts_points_not_drawn(undrawn),
                     egui::FontId::proportional(12.0),
-                    SUBPATH_OUTLINE_COLOR,
+                    subpath_outline_color(ui.ctx()),
                 );
             }
         }
@@ -22700,7 +22757,7 @@ fn run_vector_edit_tool(
     {
         let page = &doc.pages[page_index];
         let painter = ui.painter_at(image_rect);
-        let preview_color = egui::Color32::from_rgb(210, 90, 40);
+        let preview_color = theme::Theme::of(ui.ctx()).palette.preview;
         let snap_color = ui.visuals().selection.stroke.color;
 
         let to_pdf = |sp: egui::Pos2| -> Option<Point> {
@@ -23534,7 +23591,7 @@ fn run_dimension_drag(
         if let Some(kind) = placed {
             if let Some((dim_a, dim_b, ext_a, ext_b)) = kind.linear_geometry() {
                 let painter = ui.painter_at(image_rect);
-                let stroke = egui::Stroke::new(2.0, DIMENSION_DRAG_COLOR);
+                let stroke = egui::Stroke::new(2.0, dimension_drag_color(ui.ctx()));
                 let to_screen = |pt: pdfce_core::vector::Point| -> Option<egui::Pos2> {
                     viewer::pdf_space_to_canvas(egui::pos2(pt.x as f32, pt.y as f32), page)
                         .map(|c| viewer::page_to_screen(c, image_rect, extent, zoom))
@@ -23589,7 +23646,7 @@ fn run_dimension_drag(
         ui.painter_at(image_rect).rect_stroke(
             egui::Rect::from_two_pos(min, max),
             0.0,
-            egui::Stroke::new(2.0, DIMENSION_SELECT_COLOR),
+            egui::Stroke::new(2.0, dimension_select_color(ui.ctx())),
             egui::StrokeKind::Outside,
         );
     }
@@ -23913,7 +23970,7 @@ fn run_measure_tool(
     {
         let page = &doc.pages[page_index];
         let painter = ui.painter_at(image_rect);
-        let preview_color = egui::Color32::from_rgb(210, 90, 40);
+        let preview_color = theme::Theme::of(ui.ctx()).palette.preview;
         let snap_color = ui.visuals().selection.stroke.color;
         let text_color = ui.visuals().text_color();
 
