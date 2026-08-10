@@ -808,3 +808,196 @@ mod tests {
         assert_eq!(c.signatures, 0);
     }
 }
+
+// ---------------------------------------------------------------------------
+// `/ByteRange` coverage — what a signature actually protects
+// ---------------------------------------------------------------------------
+
+/// What one signature's `/ByteRange` covers, measured against the file.
+///
+/// # Why this is worth reporting WITHOUT any cryptography
+///
+/// Verifying a signature needs PKCS#7, a certificate chain and a trust
+/// store. Knowing **what a signature claims to protect** needs only
+/// arithmetic — and it answers a question that a green "signature valid"
+/// badge does not:
+///
+/// > *Was anything added to this file that the signature does not cover?*
+///
+/// A signature can be cryptographically perfect over the first 40 KB of a
+/// 900 KB file. Every byte it covers is genuinely unaltered, and the
+/// other 860 KB are unprotected. That is the shape this reports.
+///
+/// # The modality is the load-bearing part
+///
+/// §12.8.1 says the range **should** be the entire file — a `should`, not
+/// a `shall`. *"Other ranges may be used but since they do not check for
+/// all changes to the document, their use is not recommended."*
+///
+/// So a partial-coverage signature is **conforming**, merely
+/// under-protecting. Reporting it as malformed would be wrong, and
+/// reporting nothing would leave an operator believing a badge that means
+/// less than it looks like. It is reported as what it is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct ByteRangeCoverage {
+    /// The signature field's fully-qualified name, when it has one.
+    pub field_name: Option<String>,
+    /// The `/ByteRange` pairs as written: `(offset, length)`.
+    pub ranges: Vec<(u64, u64)>,
+    /// Total bytes the digest covers.
+    pub covered: u64,
+    /// The file's length, for comparison.
+    pub file_len: u64,
+    /// Bytes after the end of the last covered range.
+    ///
+    /// **This is the number that matters.** A non-zero tail means content
+    /// exists beyond everything the signature protects — the shape an
+    /// incremental update takes when it appends a revision after a
+    /// signature was applied.
+    pub uncovered_tail: u64,
+    /// Whether the ranges are ordered and non-overlapping.
+    ///
+    /// Table 252 calls for *"pairs of integers (starting byte offset,
+    /// length in bytes)"* describing the **exact** range. Overlapping or
+    /// out-of-order pairs are malformed — unlike partial coverage, which
+    /// is not.
+    pub ranges_well_formed: bool,
+    /// Whether the canonical two-pair shape is used.
+    ///
+    /// §12.8.1: *"Multiple discontiguous byte ranges shall be used to
+    /// describe a digest that does not include the signature value."*
+    /// Two pairs, straddling `/Contents`, is what every real producer
+    /// writes. A single pair means `/Contents` is inside the digest,
+    /// which cannot verify.
+    pub pair_count: usize,
+}
+
+impl ByteRangeCoverage {
+    /// Whether this signature covers the file to its end.
+    ///
+    /// The honest question behind a "signed" badge. `false` does NOT mean
+    /// the signature is invalid — it means it protects less than the
+    /// whole document.
+    #[must_use]
+    pub fn covers_to_eof(&self) -> bool {
+        self.uncovered_tail == 0
+    }
+}
+
+/// Measure every signature's `/ByteRange` against the file's real length.
+///
+/// Reads the document; changes nothing; needs no cryptography and does
+/// not attempt any. **It cannot tell you a signature is VALID** — only
+/// what it would be valid *over*. Those are different claims and pdfce
+/// must not let one stand in for the other.
+///
+/// `file_len` is the real byte length of the file as loaded. It is a
+/// parameter rather than read from the graph because a `/ByteRange` is a
+/// claim about BYTES, and the object model cannot check a claim about
+/// bytes against itself.
+#[must_use]
+pub fn byte_range_coverage<G: ObjectGraph + ?Sized>(
+    graph: &G,
+    file_len: u64,
+) -> Vec<ByteRangeCoverage> {
+    let mut out = Vec::new();
+    // Reached through `parse_acroform`, not a third field walk. `census`
+    // has its own private `walk_fields` and the forms module has the
+    // public model; adding a third traversal of the same tree is how the
+    // three come to disagree about which fields exist (project rule 2).
+    let Some(form) = crate::forms::parse_acroform(graph) else {
+        return out;
+    };
+    for field in &form.fields {
+        if field.field_type != Some(crate::forms::FieldType::Signature) {
+            continue;
+        }
+        // The signature dictionary is the field's `/V` (Table 232). An
+        // unsigned signature FIELD has no `/V` at all, which is not a
+        // defect — it is a form waiting to be signed, and reporting it as
+        // uncovered would invent a signature that does not exist.
+        let Some(dict) = graph
+            .resolved(field.id)
+            .as_dict()
+            .and_then(|d| d.get(b"V"))
+            .map(|o| graph.resolve(o))
+            .and_then(Object::as_dict)
+        else {
+            continue;
+        };
+        let name = Some(field.fully_qualified_name.clone());
+        let Some(arr) = dict.get(b"ByteRange").map(|o| graph.resolve(o)) else {
+            continue;
+        };
+        let Some(items) = arr.as_array() else {
+            continue;
+        };
+        // Integers only. A real number here is malformed — an offset is a
+        // byte position, and rounding one would silently move the window
+        // a digest is computed over.
+        let nums: Vec<i64> = items
+            .iter()
+            .map(|o| graph.resolve(o))
+            .filter_map(Object::as_int)
+            .collect();
+        if nums.len() != items.len() || nums.len() < 2 || !nums.len().is_multiple_of(2) {
+            out.push(ByteRangeCoverage {
+                field_name: name,
+                ranges: Vec::new(),
+                covered: 0,
+                file_len,
+                // Everything is uncovered when the array cannot be read:
+                // reporting zero here would understate the risk in the one
+                // case where nothing at all is known.
+                uncovered_tail: file_len,
+                ranges_well_formed: false,
+                pair_count: 0,
+            });
+            continue;
+        }
+
+        let mut ranges: Vec<(u64, u64)> = Vec::with_capacity(nums.len() / 2);
+        let mut well_formed = true;
+        for pair in nums.chunks_exact(2) {
+            // A negative offset or length is nonsense rather than a small
+            // number; clamping would invent a range the file never
+            // declared.
+            let (Some(off), Some(len)) = (pair.first().copied(), pair.get(1).copied()) else {
+                well_formed = false;
+                break;
+            };
+            if off < 0 || len < 0 {
+                well_formed = false;
+                break;
+            }
+            ranges.push((off.unsigned_abs(), len.unsigned_abs()));
+        }
+
+        // Ordered and non-overlapping, per Table 252's "exact" range.
+        let mut prev_end = 0u64;
+        for (off, len) in &ranges {
+            if *off < prev_end {
+                well_formed = false;
+            }
+            prev_end = off.saturating_add(*len);
+        }
+
+        let covered: u64 = ranges.iter().map(|(_, l)| *l).sum();
+        let end = ranges
+            .iter()
+            .map(|(o, l)| o.saturating_add(*l))
+            .max()
+            .unwrap_or(0);
+        out.push(ByteRangeCoverage {
+            field_name: name,
+            pair_count: ranges.len(),
+            uncovered_tail: file_len.saturating_sub(end),
+            ranges,
+            covered,
+            file_len,
+            ranges_well_formed: well_formed,
+        });
+    }
+    out
+}
