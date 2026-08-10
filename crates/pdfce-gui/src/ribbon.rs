@@ -108,6 +108,20 @@ pub enum RibbonGroup {
     /// panel and no reason to invent one — the export needs no persistent
     /// surface, only a dialog.
     Export,
+    /// Printing.
+    ///
+    /// # Its own group, beside Export rather than inside it
+    ///
+    /// Both send content out of the document, so the obvious move is to
+    /// fold Print into `Export`. It sits apart for the same reason
+    /// `Protect` was pulled out of `Tools`: irreversibility.
+    ///
+    /// An export writes a file, and a file can be deleted. A print marks
+    /// paper, occupies a device somebody else may be waiting for, and
+    /// cannot be undone. Grouping the two together would put the one
+    /// action in this application with no undo next to one of the most
+    /// ordinary, under a caption that describes neither.
+    Print,
     /// Reset the panel arrangement, with a choice of what to reset.
     LayoutReset,
     /// Operator settings — the persisted choices in `userdata/settings.txt`
@@ -229,10 +243,11 @@ impl RibbonGroup {
         dead_code,
         reason = "the group enumeration; swept by this module's taxonomy test and by main.rs's gated-widget test, and the list any future group-picker must read rather than re-derive" // ui-text-exempt: clippy lint justification, never displayed
     )]
-    pub const ALL: [Self; 19] = [
+    pub const ALL: [Self; 20] = [
         Self::DocumentProperties,
         Self::Clipboard,
         Self::Export,
+        Self::Print,
         Self::LayoutReset,
         Self::Settings,
         Self::Help,
@@ -258,6 +273,7 @@ impl RibbonGroup {
             Self::DocumentProperties => ui_text::ribbon_group_document_properties(),
             Self::Clipboard => ui_text::ribbon_group_clipboard(),
             Self::Export => ui_text::ribbon_group_export(),
+            Self::Print => ui_text::ribbon_group_print(),
             Self::LayoutReset => ui_text::ribbon_group_layout_reset(),
             Self::Settings => ui_text::ribbon_group_settings(),
             Self::Help => ui_text::ribbon_group_help(),
@@ -424,6 +440,7 @@ impl RibbonTab {
                 RibbonGroup::DocumentProperties,
                 RibbonGroup::Clipboard,
                 RibbonGroup::Export,
+                RibbonGroup::Print,
                 RibbonGroup::LayoutReset,
                 RibbonGroup::Settings,
                 RibbonGroup::Help,

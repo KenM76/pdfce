@@ -76,3 +76,4 @@ pdfce-core.workspace = true
 # `pdfce-render`'s, so neither can drift to a version incompatible with the
 # crate that actually produces the values we consume.
 pdfce-render.workspace = true
+pdfce-print.workspace = true

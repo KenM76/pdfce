@@ -1074,6 +1074,26 @@ impl PdfceApp {
             // other group fixes it BY CONSTRUCTION: there is no longer a code
             // path that shows a group without captioning it, which is the
             // difference between a ribbon and a toolbar someone filtered.
+            Self::ribbon_group_ui(ui, tab, RG::Print, |ui| {
+                // Disabled-and-explained with no document (R83), never
+                // hidden — and the ellipsis says it opens something
+                // rather than acting, which for the one irreversible
+                // command in this application is worth the character.
+                let has_doc = matches!(self.status, Status::Open(_));
+                ui.add_enabled_ui(has_doc, |ui| {
+                    if Self::icon_text_toggle(
+                        ui,
+                        icons::Icon::Stamp,
+                        false,
+                        ui_text::print_open_label(),
+                        ui_text::print_open_tooltip(),
+                    )
+                    .clicked()
+                    {
+                        actions.push(Action::OpenPrintDialog);
+                    }
+                });
+            });
             Self::ribbon_group_ui(ui, tab, RG::LayoutReset, |ui| {
                 if ui
                     .button(ui_text::reset_layout_button())

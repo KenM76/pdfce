@@ -2710,6 +2710,200 @@ pub fn settings_group_colour() -> &'static str {
     "Colour"
 }
 
+/// Title of the print dialog.
+pub fn print_dialog_title() -> &'static str {
+    "Print"
+}
+
+/// Shown when the system reports no printers at all.
+pub fn print_no_printers() -> &'static str {
+    "No printers are installed. pdfce can only print to a printer Windows already knows about."
+}
+
+/// Shown when the chosen printer's driver will not report its capabilities.
+pub fn print_device_unavailable() -> &'static str {
+    "This printer will not report its paper size or resolution, so pdfce cannot show what the page would look like. Choose another printer."
+}
+
+/// Shown when the typed page range selects nothing.
+pub fn print_no_pages_selected() -> &'static str {
+    "That page range does not select any pages. Use numbers and ranges, like 1-4 or 5,1-2."
+}
+
+/// Heading over the page-range controls.
+pub fn print_pages_heading() -> &'static str {
+    "Pages"
+}
+
+/// The all-pages option, naming the count so it is not a guess.
+pub fn print_range_all(count: usize) -> String {
+    if count == 1 {
+        "All (1 page)".to_owned()
+    } else {
+        format!("All ({count} pages)")
+    }
+}
+
+/// The current-page option.
+pub fn print_range_current() -> &'static str {
+    "Current page"
+}
+
+/// The custom-range option.
+pub fn print_range_custom() -> &'static str {
+    "Pages:"
+}
+
+/// Heading over the sizing controls.
+pub fn print_sizing_heading() -> &'static str {
+    "Page sizing"
+}
+
+/// Scale mode: fit to the printable area.
+pub fn print_scale_fit() -> &'static str {
+    "Fit to printable area"
+}
+
+/// Scale mode: no scaling.
+pub fn print_scale_actual() -> &'static str {
+    "Actual size"
+}
+
+/// Scale mode: shrink only if too big.
+///
+/// Named distinctly from Fit because they differ on SMALL pages, and
+/// collapsing the two is the mistake `place_page`'s own test exists to
+/// catch: Fit enlarges a business card to fill a Letter sheet, Shrink
+/// leaves it alone.
+pub fn print_scale_shrink() -> &'static str {
+    "Shrink oversized pages only"
+}
+
+/// Scale mode: an explicit percentage.
+pub fn print_scale_custom() -> &'static str {
+    "Custom:"
+}
+
+/// The collapsed extra-options header.
+pub fn print_more_options() -> &'static str {
+    "More options"
+}
+
+/// The single annotations toggle.
+///
+/// Named for exactly what the one flag underneath does. Acrobat offers a
+/// four-way choice here — document, document and markups, document and
+/// stamps, form fields only — and pdfce's renderer has a single boolean.
+/// Offering the four-way choice would be a control implying a capability
+/// that is not there.
+pub fn print_include_annotations() -> &'static str {
+    "Include comments, markup and form field appearances"
+}
+
+/// The standing note that pdfce prints by rasterising.
+///
+/// A caption rather than a warning, because it is true on EVERY job. A
+/// banner that always fires teaches an operator to stop reading banners,
+/// and the one that matters here is the conditional resolution note
+/// below it.
+pub fn print_raster_note() -> &'static str {
+    "pdfce prints by rendering each page to an image. Fine lines may look slightly coarser than they would from a program that sends the drawing to the printer directly."
+}
+
+/// The resolution cap, when it binds.
+pub fn print_dpi_capped(used: u32, device: u32, page_mb: u64) -> String {
+    format!(
+        "Printing at {used} DPI. This printer can do {device}, but a full-resolution page needs about {page_mb} MB of memory each. Raise it if you need the detail."
+    )
+}
+
+/// Where the preview is in the selected pages.
+pub fn print_preview_position(shown: usize, total: usize) -> String {
+    format!("Page {shown} of {total} in this job")
+}
+
+/// The multi-page clip summary, so a clip on an unviewed page is not missed.
+pub fn print_clip_summary(clipped: usize, total: usize) -> String {
+    if clipped == 1 {
+        format!("1 of these {total} pages will lose content off the edges.")
+    } else {
+        format!("{clipped} of these {total} pages will lose content off the edges.")
+    }
+}
+
+/// The cancel button.
+pub fn print_cancel() -> &'static str {
+    "Cancel"
+}
+
+/// The print button, when nothing will be lost.
+pub fn print_button() -> &'static str {
+    "Print"
+}
+
+/// The print button when pages will clip.
+///
+/// The count is IN THE LABEL rather than beside it. Rule 4 asks for the
+/// uncertainty to be stated in the disclosure itself rather than implied
+/// by the presence of a confirm control — and a warning next to a button
+/// reading "Print" is exactly the arrangement an operator's eye skips.
+pub fn print_button_clipping(pages: usize) -> String {
+    if pages == 1 {
+        "Print (1 page will be clipped)".to_owned()
+    } else {
+        format!("Print ({pages} pages will be clipped)")
+    }
+}
+
+/// Why the print button is unavailable.
+pub fn print_button_why_disabled() -> &'static str {
+    "Choose a printer that reports its capabilities, and a page range that selects at least one page."
+}
+
+/// Confirmation that a job reached the spooler.
+pub fn print_sent(pages: usize) -> String {
+    if pages == 1 {
+        "Sent 1 page to the printer.".to_owned()
+    } else {
+        format!("Sent {pages} pages to the printer.")
+    }
+}
+
+/// A spool failure, carrying the reason.
+pub fn print_failed(reason: &str) -> String {
+    format!("Printing failed: {reason}")
+}
+
+/// Unit suffix on the resolution control.
+pub fn print_dpi_suffix() -> &'static str {
+    " DPI"
+}
+
+/// Unit suffix on the custom-scale control.
+pub fn print_percent_suffix() -> &'static str {
+    "%"
+}
+
+/// Printing was asked for with no document open.
+pub fn print_no_document() -> &'static str {
+    "No document is open."
+}
+
+/// Tooltip on the ribbon's Print button.
+pub fn print_open_tooltip() -> &'static str {
+    "Set up and print this document. Nothing prints until you press Print in the dialog."
+}
+
+/// Label on the ribbon's Print button.
+pub fn print_open_label() -> &'static str {
+    "Print…"
+}
+
+/// Ribbon group: printing.
+pub fn ribbon_group_print() -> &'static str {
+    "Print"
+}
+
 /// Settings group: how the application itself looks.
 pub fn settings_group_appearance() -> &'static str {
     "Appearance"

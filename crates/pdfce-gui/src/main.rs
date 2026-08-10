@@ -228,6 +228,7 @@ mod measure_tool;
 mod object_provider;
 mod object_summary;
 mod panels_structure;
+mod print_flow;
 mod raster;
 mod redact_apply;
 mod render_worker;
@@ -811,6 +812,8 @@ struct PdfceApp {
     /// The look. See [`crate::theme`] — this is the whole of pdfce's
     /// appearance, and the only place a colour or a metric is decided.
     theme: theme::Theme,
+    /// The print dialog, when open. See [`crate::print_flow`].
+    pending_print: Option<print_flow::PendingPrint>,
     layer_overrides: std::collections::BTreeMap<pdfce_core::object::ObjId, bool>,
     /// Bumped whenever [`Self::layer_overrides`] changes, so the cached
     /// page texture invalidates. Without it the toggle would appear to do
@@ -1580,6 +1583,7 @@ impl Default for PdfceApp {
             font_env: pdfce_render::FontEnvironment::bundled(),
             font_env_generation: 0,
             theme: theme::Theme::default(),
+            pending_print: None,
             layer_overrides: std::collections::BTreeMap::new(),
             layers_generation: 0,
             font_notes: Vec::new(),
@@ -4201,6 +4205,18 @@ enum Action {
     /// same one gesture that entering it did, and dropping both at once
     /// would strand an operator who only wanted the chrome back.
     ExitViewMode,
+    /// Open the print dialog. Never spools.
+    OpenPrintDialog,
+    /// Close the print dialog without printing.
+    CancelPrint,
+    /// ★ **Start a print job.** The one action in pdfce that marks paper.
+    ///
+    /// Carries nothing: what prints lives in `pending_print`, which the
+    /// dialog refreshes every frame. `Action` is `Copy` and a plan is a
+    /// `Vec`, and that constraint produced the better arrangement — one
+    /// home for the job description, so the action and the dialog cannot
+    /// come to describe different jobs.
+    SpoolPrint,
     /// Open the Bookmarks activity.
     ShowBookmarks,
     /// Open the Layers activity.
@@ -10826,6 +10842,21 @@ impl PdfceApp {
             // the document's text, so the panel cannot call it while it
             // holds the document borrow. Same shape as
             // `search_and_mark_for_redaction` directly above.
+            Action::OpenPrintDialog => {
+                self.open_print_dialog();
+                return;
+            }
+            Action::CancelPrint => {
+                self.pending_print = None;
+                return;
+            }
+            Action::SpoolPrint => {
+                let outcome = self.spool_print();
+                if let Some(p) = self.pending_print.as_mut() {
+                    p.outcome = Some(outcome);
+                }
+                return;
+            }
             Action::ShowBookmarks => {
                 self.show_pane_subject(ribbon::PaneSubject::Bookmarks);
                 return;
@@ -10914,7 +10945,10 @@ impl PdfceApp {
             // open-document guard — these are the actions that are
             // meaningful with no document open, or that need `&mut self`
             // rather than `&mut OpenDoc`.
-            Action::ShowBookmarks
+            Action::OpenPrintDialog
+            | Action::CancelPrint
+            | Action::SpoolPrint
+            | Action::ShowBookmarks
             | Action::ShowLayers
             | Action::ShowSignatures
             | Action::ToggleFind
@@ -11974,6 +12008,18 @@ impl eframe::App for PdfceApp {
             diag::Step::Find => {
                 self.apply(Action::ToggleFind, ctx, ctx.pixels_per_point());
             }
+            diag::Step::PrintDialog => {
+                self.apply(Action::OpenPrintDialog, ctx, ctx.pixels_per_point());
+                diag::trace(|| {
+                    let p = self.pending_print.as_ref();
+                    format!(
+                        "print-dialog open={} printers={} plans={}",
+                        u8::from(p.is_some()),
+                        p.map_or(0, |p| p.printers.len()),
+                        p.map_or(0, |p| p.plans.len())
+                    )
+                });
+            }
             diag::Step::LayerToggle(ref name) => {
                 // Goes through `set_layer_visible`, the same helper the
                 // checkbox calls — including its radio-group handling —
@@ -12643,6 +12689,7 @@ impl eframe::App for PdfceApp {
         // modeless reference; it is not something an operator keeps open
         // while working, which is what would make it owe a dock panel.
         self.settings_window(&ctx, &mut actions);
+        self.print_dialog(&ctx, &mut actions);
         // Non-modal, like the reset-layout chooser and for the same reason:
         // it changes nothing about the document, so an operator who wants to
         // look at the drawing while deciding the scale should be able to.

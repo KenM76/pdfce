@@ -2313,6 +2313,7 @@ dependencies = [
  "eframe",
  "egui_tiles",
  "pdfce-core",
+ "pdfce-print",
  "pdfce-render",
  "rfd",
 ]
