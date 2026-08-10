@@ -1,0 +1,74 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Pages /Count 1 /Kids [2 0 R] >>
+endobj
+2 0 obj
+<< /Type /Page /Parent 1 0 R /MediaBox [0 0 200 200] /Resources << >> >>
+endobj
+3 0 obj
+<< /Type /EmbeddedFile /Subtype /application#2Foctet-stream /Params << /Size 14 /CreationDate (D:20260101000000Z) /ModDate (D:20260810123000Z) >> /Length 14 >>
+stream
+inert payload
+
+endstream
+endobj
+4 0 obj
+<< /Type /Filespec /F (..\\..\\..\\Windows\\System32\\evil.exe) /EF << /F 3 0 R >> >>
+endobj
+5 0 obj
+<< /Type /EmbeddedFile /Subtype /application#2Foctet-stream /Params << /Size 14 /CreationDate (D:20260101000000Z) /ModDate (D:20260810123000Z) >> /Length 14 >>
+stream
+inert payload
+
+endstream
+endobj
+6 0 obj
+<< /Type /Filespec /F (/etc/cron.d/pwn) /EF << /F 5 0 R >> >>
+endobj
+7 0 obj
+<< /Type /EmbeddedFile /Subtype /application#2Foctet-stream /Params << /Size 14 /CreationDate (D:20260101000000Z) /ModDate (D:20260810123000Z) >> /Length 14 >>
+stream
+inert payload
+
+endstream
+endobj
+8 0 obj
+<< /Type /Filespec /F (ok.txt\000.exe) /EF << /F 7 0 R >> >>
+endobj
+9 0 obj
+<< /Type /EmbeddedFile /Subtype /application#2Foctet-stream /Params << /Size 14 /CreationDate (D:20260101000000Z) /ModDate (D:20260810123000Z) >> /Length 14 >>
+stream
+inert payload
+
+endstream
+endobj
+10 0 obj
+<< /Type /Filespec /F (CON.txt) /EF << /F 9 0 R >> >>
+endobj
+11 0 obj
+<< /EmbeddedFiles << /Names [(..\\..\\..\\Windows\\System32\\evil.exe) 4 0 R (/etc/cron.d/pwn) 6 0 R (ok.txt\000.exe) 8 0 R (CON.txt) 10 0 R] >> >>
+endobj
+12 0 obj
+<< /Type /Catalog /Pages 1 0 R /Names 11 0 R >>
+endobj
+xref
+0 13
+0000000000 65535 f 
+0000000015 00000 n 
+0000000072 00000 n 
+0000000160 00000 n 
+0000000367 00000 n 
+0000000468 00000 n 
+0000000675 00000 n 
+0000000752 00000 n 
+0000000959 00000 n 
+0000001035 00000 n 
+0000001242 00000 n 
+0000001312 00000 n 
+0000001476 00000 n 
+trailer
+<< /Size 13 /Root 12 0 R >>
+startxref
+1540
+%%EOF

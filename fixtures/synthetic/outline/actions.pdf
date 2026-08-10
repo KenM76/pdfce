@@ -1,0 +1,50 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R /Outlines 5 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 /MediaBox [0 0 612 792] /Resources << >> >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R >>
+endobj
+5 0 obj
+<< /Type /Outlines /First 6 0 R /Last 10 0 R /Count 5 >>
+endobj
+6 0 obj
+<< /Title (GoTo local) /Parent 5 0 R /Next 7 0 R /A << /S /GoTo /D [4 0 R /Fit] >> >>
+endobj
+7 0 obj
+<< /Title (GoToR by number) /Parent 5 0 R /Prev 6 0 R /Next 8 0 R /A << /S /GoToR /F (other.pdf) /D [7 /Fit] /NewWindow true >> >>
+endobj
+8 0 obj
+<< /Title (GoToR by name) /Parent 5 0 R /Prev 7 0 R /Next 9 0 R /A << /S /GoToR /F << /Type /Filespec /F (legacy.pdf) /UF (unicode.pdf) >> /D (remote-name) >> >>
+endobj
+9 0 obj
+<< /Title (Web link) /Parent 5 0 R /Prev 8 0 R /Next 10 0 R /A << /S /URI /URI (https://example.invalid/spec) >> >>
+endobj
+10 0 obj
+<< /Title (Script) /Parent 5 0 R /Prev 9 0 R /A << /S /JavaScript /JS (app.alert\(1\);) >> >>
+endobj
+xref
+0 11
+0000000000 65535 f 
+0000000015 00000 n 
+0000000080 00000 n 
+0000000184 00000 n 
+0000000231 00000 n 
+0000000278 00000 n 
+0000000350 00000 n 
+0000000451 00000 n 
+0000000597 00000 n 
+0000000774 00000 n 
+0000000905 00000 n 
+trailer
+<< /Size 11 /Root 1 0 R >>
+startxref
+1015
+%%EOF

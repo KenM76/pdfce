@@ -269,6 +269,16 @@ const INITIAL_WINDOW_SIZE: [f32; 2] = [1100.0, 800.0];
 /// line of text somewhere else on screen).
 const STATUS_PANEL_HEIGHT_PTS: f32 = 92.0;
 
+/// Fixed height of the Find bar, in egui points.
+///
+/// Constant for the same reason [`STATUS_PANEL_HEIGHT_PTS`] is — see the
+/// comment at its panel. Sized to hold the query row, the counter and the
+/// two-line caveat without the panel resizing as those change: the hint
+/// is always present, and the counter line swaps between a match count,
+/// a no-matches sentence and a not-yet-searched prompt, all of which wrap
+/// differently.
+const FIND_PANEL_HEIGHT_PTS: f32 = 96.0;
+
 /// Outline colour for a selected SUBPATH inside an entered object.
 ///
 /// Deliberately not the theme's selection accent, which means "this object is
@@ -885,6 +895,45 @@ struct PdfceApp {
     /// state, because a query typed against the previous document is stale
     /// narration about the wrong file.
     redact_search_query: String,
+    /// Whether the Find bar is showing (Ctrl+F toggles it).
+    ///
+    /// Find is a momentary toggle, NOT a `PaneSubject`. The right dock's
+    /// subjects are workflows an operator ENTERS and stays in, and
+    /// switching one REPLACES what was showing — so routing Ctrl+F
+    /// through it would yank a Redact mark list out from under someone
+    /// mid-review, and would need new state to restore it afterwards.
+    /// `pdfce-ui-specialist` ruled that out by name, along with a
+    /// floating `egui::Area` (retired twice in this codebase already —
+    /// decision 024, then Pass 34.1's move to docking).
+    find_open: bool,
+    /// The Find query, as typed.
+    find_query: String,
+    /// Case-sensitive matching. Core takes `case_insensitive`, so this is
+    /// its inverse at the call site.
+    ///
+    /// Whole-word matching is deliberately absent rather than faked:
+    /// [`pdfce_core::edit::TextMatch`] carries only the matched substring
+    /// with no surrounding context, so a shell-side boundary check has
+    /// nothing to check against. That is a core gap, and post-filtering
+    /// on data core does not return would be inventing an answer.
+    find_case_sensitive: bool,
+    /// The last search's hits, cached between frames.
+    ///
+    /// Cached because `find_text` takes `&mut self` and extracts the
+    /// document's text — it cannot be called from inside a render closure
+    /// that already holds the document borrow, and it must not run once
+    /// per frame. Populated in the action-dispatch loop, read while
+    /// drawing: the same shape `search_and_mark_for_redaction` uses.
+    find_matches: Vec<pdfce_core::edit::TextMatch>,
+    /// Which hit is current, indexing [`Self::find_matches`].
+    find_index: usize,
+    /// The query `find_matches` was produced from.
+    ///
+    /// Kept so the bar can tell "you have not searched yet" from "this
+    /// query genuinely has no hits" — the two look identical from an
+    /// empty result vector, and only one of them is worth telling the
+    /// operator about.
+    find_searched_query: Option<String>,
     /// Whether the redaction search box is read as a PATTERN (`#` = any
     /// digit, `?` = any character) rather than as a literal string.
     ///
@@ -1468,6 +1517,12 @@ impl Default for PdfceApp {
             pending_copy: None,
             pending_redaction_apply: None,
             redact_search_query: String::new(),
+            find_open: false,
+            find_query: String::new(),
+            find_case_sensitive: false,
+            find_matches: Vec::new(),
+            find_index: 0,
+            find_searched_query: None,
             redact_search_is_pattern: false,
             parked: Vec::new(),
             form_drafts: std::collections::HashMap::new(),
@@ -4028,6 +4083,19 @@ impl OpenDoc {
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Action {
     Open,
+    /// Show or hide the Find bar (Ctrl+F).
+    ToggleFind,
+    /// Run the current Find query and cache its hits.
+    ///
+    /// Separate from typing: the search extracts the whole document's
+    /// text, so it runs on a deliberate act, not on every keystroke.
+    /// Which of the two is right has NOT been measured on a large
+    /// document, and the specialist flagged that as genuinely open —
+    /// Enter-triggered is the conservative choice until it is.
+    RunFind,
+    /// Move to the next (`true`) or previous (`false`) Find hit, wrapping.
+    StepFind(bool),
+
     FirstPage,
     PrevPage,
     NextPage,
@@ -4322,6 +4390,16 @@ impl PdfceApp {
         // Pass 8.1: a query typed against the previous document is stale
         // narration about the wrong file, exactly like `copy_result` below.
         self.redact_search_query.clear();
+        // Same reason, same place: a query and its hits belong to the
+        // document they were run against. Carrying them into a newly
+        // opened file is stale narration about the wrong document, and
+        // the cached page indices would point into a page tree that no
+        // longer exists.
+        self.find_query.clear();
+        self.find_matches.clear();
+        self.find_index = 0;
+        self.find_searched_query = None;
+        self.find_open = false;
         self.edit_note = None;
         self.recovery_note = None;
         self.copy_result = None;
@@ -8747,6 +8825,223 @@ impl PdfceApp {
         }
     }
 
+    /// Draw the Find bar.
+    ///
+    /// Reads only cached state — the search itself runs in the dispatch
+    /// loop ([`Self::run_find`]), because `find_text` takes `&mut self`
+    /// and cannot be called while this closure holds the document borrow.
+    ///
+    /// # Enter and Escape are handled as FOCUSED-WIDGET keys, not globals
+    ///
+    /// Neither is registered in `collect_keyboard_actions`, deliberately.
+    /// That function runs before any panel draws and `consume_key` removes
+    /// the event, so a global `Enter` binding would eat this box's Enter
+    /// before the box ever saw it — the same defect that was caught in the
+    /// Forms panel's commit-on-`lost_focus` flow, and the same one the
+    /// unmodified-key guard above exists for.
+    fn find_bar(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        ui.horizontal(|ui| {
+            let box_response = ui.add(
+                egui::TextEdit::singleline(&mut self.find_query)
+                    .hint_text(ui_text::find_query_placeholder())
+                    .desired_width(280.0),
+            );
+            diag::trace(|| {
+                format!(
+                    "find-query-box rect={:?} focus={} query={:?}",
+                    box_response.rect,
+                    box_response.has_focus(),
+                    self.find_query
+                )
+            });
+
+            // ★ `lost_focus()`, NOT `has_focus()` + a key peek.
+            //
+            // A singleline `TextEdit` CONSUMES Enter itself and surrenders
+            // focus, so by the time a peek placed after `ui.add` runs, the
+            // event is gone. My first version peeked on `has_focus()` and
+            // silently never fired: the trace showed
+            // `focus=true query="third"` and a status of "Type text above
+            // to search" — the box had the text, had focus, and the search
+            // never ran.
+            //
+            // `lost_focus()` is the condition every other draft in this
+            // application commits on (the field-rename editor, the Forms
+            // panel's text drafts), for exactly this reason. Copying it
+            // rather than inventing a second Enter idiom is the point.
+            if box_response.lost_focus() {
+                let (enter, shift) =
+                    ui.input(|i| (i.key_pressed(egui::Key::Enter), i.modifiers.shift));
+                if enter {
+                    // A fresh query searches; the same query again steps to
+                    // the next hit. Retyping a query the operator has not
+                    // changed and expecting a re-scan is not what Enter
+                    // means in any find bar.
+                    if self.find_searched_query.as_deref() != Some(self.find_query.trim()) {
+                        actions.push(Action::RunFind);
+                    } else {
+                        actions.push(Action::StepFind(!shift));
+                    }
+                }
+            }
+
+            // The primary trigger. Enter below is a convenience on top of
+            // this, never the only way in.
+            if ui
+                .button(ui_text::find_run_label())
+                .on_hover_text(ui_text::find_run_tooltip())
+                .clicked()
+            {
+                actions.push(Action::RunFind);
+            }
+
+            let has_hits = !self.find_matches.is_empty();
+            ui.add_enabled_ui(has_hits, |ui| {
+                if ui
+                    .button(ui_text::find_previous_label())
+                    .on_hover_text(ui_text::find_previous_tooltip())
+                    .clicked()
+                {
+                    actions.push(Action::StepFind(false));
+                }
+                if ui
+                    .button(ui_text::find_next_label())
+                    .on_hover_text(ui_text::find_next_tooltip())
+                    .clicked()
+                {
+                    actions.push(Action::StepFind(true));
+                }
+            });
+
+            // Toggling case-sensitivity invalidates the cached hits, so it
+            // re-runs rather than leaving a counter that describes a
+            // different search than the one the checkbox now claims.
+            if ui
+                .checkbox(
+                    &mut self.find_case_sensitive,
+                    ui_text::find_case_sensitive_label(),
+                )
+                .on_hover_text(ui_text::find_case_sensitive_tooltip())
+                .changed()
+                && self.find_searched_query.is_some()
+            {
+                actions.push(Action::RunFind);
+            }
+
+            if ui
+                .button(ui_text::find_close_label())
+                .on_hover_text(ui_text::find_close_tooltip())
+                .clicked()
+            {
+                actions.push(Action::ToggleFind);
+            }
+        });
+
+        // Three distinct states, never collapsed into two: "not searched
+        // yet" and "searched, found nothing" produce an identical empty
+        // vector, and only the second is a claim about the document.
+        let status = match (&self.find_searched_query, self.find_matches.len()) {
+            (None, _) => ui_text::find_empty_query().to_owned(),
+            (Some(q), 0) => ui_text::find_no_matches(q),
+            (Some(_), n) => {
+                let page = self
+                    .find_matches
+                    .get(self.find_index)
+                    .map_or(1, |m| m.page_index + 1);
+                ui_text::find_match_counter(self.find_index + 1, n, page)
+            }
+        };
+        // The bar's own answer, in the trace. This is the only oracle for
+        // Find when the operator is using the machine and a screenshot
+        // harness would seize their screen — which is the situation diag
+        // exists for.
+        diag::trace(|| {
+            format!(
+                "find-status {status:?} hits={} index={}",
+                self.find_matches.len(),
+                self.find_index
+            )
+        });
+        ui.label(status);
+        ui.label(egui::RichText::new(ui_text::find_hint()).small().weak());
+    }
+
+    /// Run the Find query and cache its hits.
+    ///
+    /// Called from the action-dispatch loop only. `find_text` takes
+    /// `&mut self` on the session and extracts the whole document's text,
+    /// so it can neither run inside a render closure holding the document
+    /// borrow nor be afforded once per frame.
+    ///
+    /// Jumps to the first hit's page immediately: a search that reports
+    /// "7 matches" and leaves the operator on a page with none of them is
+    /// answering a question nobody asked.
+    fn run_find(&mut self) {
+        let query = self.find_query.trim().to_owned();
+        let case_insensitive = !self.find_case_sensitive;
+        self.find_index = 0;
+        if query.is_empty() {
+            self.find_matches.clear();
+            // NOT `Some("")` — an empty box means "no search has been
+            // run", which the bar reports differently from a search that
+            // genuinely found nothing.
+            self.find_searched_query = None;
+            return;
+        }
+        let Status::Open(doc) = &mut self.status else {
+            return;
+        };
+        self.find_matches = doc.session_mut().find_text(&query, case_insensitive);
+        self.find_searched_query = Some(query);
+        self.go_to_current_find_match();
+    }
+
+    /// Move to the next or previous hit, wrapping at either end.
+    ///
+    /// Wrapping is silent by design: the counter in the bar already says
+    /// "Match 1 of 7", so an operator who wrapped from 7 sees it. A
+    /// separate "wrapped" note would be a second thing to read saying
+    /// what the first already said.
+    fn step_find(&mut self, forward: bool) {
+        let n = self.find_matches.len();
+        if n == 0 {
+            return;
+        }
+        self.find_index = if forward {
+            (self.find_index + 1) % n
+        } else {
+            // `+ n - 1` rather than a signed decrement: `find_index` is a
+            // `usize` and `0 - 1` would panic in debug and wrap to
+            // `usize::MAX` in release, which is the worse of the two
+            // because it would only misbehave in a shipped build.
+            (self.find_index + n - 1) % n
+        };
+        self.go_to_current_find_match();
+    }
+
+    /// Show the page the current hit is on.
+    ///
+    /// The viewer is single-page ([`viewer::ViewState`] holds one
+    /// `page_index`), so reaching a hit on another page is always a real
+    /// page change, never a scroll. That is why the bar states the
+    /// destination page continuously rather than announcing the jump
+    /// afterwards — the operator sees where they are going before they
+    /// get there.
+    fn go_to_current_find_match(&mut self) {
+        let Some(m) = self.find_matches.get(self.find_index) else {
+            return;
+        };
+        let page = m.page_index;
+        if let Status::Open(doc) = &mut self.status {
+            // `go_to_page` clamps against the count, which matters here:
+            // the hits were found in the SESSION's page space, and a page
+            // deleted between the search and the jump would otherwise
+            // address past the end.
+            let count = doc.pages.len();
+            doc.view.go_to_page(page, count);
+        }
+    }
+
     /// Mark the whole of the current page (ui-spec §2.4).
     ///
     /// No confirmation, deliberately — §2.1's governing rule. Marking is
@@ -10350,6 +10645,23 @@ impl PdfceApp {
                 self.search_and_mark_for_redaction();
                 return;
             }
+            // The three Find actions run HERE, in dispatch, never inside a
+            // render closure: `find_text` takes `&mut self` and extracts
+            // the document's text, so the panel cannot call it while it
+            // holds the document borrow. Same shape as
+            // `search_and_mark_for_redaction` directly above.
+            Action::ToggleFind => {
+                self.find_open = !self.find_open;
+                return;
+            }
+            Action::RunFind => {
+                self.run_find();
+                return;
+            }
+            Action::StepFind(forward) => {
+                self.step_find(forward);
+                return;
+            }
             Action::RemoveRedactionMark(id) => {
                 self.remove_redaction_mark(id);
                 return;
@@ -10389,7 +10701,10 @@ impl PdfceApp {
             // open-document guard — these are the actions that are
             // meaningful with no document open, or that need `&mut self`
             // rather than `&mut OpenDoc`.
-            Action::Open
+            Action::ToggleFind
+            | Action::RunFind
+            | Action::StepFind(_)
+            | Action::Open
             | Action::ToggleRail
             | Action::ToggleRibbonCollapsed
             | Action::ToggleAnnotations
@@ -11407,6 +11722,9 @@ impl eframe::App for PdfceApp {
                 raw_input.modifiers = alt;
             }
             diag::Step::Zoom(factor) => raw_input.events.push(egui::Event::Zoom(factor)),
+            diag::Step::Find => {
+                self.apply(Action::ToggleFind, ctx, ctx.pixels_per_point());
+            }
             // A plain wheel scroll. `modifiers: default` is what makes it a
             // SCROLL rather than a zoom: egui routes Ctrl+wheel to zoom, so
             // reusing this path with a modifier set would silently do the
@@ -11797,6 +12115,27 @@ impl eframe::App for PdfceApp {
         // Panels, in the order documented at the top of this file:
         // toolbar, status bar, rail, canvas.
         egui::Panel::top("toolbar").show(ui, |ui| self.toolbar(ui, &mut actions));
+        // The Find bar: chrome between the toolbar and the canvas, shown
+        // only while Find is open.
+        //
+        // `exact_size` for the SAME reason the status panel below has it,
+        // and the reason is documented there at length: panel height feeds
+        // the central area, and `apply_fit` re-derives the zoom from that
+        // every frame. A content-driven height would re-fit the page every
+        // time the bar's text changed — going from "Match 3 of 7" to a
+        // wrapped no-matches sentence would visibly shrink and jump the
+        // document, which is the exact defect the 2026-08-04 audit found
+        // with the status bar.
+        //
+        // The bar appearing and disappearing DOES change the canvas height
+        // once, on toggle. That is fine and deliberate: it is a viewport
+        // change the operator caused on purpose, which is the same class
+        // as toggling the rail.
+        if self.find_open {
+            egui::Panel::top("find")
+                .exact_size(FIND_PANEL_HEIGHT_PTS)
+                .show(ui, |ui| self.find_bar(ui, &mut actions));
+        }
         // The status panel's height is FIXED, not content-driven.
         //
         // ui-spec `gesture-commit-and-shell-conventions-audit.md` §3.3. With an
@@ -12109,6 +12448,10 @@ fn collect_keyboard_actions(ctx: &egui::Context, actions: &mut Vec<Action>, keys
     }
 
     pressed(Modifiers::COMMAND, Key::O, Action::Open);
+    // Safe as a blind global chord, unlike the unmodified keys guarded
+    // above: a COMMAND-modified letter cannot collide with plain typing.
+    // Same class as the shipped Ctrl+E / Ctrl+Shift+E.
+    pressed(Modifiers::COMMAND, Key::F, Action::ToggleFind);
     // Both spellings of "the + key": on most layouts the unshifted key
     // reports as `Equals` and only reports as `Plus` when shifted, so
     // binding only one of them makes Ctrl+Plus work on some keyboards

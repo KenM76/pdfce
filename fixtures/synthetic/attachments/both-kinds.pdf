@@ -1,0 +1,58 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Pages /Count 2 /Kids [2 0 R 3 0 R] >>
+endobj
+2 0 obj
+<< /Type /Page /Parent 1 0 R /MediaBox [0 0 200 200] /Resources << >> >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 1 0 R /MediaBox [0 0 200 200] /Resources << >> /Annots [8 0 R] >>
+endobj
+4 0 obj
+<< /Type /EmbeddedFile /Subtype /text#2Fplain /Params << /Size 23 /CreationDate (D:20260101000000Z) /ModDate (D:20260810123000Z) >> /Length 23 >>
+stream
+document-level payload
+
+endstream
+endobj
+5 0 obj
+<< /Type /Filespec /F (whole-document.txt) /UF (\376\377\000w\000h\000o\000l\000e\000-\000d\000o\000c\000u\000m\000e\000n\000t\000.\000t\000x\000t) /EF << /F 4 0 R >> >>
+endobj
+6 0 obj
+<< /Type /EmbeddedFile /Subtype /text#2Fplain /Params << /Size 19 /CreationDate (D:20260101000000Z) /ModDate (D:20260810123000Z) >> /Length 19 >>
+stream
+page-level payload
+
+endstream
+endobj
+7 0 obj
+<< /Type /Filespec /F (on-page-two.txt) /UF (\376\377\000o\000n\000-\000p\000a\000g\000e\000-\000t\000w\000o\000.\000t\000x\000t) /EF << /F 6 0 R >> >>
+endobj
+8 0 obj
+<< /Type /Annot /Subtype /FileAttachment /Rect [20 150 40 170] /F 4 /Name /Paperclip /Contents (A file pinned to this page) /FS 7 0 R >>
+endobj
+9 0 obj
+<< /EmbeddedFiles << /Names [(\376\377\000w\000h\000o\000l\000e\000-\000d\000o\000c\000u\000m\000e\000n\000t\000.\000t\000x\000t) 5 0 R] >> >>
+endobj
+10 0 obj
+<< /Type /Catalog /Pages 1 0 R /Names 9 0 R >>
+endobj
+xref
+0 11
+0000000000 65535 f 
+0000000015 00000 n 
+0000000078 00000 n 
+0000000166 00000 n 
+0000000270 00000 n 
+0000000472 00000 n 
+0000000657 00000 n 
+0000000855 00000 n 
+0000001022 00000 n 
+0000001174 00000 n 
+0000001332 00000 n 
+trailer
+<< /Size 11 /Root 10 0 R >>
+startxref
+1395
+%%EOF

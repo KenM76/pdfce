@@ -1,0 +1,58 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Pages /Count 1 /Kids [2 0 R] >>
+endobj
+2 0 obj
+<< /Type /Page /Parent 1 0 R /MediaBox [0 0 200 200] /Resources << >> >>
+endobj
+3 0 obj
+<< /Type /EmbeddedFile /Subtype /text#2Fplain /Params << /Size 9 /CreationDate (D:20260101000000Z) /ModDate (D:20260810123000Z) >> /Length 9 >>
+stream
+survivor
+
+endstream
+endobj
+4 0 obj
+<< /Type /Filespec /F (good.txt) /UF (\376\377\000g\000o\000o\000d\000.\000t\000x\000t) /EF << /F 3 0 R >> >>
+endobj
+5 0 obj
+<< /Type /Filespec /F (elsewhere.txt) >>
+endobj
+6 0 obj
+<< /Type /Filespec /F (vanished.txt) /EF << /F 9999 0 R >> >>
+endobj
+7 0 obj
+<< /Kids [8 0 R 9 0 R] >>
+endobj
+8 0 obj
+<< /Names [(good.txt) 4 0 R (elsewhere.txt) 5 0 R (vanished.txt) 6 0 R (not-a-filespec) 42 (dangling-key-no-value)] >>
+endobj
+9 0 obj
+<< /Kids [7 0 R] >>
+endobj
+10 0 obj
+<< /EmbeddedFiles 7 0 R >>
+endobj
+11 0 obj
+<< /Type /Catalog /Pages 1 0 R /Names 10 0 R >>
+endobj
+xref
+0 12
+0000000000 65535 f 
+0000000015 00000 n 
+0000000072 00000 n 
+0000000160 00000 n 
+0000000346 00000 n 
+0000000471 00000 n 
+0000000527 00000 n 
+0000000604 00000 n 
+0000000645 00000 n 
+0000000779 00000 n 
+0000000814 00000 n 
+0000000857 00000 n 
+trailer
+<< /Size 12 /Root 11 0 R >>
+startxref
+921
+%%EOF

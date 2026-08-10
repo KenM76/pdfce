@@ -1,0 +1,43 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R /Outlines 5 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 612 792] /Resources << >> >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R >>
+endobj
+5 0 obj
+<< /Type /Outlines /First 6 0 R /Last 7 0 R /Count 2 >>
+endobj
+6 0 obj
+<< /Title (Ping) /Parent 5 0 R /Next 7 0 R /First 8 0 R /Last 8 0 R /Count 1 /Dest [3 0 R /Fit] >>
+endobj
+7 0 obj
+<< /Title (Pong) /Parent 5 0 R /Prev 6 0 R /Next 6 0 R /Dest [3 0 R /Fit] >>
+endobj
+8 0 obj
+<< /Title (Ouroboros) /Parent 6 0 R /Next 9 0 R /First 8 0 R /Last 8 0 R /Count 1 >>
+endobj
+9 0 obj
+<< /Title (Backref) /Parent 6 0 R /Prev 8 0 R /First 6 0 R /Last 6 0 R /Count 1 >>
+endobj
+xref
+0 10
+0000000000 65535 f 
+0000000015 00000 n 
+0000000080 00000 n 
+0000000178 00000 n 
+0000000000 65535 f 
+0000000225 00000 n 
+0000000296 00000 n 
+0000000410 00000 n 
+0000000502 00000 n 
+0000000602 00000 n 
+trailer
+<< /Size 10 /Root 1 0 R >>
+startxref
+700
+%%EOF

@@ -9322,3 +9322,130 @@ pub fn export_dxf_skipped_images(count: usize) -> String {
 pub fn export_dxf_at_paper_scale() -> &'static str {
     "Exported at paper scale (1:1), as you chose. Nothing on these pages was calibrated, so if the drawing is a scaled view the geometry is that fraction of real size."
 }
+
+// ---------------------------------------------------------------------------
+// Find — text search in the open document (Reader-parity sweep, slice 1 GUI)
+// ---------------------------------------------------------------------------
+//
+// Wording specified by `pdfce-ui-specialist` and used as given. The one
+// piece worth restating here is WHY the caveat below is unconditional.
+
+/// Placeholder in the empty query box.
+pub fn find_query_placeholder() -> &'static str {
+    "Find in document"
+}
+
+/// The permanent caveat under the query box.
+///
+/// # Why this is ALWAYS shown and never computed
+///
+/// pdfce *can* detect one of these conditions — `/ActualText` runs are
+/// counted during extraction — so gating the caveat on "does this
+/// document contain them" looks like the tidier choice. It is the wrong
+/// one, and the specialist's reasoning is the part to keep:
+///
+/// **Per-run splitting is a property of the QUERY against the CURRENT
+/// runs, not of the document.** A file with zero `/ActualText` runs can
+/// still silently miss a phrase the producer split at a kerning pair. So
+/// a computed caveat would give a confident all-clear for the *more
+/// common* failure mode, which is worse than a short boring line that is
+/// always true.
+///
+/// Same convention as `redact_search_hint`, which states its own caveat
+/// unconditionally for the identical reason: a silent zero-match result
+/// reads as "nothing here", not "nothing searchable here".
+pub fn find_hint() -> &'static str {
+    "Searches the text pdfce can extract from the page. It can miss a phrase split across a font or style change, and cannot search a scanned page that has no text layer — finding nothing is not the same as there being nothing there."
+}
+
+/// Result counter. **This is the cross-page-jump disclosure**, kept
+/// current rather than announced once.
+///
+/// The viewer is single-page, so reaching a hit on another page is always
+/// a real page change. An operator whose view jumps without explanation
+/// has lost their place — so the destination is visible before and during
+/// the jump, not narrated after it.
+pub fn find_match_counter(current: usize, total: usize, page_number: usize) -> String {
+    format!("Match {current} of {total} — page {page_number}")
+}
+
+/// Zero matches.
+///
+/// Never "nothing to find". This is the moment an operator is most likely
+/// to read absence as "not in the document" rather than "not found by
+/// this search", so the caveat is restated at exactly that moment.
+pub fn find_no_matches(query: &str) -> String {
+    format!("No matches for “{query}” in the text pdfce can extract from this document.")
+}
+
+/// Nothing has been searched for yet.
+///
+/// Distinct from [`find_no_matches`] on purpose: an empty result vector
+/// looks identical in both cases, and only one of them is a fact about
+/// the document.
+pub fn find_empty_query() -> &'static str {
+    "Type text above to search this document."
+}
+
+/// Label of the explicit search control.
+///
+/// Exists because Enter must not be the ONLY way to start a search.
+/// `Previous`/`Next` are disabled until hits exist, so with Enter alone
+/// a first search has exactly one trigger — and when that trigger did
+/// not fire, the whole bar was inert with no other way in. A visible
+/// button is both the discoverable path and the one that cannot be
+/// swallowed by a focus interaction.
+pub fn find_run_label() -> &'static str {
+    "Find"
+}
+
+/// Tooltip on the search control.
+pub fn find_run_tooltip() -> &'static str {
+    "Search this document for the text above."
+}
+
+/// Label of the previous-match control.
+///
+/// A word, not a glyph: the icon-coverage gate (Pass 18.7) rejects a
+/// codepoint with no face in the shipped stack, and the authored arrow
+/// set is directional chrome for navigation rails rather than a
+/// find-bar stepper. A word is unambiguous and costs one gate argument
+/// less.
+pub fn find_previous_label() -> &'static str {
+    "Previous"
+}
+
+/// Label of the next-match control.
+pub fn find_next_label() -> &'static str {
+    "Next"
+}
+
+/// Label of the close control.
+pub fn find_close_label() -> &'static str {
+    "Close"
+}
+
+/// Tooltip on the next-match control.
+pub fn find_next_tooltip() -> &'static str {
+    "Go to the next match (Enter)."
+}
+
+/// Tooltip on the previous-match control.
+pub fn find_previous_tooltip() -> &'static str {
+    "Go to the previous match (Shift+Enter)."
+}
+
+/// Label of the case-sensitivity toggle.
+pub fn find_case_sensitive_label() -> &'static str {
+    "Case-sensitive"
+}
+
+/// Tooltip on the case-sensitivity toggle.
+pub fn find_case_sensitive_tooltip() -> &'static str {
+    "Match uppercase and lowercase letters exactly as typed."
+}
+
+/// Tooltip on the close control.
+pub fn find_close_tooltip() -> &'static str {
+    "Close find (Escape)."
+}

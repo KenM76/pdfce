@@ -1,0 +1,38 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Pages /Count 1 /Kids [2 0 R] >>
+endobj
+2 0 obj
+<< /Type /Page /Parent 1 0 R /MediaBox [0 0 200 200] /Resources << >> >>
+endobj
+3 0 obj
+<< /Type /EmbeddedFile /Subtype /text#2Fplain /Params << /Size 17 /CreationDate (D:20260101000000Z) /ModDate (D:20260810123000Z) /CheckSum (\001\002\003\004) >> /Length 17 >>
+stream
+hello attachment
+
+endstream
+endobj
+4 0 obj
+<< /Type /Filespec /F (notes.txt) /UF (\376\377\000n\000o\000t\000e\000s\000.\000t\000x\000t) /Desc (\376\377\000A\000 \000p\000l\000a\000i\000n\000-\000t\000e\000x\000t\000 \000n\000o\000t\000e) /EF << /F 3 0 R >> >>
+endobj
+5 0 obj
+<< /EmbeddedFiles << /Names [(\376\377\000n\000o\000t\000e\000s\000.\000t\000x\000t) 4 0 R] >> >>
+endobj
+6 0 obj
+<< /Type /Catalog /Pages 1 0 R /Names 5 0 R >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000015 00000 n 
+0000000072 00000 n 
+0000000160 00000 n 
+0000000385 00000 n 
+0000000618 00000 n 
+0000000731 00000 n 
+trailer
+<< /Size 7 /Root 6 0 R >>
+startxref
+793
+%%EOF

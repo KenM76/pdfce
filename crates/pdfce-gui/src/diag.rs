@@ -141,6 +141,13 @@ pub enum Step {
     /// question "is its toolbar button wired up". A harness that could only
     /// reach a tool through its button would confuse the two.
     Tool(ScriptTool),
+    /// Toggle the Find bar, through the same action Ctrl+F pushes.
+    ///
+    /// A step rather than a synthesised Ctrl+F because the chord itself
+    /// is already covered by `collect_keyboard_actions`' own binding —
+    /// what needs driving is the BAR, and going through the action keeps
+    /// the harness testing the surface rather than the keymap.
+    Find,
     /// Open the settings window, through the same action the ribbon
     /// button pushes.
     ///
@@ -467,6 +474,7 @@ fn parse_step(s: &str) -> Option<Step> {
         "panel" if rest.trim() == "groups" => Some(Step::Groups),
         "panel" if rest.trim() == "redact" => Some(Step::Redact),
         "panel" if rest.trim() == "forms" => Some(Step::Forms),
+        "panel" if rest.trim() == "find" => Some(Step::Find),
         "panel" if rest.trim() == "comments" => Some(Step::Comments),
         "tab" => match rest.trim() {
             "file" => Some(Step::Tab("file")),
