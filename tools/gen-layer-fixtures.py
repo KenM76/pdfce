@@ -718,6 +718,67 @@ def base_state_unchanged() -> bytes:
     return serialize(objects)
 
 
+def base_state_off_unregistered() -> bytes:
+    """``/BaseState /OFF`` **and** a group missing from ``/OCGs`` (decision 037).
+
+    The one file that separates the two readings of Table 101's "all the
+    optional content groups in a document", and it did not exist -- which
+    is why the question shipped unanswered and had to be ruled on from
+    the text alone.
+
+    ``unregistered-ocg.pdf`` has unregistered groups but no
+    ``/BaseState``; ``basestate-off.pdf`` has ``/BaseState /OFF`` but
+    registers everything. Neither can tell the readings apart. This one
+    has both conditions at once:
+
+    * object 4 is registered in ``/OCGs`` and named in ``/ON``
+    * object 5 is registered and named nowhere
+    * object 6 is **not registered at all**, reachable only from the
+      page's ``/Properties`` -- exactly the shape an editing tool leaves
+      behind when it rewrites the registry and misses a group
+
+    Under ``/BaseState /OFF``:
+
+    * the **literal** reading ("every group in the document") hides
+      object 6, since it is not in ``/ON``
+    * the **registered-only** reading -- what pdfce ships today, because
+      the OFF set is enumerated from ``/OCGs`` -- reports it VISIBLE
+
+    Both marks are painted through ``BDC``/``EMC`` so the difference is
+    something an operator can SEE rather than something only a counter
+    reports. Object 6's square is the whole experiment: if it is on the
+    page, the reading is registered-only.
+
+    Two ``shall``s are violated at once here (``/D``'s ``/BaseState``
+    shall be ``ON``; every OCG shall be registered), which is precisely
+    why the case is rare and why no fixture had cornered it before.
+    """
+    objects, nxt = pages_doc(
+        1,
+        catalog_extra=(
+            "/OCProperties << /OCGs [4 0 R 5 0 R] "
+            "/D << /Name (Default) /BaseState /OFF /Order [4 0 R 5 0 R] "
+            "/ON [4 0 R] >> >>"
+        ),
+        page_extra={
+            0: (
+                "/Contents 7 0 R /Resources << /Properties << "
+                "/Reg 4 0 R /RegOff 5 0 R /Unreg 6 0 R >> >>"
+            )
+        },
+    )
+    objects[4] = ocg(pdf_string(b"Registered, in ON"))
+    objects[5] = ocg(pdf_string(b"Registered, not in ON"))
+    objects[6] = ocg(pdf_string(b"Never registered"))
+    content = b"""/OC /Reg BDC 0 0 0 rg 60 600 120 120 re f EMC
+/OC /RegOff BDC 0 0 0 rg 240 600 120 120 re f EMC
+/OC /Unreg BDC 0 0 0 rg 420 600 120 120 re f EMC
+"""
+    objects[7] = stream("", content)
+    assert nxt == 4
+    return serialize(objects)
+
+
 def no_layers() -> bytes:
     """One page, no ``/OCProperties``.
 
@@ -744,6 +805,7 @@ def main() -> int:
         "painted-layers.pdf": painted_layers(),
         "on-off-contradiction.pdf": on_off_contradiction(),
         "base-state-unchanged.pdf": base_state_unchanged(),
+        "base-state-off-unregistered.pdf": base_state_off_unregistered(),
         "no-layers.pdf": no_layers(),
     }
     for name, data in files.items():

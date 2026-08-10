@@ -1,6 +1,6 @@
 # layers — provenance and attribution
 
-Twelve minimal PDFs for the optional-content (layer / OCG) **reader** in
+Thirteen minimal PDFs for the optional-content (layer / OCG) **reader** in
 `crates/pdfce-core/src/layers.rs` — ISO 32000-1:2008 §8.11 (optional
 content), specifically Table 98 (the OCG dictionary), Table 99 (the
 optional content membership dictionary), Table 100 (`/OCProperties`) and
@@ -78,6 +78,7 @@ must come out half width.
 | `painted-layers.pdf` | The only fixture that **paints** through `BDC`/`EMC` `/OC` (§8.11.3.2). Three claims in one file: an OFF layer's mark is absent; an ON layer *nested inside* an OFF one is also absent (visibility is inherited, and the inner `EMC` restores "hidden"); and a hidden section's **clip** still bounds the unlayered content that follows. |
 | `on-off-contradiction.pdf` | A group listed in **both** `/D /ON` and `/D /OFF` — conforming (both Table 101 rows bind the *reader*, and §8.11 has no `shall not` about array membership) and self-contradictory. Pins decision 038's resolution: Table 101's `ON` row calls the array *redundant* under `/BaseState ON`, and an array carrying no information cannot override anything, so the **opposite** array decides — which is §8.11.4.5 b). A second group in neither array is the control, so a reader that simply hid everything fails too. |
 | `base-state-unchanged.pdf` | `/D /BaseState /Unchanged` — violates Table 101's *"shall be ON"* for the default configuration, and is semantically empty there besides (§8.11.2.1: states are initialised at open, so nothing exists to leave unchanged). Pins that pdfce **recovers** as `ON` rather than applying a clause, and discloses the recovery: the rival reading ("process no arrays") would make `/OFF` inert and paint every layer the author turned off. |
+| `base-state-off-unregistered.pdf` | The one file that separates the two readings of Table 101's *"all the optional content groups in a document"* under `/BaseState /OFF` — decision 037. Two `shall`s are broken at once (`/D`'s `/BaseState` shall be `ON`; every OCG shall be registered), which is why no earlier fixture cornered it: `unregistered-ocg.pdf` has no `/BaseState`, `basestate-off.pdf` registers everything. Three groups, all PAINTED, so the difference is visible rather than only counted; the third is reachable only from the page's `/Properties` and its square on the page is the whole experiment. |
 | `no-layers.pdf` | No `/OCProperties` at all. §8.11.4.2: a reader "shall ignore any optional content structures". Empty and faithful, not an error — and overwhelmingly the common real-world case. |
 
 `basic-layers.pdf` carries two name-decoding traps that are worth

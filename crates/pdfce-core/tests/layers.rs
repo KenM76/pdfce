@@ -527,3 +527,78 @@ fn an_unrecognised_base_state_recovers_as_on_and_discloses_it() {
     );
     assert!(!read.diagnostics.is_faithful());
 }
+
+/// ★ **Decision 037's open question, pinned at TODAY's answer.**
+///
+/// Under `/BaseState /OFF`, does "all the optional content groups in a
+/// document" (Table 101) mean every group in the file, or only those
+/// registered in `/OCProperties /OCGs`?
+///
+/// pdfce currently answers **registered-only**, because the OFF set is
+/// enumerated from the registry — so a group reachable only from a
+/// page's `/Properties` reports VISIBLE where the literal reading would
+/// hide it. `docs/decisions/037-base-state-off-covers-unregistered-groups.md`
+/// rules for the literal reading and is **not yet implemented**: the
+/// ruling carries a falsifier — open this fixture in Acrobat Reader and
+/// see whether the unregistered group's mark appears — and the answer
+/// decides whether this becomes a straight fix or a setting (`OC-A2`).
+///
+/// # This test exists to make the flip LOUD
+///
+/// It asserts the behaviour the decision expects to CHANGE. That is
+/// deliberate and worth stating, because a test asserting a value
+/// someone intends to change looks, to a future reader, like a test
+/// defending it.
+///
+/// It is here so the change cannot happen quietly. Whoever implements
+/// 037 must edit this test, and editing it means reading this comment
+/// and confirming the falsifier actually ran — which is the step that
+/// would otherwise be skipped, since the implementation is a
+/// straightforward refactor and the evidence for it is not.
+///
+/// If this fails and you did not mean to change layer visibility, the
+/// registry-enumeration path has moved and something else is now
+/// deciding what an unregistered group does.
+#[test]
+fn base_state_off_currently_leaves_unregistered_groups_visible() {
+    let read = layers_of("base-state-off-unregistered.pdf");
+    let find = |name: &str| {
+        read.layers
+            .iter()
+            .find(|l| l.name == name)
+            .unwrap_or_else(|| panic!("fixture must contain {name:?}"))
+    };
+
+    // The two controls, which BOTH readings agree on. Without them a
+    // regression that hid or showed everything would still satisfy the
+    // assertion that matters.
+    assert!(
+        find("Registered, in ON").visible_by_default,
+        "/ON re-enables under /BaseState /OFF"
+    );
+    assert!(
+        !find("Registered, not in ON").visible_by_default,
+        "a registered group absent from /ON stays off"
+    );
+
+    // The experiment.
+    let unregistered = find("Never registered");
+    assert!(
+        !unregistered.in_default_config,
+        "the fixture's point is that this group is NOT in /OCGs"
+    );
+    assert!(
+        unregistered.visible_by_default,
+        "TODAY pdfce reports an unregistered group visible under /BaseState /OFF. \
+         If you are implementing decision 037, this is the assertion to invert — \
+         and the falsifier (Acrobat Reader on this fixture) must have been run first."
+    );
+
+    // The disclosure that exists precisely because the question was left
+    // open: an operator is told the file reached the one case where
+    // pdfce's answer is knowingly a choice rather than a reading.
+    assert!(
+        read.diagnostics.base_state_off_with_unregistered,
+        "the open case must be disclosed, not silently resolved"
+    );
+}

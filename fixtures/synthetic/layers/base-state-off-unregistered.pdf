@@ -1,0 +1,44 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [4 0 R 5 0 R] /D << /Name (Default) /BaseState /OFF /Order [4 0 R 5 0 R] /ON [4 0 R] >> >> >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 612 792] /Resources << >> >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /Contents 7 0 R /Resources << /Properties << /Reg 4 0 R /RegOff 5 0 R /Unreg 6 0 R >> >> >>
+endobj
+4 0 obj
+<< /Type /OCG /Name (Registered, in ON)  >>
+endobj
+5 0 obj
+<< /Type /OCG /Name (Registered, not in ON)  >>
+endobj
+6 0 obj
+<< /Type /OCG /Name (Never registered)  >>
+endobj
+7 0 obj
+<<  /Length 145 >>
+stream
+/OC /Reg BDC 0 0 0 rg 60 600 120 120 re f EMC
+/OC /RegOff BDC 0 0 0 rg 240 600 120 120 re f EMC
+/OC /Unreg BDC 0 0 0 rg 420 600 120 120 re f EMC
+
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000015 00000 n 
+0000000178 00000 n 
+0000000276 00000 n 
+0000000412 00000 n 
+0000000471 00000 n 
+0000000534 00000 n 
+0000000592 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+789
+%%EOF
