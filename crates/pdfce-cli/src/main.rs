@@ -1397,6 +1397,46 @@ enum Command {
         verify_undo: bool,
     },
 
+    /// **Delete a grouping node and every field beneath it** (§12.7.3.2).
+    ///
+    /// `delete-field` names ONE terminal. This names an interior node of the
+    /// field tree — `Personal`, not `Personal.Name` — and removes the whole
+    /// subtree: every terminal under it however deep, all their widgets, and
+    /// the intermediate nodes themselves.
+    ///
+    /// **It removes fields you did not name**, which is why it will not run
+    /// without `--yes`. Run it without that flag first: it prints exactly
+    /// which terminals would go and exits without writing. That listing is
+    /// the point of the command — a subtree is precisely the thing an
+    /// operator cannot see the inside of before deleting it.
+    ///
+    /// A terminal field's name is REFUSED here rather than quietly treated
+    /// as a one-field delete: the two commands remove different amounts, and
+    /// guessing which you meant is how a mistyped name becomes silent data
+    /// loss. Use `delete-field` for a terminal.
+    DeleteFieldGroup {
+        /// Input PDF.
+        input: PathBuf,
+        /// The grouping node's fully-qualified name — the dotted prefix
+        /// `list-fields` shows on the terminals beneath it.
+        #[arg(long)]
+        name: String,
+        /// Output path. Not written unless `--yes` is given.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Actually perform the deletion. Without it, the affected fields
+        /// are listed and nothing is written.
+        #[arg(long)]
+        yes: bool,
+        /// Which save path to use.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Also verify that undoing the deletion reproduces the input byte
+        /// for byte.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+
     /// **Rename a form field** (ISO 32000-1 §12.7.3.2).
     ///
     /// `--to` is a **partial** name — the one path segment this field
@@ -3867,6 +3907,14 @@ fn run() -> ExitCode {
             mode,
             verify_undo,
         } => cmd_delete_form_field(&input, &name, None, &output, mode, verify_undo),
+        Command::DeleteFieldGroup {
+            input,
+            name,
+            output,
+            yes,
+            mode,
+            verify_undo,
+        } => cmd_delete_field_group(&input, &name, &output, yes, mode, verify_undo),
         Command::DeleteWidget {
             input,
             name,
@@ -11027,6 +11075,112 @@ fn cmd_delete_form_field(
         u32::from(deletion.field_removed),
         u32::from(deletion.selection_cleared),
         deletion.emptied_parents,
+        mode.name(),
+        output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    finish_edit(input, &outcome)
+}
+
+/// `delete-field-group` — remove a grouping node and its whole subtree.
+///
+/// # Why this command refuses to run without `--yes`
+///
+/// Every other delete in this CLI removes the thing you named. This one
+/// removes the thing you named **and every field beneath it**, and the
+/// operator typing the command cannot see that set — a subtree is exactly
+/// the shape whose contents are invisible from its name. `Personal` might
+/// be one field or forty.
+///
+/// So the default is the listing: resolve the node, print the terminals by
+/// name, write nothing, exit `0`. `--yes` is the second, deliberate act.
+/// This is rule 4's disclosure obligation in the shape a CLI can honour —
+/// there is no canvas to show the affected fields on, so the names are the
+/// disclosure, and a flag is the confirmation.
+///
+/// Exiting `0` from the dry run is deliberate: nothing failed. A non-zero
+/// exit would make a scripted preview indistinguishable from a refusal, and
+/// the whole point is that previewing is a normal, expected thing to do.
+///
+/// # Why the terminals are listed on stdout, not stderr
+///
+/// The opposite of `fill-field`'s conversion note. That note is an aside
+/// about an operation you asked for; this listing **is** the output of the
+/// dry run — the answer to the question the invocation asked. A script
+/// capturing stdout wants it.
+fn cmd_delete_field_group(
+    input: &Path,
+    name: &str,
+    output: &Path,
+    yes: bool,
+    mode: SaveMode,
+    verify_undo: bool,
+) -> u8 {
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    // The preview runs the same gates as the deletion, so a dry run that
+    // succeeds is a promise the real run can keep.
+    let preview = match session.field_group_deletion_preview(name) {
+        Ok(p) => p,
+        Err(err) => return report_edit_error(input, &err),
+    };
+
+    if !yes {
+        // The listing IS the output. One line per terminal so the set is
+        // greppable and diffable, then a summary that says what else goes.
+        for t in &preview.terminals {
+            println!("would-delete field={t:?}");
+        }
+        println!(
+            "delete-field-group {} name={:?} DRY-RUN terminals={} widgets={} nodes={} — nothing written; pass --yes to delete",
+            input.display(),
+            name,
+            preview.terminals.len(),
+            preview.widgets_removed,
+            preview.nodes_removed,
+        );
+        return exit::SUCCESS;
+    }
+
+    let deletion = match session.delete_field_group(name) {
+        Ok(d) => d,
+        Err(err) => return report_edit_error(input, &err),
+    };
+
+    // Named even on the real run. The operator may have passed `--yes`
+    // straight away, and a destructive act should say what it destroyed
+    // whether or not it was previewed first.
+    for t in &deletion.terminals {
+        println!("deleted field={t:?}");
+    }
+
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "delete-field-group {} name={:?} terminals={} widgets_removed={} nodes_removed={} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        input.display(),
+        name,
+        deletion.terminals.len(),
+        deletion.widgets_removed,
+        deletion.nodes_removed,
         mode.name(),
         output.display(),
         outcome.changed,

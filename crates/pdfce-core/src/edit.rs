@@ -2415,6 +2415,26 @@ pub enum EditError {
         /// The fully-qualified name that was requested.
         name: String,
     },
+    /// A grouping-node operation named a **terminal** field.
+    ///
+    /// Distinct from [`Self::FieldNotFound`], and the distinction is the
+    /// whole reason this variant exists. The name resolves perfectly — it is
+    /// simply not an interior node of the field tree. Reporting "no field
+    /// with that name" would tell an operator their document is missing a
+    /// field they can see in `list-fields`, which reads as corruption rather
+    /// than as a wrong verb.
+    ///
+    /// Found by reading the CLI's own output: `delete-field-group --name
+    /// Personal.Name` answered *"the document has no fillable form field
+    /// with the fully-qualified name"* about a field that was right there.
+    #[error(
+        "{name:?} is a terminal form field, not a grouping node — \
+         use the single-field delete for it"
+    )]
+    NotAGroupingNode {
+        /// The fully-qualified name that was requested.
+        name: String,
+    },
     /// A plain-text fill named a **rich-text** field (`/Ff` bit 26).
     ///
     /// # This refusal prevents a WRONG VALUE ON SCREEN, not merely lost bold
@@ -5383,6 +5403,59 @@ pub struct FieldDeletion {
     pub emptied_parents: usize,
 }
 
+/// What deleting a **grouping node** would remove, or did remove.
+///
+/// # Why this is a named type and not a `usize`
+///
+/// Deleting a terminal field removes the thing the operator pointed at.
+/// Deleting a grouping node removes **fields they did not name** — every
+/// terminal beneath it, however deep. `Personal` looks like one row in a
+/// tree and may be five fields, eleven widgets and three intermediate
+/// nodes. A caller that reports "deleted Personal" has told the operator
+/// almost nothing about what just happened to their document.
+///
+/// So the terminals are carried **by name**, not counted. A count answers
+/// "how much went"; only the names answer "did the right thing go", which
+/// is the question an operator asks before confirming a destructive act on
+/// a subtree they cannot see the inside of. This is `R181`'s principle
+/// applied at the point a count would have been the easy choice.
+///
+/// # The three numbers are genuinely different quantities
+///
+/// `terminals` and `nodes_removed` do not overlap and neither implies the
+/// other: a grouping node has no type and no presence of its own (Table
+/// 220), so it is an object that vanishes without being a field anyone
+/// could have filled. `widgets_removed` is a third count again — a
+/// terminal may carry several widgets across several pages, so it is
+/// bounded below by `terminals.len()` and not by anything above.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct FieldGroupDeletion {
+    /// The fully-qualified name of the grouping node itself.
+    pub group_name: String,
+    /// Fully-qualified names of every **terminal** field removed, in the
+    /// deepest-first order [`forms::AcroForm::groups`] uses.
+    ///
+    /// By name rather than by count — see the type's own documentation.
+    /// Empty is impossible for a resolvable group: a node with no terminals
+    /// beneath it is not a grouping node, it is a node the last deletion
+    /// failed to prune, and [`EditError::FieldNotFound`] is the honest
+    /// answer for a name that reaches one.
+    pub terminals: Vec<String>,
+    /// Widget annotations un-listed from their pages and deleted.
+    ///
+    /// Not derivable from `terminals.len()`: one terminal may own several
+    /// widgets on several pages (§12.7.3.1's split field/widget shape).
+    pub widgets_removed: usize,
+    /// Grouping-node objects removed, **including the named node itself**
+    /// and every intermediate node the removal emptied.
+    ///
+    /// Counted rather than named because an intermediate node's name is a
+    /// prefix of the terminal names already listed — naming them would
+    /// repeat information the operator can already read.
+    pub nodes_removed: usize,
+}
+
 /// What a [`EditSession::rename_field`] changed.
 ///
 /// # Why a rename is ONE object write, and this struct exists to say what
@@ -7075,6 +7148,206 @@ impl EditSession {
             selection_cleared: false,
             emptied_parents: emptied.len(),
         })
+    }
+
+    /// **What deleting a grouping node would remove** — resolved and
+    /// disclosed, with nothing written.
+    ///
+    /// The companion to [`Self::delete_field_group`], and the reason that
+    /// verb is safe to offer at all. Deleting `Personal` removes every
+    /// terminal beneath it, and an operator looking at a collapsed tree row
+    /// cannot see how many that is or what they are called. This answers
+    /// that question against the live session, before anything changes.
+    ///
+    /// It runs the **same gates** as the deletion — encryption and strict
+    /// certification — so a preview never promises a removal the commit
+    /// would then refuse. A preview that succeeds where the act fails is
+    /// worse than no preview: it invites the operator to confirm something
+    /// that cannot happen.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::NotAGroupingNode`] when the name resolves to a
+    /// **terminal** field, and [`EditError::FieldNotFound`] when nothing
+    /// bears it at all. Two variants rather than one because they are
+    /// opposite problems: a wrong verb on a sound document, versus a wrong
+    /// name. A terminal is deliberately not redirected to
+    /// [`Self::delete_field`] — the two remove different amounts, and
+    /// guessing which the caller meant is exactly the sneakiness rule 4
+    /// forbids on a destructive verb.
+    ///
+    /// Plus the encryption and strict certification guards.
+    pub fn field_group_deletion_preview(
+        &mut self,
+        fqn: &str,
+    ) -> Result<FieldGroupDeletion, EditError> {
+        let (_, preview) = self.group_deletion_preflight(fqn)?;
+        Ok(preview)
+    }
+
+    /// **Delete a grouping node and everything beneath it** as ONE undoable
+    /// command.
+    ///
+    /// # Why this could not just be `delete_field` in a loop
+    ///
+    /// Three reasons, and the third is the one that would have bitten:
+    ///
+    /// 1. `delete_field` resolves through the **terminal** field list, so it
+    ///    cannot name a grouping node at all — [`Self::deletion_preflight`]
+    ///    searches `form.fields`, and a pure grouping node is not in it.
+    /// 2. A loop would produce N undo entries for one operator gesture. Undo
+    ///    would peel the subtree back one field at a time, and a partially
+    ///    undone group is a document state the operator never asked for and
+    ///    cannot name.
+    /// 3. **`R179`'s shape, on a destructive verb.** A loop of
+    ///    `delete_field(...)?` that failed halfway would leave the subtree
+    ///    half-removed, having reported failure. Unlike the redaction loop
+    ///    (`079394f`) there is no argument that the per-entry failures are
+    ///    unreachable here, because each iteration re-parses a form the
+    ///    previous iteration changed.
+    ///
+    /// Instead the whole removal set is computed first and committed once.
+    /// [`Self::remove_fields_from_form`] already takes a slice and already
+    /// computes the recursive emptied-parent fixed point **before** any
+    /// write, so the grouping nodes — including the named one — are pruned
+    /// by the machinery that exists rather than by a second traversal that
+    /// could disagree with it.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::field_group_deletion_preview`], which this calls.
+    pub fn delete_field_group(&mut self, fqn: &str) -> Result<FieldGroupDeletion, EditError> {
+        let (terminals, preview) = self.group_deletion_preflight(fqn)?;
+        let slots = self.page_slots()?;
+
+        // Every widget of every terminal, and every terminal's own id. A
+        // merged widget IS the field dict (§12.7.3.1's one-widget
+        // short-hand), so it must not be listed for deletion twice — the
+        // same filter `delete_field` applies, for the same reason.
+        let mut widgets: Vec<forms::Widget> = Vec::new();
+        let mut widget_ids: Vec<ObjId> = Vec::new();
+        let mut field_ids: Vec<ObjId> = Vec::new();
+        for field in &terminals {
+            field_ids.push(field.id);
+            for w in &field.widgets {
+                if !w.merged {
+                    widget_ids.push(w.id);
+                }
+                widgets.push(w.clone());
+            }
+        }
+
+        // One page write per page, not one per widget: `unlist_widgets`
+        // groups by page because two writes to one page dict computed from
+        // the same pre-command state overwrite rather than compose. A
+        // subtree spanning pages is exactly the case that makes that bite.
+        let mut objects = self.unlist_widgets(&widgets, &slots)?;
+        let (form_writes, emptied) = self.remove_fields_from_form(&field_ids)?;
+        objects.extend(form_writes);
+
+        let removals: Vec<Removal> = field_ids
+            .iter()
+            .copied()
+            .chain(widget_ids.iter().copied())
+            .chain(emptied.iter().copied())
+            .filter(|id| self.base.get(*id).is_some() || self.state.contains_key(id))
+            .map(|id| Removal {
+                id,
+                was_deleted: self.deleted.contains(&id),
+                is_deleted: true,
+            })
+            .collect();
+
+        self.commit(Command {
+            kind: CommandKind::DeleteFormField,
+            objects,
+            removals,
+            trailer: None,
+        });
+
+        // `nodes_removed` is reported from what the cascade ACTUALLY emptied,
+        // not from the preview's prediction. The two agree today; reporting
+        // the prediction would make them agree even on the day they stop.
+        Ok(FieldGroupDeletion {
+            nodes_removed: emptied.len(),
+            ..preview
+        })
+    }
+
+    /// Resolve a grouping node, run the deletion gates, and describe what
+    /// would go. Shared by the preview and the deletion so the two cannot
+    /// disagree about either the gates or the removal set.
+    ///
+    /// Returns the terminal fields themselves (which the deletion needs for
+    /// their widgets) alongside the caller-facing description.
+    ///
+    /// The `nodes_removed` in the returned description is a **prediction**:
+    /// the named node plus every ancestor the removal would empty. The
+    /// deletion overwrites it with what the cascade actually did.
+    fn group_deletion_preflight(
+        &mut self,
+        fqn: &str,
+    ) -> Result<(Vec<forms::Field>, FieldGroupDeletion), EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        // STRICT, matching `deletion_preflight`: removing a subtree is a
+        // structural change to the form, which is what certification freezes.
+        self.check_certification()?;
+
+        let form =
+            forms::parse_acroform(&self.graph()).ok_or_else(|| EditError::FieldNotFound {
+                name: fqn.to_owned(),
+            })?;
+
+        // A GROUPING node specifically. A terminal's name reaching here is a
+        // caller error, not a request to delete that terminal — see the
+        // preview's `# Errors`.
+        //
+        // The two failures are reported apart because they mean opposite
+        // things to whoever reads them. "This name is a terminal" is a wrong
+        // verb on a document that is fine; "no such name" is a wrong name.
+        // Collapsing them told an operator their visible field did not
+        // exist.
+        if !form.groups.iter().any(|g| g.fully_qualified_name == fqn) {
+            return Err(if form.field_by_name(fqn).is_some() {
+                EditError::NotAGroupingNode {
+                    name: fqn.to_owned(),
+                }
+            } else {
+                EditError::FieldNotFound {
+                    name: fqn.to_owned(),
+                }
+            });
+        }
+
+        let terminals: Vec<forms::Field> = form.descendants_of(fqn).cloned().collect();
+
+        // Predicted node count: the named node, plus every ancestor whose
+        // ONLY descendants are inside this subtree. An ancestor with a
+        // terminal elsewhere survives, so it is not counted.
+        let doomed_ancestors = form
+            .groups
+            .iter()
+            .filter(|g| g.fully_qualified_name != fqn)
+            .filter(|g| form.descendants_of(&g.fully_qualified_name).count() > 0)
+            .filter(|g| {
+                form.descendants_of(&g.fully_qualified_name)
+                    .all(|t| terminals.iter().any(|d| d.id == t.id))
+            })
+            .count();
+
+        let widgets_removed = terminals.iter().map(|f| f.widgets.len()).sum();
+        let preview = FieldGroupDeletion {
+            group_name: fqn.to_owned(),
+            terminals: terminals
+                .iter()
+                .map(|f| f.fully_qualified_name.clone())
+                .collect(),
+            widgets_removed,
+            nodes_removed: doomed_ancestors + 1,
+        };
+        Ok((terminals, preview))
     }
 
     /// Delete ONE widget of a field, by its index in the field's widget list

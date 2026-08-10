@@ -1136,3 +1136,146 @@ fn names_sorted(f: &forms::AcroForm) -> Vec<String> {
     v.sort();
     v
 }
+
+// ---------------------------------------------------------------------------
+// (h) Grouping-node DELETION — `delete_field_group` and its preview.
+// ---------------------------------------------------------------------------
+//
+// Deleting a terminal removes what the operator pointed at. Deleting a
+// grouping node removes fields they did NOT name, which is why the preview
+// exists and why these tests assert names rather than counts.
+//
+// `nested-form.pdf` is the only fixture with the shape that makes the
+// interesting case testable: `Personal` holds BOTH an intermediate node
+// (`Personal.Address`, with two terminals) and a terminal of its own
+// (`Personal.Name`). Deleting `Personal.Address` must therefore leave
+// `Personal` standing — a fixture where every terminal hung off one leaf
+// node could not tell a correct ancestor-prune from one that removes every
+// ancestor unconditionally.
+
+/// Deleting an intermediate node leaves an ancestor that still has a child.
+///
+/// The load-bearing assertion is `Personal.Name` SURVIVING. `Personal` is an
+/// ancestor of the deleted node, so a cascade that pruned ancestors without
+/// checking whether they still had descendants would take it — and with it a
+/// field in a different branch that the operator never named.
+#[test]
+fn deleting_an_intermediate_node_spares_an_ancestor_that_still_has_a_child() {
+    let mut s = session("nested-form.pdf");
+
+    let preview = s
+        .field_group_deletion_preview("Personal.Address")
+        .expect("Personal.Address is a grouping node");
+    assert_eq!(preview.group_name, "Personal.Address");
+    let mut got = preview.terminals.clone();
+    got.sort();
+    assert_eq!(
+        got,
+        vec!["Personal.Address.City", "Personal.Address.Zip"],
+        "the preview must NAME the terminals, not just count them"
+    );
+    assert_eq!(preview.widgets_removed, 2);
+    assert_eq!(
+        preview.nodes_removed, 1,
+        "only Address goes; Personal survives because Personal.Name remains"
+    );
+
+    let done = s
+        .delete_field_group("Personal.Address")
+        .expect("the deletion must succeed where the preview did");
+    assert_eq!(done.terminals, preview.terminals);
+    assert_eq!(done.nodes_removed, preview.nodes_removed);
+
+    assert_eq!(
+        names_sorted(&form(&s)),
+        vec!["Personal.Name"],
+        "the sibling branch must be untouched"
+    );
+}
+
+/// Deleting the root grouping node takes the whole subtree, ancestors and all.
+///
+/// The `nodes_removed` of 2 is the assertion that distinguishes this from a
+/// terminal-only sweep: `Personal` and `Personal.Address` are both objects
+/// with names and no type of their own, and both must go. Leaving either
+/// behind would keep its name occupying the §12.7.3.2 FQN space, refusing a
+/// later field that wanted it.
+#[test]
+fn deleting_the_root_group_removes_every_terminal_and_every_node() {
+    let mut s = session("nested-form.pdf");
+
+    let preview = s
+        .field_group_deletion_preview("Personal")
+        .expect("Personal is a grouping node");
+    assert_eq!(preview.terminals.len(), 3, "{:?}", preview.terminals);
+    assert_eq!(preview.widgets_removed, 3);
+    assert_eq!(
+        preview.nodes_removed, 2,
+        "Personal and Personal.Address both vanish"
+    );
+
+    let done = s.delete_field_group("Personal").expect("deletion succeeds");
+    assert_eq!(done.nodes_removed, 2);
+    assert!(
+        names_sorted(&form(&s)).is_empty(),
+        "every field lived under Personal: {:?}",
+        names_sorted(&form(&s))
+    );
+}
+
+/// A TERMINAL's name is refused, not silently redirected to `delete_field`.
+///
+/// The two verbs remove different amounts. Accepting a terminal here would
+/// mean a caller that mistyped a group name got a single-field deletion and
+/// no signal that it had asked for something else — the sneakiness rule 4
+/// forbids, on a destructive verb.
+///
+/// The variant matters as much as the refusal. A terminal name and an absent
+/// name are opposite problems — a wrong verb on a sound document versus a
+/// wrong name — and both are asserted here so a later simplification that
+/// collapses them back into one has to break a test. It reached the CLI once
+/// already, telling an operator that a field `list-fields` had just printed
+/// did not exist.
+#[test]
+fn a_terminal_name_is_not_a_grouping_node() {
+    let mut s = session("nested-form.pdf");
+    assert!(
+        matches!(
+            s.field_group_deletion_preview("Personal.Name"),
+            Err(pdfce_core::edit::EditError::NotAGroupingNode { .. })
+        ),
+        "a terminal must be refused AS a terminal, not as a missing field"
+    );
+    assert!(
+        matches!(
+            s.field_group_deletion_preview("Nope.Nothing"),
+            Err(pdfce_core::edit::EditError::FieldNotFound { .. })
+        ),
+        "an absent name is still FieldNotFound"
+    );
+    // And neither refusal may have changed anything on the way out.
+    assert_eq!(names_sorted(&form(&s)).len(), 3);
+}
+
+/// The whole subtree removal is ONE undoable command.
+///
+/// Three terminals, three widgets and two grouping nodes go together, so one
+/// undo must bring all eight back. A per-field loop would need three undos
+/// and would expose two intermediate states the operator never asked for —
+/// which is the third reason `delete_field_group` is not `delete_field` in a
+/// loop.
+#[test]
+fn deleting_a_group_undoes_as_a_single_command() {
+    let mut s = session("nested-form.pdf");
+    let before = names_sorted(&form(&s));
+
+    s.delete_field_group("Personal").expect("deletion succeeds");
+    assert!(names_sorted(&form(&s)).is_empty());
+
+    s.undo().expect("one undo must restore the whole subtree");
+    assert_eq!(
+        names_sorted(&form(&s)),
+        before,
+        "a single undo must restore every terminal, widget and node"
+    );
+}
