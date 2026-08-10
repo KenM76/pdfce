@@ -788,6 +788,75 @@ D:\Dev\pdfce\
                                    16.7 ms frame at 60 Hz — so a page that
                                    rasterizes in milliseconds returns inline and
                                    never touches the asynchronous path.
+                                   **`theme.rs` (`Pass 58.0`, 2026-08-10,
+                                   `2387a58`):** the first module in the
+                                   crate that sets a `egui::Style` at all —
+                                   before this Pass the app ran on egui's
+                                   stock appearance plus ~26 scattered
+                                   `Color32` literals across a 27,000-line
+                                   file. `Palette` (named semantic roles,
+                                   never colour names) + `Metrics` + three
+                                   presets (Quiet/Airy/Dark) +
+                                   `Theme::apply`, called once per frame via
+                                   `ctx.all_styles_mut` (both egui 0.35
+                                   light/dark `Style`s, never `set_style` —
+                                   writing only one makes the app's look
+                                   depend on the OS theme). Canvas-drawn
+                                   overlay colours (node marks, snap
+                                   guides, dimension previews) are stashed
+                                   in `ctx.data_mut` under an app-owned
+                                   `egui::Id`, since `egui::Style` has no
+                                   field for pdfce's own overlay vocabulary.
+                                   **★ LOAD-BEARING BOUNDARY: chrome is
+                                   themed, DOCUMENT colour is not.**
+                                   `PdfceApp::markup_color`/`prop_color` and
+                                   one pure-black comparison deciding a
+                                   colour operator are written INTO the PDF
+                                   (`/C`, appearance-stream colour
+                                   operators) — a theme must never touch
+                                   them, or a restyle would silently change
+                                   what colour gets committed to a saved
+                                   file. Marked `// DOCUMENT COLOUR:` at
+                                   each of the three sites; `tools/check-
+                                   theme-colors.sh` (new gate, same shape as
+                                   `check-ui-strings.sh`) forbids raw colour
+                                   literals outside `theme.rs` but honours
+                                   that marker as the deliberate exception.
+                                   `Settings::theme` (`pdfce-core`) is a
+                                   plain `String` token, not `theme::Preset`
+                                   — core must never gain GUI vocabulary
+                                   (this section's own invariant); a test
+                                   in `theme.rs` cross-checks core's default
+                                   token against `Preset::default()` so the
+                                   two cannot drift silently. **No visual
+                                   redesign shipped this Pass** — the three
+                                   presets exist so the operator can choose
+                                   a direction later; that choice is an open
+                                   operator question, not yet answered. See
+                                   §12 for the full decision record and
+                                   `D:\dev\rag\egui\` for the generalized
+                                   "centralize + gate" pattern this is the
+                                   third pdfce instance of (strings, icons,
+                                   now colour).
+                                   **`main.rs` split (`Pass 58.1`,
+                                   2026-08-10, `255cf86`→`3a699cf`→
+                                   `fc137e2`):** 27,647 → 25,511 lines, pure
+                                   moves (no logic/signature/behaviour
+                                   change, same 2,901 tests before and
+                                   after), staged as three separately-
+                                   revertable commits — `canvas_overlay.rs`
+                                   (749 lines: canvas-drawn overlays),
+                                   `panels_structure.rs` (520 lines: several
+                                   dock panel bodies), `ribbon_ui.rs` (1,121
+                                   lines: ribbon widget drawing). No crate-
+                                   boundary change — purely an intra-crate
+                                   module split, recorded here because two
+                                   real defects surfaced FROM the move (see
+                                   §12): a doc comment silently attached to
+                                   the wrong function for two panels'
+                                   worth of distance, and a textual test
+                                   gate whose subject moved with the code
+                                   it was gating.
     pdfce-cli\                  <- The command-line batch shell. Subcommand parsing
                                    (clap crate), one subcommand per batch operation
                                    (merge/split/rotate/extract, Bates stamp, convert
@@ -15244,3 +15313,161 @@ correction above, next genuinely free decision number 039). Cross-
 reference: `ROADMAP.md`'s `6ab72ec` Shipped entry for the full sourcing
 (exact file/line citations for every claim above) and the `Pass 57.0`
 ledger note.
+
+### 2026-08-10 (eightieth filing, `2387a58`) — a theme module and its ONE hard boundary: chrome is themed, document colour never is; `Settings::theme` is a plain `String`, not `theme::Preset`
+
+**Filed by `pdfce-librarian`, no shell tool this dispatch — every
+hash-to-content mapping and the four-commit boundary are as stated by
+the dispatching engineer, not confirmed against `git log`/`git show`.**
+**Independently verified by direct read of current source, in full:**
+`crates/pdfce-gui/src/theme.rs` (all 601 lines — `Palette`, `Metrics`,
+`Theme`, `Preset` and its three variants, `Theme::apply`/`of`/
+`write_style`, all four tests); `tools/check-theme-colors.sh` (in full —
+the marker-honoured-within-8-lines-above rule, the `DOCUMENT COLOUR:`/
+`NOT A THEME COLOUR:` escape hatch, why `TRANSPARENT` is deliberately
+excluded from the forbidden-literal pattern); `crates/pdfce-core/src/
+settings/mod.rs:872` (`pub theme: String`) and `:936`/`:1837` (the
+`"quiet"`/`"dark"` literal defaults); `crates/pdfce-gui/src/settings_panel.rs:365`–`:397`
+(`theme_setting`, confirmed it is the ONE setting in the panel that
+applies live rather than staying draft-until-Save, and that the panel's
+own doc comment states this explicitly rather than leaving it a silent
+exception to the panel's usual contract). **Independently confirmed
+by grep, not merely relayed:** exactly three `// DOCUMENT COLOUR:`
+sites in `crates/pdfce-gui/src` (`main.rs:1620`, `:3436`, `:17823`),
+matching the dispatch's claimed count.
+
+**The decision, stated as the invariant it now is.** pdfce's appearance
+is data, owned entirely by `theme.rs`, applied once per frame — before
+this Pass nothing in the crate called any `egui::Style`-setting method
+at all, so the app ran on egui's stock look plus per-call-site colour
+literals. **Two colours are excluded from theming by design, not by
+oversight:** `PdfceApp::markup_color` and `PdfceApp::prop_color` (plus
+one pure-black-vs-other comparison selecting a PDF colour operator) are
+the OPERATOR's choice about DOCUMENT CONTENT — they reach `/C` and
+appearance-stream colour operators in a saved file. A theme sweep that
+touched them would silently change what colour gets committed to disk,
+with the change invisible until the file is reopened. This is the same
+class of boundary §5's round-trip invariant draws (pdfce-authored state
+vs. document state) applied one layer up, to the styling system rather
+than the object model, and it is now load-bearing for every future
+change to `theme.rs` or any call site that adds a colour: **the
+question "does this colour end up in a saved file?" decides whether it
+may ever be a theme role.**
+
+**Crate-boundary consequence: `Settings::theme` is `String`, never
+`theme::Preset`.** `pdfce-core` must not gain GUI vocabulary (§3's
+standing rule) — a `theme::Preset` field on `Settings` would pull
+`pdfce-gui`'s enum into the headless crate the WASM fork depends on
+staying free of exactly that class of dependency. The two sides are
+kept from drifting apart not by the type system (there is nothing to
+type-check across the boundary) but by a test in `theme.rs` asserting
+`Preset::from_key(&Settings::default().theme) == Some(Preset::default())`
+— confirmed present and passing per the direct read above. This is the
+same "stable settings-file token, never the display string" pattern
+`Preset::key()`'s own doc comment states directly: a token is a
+persistence contract; a display string is `ui_text.rs`'s to reword
+without invalidating every operator's saved settings file.
+
+**Scope, stated because the dispatch was explicit about it and it is
+easy to over-read a new theme module as a redesign.** No visual
+redesign shipped in this Pass. The Quiet preset is deliberately tuned to
+reproduce what the app already looked like, so an operator who never
+opens Settings sees a tidied version of the prior appearance, not a
+different one. Airy and Dark exist so the operator can CHOOSE a look —
+the right choice depends on the operator's environment (monitor,
+session length, CAD-toolchain conventions) in a way source code cannot
+settle — but which of the three (or a fourth) becomes the shipped
+default, if any change is warranted at all, is an **open operator
+question, not yet answered**, tracked in `ROADMAP.md`'s Backlog rather
+than decided here.
+
+**Body-section sync:** §3's `pdfce-gui` module note gains a new
+paragraph (this filing) naming the module, the boundary, and the
+crate-boundary decision above.
+
+**No decision-record ceiling change** (037/038 remain CLAIMED-not-
+authored; 034–036 unaffected). Cross-reference: `ROADMAP.md`'s
+`Pass 58.0` Shipped entry (eightieth filing) for the full build record,
+and `D:\dev\rag\egui\centralize_and_gate_is_the_reusable_pattern_for_every_operator_visible_dimension_third_instance_colour.md`
+for the generalized cross-project form of the centralize-and-gate
+pattern this Pass is the third pdfce instance of.
+
+### 2026-08-10 (eightieth filing, `255cf86`→`3a699cf`→`fc137e2`) — `main.rs` split into three modules; two pre-existing defects surfaced by the move itself, neither a crate-boundary change
+
+**Filed by `pdfce-librarian`, no shell tool this dispatch — the exact
+before/after line counts and the "same 2,901 tests before and after"
+claim are as stated by the dispatching engineer, not confirmed against
+`git log`/`git show`.** **Independently verified by direct read of
+current source, not merely relayed:** `crates/pdfce-gui/src/main.rs`
+is **25,511 lines** (grepped, matches the dispatch exactly);
+`canvas_overlay.rs` **749**, `panels_structure.rs` **520**,
+`ribbon_ui.rs` **1,121** (all three grepped, all three match exactly).
+`crates/pdfce-gui/src/main.rs:7382`–`:7392` (the `forms_panel` doc
+comment, confirmed now correctly attached to `fn forms_panel` and
+narrating its own prior misattachment: *"this class of drift is a
+function of DISTANCE, and 27,000 lines is a lot of distance"*).
+`crates/pdfce-gui/src/main.rs:23175`–`:23190`
+(`every_ribbon_group_is_gated_to_a_widget`, confirmed it concatenates
+`main.rs` and `ribbon_ui.rs` via `include_str!` and asserts each
+`ribbon::RibbonGroup`'s `Debug`-formatted needle is PRESENT in that
+concatenation) and `:23192`–`:23214` (the adjacent
+`every_pane_subject_is_reachable_without_the_harness` doc comment,
+confirmed it names the present-vs-absent-assertion lesson explicitly
+and cross-references the ribbon test by name).
+
+**Plain entry, no decision number — a pure intra-crate module split, no
+crate-boundary, public-API-surface, or data-model change.** Recorded
+here, per this section's own convention for non-crate-boundary findings
+worth a permanent record (same shape as the `annot::oc_refs`
+consolidation and the `R184` reachability entries above), because two
+real, pre-existing defects surfaced FROM the act of moving code, not
+from any logic change — the split's own justification, demonstrated
+rather than merely argued.
+
+**Finding 1 — a doc comment had been silently re-attached to the wrong
+function for roughly 470 lines, invisible to the compiler and to
+`cargo doc`.** `forms_panel`'s ~20-line doc comment had drifted onto
+`signatures_panel` when the Signatures panel was inserted between the
+comment and its original subject, sometime before this Pass. Rust
+attaches a doc comment to the NEXT item by pure token-stream position;
+nothing cross-checks a comment's prose against its subject's actual
+name or behaviour. `cargo doc` rendered the forms-panel description
+under the signatures heading without complaint, and reading `main.rs`
+top-to-bottom showed a doc comment immediately followed by a function —
+exactly what "correct" looks like on a linear read. It surfaced only
+because the three panels between the comment and `forms_panel` moved to
+their own module, landing the orphaned comment next to a blank line.
+Fixed in this Pass; the fix's own doc comment records the finding at
+the site, per this project's practice of leaving a defect's discovery
+context where a future reader will actually see it.
+
+**Finding 2 — `every_ribbon_group_is_gated_to_a_widget` failed the
+moment the ribbon's widgets moved, and this is the GOOD outcome,
+recorded because the alternative shape is the dangerous one.** See the
+matching `docs/ROADMAP.md` entry and the newly-appended instance in
+`D:\dev\rag\rust\absence_assertion_must_first_prove_the_container_could_have_held_it.md`
+(R162's existing family) for the full derivation: the test asserts a
+needle is PRESENT in the shell's concatenated source, so a refactor that
+moved the needle's location made the assertion fail loudly rather than
+silently pass on a now-empty or now-wrong-shaped search. **R162 is
+CITED here, not re-minted** — this is a new site-class (textual
+`include_str!`-based source scanning, not a runtime collection) for an
+already-standing rule, corroborating rather than extending it.
+
+**Process finding, not a code defect — recorded because it cost real
+time and is a general methodology gap, not a pdfce-specific one.**
+Imports were deleted on the strength of `cargo clippy` "unused import"
+warnings taken from a build whose own output also contained a
+compile error for an unrelated symbol. Rust/clippy analysis does not
+proceed past a crate's first hard error, so those warnings described a
+program that had not finished being analysed — some of the "unused"
+imports were in fact used by code the compiler never reached. Cost two
+extra fix-and-rebuild cycles. Filed as its own finding:
+`D:\dev\rag\rust\clippy_warnings_from_a_build_that_already_errored_describe_a_program_that_never_finished_compiling.md`.
+
+**Body-section sync:** §3's `pdfce-gui` module note gains a new
+paragraph (this filing, immediately following the `theme.rs` entry
+above) naming the split, the line counts, and the two findings.
+
+**No decision-record ceiling change.** Cross-reference: `ROADMAP.md`'s
+`Pass 58.1` Shipped entry (eightieth filing) for the full build record.

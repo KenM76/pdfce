@@ -32085,3 +32085,135 @@ engineer should check `D:\Dev\pdfce-backups\` and `git log`/`git status`
 directly before any push. This is the **seventy-ninth** `SESSION_LOG.md`
 filing (the seventy-eighth confirmed present by direct read before this
 entry was appended).
+
+## 2026-08-10 (eightieth filing) — operator-initiated, not roadmap work: `2387a58` ships `Pass 58.0`, a theme module and the first style hook the crate ever had; `255cf86`→`3a699cf`→`fc137e2` ship `Pass 58.1`, the `main.rs` split, and surface two pre-existing defects by moving code, not by changing it
+
+**Sourcing.** No shell tool this dispatch — `git log -1 --format=%B <sha>`
+and `git show --stat` could not be run for any of the four commits,
+despite the dispatch asking for them; every hash-to-content mapping and
+the "2,901 tests before and after" claim are relayed from the engineer,
+not confirmed against the commit graph. **Independently verified by
+direct read of current source, in full or by targeted grep, not merely
+relayed:** `crates/pdfce-gui/src/theme.rs` (all 601 lines);
+`tools/check-theme-colors.sh` (in full); exactly three `// DOCUMENT
+COLOUR:` sites (`main.rs:1620`, `:3436`, `:17823`, grepped, matches the
+dispatch); `crates/pdfce-core/src/settings/mod.rs:872`/`:936`/`:1837`
+(`theme: String`, `"quiet"`/`"dark"` defaults); `crates/pdfce-gui/src/settings_panel.rs:365`–`:397`
+(`theme_setting`, the live-apply exception to the draft-until-Save
+contract, stated in its own doc comment); line counts for all four
+touched files — `main.rs` **25,511**, `canvas_overlay.rs` **749**,
+`panels_structure.rs` **520**, `ribbon_ui.rs` **1,121** — all grepped
+and matched exactly; `main.rs:7382`–`:7392` (`forms_panel`'s doc
+comment, confirmed correctly reattached); `main.rs:23175`–`:23214`
+(`every_ribbon_group_is_gated_to_a_widget`, confirmed `include_str!`-
+concatenates `main.rs`+`ribbon_ui.rs` and asserts PRESENCE). Cargo.toml
+for `pdfce-core`/`pdfce-render` grepped for `egui`/`eframe` — no real
+dependency, GUI-core separation unaffected. **Not independently
+verified:** commit messages/diffs themselves, and the stated test/gate
+figures.
+
+**Shipped:**
+- `2387a58` — **`Pass 58.0`**, new Pass ID (grepped free, R156).
+  `theme.rs`: `Palette` (17 named roles) + `Metrics` + `Theme` + three
+  presets (Quiet/default/reproduces-prior-look, Airy, Dark).
+  `Theme::apply` is the first `egui::Style`-setting call in the crate's
+  history, applied every frame via `ctx.all_styles_mut` (both of egui
+  0.35's light/dark `Style`s — not `set_style`, which would make the
+  app's look depend on the OS theme). Canvas overlay colours (no field
+  on `egui::Style`) are stashed via `ctx.data_mut`/`egui::Id`. New gate
+  `tools/check-theme-colors.sh`, pdfce's THIRD centralize-and-gate
+  instance (after strings, icons), with an 8-line-lookback marker
+  exemption. **Load-bearing boundary: chrome is themed, document colour
+  is not** — `markup_color`/`prop_color`/one colour-operator comparison
+  write into the saved PDF and are marked `// DOCUMENT COLOUR:`,
+  excluded from the gate by name rather than by oversight.
+  `Settings::theme` stays a plain `String` (§3's GUI-core separation),
+  cross-checked against `Preset::default()` by a test in `theme.rs`
+  rather than by the type system. Two defects the new tests caught
+  before ship: the first accent colour collided with `node_mark`'s
+  historical value (two overlay roles briefly one colour); the overlay
+  accessors briefly read `Theme::default()` instead of the live theme.
+  **No visual redesign** — the presets exist so the operator can choose
+  a direction, not yet chosen.
+- `255cf86`→`3a699cf`→`fc137e2` — **`Pass 58.1`**, new Pass ID (grepped
+  free). `main.rs` **27,647 → 25,511** lines, three staged/revertable
+  commits, pure moves into `canvas_overlay.rs` (749),
+  `panels_structure.rs` (520), `ribbon_ui.rs` (1,121) — no logic,
+  signature, or behaviour change, same 2,901 tests before and after
+  (relayed). **Finding 1**: `forms_panel`'s doc comment had silently
+  reattached to `signatures_panel` (~470 lines away) — invisible to the
+  compiler and `cargo doc`, surfaced only when the panels between them
+  moved out. **Finding 2**: `every_ribbon_group_is_gated_to_a_widget`
+  failed the instant the ribbon's widgets moved — the GOOD outcome,
+  because it asserts presence, not absence. **R162 CITED** (a new
+  textual-source-gate site-class for the already-standing "absence
+  assertion proves nothing until the container is shown capable of
+  holding it" rule), **not re-minted**, and explicitly distinct from a
+  separately-declined "gate incomplete across call sites" candidate
+  from the prior filing (coverage completeness vs. assertion polarity —
+  related family, different mechanism). **Process finding**: imports
+  deleted on `cargo clippy` "unused import" warnings from a build whose
+  output also carried an unrelated compile error — clippy stops
+  analysing at a crate's first hard error, so those warnings described
+  a program that never finished compiling; cost two extra
+  fix-rebuild cycles.
+
+**Decisions made this session:**
+- Operator set the work order himself, after being told honestly that
+  colour was not centralized at all (unlike strings/icons) and nothing
+  set an egui style anywhere: theme extraction, then the `main.rs`
+  split, then back to feature work; visual direction deferred to "show
+  me options first."
+- Chrome-vs-document-colour boundary and `Settings::theme`'s
+  `String`-not-`Preset` crate-boundary call both recorded in
+  `ARCHITECTURE.md` §12 (two new dated entries) and §3 (body sync).
+
+**Findings + decisions:**
+- No `C:\personal_rag\pdf\` lesson — nothing here is a PDF-domain
+  producer-divergence finding.
+- `D:\dev\rag\rust\`: one new file (clippy-warnings-from-an-errored-
+  build) plus a dated amendment to the existing R162 home file
+  (`absence_assertion_must_first_prove_the_container_could_have_held_it.md`)
+  for the textual-gate site-class; both indexed.
+- `D:\dev\rag\egui\`: one new file (centralize-and-gate pattern,
+  third-instance generalization, `ctx.all_styles_mut`/`ctx.data_mut`
+  specifics); indexed.
+
+**Still in flight:** which theme preset (if any) becomes the shipped
+default — open operator question, filed to `ROADMAP.md` Backlog, not a
+numbered item (design-direction, not a spec/behaviour ruling); decisions
+`037`/`038` still CLAIMED-not-authored (unaffected by this filing);
+printer job SPOOLING (operator go-ahead); attachment EXTRACTION-to-file
+(R151).
+
+**For next session:** resume feature work per the operator's stated
+order (back to roadmap Passes after the theme+split detour); if the
+operator picks a preset direction, that is a `docs/decisions/` entry
+worth authoring formally, not just a §12 plain entry, since it would be
+the first real visual-design ruling.
+
+**Ledger for this filing.** **Two new Pass IDs: `Pass 58.0` + `Pass
+58.1`**, both grepped free before filing per R156; Pass family ceiling
+moves **57.0 → 58.1**. `docs/FEATURES.md`: one new row under *Shell &
+UX* — "Theming / Appearance" — core `[x]`, cli `—` (no visual surface
+to theme), gui `[x]`, Acrobat `?` (not looked up, no parity behaviour to
+source). No `Pass 58.1` row — a pure module split has no capability to
+tick; `FEATURES.md` stays capability-shaped per its own header.
+`docs/ARCHITECTURE.md`: §3 gains two new `pdfce-gui` paragraphs
+(`theme.rs`, the `main.rs` split); §12 gains two new dated entries (this
+filing). Standing rules: **no new mint** — R162 cited; the image-gate
+coverage-completeness candidate stays declined, unaffected; ceiling
+stays **R185**, next free **R186**. Decision ceiling: **unchanged**,
+037/038 still claimed-not-authored. Operator-question: unchanged
+numbered ceiling; one new unnumbered open item (theme-preset default)
+filed to Backlog. `D:\dev\rag\rust\`: one new file + one dated
+amendment, both indexed this filing. `D:\dev\rag\egui\`: one new file,
+indexed this filing. Gate figures (**2,901 tests, `cargo fmt --check`/
+`clippy -- -D warnings` clean, `check-theme-colors.sh` clean**, per the
+dispatch) RELAYED, NOT independently re-run — no shell this dispatch.
+Backup/git working-tree state **not independently asserted** (hard rule
+8) — no shell this dispatch; the engineer should check
+`D:\Dev\pdfce-backups\` and `git log`/`git status` directly before any
+push. This is the **eightieth** `SESSION_LOG.md` filing (the
+seventy-ninth confirmed present by direct read before this entry was
+appended).

@@ -81,6 +81,261 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★ `2387a58` FILES `Pass 58.0` — a theme module, at last: `theme.rs`, three presets (Quiet/Airy/Dark), `Theme::apply` as the style hook that never existed, `tools/check-theme-colors.sh`, and `Settings::theme` as an opaque `String`; `255cf86`→`3a699cf`→`fc137e2` FILE `Pass 58.1` — `main.rs` split 27,647 → 25,511 lines into three modules, no logic change, and TWO pre-existing defects surfaced by the move itself — operator-initiated (not roadmap-driven): "will the GUI's look ever improve, and is it modular enough to change safely?" — 2026-08-10
+
+**Sourcing.** No shell tool this dispatch — `git log -1 --format=%B <sha>`
+and `git show --stat` could not be run for any of the four commits, so
+every hash-to-content mapping and the "same 2,901 tests before and
+after" claim are relayed from the dispatching engineer, not confirmed
+against the commit graph. **Independently verified by direct read of
+current source, not merely relayed:** `crates/pdfce-gui/src/theme.rs`
+in full (601 lines — `Palette`'s 17 named roles, `Metrics`, `Theme`,
+`Preset`'s three variants + `ALL`/`key`/`from_key`, `Theme::apply`/`of`/
+`write_style`, all four tests including
+`the_core_default_theme_token_is_one_the_shell_knows`);
+`tools/check-theme-colors.sh` in full (the forbidden-`Color32`-
+constructor pattern, the 8-line-lookback marker rule, why
+`TRANSPARENT` is excluded); grep for `DOCUMENT COLOUR:` across
+`crates/pdfce-gui/src` — **exactly three hits** (`main.rs:1620`,
+`:3436`, `:17823`), matching the dispatch's claimed count exactly.
+`crates/pdfce-core/src/settings/mod.rs:872` (`pub theme: String`),
+`:936`/`:1837` (the `"quiet"`/`"dark"` literal defaults).
+`crates/pdfce-gui/src/settings_panel.rs:365`–`:397` (`theme_setting`,
+confirmed it applies live rather than staying draft-until-Save, with
+the panel's own doc comment stating this exception explicitly). Line
+counts for all four touched files grepped directly and matched the
+dispatch exactly: `main.rs` **25,511**, `canvas_overlay.rs` **749**,
+`panels_structure.rs` **520**, `ribbon_ui.rs` **1,121**.
+`crates/pdfce-gui/src/main.rs:7382`–`:7392` (the `forms_panel` doc
+comment, confirmed now correctly attached and narrating its own prior
+misattachment). `crates/pdfce-gui/src/main.rs:23175`–`:23214`
+(`every_ribbon_group_is_gated_to_a_widget` in full, confirmed it
+`include_str!`-concatenates `main.rs` + `ribbon_ui.rs` and asserts
+presence, plus the adjacent doc comment naming the present-vs-absent
+lesson explicitly). Cargo.toml for `pdfce-core`/`pdfce-render` grepped
+for `egui`/`eframe` — zero real dependency hits (one prose mention in a
+`pdfce-render` comment, pre-existing, unrelated to this filing) —
+GUI-core separation invariant unaffected by either commit group.
+**Not independently verified:** the exact commit messages/diffs (no
+`git log`/`git show` this dispatch) and the stated test count/gate
+results.
+
+**Shipped:**
+- `2387a58` — **`Pass 58.0`, a new Pass ID** (grepped `Pass 58` against
+  this file before filing, per R156 — zero hits; Pass family ceiling
+  was **57.0**, moves to **58.0**). New `crates/pdfce-gui/src/theme.rs`:
+  `Palette` (17 fields, every one a named ROLE — `accent`, never
+  `blue` — so a theme wanting a green accent is not read as "blue,
+  except it's green now"), `Metrics` (control height, gutter, panel
+  padding, corner radius, icon points — travels WITH the palette
+  because a generous-padding theme with a dense theme's control height
+  reads as a mistake), `Theme` (palette + metrics + which preset), and
+  three shipped presets: **Quiet** (default, deliberately tuned to
+  reproduce the app's PRIOR look, so an operator who never opens
+  Settings sees a tidied version of what they had, not a different
+  app), **Airy** (lighter, roomier, softer edges), **Dark** (dark
+  chrome/light page, CAD-tool convention, overlay hues RE-TUNED not
+  inherited since the quiet preset's node marks are muddy on dark).
+  `Theme::apply` is the FIRST style-setting call anywhere in the crate
+  — before this Pass nothing called any `egui::Style`-mutating method
+  at all, so pdfce ran on egui's stock appearance plus ~26 scattered
+  `Color32` literals across a 27,000-line file. Applied every frame via
+  `ctx.all_styles_mut` (**not** `set_style`) so BOTH of egui 0.35's
+  separate light/dark `Style`s get the same palette — writing only one
+  would make pdfce's look depend on the operator's OS theme setting, a
+  bug invisible on whichever OS theme the developer's own machine
+  happens to run. Canvas-drawn OVERLAY colours (node marks, snap
+  guides, dimension previews — pdfce's own vocabulary, no field for
+  them on `egui::Style`) are stashed in `ctx.data_mut` under an
+  app-owned `egui::Id` so every canvas painter reads the live theme
+  rather than a default baked in at its own call site — the "two-thirds
+  of a theme" failure mode this whole module exists to prevent.
+- **New gate, `tools/check-theme-colors.sh`, same shape as the
+  pre-existing `check-ui-strings.sh`** — forbids `Color32::from_rgb`/
+  `from_rgba_*`/`from_gray`/named constants (`RED`, `GRAY`, …) outside
+  `theme.rs`, with an 8-line-lookback marker exemption
+  (`// DOCUMENT COLOUR:` / `// NOT A THEME COLOUR:`). `TRANSPARENT` is
+  deliberately EXCLUDED from the forbidden pattern — it is the absence
+  of a colour, not a choice of one, and requiring a marker on every
+  `Shape::convex_polygon(.., TRANSPARENT, ..)` would train contributors
+  to add markers without reading them.
+  This is pdfce's **THIRD** instance of the "centralize + gate" pattern
+  (strings → `ui_text.rs`/`check-ui-strings.sh`; icons → `icons.rs` +
+  parse/raster tests; now colour+metrics) — generalized to
+  `D:\dev\rag\egui\` this filing (below).
+- **★ THE LOAD-BEARING BOUNDARY, and the reason the gate is not
+  absolute: CHROME IS THEMED, DOCUMENT COLOUR IS NOT.** Three sites
+  write a colour INTO the PDF rather than draw one on screen —
+  `PdfceApp::markup_color` (an authored annotation's `/C` and
+  appearance-stream colour operators), `PdfceApp::prop_color` (same,
+  properties panel), and one pure-black-vs-other comparison deciding
+  which colour operator gets emitted. Those are the OPERATOR's choice
+  about DOCUMENT CONTENT, not chrome, and a theme sweep must never
+  touch them — a mechanical restyle would have silently made a dark
+  theme author differently-coloured markup than a light one, visible
+  only after saving. All three marked `// DOCUMENT COLOUR:` at the
+  site, confirmed present by direct grep (three hits, matches the
+  dispatch exactly).
+- **`Settings::theme` (`pdfce-core`) is a plain `String`, never
+  `theme::Preset`** — core must never gain GUI vocabulary (§3's
+  standing GUI-core-separation invariant; `cargo tree -p pdfce-core`
+  unaffected, confirmed no `egui`/`eframe` real dependency). Kept from
+  drifting against `Preset::default()` by a test in `theme.rs`
+  (`the_core_default_theme_token_is_one_the_shell_knows`), confirmed
+  present and matching (`"quiet"` ↔ `Preset::Quiet`) by direct read —
+  the seam is checked from the crate that owns the enum, since nothing
+  in the type system connects a `pdfce-core` literal to a `pdfce-gui`
+  enum across the crate boundary.
+- **Two defects the new tests caught before ship, worth recording as
+  the module's own justification, demonstrated rather than argued:**
+  (1) the first-chosen accent colour landed exactly on `node_mark`'s
+  historical value — two semantically distinct overlay roles
+  collapsing to one colour, caught by
+  `distinct_overlay_roles_stay_distinct_in_every_preset`, which asserts
+  every preset's seven semantic roles stay pairwise-distinct (a `..
+  quiet.palette` partial-struct-update is exactly how two roles quietly
+  become one, and the dark preset uses that idiom throughout). (2) the
+  overlay accessors briefly read `Theme::default()` instead of the live
+  applied theme, which would have shipped a dark preset with
+  light-theme node marks — the precise "two-thirds of a theme" failure
+  this module argues against, discovered inside the module written to
+  prevent it.
+- **Settings picker deliberately breaks the draft-until-Save
+  contract.** Every other Settings row is a DRAFT until Save is clicked
+  — a theme cannot be, because "you cannot choose a look from a radio
+  button's label; you choose it by seeing it." Selecting a preset
+  applies on the next frame; Cancel puts it back; only Save persists it.
+  Stated in the panel's own doc comment rather than left for the
+  operator to discover as a surprise inconsistency.
+- **Explicitly NOT this Pass: any visual redesign.** The three presets
+  exist so the operator can CHOOSE a direction — which one (if any)
+  should become the shipped default is an **open operator question**,
+  not answered here, filed to Backlog rather than decided.
+- `255cf86`→`3a699cf`→`fc137e2` — **`Pass 58.1`, a new Pass ID**
+  (grepped `Pass 58.1` before filing — zero hits; ceiling **58.0 →
+  58.1**). Three staged, separately-revertable commits split
+  `crates/pdfce-gui/src/main.rs` from **27,647 to 25,511 lines**
+  (confirmed by direct grep, matches exactly) into
+  `canvas_overlay.rs` (**749** lines), `panels_structure.rs`
+  (**520** lines), `ribbon_ui.rs` (**1,121** lines) — all three counts
+  independently grepped and matched exactly. **Pure moves: no logic, no
+  signature, no behaviour change; same 2,901 tests before and after**
+  (test count relayed, not independently re-run this dispatch).
+- **★ Finding 1 — a doc comment silently re-attached to the wrong
+  function for ~470 lines, invisible to the compiler and to `cargo
+  doc`.** `forms_panel`'s ~20-line doc comment had drifted onto
+  `signatures_panel` when the Signatures panel was inserted between
+  the comment and its true subject at some earlier point. Rust attaches
+  a doc comment to the NEXT item by pure token-stream position; nothing
+  cross-checks a comment's prose against the function it precedes. It
+  surfaced only when the three panels between them moved to their own
+  module, landing the orphaned comment next to a blank line. Fixed this
+  Pass; confirmed by direct read that `forms_panel`'s doc comment now
+  correctly describes `forms_panel` and narrates its own prior
+  misattachment at the site — *"this class of drift is a function of
+  DISTANCE, and 27,000 lines is a lot of distance."*
+- **★ Finding 2 — `every_ribbon_group_is_gated_to_a_widget` failed the
+  instant the ribbon's widgets moved, and this is the GOOD outcome.**
+  Confirmed by direct read: the test `include_str!`-concatenates
+  `main.rs` + `ribbon_ui.rs` and asserts each `ribbon::RibbonGroup`'s
+  `Debug`-formatted needle is PRESENT somewhere in that text. Because
+  the claim is positive, moving the ribbon's widget code out of
+  `main.rs` without updating the test's file list made the assertion
+  fail loudly and immediately, naming the missing group — the general
+  lesson, recorded beside the test itself: **a textual gate that asserts
+  a needle is PRESENT cannot rot into a vacuous pass; one that asserts
+  ABSENCE goes quiet the moment its subject moves**, which is exactly
+  how the first draft of `every_pane_subject_is_reachable_without_the_harness`
+  (`R184`, seventy-seventh filing) certified the bug it was written for.
+  **R162 is CITED here, not re-minted** — this is a new site-class
+  (textual `include_str!`-based source scanning, not a runtime
+  collection) for the already-standing "an absence assertion proves
+  nothing until the container is shown capable of holding it" rule, a
+  corroborating instance rather than a new failure shape. **Distinct
+  from a separately-declined "gate incomplete across call sites"
+  candidate raised the same day** (the `draw_image` optional-content
+  gate, `Pass 57.0`'s entry above) — that is about COVERAGE
+  COMPLETENESS across multiple convergence points; this is about
+  ASSERTION POLARITY. Related family, different mechanism — not the
+  second instance of that declined candidate.
+- **Process finding, not a code defect.** Imports were deleted on the
+  strength of `cargo clippy` "unused import" warnings taken from a
+  build whose own output also contained an unrelated compile error.
+  Rust/clippy analysis does not proceed past a crate's first hard
+  error, so those warnings described a program that had not finished
+  being analysed — some flagged imports were in fact used by code the
+  compiler never reached. Cost two extra fix-and-rebuild cycles. Filed
+  to `D:\dev\rag\rust\` (below).
+
+**Decisions made this session:**
+- **Operator set the work order himself**, in response to being asked
+  honestly whether the GUI's "window dressing" would improve and
+  whether the codebase was modular enough to change the look safely:
+  theme extraction first, then the `main.rs` split, then back to
+  feature work; visual direction deferred to "show me options first"
+  (the three presets satisfy that, not yet chosen from).
+- **Chrome-vs-document-colour boundary recorded as a load-bearing
+  invariant** in `ARCHITECTURE.md` §12 and §3 — constrains every future
+  styling change, not just this Pass.
+- **`Settings::theme` as opaque `String` recorded as a crate-boundary
+  decision** in `ARCHITECTURE.md` §12 — governed by §3's GUI-core
+  separation invariant, cross-checked by a test rather than the type
+  system.
+
+**Findings + decisions:**
+- No new `C:\personal_rag\pdf\` lesson this filing — nothing here is a
+  real-world-PDF-producer-divergence finding; the theme/colour
+  boundary is a pdfce UI-architecture decision, not a PDF-domain one.
+- **Two new `D:\dev\rag\rust\` files**: the clippy-warnings-from-an-
+  errored-build methodology finding (new file), and a corroborating
+  instance appended (dated footer, not a new file) to the existing
+  `absence_assertion_must_first_prove_the_container_could_have_held_it.md`
+  (R162's home file) for the textual-source-gate site-class.
+- **One new `D:\dev\rag\egui\` file**: the "centralize + gate" pattern
+  generalized across pdfce's three confirmed instances (strings, icons,
+  colour), including the `ctx.all_styles_mut`-vs-`set_style` and
+  `ctx.data_mut`-overlay-stash egui 0.35 specifics.
+
+**Ledger for this filing.** **Two new Pass IDs: `Pass 58.0`** (theme/
+appearance layer) **and `Pass 58.1`** (`main.rs` module split), both
+grepped free before filing per R156; Pass family ceiling moves
+**57.0 → 58.1**. `docs/FEATURES.md`: new row under *Shell & UX* —
+"Theming / Appearance (three presets, live picker)" — core `[x]`
+(`Settings::theme`), cli `—` (not applicable — pdfce-cli has no visual
+surface), gui `[x]`, Acrobat `?` (not looked up — theming is not a
+document-editing capability the Acrobat feature-parity RAG catalogues
+against; `pdfce-acrobat-librarian` not dispatched, no parity behaviour
+to source). **No `Pass 58.1` row** — a pure internal module split has
+no operator-visible capability, and `FEATURES.md` is capability-shaped
+by its own header; recording it there would misrepresent a code-
+structure change as a feature. `docs/ARCHITECTURE.md`: §3's `pdfce-gui`
+module note gains two new paragraphs (`theme.rs`, the `main.rs` split);
+§12 gains two new dated entries (this filing). Standing rules: **no new
+mint** — R162 CITED for Finding 2 (textual-gate site-class); the
+image-gate coverage-completeness candidate from `Pass 57.0`'s entry
+remains DECLINED, unaffected, still a first instance under the
+two-instance bar; ceiling stays **R185**, next free **R186**. Decision
+ceiling: **unchanged** — `037`/`038` remain CLAIMED-not-authored;
+034–036 unaffected. Operator-question ceiling: **unchanged**, but one
+NEW open item recorded (unnumbered, since it is a design-direction
+question rather than a spec/behaviour ruling) — which of the three
+theme presets, if any, becomes the shipped default; filed to Backlog.
+`C:\personal_rag\pdf\`: no new lesson. `D:\dev\rag\rust\`: **one new
+file** (clippy-errored-build finding) **plus one dated amendment** to
+an existing file (R162 corroboration); both indexed in
+`D:\dev\rag\rust\index.md` this filing. `D:\dev\rag\egui\`: **one new
+file** (centralize-and-gate pattern), indexed in
+`D:\dev\rag\egui\index.md` this filing. Gate figures (**2,901 tests
+before and after, `cargo fmt --check`/`cargo clippy -- -D warnings`
+clean, `check-theme-colors.sh` clean**, per the dispatch) RELAYED, NOT
+independently re-run — no shell this dispatch. Backup/git working-tree
+state **not independently asserted** (hard rule 8) — no shell this
+dispatch; the engineer should check `D:\Dev\pdfce-backups\` and
+`git log`/`git status` directly before any push. This is the
+**eightieth** `SESSION_LOG.md` filing.
+
+---
+
 ### ★★ `6ab72ec` FILES `Pass 57.0` — the document-wide OCG/layers panel gets a real, session-only TOGGLE (`LayerVisibility`, `--show-layer`/`--hide-layer`, a checkbox per layer with Reset), closing decision 036's last open Reader-parity gap; `5c4ff08`+`57f0c8f` fix two §8.11 defects inside the just-shipped `Pass 56.0` — one a same-day self-regression; `c098e9b` corrects the 76th–78th filings' "files on disk" framing rather than leaving it standing — 2026-08-10
 
 **Sourcing.** No shell tool this dispatch — `git log -1 --format=%B <sha>`
