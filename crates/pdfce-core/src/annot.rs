@@ -729,7 +729,65 @@ pub fn optional_content_default_off<G: ObjectGraph + ?Sized>(graph: &G) -> BTree
         // Default BaseState ON; /OFF disables specific groups.
         off.extend(oc_refs(graph, d.get(b"OFF")));
     }
+
+    // §8.11.2.3 INTENT — which groups participate in visibility at all.
+    //
+    // ★ Not consulted until 2026-08-10, so a `Design`-only group hid
+    // content in a `View` render. `/Design` is the author's structural
+    // organisation of artwork — scaffolding a consumer is not supposed
+    // to be affected by — and pdfce was letting it blank out content for
+    // a reader that had never asked to see design layers.
+    //
+    // The rule is a SET INTERSECTION, not a name comparison: both the
+    // configuration and each group carry an intent that may be a single
+    // name or an array, and a group participates when the two sets meet.
+    // Table 101 additionally allows `All` on the configuration, which
+    // matches everything.
+    //
+    // Applied as a FILTER over the already-computed set rather than
+    // woven into the two branches above, because it applies identically
+    // to both and the `/BaseState /OFF` branch is subtle enough already.
+    let config_intent = intent_set(graph, d.get(b"Intent"));
+    if config_intent.is_empty() {
+        // §8.11.2.3: an empty intent array means no group participates,
+        // which the clause states as "all content visible". An empty set
+        // here, not the unfiltered one — this is the one case where
+        // fewer intents means MORE visible content, and reading it as
+        // "no filter" would inverte it.
+        return BTreeSet::new();
+    }
+    if !config_intent.iter().any(|i| i == b"All") {
+        off.retain(|id| {
+            let group_intent = graph.resolved(*id).as_dict().map_or_else(
+                || intent_set(graph, None),
+                |g| intent_set(graph, g.get(b"Intent")),
+            );
+            group_intent.iter().any(|g| config_intent.contains(g))
+        });
+    }
     off
+}
+
+/// An `/Intent` entry as a set of names, defaulting to `[View]`
+/// (§8.11.2.3, Table 98 and Table 101 both give `View` as the default).
+///
+/// Accepts a single name or an array, the same tolerance
+/// [`oc_refs`] applies to `/OCGs`. A present-but-empty array is returned
+/// EMPTY rather than defaulted, because §8.11.2.3 gives an empty array
+/// its own meaning ("all content visible") — defaulting it to `View`
+/// would silently discard the one intent value that changes the answer.
+fn intent_set<G: ObjectGraph + ?Sized>(graph: &G, obj: Option<&Object>) -> Vec<Vec<u8>> {
+    match obj.map(|o| graph.resolve(o)) {
+        Some(Object::Name(n)) => vec![n.as_bytes().to_vec()],
+        Some(Object::Array(items)) => items
+            .iter()
+            .map(|o| graph.resolve(o))
+            .filter_map(Object::as_name)
+            .map(|n| n.as_bytes().to_vec())
+            .collect(),
+        // Absent, null, or a type Table 98 does not allow: the default.
+        _ => vec![b"View".to_vec()],
+    }
 }
 
 /// Whether an annotation's `/OC` reference resolves to a hidden state, given
@@ -1640,5 +1698,101 @@ mod tests {
         let graph = doc.view();
         let off_set = optional_content_default_off(&graph);
         assert!(!oc_is_hidden(&graph, ObjId::new(4, 0), &off_set));
+    }
+    // ---- §8.11.2.3 `/Intent` ----
+
+    /// A doc whose single OCG is in `/D /OFF`, with `group_intent` on the
+    /// group and `config_intent` on the configuration (empty string =
+    /// the entry is absent).
+    fn design_intent_off_set(group_intent: &str, config_intent: &str) -> usize {
+        let g = if group_intent.is_empty() {
+            String::new()
+        } else {
+            format!("/Intent {group_intent}")
+        };
+        let c = if config_intent.is_empty() {
+            String::new()
+        } else {
+            format!("/Intent {config_intent}")
+        };
+        let objects: Vec<(u32, Vec<u8>)> = vec![
+            (
+                1,
+                format!(
+                    "<< /Type /Catalog /Pages 2 0 R /OCProperties \
+                     << /OCGs [5 0 R] /D << /OFF [5 0 R] {c} >> >> >>"
+                )
+                .into_bytes(),
+            ),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 10 10] >>".to_vec(),
+            ),
+            (3, b"<< /Type /Page /Parent 2 0 R >>".to_vec()),
+            (4, b"<< /Type /OCG /Name (unused) >>".to_vec()),
+            (5, format!("<< /Type /OCG /Name (A) {g} >>").into_bytes()),
+        ];
+        let doc = build_pdf(&objects);
+        optional_content_default_off(&doc.view()).len()
+    }
+
+    /// ★ **A `Design`-only group does not hide content in a `View`
+    /// render.**
+    ///
+    /// §8.11.2.3: `/Design` is the author's structural organisation of
+    /// artwork, and a configuration's intent set selects which groups
+    /// participate in visibility at all. Until `/Intent` was read, a
+    /// group marked `Design` and listed in `/OFF` blanked out content for
+    /// a reader that had never asked to see design layers.
+    #[test]
+    fn a_design_only_group_does_not_hide_in_a_view_configuration() {
+        assert_eq!(
+            design_intent_off_set("/Design", ""),
+            0,
+            "the configuration defaults to /View, which /Design does not meet"
+        );
+        assert_eq!(
+            design_intent_off_set("/Design", "/Design"),
+            1,
+            "a Design configuration DOES consider it"
+        );
+    }
+
+    /// The defaults on both sides are `View`, so an ordinary document
+    /// with no `/Intent` anywhere is unaffected — the case that must not
+    /// have moved.
+    #[test]
+    fn absent_intent_on_both_sides_still_hides() {
+        assert_eq!(design_intent_off_set("", ""), 1);
+        assert_eq!(design_intent_off_set("/View", ""), 1);
+    }
+
+    /// Intent is a SET intersection, so a group naming both intents
+    /// participates in either configuration.
+    #[test]
+    fn an_array_intent_intersects_rather_than_compares() {
+        assert_eq!(design_intent_off_set("[/View /Design]", ""), 1);
+        assert_eq!(design_intent_off_set("[/View /Design]", "/Design"), 1);
+        assert_eq!(design_intent_off_set("[/Design]", ""), 0);
+    }
+
+    /// Table 101's `All` on the configuration considers every group
+    /// whatever its intent.
+    #[test]
+    fn a_config_intent_of_all_considers_every_group() {
+        assert_eq!(design_intent_off_set("/Design", "/All"), 1);
+        assert_eq!(design_intent_off_set("/Anything", "/All"), 1);
+    }
+
+    /// ★ **An EMPTY configuration intent array makes everything visible.**
+    ///
+    /// The one case where fewer intents means MORE visible content.
+    /// §8.11.2.3 states it outright, and it is exactly the shape a
+    /// "treat an empty array as no filter" reading gets backwards — that
+    /// reading would hide the group instead.
+    #[test]
+    fn an_empty_config_intent_array_shows_everything() {
+        assert_eq!(design_intent_off_set("/View", "[]"), 0);
+        assert_eq!(design_intent_off_set("", "[]"), 0);
     }
 }
