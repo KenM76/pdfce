@@ -905,6 +905,22 @@ struct PdfceApp {
     /// `pdfce-ui-specialist` ruled that out by name, along with a
     /// floating `egui::Area` (retired twice in this codebase already —
     /// decision 024, then Pass 34.1's move to docking).
+    /// Chrome hidden — ribbon, docks and status bar gone, window kept.
+    ///
+    /// **Deliberately SEPARATE from full screen**, which is the whole
+    /// point. A named Acrobat complaint is that it conflates Read Mode
+    /// and Full Screen (`Acrobat_Features/fullscreen__pagemode_and_escape.md`),
+    /// so an operator who wants more page on a windowed display has to
+    /// take over their whole monitor to get it. Two toggles, composable:
+    /// read mode without full screen, full screen without read mode, or
+    /// both.
+    read_mode: bool,
+    /// The OS window is full-screen.
+    ///
+    /// Tracked here as well as sent to the viewport because egui has no
+    /// query for it — without a local copy, a toggle could not know which
+    /// way to toggle.
+    full_screen: bool,
     find_open: bool,
     /// The Find query, as typed.
     find_query: String,
@@ -1517,6 +1533,8 @@ impl Default for PdfceApp {
             pending_copy: None,
             pending_redaction_apply: None,
             redact_search_query: String::new(),
+            read_mode: false,
+            full_screen: false,
             find_open: false,
             find_query: String::new(),
             find_case_sensitive: false,
@@ -4083,6 +4101,16 @@ impl OpenDoc {
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Action {
     Open,
+    /// Hide or show the chrome, keeping the window (Ctrl+H).
+    ToggleReadMode,
+    /// Take the OS window full-screen, or give it back (F11).
+    ToggleFullScreen,
+    /// Leave read mode, or if not in it, leave full screen.
+    ///
+    /// One step per press, deliberately: leaving a mode should cost the
+    /// same one gesture that entering it did, and dropping both at once
+    /// would strand an operator who only wanted the chrome back.
+    ExitViewMode,
     /// Show or hide the Find bar (Ctrl+F).
     ToggleFind,
     /// Run the current Find query and cache its hits.
@@ -10790,6 +10818,25 @@ impl PdfceApp {
                 self.find_open = !self.find_open;
                 return;
             }
+            Action::ToggleReadMode => {
+                self.read_mode = !self.read_mode;
+                return;
+            }
+            Action::ToggleFullScreen => {
+                self.full_screen = !self.full_screen;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(self.full_screen));
+                return;
+            }
+            Action::ExitViewMode => {
+                // Read mode first, so one press is one step.
+                if self.read_mode {
+                    self.read_mode = false;
+                } else if self.full_screen {
+                    self.full_screen = false;
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
+                }
+                return;
+            }
             Action::RunFind => {
                 self.run_find();
                 return;
@@ -10838,6 +10885,9 @@ impl PdfceApp {
             // meaningful with no document open, or that need `&mut self`
             // rather than `&mut OpenDoc`.
             Action::ToggleFind
+            | Action::ToggleReadMode
+            | Action::ToggleFullScreen
+            | Action::ExitViewMode
             | Action::RunFind
             | Action::StepFind(_)
             | Action::Open
@@ -11858,6 +11908,12 @@ impl eframe::App for PdfceApp {
                 raw_input.modifiers = alt;
             }
             diag::Step::Zoom(factor) => raw_input.events.push(egui::Event::Zoom(factor)),
+            diag::Step::ReadMode => {
+                self.apply(Action::ToggleReadMode, ctx, ctx.pixels_per_point());
+            }
+            diag::Step::ExitViewMode => {
+                self.apply(Action::ExitViewMode, ctx, ctx.pixels_per_point());
+            }
             diag::Step::Bookmarks => {
                 self.show_pane_subject(ribbon::PaneSubject::Bookmarks);
             }
@@ -12224,6 +12280,7 @@ impl eframe::App for PdfceApp {
                 selection_nonempty: canvas_selection_nonempty,
                 delete_target: canvas_delete_target,
                 inside_object,
+                in_view_mode: self.full_screen || self.read_mode,
             },
         );
 
@@ -12253,7 +12310,28 @@ impl eframe::App for PdfceApp {
 
         // Panels, in the order documented at the top of this file:
         // toolbar, status bar, rail, canvas.
-        egui::Panel::top("toolbar").show(ui, |ui| self.toolbar(ui, &mut actions));
+        // ★ READ MODE HIDES THE CHROME, and the Find bar is the one piece
+        // that stays.
+        //
+        // Hiding the ribbon, rail, dock and status bar is the point —
+        // more page, same window. But hiding the FIND BAR would be a
+        // different thing: an operator who opened Find and then entered
+        // read mode did not ask to cancel their search, and a bar that
+        // vanishes when a mode changes reads as a bug. So the Find
+        // condition below is unchanged.
+        //
+        // Nothing is DISABLED by read mode, only undrawn. Every keyboard
+        // command still works, which is what makes Escape a way out
+        // rather than the only one.
+        if !self.read_mode {
+            egui::Panel::top("toolbar").show(ui, |ui| self.toolbar(ui, &mut actions));
+        }
+        diag::trace(|| {
+            format!(
+                "view-mode read={} fullscreen={} chrome_drawn={}",
+                self.read_mode, self.full_screen, !self.read_mode
+            )
+        });
         // The Find bar: chrome between the toolbar and the canvas, shown
         // only while Find is open.
         //
@@ -12299,9 +12377,11 @@ impl eframe::App for PdfceApp {
         // space when there is nothing to say, which is how a status/terminal
         // panel behaves in most desktop editors, and strictly better than a
         // page that jumps on click.
-        egui::Panel::bottom("status")
-            .exact_size(STATUS_PANEL_HEIGHT_PTS)
-            .show(ui, |ui| self.status_bar(ui, &mut actions));
+        if !self.read_mode {
+            egui::Panel::bottom("status")
+                .exact_size(STATUS_PANEL_HEIGHT_PTS)
+                .show(ui, |ui| self.status_bar(ui, &mut actions));
+        }
         // Pass 34.1: the left dock replaces the hand-rolled thumbnail panel.
         // Same position, same toggle, same add-order (it must still precede
         // the CentralPanel and follow the full-width status bar) — what
@@ -12375,7 +12455,11 @@ impl eframe::App for PdfceApp {
                 });
             });
         }
-        if self.rail_expanded {
+        // Read mode hides the docks too — they are chrome, and the
+        // whole point is more page. The operator's rail/dock preferences
+        // are NOT changed, only unrendered, so leaving read mode restores
+        // exactly what they had.
+        if self.rail_expanded && !self.read_mode {
             egui::Panel::left("dock-left")
                 .default_size(LEFT_DOCK_DEFAULT_WIDTH_PTS)
                 .show(ui, |ui| {
@@ -12391,7 +12475,7 @@ impl eframe::App for PdfceApp {
         // toolbar → status → rail → dock → canvas. Inside the dock, the tab
         // bars are drawn before their panes' widgets, so Tab still visits
         // pick-then-fill, exactly as the hand-rolled row list would have.
-        if self.tools_open {
+        if self.tools_open && !self.read_mode {
             egui::Panel::right("tools")
                 .default_size(DOCK_DEFAULT_WIDTH_PTS)
                 .show(ui, |ui| self.dock_body(ui, &mut actions));
@@ -12514,6 +12598,9 @@ struct CanvasKeys {
     delete_target: bool,
     /// The operator is INSIDE an object — the rung Escape pops first.
     inside_object: bool,
+    /// Read mode or full screen is on, so Escape leaves it before the
+    /// canvas ladder is consulted at all. See the Escape handler.
+    in_view_mode: bool,
 }
 
 fn collect_keyboard_actions(ctx: &egui::Context, actions: &mut Vec<Action>, keys: CanvasKeys) {
@@ -12523,6 +12610,7 @@ fn collect_keyboard_actions(ctx: &egui::Context, actions: &mut Vec<Action>, keys
         selection_nonempty: canvas_selection_nonempty,
         delete_target: canvas_delete_target,
         inside_object,
+        in_view_mode,
     } = keys;
     use egui::{Key, Modifiers};
 
@@ -12591,6 +12679,11 @@ fn collect_keyboard_actions(ctx: &egui::Context, actions: &mut Vec<Action>, keys
     // above: a COMMAND-modified letter cannot collide with plain typing.
     // Same class as the shipped Ctrl+E / Ctrl+Shift+E.
     pressed(Modifiers::COMMAND, Key::F, Action::ToggleFind);
+    // F11 for full screen: the near-universal convention, and a function
+    // key no text field competes for. Ctrl+H for read mode, matching the
+    // chord Acrobat uses for the same idea.
+    pressed(Modifiers::NONE, Key::F11, Action::ToggleFullScreen);
+    pressed(Modifiers::COMMAND, Key::H, Action::ToggleReadMode);
     // Both spellings of "the + key": on most layouts the unshifted key
     // reports as `Equals` and only reports as `Plus` when shifted, so
     // binding only one of them makes Ctrl+Plus work on some keyboards
@@ -12704,6 +12797,24 @@ fn collect_keyboard_actions(ctx: &egui::Context, actions: &mut Vec<Action>, keys
     // closure's final use, so its mutable borrow of `actions` has ended and
     // the computed outcome can be pushed directly. Consumed centrally so a
     // widget underneath cannot also act on it.
+    // ★ ESCAPE LEAVES READ MODE AND FULL SCREEN FIRST, before the canvas
+    // ladder gets a look.
+    //
+    // The principle is the one the Acrobat RAG records as Reader's own:
+    // **a document must never be able to trap the operator.** Read mode
+    // hides the ribbon, and full screen hides the window controls with
+    // it — so if Escape fell through to `resolve_escape`'s tool/gesture/
+    // selection chain, an operator in both modes with nothing selected
+    // would have no visible way out and no working key.
+    //
+    // Checked before the consume so the canvas never sees the key in
+    // this state, and read mode is left before full screen so one press
+    // does not drop both at once — leaving a mode should be one step,
+    // the same way entering it was.
+    if in_view_mode && ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape)) {
+        actions.push(Action::ExitViewMode);
+        return;
+    }
     if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape)) {
         let outcome = canvas::resolve_escape(
             tool_active,

@@ -143,6 +143,14 @@ pub enum Step {
     Tool(ScriptTool),
     /// Show the Bookmarks activity.
     Bookmarks,
+    /// Toggle read mode (chrome hidden, window kept).
+    ///
+    /// Full screen is deliberately NOT drivable: it would take over the
+    /// operator's display, and this harness exists precisely so
+    /// verification never touches their screen.
+    ReadMode,
+    /// Leave read mode or full screen, as Escape does.
+    ExitViewMode,
     /// Toggle the Find bar, through the same action Ctrl+F pushes.
     ///
     /// A step rather than a synthesised Ctrl+F because the chord itself
@@ -478,6 +486,8 @@ fn parse_step(s: &str) -> Option<Step> {
         "panel" if rest.trim() == "forms" => Some(Step::Forms),
         "panel" if rest.trim() == "find" => Some(Step::Find),
         "panel" if rest.trim() == "bookmarks" => Some(Step::Bookmarks),
+        "view" if rest.trim() == "read" => Some(Step::ReadMode),
+        "view" if rest.trim() == "escape" => Some(Step::ExitViewMode),
         "panel" if rest.trim() == "comments" => Some(Step::Comments),
         "tab" => match rest.trim() {
             "file" => Some(Step::Tab("file")),
