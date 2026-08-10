@@ -1,8 +1,9 @@
 # NEXT SESSION — start here
 
-**Rewritten 2026-08-10.** Read this, then `docs/ROADMAP.md` and the latest
-`docs/SESSION_LOG.md` entry. This is a *handoff*, not a record — the
-record is the librarian's. Overwrite it once acted on.
+**Rewritten 2026-08-10 (second time that day).** Read this, then
+`docs/ROADMAP.md` and the latest `docs/SESSION_LOG.md` entry. This is a
+*handoff*, not a record — the record is the librarian's. Overwrite it
+once acted on.
 
 Not owned by `pdfce-librarian`. Safe to edit without racing a filing.
 
@@ -10,168 +11,179 @@ Not owned by `pdfce-librarian`. Safe to edit without racing a filing.
 
 ## State
 
-- Branch `pass-8-redaction`, HEAD **`2ffd808`**. Working tree clean.
-- **2680 workspace tests, 0 failed.** clippy 0, `cargo fmt --all --check`
-  clean, **all seven gates green**, `cargo tree` shows no GUI dep in
-  core or render.
-- **★ THE REPOSITORY IS PUBLIC.** `github.com/KenM76/pdfce`, since
-  2026-08-09. Anything committed here is published by default. The
-  `tools/` temp-folder convention for test files is now the actual
-  control, not tidiness.
-- **The publish deny-rules are gone**, by the operator's explicit choice,
-  from both `.claude/settings.json` and `.claude/settings.local.json`.
-  `gh release` and `cargo publish` are still denied. **Rule 8 now has no
-  fence behind it — the absence of a deny rule is not a go-ahead.**
-- Open question **(bh) is CLOSED**, resolved *accept*. Do not re-open it.
+- Branch `pass-8-redaction`, HEAD **`42b86cd`**.
+- **2804 workspace tests, 0 failed.** clippy 0 with `--all-features`,
+  `cargo fmt --all --check` clean.
+- **Seven of eight gates green.** `check-commits-filed.py` is RED on the
+  most recent commits — file them; that is the normal state after a run
+  of work, not a defect.
+- **86 commits unpushed**, and `main` upstream still does not compile on
+  Linux (`ef88973` fixes it, locally). Pushing is permitted on request
+  and is the operator's call, never an agent's. **R176.**
+- Baseline debt: **5 hashes** in `tools/commits-filed-baseline.txt`. The
+  file is 25 LINES — twenty of them are its header. Count the hashes
+  (`grep -cE '^[0-9a-f]{7,40}'`), not the lines; `wc -l` gives 25 and is
+  wrong.
 
 ---
 
-## ★ FIRST: rich-text fill is UNBLOCKED, and has been since 2026-08-06
+## ★ THE ACTIVE CAMPAIGN — Reader-parity sweep (decision 036)
 
-The operator has a standing ruling on it, quoted in `b8f96b1`:
+Chosen by the operator on 2026-08-10 after an audit found the gap
+**inverted** from what the roadmap had assumed: pdfce is well AHEAD of
+Acrobat Reader on editing — text, vector objects, redaction, form
+authoring, page operations — and was BEHIND on plain consumption.
 
-> *"it should be able to handle rich text fills if acrobat can or if it
-> makes it better than acrobat"*
+Seven gaps were verified absent IN SOURCE. Six are now closed:
 
-That commit (2026-08-07) says the work is *"blocked on §12.7.3.4 — still a
-named GAP in the spec RAG."* **It is not.** Line 21 of
-`D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__s__12.7.3.4.md`
-reads `GAP CLOSED 2026-08-06` — the day *before* the commit that calls it
-open. Verified directly, not relayed.
-
-So a feature the operator explicitly asked for has been sitting behind a
-blocker that cleared four days ago, and the only record saying otherwise
-was a commit nobody had filed. It surfaced on 2026-08-10 only because the
-baseline debt was being repaid.
-
-**What it is:** `<value-richtext>` (XFDF) and `/RV` (FDF) carry formatting
-alongside the plain value. pdfce's `FieldData` carries
-`values: Vec<String>` and drops it. Today's behaviour is a *disclosure*
-only — the export and import reports say so when the document has a
-rich-text field.
-
-**Scope help already in hand,** from the Acrobat-parity RAG via `b8f96b1`:
-Acrobat's rich-text support is enumerable (font family/style/weight/
-stretch/size/colour, alignment, underline, strikethrough, sub/superscript,
-via Adobe's `Span` object), **lists are unsupported even in Acrobat**, and
-both FDF and XFDF genuinely carry the formatting. It also records three
-places Acrobat is unreliable — an Adobe-acknowledged font-substitution
-bug, an auto-size persistence interaction, and inconsistent `richValue`
-across script contexts. Those are the openings for the ruling's second
-clause. **Unverified against `Acrobat_Features` — that is a
-`pdfce-acrobat-librarian` dispatch and is recorded as owed.**
-
-## Also check CI — it is the thing nobody was doing
-
-```bash
-gh run list --repo KenM76/pdfce --limit 5
-```
-
-`ef88973` fixed a defect that made **pdfce uncompilable on Linux**, red on
-six of six runs since the repo went public, found by reading CI rather
-than any local signal. **The fix is committed here and NOT PUSHED**, so
-`main` upstream is still broken. Pushing is permitted on request and is
-the operator's call. Standing rule **R176**.
-
-## What shipped this session
-
-| | |
+| Gap | State |
 |---|---|
-| `0466281` | Pass 52.2 GUI — Export DXF, disabled until a scale resolves |
-| `c58cca1` | CLI `--pages`/`--output-dir`; paper-scale warning's third gate |
-| `aa9ed38` | filing; **R174** minted |
-| `a3ba0f8` | **Pass 53.0** — field rename in the Forms panel |
-| `4f0e443` | `list-fields` stops mangling names with spaces |
-| `269361d` | docs corrected: the repo is public; **R175** |
-| `ef88973` | **Linux build fix**; Enter commits an Edit Text draft |
-| `b9819b4` | filing; **R176**; decision 003 §1.1 superseded |
-| `45a88f2` | `text:lines` — the harness can locate a text run |
-| `0c102e4` | core: `AcroForm::groups`, the field-name tree's interior |
-| `6611812` | **Pass 53.1** — the name breadcrumb; grouping-node rename |
-| `2b41b77` | the page highlight survives the walk to the rename editor |
-| `462d468`–`f895dc0` | owed-commit debt 11 → 5; **R177**, **R178** |
+| Find | **DONE** — core + CLI (`find-text`) + GUI bar, `Pass 55.0` |
+| Printing | **PARTIAL** — `list-printers`, `print-preview`; **spooling deliberately unbuilt** |
+| Bookmarks | **DONE** — core + `list-outline` + a clickable panel |
+| Attachments | **DONE (listing)** — core + `list-attachments`; extraction BLOCKED, see below |
+| Read mode / full screen | **DONE** — two separate toggles, Ctrl+H and F11 |
+| Document layers (OCG) | **IN FLIGHT** — see the next section |
+| Signature validation | **NOT STARTED**, lowest priority |
 
-Ledger: Pass **53.1**, rules **R178** (next R179), decisions **035**
-(next 036), questions **(bh)** closed (next (bi)).
+### The layers module is written but NOT REGISTERED
 
-**Owed-commit debt: 11 → 5.** `338076a`, `1f319c0`, `55a0732`, `587e520`,
-`9141ded` remain in `tools/commits-filed-baseline.txt`. Repaying it is not
-housekeeping — THREE of the six repaid so far were the only home of a live
-obligation (an owed UX review that turned out already closed, a stale
-blocker, and this ruling).
+`crates/pdfce-core/src/layers.rs` exists (~1969 lines) with nine fixtures
+under `fixtures/synthetic/layers/`, written by a subagent that had not
+reported when this file was written. **It is not in `lib.rs`.** Register
+it, run the tests, wire `list-layers` in the CLI and a panel in the GUI.
+
+The hard part already existed and the agent was told to reuse it rather
+than reimplement: `annot.rs`'s `optional_content_default_off` resolves
+`/OCProperties /D` including `/BaseState`/`/ON`/`/OFF`, and `oc_is_hidden`
+resolves an `/OC` against it. If the agent duplicated them because they
+were private, **make the originals `pub(crate)` and delete the copy** —
+two resolvers disagreeing means a layers panel that says "on" about
+content the renderer hides.
+
+Per the Acrobat RAG: toggling layers in a viewer is **session-scoped with
+zero file-format footprint** unless the operator explicitly saves, and
+**locked layers** cannot be toggled at all.
+
+---
+
+## ★ HARD BLOCKER — attachment extraction and `/EFF`
+
+**Do not build an extraction surface without reading this.**
+
+Since PDF 1.5 an *otherwise unencrypted* document can carry **encrypted**
+embedded files via `/EFF` + `DefEmbeddedFile` (§7.6.5). The intuitive
+guard — no password prompt, so plaintext — is wrong, and wrong
+**silently**: the filter chain runs and returns garbage that looks like a
+successful read.
+
+`AttachmentNotes::may_be_encrypted` is a deliberately over-broad warning
+flag, not a fix. `list-attachments` already surfaces it as
+`MAY_BE_ENCRYPTED` plus a stderr warning. Any future extraction MUST
+refuse or loudly caveat while it is set. Filed as a Backlog blocker with
+acceptance-criteria language, not as a doc comment.
+
+---
+
+## Verification is TEXT-ONLY while the operator is at the machine
+
+Stated by the operator on 2026-08-10: he is using this PC.
+
+- **`tools/gui-shot.ps1` is OFF LIMITS** — it raises a real window and
+  grabs the foreground.
+- **`tools/gui-drive.ps1` is fine** — it runs the window off-screen at
+  (-4000,-4000) and never takes focus. This is the situation `diag.rs`
+  was written for; its module docs say so.
+- Drive it with **`pwsh`**, not `powershell`. Both parse the scripts now,
+  but 5.1 leaves `$Exe` unresolved in that one file for reasons that were
+  investigated and not identified.
+- New diag steps this session: `scroll:<points>`, `panel:find`,
+  `panel:bookmarks`, `view:read`, `view:escape`. **Full screen is
+  deliberately NOT drivable** — a step that seized the operator's display
+  would defeat the reason the harness exists.
 
 ---
 
 ## THE NEXT TASK — ranked
 
-**Items 1–3 of the previous version of this list are DONE** and have been
-removed rather than left to be re-read as outstanding: the text-run
-harness gap (`45a88f2`), grouping-node rename (`Pass 53.1`), and the
-hover-highlight polish (`2b41b77`).
+### 1. Land the layers module (above), then its CLI and panel
 
-### 1. Rich-text fill — see the top of this file
+### 2. Owed items on Find, all named and none silent
 
-The operator's own ruling, unblocked since 2026-08-06, and the largest
-real capability left in the forms area. Three surfaces (core `/RV` +
-`<value-richtext>`, CLI, GUI), so scope it as a Pass family rather than
-one commit. Dispatch `pdfce-acrobat-librarian` first to check the
-Acrobat-behaviour claims relayed in `b8f96b1` before writing acceptance
-criteria — they are recorded as unverified.
+- **Enter does not trigger the search.** Two idioms tried —
+  `has_focus()` + key peek, then `lost_focus()` like every other draft in
+  the app. Both silently no-op while the trace shows `focus=true
+  query="third"`. The explicit **Find** button is the working path, and
+  exists precisely because Enter must never be the only way in.
+- **Whole-word matching is absent, not faked.** `TextMatch` returns only
+  the matched substring with no surrounding context, so a shell-side
+  boundary check has nothing to check against. A `pdfce-core` gap.
+- Match highlighting on the canvas is not drawn. `TextMatch.quad` is in
+  page space; invert `pdfce-render`'s Transform rather than hand-deriving
+  a second mapping.
 
-### 2. Finish the owed-commit debt — five left
+### 3. Printing: the spooling half
 
-`338076a`, `1f319c0`, `55a0732`, `587e520`, `9141ded`.
+Everything up to the job exists — `printer_caps` reads DPI and printable
+area, `place_page` computes scale and offset and reports clipping.
+**Printing consumes paper and occupies a shared device; get an explicit
+go-ahead before spooling anything.**
 
-Do not treat this as housekeeping. **Three of the six repaid so far were
-the only home of a live obligation**: an owed UX review (which turned out
-to have already closed), a stale blocker on a feature the operator asked
-for, and the rich-text ruling itself. The pattern is strong enough that
-the remaining five should be read before anything is assumed about what
-is or is not tracked.
+Two decisions already recorded, not yet acted on: the first slice
+rasterises (Reader sends vector to the driver and RIPs at print time —
+pdfce making Reader's *fallback* the default is an honest limitation that
+belongs in the disclosure), and a resolution cap is needed because A4 at
+600 DPI is ~139 MB of RGBA per page.
 
-Dispatch with `git show -s --format=%B <hash>` pasted into the dispatch —
-the librarian has no shell, and a one-line subject cannot carry a defect,
-a measurement or an owed follow-up.
+### 4. `R86` is NOT discharged for `e46c3a8`
 
-### 3. Grouping-node DELETION
+The unmodified-key guard is right by two independent code analyses —
+mine and `pdfce-ui-specialist`'s, which found the codebase's own comment
+at `main.rs:17107` stating the ordering. But the empirical test does not
+work: type `hello`, press Home, type `X` gives `helloX` **both before and
+after** the guard, while a trace confirms the guard is active. egui 0.35
+does handle `Key::Home` (`text_selection/cursor_range.rs:134`) and the
+harness injects real events. **A harness question, not a product one** —
+but until it is answered, that commit's verification claim stays "not
+verified".
 
-Filed as Backlog. It does not exist as a core verb at all —
-`deletion_preflight` resolves only terminals — so it is core + CLI + GUI
-or nothing, and R124 says show nothing in the GUI until it exists rather
-than a disabled stub. Rename reached grouping nodes in `Pass 53.1`;
-deletion deliberately did not.
-
-### 4. Push, if the operator says so
-
-`main` upstream does not compile on Linux. The fix is local. Pushing is
-permitted on request and is not an agent's decision.
+---
 
 ## Things learned this session that will save the next one time
 
-**Two documents asserted unmeasured facts about the environment, in the
-sections written to warn about those facts.** `LEGAL.md` §1.1 said "no
-git remote" hours after the repo was pushed; `decisions/003` §1.1 called
-"pdfce has no git remote, CI has never run once" *the framing fact
-everyone should read first*, and both halves were false. That is
-**R175**. `git remote -v` and `gh run list` cost nothing.
+**Read the output as its audience, every time.** Five defects this
+session were invisible to green tests: a rich-text summary listing
+`bold, 12pt, Helvetica, #FF0000, italic` with the two facts an operator
+compares three items apart; outline diagnostics burying `cycles_broken=3`
+in a wall of nineteen zeros; `kind=` printing UTF-16BE bytes where a name
+belonged; a gate whose own failure message rendered `?` for its
+em-dashes; and a build changelog mangling every commit subject.
 
-**Three defects this session were invisible to green tests** and were
-found only by looking at output as its audience (**R174**): a raw
-seventeen-digit `f64` in a dialog, a CLI telling an operator who passed
-`--scale 1` that it did not know the scale, and a rename message quoting
-a `/TU` label that a rename does not change.
+**Windows defaults to cp1252 everywhere UTF-8 is not demanded, and each
+layer must be told separately.** Three instances, three different
+mechanisms — stdout encoding (Python gates), source encoding (PowerShell
+would not parse), subprocess capture (`git log` via
+`subprocess.run(text=True)`). Knowing the first two did not prevent the
+third.
 
-**Dispatch the librarian with `git show -s --format=%B <hash>` pasted
-in.** Three for three this session. Two consecutive filings before that
-had to leave a question open that three `git` invocations closed.
+**Grep the RAG before FIXING, not before documenting the fix (R182).** I
+fixed a `.ps1` parse failure with BOMs; `personal_rag`'s existing lesson
+rules against BOMs by name. I found it while writing up — after the wrong
+change was committed.
 
-**`gui-shot.ps1` defaults 1760×1150 and `gui-drive.ps1` 1600×1000.**
-Coordinates do not transfer. Aiming a shot from screenshot pixels hit
-Delete instead of Rename this session — pass `-W 1600 -H 1000` to
-`gui-shot` and use the traced `rect=`.
+**`git add -A` and parallel agents do not mix.** It swept two subagents'
+in-progress modules into an unrelated commit. Nothing was lost, but one
+agent had to verify its own work had not been clobbered. Stage by
+explicit path while they run.
 
-**The ui-specialist twice caught things I had wrong before they shipped**
-— prefilling a rename editor from `/TU` instead of `/T`, and a global
-`consume_key(Enter)` that would have silently broken every panel text
-field. Both were changes I was about to make. Dispatch it for anything
-touching input or disclosure.
+**Dispatch the subagents; they earn it.** `pdfce-ui-specialist` caught
+three things before they shipped, including a `&mut self` call I was
+about to put in a render path. Both module-writing subagents dispatched
+`pdfce-spec-librarian` unprompted on finding the spec RAG had zero
+coverage of their clause — which produced eight new spec entries and a
+correction to an existing one.
+
+**Check a number before asserting it.** Three times this session I nearly
+shipped a measurement I had not taken: a `grep -c` of textual occurrences
+reported as raise sites (42 vs 26), a `$PSScriptRoot` cause my own probe
+disproved, and `wc -l` on a file whose header is 80% of its lines.
