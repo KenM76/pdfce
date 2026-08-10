@@ -30388,12 +30388,13 @@ highest); no new Pass ID (`b2574f6` completes an unscoped Backlog audit
 item; `6a42ffa`/`c46a6ce` extend `Pass 37.3`'s existing ID without moving
 its status). `docs/FEATURES.md`: one row edited — Forms *Import/export
 form data* (addendum naming the completed skip-and-count fix and the
-corrected export count; no checkbox change). `docs/ARCHITECTURE.md`
-§12: **edited** — new dated entry, no new decision number; ceiling stays
-**035**, next free **036**. Standing rules: **`R180` MINTED** — ceiling
-moves **R179 → R180**, next free **R181**. Operator-question ceiling
-unchanged at **(bh)** (closed ACCEPT), next free **(bi)**. Backup/git
-working-tree state not independently asserted — this librarian has no
-shell this dispatch (hard rule 8). This is the **sixty-sixth**
-`SESSION_LOG.md` filing (the sixty-fifth confirmed present by direct
-read before this entry was appended).
+corrected export count; no checkbox change). `docs/ARCHITECTURE.md` §12:
+**not edited** — none of the three commits redraws a crate boundary,
+picks a library, or defines/refines an invariant. Standing rules:
+**`R181` MINTED** — ceiling moves **R180 → R181**, next free **R182**.
+Decision records: unchanged, ceiling **035**, next free **036**.
+Operator-question ceiling unchanged at **(bh)** (closed ACCEPT), next
+free **(bi)**. Backup/git working-tree state not independently asserted
+— this librarian has no shell this dispatch (hard rule 8). This is the
+**sixty-seventh** `SESSION_LOG.md` filing (the sixty-sixth confirmed
+present by direct read before this entry was appended).
