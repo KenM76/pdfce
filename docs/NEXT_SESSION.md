@@ -85,6 +85,11 @@ the operator's call. Standing rule **R176**.
 | `269361d` | docs corrected: the repo is public; **R175** |
 | `ef88973` | **Linux build fix**; Enter commits an Edit Text draft |
 | `b9819b4` | filing; **R176**; decision 003 §1.1 superseded |
+| `45a88f2` | `text:lines` — the harness can locate a text run |
+| `0c102e4` | core: `AcroForm::groups`, the field-name tree's interior |
+| `6611812` | **Pass 53.1** — the name breadcrumb; grouping-node rename |
+| `2b41b77` | the page highlight survives the walk to the rename editor |
+| `462d468`–`f895dc0` | owed-commit debt 11 → 5; **R177**, **R178** |
 
 Ledger: Pass **53.1**, rules **R178** (next R179), decisions **035**
 (next 036), questions **(bh)** closed (next (bi)).
@@ -99,50 +104,47 @@ blocker, and this ruling).
 
 ## THE NEXT TASK — ranked
 
-### 1. The harness cannot locate a text run, so Enter-on-canvas is unverified
+**Items 1–3 of the previous version of this list are DONE** and have been
+removed rather than left to be re-read as outstanding: the text-run
+harness gap (`45a88f2`), grouping-node rename (`Pass 53.1`), and the
+hover-highlight polish (`2b41b77`).
 
-**This is the honest gap in `ef88973` and it is the first thing to fix.**
+### 1. Rich-text fill — see the top of this file
 
-Enter now commits an Edit Text draft. The regression that mattered (the
-Forms panel and rename editor still committing on Enter) **was** driven
-live. The positive case — Enter committing on the canvas — was **not**,
-because a script cannot find a text run to click, and R172 forbids
-guessing coordinates.
+The operator's own ruling, unblocked since 2026-08-06, and the largest
+real capability left in the forms area. Three surfaces (core `/RV` +
+`<value-richtext>`, CLI, GUI), so scope it as a Pass family rather than
+one commit. Dispatch `pdfce-acrobat-librarian` first to check the
+Acrobat-behaviour claims relayed in `b8f96b1` before writing acceptance
+criteria — they are recorded as unverified.
 
-What is missing, established by looking:
+### 2. Finish the owed-commit debt — five left
 
-- `viewer::page_to_screen` exists; there is **no `pdf_to_canvas_space`**
-  inverse of `canvas_to_pdf_space`, so a run's PDF bbox cannot be
-  projected to a screen point.
-- No `rect=` trace on the Edit-Text path.
-- A `text:pick <run>` step that sets `state.caret` directly (the way
-  `tool:` sets a tool) would **not** be enough on its own: typing is
-  gated on `image_response.has_focus()`, and only a real click grants
-  canvas focus. So the useful affordance is emitting run rects and
-  clicking one — which solves focus and aim together.
+`338076a`, `1f319c0`, `55a0732`, `587e520`, `9141ded`.
 
-Scope it as a slice. It unblocks every future canvas-text test, not just
-this one.
+Do not treat this as housekeeping. **Three of the six repaid so far were
+the only home of a live obligation**: an owed UX review (which turned out
+to have already closed), a stale blocker on a feature the operator asked
+for, and the rich-text ruling itself. The pattern is strong enough that
+the remaining five should be read before anything is assumed about what
+is or is not tracked.
 
-### 2. Renaming a pure grouping node is not possible from the GUI
+Dispatch with `git show -s --format=%B <hash>` pasted into the dispatch —
+the librarian has no shell, and a one-line subject cannot carry a defect,
+a measurement or an owed follow-up.
 
-Filed as Backlog by the librarian. `form.fields` is a projection of
-**terminal** fields (`walk_field` returns early on a pure non-terminal),
-so `Personal` in `Personal.Address.Zip` is not a row and cannot be
-renamed. Needs its own row source. Operator-visible symptom: dotted
-names that cannot be fully edited, with nothing saying why.
+### 3. Grouping-node DELETION
 
-### 3. `pdfce-ui-specialist` polish item 10
+Filed as Backlog. It does not exist as a core verb at all —
+`deletion_preflight` resolves only terminals — so it is core + CLI + GUI
+or nothing, and R124 says show nothing in the GUI until it exists rather
+than a disabled stub. Rename reached grouping nodes in `Pass 53.1`;
+deletion deliberately did not.
 
-Extend Pass 47.3's hover-highlight to persist while a rename editor is
-open. Small.
+### 4. Push, if the operator says so
 
-### 4. The eleven owed commits in `tools/commits-filed-baseline.txt`
-
-Still DEBT, not an allowlist. Two were cleared this session by proper
-filing; eleven remain.
-
----
+`main` upstream does not compile on Linux. The fix is local. Pushing is
+permitted on request and is not an agent's decision.
 
 ## Things learned this session that will save the next one time
 
