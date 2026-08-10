@@ -9827,6 +9827,49 @@ impl EditSession {
     /// ```
     #[must_use]
     pub fn deletion_refusal(&self) -> Option<EditError> {
+        self.structural_form_refusal()
+    }
+
+    /// Why a **rename** would be refused, or `None` if it would be allowed
+    /// (Pass 53.0).
+    ///
+    /// # This is `deletion_refusal`'s answer today, and it is deliberately
+    /// its own function
+    ///
+    /// [`Self::rename_field`] guards on encryption then
+    /// [`Self::check_certification`] — the identical pair, in the identical
+    /// order, that [`Self::deletion_refusal`] reports. So a shell could call
+    /// that one and be correct.
+    ///
+    /// It should not. `deletion_refusal`'s own doc comment already argues
+    /// this shape once, against reusing `fill_refusal` for a delete control:
+    /// the two gates *happen* to be computable together and are answers to
+    /// different questions, and a call site that asks the wrong question is
+    /// correct only until the answers diverge — at which point it is wrong
+    /// silently, in a control that stays enabled while its verb refuses.
+    ///
+    /// A GUI disabling a Rename button through a method named
+    /// `deletion_refusal` is that hazard with the name spelled out at the
+    /// call site. This costs three lines and makes the coupling explicit:
+    /// both delegate to [`Self::structural_form_refusal`], so if a future
+    /// spec nuance ever separates them, the split happens HERE, once, and
+    /// every caller keeps asking its own question.
+    #[must_use]
+    pub fn rename_refusal(&self) -> Option<EditError> {
+        self.structural_form_refusal()
+    }
+
+    /// The gate every STRUCTURAL change to the form shares: encryption, then
+    /// the strict certification check.
+    ///
+    /// "Structural" is the operative word and the reason this is not also
+    /// the fill gate. A certification signature with `/P 2` permits filling
+    /// and forbids changing the form's shape (Table 254), so on the ordinary
+    /// real-world certified form filling is offered while deletion and
+    /// renaming are refused — see [`Self::check_certification_for_fill`],
+    /// which is a genuinely different computation and not a variant of this
+    /// one.
+    fn structural_form_refusal(&self) -> Option<EditError> {
         if self.base.trailer().contains_key(b"Encrypt") {
             return Some(EditError::DocumentEncrypted);
         }

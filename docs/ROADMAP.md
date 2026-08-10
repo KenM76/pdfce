@@ -81,6 +81,90 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### docs/fix — the project record said "no git remote"; the remote has existed since 2026-08-09 04:56Z and the repository is PUBLIC — ten historical sites reviewed, none rewritten; Open operator question (bh) CLOSES as ACCEPT — 2026-08-10 (fifty-eighth filing, no Pass ID)
+
+**Sourcing.** This librarian has no shell this dispatch (hard rule 8).
+Every figure below is carried directly in the dispatch, attributed to
+commands the engineer ran today: `git remote -v`; `gh repo view
+KenM76/pdfce --json visibility,createdAt,pushedAt`; `gh api
+repos/KenM76/pdfce/contents/tools/realdrawings-smoke?ref=817d518^`.
+This librarian did not run them and asserts nothing beyond what the
+dispatch quoted.
+
+**The error, and it is the SHAPE worth recording, not just the fact.**
+`docs/LEGAL.md` §1.1 — the section written specifically to warn about
+publish exposure — asserted *"there is still no git remote configured"*
+on the evening of 2026-08-09, **hours after** `github.com/KenM76/pdfce`
+had been created (04:56Z, **public**) and pushed (`main` @ `01b90c4`,
+10:18Z). The same false claim was carried in `CLAUDE.md` rule 8 and
+`docs/NEXT_SESSION.md`; the engineer corrected all three in `269361d`
+(none of the three is inside this librarian's five storage tiers —
+`ROADMAP.md`, `SESSION_LOG.md`, `ARCHITECTURE.md` §12, the two
+`D:\dev\rag\` trees, `personal_rag\pdf\` — so noted here rather than
+edited by this librarian). **Every gate this project owns checks code.
+Nothing checks a document's claim about the state of the world**, and
+the one section written to warn about a live exposure read as
+hypothetical for most of a day as a direct, measured result. New
+standing rule **R175**, below, generalises the finding; this entry is
+the incident it derives from.
+
+**The ten sites this dispatch named, in `ARCHITECTURE.md`/`ROADMAP.md`,
+reviewed individually — ALL TEN JUDGED HISTORICAL, NONE STRUCK.**
+`ARCHITECTURE.md`:1378 (§4.1 entry (K)'s timing argument), :10422,
+:10603 (both dated backup/remote checkpoints); `ROADMAP.md`:4703, 7062,
+8177, 11148, 19596, 21154, 21320. Every one is a dated, commit-anchored
+statement inside the reverse-chronological Shipped log or the §4.1
+change log — each names the specific commit or filing it was checked
+at (`4475fe6`, `6b33789`, `d8b3903` and its descendants, or a numbered
+filing's own `git remote -v` output under amended hard rule 8). **None
+states the present situation**; all state what was true on the date
+and commit named, several by direct command output rather than
+assumption. Per this librarian's own instruction not to rewrite dated
+history — a silently-updated dated entry is worse than a stale one —
+**none of the ten was edited.** A reader reaching any of them via the
+reverse-chronological Shipped section passes dozens of newer, current
+entries first, including this one.
+
+**Two sites the dispatch did NOT name were found during the same grep
+sweep, and are flagged rather than edited, because they sit in
+`docs/decisions/`, an append-only tier outside this librarian's remit:**
+`docs/decisions/003-distribution-posture.md`:69 — *"pdfce has no git
+remote. CI has never run once."*, written as **"the framing fact
+everyone should read first"**, which reads as current framing rather
+than a dated check and is the one site in the whole sweep most likely
+to mislead a reader — and :1183 (a dated build-artifact line, lower
+risk). `docs/decisions/007-next-subsystem-after-read-stack.md`:896,
+:1015 are JSON risk-register entries, clearly dated to their filing —
+lower risk, still flagged for completeness. **Recommended: the
+engineer add a superseding note to decision 003 §1.1 the same way
+`LEGAL.md` §1.1 now carries one** — this librarian cannot edit
+`docs/decisions/` directly.
+
+**Open operator question (bh) — CLOSED, resolved ACCEPT.** Edited in
+place under *Open operator questions*, below (the section's established
+convention for resolved items — see (bb)/(bd)–(bg)). Operator-question
+ceiling **unchanged at (bh)** — closed, not retired — next free
+**(bi)**.
+
+**Also recorded, for the ledger only — not this librarian's remit to
+adjudicate:** the publish deny-rules were removed from both
+`.claude/settings.json` and `.claude/settings.local.json` in the same
+commit (`269361d`), by the operator's explicit choice, so an agent can
+push on request; `gh release` and `cargo publish` remain denied. Rule 8
+(`CLAUDE.md`) survives as a rule with no mechanical fence behind it.
+Separately, a new public repository unrelated to pdfce —
+`github.com/KenM76/az-hcpoa-field-fix` — was created today; it carries
+no pdfce source and originates from the r/pdf question that drove
+commit `4f0e443` (the `list-fields` whitespace-mangling fix). One line
+in today's `SESSION_LOG.md` entry, not a Pass.
+
+**Nothing else in the ledger moves.** Pass ceiling **53.0** (unchanged);
+standing-rule ceiling `R174` → **`R175`** (next free `R176`); decision-
+record ceiling **035** (036 next free) — see the matching
+`ARCHITECTURE.md` §12 entry, same date, for the decision-log half of
+this correction; operator-question ceiling **(bh)**, now closed (next
+free (bi)).
+
 ### ★ `Pass 53.0` — form field RENAME reaches the GUI, closing the R151 debt Pass 20.6 left on its own core+CLI-only capability; a display-string/edit-string prefill trap caught before ship; a draft-cache invalidation bug found that no automated test would have caught; and `R174` earns a THIRD instance within the hour — 2026-08-09, committed `a3ba0f8` (fifty-seventh filing)
 
 **Sourcing.** This librarian has no shell this dispatch (hard rule 8).
@@ -33841,6 +33925,26 @@ answered. Operator-question ceiling moves (bg) → (bh), next free (bi):**
   entry** — flagged directly to the engineer/operator in this
   dispatch's report, not actioned here.
 
+  > **★ RESOLVED 2026-08-10 — CLOSED, operator's ruling: ACCEPT (option
+  > 3).** Given all three named options plus a fourth the operator
+  > added himself ("inventory everything first"), **the operator chose
+  > to leave the repository public and accept the exposure.** Recorded
+  > reasoning, because a closed decision's reasoning is the part that
+  > stays useful: **`git filter-repo` would not have been sufficient
+  > alone** — GitHub keeps unreachable objects fetchable by SHA until
+  > Support purges them, so option (1) was never the clean fix its name
+  > suggests. **Rewriting history would also have dangled every commit
+  > hash this project's own filings cite by SHA** — `ROADMAP.md`,
+  > `SESSION_LOG.md`, `tools/commits-filed-baseline.txt`, and the
+  > `ARCHITECTURE.md` §12 decision log are all built on those hashes
+  > staying resolvable. **0 forks, 0 stars** at decision time (`gh repo
+  > view KenM76/pdfce`, checked 2026-08-10). `docs/LEGAL.md` §1.1 now
+  > carries this as **binding on the engineer going forward**: this
+  > ruling is not reopened to be helpful, and is not precedent for the
+  > next third-party-material incident, which earns its own ruling on
+  > its own facts. **Operator-question ceiling stays (bh)** — closed,
+  > not retired; next free remains **(bi)**.
+
 **RESOLVED this session (2026-08-08, thirty-fourth filing) — the
 operator answered decision 033 §7 in full; see below. (bb) moved here
 from its prior PENDING-CONFIRMATION bucket (thirty-third filing);
@@ -41688,6 +41792,41 @@ and
   not merely on the value itself) — filed there rather than duplicated
   here, because that half is a fix pattern, not a testing bar.
   **Ceiling moves `R173` → `R174`; next free `R175`.**
+
+- **R175 — A document's claim about the state of the world (git remote,
+  CI status, backup currency, "local only") is only as true as its
+  last measurement, and goes stale the instant that state changes;
+  write it with the command that produced it and the date it was run,
+  never carried forward as prose (2026-08-10; librarian-minted, from
+  `docs/LEGAL.md` §1.1's own false "there is still no git remote
+  configured" claim, corrected `269361d`).** `LEGAL.md` §1.1 — the
+  section written specifically to warn about a publish exposure —
+  asserted no remote existed for most of a day after
+  `github.com/KenM76/pdfce` had been created (04:56Z) and pushed
+  (10:18Z, public); `CLAUDE.md` rule 8 and `docs/NEXT_SESSION.md`
+  carried the same false claim. Every project gate checks code; none
+  checks a document's claim about the environment, so a stale
+  environmental assertion has no mechanism catching it the way a stale
+  test does. **This is hard rule 8 pointed outward.** Rule 8 (this
+  agent file, above) binds this librarian's own assertions about
+  git/backup state; R175 binds every document in the project the same
+  way, because this incident was not this librarian inferring from
+  documents — it was a document itself carrying an unmeasured claim.
+  Practical form: (1) any sentence of the shape "there is no remote" /
+  "still local-only" / "CI has never run" is written WITH the command
+  and its output ("`git remote -v` → empty, checked 2026-08-09"), never
+  bare; (2) a document holding a **prospective blocker** premised on an
+  environmental fact (`LEGAL.md` §1.1's redaction-disclosure risk,
+  premised on "no remote") re-checks that fact before being trusted
+  again, not merely re-read. **Corollary, stated because a public
+  remote changes what "committed" means:** in a repository with a
+  configured remote, anything committed is a candidate for being
+  published the moment someone pushes — the `tools/` temp-folder
+  convention for test/scratch material stopped being tidiness and
+  became the actual control against a repeat of the `817d518`
+  confidentiality incident once the remote existed, independent of
+  whether any given commit is pushed yet. **Ceiling moves `R174` →
+  `R175`; next free `R176`.**
 
 ## Update protocol
 

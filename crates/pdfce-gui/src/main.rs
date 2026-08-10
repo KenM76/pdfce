@@ -1788,6 +1788,29 @@ enum Status {
 /// so this stores the **owned** `PageText` and rebuilds the (cheap, index-only)
 /// model transiently wherever it is needed — sidestepping a self-referential
 /// borrow rather than storing the model itself.
+/// Whether an Edit Text draft is in a state that a deliberate commit should
+/// WRITE, as opposed to discard or ignore.
+///
+/// # Why this is a named function used twice rather than a condition typed
+/// twice
+///
+/// It has two callers that must never disagree: `committable_gesture`, which
+/// decides what a click-away commits (Pass 34.0), and the `Key::Enter` arm in
+/// the tool's typing loop, which decides what the keyboard commits (Pass
+/// 24.0's deferred half). The same draft has to be committable to both or
+/// neither.
+///
+/// The second condition is the one that would rot. `reflow.is_some()` is an
+/// INFERRED re-wrap (14.3 §1.4, mutually exclusive with `pending`), and
+/// committing an inference on a keystroke is what rule 4 forbids. The Enter
+/// arm sits inside an `if` that already tests `state.reflow.is_none()` — so
+/// checking it here is redundant *today*, and stops being redundant the
+/// moment anyone restructures that block. A guard that depends on an
+/// enclosing condition three screens above it is a guard with a shelf life.
+const fn text_edit_committable(state: &TextEditState) -> bool {
+    state.pending.is_some() && state.reflow.is_none()
+}
+
 struct TextEditState {
     /// The page this state was built against (staleness key).
     page_index: usize,
@@ -7072,21 +7095,31 @@ impl PdfceApp {
         // The master edit switch gates authoring the same way it gates every
         // other mutation. Disabled-and-explained (R83), never hidden.
         let deletes_enabled = doc.editing_enabled && delete_refusal_note.is_none();
-        // RENAME TAKES THE SAME GATE AS DELETION, from the same query.
+        // RENAME ASKS ITS OWN QUESTION, even though the answer is deletion's.
         //
-        // Verified rather than assumed: `rename_field` guards with
-        // `trailer().contains_key(b"Encrypt")` then `check_certification()`,
-        // and `deletion_refusal()` runs the identical two checks in the
-        // identical order. Both are structural changes to the form, which is
-        // what a certification signature freezes.
+        // `rename_refusal()` and `deletion_refusal()` both delegate to core's
+        // `structural_form_refusal` — the same two checks in the same order,
+        // because both are structural changes and that is what a
+        // certification signature freezes. So this line could just as well
+        // read `delete_refusal_note`.
         //
-        // So the `Option<EditError>` is asked ONCE (above) and mapped to TWO
-        // strings — not asked twice, and not one string reused. Deletion's
-        // wording says fields cannot be "added or removed", which is true and
-        // is not what an operator who pressed Rename just tried to do.
-        let rename_refusal_note: Option<&'static str> =
-            delete_refusal_note.map(|_| ui_text::form_rename_certification_disabled_tooltip());
-        let renames_enabled = deletes_enabled;
+        // It deliberately does not. `deletion_refusal`'s own doc comment
+        // makes exactly this argument against reusing `fill_refusal` for a
+        // delete control: two gates that HAPPEN to agree are answers to
+        // different questions, and a call site asking the wrong one stays
+        // correct only until they diverge — after which it is wrong silently,
+        // in a control that remains enabled while its verb refuses. Asking
+        // through the name that means what this control DOES is what makes a
+        // future split land here for free.
+        //
+        // The STRING is separate regardless: deletion's wording says fields
+        // cannot be "added or removed", which is true and is not what an
+        // operator who pressed Rename just tried to do.
+        let rename_refusal_note: Option<&'static str> = doc
+            .session
+            .rename_refusal()
+            .map(|_| ui_text::form_rename_certification_disabled_tooltip());
+        let renames_enabled = doc.editing_enabled && rename_refusal_note.is_none();
         let mut rename_field: Option<(String, String)> = None;
         let drafts = &mut self.form_drafts;
         // Hoisted before the closure like `drafts`, and for the same reason:
@@ -10215,10 +10248,7 @@ impl PdfceApp {
         };
         // A text edit the operator typed. `reflow` is mutually exclusive with
         // `pending` (14.3 §1.4) and is INFERRED, so it is deliberately absent.
-        let text = doc
-            .text_edit
-            .as_ref()
-            .is_some_and(|s| s.pending.is_some() && s.reflow.is_none());
+        let text = doc.text_edit.as_ref().is_some_and(text_edit_committable);
         // New text the operator typed. Empty drafts are NOT committable
         // (ui-spec §B.10) — they would author invisible content.
         let add = doc
@@ -11031,6 +11061,7 @@ impl eframe::App for PdfceApp {
                     "up" => egui::Key::ArrowUp,
                     "down" => egui::Key::ArrowDown,
                     "home" => egui::Key::Home,
+                    "enter" => egui::Key::Enter,
                     _ => egui::Key::End,
                 };
                 for pressed in [true, false] {
@@ -16471,6 +16502,48 @@ fn run_text_edit_tool(
                         pressed: true,
                         ..
                     } => text_edit_delete(state),
+                    // ★ ENTER COMMITS THE DRAFT — the keyboard counterpart to
+                    // the Accept button, and the second half of what `ae59ce3`
+                    // deferred from Pass 24.0 ("wiring universal Enter/Escape").
+                    // Escape shipped; this is Enter.
+                    //
+                    // THE CONDITION IS THE ACCEPT BUTTON'S OWN, not a second
+                    // one. `state.pending.is_some()` is exactly what enables
+                    // that button, so the two cannot disagree about when a
+                    // draft is committable — which is the R92 objection to
+                    // deriving the same fact twice.
+                    //
+                    // ★★ READ AS A NON-CONSUMING PEEK, HERE, AND NEVER AS A
+                    // GLOBAL `consume_key` IN `collect_keyboard_actions`.
+                    //
+                    // That function runs BEFORE any panel is drawn, and
+                    // `consume_key` removes the event from the frame — its own
+                    // doc comment says so, approvingly, because that is what
+                    // stops a widget underneath also acting on a chord. Enter
+                    // is the case where that is fatal rather than helpful: the
+                    // Forms panel's value editors and the field-rename editor
+                    // (Pass 53.0) both commit on `lost_focus()`, and a
+                    // singleline `TextEdit` surrenders focus **because egui
+                    // sees the Enter**. Eating it upstream would silently break
+                    // Enter-to-commit in every one of them, in a dock drawn
+                    // later in the same frame.
+                    //
+                    // Gating on `image_response.has_focus()` closes that by
+                    // construction: focus is exclusive, so this arm can only
+                    // fire when the CANVAS holds it, never at the same time as
+                    // a panel field.
+                    //
+                    // Deliberately NOT wired for the measure tools. Their
+                    // gesture is pick-and-click with nothing typed, so there is
+                    // no typing flow for Enter to be the "yes" to — and
+                    // `MeasureScale` additionally re-values every ce dimension
+                    // in its group, which is the blast radius decision 031 kept
+                    // an explicit Accept for. See `measure_status_ui`.
+                    egui::Event::Key {
+                        key: egui::Key::Enter,
+                        pressed: true,
+                        ..
+                    } if text_edit_committable(state) => do_accept = true,
                     _ => {}
                 }
             }
@@ -21576,6 +21649,32 @@ fn run_dimension_drag(
 /// commit point exists whether or not a button does. Linear DOES also commit
 /// on click-away (Pass 34.0); its button is the deliberate path, as with Edit
 /// Text.
+///
+/// # ★ AND NONE OF THE THREE IS WIRED TO ENTER — that absence is decided
+///
+/// Enter commits the Edit Text draft (see the `Key::Enter` arm in that tool's
+/// typing loop). It deliberately stops there, and this note exists so the
+/// missing arm here reads as a ruling rather than as the next tool somebody
+/// forgot.
+///
+/// **The reason is not decision 031's authored-vs-inferred axis.** It is that
+/// Enter completes a TYPING flow, and a measure gesture is pick-and-click —
+/// nothing was typed, so there is nothing for Enter to be the "yes" to, and
+/// nothing in the interaction primes an operator to reach for it. Decision
+/// 031 §2's own convention table already draws this line: it lists Enter for
+/// the `TextEdit` and `AddText` rows and, for `MeasureLinear`, says only
+/// *"implicit, on click-out, once both points are picked."*
+///
+/// `MeasureScale` has a second, independent reason, and it is the one that
+/// would matter even if a value were typed: committing re-values every other
+/// ce dimension in the group. The redaction Apply dialog makes the same call
+/// for the same shape of hazard — *"an operator reading a long report and
+/// pressing Enter out of habit must not commit the most destructive action in
+/// the application."*
+///
+/// Mechanically this is also the safer non-change: this ONE function drives
+/// Accept for all three tools, so an Enter binding added here could not have
+/// reached Linear without also reaching Circular and Scale.
 fn measure_status_ui(
     st: &measure_tool::MeasureState,
     model: &pdfce_core::dimension::DimensionModel,

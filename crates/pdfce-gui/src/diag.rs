@@ -441,6 +441,20 @@ fn parse_step(s: &str) -> Option<Step> {
             "down" => Some(Step::NavKey("down")),
             "home" => Some(Step::NavKey("home")),
             "end" => Some(Step::NavKey("end")),
+            // `key:enter` (Pass 24.0's deferred half). Carried by `NavKey`
+            // rather than a variant of its own because the injector is the
+            // thing that matters — a real press/release pair through
+            // `raw_input.events`, the same seam a physical key arrives on —
+            // and Enter needs exactly that and nothing else. The variant is
+            // named for its first use, not for a taxonomy.
+            //
+            // Added because the feature was NOT DRIVABLE WITHOUT IT: Enter
+            // now commits an Edit Text draft, and the same keystroke is what
+            // the Forms panel's value editors and the field-rename editor
+            // rely on for their `lost_focus()` commit. All three are exactly
+            // the interaction a global `consume_key` would have broken
+            // silently, so the harness has to be able to press it.
+            "enter" => Some(Step::NavKey("enter")),
             _ => None,
         },
         // A top-level step, NOT `tool:settings`: settings are not a tool,
@@ -583,6 +597,7 @@ mod tests {
         assert_eq!(parse_step("export:dxf"), Some(Step::ExportDxf));
         assert_eq!(parse_step("export: dxf "), Some(Step::ExportDxf));
         assert_eq!(parse_step("export:dxf-go"), Some(Step::ExportDxfCommit));
+        assert_eq!(parse_step("key:enter"), Some(Step::NavKey("enter")));
         // Rejected, not silently coerced — and a reject is TRACED by
         // `Script::from_env`, which is the whole point of the 2026-08-07
         // `placefield` lesson recorded on this module.

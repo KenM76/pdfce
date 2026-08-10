@@ -29415,3 +29415,116 @@ feature need correcting.
   state not asserted beyond the sourcing note above (hard rule 8). This
   is the **fifty-seventh** `SESSION_LOG.md` filing (the fifty-sixth
   confirmed present by direct read before this entry was appended).
+
+## 2026-08-10 (fifty-eighth filing) — the project record said "no git remote" after the remote existed and the repo went public; `docs/LEGAL.md` §1.1's own warning section was the one that got it wrong; Open operator question (bh) CLOSES as ACCEPT; `R175` MINTED
+
+**Filed by `pdfce-librarian`, dispatched with the engineer's own
+measured evidence carried IN the dispatch** — this librarian has no
+shell this filing (hard rule 8). Every command output quoted below
+(`git remote -v`, `gh repo view`, `gh api …/contents/…`) is the
+engineer's, run today, and is relayed verbatim, not independently
+re-run.
+
+**The correction.** `github.com/KenM76/pdfce` (**public**) was created
+2026-08-09 04:56:14Z and pushed (`main` @ `01b90c4`) at 10:18:31Z, 0
+forks / 0 stars. `docs/LEGAL.md` §1.1 — written that same evening,
+specifically to warn about publish exposure — asserted *"there is
+still no git remote configured"* anyway. `CLAUDE.md` rule 8 and
+`docs/NEXT_SESSION.md` carried the same false claim. The engineer
+corrected all three in `269361d`; none of the three is inside this
+librarian's five storage tiers, so this filing records the correction
+rather than performing it.
+
+**Shipped:** none — this is a documentation-correction filing, no Pass
+ID, no code.
+
+**Decisions made this session:**
+- **New standing rule `R175`** (`ROADMAP.md`, Standing rules): a
+  document's claim about git/CI/environment state is only as current
+  as its last measurement — write it with the command and date that
+  produced it, never as carried-forward prose. Hard rule 8 pointed
+  outward: rule 8 binds this librarian's own assertions about
+  git/backup state; R175 binds every document in the project the same
+  way, because this incident was a document itself carrying an
+  unmeasured claim, not this librarian inferring from documents.
+  Corollary recorded with it: in a repository with a configured
+  remote, anything committed is a candidate for being published the
+  moment someone pushes — the `tools/` temp-folder convention for
+  scratch material is now the actual control, not tidiness.
+- **Open operator question (bh) CLOSED, operator's ruling: ACCEPT
+  (option 3)** — leave the repository public, accept the
+  pre-`817d518` history (including the now-removed confidential
+  material) staying reachable. `git filter-repo` was never the clean
+  fix it sounds like (GitHub keeps unreachable objects fetchable by
+  SHA until Support purges them); rewriting would have dangled every
+  commit hash this project's own filings cite. 0 forks / 0 stars at
+  decision time. Binding on the engineer: not reopened to be helpful,
+  not precedent for the next third-party-material incident.
+
+**Findings + decisions:**
+- **The shape, not just the fact.** Every gate this project owns
+  checks code; nothing checks a document's claim about the state of
+  the world, so the one section written to warn about a live exposure
+  read as hypothetical for most of a day. R175 is the generalization.
+- **Ten historical "no git remote"/"local-only" sites reviewed**
+  (`ARCHITECTURE.md`:1378, 10422, 10603; `ROADMAP.md`:4703, 7062, 8177,
+  11148, 19596, 21154, 21320) — every one is a dated, commit-anchored
+  statement, none states the present situation, **none rewritten**.
+  Full reasoning in the matching `ROADMAP.md` Shipped entry, this same
+  date.
+- **Two further stale sites found outside the dispatch's named ten**,
+  in `docs/decisions/003-distribution-posture.md`:69 (*"pdfce has no
+  git remote. CI has never run once."*, framed as "the fact everyone
+  should read first" — the single highest-risk site in the whole
+  sweep) and :1183, and
+  `docs/decisions/007-next-subsystem-after-read-stack.md`:896/:1015.
+  **Flagged, not edited** — `docs/decisions/` is append-only and
+  outside this librarian's remit; recommend the engineer add a
+  superseding note to decision 003 §1.1 the same way `LEGAL.md` §1.1
+  now carries one.
+- **`ARCHITECTURE.md` §12 gained a dated entry** (2026-08-10) recording
+  the same correction from the decision-log side: §4.1 entry (K)'s
+  2026-08-07 timing argument ("the implementor set is exactly this
+  repository's, and it is empty") had its premise go stale within two
+  days. **The decision itself is not reverted** — the `Send + Sync`
+  bound was additive regardless of who could implement the trait; only
+  the urgency framing was time-boxed to a premise that outlived its
+  own justification faster than expected.
+- **Publish deny-rules removed** from `.claude/settings.json` and
+  `.claude/settings.local.json` in `269361d`, by the operator's
+  explicit choice — `gh release`/`cargo publish` remain denied; rule 8
+  survives with no mechanical fence behind it.
+- **A second, unrelated public repo appeared today**:
+  `github.com/KenM76/az-hcpoa-field-fix` — the repaired Arizona Health
+  Care Power of Attorney PDF, the original, a before/after render, and
+  a README, born from the r/pdf question behind `4f0e443` (the
+  `list-fields` whitespace-mangling fix). No pdfce source, not a Pass.
+  Recorded here as the origin note for that commit, nowhere else in
+  the ledger.
+
+**Still in flight:** unchanged from the fifty-seventh filing — the
+grouping-node rename gap (Backlog); `pdfce-ui-specialist` polish items
+8/10; whether a fuller `docs/decisions/035-*.md` KenAgent record adds
+value; item (b) of `ae59ce3`'s deferred scope.
+
+**For next session:**
+- Consider whether decision 003 §1.1 gets its superseding note (flagged
+  above, not this librarian's to write).
+- `personal_rag/claude_code` is a plausible home for a short lesson on
+  "a document's environmental claim needs the same re-verification
+  discipline as a git/backup claim" if the pattern recurs outside
+  pdfce — not written this filing (judged pdfce-internal per R175's
+  own text; revisit if a second project hits the same shape).
+
+- **Ledger for this filing.** No new Pass ID. Standing rules: **`R175`
+  MINTED** — ceiling moves `R174` → `R175`, next free `R176`. Decision
+  records: no new number claimed — one plain dated `ARCHITECTURE.md`
+  §12 entry added; ceiling stays **035**, next free **036**.
+  Operator-question ceiling: **(bh) CLOSED** (not retired) — ceiling
+  stays **(bh)**, next free **(bi)**. `docs/decisions/` untouched by
+  this librarian (two stale sites flagged, not edited). Backup/git
+  working-tree state not independently asserted — figures above are
+  the engineer's, relayed with their source commands named (hard rule
+  8). This is the **fifty-eighth** `SESSION_LOG.md` filing (the
+  fifty-seventh confirmed present by direct read before this entry was
+  appended).

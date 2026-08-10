@@ -346,6 +346,49 @@ pub fn page_device_geometry(page: &Page, scale: f32) -> (u32, u32, Transform) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Shared image-codec test fixtures — declared HERE, at file scope, and NOT
+// inside `mod tests` (see the paragraph marked ★)
+// ---------------------------------------------------------------------------
+//
+// These three files live in `pdfce-core` and are `#[cfg(test)]`-only there,
+// so they are not reachable as a normal cross-crate path. `#[path]` loads
+// each as a real module file, which is what lets it keep the `//!` module
+// docs and the GENERATED-FILE banner it opens with — `include!` cannot,
+// because an inner attribute has to be lexically first in a block and a
+// macro expansion never is. That part of the original reasoning was right.
+//
+// ★ WHAT WAS WRONG WAS THE PLACEMENT: these sat INSIDE the inline
+// `mod tests` below, and that did not compile on Linux.
+//
+// `mod tests` is inline in `lib.rs`, so Rust resolves a `#[path]` written
+// inside it relative to a phantom `src/tests/` directory that does not exist
+// on disk. Windows collapses the `..` components lexically and never touches
+// it; Linux resolves a path one component at a time and returns ENOENT on
+// the missing directory. `src/tests/../../../pdfce-core/...` is lexically
+// correct and still fails to open.
+//
+// Measured on the public repository, 2026-08-09: SIX OF SIX CI RUNS RED,
+// with `cargo test (windows-latest)` GREEN beside `cargo test
+// (ubuntu-latest)`, `cargo clippy` and `cargo fmt --check` all failing on
+// `couldn't read .../src/tests/../../../pdfce-core/src/image_codec/fixtures.rs`.
+// A green Windows job next to a red Linux one is this bug's signature, and
+// that split is exactly why it survived every local run.
+//
+// At file scope the base directory is `src/`, which is real, so one `..`
+// comes off each path and Linux can resolve them.
+#[cfg(test)]
+#[path = "../../pdfce-core/src/image_codec/fixtures.rs"]
+mod jpeg_fixtures;
+
+#[cfg(test)]
+#[path = "../../pdfce-core/src/image_codec/fixtures_bilevel.rs"]
+mod bilevel_fixtures;
+
+#[cfg(test)]
+#[path = "../../pdfce-core/src/image_codec/fixtures_jpx.rs"]
+mod jpx_fixtures;
+
 #[cfg(test)]
 #[allow(
     clippy::unwrap_used,
@@ -1605,12 +1648,12 @@ mod tests {
     /// `#[cfg(test)]`-only inside `pdfce-core`, so it is not reachable
     /// as a normal cross-crate path.
     ///
-    /// `#[path]` rather than `include!` because the file opens with
-    /// `//!` module docs, and `include!` in item position cannot carry
-    /// inner attributes — a `#[path]` module declaration loads it as a
-    /// real module file, where they are exactly where they belong.
-    #[path = "../../../pdfce-core/src/image_codec/fixtures.rs"]
-    mod jpeg;
+    /// Declared at FILE scope (see the ★ note above `mod tests`) and
+    /// aliased here so every `jpeg::` call site below is unchanged. The
+    /// declaration cannot live in this module: a `#[path]` inside an inline
+    /// `mod tests` resolves through a phantom `src/tests/` directory, which
+    /// Linux cannot traverse.
+    use crate::jpeg_fixtures as jpeg;
 
     #[test]
     fn image_with_corrupt_codec_data_is_counted_not_fatal() {
@@ -1680,8 +1723,7 @@ mod tests {
     /// tests, pulled in the same way and for the same reason as
     /// [`jpeg`]: one provenance record, one generator
     /// (`tools/gen-bilevel-fixtures.py`), one set of bytes.
-    #[path = "../../../pdfce-core/src/image_codec/fixtures_bilevel.rs"]
-    mod bilevel;
+    use crate::bilevel_fixtures as bilevel;
 
     /// A 16 × 4 bilevel image XObject dictionary with the given extras.
     ///
@@ -1845,8 +1887,7 @@ mod tests {
     /// tests, pulled in the same way and for the same reason as
     /// [`jpeg`] and [`bilevel`]: one provenance record, one generator
     /// (`tools/gen-jpx-fixtures.py`), one set of bytes.
-    #[path = "../../../pdfce-core/src/image_codec/fixtures_jpx.rs"]
-    mod jpx;
+    use crate::jpx_fixtures as jpx;
 
     /// A 4 × 2 JPX image XObject dictionary with the given extras.
     ///

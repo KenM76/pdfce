@@ -14058,3 +14058,54 @@ started).
   codebase's derived-key caches, not a general Rust `HashMap` gotcha
   the ecosystem RAG would want, and not a PDF-domain fact) — no
   cross-project RAG entry filed.
+
+- **2026-08-10 (`269361d` correction + operator ruling) — the
+  repository has been PUBLIC since 2026-08-09 04:56Z; §4.1 entry (K)'s
+  timing argument had a premise that went stale within two days; Open
+  operator question (bh) CLOSES as ACCEPT.** Checked, not inferred
+  (hard rule 8, amended 2026-08-07): `git remote -v` → `origin
+  https://github.com/KenM76/pdfce.git`; `gh repo view KenM76/pdfce
+  --json visibility,createdAt,pushedAt` → `visibility: PUBLIC`,
+  `created: 2026-08-09T04:56:14Z`, `pushed: 2026-08-09T10:18:31Z`
+  (`main` @ `01b90c4`), `forks: 0`, `stars: 0`. `docs/LEGAL.md` §1.1
+  asserted *"there is still no git remote configured"* on the evening
+  of the same day the remote was created — corrected in `269361d`,
+  alongside `CLAUDE.md` rule 8 and `docs/NEXT_SESSION.md`.
+  **What this means for §4.1 entry (K), above (2026-08-07): the
+  "implementor set is exactly this repository's, and it is empty"
+  premise no longer holds** — the repository is reachable by anyone,
+  and `gh api repos/KenM76/pdfce/contents/tools/realdrawings-smoke?
+  ref=817d518^` confirms even a since-removed confidential path is
+  still fetchable by SHA from the public remote. **The decision itself
+  is not reverted**: adding `Send + Sync` to `ObjectGraph` was additive
+  in practice (§4.1(K)) regardless of who could theoretically implement
+  the trait, so nothing about the decision depended on the implementor
+  set staying empty going forward — only the *urgency* framing
+  ("cheapest moment this bound will ever have") was time-boxed to a
+  premise that turned out shorter-lived than the entry assumed.
+  Recorded so a future reader does not treat (K)'s timing argument as
+  still describing the present.
+  **Open operator question (bh)** (`ROADMAP.md`, filed fiftieth filing,
+  2026-08-09) — three-way git-history handling before any public push
+  — **CLOSES 2026-08-10, operator's ruling: ACCEPT**, i.e. leave the
+  repository public with the pre-`817d518` history (including the
+  now-removed confidential material) intact and reachable. Reasoning:
+  `git filter-repo` was never the clean fix it sounds like — GitHub
+  keeps unreachable objects fetchable by SHA until Support purges them
+  — and rewriting would have dangled every commit hash `ROADMAP.md`,
+  `SESSION_LOG.md` and this decision log cite by SHA, at 0 forks / 0
+  stars. **Binding on the engineer**: this ruling is not reopened to be
+  helpful and is not precedent for the next third-party-material
+  incident, which gets its own ruling. See `LEGAL.md` §1.1 (amended
+  same date) for the full three-option record and `ROADMAP.md`'s Open
+  operator questions section for the ledger entry.
+  **New standing rule R175** (`ROADMAP.md`, Standing rules): a
+  document's claim about git/CI/environment state is only as current
+  as its last measurement; write it with the command and date that
+  produced it, never as carried-forward prose. This entry, and the
+  `LEGAL.md`/`CLAUDE.md`/`NEXT_SESSION.md` correction it follows, is
+  the incident R175 derives from.
+  **Ledger:** decision records stay **035** (036 next free); standing
+  rules move `R174` → `R175` (`R176` next free); operator questions
+  stay **(bh)**, closed (next free **(bi)**); Pass ceiling unchanged at
+  **53.0**.
