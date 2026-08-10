@@ -98,24 +98,33 @@ forbidden. Two were cleared this session by proper filing; eleven remain.
 
 ---
 
-## Publishing is blocked on TWO independent things, and only one is the licence
+## Publishing — BOTH items are now CLOSED, and the earlier text here was wrong
 
-Both are the operator's calls. **Do not resolve either.**
+This section previously said publishing was blocked on two things and
+that *"no git remote is configured"*. **Both halves were false**, and the
+false one was the reassuring one. Corrected 2026-08-10.
 
-1. **The go-ahead itself.** MIT settles the licence (`LEGAL.md` §1);
-   the decision to push is a separate act and has not been given. No
-   git remote is configured, and `git push` / `gh` / `cargo publish`
-   are denied outright in `.claude/settings.local.json` rather than
-   merely remembered.
-2. **`LEGAL.md` §1.1 — git history carries a third party's confidential
-   material.** `817d518` removed it from the *tree* and says in its own
-   final paragraph, in capitals, that this does not reach history. It is
-   still recoverable from the **288 commits before it** — verified this
-   session: `git show 817d518^:tools/realdrawings-smoke/README.md` still
-   prints the file whose own text said *"Nothing in this directory is to
-   be committed at all."* Three options (rewrite history / squash to a
-   fresh initial commit / accept), each with a real cost, written out in
-   §1.1. **Open operator question (bh).**
+1. **The repository is PUBLIC and has been since 2026-08-09.**
+   `github.com/KenM76/pdfce`, created 04:56Z, `main` pushed 10:18Z.
+   Publishing was not pending; it had happened. Check with
+   `git remote -v`, not by reading a document.
+2. **`LEGAL.md` §1.1 — the confidential material in history is
+   ACCEPTED.** It is genuinely reachable from the public repo (verified:
+   `gh api repos/KenM76/pdfce/contents/tools/realdrawings-smoke?ref=817d518^`
+   returns the listing). Presented with that and four options, the
+   operator chose on 2026-08-10 to leave it public and correct the
+   record. **Open question (bh) is CLOSED — resolved as "accept."**
+   Do not re-open it; do not treat it as precedent for the next file.
+3. **The publish deny-rules are gone**, by the operator's explicit
+   choice the same day — removed from BOTH `.claude/settings.json` (the
+   checked-in one) and `.claude/settings.local.json`. `gh release` and
+   `cargo publish` are still denied. **Rule 8 now has no fence behind
+   it:** the absence of a deny rule is not a go-ahead, and an agent must
+   not read it as one.
+
+**What this changes about day-to-day work:** anything committed to this
+repo is published by default. The `tools/` temp-folder convention for
+test files stopped being tidiness and became the actual control.
 
 ---
 

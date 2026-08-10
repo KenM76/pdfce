@@ -44,9 +44,6 @@
       "Write"
     ],
     "deny": [
-      "Bash(git push:*)",
-      "Bash(git remote add:*)",
-      "Bash(gh repo create:*)",
       "Bash(gh release:*)",
       "Bash(cargo publish:*)"
     ]

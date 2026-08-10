@@ -148,10 +148,23 @@ permissive — zero copyleft, verified against the generated
 
 What still holds, and is the part that matters day to day:
 
-- **Do not push to a public repository or cut a release** without an
-  explicit, current go-ahead. The license no longer blocks it; the
-  operator's decision to publish is a separate act and has not been
-  given. There is still no git remote configured.
+- **Do not push or cut a release** without an explicit, current
+  go-ahead. The license does not block it; publishing is the operator's
+  act, not the agent's, and each one is its own decision.
+- **★ THE PROJECT IS ALREADY PUBLIC. This bullet said "there is still no
+  git remote configured" and that was FALSE** —
+  `github.com/KenM76/pdfce` is public, created 2026-08-09 04:56Z, `main`
+  pushed 10:18Z. Corrected 2026-08-10. Two consequences worth carrying:
+  a repository with a remote is one where a careless `git push` reaches
+  the world, and **anything committed here is published by default**, so
+  the temp-folder convention for test files is now load-bearing rather
+  than tidy. The confidential material already in history was reviewed
+  by the operator and **accepted** — see `LEGAL.md` §1.1; that is
+  settled, not an invitation to re-raise it.
+- Note the shape of that error, because it is the expensive kind: a
+  document asserted a fact about the environment that nobody had
+  measured, and it read as reassurance for a day. `git remote -v` costs
+  nothing.
 - **GPL/AGPL prior art is categorically out** as a dependency or code
   source — MuPDF, Poppler, Ghostscript, Inkscape. An MIT project cannot
   link them (`LEGAL.md` §6.1). Inkscape stays a *behavioural* reference

@@ -41,14 +41,19 @@ copyleft dependency was ever adopted), but it removes the
 hypothetical "choose AGPL and unlock MuPDF/Poppler/Ghostscript" branch
 this section used to describe as a live option.
 
-**What this decision does NOT do — it does not authorize a push.**
-MIT satisfies project rule 8's license precondition for a public-
-facing commit posture, but the operator did not separately ask to
-push or publish. The project's first implementation commit
-(`d8b3903`, SESSION_LOG continuation 49) remains **local only**. A
-push/publish action requires its own explicit operator go-ahead —
-track that as a distinct, narrower open item from the (now-resolved)
-license decision itself.
+**What this decision did NOT do — it did not, by itself, authorize a
+push.** MIT satisfied project rule 8's license precondition for a
+public-facing commit posture; publishing remained a separate act.
+
+**★ SUPERSEDED BY EVENTS, 2026-08-09.** This paragraph used to end *"the
+project's first implementation commit (`d8b3903`) remains local only"*.
+It is not local. The operator created `github.com/KenM76/pdfce`
+(**public**) on 2026-08-09 04:56Z and pushed `main` at 10:18Z. Verify
+rather than trust this sentence too — `git remote -v` and
+`gh repo view KenM76/pdfce --json visibility`.
+
+A push still requires the operator's own act; what changed is that the
+act happened. See §1.1 for what came with it.
 
 Historical note (context for why this took the shape it did):
 realistic candidates presented to the operator were **MIT or
@@ -57,13 +62,41 @@ AGPL-3.0** (copyleft, blocks proprietary forks/hosted-service
 loopholes, would have unlocked MuPDF/Poppler/Ghostscript as real
 dependencies). The operator chose MIT.
 
-### 1.1 ⚠ A SECOND, INDEPENDENT PUBLISHING BLOCKER — git history carries a third party's confidential material (2026-08-09)
+### 1.1 git history carries a third party's confidential material — AND THE REPOSITORY IS ALREADY PUBLIC (2026-08-09; corrected and decided 2026-08-10)
 
-**This is not the license question, and resolving the license did not
-resolve it.** §1 above says a push needs an operator go-ahead. This
-section says that *even with* that go-ahead, the repository as it stands
-cannot be published, because publishing it would disclose material that
-is not the operator's to disclose.
+> **★ THIS SECTION WAS WRONG FOR ONE DAY, IN THE DIRECTION THAT MATTERED.**
+>
+> Written 2026-08-09 as a *prospective* blocker — "publishing would
+> disclose this" — on the stated basis that no git remote existed. **That
+> basis was false when it was written.** `github.com/KenM76/pdfce` was
+> created 2026-08-09 04:56Z and pushed at 10:18Z; this section was written
+> that evening and asserted the opposite.
+>
+> Found 2026-08-10 by running `git remote -v` while verifying something
+> unrelated. Verified, not inferred: `gh api
+> repos/KenM76/pdfce/contents/tools/realdrawings-smoke?ref=817d518^`
+> **returns the directory listing** — the harness whose own README said
+> *"Nothing in this directory is to be committed at all"* is fetchable by
+> anyone from the public repository.
+>
+> The lesson is not "check the remote." It is that **this document
+> asserted an environmental fact it had not measured**, in the one section
+> written to warn about that fact, and the assertion made the risk read as
+> hypothetical for a day. Any claim here about the state of the world —
+> what is pushed, what is configured, what is reachable — must be a
+> command someone ran, quoted, or it does not belong in this file.
+>
+> **OPERATOR DECISION, 2026-08-10: leave the repository public and accept
+> it.** Presented with the measured exposure and four options (make
+> private now and decide later; rewrite history and force-push; leave
+> public and correct the record; or gather a full inventory first), the
+> operator chose to leave it public and correct the record. Open question
+> **(bh)** is therefore **CLOSED — resolved as "accept"**, not still open.
+>
+> What that decision does and does not mean, so a later reader does not
+> over-read it: it settles the material already in history. It is **not**
+> a standing licence to publish anything else, and §1's rule that a push
+> is the operator's act still holds.
 
 **The facts, measured rather than estimated.**
 
@@ -99,23 +132,29 @@ git log --oneline 817d518 | wc -l       # commits up to and including the remova
 git log --all --full-history -- tools/realdrawings-smoke   # the deleted harness, still reachable
 ```
 
-**THE DECISION IS THE OPERATOR'S AND HAS NOT BEEN MADE.** Tracked as
-`ROADMAP.md` open operator question **(bh)**. Three options, none of
-which an agent may pick:
+**THE DECISION WAS THE OPERATOR'S AND HAS BEEN MADE: ACCEPT (2026-08-10).**
 
-| Option | What it costs |
+The options that were on the table, recorded because the reasoning
+behind a closed decision is the part that stays useful:
+
+| Option | What it would have cost |
 |---|---|
-| **Rewrite history** (`git filter-repo` over the affected paths and strings) | Every commit hash changes. Every hash cited in `ROADMAP.md`, `SESSION_LOG.md`, `tools/commits-filed-baseline.txt` and the decision log becomes dangling — and this project's filing gates are built on those hashes. |
-| **Squash to a fresh initial commit** | The 329-commit engineering record — which is a substantial part of the project's documentation-first value — stops existing publicly. |
-| **Accept it and publish anyway** | Discloses a third party's confidential material. Not an engineering call at all. |
+| **Rewrite history** (`git filter-repo` over the affected paths and strings, then force-push) | Every commit hash changes. Every hash cited in `ROADMAP.md`, `SESSION_LOG.md`, `tools/commits-filed-baseline.txt` and the decision log goes dangling — and this project's filing gates are built on those hashes. **It is also incomplete on its own:** GitHub keeps unreachable objects fetchable by SHA until Support purges them. |
+| **Squash to a fresh initial commit** | The engineering record — a substantial part of this project's documentation-first value — stops existing publicly. |
+| **Make it private while deciding** | Seconds, reversible, stops further exposure. Not chosen. |
+| **Accept** ← **CHOSEN** | The material stays reachable. Weighed against 0 forks and 0 stars at the time of the decision. |
 
-**Binding on `pdfce-engineer` until the operator decides:** treat this
-exactly as §1 treats the license — a hard precondition on any push,
-remote, or release, independent of and in addition to the go-ahead
-itself. Do not resolve it by choosing an option, do not resolve it by
-rewriting history "to make publishing possible", and do not let the
-existence of `817d518` be read as the problem being closed. The commit
-says so in its own final paragraph, in capitals, for this reason.
+**Binding on `pdfce-engineer` going forward:**
+
+- **Do not re-open this to be helpful.** It is decided. Raising it again
+  as though it were open wastes the operator's attention on a question he
+  has already answered with the facts in front of him.
+- **Do not treat it as precedent.** It settles *this* material. The next
+  third-party file committed here is a new decision, and `tools/` still
+  has a temp-folder convention precisely so there is no next one.
+- **`817d518` did what it said and no more.** It cleaned the working
+  tree; it never reached history, and its own final paragraph says so in
+  capitals. Do not cite it as the problem being closed.
 
 ## 2. ISO / ITU-T / ETSI standard copyright — how the spec RAG is scoped
 
