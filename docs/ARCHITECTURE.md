@@ -15471,3 +15471,75 @@ above) naming the split, the line counts, and the two findings.
 
 **No decision-record ceiling change.** Cross-reference: `ROADMAP.md`'s
 `Pass 58.1` Shipped entry (eightieth filing) for the full build record.
+
+### 2026-08-10 (eighty-first filing, `e5c6870`) — an unevaluable `/VE` visibility expression falls back to `/OCGs`+`/P`; this is the behaviour §8.11.2.2 NOTE 2 designed, not a repair pdfce added
+
+**Filed by `pdfce-librarian`, no shell tool this dispatch — relaying a
+staged evidence file (hash/date/subject/`--stat`/full commit message
+for each of five previously-unfiled commits, functionally equivalent to
+`git show` but not independently confirmed against the commit graph).**
+**Independently verified by direct read of current source, not merely
+relayed:** `crates/pdfce-core/src/annot.rs:805`–`:947` in full —
+`MAX_VE_DEPTH = 32` (cross-referenced by its own doc comment against
+`layers::MAX_ORDER_DEPTH`, deliberately the same value: "two different
+caps would mean a file that renders but cannot be listed, or the
+reverse"); `eval_ve`/`eval_ve_resolved`/`eval_ve_operand` confirmed to
+return `Option<bool>` throughout, with `None` meaning "not an
+expression pdfce can evaluate" at every refusal site (wrong operand
+count on `Not`, zero operands on `And`/`Or`, an operator name outside
+`{And, Or, Not}`, depth exceeding the cap, a cycle); `oc_is_hidden`
+(`:958`) confirmed to try `eval_ve` first and fall through to the
+pre-existing `/P`-policy path on `None`, with the fallback's rationale
+stated in the function's own doc comment, citing §8.11.2.2 NOTE 2 by
+name. Full build record: `ROADMAP.md`'s `e5c6870` Shipped entry
+(eighty-first filing, filed against the existing `Pass 56.0`).
+
+**Plain entry, no decision number — recording an invariant, not a
+crate-boundary or library choice.** §8.11.2.2 defines `/VE` as a
+boolean expression tree (`And`/`Or`/`Not`) over OCG on/off states that
+OVERRIDES the older `/OCGs`+`/P` mechanism where a reader supports it.
+A conforming reader that does NOT support `/VE`, or that encounters an
+expression it cannot make sense of (a malformed operator, an
+out-of-range operand count, a cycle, excessive nesting), needs
+something correct to fall back to — and NOTE 2 tells AUTHORS to supply
+`/OCGs` and `/P` alongside `/VE` for exactly that reason. `eval_ve`
+returning `None` and its caller falling through to the existing
+`/P`-policy resolution is therefore not a workaround invented to cope
+with a gap in pdfce's own expression support; it is the mechanism the
+standard's own text designed for a reader in pdfce's position.
+
+**Why this is recorded here rather than left as an implementation
+detail.** The behaviour, read cold, LOOKS like leniency — "we couldn't
+evaluate the author's expression, so we ignored it and used a simpler,
+older mechanism instead" reads as a shortcut a future maintainer might
+reasonably want to "fix" into an outright refusal (treat unevaluable as
+hidden, or reject the document). Both alternatives are wrong: refusing
+the whole document over one indirect array a hostile or malformed file
+made unreadable, or treating "unreadable" as "hidden," would remove
+content because a HINT could not be parsed — worse than falling back to
+the exact mechanism the format's own authors named for this case. This
+entry exists so that judgment is made once, with the citation, rather
+than re-litigated by a future reader who does not have §8.11.2.2 NOTE 2
+in front of them.
+
+**What counts as unevaluable, and why each refusal is a refusal rather
+than a resolution (each confirmed above by direct source read):** an
+operator name outside the three the clause defines — guessing at a
+fourth is how a reader shows content an author hid; `Not` with other
+than exactly one operand — §8.11.2.2 names exactly one, and two could
+plausibly mean either `Not(And(a,b))` or a typo for `Or`, so pdfce does
+not pick; an `And`/`Or` with zero operands — inventing an identity
+element (`And` of nothing = `true`) is pdfce deciding what the author
+meant, not reading what they wrote; one unreadable operand inside an
+`And` — the whole conjunction is unknown, because the unreadable
+operand could have been the one that was `false`. A cycle guard exists
+because an expression array may reference itself through an indirect
+reference, legal syntax describing an infinite tree — the same hazard
+`layers::MAX_ORDER_DEPTH` guards, deliberately capped at the same
+depth.
+
+**No `docs/ARCHITECTURE.md` body-section change accompanies this
+entry** — §3's OCG-resolution notes already describe `annot.rs` as the
+one shared resolver both the panel and the renderer consult; `/VE`
+extends that resolver's behaviour without moving the resolver itself,
+so no body-section text was rendered inaccurate by this change.

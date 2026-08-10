@@ -32217,3 +32217,115 @@ Backup/git working-tree state **not independently asserted** (hard rule
 push. This is the **eightieth** `SESSION_LOG.md` filing (the
 seventy-ninth confirmed present by direct read before this entry was
 appended).
+
+## 2026-08-10 (eighty-first filing) — `check-commits-filed.py` RED: five commits from a 2026-08-10 11:16–14:58 window filed by hash for the first time — `d6bc6cd` (the Signatures panel's actual GUI body, previously uncited despite `FEATURES.md` already assuming it existed), `b6a9ca0` (`/Intent` disclosure, both shells), `e5c6870` (§8.11.2.2 `/VE`, filed against `Pass 56.0`), `24e07e3` (decision-037 falsifier fixture + a pinning test), `8eabed6` (two packaging-tool defects, tooling only); no new Pass ID minted
+
+**Shipped:**
+- `d6bc6cd` — the Signatures panel's actual construction, the GUI half
+  of `Pass 10.0`. Caveat-first, above the list, not a tooltip: pdfce
+  performs no cryptographic verification. Four states worded for what
+  they are (whole-file, tail, malformed, single-range), file length
+  read fresh from disk each frame rather than cached at open. **Not a
+  duplicate filing** — checked explicitly per this dispatch's own
+  instruction, and this is a genuine citation gap: `ROADMAP.md`'s
+  seventy-seventh filing and `FEATURES.md` row 212 both already
+  described the panel body as existing before `ec8abfe`'s reachability
+  fix, but neither had ever named the commit that built it. Corrected
+  in `FEATURES.md` this filing.
+- `b6a9ca0` — filed against `Pass 56.0` (R170). The disclosure half of
+  `57f0c8f`'s §8.11.2.3 `/Intent` fix: a `Design`-only OCG in `/OFF`
+  correctly renders visible in a `View` render, and from outside that
+  reads as pdfce ignoring the document's own array unless disclosed.
+  GUI tooltip + CLI `intent-not-view` flag, gated on the same
+  condition, printed only when a group's intent departs from `View`.
+- `8eabed6` — no Pass ID, tooling. `-dirty` was firing on ANY
+  working-tree diff, including docs-only edits, falsely marking
+  recoverable binaries "in no commit"; narrowed to a named
+  build-affecting path set. Separately, a fixed-offset porcelain-line
+  parse was silently eating the first character of exactly the FIRST
+  path per run, because this module's own `git()` helper strips
+  leading whitespace off only that line; fixed with a regex. Both found
+  by running the tool and reading its output.
+- `e5c6870` — filed against `Pass 56.0` (R170). §8.11.2.2 `/VE`
+  visibility expressions (`And`/`Or`/`Not`, cycle-guarded at
+  `MAX_VE_DEPTH`=32 matching `layers::MAX_ORDER_DEPTH`). An
+  unevaluable expression falls back to `/OCGs`+`/P` — confirmed by
+  direct source read to be the behaviour §8.11.2.2 NOTE 2 designed,
+  not a pdfce repair; recorded as a plain `ARCHITECTURE.md` §12 entry
+  this filing specifically because it reads as leniency and could
+  otherwise be "fixed" into refusing. §8.11's sole remaining gap is
+  now `/AS`+`/Usage` (§8.11.4.4).
+- `24e07e3` — no Pass ID, decision-037 support (still CLAIMED, NOT YET
+  AUTHORED — unaffected). A fixture (`base-state-off-unregistered.pdf`)
+  and a pinning test
+  (`base_state_off_currently_leaves_unregistered_groups_visible`)
+  built specifically so the falsifier decision 037 already names
+  (check Acrobat Reader's own behaviour on this exact case) can
+  actually be run. The test's own comment names it as a pin of TODAY's
+  answer, expected to change, so an implementor of 037 must read the
+  comment and edit the test rather than silently refactor past it.
+
+**Decisions made this session:** none new — this filing closes a
+`check-commits-filed.py` gate finding, not new engineering scope. A
+plain `ARCHITECTURE.md` §12 entry records `/VE`'s fallback-to-`/P`
+invariant (see *Shipped*, above).
+
+**Findings + decisions:**
+- **A documentary self-consistency inference, not a git-log read,
+  places `e5c6870`/`24e07e3` after the seventy-ninth filing's own
+  commits**: that filing's *RAG escalation* section stated, as a
+  direct-source-read finding, that `/VE` remained unimplemented — a
+  sentence now false. A filing whose own direct read said `/VE` was
+  absent could not have been written after `e5c6870` landed. Flagged
+  explicitly as an inference from document content, not an assertion
+  about git or backup state (hard rule 8 governs the latter, not this).
+  A correction footer was appended to that entry rather than editing
+  it, per this file's append-only convention.
+- **`docs/FEATURES.md` row 212's citation gap is the same shape as the
+  Bookmarks/Layers reachability gap** (R184, seventy-seventh filing) —
+  a capability whose construction commit was simply never named,
+  surfaced by an unrelated audit (an exhaustive commit-filing gate,
+  not a reachability audit). `check-commits-filed.py` exists precisely
+  because `check-passes-filed.py` cannot see a commit claiming no Pass
+  ID, which `d6bc6cd` never did.
+
+**Still in flight:** unchanged — decisions 037/038 still CLAIMED-not-
+authored (037 now has its falsifier fixture, still not ruled); printer
+job SPOOLING (operator go-ahead); attachment EXTRACTION-to-file
+(R151); `/AS`+`/Usage` auto-state (§8.11.4.4), now §8.11's sole
+remaining unimplemented piece; theme-preset default (open operator
+question).
+
+**For next session:** none of the five commits changes the operator-
+facing work order set at the eightieth filing (theme direction, then
+back to roadmap Passes) — this filing is a backfill, not new scope.
+
+**Ledger for this filing.** **No new Pass ID** — filed against `Pass
+10.0` and `Pass 56.0`, or with none (tooling; decision-037 support);
+Pass-family ceiling unchanged at **58.1**, next free **59**.
+`docs/FEATURES.md`: rows 187, 210, 212 edited (text corrections/
+additions only — no box changed value; all three were already
+correctly ticked or correctly partial). `docs/ARCHITECTURE.md`: one new
+plain §12 entry (`/VE` fallback-to-`/P`) plus one dated correction
+footer to the seventy-ninth filing's *RAG escalation* claim; decision-
+record ceiling unchanged, 037/038 still claimed-not-authored, next
+free 039. Standing rules: no new mint — R170 and R174 cited; ceiling
+stays **R185**, next free **R186**. `D:\dev\rag\rust\`: two new files
+(the `-dirty` false-positive-erodes-trust finding; the
+strip-corrupts-first-line-only fixed-offset-parse finding), both
+indexed this filing. `C:\personal_rag\pdf\`: no new lesson — nothing
+here is a real-world-producer-divergence finding. Operator-question
+ceiling unchanged at **(bh)**, next free **(bi)**. Gate figures relayed
+per commit (2838/2839/2889/1276-core/2902 tests across the five
+messages, clippy 0 `--all-features`, fmt clean where stated) RELAYED,
+NOT independently re-run — no shell this dispatch. Backup/git
+working-tree state **not asserted anywhere in this filing** (hard rule
+8) — this librarian had no shell and worked entirely from a staged
+evidence file (hash/date/subject/`--stat`/full message per commit,
+supplied because two prior dispatches had asked it to run `git`
+commands it does not have) plus direct reads of current source, listed
+in `ROADMAP.md`'s matching entry. The engineer should check
+`D:\Dev\pdfce-backups\` and `git log`/`git status` directly before any
+push. This is the **eighty-first** `SESSION_LOG.md` filing (the
+eightieth confirmed present by direct read before this entry was
+appended).

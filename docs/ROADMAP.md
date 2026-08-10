@@ -81,6 +81,311 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★★ FIVE UNFILED COMMITS SURFACE — `check-commits-filed.py` RED: `d6bc6cd`/`b6a9ca0`/`8eabed6`/`e5c6870`/`24e07e3`, all committed 2026-08-10 11:16–14:58, none cited in `ROADMAP.md` or `SESSION_LOG.md` before this filing — filed against `Pass 10.0` (GUI slice, previously uncited), `Pass 56.0` (§8.11.2.2 `/VE` + the `/Intent` disclosure), a tooling-only entry (packaging), and decisions `037`/`038` (a falsifier fixture) — no new Pass ID minted — 2026-08-10 (eighty-first filing)
+
+**Sourcing.** No shell tool this dispatch. The engineer staged a file
+containing, for each of the five commits, the hash, author date,
+subject, `--stat` file list and the complete commit message — the same
+material a `git show` would give, supplied because two prior dispatches
+had asked this librarian to run `git` commands it does not have. That
+file is the source for every hash-to-content mapping and every
+diffstat figure below; it is **not** independently re-confirmed against
+`git log`/`git show`, because no shell exists to run either. **Where a
+claim could be checked a different way — by reading the LIVE SOURCE
+these commits are described as having produced — it was, and is marked
+so below:**
+
+- `crates/pdfce-gui/src/panels_structure.rs:52`–`:133` — `signatures_panel`
+  in full, confirmed to match `d6bc6cd`'s own description exactly: the
+  coverage-only caveat is the first `ui.label`, before the loop, not a
+  tooltip (`ui_text::signatures_not_a_validity_check`); the file length
+  comes from `std::fs::metadata(&doc.path)` inside the panel body
+  itself (a fresh stat every frame, not a cached open-time value, with
+  a doc comment naming exactly why — an incremental save would make a
+  captured length stale); malformed-range and single-range messages
+  print BEFORE the coverage numbers; a `diag::trace` line carries
+  `covered`/`tail`/`pairs`/`well_formed` per row.
+- `crates/pdfce-core/src/annot.rs:805`–`:947` — `MAX_VE_DEPTH` (32,
+  confirmed matching `layers::MAX_ORDER_DEPTH` by cross-reference
+  comment), `eval_ve`/`eval_ve_resolved`/`eval_ve_operand` in full: the
+  cycle guard captures the reference's object id BEFORE resolving and
+  pushes/pops around the recursive call; `Not` refuses any operand
+  count other than exactly one; an operator with zero operands returns
+  `None` rather than an invented identity element; the fourth-operator
+  case (anything not `And`/`Or`/`Not`) returns `None`; `oc_is_hidden`
+  tries `eval_ve` first and falls through to the existing `/P`-policy
+  path on `None`, with a doc comment citing §8.11.2.2 NOTE 2 by name as
+  the reason the fallback is not pdfce's own invention.
+- `tools/package-portable.py:184`–`:226` — confirmed the `dirty`
+  computation is now `bool(dirty_build)` where `dirty_build` filters
+  `git status --porcelain` paths against a named `BUILD_AFFECTING`
+  tuple (`crates/`, `Cargo.toml`, `Cargo.lock`, `rust-toolchain`,
+  `.cargo/`, `build.rs`), replacing a prior bare
+  `bool(git("status", "--porcelain"))`; a comment at the site narrates
+  the old behaviour and names the fixed regex-based parse at `:204`–
+  `:207` as the FIRST-LINE-only leading-space bug's repair.
+- `crates/pdfce-core/tests/layers.rs:560`–`:568` — confirmed
+  `base_state_off_currently_leaves_unregistered_groups_visible` exists,
+  reads `base-state-off-unregistered.pdf`, and its own doc comment
+  states the test is a deliberate pin of TODAY's answer that the next
+  implementor of decision 037 must edit, not merely leave passing.
+- `crates/pdfce-core/src/layers.rs:579`,`:1616`–`:1630` and
+  `crates/pdfce-cli/src/main.rs:6062`–`:6063` and
+  `crates/pdfce-gui/src/panels_structure.rs:351`,`:366`–`:367` and
+  `crates/pdfce-gui/src/ui_text.rs:8669` — confirmed `Layer::intent_view`
+  exists, the CLI prints the `intent-not-view` flag only inside `if
+  !l.intent_view`, the GUI panel gates an equivalent tooltip the same
+  way, and the diagnostic trace line carries `intent_view=`.
+
+**Not independently verified:** the exact commit-to-diffstat mapping,
+relative ordering among the five beyond what their own author-date
+timestamps state, and the stated per-commit test/clippy/fmt figures
+(2838/2839/2889/1276-core/2902 tests across the five messages) — all
+relayed from the staged file, not re-run.
+
+**Placement and ordering, stated rather than assumed.** All five carry
+author dates of 2026-08-10 between 11:16:51 and 14:58:37 — earlier than
+this file's own eightieth filing (`Pass 58.0`/`58.1`, `2387a58` etc.),
+which is placed above this entry and whose own text was not disturbed.
+**Internal evidence, not a git-log read, places this block's last two
+commits (`e5c6870`, `24e07e3`) AFTER the seventy-ninth filing's
+(`Pass 57.0`) own commits**: that filing's *RAG escalation* section
+(above, in this same *Shipped* list) stated as a **direct-source-read
+finding**, not a relay, that "§8.11's remaining genuinely unimplemented
+pieces… are exactly `/VE`… and `/AS`+`/Usage`" — a sentence that is now
+false, since `/VE` is confirmed implemented above. A filing whose own
+direct read said `/VE` was absent could not have been written after
+`e5c6870` landed; therefore `e5c6870` postdates the seventy-ninth
+filing's source read. This is a **documentary self-consistency
+inference**, not an assertion about git or backup state (hard rule 8
+is about the latter) — flagged as an inference rather than a
+measurement regardless. A correction footer is added to that entry's
+*RAG escalation* section below, per the operator's standing instruction
+not to leave a stale claim standing silently.
+
+**Shipped:**
+- `d6bc6cd`, 11:16:51 — **the GUI half of `Pass 10.0`'s Signatures
+  panel, previously never cited by hash.** `docs/FEATURES.md` row 212
+  and `ROADMAP.md`'s own seventy-seventh filing both already document
+  that "the panel body existed" before `ec8abfe`'s rail-reachability
+  fix — but neither ever named the commit that built it. Checked
+  explicitly for duplication before filing (per this dispatch's own
+  instruction): **this is a genuine citation gap, not a re-file** — the
+  content (the caveat-first design, the four coverage states, the
+  disk-read-length rationale) has never appeared in `ROADMAP.md` by its
+  own commit hash until now. `docs/FEATURES.md` row 212 corrected in
+  this filing (below) to name `d6bc6cd` alongside `2676d4d`+`2ae9991`
+  and `ec8abfe`, rather than leaving the panel's construction
+  unattributed. Four states, each worded for what it is, not
+  collapsed into "valid"/"invalid": whole-file coverage, a covered
+  tail (worded as under-protection, since §12.8.1 makes whole-file
+  coverage a `should` not a `shall` — Pass 10.0's own modal finding,
+  carried into the panel), a malformed range (reported BEFORE the
+  numbers, since it changes what they mean), and a single-range
+  signature (its own message — it signs its own value and cannot be
+  verified against anything external). Two further states kept
+  deliberately distinct: "this document has no signatures" vs. "pdfce
+  could not read the file's size from disk" — the second is an
+  inability to look, not a fact about the document, and says so.
+  Verified off-screen against all three fixtures, matching
+  `list-signatures`' own numbers exactly (per the staged commit
+  message — not independently re-run this filing).
+- `b6a9ca0`, 13:09:37 — **filed against the existing `Pass 56.0`
+  (R170: a same-day extension of the shared OCG resolver stays on the
+  capability's own ID; same convention `5c4ff08`/`57f0c8f` used,
+  seventy-ninth filing), no new mint.** The disclosure half of
+  `57f0c8f`'s own §8.11.2.3 `/Intent` fix: a `Design`-only group named
+  in a document's `/D /OFF` array now correctly renders VISIBLE in a
+  `View`-intent render (§8.11.2.3 says intent selects which groups
+  PARTICIPATE at all), and from the outside that is indistinguishable
+  from pdfce ignoring `/OFF` — the panel says "on," the file's array
+  says "off," and the only available reading was "pdfce is wrong."
+  Both shells now say why, gated on the same condition
+  (`!l.intent_view`, confirmed above): the GUI row's tooltip states the
+  group is marked for design use, not viewing, so the document's on/off
+  setting does not affect what is drawn; the CLI prints
+  `intent-not-view` on the layer's own `list-layers` line. Printed only
+  when intent departs from `View` — an ordinary document's
+  `list-layers` output is confirmed byte-for-byte unchanged, per the
+  commit's own stated verification against the `malformed-groups`
+  fixture (relayed, not re-run this filing). **The panel and the
+  renderer did not drift on this change, and the commit message
+  states why that was not luck**: `layers.rs` delegates
+  `visible_by_default` to `optional_content_default_off` rather than
+  deriving it a second time (the `annot::oc_refs` consolidation,
+  seventy-sixth filing), so the intent filter landing in one function
+  reached both at once with no second edit required.
+- `8eabed6`, 13:14:43 — **no Pass ID — tooling, same convention as the
+  render-parity-oracle and benign-bucket-audit entries filed elsewhere
+  in this list with no Pass ID.** Two defects in
+  `tools/package-portable.py`, both found by running the tool and
+  reading its output, the same method credited for the
+  `list-signatures` contradictory-warning fix (R174; the commit message
+  cites R174 by name for the shared method, not for either defect's
+  shape). **Confirmed live in source, above:**
+  1. `-dirty` was firing on ANY working-tree diff
+     (`bool(git("status", "--porcelain"))`), including a docs-only edit
+     landing while a package built — so a build whose binaries were
+     exactly the named commit still carried a `BUILD-INFO.txt` warning
+     that its code "is in no commit and cannot be recovered from the
+     hash alone," which was false. Fixed by narrowing `dirty` to a
+     named `BUILD_AFFECTING` path tuple (`crates/`, `Cargo.toml`,
+     `Cargo.lock`, `rust-toolchain*`, `.cargo/`, `build.rs`) —
+     deliberately generous, since under-reporting here reproduces the
+     exact false reassurance the suffix exists to prevent, while a
+     non-build change is still named in `BUILD-INFO.txt`, just not as a
+     claim about the payload.
+  2. Exactly one entry per run — the FIRST — was silently missing its
+     leading character (`claude/agent-memory/…` printed for a file
+     actually at `.claude/agent-memory/…`), because a fixed-offset
+     parse (`line[3:]`, correct for the documented `XY <path>` porcelain
+     shape) was reading output already stripped of ITS leading space by
+     this module's own `git()` helper — but only on the first line.
+     Fixed with a regex that does not depend on how many leading spaces
+     survived. Recorded as the harder class of bug: a list that is
+     otherwise correct trains the reader to trust the one entry that
+     is not, and a nonexistent path reads as "deleted," not "parse
+     error." Both findings escalated to `D:\dev\rag\rust\` (below).
+- `e5c6870`, 13:20:41 — **filed against the existing `Pass 56.0`
+  (R170), no new mint** — same convention as `b6a9ca0` above, and for
+  the same reason: this extends the identical shared resolver
+  (`annot.rs`) the rest of `Pass 56.0`'s §8.11 work lives in, has no
+  CLI or GUI surface of its own (it changes what the renderer decides
+  to draw, not a command or a panel), and is not separable from that
+  capability's own acceptance criteria. §8.11.2.2 `/VE` — an arbitrary
+  boolean expression (`And`/`Or`/`Not`, nested) over OCG states,
+  overriding `/OCGs`+`/P` where supported. It earns its place by
+  expressing "A but not B," which no single `/P` policy over one flat
+  list can: the four Table 99 policies are all-or-any, so a drawing
+  wanting a detail layer shown only when the overview is off has no
+  way to say that without an expression. **Confirmed live in source,
+  above:** cycle-guarded at `MAX_VE_DEPTH = 32`, matching
+  `layers::MAX_ORDER_DEPTH` by deliberate cross-reference (two
+  different caps would mean a file that renders but cannot be listed,
+  or the reverse); `Not` with other than one operand, an operator with
+  zero operands, and a fourth operator name are each refused
+  (`None`) rather than resolved by an invented house rule. **★ The
+  unevaluable-falls-back-to-`/P` behaviour is not a repair pdfce
+  invented — §8.11.2.2 NOTE 2 tells authors to supply `/OCGs`+`/P`
+  ALONGSIDE `/VE` for exactly this reader.** Recorded as an
+  `ARCHITECTURE.md` §12 plain entry (below), because it reads as
+  leniency and is the behaviour the standard designed for — a future
+  reader could otherwise "fix" it into refusing. §8.11's remaining
+  gap, per the commit's own closing line, is now `/AS`+`/Usage`
+  (§8.11.4.4) alone. `docs/FEATURES.md` row 187 corrected in this
+  filing (below) — the seventy-ninth filing's row text and its own
+  *RAG escalation* section both still named `/VE` as unimplemented.
+- `24e07e3`, 14:58:37 — **no Pass ID — a fixture and a pinning test in
+  support of decision `037` (still CLAIMED, NOT YET AUTHORED), not a
+  capability change.** Decision 037 asks whether `/BaseState /OFF`'s
+  "all groups" reaches OCG-shaped objects never registered in
+  `/OCGs`, and its own §12 entry (seventy-sixth filing) names a
+  falsifier that has to run BEFORE any implementation: open the case
+  in Acrobat Reader and see what it does. No existing fixture could
+  supply that case — `unregistered-ocg.pdf` has unregistered groups
+  with no `/BaseState`, `basestate-off.pdf` has `/BaseState /OFF` with
+  everything registered, and the divergence needs BOTH conditions in
+  one file (breaking two `shall`s at once: `/D`'s `/BaseState` shall be
+  `ON`, every OCG shall be registered), which is why the question had
+  to ship ruled from text alone rather than from a corpus example.
+  **Confirmed live in source, above:** the new
+  `base-state-off-unregistered.pdf` fixture paints three groups through
+  real `BDC`/`EMC` content so the difference is something to look at,
+  not a counter to read (registered+on → shown, registered+not-on →
+  hidden, both readings agreeing on those two; never-registered → the
+  actual experiment, rendered today as SHOWN, the registered-only
+  reading pdfce currently ships). **The pinning test is deliberately a
+  test that asserts the behaviour decision 037 expects to CHANGE** —
+  `base_state_off_currently_leaves_unregistered_groups_visible` — so
+  that whoever implements 037 cannot do so as a silent refactor: editing
+  a test whose own comment explains why it currently passes is a step
+  that requires reading the comment and confirming the falsifier
+  actually ran. The refactor decision 037 itself calls for (a
+  per-group resolver replacing the eager OFF-set computation) is
+  explicitly NOT built by this commit — it waits for the falsifier
+  rather than racing it.
+
+**Decisions made this session:**
+- **Plain `ARCHITECTURE.md` §12 entry (no decision number) — `/VE`'s
+  fallback to `/OCGs`+`/P` on an unevaluable expression is recorded as
+  a load-bearing invariant, not an implementation detail**, because
+  §8.11.2.2 NOTE 2 designed exactly this fallback and a future reader
+  who did not know that could plausibly "fix" it into refusing instead.
+  Same "plain dated entry" convention as the `LayerVisibility`
+  replace-not-merge entry (seventy-ninth filing) and the §8.11.3.1
+  blit-only entry (seventy-eighth filing).
+- **No new standing rule minted for `d6bc6cd`/`b6a9ca0`/`e5c6870`/
+  `24e07e3`** — each cites an existing rule (R170, R184's citation
+  chain for the Signatures-panel gap) rather than a new shape.
+- **Two candidate findings from `8eabed6` escalated to `D:\dev\rag\rust\`
+  as new files (below), not folded into `ci_gate_red_at_baseline_
+  enforces_nothing.md`** — that existing file is about a gate red at
+  baseline from the START; `8eabed6`'s first finding is about a
+  correctly-designed warning that had DRIFTED into firing on a
+  non-triggering condition, a related but distinct failure shape (an
+  eroded-trust mechanism, not a noise-floor one). The second (a helper
+  that strips its own output corrupting a FIXED-OFFSET parse on the
+  FIRST line only) has no existing home in this RAG's index, grepped
+  before writing.
+
+**Findings + decisions:**
+- **`docs/FEATURES.md` row 212's citation gap is the same shape this
+  project has hit before with the Bookmarks/Layers rows** (R184,
+  seventy-seventh filing) — a capability whose actual construction
+  commit was never named, discovered only when a later, unrelated audit
+  (here: an exhaustive commit-filing gate, not a reachability audit)
+  went looking. Distinct failure, same lesson: a row's citation list is
+  only as complete as the filing that built it, and `check-commits-
+  filed.py` exists precisely because `check-passes-filed.py` cannot see
+  a commit that claims no Pass ID at all — which `d6bc6cd` never did.
+
+**Still owed, carried forward, unaffected by this filing:** printer job
+SPOOLING (operator go-ahead); attachment EXTRACTION-to-file (R151);
+decisions `037`/`038` still CLAIMED, NOT YET AUTHORED — `24e07e3`
+supplies 037's falsifier fixture and pins today's answer, it does not
+rule on it; `/AS`+`/Usage` auto-state (§8.11.4.4), now §8.11's sole
+remaining unimplemented piece; which theme preset becomes the shipped
+default (open operator question, unaffected).
+
+**Ledger for this filing.** **No new Pass ID** — all five commits filed
+against existing Passes (`10.0`, `56.0`) or with none (tooling;
+decision-037 support); Pass-family ceiling **unchanged at 58.1**, next
+free single-number family **59**. `docs/FEATURES.md`: row 187
+(content-stream `/OC`) corrected — `/VE` moved from "remaining
+unimplemented" to shipped, `/AS`+`/Usage` now named as the sole
+remainder; row 210 (Document layers OCG) gains a note on the `/Intent`
+disclosure and the decision-037 fixture; row 212 (Signature `/ByteRange`
+coverage) corrected to cite `d6bc6cd` as the commit that built the
+panel body, previously uncited. No row moves between *Implemented* and
+*Planned* — all three affected rows were already fully ticked or
+already correctly partial. `docs/ARCHITECTURE.md` §12: **one new plain
+dated entry** (`/VE` fallback-to-`/P` invariant) **plus one dated
+correction footer** to the seventy-ninth filing's *RAG escalation*
+claim that `/VE` remained unimplemented — decision-record ceiling
+**unchanged**, `037`/`038` still CLAIMED-not-authored, next genuinely
+free **039**. Standing rules: **no new mint** — R170 and R174 CITED;
+ceiling stays **R185**, next free **R186**. `D:\dev\rag\rust\`: **two
+new files** (the `-dirty`-false-positive-erodes-trust finding, and the
+strip-corrupts-first-line-only fixed-offset-parse finding), both
+indexed this filing. `C:\personal_rag\pdf\`: no new lesson — nothing
+here is a real-world-producer-divergence finding; the `/VE`/`/Intent`/
+`/BaseState` work is pdfce's own spec-implementation and an open
+spec-interpretation question, not an observed producer divergence.
+Operator-question ceiling unchanged at **(bh)**, next free **(bi)**.
+Gate figures relayed per commit (2838/2839/2889/1276-core/2902 tests
+across the five messages, clippy 0 `--all-features`, fmt clean where
+stated) are RELAYED, NOT independently re-run — no shell this dispatch.
+**Backup/git working-tree state not asserted anywhere in this
+filing** (hard rule 8) — the engineer should check
+`D:\Dev\pdfce-backups\` and `git log`/`git status` directly before any
+push; this librarian had no shell and worked entirely from the staged
+evidence file plus direct reads of current source. This is the
+**eighty-first** `SESSION_LOG.md`/`ROADMAP.md` joint filing (the
+eightieth confirmed present by direct read before this entry was
+written).
+
+---
+
 ### ★ `2387a58` FILES `Pass 58.0` — a theme module, at last: `theme.rs`, three presets (Quiet/Airy/Dark), `Theme::apply` as the style hook that never existed, `tools/check-theme-colors.sh`, and `Settings::theme` as an opaque `String`; `255cf86`→`3a699cf`→`fc137e2` FILE `Pass 58.1` — `main.rs` split 27,647 → 25,511 lines into three modules, no logic change, and TWO pre-existing defects surfaced by the move itself — operator-initiated (not roadmap-driven): "will the GUI's look ever improve, and is it modular enough to change safely?" — 2026-08-10
 
 **Sourcing.** No shell tool this dispatch — `git log -1 --format=%B <sha>`
@@ -587,6 +892,20 @@ exclusive territory):**
   `/VE` visibility expressions (§8.11.2.4 — `optional_content_default_off`'s
   own comment on the empty-`/OCGs` case names this) and `/AS`+`/Usage`
   auto-state (§8.11.4.4) — nothing else in §8.11 remains unread.
+
+  **★ CORRECTION (2026-08-10, eighty-first filing) — `/VE` IS NOW
+  IMPLEMENTED, by `e5c6870`, and was already committed before this
+  correction was written (see that filing's own placement note for how
+  the ordering was inferred).** This entry's claim was accurate against
+  the source it read at the time; it is not accurate now and is left
+  standing per this file's append-only convention, corrected here
+  rather than edited. §8.11's sole remaining unimplemented piece is
+  `/AS`+`/Usage` auto-state (§8.11.4.4). Also worth naming: this
+  entry's own clause number (§8.11.2.4) disagrees with `e5c6870`'s own
+  commit message, which cites `/VE` as §8.11.2.2 — a discrepancy this
+  librarian is not positioned to resolve (spec clause sourcing is
+  `pdfce-spec-librarian`'s exclusive territory, hard rule 6); flagged
+  for that librarian to settle, not adjudicated here.
 
 **Ledger for this filing.** **One new Pass ID minted: `Pass 57.0`**
 (operator-facing OCG layer toggle), grepped free before filing per R156.
