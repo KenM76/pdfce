@@ -1324,6 +1324,22 @@ impl DxfExportDraft {
     }
 }
 
+/// What one frame of the rename editor decided.
+///
+/// Three states rather than an `Option`, because "still open" and
+/// "cancelled" must not collapse: the first keeps the operator's typing,
+/// the second discards it, and a caller that could not tell them apart
+/// would either lose a draft on every frame or never close the editor.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum RenameEditorOutcome {
+    /// Still being typed — keep the draft.
+    Open,
+    /// The operator pressed Cancel — drop the draft, write nothing.
+    Cancelled,
+    /// Commit this new partial name.
+    Commit(String),
+}
+
 /// What the last DXF export did, for the status bar (Pass 52.2).
 ///
 /// The counters are SUMMED across every page written, and the pages that
@@ -6742,6 +6758,273 @@ impl PdfceApp {
         }
     }
 
+    /// The rename editor itself — the `TextEdit`, its three live captions,
+    /// and the commit/cancel decision — for **any** node addressed by FQN.
+    ///
+    /// # Why this is parameterised by FQN rather than by `Field`
+    ///
+    /// It has two callers that must behave identically: a terminal field's
+    /// row, and an ancestor segment in that row's breadcrumb (Pass 53.1).
+    /// A grouping node has no [`Field`](pdfce_core::forms::Field) — it is not
+    /// in `AcroForm::fields` at all, by the Table 220 reasoning
+    /// `FieldGroupNode` records — so anything this body needed off a `Field`
+    /// would have blocked the reuse. It needed exactly one thing, the id, and
+    /// only to exclude the node from its own collision check.
+    ///
+    /// Everything else was already FQN-addressed: `descendants_of`,
+    /// `rename_field`, and the last-segment substitution all take a path.
+    /// That is why the specialist's ruling was "extract, do not hand-roll a
+    /// second widget tree" — the second tree would have drifted on the
+    /// captions, which are the rule-4 disclosure.
+    ///
+    /// Returns `Some(new_partial)` when the operator committed.
+    fn form_rename_editor(
+        ui: &mut egui::Ui,
+        form: &pdfce_core::forms::AcroForm,
+        fqn: &str,
+        stored: &str,
+        self_id: pdfce_core::object::ObjId,
+        draft: &mut String,
+    ) -> RenameEditorOutcome {
+        // Open: the editor, its live captions, and a cancel.
+        let resp = ui.add(egui::TextEdit::singleline(draft).desired_width(120.0));
+
+        // The resulting FQN: this path with its LAST segment replaced —
+        // the same substitution `rename_field` performs, so the caption
+        // cannot promise a name the commit would not produce.
+        let mut path: Vec<&str> = fqn.split('.').collect();
+        path.pop();
+        let typed = draft.clone();
+        path.push(&typed);
+        let new_fqn = path.join(".");
+
+        ui.label(
+            egui::RichText::new(ui_text::form_rename_new_fqn_caption(&new_fqn))
+                .small()
+                .weak(),
+        );
+
+        // The rule-4 disclosure, from core's own definition of
+        // "descendant" rather than a second prefix match written here
+        // (project rule 2 — `AcroForm::descendants_of` owns the
+        // separator subtlety that makes `Address` rename `Address.City`
+        // and leave `Addressed` alone).
+        let descendants = form.descendants_of(fqn).count();
+        if descendants > 0 {
+            ui.colored_label(
+                ui.visuals().warn_fg_color,
+                ui_text::form_rename_descendant_caption(descendants),
+            );
+        }
+
+        // Advisory only — neither disables the commit. See the doc
+        // comment for why a flickering caption is acceptable where a
+        // flickering enabled-state would not be.
+        if draft.contains('.') {
+            ui.colored_label(
+                ui.visuals().warn_fg_color,
+                ui_text::form_rename_period_caption(),
+            );
+        } else if form
+            .fields
+            .iter()
+            .any(|f| f.fully_qualified_name == new_fqn && f.id != self_id)
+        {
+            ui.colored_label(
+                ui.visuals().warn_fg_color,
+                ui_text::form_rename_collision_caption(&new_fqn),
+            );
+        }
+
+        diag::trace(|| {
+            // ui-text-exempt: diagnostic trace, never displayed in the UI
+            format!(
+                "form-rename-edit fqn={fqn:?} draft={draft:?} new_fqn={new_fqn:?} \
+                 descendants={descendants} lost_focus={} rect={:?}",
+                resp.lost_focus(),
+                resp.rect
+            )
+        });
+
+        let cancelled = ui.button(ui_text::form_rename_cancel_button()).clicked();
+        // Committed on the SAME condition every other draft in this panel
+        // uses — `lost_focus()` and a real change — so a rename is not a
+        // second thing to learn.
+        let commit = form_field_commit(resp.lost_focus(), draft.as_str(), stored);
+
+        // Cancel is read FIRST. Clicking it takes focus off the editor, so
+        // both fire on the same frame — and a cancel that also committed
+        // would be the control doing the opposite of its label.
+        if cancelled {
+            RenameEditorOutcome::Cancelled
+        } else {
+            commit.map_or(RenameEditorOutcome::Open, RenameEditorOutcome::Commit)
+        }
+    }
+
+    /// The field's name **breadcrumb** — its ancestor segments, each
+    /// independently renameable (Pass 53.1).
+    ///
+    /// `Personal › Address › Zip`, where the ancestors are buttons and the
+    /// field's own final segment is plain text (its edit affordance is the
+    /// Rename control directly below; a second target for one action is a
+    /// wrong-button hazard, not a convenience).
+    ///
+    /// # Why this, and not a "Name groups" section
+    ///
+    /// Pass 7.0's census found **no corpus file nests fields at all** — a
+    /// dedicated section would render empty on essentially every real form
+    /// and exist for pdfce's own merge output, which is R124's
+    /// no-placeholders ruling exactly. Gating on `fqn.contains('.')` makes
+    /// the whole thing absent by construction on a flat form rather than
+    /// present-and-empty, and absent for a reason a reader can check.
+    ///
+    /// # One shared node, one shared draft
+    ///
+    /// Crumbs key into the SAME `form_rename_drafts` map as the row's own
+    /// editor, by the ancestor's FQN. So opening `Personal` from `Zip`'s row
+    /// and from `City`'s row shows one editor in both — which is correct,
+    /// because it is one `/T`. It also means `rekey_form_drafts` needs no
+    /// change: its prefix rewrite was already FQN-generic.
+    ///
+    /// # The segments come from core, never from splitting the FQN
+    ///
+    /// `form.groups` carries each node's own `/T` read from its object.
+    /// Splitting `fqn` on `.` would be wrong on any file whose `/T` itself
+    /// contains a period — see `FieldGroupNode`'s docs. Only the *display*
+    /// order is taken from the path; every editable value is core's.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "every parameter is per-row state the caller already holds; bundling them would build a struct per field per frame to read once — the same call this panel's sibling row functions make" // ui-text-exempt: clippy lint justification, never displayed
+    )]
+    fn form_rename_breadcrumb(
+        ui: &mut egui::Ui,
+        form: &pdfce_core::forms::AcroForm,
+        fqn: &str,
+        enabled: bool,
+        refusal: Option<&'static str>,
+        drafts: &mut std::collections::HashMap<String, String>,
+        out: &mut Option<(String, String)>,
+        // Ancestors whose editor has ALREADY been drawn this frame. See the
+        // ★ note in this function's docs.
+        edited_this_frame: &mut std::collections::HashSet<String>,
+    ) {
+        // Absent entirely on a flat form. Not hidden — never built.
+        if !fqn.contains('.') {
+            return;
+        }
+        // Every ancestor path of this field, shallowest first, matched
+        // against core's group list. A prefix with no matching group is
+        // skipped rather than guessed at: it means the walk did not classify
+        // that node as a pure grouping node (a mixed-`/Kids` node is a
+        // TERMINAL and gets its own row), so it has no crumb here.
+        let mut prefix = String::new();
+        let segments: Vec<&str> = fqn.split('.').collect();
+        let last = segments.len().saturating_sub(1);
+
+        ui.horizontal_wrapped(|ui| {
+            for (i, seg) in segments.iter().enumerate() {
+                if i > 0 {
+                    prefix.push('.');
+                }
+                prefix.push_str(seg);
+
+                if i == last {
+                    // The field itself — plain text; Rename is below.
+                    ui.label(egui::RichText::new(*seg).small().weak());
+                    continue;
+                }
+                let Some(node) = form
+                    .groups
+                    .iter()
+                    .find(|g| g.fully_qualified_name == prefix)
+                else {
+                    ui.label(egui::RichText::new(*seg).small().weak());
+                    ui.label(egui::RichText::new("›").small().weak()); // ui-text-exempt: breadcrumb separator glyph, not prose
+                    continue;
+                };
+                // A `/T`-less intermediate contributes no segment anyone can
+                // rename; shown, not offered.
+                let Some(partial) = node.partial_name.as_ref() else {
+                    ui.label(egui::RichText::new(*seg).small().weak());
+                    ui.label(egui::RichText::new("›").small().weak()); // ui-text-exempt: breadcrumb separator glyph, not prose
+                    continue;
+                };
+                let stored = String::from_utf8_lossy(partial).into_owned();
+                let node_fqn = node.fully_qualified_name.clone();
+                let node_id = node.id;
+                let descendants = form.descendants_of(&node_fqn).count();
+
+                // ★ ONE OPEN EDITOR PER NODE, NOT ONE PER ROW.
+                //
+                // A crumb for `Personal` appears on every field beneath it —
+                // three rows, on `nested-form.pdf`. The draft is keyed by the
+                // ancestor's FQN and therefore SHARED, which is right: it is
+                // one `/T`. But rendering the editor on each row put three
+                // `TextEdit`s on screen backed by one string, competing for
+                // focus, and typing landed in whichever egui happened to
+                // focus. Found by driving it, not by reading it.
+                //
+                // So the buttons stay on every row — they are navigation, and
+                // an operator should be able to reach the group from whatever
+                // field they are looking at — and the EDITOR is drawn once,
+                // on the first row that offers it this frame.
+                let already_open = !edited_this_frame.insert(node_fqn.clone());
+                if let Some(draft) = drafts.get_mut(&node_fqn).filter(|_| !already_open) {
+                    // The outcome is computed under the `draft` borrow and
+                    // ACTED ON after it ends — `drafts.remove` inside the
+                    // closure would be a second mutable borrow of the map the
+                    // draft came from. The same defer-then-apply shape the
+                    // panel already uses for every row action.
+                    let outcome = ui
+                        .add_enabled_ui(enabled, |ui| {
+                            Self::form_rename_editor(
+                                ui, form, &node_fqn, &stored, node_id, draft,
+                            )
+                        })
+                        .inner;
+                    match outcome {
+                        RenameEditorOutcome::Open => {}
+                        RenameEditorOutcome::Cancelled => {
+                            drafts.remove(&node_fqn);
+                        }
+                        RenameEditorOutcome::Commit(new_partial) => {
+                            *out = Some((node_fqn.clone(), new_partial));
+                        }
+                    }
+                } else if drafts.contains_key(&node_fqn) {
+                    // Open, but its editor belongs to an earlier row. Show the
+                    // segment inert rather than as a button that would look
+                    // like a second way to edit the same thing.
+                    ui.label(egui::RichText::new(*seg).small().weak());
+                } else {
+                    ui.add_enabled_ui(enabled, |ui| {
+                        let b = ui.small_button(*seg);
+                        let b = match refusal {
+                            Some(note) => b.on_disabled_hover_text(note),
+                            None => b.on_hover_text(
+                                ui_text::form_rename_group_segment_tooltip_with_count(
+                                    descendants,
+                                ),
+                            ),
+                        };
+                        diag::trace(|| {
+                            // ui-text-exempt: diagnostic trace, never displayed in the UI
+                            format!(
+                                "form-rename-crumb fqn={node_fqn:?} partial={stored:?}                                  descendants={descendants} enabled={enabled} rect={:?}",
+                                b.rect
+                            )
+                        });
+                        if b.clicked() {
+                            drafts.insert(node_fqn.clone(), stored.clone());
+                        }
+                    });
+                }
+                ui.label(egui::RichText::new("›").small().weak()); // ui-text-exempt: breadcrumb separator glyph, not prose
+            }
+        });
+    }
+
     /// One field row's **rename** affordance (Pass 53.0 — the GUI half of
     /// Pass 20.6's `rename-field`).
     ///
@@ -6845,82 +7128,17 @@ impl PdfceApp {
                 return;
             };
 
-            // Open: the editor, its live captions, and a cancel.
-            let resp = ui.add(egui::TextEdit::singleline(draft).desired_width(120.0));
-
-            // The resulting FQN: this path with its LAST segment replaced —
-            // the same substitution `rename_field` performs, so the caption
-            // cannot promise a name the commit would not produce.
-            let mut path: Vec<&str> = fqn.split('.').collect();
-            path.pop();
-            let typed = draft.clone();
-            path.push(&typed);
-            let new_fqn = path.join(".");
-
-            ui.label(
-                egui::RichText::new(ui_text::form_rename_new_fqn_caption(&new_fqn))
-                    .small()
-                    .weak(),
-            );
-
-            // The rule-4 disclosure, from core's own definition of
-            // "descendant" rather than a second prefix match written here
-            // (project rule 2 — `AcroForm::descendants_of` owns the
-            // separator subtlety that makes `Address` rename `Address.City`
-            // and leave `Addressed` alone).
-            let descendants = form.descendants_of(fqn).count();
-            if descendants > 0 {
-                ui.colored_label(
-                    ui.visuals().warn_fg_color,
-                    ui_text::form_rename_descendant_caption(descendants),
-                );
-            }
-
-            // Advisory only — neither disables the commit. See the doc
-            // comment for why a flickering caption is acceptable where a
-            // flickering enabled-state would not be.
-            if draft.contains('.') {
-                ui.colored_label(
-                    ui.visuals().warn_fg_color,
-                    ui_text::form_rename_period_caption(),
-                );
-            } else if form
-                .fields
-                .iter()
-                .any(|f| f.fully_qualified_name == new_fqn && f.id != field.id)
-            {
-                ui.colored_label(
-                    ui.visuals().warn_fg_color,
-                    ui_text::form_rename_collision_caption(&new_fqn),
-                );
-            }
-
-            diag::trace(|| {
-                // ui-text-exempt: diagnostic trace, never displayed in the UI
-                format!(
-                    "form-rename-edit fqn={fqn:?} draft={draft:?} new_fqn={new_fqn:?} \
-                     descendants={descendants} lost_focus={} rect={:?}",
-                    resp.lost_focus(),
-                    resp.rect
-                )
-            });
-
-            let cancelled = ui.button(ui_text::form_rename_cancel_button()).clicked();
-            // Committed on the SAME condition every other draft in this panel
-            // uses — `lost_focus()` and a real change — so a rename is not a
-            // second thing to learn. `form_field_commit`'s own docs argue the
-            // shape; the reason it applies unchanged here is that
-            // `rename_field` pushes one undo entry per call exactly as
-            // `fill_text_field` does.
-            let commit = form_field_commit(resp.lost_focus(), draft.as_str(), &stored);
-
-            // Cancel is read FIRST. Clicking it takes focus off the editor,
-            // so both fire on the same frame — and a cancel that also
-            // committed would be the control doing the opposite of its label.
-            if cancelled {
-                drafts.remove(fqn);
-            } else if let Some(new_partial) = commit {
-                *out = Some((fqn.to_owned(), new_partial));
+            // Open: the shared editor. Identical widget tree to an ancestor
+            // crumb's, because it IS the same function — see
+            // `form_rename_editor`.
+            match Self::form_rename_editor(ui, form, fqn, &stored, field.id, draft) {
+                RenameEditorOutcome::Open => {}
+                RenameEditorOutcome::Cancelled => {
+                    drafts.remove(fqn);
+                }
+                RenameEditorOutcome::Commit(new_partial) => {
+                    *out = Some((fqn.to_owned(), new_partial));
+                }
             }
         });
     }
@@ -7139,6 +7357,10 @@ impl PdfceApp {
         // the body holds `&mut self.status` throughout, so reaching a second
         // `self` field from inside it has to be a disjoint borrow taken here.
         let rename_drafts = &mut self.form_rename_drafts;
+        // Per-FRAME, not persistent: which ancestors have already drawn their
+        // one editor. Rebuilt every draw, like every other frame-scoped
+        // decision in this panel.
+        let mut crumb_edited: std::collections::HashSet<String> = std::collections::HashSet::new();
 
         egui::ScrollArea::vertical().show(ui, |ui| {
             for field in &form.fields {
@@ -7548,6 +7770,16 @@ impl PdfceApp {
                 // Never per-widget: a field has ONE `/T` however many
                 // appearances it owns, so this sits with the whole-field
                 // controls and not inside the per-widget rows.
+                Self::form_rename_breadcrumb(
+                    ui,
+                    &form,
+                    &fqn,
+                    renames_enabled,
+                    rename_refusal_note,
+                    rename_drafts,
+                    &mut rename_field,
+                    &mut crumb_edited,
+                );
                 Self::form_rename_row(
                     ui,
                     field,

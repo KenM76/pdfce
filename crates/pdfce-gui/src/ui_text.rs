@@ -7482,6 +7482,26 @@ pub fn form_rename_cancel_button() -> &'static str {
     "Cancel"
 }
 
+/// The ancestor-segment tooltip, WITH its blast-radius count — one entry,
+/// one complete message (R2).
+///
+/// This began as two entries assembled with `format!("{} — {}", ..)` at the
+/// call site, and `check-ui-strings.sh` caught it. The gate was right: R2
+/// forbids building a sentence from fragments precisely because a
+/// translation must be free to reorder, and "shared by 3 field(s)" is not a
+/// clause that can be appended to an arbitrary sentence in every language.
+///
+/// The count is shown BEFORE the operator opens the editor, unlike the
+/// terminal case where it appears only once open. Deliberate and free: a
+/// grouping segment's blast radius is never zero — it is what a grouping
+/// node IS — so there is no reason to make them open an editor to learn a
+/// fact that is always true.
+pub fn form_rename_group_segment_tooltip_with_count(descendants: usize) -> String {
+    format!(
+        "Rename this shared part of the name. It belongs to the {descendants} field(s) beneath it, so renaming it changes all of their full names — nothing of theirs is written."
+    )
+}
+
 /// Why the rename control is disabled on a row with no `/T` of its own.
 ///
 /// `Field::shares_parent_name` — one of several representations sharing one
