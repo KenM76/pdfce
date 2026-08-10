@@ -7401,6 +7401,29 @@ impl PdfceApp {
                 if row.hovered() {
                     hovered_field = Some(field.id);
                 }
+                // ★ AND IT STICKS WHILE THIS FIELD IS BEING RENAMED.
+                //
+                // Pass 47.3 highlights the widget on the page while the
+                // pointer is over its row, which answers "which rectangle is
+                // this?" — and it answers it for exactly as long as the
+                // pointer stays put. Renaming moves the pointer: down to the
+                // Rename button, into the editor, across to Cancel. The
+                // highlight dies at the first of those, so the operator is
+                // typing a new name for a field they can no longer see.
+                //
+                // Hover is still the primary signal; this only adds "or an
+                // editor for this field is open", which is a strictly
+                // stronger statement of intent than hovering and lasts
+                // exactly as long as the operator's attention is on the
+                // field. It ends when they commit or cancel, with no new
+                // state to clear.
+                //
+                // Deliberately NOT extended to an ancestor crumb's editor: a
+                // grouping node has no widget on the page to highlight, so
+                // there is nothing to point at (Table 220 — no presence).
+                if hovered_field.is_none() && drafts_open_for(rename_drafts, &fqn) {
+                    hovered_field = Some(field.id);
+                }
                 row
                     .on_hover_text(ui_text::form_field_row_tooltip(&fqn));
 
@@ -23453,6 +23476,20 @@ fn form_field_block_reason(field: &pdfce_core::forms::Field) -> Option<&'static 
         },
         _ => None,
     }
+}
+
+/// Whether a rename editor is open for exactly this field.
+///
+/// A named function rather than an inline `contains_key`, because the
+/// question is not "is this key present" — it is "is the operator's
+/// attention on THIS field", and the two come apart the moment ancestor
+/// crumbs enter the picture (Pass 53.1). An open editor for
+/// `Personal` must not hold the highlight on `Personal.Address.Zip`'s
+/// widget: the operator is editing a name that has no widget of its own,
+/// and pointing at an arbitrary descendant's rectangle would be pointing
+/// at the wrong thing confidently.
+fn drafts_open_for(drafts: &std::collections::HashMap<String, String>, fqn: &str) -> bool {
+    drafts.contains_key(fqn)
 }
 
 /// Should a form text-field draft be written to the session yet?
