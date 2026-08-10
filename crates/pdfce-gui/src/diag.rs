@@ -171,6 +171,11 @@ pub enum Step {
     /// running frame can show that the box passes the ones the
     /// checkboxes claim — which is exactly the gap that let the bar ship
     /// treating `?` as a wildcard with no control for it.
+    /// Toggle one layer's visibility by NAME: `layer:Hidden Box`.
+    ///
+    /// By name rather than by object number because the name is what the
+    /// panel shows and what a failing run should quote back.
+    LayerToggle(String),
     Search {
         /// The query text, as if typed.
         query: String,
@@ -506,6 +511,7 @@ fn parse_step(s: &str) -> Option<Step> {
         "panel" if rest.trim() == "redact" => Some(Step::Redact),
         "panel" if rest.trim() == "forms" => Some(Step::Forms),
         "panel" if rest.trim() == "find" => Some(Step::Find),
+        "layer" => Some(Step::LayerToggle(rest.trim().to_owned())),
         "search" => {
             // `whole:` / `wild:` prefixes may be combined in either
             // order; whatever is left is the query, verbatim (a query

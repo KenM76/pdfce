@@ -677,7 +677,7 @@ pub fn run(
     initial: GraphicsState,
     pixmap: &mut Pixmap,
     cancel: Option<&RenderCancel>,
-    policy: RenderPolicy,
+    policy: RenderPolicy<'_>,
 ) -> Diagnostics {
     run_nested(
         doc,
@@ -756,7 +756,7 @@ pub fn trace_paths(
     resources: &Dict,
     fonts: &FontEnvironment,
     initial: GraphicsState,
-    policy: RenderPolicy,
+    policy: RenderPolicy<'_>,
 ) -> Vec<TracedPath> {
     // A tiny throwaway target: we discard the pixels, so its size only has
     // to be non-zero for `Pixmap::new` to succeed.
@@ -817,7 +817,7 @@ fn run_nested(
     depth: usize,
     active: Vec<ObjId>,
     cancel: Option<&RenderCancel>,
-    policy: RenderPolicy,
+    policy: RenderPolicy<'_>,
     // `true` if the `Do` that invoked this form sits inside a hidden
     // `/OC` section, or the form's own `/OC` is off.
     //
@@ -930,7 +930,7 @@ pub fn run_form_at(
     initial: GraphicsState,
     pixmap: &mut Pixmap,
     cancel: Option<&RenderCancel>,
-    policy: RenderPolicy,
+    policy: RenderPolicy<'_>,
 ) -> Diagnostics {
     let mut interp = Interpreter {
         policy,
@@ -1026,7 +1026,7 @@ struct Interpreter<'a> {
     /// Carried **per render**, never read from a global: two renders of
     /// the same page must not be able to differ for a reason invisible at
     /// the call site. See `RenderPolicy`'s own docs.
-    policy: RenderPolicy,
+    policy: RenderPolicy<'a>,
     /// `Tm`/`Tlm`, live only between `BT` and `ET` (§9.4.1). `None`
     /// outside a text object — which is how the positioning and showing
     /// operators detect the "shall only appear within text objects"
@@ -1936,6 +1936,13 @@ impl Interpreter<'_> {
     /// Lazy because most content streams contain no optional content at
     /// all, and the set costs a walk of `/OCProperties` (§8.11.4.2).
     fn oc_off_set(&mut self) -> &std::collections::BTreeSet<ObjId> {
+        // An operator override REPLACES the document's default
+        // configuration; it is not merged with it. See
+        // `crate::layer_state`'s module docs for why — every merge rule
+        // would be a rendering decision invisible at the call site.
+        if let Some(v) = self.policy.layers {
+            return v.hidden_set();
+        }
         self.oc_off
             .get_or_insert_with(|| pdfce_core::annot::optional_content_default_off(self.doc))
     }

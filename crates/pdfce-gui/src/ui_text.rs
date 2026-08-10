@@ -8589,8 +8589,47 @@ pub fn layers_count(total: usize) -> String {
 /// cannot change them yet is shorter than the confusion it prevents —
 /// and it names what "visible" means here, which is the state a reader
 /// would START in, not one pdfce is holding.
-pub fn layers_read_only_note() -> &'static str {
-    "Shown as the document defines them. pdfce cannot switch layers on or off yet, so this is the state a reader would open the document in."
+pub fn layers_session_only_note() -> &'static str {
+    "Switching a layer changes what you see, not the document. Nothing here is saved."
+}
+
+/// How many layers currently differ from the document's own configuration.
+pub fn layers_overridden(n: usize) -> String {
+    if n == 1 {
+        "1 layer differs from the document.".to_owned()
+    } else {
+        format!("{n} layers differ from the document.")
+    }
+}
+
+/// Label on the control that drops every session override.
+pub fn layers_reset_label() -> &'static str {
+    "Reset"
+}
+
+/// Tooltip on that control.
+///
+/// Says what it returns TO, because "reset" in a layers panel could
+/// equally be read as "turn everything on".
+pub fn layers_reset_tooltip() -> &'static str {
+    "Go back to the layer states the document itself specifies. This shows hidden layers as hidden again."
+}
+
+/// Tooltip on a layer's visibility checkbox.
+pub fn layer_toggle_tooltip() -> &'static str {
+    "Show or hide this layer on screen. The document is not changed."
+}
+
+/// Tooltip on a layer whose state the operator has changed.
+///
+/// Names the document's own state, so the operator can always see what
+/// they are diverging FROM without resetting to find out.
+pub fn layer_overridden_tooltip(document_wanted_visible: bool) -> &'static str {
+    if document_wanted_visible {
+        "You have hidden this layer. The document shows it."
+    } else {
+        "You have shown this layer. The document hides it."
+    }
 }
 
 /// Placeholder for a layer whose /Name is absent.

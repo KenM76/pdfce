@@ -99,6 +99,8 @@ pub struct RenderedPixels {
     pub annotations: bool,
     /// The font-environment generation it was rendered against.
     pub font_env_generation: u64,
+    /// The layer-override generation it was rendered against.
+    pub layers_generation: u64,
 }
 
 /// What a worker sends back: pixels, a failure, or nothing at all.
@@ -135,6 +137,7 @@ struct RenderKey {
     raster_scale_bits: u32,
     annotations: bool,
     font_env_generation: u64,
+    layers_generation: u64,
 }
 
 impl RenderKey {
@@ -144,6 +147,7 @@ impl RenderKey {
             raster_scale_bits: request.raster_scale.to_bits(),
             annotations: request.annotations,
             font_env_generation: request.font_env_generation,
+            layers_generation: request.layers_generation,
         }
     }
 }
@@ -200,6 +204,15 @@ pub struct RenderRequest {
     pub annotations: bool,
     pub fonts: FontEnvironment,
     pub font_env_generation: u64,
+    /// The operator's layer-visibility override, or `None` to render the
+    /// document as its own default configuration asks (§8.11.4.3).
+    pub layers: Option<pdfce_render::LayerVisibility>,
+    /// Bumped on every layer toggle. A FIFTH staleness key, for the same
+    /// reason `font_env_generation` is a fourth: hiding a layer changes
+    /// neither the page, the scale, the annotation flag nor the fonts, so
+    /// without it the cached texture would not invalidate and the toggle
+    /// would appear to do nothing.
+    pub layers_generation: u64,
     /// The operator's DeviceCMYK conversion choice (§8.6.4.4), carried on
     /// the request so a render always says which conversion produced it.
     pub cmyk_intent: CmykIntent,
@@ -406,6 +419,9 @@ fn render_on_worker(request: &RenderRequest, cancel: &RenderCancel) -> Outcome {
         .with_cmyk_intent(request.cmyk_intent);
     options.fonts = request.fonts.clone();
     options.cancel = Some(cancel.clone());
+    // `None` stays `None`: a document nobody has toggled renders as the
+    // document asks. Only an operator who touched a layer produces a set.
+    options.layers = request.layers.clone();
 
     // `session.view()`, NOT `session.document()` (decision 018 §1) — the
     // view composes the overlay and the R45 staging buffer, so unsaved
@@ -422,6 +438,7 @@ fn render_on_worker(request: &RenderRequest, cancel: &RenderCancel) -> Outcome {
             raster_scale: request.raster_scale,
             annotations: request.annotations,
             font_env_generation: request.font_env_generation,
+            layers_generation: request.layers_generation,
         })),
         Err(e) if cancel.is_cancelled() => {
             // Deliberate abandonment, not a defect. Checking the token
@@ -446,7 +463,27 @@ mod tests {
             raster_scale_bits: scale.to_bits(),
             annotations,
             font_env_generation: generation,
+            // Held at zero by the shared helper; the layer key gets its
+            // own test below rather than riding on `generation`, so a
+            // regression names which key was dropped.
+            layers_generation: 0,
         }
+    }
+
+    /// **A layer toggle makes the key differ.**
+    ///
+    /// The fifth staleness key, tested separately from the font one so a
+    /// failure says WHICH key stopped counting. Without it a toggle
+    /// would be recognised as "the render already running", the cached
+    /// texture would stand, and hiding a layer would appear to do
+    /// nothing at all — the same silent-no-op the font generation was
+    /// added to prevent.
+    #[test]
+    fn a_layer_toggle_is_a_different_render() {
+        let a = key(0, 1.0, true, 0);
+        let mut b = a;
+        b.layers_generation = 1;
+        assert_ne!(a, b, "a layer override must not reuse another's raster");
     }
 
     /// Two renders of the same thing must compare EQUAL.

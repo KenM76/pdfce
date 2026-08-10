@@ -60,6 +60,7 @@ pub mod font;
 pub mod gstate;
 pub mod image;
 pub mod interpret;
+pub mod layer_state;
 pub mod mask;
 pub mod profile;
 pub mod text;
@@ -80,6 +81,7 @@ pub use pdfce_core::view::DocumentView;
 
 pub use font::{FallbackKey, FontData, FontEnvironment, GlyphSource, RenderOptions, RenderPolicy};
 pub use interpret::Diagnostics;
+pub use layer_state::LayerVisibility;
 // `RenderedPage::pixmap` is a public field of a `tiny_skia` type, so this
 // crate must re-export `tiny_skia` or every consumer has to add its own
 // dependency on it and guess a compatible version — the Rust API
@@ -398,6 +400,7 @@ mod jpx_fixtures;
 )]
 mod tests {
     use super::*;
+    use pdfce_core::object::ObjId;
 
     /// Assemble a classic (§7.5.4 cross-reference *table*) PDF from
     /// numbered object bodies and return its first page.
@@ -2646,6 +2649,114 @@ mod tests {
             "justified ink right edge {x1} should reach the ~65px box margin"
         );
     }
+    // -----------------------------------------------------------------
+    // The operator's layer override (`LayerVisibility`)
+    // -----------------------------------------------------------------
+
+    /// **Turning a layer ON that the document turns OFF paints it.**
+    ///
+    /// The direction that makes a Layers panel useful rather than
+    /// decorative: the file says hide it, the operator says show it, and
+    /// the operator wins for this render only — nothing in the document
+    /// changes.
+    #[test]
+    fn an_override_can_show_a_layer_the_document_hides() {
+        let (doc, page) = doc_with_oc_content(
+            "/OC /oc1 BDC 0 0 0 rg 10 10 50 50 re f EMC",
+            "/Order [5 0 R] /OFF [5 0 R]",
+        );
+        // Hiding NOTHING — which is what "turn every layer on" produces,
+        // and is deliberately distinct from passing no override at all.
+        let options = RenderOptions::default().with_layers(crate::LayerVisibility::hiding([]));
+        let out = render_page_with(&doc, &page, 1.0, &options).unwrap();
+        assert!(
+            ink_bbox(&out.pixmap).is_some(),
+            "an override that hides nothing must show a layer the document turned off"
+        );
+        assert_eq!(out.diagnostics.oc_sections_hidden, 0);
+    }
+
+    /// **Turning a layer OFF that the document leaves ON hides it.**
+    #[test]
+    fn an_override_can_hide_a_layer_the_document_shows() {
+        let (doc, page) = doc_with_oc_content(
+            "/OC /oc1 BDC 0 0 0 rg 10 10 50 50 re f EMC",
+            "/Order [5 0 R]",
+        );
+        let options = RenderOptions::default()
+            .with_layers(crate::LayerVisibility::hiding([ObjId::new(5, 0)]));
+        let out = render_page_with(&doc, &page, 1.0, &options).unwrap();
+        assert!(ink_bbox(&out.pixmap).is_none());
+        assert_eq!(out.diagnostics.oc_sections_hidden, 1);
+    }
+
+    /// ★ **The override REPLACES the document's configuration; it does
+    /// not merge with it.**
+    ///
+    /// Two groups, one of which the document turns off. The override
+    /// names only the OTHER one. If the two sets were unioned, nothing
+    /// would paint; because the override replaces, the document's
+    /// hidden group comes back and the override's goes away — the two
+    /// squares swap.
+    ///
+    /// This is the contract `layer_state`'s module docs argue for, and
+    /// it is worth a test rather than a comment because a merge is the
+    /// intuitive implementation and would pass both tests above.
+    #[test]
+    fn an_override_replaces_the_documents_configuration_rather_than_merging() {
+        let objects: Vec<(u32, Vec<u8>)> = vec![
+            (
+                1,
+                b"<< /Type /Catalog /Pages 2 0 R /OCProperties \
+                  << /OCGs [5 0 R 6 0 R] /D << /OFF [5 0 R] >> >> >>"
+                    .to_vec(),
+            ),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 100 100] >>".to_vec(),
+            ),
+            (
+                3,
+                b"<< /Type /Page /Parent 2 0 R /Contents 4 0 R \
+                  /Resources << /Properties << /a 5 0 R /b 6 0 R >> >> >>"
+                    .to_vec(),
+            ),
+            (
+                4,
+                stream_object(
+                    "",
+                    b"/OC /a BDC 0 0 0 rg 5 5 20 20 re f EMC \
+                      /OC /b BDC 0 0 0 rg 70 70 20 20 re f EMC",
+                ),
+            ),
+            (5, b"<< /Type /OCG /Name (A) >>".to_vec()),
+            (6, b"<< /Type /OCG /Name (B) >>".to_vec()),
+        ];
+        let (doc, page) = build_pdf(&objects);
+
+        // The document alone: A hidden, B shown — ink only in the
+        // upper-right (PDF y grows upward, so B's y=70 is near the top).
+        let base = render_page(&doc, &page, 1.0).unwrap();
+        let base_box = ink_bbox(&base.pixmap).expect("B must paint");
+
+        // The override names B only. Under a UNION both would be hidden.
+        let options = RenderOptions::default()
+            .with_layers(crate::LayerVisibility::hiding([ObjId::new(6, 0)]));
+        let out = render_page_with(&doc, &page, 1.0, &options).unwrap();
+        let over_box = ink_bbox(&out.pixmap).expect(
+            "A must paint under the override; if this is empty the sets were merged, not replaced",
+        );
+        assert_ne!(
+            base_box, over_box,
+            "the visible square must have CHANGED, not merely survived"
+        );
+        assert!(
+            over_box.0 < base_box.0,
+            "A sits left of B, so replacing the configuration moves the ink left"
+        );
+        assert_eq!(out.diagnostics.oc_sections_hidden, 1);
+    }
+
     // -----------------------------------------------------------------
     // §8.11.3.2 — optional content in CONTENT STREAMS (BDC/EMC /OC)
     //

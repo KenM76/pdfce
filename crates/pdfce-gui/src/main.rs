@@ -776,6 +776,29 @@ struct PdfceApp {
     /// staleness key so adding/removing a folder re-renders the current
     /// page instead of silently doing nothing.
     font_env_generation: u64,
+    /// The operator's per-layer visibility choices, keyed by OCG object.
+    ///
+    /// **Empty means "obey the document"** — not "show everything". The
+    /// distinction matters: an empty map produces no override at all, so
+    /// a file whose default configuration hides a layer still hides it,
+    /// which is what a reader does with a document it was just handed.
+    ///
+    /// Session-only, and deliberately so. Changing which layers are
+    /// visible does not edit the document (§8.11.4.3's `/D` configuration
+    /// is untouched), so it must not mark the document dirty, must not
+    /// appear in an incremental save, and must not survive reopening. A
+    /// viewing choice that quietly became a file change would be the
+    /// worst kind of surprise in an editor whose whole contract is
+    /// minimal diffs (`ARCHITECTURE.md` §5).
+    ///
+    /// A `BTreeMap` rather than a `HashMap` so the derived
+    /// `LayerVisibility` is built in a stable order — two renders of the
+    /// same state must be identical, including in their diagnostics.
+    layer_overrides: std::collections::BTreeMap<pdfce_core::object::ObjId, bool>,
+    /// Bumped whenever [`Self::layer_overrides`] changes, so the cached
+    /// page texture invalidates. Without it the toggle would appear to do
+    /// nothing — see `render_worker::RenderRequest::layers_generation`.
+    layers_generation: u64,
     /// Human-readable notes from the most recent font-folder walk
     /// (registered faces, skipped files) — surfaced in the Font-folders
     /// tool so a mismatch is debuggable from the UI (fuzzy-never-sneaky).
@@ -1539,6 +1562,8 @@ impl Default for PdfceApp {
             font_folders: diag::font_dirs(),
             font_env: pdfce_render::FontEnvironment::bundled(),
             font_env_generation: 0,
+            layer_overrides: std::collections::BTreeMap::new(),
+            layers_generation: 0,
             font_notes: Vec::new(),
             // Pass 16.2 §5.1: bundled Helvetica is the default face for new
             // page text (the R79 non-embedded Standard-14 default).
@@ -4021,6 +4046,12 @@ impl OpenDoc {
     /// A failure is recorded in `render_error` rather than propagated:
     /// the document is still open and the operator can still navigate
     /// away from a page that will not draw.
+    // One over clippy's bound. The parameters are the render's inputs
+    // already decomposed — the same reasoning `interpret::run` carries —
+    // and every one of them is also a texture-staleness key, so bundling
+    // them into a struct would put a layer of indirection between the
+    // staleness test and the values it compares.
+    #[allow(clippy::too_many_arguments)]
     fn rasterize_current(
         &mut self,
         ctx: &egui::Context,
@@ -4028,6 +4059,8 @@ impl OpenDoc {
         fonts: &pdfce_render::FontEnvironment,
         font_env_generation: u64,
         cmyk_intent: pdfce_core::settings::CmykIntent,
+        layers: Option<pdfce_render::LayerVisibility>,
+        layers_generation: u64,
     ) {
         let Some(page) = self.pages.get(self.view.page_index) else {
             self.page_texture = None;
@@ -4061,6 +4094,8 @@ impl OpenDoc {
             fonts: fonts.clone(),
             font_env_generation,
             cmyk_intent,
+            layers,
+            layers_generation,
         });
         if let Some(result) = outcome {
             self.absorb_render(ctx, result);
@@ -7420,6 +7455,75 @@ impl PdfceApp {
     /// That value comes from `annot.rs`'s `optional_content_default_off`
     /// — the same resolver the renderer consults for annotations — so the
     /// panel cannot say "on" about content the page hides.
+    /// The complete hidden set for this render, or `None` to obey the
+    /// document.
+    ///
+    /// # Why this recomputes the WHOLE set rather than sending the deltas
+    ///
+    /// [`pdfce_render::LayerVisibility`] REPLACES the document's default
+    /// configuration; it is not merged with it (see that type's module
+    /// docs — every merge rule would be a rendering decision invisible at
+    /// the call site). So the answer has to start from what the document
+    /// asks and apply the operator's changes on top, which is exactly
+    /// what this does.
+    ///
+    /// Sending only the toggled groups would show every layer the
+    /// document had turned off, which is the failure that contract
+    /// exists to make impossible to reach by accident.
+    ///
+    /// Returns `None` when nothing has been toggled — not an empty set.
+    /// An empty set means "hide nothing", which would reveal a
+    /// document's own hidden layers the moment the panel was opened.
+    fn layer_visibility(&self) -> Option<pdfce_render::LayerVisibility> {
+        if self.layer_overrides.is_empty() {
+            return None;
+        }
+        let Status::Open(doc) = &self.status else {
+            return None;
+        };
+        let mut hidden = pdfce_core::annot::optional_content_default_off(&doc.session.graph());
+        for (id, visible) in &self.layer_overrides {
+            if *visible {
+                hidden.remove(id);
+            } else {
+                hidden.insert(*id);
+            }
+        }
+        Some(pdfce_render::LayerVisibility::hiding(hidden))
+    }
+
+    /// Set one layer's visibility for this session, honouring
+    /// `/RBGroups` (Table 101).
+    ///
+    /// # Radio behaviour, because a radio group is not a hint
+    ///
+    /// Table 101's `/RBGroups` are "radio button" groups: at most one
+    /// member visible at a time. Turning one on therefore turns its
+    /// siblings off. Leaving that to the operator would let pdfce show a
+    /// combination the document declares impossible — two mutually
+    /// exclusive alternates painted over each other, which on a CAD
+    /// drawing means two different title blocks in the same place.
+    ///
+    /// Turning one OFF does not turn a sibling on: "at most one" permits
+    /// none, and picking a replacement would be pdfce choosing which
+    /// alternate the operator meant.
+    fn set_layer_visible(
+        &mut self,
+        id: pdfce_core::object::ObjId,
+        visible: bool,
+        siblings: &[pdfce_core::object::ObjId],
+    ) {
+        self.layer_overrides.insert(id, visible);
+        if visible {
+            for sib in siblings {
+                if *sib != id {
+                    self.layer_overrides.insert(*sib, false);
+                }
+            }
+        }
+        self.layers_generation = self.layers_generation.wrapping_add(1);
+    }
+
     fn layers_panel(&mut self, ui: &mut egui::Ui, _actions: &mut [Action]) {
         let Status::Open(doc) = &self.status else {
             return;
@@ -7432,11 +7536,31 @@ impl PdfceApp {
         }
         ui.label(ui_text::layers_count(read.layers.len()));
         ui.label(
-            egui::RichText::new(ui_text::layers_read_only_note())
+            egui::RichText::new(ui_text::layers_session_only_note())
                 .small()
                 .weak(),
         );
+        // Only offered once there is something to undo, so the control
+        // never sits there implying a change that has not happened.
+        let mut reset = false;
+        if !self.layer_overrides.is_empty() {
+            ui.horizontal(|ui| {
+                ui.label(ui_text::layers_overridden(self.layer_overrides.len()));
+                reset = ui
+                    .button(ui_text::layers_reset_label())
+                    .on_hover_text(ui_text::layers_reset_tooltip())
+                    .clicked();
+            });
+        }
         ui.separator();
+
+        // Collected while the read is borrowed, applied after — the
+        // toggle needs `&mut self` and the loop holds `&self.status`.
+        let mut toggled: Option<(
+            pdfce_core::object::ObjId,
+            bool,
+            Vec<pdfce_core::object::ObjId>,
+        )> = None;
 
         egui::ScrollArea::vertical().show(ui, |ui| {
             for l in &read.layers {
@@ -7449,15 +7573,50 @@ impl PdfceApp {
                 } else {
                     ui_text::layer_unnamed().to_owned()
                 };
+                // The EFFECTIVE state: the operator's choice if there is
+                // one, otherwise the document's. Never the document's
+                // alone — a checkbox that ignored the override would tick
+                // itself back the moment the panel repainted.
+                let effective = self
+                    .layer_overrides
+                    .get(&l.id)
+                    .copied()
+                    .unwrap_or(l.visible_by_default);
                 ui.horizontal(|ui| {
-                    // The visibility state as TEXT, not as a colour or an
-                    // icon alone — rule 6's no-colour-only-cue.
-                    ui.label(if l.visible_by_default {
+                    // Table 101 `/Locked`: "the UI shall not allow the
+                    // visibility state to be changed". Disabled and
+                    // explained, never hidden and never silently
+                    // ignored — R83.
+                    let mut want = effective;
+                    let cb = ui
+                        .add_enabled(!l.locked, egui::Checkbox::new(&mut want, ""))
+                        .on_hover_text(if l.locked {
+                            ui_text::layer_locked_tooltip()
+                        } else {
+                            ui_text::layer_toggle_tooltip()
+                        });
+                    if cb.changed() {
+                        let siblings = l
+                            .radio_group
+                            .and_then(|g| read.radio_groups.get(g))
+                            .cloned()
+                            .unwrap_or_default();
+                        toggled = Some((l.id, want, siblings));
+                    }
+                    // The state as TEXT as well as a checkbox — rule 6's
+                    // no-colour-only-cue, and it still says which way the
+                    // document itself asks when the two disagree.
+                    ui.label(if effective {
                         ui_text::layer_visible_marker()
                     } else {
                         ui_text::layer_hidden_marker()
                     });
                     let mut label = ui.label(name);
+                    if effective != l.visible_by_default {
+                        label = label.on_hover_text(ui_text::layer_overridden_tooltip(
+                            l.visible_by_default,
+                        ));
+                    }
                     if l.locked {
                         label = label.on_hover_text(ui_text::layer_locked_tooltip());
                     }
@@ -7470,12 +7629,23 @@ impl PdfceApp {
                 });
                 diag::trace(|| {
                     format!(
-                        "layer-row name={:?} visible={} locked={} registered={}",
+                        "layer-row name={:?} visible={effective} default={} locked={} registered={}",
                         l.name, l.visible_by_default, l.locked, l.in_default_config
                     )
                 });
             }
         });
+
+        if let Some((id, visible, siblings)) = toggled {
+            self.set_layer_visible(id, visible, &siblings);
+        }
+        if reset {
+            // Back to the document's own configuration, in one gesture
+            // and one undo-equivalent (R49) — clearing the map is exactly
+            // "no override", which is not the same as "show everything".
+            self.layer_overrides.clear();
+            self.layers_generation = self.layers_generation.wrapping_add(1);
+        }
     }
 
     /// The Bookmarks panel — the document's outline, as navigation.
@@ -12176,6 +12346,38 @@ impl eframe::App for PdfceApp {
             }
             diag::Step::Find => {
                 self.apply(Action::ToggleFind, ctx, ctx.pixels_per_point());
+            }
+            diag::Step::LayerToggle(ref name) => {
+                // Goes through `set_layer_visible`, the same helper the
+                // checkbox calls — including its radio-group handling —
+                // so what is driven is the panel's own path (R184: a
+                // harness route that bypasses the operator's is not a
+                // test of the operator's).
+                let found = if let Status::Open(doc) = &self.status {
+                    let read = pdfce_core::layers::read_layers(&doc.session.graph());
+                    read.layers.iter().find(|l| &l.name == name).map(|l| {
+                        let sibs = l
+                            .radio_group
+                            .and_then(|g| read.radio_groups.get(g))
+                            .cloned()
+                            .unwrap_or_default();
+                        let now = self
+                            .layer_overrides
+                            .get(&l.id)
+                            .copied()
+                            .unwrap_or(l.visible_by_default);
+                        (l.id, !now, sibs)
+                    })
+                } else {
+                    None
+                };
+                match found {
+                    Some((id, visible, sibs)) => {
+                        self.set_layer_visible(id, visible, &sibs);
+                        diag::trace(|| format!("layer-toggle name={name:?} visible={visible}"));
+                    }
+                    None => diag::trace(|| format!("layer-toggle name={name:?} NOT-FOUND")),
+                }
             }
             diag::Step::Search {
                 ref query,
@@ -17319,6 +17521,10 @@ impl PdfceApp {
         // Same disjoint-field reasoning, and `CmykIntent` is `Copy`, so
         // this is read out rather than borrowed.
         let cmyk_intent = self.settings.cmyk_intent;
+        // Derived before the `self.status` borrow, for the same
+        // disjoint-field reason the font environment is read out here.
+        let layers_generation = self.layers_generation;
+        let layers = self.layer_visibility();
         let Status::Open(doc) = &mut self.status else {
             return;
         };
@@ -17380,6 +17586,12 @@ impl PdfceApp {
             .page_texture
             .as_ref()
             .is_some_and(|t| t.font_env_generation != font_env_generation);
+        // The layer override's own key. Separate from the font one so a
+        // regression names which input stopped invalidating the texture.
+        let stale_layers = doc
+            .page_texture
+            .as_ref()
+            .is_some_and(|t| t.layers_generation != layers_generation);
 
         // A page whose previous render failed must not be retried every
         // frame: the failure is deterministic (same bytes, same code),
@@ -17388,13 +17600,15 @@ impl PdfceApp {
             return;
         }
 
-        if stale_page || stale_annotations || stale_fonts {
+        if stale_page || stale_annotations || stale_fonts || stale_layers {
             doc.rasterize_current(
                 ctx,
                 wanted_scale,
                 font_env,
                 font_env_generation,
                 cmyk_intent,
+                layers.clone(),
+                layers_generation,
             );
         } else if stale_scale {
             if now >= doc.zoom_commit_at {
@@ -17404,6 +17618,8 @@ impl PdfceApp {
                     font_env,
                     font_env_generation,
                     cmyk_intent,
+                    layers.clone(),
+                    layers_generation,
                 );
             } else {
                 // Nothing else will wake egui up when the debounce

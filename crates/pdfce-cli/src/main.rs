@@ -1167,6 +1167,29 @@ enum Command {
         /// noted on stderr, never fatal.
         #[arg(long = "font-dir", value_name = "DIR")]
         font_dirs: Vec<PathBuf>,
+        /// Force an optional-content layer (OCG) VISIBLE, by its `/Name`
+        /// (ISO 32000-1 §8.11). Repeatable.
+        ///
+        /// Overrides the document's own default configuration
+        /// (`/OCProperties /D`) for this render only — nothing is
+        /// written. Use `list-layers` to see the names and which state
+        /// the document itself asks for.
+        ///
+        /// A name that matches no layer is a NOTE on stderr, not a
+        /// failure: a batch that renders a hundred drawings must not
+        /// abort because one of them lacks a "Grid" layer, and silently
+        /// ignoring it would let a typo produce a hundred wrong rasters
+        /// with no sign anything was wrong.
+        ///
+        /// If a name is given to BOTH flags, that is refused rather than
+        /// resolved by flag order — the operator asked for two things
+        /// and pdfce cannot know which was meant.
+        #[arg(long = "show-layer", value_name = "NAME")]
+        show_layers: Vec<String>,
+        /// Force an optional-content layer HIDDEN, by its `/Name`.
+        /// Repeatable. See `--show-layer`.
+        #[arg(long = "hide-layer", value_name = "NAME")]
+        hide_layers: Vec<String>,
     },
 
     /// List a document's annotations per page (ISO 32000-1 §12.5).
@@ -3937,7 +3960,18 @@ fn run() -> ExitCode {
             output,
             no_annotations,
             font_dirs,
-        } => cmd_render_page(&input, page, scale, &output, !no_annotations, &font_dirs),
+            show_layers,
+            hide_layers,
+        } => cmd_render_page(
+            &input,
+            page,
+            scale,
+            &output,
+            !no_annotations,
+            &font_dirs,
+            &show_layers,
+            &hide_layers,
+        ),
         Command::ListAnnotations { input, pages } => cmd_list_annotations(&input, &pages),
         Command::ListFields {
             input,
@@ -5014,6 +5048,7 @@ fn has_font_extension(path: &Path) -> bool {
 /// `0` success; `3` the input could not be read or the output could not
 /// be written; `4` the input is not a PDF; `1` everything else (structural
 /// failure, page out of range, raster-size guard, PNG encoding).
+#[allow(clippy::too_many_arguments)]
 fn cmd_render_page(
     input: &Path,
     page_number: u32,
@@ -5021,6 +5056,8 @@ fn cmd_render_page(
     output: &Path,
     annotations: bool,
     font_dirs: &[PathBuf],
+    show_layers: &[String],
+    hide_layers: &[String],
 ) -> u8 {
     // Build the font environment from any `--font-dir` BEFORE loading the
     // document: the walk is pure shell-side I/O (R61), and a bad font dir
@@ -5092,6 +5129,34 @@ numbered 1..={})",
         .with_cmyk_jpeg_polarity(settings.cmyk_jpeg_polarity)
         .with_missing_as(settings.missing_as);
     render_options.fonts = font_env;
+
+    // §8.11 layer overrides. Resolved by NAME against the document's own
+    // registry, because a name is what an operator has (`list-layers`
+    // prints them) and an object number is not.
+    if !show_layers.is_empty() || !hide_layers.is_empty() {
+        match resolve_layer_override(&doc, show_layers, hide_layers) {
+            Ok((visibility, unmatched)) => {
+                for name in unmatched {
+                    eprintln!(
+                        "pdfce-cli: no layer named {name:?} in {} — the other --show-layer/--hide-layer names were still applied",
+                        input.display()
+                    );
+                }
+                render_options.layers = Some(visibility);
+            }
+            Err(name) => {
+                eprintln!(
+                    "pdfce-cli: layer {name:?} was given to both --show-layer and --hide-layer; pdfce will not guess which you meant"
+                );
+                // `RUNTIME_ERROR` rather than a new usage code: clap owns
+                // the usage vocabulary and this is not a malformed command
+                // line — both flags are spelled correctly and mean what
+                // they say. What cannot be done is honouring both.
+                return exit::RUNTIME_ERROR;
+            }
+        }
+    }
+
     let rendered = match pdfce_render::render_page_with(&doc, page, scale, &render_options) {
         Ok(rendered) => rendered,
         Err(err) => {
@@ -5210,6 +5275,60 @@ masks_resampled={} mattes_undone={} mattes_not_undone={} oc_hidden={}",
     report_diagnostics(d);
 
     exit::SUCCESS
+}
+
+/// Resolve `--show-layer` / `--hide-layer` names into a complete
+/// [`pdfce_render::LayerVisibility`].
+///
+/// # The set REPLACES the document's configuration, so it is built from it
+///
+/// `LayerVisibility` is not a patch (see that type's module docs): the
+/// renderer uses it *instead of* `/OCProperties /D`. So the answer starts
+/// from [`pdfce_core::annot::optional_content_default_off`] — what the
+/// document asks for — and applies the operator's names on top. Passing
+/// only the named groups would show every layer the document had turned
+/// off, which is a wrong raster that looks plausible.
+///
+/// # Errors
+///
+/// Returns the offending name when it appears in BOTH lists. That is
+/// refused rather than resolved by flag order: the operator asked for two
+/// contradictory things and there is no reading of the command line that
+/// says which one they meant. Order-dependence would make the same two
+/// flags mean different things depending on how a script assembled them.
+///
+/// Names matching no layer are returned as the second tuple element for
+/// the caller to report — a note, not a failure, so a batch over a
+/// hundred drawings does not abort because one lacks a "Grid" layer.
+fn resolve_layer_override(
+    doc: &pdfce_core::document::Document,
+    show: &[String],
+    hide: &[String],
+) -> Result<(pdfce_render::LayerVisibility, Vec<String>), String> {
+    if let Some(clash) = show.iter().find(|n| hide.contains(n)) {
+        return Err(clash.clone());
+    }
+    let graph = doc.view();
+    let read = pdfce_core::layers::read_layers(&graph);
+    let mut hidden = pdfce_core::annot::optional_content_default_off(&graph);
+    let mut unmatched = Vec::new();
+    for (names, make_visible) in [(show, true), (hide, false)] {
+        for name in names {
+            let mut matched = false;
+            for l in read.layers.iter().filter(|l| &l.name == name) {
+                matched = true;
+                if make_visible {
+                    hidden.remove(&l.id);
+                } else {
+                    hidden.insert(l.id);
+                }
+            }
+            if !matched {
+                unmatched.push(name.clone());
+            }
+        }
+    }
+    Ok((pdfce_render::LayerVisibility::hiding(hidden), unmatched))
 }
 
 /// Count of `unsupported` fonts attributed to one reason key (0 when the

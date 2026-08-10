@@ -123,7 +123,15 @@ pub(crate) fn survey_page_annotations(
     // full content-stream BDC/EMC /OC stays deferred — decision 011 §2.4).
     // Computed once; empty (⇒ nothing hidden) when the file has no optional
     // content, so this is a no-op on every pre-12.M2 file.
-    let oc_off = pdfce_core::annot::optional_content_default_off(doc);
+    // Annotation `/OC` (§8.11.3.3) answers to the same layer state as
+    // content-stream `/OC`, and must read it from the same place: an
+    // operator who hides a layer expects the dimension annotations ON
+    // that layer to go with it. Splitting the two sources is how a
+    // toggle ends up half-working.
+    let oc_off = match policy.layers {
+        Some(v) => v.hidden_set().clone(),
+        None => pdfce_core::annot::optional_content_default_off(doc),
+    };
 
     // `AS-A1` (R169): what to show for a multi-entry /AP /N subdictionary
     // that carries no /AS. §12.5.5 makes /AS Required there and states no
@@ -954,5 +962,27 @@ mod tests {
             out.diagnostics.annotations_total, 1,
             "suppressed but disclosed"
         );
+    }
+    /// **The override reaches ANNOTATIONS too, not only page content.**
+    ///
+    /// pdfce's own authored dimensions live on annotation `/OC`
+    /// (§8.11.3.3), and an operator who hides that layer means the
+    /// dimensions. Two code paths read layer state — the interpreter and
+    /// the annotation walk — and a toggle that reached only one of them
+    /// would look like it half-worked.
+    #[test]
+    fn an_override_reaches_annotation_oc_as_well_as_page_content() {
+        let (doc, page) = doc_with_oc_annot("/Order [10 0 R]");
+        let shown = render_page(&doc, &page, 1.0).unwrap();
+        assert_eq!(shown.diagnostics.annotations_painted, 1);
+
+        let options = RenderOptions::default()
+            .with_layers(crate::LayerVisibility::hiding([ObjId::new(10, 0)]));
+        let hidden = render_page_with(&doc, &page, 1.0, &options).unwrap();
+        assert_eq!(
+            hidden.diagnostics.annotations_painted, 0,
+            "hiding a layer must hide the annotations on it"
+        );
+        assert_eq!(hidden.diagnostics.annotations_hidden, 1);
     }
 }

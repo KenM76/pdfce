@@ -298,6 +298,19 @@ pub struct RenderOptions {
     /// from this field existing. Only a caller that opts in can be
     /// cancelled.
     pub cancel: Option<crate::cancel::RenderCancel>,
+    /// The operator's layer-visibility override, or `None` to obey the
+    /// document's own default configuration (§8.11.4.3).
+    ///
+    /// **`None` by default**, and that default is load-bearing: it means
+    /// every existing caller renders the document as the document asks,
+    /// which is what a reader does with a file it was just handed. Only
+    /// a front end that has an operator turning layers on and off sets
+    /// this.
+    ///
+    /// Owned here and BORROWED by [`RenderPolicy`], so the policy stays
+    /// `Copy`. See [`crate::LayerVisibility`] for the replace-not-merge
+    /// contract.
+    pub layers: Option<crate::LayerVisibility>,
     /// How `DeviceCMYK` is converted to sRGB for display
     /// (ISO 32000-1 §8.6.4.4).
     ///
@@ -372,7 +385,7 @@ pub struct RenderOptions {
 /// question a caller can answer or a test can pin.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
-pub struct RenderPolicy {
+pub struct RenderPolicy<'a> {
     /// See [`RenderOptions::cmyk_intent`].
     pub cmyk_intent: CmykIntent,
     /// See [`RenderOptions::mask_resample`].
@@ -387,6 +400,15 @@ pub struct RenderPolicy {
     /// choices and splitting the bundle by consumer would mean two
     /// bundles that must be kept in step.
     pub missing_as: MissingAppearanceState,
+    /// The operator's layer-visibility override for this render, or
+    /// `None` to obey the document's default configuration
+    /// (§8.11.4.3 `/OCProperties /D`).
+    ///
+    /// A BORROW, so `RenderPolicy` stays `Copy` while the set itself is
+    /// owned by the [`RenderOptions`] that outlives the render. See
+    /// [`crate::LayerVisibility`] for why it REPLACES the document's
+    /// defaults rather than merging with them.
+    pub layers: Option<&'a crate::LayerVisibility>,
 }
 
 impl Default for RenderOptions {
@@ -410,6 +432,10 @@ impl Default for RenderOptions {
             image_minify: MinifyFilter::default(),
             cmyk_jpeg_polarity: CmykJpegPolarity::default(),
             missing_as: MissingAppearanceState::default(),
+            // See the field docs: None means "render the document as the
+            // document asks", which is the only correct default for a
+            // caller that has no operator behind it.
+            layers: None,
         }
     }
 }
@@ -482,6 +508,19 @@ impl RenderOptions {
     /// Set the missing-`/AS` policy (`AS-A1`), returning `self` for
     /// chaining.
     #[must_use]
+    /// Override which optional-content groups are hidden for this render
+    /// (§8.11), returning `self` for chaining.
+    ///
+    /// The set REPLACES the document's default configuration. Build it
+    /// from [`pdfce_core::annot::optional_content_default_off`] and apply
+    /// the operator's toggles — passing only the groups the operator
+    /// touched would show every layer the document had turned off. See
+    /// [`crate::LayerVisibility`].
+    pub fn with_layers(mut self, layers: crate::LayerVisibility) -> Self {
+        self.layers = Some(layers);
+        self
+    }
+
     pub fn with_missing_as(mut self, policy: MissingAppearanceState) -> Self {
         self.missing_as = policy;
         self
@@ -495,13 +534,14 @@ impl RenderOptions {
     /// have to be rebuilt by every one of them or go stale. Projecting on
     /// demand makes staleness unrepresentable.
     #[must_use]
-    pub const fn policy(&self) -> RenderPolicy {
+    pub const fn policy(&self) -> RenderPolicy<'_> {
         RenderPolicy {
             cmyk_intent: self.cmyk_intent,
             mask_resample: self.mask_resample,
             image_minify: self.image_minify,
             cmyk_jpeg_polarity: self.cmyk_jpeg_polarity,
             missing_as: self.missing_as,
+            layers: self.layers.as_ref(),
         }
     }
 }
@@ -533,12 +573,18 @@ mod render_policy_tests {
         // would compile and would silently ignore the operator's choice.
         // Building a non-default options value and comparing the whole
         // projection catches that without naming the fields twice.
+        // `layers` is the one field whose value is BORROWED from the
+        // options, so it is set here too: a projection that dropped it
+        // would render every layer the document turns off, which is
+        // exactly the operator choice this gate exists to protect.
+        let hidden = crate::LayerVisibility::hiding([pdfce_core::object::ObjId::new(10, 0)]);
         let options = RenderOptions::default()
             .with_cmyk_intent(pdfce_core::settings::CmykIntent::Naive)
             .with_mask_resample(pdfce_core::settings::MaskResample::Bilinear)
             .with_image_minify(pdfce_core::settings::MinifyFilter::Smooth)
             .with_cmyk_jpeg_polarity(pdfce_core::settings::CmykJpegPolarity::InvertOnApp14)
-            .with_missing_as(pdfce_core::settings::MissingAppearanceState::FirstEntry);
+            .with_missing_as(pdfce_core::settings::MissingAppearanceState::FirstEntry)
+            .with_layers(hidden.clone());
         assert_eq!(
             options.policy(),
             RenderPolicy {
@@ -547,6 +593,7 @@ mod render_policy_tests {
                 image_minify: pdfce_core::settings::MinifyFilter::Smooth,
                 cmyk_jpeg_polarity: pdfce_core::settings::CmykJpegPolarity::InvertOnApp14,
                 missing_as: pdfce_core::settings::MissingAppearanceState::FirstEntry,
+                layers: Some(&hidden),
             }
         );
         assert_ne!(options.policy(), RenderPolicy::default());

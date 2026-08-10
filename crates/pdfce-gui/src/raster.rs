@@ -100,6 +100,9 @@ pub struct PageTexture {
     /// invalidate and supplying a font would silently do nothing until an
     /// unrelated repaint (the ui-specialist's named correctness gap #3).
     pub font_env_generation: u64,
+    /// The layer-override generation these pixels were drawn with — a
+    /// FIFTH staleness key, for the same reason the fourth exists.
+    pub layers_generation: u64,
     /// The honesty report that came with these pixels (decision 004
     /// §6.4, rule R20). Displayed in the status bar; never discarded.
     pub diagnostics: Diagnostics,
@@ -206,6 +209,7 @@ pub fn texture_from_pixels(
         raster_scale: pixels.raster_scale,
         annotations: pixels.annotations,
         font_env_generation: pixels.font_env_generation,
+        layers_generation: pixels.layers_generation,
         diagnostics: pixels.diagnostics.clone(),
     }
 }
