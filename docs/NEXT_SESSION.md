@@ -10,8 +10,8 @@ Not owned by `pdfce-librarian`. Safe to edit without racing a filing.
 
 ## State
 
-- Branch `pass-8-redaction`, HEAD **`b9819b4`**. Working tree clean.
-- **2675 workspace tests, 0 failed.** clippy 0, `cargo fmt --all --check`
+- Branch `pass-8-redaction`, HEAD **`2ffd808`**. Working tree clean.
+- **2680 workspace tests, 0 failed.** clippy 0, `cargo fmt --all --check`
   clean, **all seven gates green**, `cargo tree` shows no GUI dep in
   core or render.
 - **★ THE REPOSITORY IS PUBLIC.** `github.com/KenM76/pdfce`, since
@@ -26,22 +26,52 @@ Not owned by `pdfce-librarian`. Safe to edit without racing a filing.
 
 ---
 
-## ★ FIRST: check CI. It is the thing nobody was doing.
+## ★ FIRST: rich-text fill is UNBLOCKED, and has been since 2026-08-06
+
+The operator has a standing ruling on it, quoted in `b8f96b1`:
+
+> *"it should be able to handle rich text fills if acrobat can or if it
+> makes it better than acrobat"*
+
+That commit (2026-08-07) says the work is *"blocked on §12.7.3.4 — still a
+named GAP in the spec RAG."* **It is not.** Line 21 of
+`D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__s__12.7.3.4.md`
+reads `GAP CLOSED 2026-08-06` — the day *before* the commit that calls it
+open. Verified directly, not relayed.
+
+So a feature the operator explicitly asked for has been sitting behind a
+blocker that cleared four days ago, and the only record saying otherwise
+was a commit nobody had filed. It surfaced on 2026-08-10 only because the
+baseline debt was being repaid.
+
+**What it is:** `<value-richtext>` (XFDF) and `/RV` (FDF) carry formatting
+alongside the plain value. pdfce's `FieldData` carries
+`values: Vec<String>` and drops it. Today's behaviour is a *disclosure*
+only — the export and import reports say so when the document has a
+rich-text field.
+
+**Scope help already in hand,** from the Acrobat-parity RAG via `b8f96b1`:
+Acrobat's rich-text support is enumerable (font family/style/weight/
+stretch/size/colour, alignment, underline, strikethrough, sub/superscript,
+via Adobe's `Span` object), **lists are unsupported even in Acrobat**, and
+both FDF and XFDF genuinely carry the formatting. It also records three
+places Acrobat is unreliable — an Adobe-acknowledged font-substitution
+bug, an auto-size persistence interaction, and inconsistent `richValue`
+across script contexts. Those are the openings for the ruling's second
+clause. **Unverified against `Acrobat_Features` — that is a
+`pdfce-acrobat-librarian` dispatch and is recorded as owed.**
+
+## Also check CI — it is the thing nobody was doing
 
 ```bash
 gh run list --repo KenM76/pdfce --limit 5
 ```
 
-`ef88973` fixed a defect that made **pdfce uncompilable on Linux** and
-had been red on six of six runs since the repo went public. It was found
-by reading CI, not by any local signal — every local run on this Windows
-machine was green throughout. That is standing rule **R176**: *a CI
-pipeline that runs is not evidence anyone looked at it.*
-
-The fix has **not been pushed**, so `main` upstream is still broken.
-Pushing is now permitted on request and is the operator's call.
-
----
+`ef88973` fixed a defect that made **pdfce uncompilable on Linux**, red on
+six of six runs since the repo went public, found by reading CI rather
+than any local signal. **The fix is committed here and NOT PUSHED**, so
+`main` upstream is still broken. Pushing is permitted on request and is
+the operator's call. Standing rule **R176**.
 
 ## What shipped this session
 
@@ -56,8 +86,14 @@ Pushing is now permitted on request and is the operator's call.
 | `ef88973` | **Linux build fix**; Enter commits an Edit Text draft |
 | `b9819b4` | filing; **R176**; decision 003 §1.1 superseded |
 
-Ledger: Pass **53.0**, rules **R176** (next R177), decisions **035**
+Ledger: Pass **53.1**, rules **R178** (next R179), decisions **035**
 (next 036), questions **(bh)** closed (next (bi)).
+
+**Owed-commit debt: 11 → 5.** `338076a`, `1f319c0`, `55a0732`, `587e520`,
+`9141ded` remain in `tools/commits-filed-baseline.txt`. Repaying it is not
+housekeeping — THREE of the six repaid so far were the only home of a live
+obligation (an owed UX review that turned out already closed, a stale
+blocker, and this ruling).
 
 ---
 
