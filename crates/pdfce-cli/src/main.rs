@@ -1066,6 +1066,19 @@ enum Command {
         /// signatures).
         #[arg(long)]
         fillable_only: bool,
+        /// For each RICH-TEXT field, also print its formatting run by run.
+        ///
+        /// A rich-text field's row shows `rich=<n>runs`, which says the
+        /// field HAS formatting without saying what it is. This prints the
+        /// text of each run and the style resolved for it from `/RV` and
+        /// `/DS` together (§12.7.3.4) — which is the question an operator
+        /// asks before deciding whether a downgrade is acceptable.
+        ///
+        /// Off by default: it is several lines per field, and on a form of
+        /// any size that would bury the one-line-per-field listing the rest
+        /// of this command exists to give.
+        #[arg(long)]
+        rich_text: bool,
     },
 
     /// **Create a new text form field** (§12.7.2 + §12.5.6.19).
@@ -3776,7 +3789,8 @@ fn run() -> ExitCode {
         Command::ListFields {
             input,
             fillable_only,
-        } => cmd_list_fields(&input, fillable_only),
+            rich_text,
+        } => cmd_list_fields(&input, fillable_only, rich_text),
         Command::AddTextField {
             input,
             name,
@@ -5463,7 +5477,85 @@ with_note={with_note} with_author={with_author} need_appearances={need_appearanc
 /// Read-only. One `field …` line per terminal field, then a `list-fields …`
 /// summary line carrying the document-level form disclosures. The value is
 /// emitted as a sanitised token so the line stays field-splittable.
-fn cmd_list_fields(input: &Path, fillable_only: bool) -> u8 {
+/// One line describing a resolved rich-text run style.
+///
+/// # Why only the SET properties appear
+///
+/// [`pdfce_core::richtext::Style`] uses `None` for "neither the run nor
+/// `/DS` specified this", which is deliberately not the same as "the
+/// default". Printing `weight=none` for every plain run would bury the
+/// handful of properties that are actually set, and — worse — would read
+/// as an assertion about the field that the file does not make. What is
+/// absent here is absent from the document.
+///
+/// `unstyled` rather than an empty string when nothing is set, because a
+/// blank tail in a `key=value` line reads as truncated output.
+fn describe_style(s: &pdfce_core::richtext::Style) -> String {
+    use pdfce_core::richtext::{Align, Stretch};
+    let mut parts: Vec<String> = Vec::new();
+    if let Some(f) = s.size_pt {
+        parts.push(format!("{f}pt"));
+    }
+    if !s.family.is_empty() {
+        parts.push(s.family.join("/"));
+    }
+    // Reported as the number the spec normalises to, with the familiar
+    // keyword alongside for the two values that have one — an operator
+    // reading `700` should not have to remember that it means bold.
+    if let Some(w) = s.weight {
+        parts.push(match w {
+            400 => "weight=400(normal)".to_owned(),
+            700 => "weight=700(bold)".to_owned(),
+            other => format!("weight={other}"),
+        });
+    }
+    if let Some(i) = s.italic {
+        parts.push(if i { "italic" } else { "upright" }.to_owned());
+    }
+    if s.underline == Some(true) {
+        parts.push("underline".to_owned());
+    }
+    if s.strikethrough == Some(true) {
+        parts.push("strikethrough".to_owned());
+    }
+    if let Some([r, g, b]) = s.color {
+        // Back to the #rrggbb the file wrote. The model holds DeviceRGB
+        // 0.0-1.0 because RT-M12 requires that conversion, but three
+        // decimals are not what an operator recognises as "the red one".
+        let byte = |v: f64| (v * 255.0).round().clamp(0.0, 255.0) as u8;
+        parts.push(format!("#{:02X}{:02X}{:02X}", byte(r), byte(g), byte(b)));
+    }
+    if let Some(a) = s.align {
+        parts.push(
+            match a {
+                Align::Left => "align=left",
+                Align::Center => "align=center",
+                Align::Right => "align=right",
+            }
+            .to_owned(),
+        );
+    }
+    if let Some(v) = s.baseline_shift_pt {
+        // Named by what it MEANS, not by its sign. Table 225's convention
+        // is positive-is-superscript, which is the opposite of the
+        // intuition a reader brings from CSS's `vertical-align`.
+        let kind = if v > 0.0 { "superscript" } else { "subscript" };
+        parts.push(format!("{kind}({v:+}pt)"));
+    }
+    // `Normal` is suppressed rather than printed: it is the width every
+    // font already has, so naming it adds a token to every run without
+    // distinguishing any of them.
+    if let Some(st) = s.stretch.filter(|st| *st != Stretch::Normal) {
+        parts.push(format!("stretch={st:?}"));
+    }
+    if parts.is_empty() {
+        "unstyled".to_owned()
+    } else {
+        parts.join(",")
+    }
+}
+
+fn cmd_list_fields(input: &Path, fillable_only: bool, rich_text: bool) -> u8 {
     let doc = match pdfce_core::document::Document::load(input) {
         Ok(doc) => doc,
         Err(err) => {
@@ -5562,9 +5654,37 @@ fn cmd_list_fields(input: &Path, fillable_only: bool) -> u8 {
                 || "-".to_owned(),
                 |c| format!("{:?}", String::from_utf8_lossy(c)),
             );
+        // The field's rich text, parsed once and used for both the row's
+        // compact token and the optional detail below.
+        //
+        // Parsed from `/RV` UNGATED by the RichText flag, matching the
+        // export path: a file may legally-ish carry `/RV` with bit 26
+        // clear, and that is precisely the case where reporting "no
+        // formatting" would hide the only copy of it. A parse failure
+        // reports as `rich=unparsed` rather than as absent, because "this
+        // field has formatting pdfce could not read" and "this field has
+        // no formatting" are different facts and only one of them is a
+        // reason to stop.
+        let runs = field.rich_value.as_ref().map(|rv| {
+            let ds = field
+                .default_style
+                .as_ref()
+                .map(|d| String::from_utf8_lossy(d).into_owned());
+            String::from_utf8(rv.clone())
+                .map_err(|_| "not UTF-8".to_owned())
+                .and_then(|s| {
+                    pdfce_core::richtext::parse(&s, ds.as_deref()).map_err(|e| e.to_string())
+                })
+        });
+        let rich = match &runs {
+            None => "-".to_owned(),
+            Some(Ok(r)) => format!("{}runs", r.len()),
+            Some(Err(_)) => "unparsed".to_owned(),
+        };
+
         println!(
             "field name={name} type={ty} button={button} flags=0x{:X} value={value} \
-widgets={} ap={} fillable={} readonly={} aa={} caption={caption}",
+widgets={} ap={} fillable={} readonly={} aa={} caption={caption} rich={rich}",
             field.flags.0,
             field.widgets.len(),
             u32::from(field.has_appearance()),
@@ -5572,6 +5692,27 @@ widgets={} ap={} fillable={} readonly={} aa={} caption={caption}",
             u32::from(field.flags.read_only()),
             u32::from(field.has_additional_actions),
         );
+
+        if rich_text {
+            match &runs {
+                None => {}
+                Some(Ok(r)) => {
+                    for (i, run) in r.iter().enumerate() {
+                        println!(
+                            "  run {i} p={} text={:?} style={}",
+                            run.paragraph,
+                            run.text,
+                            describe_style(&run.style),
+                        );
+                    }
+                }
+                // Named, not swallowed. A field whose formatting pdfce
+                // cannot read is the one an operator most needs told
+                // about, since every downstream decision about it is
+                // being made blind.
+                Some(Err(e)) => println!("  rich text could not be read: {e}"),
+            }
+        }
     }
 
     let xfa = match form.xfa {

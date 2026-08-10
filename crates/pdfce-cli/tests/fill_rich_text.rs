@@ -295,3 +295,75 @@ fn the_flag_is_inert_on_a_plain_text_field() {
         "the flag must not change the outcome for a plain text field"
     );
 }
+
+/// `list-fields` says WHAT the formatting is, not merely that it exists.
+///
+/// The row's `rich=<n>runs` token answers "does this field have
+/// formatting". `--rich-text` answers "what would I lose by downgrading
+/// it", which is the question that actually precedes a decision — and
+/// until this flag existed, pdfce could parse the answer and had no way
+/// to say it.
+///
+/// The middle run is the load-bearing assertion, as everywhere else in
+/// this feature: it is a bare space inside no styling element, so it
+/// carries `/DS`'s size, family and colour and nothing of its own. A
+/// reader that only reported styles where an element had set one would
+/// show it as unstyled, and a flattening reader would not show it at all.
+#[test]
+fn list_fields_describes_rich_text_run_by_run() {
+    let (_dir, input) = TempDir::seeded_with("describe", "forms/radio-choice-form.pdf");
+
+    // Without the flag: the row states there IS formatting, in three runs.
+    let plain = stdout(&run(&["list-fields", &input.display().to_string()]));
+    let row = plain
+        .lines()
+        .find(|l| l.contains(r#"name="Notes""#))
+        .expect("a Notes row");
+    assert!(row.contains("rich=3runs"), "{row}");
+
+    // A field with no /RV must say so, not be silently blank.
+    let colour = plain
+        .lines()
+        .find(|l| l.contains(r#"name="Colour""#))
+        .expect("a Colour row");
+    assert!(colour.contains("rich=-"), "{colour}");
+
+    // With the flag: each run, its text, and its resolved style.
+    let out = run(&["list-fields", &input.display().to_string(), "--rich-text"]);
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    let detail = stdout(&out);
+
+    assert!(
+        detail.contains(r#"run 0 p=0 text="RICH""#),
+        "runs must be numbered and quoted:\n{detail}"
+    );
+    assert!(
+        detail.contains("weight=700(bold)"),
+        "the weight must name the keyword an operator recognises:\n{detail}"
+    );
+    assert!(
+        detail.contains(r#"run 2 p=0 text="ORIGINAL""#) && detail.contains("italic"),
+        "the italic half must be identified:\n{detail}"
+    );
+
+    // The bare space between them carries /DS and only /DS.
+    let space = detail
+        .lines()
+        .find(|l| l.contains(r#"run 1 p=0 text=" ""#))
+        .expect("the space between the two styled runs is its own run");
+    assert!(
+        space.contains("12pt") && space.contains("Helvetica") && space.contains("#FF0000"),
+        "/DS must reach the unstyled run too: {space}"
+    );
+    assert!(
+        !space.contains("bold") && !space.contains("italic"),
+        "no style may leak into the space between two styled runs: {space}"
+    );
+
+    // The colour is reported as the #rrggbb the file wrote, not as the
+    // DeviceRGB triple the model holds.
+    assert!(
+        !detail.contains("1.0, 0.0, 0.0"),
+        "raw DeviceRGB components must not reach the operator:\n{detail}"
+    );
+}
