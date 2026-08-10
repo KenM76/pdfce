@@ -30612,6 +30612,23 @@ own `6f73843`/`649017c` *Shipped* entry, Sourcing paragraph.
   both have shipped their first slice/their core+CLI half respectively.
   Not this librarian's file to edit; flagged for the engineer.
 
+**Ledger for this filing.** **New Pass ID minted: `Pass 54.0`**
+(grouping-node deletion, core + CLI). `Pass 37.3` gains a third slice
+under its existing ID, stays IN PROGRESS. Pass family ceiling moves
+**53.1 → 54.0**. `docs/FEATURES.md`: row 155 amended (hash correction,
+no checkbox change); one new Implemented row added (Forms section,
+grouping-node deletion, core/cli ticked, gui empty). `docs/ARCHITECTURE.md`
+§12: **not edited** — no crate boundary, library choice, or invariant
+was redrawn. Standing rules: **`R179` gains an AMENDMENT** — no new
+number, ceiling unchanged at **R181**, next free **R182**. Decision
+records: unchanged, ceiling **035**, next free **036**. Operator-question
+ceiling unchanged at **(bh)** (closed ACCEPT), next free **(bi)**.
+`tools/commits-filed-baseline.txt`: unchanged at **5 lines**. Backup/git
+working-tree state not independently asserted — this librarian has no
+shell this dispatch (hard rule 8). This is the **sixty-ninth**
+`SESSION_LOG.md` filing (the sixty-eighth confirmed present by direct
+read before this entry was appended).
+
 ## 2026-08-10 (seventieth filing) — `eac0853`: the R179 audit finishes by MECHANISM (17 loop sites, not the sixty-seventh filing's manual 11) and ships as an enforcing gate, `check-one-commit-per-command.py`; a Windows-console mojibake defect degrading FIVE Python gates' own failure text is found by reading a gate's output as its audience and fixed uniformly; `b1d7858`: `Pass 54.0` gains `FieldGroupDeletion.nodes: Vec<String>`, closing a shell-side cache-invalidation gap `pdfce-ui-specialist` found reviewing the still-unbuilt GUI, plus a `&mut self`/borrow-checker bug avoided before it was written; `R174` gains an AMENDMENT naming gate/tool output as a covered audience
 
 **Sourcing.** This librarian has Grep/Read but no shell this dispatch
@@ -30733,22 +30750,6 @@ shell this dispatch (hard rule 8). This is the **seventieth**
 `SESSION_LOG.md` filing (the sixty-ninth confirmed present by direct
 read before this entry was appended).
 
-**Ledger for this filing.** **New Pass ID minted: `Pass 54.0`**
-(grouping-node deletion, core + CLI). `Pass 37.3` gains a third slice
-under its existing ID, stays IN PROGRESS. Pass family ceiling moves
-**53.1 → 54.0**. `docs/FEATURES.md`: row 155 amended (hash correction,
-no checkbox change); one new Implemented row added (Forms section,
-grouping-node deletion, core/cli ticked, gui empty). `docs/ARCHITECTURE.md`
-§12: **not edited** — no crate boundary, library choice, or invariant
-was redrawn. Standing rules: **`R179` gains an AMENDMENT** — no new
-number, ceiling unchanged at **R181**, next free **R182**. Decision
-records: unchanged, ceiling **035**, next free **036**. Operator-question
-ceiling unchanged at **(bh)** (closed ACCEPT), next free **(bi)**.
-`tools/commits-filed-baseline.txt`: unchanged at **5 lines**. Backup/git
-working-tree state not independently asserted — this librarian has no
-shell this dispatch (hard rule 8). This is the **sixty-ninth**
-`SESSION_LOG.md` filing (the sixty-eighth confirmed present by direct
-read before this entry was appended).
 
 ## 2026-08-10 (seventy-first filing) — `6798e8b`: `Pass 54.1` ships — grouping-node deletion reaches the GUI as a "Grouped Fields" roster, one button per group built AS ONE control; `e8de47c`: two self-corrections to `6798e8b`'s own commit message (a BOM fix reverted for violating an existing `personal_rag` lesson by name; an unmeasured `$PSScriptRoot` causal claim retracted); `R182` MINTED; a structural ordering defect found in this very file, flagged not fixed
 
