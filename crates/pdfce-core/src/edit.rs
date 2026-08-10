@@ -5403,6 +5403,32 @@ pub struct FieldDeletion {
     pub emptied_parents: usize,
 }
 
+/// One occurrence of a search term in the document's page text.
+///
+/// Carries the geometry, not just the page: a viewer has to draw the
+/// highlight, and a CLI reporting only "page 3" leaves an operator
+/// hunting for which of six occurrences was meant.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct TextMatch {
+    /// Zero-based page index, in the **session's** page space — so it
+    /// stays correct after pages are deleted, inserted or reordered in
+    /// this session.
+    pub page_index: usize,
+    /// The match's bounding box in unrotated page space.
+    ///
+    /// The same geometry `mark_redactions_by_search` would cover, from
+    /// the same scan — deliberately, so a highlight and the redaction
+    /// made from it cannot disagree.
+    pub quad: crate::annot_author::Quad,
+    /// The matched text as it appears in the document.
+    ///
+    /// Not simply the needle: a case-insensitive search for `total`
+    /// matches `TOTAL`, and an operator reviewing hits needs to see which
+    /// one they actually got.
+    pub text: String,
+}
+
 /// What deleting a **grouping node** would remove, or did remove.
 ///
 /// # Why this is a named type and not a `usize`
@@ -9864,9 +9890,9 @@ impl EditSession {
     where
         F: Fn(&str) -> Vec<(usize, usize)>,
     {
-        use crate::annot_author::{Quad, RedactSpec};
-        use crate::page_tree::Rect;
-        use crate::text_extract::{self, ExtractOptions, TextOrigin};
+        // The extraction and geometry imports moved with the scan into
+        // `scan_text_matches`; what stays is what AUTHORING needs.
+        use crate::annot_author::RedactSpec;
         use crate::vartext::Quadding;
 
         // R179: the two DOCUMENT-WIDE gates, hoisted ahead of the scan.
@@ -9898,17 +9924,119 @@ impl EditSession {
         }
         self.check_certification_for_annotation()?;
 
+        // The SCAN is `scan_text_matches` — shared with `find_text`, which
+        // wants exactly this and mutates nothing. Two copies of
+        // glyph-span-to-quad geometry would drift, and the way they would
+        // drift is the worst possible: a redaction covering a slightly
+        // different box than the search that found it.
+        let matches: Vec<TextMatch> = self.scan_text_matches(&matcher)?;
+
+        let mut created = Vec::with_capacity(matches.len());
+        for m in matches {
+            let spec = RedactSpec {
+                quads: vec![m.quad],
+                fill: None,
+                overlay_text: None,
+                quadding: Quadding::Left,
+            };
+            created.push(self.add_redaction(m.page_index, &spec)?);
+        }
+        Ok(created)
+    }
+
+    /// **Find every occurrence of `needle` in the document's page text**,
+    /// with the on-page geometry of each hit. Changes nothing.
+    ///
+    /// The read-only half of what `mark_redactions_by_search` has always
+    /// done internally. That verb extracted the text, matched it, turned
+    /// each match's glyph span into a quad — and then, because its only
+    /// caller wanted redactions, threw the quads straight into
+    /// `add_redaction`. The scan was never reachable on its own, so a
+    /// viewer Find had nothing to call and would have had to reimplement
+    /// it.
+    ///
+    /// # Why sharing the scan matters more than saving the code
+    ///
+    /// Both verbs turn a glyph span into a rectangle, and the way two
+    /// copies of that would drift is the worst available: **a redaction
+    /// covering a slightly different box than the search that found it.**
+    /// An operator searches, sees a highlight, marks it, and the mark is
+    /// not quite where the highlight was. Sharing one scanner makes that
+    /// unrepresentable rather than merely unlikely (project rule 2).
+    ///
+    /// # What it searches, and what it does not
+    ///
+    /// **Page content text only**, and only runs whose text came from
+    /// real glyphs — `TextOrigin::ActualText` runs carry a replacement
+    /// string with no per-glyph geometry, so a match inside one could be
+    /// counted but not located, and a hit the caller cannot point at is
+    /// worse than no hit.
+    ///
+    /// It does **not** search form-field values, annotation contents,
+    /// bookmarks or attachments. That is a real difference from a mature
+    /// viewer's Find and is stated rather than discovered: those live in
+    /// different object trees and each needs its own decision about what
+    /// "found" means when the text is not on the page.
+    ///
+    /// Matching is per **text run**, so a phrase split across two runs by
+    /// the producer's own layout is not found. Real producers split runs
+    /// at kerning pairs and style changes, so this is not a rare case.
+    /// Fixing it means matching across a page-level concatenation and then
+    /// mapping offsets back to glyphs, which is a different and larger
+    /// piece of work — named here so it is a known limit rather than a
+    /// surprise.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::TextExtraction`] if the document's text cannot be
+    /// extracted. Note there is deliberately **no encryption or
+    /// certification gate**: this reads and reports, and refusing to
+    /// SEARCH a certified document would be a restriction the signature
+    /// does not ask for.
+    pub fn find_text(&mut self, needle: &str, case_insensitive: bool) -> Vec<TextMatch> {
+        if needle.is_empty() {
+            return Vec::new();
+        }
+        let n = needle.to_owned();
+        self.scan_text_matches(&|text| find_pattern_matches(text, &n, case_insensitive))
+            .unwrap_or_default()
+    }
+
+    /// The shared scan: extract the session's text, run `matcher` over
+    /// each glyph-backed run, and turn each match's glyph span into a
+    /// page-space quad.
+    ///
+    /// Reads `self.view()` — the SESSION, not the base revision — for the
+    /// reason `author_text_matches` documents at length: page indices from
+    /// a base-revision extraction and page indices resolved through
+    /// `page_slots` agree only until a page is deleted, inserted or
+    /// reordered, and a search that reports the wrong page is a
+    /// mis-targeting hazard rather than mere staleness.
+    fn scan_text_matches(
+        &mut self,
+        matcher: &dyn Fn(&str) -> Vec<(usize, usize)>,
+    ) -> Result<Vec<TextMatch>, EditError> {
+        use crate::annot_author::Quad;
+        use crate::page_tree::Rect;
+        use crate::text_extract::{self, ExtractOptions, TextOrigin};
+
         let extracted =
             text_extract::extract_document_view(&self.view(), &ExtractOptions::default())
                 .map_err(|e| EditError::TextExtraction(e.to_string()))?;
 
-        let mut matches: Vec<(usize, Quad)> = Vec::new();
+        let mut matches: Vec<TextMatch> = Vec::new();
         for page in &extracted.pages {
             for run in &page.runs {
+                // Glyph-backed runs only — see `find_text`'s own docs.
                 if run.origin != TextOrigin::Glyphs || run.glyphs.is_empty() {
                     continue;
                 }
                 for (start, end) in matcher(&run.text) {
+                    // Every glyph whose text span OVERLAPS the match, not
+                    // whose start falls inside it: one glyph may cover
+                    // several characters (a ligature) and one character
+                    // several glyphs, so an endpoint test would clip the
+                    // box at either edge.
                     let matched: Vec<_> = run
                         .glyphs
                         .iter()
@@ -9929,6 +10057,10 @@ impl EditSession {
                         let x0 = f64::from(g.x);
                         let x1 = f64::from(g.x + g.advance);
                         let size = f64::from(g.size);
+                        // Descender and ascender as fractions of the size:
+                        // the extraction carries no per-font metrics here,
+                        // and a box drawn on the baseline alone would sit
+                        // under the text rather than around it.
                         let y0 = f64::from(g.y) - 0.22 * size;
                         let y1 = f64::from(g.y) + 0.85 * size;
                         llx = llx.min(x0.min(x1));
@@ -9937,26 +10069,16 @@ impl EditSession {
                         ury = ury.max(y1);
                     }
                     if llx.is_finite() && urx > llx {
-                        matches.push((
-                            page.page_index,
-                            Quad::from_rect(Rect::from_corners(llx, lly, urx, ury)),
-                        ));
+                        matches.push(TextMatch {
+                            page_index: page.page_index,
+                            quad: Quad::from_rect(Rect::from_corners(llx, lly, urx, ury)),
+                            text: run.text.get(start..end).unwrap_or_default().to_owned(),
+                        });
                     }
                 }
             }
         }
-
-        let mut created = Vec::with_capacity(matches.len());
-        for (page_index, quad) in matches {
-            let spec = RedactSpec {
-                quads: vec![quad],
-                fill: None,
-                overlay_text: None,
-                quadding: Quadding::Left,
-            };
-            created.push(self.add_redaction(page_index, &spec)?);
-        }
-        Ok(created)
+        Ok(matches)
     }
 
     /// Author a text-bearing annotation onto a page (Pass 6.2): FreeText,

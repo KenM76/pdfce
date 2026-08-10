@@ -945,6 +945,33 @@ enum Command {
     /// many fell through it to U+FFFD, which fonts carry no recoverable
     /// Unicode at all, and how many spaces and line breaks pdfce
     /// invented.
+    /// **Find text in a document's pages**, reporting where each hit is.
+    ///
+    /// Reports the page and the on-page bounding box of every occurrence,
+    /// so a hit can be pointed at rather than merely counted. The
+    /// geometry is the SAME scan `mark-redaction --search` uses, so what
+    /// this finds and what that would cover cannot disagree.
+    ///
+    /// Searches **page content text only** — not form-field values,
+    /// annotation contents, bookmarks or attachments. And matching is per
+    /// text run, so a phrase the producer split across runs (at a kerning
+    /// pair or a style change) is not found. Both limits are real and
+    /// stated rather than left to be discovered.
+    ///
+    /// Changes nothing and gates on nothing: an encrypted or certified
+    /// document is still searchable, because reading is not what a
+    /// signature restricts.
+    FindText {
+        /// Input PDF.
+        input: PathBuf,
+        /// The text to find.
+        #[arg(long)]
+        needle: String,
+        /// Match regardless of case.
+        #[arg(long)]
+        ignore_case: bool,
+    },
+
     ExtractText {
         /// Input PDF.
         input: PathBuf,
@@ -3770,6 +3797,11 @@ fn run() -> ExitCode {
         Command::ToPdfa { .. } => unimplemented_stub("to-pdfa"),
         Command::ValidatePdfa { .. } => unimplemented_stub("validate-pdfa"),
         Command::Sign { .. } => unimplemented_stub("sign"),
+        Command::FindText {
+            input,
+            needle,
+            ignore_case,
+        } => cmd_find_text(&input, &needle, ignore_case),
         Command::ExtractText {
             input,
             pages,
@@ -5477,6 +5509,66 @@ with_note={with_note} with_author={with_author} need_appearances={need_appearanc
 /// Read-only. One `field …` line per terminal field, then a `list-fields …`
 /// summary line carrying the document-level form disclosures. The value is
 /// emitted as a sanitised token so the line stays field-splittable.
+/// `find-text` — locate every occurrence of a string in the page text.
+///
+/// # Why the geometry is in the output and not just the page number
+///
+/// "page 3" is not an answer when a word appears six times on it. Each
+/// hit reports its bounding box in unrotated page space, which is what a
+/// caller needs to draw a box, crop an image, or hand a coordinate to
+/// `mark-redaction`. It is the SAME quad `mark-redaction --search` would
+/// cover, because both come from one scan in core — so a script that
+/// finds first and redacts second cannot get two different rectangles.
+///
+/// # Exit code
+///
+/// `0` whether or not anything matched. Finding nothing is a successful
+/// search, not a failure, and a non-zero exit would make "no hits"
+/// indistinguishable from "could not read the file" in a shell pipeline.
+/// The count is on the summary line for a caller that wants to branch.
+fn cmd_find_text(input: &Path, needle: &str, ignore_case: bool) -> u8 {
+    let doc = match pdfce_core::document::Document::load(input) {
+        Ok(doc) => doc,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit_code_for_doc(&err);
+        }
+    };
+    let mut session = pdfce_core::edit::EditSession::new(doc);
+    let hits = session.find_text(needle, ignore_case);
+
+    for h in &hits {
+        // Bounds over all FOUR corners rather than reading `ll`/`ur`.
+        // Today every quad here comes from `Quad::from_rect` and is
+        // axis-aligned, so the two agree — but `Quad` is a general
+        // quadrilateral (§12.5.6.10 `/QuadPoints`), and a corner-pair
+        // shortcut would silently under-report the box the day a rotated
+        // one arrives.
+        let xs = [h.quad.ul.0, h.quad.ur.0, h.quad.ll.0, h.quad.lr.0];
+        let ys = [h.quad.ul.1, h.quad.ur.1, h.quad.ll.1, h.quad.lr.1];
+        let min = |v: [f64; 4]| v.iter().copied().fold(f64::INFINITY, f64::min);
+        let max = |v: [f64; 4]| v.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        // 1-based page, matching every other page-addressing surface in
+        // this CLI. The extraction is 0-based and the operator is not.
+        println!(
+            "match page={} text={:?} rect={:.2},{:.2},{:.2},{:.2}",
+            h.page_index + 1,
+            h.text,
+            min(xs),
+            min(ys),
+            max(xs),
+            max(ys),
+        );
+    }
+    println!(
+        "find-text {} needle={needle:?} ignore_case={} matches={}",
+        input.display(),
+        u32::from(ignore_case),
+        hits.len(),
+    );
+    exit::SUCCESS
+}
+
 /// One line describing a resolved rich-text run style.
 ///
 /// # Why only the SET properties appear
