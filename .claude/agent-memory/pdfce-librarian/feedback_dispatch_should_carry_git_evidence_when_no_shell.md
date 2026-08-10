@@ -83,3 +83,21 @@ whether this was a one-off (the dispatching engineer working from its
 own summary rather than pasting `git show`) or a genuine drift back
 toward pre-fifty-fifth-filing behavior — one instance is not yet a
 second data point either way.
+
+**Second data point, confirms the drift, 2026-08-10 (eightieth
+filing).** The `Pass 58.0`/`58.1` dispatch went further than the
+sixty-eighth filing's partial regression: it explicitly INSTRUCTED this
+librarian to run `git log -1 --format=%B <sha>` and `git show --stat
+<sha>` for all four commits "before writing," with no shell tool
+present on the dispatch — the instruction assumed shell access that
+this invocation did not have. Rich prose summary was carried (as in the
+sixty-eighth filing), no raw commit text. Handled the same way as
+before: direct source verification (file line counts, doc-comment
+content, specific line ranges) rather than commit-graph confirmation,
+stated plainly in the filing's Sourcing paragraph rather than treated as
+a blocker. **Two consecutive non-git-evidence dispatches is enough to
+call this a real pattern, not a one-off** — worth surfacing to the
+dispatching engineer directly next time it recurs (this file's own
+guidance says to note it "in the filing," which was done both times, but
+a THIRD occurrence should probably get a spoken flag in the librarian's
+final report as well, not just a buried memory note).

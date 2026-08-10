@@ -4084,6 +4084,7 @@ impl OpenDoc {
         cmyk_intent: pdfce_core::settings::CmykIntent,
         layers: Option<pdfce_render::LayerVisibility>,
         layers_generation: u64,
+        view_magnification: f32,
     ) {
         let Some(page) = self.pages.get(self.view.page_index) else {
             self.page_texture = None;
@@ -4119,6 +4120,7 @@ impl OpenDoc {
             cmyk_intent,
             layers,
             layers_generation,
+            view_magnification,
         });
         if let Some(result) = outcome {
             self.absorb_render(ctx, result);
@@ -16169,6 +16171,7 @@ impl PdfceApp {
                 cmyk_intent,
                 layers.clone(),
                 layers_generation,
+                doc.view.zoom,
             );
         } else if stale_scale {
             if now >= doc.zoom_commit_at {
@@ -16180,6 +16183,7 @@ impl PdfceApp {
                     cmyk_intent,
                     layers.clone(),
                     layers_generation,
+                    doc.view.zoom,
                 );
             } else {
                 // Nothing else will wake egui up when the debounce

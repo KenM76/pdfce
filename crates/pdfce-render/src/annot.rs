@@ -129,8 +129,21 @@ pub(crate) fn survey_page_annotations(
     // that layer to go with it. Splitting the two sources is how a
     // toggle ends up half-working.
     let oc_off = match policy.layers {
+        // An operator override replaces everything, including usage
+        // application — §8.11.4.5: "Manual changes shall override the
+        // states that were set automatically… and shall not be
+        // readjusted based on usage application dictionaries."
         Some(v) => v.hidden_set().clone(),
-        None => pdfce_core::annot::optional_content_default_off(doc),
+        None => {
+            let mut off = pdfce_core::annot::optional_content_default_off(doc);
+            if let Some(magnification) = policy.view_magnification {
+                // The notes are dropped HERE on purpose: this is the
+                // render path, and it has no channel to report them on.
+                // The shells surface them from their own call.
+                let _ = pdfce_core::annot::apply_view_usage(doc, &mut off, magnification);
+            }
+            off
+        }
     };
 
     // `AS-A1` (R169): what to show for a multi-entry /AP /N subdictionary

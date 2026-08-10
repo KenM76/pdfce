@@ -1551,8 +1551,98 @@ fn expand_oc<G: ObjectGraph + ?Sized>(
         for id in crate::annot::oc_refs(graph, dict.get(b"OCGs")) {
             note(id, source, found, seen);
         }
+        // ★ `/VE` IS A DISCOVERY SITE TOO, AND IT WAS BEING MISSED.
+        //
+        // A visibility expression names groups that nothing else in the
+        // document need mention. The renderer evaluates them correctly
+        // (`annot::eval_ve`), so their content genuinely appears and
+        // disappears — while the panel, walking only `/OCGs`, had no row
+        // for them. Content that changes with a layer nobody can see or
+        // toggle is the worst shape this panel can take: the operator
+        // watches the page change and has nothing to attribute it to.
+        //
+        // Found by a spec sweep after `/VE` evaluation shipped, not by
+        // the evaluation work itself — which had no reason to look at
+        // the enumerator, and is exactly why the two halves of a feature
+        // want checking against each other.
+        ve_groups(graph, dict.get(b"VE"), 0, &mut Vec::new(), &mut |id| {
+            note(id, source, found, seen);
+        });
     } else {
         note(oc, source, found, seen);
+    }
+}
+
+/// Walk a `/VE` visibility expression for the OCGs it names
+/// (§8.11.2.2), for DISCOVERY only.
+///
+/// # Discovery, not evaluation — and the difference matters here
+///
+/// [`crate::annot::eval_ve`] decides what an expression MEANS; this only
+/// asks which groups appear in it, so that every group a document
+/// mentions can be listed. It is therefore deliberately more permissive:
+/// an expression this refuses to evaluate — an unknown operator, a `Not`
+/// with two operands — still names real groups, and those groups still
+/// belong in the panel. Refusing to list them because the expression is
+/// malformed would hide the very groups an operator most needs to see.
+///
+/// The operand rule (`DA-N17`: an OCMD is not a legal operand) is
+/// likewise NOT enforced here. A nested OCMD is a malformation, and
+/// walking into its `/OCGs` finds groups that exist; the panel's job is
+/// to be complete about what the file mentions.
+///
+/// Shares [`MAX_ORDER_DEPTH`] and a cycle guard with the evaluator for
+/// the same reason it has them: the grammar permits arbitrary indirect
+/// nesting, so a self-referential array is legal syntax describing an
+/// infinite tree.
+fn ve_groups<G: ObjectGraph + ?Sized>(
+    graph: &G,
+    obj: Option<&Object>,
+    depth: usize,
+    visited: &mut Vec<ObjId>,
+    note: &mut impl FnMut(ObjId),
+) {
+    let Some(obj) = obj else {
+        return;
+    };
+    if depth > MAX_ORDER_DEPTH {
+        return;
+    }
+    if let Some(id) = obj.as_reference() {
+        if visited.contains(&id) {
+            return;
+        }
+        visited.push(id);
+    }
+    match graph.resolve(obj) {
+        Object::Array(items) => {
+            for item in items {
+                ve_groups(graph, Some(item), depth + 1, visited, note);
+            }
+        }
+        // A non-array operand that resolves to a dictionary is a group
+        // (or a malformed OCMD, whose own members are walked so nothing
+        // the file names is lost).
+        Object::Dict(d) => {
+            if let Some(id) = obj.as_reference() {
+                let is_ocmd = graph
+                    .resolve(d.get(b"Type").unwrap_or(&Object::Null))
+                    .as_name()
+                    .is_some_and(|n| n.0 == b"OCMD");
+                if is_ocmd {
+                    for inner in crate::annot::oc_refs(graph, d.get(b"OCGs")) {
+                        note(inner);
+                    }
+                } else {
+                    note(id);
+                }
+            }
+        }
+        // The operator name, or anything else the grammar allows.
+        _ => {}
+    }
+    if obj.as_reference().is_some() {
+        visited.pop();
     }
 }
 

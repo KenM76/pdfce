@@ -213,6 +213,15 @@ pub struct RenderRequest {
     /// without it the cached texture would not invalidate and the toggle
     /// would appear to do nothing.
     pub layers_generation: u64,
+    /// The document magnification for §8.11.4.4 `View`-event `/AS`
+    /// usage application — the operator's ZOOM, never `raster_scale`.
+    ///
+    /// Those differ by `pixels_per_point`, and using the raster scale
+    /// would make a layer's visibility depend on the MONITOR: a document
+    /// banding a layer to `[1.0, 2.0)` would show it on a 1× display and
+    /// hide it on a 2× one at the same nominal zoom. The magnification
+    /// the standard means is the one the operator sees.
+    pub view_magnification: f32,
     /// The operator's DeviceCMYK conversion choice (§8.6.4.4), carried on
     /// the request so a render always says which conversion produced it.
     pub cmyk_intent: CmykIntent,
@@ -422,6 +431,10 @@ fn render_on_worker(request: &RenderRequest, cancel: &RenderCancel) -> Outcome {
     // `None` stays `None`: a document nobody has toggled renders as the
     // document asks. Only an operator who touched a layer produces a set.
     options.layers = request.layers.clone();
+    // A viewer, so `/AS` View-event usage applies (§8.11.4.5). The
+    // texture cache already keys on scale, which is what satisfies the
+    // clause's "shall be reapplied whenever [zoom] changes".
+    options.view_magnification = Some(request.view_magnification);
 
     // `session.view()`, NOT `session.document()` (decision 018 §1) — the
     // view composes the overlay and the R45 staging buffer, so unsaved

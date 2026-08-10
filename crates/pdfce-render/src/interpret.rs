@@ -1943,8 +1943,21 @@ impl Interpreter<'_> {
         if let Some(v) = self.policy.layers {
             return v.hidden_set();
         }
-        self.oc_off
-            .get_or_insert_with(|| pdfce_core::annot::optional_content_default_off(self.doc))
+        let doc = self.doc;
+        let magnification = self.policy.view_magnification;
+        self.oc_off.get_or_insert_with(|| {
+            let mut off = pdfce_core::annot::optional_content_default_off(doc);
+            // §8.11.4.5: only a VIEWER examines `/AS`. `None` here is a
+            // print or aggregate render, for which the `/D`-initial state
+            // is not just adequate but required.
+            if let Some(magnification) = magnification {
+                // The notes are dropped HERE on purpose: this is the
+                // render path, and it has no channel to report them on.
+                // The shells surface them from their own call.
+                let _ = pdfce_core::annot::apply_view_usage(doc, &mut off, magnification);
+            }
+            off
+        })
     }
 
     /// `BDC` — open a marked-content section, and decide whether it hides.

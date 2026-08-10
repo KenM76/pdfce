@@ -94,7 +94,7 @@
 //!   note. A consumer that wants the resolved view builds it from the
 //!   links.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::graph::ObjectGraph;
 use crate::object::{Dict, Name, ObjId, Object};
@@ -793,6 +793,10 @@ fn intent_set<G: ObjectGraph + ?Sized>(graph: &G, obj: Option<&Object>) -> Vec<V
 /// How deep a `/VE` visibility expression may nest before pdfce stops
 /// descending (§8.11.2.2).
 ///
+/// **This is pdfce POLICY, not a spec requirement** — §8.11.2.2 sets no
+/// depth limit and Annex C's architectural limits never mention
+/// visibility expressions (`DA-N18`). Cite it as a choice, not a clause.
+///
 /// The standard sets no limit, and a boolean expression tree is a shape
 /// a hostile or broken file can nest arbitrarily. 32 matches
 /// [`crate::layers::MAX_ORDER_DEPTH`] deliberately — both are
@@ -832,6 +836,20 @@ pub const MAX_VE_DEPTH: usize = 32;
 /// because an expression may reference itself through an indirect
 /// reference — legal syntax describing an infinite tree, the same hazard
 /// `/Order` has and the same guard.
+///
+/// The cycle guard is **pdfce policy too** (`DA-N19` — §8.11.2.2 states
+/// no cycle rule), though it is the one policy here that is arguably
+/// forced: the grammar permits arbitrary indirect nesting, so without it
+/// a conforming-looking file ends the stack.
+///
+/// # `/VE` is preferred by a `should`, not a `shall`
+///
+/// NOTE 2 recommends supporting `/VE` in preference to `/OCGs` + `/P`;
+/// there is no `shall` anywhere requiring it (`DA-A16`). A reader that
+/// ignored visibility expressions entirely would violate nothing. So the
+/// fallback below is not a concession — the whole arrangement is
+/// NOTE 2's design, and a conforming file may legitimately carry `/VE`
+/// with no `/OCGs` at all.
 fn eval_ve<G: ObjectGraph + ?Sized>(
     graph: &G,
     obj: &Object,
@@ -943,6 +961,24 @@ fn eval_ve_operand<G: ObjectGraph + ?Sized>(
     // — visibility is keyed on object identity, so a direct dictionary
     // has nothing to look up in `off`.
     let id = obj.as_reference()?;
+    // §8.11.2.2: "Subsequent elements shall be either optional content
+    // groups or other visibility expressions." An **OCMD is not a legal
+    // operand** (`DA-N17`), and accepting one would silently treat a
+    // membership dictionary as though it were a group — testing the
+    // wrong object's state and producing a confident wrong answer rather
+    // than an abstention.
+    if graph
+        .resolved(id)
+        .as_dict()
+        .and_then(|d| {
+            graph
+                .resolve(d.get(b"Type").unwrap_or(&Object::Null))
+                .as_name()
+        })
+        .is_some_and(|n| n.as_bytes() == b"OCMD")
+    {
+        return None;
+    }
     Some(!off.contains(&id))
 }
 
@@ -1024,6 +1060,310 @@ pub fn oc_is_hidden<G: ObjectGraph + ?Sized>(graph: &G, oc: ObjId, off: &BTreeSe
         // group-shaped dict — the authored-layer case, §8.11 NOTE 3).
         off.contains(&oc)
     }
+}
+
+/// What a viewer's `/AS` usage application left unapplied, and why.
+///
+/// Returned alongside the state so a shell can say what it did not do.
+/// A layer whose visibility is auto-managed by a category pdfce cannot
+/// evaluate is a layer showing the `/D` answer while the document asked
+/// for a computed one — indistinguishable, from outside, from pdfce
+/// ignoring `/AS` entirely.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct UsageNotes {
+    /// `View`-event usage application dictionaries examined.
+    pub applications: usize,
+    /// Groups whose state a category actually decided.
+    pub groups_managed: usize,
+    /// Categories named in a `/Category` array that pdfce cannot
+    /// evaluate: `Language` (needs a system locale), `User` (needs an
+    /// identity), and `CreatorInfo`/`PageElement` (§8.11.4.4 defines no
+    /// behaviour for them at all — `DA-N13`).
+    pub categories_unevaluable: usize,
+    /// `/AS` entries whose `/Event` is not `View`. Counted, not applied:
+    /// §8.11.4.5 scopes the viewer's examination to `Event` `View`, and
+    /// `Print`/`Export` apply only for the duration of that operation.
+    pub non_view_events: usize,
+}
+
+/// A single category's recommendation for one group, or `None` for
+/// "this category yielded no recommendation".
+///
+/// # `None` is not `OFF`, and that distinction is the whole clause
+///
+/// §8.11.4.4's aggregation sentence reads *"If all the entries yield a
+/// recommended state of `ON`, the group's state shall be set to `ON`;
+/// otherwise, its state shall be set to `OFF`"*, which taken alone makes
+/// a missing sub-dictionary an `OFF`. The standard then refutes that
+/// twice in its own text: the `Print` bullet says an absent `PrintState`
+/// leaves the state *"unchanged"*, and the §8.11.4.4 EXAMPLE says a
+/// group with no `/Zoom` *"shall not be affected by zoom level
+/// changes"*. `Language` goes the other way and explicitly assigns `OFF`
+/// to non-matching groups.
+///
+/// Three loci, three answers. The reading that makes all four sentences
+/// simultaneously true — and the one implemented here — is that an
+/// absent category yields NO recommendation and is excluded from the
+/// conjunction, rather than contributing a false.
+///
+/// Corroborated by the standard's own stated rationale for permitting
+/// multiple same-`Event` entries: *"to allow documents with incompatible
+/// usage application dictionaries to be combined into larger documents
+/// and have their behaviour preserved"*. Under absent-means-`OFF`,
+/// merging two documents blacks out every layer lacking a merged
+/// category — precisely what that sentence exists to prevent.
+///
+/// Recorded in the spec corpus as `DA.16.4`, and registered as setting
+/// candidate `DA-A13` (*absent usage category ⇒ skip | force OFF*). No
+/// knob is offered: the alternative reading contradicts the standard's
+/// own assembly rationale, which makes this a defended default rather
+/// than a fork. See `ARCHITECTURE.md` for the difference.
+type Recommendation = Option<bool>;
+
+/// Evaluate one usage category for one group (§8.11.4.4, Table 102).
+///
+/// `magnification` is a SCALE FACTOR where `1.0` is 100 %.
+/// §8.11.4.4 never defines the quantity it compares against — it says
+/// only "the current magnification level of the document" — so the unit
+/// is sourced from §12.3.2.2 (`/XYZ`: "magnified by the **factor**
+/// `zoom`") and Annex C.2 ("between approximately 8 percent and 6400
+/// percent"), plus the clause's own EXAMPLE, whose `[0,1) [1,2) [2,20)`
+/// bands are captioned "20000 foot view" through "1000 foot view".
+fn usage_recommendation<G: ObjectGraph + ?Sized>(
+    graph: &G,
+    usage: &Dict,
+    category: &[u8],
+    magnification: f32,
+) -> Recommendation {
+    let sub = graph
+        .resolve(usage.get(category).unwrap_or(&Object::Null))
+        .as_dict()?;
+    match category {
+        // Table 102: "A dictionary that shall have a single entry,
+        // ViewState, a name that shall have a value of either ON or
+        // OFF". A missing or unrecognised value is not repaired — it
+        // yields no recommendation, which leaves the `/D` state standing.
+        b"View" => state_name(graph, sub, b"ViewState"),
+        // Table 102's `Print` is the loose one: "may contain the
+        // following optional entries", both optional. §8.11.4.4 states
+        // the absent case outright — "If PrintState is not present, the
+        // state of the optional content group shall be left unchanged" —
+        // which is `None`, and is where the excluded-from-the-conjunction
+        // reading is sourced rather than inferred.
+        b"Print" => state_name(graph, sub, b"PrintState"),
+        b"Export" => state_name(graph, sub, b"ExportState"),
+        // §8.11.4.4: "If the current magnification level of the document
+        // is greater than or equal to `min` and less than `max`, the ON
+        // state shall be used; otherwise, OFF shall be used."
+        //
+        // HALF-OPEN, `[min, max)`, and deliberately implemented with no
+        // epsilon: `/max 1.0` is OFF at exactly 100 % and ON at 99.99 %.
+        // That is the specified boundary and softening it would make a
+        // layer appear at a magnification the document excluded.
+        //
+        // Defaults are Table 102's own: `min` 0, `max` infinity — so an
+        // absent bound is unbounded on that side. An inverted or empty
+        // range (`min >= max`) is NOT repaired: the standard imposes no
+        // `min <= max` constraint and states no recovery, and the
+        // predicate degrades to permanently-OFF, which is the honest
+        // reading of a range that admits nothing.
+        b"Zoom" => {
+            let min = number(graph, sub.get(b"min")).unwrap_or(0.0);
+            let max = number(graph, sub.get(b"max")).unwrap_or(f32::INFINITY);
+            Some(magnification >= min && magnification < max)
+        }
+        // `Language` and `User` need a system locale and an identity
+        // that pdfce has no concept of; `CreatorInfo` and `PageElement`
+        // have no defined effect on state at all (`DA-N13`). All four
+        // are counted as unevaluable by the caller rather than guessed.
+        _ => None,
+    }
+}
+
+/// A `/ViewState`-style name as a boolean, `None` for absent or
+/// unrecognised.
+fn state_name<G: ObjectGraph + ?Sized>(graph: &G, dict: &Dict, key: &[u8]) -> Recommendation {
+    match graph
+        .resolve(dict.get(key).unwrap_or(&Object::Null))
+        .as_name()?
+        .as_bytes()
+    {
+        b"ON" => Some(true),
+        b"OFF" => Some(false),
+        _ => None,
+    }
+}
+
+/// A number entry as `f32`, `None` if absent or not numeric.
+fn number<G: ObjectGraph + ?Sized>(graph: &G, obj: Option<&Object>) -> Option<f32> {
+    match graph.resolve(obj?) {
+        Object::Integer(i) => Some(*i as f32),
+        Object::Real(r) => Some(*r as f32),
+        _ => None,
+    }
+}
+
+/// Apply the `View`-event `/AS` usage applications on top of the
+/// `/D`-initial state (§8.11.4.4 and §8.11.4.5).
+///
+/// # ★ This function must never be reachable from a print or export path
+///
+/// That is a `shall not`, not a preference. §8.11.4.5, of the
+/// `/D`-initial state: *"This state shall be the state used by printing
+/// and aggregating application. **Such applications shall not apply the
+/// changes based on usage application dictionaries described below.**"*
+/// Only then: *"The remaining discussion in this sub-clause applies only
+/// to viewer applications. Such applications shall examine the `AS`
+/// array…"*
+///
+/// So [`optional_content_default_off`] is not merely a first step that
+/// this refines — it is the complete and correct answer for printing and
+/// for aggregation, and calling this on the way to a printed page would
+/// violate the standard rather than merely differ from it. The two are
+/// separate functions so that the print path cannot acquire this one by
+/// accident.
+///
+/// # It must be re-run when the magnification changes
+///
+/// §8.11.4.5: *"Whenever there is a change to a factor that the usage
+/// application dictionaries with event type `View` depend on (such as
+/// zoom level), the corresponding dictionaries shall be reapplied."*
+/// Without the re-run the `Zoom` category does not work at all — a
+/// layer banded to `[2.0, 20.0)` would keep whatever state it had when
+/// the document opened.
+///
+/// # The operator's manual overrides sit ABOVE this, and stay
+///
+/// §8.11.4.5: *"Manual changes shall override the states that were set
+/// automatically. The states of these groups remain overridden and shall
+/// not be readjusted based on usage application dictionaries with event
+/// type `View` as long as the document is open (or until the user
+/// reverts the document to its original state)."*
+///
+/// That is why `pdfce_render::LayerVisibility` REPLACES the document's
+/// answer rather than merging with it — a merge would let a zoom change
+/// re-decide a layer the operator had toggled, which the sentence above
+/// forbids. The contract was argued for on its own terms before this
+/// clause was read; the clause turns out to require it.
+///
+/// Two details of that sentence are worth carrying: the stickiness is
+/// **per group** (*"the states of these groups"*), so toggling layer A
+/// must not freeze layer B's zoom behaviour; and the standard names the
+/// release — *"until the user reverts the document to its original
+/// state"* — which is exactly the Layers panel's **Reset**.
+///
+/// # Aggregation across several applications
+///
+/// §8.11.4.4: *"If a given optional content group appears in more than
+/// one `OCGs` array, its state shall be `ON` only if all categories in
+/// all the usage application dictionaries it appears in shall have a
+/// state of `ON`."*
+///
+/// A global conjunction: `OFF` dominates, and the result is
+/// **order-independent**. Note that this is the opposite algebra to the
+/// `/D` `/ON`//`/OFF` arrays in the same clause, where the order is
+/// load-bearing (decision 038) — do not carry last-writer-wins thinking
+/// across that boundary.
+#[must_use]
+pub fn apply_view_usage<G: ObjectGraph + ?Sized>(
+    graph: &G,
+    off: &mut BTreeSet<ObjId>,
+    magnification: f32,
+) -> UsageNotes {
+    let mut notes = UsageNotes::default();
+    let Some(catalog) = graph.catalog_dict() else {
+        return notes;
+    };
+    let Some(ocp) = graph
+        .resolve(catalog.get(b"OCProperties").unwrap_or(&Object::Null))
+        .as_dict()
+    else {
+        return notes;
+    };
+    let Some(d) = graph
+        .resolve(ocp.get(b"D").unwrap_or(&Object::Null))
+        .as_dict()
+    else {
+        return notes;
+    };
+    let Some(Object::Array(applications)) = d.get(b"AS").map(|o| graph.resolve(o)) else {
+        return notes;
+    };
+
+    // Accumulated across EVERY View-event application before anything is
+    // written back, because the rule is a conjunction over all of them —
+    // writing per-application would make the outcome depend on order.
+    let mut verdicts: BTreeMap<ObjId, bool> = BTreeMap::new();
+
+    for app in applications {
+        let Some(app) = graph.resolve(app).as_dict() else {
+            continue;
+        };
+        // Table 103: `/Event` is Required and shall be View, Print or
+        // Export. §8.11.4.5 scopes the viewer to View.
+        let event = graph
+            .resolve(app.get(b"Event").unwrap_or(&Object::Null))
+            .as_name()
+            .map(|n| n.as_bytes().to_vec());
+        if event.as_deref() != Some(b"View".as_slice()) {
+            notes.non_view_events += 1;
+            continue;
+        }
+        notes.applications += 1;
+
+        // NOTE 3's trap: `Event` and `Category` share the names View,
+        // Print and Export and are INDEPENDENT. `<< /Event /View
+        // /Category [/Zoom] >>` is legal and common, so the categories
+        // are read from `/Category` and never inferred from the event.
+        let categories: Vec<Vec<u8>> = match app.get(b"Category").map(|o| graph.resolve(o)) {
+            Some(Object::Array(items)) => items
+                .iter()
+                .map(|o| graph.resolve(o))
+                .filter_map(Object::as_name)
+                .map(|n| n.as_bytes().to_vec())
+                .collect(),
+            _ => Vec::new(),
+        };
+
+        // Table 103: `/OCGs` default is an empty array, "indicating that
+        // no groups shall be affected".
+        for group in oc_refs(graph, app.get(b"OCGs")) {
+            let Some(usage) = graph.resolved(group).as_dict().and_then(|g| {
+                graph
+                    .resolve(g.get(b"Usage").unwrap_or(&Object::Null))
+                    .as_dict()
+            }) else {
+                continue;
+            };
+            for category in &categories {
+                if matches!(
+                    category.as_slice(),
+                    b"Language" | b"User" | b"CreatorInfo" | b"PageElement"
+                ) {
+                    notes.categories_unevaluable += 1;
+                    continue;
+                }
+                if let Some(recommended) =
+                    usage_recommendation(graph, usage, category, magnification)
+                {
+                    // Conjunction: once any category anywhere says OFF,
+                    // no later ON can revive it.
+                    let slot = verdicts.entry(group).or_insert(true);
+                    *slot &= recommended;
+                }
+            }
+        }
+    }
+
+    notes.groups_managed = verdicts.len();
+    for (group, on) in verdicts {
+        if on {
+            off.remove(&group);
+        } else {
+            off.insert(group);
+        }
+    }
+    notes
 }
 
 /// Collect the OCG references an `/OCGs`/`/ON`/`/OFF` entry names — either a
@@ -2127,5 +2467,307 @@ mod tests {
             oc_is_hidden(&graph, ObjId::new(4, 0), &off_set),
             "the cycle makes the expression unevaluable, so /P /AnyOn answers: A is off, so hidden"
         );
+    }
+    // ---- §8.11.4.4 `/AS` + `/Usage` auto-state ----
+
+    /// A doc whose `/D` carries one `View`-event usage application over
+    /// group 5, with `categories` and the group's `/Usage` supplied raw.
+    /// Group 5 starts ON (nothing in `/OFF`).
+    fn usage_off_set(categories: &str, usage: &str, magnification: f32) -> BTreeSet<ObjId> {
+        let objects: Vec<(u32, Vec<u8>)> = vec![
+            (
+                1,
+                format!(
+                    "<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [5 0 R] \
+                     /D << /AS [ << /Event /View /Category {categories} /OCGs [5 0 R] >> ] >> >> >>"
+                )
+                .into_bytes(),
+            ),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 10 10] >>".to_vec(),
+            ),
+            (3, b"<< /Type /Page /Parent 2 0 R >>".to_vec()),
+            (4, b"<< /Type /OCG /Name (unused) >>".to_vec()),
+            (
+                5,
+                format!("<< /Type /OCG /Name (A) /Usage {usage} >>").into_bytes(),
+            ),
+        ];
+        let doc = build_pdf(&objects);
+        let graph = doc.view();
+        let mut off = optional_content_default_off(&graph);
+        let _ = apply_view_usage(&graph, &mut off, magnification);
+        off
+    }
+
+    /// **`/View /ViewState /OFF` hides a group the `/D` state showed.**
+    ///
+    /// The base case: `/D` says nothing about group 5, so it is ON, and
+    /// the usage application turns it off.
+    #[test]
+    fn a_view_state_of_off_hides_a_group_the_default_config_shows() {
+        assert!(
+            usage_off_set("[/View]", "<< /View << /ViewState /OFF >> >>", 1.0)
+                .contains(&ObjId::new(5, 0))
+        );
+        assert!(
+            !usage_off_set("[/View]", "<< /View << /ViewState /ON >> >>", 1.0)
+                .contains(&ObjId::new(5, 0))
+        );
+    }
+
+    /// ★ **`Zoom` is half-open: `min` inclusive, `max` EXCLUSIVE.**
+    ///
+    /// §8.11.4.4: *"If the current magnification level of the document
+    /// is greater than or equal to `min` and less than `max`, the ON
+    /// state shall be used; otherwise, OFF shall be used."*
+    ///
+    /// The exact-boundary pair is the whole point of this test. A layer
+    /// banded `[1.0, 2.0)` is ON at exactly 100 % and OFF at exactly
+    /// 200 %, and an implementation that used `<=` on the upper bound
+    /// would differ from the standard at precisely one magnification —
+    /// which nobody discovers by accident, because nobody zooms to
+    /// exactly 200 % on purpose.
+    #[test]
+    fn zoom_bounds_are_half_open_at_both_ends() {
+        let band = "<< /Zoom << /min 1.0 /max 2.0 >> >>";
+        let hidden = |m| usage_off_set("[/Zoom]", band, m).contains(&ObjId::new(5, 0));
+        assert!(hidden(0.999), "below min is OFF");
+        assert!(!hidden(1.0), "AT min is ON — the bound is inclusive");
+        assert!(!hidden(1.999), "inside the band is ON");
+        assert!(hidden(2.0), "AT max is OFF — the bound is exclusive");
+        assert!(hidden(2.001), "above max is OFF");
+    }
+
+    /// An absent bound is unbounded on that side (Table 102: `min`
+    /// defaults to 0, `max` to infinity).
+    #[test]
+    fn an_absent_zoom_bound_is_unbounded() {
+        let only_min = "<< /Zoom << /min 2.0 >> >>";
+        assert!(!usage_off_set("[/Zoom]", only_min, 1000.0).contains(&ObjId::new(5, 0)));
+        assert!(usage_off_set("[/Zoom]", only_min, 1.0).contains(&ObjId::new(5, 0)));
+        let only_max = "<< /Zoom << /max 2.0 >> >>";
+        assert!(!usage_off_set("[/Zoom]", only_max, 0.01).contains(&ObjId::new(5, 0)));
+        assert!(usage_off_set("[/Zoom]", only_max, 2.0).contains(&ObjId::new(5, 0)));
+    }
+
+    /// An empty or inverted range is left to degrade to permanently-OFF
+    /// rather than repaired.
+    ///
+    /// The standard imposes no `min <= max` constraint and states no
+    /// recovery. Silently swapping the bounds would show content at
+    /// magnifications the document's own numbers exclude — inventing an
+    /// intent from a malformation.
+    #[test]
+    fn an_inverted_zoom_range_is_not_repaired() {
+        let inverted = "<< /Zoom << /min 5.0 /max 2.0 >> >>";
+        for m in [1.0, 3.0, 10.0] {
+            assert!(
+                usage_off_set("[/Zoom]", inverted, m).contains(&ObjId::new(5, 0)),
+                "an empty range admits nothing, at any magnification"
+            );
+        }
+    }
+
+    /// ★ **A category the group does not carry yields NO recommendation
+    /// — it does not vote `OFF`.**
+    ///
+    /// §8.11.4.4's aggregation sentence, read alone, makes a missing
+    /// sub-dictionary an `OFF`. Its own `Print` bullet ("left
+    /// unchanged") and its own EXAMPLE ("shall not be affected by zoom
+    /// level changes") both say otherwise, and the clause's stated
+    /// rationale for multiple applications — combining documents "and
+    /// have their behaviour preserved" — is impossible under
+    /// absent-means-OFF, because merging would black out every layer
+    /// lacking a merged category.
+    ///
+    /// Here the group has a `/View` saying ON and no `/Zoom` at all,
+    /// while both categories are requested. Under absent-means-OFF the
+    /// group would be hidden; under the implemented reading the `/Zoom`
+    /// simply abstains.
+    #[test]
+    fn a_category_the_group_lacks_abstains_rather_than_voting_off() {
+        let off = usage_off_set("[/View /Zoom]", "<< /View << /ViewState /ON >> >>", 1.0);
+        assert!(
+            !off.contains(&ObjId::new(5, 0)),
+            "the absent /Zoom must not veto the present /View"
+        );
+    }
+
+    /// **A group with no `/Usage` at all is left exactly as `/D` had
+    /// it** — in both directions, which is what "left unchanged" means
+    /// and what a blanket `OFF` would break.
+    #[test]
+    fn a_group_with_no_usage_dictionary_keeps_its_default_state() {
+        let objects: Vec<(u32, Vec<u8>)> = vec![
+            (
+                1,
+                b"<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [5 0 R 6 0 R] \
+                  /D << /OFF [6 0 R] /AS [ << /Event /View /Category [/View] \
+                  /OCGs [5 0 R 6 0 R] >> ] >> >> >>"
+                    .to_vec(),
+            ),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 10 10] >>".to_vec(),
+            ),
+            (3, b"<< /Type /Page /Parent 2 0 R >>".to_vec()),
+            (4, b"<< /Type /OCG /Name (unused) >>".to_vec()),
+            (5, b"<< /Type /OCG /Name (on, no usage) >>".to_vec()),
+            (6, b"<< /Type /OCG /Name (off, no usage) >>".to_vec()),
+        ];
+        let doc = build_pdf(&objects);
+        let graph = doc.view();
+        let mut off = optional_content_default_off(&graph);
+        let notes = apply_view_usage(&graph, &mut off, 1.0);
+        assert!(!off.contains(&ObjId::new(5, 0)), "was ON, stays ON");
+        assert!(off.contains(&ObjId::new(6, 0)), "was OFF, stays OFF");
+        assert_eq!(notes.groups_managed, 0, "no category decided anything");
+        assert_eq!(notes.applications, 1, "the application was still examined");
+    }
+
+    /// ★ **The conjunction is global and order-independent: `OFF`
+    /// dominates.**
+    ///
+    /// §8.11.4.4: *"If a given optional content group appears in more
+    /// than one `OCGs` array, its state shall be ON only if all
+    /// categories in all the usage application dictionaries it appears
+    /// in shall have a state of ON."*
+    ///
+    /// This is the OPPOSITE algebra to the `/D` `/ON`//`/OFF` arrays in
+    /// the same clause, where order decides (decision 038). Both orders
+    /// are tested so a last-writer-wins implementation fails one of
+    /// them, whichever way round it was written.
+    #[test]
+    fn two_applications_conjoin_with_off_dominating_in_either_order() {
+        for (first, second) in [("/ON", "/OFF"), ("/OFF", "/ON")] {
+            let objects: Vec<(u32, Vec<u8>)> = vec![
+                (
+                    1,
+                    b"<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [5 0 R] /D << /AS [ \
+                     << /Event /View /Category [/View] /OCGs [5 0 R] >> \
+                     << /Event /View /Category [/Print] /OCGs [5 0 R] >> ] >> >> >>"
+                        .to_vec(),
+                ),
+                (
+                    2,
+                    b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 10 10] >>".to_vec(),
+                ),
+                (3, b"<< /Type /Page /Parent 2 0 R >>".to_vec()),
+                (4, b"<< /Type /OCG /Name (unused) >>".to_vec()),
+                (
+                    5,
+                    format!(
+                        "<< /Type /OCG /Name (A) /Usage << /View << /ViewState {first} >> \
+                         /Print << /PrintState {second} >> >> >>"
+                    )
+                    .into_bytes(),
+                ),
+            ];
+            let doc = build_pdf(&objects);
+            let graph = doc.view();
+            let mut off = optional_content_default_off(&graph);
+            let _ = apply_view_usage(&graph, &mut off, 1.0);
+            assert!(
+                off.contains(&ObjId::new(5, 0)),
+                "one OFF anywhere hides the group, whichever application carried it ({first}/{second})"
+            );
+        }
+    }
+
+    /// **A non-`View` event is counted and not applied.**
+    ///
+    /// §8.11.4.5 scopes a viewer's examination to `Event` `View`;
+    /// `Print` and `Export` apply only for the duration of that
+    /// operation and then revert. Applying a `/Print` dictionary at
+    /// viewing time would hide content on screen that the document only
+    /// asked to hide on paper.
+    #[test]
+    fn a_print_event_application_is_not_applied_when_viewing() {
+        let objects: Vec<(u32, Vec<u8>)> = vec![
+            (
+                1,
+                b"<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [5 0 R] /D << /AS [ \
+                  << /Event /Print /Category [/View] /OCGs [5 0 R] >> ] >> >> >>"
+                    .to_vec(),
+            ),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 10 10] >>".to_vec(),
+            ),
+            (3, b"<< /Type /Page /Parent 2 0 R >>".to_vec()),
+            (4, b"<< /Type /OCG /Name (unused) >>".to_vec()),
+            (
+                5,
+                b"<< /Type /OCG /Name (A) /Usage << /View << /ViewState /OFF >> >> >>".to_vec(),
+            ),
+        ];
+        let doc = build_pdf(&objects);
+        let graph = doc.view();
+        let mut off = optional_content_default_off(&graph);
+        let notes = apply_view_usage(&graph, &mut off, 1.0);
+        assert!(
+            !off.contains(&ObjId::new(5, 0)),
+            "a Print event does not act on screen"
+        );
+        assert_eq!(
+            notes.non_view_events, 1,
+            "and it is counted, not ignored silently"
+        );
+        assert_eq!(notes.applications, 0);
+    }
+
+    /// **`Event` and `Category` sharing names does not conflate them**
+    /// (§8.11.4.4 NOTE 3).
+    ///
+    /// `<< /Event /View /Category [/Zoom] >>` is legal: the event says
+    /// WHEN to apply, the category says WHICH usage entry to read. An
+    /// implementation that keyed the category off the event name would
+    /// read `/View` here and find nothing.
+    #[test]
+    fn a_view_event_can_request_a_zoom_category() {
+        let off = usage_off_set("[/Zoom]", "<< /Zoom << /min 4.0 >> >>", 1.0);
+        assert!(
+            off.contains(&ObjId::new(5, 0)),
+            "the Zoom category was read under a View event"
+        );
+    }
+
+    /// **Categories pdfce cannot evaluate are counted, not guessed.**
+    ///
+    /// `Language` and `User` need a locale and an identity pdfce has no
+    /// concept of; `CreatorInfo` and `PageElement` have no defined
+    /// effect on state at all. Guessing at any of them would move
+    /// content on the page for a reason pdfce could not explain.
+    #[test]
+    fn unevaluable_categories_are_disclosed_rather_than_guessed() {
+        let objects: Vec<(u32, Vec<u8>)> = vec![
+            (
+                1,
+                b"<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [5 0 R] /D << /AS [ \
+                  << /Event /View /Category [/Language /User] /OCGs [5 0 R] >> ] >> >> >>"
+                    .to_vec(),
+            ),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 10 10] >>".to_vec(),
+            ),
+            (3, b"<< /Type /Page /Parent 2 0 R >>".to_vec()),
+            (4, b"<< /Type /OCG /Name (unused) >>".to_vec()),
+            (
+                5,
+                b"<< /Type /OCG /Name (A) /Usage << /Language << /Lang (de-DE) >> \
+                  /User << /Type /Ind /Name (someone) >> >> >>"
+                    .to_vec(),
+            ),
+        ];
+        let doc = build_pdf(&objects);
+        let graph = doc.view();
+        let mut off = optional_content_default_off(&graph);
+        let notes = apply_view_usage(&graph, &mut off, 1.0);
+        assert!(!off.contains(&ObjId::new(5, 0)), "state untouched");
+        assert_eq!(notes.categories_unevaluable, 2);
+        assert_eq!(notes.groups_managed, 0);
     }
 }

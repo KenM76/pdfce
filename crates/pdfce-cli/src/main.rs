@@ -5129,6 +5129,11 @@ numbered 1..={})",
         .with_cmyk_jpeg_polarity(settings.cmyk_jpeg_polarity)
         .with_missing_as(settings.missing_as);
     render_options.fonts = font_env;
+    // `render-page` produces a raster for LOOKING AT, so it is a viewer
+    // under §8.11.4.5 and applies `View`-event `/AS` usage at the
+    // requested scale. The print path is the one the clause forbids this
+    // on, and pdfce's printing does not come through here.
+    render_options.view_magnification = Some(scale);
 
     // §8.11 layer overrides. Resolved by NAME against the document's own
     // registry, because a name is what an operator has (`list-layers`

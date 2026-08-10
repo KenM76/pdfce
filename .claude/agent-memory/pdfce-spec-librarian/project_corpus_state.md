@@ -1,8 +1,55 @@
 ---
 name: pdf-spec-corpus-state
-description: PDF_Spec RAG conventions that are NOT recorded in its own index.md — the font__* vs iso32000__s__9.* prefix split, the two-tier gap vocabulary, retraction markers, shall/should modality tabulation, and targeted codec-spec cross-reference reads.
+description: PDF_Spec RAG conventions NOT recorded in its own index.md — prefix splits, gap/retraction vocabulary, axis re-audits, evidencing negatives, and 36 numbered dispatch-shape findings. Too long to read whole; grep by item number or keyword using the index at the top.
 metadata:
   type: project
+---
+
+**THIS FILE EXCEEDS THE SINGLE-READ CAP. Do not read it start to finish — use the
+item index below, then `Read` with `offset`/`limit` or `Grep` for the item's
+heading (`**<N>. `).**
+
+| # | Item — what it is about |
+|---|---|
+| 1 | `font__*` (external font data) vs `iso32000__s__9.*` (clause text); same for `color__*` |
+| 2 | Gap vocabulary: GAP / NEEDS VERIFICATION / genuine spec ambiguity / GAP CLOSED |
+| 2b | A gap can close on a NEGATIVE result; a gap can be PERMANENT; split-sourcing must be tabulated |
+| 3 | Retractions: `CORRECTION`/`AMENDMENT` + retained wrong text in a blockquote + index sweep |
+| 4 | `VERIFICATION CLOSED` + an explicit "was the recalled claim right?" outcome line |
+| 5 | Filter files name the chosen crate but never assert crate capabilities |
+| 6 | Modality (`shall`/`should`/`can`) is load-bearing — tabulate, never flatten |
+| 7 | Resolve dangling cross-refs with a TARGETED read of the staged codec spec |
+| 8 | Second audit on a new AXIS = appended section, never a rewrite; ≥4 files ⇒ a `ref` consolidator |
+| 9 / 9b | SCOPED banners with a `NOT ingested` list; widening a scope must edit the banner in place |
+| 10 | `NEGATIVE RESULT` as a first-class greppable deliverable class |
+| 11 | Coverage-DEPTH axis (stage 1 → stage 2), distinct from the direction axis |
+| 12 | Never close a negative with a recalled real-world fact — route to `personal_rag\pdf` |
+| 13 | Direction changes have TWO shapes: same clauses ⇒ axis section; different clauses ⇒ new files + cross-warning consolidators |
+| 14 | A dispatch can ASK for negatives — satisfy with term-frequency EVIDENCE and give each an ID |
+| 15 | Verify the staged source CONTAINS the requested numbering before writing; index.md is edited concurrently |
+| 16 | REFUSING to write an unobtainable algorithm is a valid deliverable |
+| 17 | A WRITE audit must trace the artifact to its CONSUMER clause |
+| 18 | One dispatch can be both axis-section and new-file; flag-bit VALUES are hypotheses |
+| 19 | Behavioral negatives: the HOLLOW SHALL, the NO-CLAUSE tool-verb, `shall`-vs-`may` on producer flags |
+| 20 | DESTRUCTIVE-op shape (redaction): outcome-bound/method-deferred `shall`, pure-clause vs derived-mechanics split, invariant inversion, carrier sweep |
+| 21 | A dispatch's asserted SPEC GUARANTEE is a hypothesis; split spec vs pdfce-invariant vs empirical guarantors |
+| 22 | INVERSE/RE-ENCODE shape: invert the font's own forward chain; the refuse-trigger table is the deliverable |
+| 23 | APPEND/ORIGINATION shape: the binding rule may be in an un-dispatched clause; byte-identical = edit the REFERENCE |
+| 24 | EMBEDDING/REDISTRIBUTION shape: read the vendored crate; check whether the spec MANDATES the "limitation"; cross-spec bridge gaps are PERMANENT |
+| 25 | A FIGURE is normative and readable as GEOMETRY; refute rival readings arithmetically; record confirmations |
+| 26 | COLLISION/RE-INDEX shape: re-index existing verbatim material on a NEW KEY; key names overload across dictionaries |
+| 27 | NAMED-GAP shape: closing a recorded NON-GOAL; the "partly" licensing split; grep clause 3 vs the Bibliography yourself |
+| 28 | CLAIM-VERIFICATION shape and its 4th verdict, CONFIRMED-BUT-SCOPE-INCOMPLETE |
+| 29 | RENDER-PIPELINE shape on an uningested clause: an existing ambiguity row can be WRONG; one key name = two features |
+| 30 | THREE-AREA PARITY SCOPING (prepress): the DECLINE/DEFINE clause pair; the modality ladder; DEVICE-CLASS COLLAPSE; OBLIGED vs CHOOSING |
+| 31 | CONSOLIDATION-ONLY shape: measure the population; grep the CONSUMER codebase; grade every default; blast radius |
+| 32 | DELETION/REFERENTIAL-INTEGRITY shape: the generic governing clause; the obligation for key A living in key B's row; sibling-row CONTRAST |
+| 33 | RECURSIVE-DEFINITION shape: an annex worked EXAMPLE as a machine-checkable oracle; tables swap numbers between editions |
+| 34 | READER/ENUMERATION shape: the standard conceding its subject is not enumerable; merged-cell extraction artifacts |
+| 35 | UI-PRESENTATION/TREE shape + the CLAIM-OF-CONTRADICTION ruling: the resolution is a third sentence in the same table; "process both" is a wrong shape for state assignment |
+| 36 | NAMED-TABLE shape: DIVERGENT SIBLING ROWS; a correct summary is the hardest gap to see; a purpose clause corroborates; global conjunction vs order-critical algebra; a `shall not` as a NEGATIVE WIRING constraint |
+| 37 | ADJUDICATING A CLAUSE-NUMBER CONFLICT: rule from the source's own enumeration, never from your heading (headings are RECONSTRUCTED); "the sub-clause does not exist" beats "the other one is right"; status leaks to anywhere the PRODUCT NAME appears, not just to headings and the index |
+
 ---
 
 Two conventions established for `D:\Dev\Rag-Specialized\PDF_Spec\` that are easy
@@ -1639,3 +1686,143 @@ three sites plus the index. Seven sub-rules:
   between the start of this session and the status edit; pinning `57f0c8f`
   would have shipped a table that was stale on arrival. Same class as the
   concurrency rule in item 15 (index.md) and the `ls -lt` rule for GAP claims.
+
+**36. A NAMED-TABLE dispatch ("Table N is described only as a list of key names —
+source it") — the payload is that the SIBLING ROWS ANSWER THE SAME STRUCTURAL
+QUESTION DIFFERENTLY FROM EACH OTHER, and the clause's own governing aggregation
+sentence contradicts two of them.** Established 2026-08-10 closing the Table 102
+(optional content **usage** dictionary) gap in `iso32000__s__8.11.md` for the
+`/AS` + `/Usage` auto-state Pass. Six sub-findings, all new shapes:
+
+- **A file can name a table and never quote it, indefinitely, without looking
+  incomplete.** Table 103 had been verbatim since an earlier build; Table 102, its
+  sibling one page earlier, was a bare list of eight key names in a "recognition
+  scope" paragraph. Nothing flagged it because the paragraph was *true*. **A
+  summary that is correct is the hardest gap to see.** How to apply: when a clause
+  file cites two tables and quotes one, that asymmetry is itself a gap marker —
+  grep clause files for `Table N` mentions with no adjacent blockquote. Fix shape:
+  append the depth section, then put a **SUPERSEDED IN DEPTH** banner on the
+  shallow paragraph (item 9b's banner discipline extended from SCOPED files to
+  *shallow-but-correct* prose), naming the sub-sections that now own the question
+  and saying "do NOT answer X from this paragraph".
+- **THE DIVERGENT-SIBLING-ROWS shape.** Item 32 was sibling-row CONTRAST (row A
+  states a rule, row B is silent ⇒ the silence is deliberate). This is stronger
+  and worse: **§8.11.4.4 answers "what if the group lacks this category?" for
+  three of six categories and gives a DIFFERENT answer each time** — `Print`
+  "shall be **left unchanged**", the `Zoom` EXAMPLE "shall **not be affected**",
+  `Language` "All other groups shall receive an **`OFF`** recommendation" — while
+  `View`, `Export` and `User` say nothing. **And the clause's own aggregation
+  sentence** ("If all the entries yield a recommended state of ON; **otherwise**,
+  its state shall be set to OFF") **is false under two of the three.** The naive
+  reading of the *governing* sentence is refuted by its *subordinate* bullets.
+  Deliverable: the full absent-case table with a per-row Basis column, then a
+  DERIVED reconciliation stated as *"the only reading under which all four
+  sentences are simultaneously true"*, plus an explicit **"what is NOT
+  defensible"** paragraph (the item-35 discipline). How to apply: when a clause
+  answers a structural question for *some* enumerated cases, enumerate ALL the
+  cases and check each against the governing sentence — never generalise from the
+  first answer found.
+- **The standard's stated RATIONALE can independently corroborate a derived
+  reading.** "There shall be no restriction on multiple entries with the same
+  value of `Event`, **in order to allow documents with incompatible usage
+  application dictionaries to be combined into larger documents and have their
+  behaviour preserved**." Under the naive absent-implies-OFF reading, merging two
+  files blacks out every layer lacking one of the merged categories — precisely
+  what the stated rationale exists to prevent. **A purpose clause in one normative
+  sentence is evidence about the intended reading of a *different* sentence.**
+- **"What happens on a conflict?" is sometimes "there is no conflict" — a GLOBAL
+  CONJUNCTION.** Two usage applications naming one OCG with contradictory
+  categories resolve by AND across everything ("`ON` only if all categories in all
+  the usage application dictionaries it appears in"), so `OFF` dominates and
+  **`/AS` is ORDER-INDEPENDENT** — the exact opposite of the same file's `/D`
+  `/ON`//`/OFF` arrays, where order is load-bearing and had to be forced
+  interpretively (item 35). **Two state-assignment mechanisms in one clause can
+  have opposite algebras**; say so in the file, or an implementer imports
+  last-writer-wins thinking from the neighbouring section.
+- **A BOUNDARY-POLARITY question can be DOUBLY sourced — look for the second locus
+  before labelling it derived.** `/Zoom` is half-open `min ≤ m < max`, stated once
+  in Table 102's wording ("**at which**" / "**below which**") and once in
+  §8.11.4.4's bullet ("greater than **or equal to**" / "**less than**"). Table and
+  clause **agree** — worth writing down precisely because the previous audit of
+  this same file found them apparently divergent. Meanwhile the *quantity*
+  (magnification) is undefined in the clause and recoverable only from **three
+  clauses that never mention the feature** (§12.3.2.2 `/XYZ` "magnified by the
+  **factor**", Annex C.2 "8 percent to 6400 percent", §14.10.6 `/PZ`) plus the
+  clause's own EXAMPLE values. **A units question is often answerable only OUTSIDE
+  the owning clause; sweep the unit word's frequency document-wide** (here
+  `magnification` = 22 hits, 4 load-bearing). Label DERIVED and cite the foreign
+  clauses, never the owning one.
+- **A dispatch's ARCHITECTURAL PLAN can be confirmed by a `shall not`.** The
+  dispatch proposed keeping the `/D` function as the print/aggregate answer and
+  adding a separate View-event layer. §8.11.4.5 does not merely permit that split,
+  it **mandates** it: the `/D` result "shall be the state used by printing and
+  aggregating application[s]. **Such applications shall not apply the changes based
+  on usage application dictionaries**" ⇒ a **negative wiring constraint** (the new
+  function must be unreachable from print/export), which an implementer will not
+  derive from a feature description. Same for the override contract: "Manual
+  changes **shall** override … and **shall not** be readjusted … as long as the
+  document is open" makes replace-not-merge **sourced, not lucky** — and reading
+  past the named sentence yielded two unasked-for details: the stickiness is **per
+  group** ("the states of **these** groups"), and the standard **names the
+  release** ("until the user reverts the document to its original state" ⇒ a
+  *Reset layers* command is sanctioned). **When a dispatch says "I need this
+  verbatim because my architecture depends on it", read the scope qualifiers
+  around the sentence it named** — those are the part the architecture needs.
+
+**Also this build:** a **5th KEY-NAME OVERLOADING** — `/AS` is Table 101's array of
+usage application dictionaries *and* Table 168's annotation appearance-state
+**name**; a `grep -rn 'b"AS"'` of the consumer codebase returns mostly the *wrong*
+one, so check for an overload before handing an implementer a grep. A **4th
+name-collision inside one feature**: `View`//`Print`//`Export` are simultaneously
+`Event` values and `Category` values and NOTE 3 says so — do not key the category
+handler off the event name. **Two enumerations of unequal length is a negative
+result**: Table 102 has **eight** entries, §8.11.4.4 defines rules for **six** ⇒
+`CreatorInfo`//`PageElement` are legal `/Category` values with no defined behaviour;
+**count both sides of any "for each of the corresponding X" mapping**. One category
+(`Language`) is **not evaluable per-group** — its rule quantifies over the whole
+`/OCGs` array, so a per-group loop gets it wrong; watch for a rule whose subject is
+*"the groups in the array"* rather than *"the group"*. Five new errata, one —
+Table 102's `Print` row reading "the content in this group **is shall be** used when
+printing" — **two-extractor confirmed AND proved permanent** by the 2.0 change
+record's 0 hits for `PrintState` (the now-routine erratum-permanence test). And a
+**stale un-struck entry was found in `index.md`'s "not yet ingested" clause list**
+(`§8.11 optional content`, bare, while every sibling had been struck through with a
+closure note) — **after closing the last table in a clause, grep the index's gap
+lists for the bare clause number**, not just for the file name.
+
+**37. ADJUDICATING A CLAUSE-NUMBER CONFLICT between two pdfce filings — rule from
+the SOURCE'S OWN ENUMERATION, never from your corpus's heading.** Established
+2026-08-10 settling §8.11.2.2 (pdfce's code + 10 doc comments) vs §8.11.2.4
+(an older `ARCHITECTURE.md` filing) for `/VE`. Three findings:
+
+- **The strongest verdict is "the rival does not exist", not "mine is right".**
+  `8.11.2.4` = **0 occurrences in 756 pages** — no heading, no cross-reference, no
+  ToC line. That single count settles it without any argument about where `VE`
+  lives, and it also **rules out a renumbering explanation**. Reach for the
+  0-hit count on the *disputed* number first; it is one command and it can end
+  the question outright. (Then still confirm the positive side: enumerate the
+  sub-clause headings, and check the disputed feature's text ends before the
+  *next* heading — `/VE`'s grammar, NOTEs and all three EXAMPLEs sit inside
+  §8.11.2.2 and §8.11.2.3 begins after them.)
+- **A corpus HEADING is a reconstructed artifact and must not be evidence.** The
+  coordinator's own reasoning ran "the corpus heading says §8.11.2.2, therefore
+  §8.11.2.2" and explicitly asked whether that was safe. It was not: this file's
+  heading reads *"§8.11.2.2 Optional Content Membership **Dictionary** — OCMD —
+  Table 99"* while the source reads *"Optional Content Membership
+  **Dictionaries**"* with no tail — **the clause number is transcribed, the
+  heading text is editorialised.** Right answer, invalid route. **When asked to
+  confirm a citation, say explicitly which parts of your own file are verbatim
+  and which are reconstructed** — that is usually the most useful sentence in the
+  reply, and nobody can derive it from the file itself.
+- **The "one status locus" rule leaks anywhere the PRODUCT NAME appears.** It was
+  written after status leaked into a *heading*; the index-hash grep was added
+  after it leaked into `index.md`. This session found a **third** shape: a stale
+  *"pdfce reads OCMDs but ignores `/P` … and ignores `/VE`"* bullet sitting in the
+  **clause-summary prose** of the same file, where no status vocabulary and no
+  commit hash appears, so neither prior rule could find it. **Sweep for the
+  product name (`pdfce`), not for the status table, not for the hash.** And when
+  a status row splits, expect the mirrors to split too: `/VE` needed one row to
+  become two (EVALUATION implemented, GROUP DISCOVERY not) because a single
+  NOT IMPLEMENTED cell was hiding a shipped feature *and* a live defect — **when
+  a dispatch says "the first half is now false, verify the second half", the
+  deliverable is usually a ROW SPLIT, not an edit.**

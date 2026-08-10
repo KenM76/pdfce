@@ -311,6 +311,31 @@ pub struct RenderOptions {
     /// `Copy`. See [`crate::LayerVisibility`] for the replace-not-merge
     /// contract.
     pub layers: Option<crate::LayerVisibility>,
+    /// Apply `View`-event `/AS` usage applications at this magnification
+    /// (§8.11.4.4), or `None` to render the `/D`-initial state.
+    ///
+    /// # ★ `None` is the PRINT answer, and it is the default for a reason
+    ///
+    /// §8.11.4.5 says the `/D`-initial state *"shall be the state used by
+    /// printing and aggregating application[s]. Such applications **shall
+    /// not** apply the changes based on usage application dictionaries"*.
+    /// Only a **viewer** examines `/AS`.
+    ///
+    /// So this is opt-IN. A caller that has not thought about whether it
+    /// is a viewer gets the print-correct answer, and the only way to
+    /// apply usage is to say so — which means a print or aggregate path
+    /// cannot acquire it by inheriting a default. Defaulting the other
+    /// way would put a `shall not` violation one forgotten argument away.
+    ///
+    /// The value is a SCALE FACTOR where `1.0` is 100 %. §8.11.4.4 never
+    /// defines the quantity; the unit is sourced from §12.3.2.2 and
+    /// Annex C.2 (see `pdfce_core::annot::apply_view_usage`).
+    ///
+    /// A viewer must re-render when this changes — §8.11.4.5 requires the
+    /// dictionaries to be reapplied "whenever there is a change to a
+    /// factor that [they] depend on (such as zoom level)". In the GUI
+    /// that falls out of the raster cache keying on scale.
+    pub view_magnification: Option<f32>,
     /// How `DeviceCMYK` is converted to sRGB for display
     /// (ISO 32000-1 §8.6.4.4).
     ///
@@ -383,7 +408,12 @@ pub struct RenderOptions {
 /// on, and a `static` or thread-local would destroy it: a render's output
 /// would depend on when the settings file was last read, which is not a
 /// question a caller can answer or a test can pin.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+// `Eq` is deliberately NOT derived: `view_magnification` is an `f32`,
+// and a policy carrying a float has no total equality. `PartialEq` is
+// what the projection test actually needs, and claiming `Eq` for a type
+// that can hold a NaN would be a lie the compiler happens to allow via
+// the other fields.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[non_exhaustive]
 pub struct RenderPolicy<'a> {
     /// See [`RenderOptions::cmyk_intent`].
@@ -409,6 +439,8 @@ pub struct RenderPolicy<'a> {
     /// [`crate::LayerVisibility`] for why it REPLACES the document's
     /// defaults rather than merging with them.
     pub layers: Option<&'a crate::LayerVisibility>,
+    /// See [`RenderOptions::view_magnification`].
+    pub view_magnification: Option<f32>,
 }
 
 impl Default for RenderOptions {
@@ -436,6 +468,9 @@ impl Default for RenderOptions {
             // document asks", which is the only correct default for a
             // caller that has no operator behind it.
             layers: None,
+            // See the field docs: the print-correct answer is the safe
+            // default, and a viewer opts in.
+            view_magnification: None,
         }
     }
 }
@@ -521,6 +556,16 @@ impl RenderOptions {
         self
     }
 
+    /// Render as a VIEWER at this magnification, applying `View`-event
+    /// `/AS` usage applications (§8.11.4.4). See
+    /// [`RenderOptions::view_magnification`] — do not call this on a
+    /// print or aggregate path.
+    #[must_use]
+    pub fn with_view_magnification(mut self, magnification: f32) -> Self {
+        self.view_magnification = Some(magnification);
+        self
+    }
+
     pub fn with_missing_as(mut self, policy: MissingAppearanceState) -> Self {
         self.missing_as = policy;
         self
@@ -542,6 +587,7 @@ impl RenderOptions {
             cmyk_jpeg_polarity: self.cmyk_jpeg_polarity,
             missing_as: self.missing_as,
             layers: self.layers.as_ref(),
+            view_magnification: self.view_magnification,
         }
     }
 }
@@ -584,7 +630,8 @@ mod render_policy_tests {
             .with_image_minify(pdfce_core::settings::MinifyFilter::Smooth)
             .with_cmyk_jpeg_polarity(pdfce_core::settings::CmykJpegPolarity::InvertOnApp14)
             .with_missing_as(pdfce_core::settings::MissingAppearanceState::FirstEntry)
-            .with_layers(hidden.clone());
+            .with_layers(hidden.clone())
+            .with_view_magnification(2.5);
         assert_eq!(
             options.policy(),
             RenderPolicy {
@@ -594,6 +641,7 @@ mod render_policy_tests {
                 cmyk_jpeg_polarity: pdfce_core::settings::CmykJpegPolarity::InvertOnApp14,
                 missing_as: pdfce_core::settings::MissingAppearanceState::FirstEntry,
                 layers: Some(&hidden),
+                view_magnification: Some(2.5),
             }
         );
         assert_ne!(options.policy(), RenderPolicy::default());
