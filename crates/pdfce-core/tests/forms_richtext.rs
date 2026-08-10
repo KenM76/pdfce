@@ -291,3 +291,50 @@ fn fill_text_field_still_refuses_a_rich_text_field_directly() {
         "and refuse by NAME, so a caller can route on it; got {err:?}"
     );
 }
+
+/// **★ NO per-entry failure abandons the import half-applied — not just
+/// rich text.**
+///
+/// The rich-text case was merely the reachable instance. Every verb the
+/// import loop calls COMMITS, so a `?` on any of them wrote everything
+/// before it and then reported failure. This drives a button entry with an
+/// on-state the document does not have, which `set_button_state` refuses,
+/// and asserts the entries either side of it still landed.
+#[test]
+fn a_refused_entry_of_any_kind_is_skipped_not_fatal() {
+    let mut s = session();
+    let data = pdfce_core::fdf::FormData {
+        fields: vec![
+            field_data("Country", "CA"),
+            // An on-state this check box does not have. Refused per-entry.
+            field_data("Colour", "NoSuchStateExists"),
+            field_data("Notes", "rich text, also skipped"),
+        ],
+    };
+
+    let outcome = s
+        .import_form_data(&data)
+        .expect("a per-entry refusal must not fail the whole import");
+    assert_eq!(
+        outcome.applied + outcome.skipped,
+        3,
+        "every entry is accounted for: applied={} skipped={}",
+        outcome.applied,
+        outcome.skipped
+    );
+    assert!(
+        outcome.applied >= 1,
+        "the applicable entry still landed; applied={}",
+        outcome.applied
+    );
+
+    let form = pdfce_core::forms::parse_acroform(&s.graph()).expect("AcroForm");
+    assert_eq!(
+        form.field_by_name("Country")
+            .expect("Country exists")
+            .value
+            .display_text(),
+        "CA",
+        "an entry BEFORE the refused one is not rolled back and not lost"
+    );
+}

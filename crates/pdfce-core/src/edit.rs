@@ -10742,6 +10742,24 @@ impl EditSession {
         if forms::parse_acroform(&self.graph()).is_none() {
             return Err(EditError::NoInteractiveForm);
         }
+        // ★ THE DOCUMENT-WIDE GATE IS ASKED ONCE, UP FRONT.
+        //
+        // A certification signature that forbids filling forbids it for
+        // EVERY entry, so discovering that on entry seventeen — after
+        // sixteen have already been committed — is both late and
+        // destructive. Asked here, it fails before anything is written and
+        // the document is untouched.
+        //
+        // This is also what makes the per-entry policy below safe to state
+        // as "skip": with the document-wide refusals taken out, what remains
+        // is genuinely per-field.
+        if let Some(err) = self.fill_refusal() {
+            return Err(err);
+        }
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+
         let mut applied = 0usize;
         let mut skipped = 0usize;
         for entry in &data.fields {
@@ -10753,14 +10771,31 @@ impl EditSession {
                 skipped += 1;
                 continue;
             };
-            match field.field_type {
+            // ★ A PER-ENTRY FAILURE SKIPS; IT DOES NOT ABANDON THE IMPORT.
+            //
+            // Every verb below COMMITS — `set_button_state`,
+            // `set_choice_value` and `fill_text_field` all push their own
+            // undo entry. So a `?` here does not merely stop: it stops
+            // AFTER writing everything before it, and hands the caller an
+            // `Err` describing a document that has already changed, with
+            // nothing saying how far it got.
+            //
+            // With the document-wide gates taken above, what can still fail
+            // here is per-field and local — an on-state the file does not
+            // have, an option that is not in `/Opt`, a rich-text field. Each
+            // is the same question the signature arm has always answered by
+            // skipping: pdfce cannot apply THIS entry.
+            //
+            // `applied` + `skipped` is the disclosure, and it now always
+            // sums to the entries examined.
+            let outcome = match field.field_type {
                 Some(FieldType::Button) => {
                     let state = entry.values.first().map_or("Off", String::as_str);
-                    self.set_button_state(&entry.name, state)?;
+                    self.set_button_state(&entry.name, state).map(|_| ())
                 }
                 Some(FieldType::Choice) => {
                     let sel: Vec<&str> = entry.values.iter().map(String::as_str).collect();
-                    self.set_choice_value(&entry.name, &sel)?;
+                    self.set_choice_value(&entry.name, &sel).map(|_| ())
                 }
                 Some(FieldType::Text) => {
                     // ★ A RICH-TEXT FIELD IS SKIPPED, NOT FATAL.
@@ -10792,14 +10827,18 @@ impl EditSession {
                         continue;
                     }
                     let text = entry.values.first().map_or("", String::as_str);
-                    self.fill_text_field(&entry.name, text)?;
+                    self.fill_text_field(&entry.name, text).map(|_| ())
                 }
                 Some(FieldType::Signature) | None => {
                     skipped += 1;
                     continue;
                 }
+            };
+            if outcome.is_ok() {
+                applied += 1;
+            } else {
+                skipped += 1;
             }
-            applied += 1;
         }
         Ok(ImportOutcome { applied, skipped })
     }
