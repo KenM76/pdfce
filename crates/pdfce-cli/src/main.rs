@@ -1102,6 +1102,21 @@ enum Command {
         /// Draw a border around each page's cell when using `--n-up`.
         #[arg(long)]
         n_up_border: bool,
+        /// Impose as a folded booklet: two page-halves per sheet face,
+        /// remapped so the fold reads in order.
+        ///
+        /// Pages are padded to a multiple of four with blanks, and the
+        /// blanks SCATTER across sheets rather than grouping at the end
+        /// — that is what a fold requires, and grouping them produces a
+        /// booklet with a blank leaf in the middle.
+        #[arg(long)]
+        booklet: bool,
+        /// Which edge the booklet is bound on.
+        #[arg(long, value_enum, default_value_t = BindingArg::Left)]
+        binding: BindingArg,
+        /// Print one face of each sheet, for a printer without duplex.
+        #[arg(long, value_enum, default_value_t = BookletSubsetArg::BothSides)]
+        booklet_subset: BookletSubsetArg,
     },
 
     PrintPreview {
@@ -4057,6 +4072,9 @@ fn run() -> ExitCode {
             comments,
             n_up,
             n_up_border,
+            booklet,
+            binding,
+            booklet_subset,
         } => cmd_print(
             &input,
             printer.as_deref(),
@@ -4076,6 +4094,9 @@ fn run() -> ExitCode {
             comments,
             n_up,
             n_up_border,
+            booklet,
+            binding,
+            booklet_subset,
         ),
         Command::PrintPreview {
             input,
@@ -6460,6 +6481,53 @@ fn cmd_list_attachments(input: &Path) -> u8 {
 /// variant, and because the CLI's vocabulary is allowed to differ from
 /// the engine's — `shrink` reads better than `ShrinkOversized` in a
 /// shell.
+/// `--binding` on `print`.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
+enum BindingArg {
+    /// Side-by-side halves, bound on the left.
+    Left,
+    /// Side-by-side halves, bound on the right.
+    Right,
+    /// Stacked halves, bound on the left (a horizontal fold).
+    LeftTall,
+    /// Stacked halves, bound on the right.
+    RightTall,
+}
+
+impl BindingArg {
+    /// The imposition type this maps to.
+    const fn to_binding(self) -> pdfce_print::imposition::Binding {
+        match self {
+            Self::Left => pdfce_print::imposition::Binding::Left,
+            Self::Right => pdfce_print::imposition::Binding::Right,
+            Self::LeftTall => pdfce_print::imposition::Binding::LeftTall,
+            Self::RightTall => pdfce_print::imposition::Binding::RightTall,
+        }
+    }
+}
+
+/// `--booklet-subset` on `print`.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
+enum BookletSubsetArg {
+    /// Every face.
+    BothSides,
+    /// Front faces only — the first pass on a printer without duplex.
+    FrontOnly,
+    /// Back faces only — the second pass, after re-feeding.
+    BackOnly,
+}
+
+impl BookletSubsetArg {
+    /// The imposition type this maps to.
+    const fn to_subset(self) -> pdfce_print::imposition::BookletSubset {
+        match self {
+            Self::BothSides => pdfce_print::imposition::BookletSubset::BothSides,
+            Self::FrontOnly => pdfce_print::imposition::BookletSubset::FrontOnly,
+            Self::BackOnly => pdfce_print::imposition::BookletSubset::BackOnly,
+        }
+    }
+}
+
 /// `--comments` on `print` — which annotation classes reach the paper.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
 enum CommentsArg {
@@ -6639,6 +6707,9 @@ fn cmd_print(
     comments: CommentsArg,
     n_up: Option<u32>,
     n_up_border: bool,
+    booklet: bool,
+    binding: BindingArg,
+    booklet_subset: BookletSubsetArg,
 ) -> u8 {
     let doc = match pdfce_core::document::Document::load(input) {
         Ok(doc) => doc,
@@ -6824,7 +6895,122 @@ fn cmd_print(
         bitmaps = sheets;
     }
 
-    if n_up.is_none() {
+    // ---- Booklet: folded imposition, two page-halves per sheet face ----
+    //
+    // Its own path for the same reason N-up is: it changes the SHAPE of
+    // the job. A booklet is not a scaling of the page sequence, it is a
+    // REMAPPING of it — sheet 1 carries the last page beside the first —
+    // and no `Placement` can express that.
+    //
+    // The blank positions are real slots with no source. They are
+    // rendered as empty sheet halves rather than skipped, because a
+    // booklet's blanks are structural: dropping them shortens the fold
+    // and every subsequent sheet carries the wrong pages.
+    if booklet {
+        let spec_b = pdfce_print::imposition::BookletSpec {
+            binding: binding.to_binding(),
+            subset: booklet_subset.to_subset(),
+            sheets: None,
+            auto_rotate: true,
+        };
+        let sequence = spec.sequence();
+        let ordered_sizes: Vec<(f64, f64)> = sequence
+            .iter()
+            .filter_map(|&i| page_sizes.get(i).copied())
+            .collect();
+        let layout = match pdfce_print::imposition::plan_booklet(
+            device.printable_pt,
+            &ordered_sizes,
+            &spec_b,
+        ) {
+            Ok(l) => l,
+            Err(err) => {
+                eprintln!("pdfce-cli: {err}");
+                return exit::RUNTIME_ERROR;
+            }
+        };
+        let px = |pt: f64| (pt * f64::from(resolution.dpi) / 72.0).round().max(1.0) as u32;
+        let (sw, sh) = (px(device.printable_pt.0), px(device.printable_pt.1));
+        let mut faces: Vec<pdfce_print::PageBitmap> = Vec::new();
+        // One bitmap per SHEET FACE, in the order they must be fed.
+        let mut keys: Vec<(usize, bool)> = layout
+            .slots
+            .iter()
+            .map(|s| {
+                (
+                    s.sheet,
+                    matches!(s.side, pdfce_print::imposition::BookletSide::Back),
+                )
+            })
+            .collect();
+        keys.sort_unstable();
+        keys.dedup();
+        for (sheet_no, is_back) in keys {
+            let Some(mut face) = pdfce_render::tiny_skia::Pixmap::new(sw, sh) else {
+                eprintln!("pdfce-cli: a sheet of {sw}x{sh} pixels is too large to compose");
+                return exit::RUNTIME_ERROR;
+            };
+            face.fill(pdfce_render::tiny_skia::Color::WHITE);
+            for slot in layout.slots.iter().filter(|s| {
+                s.sheet == sheet_no
+                    && matches!(s.side, pdfce_print::imposition::BookletSide::Back) == is_back
+            }) {
+                let (Some(source_pos), Some(fit)) = (slot.source, slot.fit) else {
+                    // A structural blank. The half stays white.
+                    continue;
+                };
+                let Some(&source) = sequence.get(source_pos) else {
+                    continue;
+                };
+                let Some(page) = page_list.get(source) else {
+                    continue;
+                };
+                let scale = (f64::from(resolution.dpi) / 72.0) * fit.scale;
+                let options = pdfce_render::RenderOptions::default()
+                    .with_annotation_scope(comments.to_scope());
+                let rendered = match pdfce_render::render_page_with_view(
+                    &session.view(),
+                    page,
+                    scale as f32,
+                    &options,
+                ) {
+                    Ok(r) => r,
+                    Err(err) => {
+                        eprintln!("pdfce-cli: page {}: {err}", source + 1);
+                        return exit::RUNTIME_ERROR;
+                    }
+                };
+                face.draw_pixmap(
+                    px(fit.rect.x) as i32,
+                    px(fit.rect.y) as i32,
+                    rendered.pixmap.as_ref(),
+                    &pdfce_render::tiny_skia::PixmapPaint::default(),
+                    pdfce_render::tiny_skia::Transform::identity(),
+                    None,
+                );
+            }
+            faces.push(pdfce_print::PageBitmap {
+                width: face.width(),
+                height: face.height(),
+                rgba: face.data().to_vec(),
+                placement: pdfce_print::Placement {
+                    scale: 1.0,
+                    offset_x_pt: 0.0,
+                    offset_y_pt: 0.0,
+                    clipped: false,
+                },
+                page_pt: device.printable_pt,
+            });
+        }
+        eprintln!(
+            "pdfce-cli: booklet of {} sheet(s), {} page(s) after padding, {} blank position(s). \
+             Print two-sided on the long edge, or print one side and re-feed.",
+            layout.total_sheets, layout.padded_pages, layout.blank_positions
+        );
+        bitmaps = faces;
+    }
+
+    if n_up.is_none() && !booklet {
         for plan in &plans {
             let (Some(page), Some(&size)) = (page_list.get(plan.index), page_sizes.get(plan.index))
             else {
