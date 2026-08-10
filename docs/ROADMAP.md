@@ -81,6 +81,152 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★ `Pass 53.1` — the field-name tree's INTERIOR becomes readable, and grouping-node rename reaches the GUI as a breadcrumb; a split-the-FQN trap caught before it was written; a shared draft rendered three times turns out not to be shared state — 2026-08-10, tip of `pass-8-redaction` (sixty-first filing, commits `0c102e4` + `6611812`)
+
+**Sourcing.** This librarian has no shell this dispatch (hard rule 8). Both
+commits are stated to be sequential on `pass-8-redaction`, closing one
+Backlog item together (below). Technical content, trace output, and test
+counts are the engineer's own account, relayed, not independently re-run.
+
+**The gap this closes.** `AcroForm::fields` (§12.7.3.2's terminal-only
+projection — `walk_field` returns early on a pure grouping node) has never
+listed a field's INTERIOR name segments — the `Personal` in
+`Personal.Address.Zip`. `Pass 53.0` (`a3ba0f8`, 2026-08-09) shipped
+terminal rename and named the gap in its own Shipped entry and in a
+`ROADMAP.md` Backlog item (below, now resolved), which framed the fix as
+needing "its own row source... a bigger change than `Pass 53.0`'s
+row-level rename affordance." **That framing was wrong, and was disproved
+by measurement, not merely optimistic** — `EditSession::rename_field`
+already accepted a grouping node's FQN (`FieldPath::Grouping`) before
+either commit, proven live before either was written:
+
+```
+$ pdfce-cli rename-field nested-form.pdf --name Personal --to Applicant
+... from="Personal" to="Applicant" descendants_renamed=3 objects=1
+```
+
+So the missing piece was never the core verb — only a reader that could
+name the interior node at all.
+
+**`0c102e4` — core: `AcroForm::groups: Vec<FieldGroupNode>`.** The
+pure-grouping-node projection `fields` deliberately omits:
+`{ id, fully_qualified_name, partial_name }` per node, deepest-first
+(post-order — the node is recorded at the early return reached only after
+recursing into its children).
+
+**★ The trap the ui-specialist caught before a line was written.** The
+obvious implementation derives an interior node's ancestors by splitting a
+terminal's `fully_qualified_name` on `.`. That is silently wrong: the FQN
+joins decoded `/T` text strings (§7.9.2), and nothing forbids a `/T`
+containing a literal period — `rename_field` refuses periods in NEW names,
+which says nothing about names already present in a file pdfce did not
+author. A split-based reader on such a file misattributes every segment
+after the first and reports ancestors that do not exist — exactly the
+re-derivation project rule 2 forbids. Built instead to read each node's
+own `/T` at the point in the walk where it is already known, never to
+re-derive it from another node's joined string.
+
+**Two doc-comment guesses corrected by the tests that disproved them,
+recorded as a rate rather than hidden.** Order was documented "DFS," and a
+test disagreed — post-order is correct; the code was right, the comment
+was a guess. A fixture's `Personal` node was asserted at 2 descendants
+when it is 3 — the count is of TERMINALS, not tree levels. Both were the
+engineer's own expectations, not the code: two wrong guesses in five new
+tests, worth naming as a rate rather than sweeping past.
+
+**5 new tests filed against the `0c102e4` projection**: interior nodes
+reported with their own partial names; `fields` and `groups` PARTITION the
+tree across three fixtures (a node in both would double a Rename control
+for one `/T`); a flat form reports an empty `groups` list (R124 — a UI
+renders nothing rather than a stub); a mixed-`/Kids` node (holding both a
+widget and a child field) is a terminal, not an interior node; every name
+`groups` reports resolves in `rename_field`.
+
+**`6611812` — GUI: the name breadcrumb.** A Forms-panel row for
+`Personal.Address.Zip` now renders `Personal › Address › Zip`; ancestor
+segments are buttons opening the SAME rename editor the field's own
+Rename button opens.
+
+**Driven live** on `nested-form.pdf`: crumbs `Personal` (3 descendants)
+and `Personal.Address` (2) render on the `Zip` row; clicking `Personal`'s
+crumb and renaming to `PersonalX` produces
+`edit-note "Renamed \"Personal\" to \"PersonalX\". 3 field(s) beneath it
+now have different names as a result…"`, and the crumbs re-derive to
+`PersonalX` / `PersonalX.Address` on the next frame. **And the negative,
+also driven:** zero crumb traces on flat `demo-form.pdf`.
+
+**★★ A defect shipped and then found by driving it, not by reading the
+diff.** The rename-editor draft is keyed by ancestor FQN and is therefore
+SHARED across every row beneath that ancestor — correct; it is one `/T`,
+one draft. What neither the engineer nor the specialist's review said in
+advance is what shared state does when RENDERED three times in the same
+frame: three `TextEdit` widgets backed by one `&mut String`, competing
+for focus, and a typed character landed wherever egui happened to focus
+that frame. **Reading the code would not have caught this** — three
+widgets sharing one string is correct Rust and correct egui; it is only
+wrong as observed BEHAVIOUR. Fixed: crumb BUTTONS stay on every row (pure
+navigation, no shared mutable state), but the editor itself is drawn once
+per node per frame — one canonical row owns it, the others render inert.
+
+**R2 caught at the gate.** The crumb tooltip was first built as
+`format!("{} — {}", tooltip(), caption(count))` — two catalog entries
+assembled at the call site. `check-ui-strings.sh` failed it, correctly:
+R2 forbids fragment assembly because a translation must be free to
+reorder the two clauses. Collapsed to one catalog entry taking the count
+as a parameter.
+
+**Scope discipline, worth naming because it is the cheap-follow-up case
+R151 exists to catch early rather than late.** `form_rename_editor` is
+now one function with two callers, needing exactly one thing off `Field`
+(its id, for the editor's own collision exclusion) — everything else is
+already FQN-addressed. `rekey_form_drafts` (`Pass 53.0`'s draft-cache
+re-keying fix, `ARCHITECTURE.md` §12) needed NO change — its
+prefix-rewrite logic was already FQN-generic, not terminal-specific.
+
+**Explicitly NOT done, and it is a capability gap, not an oversight:**
+grouping-NODE DELETION. `deletion_preflight` resolves terminals only;
+there is no core verb to delete a pure grouping node. Per R124, nothing
+is shown for it (no disabled stub) rather than a control with no verb
+behind it. Filed as its own Backlog entry, below — core + CLI + GUI, a
+Pass of its own.
+
+**Numbers.** 5 new tests filed against the `0c102e4` core projection
+(enumerated above, out of a set this dispatch did not total). No
+workspace-wide test count, `cargo clippy`, or `cargo fmt` result was
+included in this dispatch, so none is stated here (rule 10 — a total is
+not filed without its own figure to check it against).
+
+**Invariant checks**
+- **GUI-core separation**: `AcroForm::groups` is ordinary `pdfce-core`
+  data-model code (§12.7.3.2 walk, no windowing dependency); the
+  breadcrumb and its rename editor are `pdfce-gui`-only. No dependency
+  crossing reported.
+- **Round-trip / minimal-diff**: unaffected — no new object-write path;
+  renaming a grouping node was already routed through the existing
+  `rename_field` write path shipped in `Pass 53.0`.
+- **Packaging smoke test**: not applicable — no packaging surface
+  changed.
+
+**Ledger for this filing.** **New Pass ID minted: `Pass 53.1`** (current
+ceiling `53.0`; both commits close one Backlog item and are filed
+together as one Pass, per this ledger's own convention for a core+GUI
+pair shipped in the same session — see `Pass 53.0`, `Pass 46.0`, etc.).
+Pass family ceiling moves **`53.0` → `53.1`**. The Backlog entry naming
+this gap (*"Rename a pure grouping node..."*) is AMENDED in place, below
+— not deleted — with its "bigger change" framing corrected against what
+actually shipped, and a forward pointer to `Pass 53.1`; a NEW Backlog
+entry is added for grouping-node deletion (also below). `docs/FEATURES.md`'s
+*RENAME a form field* row is updated in this same filing — edited in
+place, not split into a new row, since it is the same verb
+(`rename_field`) reaching a second class of name it already accepted, not
+a new capability. Standing rules: no new rule minted; ceiling stays
+**R176**, next free **R177**. Decision records: one plain dated
+`ARCHITECTURE.md` §12 entry added (the shared-state-rendered-N-times
+finding) — no new number claimed; ceiling stays **035**, next free
+**036**. Operator-question ceiling unchanged at **(bh)**, next free
+**(bi)**. Backup/git working-tree state not independently asserted — this
+librarian has no shell this dispatch (hard rule 8).
+
 ### `45a88f2` — the canvas half of Enter-to-commit, recorded "NOT DRIVEN, owed" by `ef88973` one filing ago, is now DRIVEN: a one-shot `text:lines` diag step, and `R151`'s `pdf_space_to_canvas` gets its first real caller — 2026-08-10, tip of `pass-8-redaction` (sixtieth filing)
 
 **Sourcing.** This librarian has no shell this dispatch (hard rule 8).
@@ -31723,7 +31869,7 @@ Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
 
-- **Rename a pure grouping node — not reachable from the GUI, and
+- ~~**Rename a pure grouping node — not reachable from the GUI, and
   nothing tells the operator so** (owed by `Pass 53.0`, `a3ba0f8`,
   2026-08-09). `form.fields` is a projection of TERMINAL fields only
   (`walk_field` returns early on a pure non-terminal per §12.7.3.2), so
@@ -31734,7 +31880,32 @@ nothing gets forgotten, not as a commitment to build in this order.
   edit), not a paper cut: needs its own row source (grouping nodes
   currently have no on-screen representation whatsoever), which is a
   bigger change than `Pass 53.0`'s row-level rename affordance. Not yet
-  scoped to a Pass.
+  scoped to a Pass.~~ **[★★ SHIPPED 2026-08-10, `Pass 53.1` (`0c102e4` +
+  `6611812`) — and the "bigger change" framing above was WRONG, disproved
+  by measurement, not merely optimistic.** `EditSession::rename_field`
+  already accepted a grouping node's FQN before either commit shipped —
+  the core verb was never the gap. What actually shipped was one new
+  accessor (`AcroForm::groups: Vec<FieldGroupNode>`, the interior-node
+  projection `fields` deliberately omits) plus a breadcrumb
+  (`Personal › Address › Zip`) whose ancestor segments open the SAME
+  rename editor the field's own Rename button opens — not a new row
+  source, not a bigger change. Full record: `ROADMAP.md`'s `Pass 53.1`
+  Shipped entry, top of *Shipped*. **Still owed, and now its own Backlog
+  entry below: grouping-node DELETION** — no core verb exists for it,
+  unlike rename.]**
+- **Delete a pure grouping node — no core verb exists, unlike rename**
+  (owed by `Pass 53.1`, `0c102e4` + `6611812`, 2026-08-10).
+  `deletion_preflight` resolves TERMINAL fields only; nothing in
+  `pdfce-core` deletes a pure grouping node (and, by extension, the
+  terminals beneath it) as a single verb. The closest existing behaviour
+  — `delete_field`'s grouping-node PRUNING — only removes a grouping node
+  left childless as a SIDE EFFECT of deleting its last terminal
+  descendant; that is a different operation from "delete this grouping
+  node and everything under it" as a deliberate act. Per R124 the GUI
+  shows nothing for this today (no disabled stub) rather than a control
+  with no verb behind it. A Pass of its own — core + CLI + GUI, same
+  shape as `Pass 20.2`'s original `delete-field`/`delete-widget` pair.
+  Not yet scoped to a Pass.
 - **★ NEW R169 register entry, named but not built — sub-pixel
   stroke-width clamp policy** (owed by the render fix filed 2026-08-09
   under *Shipped*, `9abf5b5` — "sub-pixel strokes stop rendering at 9%

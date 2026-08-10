@@ -14193,3 +14193,47 @@ started).
   its first real caller, discharging an R151-shaped debt from an
   earlier Pass by finding a genuine use rather than deleting the
   function or writing a second inverse beside it.
+
+- **2026-08-10 (`Pass 53.1`, `0c102e4` + `6611812`) — shared state
+  RENDERED N TIMES is not shared state; a draft keyed by identity is
+  correct, and drawing its editor once per referring row is a SEPARATE
+  obligation the key alone does not discharge.** Found shipping the
+  Forms-panel grouping-node rename breadcrumb. The rename-editor draft
+  is keyed by ancestor fully-qualified name specifically so every row
+  beneath that ancestor shares one draft — correct, because it is one
+  `/T`, one edit. What the keying decision does not by itself decide is
+  what happens when the SAME keyed state backs more than one widget
+  drawn in the SAME frame: with three Forms-panel rows sharing an
+  ancestor, the naive implementation drew three `egui::TextEdit`
+  widgets against the one shared `&mut String`, all three competing for
+  focus in the same frame, so a typed character landed wherever egui
+  happened to resolve focus that frame rather than reliably in the row
+  the operator clicked. **Reading the diff would not have caught this**
+  — three widgets backed by one string is unremarkable, correct Rust and
+  correct egui; it is wrong only as OBSERVED BEHAVIOUR, found by driving
+  the harness, not by review. **Decided: crumb BUTTONS (pure navigation,
+  no mutable state) may legitimately render on every referring row, but
+  the EDITOR they open renders once per node per frame** — one canonical
+  row owns the live `TextEdit`, every other row referring to the same
+  key renders inert. **General form, stated because this project has
+  already shown the shape recurs across different kinds of shared state**
+  (`Pass 53.0`'s `form_drafts` re-keying finding, immediately above, is a
+  sibling: both are cases where the SINGLE fact "this state is correctly
+  identified/keyed" was mistaken for the WHOLE correctness argument, when
+  a second, independent question — what happens when that same state is
+  read or rendered more than once in one pass — was still open.** Any
+  future egui surface in this project where one piece of state can be
+  reached from more than one row/control in the same frame needs an
+  explicit answer to "which one owns the interactive widget," not merely
+  a correct key. No new decision number claimed — filed as a plain dated
+  entry, refining the same general caution as the `Pass 53.0` entries
+  above rather than forking a new decision. **Filed to
+  `D:\dev\rag\egui\`** (see `egui_shared_mut_string_backing_multiple_texted_widgets_in_one_frame_competes_for_focus.md`)
+  — this half is a pure egui/immediate-mode fact (a `&mut String` backing
+  more than one `TextEdit` drawn in one frame competes for focus), useful
+  to any future egui project on this machine, not specific to pdfce's
+  Forms panel. Cross-reference: **R2** (`ROADMAP.md` Standing rules) —
+  caught the same commit's crumb tooltip assembling two catalog entries
+  with `format!`, an unrelated but adjacent gate hit in the same diff.
+  Full record: `ROADMAP.md`'s `Pass 53.1` Shipped entry (top of
+  *Shipped*).

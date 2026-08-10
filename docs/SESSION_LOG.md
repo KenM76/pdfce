@@ -29689,3 +29689,83 @@ engineer (outside this librarian's tiers).
   (hard rule 8). This is the **sixtieth** `SESSION_LOG.md` filing (the
   fifty-ninth confirmed present by direct read before this entry was
   appended).
+
+## 2026-08-10 (sixty-first filing) — `Pass 53.1` (`0c102e4` + `6611812`): the field-name tree's interior becomes readable, and grouping-node rename reaches the GUI as a breadcrumb; a split-the-FQN trap caught before it was written; a shared draft rendered three times turns out not to be shared state
+
+**Filed by `pdfce-librarian`, dispatched with the engineer's own git
+evidence carried IN the dispatch** — this librarian has no shell this
+filing (hard rule 8); every figure below is relayed, not independently
+re-run.
+
+**Shipped:**
+- **`Pass 53.1`** (new Pass ID; current ceiling was `53.0`) —
+  `AcroForm::groups: Vec<FieldGroupNode>` (`0c102e4`), the interior-node
+  projection `AcroForm::fields` has always omitted (§12.7.3.2's
+  terminal-only walk). 5 new tests. Then a Forms-panel breadcrumb
+  (`6611812`): `Personal › Address › Zip`, ancestor segments open the
+  SAME rename editor the field's own Rename button opens. Both driven
+  live on `nested-form.pdf` (crumb counts, a live rename, re-derived
+  crumbs after) and the negative (zero crumb traces on a flat form).
+
+**Decisions made this session:**
+- **`ARCHITECTURE.md` §12 gained a plain dated entry**: shared state
+  RENDERED N times is not shared state — a draft keyed by ancestor FQN is
+  correctly keyed, but drawing its editor on every referring row let
+  three `TextEdit` widgets fight over one `&mut String`'s focus in the
+  same frame. Fixed by drawing the editor once per node per frame (crumb
+  buttons stay on every row; the editor does not). No new decision
+  number claimed. Filed to `D:\dev\rag\egui\` as a pure egui/immediate-
+  mode fact, generalizable past pdfce.
+
+**Findings + decisions:**
+- **The split-the-FQN trap, caught by `pdfce-ui-specialist` before a
+  line was written**: an interior node's ancestors cannot be derived by
+  splitting a terminal's fully-qualified name on `.` — the FQN joins
+  decoded `/T` text strings (§7.9.2) and nothing forbids a `/T`
+  containing a literal period in a file pdfce did not author (`rename_
+  field` only refuses periods in NEW names). Built instead to read each
+  node's own `/T` at the point in the walk where it is already known.
+  Judged a PDF-domain fact, not pdfce-specific — filed to
+  `C:\personal_rag\pdf\`.
+- Two doc-comment guesses corrected by the tests that disproved them:
+  the walk order was documented "DFS" (it is post-order); a fixture's
+  descendant count was asserted at 2 when it is 3 (the count is of
+  terminals, not tree levels). Both were expectations, not code defects
+  — recorded as a rate (two wrong guesses in five new tests), not hidden.
+- **`ROADMAP.md`'s Backlog entry for grouping-node rename was WRONG about
+  its own difficulty**, disproved by measurement: it predicted "needs its
+  own row source... a bigger change than `Pass 53.0`'s row-level rename
+  affordance." What shipped was one accessor plus a breadcrumb — the core
+  verb (`rename_field`) already accepted a grouping node's FQN before
+  either commit. Amended in place with a forward pointer, not deleted.
+- **Grouping-node DELETION remains a real gap**, filed as its own fresh
+  Backlog entry — `deletion_preflight` resolves terminals only, and no
+  core verb exists to delete a pure grouping node (distinct from
+  `delete_field`'s incidental grouping-node pruning on last-child
+  removal). Per R124, the GUI shows nothing for it rather than a disabled
+  stub.
+- `docs/FEATURES.md`'s *RENAME a form field* row updated in the same
+  filing — edited in place (same verb, `rename_field`, reaching a second
+  class of name), not split into a new row.
+
+**Still in flight:** grouping-node deletion (core + CLI + GUI, unscoped
+to a Pass); `docs/decisions/003-distribution-posture.md` §1.1's
+superseding note still owed to the engineer (outside this librarian's
+tiers, flagged in prior filings).
+
+**For next session:** nothing new opened by this filing beyond the two
+Backlog items above (one amended, one new).
+
+- **Ledger for this filing.** **New Pass ID minted: `Pass 53.1`.** Pass
+  family ceiling moves **`53.0` → `53.1`**. Standing rules: no new rule
+  minted; ceiling stays **`R176`**, next free **`R177`**. Decision
+  records: no new number claimed — one plain dated `ARCHITECTURE.md` §12
+  entry added; ceiling stays **035**, next free **036**. Operator-
+  question ceiling unchanged at **(bh)**, next free **(bi)**.
+  `docs/decisions/` untouched by this librarian. Backup/git working-tree
+  state not independently asserted (hard rule 8). New RAG entries this
+  filing: `D:\dev\rag\egui\egui_shared_mut_string_backing_multiple_texted_widgets_in_one_frame_competes_for_focus.md`
+  and `C:\personal_rag\pdf\lesson_20260810_field_t_may_contain_a_period_so_fqn_is_not_safely_splittable.md`,
+  both indexed in this same filing. This is the **sixty-first**
+  `SESSION_LOG.md` filing (the sixtieth confirmed present by direct read
+  before this entry was appended).
