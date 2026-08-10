@@ -128,6 +128,42 @@ pub enum Step {
     /// off-screen and never touches focus, which is the only option when
     /// someone is working at the machine.
     Settings,
+    /// Open the Export-DXF window (`export:dxf`), through the same action
+    /// the ribbon button pushes (Pass 52.2).
+    ///
+    /// # Why this step exists and the export needs it more than most
+    ///
+    /// The export's whole point is a decision made BEFORE a file is written
+    /// — the scale — and the scale is inferred from the ce dimensions on the
+    /// pages being exported. There is exactly one moment when that inference
+    /// happens, and it is the moment this step reproduces. Without it, the
+    /// only way to reach the inference is to click a ribbon button by pixel
+    /// coordinate, and
+    /// `only_the_active_tab_is_emitted_so_scripted_harnesses_cannot_reach_
+    /// other_tabs` plus
+    /// `scripted_click_coordinates_go_stale_when_a_dock_width_changes` both
+    /// say what that costs.
+    ///
+    /// It also splits the two questions that would otherwise be one failure:
+    /// *"does the scale inference reach the dialog"* and *"is the ribbon
+    /// button wired up"*. The second still has to be checked by eye; the
+    /// first no longer does.
+    ExportDxf,
+    /// Commit the open Export-DXF draft (`export:dxf-go`), Pass 52.2.
+    ///
+    /// Pair it with a preceding `export:dxf` and, for a destination,
+    /// `PDFCE_DIAG_EXPORT_DIR` — see [`export_dir`].
+    ///
+    /// # A commit that does nothing is a RESULT here, not a failed step
+    ///
+    /// On an uncalibrated page with nothing typed, the draft resolves no
+    /// scale and this writes no file. That is the feature working: the
+    /// Export button is disabled in exactly that state, and this step
+    /// reaches the same guard the button does. A script asserting "no
+    /// `dxf-export` trace line appeared" is asserting the gate held, which
+    /// is the single most valuable thing about this feature to be able to
+    /// check from outside.
+    ExportDxfCommit,
     /// Choose the Create Field tool's field TYPE
     /// (`field-kind:text|check|radio|choice`).
     ///
@@ -411,6 +447,12 @@ fn parse_step(s: &str) -> Option<Step> {
         // and filing them under one would make the harness vocabulary lie
         // about the application's own structure.
         "settings" => Some(Step::Settings),
+        // A top-level verb like `settings`, and NOT `tool:dxf`: an export is
+        // not a canvas tool and arms nothing, so filing it under `tool:`
+        // would make the harness vocabulary lie about the application's
+        // structure — the objection `settings` records just above.
+        "export" if rest.trim() == "dxf" => Some(Step::ExportDxf),
+        "export" if rest.trim() == "dxf-go" => Some(Step::ExportDxfCommit),
         "view" if rest.trim() == "points" => Some(Step::ShowPoints),
         // NOT `rest.trim()`: leading and trailing spaces are legitimate text.
         "type" if !rest.is_empty() => Some(Step::Text(rest.to_owned())),
@@ -498,9 +540,56 @@ pub fn font_dirs() -> Vec<std::path::PathBuf> {
         .collect()
 }
 
+/// Where a scripted DXF export writes, from `PDFCE_DIAG_EXPORT_DIR`.
+///
+/// # Why this exists
+///
+/// `commit_dxf_export` asks for its destination through a **native file or
+/// folder dialog**, and a native modal is exactly what the scripted-input
+/// harness cannot drive. That is the identical wall [`font_dirs`] was built
+/// to get past, and it has the identical consequence if left standing:
+/// everything downstream of the picker — the page loop, the decompose
+/// against the session view, the atomic write, the per-page naming, and
+/// every rule-4 disclosure the outcome carries — would be observable only
+/// by the operator clicking through a dialog by hand.
+///
+/// When set, both branches use it: a single-page export writes
+/// `<dir>/<stem>.dxf` and a multi-page export writes into `<dir>` exactly as
+/// a picked folder would. So the harness exercises the SAME code path,
+/// substituting only the answer the dialog would have returned — which is
+/// the property that makes this a diagnostic seam rather than a second
+/// implementation.
+///
+/// The picker itself still has to be verified by hand. Everything after it
+/// no longer does.
+///
+/// Off unless asked, like every other member of this module: unset, the
+/// dialog opens exactly as it always has.
+#[must_use]
+pub fn export_dir() -> Option<std::path::PathBuf> {
+    // ui-text-exempt: environment variable name, never displayed
+    let raw = std::env::var("PDFCE_DIAG_EXPORT_DIR").ok()?;
+    let trimmed = raw.trim();
+    (!trimmed.is_empty()).then(|| std::path::PathBuf::from(trimmed))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `export:dxf` parses, and the near-misses do not silently become it.
+    #[test]
+    fn the_export_step_parses_and_its_near_misses_are_rejected() {
+        assert_eq!(parse_step("export:dxf"), Some(Step::ExportDxf));
+        assert_eq!(parse_step("export: dxf "), Some(Step::ExportDxf));
+        assert_eq!(parse_step("export:dxf-go"), Some(Step::ExportDxfCommit));
+        // Rejected, not silently coerced — and a reject is TRACED by
+        // `Script::from_env`, which is the whole point of the 2026-08-07
+        // `placefield` lesson recorded on this module.
+        assert_eq!(parse_step("export"), None);
+        assert_eq!(parse_step("export:pdf"), None);
+        assert_eq!(parse_step("tool:dxf"), None);
+    }
 
     #[test]
     fn steps_parse_and_bad_ones_are_skipped_rather_than_fatal() {

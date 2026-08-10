@@ -57,6 +57,66 @@ AGPL-3.0** (copyleft, blocks proprietary forks/hosted-service
 loopholes, would have unlocked MuPDF/Poppler/Ghostscript as real
 dependencies). The operator chose MIT.
 
+### 1.1 ⚠ A SECOND, INDEPENDENT PUBLISHING BLOCKER — git history carries a third party's confidential material (2026-08-09)
+
+**This is not the license question, and resolving the license did not
+resolve it.** §1 above says a push needs an operator go-ahead. This
+section says that *even with* that go-ahead, the repository as it stands
+cannot be published, because publishing it would disclose material that
+is not the operator's to disclose.
+
+**The facts, measured rather than estimated.**
+
+Commit **`817d518`** ("remove a third party's confidential material from
+the tree") removed, from the *working tree*:
+
+- `tools/realdrawings-smoke/` — **deleted**. It named a real company's
+  drawings as confidential and gave the filesystem path to them. Its own
+  `README` said *"Nothing in this directory is to be committed at all"*,
+  and all three files had been committed anyway. The `ROADMAP.md` entry
+  describing it claimed *"nothing proprietary is committed"*, which was
+  false: the RESULTS were gitignored, the harness was not.
+- A named drawing identifier and its path, redacted to a neutral
+  placeholder across `ROADMAP.md`, `SESSION_LOG.md`, `tools/gui-drive.ps1`
+  and one agent-memory file, together with a pair of strings lifted from
+  that drawing's own text.
+- The provenance of the corpus census in `docs/decisions/008` — the
+  operator's employer and their document store — with every number kept.
+
+**None of that removal reaches git history.** Nothing has ever been
+deleted from this repository (819 paths ever, 746 tracked at that
+commit, every difference a directory object), so all of the above is
+still fully recoverable from the **288 commits that precede `817d518`**.
+A `git clone` of a published repository fetches those commits. The
+material would be as public as if the removal had never happened.
+
+**Verify before relying on this paragraph rather than after** — the
+counts move with every commit:
+
+```bash
+git log --oneline | wc -l               # total commits
+git log --oneline 817d518 | wc -l       # commits up to and including the removal
+git log --all --full-history -- tools/realdrawings-smoke   # the deleted harness, still reachable
+```
+
+**THE DECISION IS THE OPERATOR'S AND HAS NOT BEEN MADE.** Tracked as
+`ROADMAP.md` open operator question **(bh)**. Three options, none of
+which an agent may pick:
+
+| Option | What it costs |
+|---|---|
+| **Rewrite history** (`git filter-repo` over the affected paths and strings) | Every commit hash changes. Every hash cited in `ROADMAP.md`, `SESSION_LOG.md`, `tools/commits-filed-baseline.txt` and the decision log becomes dangling — and this project's filing gates are built on those hashes. |
+| **Squash to a fresh initial commit** | The 329-commit engineering record — which is a substantial part of the project's documentation-first value — stops existing publicly. |
+| **Accept it and publish anyway** | Discloses a third party's confidential material. Not an engineering call at all. |
+
+**Binding on `pdfce-engineer` until the operator decides:** treat this
+exactly as §1 treats the license — a hard precondition on any push,
+remote, or release, independent of and in addition to the go-ahead
+itself. Do not resolve it by choosing an option, do not resolve it by
+rewriting history "to make publishing possible", and do not let the
+existence of `817d518` be read as the problem being closed. The commit
+says so in its own final paragraph, in capitals, for this reason.
+
 ## 2. ISO / ITU-T / ETSI standard copyright — how the spec RAG is scoped
 
 The PDF ecosystem's normative documents have genuinely mixed licensing:

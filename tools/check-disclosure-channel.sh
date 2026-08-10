@@ -56,6 +56,13 @@ cd "$(dirname "$0")/.."
 # (always 1 — the one inside the setter itself).
 GUARDED=(
   "edit_note:set_edit_note"
+  # Added with the field, Pass 52.2, rather than retrofitted after a
+  # disclosure was found to be invisible — which is how the first entry got
+  # here. `dxf_export_result` carries rule-4 obligations of its own: text
+  # pdfce could not read and dropped, images it has no representation for,
+  # and a paper-scale export the operator agreed to and will not remember
+  # agreeing to. Same failure mode as `edit_note`, so the same choke point.
+  "dxf_export_result:set_dxf_export_result"
 )
 
 fail=0

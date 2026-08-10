@@ -1960,6 +1960,11 @@ pub fn ribbon_group_document_properties() -> &'static str {
 pub fn ribbon_group_clipboard() -> &'static str {
     "Clipboard"
 }
+/// See [`ribbon_group_document_properties`]. Names the band holding the
+/// derivative-file exports (DXF today), beside Clipboard on the File tab.
+pub fn ribbon_group_export() -> &'static str {
+    "Export"
+}
 /// See [`ribbon_group_document_properties`].
 pub fn ribbon_group_layout_reset() -> &'static str {
     "Layout"
@@ -8439,4 +8444,400 @@ pub fn create_field_disclosure_has_no_options() -> &'static str {
 /// `FieldAuthorDisclosures::group_flags_ignored`.
 pub fn create_field_disclosure_group_flags_ignored() -> &'static str {
     "This button joined an existing group, so the group's own behaviour settings apply rather than the ones set here."
+}
+
+// ---------------------------------------------------------------------------
+// Export ▸ DXF (Pass 52.2, GUI half)
+// ---------------------------------------------------------------------------
+//
+// The CLI (`cmd_export_dxf`) already says the right things about what a DXF
+// export does and does not carry, and about what an uncalibrated drawing
+// costs at the cutting table. Where a sentence here has a CLI counterpart it
+// is PORTED rather than re-derived — the two shells must not develop
+// different accounts of the same risk, and the CLI's wording was written
+// against the actual failure.
+//
+// Where they differ is the SCALE, and the difference is a real capability
+// gap rather than a wording choice: the CLI can only warn after the fact,
+// because by the time it prints anything the file is written. The GUI asks
+// first. So the GUI has strings the CLI has no use for (a disabled Export
+// button's reason, a paper-scale opt-in) and does NOT carry the CLI's
+// after-the-fact paper-scale warning in the same form.
+
+/// The File ▸ Export band's button. Ellipsis because it opens a dialog —
+/// the same convention as "Set scale…".
+pub fn export_dxf_button() -> &'static str {
+    "Export DXF…"
+}
+
+/// Tooltip on the Export DXF button.
+///
+/// Names the destination class (CAD) rather than the format alone: an
+/// operator who has a drawing to trace is not searching for "DXF", they are
+/// searching for the way to get the geometry into the program that cuts it.
+pub fn export_dxf_tooltip() -> &'static str {
+    "Write this page's lines, curves and text out as a DXF file that CAD and CNC software can open."
+}
+
+/// Title of the Export DXF options window.
+pub fn export_dxf_title() -> &'static str {
+    "Export DXF"
+}
+
+/// The window's page readout when exporting the page currently on screen.
+pub fn export_dxf_pages_current(page_number: usize) -> String {
+    format!("Page {page_number} (the page you are looking at)")
+}
+
+/// The window's page readout when the Pages panel has a selection.
+///
+/// States the count AND that the selection is what decides it, because the
+/// selection lives in another panel that may be scrolled out of view — an
+/// operator who forgot they had six thumbnails ticked would otherwise get
+/// six files with no explanation of where six came from.
+pub fn export_dxf_pages_selected(count: usize) -> String {
+    format!(
+        "{count} selected pages — one DXF each, into a folder you choose. Clear the selection in \
+         the Pages panel to export just the current page."
+    )
+}
+
+/// Label of the units radio row.
+pub fn export_dxf_units_label() -> &'static str {
+    "Units"
+}
+
+/// The inches option.
+pub fn export_dxf_units_inches() -> &'static str {
+    "Inches"
+}
+
+/// The millimetres option.
+pub fn export_dxf_units_millimetres() -> &'static str {
+    "Millimetres"
+}
+
+/// Tooltip on the units row — says what the choice actually writes.
+pub fn export_dxf_units_tooltip() -> &'static str {
+    "What the numbers in the file mean. The receiving program reads this from the file's header, so getting it wrong scales the drawing by 25.4."
+}
+
+/// Label of the scale field.
+pub fn export_dxf_scale_label() -> &'static str {
+    "Scale"
+}
+
+/// Tooltip on the scale field, in the same terms the measure tool uses.
+pub fn export_dxf_scale_tooltip() -> &'static str {
+    "How many real-world units one paper unit represents: 1 for a full-size drawing, 2 for a 1:2 detail, 5 for a 1:5 detail."
+}
+
+/// The caption under a PRE-FILLED scale field (rule 4: the inference is on
+/// screen, named, and overwritable before anything is written).
+///
+/// `summary` is [`group_scale_summary`]'s rendering of that group's own
+/// calibration, so this window and the Measure panel describe the same
+/// group in the same words. Do not build a "1:2"-style ratio here — the
+/// established convention in this application is "1 mm = 28.35 pt".
+pub fn export_dxf_scale_from_group(group: &str, summary: &str) -> String {
+    format!(
+        "Filled in from the ce dimension group \"{group}\" — {summary}. Change it if that is not \
+         the right one for this export."
+    )
+}
+
+/// Appended when more than one calibrated group agrees.
+///
+/// Corroboration, not a second answer — which is why it is a separate line
+/// rather than a different pre-fill.
+pub fn export_dxf_scale_agreeing(others: usize) -> String {
+    format!("{others} other calibrated group(s) on these pages agree.")
+}
+
+/// The caption under an EMPTY scale field on an uncalibrated page.
+///
+/// Ported from the CLI's paper-scale warning, turned from a report into a
+/// question because the GUI can still ask. The destination is frequently a
+/// cutting table and a wrongly scaled cut is metal, so this does not
+/// pre-fill 1 and hope.
+pub fn export_dxf_scale_unknown() -> &'static str {
+    "Nothing on these pages is calibrated, so pdfce does not know what scale the drawing is at. If it is a scaled view — a 1:2 detail, say — exporting at paper scale gives you geometry at that fraction of real size, and it will look entirely plausible."
+}
+
+/// The explicit opt-in to paper scale on an uncalibrated page.
+///
+/// A deliberate act rather than a default, and it names the number so the
+/// operator is agreeing to something specific.
+pub fn export_dxf_paper_scale_opt_in() -> &'static str {
+    "Export at paper scale (1:1) — this drawing has no scale set"
+}
+
+/// The hint under the scale field pointing at the better answer.
+pub fn export_dxf_scale_measure_hint() -> &'static str {
+    "Or measure a known feature with the Measure tool's \"scale by known dimension\", and the figure comes across automatically."
+}
+
+/// The caption above the conflict radio list.
+///
+/// Ported from the CLI's refusal, which explains why pdfce will not pick:
+/// a mixed-scale sheet is an ORDINARY drawing, not a broken one.
+pub fn export_dxf_scale_conflict() -> &'static str {
+    "These pages' ce dimension groups disagree about the scale, and a DXF carries only one. A 1:1 plan and a 1:5 detail on one sheet is an ordinary drawing, so pdfce will not choose for you — picking wrong exports part of it at the wrong size and the result looks entirely plausible."
+}
+
+/// One candidate in the conflict radio list.
+pub fn export_dxf_scale_conflict_candidate(group: &str, scale: f64) -> String {
+    format!("\"{group}\" says {}", export_dxf_scale_number(scale))
+}
+
+/// Render a derived export scale for a human (R6).
+///
+/// # Why this exists rather than `format!("{scale}")`
+///
+/// A derived scale is a division, so it is almost never round: a group
+/// calibrated to 5 m over 200 pt yields `70.86614173228347`, and a 1:50 cm
+/// group beside it yields `283.46456692913387`. Both were printed at full
+/// `f64` precision in the first build of this dialog, and seeing them in the
+/// running application is what caught it — seventeen significant figures is
+/// not a number an operator can read, compare against the other candidate,
+/// or retype.
+///
+/// Six decimals, with trailing zeros stripped, so `1.0` prints as `1` and
+/// `70.86614173228347` prints as `70.866142`. The residual error is
+/// relative 4e-9 — half a nanometre on a five-metre dimension, which is
+/// beneath every plotter, cutter and CAD kernel that will ever read the
+/// file.
+///
+/// # The guard, and why it is not paranoia
+///
+/// This value is written INTO the scale field and re-parsed on export, so
+/// what is shown is what is exported — which is the honest arrangement, and
+/// also means a rounding that reached zero would silently disable Export
+/// with no explanation. A scale below 1e-6 is implausible rather than
+/// impossible, so the rounding is checked against the original and the full
+/// representation is used when it does not survive. An unreadable number
+/// beats a wrong one.
+pub fn export_dxf_scale_number(scale: f64) -> String {
+    let rounded = format!("{scale:.6}");
+    let trimmed = if rounded.contains('.') {
+        rounded.trim_end_matches('0').trim_end_matches('.')
+    } else {
+        &rounded
+    };
+    let survives = trimmed
+        .parse::<f64>()
+        .is_ok_and(|back| back > 0.0 && (back - scale).abs() <= 1e-6 * scale.abs().max(1.0));
+    if survives {
+        trimmed.to_owned()
+    } else {
+        format!("{scale}")
+    }
+}
+
+/// The escape hatch at the bottom of the conflict radio list.
+pub fn export_dxf_scale_conflict_manual() -> &'static str {
+    "Enter a scale myself"
+}
+
+/// Label of the text-handling radio row.
+pub fn export_dxf_text_label() -> &'static str {
+    "Text"
+}
+
+/// Keep the page's text as `TEXT` entities.
+pub fn export_dxf_text_include() -> &'static str {
+    "Include as TEXT entities"
+}
+
+/// Leave the page's text out entirely.
+pub fn export_dxf_text_omit() -> &'static str {
+    "Omit entirely"
+}
+
+/// Tooltip on the text row.
+///
+/// States the ONE thing an operator cutting metal needs to decide on: the
+/// text lands on its own layer so it can be deleted in one click, which is
+/// what makes including it the safe default rather than a hazard.
+pub fn export_dxf_text_tooltip() -> &'static str {
+    "Labels and printed dimensions come across as real, selectable text on their own layer, so they can be hidden or deleted in one step. Omit them if any stray entity on the way to a cutting table is a hazard."
+}
+
+/// The collapsed Advanced section's header.
+pub fn export_dxf_advanced() -> &'static str {
+    "Advanced"
+}
+
+/// Recognise circular Béziers as `CIRCLE`/`ARC`.
+pub fn export_dxf_fit_arcs() -> &'static str {
+    "Fit circles and arcs"
+}
+
+/// Tooltip explaining what turning arc fitting off costs.
+pub fn export_dxf_fit_arcs_tooltip() -> &'static str {
+    "PDF has no arc, so every hole and fillet arrives as curve segments. On, pdfce recognises the circular ones and writes real circles and arcs; off, they stay as splines and the file gets much larger."
+}
+
+/// The arc-tolerance field's label.
+pub fn export_dxf_arc_tolerance() -> &'static str {
+    "Arc tolerance (pt)"
+}
+
+/// Tooltip on the arc-tolerance field.
+pub fn export_dxf_arc_tolerance_tooltip() -> &'static str {
+    "How far a curve may deviate from a true circle and still be written as one. Measured on the page, before scaling, because it describes how well the drawing's author approximated the circle."
+}
+
+/// The window's cancel button.
+pub fn export_dxf_cancel() -> &'static str {
+    "Cancel"
+}
+
+/// The window's confirm button. Ellipsis: a file/folder dialog follows.
+pub fn export_dxf_confirm() -> &'static str {
+    "Export…"
+}
+
+/// Tooltip on a DISABLED Export button — the R83 obligation that a dead
+/// control explains itself rather than merely sitting there.
+pub fn export_dxf_confirm_disabled_tooltip() -> &'static str {
+    "Set a scale first — pdfce will not guess one, because a wrongly scaled export looks correct."
+}
+
+/// The save dialog's filter label.
+pub fn export_dxf_dialog_filter_label() -> &'static str {
+    "DXF drawing"
+}
+
+/// The suggested file name for a single-page export.
+pub fn export_dxf_suggested_name(stem: &str) -> String {
+    format!("{stem}.dxf")
+}
+
+/// The per-page file name for a multi-page export.
+///
+/// Zero-padded to the widest page number in the run, so the files sort in
+/// page order in every file manager rather than 1, 10, 11, 2.
+pub fn export_dxf_page_file_name(stem: &str, page_number: usize, width: usize) -> String {
+    format!("{stem}_p{page_number:0width$}.dxf")
+}
+
+// --- outcome, in the status bar ------------------------------------------
+
+#[cfg(test)]
+mod export_dxf_tests {
+    use super::export_dxf_scale_number;
+
+    /// The two figures the running application actually showed, plus the
+    /// round ones that must not grow a decimal point.
+    #[test]
+    fn a_derived_scale_prints_readably_and_still_parses_back() {
+        assert_eq!(export_dxf_scale_number(1.0), "1");
+        assert_eq!(export_dxf_scale_number(2.0), "2");
+        assert_eq!(export_dxf_scale_number(50.0), "50");
+        assert_eq!(export_dxf_scale_number(1.5), "1.5");
+        // The two seventeen-digit values seen on screen, which is what this
+        // helper was written after.
+        assert_eq!(export_dxf_scale_number(70.866_141_732_283_47), "70.866142");
+        assert_eq!(
+            export_dxf_scale_number(283.464_566_929_133_87),
+            "283.464567"
+        );
+        // Whatever is shown is re-parsed on export, so every rendering must
+        // survive the round trip as a positive finite number.
+        for v in [1.0, 2.0, 50.0, 1.5, 70.866_141_732_283_47, 0.001] {
+            let back: f64 = export_dxf_scale_number(v).parse().expect("re-parses");
+            assert!(back > 0.0 && (back - v).abs() <= 1e-6 * v.abs().max(1.0));
+        }
+    }
+
+    /// A scale too small to survive six decimals falls back to the full
+    /// representation rather than rounding to a zero that would disable
+    /// Export with no explanation.
+    #[test]
+    fn a_scale_below_the_rounding_floor_keeps_its_full_representation() {
+        let tiny = 1e-9;
+        let shown = export_dxf_scale_number(tiny);
+        let back: f64 = shown.parse().expect("re-parses");
+        assert!(back > 0.0, "{shown:?} must not round to zero");
+    }
+}
+
+/// One file was written.
+pub fn export_dxf_wrote_one(path: &Path, entities: usize) -> String {
+    format!("Exported {entities} entities to {}", path.display())
+}
+
+/// Several files were written into a folder.
+pub fn export_dxf_wrote_many(files: usize, entities: usize, dir: &Path) -> String {
+    format!(
+        "Exported {files} DXF files ({entities} entities in total) into {}",
+        dir.display()
+    )
+}
+
+/// The export could not be written at all.
+pub fn export_dxf_failed(message: &str) -> String {
+    format!("DXF export failed: {message}")
+}
+
+/// Some of the selected pages could not be read.
+///
+/// Named individually rather than counted: an operator who gets seven files
+/// from eight selected pages needs to know WHICH page is missing, and a
+/// count does not tell them.
+///
+/// Takes the page numbers rather than a pre-joined string, per R6: the
+/// separator between list items is itself operator-visible text a
+/// translation may need to change (and some locales do), so it belongs in
+/// the catalog rather than at the call site.
+pub fn export_dxf_pages_failed(pages: &[usize]) -> String {
+    let list = pages
+        .iter()
+        .map(usize::to_string)
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("These pages could not be read and produced no file: {list}")
+}
+
+/// Text objects deliberately left out (the operator chose Omit).
+///
+/// Ported from the CLI, minus the `--no-text` reference. Plain colour, not
+/// a warning: this is what they asked for.
+pub fn export_dxf_skipped_text(count: usize) -> String {
+    format!(
+        "{count} text object(s) left out, as you chose — the DXF carries geometry only, so the \
+         drawing's dimensions, labels and notes are not in it. Their outlines are not there \
+         either; the text was never converted to curves."
+    )
+}
+
+/// Text pdfce COULD NOT READ. Warning colour — this is not a choice, it is
+/// a fact about the source PDF, and it is the case where labels the
+/// operator can plainly see are missing from the file.
+pub fn export_dxf_unreadable_text(count: usize) -> String {
+    format!(
+        "{count} text run(s) could NOT be read and are missing from the DXF — pdfce could not map \
+         their character codes to characters (a font with no /ToUnicode, typically). These are \
+         labels you can see on the page but cannot get out of it."
+    )
+}
+
+/// Images skipped — DXF has no raster entity in the subset pdfce writes.
+pub fn export_dxf_skipped_images(count: usize) -> String {
+    format!(
+        "{count} image(s) were not exported — DXF has no raster entity in the subset pdfce \
+         writes, so a scanned or rendered region of the page is simply absent rather than blank."
+    )
+}
+
+/// Shown after an export the operator took at paper scale on an
+/// uncalibrated drawing.
+///
+/// The CLI prints this before the operator can act on it; here they already
+/// opted in, so it is a record of what they agreed to rather than a
+/// warning they can still heed. Kept anyway, and warn-coloured, because
+/// "what scale is this file at" is a question asked days later.
+pub fn export_dxf_at_paper_scale() -> &'static str {
+    "Exported at paper scale (1:1), as you chose. Nothing on these pages was calibrated, so if the drawing is a scaled view the geometry is that fraction of real size."
 }

@@ -814,6 +814,31 @@ struct PdfceApp {
     copy_result: Option<CopyTextOutcome>,
     /// Whether the copy-result detail is expanded.
     copy_detail_expanded: bool,
+    /// The Export-DXF options window's draft, `None` when it is closed
+    /// (Pass 52.2).
+    ///
+    /// A DRAFT, not a set of live settings: it is built when the window
+    /// opens — page set resolved, scale inferred from the ce dimensions on
+    /// those pages — and discarded when it closes. Nothing here survives to
+    /// the next export, deliberately. The scale that was right for one
+    /// drawing is exactly the wrong thing to silently reuse on the next one,
+    /// and a remembered scale is an inference the operator did not make this
+    /// time (rule 4).
+    dxf_export: Option<DxfExportDraft>,
+    /// The outcome of the most recent DXF export, kept until the next one.
+    ///
+    /// **A sibling of [`Self::save_result`], not a member of it.**
+    /// `SaveOutcome` is specifically about writing the OPEN DOCUMENT's
+    /// edits — its "N objects appended" and "promoted" lines are statements
+    /// about the incremental-save machinery, and its presence is what the
+    /// close-confirmation and the modified-title logic read. A DXF export
+    /// touches none of that: it produces a derivative file and leaves the
+    /// document byte-identical. Folding it in would make "did my document
+    /// save?" answerable by an operation that never wrote a PDF at all.
+    ///
+    /// Assigned ONLY through [`PdfceApp::set_dxf_export_result`] — see that
+    /// function, and `tools/check-disclosure-channel.sh`, which enforces it.
+    dxf_export_result: Option<DxfExportResult>,
     /// A copy waiting on the operator's answer to the
     /// mostly-unreadable question.
     ///
@@ -1132,6 +1157,155 @@ enum SaveOutcome {
     Failed(String),
 }
 
+/// Which radio the operator picked when the pages' ce dimension groups
+/// disagree about the drawing scale (Pass 52.2).
+///
+/// # Why the "nothing picked yet" state is `Option<Self>` and not a variant
+///
+/// A `Unpicked` variant would be a value the operator can never choose and
+/// that every match arm has to remember to reject. `None` says the same
+/// thing in the type the enablement test already reads — and it makes
+/// "Export is disabled until a choice exists" the natural reading of
+/// `resolved_scale() -> Option<f64>` rather than an extra guard beside it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DxfConflictPick {
+    /// The nth candidate in [`DxfScaleSuggestion::Conflicting`]'s list.
+    Candidate(usize),
+    /// "Enter a scale myself" — the typed field governs.
+    Manual,
+}
+
+/// The Export-DXF options window's working state (Pass 52.2).
+///
+/// # Why the scale is a `String` and not an `f64`
+///
+/// Because **"pdfce does not know"** must be representable, and so must
+/// "the operator is halfway through typing `1.`". An `f64` field forces a
+/// number to exist at all times, and the only number available to put there
+/// on an uncalibrated drawing is `1.0` — which is paper scale, which is
+/// precisely the silent wrong answer this whole feature exists to prevent.
+/// An empty box that disables Export is the honest encoding of not knowing.
+///
+/// The arc tolerance is an `f64` for the mirror reason: it always has a
+/// meaningful value (`DxfOptions::default()`'s 0.05), there is no "unknown"
+/// state to express, and a `DragValue` cannot be left half-typed.
+struct DxfExportDraft {
+    /// The pages this export will write, 0-based, in document order.
+    ///
+    /// Resolved ONCE when the window opens rather than read live from
+    /// `doc.selected_pages`. The window is non-modal, so the operator can
+    /// change the selection while it is open — and a dialog whose subject
+    /// changes underneath the scale it already inferred would be inferring
+    /// against one page set and exporting another.
+    pages: Vec<usize>,
+    /// Output units — the DXF header's `$INSUNITS`.
+    units: pdfce_core::export::dxf::DxfUnits,
+    /// The scale field's literal text. See the type docs.
+    scale_text: String,
+    /// What pdfce inferred from the ce dimensions on [`Self::pages`], when
+    /// the window opened. Kept so the disclosure can name its source and so
+    /// the conflict list has something to render.
+    suggestion: pdfce_core::export::dxf::DxfScaleSuggestion,
+    /// The source group's calibration in the Measure panel's own words —
+    /// `"1 mm = 28.35 pt"` — or empty when nothing was inferred.
+    ///
+    /// # Why this is stored rather than rendered on demand
+    ///
+    /// [`ui_text::group_scale_summary`] takes a
+    /// [`ScaleState`](pdfce_core::dimension::ScaleState) and a
+    /// [`Unit`](pdfce_core::dimension::Unit) — the group's own state, not
+    /// the dimensionless real-units-per-paper-unit figure
+    /// [`DxfScaleSuggestion`](pdfce_core::export::dxf::DxfScaleSuggestion)
+    /// carries. Reaching those back out during the window's draw would mean
+    /// re-reading the `DimensionModel` every frame and re-finding the group
+    /// by name. It is captured once, at the same moment as the inference it
+    /// describes, which also makes the caption a snapshot of what was
+    /// inferred rather than of what the model says now.
+    ///
+    /// Rendered through that shared helper, and not a bespoke format,
+    /// because this window and the Measure panel must describe one group in
+    /// one set of words.
+    scale_summary: String,
+    /// Uncalibrated only: the operator has explicitly accepted paper scale.
+    paper_scale_accepted: bool,
+    /// Conflicting only: which radio is selected, `None` until one is.
+    conflict_pick: Option<DxfConflictPick>,
+    /// Whether page text becomes `TEXT` entities.
+    text: pdfce_core::export::dxf::DxfText,
+    /// Whether circular Béziers become `CIRCLE`/`ARC`.
+    fit_arcs: bool,
+    /// How far a cubic may deviate from a true arc, in pre-scale points.
+    arc_tolerance: f64,
+}
+
+impl DxfExportDraft {
+    /// The scale this draft would export at, or `None` if the operator has
+    /// not yet supplied one.
+    ///
+    /// **`None` is the whole safety mechanism**, not an error path: it is
+    /// what keeps the Export button disabled, and it is returned in exactly
+    /// the cases where pdfce would otherwise have to guess — an
+    /// uncalibrated drawing with nothing typed and no paper-scale opt-in, an
+    /// unresolved conflict, or a field holding something that is not a
+    /// positive finite number.
+    ///
+    /// Zero and negative are rejected alongside `NaN`: a zero scale
+    /// collapses the drawing to a point and a negative one mirrors it, and
+    /// both produce a file that opens successfully and is wrong.
+    fn resolved_scale(&self) -> Option<f64> {
+        use pdfce_core::export::dxf::DxfScaleSuggestion as S;
+
+        // The conflict case answers first, because its radio list is the
+        // control in charge — a candidate's own figure is authoritative and
+        // is not routed through the text box at all, so there is no state
+        // where the selected radio and the exported number can disagree.
+        if let S::Conflicting { candidates } = &self.suggestion {
+            match self.conflict_pick? {
+                DxfConflictPick::Candidate(i) => return candidates.get(i).map(|c| c.scale),
+                DxfConflictPick::Manual => {}
+            }
+        } else if self.paper_scale_accepted {
+            return Some(1.0);
+        }
+        let parsed: f64 = self.scale_text.trim().parse().ok()?;
+        (parsed.is_finite() && parsed > 0.0).then_some(parsed)
+    }
+
+    /// Whether this export would be written at paper scale on a drawing
+    /// pdfce knows nothing about — the one outcome that earns a warning
+    /// AFTER the fact as well as before it.
+    fn is_uncalibrated_paper_scale(&self) -> bool {
+        matches!(
+            self.suggestion,
+            pdfce_core::export::dxf::DxfScaleSuggestion::Uncalibrated
+        ) && self.resolved_scale() == Some(1.0)
+    }
+}
+
+/// What the last DXF export did, for the status bar (Pass 52.2).
+///
+/// The counters are SUMMED across every page written, and the pages that
+/// could not be read are named individually — see
+/// [`ui_text::export_dxf_pages_failed`] for why a count would not do.
+enum DxfExportResult {
+    Written {
+        /// The file written, or — for a multi-page run — the folder the
+        /// files went into.
+        destination: PathBuf,
+        /// How many files were written. `1` renders the single-file line.
+        files: usize,
+        /// Every page's outcome, summed.
+        outcome: pdfce_core::export::dxf::DxfOutcome,
+        /// 1-based page numbers that could not be decomposed. Non-empty
+        /// means the operator has fewer files than pages selected, which
+        /// they must be told without having to count them.
+        failed_pages: Vec<usize>,
+        /// Whether this went out at paper scale on an uncalibrated drawing.
+        paper_scale: bool,
+    },
+    Failed(String),
+}
+
 impl Default for PdfceApp {
     /// Startup defaults.
     ///
@@ -1230,6 +1404,8 @@ impl Default for PdfceApp {
             // summary is always visible and the detail is there for when
             // the summary says there is something to read.
             copy_detail_expanded: false,
+            dxf_export: None,
+            dxf_export_result: None,
             pending_copy: None,
             pending_redaction_apply: None,
             redact_search_query: String::new(),
@@ -3844,6 +4020,18 @@ enum Action {
     /// real tree has been restored from the borrow-dance swap.
     /// Open the reset-layout chooser (Pass 24.1).
     OpenResetLayout,
+    /// Open the Export-DXF options window on a fresh draft (Pass 52.2).
+    ///
+    /// Building the draft is real work — it resolves the page set and runs
+    /// the scale inference over those pages' ce dimension groups — so it is
+    /// a command applied in `apply()` rather than a flag flipped mid-draw,
+    /// the same reasoning `OpenResetLayout`'s neighbours record.
+    OpenDxfExport,
+    /// Close the Export-DXF window, discarding the draft.
+    CancelDxfExport,
+    /// Write the DXF(s) the draft describes, after asking for a
+    /// destination.
+    CommitDxfExport,
     /// Open the settings window on a fresh draft.
     OpenSettings,
     /// Write the draft to disk and adopt it.
@@ -5286,6 +5474,673 @@ impl PdfceApp {
             });
         if response.header_response.clicked() {
             self.copy_detail_expanded = !self.copy_detail_expanded;
+        }
+    }
+
+    // -- Export ▸ DXF (Pass 52.2, GUI half) ---------------------------
+    //
+    // The core writer and the CLI shipped first (Pass 52.0/52.1/52.3), and
+    // the scale inference the GUI is here to expose shipped with them
+    // (52.2, core+CLI half). What this section adds is the half only a GUI
+    // can do: ASK BEFORE WRITING. The CLI can print "this went out at paper
+    // scale" only after the bytes are on disk; by then the operator's next
+    // step may already be a cutting table.
+
+    /// Open the Export-DXF window on a freshly built draft.
+    ///
+    /// # What "freshly built" has to include, and why
+    ///
+    /// Two things are resolved here rather than in the window's draw, and
+    /// both are load-bearing:
+    ///
+    /// 1. **The page set.** `doc.selected_pages` if the Pages panel has a
+    ///    selection, otherwise the page on screen. Frozen at open time —
+    ///    the window is non-modal, so a live read would let the operator
+    ///    change the selection under a scale that was inferred from a
+    ///    different set of pages.
+    /// 2. **The scale inference**, over exactly those pages' ce dimension
+    ///    groups. Not the document's — see
+    ///    [`EditSession::dimension_groups_on_page`](pdfce_core::edit::EditSession::dimension_groups_on_page)
+    ///    for the sheet-set failure that scoping prevents.
+    ///
+    /// The three suggestion cases seed three different starting states, and
+    /// the difference between them IS rule 4:
+    ///
+    /// - **Calibrated** → the field is pre-filled and the caption names the
+    ///   group it came from. An inference, shown, overwritable, and nothing
+    ///   is written until the operator presses a button at a fixed position.
+    /// - **Uncalibrated** → the field is left **empty**. Pre-filling `1.0`
+    ///   would be pdfce answering a question it cannot answer, in a way that
+    ///   produces a file which opens fine and is the wrong size.
+    /// - **Conflicting** → nothing is pre-selected. Two groups genuinely
+    ///   disagree and a DXF carries one scale; picking for the operator is
+    ///   the silent-wrong-answer failure with extra steps.
+    fn open_dxf_export(&mut self) {
+        use pdfce_core::export::dxf::{DxfOptions, DxfScaleSuggestion, suggest_scale_for_groups};
+
+        let Status::Open(doc) = &self.status else {
+            return;
+        };
+        let pages: Vec<usize> = if doc.selected_pages.is_empty() {
+            vec![doc.view.page_index]
+        } else {
+            doc.selected_pages.iter().copied().collect()
+        };
+
+        // The union of every selected page's groups. A group appearing on
+        // two pages must not vote twice — `suggest_scale_for_groups`
+        // deduplicates opinions by VALUE, so a duplicate id would inflate
+        // `agreeing` and make one group look like corroboration of itself.
+        let mut groups: Vec<pdfce_core::dimension::GroupId> = Vec::new();
+        for page in &pages {
+            for id in doc.session.dimension_groups_on_page(*page) {
+                if !groups.contains(&id) {
+                    groups.push(id);
+                }
+            }
+        }
+        let model = doc.session.dimension_model();
+        let suggestion = suggest_scale_for_groups(&model, &groups);
+
+        // Pre-filled ONLY in the Calibrated case. See the doc comment: the
+        // other two arms leaving this empty is the safety property, not an
+        // omission.
+        let scale_text = match &suggestion {
+            // Through the catalog's number formatter, not `{scale}`: a
+            // derived scale is a division and prints at seventeen
+            // significant figures raw, which is not a number anyone can read
+            // or retype. See `ui_text::export_dxf_scale_number`.
+            DxfScaleSuggestion::Calibrated { scale, .. } => {
+                ui_text::export_dxf_scale_number(*scale)
+            }
+            DxfScaleSuggestion::Uncalibrated | DxfScaleSuggestion::Conflicting { .. } => {
+                String::new()
+            }
+        };
+        // The group's own unit, where there is one — the operator already
+        // told pdfce what units they think in when they calibrated. The
+        // scale is dimensionless, so this changes only the header's
+        // `$INSUNITS`, never a coordinate.
+        let units = match &suggestion {
+            DxfScaleSuggestion::Calibrated { units, .. } => *units,
+            _ => DxfOptions::default().units,
+        };
+
+        // The caption's wording, captured now while the model is in hand.
+        //
+        // Matched by NAME, which is what the suggestion carries, and that is
+        // safe here for a reason worth stating rather than relying on:
+        // `Calibrated` means every calibrated group in scope AGREES on the
+        // dimensionless scale, so if two groups share a name they also share
+        // the answer, and either one renders a truthful summary in its own
+        // unit. An empty summary (no match) degrades to a caption that names
+        // the group without restating its calibration — still an honest
+        // disclosure, just a shorter one.
+        let scale_summary = match &suggestion {
+            DxfScaleSuggestion::Calibrated { group, .. } => model
+                .groups()
+                .iter()
+                .find(|g| &g.name == group)
+                .map(|g| ui_text::group_scale_summary(g.scale, g.format.unit))
+                .unwrap_or_default(),
+            _ => String::new(),
+        };
+
+        let defaults = DxfOptions::default();
+        self.dxf_export = Some(DxfExportDraft {
+            pages,
+            units,
+            scale_text,
+            suggestion,
+            scale_summary,
+            paper_scale_accepted: false,
+            conflict_pick: None,
+            text: defaults.text,
+            fit_arcs: defaults.fit_arcs,
+            arc_tolerance: defaults.arc_tolerance,
+        });
+    }
+
+    /// The Export-DXF options window.
+    ///
+    /// # Why a window on the File tab, and why that settles the rule-4
+    /// placement objection before it is raised
+    ///
+    /// Decision 024 §4.4 narrowed rule 4 after the operator's complaint that
+    /// *"there is a separate accept / reject box somewhere on the screen to
+    /// click — I've never seen any other software operate that way."* The
+    /// complaint was about PLACEMENT: those confirm boxes were positioned
+    /// relative to the PAGE, so they moved on every zoom, scroll and page
+    /// change. A window opened from a ribbon button has a fixed position and
+    /// a title bar, which is the shape every application uses for "this
+    /// command needs options" — so that objection does not reach here.
+    ///
+    /// Non-modal, like [`Self::reset_layout_chooser`] and for the same
+    /// reason: nothing here is destructive to the document. The operator can
+    /// leave it open and look at the drawing, which is exactly what someone
+    /// deciding "is this the 1:5 detail sheet?" wants to do.
+    ///
+    /// # Why one window rather than a wizard
+    ///
+    /// Four questions, three of which have a correct default. A wizard would
+    /// make the operator page past `fit_arcs` — which they will never change
+    /// — to reach the scale, which is the only one that can hurt them.
+    fn dxf_export_window(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
+        use pdfce_core::export::dxf::{DxfText, DxfUnits};
+
+        let Some(draft) = self.dxf_export.as_mut() else {
+            return;
+        };
+        let mut open = true;
+        egui::Window::new(ui_text::export_dxf_title())
+            .collapsible(false)
+            .resizable(false)
+            .open(&mut open)
+            .show(ctx, |ui| {
+                // R3: sized generously rather than to the English text —
+                // the scale disclosures are the longest strings in this
+                // application outside the status bar.
+                ui.set_max_width(560.0);
+
+                // --- what is being exported (read-only) ------------------
+                ui.label(match draft.pages.as_slice() {
+                    [one] => ui_text::export_dxf_pages_current(one + 1),
+                    many => ui_text::export_dxf_pages_selected(many.len()),
+                });
+                ui.separator();
+
+                // --- units ----------------------------------------------
+                //
+                // A radio ROW, not a ComboBox: two options, both short. A
+                // ComboBox would hide one behind a click and tell the
+                // operator nothing they could not already see.
+                ui.horizontal(|ui| {
+                    ui.label(ui_text::export_dxf_units_label());
+                    ui.radio_value(
+                        &mut draft.units,
+                        DxfUnits::Inches,
+                        ui_text::export_dxf_units_inches(),
+                    );
+                    ui.radio_value(
+                        &mut draft.units,
+                        DxfUnits::Millimetres,
+                        ui_text::export_dxf_units_millimetres(),
+                    );
+                })
+                .response
+                .on_hover_text(ui_text::export_dxf_units_tooltip());
+
+                // --- scale: the load-bearing disclosure ------------------
+                Self::dxf_export_scale_ui(ui, draft);
+
+                // --- text ------------------------------------------------
+                ui.separator();
+                ui.horizontal(|ui| {
+                    ui.label(ui_text::export_dxf_text_label());
+                    ui.radio_value(
+                        &mut draft.text,
+                        DxfText::Entities,
+                        ui_text::export_dxf_text_include(),
+                    );
+                    ui.radio_value(
+                        &mut draft.text,
+                        DxfText::Omit,
+                        ui_text::export_dxf_text_omit(),
+                    );
+                })
+                .response
+                .on_hover_text(ui_text::export_dxf_text_tooltip());
+
+                // --- advanced, closed by default -------------------------
+                //
+                // `fit_arcs` and `arc_tolerance` match `DxfOptions::default()`
+                // and the core module's docs already justify both. They are
+                // here because an operator whose consumer chokes on splines
+                // needs a lever, not because anyone should have to look.
+                egui::CollapsingHeader::new(ui_text::export_dxf_advanced())
+                    .id_salt("dxf-export-advanced")
+                    .default_open(false)
+                    .show(ui, |ui| {
+                        ui.checkbox(&mut draft.fit_arcs, ui_text::export_dxf_fit_arcs())
+                            .on_hover_text(ui_text::export_dxf_fit_arcs_tooltip());
+                        // Disabled rather than hidden when fitting is off:
+                        // the tolerance is meaningless without it, and a
+                        // control that vanishes is a control the operator
+                        // thinks they imagined.
+                        ui.add_enabled_ui(draft.fit_arcs, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.label(ui_text::export_dxf_arc_tolerance());
+                                ui.add(
+                                    egui::DragValue::new(&mut draft.arc_tolerance)
+                                        .speed(0.005)
+                                        .range(0.0..=10.0),
+                                );
+                            })
+                            .response
+                            .on_hover_text(ui_text::export_dxf_arc_tolerance_tooltip());
+                        });
+                    });
+
+                // --- commit ----------------------------------------------
+                ui.separator();
+                ui.horizontal(|ui| {
+                    if ui.button(ui_text::export_dxf_cancel()).clicked() {
+                        actions.push(Action::CancelDxfExport);
+                    }
+                    // ★ THE GATE. Disabled until a scale exists, and the
+                    // tooltip says why — R83's rule that a dead control
+                    // explains itself. This is the difference the GUI half
+                    // exists for: the CLI can only warn after writing.
+                    let ready = draft.resolved_scale().is_some();
+                    let resp =
+                        ui.add_enabled(ready, egui::Button::new(ui_text::export_dxf_confirm()));
+                    if resp.clicked() {
+                        actions.push(Action::CommitDxfExport);
+                    }
+                    if !ready {
+                        resp.on_hover_text(ui_text::export_dxf_confirm_disabled_tooltip());
+                    }
+                });
+            });
+        // The title-bar close is a cancel, so both routes agree.
+        if !open {
+            self.dxf_export = None;
+        }
+    }
+
+    /// The scale row and whichever disclosure the inference earned.
+    ///
+    /// Split out of [`Self::dxf_export_window`] because it is the only part
+    /// of that window with real logic in it, and because the three arms
+    /// below are the feature: everything else in the dialog is a preference,
+    /// and this is the one that decides whether the exported geometry is the
+    /// right size.
+    ///
+    /// A free-standing associated function taking `&mut DxfExportDraft`
+    /// rather than a method, so it can be called while the window closure
+    /// already holds the `self.dxf_export` borrow.
+    fn dxf_export_scale_ui(ui: &mut egui::Ui, draft: &mut DxfExportDraft) {
+        use pdfce_core::export::dxf::DxfScaleSuggestion as S;
+
+        ui.separator();
+
+        // The conflict case replaces the field with a choice, because there
+        // is nothing honest to put IN the field: two groups have answered
+        // and pdfce cannot rank them.
+        if let S::Conflicting { candidates } = &draft.suggestion {
+            ui.colored_label(
+                ui.visuals().warn_fg_color,
+                ui_text::export_dxf_scale_conflict(),
+            );
+            for (i, c) in candidates.iter().enumerate() {
+                ui.radio_value(
+                    &mut draft.conflict_pick,
+                    Some(DxfConflictPick::Candidate(i)),
+                    ui_text::export_dxf_scale_conflict_candidate(&c.group, c.scale),
+                );
+            }
+            ui.radio_value(
+                &mut draft.conflict_pick,
+                Some(DxfConflictPick::Manual),
+                ui_text::export_dxf_scale_conflict_manual(),
+            );
+            // The field appears only once "myself" is chosen. Showing it
+            // beside the radios would make it ambiguous which one wins.
+            if draft.conflict_pick == Some(DxfConflictPick::Manual) {
+                Self::dxf_export_scale_field(ui, draft, true);
+            }
+            return;
+        }
+
+        let enabled = !draft.paper_scale_accepted;
+        Self::dxf_export_scale_field(ui, draft, enabled);
+
+        match &draft.suggestion {
+            S::Calibrated {
+                group, agreeing, ..
+            } => {
+                // `scale_summary` was rendered through the SAME helper the
+                // Measure panel uses, so a group is described identically
+                // wherever it appears. Deliberately not a "1:2"-style ratio
+                // — this application's established convention is
+                // "1 mm = 28.35 pt", and inventing a second notation for one
+                // dialog is how two notations become permanent.
+                ui.label(
+                    egui::RichText::new(ui_text::export_dxf_scale_from_group(
+                        group,
+                        &draft.scale_summary,
+                    ))
+                    .weak()
+                    .small(),
+                );
+                if *agreeing > 1 {
+                    ui.label(
+                        egui::RichText::new(ui_text::export_dxf_scale_agreeing(agreeing - 1))
+                            .weak()
+                            .small(),
+                    );
+                }
+            }
+            S::Uncalibrated => {
+                ui.colored_label(
+                    ui.visuals().warn_fg_color,
+                    ui_text::export_dxf_scale_unknown(),
+                );
+                // The explicit opt-in. pdfce still will not choose paper
+                // scale; it will only accept the operator choosing it, and
+                // the label names the number so the agreement is specific.
+                ui.checkbox(
+                    &mut draft.paper_scale_accepted,
+                    ui_text::export_dxf_paper_scale_opt_in(),
+                );
+                ui.label(
+                    egui::RichText::new(ui_text::export_dxf_scale_measure_hint())
+                        .weak()
+                        .small(),
+                );
+            }
+            // Returned above, before the field was even drawn. Kept as a
+            // real arm rather than a `_` so that a fourth suggestion variant
+            // is a compile error here — this match is where a new kind of
+            // inference would need its own disclosure, and defaulting one
+            // into the uncalibrated branch would ship it undisclosed.
+            S::Conflicting { .. } => unreachable!(),
+        }
+    }
+
+    /// The scale text field itself.
+    fn dxf_export_scale_field(ui: &mut egui::Ui, draft: &mut DxfExportDraft, enabled: bool) {
+        ui.horizontal(|ui| {
+            ui.label(ui_text::export_dxf_scale_label());
+            ui.add_enabled(
+                enabled,
+                egui::TextEdit::singleline(&mut draft.scale_text).desired_width(90.0),
+            );
+        })
+        .response
+        .on_hover_text(ui_text::export_dxf_scale_tooltip());
+    }
+
+    /// Set the DXF-export outcome, and TRACE it.
+    ///
+    /// The same choke-point discipline `set_edit_note` documents, applied to
+    /// this channel from its first line rather than retrofitted onto it
+    /// after a disclosure was found to be invisible. `tools/check-disclosure-
+    /// channel.sh` guards it: exactly one bare `= Some(...)` assignment to
+    /// `dxf_export_result` may exist, and it is the one below.
+    ///
+    /// Worth stating why an export outcome counts as a disclosure at all and
+    /// not merely as a status message: two of its lines report things pdfce
+    /// DECIDED — text it could not read and dropped, images it has no
+    /// representation for — and one reports a scale the operator agreed to
+    /// but will not remember agreeing to. Those are rule-4 obligations, and
+    /// an obligation that silently stopped firing would look exactly like
+    /// one that fired and had nothing to say.
+    fn set_dxf_export_result(&mut self, result: DxfExportResult) {
+        diag::trace(|| match &result {
+            DxfExportResult::Written {
+                destination,
+                files,
+                outcome,
+                failed_pages,
+                paper_scale,
+            } => {
+                // ui-text-exempt: diagnostic trace, never displayed in the UI
+                format!(
+                    "dxf-export files={files} dest={destination:?} polylines={} circles={} arcs={} splines={} text={} unreadable_text={} skipped_text={} skipped_images={} failed_pages={failed_pages:?} paper_scale={paper_scale}",
+                    outcome.polylines,
+                    outcome.circles,
+                    outcome.arcs,
+                    outcome.splines,
+                    outcome.text_entities,
+                    outcome.unreadable_text,
+                    outcome.skipped_text,
+                    outcome.skipped_images,
+                )
+            }
+            // ui-text-exempt: diagnostic trace, never displayed in the UI
+            DxfExportResult::Failed(message) => format!("dxf-export failed {message:?}"),
+        });
+        self.dxf_export_result = Some(result);
+    }
+
+    /// Write the DXF(s) the draft describes.
+    ///
+    /// # ★ The correctness trap this function exists to not fall into
+    ///
+    /// It decomposes against **`doc.session.view()`** — the overlay-aware
+    /// session view — and never a fresh `Document::load` of the bytes on
+    /// disk. The CLI legitimately loads from disk because it has no session
+    /// and no unsaved edits can exist. Copying that call here would export a
+    /// DXF that silently does not match what is on screen for anyone who has
+    /// edited and not saved, which is decision 018's hazard in a new shell.
+    ///
+    /// # Destination
+    ///
+    /// One page → a save dialog and one file. Several → a folder picker and
+    /// one file per page, named `{stem}_p{n}.dxf` zero-padded to the widest
+    /// page number so they sort in page order. No editable name template in
+    /// this slice: a template is a small feature with a large surface (what
+    /// happens on a collision, what tokens exist, what an invalid one does)
+    /// and nothing yet asks for it.
+    ///
+    /// # Every write goes through `write_atomic`
+    ///
+    /// Standing UX rule 5 is not scoped to the primary document. A DXF
+    /// truncated by a crash mid-write is the same failure for a file headed
+    /// into a CNC pipeline as it is for a PDF, and the destination is
+    /// frequently a path the operator is overwriting from a previous run.
+    ///
+    /// # Partial failure is reported, not swallowed
+    ///
+    /// A page that will not decompose is skipped, named, and the rest are
+    /// written. Eight selected pages producing seven files with no
+    /// explanation is the kind of quiet loss this project's disclosure rules
+    /// exist to forbid.
+    fn commit_dxf_export(&mut self) {
+        use pdfce_core::export::dxf::{DxfOptions, DxfOutcome, write_dxf};
+
+        let Some(draft) = self.dxf_export.take() else {
+            return;
+        };
+        let Some(scale) = draft.resolved_scale() else {
+            // Unreachable through the UI (the button is disabled), and
+            // handled rather than asserted: a keyboard or scripted path that
+            // reached here must not write a file at a scale nobody chose.
+            return;
+        };
+        let Status::Open(doc) = &self.status else {
+            return;
+        };
+        let stem = ui_text::file_stem(&doc.path);
+        let paper_scale = draft.is_uncalibrated_paper_scale();
+
+        // The destination is asked for BEFORE any page is decomposed, so a
+        // cancelled dialog costs nothing and a slow document does not make
+        // the operator wait to find out where it is going.
+        //
+        // `diag::export_dir` substitutes the answer the native dialog would
+        // have given, and nothing else — see that function for why the whole
+        // path below would otherwise be reachable only by hand.
+        let multi = draft.pages.len() > 1;
+        let destination = match diag::export_dir() {
+            Some(dir) if multi => Some(dir),
+            Some(dir) => Some(dir.join(ui_text::export_dxf_suggested_name(&stem))),
+            None if multi => rfd::FileDialog::new().pick_folder(),
+            None => rfd::FileDialog::new()
+                .add_filter(ui_text::export_dxf_dialog_filter_label(), &["dxf"])
+                .set_file_name(ui_text::export_dxf_suggested_name(&stem))
+                .save_file(),
+        };
+        let Some(destination) = destination else {
+            return; // cancelled — the draft is gone, nothing was written
+        };
+
+        let opts = DxfOptions {
+            units: draft.units,
+            scale,
+            fit_arcs: draft.fit_arcs,
+            arc_tolerance: draft.arc_tolerance,
+            text: draft.text,
+        };
+
+        // The view is built once and reused for every page: it resolves the
+        // session overlay, which is per-document rather than per-page.
+        let view = doc.session.view();
+        let pages = match doc.session.pages() {
+            Ok(pages) => pages,
+            Err(err) => {
+                self.set_dxf_export_result(DxfExportResult::Failed(err.to_string()));
+                return;
+            }
+        };
+
+        // The zero-padding width, from the LARGEST page number in the run —
+        // not from the document's page count. Selecting pages 8, 9 and 10 of
+        // a 400-page file should not produce `_p008`.
+        let width = draft
+            .pages
+            .iter()
+            .map(|p| (p + 1).to_string().len())
+            .max()
+            .unwrap_or(1);
+
+        let mut total = DxfOutcome::default();
+        let mut failed_pages: Vec<usize> = Vec::new();
+        let mut files = 0usize;
+        for index in &draft.pages {
+            let Some(page) = pages.get(*index) else {
+                failed_pages.push(index + 1);
+                continue;
+            };
+            let model = match pdfce_core::vector::decompose_page(
+                &view,
+                page,
+                pdfce_core::vector::Matrix::IDENTITY,
+            ) {
+                Ok(model) => model,
+                Err(_) => {
+                    failed_pages.push(index + 1);
+                    continue;
+                }
+            };
+            let (dxf, outcome) = write_dxf(&model, &opts);
+            let path = if multi {
+                destination.join(ui_text::export_dxf_page_file_name(&stem, index + 1, width))
+            } else {
+                destination.clone()
+            };
+            if let Err(err) = write_atomic(&path, dxf.as_bytes()) {
+                // A write failure is fatal to the whole run rather than
+                // per-page: the usual causes (no permission, no space, a
+                // read-only folder) apply to every remaining page, and
+                // grinding through forty more failures to report forty
+                // identical errors helps nobody.
+                self.set_dxf_export_result(DxfExportResult::Failed(err.to_string()));
+                return;
+            }
+            files += 1;
+            total.polylines += outcome.polylines;
+            total.circles += outcome.circles;
+            total.arcs += outcome.arcs;
+            total.splines += outcome.splines;
+            total.skipped_text += outcome.skipped_text;
+            total.skipped_images += outcome.skipped_images;
+            total.text_entities += outcome.text_entities;
+            total.unreadable_text += outcome.unreadable_text;
+        }
+
+        self.set_dxf_export_result(DxfExportResult::Written {
+            destination,
+            files,
+            outcome: total,
+            failed_pages,
+            paper_scale,
+        });
+    }
+
+    /// The DXF-export result lines in the status bar.
+    ///
+    /// # Why the status bar, and not a toast or a modal
+    ///
+    /// A toast fades, and *"are the labels missing?"* is a question asked
+    /// after opening the file in another application — minutes later, not
+    /// seconds. A modal charges a dismissal for information that is usually
+    /// "it worked". The status bar is this application's narrator channel
+    /// (see [`Self::status_bar_body`]) and it persists until superseded,
+    /// which is the right lifetime for "what did that export actually do?".
+    ///
+    /// # Only non-zero lines appear
+    ///
+    /// A permanent "0 images skipped" would train the operator to skip the
+    /// whole block, which is exactly what must not happen to the two lines
+    /// that matter. The presence of a line is itself the signal.
+    ///
+    /// # Colour says whose decision it was
+    ///
+    /// `unreadable_text` and `skipped_images` are warn-coloured: those are
+    /// pdfce's limits, and they mean content the operator can see on the
+    /// page is absent from the file. `skipped_text` is plain — that was the
+    /// operator's own choice in the dialog, and colouring their own decision
+    /// as a caution is how a warning colour stops meaning anything.
+    fn dxf_export_result_bar(&mut self, ui: &mut egui::Ui) {
+        let Some(result) = &self.dxf_export_result else {
+            return;
+        };
+        let (destination, files, outcome, failed_pages, paper_scale) = match result {
+            DxfExportResult::Failed(message) => {
+                ui.colored_label(
+                    ui.visuals().error_fg_color,
+                    ui_text::export_dxf_failed(message),
+                );
+                return;
+            }
+            DxfExportResult::Written {
+                destination,
+                files,
+                outcome,
+                failed_pages,
+                paper_scale,
+            } => (destination, *files, outcome, failed_pages, *paper_scale),
+        };
+
+        let entities = outcome.polylines
+            + outcome.circles
+            + outcome.arcs
+            + outcome.splines
+            + outcome.text_entities;
+        if files == 1 {
+            ui.label(ui_text::export_dxf_wrote_one(destination, entities));
+        } else {
+            ui.label(ui_text::export_dxf_wrote_many(files, entities, destination));
+        }
+
+        if !failed_pages.is_empty() {
+            ui.colored_label(
+                ui.visuals().warn_fg_color,
+                ui_text::export_dxf_pages_failed(failed_pages),
+            );
+        }
+        if outcome.skipped_text > 0 {
+            ui.label(ui_text::export_dxf_skipped_text(outcome.skipped_text));
+        }
+        if outcome.unreadable_text > 0 {
+            ui.colored_label(
+                ui.visuals().warn_fg_color,
+                ui_text::export_dxf_unreadable_text(outcome.unreadable_text),
+            );
+        }
+        if outcome.skipped_images > 0 {
+            ui.colored_label(
+                ui.visuals().warn_fg_color,
+                ui_text::export_dxf_skipped_images(outcome.skipped_images),
+            );
+        }
+        if paper_scale {
+            ui.colored_label(
+                ui.visuals().warn_fg_color,
+                ui_text::export_dxf_at_paper_scale(),
+            );
         }
     }
 
@@ -8163,6 +9018,22 @@ impl PdfceApp {
                 self.pending_reset = Some(ribbon::ResetScope::default());
                 return;
             }
+            Action::OpenDxfExport => {
+                self.open_dxf_export();
+                return;
+            }
+            Action::CancelDxfExport => {
+                // Costs nothing to back out of: no file has been chosen and
+                // nothing has been written. The document was never touched
+                // at any point, which is the whole character of this
+                // command.
+                self.dxf_export = None;
+                return;
+            }
+            Action::CommitDxfExport => {
+                self.commit_dxf_export();
+                return;
+            }
             Action::ApplyResetLayout(scope) => {
                 // Each arm rebuilds from the SAME `default_*` constructor the
                 // application starts with, so "reset" and "startup" cannot
@@ -8629,6 +9500,9 @@ impl PdfceApp {
             | Action::ToggleShowPoints
             | Action::ToggleProperties
             | Action::OpenResetLayout
+            | Action::OpenDxfExport
+            | Action::CancelDxfExport
+            | Action::CommitDxfExport
             | Action::CancelResetLayout
             // The settings actions belong in THIS arm, not a new one: they
             // are meaningful with no document open (every setting is
@@ -9696,6 +10570,49 @@ impl eframe::App for PdfceApp {
                         .is_some_and(settings_panel::Draft::is_all_default),
                 );
             }
+            diag::Step::ExportDxf => {
+                // Through the SAME action the ribbon button pushes, for the
+                // reason `Step::Settings` gives above: a scripted entry that
+                // built the draft itself would skip the page resolution and
+                // the scale inference — i.e. the entire feature — and produce
+                // a harness artefact indistinguishable from a working one.
+                self.apply(Action::OpenDxfExport, ctx, ctx.pixels_per_point());
+                // ★ The inference, in the trace, at the moment it is made.
+                //
+                // This is the line that makes the export's central decision
+                // observable at all. `resolved_scale` is reported alongside
+                // the suggestion because the two can legitimately differ —
+                // Uncalibrated with nothing typed resolves to `None`, and
+                // "the dialog opened" says nothing about whether Export is
+                // live. Reporting only one of them would leave the gate
+                // itself unobserved, which is exactly the recursive
+                // instrument failure `set_edit_note` was written after.
+                if let Some(draft) = &self.dxf_export {
+                    eprintln!(
+                        "diag: dxf-export pages={:?} suggestion={:?} resolved={:?} units={:?}", // ui-text-exempt: diagnostic trace to stderr under PDFCE_DIAG, never shown in the UI
+                        draft.pages,
+                        draft.suggestion,
+                        draft.resolved_scale(),
+                        draft.units,
+                    );
+                } else {
+                    // Not silence. A window that failed to open must say so,
+                    // or its absence reads as a feature that did nothing.
+                    eprintln!("diag: dxf-export window did not open"); // ui-text-exempt: diagnostic trace to stderr under PDFCE_DIAG, never shown in the UI
+                }
+            }
+            diag::Step::ExportDxfCommit => {
+                // Same action the Export button pushes — including its
+                // `resolved_scale()` guard, so a scripted commit cannot write
+                // a file the button would have refused to write.
+                self.apply(Action::CommitDxfExport, ctx, ctx.pixels_per_point());
+                // The outcome, or its absence, stated either way. A commit
+                // that correctly refused and a commit that silently failed
+                // look identical from outside unless one of them says so.
+                if self.dxf_export_result.is_none() {
+                    eprintln!("diag: dxf-export commit wrote nothing (no scale resolved)"); // ui-text-exempt: diagnostic trace to stderr under PDFCE_DIAG, never shown in the UI
+                }
+            }
             diag::Step::Tool(which) => {
                 // Routed through the SAME action the toolbar pushes, so a
                 // scripted tool entry builds exactly the per-tool state a real
@@ -10118,6 +11035,10 @@ impl eframe::App for PdfceApp {
         // modeless reference; it is not something an operator keeps open
         // while working, which is what would make it owe a dock panel.
         self.settings_window(&ctx, &mut actions);
+        // Non-modal, like the reset-layout chooser and for the same reason:
+        // it changes nothing about the document, so an operator who wants to
+        // look at the drawing while deciding the scale should be able to.
+        self.dxf_export_window(&ctx, &mut actions);
         self.shortcuts_window(&ctx);
 
         for action in actions {
@@ -11550,6 +12471,27 @@ impl PdfceApp {
                 }
             });
 
+            // Export ▸ DXF (Pass 52.2). Beside Clipboard, because both are
+            // "get content out" — and a group of its own, because what the
+            // operator ends up holding is a file for another application
+            // rather than characters on the clipboard. See
+            // `RibbonGroup::Export` for the full placement argument.
+            //
+            // Hidden rather than disabled with no document open, matching
+            // Save's posture in the QAT and R124's "no placeholders"
+            // ruling: there is nothing to discover about exporting a page
+            // when no page exists.
+            Self::ribbon_group_ui(ui, tab, RG::Export, |ui| {
+                if self.status_is_open()
+                    && ui
+                        .button(ui_text::export_dxf_button())
+                        .on_hover_text(ui_text::export_dxf_tooltip())
+                        .clicked()
+                {
+                    actions.push(Action::OpenDxfExport);
+                }
+            });
+
             Self::ribbon_group_ui(ui, tab, RG::Batch, |ui| {
                 // The whole of Pass 3.2's toolbar growth: ONE toggle. Every
                 // other new capability lives on the thumbnails (page-scoped)
@@ -12918,6 +13860,12 @@ impl PdfceApp {
         // always about what is on screen, while this is a snapshot of a
         // copy that may have named a different page entirely.
         self.copy_result_bar(ui);
+
+        // The DXF-export result sits with them, in the same "did my last
+        // requested action work, and what should I know about it" family —
+        // and NOT inside the save result, because a DXF export never wrote
+        // the open document at all. See `PdfceApp::dxf_export_result`.
+        self.dxf_export_result_bar(ui);
 
         let Status::Open(doc) = &self.status else {
             ui.label(ui_text::diagnostics_no_document());
@@ -21950,6 +22898,168 @@ mod tests {
     }
 
     use super::*;
+
+    // ---- Pass 52.2: the Export-DXF scale gate ----
+    //
+    // `resolved_scale() -> Option<f64>` is the whole safety mechanism of
+    // this dialog: `None` disables Export. Every assertion below is about
+    // what must NOT resolve, because a `Some` that should have been `None`
+    // is a file written at a scale nobody chose — and a DXF at the wrong
+    // scale opens without complaint and cuts metal to the wrong size.
+
+    /// A draft in the state [`PdfceApp::open_dxf_export`] would build it for
+    /// `suggestion`, with nothing typed and nothing picked.
+    fn dxf_draft(suggestion: pdfce_core::export::dxf::DxfScaleSuggestion) -> DxfExportDraft {
+        let d = pdfce_core::export::dxf::DxfOptions::default();
+        DxfExportDraft {
+            pages: vec![0],
+            units: d.units,
+            scale_text: String::new(),
+            suggestion,
+            scale_summary: String::new(),
+            paper_scale_accepted: false,
+            conflict_pick: None,
+            text: d.text,
+            fit_arcs: d.fit_arcs,
+            arc_tolerance: d.arc_tolerance,
+        }
+    }
+
+    /// **★ An uncalibrated drawing does not resolve to 1.0 by itself.**
+    ///
+    /// The single most important assertion in this file. If this ever
+    /// returns `Some(1.0)`, the Export button is live on a drawing pdfce
+    /// knows nothing about, and the operator gets paper-scale geometry with
+    /// no decision having been made.
+    #[test]
+    fn an_uncalibrated_draft_resolves_to_nothing_until_the_operator_acts() {
+        use pdfce_core::export::dxf::DxfScaleSuggestion as S;
+        let mut draft = dxf_draft(S::Uncalibrated);
+        assert_eq!(
+            draft.resolved_scale(),
+            None,
+            "an empty field on an uncalibrated drawing must keep Export disabled"
+        );
+
+        // Either of the two deliberate acts unblocks it, and only those.
+        draft.paper_scale_accepted = true;
+        assert_eq!(draft.resolved_scale(), Some(1.0));
+        assert!(
+            draft.is_uncalibrated_paper_scale(),
+            "and the after-the-fact disclosure fires for it"
+        );
+
+        draft.paper_scale_accepted = false;
+        draft.scale_text = "2".to_owned();
+        assert_eq!(draft.resolved_scale(), Some(2.0));
+        assert!(
+            !draft.is_uncalibrated_paper_scale(),
+            "a typed 2 is not paper scale and must not claim to be"
+        );
+    }
+
+    /// **A conflict resolves to nothing until a radio is chosen.**
+    ///
+    /// Two groups disagree and a DXF carries one scale. Picking for the
+    /// operator exports part of the sheet wrong by whatever factor separates
+    /// the two, and the result looks entirely plausible.
+    #[test]
+    fn a_conflicting_draft_resolves_to_nothing_until_a_candidate_is_picked() {
+        use pdfce_core::export::dxf::{DxfScaleCandidate, DxfScaleSuggestion as S, DxfUnits};
+        let candidates = vec![
+            DxfScaleCandidate {
+                group: "Plan".to_owned(),
+                scale: 1.0,
+                units: DxfUnits::Millimetres,
+            },
+            DxfScaleCandidate {
+                group: "Detail".to_owned(),
+                scale: 5.0,
+                units: DxfUnits::Millimetres,
+            },
+        ];
+        let mut draft = dxf_draft(S::Conflicting { candidates });
+        assert_eq!(draft.resolved_scale(), None, "nothing is pre-selected");
+
+        // A typed number alone does NOT unblock it — the operator must say
+        // that typing is what they mean, otherwise a stale value left in the
+        // field would silently override an unresolved disagreement.
+        draft.scale_text = "3".to_owned();
+        assert_eq!(
+            draft.resolved_scale(),
+            None,
+            "text without picking \"enter a scale myself\" resolves nothing"
+        );
+
+        draft.conflict_pick = Some(DxfConflictPick::Candidate(1));
+        assert_eq!(
+            draft.resolved_scale(),
+            Some(5.0),
+            "a chosen candidate's own figure wins over whatever is in the box"
+        );
+
+        draft.conflict_pick = Some(DxfConflictPick::Manual);
+        assert_eq!(draft.resolved_scale(), Some(3.0));
+
+        // An out-of-range index cannot resolve. Unreachable through the UI,
+        // asserted because the alternative to `get` here would be an index
+        // that panics inside a draw.
+        draft.conflict_pick = Some(DxfConflictPick::Candidate(99));
+        assert_eq!(draft.resolved_scale(), None);
+    }
+
+    /// **A calibrated draft is pre-filled and overwritable.**
+    ///
+    /// Rule 4 in one assertion: the inference is a value the operator can
+    /// see and replace, and replacing it is what governs.
+    #[test]
+    fn a_calibrated_draft_pre_fills_and_can_be_overwritten() {
+        use pdfce_core::export::dxf::{DxfScaleSuggestion as S, DxfUnits};
+        let mut draft = dxf_draft(S::Calibrated {
+            scale: 2.0,
+            units: DxfUnits::Millimetres,
+            group: "Detail".to_owned(),
+            agreeing: 1,
+        });
+        // `open_dxf_export` writes the field; the draft helper leaves it
+        // empty, so an empty field must NOT fall back to the inference.
+        assert_eq!(
+            draft.resolved_scale(),
+            None,
+            "an emptied field resolves nothing even when pdfce had an answer — \
+             the number in the box is what gets exported, always"
+        );
+        draft.scale_text = "2".to_owned();
+        assert_eq!(draft.resolved_scale(), Some(2.0));
+        draft.scale_text = "4.5".to_owned();
+        assert_eq!(draft.resolved_scale(), Some(4.5), "the operator's override");
+        assert!(
+            !draft.is_uncalibrated_paper_scale(),
+            "a calibrated drawing never earns the paper-scale warning"
+        );
+    }
+
+    /// **Nothing that is not a positive finite number resolves.**
+    ///
+    /// Zero collapses the drawing to a point and a negative mirrors it;
+    /// both produce a DXF that opens successfully and is wrong, which is
+    /// the failure class this dialog exists to close.
+    #[test]
+    fn a_scale_that_is_not_a_positive_finite_number_resolves_to_nothing() {
+        use pdfce_core::export::dxf::DxfScaleSuggestion as S;
+        let mut draft = dxf_draft(S::Uncalibrated);
+        for bad in ["", " ", "0", "-1", "abc", "1,5", "NaN", "inf", "-0.0"] {
+            draft.scale_text = bad.to_owned();
+            assert_eq!(
+                draft.resolved_scale(),
+                None,
+                "{bad:?} must not become an export scale"
+            );
+        }
+        // Surrounding whitespace is the operator's, not a syntax error.
+        draft.scale_text = "  1.5  ".to_owned();
+        assert_eq!(draft.resolved_scale(), Some(1.5));
+    }
 
     // ---- Pass 19.3: the spacing & style property surface ----
 

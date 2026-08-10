@@ -13195,6 +13195,16 @@ appended={} out_bytes={} undo_verified={} undo_identical={}",
 ///   DXF carries one scale; choosing either would export half the sheet
 ///   wrong by a factor of five, and it would look entirely plausible.
 ///   `--scale` resolves it, which is what the refusal says.
+///
+/// The inference is scoped to **the page being exported**, not to the
+/// document. It shipped document-wide, which was wrong in both directions
+/// on a multi-page sheet set: an unambiguous page-1 export could be
+/// refused because page 3 held a 1:5 detail, and — the half that actually
+/// damages metal — a page 1 with no calibration of its own would be
+/// exported at page 3's scale with nothing on screen or in the output
+/// looking odd. `dimension_groups_on_page` resolves each ce dimension's
+/// owning page through its annotation's `/P`, and only those groups get a
+/// vote.
 fn cmd_export_dxf(
     input: &Path,
     page: u32,
@@ -13205,7 +13215,7 @@ fn cmd_export_dxf(
     text: bool,
 ) -> u8 {
     use pdfce_core::export::dxf::{
-        DxfOptions, DxfScaleSuggestion, DxfText, DxfUnits, suggest_scale, write_dxf,
+        DxfOptions, DxfScaleSuggestion, DxfText, DxfUnits, suggest_scale_for_groups, write_dxf,
     };
 
     if let Some(s) = scale
@@ -13261,7 +13271,11 @@ fn cmd_export_dxf(
     // Done AFTER decomposition so a page that cannot be read fails on that
     // rather than on a scale question the operator would then have answered
     // for nothing.
-    let suggestion = suggest_scale(&doc.dimension_model());
+    //
+    // Scoped to THIS page's groups — see this function's contract for the
+    // sheet-set failure the document-wide version had.
+    let suggestion =
+        suggest_scale_for_groups(&doc.dimension_model(), &doc.dimension_groups_on_page(index));
     let scale = match scale {
         Some(explicit) => explicit,
         None => match &suggestion {

@@ -81,7 +81,211 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★ `Pass 52.2` (core + CLI substrate: the drawing's OWN calibration reaches the DXF export, and a disagreement stops it) — 2026-08-09, committed `d2d03a5` (fifty-fourth filing)
+
+**Sourcing, stated once because it governs the whole entry.** This
+librarian has **no shell this dispatch** (hard rule 8) — cannot run
+`git show d2d03a5` or re-run `cargo test`/`cargo clippy`. What is
+DIFFERENT from the fifty-third filing's fully-relayed hash: **the
+dispatching engineer read `git log` directly this session and reports the
+hash `d2d03a5` (and the two commits filed alongside it, `39593e1` and the
+already-filed `3c4aca4`/`1f4839d`) as verified against it** — this
+librarian did not re-run that check itself, but the sourcing chain is one
+step shorter than the fifty-third filing's ("relayed from a dispatch that
+itself had no shell"), and that distinction is stated rather than
+collapsed into an identical-looking caveat. **What IS independently
+confirmed by direct `Read`/`Grep` against the current working tree**
+(not relayed, not assumed from the commit message alone):
+`pdfce_core::export::dxf::DxfScaleSuggestion` (three-variant enum,
+`crates/pdfce-core/src/export/dxf.rs:938`), `suggest_scale`/
+`suggest_scale_for_groups`/`suggest_scale_from`, `ScaleState::effective_scale`
+(cited from `crates/pdfce-core/src/dimension/`), and a NEW test file
+`crates/pdfce-core/tests/dxf_scale.rs` carrying **exactly 6 `#[test]`
+functions, counted directly by this librarian via `Grep`** — matching
+the commit message's own count. `crates/pdfce-cli/src/main.rs`'s
+`cmd_export_dxf` constructs a `pdfce_core::edit::EditSession` with an
+explicit doc comment stating **"Read-only on the input. An `EditSession`
+IS constructed — it is the only route to the `/PieceInfo` dimension
+sidecar… but nothing is mutated and no save path is reachable from
+here"** — independently confirmed present, not merely relayed.
+**Full-workspace `cargo test`/`cargo fmt`/`cargo clippy` totals are
+relayed from the commit message, NOT independently re-run** (no shell).
+
+**★ Terminology check (project rule 15): this Pass is entirely about ce
+dimensions — pdfce-authored `/Line`+`/IT /LineDimension` groups and their
+`/PieceInfo` sidecar calibration — never pdf dimensions.** The drawing's
+own printed callouts (pdf dimensions) are not read by this mechanism at
+all; only a ce dimension the operator has calibrated via the measure
+tool's "scale by known dimension" gesture supplies evidence here.
+
+#### The defect this closes, named because it is the reason this slice
+outranks the rest of `Pass 52.2`
+
+`export-dxf --scale` defaulted to `1.0` — **paper scale**. A 1:2 detail
+view exported at that default arrives at **half real size**, and the
+module's own docs already named this exact trap as the reason a generic
+PDF→DXF converter cannot be trusted; the default was sitting inside it
+regardless. Until this commit, the CLI's `--scale` flag was the *only*
+way to supply the real answer, and supplying it required the operator to
+already know the number — exactly the information the measure tool's
+"scale by known dimension" gesture already captures on the page itself,
+disconnected from the export path.
+
+#### The fix: `--scale` becomes optional, and the drawing answers for itself
+
+Omitted, pdfce now reads the ce dimensions already on the page. If the
+operator has calibrated the drawing, that calibration **is** the answer
+the export needs — closing the loop between a capability pdfce already
+had (measure-tool calibration) and a capability that, until this commit,
+could not see it.
+
+#### Why `DxfScaleSuggestion` is a three-variant enum, not `Option<f64>`
+
+`Uncalibrated` / `Calibrated` / `Conflicting`. An `Option<f64>` can say
+"here is a number" and "here is none" — and the case that actually
+matters collapses invisibly into `None`:
+
+**`Conflicting`** — a sheet with a 1:1 plan and a 1:5 detail is an
+*ordinary* drawing, and a DXF file carries exactly one scale. Taking the
+first calibrated group's answer silently exports half the sheet wrong by
+a factor of five, and the result looks entirely plausible — nothing in
+the file or the exit code hints that anything went wrong. Making this a
+named variant means a caller **cannot** handle it by accident; it has to
+be matched. The CLI refuses the export and lists every candidate;
+`--scale` resolves it, which is what the refusal itself says.
+
+**`Calibrated`** is disclosed to the operator **before** the file is
+written, naming the specific ce-dimension group the figure came from —
+rule 4 (fuzzy, never sneaky): an inference is shown, not applied
+silently. **`Uncalibrated`** falls back to paper scale with the existing
+loud warning — but that warning is now gated on **the page being
+uncalibrated**, not on the numeric scale happening to equal `1`. A group
+deliberately calibrated to an explicit 1:1 is a real answer the operator
+gave; warning them pdfce "might not know the scale" when it demonstrably
+does is exactly the shape of disclosure that gets learned past and
+ignored the one time it matters.
+
+#### Unit-cancellation — the invariant that keeps cross-unit calibration from reading as a false conflict
+
+`ScaleState::effective_scale` answers *"how many of the group's display
+units is one PDF point?"* — a genuinely **different number** for a
+millimetre group than for an inch group describing the identical 1:1
+sheet (0.3528 vs 0.01389). Compared raw, two groups that agree perfectly
+would report a conflict, sending the operator to resolve a disagreement
+that does not exist. Dividing each by the unit's own baseline cancels the
+unit out and leaves a dimensionless *real-units-per-paper-unit* ratio —
+exactly `DxfOptions::scale`, and exactly what makes a millimetre group
+and an inch group comparable at all.
+`two_groups_in_different_units_describing_one_scale_do_not_conflict`
+(`crates/pdfce-core/tests/dxf_scale.rs`) is the assertion that the
+cancellation actually works, confirmed present by this librarian's own
+`Read`.
+
+`ScaleState::NeverSet` **abstains** rather than competing in the
+agreement/conflict computation — otherwise the always-present, never-
+explicitly-set "Default" group would conflict with the very first real
+calibration the operator ever performs, which is the single most common
+case there is, not an edge case.
+
+#### The CLI's `EditSession` is a reader, not a writer — and the contract now says so
+
+`cmd_export_dxf` now builds an `EditSession` because that is the only
+route to the `/PieceInfo` sidecar the drawing's calibration actually
+lives in. **Nothing is mutated and no save path is reachable** — the doc
+comment states this as an explicit part of the function's contract
+rather than leaving "no session exists" as an inaccurate implicit claim
+once a session genuinely is constructed.
+
+#### Tests and gates (relayed from the commit message; 6 confirmed directly by this librarian's own `Grep`, per the sourcing note above)
+
+**2643 workspace tests, 0 failed; 6 new** (`crates/pdfce-core/tests/dxf_scale.rs`:
+`a_document_with_no_calibrated_group_infers_nothing_rather_than_one`,
+`a_one_to_two_millimetre_group_yields_scale_two`,
+`an_explicit_one_to_one_group_is_calibrated_at_scale_one`,
+`two_groups_in_different_units_describing_one_scale_do_not_conflict`,
+`groups_calibrated_to_different_scales_conflict_rather_than_first_winning`,
+`a_never_set_group_abstains_instead_of_conflicting`). `cargo clippy -- -D
+warnings`: 0. `cargo fmt --check`: clean. **Full-suite pass/fail count and
+clippy/fmt cleanliness are relayed from the dispatch, not independently
+re-run by this librarian** — no shell.
+
+#### What is NOT yet done, and a discrepancy flagged rather than silently resolved
+
+- **`Pass 52.2`'s GUI half (Export ▸ DXF surface)** stays open —
+  `pdfce-ui-specialist` reportedly dispatched this same session (relayed,
+  not independently confirmed).
+- **Carried forward as a stated limitation, per the dispatching
+  engineer's own account of this commit**: `suggest_scale` takes the
+  whole `DimensionModel` and is therefore **document-wide** — a
+  multi-page sheet set could be refused on an unrelated page's
+  conflicting scale, or silently exported at a different page's scale.
+  The dispatch states the GUI half is what addresses page-scoping this
+  session.
+- **★ Flagged, not resolved: this librarian's own independent `Read` of
+  the CURRENT working tree already shows `cmd_export_dxf` calling the
+  PAGE-SCOPED `suggest_scale_for_groups`/`dimension_groups_on_page`, with
+  a doc comment describing the document-wide behaviour in the PAST tense
+  ("Scoped to THIS page's groups — see this function's contract for the
+  sheet-set failure the document-wide version HAD").** Whether that
+  page-scoping landed **inside** `d2d03a5` itself or as further,
+  uncommitted work in this same session toward the still-open GUI half is
+  something this librarian cannot determine without `git show d2d03a5`
+  (no shell this dispatch) — so it is recorded as an observation, not
+  folded into either "shipped in this commit" or "still owed." A future
+  filing with a shell should confirm which and correct this note if
+  needed, per hard rule 8's own discipline about not asserting what
+  cannot be checked.
+
+#### Invariant checks
+
+- **GUI-core separation**: not re-verified by `cargo tree` this filing
+  (no shell); the touched files (`dxf.rs`, `main.rs`) are the same
+  modules the fifty-third filing already confirmed carry no GUI symbol on
+  `Read` inspection, and nothing in this commit's own description adds a
+  new dependency.
+- **Round-trip / minimal-diff**: not applicable, same reasoning as the
+  rest of the `export/` tree (write path OUT of pdfce's model, not
+  PDF-to-PDF serialisation) — reinforced here by the doc comment's own
+  explicit "no save path is reachable" statement for the CLI side.
+- **Packaging smoke test**: not addressed — no packaging surface changed.
+
+**Ledger for this filing.** No new Pass ID — `Pass 52.2` was already
+named (fifty-second filing) and partially annotated (fifty-third filing);
+this entry is its core+CLI substrate completion record, GUI half still
+owed. `docs/FEATURES.md`: DXF-export row's prose updated in this same
+filing (core/cli were already ticked `[x]` by the fifty-third filing;
+this filing corrects the row's now-stale claim that "`--scale` is the
+only way" to supply the figure); `gui` stays `[ ]`, row stays under
+*Planned*. Standing rules: **no rule minted or amended by THIS entry**
+(see the separate `39593e1` tooling entry, below, for `R173`). Decision
+records: `033` on disk, `034` CLAIMED-by-citation/UNAUTHORED (unchanged,
+unrelated), `035` CLAIMED BY CITATION (unchanged by this entry — see the
+`ARCHITECTURE.md` §12 amendment filed alongside this entry for the new
+content this commit adds to that decision). Operator-question ceiling
+unchanged at **(bh)**, next free **(bi)**. `docs/decisions/` untouched.
+Backup/git working-tree state not asserted beyond the sourcing note
+above (hard rule 8). This is the **fifty-fourth** `SESSION_LOG.md`
+filing (the fifty-third confirmed present by direct read before this
+entry was written).
+
+---
+
 ### ★ `Pass 52.0` (core DXF writer) + `Pass 52.1` (`pdfce-cli export-dxf`) + `Pass 52.3` (page text as `TEXT` entities on a dedicated layer) — three of the family's four slices SHIP; `Pass 52.2` (GUI) stays IN PROGRESS — 2026-08-09, committed `3c4aca4`→`1f4839d` (fifty-third filing)
+
+> **⚠ AMENDMENT 2026-08-09 (fifty-fourth filing) — the "hash not
+> independently confirmed against `git log`" caveat below is DOWNGRADED,
+> named and sourced rather than silently dropped.** The dispatching
+> engineer reports reading `git log` directly in the fifty-fourth
+> filing's own session and confirming `3c4aca4`, `1f4839d`, `d2d03a5` and
+> `39593e1` are real commits in that stated order — **this librarian did
+> not re-run that check itself** (no shell either dispatch) and is
+> relaying the engineer's report, one step removed rather than two. The
+> original caveat's SUBSTANCE — that this librarian has never itself run
+> `git log` against these hashes — remains true and is not erased; this
+> banner narrows WHO is vouching for the hashes, not the fact that this
+> librarian still hasn't independently checked them. Per hard rule 1
+> (Shipped is append-only) this is a dated amendment, not a rewrite of
+> the paragraph below.
 
 **Sourcing, stated once because it governs the whole entry.** This
 librarian was **not granted a shell in this dispatch** (no `Bash`/
@@ -447,6 +651,192 @@ this librarian cannot even confirm the two cited hashes are on the
 checked-out branch). This is the **fifty-third** `SESSION_LOG.md`
 filing (the fifty-second confirmed present by direct read before this
 entry was written).
+
+---
+
+### ★ tooling — two gates stop scanning a window and start scanning the history; the very gate this session's dispatch responded to is filed here, along with its own unresolved `ae59ce3`/Pass-24.0 flag — 2026-08-09 12:19:09, committed `39593e1` (fifty-fourth filing)
+
+**Sourcing.** No shell this dispatch (hard rule 8). The dispatching
+engineer reports reading `git log` directly and confirming `39593e1` this
+session — one step shorter than a fully-relayed hash, not independently
+re-verified by this librarian. **Independently confirmed by direct
+`Read`**: `tools/check-passes-filed.py` and `tools/check-commits-filed.py`
+both currently default to scanning the FULL commit history rather than a
+fixed trailing window (their `--since`/window-default logic, read
+directly); `tools/commits-filed-baseline.txt` still contains **exactly
+the same 11 hashes** as the fifty-first filing recorded, unchanged —
+confirmed by direct `Read`, and this filing does **not** touch that file
+(per this dispatch's explicit constraint).
+
+**No Pass ID — ledger/gate infrastructure, same class as the fifty-first
+filing's `check-commits-filed.py` entry. No `ARCHITECTURE.md` §12 entry**
+— no crate boundary, library choice or invariant is redrawn; this is
+enforcement of a scope decision already written down in the gate scripts
+themselves.
+
+#### The defect: a fixed-COMMIT-COUNT window, not a fixed-TIME window
+
+`check-passes-filed.py` defaulted to scanning the **last 60 commits**, on
+the reasoning — stated in its own usage text — that 60 "spans several
+days of this project's history." That assumption stopped being true
+without anyone re-checking it: this project produces roughly sixty
+commits in about two days once multiple dispatch-heavy sessions are
+running. `ae59ce3` — subjected *"Pass 24.0 (part): tool panels anchor to
+the viewport"* — sat **five days back** in history with its hash in no
+filing (`ROADMAP.md`/`SESSION_LOG.md`), and the gate reported CLEAN the
+entire time: not because its hash-presence join logic was wrong (it would
+have matched on the first character) but because the commit had scrolled
+outside the sliding 60-commit window before the gate was ever re-run
+against it.
+
+**★ THE GENERALIZABLE FINDING, worth stating in the words the commit
+message itself uses because they are exact: a gate whose coverage is a
+function of how fast the project is moving reports "clean" most reliably
+when there is most to find.** The window's wall-clock reach shrinks in
+direct proportion to commit velocity, and high-velocity periods are
+exactly the periods most likely to have produced a commit that fell
+through some OTHER process gap (a rushed dispatch, a librarian check-in
+skipped under time pressure) — so the gate's honesty degrades precisely
+when its output matters most. This is a distinct failure shape from a
+plain blind spot (a case the join logic structurally cannot see, already
+disclosed honestly in the checker's own docstring) or a
+check-before-the-fact-exists race (the filing-commit blind spot, already
+on record) — it is a coverage window sized in a unit that is a rough
+proxy for time, and the proxy silently breaks as velocity changes. Filed
+as a new personal_rag/claude_code lesson because the failure shape
+generalizes past pdfce to any self-checking gate over a growing history
+(see the RAG escalation, below).
+
+**Proven, not merely asserted**: removing `ae59ce3`'s hash from
+`ROADMAP.md` and re-running the gate with the window widened to the full
+history — **323 commits, scanning in ~0.5 seconds** — makes the
+exhaustive scan flag the commit by name. It could not have done that
+under yesterday's windowed default. The fix cost nothing measurable: the
+windowing was never buying real performance, only encoding an assumption
+about "how much history is enough" nobody had re-checked since the day it
+was written.
+
+#### The fix
+
+Both `check-passes-filed.py` and `check-commits-filed.py` now default to
+the **full commit history** rather than a rolling window; `--since
+<date>` remains available for a deliberately narrower run, but is no
+longer the default.
+
+#### A pre-existing weakness, disclosed rather than newly discovered — and now LIVE, not merely theoretical
+
+`check-commits-filed.py`'s own header already states its join is *"the
+hash appears somewhere in the record,"* which means a hash cited only
+inside an OWED list — the fifty-first filing's own eleven-hash table,
+`tools/commits-filed-baseline.txt` — reads to the gate as filed. That
+weakness is not hypothetical: it governs exactly the eleven commits this
+session is not touching (unchanged, confirmed by `Read` above). Recorded
+in the gate's own docstring, not hidden, per this project's
+disclose-known-weaknesses convention (`check-ui-strings.sh`'s own header,
+cited as precedent by the fifty-first filing).
+
+#### `ae59ce3` / Pass 24.0 — the contradiction handed to this librarian, and what could and could not be resolved from the record alone
+
+**Not resolved. Evidence assembled below so a future filing with a shell
+can settle it in one `git show ae59ce3`, rather than starting over.**
+
+The commit's own subject — *"Pass 24.0 (part): tool panels anchor to the
+viewport, not to the page"* — describes, almost verbatim, decision 024's
+own acceptance criterion for `Pass 24.0`: **`R121`** (Standing rules,
+below) reads *"a tool's confirm lives at a fixed, window-relative anchor;
+never at a position derived from the document,"* sourced concretely to
+`main.rs:9366`, `:10244`, `:11942` positioning Accept/Reject relative to
+`image_rect` — i.e. anchored to the **page**, not the **viewport**. The
+commit subject's own wording is close enough to this acceptance criterion
+that it reads as genuine `Pass 24.0` work, not a coincidental phrase
+reuse.
+
+**Against that**, the `★ Pass 24.0–24.5` family's own 2026-08-05 update
+banner (top of that entry, `Next up`) states, unambiguously: *"Pass 24.0
+(the fixed-anchor confirm strip) has **not** shipped under that name; the
+operator-visible fix for the floating Accept/Reject box complaint…
+arrived instead via Pass 34.0 (`GestureInterrupt::Commit`, a defect fix)
+and Pass 34.1 (the dock relocation)."* `Pass 34.0`'s own Shipped entry
+cites hash `b84fd53`; `Pass 34.1`'s cites `e15f55b`→`fae916d`→`13f3c0b`.
+**`ae59ce3` is none of these four hashes** — a fact checkable from this
+document alone, no shell required — so `ae59ce3` cannot simply BE the
+already-filed `34.0`/`34.1` work under a different subject line; if it is
+real work, it is a genuinely separate, unattributed commit.
+
+**What this librarian could not determine without reading the commit
+itself or running `git log --before`/`--after` against the 2026-08-05
+banner's own write time:**
+
+1. Whether `ae59ce3` **predates** the banner (in which case it may be an
+   earlier, abandoned attempt at the anchor fix, later superseded by the
+   `34.0`/`34.1` approach and correctly left unshipped) or **postdates**
+   it (in which case it may be additional work never folded into
+   `34.0`/`34.1`'s own record, or a duplicate implementation nobody
+   reconciled).
+2. Whether the commit's actual diff touches the same three `main.rs`
+   sites R121 names, or something else entirely — the subject line is
+   evidence, not proof, of what the commit contains.
+
+**One piece of the record that looks like a resolution but is NOT one,
+flagged so a future filing does not mistake it for one**: `R141`'s own
+corollary text (Standing rules, below) says *"if a criterion is
+deliberately deferred, the Pass ships as 'Pass N (part)'… which is
+exactly what Pass 24.0 (part) already does"* — filed 2026-08-04,
+continuation 82, the **same day** decision 024 minted the `24.0–24.5`
+family and also the same day a DIFFERENT, since-renumbered `Pass 24.0a`
+(subpath-level hit testing, commit `7fc943a`) collided with it and was
+corrected to `Pass 25.0` (see that Shipped entry's own collision record).
+**Given that collision, R141's "Pass 24.0 (part) already does" may
+itself be referring to the pre-renumber `24.0a`, not decision 024's
+`24.0`** — another fork this librarian cannot resolve from the text
+alone, and is naming rather than silently picking a reading of.
+
+**For the next session with a shell:** `git show ae59ce3` — read the
+full diff, check its commit date against `2026-08-05` (the banner's own
+date), and check whether it touches `main.rs:9366`/`:10244`/`:11942`
+(R121's own cited sites) or `GestureInterrupt`/dock code (`34.0`/`34.1`'s
+actual mechanism). That one read settles both open forks above.
+
+#### RAG escalation
+
+`C:\personal_rag\claude_code\lesson_20260809_gate_coverage_window_shrinks_exactly_when_commit_velocity_rises.md`
+(new) — the starred finding above, generalized past pdfce: any
+self-checking gate over a growing history whose window is sized in a
+count rather than derived from what it actually needs to cover has this
+failure mode. Added to that subject's `index.md` and the master
+`C:\personal_rag\index.md` in the same filing.
+
+#### Standing rule minted
+
+**`R173` — A gate that scans a growing history for coverage must size its
+window from what it needs to cover, never from a fixed count assumed
+once and never revisited; a commit-count window is a proxy for TIME that
+silently breaks as commit velocity changes (2026-08-09, `39593e1`;
+librarian-minted).** Concrete cost this closes: a 60-commit window
+correctly sized "several days" when written; the project later produced
+that many commits in about two days, and a Pass-claiming commit
+(`ae59ce3`) sat unfiled and undetected for five days as a direct result.
+**Distinct root cause from `R106`'s ledger-collision family and `R162`'s
+proven-to-fail-first family** — this is about a scan's COVERAGE shrinking
+under load, not about a join key matching the wrong thing or a gate never
+having been proven to fail — so filed as a new rule rather than folded
+into either. **Ceiling moves R172 → R173; next free R174.**
+
+#### `docs/FEATURES.md`
+
+**Not touched by this entry** — `39593e1` is CI/tooling infrastructure,
+no user-facing capability changed.
+
+**Ledger for this filing.** No new Pass ID. Standing rules: **`R173`
+MINTED** (see above) — ceiling **R172 → R173**, next free **R174**.
+`ARCHITECTURE.md` §12 NOT edited by this entry — no crate boundary,
+library choice or invariant redrawn. Decision records: **`033` on disk,
+`034` CLAIMED-by-citation/UNAUTHORED (unchanged), `035` CLAIMED BY
+CITATION (unchanged)**. Operator-question ceiling unchanged at **(bh)**,
+next free **(bi)**. `docs/decisions/` untouched. Backup/git working-tree
+state not asserted beyond the sourcing note above (hard rule 8). This is
+the **fifty-fourth** `SESSION_LOG.md` filing (the fifty-third confirmed
+present by direct read before this entry was written).
 
 ---
 
@@ -25079,12 +25469,16 @@ shipped under one toggle, not a single exclusive choice) and the text-
 emission fork (`TEXT` entities per run, `MTEXT` explicitly rejected).**
 Retained below in place (append-only discipline) because it is the
 record of how the family was scoped and why the acceptance criteria
-read the way they do. **`Pass 52.2` (GUI Export ▸ DXF + measure-tool
-scale wiring) is NOT shipped and stays open** — the operator's dispatch
-that produced this filing states it is in progress this session
-(`pdfce-ui-specialist` dispatched), relayed here rather than
-independently confirmed (this librarian has no shell this dispatch;
-see the Shipped entry's own sourcing note).
+read the way they do. **`Pass 52.2` CORE+CLI SUBSTRATE SHIPPED 2026-08-09
+(`d2d03a5`) — the CLI now derives its export scale from the drawing's own
+ce-dimension calibration instead of requiring `--scale` on every call;
+see the `Pass 52.2` Shipped entry (new top of *Shipped*, fifty-fourth
+filing) for `DxfScaleSuggestion`'s three-case design, the
+Uncalibrated/Calibrated/Conflicting behaviour, and the unit-cancellation
+invariant.** **`Pass 52.2`'s GUI half (an actual Export ▸ DXF panel) is
+NOT shipped and stays open** — relayed as in progress this same session
+(`pdfce-ui-specialist` dispatched), not independently confirmed (no
+shell this dispatch; see the Shipped entry's own sourcing note).
 
 **The operator's actual question, quoted in full because the redirect is
 this entry's whole shape:** *"SolidWorks has an option to import PDF
@@ -40541,6 +40935,30 @@ and
   as `R168`/`R171`'s own in-place amendments); `R173` stays next free.
   Full delivery record: the `Pass 52.0`+`52.1`+`52.3` Shipped entry
   (top of *Shipped*).
+
+- **R173 — A gate that scans a growing history for coverage must size
+  its window from what it needs to cover, never from a fixed count
+  assumed once and never revisited; a commit-count window is a proxy for
+  TIME that silently breaks as commit velocity changes (2026-08-09,
+  `39593e1`; librarian-minted).** `check-passes-filed.py` defaulted to
+  the last 60 commits, correctly sized "several days of history" on the
+  day it was written; the project later produced that many commits in
+  about two days, and a Pass-claiming commit (`ae59ce3`, still unfiled —
+  see the matching `★ tooling` Shipped entry, this same date, for the
+  full `ae59ce3`/Pass-24.0 evidence trail) sat unfiled and undetected for
+  five days as a direct, provable result — removing its hash and
+  re-running the gate with the window widened to the FULL history (323
+  commits, ~0.5 s) flagged it immediately; the windowed default could not
+  have. **Distinct root cause from `R106`'s ledger-collision family and
+  `R162`'s proven-to-fail-first family** — this is coverage shrinking
+  under load, not a join key matching the wrong record or a gate never
+  proven to fail, so it is filed as its own rule rather than an
+  amendment. Both `check-passes-filed.py` and `check-commits-filed.py`
+  now default to scanning the full commit history; `--since <date>`
+  remains for a deliberately narrower run. Escalated to
+  `C:\personal_rag\claude_code\lesson_20260809_gate_coverage_window_shrinks_exactly_when_commit_velocity_rises.md`
+  as a finding generalizing past pdfce to any self-checking gate over a
+  growing history. **Ceiling moves `R172` → `R173`; next free `R174`.**
 
 ## Update protocol
 

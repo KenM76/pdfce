@@ -12830,6 +12830,88 @@ impl EditSession {
             .collect()
     }
 
+    /// Every distinct ce dimension **group** with at least one dimension on
+    /// `page_index`, in the model's own group order (Pass 52.2).
+    ///
+    /// # Why this exists, and why it is not a shell-side filter
+    ///
+    /// [`DimensionModel`] is **document-global**: a [`DimensionRecord`] names
+    /// its group and its annotation, and nothing else. Page ownership is not
+    /// in the sidecar at all — it is carried by the annotation's `/P` entry
+    /// (§12.5.2), which means answering *"which groups are on this page"*
+    /// needs the sidecar, the annotation objects and the session overlay
+    /// resolved together. That is precisely the assembly
+    /// [`Self::dimension_rects`] already performs, and a shell reconstructing
+    /// it would be reaching through three layers to rebuild something the
+    /// session knows (project rule 2, `ARCHITECTURE.md` §3).
+    ///
+    /// # What it is FOR
+    ///
+    /// [`suggest_scale`](crate::export::dxf::suggest_scale) reads the whole
+    /// model, so a DXF export driven by it is document-wide. On a sheet set
+    /// that is wrong in two directions: an unambiguous page-1 export can be
+    /// refused because page 3 holds a 1:5 detail, and — the dangerous half —
+    /// a page 1 with no calibration of its own can be exported at page 3's
+    /// scale without anything looking odd. Feeding this list to
+    /// [`suggest_scale_for_groups`](crate::export::dxf::suggest_scale_for_groups)
+    /// scopes the inference to the pages actually being written.
+    ///
+    /// # Contract
+    ///
+    /// - **Deduplicated**, and in [`DimensionModel::groups`] order rather
+    ///   than in dimension order, so the result is stable across calls and a
+    ///   caller can pair it against the group list it already displays.
+    /// - **Overlay-aware**, exactly like [`Self::dimension_rects`]: a
+    ///   dimension authored or moved this session counts, because the
+    ///   annotation is read through the session rather than from the base
+    ///   revision.
+    /// - Dimensions **not yet wired into a document** (`annot` is `None`) are
+    ///   omitted — they belong to no page yet, and guessing one would be the
+    ///   invention this accessor exists to avoid.
+    /// - An out-of-range `page_index`, or a page tree that will not walk,
+    ///   yields an empty list rather than an error. Every caller's next move
+    ///   on "no groups" is the same as on "cannot tell": treat the page as
+    ///   uncalibrated and say so.
+    #[must_use]
+    pub fn dimension_groups_on_page(&self, page_index: usize) -> Vec<GroupId> {
+        let Ok(slots) = self.page_slots() else {
+            return Vec::new();
+        };
+        let Some(page_id) = slots.get(page_index).map(|s| s.id) else {
+            return Vec::new();
+        };
+        let model = self.read_dimension_model();
+        // Collected as a set of ids first, then emitted in group order. The
+        // other way round — pushing group ids as dimensions are walked and
+        // deduping afterwards — would order the result by AUTHORING order of
+        // the first member, which reshuffles when a dimension is deleted.
+        let mut present: Vec<GroupId> = Vec::new();
+        for record in model.dimensions() {
+            if present.contains(&record.group) {
+                continue;
+            }
+            let Some(annot_id) = record.annot else {
+                continue; // not wired into any page yet
+            };
+            let Some(dict) = self.value(annot_id).and_then(Object::as_dict) else {
+                continue;
+            };
+            // `/P` names the page the annotation lives on (§12.5.2) — the
+            // same test `dimension_rects` applies, and the only honest one:
+            // the sidecar deliberately does not duplicate the page.
+            if dict.get(b"P").and_then(Object::as_reference) != Some(page_id) {
+                continue;
+            }
+            present.push(record.group);
+        }
+        model
+            .groups()
+            .iter()
+            .map(|g| g.id)
+            .filter(|id| present.contains(id))
+            .collect()
+    }
+
     /// **Place a ce dimension** — set where its line stands off and where its
     /// number sits along that line — as one undoable command (Pass 27.1).
     ///

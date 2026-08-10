@@ -1007,12 +1007,68 @@ const SCALE_AGREEMENT_TOLERANCE: f64 = 1e-9;
 /// It does not pick a winner when groups disagree, and it does not fall
 /// back to `1.0` when nothing is calibrated. Both would be pdfce quietly
 /// deciding something it does not know — see [`DxfScaleSuggestion`].
+///
+/// # Scope: this reads the WHOLE document
+///
+/// Every group in the model is consulted, including groups whose
+/// dimensions live on pages this export will not touch. That is the right
+/// answer only when the caller genuinely means "this document"; a caller
+/// exporting **one page** wants
+/// [`suggest_scale_for_groups`] with that page's own groups, or a sheet
+/// set whose page 3 is a 1:5 detail will either refuse a perfectly
+/// unambiguous page-1 export or — worse, when page 1 has no calibration of
+/// its own — silently export it at page 3's scale. See
+/// [`crate::edit::EditSession::dimension_groups_on_page`] for the
+/// page-ownership resolution that produces the id list.
 #[must_use]
 pub fn suggest_scale(model: &crate::dimension::DimensionModel) -> DxfScaleSuggestion {
+    suggest_scale_from(model.groups().iter())
+}
+
+/// Infer the drawing scale from **only** the named ce dimension groups.
+///
+/// The page-scoped sibling of [`suggest_scale`], and the one a shell
+/// exporting a specific page (or a specific selection of pages) should
+/// call. `groups` is normally
+/// [`EditSession::dimension_groups_on_page`](crate::edit::EditSession::dimension_groups_on_page)
+/// for the page being exported — the union of that call over several pages
+/// when several are being exported at once, in which case a
+/// [`DxfScaleSuggestion::Conflicting`] result is exactly the statement
+/// *"these pages are not all at one scale, so one DXF scale cannot serve
+/// them"*.
+///
+/// Ids not present in `model` are ignored rather than an error: a stale id
+/// describes a group that no longer exists, which is the same amount of
+/// evidence as no group at all.
+///
+/// An **empty** `groups` yields [`DxfScaleSuggestion::Uncalibrated`],
+/// which is the truthful answer — a page carrying no ce dimensions
+/// supplies no evidence about its scale. It is deliberately not
+/// distinguished from "carries dimensions, none calibrated": both mean
+/// pdfce does not know, and both must be disclosed the same way.
+#[must_use]
+pub fn suggest_scale_for_groups(
+    model: &crate::dimension::DimensionModel,
+    groups: &[crate::dimension::GroupId],
+) -> DxfScaleSuggestion {
+    suggest_scale_from(model.groups().iter().filter(|g| groups.contains(&g.id)))
+}
+
+/// The shared body of [`suggest_scale`] and [`suggest_scale_for_groups`].
+///
+/// Written over an iterator rather than over a slice so the page-scoped
+/// entry point filters instead of allocating a second `Vec<Group>` — and,
+/// more importantly, so there is exactly ONE implementation of the
+/// unit-cancellation and the agreement test. Two copies of this arithmetic
+/// would be two chances for a document-wide and a page-scoped export of
+/// the same single-page document to disagree about its scale.
+fn suggest_scale_from<'a>(
+    groups: impl Iterator<Item = &'a crate::dimension::Group>,
+) -> DxfScaleSuggestion {
     let mut candidates: Vec<DxfScaleCandidate> = Vec::new();
     let mut agreeing = 0usize;
 
-    for group in model.groups() {
+    for group in groups {
         let unit = group.format.unit;
         let Some(per_point) = group.scale.effective_scale(unit) else {
             continue; // NeverSet — this group has no opinion

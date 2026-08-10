@@ -13807,3 +13807,66 @@ started).
   top of this — e.g. to capture alternatives considered and rejected in
   the KenAgent format the other decision records use — remains that
   dispatch's call, not exercised by this entry.
+
+- **2026-08-09 — `Pass 52.2` core+CLI substrate (`d2d03a5`): a fourth
+  fork, extending decision `035` rather than claiming a new number, plus
+  one correction to that entry's own prior wording.** Full technical
+  delivery record: `ROADMAP.md`'s matching `Pass 52.2` Shipped entry
+  (top of *Shipped*, this same date).
+
+  **Fourth fork — how to represent an inference that can be absent,
+  present, or self-contradictory.** `export/dxf.rs` gains
+  `suggest_scale`/`suggest_scale_for_groups`, which read a page's
+  calibrated ce dimensions and infer the DXF export's drawing scale.
+  **Decided: a three-variant enum (`DxfScaleSuggestion::Uncalibrated` /
+  `Calibrated { scale, units, group, agreeing }` / `Conflicting {
+  candidates }`), not `Option<f64>`.** The reason this counts as
+  architecture rather than implementation detail: an `Option<f64>`
+  return type makes the disagreeing case indistinguishable from the
+  absent case at the type level — a caller matching `Some(x) => use x,
+  None => fall back` treats "two ce-dimension groups disagree about this
+  sheet's scale" exactly like "no group is calibrated," and silently
+  picks whichever group's answer arrived first. A sheet with a 1:1 plan
+  and a 1:5 detail is an ORDINARY drawing (not a data-entry error), and a
+  DXF file carries exactly one scale — the wrong pick exports half the
+  sheet at the wrong size with nothing in the file or the exit code
+  suggesting anything went wrong. The enum forces every caller's `match`
+  to name what disagreement means to them; `cmd_export_dxf` REFUSES the
+  export and lists every candidate. Escalated as a `D:\dev\rag\rust\`
+  finding
+  (`a_three_way_inference_needs_an_enum_the_disagreeing_case_hides_inside_option_none.md`)
+  because the pattern generalizes past pdfce to any "infer X from
+  possibly-many independent sources" function.
+
+  **Companion invariant, load-bearing for the fork above rather than
+  incidental to it: comparison across sources must be UNIT-CANCELLED
+  first.** `ScaleState::effective_scale` answers "how many of the
+  group's display units is one PDF point," a different raw number for a
+  millimetre group than an inch group describing the identical 1:1
+  sheet. Comparing those raw values would report a false `Conflicting`
+  between two groups that actually agree. Dividing by the unit's own
+  baseline cancels the unit and yields the dimensionless ratio
+  `DxfOptions::scale` actually needs — without this step the enum design
+  above would still be right in shape and wrong in practice, flagging
+  every cross-unit sheet as ambiguous.
+
+  **Correction to this entry's own prior wording, stated because it was
+  wrong, not merely incomplete.** The 2026-08-09 decision-`035` text
+  above states *"the CLI side (`cmd_export_dxf`) never opens an
+  `EditSession` or a save path on the input PDF."* That is now
+  **imprecise**: `cmd_export_dxf` DOES construct an `EditSession` as of
+  `d2d03a5` — it is the only route to the `/PieceInfo` sidecar the
+  drawing's calibration lives in. **The invariant that mattered was
+  never "no session," it was "no mutation, no save"**, and that half
+  remains true and is now stated explicitly in the function's own doc
+  comment as part of its contract, independently confirmed present by
+  `pdfce-librarian`'s direct `Read` of the working tree. Per this
+  project's append-only decision-log convention, the earlier sentence is
+  not deleted — this paragraph is the correction, dated and pointing
+  back at it, the same shape a Shipped-entry amendment takes.
+
+  **Decision-number status: no new number claimed.** This is filed as an
+  extension of `035` (already claimed by citation, 2026-08-09, three
+  forks) rather than a candidate for `036` — the same crate boundary,
+  the same module, the same "shipped, not merely proposed" posture that
+  justified writing `035` directly rather than only flagging it.

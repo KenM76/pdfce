@@ -79,6 +79,35 @@ pub enum RibbonGroup {
     DocumentProperties,
     /// Get content OUT — copy text to the clipboard.
     Clipboard,
+    /// Get content out as a **derivative file** — DXF today (Pass 52.2).
+    ///
+    /// # Why `File` and not `Edit`
+    ///
+    /// The tab question `Edit` answers is *"what am I CHANGING about what is
+    /// already there?"* — and a DXF export changes nothing at all. It reads
+    /// the page and writes a second, different file, which is the same shape
+    /// as Save-a-copy and therefore the same tab.
+    ///
+    /// # Why its own group rather than a member of `Clipboard`
+    ///
+    /// They are neighbours by intent — both are *get content out* — and
+    /// genuinely different in what the operator ends up holding. Copy-text
+    /// puts characters on the clipboard for something else to receive right
+    /// now; this writes a file to a path they choose, in a format for a
+    /// different application entirely, and it opens a dialog to ask how. A
+    /// caption reading "Clipboard" over a button that writes a `.dxf` to disk
+    /// would be the group caption lying, which is the one thing Pass 47.2
+    /// established the captions exist to stop.
+    ///
+    /// # Why not a button inside a dock panel
+    ///
+    /// `Action::ExportFormData` is a button inside the Forms dock, and that
+    /// is deliberately NOT the precedent followed here: it is scoped to a
+    /// panel that exists to list a document's fields, and an operator already
+    /// in that panel is already in the form-data context. There is no DXF
+    /// panel and no reason to invent one — the export needs no persistent
+    /// surface, only a dialog.
+    Export,
     /// Reset the panel arrangement, with a choice of what to reset.
     LayoutReset,
     /// Operator settings — the persisted choices in `userdata/settings.txt`
@@ -200,9 +229,10 @@ impl RibbonGroup {
         dead_code,
         reason = "the group enumeration; swept by this module's taxonomy test and by main.rs's gated-widget test, and the list any future group-picker must read rather than re-derive" // ui-text-exempt: clippy lint justification, never displayed
     )]
-    pub const ALL: [Self; 18] = [
+    pub const ALL: [Self; 19] = [
         Self::DocumentProperties,
         Self::Clipboard,
+        Self::Export,
         Self::LayoutReset,
         Self::Settings,
         Self::Help,
@@ -227,6 +257,7 @@ impl RibbonGroup {
         match self {
             Self::DocumentProperties => ui_text::ribbon_group_document_properties(),
             Self::Clipboard => ui_text::ribbon_group_clipboard(),
+            Self::Export => ui_text::ribbon_group_export(),
             Self::LayoutReset => ui_text::ribbon_group_layout_reset(),
             Self::Settings => ui_text::ribbon_group_settings(),
             Self::Help => ui_text::ribbon_group_help(),
@@ -392,6 +423,7 @@ impl RibbonTab {
             Self::File => &[
                 RibbonGroup::DocumentProperties,
                 RibbonGroup::Clipboard,
+                RibbonGroup::Export,
                 RibbonGroup::LayoutReset,
                 RibbonGroup::Settings,
                 RibbonGroup::Help,

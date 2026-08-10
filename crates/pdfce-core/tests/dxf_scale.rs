@@ -37,8 +37,15 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use pdfce_core::dimension::{DimensionModel, NumberFormat, ScaleState, Unit};
-use pdfce_core::export::dxf::{DxfScaleSuggestion, DxfUnits, suggest_scale};
+use pdfce_core::dimension::{
+    DimensionKind, DimensionModel, GroupId, NumberFormat, ScaleState, Unit,
+};
+use pdfce_core::document::Document;
+use pdfce_core::edit::EditSession;
+use pdfce_core::export::dxf::{
+    DxfScaleSuggestion, DxfUnits, suggest_scale, suggest_scale_for_groups,
+};
+use pdfce_core::vector::{AxisConstraint, Point};
 
 /// The relative slack the assertions allow. The conversions are exact in
 /// binary for inches (1/72) but not for millimetres (25.4/72), so an exact
@@ -239,6 +246,258 @@ fn a_never_set_group_abstains_instead_of_conflicting() {
             assert_close(scale, 2.0, "the one group that has an opinion");
             assert_eq!(agreeing, 1, "the two never-set groups do not count");
             assert_eq!(group, "Measured");
+        }
+        other => panic!("expected Calibrated, got {other:?}"),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Page scope
+// ---------------------------------------------------------------------------
+//
+// `suggest_scale` reads the WHOLE model. On a one-page drawing that is the
+// same thing as reading the page; on a sheet set it is not, and the gap is
+// not academic — it is the difference between a DXF cut at 1:1 and one cut
+// at 1:5. `suggest_scale_for_groups` narrows the inference to the groups
+// that are actually ON the page(s) being written, and
+// `EditSession::dimension_groups_on_page` is what resolves that ownership
+// (through each ce dimension's annotation `/P`, §12.5.2 — the sidecar
+// deliberately does not record a page).
+
+/// A two-page PDF: catalog(1) → pages(2) → page(3), page(4).
+///
+/// Two pages is the minimum that can express the defect at all. Everything
+/// below it — one page, or a model with no document — cannot distinguish
+/// document-wide from page-scoped, which is exactly why the limitation
+/// survived the first slice's six tests.
+fn two_page_pdf() -> Vec<u8> {
+    let bodies = [
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        "<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 400] /Resources << >> >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 400] /Resources << >> >>",
+    ];
+    let mut buf = b"%PDF-1.7\n%\xE2\xE3\xCF\xD3\n".to_vec();
+    let mut offsets = Vec::new();
+    for (i, body) in bodies.iter().enumerate() {
+        offsets.push(buf.len());
+        buf.extend_from_slice(format!("{} 0 obj\n{body}\nendobj\n", i + 1).as_bytes());
+    }
+    let xref_at = buf.len();
+    let size = bodies.len() + 1;
+    buf.extend_from_slice(format!("xref\n0 {size}\n0000000000 65535 f \n").as_bytes());
+    for off in &offsets {
+        buf.extend_from_slice(format!("{off:010} 00000 n \n").as_bytes());
+    }
+    buf.extend_from_slice(
+        format!("trailer\n<< /Size {size} /Root 1 0 R >>\nstartxref\n{xref_at}\n%%EOF\n")
+            .as_bytes(),
+    );
+    buf
+}
+
+/// A horizontal ce dimension somewhere inside the 400×400 page box.
+fn linear() -> DimensionKind {
+    DimensionKind::Linear {
+        a: Point::new(100.0, 200.0),
+        b: Point::new(300.0, 200.0),
+        constraint: AxisConstraint::Horizontal,
+        offset: 0.0,
+        text_along: 0.0,
+    }
+}
+
+/// A two-page session where page 0 carries an UNCALIBRATED group and page 1
+/// carries a 1:5 one. The shape of a real sheet set: the operator has
+/// calibrated the detail sheet and not yet touched the general arrangement.
+fn sheet_set() -> (EditSession, GroupId, GroupId) {
+    let doc = Document::from_bytes(two_page_pdf()).unwrap();
+    let mut s = EditSession::new(doc);
+    let plan = s.add_dimension_group("Plan", Unit::Millimeter).unwrap();
+    let detail = s
+        .add_dimension_group("Detail 1:5", Unit::Millimeter)
+        .unwrap();
+    s.set_group_scale(
+        detail,
+        ScaleState::Calibrated {
+            scale: 5.0 * 25.4 / 72.0,
+        },
+        NumberFormat::decimal(Unit::Millimeter, 1),
+    )
+    .unwrap();
+    s.add_dimension(0, plan, linear()).unwrap();
+    s.add_dimension(1, detail, linear()).unwrap();
+    (s, plan, detail)
+}
+
+/// **A page reports only the groups whose dimensions are on it.**
+///
+/// The accessor's whole contract in one assertion. If this ever returns
+/// both groups for either page, every page-scoped guarantee below it is
+/// vacuous while still passing.
+#[test]
+fn dimension_groups_on_page_reports_only_that_pages_groups() {
+    let (s, plan, detail) = sheet_set();
+    assert_eq!(
+        s.dimension_groups_on_page(0),
+        vec![plan],
+        "page 0 carries the plan dimension and nothing else"
+    );
+    assert_eq!(
+        s.dimension_groups_on_page(1),
+        vec![detail],
+        "page 1 carries the detail dimension and nothing else"
+    );
+    assert!(
+        s.dimension_groups_on_page(9).is_empty(),
+        "an out-of-range page has no groups rather than erroring"
+    );
+}
+
+/// **★ THE DEFECT. An uncalibrated page must not inherit another page's
+/// scale.**
+///
+/// Document-wide, page 0 has exactly one calibrated group in the model —
+/// the 1:5 detail on page 1 — so `suggest_scale` reports `Calibrated{5.0}`
+/// and an export of page 0 comes out five times real size with nothing
+/// anywhere saying so. That is the plausible-looking wrong answer this
+/// whole feature exists to prevent, arriving through the feature itself.
+///
+/// Both halves are asserted deliberately: the document-wide reading is
+/// pinned as the WRONG answer so that a future "simplification" back to
+/// `suggest_scale` fails here loudly instead of silently reintroducing it.
+#[test]
+fn an_uncalibrated_page_does_not_inherit_another_pages_scale() {
+    let (s, ..) = sheet_set();
+    let model = s.dimension_model();
+
+    match suggest_scale(&model) {
+        DxfScaleSuggestion::Calibrated { scale, .. } => {
+            assert_close(scale, 5.0, "the document-wide reading — this is the trap");
+        }
+        other => panic!("expected the document-wide reading to find the detail; got {other:?}"),
+    }
+
+    assert_eq!(
+        suggest_scale_for_groups(&model, &s.dimension_groups_on_page(0)),
+        DxfScaleSuggestion::Uncalibrated,
+        "page 0's own dimension is uncalibrated, so pdfce does not know its scale — \
+         inheriting page 1's 1:5 would export it five times real size, plausibly"
+    );
+}
+
+/// **A page that IS calibrated is not held hostage by another page.**
+///
+/// The mirror failure, and the one an operator would report as a bug
+/// rather than discover at the cutting table: page 1 is unambiguously 1:5,
+/// but a second sheet at 1:2 makes the document-wide reading `Conflicting`,
+/// so the CLI refuses and the GUI disables Export — for a page that has
+/// exactly one answer.
+#[test]
+fn a_calibrated_page_is_not_refused_because_another_page_disagrees() {
+    let (mut s, plan, _detail) = sheet_set();
+    // Give the plan group a scale too, so the DOCUMENT now holds two
+    // different calibrated answers while each PAGE still holds one.
+    s.set_group_scale(
+        plan,
+        ScaleState::Calibrated {
+            scale: 2.0 * 25.4 / 72.0,
+        },
+        NumberFormat::decimal(Unit::Millimeter, 1),
+    )
+    .unwrap();
+    let model = s.dimension_model();
+
+    assert!(
+        matches!(
+            suggest_scale(&model),
+            DxfScaleSuggestion::Conflicting { .. }
+        ),
+        "document-wide, the sheet set genuinely disagrees with itself"
+    );
+    for (page, want) in [(0usize, 2.0), (1, 5.0)] {
+        match suggest_scale_for_groups(&model, &s.dimension_groups_on_page(page)) {
+            DxfScaleSuggestion::Calibrated { scale, .. } => {
+                assert_close(scale, want, "each page on its own has one answer");
+            }
+            other => panic!("page {page} should be unambiguous; got {other:?}"),
+        }
+    }
+}
+
+/// **Two selected pages that disagree ARE a conflict.**
+///
+/// The multi-page export case. Asking for both sheets at once is asking
+/// for one DXF scale to serve both, and there is no such number — so the
+/// same variant that stops a single ambiguous page stops this, through the
+/// same code path rather than through a special case bolted onto the
+/// caller.
+#[test]
+fn a_multi_page_selection_that_disagrees_conflicts() {
+    let (mut s, plan, _detail) = sheet_set();
+    s.set_group_scale(
+        plan,
+        ScaleState::Calibrated {
+            scale: 2.0 * 25.4 / 72.0,
+        },
+        NumberFormat::decimal(Unit::Millimeter, 1),
+    )
+    .unwrap();
+    let model = s.dimension_model();
+    let mut both = s.dimension_groups_on_page(0);
+    both.extend(s.dimension_groups_on_page(1));
+
+    match suggest_scale_for_groups(&model, &both) {
+        DxfScaleSuggestion::Conflicting { candidates } => {
+            assert_eq!(candidates.len(), 2, "both pages' opinions are reported");
+        }
+        other => panic!("two pages at different scales cannot share one DXF scale; got {other:?}"),
+    }
+}
+
+/// **An empty group list infers nothing rather than 1.0.**
+///
+/// The boundary the GUI hits constantly: a page with no ce dimensions on
+/// it at all. It must land in the same `Uncalibrated` disclosure as a page
+/// whose dimensions are merely uncalibrated — pdfce does not know, and the
+/// two reasons for not knowing do not change what the operator must be
+/// told.
+#[test]
+fn a_page_with_no_dimensions_infers_nothing() {
+    let mut model = DimensionModel::new();
+    let g = model.add_group("Elsewhere", Unit::Inch);
+    model.set_group_scale(
+        g,
+        ScaleState::Calibrated { scale: 3.0 / 72.0 },
+        NumberFormat::decimal(Unit::Inch, 3),
+    );
+    assert_eq!(
+        suggest_scale_for_groups(&model, &[]),
+        DxfScaleSuggestion::Uncalibrated,
+        "no groups on the page means no evidence about the page"
+    );
+}
+
+/// **A stale group id is ignored, not an error.**
+///
+/// A `GroupId` naming a group that no longer exists carries the same
+/// amount of evidence as no group at all, and a shell holding a list one
+/// frame out of date is ordinary in immediate mode rather than a fault.
+#[test]
+fn an_unknown_group_id_is_ignored() {
+    let mut model = DimensionModel::new();
+    let g = model.add_group("Real", Unit::Millimeter);
+    model.set_group_scale(
+        g,
+        ScaleState::OneToOne,
+        NumberFormat::decimal(Unit::Millimeter, 1),
+    );
+    match suggest_scale_for_groups(&model, &[g, GroupId(9999)]) {
+        DxfScaleSuggestion::Calibrated {
+            scale, agreeing, ..
+        } => {
+            assert_close(scale, 1.0, "the group that exists");
+            assert_eq!(agreeing, 1, "the phantom id contributes nothing");
         }
         other => panic!("expected Calibrated, got {other:?}"),
     }
