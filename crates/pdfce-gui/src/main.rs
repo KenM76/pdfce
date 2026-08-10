@@ -12054,14 +12054,56 @@ fn collect_keyboard_actions(ctx: &egui::Context, actions: &mut Vec<Action>, keys
         }
     };
 
-    pressed(Modifiers::NONE, Key::PageDown, Action::NextPage);
-    pressed(Modifiers::NONE, Key::PageUp, Action::PrevPage);
+    // ★ A FOCUSED TEXT WIDGET OWNS THE UNMODIFIED KEYS.
+    //
+    // This function runs BEFORE any panel draws, and `consume_key` REMOVES
+    // the event from the frame. So every unmodified key registered below
+    // is taken out of the stream before a focused `TextEdit` can ever see
+    // it — and the operator, who is typing, watches the document do
+    // something else instead.
+    //
+    // Demonstrated, not theorised. Focus the Redact panel's query box,
+    // type `hello`, press Home, type `X`:
+    //
+    //     before this guard:  "helloX"   (Home stolen; document jumped
+    //                                     to page 1 mid-word)
+    //     after:              "Xhello"   (Home moved the caret)
+    //
+    // `[` and `]` were the worse half and the easier to miss: they are
+    // PRINTABLE CHARACTERS. Typing a bracket into any text field in this
+    // application rotated the page instead of inserting it.
+    //
+    // The previous guard was `tool_active`, and its own comment shows the
+    // hazard was known — *"leaves them for a focused canvas OR a focused
+    // property-bar DragValue"*. But `tool_active` asks whether a CANVAS
+    // TOOL is armed, which is a different question from whether a text
+    // widget has focus, and every panel in this application is full of
+    // text widgets that no tool arms.
+    //
+    // Reads the PREVIOUS frame's focus, since panels have not drawn yet.
+    // That is correct rather than a compromise: focus persists across
+    // frames, and the frame in which focus is first taken is the click
+    // that took it, not a keystroke.
+    //
+    // Modifier chords are deliberately NOT guarded. Ctrl+S, Ctrl+O,
+    // Ctrl+Z and the zoom chords are application commands a text field
+    // has no claim on, and an operator who presses Ctrl+S while typing in
+    // a form field means Save.
+    //
+    // A plain flag rather than a second closure: `pressed` already holds
+    // `actions` mutably, and two closures cannot.
+    let typing = ctx.egui_wants_keyboard_input();
+
+    if !typing {
+        pressed(Modifiers::NONE, Key::PageDown, Action::NextPage);
+        pressed(Modifiers::NONE, Key::PageUp, Action::PrevPage);
+    }
     // Home/End jump to the first/last page — but when a canvas tool is active
     // they are yielded to it (Pass 14.4 §4.5: Home/End become line-start/end
     // caret motion in the text-edit tool). Not consuming them here leaves them
     // for a focused canvas OR a focused property-bar DragValue, both of which
     // want Home/End for their own text navigation.
-    if !tool_active {
+    if !tool_active && !typing {
         pressed(Modifiers::NONE, Key::Home, Action::FirstPage);
         pressed(Modifiers::NONE, Key::End, Action::LastPage);
     }
@@ -12097,8 +12139,12 @@ fn collect_keyboard_actions(ctx: &egui::Context, actions: &mut Vec<Action>, keys
     // that rotation is a batch operation. `[` and `]` are the image-
     // viewer convention and are unclaimed here; deliberately not
     // Acrobat's bindings.
-    pressed(Modifiers::NONE, Key::OpenBracket, Action::RotateLeft);
-    pressed(Modifiers::NONE, Key::CloseBracket, Action::RotateRight);
+    // Printable characters. Without the typing guard, a bracket typed
+    // into any text field in this application rotated the page.
+    if !typing {
+        pressed(Modifiers::NONE, Key::OpenBracket, Action::RotateLeft);
+        pressed(Modifiers::NONE, Key::CloseBracket, Action::RotateRight);
+    }
 
     // Selection and reorder. Alt+arrow rather than a drag, because
     // drag-and-drop is not keyboard-operable and egui's assistive-
@@ -12125,7 +12171,7 @@ fn collect_keyboard_actions(ctx: &egui::Context, actions: &mut Vec<Action>, keys
     //
     // The text tools are deliberately NOT given this hole: Delete there is
     // forward-character-delete, and hijacking it would break typing.
-    if !tool_active || canvas_delete_target {
+    if (!tool_active || canvas_delete_target) && !typing {
         pressed(Modifiers::NONE, Key::Delete, Action::DeleteSelection);
         pressed(Modifiers::NONE, Key::Backspace, Action::DeleteSelection);
     }
