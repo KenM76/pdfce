@@ -14147,3 +14147,49 @@ started).
   New standing rule **R176** (unrelated to this entry's own subject —
   minted the same commit, from the Linux CI-blind-spot half of `ef88973`;
   see `ROADMAP.md` Standing rules) does not touch this invariant.
+  **★ CORRECTION 2026-08-10 (`45a88f2`) — the "unverified by live drive"
+  half above is resolved, not merely narrowed.** A `text:lines` diag step
+  now emits every editable line's PDF bbox and click point, and the
+  canvas text-edit-draft Enter-commit path is driven live end to end
+  (click sets caret → type → `key:enter` → `commit-text-edit ->
+  Committed`), plus the negative (no pending edit, zero commit traces).
+  Left standing above rather than rewritten, per this document's own
+  append-only convention for the decision log. Full record:
+  `ROADMAP.md`'s `45a88f2` Shipped entry (top of *Shipped*).
+
+- **2026-08-10 (`45a88f2`) — a diagnostic-harness trace that would
+  otherwise be per-frame gets emitted ONCE, on an explicit flag consumed
+  with `mem::take`, and it is colocated with the closure it inverts.**
+  Two small conventions, both worth recording because the harness
+  observability surface (`pdfce-diag`, the `gui-shot`/`gui-drive` trace
+  stream) is going to keep growing and both generalise past this one
+  step. **(1) One-shot, not per-frame.** A real drawing can carry
+  hundreds of editable text runs on one sheet (measured: 237), and a
+  driving script runs for hundreds of frames — a trace emitted every
+  frame would produce tens of thousands of identical lines to report a
+  fact that never changes within a run. The `text:lines` step instead
+  sets a flag; the tool's own draw call consumes it with `mem::take`
+  (not a bare read-then-clear, so the flag cannot survive an early
+  return and leak a second emission) and emits exactly once. **(2)
+  Colocate the emitter with the closure it inverts.** The new emitter
+  sits in the same module, next to `hit_at` — the hit-test function it
+  is the geometric inverse of (bbox-to-click-point vs. click-point-to-
+  hit). If the two are ever edited out of step, the harness would aim
+  at points the hit-test does not resolve, and a genuinely working
+  feature would read as broken in every future trace-driven verification
+  — precisely the failure this affordance exists to prevent. Placing
+  them side by side makes that drift visible at review time rather than
+  only at run time. **Decided: any future `pdfce-diag` step that emits
+  geometry for the harness to click follows both conventions** — a
+  one-shot flag drained with `mem::take`, defined beside its inverse
+  function, not as a free-standing utility. No new decision number
+  claimed — a plain dated entry, harness-internal rather than a
+  product-facing invariant. Judged pdfce-internal, not filed to
+  `D:\dev\rag\egui\` — the `mem::take`-drained-flag idiom itself is
+  ordinary Rust, not an egui-specific finding, and the colocation
+  discipline is specific to this project's own hit-test/harness split.
+  Cross-reference: **`R151`** (`ROADMAP.md` Standing rules, addendum
+  same commit) — this same change gave `viewer::pdf_space_to_canvas`
+  its first real caller, discharging an R151-shaped debt from an
+  earlier Pass by finding a genuine use rather than deleting the
+  function or writing a second inverse beside it.

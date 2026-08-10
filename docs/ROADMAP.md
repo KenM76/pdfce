@@ -81,6 +81,108 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `45a88f2` — the canvas half of Enter-to-commit, recorded "NOT DRIVEN, owed" by `ef88973` one filing ago, is now DRIVEN: a one-shot `text:lines` diag step, and `R151`'s `pdf_space_to_canvas` gets its first real caller — 2026-08-10, tip of `pass-8-redaction` (sixtieth filing)
+
+**Sourcing.** This librarian has no shell this dispatch (hard rule 8).
+Commit `45a88f2` is stated to be the tip of `pass-8-redaction`, immediately
+after `8138c25`. Trace output, test count, and clippy/fmt results are the
+engineer's own readings, relayed, not independently re-run.
+
+**The gap this closes.** The `ef88973` Shipped entry (immediately below)
+recorded Enter-to-commit for a canvas text-edit draft as **NOT DRIVEN** —
+construction-only evidence, no live run. Two obstacles stood in the way: a
+script must physically **click** a text run to both place the caret and
+satisfy `image_response.has_focus()` (typing is gated on it), and nothing
+in the trace stream said where a run was — R172 forbids guessing
+coordinates, and `gui-shot`/`gui-drive` run at different window sizes, so
+even a screenshot pixel does not transfer between them.
+
+**What shipped.** A new `pdfce-diag text-line` step dumps every editable
+line's PDF bbox and a screen point to click:
+
+```
+pdfce-diag text-line index=0 pdf_bbox=[15.00,75.50,115.04,93.50] click=782,348
+pdfce-diag text-line index=1 pdf_bbox=[15.00,57.50,123.92,67.50] click=809,479
+```
+
+**Now driven end to end** (`hello.pdf`):
+
+```
+tool:text        text-edit focus=false caret=None pending=false
+click 782,348    focus=true  caret=Some(run:0, byte_offset:7)
+type:Z           pending=true
+key:enter        commit-text-edit -> Committed
+                 focus=true  caret=None pending=false
+```
+
+**And the negative, also driven**: the same script without `type:Z`
+produces **zero** `commit-text-edit` traces — Enter on a caret with no
+pending edit is inert, confirmed by absence rather than assumed.
+
+**Three design points worth carrying forward.**
+1. **One-shot, not per-frame.** A real drawing puts every label on a sheet
+   in one text object — measured at 237 runs — and a script runs hundreds
+   of frames; per-frame tracing would emit tens of thousands of lines to
+   say something that never changes. The step sets a flag; the tool's draw
+   consumes it with `mem::take` (so it cannot survive an early return),
+   emits once, clears it.
+2. **The emitter sits beside `hit_at`, the closure it inverts.** If the two
+   ever disagree, the harness aims at points the hit-test does not
+   resolve, and a *working* feature reads as broken — the exact failure
+   this affordance exists to prevent. Colocated deliberately, so a reader
+   cannot change one without seeing the other.
+3. It emits each line's **centre**, not a corner — a corner sits exactly on
+   the boundary a hit-test compares against, which is the one point most
+   likely to round the wrong way.
+
+**★ `R151` discharged in passing, worth its own note.** This is the first
+live consumer of `viewer::pdf_space_to_canvas`, built and tested in an
+earlier Pass for a projection that was never written — its own
+`dead_code` attribute names Pass 9a's selection-outline projection as the
+intended caller, and that caller never came. A capability with no caller
+is exactly `R151`'s shape, and it is discharged here **by finding its
+real first caller later**, not by writing a second inverse beside it. See
+`R151`'s own Standing-rules entry (amended in place, this filing) for the
+generalised note.
+
+**Numbers.** **2675 workspace tests, 0 failed** — unchanged from `ef88973`;
+this is harness observability, not new product code, and the *verification*
+it enables is the deliverable, recorded above as trace output rather than a
+new test count. `cargo clippy --workspace --all-targets`: 0. `cargo fmt
+--all --check`: clean. Seven gates green (relayed, not independently
+re-run).
+
+**Invariant checks**
+- **GUI-core separation**: the new diag step and `text:lines` trace live in
+  `pdfce-gui`'s canvas/diagnostic code; `pdf_space_to_canvas` itself is
+  pre-existing `pdfce-gui` code (its GUI-agnostic sibling stays in
+  `pdfce-core`/`pdfce-render`). No windowing dependency added to either
+  core crate.
+- **Round-trip / minimal-diff**: unaffected — no new object-write path.
+- **Packaging smoke test**: not applicable — no packaging surface changed.
+
+**Ledger effect.** `ef88973`'s "NOT DRIVEN" verification note (immediately
+below) gets a dated correction footer rather than a silent rewrite — per
+this ledger's own append-only discipline (hard rule 1), the original
+record stands and the resolution is appended beside it. Same treatment for
+the matching `★ Pass 24.0–24.5` family banner (*Next up*) and the
+`ARCHITECTURE.md` §12 entry the `ef88973` filing wrote. **No new Pass
+ID** — this ledger's own precedent for harness/CI work (the Linux fix and
+the `ui-strings`/HTTP-client gate repairs, all elsewhere in *Shipped*,
+carry none); this is observability that lets an already-shipped capability
+be verified, not a new capability. `docs/FEATURES.md`'s "Enter commits a
+typing-flow draft" row is updated in this same filing to drop the
+unverified caveat (see below) — not moved, since the row was already
+*Implemented*. Pass family ceiling unchanged at **53.0**. Standing rules:
+**`R151`'s own entry amended in place** with this discharge as a second,
+generalised note; no new rule minted — closing an already-diagnosed R172
+gap is the fix R172 itself called for, not a new instance of a miss.
+Ceiling stays **`R176`**, next free **`R177`**. Decision records: no new
+number claimed; ceiling stays **035**, next free **036**. Operator-question
+ceiling unchanged at **(bh)**, next free **(bi)**. Backup/git working-tree
+state not independently asserted — this librarian has no shell this
+dispatch (hard rule 8).
+
 ### ★ `ef88973` — pdfce did not compile on Linux since the day its CI could first run (found by reading the run history, not by running it); Pass 24.0's deferred "universal Enter/Escape" ships NARROWER than filed, on a `pdfce-ui-specialist` ruling that caught a global-key regression before ship; `Pass 53.0`'s owed polish item 8 discharged — 2026-08-10, tip of `pass-8-redaction` (fifty-ninth filing)
 
 **Sourcing.** This librarian has no shell this dispatch (hard rule 8).
@@ -216,6 +318,16 @@ not.**
 - `key:enter` was added to the diagnostic harness as part of this work —
   the feature was not drivable at all without it, and the canvas half
   remains undriven regardless.
+  **★ RESOLVED 2026-08-10 (sixtieth filing, `45a88f2`) — DRIVEN LIVE.** A
+  `text:lines` diag step now dumps every editable line's PDF bbox and
+  click point, closing exactly the gap this note named ("no way to
+  discover [canvas coordinates] today"). `key:enter` on a real click now
+  produces `commit-text-edit -> Committed`, and the same script with no
+  `type:Z` produces zero commit traces. Full record: `45a88f2`'s own
+  Shipped entry, immediately above. This bullet, and the "NOT DRIVEN"
+  bullet above it, are left standing rather than edited — the append-only
+  discipline applies to an "owed" note the same as to anything else this
+  ledger records; this footer is the correction, not a rewrite.
 
 **Ledger effect: Pass 24.0's acceptance criterion narrows in place, not by
 deletion.** The original text ("Enter commits in all three tools") is now
@@ -28738,6 +28850,18 @@ which is the Pass 8.0 advance-preserving-surgery problem, not the Pass
 
 ### ★ Pass 24.0–24.5 — Ribbon command surface + the end of the floating Accept/Reject box (decision 024, filed 2026-08-04, DECIDED — Pass 24.1 SHIPPED; Pass 24.0 SHIPPED IN TWO HALVES — confirm-strip `ae59ce3` 2026-08-04 (superseded by Pass 34.1, see the 2026-08-09 banner below), Enter-commit `ef88973` 2026-08-10 (NARROWER than filed, see the 2026-08-10 banner below); 24.2–24.5 NOT STARTED)
 
+> **✅ UPDATE 2026-08-10 (sixtieth filing) — the "unverified by live drive"
+> caveat directly below is RESOLVED.** `45a88f2` shipped a `text:lines`
+> diag step (every editable line's PDF bbox + click point) closing the
+> gap the fifty-ninth filing's banner named: Enter committing a canvas
+> text-edit draft is now **DRIVEN LIVE** end to end (`click` → caret set →
+> `type:Z` → `key:enter` → `commit-text-edit -> Committed`), plus the
+> negative (no pending edit, zero commit traces). Left standing rather
+> than edited, per this ledger's append-only discipline — see `45a88f2`'s
+> own Shipped entry (top of *Shipped*) for the full record, and the
+> matching correction footer on the `ef88973` Shipped entry's own
+> "NOT DRIVEN" bullet.
+>
 > **⚠ UPDATE 2026-08-10 (fifty-ninth filing) — Pass 24.0's OTHER deferred
 > half ships, and "universal Enter/Escape" turns out to be the wrong
 > phrase for it.** `ae59ce3` deferred wiring Enter beyond the one
@@ -38728,6 +38852,30 @@ not a judgment call:**
   **`tools/check-ledger-numbers.py --stats` should be re-run after this
   commit**, per the same discipline as every prior ceiling-moving filing —
   this librarian has no shell and has not run it itself.
+
+  **★ ADDENDUM 2026-08-10 (`45a88f2`, sixtieth filing) — a second, useful
+  data point on how this rule's own debt gets discharged.**
+  `viewer::pdf_space_to_canvas` sat in exactly this rule's shape from an
+  earlier Pass: built, documented, unit-tested, `#[allow(dead_code)]`,
+  its own comment naming a specific intended caller (Pass 9a's
+  selection-outline projection) that never arrived. `45a88f2` closes the
+  gap not by writing a second inverse projection beside it, and not by
+  deleting the function, but by giving it its **first real caller** — a
+  diagnostic step (`text:lines`) that needed exactly the projection this
+  function already performed, for an unrelated reason (locating a text
+  run for the GUI-driving harness to click). **Worth recording because it
+  is not the only available fix and the other two are worse**: a second,
+  parallel inverse invites the divergence this rule's own `move_subpath`
+  incident was never at risk of (there was only one path in that case),
+  and outright deletion destroys a capability on the assumption its
+  absence of a caller means absence of a future one — which was false
+  here by one Pass's worth of waiting. **The generalised form**: before
+  writing a new function to solve a projection/inversion/lookup need,
+  grep for an existing `#[allow(dead_code)]` or otherwise-uncalled
+  `pub`/`pub(crate)` item that already does the job — this rule's own
+  audit (which surfaces exactly these items) is the same grep that would
+  have found `pdf_space_to_canvas` proactively, not just after the fact.
+  Full delivery record: `45a88f2`'s own Shipped entry (top of *Shipped*).
 
 - **R152 — A wired call site is necessary but not sufficient; the
   gesture that reaches a capability must also confirm its own outcome,

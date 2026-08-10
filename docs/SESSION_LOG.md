@@ -29619,3 +29619,73 @@ canvas half of Enter-to-commit is unverified by live drive; decision
   independently asserted (hard rule 8). This is the **fifty-ninth**
   `SESSION_LOG.md` filing (the fifty-eighth confirmed present by direct
   read before this entry was appended).
+
+## 2026-08-10 (sixtieth filing) — `45a88f2`: the canvas half of Enter-to-commit, recorded "NOT DRIVEN, owed" by the fifty-ninth filing, is now DRIVEN LIVE — a one-shot `text:lines` diag step, and `R151`'s `pdf_space_to_canvas` gets its first real caller
+
+**Filed by `pdfce-librarian`, dispatched with the engineer's own git
+evidence carried IN the dispatch** — this librarian has no shell this
+filing (hard rule 8); every figure below is relayed, not independently
+re-run.
+
+**Shipped:**
+- No Pass ID — harness observability, not a product capability. A new
+  `pdfce-diag text-line` step dumps every editable text line's PDF bbox
+  and a screen click point (`pdf_bbox=[…] click=x,y`), one-shot per draw
+  call via a flag drained with `mem::take` (never per-frame — a real
+  sheet can carry 237 runs, and a script runs hundreds of frames). Closes
+  the verification gap the fifty-ninth filing (`ef88973`) recorded as
+  owed: Enter committing a canvas text-edit draft is now driven live end
+  to end (click sets caret → type → `key:enter` →
+  `commit-text-edit -> Committed`), and the negative is driven too (no
+  pending edit → zero commit traces).
+
+**Decisions made this session:**
+- **`ARCHITECTURE.md` §12 gained a plain dated entry**: any future
+  `pdfce-diag` step that emits geometry for the harness to click follows
+  two conventions going forward — a one-shot flag drained with
+  `mem::take`, and colocation with the hit-test closure it geometrically
+  inverts (`text:lines` sits beside `hit_at` for exactly this reason).
+  No new decision number claimed.
+
+**Findings + decisions:**
+- **`R151` (`ROADMAP.md` Standing rules) discharged a second time, and
+  the discharge shape is worth its own note.** `viewer::pdf_space_to_canvas`
+  had sat built-and-uncalled since an earlier Pass, its own `dead_code`
+  comment naming a caller (Pass 9a's selection-outline projection) that
+  never came. `45a88f2` gives it its first real caller — the new diag
+  step needed exactly this projection for an unrelated reason — rather
+  than deleting the function or writing a second inverse beside it.
+  Addendum written to R151's own entry recording this as a second,
+  generalised data point: before writing a new projection/lookup
+  function, grep for an existing uncalled one that already does the job.
+- Three ledger sites corrected with dated footers rather than rewritten,
+  per append-only discipline: `ROADMAP.md`'s `ef88973` Shipped entry (the
+  "NOT DRIVEN" bullet), the `★ Pass 24.0–24.5` family entry's *Next up*
+  banner, and `ARCHITECTURE.md` §12's matching decision entry. All three
+  now carry a 2026-08-10 correction pointing at `45a88f2` rather than
+  silently reading as still-owed.
+- `docs/FEATURES.md`'s "Enter commits a typing-flow draft" row updated in
+  the same filing — the row was already `[x]` under *Implemented*
+  (gui column), so this is a caveat removal, not a box change or a row
+  move.
+
+**Still in flight:** unchanged from the fifty-ninth filing, minus the
+canvas Enter-commit verification item (now closed); `docs/decisions/003-
+distribution-posture.md` §1.1's superseding note is still owed to the
+engineer (outside this librarian's tiers).
+
+**For next session:** nothing new opened by this filing.
+
+- **Ledger for this filing.** No new Pass ID — harness/CI-tooling
+  convention, same as `ef88973`. Pass ceiling unchanged at **53.0**.
+  Standing rules: **no new rule minted** — this closes an already-
+  diagnosed `R172` gap rather than presenting a new miss; `R151`'s own
+  entry amended in place with a second discharge note. Ceiling stays
+  **`R176`**, next free **`R177`**. Decision records: no new number
+  claimed — one plain dated `ARCHITECTURE.md` §12 entry added; ceiling
+  stays **035**, next free **036**. Operator-question ceiling unchanged
+  at **(bh)**, next free **(bi)**. `docs/decisions/` untouched by this
+  librarian. Backup/git working-tree state not independently asserted
+  (hard rule 8). This is the **sixtieth** `SESSION_LOG.md` filing (the
+  fifty-ninth confirmed present by direct read before this entry was
+  appended).
