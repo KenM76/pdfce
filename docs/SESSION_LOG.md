@@ -29964,3 +29964,109 @@ working-tree state not independently asserted — this librarian has no
 shell this dispatch (hard rule 8). This is the **sixty-third**
 `SESSION_LOG.md` filing (the sixty-second confirmed present by direct
 read before this entry was appended).
+
+## 2026-08-10 (sixty-fourth filing) — `b8f96b1` FILED: form-data export/import discloses rich-text loss CONDITIONALLY; the operator's 2026-08-06 ruling overturning `VT3` had been living only in a spec-RAG file and a commit message, never in `ROADMAP.md`, until this filing brought it in and corrected a now-stale claim inside `b8f96b1`'s own message; `R178` MINTED; debt **6 → 5**
+
+**Sourcing.** This librarian has no shell this dispatch (hard rule 8).
+`b8f96b1`'s content is relayed — the dispatching engineer quoted the
+first ~45 lines of the commit message directly and flagged the tail as
+truncated; nothing below asserts anything about the unread remainder.
+Independently verified **by direct read**, not relayed: the baseline
+file before (**6** lines) and after (**5** — `b8f96b1` removed) this
+edit; the full existing text of the *Next up* entry this filing amends
+(`★ Rich-text fill: should pdfce-core refuse too?`, filed 2026-08-05);
+and `D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__s__12.7.3.4.md`
+in full, to confirm both the operator's verbatim quote and its own
+"GAP CLOSED 2026-08-06" header.
+
+**Shipped:**
+- `b8f96b1` (2026-08-07) — `pdfce`'s FDF/XFDF export carries field
+  values only (`/RV`/`<value-richtext>` rich-text formatting was Pass
+  7.1's named non-goal). That was an honest, documented, CLI-only
+  limit — the caveat lived in `fdf.rs`'s module doc and in `--help`,
+  both on the one path a scripter reads. A GUI "Export data…" button,
+  shipped the day before, reached the same code with **no route to
+  that documentation at all**. Fix shipped here: export/import reports
+  now disclose the loss **conditionally on the document actually
+  having a rich-text field** (`Field::is_rich_text()`, gated on field
+  type first — bit 26 is `RichText` on `/Tx`, `RadiosInUnison` on
+  `/Btn`), so the disclosure is a signal, not boilerplate. This is
+  rule 4 shipping ahead of the real fix, deliberately — the honest
+  interim state, not the destination.
+
+**Decisions made this session:**
+- **The existing *Next up* entry's own framing ("should core refuse
+  too?") is superseded, not by this librarian but by the operator,
+  eleven days before this filing caught up to it.** On 2026-08-06 the
+  operator ruled: *"it should be able to handle rich text fills if
+  acrobat can or if it makes it better than acrobat"* — overturning
+  the spec RAG's `VT3` non-goal outright. That ruling has existed,
+  until today, in exactly two places: the spec-RAG file's own header,
+  and the body of `b8f96b1`. Amended into `ROADMAP.md`'s *Next up*
+  section in place, dated 2026-08-10, with a forward pointer — the
+  live question is no longer "refuse or not" but which of two honest
+  remaining options (explicit lossy downgrade vs. true `/RV`-preserving
+  fill, per the spec RAG's own §12 ordering) pdfce builds first.
+- **A factual correction to `b8f96b1`'s own account.** The commit
+  describes the real fix as blocked on §12.7.3.4 being "still a named
+  GAP" — true on 2026-08-06, false by the time the commit landed on
+  2026-08-07: `pdfce-spec-librarian` closed that gap on 2026-08-06,
+  the day before. No spec blocker remains; only an engineering-scope
+  decision does.
+
+**Findings + decisions:**
+- **New standing rule `R178` MINTED**: a caveat is only a disclosure if
+  it sits on the path the caller actually takes. `b8f96b1` is the first
+  instance (a true caveat orphaned from a new caller). A second,
+  relayed-not-verified instance from the same session, `4f0e443`
+  (2026-08-09, `list-fields` whitespace-mangling fix): a doc comment
+  reportedly cited §7.3.5 (name objects) to justify a helper touching a
+  §7.9.2 text string — a caveat wrong from the day it was written,
+  which no caller could ever have used to self-correct. Same shape
+  (disclosure correctness is a property of the reader's path, not the
+  string alone), opposite failure route. Full text in `ROADMAP.md`
+  *Standing rules*.
+- Acrobat-parity findings relayed from `b8f96b1`'s own account (not
+  independently verified, and not checked against
+  `D:\Dev\Rag-Specialized\Acrobat_Features\` by this filing — flagged
+  for the engineer): Acrobat's rich-text set is enumerable via its own
+  JS `Span` object; **lists are unsupported even in Acrobat**; three
+  Acrobat-side unreliability findings (a multi-year font-substitution
+  bug, an auto-size-persistence interaction, inconsistent `richValue`
+  across script event contexts).
+
+**Still in flight:**
+- Baseline debt now **5 lines**: `338076a`, `1f319c0`, `55a0732`,
+  `587e520`, `9141ded` — unread by this librarian beyond their subject
+  lines.
+- The rich-text scope decision (which honest option ships first) is
+  still unscoped to a Pass — see the amended `ROADMAP.md` *Next up*
+  entry.
+- Whether the Acrobat-parity findings above are already on file in
+  `D:\Dev\Rag-Specialized\Acrobat_Features\` is unchecked.
+
+**For next session:**
+- Continue working the 5-line baseline debt.
+- Dispatch `pdfce-acrobat-librarian` to confirm/file the rich-text
+  Acrobat-parity findings surfaced by `b8f96b1`, if not already on
+  file.
+- Whoever next touches the forms subsystem should read the amended
+  *Next up* entry (not the original 2026-08-05 framing) as the live
+  statement of the rich-text-fill question.
+
+**Ledger for this filing.** No new Pass ID. `docs/FEATURES.md`: two
+rows edited (Forms *Import/export form data*; Planned *Rich-text
+fill*) — no checkbox moves, both rows report state, not a new
+capability. `docs/ARCHITECTURE.md` §12: not edited — no crate/library/
+invariant decision here. Standing rules: **`R178` MINTED** — ceiling
+moves **R177 → R178**, next free **R179**. Decision records: no new
+number claimed; ceiling stays **035**, next free **036**.
+Operator-question ceiling unchanged at **(bh)**, next free **(bi)** —
+no new lettered question minted; the rich-text scope question is
+already an operator answer, not an open one. Baseline-debt count:
+**6 → 5** lines in `tools/commits-filed-baseline.txt`, independently
+verified by direct read both before and after edit. Backup/git
+working-tree state not independently asserted — this librarian has no
+shell this dispatch (hard rule 8). This is the **sixty-fourth**
+`SESSION_LOG.md` filing (the sixty-third confirmed present by direct
+read before this entry was appended).

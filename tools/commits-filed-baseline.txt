@@ -20,7 +20,6 @@
 
 338076a  # filing ordinals stop being the one identifier nothing checks
 1f319c0  # icons: a missing glyph gets AUTHORED, and the tree reveals the rest
-b8f96b1  # disclose: exporting form data silently dropped rich-text formatting
 55a0732  # GUI-gap sweep 5/N: radio groups and choice fields are editable
 587e520  # harden: /Ff bit 26 cannot be decoded wrong any more
 9141ded  # Tool property bars: draggable, and the measure box closable

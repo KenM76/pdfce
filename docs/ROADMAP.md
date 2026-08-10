@@ -81,6 +81,126 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★ `b8f96b1` FILED — form-data export/import discloses rich-text data loss conditionally, not as boilerplate; the operator's own 2026-08-06 ruling that overturned VT3 is brought into `ROADMAP.md` for the first time (amended into the *Next up* entry above); `R178` MINTED — baseline debt **6 → 5** — 2026-08-10 (sixty-fourth filing)
+
+**Sourcing.** This librarian has no shell this dispatch (hard rule 8).
+`b8f96b1`'s technical content is relayed from the dispatching engineer,
+who quoted the commit message directly; only the first ~45 lines were
+supplied, the tail was reported truncated, and nothing below is stated
+about that unread tail. Independently verified **by direct read**, not
+relayed: `tools/commits-filed-baseline.txt` before this edit (**6**
+lines: `338076a`, `1f319c0`, `b8f96b1`, `55a0732`, `587e520`, `9141ded`)
+and after (**5** — `b8f96b1` removed); the existing *Next up* entry
+this filing amends (`★ Rich-text fill: should pdfce-core refuse too?`,
+filed 2026-08-05, read in full before editing); and the spec-RAG file
+`D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__s__12.7.3.4.md`,
+read in full to confirm both the operator quote and the "GAP CLOSED
+2026-08-06" header date.
+
+**The finding, restated so this entry stands alone.** pdfce's FDF/XFDF
+export model carries field **values only** — `<value-richtext>` (XFDF)
+and `/RV` (FDF) were a named non-goal of Pass 7.1, recorded in `fdf.rs`'s
+own module doc, with `FieldData::values` typed as a bare `Vec<String>`.
+That was an honest, documented CLI-only limitation until a GUI
+"Export data…" button (shipped the day before this commit, per its own
+account) reached the same code path with no equivalent route to the
+module doc or `--help` text that had been carrying the caveat. **The
+scope call was fine; what changed was who could reach it** — an
+operator pressing that button gets a file that looks complete and
+discovers the loss only on re-import, possibly after the styled
+original is gone. **The fix shipped here is the disclosure, not the
+loss's repair**: export and import reports now state the limitation,
+**conditionally on the document actually containing a rich-text
+field** (`Field::is_rich_text()`, the type-gated predicate — bit 26 is
+`RichText` on a `/Tx` field and `RadiosInUnison` on a `/Btn`, so the
+check must gate on field type first, same trap `R151`'s neighbouring
+entries already record), so the disclosure is a signal rather than
+boilerplate on every form.
+
+**This is rule 4 ("fuzzy, never sneaky") working in the direction the
+project wants to see more of, and worth naming as precedent**: pdfce
+shipped the disclosure *before* the real fix, deliberately, so the gap
+was honest for however long the fix takes rather than silent. Same
+shape as this project's own `commits-filed-baseline.txt` ratchet
+(named-and-tracked debt beats invisible debt) applied to a data-loss
+path instead of a commit backlog.
+
+**★ A factual correction to the commit's own account.** `b8f96b1`
+describes the real fix (reading/writing `/RV`) as blocked on
+§12.7.3.4, "still a named GAP in the spec RAG, with
+`pdfce-spec-librarian` sourcing it now." **That was true on
+2026-08-06 and false by the time this commit landed on 2026-08-07** —
+`iso32000__s__12.7.3.4.md`'s own header reads **"GAP CLOSED
+2026-08-06,"** the day before. As of this filing there is no spec-RAG
+blocker on implementing the real fix; what remains is an engineering
+scope decision, not a sourcing gap — see the amendment to the *Next
+up* entry immediately above this one for the full detail, including
+the operator's own 2026-08-06 ruling that the fix should exist at all
+("if acrobat can or if it makes it better than acrobat"), which had
+been sitting in that one spec-RAG file and this one commit message and
+nowhere in this project's own roadmap until this filing.
+
+**Acrobat-parity findings surfaced by the same commit, relayed and not
+independently re-verified:** an enumerable rich-text feature set via
+Adobe's own JS `Span` object (font family/style/weight/stretch/size/
+colour, alignment, underline, strikethrough, sub/superscript); **lists
+are not supported even in Acrobat**; and three Acrobat-side
+unreliability findings — a multi-year, Adobe-acknowledged
+font-substitution bug when enabling rich text on an already-styled
+field, a bad interaction with auto-size persistence, and inconsistent
+`richValue` behaviour across Acrobat's own script event contexts. The
+commit's own first line attributes these to "the Acrobat-parity RAG
+build" — **whether `D:\Dev\Rag-Specialized\Acrobat_Features\` already
+has them on file, or whether this is a second surfacing owed a
+dispatch to `pdfce-acrobat-librarian`, was not checked by this
+filing** (out of this librarian's remit to verify; flagged for the
+engineer).
+
+**★ New standing rule `R178` MINTED — see *Standing rules* below.**
+The reusable shape underneath this commit ("the scope call was fine;
+what changed is who can reach it") recurred within the same project
+window in a different mechanism: commit `4f0e443` (2026-08-09,
+`list-fields` whitespace-mangling fix) — relayed by the dispatching
+engineer this session, **not independently read by this librarian, no
+shell, subject line only beyond what was relayed** — reportedly carried
+a doc comment justifying a text-mangling helper by citing §7.3.5 (name
+objects) where the value in question was a §7.9.2 text string. Two
+different failure mechanisms (a true caveat orphaned from its new
+caller; a citation drift no caller could see was wrong) sharing one
+shape: **a caveat's correctness is a property of the path that reaches
+it, not a property of the caveat in isolation.**
+
+**Numbers.** Baseline debt: **6 lines → 5 lines**
+(`tools/commits-filed-baseline.txt`), verified by direct read before
+and after. `docs/FEATURES.md`: two rows edited — the *Import/export
+form data* row (Forms section) gains a note naming the new conditional
+disclosure; the *Rich-text fill* Planned row is reframed to match the
+amended *Next up* entry (the question is no longer "should core
+refuse", it is "which of the two remaining honest options, in which
+order"). Neither row's checkboxes move — the disclosure is a reporting
+change to an already-`[x]`/`[x]`/`[ ]` capability, not a new one, and
+the *Rich-text fill* row was already all-unticked.
+
+**Invariant checks.** Not stated in the portion of the commit message
+relayed to this librarian; not independently re-run (no shell).
+
+**Ledger for this filing.** No new Pass ID — this is a disclosure
+fix + a ledger/documentation-tracking filing, no Pass entry exists or
+is created for it, consistent with this ledger's established
+convention for that class of commit. `docs/ARCHITECTURE.md` §12: **not
+edited** — no crate boundary, library choice, or invariant is
+redrawn here; the reusable finding is a standing-rule shape (R178),
+not an architectural one. Standing rules: **`R178` MINTED** (below) —
+ceiling moves `R177` → `R178`, next free `R179`. Decision records: no
+new number claimed; ceiling stays **035**, next free **036**.
+Operator-question ceiling **unchanged at (bh)**, next free **(bi)** —
+no new lettered question minted; the rich-text scope question is
+already an operator answer (2026-08-06), not an open question needing
+one. Backup/git working-tree state not independently asserted — this
+librarian has no shell this dispatch (hard rule 8).
+
+---
+
 ### ★ `462d468` is cited by hash for a discharge already filed; `17131b6` (the GUI harness refuses to drive a stale binary) and `0febeb6` (a dock-pane layout defect no trace could see) are FILED; `R177` MINTED — baseline debt **8 → 6** — 2026-08-10, tip of `pass-8-redaction` (sixty-third filing)
 
 **Sourcing.** This librarian has no shell this dispatch (hard rule 8).
@@ -28598,6 +28718,60 @@ one-verb decision, and whichever Pass next touches the forms subsystem
 (the Pass 37.2 **P1** set is the obvious host) should resolve it rather
 than carry it.
 
+> **★ AMENDMENT 2026-08-10 (sixty-fourth filing) — the question above is
+> STALE. The operator already answered a bigger question than the one
+> this entry asks, one day after it was filed, and that answer was
+> never brought into `ROADMAP.md` until now.** On **2026-08-06** the
+> operator overturned the standing "rich text is a non-goal" posture
+> (spec RAG's own `VT3` finding) outright: *"it should be able to
+> handle rich text fills if acrobat can or if it makes it better than
+> acrobat"* — quoted verbatim in
+> `D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__s__12.7.3.4.md`'s
+> own header (`pdfce-spec-librarian`'s file, read directly by this
+> librarian to confirm the quote and the date). **Until this filing,
+> that ruling existed in exactly two places: that one spec-RAG file,
+> and the body of commit `b8f96b1` (2026-08-07) — nowhere in
+> `ROADMAP.md` or `SESSION_LOG.md`.** A standing operator ruling that
+> only a commit message and a RAG file can produce is one dropped
+> compaction away from being unfindable; it is recorded here now for
+> exactly that reason.
+>
+> **This also corrects a factual claim `b8f96b1`'s own commit message
+> makes.** That commit describes the real fix (reading/writing `/RV`)
+> as "blocked on §12.7.3.4 — still a named GAP in the spec RAG, with
+> `pdfce-spec-librarian` sourcing it now" — true when the operator gave
+> the ruling on 2026-08-06, **false by the time `b8f96b1` was
+> committed** on 2026-08-07: `iso32000__s__12.7.3.4.md`'s own header
+> reads **"GAP CLOSED 2026-08-06."** The file this librarian read
+> directly answers every correctness question a rich-text fill
+> implementation needs (13 carrier rules `RT-M1`–`RT-M13`, 9 negative
+> results `RT-N1`–`RT-N9` including the `/V`-vs-`/RV` precedence
+> question that makes naive overwriting corrupt rather than merely
+> lossy, 9 open ambiguities `RT-A1`–`RT-A9`, and its own §12 "Why it
+> matters for pdfce" section naming the three honest implementation
+> options in ascending cost: **(1) refuse + disclose** — pdfce's
+> current posture, and what `b8f96b1` itself shipped for the export
+> path; **(2) downgrade explicitly** — clear the `RichText` flag,
+> delete `/RV`, write `/V`, regenerate a plain appearance, disclosed as
+> destructive; **(3) true rich-text fill** — write both `/RV` and a
+> derived `/V`, keep `RichText` set, regenerate the appearance, which
+> the spec's own analysis flags as **reader-defined POLICY, not
+> conformance** (`RT-N2`) — pdfce's rendering choices there are not a
+> spec claim and must be disclosed as pdfce's own, per project rule 4.
+>
+> **What is NOT yet decided, and is the real remaining question this
+> entry's title should have asked all along:** not "should core refuse
+> too" (the operator's ruling already answers that — no, refusal is not
+> the destination) but **which of options (2) and (3) pdfce builds, in
+> which order, and whether `pdfce-cli fill-field` needs an explicit
+> opt-in flag for whichever remains lossy in the interim.** The
+> implementation trap already on record below (bit-26 `RichText`/
+> `RadiosInUnison` collision — gate on field type first) still applies
+> unchanged to either option. **Still not scoped to a Pass.** Whichever
+> engineer next picks up the forms subsystem should treat this
+> amendment, not the original 2026-08-05 framing above it, as the
+> live statement of the question.
+
 ### ★ Operator request 2026-08-05 — GUI usability: docked tool options, implicit gesture-commit, and the ce-dimension property surface (Pass families 34 and 35, decision 031, question (aw))
 
 **Verbatim, 2026-08-05** (operator, relayed through `pdfce-engineer`):
@@ -42801,6 +42975,42 @@ and
   `two_gui_harnesses_with_different_default_window_sizes_make_coordinates_non_transferable.md`
   (2026-08-09 recurrence), both `D:\dev\rag\egui\`. **Ceiling moves
   `R176` → `R177`; next free `R178`.**
+
+- **R178 — A caveat is only a disclosure if it sits on the path the
+  caller actually takes; the same words in a module doc or `--help`
+  string stop being a disclosure the moment a NEW caller reaches the
+  same code without passing through that doc (2026-08-10; librarian-
+  minted from `b8f96b1` + a relayed second instance, `4f0e443`).**
+  `b8f96b1` (2026-08-07): pdfce's FDF/XFDF export carrying field values
+  only, and never rich-text formatting (`/RV`/`<value-richtext>`), was
+  an honest, documented, CLI-only limitation — the caveat lived in
+  `fdf.rs`'s module doc and in `--help`, both on the one path a
+  scripter actually reads. A GUI "Export data…" button, shipped the
+  day before, reached the identical code with **no route to that
+  documentation at all** — the caveat was still true and still
+  written down, and had stopped being a disclosure regardless, because
+  disclosure is a property of the reader's path, not of the string's
+  existence. Second instance, same shape, different mechanism, relayed
+  by the dispatching engineer and **not independently read by this
+  librarian** (no shell): `4f0e443` (2026-08-09, `list-fields`
+  whitespace-mangling fix) reportedly carried a doc comment justifying
+  its text-mangling helper by citing §7.3.5 (name objects) for a value
+  that is in fact a §7.9.2 text string — a caveat that was wrong from
+  the day it was written, which no caller could ever have used to
+  self-correct, the same failure by the opposite route (the words were
+  never true, rather than stopping being reachable). **Practical form:**
+  when a Pass adds a NEW caller to existing code (a GUI control in
+  front of a CLI-only path, a second subsystem reusing a helper), audit
+  whether every caveat that code's own doc comments/`--help`/module
+  doc carry is still reachable from the new caller — and separately,
+  when writing a spec citation into a doc comment, verify the clause
+  number against the spec RAG rather than against memory, because a
+  wrong citation is invisible to every reader who trusts it. **Distinct
+  from R151** (asks whether a capability has a caller at all) **and
+  from R174** (asks whether a disclosure string is informative to its
+  reader) — R178 asks whether a true, informative disclosure string is
+  still standing on ground a real caller crosses. **Ceiling moves
+  `R177` → `R178`; next free `R179`.**
 
 ## Update protocol
 
