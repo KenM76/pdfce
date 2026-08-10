@@ -137,7 +137,29 @@ impl FieldFlags {
     pub const PASSWORD: u32 = 1 << 13;
     /// Bit 21 (value 1048576) — `FileSelect`: the text is a file pathname.
     pub const FILE_SELECT: u32 = 1 << 20;
-    /// Bit 23 (value 4194304) — `DoNotSpellCheck` (text **and** choice).
+    /// Bit 23 (value 4194304) — `DoNotSpellCheck`, on text **and** choice
+    /// fields, with the **same meaning but a different precondition** on
+    /// each. That asymmetry is the whole reason this note exists.
+    ///
+    /// Table 228 (`/Tx`) states it unconditionally. Table 230 (`/Ch`) gates
+    /// it on `Combo` **and** `Edit` — spell-checking is only a question for
+    /// a choice field the operator can type into, and a set bit on a
+    /// list-box or a non-editable combo is meaningless rather than
+    /// meaningful.
+    ///
+    /// So the bit position and the meaning are shared, and the
+    /// **validation rule is not**. A decoder that resolves only the type
+    /// gets the right answer for "what does this bit mean"; one that also
+    /// wants "is this bit legitimate here" must additionally check
+    /// `COMBO | EDIT` on `/Ch`. Unlike bit 26 — the one genuinely
+    /// overloaded position, which `Field::is_rich_text` exists to make
+    /// undecodable-wrong (`587e520`) — this cannot produce a wrong meaning,
+    /// only a missed validation, which is why it is documented here rather
+    /// than wrapped in an accessor.
+    ///
+    /// Nothing in pdfce consumes this flag yet. The note is placed at the
+    /// definition so the precondition is present at the moment something
+    /// first does, instead of being re-derived from the spec.
     pub const DO_NOT_SPELL_CHECK: u32 = 1 << 22;
     /// Bit 24 (value 8388608) — `DoNotScroll`: the field does not scroll.
     pub const DO_NOT_SCROLL: u32 = 1 << 23;
