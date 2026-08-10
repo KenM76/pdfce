@@ -115,6 +115,14 @@ pub(crate) struct PendingPrint {
     /// Rendering resolution ceiling, in DPI. A memory bound, editable
     /// because the disclosure is worth more as a control than a warning.
     max_dpi: u32,
+    /// Odd/even filtering.
+    pub(crate) subset: pdfce_print::PageSubset,
+    /// Print back to front.
+    pub(crate) reverse: bool,
+    /// Copy count.
+    pub(crate) copies: u16,
+    /// Copy ordering.
+    pub(crate) collate: pdfce_print::Collate,
     /// Which page the preview shows.
     preview_page: usize,
     /// The last spool attempt's outcome, once there is one.
@@ -154,6 +162,10 @@ impl PdfceApp {
             custom_percent: 100,
             annotations: true,
             max_dpi: 300,
+            subset: pdfce_print::PageSubset::All,
+            reverse: false,
+            copies: 1,
+            collate: pdfce_print::Collate::Collated,
             preview_page,
             outcome: None,
             plans: Vec::new(),
@@ -237,6 +249,10 @@ impl PdfceApp {
             pages: selected_pages.clone(),
             mode,
             max_dpi: pending.max_dpi,
+            subset: pending.subset,
+            reverse: pending.reverse,
+            copies: pending.copies,
+            collate: pending.collate,
         };
         let geometry = caps.as_ref().map(pdfce_print::DeviceGeometry::from);
         let plans = geometry
@@ -648,6 +664,7 @@ impl PdfceApp {
                 page_pt: size,
             });
         }
-        pdfce_print::spool(&printer, &bitmaps, pdfce_print::DryRun::No).map_err(|e| e.to_string())
+        pdfce_print::spool(&printer, &bitmaps, pdfce_print::DryRun::No, None)
+            .map_err(|e| e.to_string())
     }
 }

@@ -564,7 +564,8 @@ pub fn place_page(page: (f64, f64), printable: (f64, f64), mode: ScaleMode) -> P
 )]
 mod tests {
     use super::{
-        DeviceGeometry, JobSpec, Placement, ScaleMode, job_resolution, place_page, plan_job,
+        Collate, DeviceGeometry, JobSpec, PageSubset, Placement, ScaleMode, job_resolution,
+        place_page, plan_job,
     };
 
     /// A4 in points.
@@ -674,6 +675,10 @@ mod tests {
             pages,
             mode,
             max_dpi,
+            subset: PageSubset::All,
+            reverse: false,
+            copies: 1,
+            collate: Collate::Collated,
         }
     }
 
@@ -779,6 +784,110 @@ mod tests {
             "a portrait and a landscape page cannot share a fit scale"
         );
     }
+
+    // ---- page sequencing: subset, reverse, copies, collate ----
+
+    fn seq(
+        pages: Vec<usize>,
+        subset: PageSubset,
+        reverse: bool,
+        copies: u16,
+        collate: Collate,
+    ) -> Vec<usize> {
+        JobSpec {
+            pages,
+            mode: ScaleMode::Fit,
+            max_dpi: 300,
+            subset,
+            reverse,
+            copies,
+            collate,
+        }
+        .sequence()
+    }
+
+    /// ★ **Odd/even is by DOCUMENT page number, not position in the
+    /// range.**
+    ///
+    /// "Pages 2-9, odd" means the pages numbered 3, 5, 7, 9 — what is
+    /// printed on the paper — not the first, third and fifth entries of
+    /// the range, which would be 2, 4, 6.
+    ///
+    /// Both readings produce a plausible page count, and one produces
+    /// entirely the wrong sheets. That is why this has a test rather
+    /// than a comment.
+    #[test]
+    fn odd_and_even_are_by_document_page_number() {
+        // Zero-based 1..=8 is document pages 2..=9.
+        let range: Vec<usize> = (1..=8).collect();
+        assert_eq!(
+            seq(range.clone(), PageSubset::Odd, false, 1, Collate::Collated),
+            vec![2, 4, 6, 8],
+            "document pages 3,5,7,9"
+        );
+        assert_eq!(
+            seq(range, PageSubset::Even, false, 1, Collate::Collated),
+            vec![1, 3, 5, 7],
+            "document pages 2,4,6,8"
+        );
+    }
+
+    /// ★ **Subset is applied BEFORE reverse.**
+    ///
+    /// "Even pages, reversed" is the even pages in reverse order.
+    /// Reversing first and then taking every other entry yields a
+    /// different SET — on an even-length range it yields the odd pages.
+    #[test]
+    fn the_subset_is_taken_before_the_reverse() {
+        let range: Vec<usize> = (0..4).collect(); // document pages 1..=4
+        assert_eq!(
+            seq(range, PageSubset::Even, true, 1, Collate::Collated),
+            vec![3, 1],
+            "document pages 4 then 2 — not pages 3 and 1"
+        );
+    }
+
+    /// Collated repeats the whole sequence; uncollated repeats each page.
+    #[test]
+    fn collation_decides_where_the_copies_go() {
+        let range = vec![0, 1, 2];
+        assert_eq!(
+            seq(range.clone(), PageSubset::All, false, 2, Collate::Collated),
+            vec![0, 1, 2, 0, 1, 2]
+        );
+        assert_eq!(
+            seq(range, PageSubset::All, false, 2, Collate::Uncollated),
+            vec![0, 0, 1, 1, 2, 2]
+        );
+    }
+
+    /// **Copies multiply the FINISHED sequence.**
+    ///
+    /// If copies were applied before the subset, the filter would run
+    /// over duplicated pages and collation would have nothing left to
+    /// mean. Pinned with all three options at once, because the order of
+    /// operations is the only place a defect can hide in code this
+    /// short.
+    #[test]
+    fn copies_apply_to_the_sequence_after_subset_and_reverse() {
+        let range: Vec<usize> = (0..4).collect();
+        assert_eq!(
+            seq(range, PageSubset::Odd, true, 2, Collate::Collated),
+            vec![2, 0, 2, 0],
+            "odd document pages 1,3 -> reversed 3,1 -> twice"
+        );
+    }
+
+    /// Zero copies prints once. A job of nothing is never what was
+    /// meant, and erroring would be a dialog fault for a value no UI
+    /// should have produced.
+    #[test]
+    fn zero_copies_is_treated_as_one() {
+        assert_eq!(
+            seq(vec![0, 1], PageSubset::All, false, 0, Collate::Collated),
+            vec![0, 1]
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -815,6 +924,107 @@ pub struct JobSpec {
     /// is choosing a number the operator did not, so both shells disclose
     /// it when it binds (rule 4).
     pub max_dpi: u32,
+    /// Odd/even filtering, applied over [`Self::pages`].
+    pub subset: PageSubset,
+    /// Print the sequence back to front.
+    pub reverse: bool,
+    /// How many copies. Zero is treated as one — a job of nothing is
+    /// never what an operator meant, and refusing it would be a dialog
+    /// error for a value no UI should have allowed.
+    pub copies: u16,
+    /// Copy ordering.
+    pub collate: Collate,
+}
+
+/// Which of the selected pages actually print (Acrobat's odd/even
+/// subset filter).
+///
+/// Applied AFTER the range, and composing with it rather than replacing
+/// it — "pages 1-10, even only" is a thing an operator asks for, and a
+/// design where the subset replaced the range would make that
+/// unexpressible.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PageSubset {
+    /// Every page in the range.
+    #[default]
+    All,
+    /// Odd pages by their 1-based DOCUMENT number, not their position in
+    /// the range.
+    ///
+    /// This distinction is the whole reason the field is documented: an
+    /// operator printing "2-9, odd" means document pages 3, 5, 7, 9 —
+    /// the numbers printed on the paper — not the first, third and fifth
+    /// entries of the range. Getting it wrong produces a plausible page
+    /// count and the wrong sheets, which is the hardest kind of wrong to
+    /// notice.
+    Odd,
+    /// Even pages, by document number, same reasoning.
+    Even,
+}
+
+/// How multiple copies are ordered.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Collate {
+    /// 1,2,3, 1,2,3 — whole documents, in order.
+    #[default]
+    Collated,
+    /// 1,1, 2,2, 3,3 — all copies of each page together.
+    ///
+    /// Faster on most hardware because the page is rasterised once per
+    /// position rather than once per copy, and the order a stapler
+    /// wants.
+    Uncollated,
+}
+
+impl JobSpec {
+    /// Expand `pages` into the actual print sequence: subset filtered,
+    /// reversed if asked, then multiplied by copies in the chosen order.
+    ///
+    /// # Order of operations, and why it is this one
+    ///
+    /// Subset, then reverse, then copies. Each step is defined on the
+    /// result of the previous, and the order is not arbitrary:
+    ///
+    /// - **Subset before reverse**, because "even pages, reversed" means
+    ///   the even pages in reverse order. Reversing first and then taking
+    ///   every other entry would yield a different set entirely — odd
+    ///   pages, on an even-length range.
+    /// - **Copies last**, because a copy is a copy of the finished
+    ///   sequence. Multiplying first would let the subset filter run over
+    ///   duplicated pages, and `Collate` would have nothing left to mean.
+    ///
+    /// Written down because all three steps are one-liners and the ORDER
+    /// is the only place a defect can hide.
+    #[must_use]
+    pub fn sequence(&self) -> Vec<usize> {
+        let mut seq: Vec<usize> = self
+            .pages
+            .iter()
+            .copied()
+            .filter(|&i| match self.subset {
+                PageSubset::All => true,
+                // `i` is zero-based; the operator's page number is `i+1`.
+                PageSubset::Odd => (i + 1) % 2 == 1,
+                PageSubset::Even => (i + 1) % 2 == 0,
+            })
+            .collect();
+        if self.reverse {
+            seq.reverse();
+        }
+        let copies = self.copies.max(1);
+        match self.collate {
+            Collate::Collated => seq
+                .iter()
+                .copied()
+                .cycle()
+                .take(seq.len() * copies as usize)
+                .collect(),
+            Collate::Uncollated => seq
+                .iter()
+                .flat_map(|&i| std::iter::repeat_n(i, copies as usize))
+                .collect(),
+        }
+    }
 }
 
 /// Where one page lands, and how big to render it.
@@ -929,9 +1139,9 @@ pub fn plan_job(
     spec: &JobSpec,
 ) -> Vec<PagePlan> {
     let resolution = job_resolution(device, spec);
-    spec.pages
-        .iter()
-        .filter_map(|&index| {
+    spec.sequence()
+        .into_iter()
+        .filter_map(|index| {
             let size = *page_sizes.get(index)?;
             let placement = place_page(size, device.printable_pt, spec.mode);
             Some(PagePlan {
@@ -1042,6 +1252,7 @@ pub fn spool(
     printer: &str,
     pages: &[PageBitmap],
     dry_run: DryRun,
+    output: Option<&std::path::Path>,
 ) -> Result<SpoolReport, PrintError> {
     use windows::Win32::Graphics::Gdi::{CreateDCW, DeleteDC};
     use windows::Win32::Storage::Xps::{AbortDoc, DOCINFOW, EndDoc, EndPage, StartDocW, StartPage};
@@ -1083,9 +1294,31 @@ pub fn spool(
         }
 
         let doc_name: Vec<u16> = "pdfce document\0".encode_utf16().collect();
+        // `lpszOutput` redirects the job to a FILE instead of the port.
+        //
+        // This is what makes a `PORTPROMPT:` driver — "Microsoft Print to
+        // PDF" and most PDF writers — usable without a Save dialog
+        // appearing. It is both a real capability ("print to file") and
+        // the only way this code path can be verified by anything other
+        // than a person watching a printer.
+        //
+        // The buffer is bound rather than built inline because the
+        // `PCWSTR` must outlive the `DOCINFOW`: a pointer into a dropped
+        // temporary is a dangling one, and nothing in the type system
+        // catches it here.
+        let out_wide: Option<Vec<u16>> = output.map(|p| {
+            p.as_os_str()
+                .to_string_lossy()
+                .encode_utf16()
+                .chain(std::iter::once(0))
+                .collect()
+        });
         let info = DOCINFOW {
             cbSize: i32::try_from(std::mem::size_of::<DOCINFOW>()).unwrap_or(0),
             lpszDocName: PCWSTR(doc_name.as_ptr()),
+            lpszOutput: out_wide
+                .as_ref()
+                .map_or_else(PCWSTR::null, |w| PCWSTR(w.as_ptr())),
             ..Default::default()
         };
         // SAFETY: `hdc` is valid (checked above) and `info` outlives the
@@ -1236,6 +1469,7 @@ pub fn spool(
     _printer: &str,
     _pages: &[PageBitmap],
     _dry_run: DryRun,
+    _output: Option<&std::path::Path>,
 ) -> Result<SpoolReport, PrintError> {
     Err(PrintError::Unsupported)
 }

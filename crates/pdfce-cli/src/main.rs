@@ -1055,6 +1055,28 @@ enum Command {
         /// choosing a number the operator did not.
         #[arg(long, default_value_t = 300, value_parser = clap::value_parser!(u32).range(36..=2400))]
         max_dpi: u32,
+        /// Write the job to a FILE instead of the printer's own port.
+        ///
+        /// What GDI's `lpszOutput` does. Most PDF writers sit on a
+        /// `PORTPROMPT:` port and pop a Save dialog; this bypasses it,
+        /// which makes them scriptable — and is a real capability rather
+        /// than only a testing device.
+        #[arg(long, value_name = "PATH")]
+        to_file: Option<PathBuf>,
+        /// How many copies.
+        #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u16).range(1..=999))]
+        copies: u16,
+        /// Print each page's copies together (1,1,2,2) rather than whole
+        /// documents in order (1,2,1,2).
+        #[arg(long)]
+        uncollated: bool,
+        /// Print only odd or only even DOCUMENT page numbers, within
+        /// whatever `--pages` selected.
+        #[arg(long, value_enum, default_value_t = SubsetArg::All)]
+        subset: SubsetArg,
+        /// Print the sequence back to front.
+        #[arg(long)]
+        reverse: bool,
     },
 
     PrintPreview {
@@ -3999,6 +4021,11 @@ fn run() -> ExitCode {
             pages,
             send,
             max_dpi,
+            to_file,
+            copies,
+            uncollated,
+            subset,
+            reverse,
         } => cmd_print(
             &input,
             printer.as_deref(),
@@ -4007,6 +4034,11 @@ fn run() -> ExitCode {
             &pages,
             send,
             max_dpi,
+            to_file,
+            copies,
+            uncollated,
+            subset,
+            reverse,
         ),
         Command::PrintPreview {
             input,
@@ -6391,6 +6423,28 @@ fn cmd_list_attachments(input: &Path) -> u8 {
 /// variant, and because the CLI's vocabulary is allowed to differ from
 /// the engine's — `shrink` reads better than `ShrinkOversized` in a
 /// shell.
+/// `--subset` on `print`.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
+enum SubsetArg {
+    /// Every selected page.
+    All,
+    /// Only odd DOCUMENT page numbers.
+    Odd,
+    /// Only even DOCUMENT page numbers.
+    Even,
+}
+
+impl SubsetArg {
+    /// The core type this maps to.
+    const fn to_subset(self) -> pdfce_print::PageSubset {
+        match self {
+            Self::All => pdfce_print::PageSubset::All,
+            Self::Odd => pdfce_print::PageSubset::Odd,
+            Self::Even => pdfce_print::PageSubset::Even,
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
 enum PrintScaleArg {
     /// Scale to fill the printable area, enlarging a small page.
@@ -6451,6 +6505,12 @@ impl PrintScaleArg {
 /// printing a drawing needs telling before the paper comes out, not
 /// after. The result line says `mode=raster` on every run for that
 /// reason.
+// Twelve arguments, five over clippy's bound. They are `clap`'s own
+// parsed flags handed straight through, and bundling them into a struct
+// would mean a second definition of the command's surface that has to be
+// kept in step with the derive — the same reasoning `interpret::run`
+// carries for its decomposed render inputs.
+#[allow(clippy::too_many_arguments)]
 fn cmd_print(
     input: &Path,
     printer: Option<&str>,
@@ -6459,6 +6519,11 @@ fn cmd_print(
     pages_spec: &str,
     send: bool,
     dpi_cap: u32,
+    to_file: Option<PathBuf>,
+    copies: u16,
+    uncollated: bool,
+    subset: SubsetArg,
+    reverse: bool,
 ) -> u8 {
     let doc = match pdfce_core::document::Document::load(input) {
         Ok(doc) => doc,
@@ -6530,6 +6595,14 @@ fn cmd_print(
         pages: selected.clone(),
         mode,
         max_dpi: dpi_cap,
+        subset: subset.to_subset(),
+        reverse,
+        copies,
+        collate: if uncollated {
+            pdfce_print::Collate::Uncollated
+        } else {
+            pdfce_print::Collate::Collated
+        },
     };
     let resolution = pdfce_print::job_resolution(&device, &spec);
     let plans = pdfce_print::plan_job(&device, &page_sizes, &spec);
@@ -6572,7 +6645,7 @@ fn cmd_print(
     } else {
         pdfce_print::DryRun::Yes
     };
-    let report = match pdfce_print::spool(&name, &bitmaps, dry) {
+    let report = match pdfce_print::spool(&name, &bitmaps, dry, to_file.as_deref()) {
         Ok(r) => r,
         Err(err) => {
             eprintln!("pdfce-cli: {err}");
