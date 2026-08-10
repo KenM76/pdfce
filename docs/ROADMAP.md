@@ -81,6 +81,148 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★ `Pass 52.1` extended — CLI multi-page DXF export (`--pages`, `--output-dir`), closing the batch-export gap the GUI already had; plus the paper-scale disclosure's THIRD gate clause — 2026-08-09, committed `c58cca1` (fifty-sixth filing)
+
+**Sourcing.** No shell this dispatch (hard rule 8). Unlike the two prior
+filings this session, this dispatch carries the evidence directly rather
+than asking this librarian to infer it without one: the coordinator
+message quotes `c58cca1`'s full commit message verbatim, states it is
+the tip of `pass-8-redaction` immediately after `0466281`, and states
+the engineer verified it against `git log` this session. Relayed one
+hop from a direct check — not re-derived from documents, which is the
+distinction hard rule 8 actually draws. The technical content below is
+drawn from the quoted commit message; no code was independently `Read`
+by this librarian this dispatch.
+
+**The gap this closes.** `0466281` (fifty-fifth filing, GUI half of
+`Pass 52.2`) gave the GUI multi-page DXF export via
+`doc.selected_pages`; `Pass 52.1`'s CLI (`3c4aca4`) stayed
+one-page-at-a-time (`--page N`). Two shells diverged on a capability
+inside the very session that shipped the family, and inside the session
+that wrote project rule 11 down. Closed:
+
+```
+pdfce-cli export-dxf sheet.pdf --pages all --output-dir out/
+```
+
+**Naming, and why it is padded to the RUN, not the document.**
+`<stem>_p<n>.dxf`, zero-padded to the widest page number IN THE RUN —
+the same naming the GUI already emits (`0466281`), deliberately: a
+batch script's output and an operator's own click have to be
+interchangeable or the pairing between the two shells is a lie. Padded
+because eleven pages is where unpadded naming breaks (a file manager or
+a CAM post-processor consuming the folder in name order sees `_p1,
+_p10, _p11, _p12, _p2, …`). From the RUN's own widest page, not the
+document's: exporting pages 8-10 of a 400-page file must not produce
+`_p008`.
+
+**One scale for the run — which turns disagreement into a refusal, not
+a per-file choice.** The scale is inferred from the UNION of the
+selected pages' ce dimension groups, deduplicated (a group spanning two
+selected pages must not vote twice — double-counting it would inflate
+`Calibrated`'s `agreeing` count and read as corroboration of itself).
+`--scale` is one value for the whole run, so pages calibrated to
+different scales are refused exactly as two disagreeing groups on one
+page already are (decision 035's fourth fork), with the same two
+remedies (fix the drawing's calibration, or supply `--scale`
+explicitly). A run that silently used a different scale per file would
+be this feature's own already-named failure mode (decision 035's fifth
+fork — a document-global inference consumed per-page is silently wrong
+in the over-confident direction) wearing its own uniform.
+
+**All-or-nothing.** Every page is decomposed before any file is
+written; a run that wrote four files and then failed on page five would
+leave a directory an operator has to reconcile by hand against a page
+list, and the usual cause (a malformed content stream) is a property of
+the document, so a retry gains nothing. Matches `parse_pages`'s existing
+posture of refusing an out-of-range page rather than dropping it.
+
+**★ A defect found by RUNNING the command, after every automated test
+was already green — this session's SECOND instance of that shape (see
+`R174`, minted below).** `--scale 1` on an uncalibrated page printed:
+*"exported at PAPER scale. Nothing on this page is calibrated, so pdfce
+does not know what scale the drawing is at … pass --scale 2 for 1:2,
+and so on"* — instructing the operator to do the thing they had just
+typed. The warning was gated on the page being uncalibrated and the
+scale equalling 1, but not on WHO CHOSE the 1. This is the same
+objection `d2d03a5`'s second clause already encoded (an explicit 1:1
+*calibration* is a real answer, not a fact to be re-told), arriving
+from the opposite direction: an explicit `--scale 1` is the operator
+answering, exactly as an explicit 1:1 calibration is. Third clause
+added to the gate; `an_explicit_scale_of_one_is_not_warned_about` pins
+it in the test suite.
+
+**Disclosures summed and emitted ONCE per run, not once per file.**
+Forty near-identical paragraphs is a disclosure that gets scrolled past
+— the same "learned past and ignored" failure the wording itself was
+chosen to avoid at `d2d03a5`, arriving here through volume rather than
+through phrasing. Each page's own per-page counts stay on that page's
+own machine-readable stdout line.
+
+**API shape.** `cmd_export_dxf` now takes an `ExportDxfArgs` struct —
+nine flags is past the point where a positional call site reads as
+documentation, and named fields make the two mutually-exclusive
+destination pairs (`--page`/`--pages`, `--output`/`--output-dir`)
+legible in a way two bare `Option`s in argument position would not.
+
+**Validation split between clap and the command, and why.** Clap
+expresses what it can (`--page` xor `--pages`, `--output` xor
+`--output-dir`, `--output-dir` requires `--pages`) and exits 2 on
+violation. What clap cannot express — "one of these two destinations,
+depending on which page-selection flag was used" — is checked inside
+the command, naming the flag the operator actually needs. Both exit
+codes are asserted in the new tests, because the split itself is what a
+calling script's error handling has to read correctly.
+
+**Tests.** 10 new integration tests, `crates/pdfce-cli/tests/export_dxf.rs`,
+black-box against the built binary. Deliberately NOT covering the
+Calibrated/Conflicting multi-page paths — those need a `/PieceInfo`
+sidecar hand-written bytes cannot express, and stay covered by
+`crates/pdfce-core/tests/dxf_scale.rs` plus the checked-in
+`fixtures/synthetic/dimension/` files. The gap is stated in the
+module's own header rather than left for a reader to assume was an
+oversight.
+
+**Verified live (relayed from the dispatch, not independently
+re-run).** Twelve pages → twelve files `_p01`..`_p12`, each parsed with
+`ezdxf`: 0 errors / 0 fixes, `AC1015`, one `LWPOLYLINE` apiece.
+
+**Numbers.** **2666 workspace tests, 0 failed** over the full suite
+(10 new, all in `export_dxf.rs`). `cargo clippy --workspace
+--all-targets`: 0. `cargo fmt --all --check`: clean. **All seven gates
+green** (relayed, not independently re-run).
+
+**Invariant checks**
+- **GUI-core separation**: not addressed by this commit's own
+  description — `pdfce-cli`-only change; no `pdfce-core`/
+  `pdfce-render` `Cargo.toml` touched per the commit's own account.
+- **Round-trip / minimal-diff**: not applicable — same standing
+  reasoning as the rest of `export/` (a write path OUT of pdfce's
+  model into a foreign format).
+- **Packaging smoke test**: not addressed — no packaging surface
+  changed.
+
+**Ledger for this filing.** No new Pass ID — this is `Pass 52.1`'s own
+CLI slice, extended, not a new capability; the `Pass 52.0`–`52.3`
+family stays COMPLETE across core/cli/gui, now with the CLI and GUI
+shells at capability PARITY for multi-page export specifically (they
+were not, between the fifty-fifth filing and this commit).
+`docs/FEATURES.md`: Export row's own text extended in place to state
+the CLI now matches the GUI's multi-page capability; no box changes
+(`cli` was already `[x]` for single-page export, and multi-page is the
+same capability, not a new row). Standing rules: **`R174` MINTED** (see
+below) — ceiling moves `R173` → `R174`, next free `R175`. Decision
+records: `035` gets a sixth fork (multi-page scale union/refusal
+design) plus a disclosure-gating principle, both filed to
+`ARCHITECTURE.md` §12 alongside this entry — no new number claimed.
+Operator-question ceiling unchanged at **(bh)**, next free **(bi)**.
+`docs/decisions/` untouched. Backup/git working-tree state not
+asserted beyond the sourcing note above (hard rule 8). This is the
+**fifty-sixth** `SESSION_LOG.md` filing (the fifty-fifth confirmed
+present by direct read before this entry was written).
+
+---
+
 ### ★ `Pass 52.2` (GUI half: File ▸ Export ▸ Export DXF…, and the `Pass 52.0`–`52.3` DXF-export family closes COMPLETE across core+CLI+GUI) — 2026-08-09, committed `0466281` (fifty-fifth filing)
 
 **Sourcing.** This librarian has no shell this dispatch (hard rule 8).
@@ -41309,6 +41451,33 @@ and
   `C:\personal_rag\claude_code\lesson_20260809_gate_coverage_window_shrinks_exactly_when_commit_velocity_rises.md`
   as a finding generalizing past pdfce to any self-checking gate over a
   growing history. **Ceiling moves `R172` → `R173`; next free `R174`.**
+
+- **R174 — A disclosure's wording is only tested by reading it AS its
+  audience, not by confirming the code path that emits it fires
+  (2026-08-09, `0466281`+`c58cca1`; librarian-minted).** Two instances,
+  same session, same shape, from two different shells. `0466281`'s
+  scale field printed a raw `f64` to seventeen significant figures — a
+  value nobody could read, compare, or retype, though the code that
+  computed and displayed it was correct. `c58cca1`'s paper-scale
+  warning told an operator who had just typed `--scale 1` that pdfce
+  "does not know what scale the drawing is at," though the gate
+  condition it fired on was also correct. In both, every automated test
+  was green, and R86's own bar ("observed working in the running
+  application") was satisfied in the narrow sense that the code path
+  DID fire — what neither check catches is whether the STRING an
+  audience receives says something that audience already knows or
+  cannot use. **Distinct from R86** (which asks "did this run") **and
+  from rule 4 / decision 024 §4.4** (which asks "is this disclosed at
+  all") — this rule asks "read as its recipient, does this sentence add
+  information." Practical form: before a disclosure ships, read it in
+  the voice of the specific operator action that would make it
+  redundant or unusable, not only in the voice of the code path that
+  emits it. See `ARCHITECTURE.md` §12's decision-035 sixth-fork entry
+  (same date) for the companion design-shape finding this rule's two
+  instances also produced (gate a disclosure on who SUPPLIED a value,
+  not merely on the value itself) — filed there rather than duplicated
+  here, because that half is a fix pattern, not a testing bar.
+  **Ceiling moves `R173` → `R174`; next free `R175`.**
 
 ## Update protocol
 

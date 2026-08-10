@@ -46,3 +46,14 @@ See also [[project_uncommitted_repo_worktree_risk]] for the sibling
 discipline (hard rule 8) this pattern sits next to — both are about
 this librarian's evidentiary boundary and what's on the correct side
 of it.
+
+**Second confirmation, 2026-08-09 (fifty-sixth filing), the very next
+dispatch.** The `c58cca1` filing's dispatch quoted the full commit
+message verbatim and stated the hash was checked against `git log`
+directly, unprompted — no re-request needed. Result: no open question
+had to be flagged this filing; every figure in the entry was sourced
+from the quoted commit text rather than inferred. Two for two now.
+Nothing to change here — this is a working pattern, not a hypothesis;
+keep noting IN THE FILING when it's used (as both the fifty-fifth and
+fifty-sixth entries do) so the pattern's track record stays visible in
+`SESSION_LOG.md` itself, not only in this memory file.

@@ -29194,3 +29194,105 @@ independently re-run.
   beyond the sourcing notes above (hard rule 8). This is the
   **fifty-fifth** `SESSION_LOG.md` filing (the fifty-fourth confirmed
   present by direct read before this entry was appended).
+
+## 2026-08-09 (fifty-sixth filing) — `c58cca1`: the CLI catches up to the GUI's multi-page DXF export, `R174` is MINTED from a defect that bit twice from two directions, and decision `035` gets a sixth fork
+
+**Filed by `pdfce-librarian`, dispatched with the commit's evidence
+carried IN the dispatch** — the coordinator message quoted `c58cca1`'s
+full commit message verbatim and stated the engineer verified the hash
+against `git log` directly this session. This is the fix this
+librarian's own persistent memory recommended after the fifty-fifth
+filing (`feedback_dispatch_should_carry_git_evidence_when_no_shell.md`)
+being exercised the very next dispatch. Full technical delivery record:
+`ROADMAP.md`'s new top-of-*Shipped* entry, this same date.
+
+**Shipped:**
+- `Pass 52.1` extended (`c58cca1`) — `pdfce-cli export-dxf --pages all
+  --output-dir out/`: multi-page batch export, matching the naming
+  convention `0466281`'s GUI half already shipped
+  (`{stem}_p{n}.dxf`, zero-padded to the widest page number IN THE
+  RUN); one scale for the whole run, inferred from the deduplicated
+  UNION of the selected pages' ce-dimension groups (a group spanning
+  two pages counts once, so it cannot inflate `Calibrated::agreeing`
+  with its own presence); refused, all-or-nothing, on disagreement,
+  same two remedies as the single-page conflict case; disclosures
+  summed once per run rather than repeated once per file. `cmd_export_dxf`
+  now takes a named `ExportDxfArgs` struct. Validation split between
+  clap (exit 2, what clap can express: the two xor pairs and the
+  `--output-dir` dependency) and the command itself (what clap cannot:
+  which destination flag the operator actually needed, given which
+  page-selection flag they used).
+
+**Decisions made this session:**
+- **The gap this closes was real, not hypothetical**: `0466281`
+  (fifty-fifth filing) gave the GUI multi-page export the same session
+  the CLI stayed one-page-at-a-time — the exact shell-capability drift
+  project rule 11 exists to prevent, produced by the session that wrote
+  the rule down. `c58cca1` closes it same-session.
+- **Decision `035` gains a sixth fork** (`ARCHITECTURE.md` §12, same
+  date): the run-level scale-union/refusal design, plus a
+  disclosure-gating principle judged to belong beside `035`'s other
+  forks rather than in a cross-project RAG tier (see Findings, below,
+  for the reasoning on why it was NOT escalated). No new decision
+  number claimed.
+
+**Findings + decisions:**
+- **★ `R174` MINTED**: *a disclosure's wording is only tested by
+  reading it AS its audience, not by confirming the code path that
+  emits it fires.* Two instances, same session, same shape, from two
+  different shells — `0466281`'s raw seventeen-significant-figure `f64`
+  in the scale field (code correct, string useless) and `c58cca1`'s
+  paper-scale warning firing after an EXPLICIT `--scale 1` (gate
+  condition correct, message redundant). Both passed every automated
+  test and satisfied R86's "observed running" bar in the narrow sense
+  that the code path fired; neither check reads the string as its
+  recipient would. This project's two-occurrence promotion bar is met.
+  Distinguished explicitly from R86 ("did this run") and rule 4/
+  decision 024 §4.4 ("is this disclosed at all") in the rule's own
+  text, so a future session doesn't fold it into either by accident.
+- **Companion design-shape finding, filed to `ARCHITECTURE.md` §12
+  (decision 035, sixth fork) rather than duplicated into `R174` or
+  escalated to a cross-project RAG tier**: a disclosure that exists to
+  tell the operator "pdfce does not know X" must gate on whether the
+  OPERATOR SUPPLIED X, not merely on X's numeric value — "pdfce guessed
+  1" and "the operator told pdfce 1" are opposite epistemic states
+  wearing the same number. Judged pdfce-scale-disclosure-specific, not
+  a Rust/egui-ecosystem fact (`D:\dev\rag\rust\`) or a PDF-producer-
+  behaviour fact (`personal_rag\pdf\`) — the reasoning for that call is
+  written into the §12 entry itself so a future filing doesn't have to
+  re-derive it.
+- **The dispatch-carries-evidence fix, confirmed working a second
+  time.** This librarian's own agent-memory note, written after the
+  fifty-fifth filing, recommended exactly this pattern for future
+  dispatches; this dispatch applied it unprompted and the librarian's
+  own git-log-inference risk (hard rule 8) did not arise this filing —
+  no figure in this entry required inferring disk state from a
+  document.
+
+**Still in flight:**
+- Same open items as the fifty-fifth filing, unchanged by this one:
+  `docs/LEGAL.md` §1.1's three-way history decision (operator question
+  (bh)); whether a fuller `docs/decisions/035-*.md` KenAgent record adds
+  value; item (b) of `ae59ce3`'s deferred scope ("universal Enter/
+  Escape"), still genuinely unverified either way.
+
+**For next session:**
+- The DXF-export family is now at full core/cli/gui capability parity,
+  including multi-page batch mode on both shells — no further follow-up
+  owed from this thread unless the operator wants the fuller
+  decision-035 KenAgent record authored.
+
+- **Ledger for this filing.** No new Pass ID — `c58cca1` extends
+  `Pass 52.1`'s already-named CLI scope; the `Pass 52.0`–`52.3` family
+  stays COMPLETE, now at core/cli/gui capability PARITY for multi-page
+  export specifically. `docs/FEATURES.md`: Export row's own text
+  extended in place (CLI multi-page clause added); no box changes
+  (`cli` was already `[x]`). Standing rules: **`R174` MINTED** — ceiling
+  moves `R173` → `R174`, next free **R175**. Decision records: `035`
+  gets a sixth fork (this filing), no new number claimed; `033` on
+  disk, `034` CLAIMED-by-citation/UNAUTHORED (unchanged, unrelated).
+  Operator-question ceiling unchanged at **(bh)**, next free **(bi)**.
+  `docs/decisions/` untouched. Backup/git working-tree state not
+  asserted beyond the sourcing note above (hard rule 8). This is the
+  **fifty-sixth** `SESSION_LOG.md` filing (the fifty-fifth confirmed
+  present by direct read before this entry was appended).

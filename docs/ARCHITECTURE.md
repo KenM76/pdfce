@@ -13943,3 +13943,58 @@ started).
 
   **Decision-number status: no new number claimed.** Extension of
   `035`, same as the fourth fork.
+
+- **2026-08-09 (fifty-sixth filing) — `Pass 52.1`'s CLI slice extended
+  (`c58cca1`): a sixth fork extending decision `035`, plus a
+  disclosure-gating principle generalized from this fork and the
+  fourth/fifth.** Full technical delivery record: `ROADMAP.md`'s
+  matching Shipped entry (top of *Shipped*, this same date).
+
+  **Sixth fork — how to resolve ONE scale across MANY pages in a single
+  export run, when the fourth/fifth forks already resolved it for one
+  page.** `pdfce-cli export-dxf --pages` needs a single
+  `DxfOptions::scale` for a run that can span many pages, each
+  independently calibrated or not. **Decided: infer from the UNION of
+  the selected pages' ce-dimension groups, deduplicated by `GroupId`
+  before voting** — a group spanning two selected pages must count
+  once, or it inflates `Calibrated::agreeing` with its own presence and
+  reads as independent corroboration it never provided. `Conflicting`
+  still refuses the whole run rather than picking a scale per file: a
+  DXF file (and, transitively, an export folder an operator hands to
+  one CAM job) carries one scale — the same reasoning that produced the
+  fourth fork's `Conflicting` variant, now applied at run granularity
+  instead of page granularity. **All-or-nothing across the run**: every
+  page is decomposed before any file is written, because the usual
+  failure (a malformed content stream) is a property of the document a
+  retry cannot fix, and a partially-written output directory has to be
+  reconciled by hand against a page list. No new type required —
+  `suggest_scale_for_groups` (fifth fork) already accepts an arbitrary
+  `&[GroupId]`; the run-level caller just builds a deduplicated union
+  instead of one page's set.
+
+  **The disclosure-gating principle, stated once here because it has
+  now determined a warning's wording on three separate occasions across
+  two forks.** `d2d03a5`'s second clause (fourth fork) gated the
+  paper-scale warning on the page being uncalibrated, not on the scale
+  numerically equalling 1 — an explicit 1:1 calibration is a real
+  answer, not a fact to re-tell. `c58cca1`'s third clause does the same
+  thing from the opposite input: an explicit `--scale 1` is also the
+  operator answering, and warning them anyway repeats what they just
+  said. **General form: a disclosure that exists to tell the operator
+  "pdfce does not know X" must be gated on whether the OPERATOR SUPPLIED
+  X, not merely on X's numeric value** — a value-only gate cannot
+  distinguish "pdfce guessed 1" from "the operator told pdfce 1," and
+  those are opposite epistemic states wearing the same number. This is
+  the design-shape half of what `ROADMAP.md`'s new `R174` also records
+  (that rule states the testing-methodology half — read a disclosure as
+  its audience — this paragraph states the fix pattern the audience
+  test led to). **No separate `D:\dev\rag\rust\` or `personal_rag\pdf\`
+  entry judged warranted**: the shape is specific to gating a warning on
+  VALUE-PROVENANCE inside pdfce's own scale-disclosure design, not a
+  Rust/egui-ecosystem fact or a PDF-domain producer-behaviour fact a
+  future unrelated project would need — it belongs beside `035`'s other
+  forks, not in a cross-project tier.
+
+  **Decision-number status: no new number claimed.** Sixth fork and
+  disclosure-gating note both extend `035`, same posture as the fourth
+  and fifth forks.
