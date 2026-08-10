@@ -26,6 +26,5 @@ b8f96b1  # disclose: exporting form data silently dropped rich-text formatting
 587e520  # harden: /Ff bit 26 cannot be decoded wrong any more
 0febeb6  # fix: the group controls fitted a 520 px window, not a 370 px dock
 24b392c  # tools: gui-drive.ps1 drives through the diag script, not PostMessage
-ae59ce3  # Pass 24.0 (part): tool panels anchor to the viewport
 b0b387b  # Correct two false claims about panning
 9141ded  # Tool property bars: draggable, and the measure box closable
