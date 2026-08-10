@@ -187,3 +187,107 @@ fn the_downgrade_entry_point_is_harmless_on_a_plain_field() {
     assert_eq!(f.value.display_text(), "Ken");
     assert!(!f.is_rich_text());
 }
+
+// ---------------------------------------------------------------------------
+// FDF/XFDF IMPORT meets a rich-text field
+// ---------------------------------------------------------------------------
+//
+// `fill_text_field` refuses a rich-text field, and correctly: §12.7.3.4 makes
+// `/DS` + `/RV` the inputs to appearance generation, so writing `/V` and
+// leaving `/RV` stale makes every conforming reader regenerate from the OLD
+// text. The spec RAG's own summary is blunt about it — "not a cosmetic loss,
+// a wrong value on screen."
+//
+// `import_form_data` reaches that refusal through `?`. These tests pin what
+// that means for a data file, which nothing covered before.
+
+fn field_data(name: &str, value: &str) -> pdfce_core::fdf::FieldData {
+    pdfce_core::fdf::FieldData {
+        name: name.to_owned(),
+        values: vec![value.to_owned()],
+    }
+}
+
+/// **A rich-text field in a data file is SKIPPED, not fatal.**
+///
+/// It is the same shape as the signature arm directly above it in the import
+/// loop: an entry pdfce cannot apply, counted in `skipped` so the caller can
+/// see it did not land. Aborting instead would be a strictly worse answer to
+/// the same question — see the partial-application test below for why.
+#[test]
+fn importing_into_a_rich_text_field_is_skipped_rather_than_fatal() {
+    let mut s = session();
+    let data = pdfce_core::fdf::FormData {
+        fields: vec![field_data("Notes", "plain text from a data file")],
+    };
+
+    let outcome = s
+        .import_form_data(&data)
+        .expect("a rich-text entry must not fail the import");
+    assert_eq!(outcome.applied, 0, "nothing was applied");
+    assert_eq!(
+        outcome.skipped, 1,
+        "and the operator is told one entry did not land"
+    );
+
+    // The field is untouched: still rich, still carrying its original /RV.
+    let notes = notes_field(&s);
+    assert!(notes.is_rich_text(), "the field is still rich text");
+    let Some(Object::Dict(d)) = s.value(notes.id) else {
+        panic!("Notes is not a dict");
+    };
+    assert!(
+        d.get(b"RV").is_some(),
+        "and its /RV survives — a skipped import writes nothing at all"
+    );
+}
+
+/// **★ A rich-text entry must not abandon an import half-applied.**
+///
+/// This is why skipping beats aborting. The loop writes each entry to the
+/// overlay as it goes, so a `?` on entry two leaves entry one already
+/// written AND hands the caller an `Err` — a document that has been changed
+/// by a call that reported failure, with nothing saying how far it got.
+///
+/// The data file is ordered deliberately: a field that CAN be applied first,
+/// the rich-text one second.
+#[test]
+fn a_rich_text_entry_does_not_abandon_the_import_half_applied() {
+    let mut s = session();
+    let data = pdfce_core::fdf::FormData {
+        fields: vec![
+            field_data("Country", "CA"),
+            field_data("Notes", "plain text from a data file"),
+        ],
+    };
+
+    let outcome = s
+        .import_form_data(&data)
+        .expect("the applicable entry must still be applied");
+    assert_eq!(outcome.applied, 1, "Country landed");
+    assert_eq!(outcome.skipped, 1, "Notes did not, and is counted");
+
+    // And the one that landed really did.
+    let form = pdfce_core::forms::parse_acroform(&s.graph()).expect("AcroForm");
+    let country = form.field_by_name("Country").expect("Country exists");
+    assert_eq!(
+        country.value.display_text(),
+        "CA",
+        "the applicable entry was applied, not rolled back"
+    );
+}
+
+/// The refusal `import_form_data` routes around is still there for a DIRECT
+/// caller — skipping is the importer's policy, not a weakening of the core
+/// guard.
+#[test]
+fn fill_text_field_still_refuses_a_rich_text_field_directly() {
+    let mut s = session();
+    let err = s
+        .fill_text_field("Notes", "plain text")
+        .expect_err("the direct verb must still refuse");
+    assert!(
+        matches!(err, EditError::FieldIsRichText { .. }),
+        "and refuse by NAME, so a caller can route on it; got {err:?}"
+    );
+}

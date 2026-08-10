@@ -10763,6 +10763,34 @@ impl EditSession {
                     self.set_choice_value(&entry.name, &sel)?;
                 }
                 Some(FieldType::Text) => {
+                    // ★ A RICH-TEXT FIELD IS SKIPPED, NOT FATAL.
+                    //
+                    // `fill_text_field` refuses one, and correctly:
+                    // §12.7.3.4 makes `/DS` + `/RV` the inputs to appearance
+                    // generation, so writing `/V` and leaving `/RV` stale
+                    // makes every conforming reader regenerate from the OLD
+                    // text — a wrong value on screen, not a lost style.
+                    //
+                    // Reaching that refusal through `?` was the wrong answer
+                    // HERE, and in a way nothing tested: this loop writes
+                    // each entry to the overlay as it goes, so aborting on
+                    // entry two left entry one already written AND handed the
+                    // caller an `Err` — a document changed by a call that
+                    // reported failure, with nothing saying how far it got.
+                    //
+                    // Skipping is what the signature arm below already does
+                    // for the identical question ("pdfce cannot apply this
+                    // entry"), and `skipped` exists to say so. A data file
+                    // naming one rich-text field no longer costs the operator
+                    // every other field in it.
+                    //
+                    // The direct verb is UNCHANGED and still refuses by name.
+                    // This is the importer choosing how to handle a refusal,
+                    // not a weakening of the guard.
+                    if field.is_rich_text() {
+                        skipped += 1;
+                        continue;
+                    }
                     let text = entry.values.first().map_or("", String::as_str);
                     self.fill_text_field(&entry.name, text)?;
                 }
