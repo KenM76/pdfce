@@ -749,6 +749,38 @@ D:\Dev\pdfce\
                                    Option<LayerVisibility>` is the seam;
                                    `RenderPolicy` stays `Copy` because the set
                                    travels by reference, owned by the caller.
+                                   **`annot.rs` — `apply_view_usage`,
+                                   §8.11.4.4/.4.5 `/AS`+`/Usage` auto-state
+                                   (`Pass 56.0`, 2026-08-10, `6171313` —
+                                   completes §8.11, no remaining
+                                   unimplemented piece on the render side).**
+                                   `RenderOptions.view_magnification:
+                                   Option<f32>` defaults to `None` — the
+                                   §8.11.4.5 `shall not` ("printing and
+                                   aggregating applications shall not apply
+                                   the changes based on usage application
+                                   dictionaries") is enforced by that
+                                   default, not by caller discipline: a
+                                   caller that has not decided whether it is
+                                   a viewer gets the print-correct answer,
+                                   and applying usage requires an explicit
+                                   `Some(scale)`. GUI passes the operator's
+                                   ZOOM (`render_worker.rs`), never the
+                                   raster scale — those differ by
+                                   `pixels_per_point`, and the raster scale
+                                   would make layer visibility depend on the
+                                   monitor. `render-page --scale` supplies
+                                   it by default; `--print-state` opts out.
+                                   Aggregation across `/AS` array entries is
+                                   a GLOBAL CONJUNCTION (OFF dominates,
+                                   order-independent) — the opposite algebra
+                                   to the `/D` `/ON`/`/OFF` arrays in the
+                                   same clause, where order is load-bearing
+                                   (decision 038). See §12's two entries
+                                   dated 2026-08-10 (eighty-second filing)
+                                   for the `Option`-default enforcement
+                                   rationale and the absent-usage-category
+                                   (`DA-A13`) interpretation in full.
     pdfce-gui\                  <- The native desktop shell. egui/eframe application,
                                    window chrome, file dialogs (rfd crate), menus,
                                    docking layout (egui_dock or hand-rolled), the
@@ -15543,3 +15575,108 @@ entry** — §3's OCG-resolution notes already describe `annot.rs` as the
 one shared resolver both the panel and the renderer consult; `/VE`
 extends that resolver's behaviour without moving the resolver itself,
 so no body-section text was rendered inaccurate by this change.
+
+### 2026-08-10 (eighty-second filing, `6171313`) — the §8.11.4.5 viewer/printer `shall not` is enforced by an `Option`'s default, not by caller discipline
+
+**Filed by `pdfce-librarian`, no shell tool this dispatch — relaying a
+staged evidence file (hash/date/subject/`--stat`/full commit message for
+`6171313`, functionally equivalent to `git show` but not independently
+confirmed against the commit graph).** **Independently verified by
+direct read of current source:** `crates/pdfce-gui/src/render_worker.rs
+:216`–`:224`,`:437` (`view_magnification: f32`, the operator's zoom,
+threaded into `Some(request.view_magnification)`); `crates/pdfce-cli/
+src/main.rs:1193`–`:1202`,`:5153`–`:5163` (`--print-state`, and the gate
+`if !print_state { render_options.view_magnification = Some(scale); }`).
+Full build record: `ROADMAP.md`'s `6171313` Shipped entry (eighty-second
+filing, filed against the existing `Pass 56.0`).
+
+**Plain entry, no decision number — recording an invariant, not a
+crate-boundary or library choice.** §8.11.4.5 states, of the `/D`-initial
+state: *"This state shall be the state used by printing and aggregating
+application. Such applications shall not apply the changes based on
+usage application dictionaries described below."* Only afterward does it
+say *"The remaining discussion in this sub-clause applies only to viewer
+applications."*
+
+`pdfce_core::annot::apply_view_usage` (the function that applies `/AS`
+usage on top of the `/D`-initial state) takes a `magnification: f32`
+argument directly, with no default of its own — the enforcement instead
+lives one layer up, in `RenderOptions.view_magnification: Option<f32>`,
+which **defaults to `None`**. A caller builds a `RenderOptions` without
+deciding anything about viewer-vs-printer status and gets the
+print-correct behaviour (usage not applied) for free; reaching the
+viewer behaviour requires an explicit `Some(scale)`. This is the same
+shape as `RenderOptions.cancel: Option<RenderCancel>` defaulting to
+`None` (Pass 44.0, §12's 2026-08-07 entry) — a capability that is
+opt-IN by construction, so every existing and future caller that does
+not know about it gets the conservative answer rather than silently
+acquiring a new failure mode.
+
+**Why this is recorded here rather than left as an implementation
+detail.** The alternative — defaulting `view_magnification` to `Some`
+of some ambient scale, or making it a plain `f32` with an
+implementation-chosen default like `1.0` — would put a §8.11.4.5 `shall
+not` violation one forgotten argument away from every future print or
+export code path, and the violation would be silent: a page would simply
+render with the wrong layers on for a printed or aggregated document,
+with nothing failing loudly. Recording the default's role explicitly
+means a future reader touching `RenderOptions` sees that the `None`
+default is the compliance mechanism, not an oversight to "fix" by
+supplying a magnification unconditionally.
+
+**No `docs/ARCHITECTURE.md` body-section change beyond what accompanies
+this filing** — see the new §3 paragraph under `pdfce-render\annot.rs`,
+added in this same filing.
+
+### 2026-08-10 (eighty-second filing, `6171313`) — the §8.11.4.4 absent-usage-category rule is a DEFENDED DEFAULT (setting candidate `DA-A13`, deliberately not made a setting)
+
+**Filed by `pdfce-librarian`, same sourcing note as the entry
+immediately above.** **Independently verified by direct read:**
+`crates/pdfce-core/src/annot.rs:1121`–`:1181` (`Recommendation` type
+alias and `usage_recommendation`), whose own doc comments state the
+three-way textual contradiction and the resolution below nearly
+verbatim.
+
+**Plain entry, no decision number — an interpretation ruling on a
+self-contradicting clause, same shape as `/VE`'s NOTE-2 fallback
+(entry immediately above) and decisions 037/038's "spec ambiguity
+becomes a setting, deliberately" posture (R15).** §8.11.4.4's
+aggregation sentence, read alone — *"If all the entries yield a
+recommended state of ON, the group's state shall be set to ON;
+otherwise, its state shall be set to OFF"* — makes a MISSING
+sub-dictionary vote OFF (no entry means the "all ON" conjunction fails).
+The same clause's `Print` bullet contradicts that directly: *"If
+PrintState is not present, the state of the optional content group shall
+be left unchanged."* So does its own worked EXAMPLE: a group with no
+`/Zoom` sub-dictionary "shall not be affected by zoom level changes" —
+again, absence means "leave alone," not "OFF." `Language` goes the
+OPPOSITE way a third time, explicitly assigning OFF to a non-matching
+group. Three loci, three different answers for the identical question
+("what does an absent usage category contribute?").
+
+**Ruling, and why it is not merely a coin flip between three textual
+readings.** Implemented: an absent category yields NO recommendation
+and is excluded from the conjunction entirely — if nothing yields one,
+the `/D`-initial state is left standing. The deciding evidence is not
+any one of the three loci above; it is the clause's own STATED RATIONALE
+for permitting more than one usage-application dictionary of the same
+`Event` type in the first place: *"to allow documents with incompatible
+usage application dictionaries to be combined into larger documents and
+have their behaviour preserved."* Under an absent-means-OFF reading,
+merging two documents blacks out every layer that lacks a category
+present in the OTHER document's applications — precisely the outcome
+that sentence exists to prevent. A reading that defeats the clause's own
+declared purpose is the wrong reading, independent of which of the three
+textual loci is treated as controlling.
+
+**Status: registered as setting candidate `DA-A13` (absent usage
+category ⇒ abstain | force OFF) and deliberately NOT exposed as a
+setting.** Unlike genuinely irreconcilable ambiguities (decisions
+037/038), the alternative reading here contradicts the standard's own
+stated assembly rationale, which makes this a DEFENDED DEFAULT rather
+than a fork the operator should be asked to pick. No knob is offered.
+
+**No `docs/ARCHITECTURE.md` body-section change beyond what accompanies
+this filing** — see the new §3 paragraph under `pdfce-render\annot.rs`,
+added in this same filing (immediately above the entry preceding this
+one).

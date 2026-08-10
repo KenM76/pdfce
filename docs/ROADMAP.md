@@ -81,6 +81,223 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★ `6171313` COMPLETES `Pass 56.0`: §8.11.4.4/.4.5 `/AS`+`/Usage` auto-state ships — §8.11 has no remaining unimplemented piece on the render side; a rendered-but-unlisted OCG group fixed in the Layers panel; two corrections to the eighty-first filing's own `/VE` work; the `§8.11.2.4`/`§8.11.2.2` citation discrepancy ADJUDICATED — 2026-08-10 (eighty-second filing)
+
+**Sourcing.** No shell tool this dispatch. The engineer staged a file
+containing the hash, author date, subject, `--stat` file list and the
+complete commit message for `6171313bdb6573197df0754c1ecc8f5862600f8e` —
+the same material a `git show` would give, not independently
+re-confirmed against `git log`/`git show` (no shell). **Where a claim
+could be checked a different way — by reading the LIVE SOURCE this
+commit is described as having produced — it was, and is marked so
+below.** Job 2 (the clause-number discrepancy) was adjudicated by
+`pdfce-spec-librarian` against the primary standard text, relayed here
+by the dispatching engineer, not independently re-run by this librarian.
+
+**Confirmed live in source:**
+- `crates/pdfce-core/src/annot.rs:1121`–`:1181` (`Recommendation`,
+  `usage_recommendation`) — confirmed `Zoom` evaluates
+  `min <= magnification < max` (half-open, no epsilon), defaults
+  `min=0.0`/`max=f32::INFINITY`; `View`/`Print`/`Export` resolve via
+  `state_name`, returning `None` on an absent or unrecognised value;
+  `Language`/`User`/`CreatorInfo`/`PageElement` fall to the wildcard
+  `None` arm. The doc comment cites §12.3.2.2 and Annex C.2 for the
+  1.0=100% scale-factor reading, stating explicitly that §8.11.4.4 never
+  defines the unit itself.
+- `:1268` onward, `apply_view_usage` — confirmed `#[must_use]`; confirmed
+  `verdicts: BTreeMap<ObjId, bool>` accumulates across every `View`-event
+  application before any write-back, matching the doc comment's stated
+  order-independent global-conjunction algebra; confirmed `/Category` is
+  read explicitly from the application dict rather than inferred from
+  `/Event` (the doc comment names this NOTE 3's trap: `Event` and
+  `Category` share the names `View`/`Print`/`Export` and are
+  independent).
+- `crates/pdfce-gui/src/render_worker.rs:216`–`:224`,`:437` — confirmed
+  `view_magnification: f32` (the doc comment states it is the
+  OPERATOR'S ZOOM, not the raster scale) threaded into
+  `RenderOptions.view_magnification = Some(request.view_magnification)`.
+- `crates/pdfce-cli/src/main.rs:1193`–`:1202`,`:5153`–`:5163` —
+  confirmed `--print-state` is documented against ISO 32000-1 §8.11.4.5
+  by clause number, and confirmed the enforcement point:
+  `if !print_state { render_options.view_magnification = Some(scale); }`
+  — the flag's ABSENCE is what makes usage application fire, matching
+  "viewer is the default, print is the opt-out" rather than the reverse.
+
+**Not independently verified:** the exact `layers.rs` diff (90 lines per
+the staged `--stat`) and the stated test/clippy/fmt figures (2912 tests,
+clippy 0 `--all-features`, fmt clean) — relayed from the staged file,
+not re-run.
+
+**Shipped:**
+- `6171313` — **filed against the existing `Pass 56.0` (R170: same-day
+  extension of the shared §8.11 resolver stays on the capability's own
+  ID), no new mint** — the fourth commit this convention has covered for
+  this Pass, after `5c4ff08`/`57f0c8f`/`e5c6870`. Ships §8.11.4.4/.4.5's
+  `/AS`+`/Usage` auto-state, the piece the seventy-ninth and eighty-first
+  filings both named as §8.11's sole remainder. **§8.11 now has no
+  remaining unimplemented piece on the render side** — see *Still owed*,
+  below, for what this does NOT close (decisions 037/038, unaffected;
+  those are open interpretation questions about already-implemented
+  behaviour, not unbuilt pieces).
+  - **The absent-usage-category rule, where the standard contradicts
+    itself:** §8.11.4.4's aggregation sentence read alone makes a missing
+    sub-dictionary vote OFF; its own `Print` bullet ("state shall be left
+    unchanged" when `PrintState` is absent) and its own worked EXAMPLE (a
+    group with no `/Zoom` "shall not be affected by zoom level changes")
+    both say otherwise; `Language` goes the other way again and assigns
+    OFF explicitly. Implemented: an absent category yields no
+    recommendation and is excluded from the conjunction, rather than
+    contributing a false. The deciding evidence is not textual — it is
+    the clause's own stated rationale for permitting multiple
+    same-`Event` applications, "to allow documents with incompatible
+    usage application dictionaries to be combined into larger documents
+    and have their behaviour preserved," which absent-means-OFF would
+    defeat (merging two files would black out every layer lacking a
+    merged category). Registered as setting candidate `DA-A13` and
+    deliberately **not** made a setting — a defended default, since the
+    alternative contradicts the standard's own purpose. New plain
+    `ARCHITECTURE.md` §12 entry, below.
+  - **The print/view `shall not` (§8.11.4.5: printing/aggregating
+    applications "shall not apply the changes based on usage application
+    dictionaries") is enforced structurally, not by caller discipline:**
+    `RenderOptions.view_magnification: Option<f32>` defaults to `None`,
+    so a caller that has not decided whether it is a viewer gets the
+    print-correct answer, and applying usage requires an explicit
+    `Some(scale)`. New plain `ARCHITECTURE.md` §12 entry, below — this
+    dispatch specifically asked for one, since the default constrains
+    every future caller of `RenderOptions`.
+  - GUI passes the operator's ZOOM, never the raster scale — those differ
+    by `pixels_per_point`, and the raster scale would make a layer's
+    visibility depend on the monitor (shown at 1×, hidden at 2×, same
+    nominal zoom). CLI's `render-page --scale` supplies the magnification
+    by default; `--print-state` opts out.
+  - **★ A defect fixed, not new scope:** `layers.rs` walked an OCMD's
+    `/OCGs` and not its `/VE`, so a group named only inside a visibility
+    expression was evaluated correctly by the renderer — its content
+    genuinely appearing and disappearing — while the Layers panel had no
+    row for it; the operator watches the page change with nothing to
+    attribute it to. Found by the spec sweep after `/VE` evaluation
+    shipped (eighty-first filing), not by the evaluation work itself,
+    which had no reason to look at the panel's enumerator. Fixed by
+    extending the panel's discovery walk to include `/VE`-named groups,
+    deliberately MORE permissive than the evaluator: an expression too
+    malformed to evaluate still names real groups, and those groups still
+    belong in the panel.
+  - **Two corrections to the eighty-first filing's own `/VE` work
+    (`e5c6870`):** an OCMD is not a legal `/VE` operand per §8.11.2.2's
+    own grammar ("Subsequent elements shall be either optional content
+    groups or other visibility expressions") — `eval_ve_operand` was
+    accepting any reference as a group, so a nested OCMD would have had
+    its own state tested as though it were a plain group: a confident
+    wrong answer where an abstention was owed. And the depth cap/cycle
+    guard's doc comments cited §8.11.2.2 for a limit the standard does
+    not actually set (it names no depth limit and no cycle rule) —
+    corrected to state plainly that both are pdfce policy, not
+    requirements, so a citation does not dress a choice as a mandate and
+    stop a future reader from revisiting it.
+
+**Decisions made this session:**
+- **Plain `ARCHITECTURE.md` §12 entry — the §8.11.4.5 print/view `shall
+  not` is enforced by `RenderOptions.view_magnification`'s `Option`
+  default, not by caller discipline.** Recorded because it constrains
+  every future caller: defaulting the other way would put a `shall not`
+  violation one forgotten argument away, and the default's ABSENCE being
+  the compliance mechanism (not an oversight) needs to be legible to
+  whoever next touches this field.
+- **Plain `ARCHITECTURE.md` §12 entry — the absent-usage-category
+  interpretation (`DA-A13`) recorded as a defended default**, because the
+  standard's own three loci disagree and a future reader re-deriving the
+  answer from §8.11.4.4's aggregation sentence alone would plausibly land
+  on "absent means OFF," which the clause's own assembly rationale rules
+  out.
+- **No new standing rule.** R170 cited for the fourth time against the
+  same Pass; no new shape to name.
+
+**Findings + decisions:**
+- **★ Job 2 — the `§8.11.2.4` vs `§8.11.2.2` citation discrepancy this
+  librarian flagged but declined to adjudicate (eighty-first filing,
+  above) is now RESOLVED by `pdfce-spec-librarian`: `§8.11.2.2` is
+  correct, `§8.11.2.4` does not exist anywhere in ISO 32000-1** — zero
+  occurrences, no heading, no cross-reference, no table-of-contents
+  line; §8.11.2 has exactly three sub-clauses (`.1 General`, `.2
+  Optional Content Membership Dictionaries`, `.3 Intent`), which also
+  rules out a 1.7→2.0 renumber as an innocent explanation. **Correction
+  footer added directly below the eighty-first filing's own flag
+  (below), not a silent edit**, per this file's append-only convention.
+- **A methodology finding travels alongside the correction, about HOW
+  the earlier check was done, not about the clause itself:** the
+  dispatching engineer's own first check of this discrepancy reached the
+  right answer (`§8.11.2.2`) by reading the spec RAG's *section heading*
+  and treating it as spec text — but a RAG's own heading is
+  corpus-reconstructed navigational prose, not transcribed from the
+  standard, so its agreement with the code's citation proves nothing
+  about which clause number is real. The valid evidence, supplied by the
+  correctly-scoped spec agent, is the *absence* of `§8.11.2.4` anywhere
+  in the primary text — a full-text search, not a heading match.
+  Escalated to `C:\personal_rag\claude_code\` as a new lesson (below):
+  a general Claude-Code verification-methodology finding, not
+  PDF-domain, per this librarian's own routing rule ("what a real file
+  does" is `personal_rag/pdf`'s territory; "how an agent verified a
+  citation" is not).
+
+**Still owed, carried forward, unaffected by this filing:** printer job
+SPOOLING (operator go-ahead); attachment EXTRACTION-to-file (R151);
+decisions `037`/`038` still CLAIMED, NOT YET AUTHORED — unaffected,
+these are open interpretation questions about already-shipped behaviour,
+not pieces this commit had any reason to touch; which theme preset
+becomes the shipped default (open operator question). **§8.11 itself has
+no remaining unimplemented piece as of this filing.**
+
+**★ CORRECTION (2026-08-10, eighty-second filing) — the `§8.11.2.4` vs
+`§8.11.2.2` discrepancy the eighty-first filing flagged and declined to
+adjudicate (below) is now RULED: `§8.11.2.2` is correct. `§8.11.2.4`
+does not exist in ISO 32000-1.** Confirmed by `pdfce-spec-librarian` via
+a full-text absence search of the primary standard (zero occurrences
+anywhere — no heading, no cross-reference, no table-of-contents line),
+**not** by matching a RAG-generated section heading (see *Findings +
+decisions*, above, for why a heading match would not have been valid
+evidence even in a case where it happened to agree). The eighty-first
+filing's own flag is left standing per this file's append-only
+convention; this footer supersedes only its "not positioned to resolve"
+clause, not the discrepancy's existence.
+
+**Ledger for this filing.** **No new Pass ID** — `6171313` filed against
+the existing `Pass 56.0` (R170), the fourth commit under that
+convention; Pass-family ceiling unchanged at **58.1**, next free **59**.
+`docs/FEATURES.md`: row 187 (content-stream optional content) corrected
+— checkbox row `[x]`/`—`/`[x]`/`◐` → `[x]`/`[x]`/`[x]`/`[x]`; `cli`
+ticked on the strength of the newly-confirmed `--print-state` flag (a
+genuine per-invocation CLI control over exactly this piece, distinct
+from the automatic-pipeline reasoning that still applies to the row's
+other pieces); `Acrobat` ticked because the piece that kept the row at
+`◐` (rendering-honoring completeness) has shipped. No row moves between
+*Implemented*/*Planned* — row 187 had no *Planned* counterpart to
+remove. `docs/ARCHITECTURE.md`: **two new plain dated §12 entries** (the
+`Option`-default print/view enforcement; the `DA-A13` absent-category
+defended default) — decision-record ceiling unchanged, `037`/`038`
+still CLAIMED-not-authored, next genuinely free **039**. Standing
+rules: no new mint — R170 cited; ceiling stays **R185**, next free
+**R186**. `C:\personal_rag\claude_code\`: **one new lesson**
+(`lesson_20260810_verify_a_citation_against_source_not_a_derived_artifact.md`),
+indexed in both `claude_code/index.md` and the master `index.md` this
+filing. `C:\personal_rag\pdf\`: no new lesson — nothing here is a
+real-world-producer-divergence finding; §8.11.4.4's internal
+self-contradiction is a spec-interpretation question, the shape
+`personal_rag/pdf`'s own scope note excludes (spec text vs. observed
+producer behaviour). Operator-question ceiling unchanged at **(bh)**,
+next free **(bi)**. Gate figures relayed per commit (2912 tests,
+clippy 0 `--all-features`, fmt clean) RELAYED, NOT independently re-run
+— no shell this dispatch. **Backup/git working-tree state not asserted
+anywhere in this filing** (hard rule 8) — the engineer should check
+`D:\Dev\pdfce-backups\` and `git log`/`git status` directly before any
+push; this librarian had no shell and worked entirely from the staged
+evidence file plus direct reads of current source. This is the
+**eighty-second** `SESSION_LOG.md`/`ROADMAP.md` joint filing (the
+eighty-first confirmed present by direct read before this entry was
+written).
+
+---
+
 ### ★★★ FIVE UNFILED COMMITS SURFACE — `check-commits-filed.py` RED: `d6bc6cd`/`b6a9ca0`/`8eabed6`/`e5c6870`/`24e07e3`, all committed 2026-08-10 11:16–14:58, none cited in `ROADMAP.md` or `SESSION_LOG.md` before this filing — filed against `Pass 10.0` (GUI slice, previously uncited), `Pass 56.0` (§8.11.2.2 `/VE` + the `/Intent` disclosure), a tooling-only entry (packaging), and decisions `037`/`038` (a falsifier fixture) — no new Pass ID minted — 2026-08-10 (eighty-first filing)
 
 **Sourcing.** No shell tool this dispatch. The engineer staged a file
@@ -906,6 +1123,18 @@ exclusive territory):**
   librarian is not positioned to resolve (spec clause sourcing is
   `pdfce-spec-librarian`'s exclusive territory, hard rule 6); flagged
   for that librarian to settle, not adjudicated here.
+
+  **★ CORRECTION (2026-08-10, eighty-second filing) — RESOLVED: §8.11.2.2
+  is correct. §8.11.2.4 does not exist anywhere in ISO 32000-1**, per
+  `pdfce-spec-librarian`'s full-text absence search of the primary
+  standard (zero occurrences — no heading, no cross-reference, no
+  table-of-contents line; §8.11.2 has exactly three sub-clauses, ruling
+  out a 1.7→2.0 renumber as an innocent explanation). Full record: the
+  top-of-*Shipped* `6171313` entry, eighty-second filing, which also
+  records a methodology finding about how the earlier check for this was
+  done (a RAG section-heading match, not valid source evidence, even
+  though it happened to agree) — escalated to
+  `C:\personal_rag\claude_code\lesson_20260810_verify_a_citation_against_source_not_a_derived_artifact.md`.
 
 **Ledger for this filing.** **One new Pass ID minted: `Pass 57.0`**
 (operator-facing OCG layer toggle), grepped free before filing per R156.

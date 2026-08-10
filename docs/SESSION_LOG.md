@@ -32329,3 +32329,107 @@ in `ROADMAP.md`'s matching entry. The engineer should check
 push. This is the **eighty-first** `SESSION_LOG.md` filing (the
 eightieth confirmed present by direct read before this entry was
 appended).
+
+## 2026-08-10 (eighty-second filing) — `6171313` COMPLETES `Pass 56.0`: §8.11.4.4/.4.5 `/AS`+`/Usage` auto-state ships, closing §8.11's last unimplemented piece; a rendered-but-unlisted OCG group fixed; two corrections to the eighty-first filing's own `/VE` work; the `§8.11.2.4`/`§8.11.2.2` citation discrepancy ADJUDICATED
+
+**Shipped:**
+- `6171313` — filed against `Pass 56.0` (R170, fourth commit under that
+  convention). §8.11.4.4/.4.5 `/AS`+`/Usage` auto-state: `apply_view_usage`
+  applies `View`-event usage as a global conjunction over `Zoom` (half-open
+  `[min,max)`, defaults `min=0`/`max=∞`, no epsilon), `View`, `Print`,
+  `Export` categories, sourced against Table 102 (not in the spec corpus
+  until this session's ingestion — three details would have been silently
+  wrong from memory alone: the half-open zoom band, the infinite default
+  max, and the 1.0=100% scale-factor reading, which §8.11.4.4 itself never
+  states and is instead sourced from §12.3.2.2/Annex C.2). §8.11 now has
+  no remaining unimplemented piece on the render side.
+  - **The absent-usage-category rule:** the standard contradicts itself
+    across its aggregation sentence, its `Print` bullet, and its own
+    worked EXAMPLE. Implemented: absent abstains rather than voting OFF,
+    ruled by the clause's own stated rationale for permitting multiple
+    applications (so documents can be combined without losing behaviour) —
+    absent-means-OFF would defeat that purpose. Registered as setting
+    candidate `DA-A13`, deliberately NOT exposed as a setting — a defended
+    default. New plain `ARCHITECTURE.md` §12 entry.
+  - **The print/view `shall not` is enforced structurally:**
+    `RenderOptions.view_magnification: Option<f32>` defaults to `None`, so
+    a caller that has not decided whether it is a viewer gets the
+    print-correct answer by construction. New plain `ARCHITECTURE.md` §12
+    entry.
+  - GUI passes the operator's ZOOM, never the raster scale (would make
+    visibility depend on the monitor); CLI's `render-page --scale` applies
+    it by default, `--print-state` opts out.
+  - **A defect fixed:** the Layers panel's discovery walk read an OCMD's
+    `/OCGs` but not its `/VE`, so a group named only inside a visibility
+    expression rendered correctly while having no row in the panel. Fixed,
+    deliberately more permissive than the evaluator (a malformed
+    expression still names real groups worth listing).
+  - **Two corrections to the eighty-first filing's own `/VE` work:** an
+    OCMD is not a legal `/VE` operand (§8.11.2.2's grammar names only
+    groups or nested expressions) and was being accepted as one; the
+    depth cap and cycle guard were cited to §8.11.2.2, which sets neither
+    — both are pdfce policy, comments now say so.
+
+**Decisions made this session:**
+- Two plain `ARCHITECTURE.md` §12 entries: the `Option`-default print/view
+  enforcement, and the `DA-A13` absent-category defended default.
+- No new standing rule — R170 cited a fourth time against `Pass 56.0`.
+
+**Findings + decisions:**
+- **Job 2, the `§8.11.2.4`/`§8.11.2.2` citation discrepancy the
+  eighty-first filing flagged but declined to adjudicate, is RESOLVED:
+  §8.11.2.2 is correct.** `§8.11.2.4` does not exist anywhere in
+  ISO 32000-1 — zero occurrences, no heading, no cross-reference, no
+  table-of-contents line; §8.11.2 has exactly three sub-clauses.
+  Confirmed by `pdfce-spec-librarian`. Correction footer added to the
+  eighty-first filing's own flag in `ROADMAP.md`, not a silent edit.
+- **A methodology finding travels with the correction:** the engineer's
+  own first check of this discrepancy reached the right answer by
+  reading the spec RAG's SECTION HEADING and treating it as spec text —
+  reconstructed navigational prose, not transcribed source. It agreed by
+  coincidence, not by validity. The valid evidence was a full-text
+  absence search of the primary standard. Escalated to
+  `C:\personal_rag\claude_code\lesson_20260810_verify_a_citation_against_source_not_a_derived_artifact.md`
+  — a general Claude-Code verification-methodology finding, not
+  PDF-domain (routed away from `personal_rag/pdf`, whose scope is
+  producer behaviour, not agent verification method).
+
+**Still in flight:** unchanged — decisions 037/038 still CLAIMED-not-
+authored (unaffected by this filing, both are interpretation questions
+about already-shipped behaviour); printer job SPOOLING (operator
+go-ahead); attachment EXTRACTION-to-file (R151); theme-preset default
+(open operator question). **§8.11 itself: nothing remains unimplemented
+on the render side.**
+
+**For next session:** §8.11 is complete on both the implementation side
+(this filing) and the spec-ingestion side (per the eighty-first filing's
+own last-remaining-gap statement, now discharged by this commit) — no
+outstanding §8.11 build item is known. Decisions 037/038 remain the only
+named open §8.11-adjacent work, both interpretation rulings rather than
+features.
+
+**Ledger for this filing.** **No new Pass ID** — filed against `Pass
+56.0`, fourth commit under R170's convention; Pass-family ceiling
+unchanged at **58.1**, next free **59**. `docs/FEATURES.md`: row 187
+corrected — checkbox row `[x]`/`—`/`[x]`/`◐` → `[x]`/`[x]`/`[x]`/`[x]`;
+`cli` ticked on the `--print-state` flag (a genuine per-invocation
+control specific to this piece); `Acrobat` ticked because the piece that
+held the row at `◐` has shipped. No *Implemented*/*Planned* row move —
+row 187 had no *Planned* counterpart. `docs/ARCHITECTURE.md`: two new
+plain §12 entries; decision-record ceiling unchanged, 037/038 still
+claimed-not-authored, next free 039. Standing rules: no new mint — R170
+cited; ceiling stays **R185**, next free **R186**.
+`C:\personal_rag\claude_code\`: one new lesson, indexed in both
+`claude_code/index.md` and the master `index.md` this filing.
+`C:\personal_rag\pdf\`: no new lesson — §8.11.4.4's self-contradiction is
+a spec-interpretation question, not an observed producer divergence.
+Operator-question ceiling unchanged at **(bh)**, next free **(bi)**. Gate
+figures relayed per commit (2912 tests, clippy 0 `--all-features`, fmt
+clean) RELAYED, NOT independently re-run — no shell this dispatch.
+**Backup/git working-tree state not asserted anywhere in this filing**
+(hard rule 8) — the engineer should check `D:\Dev\pdfce-backups\` and
+`git log`/`git status` directly before any push; this librarian had no
+shell and worked entirely from the staged evidence file plus direct
+reads of current source. This is the **eighty-second**
+`SESSION_LOG.md`/`ROADMAP.md` joint filing (the eighty-first confirmed
+present by direct read before this entry was appended).
