@@ -10828,8 +10828,14 @@ impl PdfceApp {
                 return;
             }
             Action::ExitViewMode => {
-                // Read mode first, so one press is one step.
-                if self.read_mode {
+                // Innermost first, one step per press: Find is the most
+                // transient of the three, so Escape closes it before it
+                // touches a view mode. An operator searching inside read
+                // mode wants their search dismissed, not their chrome
+                // back.
+                if self.find_open {
+                    self.find_open = false;
+                } else if self.read_mode {
                     self.read_mode = false;
                 } else if self.full_screen {
                     self.full_screen = false;
@@ -12280,7 +12286,7 @@ impl eframe::App for PdfceApp {
                 selection_nonempty: canvas_selection_nonempty,
                 delete_target: canvas_delete_target,
                 inside_object,
-                in_view_mode: self.full_screen || self.read_mode,
+                in_view_mode: self.full_screen || self.read_mode || self.find_open,
             },
         );
 
@@ -13353,6 +13359,26 @@ impl PdfceApp {
         // Laid out right-to-left, so the cluster stays pinned to the window's
         // right edge as the narrator text on the left grows. Read in reverse:
         // the LAST thing added here is the LEFTMOST thing on screen.
+        // Find lives here rather than on a ribbon tab for the reason the
+        // zoom and page controls do: the status bar is always on screen,
+        // so it never sits behind a tab switch, and Ctrl+F alone is not
+        // DISCOVERABLE — an operator who does not know the chord has no
+        // way to learn the feature exists.
+        //
+        // Selectable, like the fit modes, because Find is a MODE: the bar
+        // is either showing or it is not, and the control should say
+        // which.
+        if Self::icon_text_toggle(
+            ui,
+            icons::Icon::Search,
+            self.find_open,
+            ui_text::find_open_button(),
+            ui_text::find_open_tooltip(),
+        )
+        .clicked()
+        {
+            actions.push(Action::ToggleFind);
+        }
         if ui
             .button(ui_text::zoom_100_button())
             .on_hover_text(ui_text::zoom_100_tooltip())

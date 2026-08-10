@@ -9398,6 +9398,16 @@ pub fn export_dxf_at_paper_scale() -> &'static str {
 // Wording specified by `pdfce-ui-specialist` and used as given. The one
 // piece worth restating here is WHY the caveat below is unconditional.
 
+/// Label of the status-bar Find toggle.
+pub fn find_open_button() -> &'static str {
+    "Find"
+}
+
+/// Tooltip on the status-bar Find toggle.
+pub fn find_open_tooltip() -> &'static str {
+    "Find text in this document (Ctrl+F). Escape closes it."
+}
+
 /// Placeholder in the empty query box.
 pub fn find_query_placeholder() -> &'static str {
     "Find in document"

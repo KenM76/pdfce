@@ -271,6 +271,10 @@ pub enum Icon {
     /// shipped toolbar controls. See
     /// `docs/ui_specs/menu-affordance-and-glyph-coverage.md`.
     ChevronDown,
+    /// A magnifier — Find. Empty lens: `ZoomIn`/`ZoomOut` are the same
+    /// shape carrying a `+`/`-`, so the unmarked lens is what says
+    /// "search" rather than "magnify by".
+    Search,
     /// Dismiss / remove — drawn instead of the text glyph `✕` (U+2715),
     /// which is absent from every font of the shipped stack (Pass 47.4).
     ///
@@ -396,6 +400,7 @@ impl Icon {
         Icon::Back,
         Icon::ChevronRight,
         Icon::ChevronDown,
+        Icon::Search,
         Icon::ChevronUp,
         Icon::Close,
         Icon::ZoomOut,
@@ -449,6 +454,7 @@ impl Icon {
             Icon::Back => include_str!("../assets/icons/back.svg"),
             Icon::ChevronRight => include_str!("../assets/icons/chevron-right.svg"),
             Icon::ChevronDown => include_str!("../assets/icons/chevron-down.svg"),
+            Icon::Search => include_str!("../assets/icons/search.svg"),
             Icon::ChevronUp => include_str!("../assets/icons/chevron-up.svg"),
             Icon::Close => include_str!("../assets/icons/close.svg"),
             Icon::ZoomOut => include_str!("../assets/icons/zoom-out.svg"),
@@ -502,6 +508,7 @@ impl Icon {
             Icon::Back => "back",
             Icon::ChevronRight => "chevron-right",
             Icon::ChevronDown => "chevron-down",
+            Icon::Search => "search",
             Icon::ChevronUp => "chevron-up",
             Icon::ZoomOut => "zoom-out",
             Icon::ZoomIn => "zoom-in",
