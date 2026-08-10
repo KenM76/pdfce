@@ -30172,12 +30172,112 @@ new dated entry recording the rich-text-rendering-is-policy posture.
 Standing rules: **`R179` MINTED** — ceiling moves **R178 → R179**, next
 free **R180**. Decision records: no new number claimed; ceiling stays
 **035**, next free **036**. Operator-question ceiling unchanged at
-**(bh)**, next free **(bi)**. Baseline-debt count: **5 → 5, unchanged**
-(`1e3422e` was never a baseline-debt line; this is a fresh-commit
-citation, a different claim from a debt-line removal — see this
-filing's `ROADMAP.md` entry for why conflating the two would itself be
-a hard-rule-10 violation). Backup/git working-tree state not
-independently asserted — this librarian has no shell this dispatch
-(hard rule 8). This is the **sixty-fifth** `SESSION_LOG.md` filing (the
-sixty-fourth confirmed present by direct read before this entry was
-appended).
+**(bh)**, next free **(bi)**. Backup/git working-tree state not
+independently asserted — this librarian has no shell this dispatch (hard
+rule 8).
+
+## 2026-08-10 (sixty-sixth filing) — `252ffde`+`62ba5ac`: `Pass 37.3` slice 1 makes export carry `/RV`, and slice 2 fixes the disclosure that slice 1 itself just made false, in the same session; `R180` MINTED (an accurate warning can be falsified by the very improvement it used to describe); `Pass 37.3` still IN PROGRESS
+
+**Sourcing.** This librarian has no shell this dispatch (hard rule 8).
+Both commit messages were supplied in full in the dispatch (not
+truncated). Independently verified **by direct read**: the baseline-debt
+file (still **5** lines, neither commit in it — a fresh citation, not a
+discharge); the *Next up* `Pass 37.3` acceptance criteria before amending
+further; the existing `ARCHITECTURE.md` §12 `RT-N2` entry this filing
+extends; and, for the `462d468` question below, a direct grep confirming
+it is already cited by hash in both `ROADMAP.md` (10+ hits) and this file
+(3 hits) from the sixty-third filing.
+
+**Shipped:**
+- `252ffde` (2026-08-10) — `Field::rich_value`/`FieldData::rich_value`
+  carry `/RV` through both FDF and XFDF on export, ungated by the
+  `RichText` flag (a malformed file can carry `/RV` with bit 26 clear,
+  and dropping it on export would destroy the only copy of the
+  formatting). Import is deliberately NOT touched — §12.7.3.4 makes
+  `/DS`+`/RV` the inputs to appearance generation (`RT-M9`/`RT-N7`), and
+  pdfce cannot yet generate a rich-text appearance, so writing `/RV` back
+  now would leave the stored value and the rendered one disagreeing. Gate
+  figures as supplied: 2687 tests / 0 failed / 3 new, clippy 0, fmt
+  clean, gates green.
+- `62ba5ac` (2026-08-10, same session) — the export/import disclosure
+  strings, split into two because export and import no longer share one
+  fact: export now says the formatting IS in the file (and that pdfce
+  cannot yet write it back); import says the field was left entirely
+  untouched, not even its plain value applied. The CLI previously had
+  **zero** rich-text disclosure at all (`b8f96b1` was GUI-only); both
+  shells now say the same thing, verified in the real binary
+  (`applied=4 skipped=1` on a mixed fixture, count taken before the
+  import runs since a skipped field leaves no trace afterward). Gate
+  figures as supplied: 2687 tests / 0 failed, clippy 0, fmt clean,
+  ui-strings clean.
+
+**Decisions made this session:**
+- **`ARCHITECTURE.md` §12 extended, no new decision number.** The
+  RT-N2 "rich-text rendering is policy, not conformance" posture,
+  recorded sixty-fifth filing before any `Pass 37.3` code existed, is
+  now honoured by the first real code — by construction, since
+  `252ffde`/`62ba5ac` render nothing at all. Recorded as a plain dated
+  entry extending the existing one, not a new decision.
+- **`462d468` re-cited, no new substance filed.** The dispatch reported
+  `check-commits-filed.py` still flagging it. Direct grep shows it is
+  already cited by hash in both this file and `ROADMAP.md` from the
+  sixty-third filing — flagged here as a possible gate question for the
+  engineer to look at directly (short-hash matching, or a window this
+  librarian cannot inspect without a shell), not re-narrated as new work.
+
+**Findings + decisions:**
+- **New standing rule `R180` MINTED.** An accurate disclosure can be
+  falsified by a later improvement to the very thing it describes, not
+  only by having been wrong when written or never checked against the
+  right instrument. `b8f96b1`'s export warning was true on 2026-08-07 and
+  false the moment `252ffde` shipped on 2026-08-10 — the warning then
+  told an operator they had lost formatting they still had. **Distinct
+  from R93** (verification standard for cross-module claims), **R174**
+  (whether a true string is informative to its reader), and **R178**
+  (whether a true string is still reachable from a real caller) — all
+  three assume the string's content is stable; R180 is the case where the
+  content itself goes stale as a side effect of the code it describes
+  getting better, which is harder to catch because the person making the
+  improvement has no reason to suspect prose they didn't touch. Practical
+  form: when a Pass LIFTS a limitation, grep for the sentences that
+  described it — `--help`, module docs, `FEATURES.md` rows — before
+  considering the Pass shipped. **Caught the same session it was
+  introduced**, by the same engineer, one commit later — the safety net
+  worked, but nothing mechanical looked for it; that's the rule's whole
+  point. Full text: `ROADMAP.md` *Standing rules*.
+- **Applied R180 to itself, same filing.** `docs/FEATURES.md`'s *Import/
+  export form data* row still said rich-text export was "not yet
+  implemented" — true 2026-08-07–2026-08-10, false the moment `252ffde`
+  landed. Corrected in this same filing rather than left for a future
+  session to catch, with the strikethrough left visible per this
+  project's amend-don't-erase convention.
+
+**Still in flight:**
+- `Pass 37.3` remains IN PROGRESS. Import/authoring — writing `/RV` back
+  via either explicit lossy downgrade or true `/RV`-preserving fill — is
+  still open; see the `★★★ AMENDMENT` on the *Next up* entry.
+- Baseline debt unchanged at **5 lines** (neither new commit predates the
+  gate).
+- The `?`-in-mutating-loop audit (Backlog, filed sixty-fifth filing) is
+  still not started.
+
+**For next session:**
+- Whoever continues `Pass 37.3` builds import/authoring against the same
+  `★★ AMENDMENT`'s acceptance criteria, not a fresh reading.
+- If `check-commits-filed.py` is still red on `462d468` after this
+  filing, that is worth a direct look at the gate's own matching logic —
+  it should not be, per the direct-grep evidence above.
+
+**Ledger for this filing.** Pass family ceiling **UNCHANGED at 53**
+(53.1 highest); `Pass 37.3` unchanged (no new mint, still in progress).
+`docs/FEATURES.md`: two rows edited — Planned *Rich-text fill* (`core`/
+`cli` `[ ]` → `◐`, row names its own split) and Forms *Import/export form
+data* (stale sentence corrected, no checkbox change). `docs/ARCHITECTURE.md`
+§12: **edited** — new dated entry, no new decision number; ceiling stays
+**035**, next free **036**. Standing rules: **`R180` MINTED** — ceiling
+moves **R179 → R180**, next free **R181**. Operator-question ceiling
+unchanged at **(bh)** (closed ACCEPT), next free **(bi)**. Backup/git
+working-tree state not independently asserted — this librarian has no
+shell this dispatch (hard rule 8). This is the **sixty-sixth**
+`SESSION_LOG.md` filing (the sixty-fifth confirmed present by direct
+read before this entry was appended).

@@ -8205,8 +8205,28 @@ impl PdfceApp {
         //
         // Conditional, so it is a signal and not noise: a document with no
         // rich-text field says nothing about rich text.
-        let rich = pdfce_core::forms::parse_acroform(&doc.session.graph())
-            .map_or(0, |f| f.fields.iter().filter(|x| x.is_rich_text()).count());
+        //
+        // ★ COUNTED OFF THE DATA, NOT OFF THE RichText FLAG — and the two
+        // genuinely differ, because the export reads `/RV` UNGATED by bit 26.
+        // That was deliberate (a file may carry `/RV` with the flag clear,
+        // which is exactly when dropping it destroys the only copy), and it
+        // makes a flag-based count wrong in both directions:
+        //
+        //   flag clear, `/RV` present -> the file DOES carry formatting and
+        //     a flag count says 0, so the operator is told nothing about
+        //     data that is in the file they just wrote.
+        //   flag set, no `/RV`        -> a flag count says 1 and the
+        //     sentence claims formatting is in the file when none is.
+        //
+        // The disclosure is about the FILE, so it counts the file. Note this
+        // is legitimately a different question from the import disclosure
+        // below, which counts fields that WILL BE SKIPPED and so correctly
+        // asks the flag — the two look like the same count and are not.
+        let rich = data
+            .fields
+            .iter()
+            .filter(|f| f.rich_value.is_some())
+            .count();
         let hint = doc.path.display().to_string();
         let xfdf = path
             .extension()

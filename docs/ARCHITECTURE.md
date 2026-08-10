@@ -14309,3 +14309,27 @@ started).
   posture rather than an ad hoc one discovered mid-Pass. Full record:
   `ROADMAP.md`'s `1e3422e` Shipped entry (top of *Shipped*) and the
   `★★ AMENDMENT` on the *Next up* "Rich-text fill" entry it points to.
+
+- **2026-08-10 (`252ffde`+`62ba5ac`, `Pass 37.3` slices 1–2) — the
+  `RT-N2` posture above held on first contact with real code, and is
+  worth one line saying so rather than leaving the prediction and its
+  confirmation to drift apart across two documents.** The entry above
+  was written before any `Pass 37.3` code existed. The first code now
+  does: `Field::rich_value`/`FieldData::rich_value` carry `/RV` through
+  both FDF and XFDF on export, and generate no appearance from it at
+  all. That is not a partial implementation of the RT-N2 posture — it
+  is the posture's only correct state before a rich-text `/AP`
+  generator exists: nothing renders, so there is nothing yet to be
+  pdfce's own policy rather than a spec claim. The distinction stays
+  live for whichever engineer builds the generator next: the day it
+  starts producing pixels, every doc comment/`--help` string/
+  `FEATURES.md` row it touches inherits the disclosure obligation this
+  entry already named, not a fresh one. Full record: `ROADMAP.md`'s
+  `252ffde`+`62ba5ac` Shipped entry (head of *Shipped*), Part 3, and the
+  new standing rule `R180` it also minted (a true disclosure can be
+  falsified by a later improvement to the thing it describes — see
+  `ROADMAP.md` *Standing rules*). **No crate boundary or library choice
+  changes; no new decision number claimed** — a plain dated entry
+  extending the RT-N2 entry immediately above it, same "no number"
+  convention this section already used for the `2b41b77` hover-predicate
+  entry two entries up.
