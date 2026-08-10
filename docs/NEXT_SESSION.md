@@ -1,184 +1,139 @@
 # NEXT SESSION — start here
 
-**Written 2026-08-09** (replacing the previous handoff of the same date,
-whose contents were acted on and are now filed). Read this, then
-`docs/ROADMAP.md` and the latest `docs/SESSION_LOG.md` entry as usual.
-This file is a *handoff*, not a record — the record is the librarian's.
-Delete or overwrite it once its contents have been acted on.
+**Rewritten 2026-08-10.** Read this, then `docs/ROADMAP.md` and the latest
+`docs/SESSION_LOG.md` entry. This is a *handoff*, not a record — the
+record is the librarian's. Overwrite it once acted on.
 
-Not owned by `pdfce-librarian`. It is safe to edit here without racing a
-filing.
+Not owned by `pdfce-librarian`. Safe to edit without racing a filing.
 
 ---
 
-## State at handoff
+## State
 
-- Branch `pass-8-redaction`, HEAD = **`0466281`**.
-- **2656 workspace tests, 0 failed.** `cargo clippy --workspace
-  --all-targets` = 0. `cargo fmt --all --check` clean.
-- **All seven gates under `tools/` green**, including
-  `check-commits-filed.py`, which was left deliberately red at the last
-  handoff and was cleared **by filing the two commits, not by extending
-  the baseline**. `tools/commits-filed-baseline.txt` is still eleven
-  lines and untouched.
-- `cargo tree -p pdfce-core` / `-p pdfce-render`: no GUI dependency.
+- Branch `pass-8-redaction`, HEAD **`b9819b4`**. Working tree clean.
+- **2675 workspace tests, 0 failed.** clippy 0, `cargo fmt --all --check`
+  clean, **all seven gates green**, `cargo tree` shows no GUI dep in
+  core or render.
+- **★ THE REPOSITORY IS PUBLIC.** `github.com/KenM76/pdfce`, since
+  2026-08-09. Anything committed here is published by default. The
+  `tools/` temp-folder convention for test files is now the actual
+  control, not tidiness.
+- **The publish deny-rules are gone**, by the operator's explicit choice,
+  from both `.claude/settings.json` and `.claude/settings.local.json`.
+  `gh release` and `cargo publish` are still denied. **Rule 8 now has no
+  fence behind it — the absence of a deny rule is not a go-ahead.**
+- Open question **(bh) is CLOSED**, resolved *accept*. Do not re-open it.
+
+---
+
+## ★ FIRST: check CI. It is the thing nobody was doing.
+
+```bash
+gh run list --repo KenM76/pdfce --limit 5
+```
+
+`ef88973` fixed a defect that made **pdfce uncompilable on Linux** and
+had been red on six of six runs since the repo went public. It was found
+by reading CI, not by any local signal — every local run on this Windows
+machine was green throughout. That is standing rule **R176**: *a CI
+pipeline that runs is not evidence anyone looked at it.*
+
+The fix has **not been pushed**, so `main` upstream is still broken.
+Pushing is now permitted on request and is the operator's call.
 
 ---
 
 ## What shipped this session
 
-### Pass 52.2 GUI half — `0466281`
+| | |
+|---|---|
+| `0466281` | Pass 52.2 GUI — Export DXF, disabled until a scale resolves |
+| `c58cca1` | CLI `--pages`/`--output-dir`; paper-scale warning's third gate |
+| `aa9ed38` | filing; **R174** minted |
+| `a3ba0f8` | **Pass 53.0** — field rename in the Forms panel |
+| `4f0e443` | `list-fields` stops mangling names with spaces |
+| `269361d` | docs corrected: the repo is public; **R175** |
+| `ef88973` | **Linux build fix**; Enter commits an Edit Text draft |
+| `b9819b4` | filing; **R176**; decision 003 §1.1 superseded |
 
-`File ▸ Export ▸ Export DXF…`. The Export button is **disabled until a
-scale resolves**, which is the entire point: the CLI can only warn after
-the file exists, and the destination is frequently a cutting table.
-
-Three states, and the difference between them is rule 4 — calibrated
-pre-fills and names its source group, uncalibrated leaves the field
-**empty** (never 1.0) and needs a typed number or an explicit
-paper-scale tick, conflicting shows a radio list with nothing selected.
-All three verified in the running application, not reasoned about.
-
-**The defect it fixed is worth carrying forward as a shape:**
-`suggest_scale` read the whole `DimensionModel`, so on a sheet set an
-uncalibrated page 1 would silently export at page 3's 1:5 — five times
-real size, with nothing anywhere saying so. Now page-scoped via
-`EditSession::dimension_groups_on_page` +
-`suggest_scale_for_groups`. The CLI adopted it too; it exports one page
-and was inheriting the document's opinion.
-
-`crates/pdfce-core/tests/dxf_scale.rs` pins **both halves** — the
-document-wide reading is asserted as the *wrong* answer so a future
-"simplification" back to `suggest_scale` fails loudly.
-
-### `LEGAL.md` §1.1 — the git-history publishing blocker
-
-Owed by the engineer since the last handoff (the librarian correctly
-declined it as outside its remit). Now written. See *Publishing* below.
+Ledger: Pass **53.0**, rules **R176** (next R177), decisions **035**
+(next 036), questions **(bh)** closed (next (bi)).
 
 ---
 
-## THE NEXT TASK — pick one; nothing is half-finished
+## THE NEXT TASK — ranked
 
-There is **no in-flight work.** The tree is clean, every gate is green,
-and nothing was left mid-refactor. What follows is ranked, not queued.
+### 1. The harness cannot locate a text run, so Enter-on-canvas is unverified
 
-### 1. Pass 24.0's remaining half — status corrected this session, work not done
+**This is the honest gap in `ef88973` and it is the first thing to fix.**
 
-`ae59ce3`'s own body defers two things from decision 024's Pass 24.0:
+Enter now commits an Edit Text draft. The regression that mattered (the
+Forms panel and rename editor still committing on Enter) **was** driven
+live. The positive case — Enter committing on the canvas — was **not**,
+because a script cannot find a text run to click, and R172 forbids
+guessing coordinates.
 
-- **"merging each tool's two floating Areas into ONE strip"** — now
-  **moot**. Pass 34.1 slices 3–4 deleted the floating Areas entirely and
-  moved all six into `DockPanel::ToolOptions`; `tool_strip_anchor` and
-  `StripCorner` no longer exist. *Superseded, not satisfied* — those are
-  different facts.
-- **"wiring universal Enter/Escape"** — **not verified either way, and
-  probably still open.** This is the concrete next thing to check.
+What is missing, established by looking:
 
-The acceptance criterion attached to that deferred half — *"every one of
-the ~40 disclosure strings from the three strips is provably still
-emitted, via an enumerated test"* — was **never discharged**. 34.1 moved
-the strings to a new home rather than proving them enumerated. That test
-is real, owed, and exactly the kind this project keeps discovering it
-needed after the fact (R151/R152's family).
+- `viewer::page_to_screen` exists; there is **no `pdf_to_canvas_space`**
+  inverse of `canvas_to_pdf_space`, so a run's PDF bbox cannot be
+  projected to a screen point.
+- No `rect=` trace on the Edit-Text path.
+- A `text:pick <run>` step that sets `state.caret` directly (the way
+  `tool:` sets a tool) would **not** be enough on its own: typing is
+  gated on `image_response.has_focus()`, and only a real click grants
+  canvas focus. So the useful affordance is emitting run rects and
+  clicking one — which solves focus and aim together.
 
-### 2. `pdfce-cli export-dxf` has no multi-page mode
+Scope it as a slice. It unblocks every future canvas-text test, not just
+this one.
 
-The GUI grew one this session (selected pages → one DXF each into a
-folder, `{stem}_p{n}.dxf`); the CLI still takes a single `--page`. The
-shells have diverged on a capability, which is the drift rule 11 exists
-to prevent. Small, well-specified, and the core substrate is already
-there.
+### 2. Renaming a pure grouping node is not possible from the GUI
 
-### 3. The eleven owed commits in `tools/commits-filed-baseline.txt`
+Filed as Backlog by the librarian. `form.fields` is a projection of
+**terminal** fields (`walk_field` returns early on a pure non-terminal),
+so `Personal` in `Personal.Address.Zip` is not a row and cannot be
+renamed. Needs its own row source. Operator-visible symptom: dotted
+names that cannot be fully edited, with nothing saying why.
 
-Still DEBT, not an allowlist. Shortening it is the intended direction
-and `check-commits-filed.py`'s header explains why adding to it is
-forbidden. Two were cleared this session by proper filing; eleven remain.
+### 3. `pdfce-ui-specialist` polish item 10
 
----
+Extend Pass 47.3's hover-highlight to persist while a rename editor is
+open. Small.
 
-## Publishing — BOTH items are now CLOSED, and the earlier text here was wrong
+### 4. The eleven owed commits in `tools/commits-filed-baseline.txt`
 
-This section previously said publishing was blocked on two things and
-that *"no git remote is configured"*. **Both halves were false**, and the
-false one was the reassuring one. Corrected 2026-08-10.
-
-1. **The repository is PUBLIC and has been since 2026-08-09.**
-   `github.com/KenM76/pdfce`, created 04:56Z, `main` pushed 10:18Z.
-   Publishing was not pending; it had happened. Check with
-   `git remote -v`, not by reading a document.
-2. **`LEGAL.md` §1.1 — the confidential material in history is
-   ACCEPTED.** It is genuinely reachable from the public repo (verified:
-   `gh api repos/KenM76/pdfce/contents/tools/realdrawings-smoke?ref=817d518^`
-   returns the listing). Presented with that and four options, the
-   operator chose on 2026-08-10 to leave it public and correct the
-   record. **Open question (bh) is CLOSED — resolved as "accept."**
-   Do not re-open it; do not treat it as precedent for the next file.
-3. **The publish deny-rules are gone**, by the operator's explicit
-   choice the same day — removed from BOTH `.claude/settings.json` (the
-   checked-in one) and `.claude/settings.local.json`. `gh release` and
-   `cargo publish` are still denied. **Rule 8 now has no fence behind
-   it:** the absence of a deny rule is not a go-ahead, and an agent must
-   not read it as one.
-
-**What this changes about day-to-day work:** anything committed to this
-repo is published by default. The `tools/` temp-folder convention for
-test files stopped being tidiness and became the actual control.
+Still DEBT, not an allowlist. Two were cleared this session by proper
+filing; eleven remain.
 
 ---
 
-## Two things learned this session that will save the next one time
+## Things learned this session that will save the next one time
 
-### A librarian dispatched without a shell cannot close a shell-shaped question
+**Two documents asserted unmeasured facts about the environment, in the
+sections written to warn about those facts.** `LEGAL.md` §1.1 said "no
+git remote" hours after the repo was pushed; `decisions/003` §1.1 called
+"pdfce has no git remote, CI has never run once" *the framing fact
+everyone should read first*, and both halves were false. That is
+**R175**. `git remote -v` and `gh run list` cost nothing.
 
-Twice in a row now, `pdfce-librarian` has correctly refused to guess and
-correctly recorded an open discrepancy — and both times the gap between
-*"cannot be resolved from the record"* and *resolved* was **three `git`
-invocations**, not more evidence. The `ae59ce3` / Pass-24.0 contradiction
-had sat open across two filings; it took ninety seconds with a shell.
+**Three defects this session were invisible to green tests** and were
+found only by looking at output as its audience (**R174**): a raw
+seventeen-digit `f64` in a dialog, a CLI telling an operator who passed
+`--scale 1` that it did not know the scale, and a rename message quoting
+a `/TU` label that a rename does not change.
 
-The mitigation is on the **dispatching** side, not the librarian's:
-**paste the `git show -s --format=%B <hash>` output into the dispatch.**
-Done for the two-commit filing this session, and it worked; not done for
-the Pass 52.2 filing initially, and that is what produced the
-discrepancy the librarian then had to flag. A one-line subject cannot
-carry a defect, a measurement, or an owed follow-up — and those are
-precisely what a filing is made of.
+**Dispatch the librarian with `git show -s --format=%B <hash>` pasted
+in.** Three for three this session. Two consecutive filings before that
+had to leave a question open that three `git` invocations closed.
 
-Related and worth knowing: a librarian reading the **working tree** while
-filing a **commit** can see the future relative to what it is filing.
-That is what produced its "the CLI already calls
-`suggest_scale_for_groups`" flag — correct observation, uncommitted code.
+**`gui-shot.ps1` defaults 1760×1150 and `gui-drive.ps1` 1600×1000.**
+Coordinates do not transfer. Aiming a shot from screenshot pixels hit
+Delete instead of Rename this session — pass `-W 1600 -H 1000` to
+`gui-shot` and use the traced `rect=`.
 
-### Green tests said nothing about two real defects
-
-Both were found by *looking at the running application* after everything
-was green (R86), and neither was a thing a test would have been written
-for:
-
-- The conflict list rendered `"Default" says 283.46456692913387`. A
-  derived scale is a division, so it is never round, and seventeen
-  significant figures is not a number an operator can read, compare, or
-  retype. The sharp part: that value is written **into** the field and
-  **re-parsed on export**, so the formatter and the parser are one
-  contract and rounding it changes the exported result. It is bounded
-  and stated (9 nm on a 2.5 m coordinate), not assumed harmless.
-- The whole export was **undrivable**. `commit_dxf_export` asks for its
-  destination through a native dialog — the identical wall
-  `diag::font_dirs` was built to get past, now the **second** instance
-  in this project. `export:dxf`, `export:dxf-go` and
-  `PDFCE_DIAG_EXPORT_DIR` substitute the dialog's *answer* and nothing
-  else, so the harness exercises the same path.
-
-**R172 was followed and it paid.** The egui RAG was grepped before the
-harness was driven, and
-`only_the_active_tab_is_emitted_so_scripted_harnesses_cannot_reach_other_tabs.md`
-plus the two-harness window-size finding are why no coordinate was ever
-guessed. Keep doing this.
-
-And the R172-adjacent one from last session held again: **a grep-based
-test cannot validate a structured format.** Every DXF written this
-session was parsed with `ezdxf` and `d.audit()` — 0 errors, 0 fixes —
-and the coordinates were checked against the calibration the operator
-typed (5.000 m in, 5000 mm out).
+**The ui-specialist twice caught things I had wrong before they shipped**
+— prefilling a rename editor from `/TU` instead of `/T`, and a global
+`consume_key(Enter)` that would have silently broken every panel text
+field. Both were changes I was about to make. Dispatch it for anything
+touching input or disclosure.
