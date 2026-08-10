@@ -7253,6 +7253,142 @@ impl PdfceApp {
     /// document itself declares, so the list matches the printed form far more
     /// often than an alphabetical sort would. Computed `/Tabs` ordering is a
     /// named P2 residual.
+    /// The Bookmarks panel — the document's outline, as navigation.
+    ///
+    /// # Why the tree is read fresh each frame rather than cached
+    ///
+    /// `read_outline` takes an `&ObjectGraph`, not `&mut self`, so unlike
+    /// Find it CAN run inside the render closure — and the outline is a
+    /// property of the document that page edits can change (deleting a
+    /// page can leave a bookmark pointing nowhere). A cache would need
+    /// invalidating on every edit and undo, which is a correctness
+    /// problem traded for a parse of a structure that is a few hundred
+    /// items at most. Measure before trading back.
+    ///
+    /// # A bookmark with no destination is NOT an error
+    ///
+    /// Three distinct states, and collapsing them would mislead:
+    /// a bookmark that points at a page (clickable), a HEADING with no
+    /// destination at all (legal, common, groups its children), and one
+    /// whose destination pdfce could not resolve (the document meant
+    /// something and pdfce could not follow it). Only the third is a
+    /// problem, and only the first is worth a click — so the second and
+    /// third are shown disabled with tooltips that say which they are.
+    fn bookmarks_panel(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        let Status::Open(doc) = &self.status else {
+            return;
+        };
+        let outline = pdfce_core::outline::read_outline(&doc.session.graph());
+
+        let total = outline.diagnostics.items;
+        // The current page, so a driven click has an observable to check
+        // against — the only oracle available when the operator is using
+        // the machine and a screenshot harness would seize their screen.
+        diag::trace(|| {
+            format!(
+                "bookmarks-panel page={} items={total}",
+                doc.view.page_index + 1
+            )
+        });
+        ui.label(ui_text::bookmarks_count(total));
+        // The truncation disclosure sits ABOVE the list, not below it: an
+        // operator who scrolls a short list and stops has already drawn a
+        // conclusion by the time a footnote would reach them.
+        if outline.diagnostics.cycles_broken > 0
+            || outline.diagnostics.depth_truncations > 0
+            || outline.diagnostics.item_budget_exhausted
+        {
+            ui.label(
+                egui::RichText::new(ui_text::bookmarks_truncated())
+                    .small()
+                    .weak(),
+            );
+        }
+        if outline.items.is_empty() {
+            ui.label(ui_text::bookmarks_empty());
+            return;
+        }
+        ui.separator();
+
+        // Collected first, applied after — the same defer-then-apply the
+        // rest of this shell uses, because the click handler needs
+        // `&mut self` and the walk holds `&self.status`.
+        let mut go: Option<usize> = None;
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            Self::bookmark_rows(ui, &outline.items, &mut go);
+        });
+        if let Some(page) = go {
+            actions.push(Action::GoToPage(page));
+        }
+    }
+
+    /// Draw one level of the outline, recursing into children.
+    ///
+    /// Indentation carries the structure. `ui.indent` is keyed by the
+    /// item's object id rather than its index: two siblings at the same
+    /// index in different subtrees would otherwise collide in egui's id
+    /// space, which shows up as the wrong row responding to a hover.
+    fn bookmark_rows(
+        ui: &mut egui::Ui,
+        items: &[pdfce_core::outline::OutlineItem],
+        go: &mut Option<usize>,
+    ) {
+        use pdfce_core::outline::Destination;
+        for it in items {
+            // The page a click would reach, if any. Only a resolved page
+            // destination is navigable — a named destination pdfce could
+            // not look up, or a remote file, is shown and not offered
+            // (R83: never an affordance for something that cannot work).
+            let target = match &it.destination {
+                Some(Destination::Page { page_index, .. }) => Some(*page_index),
+                _ => None,
+            };
+            let (enabled, tip) = match (&it.destination, target) {
+                (_, Some(p)) => (true, ui_text::bookmark_row_tooltip(p + 1)),
+                (None, _) => (false, ui_text::bookmark_row_heading_tooltip().to_owned()),
+                (Some(_), None) => (false, ui_text::bookmark_row_unresolved_tooltip().to_owned()),
+            };
+
+            let label = if it.title.trim().is_empty() {
+                // An untitled bookmark is legal and unclickable-looking.
+                // Its own row still has to exist, or its children lose
+                // their parent and appear at the wrong depth.
+                ui_text::bookmark_untitled().to_owned()
+            } else {
+                it.title.clone()
+            };
+
+            let resp = ui
+                .add_enabled(enabled, egui::Button::new(label).frame(false))
+                .on_hover_text(tip.clone());
+            let resp = if enabled {
+                resp
+            } else {
+                resp.on_disabled_hover_text(tip)
+            };
+            diag::trace(|| {
+                format!(
+                    "bookmark-row level={} title={:?} page={:?} enabled={enabled} rect={:?}",
+                    it.level,
+                    it.title,
+                    target.map(|p| p + 1),
+                    resp.rect
+                )
+            });
+            if resp.clicked()
+                && let Some(p) = target
+            {
+                *go = Some(p);
+            }
+
+            if !it.children.is_empty() {
+                ui.indent(("bookmark", it.id.num, it.id.generation), |ui| {
+                    Self::bookmark_rows(ui, &it.children, go);
+                });
+            }
+        }
+    }
+
     fn forms_panel(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
         // Which row the pointer is over THIS frame, collected during the draw
         // and written back to `self.highlighted_field` at the end (Pass 47.3).
@@ -11722,6 +11858,9 @@ impl eframe::App for PdfceApp {
                 raw_input.modifiers = alt;
             }
             diag::Step::Zoom(factor) => raw_input.events.push(egui::Event::Zoom(factor)),
+            diag::Step::Bookmarks => {
+                self.show_pane_subject(ribbon::PaneSubject::Bookmarks);
+            }
             diag::Step::Find => {
                 self.apply(Action::ToggleFind, ctx, ctx.pixels_per_point());
             }
@@ -14053,6 +14192,7 @@ impl PdfceApp {
             ribbon::PaneSubject::BatchTools => self.tools_dock(ui, actions),
             ribbon::PaneSubject::Redact => self.redact_panel(ui, actions),
             ribbon::PaneSubject::Forms => self.forms_panel(ui, actions),
+            ribbon::PaneSubject::Bookmarks => self.bookmarks_panel(ui, actions),
             ribbon::PaneSubject::Comments => self.comments_panel(ui, actions),
             // Never reached from `tool_options_panel`'s dispatch, which sends
             // these two elsewhere; an arm rather than a catch-all so a future

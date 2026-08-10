@@ -8492,7 +8492,75 @@ pub fn tool_pane_subject_name(subject: crate::ribbon::PaneSubject) -> &'static s
         S::Redact => activities_redact_label(),
         S::Forms => activities_forms_label(),
         S::Comments => activities_comments_label(),
+        S::Bookmarks => activities_bookmarks_label(),
     }
+}
+
+/// Label of the Bookmarks activity.
+///
+/// "Bookmarks", not "Outline": the PDF specification calls the structure
+/// an outline (§12.3.3) and every other reader calls the things in it
+/// bookmarks. The operator-facing word is the one operators use; the
+/// spec's word stays in the code and the doc comments.
+pub fn activities_bookmarks_label() -> &'static str {
+    "Bookmarks"
+}
+
+/// An outline item with no title of its own.
+///
+/// Its row still has to exist: a bookmark's children hang off it, and
+/// omitting an untitled parent would show them at the wrong depth,
+/// silently misrepresenting the document's structure.
+pub fn bookmark_untitled() -> &'static str {
+    "(untitled)"
+}
+
+/// Shown when the document has an outline but no items pdfce could read.
+pub fn bookmarks_empty() -> &'static str {
+    "This document has no bookmarks."
+}
+
+/// Tooltip on a bookmark row, naming where it goes.
+///
+/// The destination page is stated rather than left to be discovered by
+/// clicking: an operator scanning a long outline for "where is the parts
+/// list" should not have to jump to find out.
+pub fn bookmark_row_tooltip(page_number: usize) -> String {
+    format!("Go to page {page_number}.")
+}
+
+/// Tooltip on a bookmark that points nowhere pdfce can resolve.
+///
+/// Distinct from a bookmark with no destination at all, which is a
+/// heading and perfectly normal. This one MEANT to point somewhere and
+/// pdfce could not work out where — the operator should know the
+/// difference before concluding the document is broken.
+pub fn bookmark_row_unresolved_tooltip() -> &'static str {
+    "This bookmark points somewhere pdfce could not resolve — it may use a destination form pdfce does not read yet, or name a page that is not in this document."
+}
+
+/// A heading bookmark: no destination, by design.
+pub fn bookmark_row_heading_tooltip() -> &'static str {
+    "A heading. It groups the bookmarks beneath it and does not point at a page of its own."
+}
+
+/// Summary line above the tree.
+pub fn bookmarks_count(total: usize) -> String {
+    if total == 1 {
+        "1 bookmark.".to_owned()
+    } else {
+        format!("{total} bookmarks.")
+    }
+}
+
+/// Disclosure when pdfce's own reader had to give up part-way.
+///
+/// A truncated tree looks exactly like a short one from the outside, so
+/// silence here would let an operator conclude the document simply has
+/// few bookmarks. Stated as what it is: pdfce stopped, the document did
+/// not end.
+pub fn bookmarks_truncated() -> &'static str {
+    "pdfce stopped reading this outline early — it loops back on itself or is deeper than pdfce follows. Some bookmarks are missing from this list."
 }
 
 // -- The nested object tree (2026-08-06) ------------------------------------

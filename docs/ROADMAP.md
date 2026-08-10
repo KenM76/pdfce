@@ -81,6 +81,369 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★★ THE READER-PARITY SWEEP OPENS — `Pass 55.0`–`Pass 55.4` FILED across five commits: `find-text` extracted from redaction's own buried scan; a six-key keyboard-focus defect fixed (R86 explicitly NOT discharged); a Find bar built; printer enumeration + page-fit preview ship (spooling deliberately NOT built); bookmarks/outline and attachments both go from zero to read+CLI in one filing. `decision 036` MINTED — 2026-08-10 (seventy-fourth filing)
+
+**The campaign, first, because it is the thing that makes the next five
+Parts cohere rather than read as five unrelated features.** The engineer
+audited pdfce against **Acrobat Reader**, not Pro, and found the gap
+INVERTED from every prior Backlog bucket's working assumption: pdfce is
+well AHEAD of Reader on editing (text, vector objects, redaction, forms,
+page ops) and BEHIND on plain document CONSUMPTION — the thing Reader,
+used by the overwhelming majority of PDF opens, actually does. Four gaps
+were **verified absent in source**, not assumed from a feature table:
+`git grep` for print code, a Find implementation, an outline reader, an
+attachments reader all returned nothing before this session. The operator
+chose to close this as one campaign — the **Reader-parity sweep** — over
+three named alternatives (printing-first, cheap-viewer-wins-first, stay
+on the existing roadmap order). Filed as **decision 036**
+(`ARCHITECTURE.md` §12) because it reorders engineering priority
+project-wide, not one Pass's scope. Two gaps remain named and untouched:
+a document-wide OCG/layers panel (pdfce can toggle only its OWN
+ce-dimension-group layers, not an arbitrary foreign `/OCProperties`
+entry) and full-screen/read mode. Signature validation stays folded into
+the existing digital-signatures Backlog bucket, unchanged.
+
+**A standing constraint for the duration of this campaign, also recorded
+in decision 036: the operator is USING the machine.** `tools/gui-shot.ps1`
+(raises a window to the foreground) is off limits for as long as that
+holds; `tools/gui-drive.ps1` stays available (fixed off-screen coordinate,
+never takes focus). Concretely: every GUI claim below is verified by TEXT
+TRACE against the diag/observe harness, never by screenshot, until the
+operator lifts the constraint. Read every "verified" claim below with
+that scope, not as a harness regression.
+
+**Sourcing.** This librarian has Grep/Read/Glob but no shell this
+dispatch (hard rule 8) — none of the five hashes is confirmed against
+`git log`/`git show` directly; all five are taken from the dispatch.
+**Independently verified by direct read, not merely relayed:**
+`crates/pdfce-core/src/edit.rs:5413` (`TextMatch` struct) and `:9996`
+(`pub fn find_text`, signature and doc comment in full);
+`crates/pdfce-cli/src/main.rs` — the `FindText`/`ListOutline`/
+`ListAttachments`/`PrintPreview` `Command` variants and their `cmd_*`
+handlers, confirming all four subcommands exist and are wired (`find-text`,
+`list-outline --flat`, `list-attachments`, `print-preview`), plus
+`list-printers`; `crates/pdfce-gui/src/main.rs:12400`–`12519` in full —
+the six-key guard's own doc comment (verbatim caret-test transcript,
+`[` `]` named as "PRINTABLE CHARACTERS", the `tool_active`-vs-`typing`
+distinction) and every one of the six `!typing`-gated `pressed(...)`
+calls (`PageDown`/`PageUp`, `Home`/`End`, `OpenBracket`/`CloseBracket`,
+`Delete`/`Backspace`), confirming the guard is in the tree as described
+and confirming `Modifiers::COMMAND, Key::F, Action::ToggleFind` is wired
+alongside it; `crates/pdfce-cli/src/printing.rs` module doc in full
+(the "core rasterises, the shell spools" argument, the `windows`-crate-
+already-present claim, the printable-vs-sheet-area argument, the "does
+NOT spool" limit stated by name) and `crates/pdfce-cli/Cargo.toml`'s
+`[target.'cfg(windows)'.dependencies]` block; `.github/workflows/ci.yml`'s
+`cargo tree` denylist (`reqwest|ureq|hyper|…`) confirmed NOT to name
+`windows`, so the new direct dependency does not trip the fail-closed
+gate; `crates/pdfce-core/src/outline.rs:1`–`60` (module doc in full —
+the `/Count` sign-vs-magnitude argument, the cycle-guard argument, the
+explicit distinction from `pageops::outline`); `crates/pdfce-core/src/
+attachments.rs` lines 180, 217, 709–721, 857–859, 2095–2102 (`/EFF`+
+`DefEmbeddedFile` §7.6.5 doc comments, `may_be_encrypted: bool`, the
+trailer-`/Encrypt`-presence computation, and a test asserting the notes
+struct's own `/EFF`-blind construction) and lines 1435/1496
+(`attachment_bytes`/`extract_attachment` — confirmed to exist with, per
+a targeted grep of `crates/pdfce-cli/src/main.rs`, **zero** callers —
+see Part 6's R151 note); `crates/pdfce-cli/src/main.rs:5792`–`5799`
+(the `list-attachments` stderr `/EFF` warning, verbatim, plus the
+machine-readable `MAY_BE_ENCRYPTED` token on the summary line);
+`tools/commits-filed-baseline.txt` (still **5** lines — `338076a`,
+`1f319c0`, `55a0732`, `587e520`, `9141ded` — none of this filing's five
+hashes among them); `docs/FEATURES.md`'s existing sections (no prior row
+for Find/Printing/Bookmarks/Attachments anywhere in the file, confirmed
+by a targeted grep before adding any — these are new capability areas,
+not amendments); `ROADMAP.md`'s own text for "Pass 55" and "Pass 54.2"
+(zero hits before this filing — the family ID is genuinely free, per
+R156). **Not independently verified:** the stated test count (**2804,
++83**) and gate results (clippy/fmt clean) — no `cargo` invocation was
+run by this librarian, and the prior confirmed count on record
+(`c4cce95`, seventy-third filing) was **2716**, so **2804 − 83 = 2721**
+does not reconcile exactly against **2716** (a 5-test gap this filing
+cannot explain — flagged, not silently smoothed over); the four spec-RAG
+findings the two subagents' `pdfce-spec-librarian` dispatches produced
+(`forms__…`-style citations for §12.3/§7.11 etc.) are relayed from the
+dispatch's own account of the returning librarians' work, not re-read by
+this filing.
+
+**Part 1 — `04c7820`: `find_text`, filed as `Pass 55.0` (core + CLI).**
+`pdfce-core` had the WHOLE scan needed to locate text on a page — extract,
+match, turn a matched glyph span into a page-space quad — since Pass 8's
+redaction verb shipped, but it sat *inside* `add_redaction`'s mutating
+search path, reachable only as a side effect of marking the hit for
+removal. `find_text(&mut self, needle: &str, case_insensitive: bool) ->
+Vec<TextMatch>` is that scan extracted, mutating nothing. **Sharing the
+scanner rather than writing a second one is a correctness property, not
+code reuse** — two independent implementations of glyph-span-to-quad
+geometry drift in the one direction that matters, a redaction covering a
+slightly different box than the search that found it. Verified above by
+direct read: the function and its test-asserted quad exist as described.
+No encryption or certification gate, deliberately — a digital signature
+freezes a document against modification; it does not forbid reading it,
+and `find_text` writes nothing. Three limits stated in the shipped doc
+comment rather than left for a future session to discover: `/ActualText`
+runs are unmatched (no per-glyph geometry exists to locate a hit inside
+one); matching is per TEXT RUN, so a phrase a producer split across two
+`Tj` operators is missed; page content only (no annotation appearance
+streams, no form fields). CLI: `pdfce-cli find-text <input> <needle>
+[--ignore-case]`, confirmed wired above.
+
+**Part 2 — `e46c3a8`: a focused text field keeps its unmodified keys,
+filed as `Pass 55.1` — a standalone defect fix, NOT part of the Find
+capability, discovered while building it.** `collect_keyboard_actions`
+runs BEFORE any panel draws, and `egui::consume_key` removes the event
+from the stream before a focused `TextEdit` can ever see it. Six
+unmodified keys were being stolen from every focused text field in the
+application: PageUp/PageDown (no gate at all previously); Home/End
+(gated on `tool_active`, which asks whether a CANVAS TOOL is armed — a
+different question from whether a text WIDGET has focus, and every panel
+in this app is full of text widgets no tool arms); Delete/Backspace; and
+**`[`/`]`, the worst of the six because they are PRINTABLE CHARACTERS** —
+typing a bracket into any text field in the application rotated the page
+instead of inserting a character. All six now additionally guard on
+`ctx.egui_wants_keyboard_input()` (verified above, all six call sites,
+direct read). Modifier chords are deliberately left unguarded — Ctrl+S
+while typing means Save, the same reasoning that already governs
+Ctrl+F/Ctrl+O/Ctrl+Z elsewhere in the same function.
+
+**★ This does NOT discharge R86, and the fix says so in its own doc
+comment (verified above).** R86 (a Pass that changes operator-facing
+behavior does not ship until observed working in the running
+application) needs an OBSERVATION the fix is correct, not merely two
+code-level confirmations that agree with each other. The dispatch reports
+it has two independent readings that concur (the engineer's own, and
+`pdfce-ui-specialist`'s, arrived at separately, the latter finding the
+code's own comment stating the frame-ordering hazard) — and **no working
+empirical demonstration**. The stated caret test (focus a field, type
+`hello`, press Home, type `X` — `Xhello` if Home lands as a caret move,
+`helloX` if stolen) is reported to print `helloX` **both before and
+after** the guard change, while a harness trace confirms the guard code
+path is active. Every link in the causal chain checks out on its own
+(egui 0.35's own `Key::Home` handling in `text_selection/
+cursor_range.rs:134`; the harness injects real key-press and text-input
+events) and the observable the test was built to move does not move.
+**Not independently re-run by this librarian** (no GUI harness access
+this dispatch) — relayed as the dispatch's own stated, unresolved gap,
+carried forward as OWED: why the caret test cannot distinguish the two
+states is a harness question, not a product one, and belongs on the next
+session's list before this defect is called closed.
+
+**Part 3 — `fbddda5`: a Find bar, filed as `Pass 55.0` (GUI half) —
+completing `Pass 55.0` across core/CLI/GUI.** Built to
+`pdfce-ui-specialist`'s spec. Two homes were ruled out **by name** before
+the panel location was chosen: not a `PaneSubject` (switching one
+REPLACES what is showing, so opening Find would yank a Redact mark list
+out from under an operator mid-review) and not a floating `egui::Area`
+(retired twice already in this project's own history — decision 024,
+then Pass 34.1's dock migration). A conditional `Panel::top` is neither.
+`exact_size` on the panel, for the same reason the status panel already
+carries it: panel height feeds `apply_fit`, so letting the bar's own
+content drive its height would re-zoom the page on every keystroke —
+the exact defect a 2026-08-04 audit already found and fixed elsewhere in
+this codebase, not repeated here. Three query states, deliberately not
+collapsed to two: "not searched yet" and "searched, found nothing" both
+produce an empty hit vector, and only the second is a claim about the
+document — the per-run-splitting caveat under the results box is shown
+UNCONDITIONALLY, not computed, because whether a phrase crosses a run
+boundary is a property of the QUERY, not the document, and a computed
+caveat would give a confident all-clear on the more common failure mode.
+**Enter did not fire, on two separate attempts** (`has_focus()`+peek,
+then `lost_focus()`) — and stopping to reason about WHY, rather than
+trying a third binding, found the real fault: `Previous`/`Next` are
+disabled until at least one hit exists, so **Enter was the only trigger
+that could ever run a FIRST search**, and when it failed to fire the
+entire bar was inert with no other way in. An explicit **Find** button
+now exists as that alternate path; Enter remains wired in the source and
+is recorded as **still not working**, not silently left ambiguous.
+Verified against the CLI: the dispatch reports `find-status "Match 1 of 1
+- page 3" hits=1` from the GUI trace agreeing exactly with the CLI's own
+`find-text` output on the same fixture — **not independently re-run by
+this librarian** (no GUI harness this dispatch), relayed as stated.
+**Owed, named rather than left implicit:** Enter itself; Escape-to-close
+(needs a fifth rung in `canvas::resolve_escape`, already scoped by the
+specialist); a status-bar toggle so Ctrl+F is not the Find bar's only
+entry point; whole-word matching, **absent rather than faked** — `TextMatch`
+carries no surrounding context to test a word boundary against, a core
+gap, not a GUI omission. Also: the specialist's own `find_button_tooltip`
+string shipped with the spec but had no consumer in the built panel, and
+was DELETED rather than kept "for later" — the R93 shape (dead scaffolding
+left in the tree reads as a promise nobody intends to keep).
+
+**Part 4 — `ff873bc`: printer enumeration, filed as `Pass 55.2` (slice
+1).** `pdfce-cli list-printers` — the Reader-parity sweep's largest
+single gap, since **no print code existed anywhere in the workspace**
+before this commit. Deliberately does NOT spool a job: printing is
+outward-facing (consumes paper, occupies a shared device) and
+irreversible, so the spooling half is written against a real printer only
+with the operator's own explicit go-ahead — this slice exists because
+every later printing feature needs a printer NAME, and until this
+commit pdfce could not name one. **No new dependency** — the `windows`
+crate was already in the resolved tree at 0.62 via eframe/winit,
+MIT-OR-Apache-2.0, already in `THIRD_PARTY_LICENSES.md`; verified with
+`cargo tree` before adding a direct `Cargo.toml` line, per project rule
+13, rather than assumed. Target-gated under
+`[target.'cfg(windows)'.dependencies]` so Linux/macOS CI still compiles
+the crate; the CI `cargo tree` denylist (`reqwest|ureq|hyper|…`) does
+not name `windows`, confirmed above by direct read, so this addition
+does not trip the fail-closed network-client gate (R12) — the module is
+a printer-enumeration/spooler API, not a network client, and the gate
+correctly does not treat it as one. **Core rasterises, the shell spools**
+— printing must never enter `pdfce-core`, or the WASM-fork premise ends;
+this module lives in `pdfce-cli` for exactly that reason and its own
+doc comment says so, verified above. Run against the real spooler: 12
+printers enumerated, the system default correctly flagged; driver and
+port are reported beside each name because this run demonstrated why —
+a printer named "Open PDF Studio" reports driver "Microsoft Print To
+PDF," a renamed virtual device the display name alone would misidentify.
+
+**Part 5 — `1862b1f`: outline + attachments + print preview, three
+capabilities in one commit via two parallel subagents (file-ownership
+disciplined: each wrote only its own new module) plus the engineer's own
+printing work.** **2804 tests reported (+83 over the last confirmed
+count) — RELAYED, not independently re-run; see the Sourcing note above
+for the 5-test reconciliation gap this filing could not close.**
+
+*Outline/bookmarks, filed as `Pass 55.3` (core + CLI).* `/Outlines` had
+existed in this codebase only as a document-SPLIT criterion (Pass 3.2)
+— never read as a navigable tree. `pdfce-cli list-outline [--flat]`
+walks §12.3.3's `/First`/`/Next`/`/Parent` chains into an owned
+`Vec<OutlineItem>`, cycle-guarded (`MAX_OUTLINE_DEPTH` — a `/Next` chain
+has no array bound, so a malformed backward pointer describes an
+infinite list a naive walker never returns from). **Findings that
+changed shipped code, both verified above by direct read of the module
+doc:** `/Count`'s magnitude is the TRANSITIVELY visible descendant
+count, not an immediate-child count — an item with two children, each
+with three of their own, all expanded, carries `/Count 8`; a CLOSED
+item's magnitude is its immediate children only (Annex H.6's two worked
+printings both confirm this reading, per the dispatch — not
+independently re-checked by this librarian, spec-RAG territory). pdfce
+reads only the SIGN for structure and records the declared magnitude
+verbatim for diagnostics, deriving the real child count from its own
+traversal rather than trusting a producer's arithmetic. A remote
+destination's page number is **0-based**, per Table 200 in §12.6.4.3 —
+**not stated in §12.3.2 at all**, so a reader who checked only the
+outline-item clause would get it wrong; a named destination's value may
+wrap a go-to ACTION rather than a bare `/D`, handled rather than
+refused. **Both subagents dispatched `pdfce-spec-librarian` unprompted**
+— the spec RAG had ZERO prior coverage of §12.3 (outlines) or §7.11/
+§7.9.6/§7.7.4/§12.5.6.15 (embedded files); eight new spec entries
+resulted, plus **a correction** to `iso32000__s__12.5.6.md`, whose icon
+row read `GraphPushPin/Paperclip/Tag` — a cell-merge artifact hiding
+that the clause names FOUR icons, not three. **Not independently
+verified by this librarian** (spec-librarian's exclusive territory per
+hard rule 6 — relayed, not re-sourced).
+
+*Attachments, filed as `Pass 55.4` (core + CLI).* Zero mentions of
+embedded files existed in this repository before this commit.
+`AttachmentKind::DocumentLevel`/`PageAnnotation` unify both standard
+§7.11.7 paths (`/Names /EmbeddedFiles` and page-level `/FileAttachment`
+annotations) into one list; `pdfce-cli list-attachments` prints
+`name=`/`kind=`/`desc=`/`source=` per attachment. **★ The finding that
+most needs carrying forward, and is filed below as a Backlog blocker,
+not just a doc comment**: since PDF 1.5 an otherwise-UNencrypted document
+can carry PER-FILE-ENCRYPTED embedded files via `/EFF` naming
+`DefEmbeddedFile` (§7.6.5). The intuitive guard — "no password prompt at
+open, so the bytes must be plaintext" — is wrong, and wrong SILENTLY:
+the filter chain runs to completion and returns garbage that looks
+exactly like a successful read. `AttachmentNotes::may_be_encrypted` is a
+deliberately OVER-broad warning, not a fix, verified above by direct
+read of both the doc comment and the CLI's own stderr text (*"pdfce
+cannot decrypt them yet, and extracting one would produce ciphertext
+that looks like a successful read"*) and machine-readable
+`MAY_BE_ENCRYPTED` token. Filename safety, found by TESTING rather than
+reasoning: `name` is kept raw/verbatim, `safe_name()` is a separate
+sanitising accessor, and two hazards surfaced only by trying inputs — a
+NUL byte inside `/F` is already U+FFFD before any sanitiser runs, and
+`"\u{202E}gnp.exe"` (a Unicode RTL-override character) visually renders
+as `exe.png`. **★ R151 instance, named rather than silently carried**:
+`attachment_bytes`/`extract_attachment` exist in `pdfce-core`
+(confirmed above by direct read, lines 1435/1496) with **zero callers**
+in `pdfce-cli` or `pdfce-gui` — `list-attachments` reads metadata only;
+nothing yet turns an attachment's bytes into a file on disk. This is a
+shipped capability reachable from no surface, R151's own definition, and
+is filed below as `FEATURES.md`'s row for this capability records it
+honestly (`core [x]` / `cli [x]` for listing only / `gui [ ]`) rather
+than rounding "attachments" up to done.
+
+*Print preview, filed as `Pass 55.2` (slice 2), completing the printing
+family alongside `ff873bc`'s enumeration.* `pdfce-cli print-preview
+<input> [--printer NAME] [--scale-percent N]` reports what a print WOULD
+do without doing it — resolution, sheet size, printable area, per-page
+fit, and a clip report. Verified against the real default printer per
+the dispatch: `dpi=600x600 sheet_pt=612.0x792.0
+printable_pt=595.2x775.2 margin_pt=8.4,8.4`, a Letter page fitting at
+**0.9725** — the entire argument for reporting against the PRINTABLE
+area rather than the physical sheet, since a naive fit to the sheet
+scales to 1.0 and lets the hardware silently crop 8.4 pt off every edge.
+`Fit` and `ShrinkOversized` are kept as genuinely different operations,
+with a test asserting they are not collapsed. `--scale-percent` takes
+Reader's own free-form 1–1000% range, not a fixed enum. **The deliberate
+divergence from Acrobat, recorded because it is a design choice, not an
+oversight**: Acrobat clips an oversized page silently; pdfce names the
+affected pages, warns on stderr, and still exits `0` — the preview
+itself succeeded, clipping is a fact about the content, not a failure of
+the command.
+
+**A process note from this Part, filed in `decision 036` (`ARCHITECTURE.md`
+§12) rather than duplicated in full here — cross-referenced, not
+repeated.** A `git add -A` run while both subagents were still mid-write
+swept intermediate drafts of both new modules into this commit. Nothing
+was lost — the working tree superseded both drafts and each agent
+independently verified its own final state — but it cost a check that a
+more disciplined staging step would not have. Considered for a new
+Standing rule and **declined** (one instance, no data loss, cheap
+catch) — see decision 036 for the full reasoning and the R166/R167-style
+precedent it follows for not minting on a single clean instance.
+
+**Ledger for this filing.** **Five new Pass IDs minted, all checked
+against `Pass 55`/`Pass 54.2` returning zero hits before filing, per
+R156**: `Pass 55.0` (find-text, core+CLI+GUI, COMPLETE), `Pass 55.1`
+(keyboard-focus defect fix, standalone), `Pass 55.2` (printing,
+core `—`/cli `[x]`/gui `[ ]`, enumeration+preview shipped, **spooling
+deliberately unbuilt**), `Pass 55.3` (outline/bookmarks, core+CLI
+shipped, **gui `[ ]`**), `Pass 55.4` (attachments, core+CLI-for-listing
+shipped, **extraction-to-file and gui both `[ ]`, R151-flagged**). Pass
+family ceiling moves **54.1 → 55.4**. `docs/FEATURES.md`: new
+*Implemented* subsection **"Reading, navigation & printing"** added
+(four rows — Find, Bookmarks/Outline, Attachments, Printing), plus three
+new *Planned* rows (print spooling, document-layers/OCG panel,
+full-screen/read mode) and one new item-(5)/(7) annotation on the
+fifteen-item Acrobat-gap triage list. `docs/ARCHITECTURE.md`: §3 gains
+four module notes (`outline.rs`, `attachments.rs`, `find_text` in
+`edit.rs`, `printing.rs`); §7 gains a CLI-subcommand bullet naming all
+five new subcommands; §12 gains **decision 036** (the campaign itself,
+the verification constraint, and the `git add -A` process note).
+Decision ceiling moves **035 → 036**. Standing rules: **no new
+R-number** — the `git add -A` candidate is named in decision 036 and
+declined, not minted; R86 and R151 are both CITED for new instances
+(R86: the keyboard-guard fix, explicitly NOT discharged; R151: the
+uncalled `extract_attachment`), ceiling unaffected, stays **R182**, next
+free **R183**. Operator-question ceiling unchanged at **(bh)**, next
+free **(bi)** — this campaign was operator-directed in full, nothing
+here reads as a question owed back. `tools/commits-filed-baseline.txt`:
+**unchanged at 5 lines**, confirmed by direct read; none of this
+filing's five hashes was ever a baseline line. **Gate status for
+`1862b1f` (2804 tests / 0 failed, clippy/fmt clean) is RELAYED from the
+dispatch, NOT independently re-run — no shell this dispatch**, and the
+test-count delta does not fully reconcile against the last confirmed
+figure (see Sourcing, above) — flagged for the next filing to close, not
+silently accepted. Backup/git working-tree state **not independently
+asserted anywhere in this filing** (hard rule 8) — no shell this
+dispatch; the engineer should check `D:\Dev\pdfce-backups\` directly if
+backup currency needs confirming before the next push. **Still owed,
+carried forward:** printer job SPOOLING (needs explicit operator
+go-ahead before it is written against a real printer); the OCG/layers
+panel; full-screen/read mode; Enter-to-search in the Find bar;
+Escape-to-close the Find bar; whole-word matching (blocked on a core
+`TextMatch` context gap); attachment EXTRACTION-to-file (CLI+GUI, core
+verb exists — R151); the caret-test/harness discrepancy from Part 2; a
+`troubleshooting-librarian` dispatch for the Windows-console-mojibake
+finding family (carried forward unchanged from the seventy-third
+filing); a `pdfce-spec-librarian` dispatch for the FDF `/Ff` namespace
+collision (carried forward unchanged). This is the **seventy-fourth**
+`SESSION_LOG.md` filing (the seventy-third confirmed present by direct
+read before this entry was written).
+
 ### ★ `9146b41` FILED — portable builds land in `D:\builds`, one dated folder per milestone, per a new operator standing request; `ARCHITECTURE.md` §6's "the packaging smoke test verifies the partition" sentence CORRECTED — no such test existed then and none exists now; `944ef0d` FILED — `BUILD-INFO.txt`'s changelog stops mangling its own commit subjects, a THIRD independent instance of one root cause this session (Windows defaulting to cp1252 wherever UTF-8 is not demanded explicitly), written up in `personal_rag`; `c4cce95` FILED — `Pass 37.3` gains a FIFTH slice: `list-fields` discloses WHAT rich-text formatting a field has, not just that it has some — 2026-08-10 (seventy-third filing)
 
 **Sourcing.** This librarian has Grep/Read/Glob but no shell this dispatch
@@ -34989,6 +35352,60 @@ nothing gets forgotten, not as a commitment to build in this order.
   network), two are already covered by *Cannot*, and none should be
   scoped into a Pass without a dedicated `pdfce-acrobat-librarian`
   cataloguing session first, because each rests on one search.
+  **★ ITEMS (5) AND (7) PARTIALLY DISCHARGED 2026-08-10 by the
+  Reader-parity sweep (`Pass 55.3`/`Pass 55.4`, `1862b1f`) — the READ
+  half of each, not the item as a whole.** (5) named "links & bookmarks
+  authoring... as a first-class surface" — **authoring remains entirely
+  unbuilt**; what shipped is READING an existing outline (`list-outline`,
+  core+CLI), a narrower capability the item's own wording does not
+  cover. (7) named "file attachments embedded in a PDF, distinct from
+  Portfolios" — **listing/metadata is built** (`list-attachments`,
+  core+CLI); extracting an attachment's bytes to a file is NOT
+  (`extract_attachment` exists in `pdfce-core` with zero callers,
+  R151-flagged — see the new Backlog entry immediately below). Neither
+  item is struck; both stay open for their unbuilt halves.
+- **Attachment EXTRACTION-to-file — the core verb exists, no shell
+  calls it (R151, filed 2026-08-10 with `Pass 55.4`).**
+  `pdfce_core::attachments::extract_attachment`/`attachment_bytes` ship
+  with `Pass 55.4` but have zero callers in `pdfce-cli` or `pdfce-gui`
+  — `list-attachments` reads metadata only. **Hard precondition on
+  building this surface, named now so it cannot be forgotten later:**
+  since PDF 1.5 an otherwise-unencrypted document can carry
+  PER-FILE-ENCRYPTED embedded files via `/EFF` naming
+  `DefEmbeddedFile` (§7.6.5), and pdfce's filter chain runs to
+  completion on such a file and returns ciphertext that looks exactly
+  like a successful read — no error, no obviously-wrong output. **Any
+  future extraction surface (CLI `extract-attachment` or a GUI Save
+  button) MUST refuse or loudly caveat whenever
+  `AttachmentNotes::may_be_encrypted` is set**, not merely emit the same
+  warning `list-attachments` already prints and hope the operator reads
+  stderr before trusting the bytes. Not yet scoped to a Pass; whoever
+  scopes it should treat this precondition as an acceptance criterion,
+  not an afterthought.
+- **Printer job SPOOLING — the send-a-page-to-paper half of `Pass
+  55.2`, deliberately not built this session.** `list-printers` and
+  `print-preview` (both shipped) answer "what would a print do"; nothing
+  yet sends bytes to a spooler. Deferred pending the operator's explicit
+  go-ahead, per this project's standing posture on outward-facing,
+  irreversible side effects — printing consumes paper and occupies a
+  shared device, unlike every other pdfce operation, which touches only
+  files on disk. Not yet scoped to a Pass.
+- **Document-wide OCG/layers panel — distinct from the existing
+  ce-dimension-group layer toggle (filed 2026-08-10, Reader-parity
+  sweep).** pdfce can already toggle the OCG visibility of its OWN
+  ce-dimension groups (Properties panel, since Pass 34.2). It cannot
+  browse or toggle an arbitrary `/OCProperties` entry a FOREIGN producer
+  wrote — a CAD export or Illustrator file with its own named layers is
+  invisible to pdfce's layer UI today. Distinct from `FEATURES.md`'s
+  existing *Vector graphics editing* Planned row, which names
+  "general-purpose OCG layer AUTHORING" (creating new layers) — this
+  item is VIEWING/toggling layers that already exist in the file. Not
+  yet scoped to a Pass.
+- **Full-screen / read mode (filed 2026-08-10, Reader-parity sweep).**
+  Acrobat Reader's presentation-style single-page, chrome-free view.
+  Not yet scoped to a Pass; no core/CLI component expected (a GUI-only
+  window-state capability, `core`/`cli` `—` in `FEATURES.md`'s legend
+  sense).
 - **⚠ `tools/check-ledger-numbers.py` cannot see a `### ★ Pass …`
   heading — TEN declaring headings have never been checked (filed
   2026-08-06, continuation 105, no Pass number assigned).**

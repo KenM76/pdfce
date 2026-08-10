@@ -582,6 +582,17 @@ pub enum PaneSubject {
     /// structurally tied to `doc.active_tool` — a value the Forms panel
     /// correctly never sets, because filling a field arms no canvas tool.
     Forms,
+    /// The document's bookmark tree (ISO 32000-1 §12.3.3) — navigation,
+    /// not editing.
+    ///
+    /// A subject rather than a section of [`Self::Properties`] for the
+    /// same reason [`Self::Forms`] is: that pane is about "the selected
+    /// thing", and an outline shares no state with a canvas selection.
+    /// It is a workflow an operator ENTERS — open it, move around the
+    /// document, leave it — which is what this enum models and what
+    /// distinguishes it from the Find bar, a momentary toggle that
+    /// deliberately is NOT a subject.
+    Bookmarks,
 }
 
 #[cfg(test)]

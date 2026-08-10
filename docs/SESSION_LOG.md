@@ -31198,3 +31198,165 @@ this dispatch. Backup/git working-tree state not independently asserted
 (hard rule 8). This is the **seventy-third** `SESSION_LOG.md` filing (the
 seventy-second confirmed present by direct read before this entry was
 appended).
+
+## 2026-08-10 (seventy-fourth filing) — the Reader-parity sweep opens: audited against Acrobat Reader (not Pro), pdfce is found AHEAD on editing and BEHIND on plain consumption; `Pass 55.0`–`Pass 55.4` ship find-text, a six-key keyboard defect fix, printer enumeration + preview (no spooling), bookmarks/outline read, and attachments read; `decision 036` MINTED
+
+**Sourcing.** This librarian has Grep/Read/Glob but no shell this
+dispatch (hard rule 8) — none of the five hashes confirmed against `git
+log`/`git show` directly; all five taken from the dispatch.
+Independently verified by direct read: `edit.rs`'s `find_text`/
+`TextMatch`; `main.rs` (CLI)'s `FindText`/`ListOutline`/
+`ListAttachments`/`PrintPreview` commands and `list-printers`; `main.rs`
+(GUI) lines 12400–12519 in full (the six `!typing`-gated keys, the
+guard's own doc comment); `printing.rs`'s module doc and
+`Cargo.toml`'s `[target.'cfg(windows)'.dependencies]`; `ci.yml`'s
+`cargo tree` denylist (does not name `windows`); `outline.rs` lines
+1–60 (the `/Count` sign-vs-magnitude argument); `attachments.rs` lines
+180/217/709–721/857–859/2095–2102 (`/EFF` doc comments, the
+`may_be_encrypted` field, a test) and lines 1435/1496
+(`extract_attachment`/`attachment_bytes`, confirmed zero CLI/GUI
+callers by grep); `main.rs` (CLI) lines 5792–5799 (the `list-attachments`
+`/EFF` stderr warning verbatim); `tools/commits-filed-baseline.txt`
+(still 5 lines, none of this filing's hashes among them);
+`docs/FEATURES.md` (no prior Find/Printing/Bookmarks/Attachments row
+anywhere, confirmed by grep before adding any); `ROADMAP.md` (zero hits
+for "Pass 55"/"Pass 54.2" before filing, per R156). **Not independently
+verified:** the stated test count (2804, +83) and gate results — no
+`cargo` run by this librarian, and it does not fully reconcile against
+the last confirmed count (2716, seventy-third filing: 2716+83=2799, not
+2804) — flagged, not smoothed over; the two `pdfce-spec-librarian`
+dispatches' own findings (relayed, spec-librarian's territory).
+
+**Shipped:**
+- `04c7820` (2026-08-10) — `Pass 55.0` core+CLI: `find_text` extracted
+  from `add_redaction`'s buried search-to-quad scan, mutating nothing.
+  `pdfce-cli find-text <input> <needle> [--ignore-case]`. No
+  encryption/certification gate (reading, not writing). Limits named:
+  `/ActualText` unmatched, per-run matching only, page content only.
+- `e46c3a8` (2026-08-10) — `Pass 55.1`, standalone: six unmodified keys
+  (PageUp/PageDown, Home/End, Delete/Backspace, `[`/`]`) were being
+  stolen from every focused text field by `collect_keyboard_actions`
+  running before panels draw; `[`/`]` are printable characters, so
+  typing a bracket rotated the page. All six now gate on
+  `ctx.egui_wants_keyboard_input()`. **Does NOT discharge R86** — two
+  independent code-level confirmations exist (engineer + UI specialist)
+  but the caret test that should observe the fix reportedly prints the
+  same wrong output before and after; the discrepancy is unresolved and
+  flagged, not swept under the code-level agreement.
+- `fbddda5` (2026-08-10) — `Pass 55.0` GUI half, completing the family:
+  a Find bar (`Panel::top`, `exact_size`, per-run-split caveat shown
+  unconditionally). Enter does not (yet) trigger a first search — a
+  Find button is the working alternate path, since Previous/Next stay
+  disabled with zero hits, making Enter the sole original trigger.
+  Escape-to-close and whole-word matching remain unbuilt, both named.
+- `ff873bc` (2026-08-10) — `Pass 55.2` slice 1: `pdfce-cli
+  list-printers`. No print code existed anywhere in the workspace
+  before this commit. Does not spool — enumeration only, pending
+  operator go-ahead for the spooling half. No new dependency (`windows`
+  0.62 already transitive via eframe/winit).
+- `1862b1f` (2026-08-10) — three capabilities via two parallel
+  subagents (file-ownership disciplined) plus the engineer's printing
+  work: `Pass 55.3` (outline/bookmarks read, core+CLI,
+  `/Count`-magnitude and 0-based-remote-destination findings both
+  changed shipped code); `Pass 55.4` (attachments read, core+CLI-for-
+  listing, the `/EFF` per-file-encryption finding, R151-flagged
+  `extract_attachment` with zero callers); `Pass 55.2` slice 2
+  (`print-preview`, the printable-vs-sheet-area 0.9725 finding, named
+  clip disclosure diverging from Acrobat's silent clip). Both subagents
+  dispatched `pdfce-spec-librarian` unprompted — eight new spec entries,
+  one correction to `iso32000__s__12.5.6.md`'s icon-count cell-merge
+  defect.
+
+**Decisions made this session:**
+- **`decision 036` MINTED** (`ARCHITECTURE.md` §12) — the Reader-parity
+  sweep itself: audited against Acrobat Reader, not Pro; the gap is
+  inverted from every prior Backlog assumption (ahead on editing, behind
+  on consumption); the operator chose this campaign over three named
+  alternatives. Filed as a decision, not only a Pass sequence, because
+  it reorders project-wide priority.
+- A standing verification constraint for the campaign's duration: the
+  operator is at the machine, so `gui-shot.ps1` is off limits;
+  `gui-drive.ps1` (off-screen, never takes focus) remains the
+  verification path. Every GUI claim this filing is by text trace, not
+  screenshot — recorded so a future session does not read the absence
+  of a screenshot as a harness regression.
+- A `git add -A` run mid-parallel-work swept intermediate drafts of both
+  subagents' modules into `1862b1f`. Nothing lost (both agents' finals
+  superseded the drafts, both independently verified), but a candidate
+  Standing rule (*"parallel-agent sessions stage by explicit path"*) was
+  considered and **declined** — one clean instance, no data loss.
+  Recorded in decision 036, not minted, per the project's own R166/R167
+  precedent for single-instance findings.
+
+**Findings + decisions:**
+- **The Reader-parity gap is inverted from the roadmap's working
+  assumption** — pdfce is ahead of Acrobat Reader on editing and behind
+  on consumption, found by `git grep`-ing for print/find/outline/
+  attachment code and finding none of the four, not by re-reading a
+  feature table.
+- **`/Count`'s magnitude is transitively visible descendants, not an
+  immediate-child count** — §12.3.3, the single easiest clause in the
+  outline spec to misread given the key sits next to `/First`/`/Last`.
+- **§7.6.5's `/EFF`+`DefEmbeddedFile` lets an otherwise-unencrypted
+  document carry per-file-encrypted attachments with no password
+  prompt** — the intuitive "no prompt means plaintext" reading is wrong
+  and silently so; filed as a hard precondition on any future
+  attachment-extraction surface, not merely a doc comment.
+- **A printer's driver/port can misidentify it by name alone** — "Open
+  PDF Studio" turned out to be driver "Microsoft Print To PDF," found
+  by actually enumerating the real spooler rather than trusting display
+  names.
+- **A print preview against the printable area, not the physical sheet,
+  is the only fit number that means anything** — a Letter page fits at
+  0.9725 against a real printer's printable region; fitting to the raw
+  sheet size would silently let hardware crop content.
+
+**Still in flight:**
+- Printer job spooling — deferred pending explicit operator go-ahead.
+- Document-wide OCG/layers panel, full-screen/read mode — both named,
+  neither scoped to a Pass.
+- Find bar: Enter-to-search, Escape-to-close, whole-word matching — all
+  three named and owed.
+- Attachment extraction-to-file (core verb exists, R151-flagged).
+- The keyboard-guard caret-test/harness discrepancy from `e46c3a8` — a
+  harness question, not a product one, unresolved.
+- `tools/commits-filed-baseline.txt` unchanged at **5 lines**.
+- `pdfce-spec-librarian` dispatch still owed (FDF `/Ff` namespace
+  collision) — unchanged.
+- `troubleshooting-librarian` dispatch still owed (Windows-console-
+  mojibake finding family) — unchanged.
+- The test-count reconciliation gap (2716 + 83 ≠ 2804) named this
+  filing, not yet explained.
+
+**For next session:**
+- Confirm the Enter-key fix for the Find bar and drive it live once the
+  operator is off the machine (screenshot verification unblocked).
+- Scope printer spooling once the operator gives explicit go-ahead.
+- Scope the OCG/layers panel and full-screen/read mode.
+- Reconcile the 2716→2804 test-count gap against an actual `cargo test`
+  run.
+
+**Ledger for this filing.** Five new Pass IDs: `Pass 55.0` (COMPLETE,
+core+CLI+GUI), `Pass 55.1` (standalone defect fix), `Pass 55.2`
+(core `—`/cli `[x]`/gui `[ ]`, spooling unbuilt), `Pass 55.3`
+(core+CLI, gui `[ ]`), `Pass 55.4` (core+CLI-for-listing, extraction and
+gui both `[ ]`, R151-flagged). Pass family ceiling moves **54.1 →
+55.4**. `docs/FEATURES.md`: new *Implemented* subsection "Reading,
+navigation & printing" (four rows) plus five new *Planned* rows (print
+spooling, attachment extraction, bookmarks authoring, OCG/layers panel,
+full-screen/read mode); one Backlog triage-list annotation (items 5/7
+partially discharged). `docs/ARCHITECTURE.md`: §3 gains four module
+notes, §7 gains a CLI-subcommand bullet, §12 gains **decision 036**.
+Decision ceiling moves **035 → 036**. Standing rules: no new R-number
+(`git add -A` candidate declined; R86 and R151 both cited for new
+instances); ceiling unchanged at **R182**, next free **R183**.
+Operator-question ceiling unchanged at **(bh)**, next free **(bi)**.
+`tools/commits-filed-baseline.txt` unchanged at **5 lines**, confirmed
+by direct read. Gate status for `1862b1f` (2804 tests / 0 failed,
+clippy/fmt clean) RELAYED, NOT independently re-run — no shell this
+dispatch; test-count delta flagged, not reconciled. Backup/git
+working-tree state not independently asserted (hard rule 8) — no shell
+this dispatch; engineer should check `D:\Dev\pdfce-backups\` directly.
+This is the **seventy-fourth** `SESSION_LOG.md` filing (the
+seventy-third confirmed present by direct read before this entry was
+appended).

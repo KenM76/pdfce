@@ -141,6 +141,8 @@ pub enum Step {
     /// question "is its toolbar button wired up". A harness that could only
     /// reach a tool through its button would confuse the two.
     Tool(ScriptTool),
+    /// Show the Bookmarks activity.
+    Bookmarks,
     /// Toggle the Find bar, through the same action Ctrl+F pushes.
     ///
     /// A step rather than a synthesised Ctrl+F because the chord itself
@@ -475,6 +477,7 @@ fn parse_step(s: &str) -> Option<Step> {
         "panel" if rest.trim() == "redact" => Some(Step::Redact),
         "panel" if rest.trim() == "forms" => Some(Step::Forms),
         "panel" if rest.trim() == "find" => Some(Step::Find),
+        "panel" if rest.trim() == "bookmarks" => Some(Step::Bookmarks),
         "panel" if rest.trim() == "comments" => Some(Step::Comments),
         "tab" => match rest.trim() {
             "file" => Some(Step::Tab("file")),

@@ -151,6 +151,79 @@ D:\Dev\pdfce\
                                    dated 2026-08-09. GUI half (File ▸ Export
                                    ▸ Export DXF…) also `0466281`; the family
                                    is now COMPLETE across core/cli/gui.
+                                   **`outline.rs` (`Pass 55.3`, 2026-08-10,
+                                   `1862b1f`; §12 decision 036):** a
+                                   READ-only §12.3.3 tree walker —
+                                   `/First`/`/Next`/`/Parent` chains, no
+                                   array anywhere in the source encoding —
+                                   into an owned `Vec<OutlineItem>`.
+                                   `/Count`'s sign carries open/closed
+                                   state; its MAGNITUDE is transitively
+                                   visible descendants, not an immediate-
+                                   child count (a common misreading this
+                                   module deliberately does not make).
+                                   Cycle-guarded (`MAX_OUTLINE_DEPTH`) —
+                                   a `/Next` chain has no array bound, so
+                                   a malformed backward pointer describes
+                                   an infinite list a naive walker would
+                                   hang on. Distinct from
+                                   `pageops::outline` (outline authoring/
+                                   carryover across page operations,
+                                   pre-existing), a deliberately different
+                                   job with different simplifications.
+                                   **`attachments.rs` (`Pass 55.4`,
+                                   2026-08-10, `1862b1f`):** both standard
+                                   §7.11.7 attachment paths (document-level
+                                   `/Names /EmbeddedFiles` and page-level
+                                   `/FileAttachment` annotations) unified
+                                   into one `Vec<Attachment>`, plus
+                                   `AttachmentNotes::may_be_encrypted` — a
+                                   deliberately over-broad warning for the
+                                   §7.6.5 `/EFF`+`DefEmbeddedFile` case
+                                   (an otherwise-unencrypted document can
+                                   carry PER-FILE-ENCRYPTED attachments
+                                   with no password prompt; the filter
+                                   chain runs and returns garbage that
+                                   looks like a successful read). `name`
+                                   is raw/verbatim; `safe_name()` is a
+                                   separate sanitising accessor found
+                                   necessary by TESTING, not reasoning — a
+                                   NUL in `/F` was already U+FFFD before
+                                   any sanitiser saw it, and
+                                   `"\u{202E}gnp.exe"` (RTL override) reads
+                                   as `exe.png`. `extract_attachment`/
+                                   `attachment_bytes` exist here with NO
+                                   CLI or GUI caller as of this Pass — an
+                                   R151 instance, named not silently
+                                   carried; see `ROADMAP.md`'s `Pass 55.4`
+                                   Shipped entry.
+                                   **`find_text` (`Pass 55.0`, 2026-08-10,
+                                   `04c7820`) lives in `edit.rs`,** not a
+                                   new module — it is the search-to-quad
+                                   scan Pass 8's redaction verb already
+                                   contained, extracted so it can run
+                                   without mutating anything. Sharing the
+                                   scanner with `add_redaction`'s search
+                                   path is a correctness property: a
+                                   second, independent implementation of
+                                   glyph-span-to-quad geometry could drift
+                                   from the first in the one direction
+                                   that matters — a redaction covering a
+                                   different box than the search that
+                                   found it. A cross-check test compares
+                                   `find_text`'s quad against
+                                   `redact-mark`'s `/QuadPoints` for the
+                                   same match so a future split of the two
+                                   paths has to fail it. No encryption or
+                                   certification gate — a signature
+                                   freezes a document, it does not forbid
+                                   reading it. Limits stated rather than
+                                   silently absent: `/ActualText` runs are
+                                   unmatched (no per-glyph geometry to
+                                   locate a hit against); matching is
+                                   per-TEXT-RUN, so a phrase a producer
+                                   split across two `Tj` calls is missed;
+                                   page content only.
     pdfce-render\               <- Takes pdfce-core's draw-op stream + resources
                                    (fonts, images, color spaces) and rasterizes to an
                                    in-memory pixel buffer via `tiny-skia` (CPU-only,
@@ -578,6 +651,51 @@ D:\Dev\pdfce\
                                    pdfce-render, same as pdfce-gui — ZERO GUI/windowing
                                    dependencies of its own, see §7. Doubles as a fast,
                                    windowless way to exercise pdfce-core in tests.
+                                   **`printing.rs` (`Pass 55.2`, 2026-08-10,
+                                   `ff873bc`+`1862b1f`; §12 decision 036):**
+                                   the one genuinely platform-bound
+                                   capability pdfce needs, and deliberately
+                                   NOT in `pdfce-core`/`pdfce-render` — a
+                                   `windows` dependency there would end the
+                                   WASM-fork premise as surely as an `egui`
+                                   one. **Core rasterises, the shell
+                                   spools.** `windows` 0.62 was ALREADY in
+                                   the workspace tree, pulled transitively
+                                   by eframe/winit, MIT-OR-Apache-2.0,
+                                   already in `THIRD_PARTY_LICENSES.md` —
+                                   verified with `cargo tree` before adding
+                                   a direct dependency line, not assumed.
+                                   Declared under
+                                   `[target.'cfg(windows)'.dependencies]`
+                                   so Linux/macOS CI still compiles this
+                                   crate (a compile signal, R9/R10, never a
+                                   support claim); the page-placement
+                                   geometry (pure math, no platform dep) is
+                                   the one part NOT `cfg(windows)`-gated, so
+                                   it is unit-tested on every CI runner.
+                                   **Ships enumeration (`list-printers`) and
+                                   a page-fit preview (`print-preview`) —
+                                   deliberately does NOT spool a job.**
+                                   Printing is outward-facing (paper,
+                                   shared device hardware) and irreversible;
+                                   the spooling half needs the operator's
+                                   explicit go-ahead before it is written
+                                   against a real printer. Preview reports
+                                   the PRINTABLE area, not the physical
+                                   sheet — a Letter page against this
+                                   session's default printer's printable
+                                   region fits at 0.9725, the whole
+                                   argument for using it: a naive fit to
+                                   the sheet scales 1.0 and lets the
+                                   hardware silently crop 8.4 pt off every
+                                   edge. `Fit` and `ShrinkOversized` are
+                                   kept as genuinely different operations
+                                   (a test fails if they are collapsed).
+                                   Clip is reported by NAME, not silently —
+                                   Acrobat clips without saying so; pdfce
+                                   names the affected pages, warns on
+                                   stderr, and still exits 0 (the PREVIEW
+                                   succeeded).
     pdfce-web\ (future, not     <- The web fork. Same pdfce-core + pdfce-render,
       built in this phase)         compiled to wasm32-unknown-unknown, eframe's
                                    web target, served as static files (no server-side
@@ -3172,6 +3290,22 @@ debug afterthought. Design points:
   three-way stderr disclosure (`skipped_text`/`unreadable_text`/
   `skipped_images`) before its stdout summary — see §3's `export/dxf.rs`
   note and §12 decision 035.
+- **The Reader-parity sweep (`Pass 55.x`, 2026-08-10, §12 decision 036)
+  added four subcommands that read rather than mutate the PDF, plus one
+  that reports on a Windows subsystem the PDF never touches:**
+  `pdfce-cli find-text <input> <needle> [--ignore-case]` (the search-to-
+  quad scan Pass 8's redaction verb already contained, extracted to run
+  without marking anything for removal — no encryption/certification
+  gate, since reading is not writing); `pdfce-cli list-outline <input>
+  [--flat]` (§12.3.3 bookmark tree, read-only); `pdfce-cli
+  list-attachments <input>` (§7.11.7 embedded files, both standard
+  paths, with a stderr `MAY_BE_ENCRYPTED` warning per §7.6.5's
+  otherwise-invisible per-file `/EFF` encryption — see §3's
+  `attachments.rs` note); `pdfce-cli list-printers` and `pdfce-cli
+  print-preview <input> [--printer NAME] [--scale-percent N]` (Windows
+  spooler enumeration + page-fit report; **does not print anything** —
+  see §3's `printing.rs` note for why spooling is deliberately
+  unbuilt).
 - **Exit codes matter.** Since this is meant to be genuinely scriptable
   (unlike Acrobat, which has no real CLI), follow normal Unix
   conventions: `0` success, non-zero on any failure, with a specific,
@@ -14389,3 +14523,78 @@ started).
   "no number" convention as the two entries above it. Full record:
   `ROADMAP.md`'s `eac0853`/`b1d7858` *Shipped* entry (seventieth
   filing), Part 2.
+
+- **2026-08-10, decision 036 — the Reader-parity sweep: pdfce audited
+  against Acrobat READER (not Pro) found the gap INVERTED from the
+  roadmap's working assumption, and the operator chose to close it as
+  one campaign over three alternatives.** Every prior Backlog bucket
+  targeted Acrobat Pro's editing/authoring surface, on the working
+  assumption that pdfce trailed a full-featured competitor broadly. A
+  source-level audit this session (not a web search — grepped for print
+  code, a Find implementation, an outline reader, an attachments
+  reader; found none of the four anywhere in the workspace) found the
+  opposite shape: **pdfce is well AHEAD of Acrobat Reader on editing** —
+  text, vector objects, redaction, form authoring, page ops — **and
+  BEHIND on plain document CONSUMPTION**, the thing Reader (used by the
+  overwhelming majority of PDF opens) actually does. Four gaps verified
+  absent in source, not assumed from a feature-parity table: printing
+  (no print code anywhere in the workspace), Find/Ctrl+F (the scan
+  existed, buried inside a mutating redaction verb, reachable only as a
+  side effect of marking content for removal), bookmarks/outline
+  (`/Outlines` was only ever a document-SPLIT criterion, never read as
+  a tree), attachments (zero mentions in the repo). Two gaps confirmed
+  still open and deliberately NOT started this campaign: a document-wide
+  OCG/layers panel (pdfce can toggle its OWN ce-dimension-group layers;
+  it cannot browse or toggle an arbitrary `/OCProperties` entry a
+  foreign producer wrote) and full-screen/read mode. Signature
+  VALIDATION (read-only status check on an existing signature, distinct
+  from PKCS#7 signing/authoring) remains folded into the existing
+  digital-signatures Backlog bucket, lowest priority, unchanged by this
+  decision.
+
+  **The operator was offered four options and chose the sweep**, over
+  printing-first, cheap-viewer-wins-first, and staying on the existing
+  roadmap order. Filed here rather than only in `ROADMAP.md` because it
+  reorders engineering priority project-wide, not a single Pass's scope
+  — the same class of decision as decision 010's "highest-value
+  investment" call. `Pass 55.0`–`Pass 55.4` (this session: find-text
+  core+CLI+GUI, a six-key focused-text-field keyboard-guard defect fix,
+  printer enumeration + page-fit preview, outline read, attachments
+  read) are the campaign's first slices; printer job SPOOLING, the OCG
+  panel, and full-screen/read mode remain open, filed to `ROADMAP.md`
+  *Backlog*/*Next up*. See `ROADMAP.md`'s `Pass 55.0`–`Pass 55.4`
+  Shipped entry (seventy-fourth filing) for the full build record.
+
+  **A standing verification constraint, recorded here because it
+  governs how every future Pass in this campaign — and arguably every
+  GUI Pass — gets checked, not just this one's.** The operator is USING
+  the machine during this campaign, which puts `tools/gui-shot.ps1`
+  (raises a window to the foreground to screenshot it) off limits for
+  the duration; `tools/gui-drive.ps1` remains available because it runs
+  off-screen at a fixed coordinate and never takes focus. Concretely:
+  GUI verification in this campaign is by TEXT TRACE (the diag/observe
+  harness) only, not by screenshot, until the operator lifts the
+  constraint. This is an operational fact about who has the machine,
+  not a capability regression in the harness — recorded so a future
+  session does not read "no screenshot this session" as a tooling
+  defect.
+
+  **A process finding from this session's own execution, kept here
+  because decision log entries are where a reusable engineering
+  practice gets weighed, and this one did not clear the bar for a new
+  Standing rule.** Two subagents worked in parallel under file-ownership
+  discipline (each wrote only its own new module — `outline.rs`,
+  `attachments.rs`; the engineer did all shared-file wiring). A `git add
+  -A` run while both were still mid-write swept intermediate drafts of
+  both modules into the `1862b1f` commit. **Nothing was lost** — the
+  working tree superseded both drafts by the time either agent's own
+  final commit landed, and both agents independently verified their own
+  work was not clobbered — but the outline agent had to spend a check
+  confirming it. Considered for a new Standing rule (candidate wording:
+  *"parallel-agent sessions stage by explicit path, never `git add
+  -A`"*) and **NOT minted** — one instance, no actual data loss, caught
+  and confirmed cheaply. Flagged in `ROADMAP.md`'s *Standing rules*
+  section as a named candidate instead, per this project's own
+  precedent for RAG-worthy-but-not-yet-rule-worthy findings (the R166/
+  R167 "stays free" pattern) — if it recurs, the second instance is the
+  one that should mint it, not this one.
