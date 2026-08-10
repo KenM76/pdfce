@@ -72,10 +72,49 @@
 //! `CON.txt`. Anything writing a file must go through
 //! [`sanitize_attachment_name`] and must show the operator what changed.
 //!
+//! ## The listing is best-effort BY THE STANDARD'S OWN ADMISSION
+//!
+//! This is not a pdfce limitation and cannot be engineered away. §7.11.7
+//! NOTE 1 says outright that it is *"not possible, in general, to find all
+//! file specification strings … there is no way to determine whether a
+//! given string is a file specification string"*, and NOTE 3 adds that a
+//! filespec written as a **direct** object *"may not be possible to
+//! locate … neither self-typed nor necessarily reachable by any standard
+//! path of object references"*. Related: §7.11.4.1's two association
+//! routes are alternatives ("may"), and no `shall` requires an embedded
+//! file to appear in `/EmbeddedFiles` at all.
+//!
+//! Three consequences, all load-bearing:
+//!
+//! - **Both roots must be walked, and neither is a superset of the other.**
+//!   That is why [`list_attachments`] does both rather than offering a
+//!   choice.
+//! - A listing means *"the attachments reachable by the two standard
+//!   paths"*, not *"every byte of embedded file in this document"*. A UI
+//!   should not promise the latter.
+//! - A cross-reference sweep for `/Type /Filespec` objects (blessed, but
+//!   only conditionally, by §7.11.7 NOTE 2) would find some of the rest.
+//!   pdfce does not do it, and if it ever does it should be opt-in — it
+//!   would surface filespecs that are unreferenced garbage as readily as
+//!   real ones.
+//!
+//! ## Duplicate names are legal and are NOT a de-duplication key
+//!
+//! §7.11.7 NOTE 7: *"The same file name, such as `readme.txt`, may be
+//! associated with different embedded files in distinct file
+//! specifications."* Two rows with the same [`Attachment::name`] are
+//! therefore ordinary, not a bug and not a reason to collapse them.
+//! Identity, when a caller needs it, is [`Attachment::stream_id`] (or
+//! [`Attachment::filespec_id`]) — never the name.
+//!
 //! ## `/Params /Size` is a DECLARED size, not a measured one
 //!
-//! §7.11.4's embedded-file parameter dictionary carries `/Size`, and
-//! nothing in the format verifies it against the stream. A file may
+//! §7.11.4's embedded-file parameter dictionary carries `/Size`, defined
+//! as *"the size of the **uncompressed** embedded file, in bytes"*. It is
+//! **Optional**, and — the part that matters — the standard attaches no
+//! `shall` requiring it to agree with the stream and states **no reader
+//! behaviour on a mismatch**. So a disagreement is a *fact pdfce measured*,
+//! not a conformance verdict pdfce is entitled to pronounce. A file may
 //! declare 4 GB and carry ten bytes. pdfce reports it as
 //! [`Attachment::declared_size`] — named *declared* so a caller cannot
 //! mistake it for a fact — and separately reports
@@ -125,37 +164,63 @@
 //!   `/EF`. pdfce reads only `/EF`. A document using `/RF` will have those
 //!   related files silently absent from the listing. This is a **known
 //!   gap**, not a decision that they do not matter.
-//! - **`/DOS`, `/Mac`, `/Unix`** platform-specific filename slots in the
-//!   filespec (deprecated in favour of `/UF`), and the matching
-//!   platform-specific `/EF` slots. pdfce reads `/UF` and `/F` only. A
-//!   file that supplies *only* a platform slot is reported unnamed rather
-//!   than mis-named.
 //! - **`/CI` (collection item data)** — a portfolio's per-file sort/display
 //!   metadata. Portfolio *presentation* is a separate feature; the files
 //!   themselves list here regardless.
-//! - **Decryption.** If the document is encrypted, embedded file streams may
-//!   be encrypted with their own crypt filter (`/DefEmbeddedFile`, §7.6.3).
-//!   This module decodes the `/Filter` chain and nothing else; on an
-//!   encrypted document the bytes it returns are ciphertext. Whoever wires
-//!   decryption in owns making that not silently true.
+//! - **`/ID`, `/V`, `/FS`** on the filespec — the referenced file's §14.4
+//!   file identifier, the "shall not cache" volatility flag, and the file
+//!   system name (only standard value: `URL`). None affects what the
+//!   attachment *is*; a future `/FS /URL` feature would need `/FS`.
+//! - **`/Params /Mac`** (Table 47) — the Mac OS `Subtype`/`Creator`/
+//!   `ResFork` triple. A resource fork is a second payload this module
+//!   does not surface.
+//! - **`/CheckSum` verification.** The value is reported, never computed
+//!   or compared — see [`Attachment::checksum`], where the reason is not
+//!   just cost.
+//! - **Decryption.** See [`AttachmentNotes::may_be_encrypted`]; this is the
+//!   sharpest trap in the module, because since PDF 1.5 an *otherwise
+//!   unencrypted* document can carry encrypted embedded files.
 //! - **Writing anything.** No add, no replace, no delete, no extract-to-disk.
 //!
 //! ## Spec sources
 //!
-//! - §7.11.1–7.11.3 — file specifications; the `/Type /Filespec`
-//!   dictionary and the `/UF`-over-`/F` preference.
-//! - §7.11.4 — embedded file streams: `/Type /EmbeddedFile`, `/Subtype` as
-//!   a MIME type, and the `/Params` dictionary (`/Size`, `/CreationDate`,
-//!   `/ModDate`, `/CheckSum`).
+//! Sourced by `pdfce-spec-librarian` on 2026-08-10 directly from
+//! ISO 32000-1:2008; see `iso32000__ref__embedded_files.md`,
+//! `iso32000__s__7.11.md`, `iso32000__s__7.7.4.md`,
+//! `iso32000__s__7.9.6.md` and `iso32000__s__12.5.6.15.md` in
+//! `D:\Dev\Rag-Specialized\PDF_Spec\`. Every clause number below is the
+//! **ISO 32000-1** numbering; ISO 32000-2 renumbers several of these
+//! subclauses and tables, so a bare "Table 44" is edition-dependent.
+//!
+//! - §7.11.1–7.11.3, Table 44 — file specifications and the `/Type
+//!   /Filespec` dictionary. Note what is **not** there: no `/UF`-over-`/F`
+//!   precedence rule (see [`NAME_SLOT_ORDER`]).
+//! - §7.11.4, Tables 45/46 — embedded file streams (`/Type /EmbeddedFile`,
+//!   `/Subtype` as a `#`-escaped MIME type) and the `/Params` dictionary
+//!   (`/Size`, `/CreationDate`, `/ModDate`, `/CheckSum`, `/Mac`).
+//! - §7.11.7 NOTES 1/2/3/7 — why a complete enumeration is impossible, and
+//!   why duplicate filenames are legal.
 //! - §7.7.4 Table 31 — the catalog's `/Names` dictionary and its
-//!   `/EmbeddedFiles` entry.
-//! - §7.9.6 — name trees: `/Kids`, `/Names`, `/Limits`, and the
-//!   alternating key/value array shape.
-//! - §12.5.6.15 — file attachment annotations and their required `/FS`.
+//!   `/EmbeddedFiles` entry (which maps keys to **file specifications**,
+//!   not to streams: the stream is one `/EF` hop further).
+//! - §7.9.6 Table 36 — name trees. The traversal contract lives here, not
+//!   in §7.7.4.
+//! - §12.5.6.15 Table 184 — file attachment annotations: `/Subtype` and
+//!   `/FS` required, `/Name` optional with four standard icon names
+//!   (`Graph`, `PushPin`, `Paperclip`, `Tag`) and a `PushPin` default, and
+//!   the `shall` that `/Contents` is used **rather than** the filespec's
+//!   `/Desc`.
+//! - §12.3.5 — a PDF Portfolio's contents *are* the `/EmbeddedFiles` tree:
+//!   *"All attachments in that tree are in the collection; any attachments
+//!   not in that tree are not."*
+//! - §7.6.1 / §7.6.5 — embedded streams are encrypted like any other, and
+//!   `/EFF` + `DefEmbeddedFile` can encrypt them inside an otherwise
+//!   unencrypted document.
 //! - §7.3.10 — a dangling indirect reference is `null` and "shall not be
 //!   considered an error", which is why every unresolvable thing here
 //!   degrades rather than failing.
 //! - §7.9.2 — text strings, for `/UF` and `/Desc`.
+//! - §7.3.5 — name `#xx` escapes, which is how a `/` gets into a MIME type.
 
 use std::collections::HashSet;
 
@@ -235,9 +300,23 @@ pub enum AttachmentKind {
         /// The annotation object's identity, when the `/Annots` entry was
         /// an indirect reference (it always is in a well-formed file).
         annot_id: Option<ObjId>,
-        /// The annotation's `/Name` icon (`Paperclip`, `PushPin`, `Graph`,
-        /// `Tag`, or a non-standard value), raw name bytes. `None` when
-        /// absent.
+        /// The annotation's `/Name` icon, raw name bytes. `None` when the
+        /// entry is absent.
+        ///
+        /// Table 184 names **four** standard icons a conforming reader
+        /// "shall provide predefined icon appearances" for — `Graph`,
+        /// `PushPin`, `Paperclip`, `Tag` — permits additional names, and
+        /// gives a **default of `PushPin`** when the entry is absent.
+        ///
+        /// The default is deliberately **not applied here**. `None` means
+        /// "the document did not say", which is the truth; a UI that wants
+        /// the spec default can apply it, and one that wants to show that
+        /// the producer omitted it still can. Substituting silently would
+        /// be the read half inventing structure. Two further facts a
+        /// renderer needs and this field does not carry: the standard
+        /// specifies **no artwork** for the four names (no geometry, size
+        /// or colour), and Table 184 says the annotation's `/AP`, if
+        /// present, "shall take precedence over the `Name` entry".
         icon: Option<Vec<u8>>,
     },
 }
@@ -250,21 +329,73 @@ pub enum AttachmentKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum NameSource {
-    /// The filespec's `/UF` (a §7.9.2 text string) — the preferred
-    /// spelling per §7.11.3 for PDF 1.7 and later.
+    /// The filespec's `/UF` — a §7.9.2 **text string** (PDF 1.7), the only
+    /// filename slot with a defined character encoding. pdfce's first
+    /// choice; see [`NAME_SLOT_ORDER`] for why that is policy and not a
+    /// spec rule.
     Uf,
-    /// The filespec's `/F` (a §7.11.2 file-specification string), used
-    /// when `/UF` is absent.
+    /// The filespec's `/F` — a §7.11.2 file-specification string. §7.11.2.1
+    /// says its bytes "shall be passed to the operating system without
+    /// interpretation or conversion of any sort", so it has **no declared
+    /// encoding**; pdfce decodes it as a §7.9.2 text string anyway in order
+    /// to have something displayable, and that is a guess.
     F,
-    /// Neither `/UF` nor `/F` was usable, so the **name-tree key** was
-    /// used. Only reachable for [`AttachmentKind::DocumentLevel`] — an
+    /// The filespec's `/DOS` slot. Table 44 calls these "obsolescent and
+    /// should not be used by conforming writers", but `/F` is only
+    /// *required* when all three platform slots are absent, so a
+    /// conforming file can supply nothing else.
+    Dos,
+    /// The filespec's `/Mac` slot — see [`NameSource::Dos`].
+    Mac,
+    /// The filespec's `/Unix` slot — see [`NameSource::Dos`].
+    Unix,
+    /// No filename slot was usable, so the **name-tree key** was used.
+    /// Only reachable for [`AttachmentKind::DocumentLevel`] — an
     /// annotation has no key to fall back on.
+    ///
+    /// # ⚠️ A tree key is NOT a filename and has no declared encoding
+    ///
+    /// Table 31 describes `/EmbeddedFiles` as mapping "name strings to file
+    /// specifications" and stops there — it states **no** encoding
+    /// requirement, and the sibling `/Renditions` row in the same table
+    /// *does* ("which shall have Unicode encoding"), so the omission is
+    /// deliberate. §7.9.6 then says outright that "any encoding of the keys
+    /// may be used as long as it is self-consistent" and that keys "shall
+    /// be compared for equality on a simple byte-by-byte basis". Two other
+    /// tables (155 `/D`, 202 `/N`) type the same key a **byte** string.
+    ///
+    /// So when pdfce falls back to the key it is (a) using an index key as
+    /// a display name, which producers routinely mangle with numeric
+    /// suffixes and portfolio folder prefixes, and (b) decoding bytes that
+    /// have no declared encoding. Both are guesses, this variant is how
+    /// they are disclosed, and
+    /// [`AttachmentKind::DocumentLevel::tree_key`] keeps the raw bytes so a
+    /// caller can disagree.
     TreeKey,
     /// Nothing named this attachment at all. [`Attachment::name`] is
     /// empty; a caller needing a filename must synthesise one (see
     /// [`sanitize_attachment_name`], which turns an empty name into
     /// [`FALLBACK_SAFE_NAME`]).
     None,
+}
+
+impl NameSource {
+    /// Map a filespec filename-slot key to its variant.
+    ///
+    /// Total, with `None` as the catch-all, because the alternative is an
+    /// `unwrap` on a lookup that is only correct as long as this function
+    /// and [`NAME_SLOT_ORDER`] stay in sync — and the crate forbids that
+    /// `unwrap` for exactly this class of reason.
+    const fn from_slot(slot: &[u8]) -> Self {
+        match slot {
+            b"UF" => Self::Uf,
+            b"F" => Self::F,
+            b"DOS" => Self::Dos,
+            b"Mac" => Self::Mac,
+            b"Unix" => Self::Unix,
+            _ => Self::None,
+        }
+    }
 }
 
 /// Whether the document's declared `/Params /Size` could be checked, and
@@ -294,8 +425,13 @@ pub enum DeclaredSizeCheck {
         /// The agreed size, in bytes.
         bytes: u64,
     },
-    /// **The document's declaration is wrong.** Both numbers are given so
-    /// a caller can state the discrepancy rather than merely flag it.
+    /// **The declaration and the bytes disagree.** Both numbers are given
+    /// so a caller can state the discrepancy rather than merely flag it.
+    ///
+    /// Word it as a measurement, not a verdict: §7.11.4 attaches no `shall`
+    /// to `/Size` and prescribes no reader behaviour on a mismatch
+    /// (ambiguity **EF-A2**), so this is "the document says 999999 and
+    /// pdfce counted 10", not "this document is non-conforming".
     Disagrees {
         /// What `/Params /Size` claimed.
         declared: u64,
@@ -306,13 +442,16 @@ pub enum DeclaredSizeCheck {
 
 impl DeclaredSizeCheck {
     /// `true` only for [`DeclaredSizeCheck::Disagrees`] — i.e. only when
-    /// pdfce has **proof** the document is wrong.
+    /// pdfce actually counted the bytes and they did not match.
     ///
     /// Deliberately not true for `Unverified`: "we did not check" and "we
-    /// checked and it is wrong" are different claims, and collapsing them
+    /// checked and they differ" are different claims, and collapsing them
     /// would put an accusation on screen that pdfce cannot support.
+    ///
+    /// The name says *contradicted*, not *non-conforming*, on purpose —
+    /// see [`DeclaredSizeCheck::Disagrees`].
     #[must_use]
-    pub const fn is_proven_wrong(self) -> bool {
+    pub const fn is_contradicted(self) -> bool {
         matches!(self, Self::Disagrees { .. })
     }
 }
@@ -367,8 +506,32 @@ pub struct Attachment {
     /// approximate. This is disclosure of pdfce's *own* lossiness, which
     /// rule 4 requires just as much as disclosure of an inference.
     pub name_exact: bool,
-    /// The filespec's `/Desc` (§7.11.3), decoded per §7.9.2. `None` when
-    /// absent. A human-authored description, not a filename.
+    /// A human-authored description of the file — **not** a filename.
+    ///
+    /// # It comes from a DIFFERENT entry depending on the kind
+    ///
+    /// This is a `shall`, and it is easy to get wrong because the same
+    /// filespec can be reached both ways:
+    ///
+    /// - [`AttachmentKind::DocumentLevel`] → the filespec's **`/Desc`**
+    ///   (§7.11.3, PDF 1.6). Table 44's row for it says it "shall be used
+    ///   for files in the `EmbeddedFiles` name tree", which is exactly
+    ///   this route.
+    /// - [`AttachmentKind::PageAnnotation`] → the annotation's
+    ///   **`/Contents`**. §12.5.6.15: *"Conforming readers shall use this
+    ///   entry rather than the optional `Desc` entry (PDF 1.6) in the file
+    ///   specification dictionary."*
+    ///
+    /// So one filespec shared between a name-tree entry and an annotation
+    /// legitimately shows **two different descriptions**, and neither may
+    /// be cached for the other. `None` on the annotation route means the
+    /// annotation had no `/Contents`; it does **not** fall through to
+    /// `/Desc`, because the `shall` says "rather than", not "in preference
+    /// to when present".
+    ///
+    /// Decoded per §7.9.2. On the annotation route the value is markup
+    /// pop-up body text, whose paragraph separator per §12.5.6.2 is
+    /// `CR (0Dh)` rather than LF — worth knowing before rendering it.
     pub description: Option<String>,
     /// Which of the two mechanisms carries this attachment, plus the
     /// mechanism-specific coordinates needed to find it again.
@@ -395,6 +558,12 @@ pub struct Attachment {
     /// measurement.** pdfce does not sniff the bytes to check it, and a
     /// caller must not treat it as a safety signal: `/text#2Fplain` on a
     /// PE executable is trivially authorable.
+    ///
+    /// Because `/Subtype` is **optional**, `None` is common and means
+    /// simply "the document declared no media type" — not "unknown type,
+    /// go and work it out". Nothing in §7.11 authorises extension-sniffing
+    /// or content-sniffing to fill the gap, so if pdfce ever guesses a type
+    /// it must be disclosed as a guess (gap **EF-N3**).
     pub mime: Option<String>,
     /// `/Params /CreationDate` (§7.11.4), **raw and unparsed**.
     ///
@@ -408,13 +577,33 @@ pub struct Attachment {
     /// `/Params /ModDate` (§7.11.4), raw and unparsed — see
     /// [`Attachment::created`].
     pub modified: Option<String>,
-    /// `/Params /CheckSum` (§7.11.4) — the raw bytes of the declared
-    /// checksum of the *uncompressed* payload.
+    /// `/Params /CheckSum` (§7.11.4) — the raw 16 bytes of a declared MD5
+    /// digest.
     ///
-    /// Reported, **never verified**, and deliberately not decoded to hex
-    /// or interpreted: like `/Size` it is a claim by the document, and
-    /// pdfce does not currently compute the digest to compare. A caller
-    /// must not present its mere presence as an integrity guarantee.
+    /// # Reported, never verified — and that is not merely a cost decision
+    ///
+    /// **The standard contradicts itself about which bytes are digested,
+    /// inside a single table cell.** Table 46's `/CheckSum` row says it is
+    /// the checksum "of the bytes of the *uncompressed* embedded file" and
+    /// then, in the next sentence, describes "applying … MD5 … to the bytes
+    /// of *the embedded file stream*". Those are different byte sequences
+    /// whenever `/Filter` is present, which is most of the time. The
+    /// spec-RAG sourcing pass checked ISO 32000-2's change record: 2.0
+    /// retypes the entry a byte string and adds that "this is strictly a
+    /// checksum, and is not used for security purposes", but changes
+    /// **neither sentence** — so the contradiction is permanent
+    /// (ambiguity **EF-A1**).
+    ///
+    /// A verifier would therefore have to pick an interpretation and could
+    /// report "corrupt" for a perfectly conforming file that chose the
+    /// other one. pdfce reports the declared value and stops. If
+    /// verification is ever added it must try both readings and report
+    /// *which* matched, never a bare pass/fail.
+    ///
+    /// Independently: MD5, and explicitly non-security in PDF 2.0. A caller
+    /// must not present this as an integrity or authenticity guarantee, and
+    /// §7.11 provides no other one — `/ID` identifies the *referenced*
+    /// file, and there is no per-attachment signature.
     pub checksum: Option<Vec<u8>>,
     /// The object id of the embedded file stream — the handle a caller
     /// needs to fetch bytes ([`attachment_bytes`]) or to reason about
@@ -443,6 +632,22 @@ pub struct Attachment {
     /// — and equal `filespec_id`s are the signal that lets a caller say
     /// "these are the same file".
     pub filespec_id: Option<ObjId>,
+}
+
+impl Attachment {
+    /// This attachment's name, made safe to use as one filename component.
+    ///
+    /// Sugar for `sanitize_attachment_name(&self.name)`, and it exists for
+    /// a reason that is not sugar: it makes the **safe** call the short one.
+    /// Every extraction path should reach for this, and the raw
+    /// [`Attachment::name`] only when it genuinely wants to display what
+    /// the document says. Read [`sanitize_attachment_name`] before using
+    /// the result — in particular, it is a name, not a location, and the
+    /// caller still owns collision handling and destination containment.
+    #[must_use]
+    pub fn safe_name(&self) -> SafeName {
+        sanitize_attachment_name(&self.name)
+    }
 }
 
 /// Everything a listing had to skip, bound, or degrade, counted.
@@ -492,6 +697,28 @@ pub struct AttachmentNotes {
     /// value of the wrong type. **This one is always a defect**: the
     /// document promised bytes and cannot produce them.
     pub unresolvable_streams: usize,
+    /// The trailer carries an `/Encrypt` dictionary, so **any bytes
+    /// [`extract_attachment`] returns may be ciphertext**.
+    ///
+    /// # Why this flag exists rather than being left to the caller to infer
+    ///
+    /// §7.6.1 says embedded file stream contents "shall be encrypted like
+    /// any other stream", and — the part that makes this a trap rather than
+    /// an inconvenience — since PDF 1.5 embedded files "can be encrypted in
+    /// an otherwise unencrypted document" via the encryption dictionary's
+    /// `/EFF` entry naming a `DefEmbeddedFile` crypt filter (§7.6.5). So
+    /// the intuitive guard — *"is the document encrypted? no? then the
+    /// bytes are plaintext"* — is wrong for a whole class of real file, and
+    /// wrong **silently**: the `/Filter` chain runs, produces bytes, and
+    /// those bytes are garbage that looks like a successful extraction.
+    ///
+    /// `pdfce-core` does not implement decryption on this path yet, so the
+    /// only honest thing this module can do is say when the question
+    /// applies. It is set from the presence of `/Encrypt` alone, which is
+    /// cheap and deliberately over-broad: a document with `/Encrypt` and
+    /// only `/StrF` set may well have plaintext attachments, and this flag
+    /// will still be `true`. Over-warning is the correct error here.
+    pub may_be_encrypted: bool,
 }
 
 /// Why fetching an attachment's bytes failed.
@@ -624,7 +851,14 @@ pub fn list_attachments_with_notes<G: ObjectGraph + ?Sized>(
     graph: &G,
 ) -> (Vec<Attachment>, AttachmentNotes) {
     let mut out = Vec::new();
-    let mut notes = AttachmentNotes::default();
+    // Set at construction rather than after the collectors run, so the flag
+    // is true even if both bail out — "this document's attachments may be
+    // encrypted" holds regardless of whether pdfce enumerated any. See
+    // `AttachmentNotes::may_be_encrypted`.
+    let mut notes = AttachmentNotes {
+        may_be_encrypted: graph.trailer_entry(b"Encrypt").is_some(),
+        ..AttachmentNotes::default()
+    };
 
     collect_document_level(graph, &mut out, &mut notes);
     collect_page_level(graph, &mut out, &mut notes);
@@ -746,6 +980,11 @@ fn walk_name_tree<G: ObjectGraph + ?Sized>(
                     tree_key: key_bytes.clone(),
                 },
                 Some(&key_bytes),
+                // Not the annotation route: `/Desc` applies here, and
+                // §7.11.3's Table 44 row for `/Desc` says it "shall be used
+                // for files in the EmbeddedFiles name tree" — i.e. this is
+                // precisely where it belongs.
+                None,
                 notes,
             ));
         }
@@ -848,6 +1087,21 @@ fn collect_page_level<G: ObjectGraph + ?Sized>(
                 continue;
             };
 
+            // §12.5.6.15's one clause-unique `shall`: "Conforming readers
+            // shall use this entry rather than the optional `Desc` entry
+            // (PDF 1.6) in the file specification dictionary" — where
+            // "this entry" is the ANNOTATION's `/Contents`. So the very
+            // same filespec yields a different description depending on
+            // which route reached it, and a reader that read `/Desc` here
+            // would be violating a `shall` while looking correct.
+            //
+            // `/T` is deliberately NOT consulted. Table 170 makes it the
+            // pop-up window's title bar text and says it "shall identify
+            // the user who added the annotation" — it is the AUTHOR, never
+            // the filename, and mistaking it for one is an easy and
+            // plausible-looking bug.
+            let contents = read_text(graph, annot, b"Contents").map(|(_, d, _)| d.text);
+
             if out.len() >= MAX_ATTACHMENTS {
                 notes.truncated = true;
                 return;
@@ -863,75 +1117,145 @@ fn collect_page_level<G: ObjectGraph + ?Sized>(
                     icon,
                 },
                 None,
+                Some(contents),
                 notes,
             ));
         }
     }
 }
 
+/// The order in which the filespec's filename slots are consulted for
+/// [`Attachment::name`].
+///
+/// # ⚠️ The spec states NO precedence between `/UF` and `/F`. This is policy.
+///
+/// It is tempting to write "§7.11.3 prefers `/UF`", and an earlier draft of
+/// this module did. It is **not true**, and the spec-RAG sourcing pass
+/// (`iso32000__s__7.11.md`, ambiguity **EF-A3**) checked every sentence on
+/// the subject. All of them are `should`s about including *both*:
+///
+/// > "Regardless of the platform, conforming readers should use the `F` and
+/// > `UF` (beginning with PDF 1.7) entries to specify files. The `UF` entry
+/// > is optional, but should be included because it enables cross-platform
+/// > and cross-language compatibility." (§7.11.3)
+///
+/// > "The `UF` entry should be used **in addition to** the `F` entry. The
+/// > `UF` entry provides cross-platform and cross-language compatibility
+/// > and the `F` entry provides backwards compatibility." (Table 44, `F`)
+///
+/// The precedence the standard *does* state is a different one: `F`/`UF`
+/// over `DOS`/`Mac`/`Unix`, which Table 44 calls "obsolescent and should
+/// not be used by conforming writers". That part is sourced and is
+/// implemented below.
+///
+/// So `/UF` first is **pdfce's choice**, and here is its justification,
+/// offered as a reading rather than as the standard's word: `/UF` is a
+/// §7.9.2 *text string* with a defined character encoding, while §7.11.2.1
+/// says `/F`'s bytes "shall be passed to the operating system without
+/// interpretation or conversion of any sort" — i.e. `/F` has no encoding at
+/// all, and any decoding of it into displayable text is already a guess.
+/// Preferring the one entry that can be decoded correctly is the only
+/// choice that is not arbitrary.
+///
+/// **This belongs in `crate::settings` as `filename_source`, and is not
+/// there yet** — a choice the standard leaves open should be the
+/// operator's, not a constant. Recorded here so it is a known debt rather
+/// than an invisible hard-code.
+const NAME_SLOT_ORDER: [&[u8]; 5] = [b"UF", b"F", b"DOS", b"Mac", b"Unix"];
+
+/// The order in which `/EF`'s sub-keys are consulted for the payload.
+///
+/// # Also unspecified, and differently so (ambiguity EF-A4)
+///
+/// §7.11.4 says `/EF` holds "a subset of the keys `F`, `UF`, `DOS`, `Mac`,
+/// `Unix`" and stops there. It gives **no ordering**, does not require
+/// `/EF`'s keys to match the filespec's own, and does not forbid different
+/// keys pointing at *different streams*. The clause's own worked example
+/// has an `/EF` with `DOS`, `Mac` and `Unix` and **no `F` at all**, so a
+/// reader that only looked at `F`/`UF` would find nothing in a document the
+/// standard itself printed.
+///
+/// `F` leads here even though `UF` leads for the *name*, and the asymmetry
+/// is deliberate: for the name the question is "which spelling can be
+/// decoded correctly", and for the stream it is "which slot is most likely
+/// to be populated" — `/F` predates `/UF` by four versions and remains the
+/// one every producer writes.
+///
+/// [`Attachment::ef_key`] records which slot actually supplied the bytes,
+/// so the choice is disclosed rather than silent. Like [`NAME_SLOT_ORDER`]
+/// this should become a setting.
+const EF_SLOT_ORDER: [&[u8]; 5] = [b"F", b"UF", b"DOS", b"Mac", b"Unix"];
+
 /// Turn one §7.11.3 file specification dictionary into an [`Attachment`].
 ///
-/// `tree_key` is the name-tree key for a document-level entry and `None`
-/// for an annotation, which is the only structural difference between the
-/// two paths — everything below this line is shared, because a filespec is
-/// a filespec regardless of who points at it.
+/// The two routes into this function differ in exactly two places, and both
+/// are parameters rather than branches inside the body, because a filespec
+/// is a filespec regardless of who points at it:
+///
+/// - `tree_key` — the name-tree key, for a document-level entry only.
+/// - `annot_contents` — the annotation's `/Contents`, for a page-level
+///   entry only. §12.5.6.15 makes this **override** the filespec's `/Desc`,
+///   which is why the description cannot simply be read here.
 fn model_attachment<G: ObjectGraph + ?Sized>(
     graph: &G,
     filespec: &Dict,
     filespec_id: Option<ObjId>,
     kind: AttachmentKind,
     tree_key: Option<&[u8]>,
+    annot_contents: Option<Option<String>>,
     notes: &mut AttachmentNotes,
 ) -> Attachment {
     // --- the name -------------------------------------------------------
     //
-    // §7.11.3 gives `/UF` (a §7.9.2 text string, PDF 1.7) precedence over
-    // `/F` (a §7.11.2 file-specification string, byte-oriented and
-    // historically platform-flavoured). `/UF` exists precisely because `/F`
-    // could not spell non-ASCII names portably, so preferring it is the
-    // spec's own recommendation and not a pdfce guess.
+    // Slot order and its (un)sourcing: see NAME_SLOT_ORDER.
     //
-    // The name-tree key is the LAST resort, not the first, even though it
-    // is the thing an operator sees in some other viewers' listings: it is
-    // an index key, and §7.9.6 requires it to be unique and sorted, which
-    // pushes producers toward mangling it (numeric suffixes for duplicate
-    // filenames, path prefixes for portfolio folder structure). The
-    // filespec's own `/UF` is what the file is called.
-    let (name_bytes, name, name_exact, name_source) =
-        match read_text(graph, filespec, b"UF").or_else(|| read_text(graph, filespec, b"F")) {
-            Some((bytes, decoded, key)) => (
-                bytes,
-                decoded.text,
-                decoded.exact,
-                if key == b"UF" {
-                    NameSource::Uf
-                } else {
-                    NameSource::F
-                },
-            ),
-            None => match tree_key {
-                Some(key) => {
-                    let decoded = decode_text_string(key);
-                    (
-                        key.to_vec(),
-                        decoded.text,
-                        decoded.exact,
-                        NameSource::TreeKey,
-                    )
-                }
-                None => (Vec::new(), String::new(), true, NameSource::None),
-            },
-        };
+    // The name-tree key is the LAST resort, and reaching it is itself worth
+    // disclosing — see NameSource::TreeKey. §7.9.6 makes a tree key an
+    // opaque byte string with NO defined encoding ("any encoding of the
+    // keys may be used as long as it is self-consistent; keys shall be
+    // compared for equality on a simple byte-by-byte basis"), so decoding
+    // one as if it were a §7.9.2 text string is pdfce guessing, and the
+    // guess is labelled.
+    let (name_bytes, name, name_exact, name_source) = match NAME_SLOT_ORDER
+        .into_iter()
+        .find_map(|slot| read_text(graph, filespec, slot))
+    {
+        Some((bytes, decoded, slot)) => (
+            bytes,
+            decoded.text,
+            decoded.exact,
+            NameSource::from_slot(slot),
+        ),
+        None => match tree_key {
+            Some(key) => {
+                let decoded = decode_text_string(key);
+                (
+                    key.to_vec(),
+                    decoded.text,
+                    decoded.exact,
+                    NameSource::TreeKey,
+                )
+            }
+            None => (Vec::new(), String::new(), true, NameSource::None),
+        },
+    };
 
-    let description = read_text(graph, filespec, b"Desc").map(|(_, d, _)| d.text);
+    // §12.5.6.15: an annotation's `/Contents` is used **rather than** the
+    // filespec's `/Desc` — a `shall`, and it applies even when `/Contents`
+    // is absent, so `Some(None)` must mean "no description" and must NOT
+    // fall through to `/Desc`. That is why this is `Option<Option<String>>`
+    // rather than a plain `Option<String>` with `.or_else()`: the
+    // distinction between "the annotation route, which said nothing" and
+    // "the name-tree route, which has not been asked yet" is the whole
+    // rule.
+    let description = match annot_contents {
+        Some(contents) => contents,
+        None => read_text(graph, filespec, b"Desc").map(|(_, d, _)| d.text),
+    };
 
     // --- the embedded stream --------------------------------------------
     //
-    // `/EF` is a dictionary whose keys mirror the filespec's own filename
-    // slots (§7.11.4). `/UF` and `/F` are read, in that order, matching the
-    // name precedence directly above so that the bytes pdfce hands back
-    // correspond to the name pdfce shows. Platform slots (`/DOS`, `/Mac`,
-    // `/Unix`) are a documented gap (module docs).
+    // Slot order and its (un)sourcing: see EF_SLOT_ORDER.
     let mut stream_id = None;
     let mut ef_key = None;
     match filespec
@@ -941,7 +1265,7 @@ fn model_attachment<G: ObjectGraph + ?Sized>(
     {
         None => notes.filespecs_without_stream += 1,
         Some(ef) => {
-            let picked = [b"UF".as_slice(), b"F".as_slice()]
+            let picked = EF_SLOT_ORDER
                 .into_iter()
                 .find_map(|key| ef.get(key).map(|obj| (key, obj)));
             match picked {
@@ -1165,7 +1489,7 @@ pub fn attachment_bytes(view: &DocumentView<'_>, attachment: &Attachment) -> Opt
 ///     got.size_check,
 ///     DeclaredSizeCheck::Disagrees { declared: 999_999, actual: 10 }
 /// );
-/// assert!(got.size_check.is_proven_wrong());
+/// assert!(got.size_check.is_contradicted());
 /// # Ok(())
 /// # }
 /// ```
@@ -1254,6 +1578,26 @@ pub enum NameHazard {
     /// Contained a character Windows forbids in a filename
     /// (`< > : " | ? *`).
     ReservedCharacter,
+    /// Contained a Unicode bidirectional-override or isolate control
+    /// (U+200E, U+200F, U+202A–U+202E, U+2066–U+2069).
+    ///
+    /// # A display spoof, not a filesystem hazard
+    ///
+    /// These characters are legal in a filename on every mainstream
+    /// filesystem and are harmless to *write*. What they do is reorder how
+    /// the name **renders**: `"\u{202E}gnp.exe"` displays as `exe.png` in
+    /// any conforming Unicode renderer, including pdfce's own attachment
+    /// list and the operator's file manager. The operator sees a PNG,
+    /// double-clicks a program.
+    ///
+    /// This is the same trick as the NUL spoof
+    /// ([`NameHazard::ControlCharacter`]) aimed at the human instead of the
+    /// parser, and an attachment name is a first-class delivery vehicle for
+    /// it — the string comes from inside a document the operator merely
+    /// opened. The characters are stripped rather than replaced with `_`,
+    /// because they are zero-width by intent and an underscore where a
+    /// reader expected nothing is its own small lie.
+    BidiOverride,
     /// The stem is a reserved Windows device name — `CON`, `PRN`, `AUX`,
     /// `NUL`, `COM0`–`COM9`, `LPT0`–`LPT9`. Opening `CON.txt` for writing
     /// on Windows talks to the console device, not to a file, and the
@@ -1329,16 +1673,23 @@ pub struct SafeName {
 /// 1. Take everything after the **last** `/` or `\`, so a path becomes its
 ///    final component ([`NameHazard::PathSeparator`]).
 /// 2. Replace every C0 control byte, every character Windows forbids
-///    (`< > : " | ? * \` and `/`), and NUL, with `_`
+///    (`< > : " | ? * \` and `/`), NUL, and **U+FFFD** with `_`
 ///    ([`NameHazard::ControlCharacter`], [`NameHazard::ReservedCharacter`],
-///    [`NameHazard::DriveOrStream`]).
-/// 3. Refuse the pure-traversal components `.` and `..`
+///    [`NameHazard::DriveOrStream`], [`NameHazard::UndecodableBytes`]).
+///    The U+FFFD rule is the one that is easy to omit and must not be —
+///    see [`NameHazard::UndecodableBytes`] for why a NUL reaches this
+///    function disguised as a replacement character.
+/// 3. **Drop** every Unicode bidi override/isolate control
+///    ([`NameHazard::BidiOverride`]). Dropped rather than replaced,
+///    because they are zero-width and substituting a visible character
+///    would misrepresent the name in the other direction.
+/// 4. Refuse the pure-traversal components `.` and `..`
 ///    ([`NameHazard::ParentTraversal`]).
-/// 4. Strip trailing dots and spaces ([`NameHazard::TrailingDotOrSpace`]).
-/// 5. If the stem (the part before the first `.`) is a reserved Windows
+/// 5. Strip trailing dots and spaces ([`NameHazard::TrailingDotOrSpace`]).
+/// 6. If the stem (the part before the first `.`) is a reserved Windows
 ///    device name, prefix an `_` ([`NameHazard::ReservedDeviceName`]).
-/// 6. Truncate to [`MAX_SAFE_NAME_CHARS`] `char`s ([`NameHazard::TooLong`]).
-/// 7. If nothing is left, use [`FALLBACK_SAFE_NAME`]
+/// 7. Truncate to [`MAX_SAFE_NAME_CHARS`] `char`s ([`NameHazard::TooLong`]).
+/// 8. If nothing is left, use [`FALLBACK_SAFE_NAME`]
 ///    ([`NameHazard::Empty`]).
 ///
 /// The Windows rules are applied **on every platform**, deliberately. A
@@ -1381,6 +1732,12 @@ pub struct SafeName {
 /// assert_eq!(spoof.value, "invoice.pdf_.exe");
 /// assert!(spoof.hazards.contains(&NameHazard::ControlCharacter));
 ///
+/// // A right-to-left override that made `gnp.exe` render as `exe.png`
+/// // is removed, and the removal is reported.
+/// let bidi = sanitize_attachment_name("\u{202E}gnp.exe");
+/// assert_eq!(bidi.value, "gnp.exe");
+/// assert!(bidi.hazards.contains(&NameHazard::BidiOverride));
+///
 /// // Nothing usable at all still yields a usable name.
 /// assert_eq!(sanitize_attachment_name("../").value, "attachment");
 /// ```
@@ -1399,7 +1756,10 @@ pub fn sanitize_attachment_name(raw: &str) -> SafeName {
     // A traversal component is worth naming even when the separator split
     // already removed it — the operator wants to know it was a traversal,
     // not merely that it had slashes in it.
-    if raw.split(['/', '\\']).any(|part| part == ".." || part == ".") {
+    if raw
+        .split(['/', '\\'])
+        .any(|part| part == ".." || part == ".")
+    {
         hazards.push(NameHazard::ParentTraversal);
     }
     if work == ".." || work == "." {
@@ -1419,6 +1779,13 @@ pub fn sanitize_attachment_name(raw: &str) -> SafeName {
                 hazards.push(NameHazard::ControlCharacter);
                 scrubbed.push('_');
             }
+            '\u{FFFD}' => {
+                // See NameHazard::UndecodableBytes — this is where a NUL
+                // that PDFDocEncoding already turned into U+FFFD gets
+                // caught.
+                hazards.push(NameHazard::UndecodableBytes);
+                scrubbed.push('_');
+            }
             ':' => {
                 // Both a drive designator and an NTFS alternate-data-stream
                 // selector, which is why it gets its own hazard rather than
@@ -1429,6 +1796,12 @@ pub fn sanitize_attachment_name(raw: &str) -> SafeName {
             '<' | '>' | '"' | '|' | '?' | '*' => {
                 hazards.push(NameHazard::ReservedCharacter);
                 scrubbed.push('_');
+            }
+            // Bidi controls: DROPPED, not substituted. See
+            // NameHazard::BidiOverride — they are zero-width by design and
+            // exist only to lie about the rendered order of the name.
+            '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}' => {
+                hazards.push(NameHazard::BidiOverride);
             }
             other => scrubbed.push(other),
         }
@@ -1643,6 +2016,93 @@ mod tests {
         assert_eq!(found[1].name, "on-page-two.txt");
     }
 
+    /// Catches a `shall` that is easy to violate while looking correct:
+    /// §12.5.6.15 requires an annotation's `/Contents` to be used **rather
+    /// than** the filespec's `/Desc`. The fixture reaches ONE filespec both
+    /// ways, so the two rows must show two different descriptions off the
+    /// same dictionary — and must not be de-duplicated into one.
+    ///
+    /// The first implementation of this module read `/Desc` for both
+    /// routes; the defect was invisible until the spec was actually
+    /// sourced.
+    #[test]
+    fn an_annotation_description_comes_from_contents_not_desc() {
+        let doc = load("annot-contents-beats-desc.pdf");
+        let found = list_attachments(&doc);
+        assert_eq!(found.len(), 2);
+
+        let doc_level = found
+            .iter()
+            .find(|a| matches!(a.kind, AttachmentKind::DocumentLevel { .. }))
+            .unwrap();
+        let annot = found
+            .iter()
+            .find(|a| matches!(a.kind, AttachmentKind::PageAnnotation { .. }))
+            .unwrap();
+
+        assert_eq!(
+            doc_level.description.as_deref(),
+            Some("DESC from the file specification")
+        );
+        assert_eq!(
+            annot.description.as_deref(),
+            Some("CONTENTS from the annotation"),
+            "§12.5.6.15: the annotation's /Contents is used RATHER THAN /Desc"
+        );
+
+        // Same file, two routes, two lifetimes. Equal `filespec_id` is the
+        // documented signal for that — and the rows stay separate.
+        assert_eq!(doc_level.filespec_id, annot.filespec_id);
+        assert!(doc_level.filespec_id.is_some());
+    }
+
+    /// Catches: consulting only `/F` and `/UF`. Table 44 makes `/F`
+    /// required *only* when `/DOS`, `/Mac` and `/Unix` are all absent, so a
+    /// platform-slots-only filespec is conforming — and it is the shape the
+    /// standard's own §7.11.4 example uses.
+    ///
+    /// A reader without the fallback reports this legal document as
+    /// containing a nameless attachment with no bytes.
+    #[test]
+    fn platform_only_filename_and_ef_slots_are_still_read() {
+        let doc = load("ef-platform-slots.pdf");
+        let (found, notes) = list_attachments_with_notes(&doc);
+        assert_eq!(found.len(), 1);
+        let a = &found[0];
+
+        // NAME_SLOT_ORDER puts /DOS ahead of /Mac and /Unix.
+        assert_eq!(a.name, "DOSNAME.TXT");
+        assert_eq!(a.name_source, NameSource::Dos);
+        // The name-tree key is NOT what got used, even though it is the
+        // most filename-looking string in the document.
+        assert_ne!(a.name_source, NameSource::TreeKey);
+
+        // The payload came from /EF /Unix, and pdfce says which slot.
+        assert!(a.stream_id.is_some());
+        assert_eq!(a.ef_key.as_deref(), Some(&b"Unix"[..]));
+        assert_eq!(notes.filespecs_without_stream, 0);
+        assert_eq!(notes.unresolvable_streams, 0);
+
+        let view = doc.view();
+        assert_eq!(
+            attachment_bytes(&view, a).as_deref(),
+            Some(&b"platform payload\n"[..])
+        );
+    }
+
+    /// Catches: the encryption trap going unflagged. §7.6.5 lets an
+    /// *otherwise unencrypted* document carry encrypted embedded files via
+    /// `/EFF`, so a caller cannot infer plaintext from the absence of a
+    /// password prompt — the flag is the only channel that says so.
+    #[test]
+    fn an_unencrypted_document_is_not_flagged_as_maybe_encrypted() {
+        for name in ["doc-level-simple.pdf", "both-kinds.pdf"] {
+            let doc = load(name);
+            let (_, notes) = list_attachments_with_notes(&doc);
+            assert!(!notes.may_be_encrypted, "{name}");
+        }
+    }
+
     // -- declared size ---------------------------------------------------
 
     /// Catches: presenting `/Params /Size` as a measurement. The fixture
@@ -1660,7 +2120,7 @@ mod tests {
                 actual: 10
             }
         );
-        assert!(found[0].size_check.is_proven_wrong());
+        assert!(found[0].size_check.is_contradicted());
     }
 
     /// Catches: the *opposite* defect — validating `/Size` against
@@ -1673,7 +2133,7 @@ mod tests {
         let found = list_attachments(&doc);
         assert_eq!(found[0].declared_size, Some(4096));
         assert_eq!(found[0].size_check, DeclaredSizeCheck::Unverified);
-        assert!(!found[0].size_check.is_proven_wrong());
+        assert!(!found[0].size_check.is_contradicted());
 
         // And decoding settles it in the document's favour.
         let view = doc.view();
@@ -1775,7 +2235,9 @@ mod tests {
     fn every_hostile_fixture_name_survives_sanitisation_safely() {
         let doc = load("hostile-names.pdf");
         for a in list_attachments(&doc) {
-            let safe = sanitize_attachment_name(&a.name);
+            // Through the convenience method, so that path is covered too.
+            let safe = a.safe_name();
+            assert_eq!(safe, sanitize_attachment_name(&a.name));
             assert!(safe.changed, "{:?} should have been changed", a.name);
             assert!(!safe.hazards.is_empty());
             assert!(!safe.value.is_empty());
@@ -1828,7 +2290,14 @@ mod tests {
     /// name instead of the stem, or case-sensitively.
     #[test]
     fn reserved_device_names_are_defused_in_every_spelling() {
-        for raw in ["CON", "con.txt", "Con.tar.gz", "NUL.dat", "COM1.txt", "lpt9"] {
+        for raw in [
+            "CON",
+            "con.txt",
+            "Con.tar.gz",
+            "NUL.dat",
+            "COM1.txt",
+            "lpt9",
+        ] {
             let safe = sanitize_attachment_name(raw);
             assert!(
                 safe.value.starts_with('_'),
@@ -1855,6 +2324,59 @@ mod tests {
         let tabbed = sanitize_attachment_name("a\tb\r\n.txt");
         assert_eq!(tabbed.value, "a_b__.txt");
         assert!(tabbed.hazards.contains(&NameHazard::ControlCharacter));
+    }
+
+    /// Catches the hole that the first implementation actually had, and
+    /// that reasoning alone had missed: a NUL inside a `/F` byte string is
+    /// **not** a NUL by the time it reaches the sanitiser. PDFDocEncoding
+    /// leaves `0x00` undefined, so [`crate::textstring::decode_text_string`]
+    /// has already turned it into U+FFFD — and a sanitiser checking only
+    /// `char::is_control` waves the extension-spoof straight through.
+    ///
+    /// This test goes through the real fixture rather than a hand-written
+    /// string precisely because that is what exposed it.
+    #[test]
+    fn a_nul_spoof_arriving_as_u_fffd_is_still_caught() {
+        let doc = load("hostile-names.pdf");
+        let found = list_attachments(&doc);
+        let spoof = found
+            .iter()
+            .find(|a| a.name_bytes.contains(&0))
+            .expect("the fixture carries a NUL-bearing name");
+
+        // The decode was lossy, and pdfce says so rather than pretending.
+        assert!(!spoof.name_exact);
+        assert!(spoof.name.contains('\u{FFFD}'));
+        assert!(!spoof.name.contains('\0'));
+
+        let safe = spoof.safe_name();
+        assert_eq!(safe.value, "ok.txt_.exe");
+        assert!(safe.changed);
+        assert!(safe.hazards.contains(&NameHazard::UndecodableBytes));
+        assert!(!safe.value.contains('\u{FFFD}'));
+    }
+
+    /// Catches: a bidirectional-override spoof surviving into a filename.
+    ///
+    /// `"\u{202E}gnp.exe"` renders as `exe.png` — this is a lie aimed at
+    /// the operator's eyes rather than at a parser, and an attachment name
+    /// is an ideal delivery vehicle for it.
+    #[test]
+    fn bidi_overrides_that_reverse_a_displayed_extension_are_removed() {
+        let spoof = sanitize_attachment_name("\u{202E}gnp.exe");
+        assert_eq!(spoof.value, "gnp.exe");
+        assert!(spoof.changed);
+        assert!(spoof.hazards.contains(&NameHazard::BidiOverride));
+
+        // Every control in the family, and the isolates too.
+        for ch in [
+            '\u{200E}', '\u{200F}', '\u{202A}', '\u{202B}', '\u{202C}', '\u{202D}', '\u{202E}',
+            '\u{2066}', '\u{2067}', '\u{2068}', '\u{2069}',
+        ] {
+            let safe = sanitize_attachment_name(&format!("a{ch}b.txt"));
+            assert_eq!(safe.value, "ab.txt", "U+{:04X} survived", ch as u32);
+            assert!(safe.hazards.contains(&NameHazard::BidiOverride));
+        }
     }
 
     /// Catches: Windows silently eating a trailing dot so that the file on

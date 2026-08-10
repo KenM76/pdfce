@@ -93,6 +93,22 @@ WHAT IT WRITES
     which is why this fixture is the twin of ``size-lies.pdf``: one must
     be reported as disagreeing and the other must not.
 
+``annot-contents-beats-desc.pdf``
+    ONE filespec, carrying a ``/Desc``, reached BOTH ways: as a
+    ``/Names /EmbeddedFiles`` value and as an annotation's ``/FS``. The
+    annotation's ``/Contents`` differs from the ``/Desc``. §12.5.6.15
+    makes ``/Contents`` win **for the annotation route only**, so the
+    correct reading is two rows with two different descriptions off one
+    shared dictionary.
+
+``ef-platform-slots.pdf``
+    The shape ISO 32000-1's own §7.11.4 EXAMPLE uses: a filespec with no
+    ``/F`` and no ``/UF``, only the obsolescent ``/DOS``/``/Mac``/
+    ``/Unix`` slots, and an ``/EF`` containing only ``/Unix``. Table 44
+    makes ``/F`` required *only* when all three platform entries are
+    absent, so this is conforming — and a reader that consults only
+    ``/F``/``/UF`` finds a nameless attachment with no bytes.
+
 ``hostile-names.pdf``
     Four document-level entries whose names are attacker-shaped:
     a Windows path traversal (``..\\..\\..\\Windows\\System32\\evil.exe``),
@@ -578,6 +594,85 @@ def hostile_names() -> bytes:
     return pdf.serialise(root)
 
 
+def annot_contents_beats_desc() -> bytes:
+    """The §12.5.6.15 ``shall``, isolated.
+
+    ONE filespec, carrying a ``/Desc``, is reached BOTH ways: it is the
+    value of a ``/Names /EmbeddedFiles`` entry AND the ``/FS`` of a
+    ``/FileAttachment`` annotation on page 1. The annotation's
+    ``/Contents`` says something different.
+
+    §12.5.6.15: "Conforming readers **shall use this entry rather than
+    the optional Desc entry (PDF 1.6) in the file specification
+    dictionary**." So the correct reading is two rows with two different
+    descriptions off one dictionary — and a reader that reads ``/Desc``
+    for both, or that de-duplicates the rows because they share a
+    filespec, gets it wrong.
+    """
+    pdf = Pdf()
+    pages_num, page_nums = simple_page_tree(pdf)
+    ef = add_embedded_file(pdf, b"shared payload\n")
+    fs = filespec(
+        pdf,
+        f=pdf_string(b"shared.txt"),
+        uf=utf16be("shared.txt"),
+        desc=utf16be("DESC from the file specification"),
+        ef=ef,
+    )
+    attach_annotation(
+        pdf,
+        page_nums[0],
+        pages_num,
+        fs,
+        contents=utf16be("CONTENTS from the annotation"),
+    )
+    names = pdf.add(
+        b"<< /EmbeddedFiles << /Names ["
+        + utf16be("shared.txt")
+        + b" "
+        + str(fs).encode("ascii")
+        + b" 0 R] >> >>"
+    )
+    root = catalog(pdf, pages_num, names=str(names).encode("ascii") + b" 0 R")
+    return pdf.serialise(root)
+
+
+def ef_platform_slots() -> bytes:
+    """The shape ISO 32000-1's own §7.11.4 EXAMPLE uses.
+
+    A filespec with **no** ``/F`` or ``/UF`` — only the obsolescent
+    ``/DOS``, ``/Mac`` and ``/Unix`` slots — and an ``/EF`` that likewise
+    has no ``/F``. Table 44 makes ``/F`` "required if the DOS, Mac, and
+    Unix entries are all absent", so supplying only platform slots is
+    **conforming**, and a reader that looks at ``/F``/``/UF`` alone finds
+    a nameless attachment with no bytes in a perfectly legal document.
+
+    The three names differ so the slot precedence is observable.
+    """
+    pdf = Pdf()
+    pages_num, _ = simple_page_tree(pdf)
+    ef = add_embedded_file(pdf, b"platform payload\n")
+    num = pdf.add(
+        b"<< /Type /Filespec"
+        b" /DOS " + pdf_string(b"DOSNAME.TXT") + b" /Mac "
+        + pdf_string(b"MacName.txt")
+        + b" /Unix "
+        + pdf_string(b"unix-name.txt")
+        + b" /EF << /Unix "
+        + str(ef).encode("ascii")
+        + b" 0 R >> >>"
+    )
+    names = pdf.add(
+        b"<< /EmbeddedFiles << /Names ["
+        + pdf_string(b"platform.txt")
+        + b" "
+        + str(num).encode("ascii")
+        + b" 0 R] >> >>"
+    )
+    root = catalog(pdf, pages_num, names=str(names).encode("ascii") + b" 0 R")
+    return pdf.serialise(root)
+
+
 def degenerate() -> bytes:
     """Five malformations in one document; see the module docstring."""
     pdf = Pdf()
@@ -648,6 +743,8 @@ FIXTURES = {
     "both-kinds.pdf": both_kinds,
     "size-lies.pdf": size_lies,
     "flate-size-truth.pdf": flate_size_truth,
+    "annot-contents-beats-desc.pdf": annot_contents_beats_desc,
+    "ef-platform-slots.pdf": ef_platform_slots,
     "hostile-names.pdf": hostile_names,
     "degenerate.pdf": degenerate,
 }

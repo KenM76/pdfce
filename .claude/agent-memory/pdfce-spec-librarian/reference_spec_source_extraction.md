@@ -156,6 +156,21 @@ and `pdfminer` installed. Extraction recipe that works:
 - **PDF Association — the HOST SPLIT (verified 2026-08-09).** `pdfa.org` still
   **403**s automated fetches, but two sibling hosts serve fine (both HTTP 200,
   no auth, plain `curl` with a browser UA):
+  - **`https://pdf-issues.pdfa.org/32000-2-2020/clause<NN>.html` — `<NN>` IS
+    ZERO-PADDED.** `clause07.html` works; **`clause7.html` returns 404**
+    (confirmed 2026-08-10; the earlier note read `clause<N>` and only looked
+    right because clause 12 is two digits). Enumerate the real page set once
+    with `curl -s <base>/ | grep -oE 'href="[^"]*"'` — it also reveals the
+    sibling standards (`19005-4-2020`, `14289-1-2014`, `21757-1-2020`, …) and
+    the `clauseAnnex*.html` / `clauseBibliography.html` pages. Strip tags but
+    **preserve `<ins>`/`<del>` as `[INS]`/`[/INS]`/`[DEL]`/`[/DEL]` markers
+    before the generic `re.sub(r'<[^>]+>',' ')`** — the whole value of the page
+    is which side of the edit a sentence is on. Second proven use beyond
+    erratum-confirmation: **proving a known ambiguity was NOT fixed in 2.0**
+    (ISO 32000-1 Table 46 `/CheckSum` is self-contradictory; 2.0 changes the
+    key's type and adds a NOTE but leaves both contradictory sentences ⇒
+    `PERMANENT`, evidenced rather than assumed). Do this before labelling any
+    ambiguity PERMANENT.
   - **`https://pdf-issues.pdfa.org/32000-2-2020/clause<N>.html`** — the public
     **errata for ISO 32000-2:2020**, per clause. Quotes 2.0 clause text in
     strike-through/insertion form ⇒ it **confirms ISO 32000-1 errata** *and* is a

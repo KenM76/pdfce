@@ -280,7 +280,6 @@
 //! off by default; a failure exits [`exit::NOT_BYTE_IDENTICAL`], because
 //! it is a correctness result, not a crash.
 
-#[cfg(windows)]
 mod printing;
 
 use std::path::{Path, PathBuf};
@@ -948,6 +947,41 @@ enum Command {
     /// many fell through it to U+FFFD, which fonts carry no recoverable
     /// Unicode at all, and how many spaces and line breaks pdfce
     /// invented.
+    /// **Report what printing this document WOULD do**, without printing.
+    ///
+    /// Resolves the printer, reads its resolution and printable area,
+    /// and places every selected page onto the sheet — reporting the
+    /// scale, the offset, and whether content would fall off the edge.
+    /// It has no flag that starts a job.
+    ///
+    /// Acrobat clips an oversized page silently. This names the pages
+    /// that would lose content, so a scripted caller can refuse before
+    /// paper is consumed rather than discover it afterwards.
+    PrintPreview {
+        /// Input PDF.
+        input: PathBuf,
+        /// Printer name, as `list-printers` reports it. Defaults to the
+        /// system default printer.
+        #[arg(long)]
+        printer: Option<String>,
+        /// How the page is sized onto the sheet.
+        #[arg(long, value_enum, default_value_t = PrintScaleArg::Fit)]
+        scale: PrintScaleArg,
+        /// An explicit percentage, where 100 is actual size. OVERRIDES
+        /// `--scale` when given.
+        ///
+        /// Reader accepts a free-form 1–1000% rather than a set of
+        /// presets, so this is a number and not another enum value.
+        /// Overriding rather than conflicting: `--scale` has a default,
+        /// so making the two mutually exclusive would force every
+        /// percentage caller to also pass a scale word they do not mean.
+        #[arg(long, value_parser = clap::value_parser!(u32).range(1..=1000))]
+        scale_percent: Option<u32>,
+        /// 1-based pages: `all`, `3`, `1-4`, `5,1-2`.
+        #[arg(long, default_value = "all")]
+        pages: String,
+    },
+
     /// **List the printers this machine can reach** (Windows only).
     ///
     /// Read-only. It queries the print spooler and reports nothing else;
@@ -3812,6 +3846,13 @@ fn run() -> ExitCode {
         Command::ValidatePdfa { .. } => unimplemented_stub("validate-pdfa"),
         Command::Sign { .. } => unimplemented_stub("sign"),
         Command::ListPrinters => cmd_list_printers(),
+        Command::PrintPreview {
+            input,
+            printer,
+            scale,
+            pages,
+            scale_percent,
+        } => cmd_print_preview(&input, printer.as_deref(), scale, scale_percent, &pages),
         Command::FindText {
             input,
             needle,
@@ -5524,6 +5565,225 @@ with_note={with_note} with_author={with_author} need_appearances={need_appearanc
 /// Read-only. One `field …` line per terminal field, then a `list-fields …`
 /// summary line carrying the document-level form disclosures. The value is
 /// emitted as a sanitised token so the line stays field-splittable.
+/// The scaling modes, as command-line words.
+///
+/// A separate type from `printing::ScaleMode` because that one carries a
+/// free-form `Custom(f64)` which clap cannot express as a value-enum
+/// variant, and because the CLI's vocabulary is allowed to differ from
+/// the engine's — `shrink` reads better than `ShrinkOversized` in a
+/// shell.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
+enum PrintScaleArg {
+    /// Scale to fill the printable area, enlarging a small page.
+    /// Reader's own default.
+    Fit,
+    /// 1 PDF point = 1/72 inch on paper, clipping if it must.
+    Actual,
+    /// Actual size, except reduce a page too big for the sheet. Never
+    /// enlarges — which is the whole difference from `fit`.
+    Shrink,
+}
+
+impl PrintScaleArg {
+    fn to_mode(self) -> printing::ScaleMode {
+        match self {
+            Self::Fit => printing::ScaleMode::Fit,
+            Self::Actual => printing::ScaleMode::ActualSize,
+            Self::Shrink => printing::ScaleMode::ShrinkOversized,
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Fit => "fit",
+            Self::Actual => "actual",
+            Self::Shrink => "shrink",
+        }
+    }
+}
+
+/// `print-preview` — what a print WOULD do, without doing it.
+///
+/// # Why this exists before `print` does
+///
+/// Printing is an outward-facing, irreversible side effect: paper is
+/// consumed and a shared device is occupied. So the surface that answers
+/// "what would happen" ships before the one that makes it happen, and
+/// this command deliberately has no flag that starts a job.
+///
+/// It is not a placeholder either. Everything a real print needs —
+/// resolving the printer, reading its resolution and printable area,
+/// and placing each page onto the sheet — happens here and is reported.
+/// When spooling lands it will consume this exact result, so a preview
+/// that reads correctly is evidence about the print, not a separate
+/// approximation of it.
+///
+/// # The clip report is the point
+///
+/// Acrobat clips an oversized page **silently**
+/// (`Acrobat_Features/printing__scaling_modes.md`). pdfce names the pages
+/// that would lose content, and the exit code reflects it, so a scripted
+/// caller can refuse to print rather than discover the loss on paper.
+#[cfg(windows)]
+fn cmd_print_preview(
+    input: &Path,
+    printer: Option<&str>,
+    scale: PrintScaleArg,
+    scale_percent: Option<u32>,
+    pages: &str,
+) -> u8 {
+    let doc = match pdfce_core::document::Document::load(input) {
+        Ok(doc) => doc,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit_code_for_doc(&err);
+        }
+    };
+
+    // Resolve the printer: the named one, else the system default. An
+    // unnamed preview on a machine with no default is a real dead end,
+    // so it says which of the two problems it is.
+    let all = match printing::list_printers() {
+        Ok(p) => p,
+        Err(err) => {
+            eprintln!("pdfce-cli: {err}");
+            return exit::IO_ERROR;
+        }
+    };
+    let chosen = match printer {
+        Some(name) => name.to_owned(),
+        None => match all.iter().find(|p| p.is_default) {
+            Some(p) => p.name.clone(),
+            None => {
+                eprintln!(
+                    "pdfce-cli: no default printer is set — pass --printer with one of the \
+                     names from `pdfce-cli list-printers`"
+                );
+                return exit::EDIT_REFUSED;
+            }
+        },
+    };
+
+    let caps = match printing::printer_caps(&chosen) {
+        Ok(c) => c,
+        Err(err) => {
+            eprintln!("pdfce-cli: {err}");
+            return exit::EDIT_REFUSED;
+        }
+    };
+
+    // Through a session, matching every other page-addressing command:
+    // `pages()` lives on `EditSession`, and reading through the same
+    // type the editing commands use keeps one page-index space.
+    let session = pdfce_core::edit::EditSession::new(doc);
+    let page_list = match session.pages() {
+        Ok(p) => p,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit::RUNTIME_ERROR;
+        }
+    };
+    let indices = match parse_pages(pages, page_list.len()) {
+        Ok(i) => i,
+        Err(err) => {
+            eprintln!("pdfce-cli: {err}");
+            return exit::EDIT_REFUSED;
+        }
+    };
+
+    println!(
+        "printer name={:?} dpi={}x{} sheet_pt={:.1}x{:.1} printable_pt={:.1}x{:.1} \
+         margin_pt={:.1},{:.1}",
+        chosen,
+        caps.dpi_x,
+        caps.dpi_y,
+        caps.physical_pt.0,
+        caps.physical_pt.1,
+        caps.printable_pt.0,
+        caps.printable_pt.1,
+        caps.offset_pt.0,
+        caps.offset_pt.1,
+    );
+
+    // A percentage wins over the word. Clap has already bounded it to
+    // 1..=1000, so the conversion cannot produce a non-positive or
+    // non-finite multiplier.
+    let mode = match scale_percent {
+        Some(pct) => printing::ScaleMode::Custom(f64::from(pct) / 100.0),
+        None => scale.to_mode(),
+    };
+    let mode_name = match scale_percent {
+        Some(pct) => format!("{pct}%"),
+        None => scale.name().to_owned(),
+    };
+    let mut clipped = 0usize;
+    for i in &indices {
+        let Some(page) = page_list.get(*i) else {
+            continue;
+        };
+        // The MEDIA box is the sheet the page declares. A crop box would
+        // be the right input for a viewer, but printing a cropped view
+        // and printing the page are different operations, and Reader
+        // prints the page.
+        let mb = page.media_box;
+        let size = ((mb.urx - mb.llx).abs(), (mb.ury - mb.lly).abs());
+        let p = printing::place_page(size, caps.printable_pt, mode);
+        if p.clipped {
+            clipped += 1;
+        }
+        println!(
+            "page {} size_pt={:.1}x{:.1} scale={:.4} offset_pt={:.1},{:.1} clipped={}",
+            i + 1,
+            size.0,
+            size.1,
+            p.scale,
+            p.offset_x_pt,
+            p.offset_y_pt,
+            u32::from(p.clipped),
+        );
+    }
+
+    if clipped > 0 {
+        // stderr, and named as a count: this is the fact that should stop
+        // a scripted print, and it must not be lost in a stdout capture.
+        eprintln!(
+            "pdfce-cli: WARNING — {clipped} page(s) would lose content off the edge of the \
+             paper at this scale. Acrobat clips these silently; pdfce does not. Try \
+             --scale fit or --scale shrink."
+        );
+    }
+    println!(
+        "print-preview {} printer={:?} scale={} pages={} clipped={clipped}",
+        input.display(),
+        chosen,
+        mode_name,
+        indices.len(),
+    );
+    // Zero even when pages would clip: the PREVIEW succeeded, and its
+    // whole job is to report that fact. A non-zero exit would make "this
+    // layout loses content" indistinguishable from "the file would not
+    // open", and a caller that wants to branch has `clipped=` on the
+    // summary line.
+    exit::SUCCESS
+}
+
+/// The non-Windows arm — reports rather than vanishing, for the reason
+/// given on `cmd_list_printers`.
+#[cfg(not(windows))]
+fn cmd_print_preview(
+    _input: &Path,
+    _printer: Option<&str>,
+    _scale: PrintScaleArg,
+    _scale_percent: Option<u32>,
+    _pages: &str,
+) -> u8 {
+    eprintln!(
+        "pdfce-cli: printing is available on Windows only in this build \
+         (docs/decisions/003-distribution-posture.md §4.1)"
+    );
+    exit::EDIT_REFUSED
+}
+
 /// `list-printers` — what the print spooler can see.
 ///
 /// # Why a whole subcommand for a list

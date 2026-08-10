@@ -1,0 +1,54 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R /Outlines 6 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R] /Count 3 /MediaBox [0 0 612 792] /Resources << >> >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R >>
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R >>
+endobj
+6 0 obj
+<< /Type /Outlines /First 7 0 R /Last 8 0 R /Count 99 >>
+endobj
+7 0 obj
+<< /Title (Open) /Parent 6 0 R /Next 8 0 R /First 9 0 R /Last 10 0 R /Count 9 /Dest [3 0 R /Fit] >>
+endobj
+8 0 obj
+<< /Title (Shut) /Parent 6 0 R /Prev 7 0 R /First 11 0 R /Last 11 0 R /Count -7 /Dest [4 0 R /Fit] >>
+endobj
+9 0 obj
+<< /Title (Kid A) /Parent 7 0 R /Next 10 0 R /Dest [3 0 R /Fit] >>
+endobj
+10 0 obj
+<< /Title (Kid B) /Parent 7 0 R /Prev 9 0 R /Dest [4 0 R /Fit] >>
+endobj
+11 0 obj
+<< /Title (Kid C) /Parent 8 0 R /Dest [5 0 R /Fit] >>
+endobj
+xref
+0 12
+0000000000 65535 f 
+0000000015 00000 n 
+0000000080 00000 n 
+0000000190 00000 n 
+0000000237 00000 n 
+0000000284 00000 n 
+0000000331 00000 n 
+0000000403 00000 n 
+0000000518 00000 n 
+0000000635 00000 n 
+0000000717 00000 n 
+0000000799 00000 n 
+trailer
+<< /Size 12 /Root 1 0 R >>
+startxref
+869
+%%EOF

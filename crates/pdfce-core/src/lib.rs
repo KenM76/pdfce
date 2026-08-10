@@ -73,6 +73,7 @@
 
 pub mod annot;
 pub mod annot_author;
+pub mod attachments;
 pub mod color;
 pub mod content;
 pub mod dimension;
@@ -93,6 +94,7 @@ pub mod linearization;
 pub mod linebreak;
 pub mod object;
 pub mod objstm;
+pub mod outline;
 pub mod page_tree;
 pub mod pageops;
 pub mod parser;

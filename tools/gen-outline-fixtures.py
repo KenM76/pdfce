@@ -31,11 +31,27 @@ WHAT IT WRITES
     four ``must_have`` view types from
     ``Acrobat_Features/bookmarks__destinations_and_navigation.md``:
     ``/XYZ`` (with a ``null`` zoom), ``/Fit``, ``/FitH`` and ``/FitR``.
-    "Chapter 1"'s ``/Count`` is ``+9`` while it has **two** children —
-    deliberately wrong in magnitude, correct in sign. A reader that
-    treats ``/Count`` as a child count reports nine children; a reader
-    that reads only the sign reports two children, open. This file is the
-    reason that distinction is testable at all.
+
+    **Every ``/Count`` in this file is correct**, which is the point: it
+    is the happy-path fixture, and a reader must report it as a faithful
+    transcription with no diagnostics at all. The counts follow §12.3.3's
+    two different rules — an item's ``/Count`` magnitude is its *visible
+    descendants*, excluding itself, while the **root's** counts all
+    visible items *including* the top-level ones. So "Chapter 1" (open,
+    two leaf children) is ``+2``, "Chapter 2" (closed, one child) is
+    ``-1``, and the root is ``4`` — the two chapters, plus Chapter 1's
+    two children, and nothing from behind Chapter 2's closed node.
+
+``lying-counts.pdf``
+    Three pages. The same shape, with the magnitudes **deliberately
+    wrong and the signs deliberately right**: "Open" declares ``/Count
+    +9`` with two children, "Shut" declares ``/Count -7`` with one, and
+    the root declares ``99``. A reader that treats ``/Count`` as a child
+    count reports nine children; a reader that reads only the sign
+    reports two, open. Separated from ``basic-tree.pdf`` so that one
+    fixture pins the structural rule (sign wins, magnitude is ignored)
+    and the other pins the clean case — and so the magnitude
+    cross-check has something to disagree with.
 
 ``named-dests.pdf``
     Three pages. Four outline items whose destinations are **names**, not
@@ -48,6 +64,13 @@ WHAT IT WRITES
         the tree walk is genuinely exercised rather than a single leaf.
       * ``/Dest (tree-wrapped)`` — the same tree, but the value is a
         ``<< /D [...] >>`` **dictionary** rather than a bare array.
+      * ``/Dest (tree-action)`` — a name-tree value wrapping a **go-to
+        action** (``<< /A << /S /GoTo /D [...] >> >>``) rather than a
+        ``/D``, which §12.3.2.3 NOTE 2 explicitly permits.
+      * ``/Dest (LegacyIntro)`` — the legacy dictionary's key spelled as
+        a **string**, so it resolves only because pdfce searches both
+        namespaces regardless of the reference's type. Pins the
+        ``DEST-A1`` disclosure.
       * ``/Dest (nowhere)`` — a name defined by neither namespace. Must
         survive as an unresolved name, not vanish.
 
@@ -231,15 +254,19 @@ def root(first: int, last: int, count: int) -> bytes:
 # basic-tree.pdf
 # ---------------------------------------------------------------------
 def basic_tree() -> bytes:
-    """Two roots, four items, the four must_have view types, a lying /Count.
+    """Two roots, five items, the four must_have view types, counts CORRECT.
 
     Layout (object numbers in brackets):
 
-        [9]  Chapter 1        /Count +9  -> OPEN,  2 real children
+        [9]  Chapter 1        /Count +2  -> OPEN,  2 children
              [11] Section 1.1  [3 0 R /XYZ 72 720 null]
              [12] Section 1.2  [4 0 R /FitH 700]
-        [10] Chapter 2        /Count -1  -> CLOSED, 1 real child
+        [10] Chapter 2        /Count -1  -> CLOSED, 1 child
              [13] Section 2.1  [6 0 R /FitR 10 20 300 400]
+
+    Root ``/Count 4``: the two chapters plus Chapter 1's two visible
+    children. Chapter 2 is closed, so its child contributes nothing to
+    the root total even though Chapter 2 itself does.
 
     Chapter 1's own destination is ``[3 0 R /Fit]``; Chapter 2's is
     ``[5 0 R /XYZ null null 2]`` — a zoom-only ``/XYZ`` whose left and top
@@ -247,14 +274,14 @@ def basic_tree() -> bytes:
     """
     objects, n = pages_doc(5, "/Outlines 8 0 R")
     assert n == 8, n
-    objects[8] = root(9, 10, 3)
+    objects[8] = root(9, 10, 4)
     objects[9] = item(
         b"Chapter 1",
         8,
         nxt=10,
         first=11,
         last=12,
-        count=9,  # sign says OPEN; magnitude is deliberately not 2
+        count=2,  # positive => OPEN; 2 visible descendants
         dest="[3 0 R /Fit]",
     )
     objects[10] = item(
@@ -263,12 +290,36 @@ def basic_tree() -> bytes:
         prev=9,
         first=13,
         last=13,
-        count=-1,  # negative => CLOSED
+        count=-1,  # negative => CLOSED; 1 descendant if reopened
         dest="[5 0 R /XYZ null null 2]",
     )
     objects[11] = item(b"Section 1.1", 9, nxt=12, dest="[3 0 R /XYZ 72 720 null]")
     objects[12] = item(b"Section 1.2", 9, prev=11, dest="[4 0 R /FitH 700]")
     objects[13] = item(b"Section 2.1", 10, dest="[6 0 R /FitR 10 20 300 400]")
+    return serialize(objects)
+
+
+# ---------------------------------------------------------------------
+# lying-counts.pdf
+# ---------------------------------------------------------------------
+def lying_counts() -> bytes:
+    """Right signs, wrong magnitudes, wrong root total.
+
+        [6]  root      /Count 99  (true visible total: 4)
+        [7]  "Open"    /Count +9  -> OPEN,   2 children  (true: 2)
+             [9]  "Kid A"
+             [10] "Kid B"
+        [8]  "Shut"    /Count -7  -> CLOSED, 1 child     (true: 1)
+             [11] "Kid C"
+    """
+    objects, n = pages_doc(3, "/Outlines 6 0 R")
+    assert n == 6, n
+    objects[6] = root(7, 8, 99)
+    objects[7] = item(b"Open", 6, nxt=8, first=9, last=10, count=9, dest="[3 0 R /Fit]")
+    objects[8] = item(b"Shut", 6, prev=7, first=11, last=11, count=-7, dest="[4 0 R /Fit]")
+    objects[9] = item(b"Kid A", 7, nxt=10, dest="[3 0 R /Fit]")
+    objects[10] = item(b"Kid B", 7, prev=9, dest="[4 0 R /Fit]")
+    objects[11] = item(b"Kid C", 8, dest="[5 0 R /Fit]")
     return serialize(objects)
 
 
@@ -288,16 +339,22 @@ def named_dests() -> bytes:
     objects[7] = b"<< /LegacyIntro [3 0 R /XYZ 0 792 null] >>"
     objects[8] = b"<< /Kids [9 0 R] >>"
     objects[9] = (
-        b"<< /Limits [(tree-body) (tree-wrapped)] /Names ["
+        b"<< /Limits [(tree-action) (tree-wrapped)] /Names ["
+        b"(tree-action) << /A << /S /GoTo /D [4 0 R /FitB] >> >> "
         b"(tree-body) [4 0 R /Fit] "
         b"(tree-wrapped) << /D [5 0 R /FitV 40] >>"
         b"] >>"
     )
-    objects[10] = root(11, 14, 4)
+    objects[10] = root(11, 16, 6)
     objects[11] = item(b"Legacy intro", 10, nxt=12, dest="/LegacyIntro")
     objects[12] = item(b"Tree body", 10, prev=11, nxt=13, dest="(tree-body)")
     objects[13] = item(b"Tree wrapped", 10, prev=12, nxt=14, dest="(tree-wrapped)")
-    objects[14] = item(b"Nowhere", 10, prev=13, dest="(nowhere)")
+    # §12.3.2.3 NOTE 2: the wrapper dictionary may carry a go-to ACTION.
+    objects[14] = item(b"Tree action", 10, prev=13, nxt=15, dest="(tree-action)")
+    # DEST-A1: a legacy-DICTIONARY key spelled as a STRING. The type says
+    # "name tree"; only the legacy dictionary defines it.
+    objects[15] = item(b"Crossed namespace", 10, prev=14, nxt=16, dest="(LegacyIntro)")
+    objects[16] = item(b"Nowhere", 10, prev=15, dest="(nowhere)")
     return serialize(objects)
 
 
@@ -457,6 +514,7 @@ def main() -> int:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     files = {
         "basic-tree.pdf": basic_tree(),
+        "lying-counts.pdf": lying_counts(),
         "named-dests.pdf": named_dests(),
         "actions.pdf": actions(),
         "both-dest-and-a.pdf": both_dest_and_a(),

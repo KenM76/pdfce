@@ -22,10 +22,10 @@ endobj
 << /Kids [9 0 R] >>
 endobj
 9 0 obj
-<< /Limits [(tree-body) (tree-wrapped)] /Names [(tree-body) [4 0 R /Fit] (tree-wrapped) << /D [5 0 R /FitV 40] >>] >>
+<< /Limits [(tree-action) (tree-wrapped)] /Names [(tree-action) << /A << /S /GoTo /D [4 0 R /FitB] >> >> (tree-body) [4 0 R /Fit] (tree-wrapped) << /D [5 0 R /FitV 40] >>] >>
 endobj
 10 0 obj
-<< /Type /Outlines /First 11 0 R /Last 14 0 R /Count 4 >>
+<< /Type /Outlines /First 11 0 R /Last 16 0 R /Count 6 >>
 endobj
 11 0 obj
 << /Title (Legacy intro) /Parent 10 0 R /Next 12 0 R /Dest /LegacyIntro >>
@@ -37,10 +37,16 @@ endobj
 << /Title (Tree wrapped) /Parent 10 0 R /Prev 12 0 R /Next 14 0 R /Dest (tree-wrapped) >>
 endobj
 14 0 obj
-<< /Title (Nowhere) /Parent 10 0 R /Prev 13 0 R /Dest (nowhere) >>
+<< /Title (Tree action) /Parent 10 0 R /Prev 13 0 R /Next 15 0 R /Dest (tree-action) >>
+endobj
+15 0 obj
+<< /Title (Crossed namespace) /Parent 10 0 R /Prev 14 0 R /Next 16 0 R /Dest (LegacyIntro) >>
+endobj
+16 0 obj
+<< /Title (Nowhere) /Parent 10 0 R /Prev 15 0 R /Dest (nowhere) >>
 endobj
 xref
-0 15
+0 17
 0000000000 65535 f 
 0000000015 00000 n 
 0000000120 00000 n 
@@ -51,13 +57,15 @@ xref
 0000000371 00000 n 
 0000000429 00000 n 
 0000000464 00000 n 
-0000000597 00000 n 
-0000000671 00000 n 
-0000000762 00000 n 
-0000000862 00000 n 
-0000000968 00000 n 
+0000000654 00000 n 
+0000000728 00000 n 
+0000000819 00000 n 
+0000000919 00000 n 
+0000001025 00000 n 
+0000001129 00000 n 
+0000001239 00000 n 
 trailer
-<< /Size 15 /Root 1 0 R >>
+<< /Size 17 /Root 1 0 R >>
 startxref
-1051
+1322
 %%EOF

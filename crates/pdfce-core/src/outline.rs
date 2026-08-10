@@ -121,23 +121,63 @@
 //!
 //! ## Spec sources
 //!
-//! - §12.3.3 (Tables 152, 153) — document outline, `/Count` semantics,
-//!   the `/Dest`-vs-`/A` exclusivity.
-//! - §12.3.2 (Table 151) — destination syntax: `/XYZ`, `/Fit`, `/FitH`,
-//!   `/FitV`, `/FitR`, `/FitB`, `/FitBH`, `/FitBV`.
-//! - §12.3.2.2 — *"the page shall be specified by an indirect
-//!   reference"* for a destination inside the document.
-//! - §12.3.2.3 — named destinations: the PDF 1.1 catalog `/Dests`
-//!   **dictionary** and the PDF 1.2 `/Names → /Dests` **name tree**.
-//! - §7.9.6 — name trees: `/Names` as an alternating key/value array,
-//!   `/Kids` for interior nodes, and the `<< /D … >>` wrapper a
-//!   destination value may take.
-//! - §12.6.4.2 / §12.6.4.3 — the `/GoTo` and `/GoToR` actions.
-//! - §7.9.2 — `/Title` is a *text string*: UTF-16BE when it starts
-//!   `FE FF`, PDFDocEncoding (Annex D.3) otherwise.
-//! - §7.3.10 — a dangling reference resolves to `null` and *"shall not
-//!   be considered an error"*, which is why an unreadable link truncates
-//!   a chain rather than failing the parse.
+//! **Every clause and table number here is ISO 32000-1:2008 (PDF 1.7).**
+//! That is worth stating rather than assuming, because ISO 32000-2
+//! renumbers the two tables this module depends on most, and in opposite
+//! directions: 1.7's Table 153 (outline item) becomes 2.0's Table 151,
+//! while 1.7's Table 151 (destination syntax) becomes 2.0's Table 149. A
+//! citation without an edition is a citation that will eventually be
+//! read against the wrong table.
+//!
+//! - `iso32000__s__12.3.3.md` — §12.3.3, Tables 152/153/154: the outline
+//!   model, `/Count`'s two different meanings, the flag bits, and the
+//!   worked example in Annex H.6 that pins the `/Count` arithmetic.
+//! - `iso32000__s__12.3.2.md` — §12.3.2, Table 151: destination syntax
+//!   for `/XYZ`, `/Fit`, `/FitH`, `/FitV`, `/FitR`, `/FitB`, `/FitBH`,
+//!   `/FitBV`; §12.3.2.2 explicit destinations; §12.3.2.3 named
+//!   destinations and the two namespaces.
+//! - `iso32000__s__12.6.4.2.md` — §12.6.4.2/.3/.4: the `/GoTo`,
+//!   `/GoToR` and `/GoToE` actions, Tables 199/200/201, and Table 198's
+//!   registry of the twenty action types. (Note the standard's own
+//!   erratum, recorded in that RAG entry: Table 193's `/S` row misdirects
+//!   to "Table 194"; the registry is **Table 198**.)
+//! - `iso32000__s__7.9.6.md` — name trees: `/Names` as an alternating
+//!   key/value array, `/Kids` for interior nodes, and byte-by-byte key
+//!   comparison.
+//! - `iso32000__s__7.11.md` — file specifications, for `/GoToR`'s `/F`.
+//! - `iso32000__s__7.9.2.md` — `/Title` is a *text string*: UTF-16BE
+//!   when it starts `FE FF`, PDFDocEncoding (Annex D.3) otherwise. Table
+//!   35 and §7.9.2.2 name "bookmark names" explicitly, so this is
+//!   stated rather than inferred.
+//! - `iso32000__s__7.3.10.md` — a dangling reference resolves to `null`
+//!   and *"shall not be considered an error"*, which is why an
+//!   unreadable link truncates a chain rather than failing the parse.
+//!
+//! ## Spec ambiguities this module resolves by policy
+//!
+//! Three questions the standard does not answer. Each is resolved here
+//! the same way the rest of the crate resolves it, and each is
+//! **disclosed** rather than silently decided — which is the shape
+//! `CLAUDE.md` rule 4 asks for and the shape the PDF_Spec RAG's
+//! ambiguity register is built to track.
+//!
+//! - **`OL-A1` — an item carrying both `/Dest` and `/A`.** Table 153
+//!   marks them mutually exclusive in *both* rows and then says nothing
+//!   about a file that carries both. See
+//!   [`resolve_item_destination`]; counted in
+//!   [`OutlineDiagnostics::dest_and_action_both_present`].
+//! - **`DEST-A1` — a destination name defined in the "wrong"
+//!   namespace.** §12.3.2.3 gives no precedence or fallback rule between
+//!   the two, and the only discriminator it offers is the *type* of the
+//!   reference value (a name object means the PDF 1.1 dictionary, a
+//!   string means the PDF 1.2 tree). pdfce searches both regardless of
+//!   type, and counts the mismatches in
+//!   [`OutlineDiagnostics::cross_namespace_resolutions`]. See
+//!   [`NamedDestinations::new`].
+//! - **`EF-A3` — `/UF` versus `/F` on a file specification.** No
+//!   precedence rule exists; the RAG's derived reading prefers `/UF` for
+//!   any textual use and recommends the choice be a setting. See
+//!   [`file_spec_bytes`].
 //!
 //! ## Behavioural reference
 //!
@@ -267,7 +307,8 @@ pub struct OutlineItem {
     /// rather than one this module launders.
     pub color: Option<[f64; 3]>,
     /// `/F` — the item's display style flags as the file declared them
-    /// (Table 153, PDF 1.4).
+    /// (Table 153 declares the key, **Table 154** defines the bits; PDF
+    /// 1.4, default 0).
     ///
     /// Stored raw rather than as booleans because the field is a bit
     /// field with room to grow and pdfce should not silently discard
@@ -277,9 +318,18 @@ pub struct OutlineItem {
 }
 
 impl OutlineItem {
-    /// `/F` bit position 1 — render the title in italic (Table 153).
+    /// `/F` bit **position 1** — italic (Table 154).
+    ///
+    /// Recorded as the mask `1 << (1 - 1)`. Table 154 numbers bits from
+    /// 1 at the low-order end.
     const FLAG_ITALIC: i64 = 1;
-    /// `/F` bit position 2 — render the title in bold (Table 153).
+    /// `/F` bit **position 2** — bold (Table 154).
+    ///
+    /// **The intuitive order is wrong** — the PDF_Spec RAG files this as
+    /// `OL-T2` precisely because every reader's instinct is that bold
+    /// comes first. Italic is bit 1; bold is bit 2. Getting these
+    /// backwards produces a bookmarks panel that is *almost* right,
+    /// which is the kind of defect that ships.
     const FLAG_BOLD: i64 = 2;
 
     /// Whether `/F` asks for an italic title.
@@ -444,19 +494,26 @@ impl Destination {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum RemoteTarget {
-    /// An integer page number, carried **verbatim** from the file.
+    /// An integer page number in the remote file, **0-based**, carried
+    /// verbatim.
     ///
-    /// Not converted to a `usize` index, and that is deliberate. A
-    /// remote destination cannot use an indirect reference — the target
-    /// file's objects are not available to the producer — so §12.3.2
-    /// permits an integer here instead. What this module will **not**
-    /// do is assert whether that integer is 0-based or 1-based: the
-    /// PDF_Spec RAG had no §12.3.2 entry when this module was written
-    /// (see the module-level gap note in the Pass report), and
-    /// `CLAUDE.md` rule 1 forbids implementing spec-governed behaviour
-    /// from memory. Storing the raw `i64` means a later confirmation is
-    /// a one-line change at the *consumer*, and means no caller is
-    /// silently handed an off-by-one today.
+    /// A remote destination cannot use an indirect reference — the
+    /// target file's objects are not available to the producer — so
+    /// §12.3.2.2 permits an integer here instead, and *only* here:
+    /// *"No page object can be specified for a destination associated
+    /// with a remote go-to action … the `page` parameter specifies an
+    /// integer page number within the remote document."*
+    ///
+    /// **The basing is stated in an unexpected place.** *"The first page
+    /// shall be numbered 0"* appears in **Table 200's `/D` row in
+    /// §12.6.4.3** — not in §12.3.2.2, which describes the integer form
+    /// and never says which end it counts from. A reader built from
+    /// clause 12.3 alone therefore has no answer, and the standard is
+    /// not even self-consistent across sites: `/PrintPageRange` (Table
+    /// 150) is **1-based**. This is why the type carries the raw `i64`
+    /// and an explicitly-named [`RemoteTarget::page_index`] accessor,
+    /// rather than a bare `usize` that would silently absorb the
+    /// question.
     PageNumber(i64),
     /// A named destination in the remote file.
     ///
@@ -465,6 +522,29 @@ pub enum RemoteTarget {
     Named(Vec<u8>),
     /// `/D` was absent, or in no shape this module recognises.
     Unknown,
+}
+
+impl RemoteTarget {
+    /// The 0-based page index in the **remote** file, when this target
+    /// is a page number that can be one.
+    ///
+    /// Returns `None` for a negative page number as well as for the
+    /// non-numeric variants. A negative value is malformed — Table 200
+    /// numbers from 0 — and clamping it to 0 would silently turn a
+    /// corrupt bookmark into one that convincingly opens the wrong
+    /// file's first page.
+    ///
+    /// The name says *remote*, and that is load-bearing: nothing here
+    /// indexes into the current document. See
+    /// [`OutlineItem::page_index`], which deliberately returns `None`
+    /// for every remote destination.
+    #[must_use]
+    pub const fn page_index(&self) -> Option<usize> {
+        match *self {
+            Self::PageNumber(number) if number >= 0 => Some(number as usize),
+            _ => None,
+        }
+    }
 }
 
 /// A Table 151 destination fit style and its parameters (§12.3.2).
@@ -513,10 +593,22 @@ pub enum DestView {
         left: Option<f64>,
     },
     /// `[page /FitR left bottom right top]` — fit the given rectangle
-    /// entirely in the window.
+    /// entirely in the window. If the horizontal and vertical fit
+    /// factors differ, the **smaller** is used and the rectangle is
+    /// centred in the other dimension.
+    ///
+    /// **This is not a `/Rect`, and must not be parsed as one.** The
+    /// PDF_Spec RAG files that trap as `DEST-T1`. The permutation
+    /// happens to match `[llx lly urx ury]`, so a `/Rect` parser looks
+    /// like it fits — but §7.9.5 says a `/Rect` *"shall be normalised"*
+    /// while Table 151 imposes **no** normalisation on `/FitR`.
+    /// Reusing a normalising rectangle parser here would silently
+    /// reorder a destination the producer wrote deliberately, so do not
+    /// assume `left < right` or `bottom < top`.
     ///
     /// The four parameters are read **positionally in the order the
-    /// array gives them**, which is the order named here. See
+    /// array gives them**, confirmed verbatim against Table 151's
+    /// `/FitR` row (and unchanged in ISO 32000-2's Table 149). See
     /// [`DestView::rect`] for the assembled form.
     FitR {
         /// Left edge of the rectangle to fit.
@@ -583,15 +675,18 @@ impl DestView {
     /// Whether an `/XYZ` destination asks the viewer to **retain** the
     /// current zoom.
     ///
-    /// Unambiguously true when `zoom` is `null` (absent from the
-    /// `Option`). **A zoom of literal `0` is widely treated the same
-    /// way** by viewers, and this accessor does so too — but that is a
-    /// *stated reading*, not a verified clause: the PDF_Spec RAG carried
-    /// no §12.3.2 entry when this module was written, so the "zoom 0
-    /// means null" rule could not be sourced to ISO 32000-1 text. It is
-    /// recorded here as a pdfce reading precisely so it can be checked
-    /// and, if wrong, changed in one place. Returns `false` for every
-    /// non-`/XYZ` variant, which have no zoom to retain.
+    /// True when `zoom` is `null`, and equally true when it is literal
+    /// `0` — Table 151 states that equivalence verbatim, so this is a
+    /// spec rule rather than a viewer convention.
+    ///
+    /// **The zero-means-null rule is `zoom`-only.** It does *not* extend
+    /// to `left` or `top`, where `0` is a genuine coordinate: the
+    /// standard's own worked example uses `/XYZ 0 792 0` to mean "top of
+    /// the page, retain zoom", with a literal `left` of 0 and a
+    /// retain-zoom of 0 side by side in the same array. A reader that
+    /// generalised the rule to all three parameters would break exactly
+    /// that example. Returns `false` for every non-`/XYZ` variant, which
+    /// have no zoom to retain.
     #[must_use]
     pub fn zoom_is_retain(&self) -> bool {
         match *self {
@@ -655,12 +750,60 @@ pub struct OutlineDiagnostics {
     /// How many items with children carried no usable `/Count`, so their
     /// open/closed state was defaulted.
     ///
+    /// A genuine conformance failure, not merely an inconvenience: Table
+    /// 153 makes `/Count` *"required if the item has any descendants"*,
+    /// and because there is **no `/Open` key** the sign of `/Count` is
+    /// the only place the state can live. An item with children and no
+    /// `/Count` has not stated whether it is open, and no amount of
+    /// reading elsewhere in the file recovers it.
+    ///
     /// **The default is closed.** A wrongly-closed node still shows that
     /// children exist — the twisty is drawn either way — and costs the
     /// operator one click. A wrongly-*open* node on a large damaged
     /// outline floods the panel with entries the author meant to hide,
     /// and there is no equally cheap recovery from that.
     pub open_state_defaulted: usize,
+    /// How many items' `/Count` **magnitude** disagreed with the number
+    /// of visible descendants the traversal actually found.
+    ///
+    /// The cross-check the PDF_Spec RAG recommends: build the tree from
+    /// the linked list, take only the open/closed **bit** from `/Count`,
+    /// and then use the magnitude solely to detect that the file is
+    /// internally inconsistent. A non-zero value here almost always
+    /// means the document was edited by a tool that moved bookmarks
+    /// without recomputing the counts — worth telling an operator,
+    /// never worth acting on.
+    ///
+    /// The magnitude counts **visible descendants at all levels, the
+    /// item itself excluded**, and a *closed* child contributes exactly
+    /// one (itself) and none of its own subtree. See
+    /// [`Outline::visible_item_count`] for the arithmetic, which is
+    /// verified against the standard's Annex H.6 worked example.
+    ///
+    /// **Zero when the tree was truncated**, because a truncated
+    /// traversal cannot honestly disagree with anything. See
+    /// [`Outline::items`]'s producer, [`read_outline`].
+    pub count_disagreements: usize,
+    /// Whether the **root** outline dictionary's `/Count` disagreed with
+    /// the visible-item total.
+    ///
+    /// Separate from [`OutlineDiagnostics::count_disagreements`] because
+    /// the root's `/Count` counts a **different quantity**: all visible
+    /// items at every level *including the top-level items themselves*,
+    /// where an item's `/Count` excludes itself. Conflating the two
+    /// readings is, per the PDF_Spec RAG, "the single most likely defect
+    /// in an outline reader".
+    pub root_count_disagreement: bool,
+    /// The root outline dictionary's declared `/Count` (Table 152),
+    /// verbatim.
+    ///
+    /// `None` when absent, which Table 152 says *"shall be omitted if
+    /// there are no open outline items"*. **Never infer "this document
+    /// has no bookmarks" from that** — the RAG files the root's omission
+    /// rule as `OL-A2` because it contradicts its own value definition
+    /// for a flat outline, where the top-level items are always visible
+    /// and yet no item is "open". Use [`Outline::items`] being empty.
+    pub declared_root_count: Option<i64>,
     /// How many items carried **both** `/Dest` and `/A`, which §12.3.3
     /// forbids.
     ///
@@ -672,6 +815,24 @@ pub struct OutlineDiagnostics {
     /// How many named destinations neither namespace defined — the
     /// [`Destination::Named`] count.
     pub unresolved_names: usize,
+    /// How many destination names resolved in the namespace their
+    /// **type** did not point at — spec ambiguity `DEST-A1`, disclosed.
+    ///
+    /// §12.3.2.3 offers exactly one discriminator between its two
+    /// namespaces: a `/Dest` that is a **name object** belongs to the
+    /// PDF 1.1 catalog `/Dests` dictionary, and one that is a **string**
+    /// belongs to the PDF 1.2 `/Names → /Dests` tree. It states no
+    /// precedence and no fallback for a file that puts the key in the
+    /// other one.
+    ///
+    /// pdfce searches both regardless of type, because a type-strict
+    /// resolver fails on documents other readers open — but that
+    /// leniency is a **choice pdfce made where the standard was silent**,
+    /// and rule 4 says a choice like that is disclosed rather than
+    /// assumed. Non-zero here means "these bookmarks work in pdfce
+    /// because pdfce was lenient", which is exactly what an operator
+    /// preparing a file for a stricter reader needs to know.
+    pub cross_namespace_resolutions: usize,
     /// How many destination arrays named a fit style pdfce does not
     /// implement.
     pub unknown_views: usize,
@@ -708,6 +869,9 @@ impl OutlineDiagnostics {
     /// `false`. The point is to give a UI one cheap test for *"can I
     /// present this as simply the document's bookmarks?"*, and anything
     /// looser would let a partly-inferred tree pass as a faithful one.
+    ///
+    /// [`OutlineDiagnostics::named_destinations_defined`] is excluded
+    /// because it is context, not a defect. Everything else counts.
     #[must_use]
     pub const fn is_faithful(&self) -> bool {
         !self.item_budget_exhausted
@@ -718,9 +882,12 @@ impl OutlineDiagnostics {
             && self.titles_unreadable == 0
             && self.titles_inexact == 0
             && self.open_state_defaulted == 0
+            && self.count_disagreements == 0
+            && !self.root_count_disagreement
             && self.dest_and_action_both_present == 0
             && self.unmapped_pages == 0
             && self.unresolved_names == 0
+            && self.cross_namespace_resolutions == 0
             && self.unknown_views == 0
             && self.malformed_views == 0
             && self.unreadable_actions == 0
@@ -758,6 +925,83 @@ impl Outline {
         }
         out
     }
+
+    /// How many items a bookmarks panel would show on first open —
+    /// the quantity Table 152's root `/Count` declares.
+    ///
+    /// *"Total number of visible outline items at all levels of the
+    /// outline"*, **including the top-level items themselves**. An item
+    /// is visible when every ancestor between it and the root is open;
+    /// a closed item is still visible itself, and hides only its
+    /// descendants.
+    ///
+    /// ## The arithmetic, and how it was verified
+    ///
+    /// `visible(items) = Σ over items of (1 + if open { visible(children) } else { 0 })`
+    ///
+    /// The consequence worth stating, because it is the part that is
+    /// easy to get wrong: a **closed child contributes exactly one** —
+    /// itself — and none of its own subtree, however large. It is *not*
+    /// skipped, and its descendants are *not* counted.
+    ///
+    /// This is not derived from the prose alone. ISO 32000-1's Annex H.6
+    /// prints the same six-item outline twice, once fully open and once
+    /// with one node closed, and every value in both printings
+    /// reproduces under this formula — root 6→5, one item 4→3 (not
+    /// 4→2), another 1→−1. Annex F corroborates from the other
+    /// direction: *"skipping over any subtree that is closed (that is,
+    /// whose parent's `Count` value is negative)."*
+    ///
+    /// Iterative, so a hand-built tree deeper than [`MAX_OUTLINE_DEPTH`]
+    /// cannot overflow the stack here.
+    #[must_use]
+    pub fn visible_item_count(&self) -> usize {
+        visible_count(&self.items)
+    }
+}
+
+/// The visible-item total for one sibling list. See
+/// [`Outline::visible_item_count`] for the rule this implements and the
+/// Annex H.6 verification behind it.
+fn visible_count(items: &[OutlineItem]) -> usize {
+    let mut total = 0usize;
+    let mut stack: Vec<&OutlineItem> = items.iter().collect();
+    while let Some(item) = stack.pop() {
+        total += 1;
+        // A CLOSED item is itself visible; its descendants are not.
+        if item.open {
+            stack.extend(item.children.iter());
+        }
+    }
+    total
+}
+
+/// Compare every item's declared `/Count` magnitude against the visible
+/// descendants the traversal actually found, counting disagreements.
+///
+/// Returns this sibling list's own visible-item total, so one bottom-up
+/// pass serves both the per-item check and the root check.
+///
+/// Recursion is safe here in a way it would not be in a public method:
+/// this runs only over a tree [`read_siblings`] just produced, whose
+/// depth is hard-capped at [`MAX_OUTLINE_DEPTH`].
+///
+/// An item with descendants but **no** `/Count` is deliberately not
+/// reported here — it is already counted in
+/// [`OutlineDiagnostics::open_state_defaulted`], and reporting the same
+/// defect twice would make a UI double-count it.
+fn check_counts(items: &[OutlineItem], disagreements: &mut usize) -> usize {
+    let mut visible = 0usize;
+    for item in items {
+        let below = check_counts(&item.children, disagreements);
+        if let Some(declared) = item.declared_count
+            && u64::try_from(below).unwrap_or(u64::MAX) != declared.unsigned_abs()
+        {
+            *disagreements += 1;
+        }
+        visible += 1 + if item.open { below } else { 0 };
+    }
+    visible
 }
 
 // ---------------------------------------------------------------------
@@ -790,22 +1034,31 @@ impl Outline {
 /// )?;
 /// let outline = read_outline(&doc);
 ///
-/// // Two top-level chapters; the first has two children.
+/// // Two top-level chapters, five items in all.
 /// assert_eq!(outline.items.len(), 2);
 /// assert_eq!(outline.diagnostics.items, 5);
 ///
-/// // /Count's SIGN is the open/closed state. Chapter 1 declares +9 —
-/// // wrong in magnitude, right in sign — and is open with 2 children.
+/// // /Count's SIGN is the open/closed state. Chapter 1 is +2: open.
 /// let chapter1 = outline.items.first().ok_or("no first item")?;
 /// assert_eq!(chapter1.title, "Chapter 1");
 /// assert!(chapter1.open);
 /// assert_eq!(chapter1.children.len(), 2);
-/// assert_eq!(chapter1.declared_count, Some(9));
+/// assert_eq!(chapter1.page_index(), Some(0));
 ///
-/// // Chapter 2 declares -1: closed, and it really does have one child.
+/// // Chapter 2 declares -1: CLOSED, and it still really has one child.
+/// // Closed hides the child; it does not remove it.
 /// let chapter2 = outline.items.get(1).ok_or("no second item")?;
 /// assert!(!chapter2.open);
 /// assert_eq!(chapter2.children.len(), 1);
+///
+/// // The root's /Count counts VISIBLE items including the top level:
+/// // both chapters, plus Chapter 1's two children. Chapter 2 is closed,
+/// // so its child contributes nothing.
+/// assert_eq!(outline.visible_item_count(), 4);
+/// assert_eq!(outline.diagnostics.declared_root_count, Some(4));
+///
+/// // Nothing was truncated, defaulted or guessed.
+/// assert!(outline.diagnostics.is_faithful());
 /// # Ok(())
 /// # }
 /// ```
@@ -848,6 +1101,16 @@ pub fn read_outline<G: ObjectGraph + ?Sized>(graph: &G) -> Outline {
         };
     };
 
+    // Table 152's root `/Count` is the VISIBLE-ITEM TOTAL, a different
+    // quantity from an item's `/Count`, and it *"cannot be negative"* —
+    // the root has no collapsed state of its own. It is recorded and
+    // cross-checked, never used to build the tree: the tree comes from
+    // the linked list, which is the only structure the spec says
+    // display order follows.
+    diagnostics.declared_root_count = graph
+        .resolve(root.get(b"Count").unwrap_or(&Object::Null))
+        .as_int();
+
     let mut context = ReadContext {
         budget: MAX_OUTLINE_ITEMS,
         visited: HashSet::new(),
@@ -856,15 +1119,35 @@ pub fn read_outline<G: ObjectGraph + ?Sized>(graph: &G) -> Outline {
         diagnostics,
     };
 
-    // The root's own `/Count` is the visible-item total (Table 152) and
-    // carries no open/closed state, so it is read only as a chain start.
     let first = link(graph, root, b"First", &mut context);
     let items = read_siblings(graph, first, 0, &mut context);
+    let mut diagnostics = context.diagnostics;
 
-    Outline {
-        items,
-        diagnostics: context.diagnostics,
+    // The `/Count`-magnitude cross-check, but ONLY over a tree that was
+    // read whole. A traversal stopped by the item budget, the depth cap,
+    // a cycle or an unreadable link has fewer descendants than the file
+    // describes *by construction*, so every count would "disagree" and
+    // the diagnostic would report the reader's own guard rails as
+    // document corruption — noise precisely when the operator most needs
+    // signal.
+    let truncated = diagnostics.item_budget_exhausted
+        || diagnostics.depth_truncations > 0
+        || diagnostics.cycles_broken > 0
+        || diagnostics.unreadable_items > 0
+        || diagnostics.non_reference_links > 0;
+    if !truncated {
+        let mut disagreements = 0usize;
+        let visible = check_counts(&items, &mut disagreements);
+        diagnostics.count_disagreements = disagreements;
+        // Table 152's total INCLUDES the top-level items themselves,
+        // which `check_counts` already returns for the top-level list.
+        diagnostics.root_count_disagreement =
+            diagnostics.declared_root_count.is_some_and(|declared| {
+                u64::try_from(visible).unwrap_or(u64::MAX) != declared.unsigned_abs()
+            });
     }
+
+    Outline { items, diagnostics }
 }
 
 /// Read `graph`'s document outline, discarding the diagnostics.
@@ -1103,15 +1386,20 @@ fn read_color<G: ObjectGraph + ?Sized>(graph: &G, dict: &Dict) -> Option<[f64; 3
 
 /// Resolve an item's `/Dest` and/or `/A` to a [`Destination`].
 ///
-/// ## Precedence, and why it is `/Dest`
+/// ## Precedence, and why it is `/Dest` — spec ambiguity `OL-A1`
 ///
-/// §12.3.3 makes `/Dest` and `/A` **mutually exclusive** — an item
-/// carrying both is malformed, and the spec gives no rule for reading
-/// one. pdfce prefers `/Dest`, for two reasons:
+/// Table 153 marks `/Dest` and `/A` **mutually exclusive in both of
+/// their rows** — an item carrying both is malformed — and then the
+/// standard says nothing whatever about how to read one that does. This
+/// is therefore a product decision, and it is made as follows.
 ///
-/// 1. It is the cheaper and more direct statement of intent. `/A` wraps
-///    the same destination in an action dictionary that a producer
-///    emitting both has, by construction, already contradicted.
+/// 1. **The standard states a preference between the two forms, even
+///    though it states no precedence.** §12.6.4.2's NOTE says a `/GoTo`
+///    action and a direct `/Dest` *"have the same effect"*, but that the
+///    action *"is less compact and is not compatible with PDF 1.0;
+///    therefore, using a direct destination is preferable."* Where a
+///    file contradicts itself, honouring the form the spec calls
+///    preferable is the least surprising reading available.
 /// 2. **[`crate::pageops::references::DestinationResolver::resolve_target`]
 ///    already does exactly this**, and it is the function that decides
 ///    whether deleting a page reports this bookmark as broken. If the
@@ -1151,11 +1439,20 @@ fn resolve_item_destination<G: ObjectGraph + ?Sized>(
 
 /// Read an item's `/A` action dictionary (§12.6) as a [`Destination`].
 ///
-/// Only `/GoTo` and `/GoToR` are navigations. Everything else — `/URI`,
-/// `/Launch`, `/JavaScript`, `/Named`, `/Thread`, `/GoToE`, and any
-/// future extension — becomes [`Destination::NonNavigation`] carrying
-/// its `/S`, which is the *recognise and disclose, never execute*
-/// posture the Acrobat-parity RAG recommends for bookmark actions.
+/// **Any** of Table 198's twenty action types may appear on a bookmark;
+/// only `/GoTo` (Table 199) and `/GoToR` (Table 200) are page
+/// navigations. Everything else — `/URI`, `/Launch`, `/JavaScript`,
+/// `/Named`, `/Thread`, and any future extension — becomes
+/// [`Destination::NonNavigation`] carrying its `/S`, which is the
+/// *recognise and disclose, never execute* posture the Acrobat-parity
+/// RAG recommends for bookmark actions.
+///
+/// `/GoToE` (embedded go-to, Table 201) is deliberately in the second
+/// group rather than the first. It targets a page inside an *embedded
+/// file*, reached through a `/T` target chain, and pdfce has no
+/// embedded-file navigation to resolve it against. Reporting it as a
+/// disclosed action is honest; giving it a page index of this document
+/// would not be.
 ///
 /// `/Next` on an action dictionary (§12.6.1's action chaining) is
 /// deliberately **not** followed: a bookmark whose first action is a
@@ -1168,7 +1465,10 @@ fn read_action<G: ObjectGraph + ?Sized>(
     dict: &Dict,
     context: &mut ReadContext<'_>,
 ) -> Destination {
-    let Some(action) = dict.get(b"A").map(|value| graph.resolve(value)).and_then(Object::as_dict)
+    let Some(action) = dict
+        .get(b"A")
+        .map(|value| graph.resolve(value))
+        .and_then(Object::as_dict)
     else {
         context.diagnostics.unreadable_actions += 1;
         return Destination::NonNavigation { action: None };
@@ -1214,7 +1514,9 @@ fn read_remote<G: ObjectGraph + ?Sized>(
     action: &Dict,
     context: &mut ReadContext<'_>,
 ) -> Destination {
-    let file = action.get(b"F").and_then(|spec| file_spec_bytes(graph, spec));
+    let file = action
+        .get(b"F")
+        .and_then(|spec| file_spec_bytes(graph, spec));
     let new_window = match graph.resolve(action.get(b"NewWindow").unwrap_or(&Object::Null)) {
         Object::Boolean(value) => Some(*value),
         _ => None,
@@ -1264,17 +1566,41 @@ fn read_remote<G: ObjectGraph + ?Sized>(
 /// Reduce a file specification (§7.11) to display bytes.
 ///
 /// Handles the two shapes that actually occur on `/GoToR`: a bare
-/// string, and a file-specification dictionary. From the dictionary,
-/// `/UF` is preferred over `/F` because it is the Unicode form and `/F`
-/// is a platform-encoded legacy string — where both exist, `/UF` is the
-/// one that will render correctly.
+/// string (§7.11.2), and a file-specification dictionary (Table 44).
 ///
-/// **Stated gap.** §7.11's full model — `/DOS`, `/Mac`, `/Unix`,
-/// relative-path resolution against `/Root /URI`, embedded-file streams
-/// — is not implemented, and the PDF_Spec RAG had no §7.11 entry when
-/// this module was written. Anything not covered returns `None` rather
-/// than a guess, so a caller sees "pdfce could not read this file
-/// reference" instead of a plausible wrong path.
+/// ## `/UF` before `/F` — spec ambiguity `EF-A3`, resolved by policy
+///
+/// **ISO 32000-1 states no precedence between `/UF` and `/F`.**
+/// Everything it says is a `should` and none of it orders the two:
+/// `/UF` *"should be used **in addition to** the `F` entry"*, is
+/// *"recommended if the `F` entry exists"*, and supplies
+/// *"cross-platform and cross-language compatibility"* where `/F`
+/// supplies *"backwards compatibility"*.
+///
+/// pdfce prefers `/UF` here because this value is used **textually** —
+/// it is shown to an operator as "this bookmark opens *that* file" —
+/// and `/UF` is the only one of the two with a defined character
+/// encoding (PDFDocEncoding or UTF-16BE with a BOM, §7.9.2.2). `/F` is
+/// a byte string that §7.11.2.1 says must be handed to the operating
+/// system *"without interpretation or conversion of any sort"*, which
+/// makes it the right value to **open** a file with and the wrong one
+/// to **display**.
+///
+/// The PDF_Spec RAG recommends this be a setting
+/// (`filename_source = uf_then_f | f_then_uf | f_only`, default
+/// `uf_then_f`) rather than hard-coded, which matches the project's
+/// standing rule that a choice the standard leaves open becomes a
+/// setting. It is hard-coded to the recommended default here only
+/// because this module could not reach `crate::settings`; see the Pass
+/// report.
+///
+/// ## Stated gap
+///
+/// §7.11's full model — `/DOS`, `/Mac`, `/Unix`, `/FS /URL`,
+/// relative-path resolution, embedded-file streams — is not implemented.
+/// Anything not covered returns `None` rather than a guess, so a caller
+/// sees "pdfce could not read this file reference" instead of a
+/// plausible wrong path.
 fn file_spec_bytes<G: ObjectGraph + ?Sized>(graph: &G, spec: &Object) -> Option<Vec<u8>> {
     match graph.resolve(spec) {
         Object::String(bytes) => Some(bytes.clone()),
@@ -1329,13 +1655,15 @@ fn resolve_destination_value<G: ObjectGraph + ?Sized>(
                     }
                 });
             }
-            // Shapes 3 and 4: a name (the PDF 1.1 `/Dests` dictionary)
-            // or a string (the PDF 1.2 `/Names -> /Dests` tree). Both
-            // namespaces are searched for both spellings — see
-            // `NamedDestinations::new` on why they are merged.
+            // Shapes 3 and 4: a NAME object keys the PDF 1.1 `/Dests`
+            // dictionary; a STRING keys the PDF 1.2 `/Names -> /Dests`
+            // tree. §12.3.2.3 offers that type as its only discriminator
+            // and states no fallback, so pdfce searches both and
+            // discloses when the type pointed the other way — spec
+            // ambiguity `DEST-A1`. See `NamedDestinations::new`.
             Object::Name(ref name) => {
                 let key = name.as_bytes().to_vec();
-                current = match next_named(context.named, &key, &mut seen) {
+                current = match next_named(context, &key, Namespace::LegacyDict, &mut seen) {
                     Step::Value(value) => value,
                     Step::Unresolved => {
                         context.diagnostics.unresolved_names += 1;
@@ -1345,7 +1673,7 @@ fn resolve_destination_value<G: ObjectGraph + ?Sized>(
             }
             Object::String(ref bytes) => {
                 let key = bytes.clone();
-                current = match next_named(context.named, &key, &mut seen) {
+                current = match next_named(context, &key, Namespace::NameTree, &mut seen) {
                     Step::Value(value) => value,
                     Step::Unresolved => {
                         context.diagnostics.unresolved_names += 1;
@@ -1353,10 +1681,33 @@ fn resolve_destination_value<G: ObjectGraph + ?Sized>(
                     }
                 };
             }
-            // §7.9.6: a name-tree value may be `<< /D [...] >>` rather
-            // than the array itself.
+            // §12.3.2.3: a named destination's VALUE may be a dictionary
+            // rather than the array itself. NOTE 2 gives that wrapper
+            // two forms — a `/D` holding the destination array, or a
+            // go-to **action** — and both are followed here.
+            //
+            // Note this is the value's shape, not `/Dest`'s: Table 153
+            // types an outline item's `/Dest` as "name, byte string, or
+            // array", so a dictionary written directly there is
+            // malformed. Following it anyway is deliberate tolerance,
+            // costs nothing, and matches the rest of the crate.
             Object::Dict(ref dict) => {
-                current = graph.resolve(dict.get(b"D")?).clone();
+                current = match dict.get(b"D") {
+                    Some(inner) => graph.resolve(inner).clone(),
+                    None => {
+                        let action = graph.resolve(dict.get(b"A")?).as_dict()?;
+                        let is_goto = action
+                            .get(b"S")
+                            .map(|value| graph.resolve(value))
+                            .and_then(Object::as_name)
+                            .map(Name::as_bytes)
+                            .is_some_and(|subtype| subtype == b"GoTo");
+                        if !is_goto {
+                            return None;
+                        }
+                        graph.resolve(action.get(b"D")?).clone()
+                    }
+                };
             }
             _ => return None,
         }
@@ -1373,19 +1724,36 @@ enum Step {
 }
 
 /// Look up one destination name, refusing to revisit one already
-/// followed.
+/// followed, and disclosing a namespace mismatch.
+///
+/// `expected` is the namespace the *reference's type* pointed at — the
+/// only discriminator §12.3.2.3 provides. Resolving in the other one
+/// still succeeds (pdfce is lenient here so that files other readers
+/// open do not break), but it increments
+/// [`OutlineDiagnostics::cross_namespace_resolutions`] so the leniency
+/// is visible rather than assumed. Spec ambiguity `DEST-A1`.
 ///
 /// The `seen` list is a `Vec` rather than a `HashSet` on purpose: it is
 /// empty for every destination in every well-formed document and holds
 /// one entry for almost every remaining one, so a linear scan over at
 /// most [`MAX_DEST_HOPS`] entries beats hashing a byte string.
-fn next_named(named: &NamedDestinations, key: &[u8], seen: &mut Vec<Vec<u8>>) -> Step {
+fn next_named(
+    context: &mut ReadContext<'_>,
+    key: &[u8],
+    expected: Namespace,
+    seen: &mut Vec<Vec<u8>>,
+) -> Step {
     if seen.iter().any(|previous| previous == key) {
         return Step::Unresolved;
     }
     seen.push(key.to_vec());
-    match named.lookup(key) {
-        Some(value) => Step::Value(value.clone()),
+    match context.named.lookup(key) {
+        Some((value, found)) => {
+            if *found != expected {
+                context.diagnostics.cross_namespace_resolutions += 1;
+            }
+            Step::Value(value.clone())
+        }
         None => Step::Unresolved,
     }
 }
@@ -1415,7 +1783,11 @@ fn read_view<G: ObjectGraph + ?Sized>(
         graph.resolve(items.get(index + 2)?).as_number()
     }
 
-    let Some(fit) = items.get(1).map(|value| graph.resolve(value)).and_then(Object::as_name) else {
+    let Some(fit) = items
+        .get(1)
+        .map(|value| graph.resolve(value))
+        .and_then(Object::as_name)
+    else {
         context.diagnostics.malformed_views += 1;
         return DestView::Absent;
     };
@@ -1488,9 +1860,32 @@ fn read_view<G: ObjectGraph + ?Sized>(
 /// done about it.
 #[derive(Debug, Default)]
 struct NamedDestinations {
-    /// Name bytes to destination value (an array, or a `<< /D … >>`
-    /// dictionary, or — in a malformed file — another name).
-    map: HashMap<Vec<u8>, Object>,
+    /// Name bytes to (destination value, the namespace it came from).
+    ///
+    /// The value is an array, or a `<< /D … >>` / `<< /A … >>` wrapper
+    /// dictionary, or — in a malformed file — another name. The
+    /// namespace is carried so [`next_named`] can disclose a lookup that
+    /// crossed from one to the other; see `DEST-A1` in the module docs.
+    map: HashMap<Vec<u8>, (Object, Namespace)>,
+}
+
+/// Which of §12.3.2.3's two named-destination namespaces a key came
+/// from.
+///
+/// Recorded rather than discarded because the *type* of a `/Dest`
+/// reference is the only discriminator the standard offers between them
+/// (name object ⇒ [`Namespace::LegacyDict`], string ⇒
+/// [`Namespace::NameTree`]), and pdfce deliberately ignores that
+/// discriminator when resolving. Keeping the provenance is what turns
+/// that leniency from a silent policy into a reported one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Namespace {
+    /// The PDF 1.1 catalog `/Dests` **dictionary**, keyed by name
+    /// objects.
+    LegacyDict,
+    /// The PDF 1.2 catalog `/Names → /Dests` **name tree**, keyed by
+    /// strings.
+    NameTree,
 }
 
 impl NamedDestinations {
@@ -1537,7 +1932,10 @@ impl NamedDestinations {
             .and_then(Object::as_dict)
         {
             for (key, value) in dests.iter() {
-                map.insert(key.as_bytes().to_vec(), value.clone());
+                map.insert(
+                    key.as_bytes().to_vec(),
+                    (value.clone(), Namespace::LegacyDict),
+                );
             }
         }
 
@@ -1562,8 +1960,9 @@ impl NamedDestinations {
         self.map.len()
     }
 
-    /// The value `key` names, if either namespace defines it.
-    fn lookup(&self, key: &[u8]) -> Option<&Object> {
+    /// The value `key` names and the namespace that defined it, if
+    /// either does.
+    fn lookup(&self, key: &[u8]) -> Option<&(Object, Namespace)> {
         self.map.get(key)
     }
 }
@@ -1589,7 +1988,7 @@ fn flatten_name_tree<G: ObjectGraph + ?Sized>(
     depth: usize,
     budget: &mut usize,
     visited: &mut HashSet<ObjId>,
-    out: &mut HashMap<Vec<u8>, Object>,
+    out: &mut HashMap<Vec<u8>, (Object, Namespace)>,
 ) {
     if depth > MAX_NAME_TREE_DEPTH || *budget == 0 {
         return;
@@ -1605,15 +2004,19 @@ fn flatten_name_tree<G: ObjectGraph + ?Sized>(
             let (Some(key), Some(value)) = (pair.first(), pair.get(1)) else {
                 continue;
             };
-            // §7.9.6 says keys "shall be strings". A file using names is
-            // malformed but readable, and both are accepted for the same
-            // reason the two namespaces are merged at all.
+            // §7.9.6 says keys "shall be strings", and that they are
+            // compared "on a simple byte-by-byte basis" with any
+            // self-consistent encoding — which is exactly why the map is
+            // keyed by raw bytes and never by decoded text. A file using
+            // name objects here is malformed but readable, and both are
+            // accepted for the same reason the two namespaces are merged
+            // at all.
             let key_bytes = match graph.resolve(key) {
                 Object::String(bytes) => bytes.clone(),
                 Object::Name(name) => name.as_bytes().to_vec(),
                 _ => continue,
             };
-            out.insert(key_bytes, value.clone());
+            out.insert(key_bytes, (value.clone(), Namespace::NameTree));
         }
     }
 
@@ -1812,7 +2215,10 @@ mod tests {
                 11,
                 Object::Dict(dict(vec![
                     (b"Title", Object::String(b"Leaf".to_vec())),
-                    (b"Dest", Object::Array(vec![reference(3), Object::Name(Name::from(b"Fit"))])),
+                    (
+                        b"Dest",
+                        Object::Array(vec![reference(3), Object::Name(Name::from(b"Fit"))]),
+                    ),
                 ])),
             ),
         ]);
@@ -1905,6 +2311,273 @@ mod tests {
         assert_eq!(outline.diagnostics.depth_truncations, 1);
         assert_eq!(outline.diagnostics.max_depth, MAX_OUTLINE_DEPTH - 1);
         assert!(!outline.diagnostics.is_faithful());
+    }
+
+    /// Would catch: [`Outline::visible_item_count`] counting a closed
+    /// item's descendants (it must not) or skipping the closed item
+    /// itself (it must not).
+    ///
+    /// The two errors move the total in opposite directions and would
+    /// cancel out on a tree with one closed leaf-parent, so the table
+    /// varies the shape until they cannot.
+    #[test]
+    fn visible_item_count_stops_at_a_closed_node_but_counts_it() {
+        // (parent open?, grandchild present?, expected visible total)
+        //
+        // Shape: root -> Parent -> Child -> [Grandchild]
+        let cases: &[(bool, bool, usize)] = &[
+            (true, false, 2),  // Parent + Child
+            (false, false, 1), // Parent only; Child hidden
+            (true, true, 3),   // Parent + Child + Grandchild (Child open)
+            (false, true, 1),  // Parent only; a whole subtree hidden
+        ];
+        for &(open, grandchild, expected) in cases {
+            let mut child = vec![(b"Title".as_slice(), Object::String(b"Child".to_vec()))];
+            if grandchild {
+                child.push((b"First".as_slice(), reference(13)));
+                child.push((b"Count".as_slice(), Object::Integer(1)));
+            }
+            let outline = read_outline(&graph_with(vec![
+                (10, outline_root(11)),
+                (
+                    11,
+                    Object::Dict(dict(vec![
+                        (b"Title", Object::String(b"Parent".to_vec())),
+                        (b"First", reference(12)),
+                        (b"Count", Object::Integer(if open { 1 } else { -1 })),
+                    ])),
+                ),
+                (12, Object::Dict(dict(child))),
+                (
+                    13,
+                    Object::Dict(dict(vec![(
+                        b"Title".as_slice(),
+                        Object::String(b"Grandchild".to_vec()),
+                    )])),
+                ),
+            ]));
+            assert_eq!(
+                outline.visible_item_count(),
+                expected,
+                "parent open={open}, grandchild={grandchild}"
+            );
+        }
+    }
+
+    /// Would catch: the `/Count` magnitude cross-check comparing against
+    /// the wrong quantity — immediate children instead of *visible
+    /// descendants*, or including the item itself.
+    ///
+    /// The tree here has a parent with one child that itself has one
+    /// child. Open throughout, the parent's true magnitude is **2**;
+    /// a reader comparing against immediate children expects 1 and
+    /// reports a false disagreement.
+    #[test]
+    fn the_count_cross_check_compares_visible_descendants() {
+        // (parent's declared /Count, expected disagreement)
+        let cases: &[(i64, bool)] = &[(2, false), (1, true), (3, true), (-2, false)];
+        for &(declared, disagrees) in cases {
+            let outline = read_outline(&graph_with(vec![
+                (10, outline_root(11)),
+                (
+                    11,
+                    Object::Dict(dict(vec![
+                        (b"Title", Object::String(b"Parent".to_vec())),
+                        (b"First", reference(12)),
+                        (b"Count", Object::Integer(declared)),
+                    ])),
+                ),
+                (
+                    12,
+                    Object::Dict(dict(vec![
+                        (b"Title", Object::String(b"Child".to_vec())),
+                        (b"First", reference(13)),
+                        (b"Count", Object::Integer(1)),
+                    ])),
+                ),
+                (
+                    13,
+                    Object::Dict(dict(vec![(
+                        b"Title".as_slice(),
+                        Object::String(b"Grandchild".to_vec()),
+                    )])),
+                ),
+            ]));
+            assert_eq!(
+                outline.diagnostics.count_disagreements,
+                usize::from(disagrees),
+                "for /Count {declared}"
+            );
+            // A CLOSED parent (-2) still declares the same magnitude:
+            // the count is what WOULD be visible if it were reopened.
+            assert_eq!(outline.items[0].open, declared > 0);
+        }
+    }
+
+    /// Would catch: the cross-check firing on a tree the reader itself
+    /// truncated, which would report pdfce's own guard rails as document
+    /// corruption — noise exactly when the operator needs signal.
+    #[test]
+    fn the_count_cross_check_is_suppressed_on_a_truncated_tree() {
+        // A sibling cycle: the tree is short by construction, and the
+        // parent's /Count of 5 would "disagree" for that reason alone.
+        let outline = read_outline(&graph_with(vec![
+            (10, outline_root(11)),
+            (
+                11,
+                Object::Dict(dict(vec![
+                    (b"Title", Object::String(b"Parent".to_vec())),
+                    (b"First", reference(12)),
+                    (b"Count", Object::Integer(5)),
+                ])),
+            ),
+            (
+                12,
+                Object::Dict(dict(vec![
+                    (b"Title", Object::String(b"Loop".to_vec())),
+                    (b"Next", reference(12)),
+                ])),
+            ),
+        ]));
+        assert_eq!(outline.diagnostics.cycles_broken, 1);
+        assert_eq!(
+            outline.diagnostics.count_disagreements, 0,
+            "a truncated traversal cannot honestly disagree with a count"
+        );
+        assert!(!outline.diagnostics.root_count_disagreement);
+        // But the tree is still reported as unfaithful, via the cycle.
+        assert!(!outline.diagnostics.is_faithful());
+    }
+
+    /// Would catch: a name-tree value that wraps a **go-to action**
+    /// rather than a `/D` array (§12.3.2.3 NOTE 2) being treated as
+    /// unresolvable, which would silently break a whole class of
+    /// producer's bookmarks.
+    #[test]
+    fn a_named_destination_may_wrap_a_goto_action() {
+        let mut graph = graph_with(vec![
+            (10, outline_root(11)),
+            (
+                11,
+                Object::Dict(dict(vec![
+                    (b"Title", Object::String(b"Wrapped".to_vec())),
+                    (b"Dest", Object::String(b"via-action".to_vec())),
+                ])),
+            ),
+            (
+                20,
+                Object::Dict(dict(vec![(
+                    b"Names",
+                    Object::Array(vec![
+                        Object::String(b"via-action".to_vec()),
+                        Object::Dict(dict(vec![(
+                            b"A",
+                            Object::Dict(dict(vec![
+                                (b"S", Object::Name(Name::from(b"GoTo"))),
+                                (
+                                    b"D",
+                                    Object::Array(vec![
+                                        reference(4),
+                                        Object::Name(Name::from(b"FitB")),
+                                    ]),
+                                ),
+                            ])),
+                        )])),
+                    ]),
+                )])),
+            ),
+        ]);
+        graph.objects.insert(
+            ObjId::new(1, 0),
+            Object::Dict(dict(vec![
+                (b"Type", Object::Name(Name::from(b"Catalog"))),
+                (b"Pages", reference(2)),
+                (b"Outlines", reference(10)),
+                (
+                    b"Names",
+                    Object::Dict(dict(vec![(b"Dests", reference(20))])),
+                ),
+            ])),
+        );
+        let outline = read_outline(&graph);
+        assert_eq!(
+            outline.items[0].destination,
+            Some(Destination::Page {
+                page_index: 1,
+                view: DestView::FitB,
+            })
+        );
+    }
+
+    /// Would catch: a destination name resolving across §12.3.2.3's two
+    /// namespaces without the leniency being disclosed — spec ambiguity
+    /// `DEST-A1`.
+    ///
+    /// The reference's *type* is the only discriminator the spec gives:
+    /// a string should mean the name tree. Here a string finds a key the
+    /// legacy dictionary defines. pdfce resolves it (so the file works)
+    /// and says it did (so the operator knows a stricter reader may not).
+    #[test]
+    fn a_cross_namespace_name_resolves_and_is_disclosed() {
+        // (how /Dest spells the key, expected cross-namespace count)
+        let cases: &[(Object, usize)] = &[
+            // A NAME finding a legacy-dictionary key: as the type says.
+            (Object::Name(Name::from(b"intro")), 0),
+            // A STRING finding that same legacy-dictionary key: crossed.
+            (Object::String(b"intro".to_vec()), 1),
+        ];
+        for (dest, expected) in cases {
+            let mut graph = graph_with(vec![
+                (10, outline_root(11)),
+                (
+                    11,
+                    Object::Dict(dict(vec![
+                        (b"Title", Object::String(b"Intro".to_vec())),
+                        (b"Dest", dest.clone()),
+                    ])),
+                ),
+                (
+                    20,
+                    Object::Dict(dict(vec![(
+                        b"intro",
+                        Object::Array(vec![reference(3), Object::Name(Name::from(b"Fit"))]),
+                    )])),
+                ),
+            ]);
+            graph.objects.insert(
+                ObjId::new(1, 0),
+                Object::Dict(dict(vec![
+                    (b"Type", Object::Name(Name::from(b"Catalog"))),
+                    (b"Pages", reference(2)),
+                    (b"Outlines", reference(10)),
+                    (b"Dests", reference(20)),
+                ])),
+            );
+            let outline = read_outline(&graph);
+            // Either way the bookmark WORKS.
+            assert_eq!(outline.items[0].page_index(), Some(0), "for {dest:?}");
+            assert_eq!(
+                outline.diagnostics.cross_namespace_resolutions, *expected,
+                "for {dest:?}"
+            );
+        }
+    }
+
+    /// Would catch: `RemoteTarget::page_index` clamping a negative page
+    /// number to zero, which would turn a corrupt remote bookmark into
+    /// one that convincingly opens the wrong file's first page.
+    #[test]
+    fn a_remote_page_number_is_zero_based_and_rejects_negatives() {
+        let cases: &[(RemoteTarget, Option<usize>)] = &[
+            (RemoteTarget::PageNumber(0), Some(0)),
+            (RemoteTarget::PageNumber(7), Some(7)),
+            (RemoteTarget::PageNumber(-1), None),
+            (RemoteTarget::Named(b"x".to_vec()), None),
+            (RemoteTarget::Unknown, None),
+        ];
+        for (target, expected) in cases {
+            assert_eq!(target.page_index(), *expected, "for {target:?}");
+        }
     }
 
     /// Would catch: an explicit destination's page reference not being
@@ -2214,7 +2887,13 @@ mod tests {
                 DestView::FitBV { left: Some(13.0) },
             ),
             (
-                vec![reference(3), name(b"XYZ"), num(72.0), num(720.0), Object::Null],
+                vec![
+                    reference(3),
+                    name(b"XYZ"),
+                    num(72.0),
+                    num(720.0),
+                    Object::Null,
+                ],
                 DestView::Xyz {
                     left: Some(72.0),
                     top: Some(720.0),

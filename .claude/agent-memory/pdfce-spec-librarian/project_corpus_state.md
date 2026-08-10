@@ -1237,3 +1237,186 @@ never `free_primary` (licensing-memory item 6, third instance). **Note the host
 split: `pdfa.org` still 403s, but `pdfa-inc.org` and `pdf-issues.pdfa.org` both
 serve fine** — the 2026-07-31 "PDF Association is not machine-reachable" note
 was true only of one host.
+
+**33. A RECURSIVE-DEFINITION dispatch (document outline `/Count`, 2026-08-10) —
+an ANNEX WORKED EXAMPLE is a machine-checkable ORACLE, and the same key name can
+be TWO quantities in the PARENT vs CHILD dictionary of one feature.** Established
+building `iso32000__s__12.3.2/12.3.3/12.6.4.2.md` (clause 12.3 had zero prior
+coverage; verified by grep before writing anything — item 29/30 discipline, now
+3rd instance, and this time the dispatch had *already* verified it and said so).
+Six sub-rules:
+
+- **★ VERIFY A RECURSIVE/ALGORITHMIC DEFINITION AGAINST THE STANDARD'S OWN ANNEX
+  EXAMPLE, ARITHMETICALLY.** §12.3.3's `/Count` is defined by a 3-step recursion
+  in prose. **Annex H.6 gives the SAME 6-item outline TWICE — once all-open, once
+  with one node closed** — which is an *oracle*, not an illustration: every value
+  must reproduce (root 6→5, item 22 4→3, item 26 1→−1) and they do. It settled
+  three things prose re-reading would not: the Step-3 gate really prunes closed
+  subtrees (22 drops 4→3, not 4→2 ⇒ magnitude is **visible descendants
+  transitively**, not immediate children); the root counts **items including
+  top-level** while an item counts **descendants excluding self** (root 6, not 4);
+  and **leaves carry NO `/Count` key at all** while the figure's column shows `0`
+  ⇒ absent ≡ 0. Extends item 25 (*a figure is normative and readable as
+  geometry*) from **pictures** to **worked examples**: whenever a clause defines
+  something by recursion, iteration, or a numbered algorithm, **grep the annexes
+  for an example and run the definition against it**. Cheap, and it converts
+  "I read the recursion correctly" into proof. Bonus: Annex F's linearization
+  ordering rule (*"skipping over any subtree that is closed (that is, whose
+  parent's `Count` value is negative)"*) is an independent third confirmation —
+  **a clause in a completely different part of the standard can corroborate a
+  semantic you are unsure of.**
+- **A KEY NAME can be TWO DIFFERENT QUANTITIES in the ROOT vs the ITEM dictionary
+  of the SAME feature.** `/Count` in Table 152 (root outline dict) = *"total
+  number of visible outline items at all levels"*, **non-negative**, omitted if
+  none open. `/Count` in Table 153 (outline item) = **visible DESCENDANTS, self
+  excluded**, with the **sign carrying the open/closed state**. Same name, same
+  clause, adjacent tables, different quantity *and* different domain. This is a
+  **fourth** overloading shape after item 26 (bit position within one word),
+  item 26 again (`/Ff` across four unrelated dictionaries) and item 29 (`/SMask`
+  as two unrelated features). **Lead the file with a `§0` side-by-side table**
+  (item 29's rule) — done here, and it is the deliverable.
+- **★ FOURTH instance of "the conformance/semantic detail for key A lives in key
+  B's row" (item 32).** The dispatch's sharpest question — *is the remote-
+  destination page number 0- or 1-based?* — is answered **only** in **Table 200's
+  `/D` row** inside §12.6.4.3 (*"The first page shall be numbered 0"*). §12.3.2.2,
+  where anyone would look, describes the integer-page-number form **and never
+  states the basing**. Routine to adopt: when a dispatch asks for a *property of a
+  value* (basing, units, origin, endianness) and the defining clause is silent,
+  **grep the CONSUMER tables that carry that value** before recording a gap.
+- **A standard can use BOTH 0-based and 1-based indexing for the same concept at
+  different sites, each determinate.** `/GoToR` destination page = **0**-based
+  (Table 200); `/PrintPageRange` = **1**-based (Table 150, *"shall be denoted by
+  1"*); page-label indices = **0**-based (§12.4.2). Not an ambiguity — a **TRAP**,
+  and it belongs in the traps table, not the ambiguity table. The operational
+  deliverable is again a **function signature**: `parse_destination(arr, ctx:
+  DestContext)`, because **one `/D` key carries two incompatible page addressings**
+  (indirect page reference for `GoTo`, 0-based integer for `GoToR`). Same shape as
+  item 26's `decode_flags(ff, ft)` — *whenever one key's meaning depends on its
+  container, the finding is a signature, not a warning.*
+- **★ CONCURRENCY CAN INVALIDATE A GAP YOU ASSERTED MID-BUILD — re-check gap
+  claims at the END of the build, not just index counts.** Item 15 covered
+  `index.md` count drift from a parallel session. This time a second
+  spec-librarian session was writing `iso32000__s__7.7.4/7.9.6/7.11/12.5.6.15.md`
+  **interleaved with my writes** (visible in `ls -lt`), and it **closed §7.11
+  file specifications, which I had just written into `12.6.4.2.md` as "not yet
+  ingested (GAP)"**. Caught only because I ran `ls -lt` while reconciling counts.
+  **Routine: at end of any build, `ls -lt` the target directory and re-grep your
+  own new files for `GAP`/`not yet ingested` claims.** Both sessions' Status notes
+  and count recomputations then coexisted fine (the other session reconciled the
+  totals and explained the discrepancy) — **anchored, short-substring edits are
+  what made concurrent editing survivable**, confirming item 15's technique under
+  a much heavier collision than the original.
+- **PDF 2.0 errata reused routinely (item 32's new routine, now standard) — and
+  it exposed a CITATION HAZARD: tables SWAP numbers between editions.**
+  1.7 **Table 153** (outline item) → 2.0 **Table 151**, while 1.7 **Table 151**
+  (destination syntax) → 2.0 **Table 149**. So "Table 151" means *destination
+  syntax* in 1.7 and *outline item dictionary* in 2.0 — a bare table number is
+  **ambiguous across editions in the worst possible way** (both real, both in
+  clause 12.3). **Always write the edition with the table number.** Real 2.0
+  deltas found: new optional **`/SD`** (structure destination) on a
+  named-destination dict (`/SD` and `structure destination` = **0 hits** in
+  32000-1, so genuinely 2.0-only); `/Prev`//`/Next` gain *"shall not be present on
+  the first/last item at each level"*; `/FitR`'s bare imperative becomes
+  *"interactive processors **should**"*.
+
+**Also this build:** **sixth errata cluster** — `GT-E1`, Table 193's `/S` row
+cites *"Table 194"* for the action-type values; Table 194 is the annotation
+additional-actions dictionary and the registry is **Table 198**. Cross-checking
+every cited Table N continues to pay (6 builds, 6 clusters). And **the dispatch
+was substantially RIGHT** — `/FitR` = `left bottom right top`, legacy `/Dests`
+keyed by **name objects** vs the name tree by **strings**, and page-reference-vs-
+page-number legality were all confirmed verbatim; the only refinement was that
+**`zoom == 0 ≡ null` is `zoom`-ONLY** (`/XYZ 0 792 0` has a literal `left = 0`,
+per H.6). Record confirmations (item 25's closing rule) — and note that
+**"re-extract before reconstructing" is now 7 for 7**: Tables 151/152/153/154 and
+199/200/201 all came out row-aligned from the cached whole-document dump on the
+first pass, including the two split across page breaks.
+
+**33. A READER/ENUMERATION dispatch (embedded files / attachments, 2026-08-10)
+— the standard can CONCEDE that the thing being enumerated is not enumerable,
+and that concession is the headline.** Built `iso32000__s__7.11.md` +
+`7.7.4.md` + `7.9.6.md` + `12.5.6.15.md` + `iso32000__ref__embedded_files.md`.
+Seven sub-rules:
+
+- **★ A NORMATIVE ADMISSION OF IMPOSSIBILITY outranks any ambiguity row.**
+  §7.11.7 **NOTE 1**: "It is **not possible, in general, to find all file
+  specification strings** … there is **no way to determine whether a given
+  string is a file specification string**"; **NOTE 3**: direct-object file-spec
+  dictionaries "may not be possible to locate … neither self-typed nor
+  necessarily reachable by any standard path of object references." So "list
+  all attachments" is **best-effort by the standard's own text**, not by
+  pdfce's limitation. This is a *third* shape beyond item 2b's "negative
+  result" and item 14's "evidenced silence": **the spec says out loud that the
+  complete answer does not exist.** Lead with it; it converts a rule-4
+  disclosure from defensive hedging into a sourced fact.
+- **★★ Refute a "the spec says X about key K" premise with SIBLING-ROW CONTRAST
+  + CONSUMER TYPING, not with absence alone.** Dispatch asserted "the PDF 1.7
+  rule about the `/EmbeddedFiles` name-tree key being a text string." No such
+  rule. Three-part proof, each part cheap and each stronger than "I grepped and
+  found nothing": (a) Table 31's `EmbeddedFiles` row states **no** encoding —
+  while the **sibling `Renditions` row in the same table** says "(which shall
+  have Unicode encoding)" ⇒ **the standard writes the override explicitly when
+  it means one**, so the silence is deliberate; (b) **two unrelated tables that
+  CONSUME the key both type it a *byte* string** (Table 155 `/D` collection
+  initial document, Table 202 `/N` `/GoToE` target); (c) §7.9.6's own "any
+  encoding … as long as it is self-consistent; keys shall be compared … on a
+  **simple byte-by-byte basis**." **General move: to prove a table row is
+  silent on purpose, find the sibling row that isn't, and find who consumes the
+  value and how they type it.** Extends items 15/18/21/24 (numbers, flags,
+  rules, crate behaviour are hypotheses) to **a dispatch's asserted version
+  gate**.
+- **★ A single TABLE CELL can be self-contradictory — and the 2.0 errata site
+  can prove the contradiction is PERMANENT.** Table 46 `/CheckSum`: "checksum
+  of the bytes of the **uncompressed** embedded file" then, one sentence later,
+  "applying … MD5 … to the bytes of **the embedded file stream**". Different
+  bytes whenever `/Filter` is present. `pdf-issues.pdfa.org/32000-2-2020/`
+  shows 2.0 retypes the key (`byte` string) and **adds** a NOTE ("strictly a
+  checksum, not used for security purposes") while **changing neither
+  sentence** ⇒ `PERMANENT` ambiguity, evidenced rather than assumed. **New use
+  of the errata host: not only confirming an erratum (item 32) but proving a
+  known ambiguity was NOT fixed.** Do this before labelling anything PERMANENT.
+- **"Which of A or B wins?" is often answered "all the text is `should`s about
+  including BOTH."** `/UF` vs `/F`: ISO 32000-1 states **no** precedence. What
+  it does state is a *different* precedence — `F`/`UF` **over** the obsolescent
+  `DOS`/`Mac`/`Unix`. The universally-quoted "prefer `UF`" is **derived** (it is
+  the only key with a defined encoding: PDFDocEncoding or UTF-16BE+BOM, vs `F`
+  which §7.11.2.1 says is passed to the OS "without interpretation or
+  conversion of any sort"). **Separate the sourced precedence from the derived
+  one in the same row**, or the file will be cited for the wrong one.
+- **A "size/checksum metadata" question has a crisp two-part answer worth
+  pre-empting: is it the DECODED quantity, and is it REQUIRED.** `/Size` = "the
+  size of the **uncompressed** embedded file" (decoded, unambiguous) **and
+  Optional**, with **no `shall`** binding it to the real decoded length and no
+  stated reader behaviour on mismatch ⇒ informational, never an allocation
+  input. Ask both halves of that question for every metadata key.
+- **Extraction artifact class not previously recorded: TWO ADJACENT TABLE CELLS
+  MERGING INTO ONE FAKE TOKEN.** `iso32000__s__12.5.6.md` had carried
+  `Name (GraphPushPin/Paperclip/Tag)` since the Pass-6 build — Table 184 has
+  **four** icons (`Graph`, `PushPin`, `Paperclip`, `Tag`), set two-per-line in
+  the source. This is *not* item 3's row misalignment; it is a **content**
+  error that silently reduces an enumeration's **cardinality**, and it survives
+  re-reading because the merged token looks like a plausible name. **Test: when
+  a file records an enumerated name set, count it and ask whether the count is
+  a round/expected number; a set of 3 where the icons are Graph/PushPin/
+  Paperclip/Tag reads fine until you count.** Fixed in place + `CORRECTION`.
+- **Concurrency, second instance (item 15): the OTHER session had already
+  written a note naming my four files** ("a concurrent session was adding
+  `iso32000__s__7.7.4/7.9.6/7.11/12.5.6.15` while this build ran") and had
+  recomputed the `iso32000__s__` count to include them — but **not** the `ref`
+  count. **A concurrent session's recount is partial by construction**: it sees
+  the files that already landed, not the ones still coming. Recount **every**
+  prefix from `ls`, not the ones the other note mentions.
+
+**Also this build:** the consolidator earned its place on the **UNION OF TWO
+DISJOINT ROOTS** — document-level `/Root /Names /EmbeddedFiles` and page-level
+`/Annots` `/FileAttachment`, where **neither is a superset of the other** and
+the standard never says so in one place (it takes §7.11.4.1's two "may" bullets
++ §12.3.5's collections-only "all attachments in that tree are in the
+collection" + PDF 2.0's "not required unless stated otherwise"). And the
+PDF-Portfolio question was answered by **collapsing it**: a portfolio is
+document-level embedded files plus a catalog `/Collection`, and §12.3.5's
+"**All attachments in that tree are in the collection; any attachments not in
+that tree are not**" means a plain `/EmbeddedFiles` walk already sees the whole
+portfolio ⇒ **no portfolio-specific parsing is needed to enumerate or extract**,
+only to *present*. A "just give me a pointer" sub-request that collapses a
+whole feature is worth answering in full.
