@@ -30517,3 +30517,114 @@ working-tree state not independently asserted — this librarian has no
 shell this dispatch (hard rule 8). This is the **sixty-eighth**
 `SESSION_LOG.md` filing (the sixty-seventh confirmed present by direct
 read before this entry was appended).
+
+## 2026-08-10 (sixty-ninth filing) — `6f73843`: `Pass 37.3` gains a third slice, `pdfce-cli fill-field` can fill a rich-text field for the first time via an opt-in disclosed downgrade; `649017c`: `Pass 54.0` ships grouping-node DELETION (core + CLI, GUI deliberately open per R124); a hash misattribution in the sixty-eighth entry is corrected (`aac321c` never built `--downgrade-rich-text` — `6f73843` did); the `DocumentEncrypted` count discrepancy (44 vs 42) is reconciled as two different grep patterns over the same correct data, not a disagreement; `R179` gains an AMENDMENT naming three distinct audit-resolution shapes
+
+**Sourcing.** This librarian has Grep/Read but no shell this dispatch
+(hard rule 8). All source-level claims below (flag wiring, new core API,
+test counts, `DocumentEncrypted` occurrence counts by pattern) are from
+direct read/grep of the live tree, which already contains both commits.
+CLI runtime transcripts (the `list-fields`/`delete-field-group` output
+lines, exit codes) and the "undo restores all eight objects" claim are
+relayed by the engineer, not reproduced. Full citation list: `ROADMAP.md`'s
+own `6f73843`/`649017c` *Shipped* entry, Sourcing paragraph.
+
+**Shipped:**
+- `6f73843` (2026-08-10) — `pdfce-cli fill-field --downgrade-rich-text`:
+  opt-in, lossy, routes through the existing
+  `fill_text_field_downgrading_rich_text` the GUI already used, refusal
+  stays default, per-field disclosure BY NAME on stderr before the write
+  (not a count — R181's reasoning from the other direction). Closes the
+  `Pass 37.3` scoping amendment's explicitly-left-open question of
+  whether an interim CLI flag was needed. `Pass 37.3` stays IN PROGRESS
+  — true `/RV`-preserving fill is still open. 3 new tests,
+  `crates/pdfce-cli/tests/fill_rich_text.rs`.
+- `649017c` (2026-08-10) — `Pass 54.0`, new top-level ID (family 53 is
+  specifically the rename capability; deletion is a different verb, and
+  the closing Backlog entry already called it "a Pass of its own").
+  `EditSession::delete_field_group` + `field_group_deletion_preview` +
+  `FieldGroupDeletion` + `EditError::NotAGroupingNode`; CLI
+  `delete-field-group --name <FQN> [--yes]`. Removal set computed once,
+  committed once — not a loop of `delete_field` calls, because that
+  shares R179's shape on a destructive verb with no safe escape (unlike
+  the CLI fill loop below). Subtree named, not counted (R181's
+  principle). 4 new tests, `crates/pdfce-core/tests/form_field_hierarchy.rs`.
+  GUI deliberately not built (R124) — flagged as `Pass 54.0`'s own owed
+  remainder.
+
+**Decisions made this session:**
+- `Pass 54.0` minted as a fresh top-level ID rather than `Pass 53.2` —
+  family 53 is scoped to rename specifically; forcing deletion into it
+  would misfile a future reader asking "what did family 53 ship."
+- The Backlog entry for grouping-node deletion is amended in place
+  (struck through, SHIPPED bracket added), not deleted, per hard rule 1.
+- `R179` gets an AMENDMENT, not a new rule number — `cmd_fill_field`'s
+  loop is a third resolution of the same audit question (safe by
+  deferred persistence), not a new hazard shape.
+
+**Findings + decisions:**
+- **A hash misattribution in the sixty-eighth entry, self-corrected.**
+  That entry's Part 2 said `aac321c` built `--downgrade-rich-text`; it
+  actually only corrected `FEATURES.md` row 155's text. The flag is
+  `6f73843`, filed properly for the first time in this entry. Everything
+  else in that paragraph (the flag's properties, the test file) was
+  accurate — only the attribution was wrong. Amendment bracket added at
+  the sentence itself in `ROADMAP.md`.
+- **The engineer's independent recount (42 = 26+16) and this librarian's
+  filed figure (44 = 26+17+1) are BOTH correct — different grep
+  patterns, not a disagreement.** 42 comes from the qualified pattern
+  `EditError::DocumentEncrypted`; 44 comes from the unqualified
+  `DocumentEncrypted`, which also catches the enum's bare declaration and
+  one bare `//` comment. The raise-site count (26, before today's
+  addition) was never in dispute — only the unqualified total's
+  sub-classification (this librarian had folded the plain comment into
+  the "doc-comment cross-reference" bucket). Full reconciliation table:
+  `ROADMAP.md`'s Part 0b. Filed per hard rule 10 — a total is only useful
+  filed beside the pattern that produced it.
+- **`R179`'s audit question has (at least) three distinct resolutions**,
+  now named so a future hit spends less time re-deriving which bucket
+  it's in: fix (`import_form_data`), prove-unreachable (the redaction
+  loop), atomicity-by-deferred-persistence (`cmd_fill_field`). Does not
+  change R179's practical-form instruction.
+- **A defect found by reading CLI output, not by a failing test**
+  (`R174`'s pattern again): `delete-field-group --name Personal.Name`
+  initially said "no fillable form field with that name" for a field
+  `list-fields` itself prints — correct refusal, wrong reason.
+  `EditError::NotAGroupingNode` now names the actual reason; both
+  variants are asserted.
+
+**Still in flight:**
+- `Pass 37.3`: true `/RV`-preserving CLI fill (option 3) still open.
+- `Pass 54.0`: GUI half still open, tracked as the Pass's own remainder.
+- `tools/commits-filed-baseline.txt` unchanged at **5 lines**: `338076a`,
+  `1f319c0`, `55a0732`, `587e520`, `9141ded`.
+- `pdfce-spec-librarian` dispatch still owed (FDF `/Ff` namespace
+  collision; bit 23 precondition asymmetry) — unchanged from the
+  sixty-eighth filing.
+
+**For next session:**
+- `check-commits-filed.py` should now go green on `6f73843`/`649017c` —
+  both are cited by hash in this entry and in `ROADMAP.md`.
+- Read the remaining 5 baseline-debt commits in full and file them
+  properly.
+- `docs/NEXT_SESSION.md` (engineer-owned) is now stale on its "THE NEXT
+  TASK" item 1 (rich-text fill) and item 3 (grouping-node deletion) —
+  both have shipped their first slice/their core+CLI half respectively.
+  Not this librarian's file to edit; flagged for the engineer.
+
+**Ledger for this filing.** **New Pass ID minted: `Pass 54.0`**
+(grouping-node deletion, core + CLI). `Pass 37.3` gains a third slice
+under its existing ID, stays IN PROGRESS. Pass family ceiling moves
+**53.1 → 54.0**. `docs/FEATURES.md`: row 155 amended (hash correction,
+no checkbox change); one new Implemented row added (Forms section,
+grouping-node deletion, core/cli ticked, gui empty). `docs/ARCHITECTURE.md`
+§12: **not edited** — no crate boundary, library choice, or invariant
+was redrawn. Standing rules: **`R179` gains an AMENDMENT** — no new
+number, ceiling unchanged at **R181**, next free **R182**. Decision
+records: unchanged, ceiling **035**, next free **036**. Operator-question
+ceiling unchanged at **(bh)** (closed ACCEPT), next free **(bi)**.
+`tools/commits-filed-baseline.txt`: unchanged at **5 lines**. Backup/git
+working-tree state not independently asserted — this librarian has no
+shell this dispatch (hard rule 8). This is the **sixty-ninth**
+`SESSION_LOG.md` filing (the sixty-eighth confirmed present by direct
+read before this entry was appended).

@@ -1179,6 +1179,14 @@ fn deleting_an_intermediate_node_spares_an_ancestor_that_still_has_a_child() {
         preview.nodes_removed, 1,
         "only Address goes; Personal survives because Personal.Name remains"
     );
+    // The nodes are NAMED, not just counted: a shell holding per-FQN state
+    // (an open rename draft, a selection) must invalidate the intermediate
+    // node too, and deriving that set itself is how it drifts from core.
+    assert_eq!(
+        preview.nodes,
+        vec!["Personal.Address"],
+        "Personal must NOT be listed — it survives"
+    );
 
     let done = s
         .delete_field_group("Personal.Address")
@@ -1213,6 +1221,9 @@ fn deleting_the_root_group_removes_every_terminal_and_every_node() {
         preview.nodes_removed, 2,
         "Personal and Personal.Address both vanish"
     );
+    // Deepest-first, with the named node last — the order a shell wants for
+    // invalidation, and the order `AcroForm::groups` already uses.
+    assert_eq!(preview.nodes, vec!["Personal.Address", "Personal"]);
 
     let done = s.delete_field_group("Personal").expect("deletion succeeds");
     assert_eq!(done.nodes_removed, 2);

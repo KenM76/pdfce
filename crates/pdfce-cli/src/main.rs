@@ -11136,8 +11136,16 @@ fn cmd_delete_field_group(
     if !yes {
         // The listing IS the output. One line per terminal so the set is
         // greppable and diffable, then a summary that says what else goes.
+        // Terminals AND the grouping nodes, both by name. The nodes matter
+        // to the operator for a reason the count cannot convey: each one is
+        // a NAME being freed, and a name that comes back is a name a later
+        // `add-*-field` can take. "nodes=2" does not tell them `Personal`
+        // is about to become available again.
         for t in &preview.terminals {
             println!("would-delete field={t:?}");
+        }
+        for n in &preview.nodes {
+            println!("would-delete group={n:?}");
         }
         println!(
             "delete-field-group {} name={:?} DRY-RUN terminals={} widgets={} nodes={} — nothing written; pass --yes to delete",

@@ -81,6 +81,240 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★ `6f73843` FILED — `Pass 37.3` gains its third slice: `pdfce-cli fill-field` can fill a rich-text field for the first time, via an opt-in disclosed downgrade — the "interim lossy option" the amendment deliberately left open; `649017c` FILED — `Pass 54.0` ships: grouping-node DELETION, core + CLI, the subtree NAMED before it goes, GUI deliberately not built (R124); a hash misattribution in the sixty-eighth entry is corrected (`aac321c` did not build `--downgrade-rich-text` — `6f73843` did); `R179` gains an AMENDMENT naming three distinct audit-resolution shapes — baseline debt unchanged at **5** — 2026-08-10 (sixty-ninth filing)
+
+**Sourcing.** This librarian has Grep/Read but no shell this dispatch (hard
+rule 8) — no `git log`/`git show`. **Independently verified by direct
+read of the live tree** (which already contains all three commits,
+`6f73843`→`649017c`→`ef4e04e`, applied): `crates/pdfce-cli/src/main.rs`
+(`downgrade_rich_text` field, `cmd_fill_field`'s doc comment and call
+site, `delete-field-group`'s clap wiring); `crates/pdfce-core/src/edit.rs`
+(`delete_field_group`, `group_deletion_preflight`,
+`field_group_deletion_preview`, `FieldGroupDeletion`'s full doc comment
+and field list, `EditError::NotAGroupingNode`, and — precisely, by
+`Grep` count, not relayed — every `DocumentEncrypted` occurrence: 45
+raw text matches / 43 matches of the qualified pattern
+`EditError::DocumentEncrypted` / 27 raise sites (25 `return Err` + 2
+`return Some` — see Part 0) / 16 genuine `///` doc-comment
+cross-references / 1 enum declaration / 1 plain `//` comment, all in
+the current, post-`649017c` tree); `crates/pdfce-cli/tests/fill_rich_text.rs`
+(3 `#[test]` functions, confirming the engineer's count);
+`crates/pdfce-core/tests/form_field_hierarchy.rs` (4 new `#[test]`
+functions at the file's tail —
+`deleting_an_intermediate_node_spares_an_ancestor_that_still_has_a_child`,
+`deleting_the_root_group_removes_every_terminal_and_every_node`,
+`a_terminal_name_is_not_a_grouping_node`,
+`deleting_a_group_undoes_as_a_single_command` — also confirming the
+engineer's count); `tools/commits-filed-baseline.txt` (unchanged, still
+the same 5 lines: `338076a`/`1f319c0`/`55a0732`/`587e520`/`9141ded` —
+neither `6f73843` nor `649017c` was ever a baseline line); `docs/FEATURES.md`
+rows 155/157/159/160 before editing further; the `Pass 37.3` acceptance
+amendment (sixty-fifth filing) that explicitly left "whether an interim
+`pdfce-cli fill-field` opt-in flag is needed for whichever stays lossy
+meanwhile" undecided — confirming this commit closes that specific
+open branch rather than inventing new scope; the Backlog entry for
+grouping-node deletion, in full, before editing it. **Not independently
+run:** CLI runtime output (the four `list-fields`/`delete-field-group`
+transcripts in Part 2), test-suite pass/fail totals, and the
+undo-restores-eight-objects claim — relayed by the engineer, not
+reproduced by this librarian.
+
+**Part 0 — two corrections to the sixty-eighth entry, immediately
+below, made in place per hard rule 1 (a Shipped entry is corrected with
+a dated amendment, never rewritten).**
+
+**(a) Hash misattribution.** The sixty-eighth entry's Part 2 reads
+*"`aac321c` also built `fill-field --downgrade-rich-text`"*. That is
+wrong — `aac321c` corrected `docs/FEATURES.md` row 155's TEXT (naming
+the CLI gap) and nothing else; the flag itself is `6f73843`, one commit
+later, and is what Part 1 below files properly. Everything else in that
+paragraph — the flag's three properties, the test file, the R181-shaped
+stderr reasoning — is accurate; only the commit attribution was wrong.
+Amendment bracket added at the sentence itself, below.
+
+**(b) The `DocumentEncrypted` count, reconciled rather than re-decided.**
+The engineer's dispatch for this filing recounted, independently,
+**"before today's additions: 42 occurrences = 26 code sites + 16
+doc-comment cross-references; 26 = 24 `return Err` + 2 `return Some`"**
+— a figure that disagrees with the sixty-eighth entry's own filed **44
+total / 26 raise / 17 doc-comment cross-references / 1 declaration** by
+exactly 2. **Both are correct; they are not the same measurement.** The
+engineer's 42/16 comes from grepping the QUALIFIED pattern
+`EditError::DocumentEncrypted`, which by construction excludes two
+mentions that carry no `EditError::` prefix: the enum's own bare
+declaration (`DocumentEncrypted,`, line 2261) and one bare `//` comment
+mentioning the word in backticks (line 15571, not a doc-comment
+cross-reference at all — a plain aside). This librarian's original 44/17
+came from the UNQUALIFIED pattern `DocumentEncrypted`, which catches
+both of those, and mis-sorted the plain-comment line into the
+"doc-comment cross-reference" bucket rather than giving it its own —
+that bucketing error, not the totals, is what needed fixing. Full
+reconciliation, all forms filed together per hard rule 10:
+
+| pattern grepped | total | raise sites | doc-comment refs | declaration | plain comment |
+|---|---|---|---|---|---|
+| `DocumentEncrypted` (unqualified) | 44 | 26 | 16 | 1 | 1 |
+| `EditError::DocumentEncrypted` (qualified) | 42 | 26 | 16 | — | — |
+
+Both rows sum correctly (44 = 26+16+1+1; 42 = 26+16); the raise-site
+figure — the one the redaction-loop proof and any future Pass 5 work
+actually depends on — was never in dispute between the two filings, only
+the unqualified total's sub-classification was. Today's `649017c` adds
+one more raise site (`group_deletion_preflight`'s own
+`DocumentEncrypted` gate, `edit.rs:7292`), so the LIVE tree now reads 27
+raise / 45 unqualified / 43 qualified — see Sourcing, above; the table
+above is the "before today" figure the engineer's dispatch asked to be
+recorded. The Encryption Backlog checklist item is updated to this
+table in place, below.
+
+**Part 1 — `6f73843`: the CLI can fill a rich-text field for the first
+time, closing the branch `Pass 37.3`'s own scoping amendment left open.**
+The sixty-fifth filing's acceptance-criteria amendment named two
+undecided things: which of "explicit lossy downgrade" vs "true
+`/RV`-preserving fill" ships first, and "whether an interim `pdfce-cli
+fill-field` opt-in flag is needed for whichever stays lossy meanwhile."
+`6f73843` answers both at once — lossy ships first (matching the GUI's
+own already-shipped posture), and yes, the CLI gets the flag: `clap`
+arg `--downgrade-rich-text`, opt-in, routing through the same
+`fill_text_field_downgrading_rich_text` the GUI calls. Refusal stays the
+default (an automatic downgrade on a plain `fill-field` would discard
+`/RV` unasked, on a batch surface where nobody is watching — rule 4's
+"sneaky" half); the flag is taken only when `Field::is_rich_text()` says
+the field genuinely has formatting to lose (which resolves `/FT` first,
+so it cannot mistake a radio group's bit 26 — `587e520`); disclosure is
+BY NAME on stderr before the write, not a count, for the same reason
+`R181` gives from the other direction — there a count summarized the
+wrong THING, here a count would be the wrong SHAPE, since a scripted run
+needs to know WHICH field lost formatting, not how many. Fixture:
+`radio-choice-form.pdf` object 50 (`Notes`) already carried `/Ff
+33554432`, `/DS`, `/RV`, and a `/V` worded differently from the `/RV` —
+load-bearing, because a writer that failed to remove `/RV` would be
+indistinguishable from a correct one if the two agreed. `Pass 37.3`
+**remains IN PROGRESS** — the true `/RV`-preserving CLI fill (the
+amendment's option 3) is still open; this slice ships option 2's CLI
+half only.
+
+Also recorded in this commit, and worth carrying because it extends
+`R179`'s already-CLOSED core audit to a site the audit never counted:
+`cmd_fill_field`'s own loop shares `R179`'s `?`-in-a-mutating-loop
+shape, and is safe — by construction, not by luck — because the early
+return on a per-field failure happens BEFORE `save_edited` runs. The
+mutated in-memory `EditSession` is simply dropped; no file is ever
+written for the failing call. See the `R179` amendment, below.
+
+**Part 2 — `649017c`: `Pass 54.0` ships — grouping-node DELETION, core +
+CLI, minted fresh rather than folded into `Pass 53`'s family.** (Family
+53 is specifically the RENAME capability — `Pass 53.0` GUI rename,
+`Pass 53.1` grouping-node rename; deletion is a different verb on the
+same entity, and the Backlog entry closing here already called it "a
+Pass of its own," so a fresh top-level ID is the better fit than a
+`53.2` that would misfile future readers searching for "what did family
+53 ship" into thinking rename and delete are one capability. `Pass 54`
+was free — checked by direct grep of this file before assignment, per
+`R156`.) New core API: `EditSession::delete_field_group`,
+`field_group_deletion_preview`, `FieldGroupDeletion` (`group_name`,
+`terminals: Vec<String>`, `widgets_removed`, `nodes_removed`),
+`EditError::NotAGroupingNode`. New CLI subcommand: `delete-field-group
+--name <FQN> [--yes]`.
+
+**Not `delete_field` in a loop.** Two ordinary reasons (a loop cannot
+NAME a grouping node; N undo entries for one operator gesture) and one
+that matters more: a loop of `delete_field(...)?` shares `R179`'s shape
+on a DESTRUCTIVE verb, and unlike `Pass 37.3`'s CLI loop above, there is
+no "safe by deferred persistence" escape here, because each iteration
+re-parses a form the previous iteration already changed — a mid-loop
+failure would leave the subtree half-removed AND report failure. Fixed
+by computing the removal set ONCE (`group_deletion_preflight`, shared by
+the preview and the deletion so the two cannot disagree about either
+the gates or the removal set) and committing it ONCE, reusing
+`remove_fields_from_form`'s existing recursive emptied-parent fixed
+point rather than a second traversal that could disagree with it.
+
+**The subtree is NAMED, not counted** — `FieldGroupDeletion.terminals:
+Vec<String>`, per the type's own doc comment: *"a count answers how
+much went; only the names answer did the right thing go."* Explicitly
+`R181`'s principle, applied at the point a count would have been the
+easy choice. `nodes_removed` is reported from what the cascade ACTUALLY
+emptied, not the preview's prediction — agreeing today, by construction
+rather than by promise, because reporting the prediction would let the
+two silently diverge the day one traversal changes and the other
+doesn't.
+
+**CLI refuses without `--yes`.** No canvas to show affected fields on,
+so the names ARE the disclosure and the flag is the confirmation.
+Default prints one `would-delete field=` line per terminal on stdout —
+the listing IS the output, unlike `fill-field`'s stderr aside — writes
+nothing, and **exits 0**: nothing failed, and a non-zero exit on a
+correct preview would make a scripted dry-run indistinguishable from a
+refusal.
+
+**A defect found by reading output, not by a failing test.**
+`delete-field-group --name Personal.Name` initially answered "the
+document has no fillable form field with the fully-qualified name" for
+a name `list-fields` itself prints — a wrong-but-plausible message that
+would read as document corruption rather than wrong-verb-used.
+`EditError::NotAGroupingNode` now says what is true; both variants
+(`FieldNotFound` for a name that resolves to nothing, `NotAGroupingNode`
+for a name that resolves to a terminal) are asserted so a later collapse
+of the two has to break a test. **This is `R174`'s pattern again** — an
+accurate-vs-inaccurate disclosure invisible to green tests, caught only
+by reading the string as its audience would.
+
+**Verified on `nested-form.pdf`** (relayed by the engineer, not
+independently run this dispatch — no shell): `Personal.Address` →
+terminals=2/widgets=2/nodes=1, **`Personal.Name` survives** (load-bearing
+— a cascade that pruned ancestors without checking for remaining
+descendants would take it, and a field in a branch nobody named would go
+with it); `Personal` (the whole tree) → terminals=3/widgets=3/nodes=2,
+form left empty; `Personal.Name` (a terminal) → `NotAGroupingNode`, exit
+9; `Nope.Nothing` → `FieldNotFound`, exit 9. Four core tests in
+`form_field_hierarchy.rs` (confirmed present by direct read, count
+above), including one asserting the whole deletion undoes as a single
+command.
+
+**`docs/FEATURES.md` updated in this filing:** row 155's CLI clause gets
+the hash correction (Part 0a, above); a new Implemented row is added for
+grouping-node deletion (core/cli filled, gui empty by choice); the
+Backlog entry this closes is amended in place, below, rather than
+deleted, per hard rule 1. **Process note, not a defect in this
+filing:** the Backlog entry for grouping-node deletion was itself filed
+(sixty-first filing, alongside `Pass 53.1`) with no corresponding
+`FEATURES.md` *Planned* row — a gap in that filing's own maintenance
+contract, caught here only because the capability shipped the same
+session it would have been promoted from. Flagged, not chased further —
+the capability is Implemented now, so there is no stale Planned row left
+to find.
+
+**`R179` gains an AMENDMENT, not a new number** — see *Standing rules*,
+below. Three sites have now been checked against the audit question
+R179 asks and resolved three different ways (fix; prove-unreachable;
+atomicity-by-deferred-persistence); naming the taxonomy is the
+amendment's whole content, and it does not change R179's own
+practical-form instruction.
+
+**Ledger for this filing.** **New Pass ID minted: `Pass 54.0`**
+(grouping-node deletion, core + CLI; GUI owed, not built, per R124 —
+tracked as `Pass 54.0`'s own remainder rather than a new sub-ID, since
+no core surface changed to earn one). `Pass 37.3` gains a third slice
+(`6f73843`) under its EXISTING ID — still **IN PROGRESS**, true
+`/RV`-preserving CLI fill remains open. Pass family ceiling moves **53.1
+→ 54.0**. `docs/FEATURES.md`: row 155 amended (hash correction only, no
+checkbox change — the CLI capability itself was already ticked); one new
+Implemented row added (Forms section) for grouping-node deletion,
+core/cli ticked, gui empty. `docs/ARCHITECTURE.md` §12: **not edited** —
+neither commit redraws a crate boundary, picks a library, or
+defines/refines an invariant. Standing rules: **`R179` gains an
+AMENDMENT** (below) naming three audit-resolution shapes — no new
+number, ceiling **unchanged at R181**, next free **R182**. Decision
+records: unchanged, ceiling **035**, next free **036**.
+Operator-question ceiling unchanged at **(bh)** (closed ACCEPT), next
+free **(bi)**. `tools/commits-filed-baseline.txt`: **unchanged at 5
+lines** — confirmed by direct read; neither `6f73843` nor `649017c` was
+ever a baseline line. Backup/git working-tree state not independently
+asserted — this librarian has no shell this dispatch (hard rule 8). This
+is the **sixty-ninth** `SESSION_LOG.md` filing (the sixty-eighth
+confirmed present by direct read before this entry was appended).
+
 ### ★ `079394f` FILED — a redaction search refuses an encrypted document BEFORE it reads any text, closing the Backlog's redaction-loop question by PROOF rather than by a contract ruling (R179's FOURTH instance); `aac321c` FILED — `docs/FEATURES.md` row 155's rich-text-fill direction was INVERTED and is corrected, the CLI gains `fill-field --downgrade-rich-text`, and this librarian's own read catches that same row's just-written correction going stale within the SAME commit; `52f18bf` CONFIRMED already landed (sixty-seventh entry's splice + `ARCHITECTURE.md` §12 "not edited" correction) — a `DocumentEncrypted`-coverage finding flagged for Pass 5, correcting a reported "42" to a verified 44/26 — baseline debt unchanged at **5** — 2026-08-10 (sixty-eighth filing)
 
 **Sourcing.** This librarian has no shell this dispatch (hard rule 8).
@@ -170,7 +404,15 @@ load-bearing all at once, untested, the day Pass 5 (Encryption) ships.
 Full text filed to the Encryption Backlog bucket, below, as a
 pre-implementation checklist item rather than a standing rule — it names
 a specific future obligation on a specific future Pass, not a recurring
-shape worth a rule number.
+shape worth a rule number. **[★ SUB-CLASSIFICATION CORRECTED 2026-08-10
+(sixty-ninth filing) — the 44/26 totals above are CORRECT and stand; the
+"17 doc-comment cross-references" bucket was not. 16 are genuine `///`
+cross-references; the 17th is a bare `//` comment (line 15571) that
+mentions the word without the `[EditError::…]` link syntax and does not
+belong in that bucket. Full reconciliation, including the engineer's
+independently-recounted 42/26/16 (a different, QUALIFIED grep pattern,
+not a disagreement — see below): the sixty-ninth filing's own Shipped
+entry, Part 0b.]**
 
 **Part 2 — `aac321c`: `docs/FEATURES.md` row 155 corrected, the CLI
 gains `fill-field --downgrade-rich-text`, and this librarian catches the
@@ -197,7 +439,12 @@ staying the default, each converted field disclosed BY NAME on stderr
 direction: there a count described the wrong THING, here a count would
 be the wrong SHAPE), and inert on a field with no formatting to lose —
 pinned by `crates/pdfce-cli/tests/fill_rich_text.rs`'s four assertions
-in full. The CLI's own doc comment names the defect precisely: *"docs/FEATURES.md
+in full. **[★ HASH CORRECTED 2026-08-10 (sixty-ninth filing) — the flag
+did NOT ship in `aac321c`. That commit corrected this row's TEXT only;
+the flag itself shipped one commit later, `6f73843`. Everything else in
+this paragraph is accurate — only the commit attribution was wrong. Full
+record: the sixty-ninth filing's own Shipped entry, Part 0a/Part 1.]**
+The CLI's own doc comment names the defect precisely: *"docs/FEATURES.md
 asserted the exact opposite of both facts until `aac321c`"* — true of
 the row's ORIGINAL wording, and no longer true of the row `aac321c`
 itself wrote, because the flag shipped in the same commit as the
@@ -33242,7 +33489,14 @@ nothing gets forgotten, not as a commitment to build in this order.
   arms skip-and-count (`1e3422e` fixed the first, `b2574f6` the other
   two). The redaction loop is the one remaining item; see the new entry
   immediately below, split out because it needs a decision this audit
-  correctly declined to make on its own.]**
+  correctly declined to make on its own.]** **[★ ADDENDUM 2026-08-10
+  (sixty-ninth filing) — a CLI-level analog, outside this audit's
+  `edit.rs`-only scope, was found and confirmed SAFE, not fixed:
+  `pdfce-cli`'s `cmd_fill_field` loop shares R179's shape but only ever
+  commits via one deferred `save_edited` after the loop completes, so a
+  mid-loop failure writes nothing to disk. Recorded as R179's third named
+  audit-resolution shape — see the `R179` *Standing rules* amendment.
+  Not a reopening of this item; the core-only audit above remains DONE.]**
 - ~~**Redaction-search loop (`add_redaction`) shares `R179`'s shape and is
   DELIBERATELY UNFIXED, pending a contract decision**~~ **CLOSED BY PROOF,
   not by a contract ruling (`079394f`, 2026-08-10, sixty-eighth filing).**
@@ -33291,7 +33545,7 @@ nothing gets forgotten, not as a commitment to build in this order.
   Shipped entry, top of *Shipped*. **Still owed, and now its own Backlog
   entry below: grouping-node DELETION** — no core verb exists for it,
   unlike rename.]**
-- **Delete a pure grouping node — no core verb exists, unlike rename**
+- ~~**Delete a pure grouping node — no core verb exists, unlike rename**
   (owed by `Pass 53.1`, `0c102e4` + `6611812`, 2026-08-10).
   `deletion_preflight` resolves TERMINAL fields only; nothing in
   `pdfce-core` deletes a pure grouping node (and, by extension, the
@@ -33303,7 +33557,22 @@ nothing gets forgotten, not as a commitment to build in this order.
   shows nothing for this today (no disabled stub) rather than a control
   with no verb behind it. A Pass of its own — core + CLI + GUI, same
   shape as `Pass 20.2`'s original `delete-field`/`delete-widget` pair.
-  Not yet scoped to a Pass.
+  Not yet scoped to a Pass.~~ **[★★ CORE + CLI SHIPPED 2026-08-10, `Pass
+  54.0` (`649017c`) — GUI STAYS OPEN, on purpose, per R124.**
+  `EditSession::delete_field_group` + `field_group_deletion_preview` +
+  `FieldGroupDeletion` + `EditError::NotAGroupingNode`; CLI
+  `delete-field-group --name <FQN> [--yes]`. Not a loop of `delete_field`
+  calls — the removal set is computed once and committed once, because
+  each iteration of a naive loop would re-parse a form the previous
+  iteration already changed, and a mid-loop failure would leave the
+  subtree half-removed while reporting failure (R179's shape on a
+  destructive verb, with no "safe by deferred persistence" escape this
+  time). The subtree is NAMED (`terminals: Vec<String>`), not counted —
+  R181's principle applied at the exact point a count would have been
+  the easy choice. Full record: `ROADMAP.md`'s `6f73843`/`649017c`
+  *Shipped* entry (sixty-ninth filing), Part 2. **Still owed: the GUI
+  half** — R124 says show nothing until the core verb exists; it does
+  now, so this is real follow-on work, not a stub to fill in.]**
 - **★ NEW R169 register entry, named but not built — sub-pixel
   stroke-width clamp policy** (owed by the render fix filed 2026-08-09
   under *Shipped*, `9abf5b5` — "sub-pixel strokes stop rendering at 9%
@@ -35077,7 +35346,20 @@ nothing gets forgotten, not as a commitment to build in this order.
   of which 26 are actual raise sites (`return Err(...)`/`return
   Some(...)`), 17 are `[EditError::DocumentEncrypted]` doc-comment
   cross-references, and 1 is the enum variant's own declaration — none of
-  those figures is 42.** `crates/pdfce-core/tests/` contains zero
+  those figures is 42.** **[★ SUB-CLASSIFICATION CORRECTED 2026-08-10,
+  sixty-ninth filing: the "17 doc-comment cross-references" bucket
+  above was one too many — 16 are genuine `///` cross-references, the
+  17th is a bare `//` comment (line 15571) with no `[EditError::…]`
+  link syntax, its own bucket. 44/26 stand unchanged. The engineer's
+  independently-recounted "42 = 26+16" is ALSO correct — a different,
+  QUALIFIED grep pattern (`EditError::DocumentEncrypted`), which by
+  construction excludes both the bare declaration and the bare comment.
+  Full reconciliation table: `ROADMAP.md`'s `6f73843`/`649017c` *Shipped*
+  entry, Part 0b. One further note for whoever scopes Pass 5: `649017c`
+  (`Pass 54.0`, same filing) added a 27th raise site
+  (`group_deletion_preflight`, `edit.rs:7292`) — re-grep before treating
+  26/27 as fixed, this count moves every time a new mutating verb gains
+  its own encryption gate.]** `crates/pdfce-core/tests/` contains zero
   references to `DocumentEncrypted`; the term appears in exactly one
   `crates/` source file (`edit.rs` itself). This is correct
   defence-in-depth, not dead code — but it means all 26 raise sites flip
@@ -43927,6 +44209,41 @@ and
   shape — `R179` is the checklist question that audit applies at each
   hit, not the audit itself. **Ceiling moves `R178` → `R179`; next free
   `R180`.**
+
+  **★ AMENDMENT (2026-08-10, sixty-ninth filing, `649017c`/`6f73843`) —
+  THE AUDIT R179 ASKS FOR HAS (AT LEAST) THREE DISTINCT RESOLUTIONS,
+  NAMED HERE SO A FUTURE HIT SPENDS LESS TIME RE-DERIVING WHICH ONE IT
+  IS IN.** Three sites have now been checked against R179's checklist
+  question and resolved three different ways: **(1) FIX** —
+  `import_form_data`'s three field-kind arms genuinely shared the bug;
+  skip-and-count, per `1e3422e`/`b2574f6`. **(2) PROVE UNREACHABLE** —
+  the redaction-search loop's per-item errors turned out to be
+  structurally impossible once the two document-wide gates were hoisted
+  ahead of the loop (every reachable failure is document-wide, so a
+  partial mark set was never reachable), so the disposition question
+  does not arise at all; `079394f`. **(3) ATOMICITY BY DEFERRED
+  PERSISTENCE** — `pdfce-cli`'s `cmd_fill_field` loop (a CLI-level
+  analog of R179's shape, not one of the eleven `edit.rs` loops the core
+  audit counted, so it was never in scope for that audit's "DONE" verdict)
+  mutates the in-memory `EditSession` per field via `?`, but the loop's
+  only externally-visible commit point is a single `save_edited` AFTER
+  the loop completes — a failing field aborts the whole command with
+  nothing written to disk, so the file on disk is never partially
+  applied even though the in-memory session was briefly, internally,
+  partial; `6f73843`. **The general form this taxonomy supports:** a
+  loop sharing R179's syntactic shape is not automatically a live bug —
+  it is a live bug only if some caller can observe a partial mutation AS
+  a success, or as a silently-incomplete failure. A loop whose sole
+  externally-visible commit is one deferred write after the loop
+  finishes is safe by construction, the same way the redaction loop is
+  safe by proof rather than by patch — two different arguments arriving
+  at "no fix needed," which is why both get recorded rather than only
+  the one that changed code. **Does not alter R179's own practical-form
+  instruction** (still: ask the question at every `?` inside a loop that
+  mutates a `&mut` receiver) — records the shape of the answers that
+  question can have, for whoever runs the next audit. No new rule
+  number; ceiling stays **R181** (unaffected — this is an amendment to
+  an existing rule, not a new one), next free **R182**.
 
 - **R180 — An accurate disclosure can be FALSIFIED by a later
   improvement to the very thing it describes, not only by having been

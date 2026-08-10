@@ -5450,10 +5450,36 @@ pub struct FieldGroupDeletion {
     /// Grouping-node objects removed, **including the named node itself**
     /// and every intermediate node the removal emptied.
     ///
-    /// Counted rather than named because an intermediate node's name is a
-    /// prefix of the terminal names already listed — naming them would
-    /// repeat information the operator can already read.
+    /// This is what the cascade ACTUALLY emptied, not a prediction.
     pub nodes_removed: usize,
+    /// The fully-qualified names of those grouping nodes, deepest-first.
+    ///
+    /// # Why this exists, having first been left out
+    ///
+    /// The original version of this type carried only `nodes_removed`, on
+    /// the reasoning that an intermediate node's name is a prefix of the
+    /// terminal names already listed, so naming them would repeat what the
+    /// operator can already read. That is true for DISPLAY and false for
+    /// every machine consumer.
+    ///
+    /// `pdfce-ui-specialist` found the consumer: a shell holding per-field
+    /// state keyed by FQN — an open rename draft, a selection, a cached
+    /// label — must invalidate it for the intermediate nodes too. Delete
+    /// `Personal` with a rename draft open on `Personal.Address` and, with
+    /// only the terminals named, that draft's key survives with nothing
+    /// behind it. Harmless until something later reuses the freed name, at
+    /// which point a stale draft resurfaces pre-filled with an old value.
+    ///
+    /// The shell could derive this by prefix-matching `form.groups`. It
+    /// must not: [`forms::AcroForm::descendants_of`]'s own documentation
+    /// says a shell reconstructing core's notion of descendant is how the
+    /// two drift, and the same argument applies with more force here,
+    /// because the shell would be re-deriving which ancestors a cascade
+    /// *would have* emptied.
+    ///
+    /// Safe for cache invalidation specifically: dropping state for a node
+    /// that turns out to survive costs a closed draft, never a wrong edit.
+    pub nodes: Vec<String>,
 }
 
 /// What a [`EditSession::rename_field`] changed.
@@ -7268,6 +7294,23 @@ impl EditSession {
         // `nodes_removed` is reported from what the cascade ACTUALLY emptied,
         // not from the preview's prediction. The two agree today; reporting
         // the prediction would make them agree even on the day they stop.
+        //
+        // They are two INDEPENDENT derivations of one set — `emptied` is
+        // `remove_fields_from_form`'s fixed point over the field ids,
+        // `preview.nodes` is a walk of the group tree — so their agreement
+        // is a real invariant and worth catching in dev rather than
+        // discovering as a wrong number in a disclosure. Not a hard assert:
+        // a miscount must not take down an operator's session over a
+        // reporting discrepancy when the document edit itself is committed
+        // and sound.
+        debug_assert_eq!(
+            emptied.len(),
+            preview.nodes.len(),
+            "grouping-node cascade and prediction disagree for {fqn:?}: \
+             emptied {:?} vs predicted {:?}",
+            emptied.len(),
+            preview.nodes,
+        );
         Ok(FieldGroupDeletion {
             nodes_removed: emptied.len(),
             ..preview
@@ -7323,19 +7366,30 @@ impl EditSession {
 
         let terminals: Vec<forms::Field> = form.descendants_of(fqn).cloned().collect();
 
-        // Predicted node count: the named node, plus every ancestor whose
-        // ONLY descendants are inside this subtree. An ancestor with a
-        // terminal elsewhere survives, so it is not counted.
-        let doomed_ancestors = form
+        // The grouping nodes this removal takes, BY NAME: the named node,
+        // plus every other node whose descendants all lie inside this
+        // subtree. A node with a terminal elsewhere survives — that is the
+        // `Personal.Name` case, and getting it wrong would take a field in
+        // a branch nobody named.
+        //
+        // `form.groups` is already deepest-first, so this inherits that
+        // order and the named node is appended last, keeping the whole list
+        // deepest-first including its own root.
+        let mut nodes: Vec<String> = form
             .groups
             .iter()
             .filter(|g| g.fully_qualified_name != fqn)
-            .filter(|g| form.descendants_of(&g.fully_qualified_name).count() > 0)
             .filter(|g| {
-                form.descendants_of(&g.fully_qualified_name)
-                    .all(|t| terminals.iter().any(|d| d.id == t.id))
+                let mut d = form.descendants_of(&g.fully_qualified_name).peekable();
+                // A node with NO descendants is not swept up by this
+                // removal — it is already childless, which means an earlier
+                // deletion failed to prune it. Not this operation's to fix,
+                // and claiming it would overstate what was removed.
+                d.peek().is_some() && d.all(|t| terminals.iter().any(|already| already.id == t.id))
             })
-            .count();
+            .map(|g| g.fully_qualified_name.clone())
+            .collect();
+        nodes.push(fqn.to_owned());
 
         let widgets_removed = terminals.iter().map(|f| f.widgets.len()).sum();
         let preview = FieldGroupDeletion {
@@ -7345,7 +7399,8 @@ impl EditSession {
                 .map(|f| f.fully_qualified_name.clone())
                 .collect(),
             widgets_removed,
-            nodes_removed: doomed_ancestors + 1,
+            nodes_removed: nodes.len(),
+            nodes,
         };
         Ok((terminals, preview))
     }
