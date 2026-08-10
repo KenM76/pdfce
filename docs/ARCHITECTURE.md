@@ -256,6 +256,40 @@ D:\Dev\pdfce\
                                    nor a save path for one, so this
                                    module is deliberately view-only (R83)
                                    until both exist.
+                                   **`signature.rs` gains
+                                   `byte_range_coverage` (`Pass 10.0`,
+                                   2026-08-10, `2676d4d`):** measures each
+                                   signature's declared `/ByteRange`
+                                   against the file's real length —
+                                   arithmetic only, no PKCS#7, no trust
+                                   chain, no cryptography of any kind.
+                                   §12.8.1 makes whole-file coverage a
+                                   `should` not a `shall`, so a short
+                                   range is reported as CONFORMING
+                                   (merely under-protecting), while an
+                                   overlapping/out-of-order range violates
+                                   Table 252's "exact byte range" and IS
+                                   reported malformed — the function's own
+                                   doc comment states it "cannot tell you
+                                   a signature is VALID — only what it
+                                   would be valid over." Reached through
+                                   the existing `forms::parse_acroform`,
+                                   not a third field walk (project rule
+                                   2). CLI surface: `pdfce-cli
+                                   list-signatures` (§7). See `ROADMAP.md`
+                                   `Pass 10.0` Shipped entry (seventy-
+                                   sixth filing) for the fixture design
+                                   and the two-warning-branch correction.
+                                   **`annot.rs`/`layers.rs` (`956ef4d`,
+                                   2026-08-10):** `annot::oc_refs` widened
+                                   to `pub(crate)`; `layers::group_refs`
+                                   (a second, independent implementation
+                                   of the same §8.11.3.3 "one dict or an
+                                   array" resolution) deleted, five
+                                   `layers.rs` call sites converted to the
+                                   shared function — see §12's plain dated
+                                   entry for why this is a correctness
+                                   property, not a tidiness pass.
     pdfce-render\               <- Takes pdfce-core's draw-op stream + resources
                                    (fonts, images, color spaces) and rasterizes to an
                                    in-memory pixel buffer via `tiny-skia` (CPU-only,
@@ -3341,6 +3375,16 @@ debug afterthought. Design points:
   `pdfce-cli list-layers <input>` (§8.11 optional-content groups,
   READ-only — see §3's `layers.rs` note; no toggle subcommand exists,
   by design, R83).
+- **`pdfce-cli list-signatures <input>` (`Pass 10.0`, 2026-08-10,
+  `2676d4d`+`2ae9991`) — read-only `/ByteRange` coverage, explicitly NOT
+  cryptographic verification.** Distinct from the Reader-parity sweep
+  above (decision 036 named signature validation as a related gap but
+  deliberately left it in the existing "Digital signatures" Backlog
+  bucket, unstarted) — this is that bucket's first slice, chosen because
+  it needs no crypto dependency at all. Every summary line states the
+  coverage-only caveat unconditionally, not gated on a flag — see §3's
+  `signature.rs` note and §12's decision-037/038 claims for the two
+  spec questions this slice surfaced but did not settle.
 - **Exit codes matter.** Since this is meant to be genuinely scriptable
   (unlike Acrobat, which has no real CLI), follow normal Unix
   conventions: `0` success, non-zero on any failure, with a specific,
@@ -14669,3 +14713,88 @@ started).
   this is a completion-and-correction entry appended to the existing
   decision, per this file's own append-only convention, not a new
   decision.
+
+---
+
+### 2026-08-10 (seventy-sixth filing) — `Pass 10.0` (signature `/ByteRange` coverage, `annot::oc_refs`/`layers::group_refs` consolidation); TWO decisions CLAIMED as OWED (037, 038), neither authored
+
+**Filed by `pdfce-librarian`, no shell available — relaying the
+dispatching engineer's account for commit-level detail, independently
+confirmed by direct source read where stated.** Full build record:
+`ROADMAP.md`'s `Pass 10.0` Shipped entry (seventy-sixth filing).
+
+**Plain entry, no decision number — `annot::oc_refs` becomes the ONE
+resolver for §8.11.3.3's "single dict or array" `/OCGs`/`/ON`/`/OFF`
+resolution; `layers::group_refs`, a second independent implementation
+of the identical question, is deleted (`956ef4d`).** Not a tidiness
+pass: the panel (`layers.rs`) and the renderer (`annot.rs`) must agree
+which object IDs a `/D` array names, or `locked`/`off`/visibility are
+computed over two different readings of the same document — the
+visible failure mode being a layers panel reporting a group "shown"
+that the renderer is actually hiding, or the reverse. The thing shared
+is the TOLERANCE as much as the logic (a bare single reference accepted
+where Table 101's grammar describes an array) — a re-fork would be the
+kind of divergence that only shows up on a file exercising the
+tolerant path, invisible to a fixture built from the strict grammar
+alone. All 18 `layers.rs` tests pass unchanged against the shared
+function. **No crate boundary or library choice changes; no new
+decision number claimed** — same "plain dated entry" convention as the
+several such entries above it in this log.
+
+**Decision 1 — CLAIMED as decision number `037`, NOT YET AUTHORED —
+whether OCG `/BaseState /OFF`'s "all groups" means all groups
+REGISTERED in the document's `/OCGs` array, or literally every OCG-
+shaped object reachable, including ones never registered anywhere.**
+`layers.rs`'s `optional_content_default_off` (shared with `annot.rs` as
+of the consolidation above) currently answers "registered only" — an
+unregistered OCG-shaped dictionary reports VISIBLE under `/BaseState
+/OFF`, where the more literal "all groups in a document" reading would
+say hidden. This was a pragmatic choice made while shipping
+(`agreement beats purity` — keep the renderer's existing answer rather
+than introduce a third resolver to relitigate it), named explicitly as
+`base_state_off_with_unregistered` rather than silently reconciled, and
+is NOT being ratified as project doctrine by this entry. **Status:
+CLAIMED as decision number 037, NOT YET AUTHORED.** `docs/decisions/`
+remains at 036 files on disk as of this filing (037/038 are prose
+claims across `ROADMAP.md` and this entry, not yet files) — decision
+records in this project are produced via the `autonomous-builder`/
+KenAgent protocol (`docs/decisions/README.md`), not authored by
+`pdfce-librarian` directly.
+
+**Decision 2 — CLAIMED as decision number `038`, NOT YET AUTHORED —
+Table 101 vs §8.11.4.5 b): does `/BaseState` propagate by processing
+BOTH the `/ON` and `/OFF` arrays, or only the array OPPOSITE the base
+state?** Table 101's own text names both arrays as processed following
+`/BaseState`; §8.11.4.5 b)'s procedural text names only the array
+opposite the base state. `annot.rs` implements the §8.11.4.5 b) reading
+(single array). The two readings diverge only for a group named in
+BOTH `/ON` and `/OFF` simultaneously — which is why the divergence has
+shipped without a visible defect on any fixture built so far — but this
+is a genuine contradiction WITHIN the standard's own two clauses, not
+merely an area the standard leaves silent. Per the project's standing
+"spec ambiguity becomes a setting, decided deliberately, never by
+whichever implementation shipped first" posture (R15), this needs an
+actual ruling — possibly after a fresh `pdfce-spec-librarian` read of
+§8.11.4.5, since it is not established here whether the contradiction
+is genuinely irreconcilable or whether one clause is normative and the
+other merely descriptive. **Status: CLAIMED as decision number 038, NOT
+YET AUTHORED**, same protocol note as decision 037 above.
+
+**Why neither is ruled here rather than merely claimed.** Both were
+handed to this librarian at the end of a dispatch, from a relayed
+engineering summary rather than this librarian's own reading of
+§8.11.4.5 against the object model. Ruling on a spec-internal
+contradiction from a relayed summary, in the last minutes of a session,
+is exactly the kind of unearned confidence the project's own decision-
+record protocol exists to prevent — hence CLAIMED, not decided. The
+next engineer session should either dispatch `autonomous-builder` to
+author `037`/`038` formally from this content (with a `pdfce-spec-
+librarian` sourcing pass on `038` first), or explicitly release either
+claim if a fresh reading resolves it differently, before any unrelated
+work takes either number. **No `docs/ARCHITECTURE.md` body-section
+change accompanies either claim** — until each is actually decided,
+this file's normative description of OCG default-visibility resolution
+(§3's `layers.rs`/`annot.rs` notes) correctly describes CURRENT shipped
+behavior, not a settled invariant; changing the body section to assert
+either reading as "the" answer before the decision record exists would
+misstate the record's own status.

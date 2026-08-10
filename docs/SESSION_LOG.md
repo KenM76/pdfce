@@ -31520,3 +31520,108 @@ should check `D:\Dev\pdfce-backups\` directly if backup currency needs
 confirming before any push. This is the **seventy-fifth**
 `SESSION_LOG.md` filing (the seventy-fourth confirmed present by direct
 read before this entry was appended).
+
+## 2026-08-10 (seventy-sixth filing) — the seventh Reader-parity gap gets its non-cryptographic half: `Pass 10.0` ships signature `/ByteRange` coverage (core+CLI, explicitly not verification); a duplicate OCG resolver deleted; `R183` gains its own enforcement; two OCG spec contradictions filed as decisions OWED (037, 038), deliberately not settled from a relayed summary
+
+**Sourcing.** No shell this dispatch (hard rule 8) — none of the four
+hashes independently confirmed against `git log`/`git show`. Verified by
+direct read of current source: `signature.rs:900`
+(`byte_range_coverage`, its "cannot tell you VALID, only what it would
+be valid OVER" doc comment, §12.8.1 modality citation); `main.rs`
+(CLI) `:972`/`:3912`/`:5745`–`:5863` (`list-signatures`, the
+unconditional coverage-only summary line, two distinct warning
+branches); `annot.rs:783` (`oc_refs` now `pub(crate)`); five
+`layers.rs` call sites converted; zero remaining `fn group_refs`
+definitions (genuinely deleted); `fixtures/synthetic/signature/
+PROVENANCE.md` (three fixtures, short/malformed pair named as existing
+together on purpose); `tools/gui-drive.ps1:75`–`:90` (`UNPARSEABLE`
+now leads the default `-Filter`, comment cites R183 by number). **Not
+independently verified:** the unconditional-reject-print claim (taken
+on the dispatch's word); exact hash-to-change mapping; the relayed gate
+figures (2838 tests / 0 failed / clippy 0 / fmt clean). **A residual
+found independently, not named in the dispatch:** `layers.rs:1472`'s
+doc comment still names the deleted `group_refs` in an intra-doc link —
+flagged for the engineer, not fixed here (out of this librarian's file
+scope).
+
+**Shipped:**
+- `5c45174` — `gui-drive.ps1`: `UNPARSEABLE` leads the default
+  `-Filter`; a reject print reportedly now fires unconditionally before
+  filtering (relayed, spot-verified with `-Filter "canvas"`). `R183`
+  made mechanical. No Pass ID, tooling only.
+- `956ef4d` — `annot::oc_refs` → `pub(crate)`; `layers::group_refs`
+  deleted; 5 call sites converted to the shared resolver. No Pass ID —
+  internal consolidation, following an instruction the layers subagent
+  left in its own doc comment at `Pass 55.5`'s ship.
+- `2676d4d` + `2ae9991` — **`Pass 10.0`** (core+CLI): signature
+  `/ByteRange` coverage measurement. §12.8.1's `should`-not-`shall`
+  modality is the entire design — partial coverage reports CONFORMING,
+  overlapping ranges report MALFORMED (Table 252). Three new fixtures
+  (the two pre-existing signature-shaped fixtures were both vacuous for
+  this purpose — one has no signature field, one has no `/V`). Every
+  `list-signatures` summary line carries the coverage-only caveat
+  unconditionally. R174 caught a conflated-warning contradiction by
+  reading the output, not a test, before ship.
+
+**Decisions made this session:**
+- `R183` amended with its own enforcement (`5c45174`), not re-minted —
+  ceiling stays R183, next free R184.
+- Two OCG `/BaseState` spec questions CLAIMED as decisions `037`
+  (unregistered-group tie-break under `/BaseState /OFF`) and `038`
+  (Table 101 vs §8.11.4.5 b) — both/opposite-only array processing),
+  both NOT YET AUTHORED. Neither ruled by this filing — both are
+  genuine forks that change what a reader draws, and ruling on a spec-
+  internal contradiction from a relayed end-of-session summary is
+  exactly the confidence this project's decision-record protocol exists
+  to prevent.
+
+**Findings + decisions:**
+- The modality-is-the-design pattern recurs: a `should` upgraded to a
+  `shall` by the tool reporting it misreports severity on every
+  partial-coverage signature in the wild — mirror image of the
+  `Pass 55.5` `/Order`-empty-default-is-a-`shall` finding two filings
+  ago (that one was a `shall` a reader could mistake for silence; this
+  one is a `should` a reader could mistake for a `shall`).
+- Another R174 instance (output self-contradiction caught by reading,
+  not testing) — not re-tallied precisely here.
+
+**Still in flight:**
+- Actual cryptographic signature verification — NOT built, named as
+  such. Needs a crypto dependency (licensing + scope decision for the
+  operator, project rule 13), unchanged lowest priority in the Digital
+  signatures Backlog bucket.
+- Decisions `037`/`038` — both OWED, neither authored; now three
+  decision numbers owed project-wide alongside `034`/`035`.
+- The stale `[`group_refs`]` intra-doc link at `layers.rs:1472`.
+- Test-count reconciliation — now a THIRD unreconciled delta stacked
+  (2716→2804→2834→2838), none closed.
+
+**For next session:**
+- Rule on `037`/`038`, or explicitly defer with a named reason.
+- Fix the stale intra-doc link.
+- Reconcile the three-deep test-count delta stack against a real
+  `cargo test` run.
+- Scope crypto signature verification's dependency choice with the
+  operator before any code is written against it.
+
+**Ledger for this filing.** One new Pass ID: `Pass 10.0` (core+CLI,
+`gui [ ]`) — checked against zero prior hits before minting (R156);
+fills a Pass number reserved since decision-010's ranking sequence but
+never previously headed, so the Pass-family numeric ceiling stays
+**55.6** (unchanged — this is not a new high-water mark). Decision
+records: 036 on disk/complete, **037 and 038 now CLAIMED-by-citation/
+UNAUTHORED**, next genuinely free **039** (alongside the still-unauthored
+034/035). Standing rules: **R183 amended, not re-minted** — ceiling
+stays R183, next free R184. Operator-question ceiling unchanged at
+**(bh)**, next free **(bi)**. `docs/FEATURES.md`: one new *Implemented*
+row (signature `/ByteRange` coverage), one *Planned* row (Digital
+signatures) annotated in place, boxes unchanged. `docs/ARCHITECTURE.md`:
+§3 gains two module-addition notes, §7 gains a `list-signatures` CLI
+bullet, §12 gains one plain dated entry (the resolver consolidation, no
+number) plus two OWED decision claims (037, 038). Gate figures (2838
+tests / 0 failed, clippy 0 `--all-features`, fmt clean) RELAYED, NOT
+independently re-run — no shell this dispatch. Backup/git working-tree
+state **not asserted anywhere in this filing** (hard rule 8) — engineer
+should check `D:\Dev\pdfce-backups\` and `git log`/`git status` directly.
+This is the **seventy-sixth** `SESSION_LOG.md` filing (the seventy-fifth
+confirmed present by direct read before this entry was appended).

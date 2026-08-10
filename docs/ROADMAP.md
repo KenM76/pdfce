@@ -81,6 +81,244 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★ The seventh Reader-parity gap gets its non-cryptographic half — `Pass 10.0` ships `signature::byte_range_coverage` + `pdfce-cli list-signatures`; a duplicate OCG resolver is deleted in favour of the one `annot.rs` already had; `gui-drive.ps1`'s own default `-Filter` closes the exact gap `R183` named it for, the same session `R183` was minted — TWO OCG spec disagreements filed as decisions OWED (037, 038), deliberately not settled from a relayed summary — 2026-08-10 (seventy-sixth filing)
+
+**Sourcing.** This librarian has Grep/Read/Glob but no shell this
+dispatch (hard rule 8) — none of the four hashes below is confirmed
+against `git log`/`git show`; commit-to-change attribution is taken from
+the dispatch. **Independently verified by direct read of current
+source, not merely relayed:** `crates/pdfce-core/src/signature.rs:900`
+— `pub fn byte_range_coverage<G: ObjectGraph + ?Sized>(graph: &G,
+file_len: u64) -> Vec<ByteRangeCoverage>` exists, its doc comment states
+verbatim *"It cannot tell you a signature is VALID — only what it would
+be valid over. Those are different claims and pdfce must not let one
+stand in for the other,"* and cites §12.8.1's `should`-not-`shall`
+modality by name; reached via `crate::forms::parse_acroform`, not a
+third field walk, matching `census`'s own comment about its private
+`walk_fields` (project rule 2); `crates/pdfce-cli/src/main.rs:972`
+(`ListSignatures` variant), `:3912` (wiring), `:5745`–`:5863`
+(`cmd_list_signatures`) — the doc comment's own heading is *"what each
+signature COVERS, not whether it is valid"*; the unconditional summary
+line (`:5853`–`:5861`) carries the coverage-only caveat on **every**
+invocation, not gated on a flag; the two separate warning branches
+(`:5834`, `:5844`) are gated on `malformed` vs `uncovered_tail > 0`
+distinctly, with a comment (`:5827`–`:5832`) naming the prior conflated
+draft and crediting R174 by name for catching it by reading the output,
+not a test. `crates/pdfce-core/src/annot.rs:783` — `pub(crate) fn
+oc_refs` exists; `crates/pdfce-core/src/layers.rs` calls it at five
+sites (`:892`, `:955`, `:982`, `:1141`, `:1490`); `grep -rn "fn
+group_refs"` over `pdfce-core/src` returns **zero** — the function is
+genuinely deleted, not merely renamed in one place. `tools/gen-
+signature-fixtures.py` exists; `fixtures/synthetic/signature/
+PROVENANCE.md` exists and documents three fixtures
+(`signed-full-coverage.pdf`, `signed-short-coverage.pdf`,
+`signed-malformed-range.pdf`) as category (a) synthetic per `LEGAL.md`
+§5, generated (not downloaded), with the short/malformed pair named
+explicitly as existing together so neither test can pass against a
+constant. `tools/gui-drive.ps1:75`–`:90` — the `$Filter` default now
+**leads with** `UNPARSEABLE` (`'UNPARSEABLE|plain-click|vector-click|…'`),
+and its own comment cites `R183` by number and dates the change to
+2026-08-10 for the exact `nav:enter`/`nav:home` incident the seventy-
+fifth filing recorded. **Not independently verified:** the always-shown
+(filter-independent) reject-print block the dispatch describes as a
+SECOND change — grepped for it but did not exhaustively trace every
+call path in the script; taken on the dispatch's word, flagged rather
+than silently treated as confirmed. The stated test/clippy/fmt gate
+figures (**2838 tests, 0 failed**, clippy 0 with `--all-features`, fmt
+clean) are RELAYED, not independently re-run — no shell this dispatch.
+**A residual found independently, not named in the dispatch:**
+`crates/pdfce-core/src/layers.rs:1472`'s doc comment still reads
+*"both forms are handled by [`group_refs`]"* — a rustdoc intra-doc link
+to a function this same consolidation deleted. Flagged for the engineer
+below; not fixed by this librarian (out of scope — this librarian edits
+`docs/`, not `crates/`).
+
+**Shipped:**
+- `5c45174` — `tools/gui-drive.ps1`: `UNPARSEABLE` now leads the default
+  `-Filter` (helps a caller who does not override it), and — per the
+  dispatch, not independently re-traced end to end — a reject print now
+  fires unconditionally, before filtering, regardless of what `-Filter`
+  says, naming the valid step-prefix keys rather than only rejecting.
+  Verified live against `-Filter "canvas"` (a filter that excludes the
+  term entirely) and the message still printed. **This is `R183` made
+  mechanical** — no Pass ID, tooling only. See `R183`'s Standing-rules
+  entry (below), now amended with this enforcement.
+- `956ef4d` — `annot::oc_refs` widened to `pub(crate)`;
+  `layers::group_refs` deleted; five `layers.rs` call sites (`:892`,
+  `:955`, `:982`, `:1141`, `:1490`) converted to the shared resolver.
+  Following an instruction the layers subagent left in its own doc
+  comment at `Pass 55.5`'s ship, not new-found debt. All 18 `layers.rs`
+  tests pass against the shared function. **No Pass ID** — internal
+  consolidation, not a new capability; the *reason* it matters is a
+  correctness property, not tidiness: the panel and the renderer must
+  agree which groups a `/D` array names (including the tolerance — a
+  single reference accepted where Table 101 says array), or `locked`/
+  `off` are computed over two different readings of the same document,
+  the visible symptom being a panel saying "shown" about content the
+  page hides.
+- `2676d4d` + `2ae9991` — **`Pass 10.0` (core + CLI)**: signature
+  `/ByteRange` coverage measurement, explicitly **not** cryptographic
+  verification. `byte_range_coverage` measures each signature's declared
+  ranges against the file's real length; `list-signatures` prints it.
+  **The load-bearing design fact is modal, not technical**: §12.8.1
+  makes whole-file coverage a `should`, *"other ranges may be used but…
+  their use is not recommended"* — a `shall` would make a partial-range
+  signature malformed, but this is a `should`, so partial coverage is
+  **conforming, merely under-protecting**, and must be reported as such
+  rather than flagged as a defect. Overlapping ranges are a different
+  clause (Table 252's *"exact byte range"*) and **are** malformed.
+  **Three fixtures exist because the two candidates already on disk
+  would have made the test vacuous**: `certified-p2-form.pdf` carries
+  `/ByteRange [0 1 2 3]` with no signature FIELD at all (its dict hangs
+  off `/Perms /DocMDP`); `unfillable-fields-form.pdf` has a `/FT /Sig`
+  field with no `/V`. Neither exercises a real signed range. The new
+  short/malformed pair exists together on purpose (see the fixture's
+  own `PROVENANCE.md`, confirmed above) — either alone passes against a
+  constant; a fourth test asserts the three fixtures do not all report
+  identically, guarding the measurement against degenerating into a
+  constant later. **Every `list-signatures` summary line carries the
+  coverage-only caveat unconditionally** — not `--verbose`, not the man
+  page — because this is the one command where a reader is most likely
+  to take away more than was said. **A contradiction R174 caught by
+  reading the OUTPUT, not a test**: the conformance-reassurance warning
+  used to fire on `uncovered_tail > 0` alone, so the overlapping-range
+  fixture printed `MALFORMED_RANGE` on its row and, three lines below, a
+  warning saying nothing was malformed — two contradictory true
+  sentences about the same document in the same output. Now two
+  distinct, mutually-exclusive warning branches (confirmed at
+  `main.rs:5834`/`:5844` above).
+
+**Decisions made this session:**
+- **`R183` amended with its own enforcement**, not re-minted — see
+  Standing rules, below.
+- **Two OCG `/BaseState` spec questions filed as decisions OWED, not
+  settled from a relayed summary.** Both are genuine forks that change
+  what a reader DRAWS, and this librarian declined to rule on either in
+  the last minutes of a dispatch — see the *Decisions OWED* block below
+  and `ARCHITECTURE.md` §12 for the claim.
+
+**Findings + decisions:**
+- **The modality is the whole design, again** — same shape as the
+  `Pass 55.5` `/Order`-empty-default-is-a-`shall` finding two filings
+  ago, this time the mirror: a `should` that must NOT be upgraded to a
+  `shall` by the tool reporting it. A validator that can't tell "the
+  standard forbids this" from "the standard merely discourages this"
+  reports the wrong severity on every partial-coverage signature in the
+  wild — filing this pairing as a `personal_rag/pdf` lesson, below.
+- **R174, another instance** — the conflated-warning bug above. Fourth
+  or fifth occurrence on this project of "found by reading the tool's
+  own output, not by a test asserting on it"; not re-counted precisely
+  here, see R174's own Standing-rules entry for the running tally.
+- **A stale intra-doc link naming a deleted function** — `layers.rs:1472`
+  still says `[`group_refs`]` after `956ef4d` deleted it. Not the same
+  shape as `trust_but_verify_doc_comments_are_not_evidence` (that family
+  is a comment asserting untrue RUNTIME behavior); this is a comment
+  pointing at a symbol that no longer exists, which `cargo doc` may or
+  may not warn on depending on `rustdoc::broken_intra_doc_links` lint
+  configuration — not independently checked. Flagged for the engineer
+  as a one-line fix, not written up as a RAG finding (too small/singular
+  to clear the "generalizable" bar without a second instance).
+
+**Decisions OWED — recorded here because the engineer's own dispatch
+text asked for exactly this framing, and because writing either as a
+settled note would be ruling on a spec contradiction from a relayed
+summary at the end of a session, which this librarian declines to do.**
+
+1. **OCG `/BaseState /OFF` and an UNREGISTERED group — which "all
+   groups" does the default refer to?** `layers.rs`'s
+   `optional_content_default_off` treats "all groups" as "everything in
+   `/OCGs`," so a group that is NOT named in the document's registered
+   optional-content-group array still reports visible under `/BaseState
+   /OFF`, where a literal reading of "all groups in a document" would
+   say hidden. The subagent kept the RENDERER's existing answer (shared
+   resolver, `agreement beats purity` — see `956ef4d`, above) and named
+   the specific divergence `base_state_off_with_unregistered` rather
+   than silently reconciling it. **Claimed as decision number `037`,
+   NOT YET AUTHORED** — see `ARCHITECTURE.md` §12.
+2. **Table 101 vs §8.11.4.5 b) — does `/BaseState` get processed for
+   BOTH `/ON` and `/OFF`, or only the opposite one?** Table 101's own
+   text says `/BaseState` is followed by processing **both** the `/ON`
+   and `/OFF` arrays; §8.11.4.5 b) says only the array **opposite** the
+   base state. `annot.rs` implements the §8.11.4.5 b) reading (opposite
+   array only). The two readings differ **only** for a group named in
+   BOTH arrays, which is why this has shipped without a visible defect
+   — but it is a contradiction INSIDE the standard, not a gap the
+   standard leaves silent, and under the project's standing "spec
+   ambiguity becomes a setting, never a hard-coded solo choice" posture
+   (R15, `CLAUDE.md`'s fix-bugs-on-discovery framing) this is exactly
+   the shape that needs a ruling, not a default chosen by whoever edited
+   the file first. **Claimed as decision number `038`, NOT YET
+   AUTHORED** — see `ARCHITECTURE.md` §12. Whether this needs a fresh
+   `pdfce-spec-librarian` read of §8.11.4.5 before an engineering
+   ruling, or is genuinely a standard-internal contradiction with no
+   canonical resolution, is itself part of what `038` needs to settle.
+
+**Still in flight:**
+- **Actual cryptographic signature verification is NOT built and is
+  named as such, not filed as done.** PKCS#7/PAdES verification needs a
+  crypto dependency — a licensing AND scope decision for the operator
+  under project rule 13, not one to make in passing while building the
+  half that needs no dependency at all. Remains in the "Digital
+  signatures" Backlog bucket, unchanged in priority (lowest of the
+  ranked decision-008 set).
+- Decisions `037` and `038` (above) — both OWED, neither authored.
+- `037`/`038` joins `034` (CMYK/YCCK write-side, thirty-fifth filing)
+  and `035` (DXF Bézier/units forks, fifty-second filing) as CLAIMED-
+  by-citation/UNAUTHORED — **three decision numbers now owed**, none
+  authored this session; the next engineer session should either
+  dispatch `autonomous-builder` to author them or explicitly release a
+  claim that no longer applies.
+- The stale `group_refs` intra-doc link at `layers.rs:1472` (above) —
+  one-line fix, not yet made.
+- Test-count reconciliation — **now a THIRD unreconciled delta stacked**
+  (2716→2804, seventy-fourth filing; 2804→2834, seventy-fifth filing;
+  2834→2838, this filing, relayed not re-run). None of the three gaps
+  closed.
+- Printer job spooling, OCG layer TOGGLING — unchanged, both still
+  blocked on their named prerequisites (see the seventy-fifth filing's
+  own *Still in flight*).
+
+**For next session:**
+- Rule on decisions `037` and `038`, or explicitly defer with a named
+  reason — both change what a reader draws from a real (if narrow)
+  document shape.
+- Fix the stale `[`group_refs`]` intra-doc link.
+- Reconcile the now-three-deep test-count delta stack against an actual
+  `cargo test` run.
+- If cryptographic signature verification is scoped, it needs its own
+  licensing classification (project rule 13) before any dependency is
+  added — flag to the operator, don't decide solo.
+
+**Ledger for this filing.** One new Pass ID: **`Pass 10.0`** (core+CLI,
+`gui` `[ ]`) — checked against zero prior hits before minting (R156);
+fills a Pass NUMBER reserved since decision-010's candidate-ranking
+sequence (`Pass 10 — Digital signatures / PAdES`, Backlog) but never
+previously headed, so **the Pass-family numeric ceiling is UNCHANGED at
+55.6** (Pass 10.0 is not a new high-water mark; the next genuinely new
+family is still 56). `docs/FEATURES.md`: one new *Implemented* row
+under *Reading, navigation & printing* (signature coverage, `core [x]
+cli [x] gui [ ]`), one existing *Planned* row (*Digital signatures*)
+annotated with a pointer to it, boxes unchanged. `docs/ARCHITECTURE.md`:
+§3 gains a `signature.rs` addition note, §7 gains a `list-signatures`
+CLI bullet, §12 gains two OWED decision claims (**037**, **038**) plus
+one plain dated entry (the `oc_refs`/`group_refs` consolidation, no
+number claimed) — decision-record ceiling: **036 on disk/complete**,
+**037 and 038 now CLAIMED-by-citation/UNAUTHORED**, next genuinely free
+**039**. Standing rules: **`R183` AMENDED with its own enforcement, NOT
+re-minted** — ceiling stays **R183**, next free **R184**.
+Operator-question ceiling unchanged at **(bh)**, next free **(bi)**.
+Gate figures (2838 tests / 0 failed, clippy 0 `--all-features`, fmt
+clean) RELAYED, NOT independently re-run — no shell this dispatch; the
+test-count delta is flagged, stacked on two prior unreconciled gaps,
+none closed. Backup/git working-tree state **not asserted anywhere in
+this filing** (hard rule 8) — no shell this dispatch; engineer should
+check `D:\Dev\pdfce-backups\` and `git log`/`git status` directly before
+any push. This is the **seventy-sixth** `SESSION_LOG.md`/`ROADMAP.md`
+joint filing (the seventy-fifth confirmed present by direct read before
+this entry was written).
+
+---
+
 ### ★★★ THE READER-PARITY SWEEP COMPLETES — all seven `decision 036` gaps now have a surface (layers view-only via `Pass 55.5`, read mode + full screen via `Pass 55.6`; `Pass 55.0` gains match highlighting/Escape-to-close/a status-bar toggle); **TWO CORRECTIONS to already-filed claims** — `1bf6ab2`: Enter in the Find bar was NEVER broken; `77e0b50`: R86 IS discharged for `e46c3a8` — both trace to ONE root cause; `R183` MINTED — 2026-08-10 (seventy-fifth filing)
 
 **Sourcing.** This librarian has Grep/Read/Glob but no shell this
@@ -37050,7 +37288,14 @@ nothing gets forgotten, not as a commitment to build in this order.
   is already far along (Pass 3.2's `SignatureImpact` /
   `/DocMDP` / `/FieldMDP` classification and the §12.8 spec closure);
   this bucket's remaining work is the signing/verification/timestamp
-  authoring side.
+  authoring side. **`Pass 10.0` (2026-08-10, `2676d4d`+`2ae9991`) ships
+  a narrow READ-ONLY sibling — `/ByteRange` COVERAGE measurement
+  (`pdfce-cli list-signatures`), explicitly not cryptographic
+  verification** — see `docs/FEATURES.md`'s new *Implemented* row under
+  *Reading, navigation & printing*. This bucket's own scope (PKCS#7
+  sign/verify, PAdES profiles, RFC 3161) is unchanged and still entirely
+  unbuilt; `Pass 10.0` answers a different, much smaller question ("what
+  does this signature cover") that needs no crypto dependency at all.
 - **Encryption** — standard security handler, RC4 (legacy read-compat
   only, never write), AES-128/256, public-key (certificate) security
   handler. **Updated 2026-07-31 by decision 007 (Pass 5 in its
@@ -46247,6 +46492,27 @@ and
   before the zero reading became informative. Full record: `ROADMAP.md`'s
   `1bf6ab2`/`77e0b50` *Shipped* entry (seventy-fifth filing). **Ceiling
   moves `R182` → `R183`; next free `R184`.**
+
+  **★ ENFORCEMENT ADDED THE SAME SESSION `R183` WAS MINTED (2026-08-10,
+  `5c45174`, seventy-sixth filing) — the mechanical carrier this rule's
+  own "practical form" clause asked for, not a second rule.** Two
+  changes to `tools/gui-drive.ps1`, and the second is the one that
+  actually closes the gap: (1) `UNPARSEABLE` now leads the DEFAULT
+  `-Filter` string, which helps a caller who never overrides it — not
+  the failing case, since the two false negatives this rule was minted
+  from both came from a `-Filter` a caller DID choose; (2) a reject
+  print now fires **unconditionally, before the filtered trace, whatever
+  `-Filter` says** — verified with `-Filter "canvas"`, a filter that
+  excludes the term `UNPARSEABLE` entirely, and the message still
+  printed. It names the valid step-prefix keys, not only "your step was
+  invalid" — the reader's next question is *"then what is it,"* and a
+  message that doesn't answer that costs a second round trip. **Same
+  shape as R163** (prefer a mechanical gate to a rule asking a human to
+  remember) **applied to this rule about itself**: R183's own text was a
+  "-Filter must include the reject channel" instruction aimed at every
+  FUTURE caller's judgement; the unconditional print makes that judgement
+  unnecessary rather than merely documented. Full record: `ROADMAP.md`'s
+  `5c45174` *Shipped* entry (seventy-sixth filing).
 
 - **A portable build lands in `D:\builds` at every milestone (operator
   request, 2026-08-10) — `tools/package-portable.py`, `9146b41`.**
