@@ -972,3 +972,167 @@ fn the_renames_disclosed_count_matches_the_descendant_list() {
         ],
     );
 }
+
+// ---------------------------------------------------------------------------
+// `AcroForm::groups` — the field-name tree's INTERIOR (Pass 53.1)
+// ---------------------------------------------------------------------------
+//
+// `fields` is a projection of TERMINAL fields, so a pure grouping node —
+// child fields, no widgets of its own, no presence and no type under Table
+// 220 — is deliberately absent from it. That projection is right for every
+// consumer that fills, flattens or paints.
+//
+// It is wrong for exactly one: the node still owns a `/T`, and renaming it
+// re-derives the fully-qualified name of everything beneath it.
+// `rename_field` has always accepted a grouping node's FQN
+// (`FieldPath::Grouping`), so the capability existed while the NAME of the
+// thing to address was unreachable from any reader.
+
+/// **The interior nodes are reported, with their own partial names.**
+#[test]
+fn grouping_nodes_are_reported_with_their_own_partial_names() {
+    let f = form(&session("nested-form.pdf"));
+
+    let got: Vec<(String, String)> = f
+        .groups
+        .iter()
+        .map(|g| {
+            (
+                g.fully_qualified_name.clone(),
+                g.partial_name
+                    .as_ref()
+                    .map(|b| String::from_utf8_lossy(b).into_owned())
+                    .unwrap_or_default(),
+            )
+        })
+        .collect();
+
+    assert_eq!(
+        got,
+        vec![
+            ("Personal.Address".to_owned(), "Address".to_owned()),
+            ("Personal".to_owned(), "Personal".to_owned()),
+        ],
+        "both interior nodes, each carrying its OWN /T rather than a slice of \
+         a descendant's path — and DEEPEST FIRST, because a node is recorded \
+         at the early return that is reached only after recursing into its \
+         children; got {got:?}"
+    );
+}
+
+/// **A grouping node is never also a terminal.**
+///
+/// The two projections partition the tree — a node is in exactly one. If
+/// they ever overlapped, a shell rendering both would show the same node
+/// twice and offer two Rename controls for one `/T`.
+#[test]
+fn the_two_projections_do_not_overlap() {
+    for fixture in ["nested-form.pdf", "demo-form.pdf", "mixed-kids-form.pdf"] {
+        let f = form(&session(fixture));
+        for g in &f.groups {
+            assert!(
+                f.field_by_name(&g.fully_qualified_name).is_none(),
+                "{fixture}: {:?} is reported as BOTH a grouping node and a \
+                 terminal field",
+                g.fully_qualified_name
+            );
+        }
+    }
+}
+
+/// **A flat form reports NO grouping nodes.**
+///
+/// This is the common case — Pass 7.0's census found no corpus file nests
+/// fields at all — and it is what lets a shell render nothing rather than an
+/// empty section (R124). Asserted so the emptiness is a guarantee a UI can
+/// rely on, not an accident of one fixture.
+#[test]
+fn a_flat_form_has_an_empty_group_list() {
+    let f = form(&session("demo-form.pdf"));
+    assert!(!f.fields.is_empty(), "the fixture does have fields");
+    assert!(
+        f.groups.is_empty(),
+        "a flat form's field-name tree has no interior; got {:?}",
+        f.groups
+            .iter()
+            .map(|g| &g.fully_qualified_name)
+            .collect::<Vec<_>>()
+    );
+}
+
+/// **A MIXED node is a terminal, not a grouping node.**
+///
+/// A node holding both child fields and its own widget kids has presence, so
+/// `walk_field` does not take the pure-non-terminal early return and it lands
+/// in `fields`. It is renameable through its terminal row like any other —
+/// which is why it must NOT also appear as an interior node, or the operator
+/// would meet two controls for one name.
+#[test]
+fn a_mixed_kids_node_is_a_terminal_and_not_a_grouping_node() {
+    let f = form(&session("mixed-kids-form.pdf"));
+    assert!(
+        f.field_by_name("Order").is_some(),
+        "the mixed node is a terminal; have {:?}",
+        names(&f)
+    );
+    assert!(
+        f.groups.is_empty(),
+        "and therefore NOT an interior node; got {:?}",
+        f.groups
+            .iter()
+            .map(|g| &g.fully_qualified_name)
+            .collect::<Vec<_>>()
+    );
+}
+
+/// **Every reported grouping node can actually be renamed by the name
+/// reported.**
+///
+/// The whole point of the accessor: the string it hands out is the string
+/// `rename_field` takes. If those ever diverged, a shell would render a
+/// control whose every press errors.
+#[test]
+fn every_reported_grouping_node_is_renameable_by_that_name() {
+    let mut s = session("nested-form.pdf");
+    let names: Vec<String> = form(&s)
+        .groups
+        .iter()
+        .map(|g| g.fully_qualified_name.clone())
+        .collect();
+    assert_eq!(names.len(), 2);
+
+    // The deepest first, so renaming one does not invalidate the other's path.
+    let outcome = s
+        .rename_field("Personal.Address", "Location")
+        .expect("the reported name resolves");
+    assert_eq!(outcome.to, "Personal.Location");
+    assert_eq!(outcome.descendants_renamed, 2);
+
+    let outcome = s
+        .rename_field("Personal", "Applicant")
+        .expect("the reported name resolves");
+    assert_eq!(outcome.to, "Applicant");
+    assert_eq!(
+        outcome.descendants_renamed, 3,
+        "renaming the subtree ROOT reaches all three terminals — City and Zip \
+         beneath Location, and Name directly beneath it. The count is of \
+         terminals, not of tree levels."
+    );
+
+    let mut after = names_sorted(&form(&s));
+    after.sort();
+    assert_eq!(
+        after,
+        vec![
+            "Applicant.Location.City".to_owned(),
+            "Applicant.Location.Zip".to_owned(),
+            "Applicant.Name".to_owned(),
+        ],
+    );
+}
+
+fn names_sorted(f: &forms::AcroForm) -> Vec<String> {
+    let mut v = names(f);
+    v.sort();
+    v
+}

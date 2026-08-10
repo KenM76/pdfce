@@ -628,11 +628,70 @@ impl XfaPresence {
 /// The list of terminal [`Field`]s plus the document-level attributes from
 /// Table 218. Obtained from [`parse_acroform`]; `None` when the document has
 /// no `/AcroForm`.
+/// A **pure grouping node** in the §12.7.3.2 field-name tree: a field
+/// dictionary with child fields and no widgets of its own.
+///
+/// # Why this is surfaced separately rather than in [`AcroForm::fields`]
+///
+/// Table 220 gives such a node no presence, no type and no value, so it
+/// contributes nothing to a projection of *terminal* fields and
+/// `walk_field` deliberately stops at one. That projection is right for
+/// filling, flattening and appearance work, which is everything
+/// [`AcroForm::fields`] feeds.
+///
+/// It is wrong for exactly one thing: **the node still owns a `/T`, and
+/// renaming it re-derives the fully-qualified name of every field beneath
+/// it.** `EditSession::rename_field` accepts a grouping node's FQN and
+/// handles it (`FieldPath::Grouping`) — so the capability existed while the
+/// name of the thing to address was unreachable from a reader.
+///
+/// # ★ Why a shell must NOT derive this by splitting a terminal's FQN
+///
+/// It is tempting: `Personal.Address.Zip` looks like it yields `Personal`
+/// and `Personal.Address` for free. It does not, and the failure is silent.
+/// [`Field::fully_qualified_name`] is built by joining **decoded `/T` text
+/// strings** (§7.9.2), and nothing prevents a `/T` from containing a
+/// literal period — `rename_field` refuses a period in a NEW name, which
+/// says nothing about names already in a file. On such a document a split
+/// misattributes every segment after the first, and reports ancestors that
+/// do not exist.
+///
+/// So the node's own partial name is carried here, read from the object
+/// rather than reconstructed from a string (project rule 2).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FieldGroupNode {
+    /// The grouping node's field dictionary.
+    pub id: ObjId,
+    /// Its fully-qualified name — the string
+    /// [`EditSession::rename_field`](crate::edit::EditSession::rename_field)
+    /// takes to address it.
+    pub fully_qualified_name: String,
+    /// Its own `/T` (raw bytes). `None` for a `/T`-less intermediate, which
+    /// contributes no segment and therefore cannot be renamed.
+    pub partial_name: Option<Vec<u8>>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct AcroForm {
     /// The terminal fields, in field-tree DFS order (the order `/Fields` and
     /// each `/Kids` present them).
     pub fields: Vec<Field>,
+    /// The **pure grouping nodes** — the field-name tree's interior, which
+    /// [`Self::fields`] deliberately omits.
+    ///
+    /// **Deepest-first (post-order): a child appears before its parent.**
+    /// Not a choice — the node is recorded at the early return that stops the
+    /// walk, which is reached *after* recursing into its children. Stated
+    /// because it is the opposite of what "DFS order" suggests and a consumer
+    /// that assumed parents-first would render a breadcrumb backwards. It is
+    /// also the useful order for a caller renaming several: rename the
+    /// deepest first and the shallower paths stay valid.
+    ///
+    /// Empty for a flat form, which is every file in the Pass 7.0 census;
+    /// non-empty is produced mainly by pdfce's own same-name merge. A
+    /// consumer that renders these must therefore render *nothing* when the
+    /// list is empty rather than an empty section (R124).
+    pub groups: Vec<FieldGroupNode>,
     /// `/NeedAppearances` (Table 218; default false) — the producer's
     /// assertion that widget appearances are stale. **Disclosed, never a
     /// silent on-load regenerate** (R51, NF1): a *may*, not a *shall*.
@@ -834,6 +893,7 @@ pub fn parse_acroform<G: ObjectGraph + ?Sized>(graph: &G) -> Option<AcroForm> {
 
     // Walk the root fields depth-first, resolving inheritance down /Kids.
     let mut fields = Vec::new();
+    let mut groups: Vec<FieldGroupNode> = Vec::new();
     let mut visited = HashSet::new();
     let mut inline_field_roots = 0usize;
     if let Some(roots) = acro
@@ -873,12 +933,14 @@ pub fn parse_acroform<G: ObjectGraph + ?Sized>(graph: &G) -> Option<AcroForm> {
                 0,
                 &mut visited,
                 &mut fields,
+                &mut groups,
             );
         }
     }
 
     Some(AcroForm {
         fields,
+        groups,
         inline_field_roots,
         need_appearances,
         sig_flags,
@@ -927,6 +989,11 @@ fn walk_field<G: ObjectGraph + ?Sized>(
     depth: usize,
     visited: &mut HashSet<ObjId>,
     out: &mut Vec<Field>,
+    // The field-name tree's INTERIOR. Collected in the same walk rather than
+    // by a second traversal, so the two projections cannot disagree about
+    // what the tree is — and captured at the early return below, which is the
+    // only place a pure grouping node is known and then discarded.
+    groups: &mut Vec<FieldGroupNode>,
 ) {
     if out.len() >= MAX_FORM_FIELDS || depth >= MAX_FIELD_TREE_DEPTH {
         return;
@@ -1052,6 +1119,7 @@ fn walk_field<G: ObjectGraph + ?Sized>(
             depth + 1,
             visited,
             out,
+            groups,
         );
     }
 
@@ -1059,6 +1127,21 @@ fn walk_field<G: ObjectGraph + ?Sized>(
     // presence and no type of its own (Table 220), so it contributes nothing
     // to a projection of terminal fields. Stop here.
     if !child_fields.is_empty() && widget_kids.is_empty() {
+        // ★ Recorded on the way past. Everything needed is in hand here and
+        // nowhere else: `this_fqn` is the joined, decoded path and
+        // `partial_name` is the node's own `/T` read from the object. A
+        // caller that wanted these later would have to rebuild them by
+        // splitting a descendant's FQN, which is wrong on any file whose
+        // `/T` contains a period — see `FieldGroupNode`.
+        //
+        // Bounded by the same `MAX_FORM_FIELDS` ceiling the terminal list is,
+        // checked at the top of this function, so a pathological tree cannot
+        // grow this list without bound either.
+        groups.push(FieldGroupNode {
+            id,
+            fully_qualified_name: this_fqn.clone(),
+            partial_name: partial_name.clone(),
+        });
         visited.remove(&id);
         return;
     }
