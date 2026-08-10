@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Launch pdfce-gui on the real screen, drive it with a diag script, and
     capture a PNG of its window.

@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Run pdfce-gui off-screen, drive it with a scripted input sequence, and
     print its diagnostic trace. Never touches the operator's screen, mouse,

@@ -81,6 +81,259 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★ `eac0853` FILED — the `R179` audit finishes by MECHANISM (a 17-site scan, not the sixty-seventh filing's 11-site manual count) and ships as an enforcing gate, `tools/check-one-commit-per-command.py`; a Windows-console encoding defect that had been degrading FIVE Python gates' own failure text is found by reading a gate's output as its audience and fixed uniformly; `b1d7858` FILED — `Pass 54.0` gains the grouping-node NAMES a deletion frees (`FieldGroupDeletion.nodes: Vec<String>`), closing a shell-side cache-invalidation gap `pdfce-ui-specialist` found while designing the still-unbuilt GUI, and a `&mut self`/immutable-borrow bug is avoided before it was written; `R174` gains an AMENDMENT naming gate/tool output as a covered audience, not only product-facing disclosure — baseline debt unchanged at **5** — 2026-08-10 (seventieth filing)
+
+**Sourcing.** This librarian has Grep/Read but no shell this dispatch (hard
+rule 8) — no `git log`/`git show`, so neither commit's hash is
+independently confirmed against `git`; both are taken from the dispatch
+and cross-checked against the live tree instead. **Independently verified
+by direct read**: `tools/check-one-commit-per-command.py` in full — its
+docstring's own claim of "17" loop sites found by a full audit of
+`edit.rs`, the 15-safe/2-known taxonomy and the naming of
+`set_widget_as`/`set_widget_ap`/`rotation_write`/`retarget_annot` as the
+safe helpers that read like mutations, the gate's brace-depth mechanism,
+its stated refusal to check the `?` itself, and its own
+`sys.stdout.reconfigure` block; `tools/check-settings-consumed.py`,
+`tools/check-ledger-numbers.py`, `tools/check-passes-filed.py`,
+`tools/check-commits-filed.py` — each carries the identical
+`reconfigure(encoding="utf-8", errors="replace")` block, and
+`check-commits-filed.py:100-108` names the exact failure this librarian is
+asked to take on faith: *"`check-commits-filed.py` was observed printing
+'each commit's full message ? they carry' while doing its job correctly.
+Found by reading a gate's output as its audience (R174), not by reading
+its source"* — the corrected string is at line 180;
+`crates/pdfce-core/src/edit.rs` lines 5420-5483 (`FieldGroupDeletion`'s
+full doc comment, including the "having first been left out" subsection
+crediting `pdfce-ui-specialist`) and 7292-7402 (`nodes_removed`'s
+`debug_assert_eq!` cross-check against `nodes.len()`, and the
+childless-node skip in the preview walk); `crates/pdfce-cli/src/main.rs`
+lines 11139-11156 (`would-delete group={n:?}` printed per node, alongside
+the existing `would-delete field=`); `docs/FEATURES.md` row 160 before
+editing further. **Not independently verified this dispatch**: the four
+CLI runtime transcripts, the "third catch this session" tally for
+`pdfce-ui-specialist`, and the precise identity of all six loop sites the
+mechanical scan found beyond the sixty-seventh filing's manual 11 (see
+Part 1's reconciliation — four are named in the gate's own docstring; the
+other two are not, and this librarian has no way to enumerate them
+without the tree's own diff).
+
+**Part 1 — `eac0853`: R179's audit closes on a count, and the count
+disagrees with the one already on file.**
+
+The sixty-seventh filing (`b2574f6`) recorded, from a **manual** review of
+`edit.rs`: *"Eleven loops... use `self.<verb>(..)?` per item; nine build a
+`Vec` and commit once at the end (safe); TWO share `R179`'s shape"* — 9
+safe + 2 unsafe = 11. This filing's own gate docstring records, from a
+**mechanical** brace-depth scan for any loop containing a `?` on any
+`self.` call: *"17 loops... Fifteen were harmless... [and] known two"* —
+15 safe + 2 already-resolved = 17. **Both figures are correctly
+transcribed from their own sources; they are not the same measurement**,
+and the difference is worth stating rather than letting the newer number
+silently supersede the older one:
+
+| audit | method | total loop sites | safe (commit-once-after-loop) | unsafe / handled |
+|---|---|---|---|---|
+| sixty-seventh filing, `b2574f6` (2026-08-10) | manual read-through for `self.<verb>(..)?` shapes | 11 | 9 | 2 |
+| this filing, `eac0853` (2026-08-10) | mechanical scan: every loop containing a `?` on any `self.` call | 17 | 15 | 2 (same two) |
+
+The two unsafe sites agree exactly — `import_form_data` and
+`add_redaction`, both already resolved (fix; proof) before this filing.
+The disagreement is entirely on the SAFE side, and the mechanical scan's
+own docstring names at least four of the six additional sites it found
+that the manual review missed: `set_widget_as`, `set_widget_ap`,
+`rotation_write`, `retarget_annot` — helpers whose names read like
+mutations and are not, because none of them calls `self.commit`. **The
+manual count was an undercount, not a wrong count** — nothing it called
+safe was actually unsafe — but it is worth naming as its own small
+lesson: a by-hand tally of "loops that look like this shape" under-covers
+a mechanical scan for the identical shape, even when both audits reach
+the correct disposition on everything they do find. The remaining two of
+the six are not itemized in any source available to this librarian this
+dispatch (no shell, no diff) and are left unnamed rather than guessed at.
+
+**The audit's finding — this is a convention already holding, not a gap
+being closed — becomes a gate.** `tools/check-one-commit-per-command.py`
+fails if `self.commit(` appears inside a `for`/`while` loop body anywhere
+under `crates/`; currently green, zero exemptions. It deliberately does
+**not** check the `?` itself: fifteen (now known to be at least fifteen)
+of seventeen sites legitimately carry one, and a gate that fires fifteen
+times for nothing is a gate people learn to skip (the same reasoning
+`ci_gate_red_at_baseline_enforces_nothing.md` already carries in
+`D:\dev\rag\rust\`, applied here at design time rather than discovered
+after the fact). Its own docstring states its limit rather than hiding
+it: a closure that commits (`.for_each(|x| self.commit(..))`) evades a
+brace-depth scanner, and the honest fix for that is a lint, not a bigger
+script. **Proven in both directions before being trusted** — green on the
+current tree, and (per the dispatch, not independently re-run this
+dispatch) fails with file/line/loop-header against a synthetic
+`for { self.commit(..) }` planted and reverted.
+
+**A live defect in an existing gate, found by running the new one.**
+Windows consoles default to a code page that cannot encode the em-dashes,
+arrows and stars these tools print; Python was silently substituting `?`
+for exactly the characters that make a failure message legible.
+`check-commits-filed.py` had been printing *"each commit's full message ?
+they carry"* — correct in substance, unreadable in the one place a human
+reads it. Fixed with `sys.stdout.reconfigure(encoding="utf-8",
+errors="replace")`, applied uniformly to `check-settings-consumed.py`,
+`check-ledger-numbers.py`, `check-passes-filed.py` and
+`check-commits-filed.py` (the four pre-existing gates that had the
+defect) and built into `check-one-commit-per-command.py` from its first
+commit (the fifth file carrying the block, per direct grep). One
+mechanism, not four separate patches plus a fifth written differently —
+the dispatch reports an ASCII-flattening workaround was written first and
+then removed in favor of this, which is the right call: flattening the
+string loses the typography for every reader whose console CAN render it,
+to fix a problem that is the terminal's encoding, not the string's
+content.
+
+**This is R174's own pattern, on a new audience, and the source already
+says so.** `check-commits-filed.py:107` reads *"Found by reading a gate's
+output as its audience (R174), not by reading its source"* — the engineer
+cited the rule correctly without being asked. **Amendment, not a new
+number**: R174's practical form as minted (2026-08-09) speaks in terms of
+"the specific operator action that would make it redundant or unusable"
+— accurate for its two founding instances (both product-facing strings)
+but narrower than the rule actually needs, since a gate's failure text
+has an audience too, and that audience is a future engineer already
+mid-task when they read it, not the operator. See *Standing rules*,
+below.
+
+**Part 2 — `b1d7858`: the grouping nodes a deletion frees get NAMED,
+because a shell has to know which ones, not just how many.**
+
+Amends `Pass 54.0` (shipped sixty-ninth filing, `649017c`) — same Pass ID,
+GUI still owed, still unbuilt; this is a core-API amendment made in
+response to `pdfce-ui-specialist`'s review of that unbuilt GUI, not a new
+Pass.
+
+`FieldGroupDeletion` shipped with `terminals: Vec<String>` (named, per
+`R181`'s principle) and `nodes_removed: usize` (**counted only**) for the
+intermediate grouping nodes the cascade emptied. The type's own doc
+comment recorded the reasoning for that asymmetry: an intermediate node's
+name is a prefix of a terminal name already listed (`Personal` is implied
+by `Personal.Address`), so naming it too would repeat what a human reader
+can already infer. **True for a human reading the terminal list on
+screen; false for any machine consumer holding per-FQN state** — an open
+rename draft, a cached selection, a cached label — keyed by the
+intermediate node's own FQN rather than by any terminal beneath it.
+Deleting `Personal` with a rename draft open on `Personal.Address` leaves
+that draft's key referencing nothing, silently, until a LATER add re-uses
+the freed `Personal.Address` name and the stale draft resurfaces
+pre-filled with an old value nobody typed.
+
+`pdfce-ui-specialist` found the consumer while reviewing the not-yet-
+written Grouped Fields GUI, and proposed the natural-looking fix — have
+the shell prefix-match `form.groups` itself to recover the freed set —
+which is the one fix `FieldGroupDeletion`'s own doc comment (via
+`AcroForm::descendants_of`'s existing documentation) already forbids: a
+shell reconstructing core's own notion of "descendant" is exactly how the
+two drift, with more force here than at `descendants_of`'s own call
+sites, because the shell would be re-deriving which ancestors a cascade
+**would have** emptied, not merely which fields currently exist. So core
+names them instead: `nodes: Vec<String>`, deepest-first, the named node
+itself last — the same order `AcroForm::groups` already uses.
+
+**Two independently-derived views of the same set, now asserted equal
+rather than left to agree by accident.** `nodes_removed` is
+`remove_fields_from_form`'s existing recursive emptied-parent fixed
+point; `nodes` is a walk of the group tree built for this field.
+`debug_assert_eq!(nodes_removed, nodes.len())` — deliberately a debug
+assert, not a hard one: a miscount here is a REPORTING discrepancy, and
+taking down a session over it when the document edit itself is sound
+would be a worse failure than the one it catches. One subtlety the walk
+gets right that the count alone could not have exposed: a node with no
+descendants left beneath it is **skipped**, not claimed, because a node
+like that is not being emptied by this deletion — an earlier deletion
+already failed to prune it, and listing it here would overstate what THIS
+operation did.
+
+**The CLI dry run now names the nodes too**, `would-delete group={n:?}`
+beside the existing `would-delete field={t:?}` lines — each is a NAME
+being freed, and a freed name is one a later `add-*-field` call can take,
+which is exactly the fact a scripted caller needs and a bare `nodes=2`
+count does not give it.
+
+**A bug avoided before it was written.** The dispatch reports the
+engineer had intended to call `field_group_deletion_preview` (which takes
+`&mut self`) from the GUI's render path to populate the new roster
+section, and caught before writing it that the panel cannot hold `&mut
+self` for a preview while also holding the immutable `form` borrow it
+just parsed to draw the rest of the frame. The preview stays a
+CLI-dry-run-only verb; the GUI, when built, calls the mutating verb
+(`delete_field_group`) directly at commit time, the same shape every
+other destructive Forms-panel control already uses. **Recorded here
+because the GUI itself is not built** — there is no commit to cite for a
+bug that was never written, only the design note that prevented it, so
+this paragraph is that note's only home.
+
+**GUI design recorded, not built — filed to the Backlog entry this Pass
+already owes, below, not as new scope.** A "Grouped Fields" roster
+section; one button per group, **built as one control rather than
+deduplicated down to one from per-row state** — explicitly not the
+`crumb_edited` `HashSet` pattern, which resolves by frame draw order and
+is fine for cooperating editors sharing one draft, wrong for a control
+whose job is to destroy state; affected fields listed **always**, not
+behind a tooltip, because a group's terminals are by definition fields
+the operator did not individually navigate to before clicking Delete; **no
+confirm step**, on the precedent that `forms_flatten_button` already
+ships confirm-free while operating on 100% of a form's fields — a subset
+of Flatten's own scope must not carry more friction than Flatten itself
+does (decision 024 §4.4).
+
+**A naming collision, flagged rather than fixed silently.**
+`pdfce-ui-specialist` found that "group" is already claimed elsewhere in
+the shipped GUI — `group_manager_title()` names the **Dimension Groups**
+panel (`ce dimension` groups, CLAUDE.md rule 15's own vocabulary), and
+radio-button groups plus comment threading both also use the bare word. A
+Forms-panel section literally headed "Groups" would collide with an
+already-shipped, unrelated panel. Every new string for this feature is
+prefixed `form_group_*` rather than reusing the bare word. **This is rule
+15's exact problem, in a second vocabulary** — one word, two-plus
+unrelated shipped meanings — found before it shipped rather than after,
+because the review happened before the code did.
+
+**`pdfce-ui-specialist`'s third catch this session** (per the dispatch,
+not independently tallied by this librarian): after the `/TU`-vs-`/T`
+rename-prefill trap and the global `consume_key(Enter)` regression, this
+is a third defect caught by review of not-yet-written or just-written GUI
+code in the same session — worth this librarian flagging as a pattern for
+the engineer's own judgment about when to dispatch that agent, not a
+claim this librarian can verify without the session's own record.
+
+**`docs/FEATURES.md` row 160 amended in this filing** — the `nodes` field
+and the CLI's group-name listing are noted; no checkbox changes (core/cli
+were already `[x]`/`[x]`, gui stays `[ ]` by choice, R124). **The Backlog
+entry for grouping-node deletion's owed GUI half is amended in place**
+with the design notes above and the naming-collision ruling, so whoever
+builds the panel does not re-derive either.
+
+**`R174` gains an AMENDMENT, not a new number** — see *Standing rules*,
+below.
+
+**Ledger for this filing.** No new Pass ID; `Pass 54.0` gains a core-API
+amendment under its existing ID, GUI half still owed. Pass family ceiling
+**unchanged at 54.0**. `docs/FEATURES.md`: row 160 amended (addendum
+only, no checkbox change). `docs/ARCHITECTURE.md` §12: **edited** — new
+plain dated entry (no new decision number) recording the `nodes:
+Vec<String>` field, the two-independent-derivations-asserted-equal
+pattern, and the GUI-must-not-hold-`&mut`-across-an-immutable-borrow
+constraint on `field_group_deletion_preview`'s call site; decision-record
+ceiling **unchanged at 035**, next free **036**. Standing rules: **`R174`
+gains an AMENDMENT** (below) naming gate/tool output as a covered
+audience — no new number, ceiling **unchanged at R181**, next free
+**R182**. `R179` is CITED (audit closed by mechanism, taxonomy unchanged)
+— no new amendment paragraph added, since enforcement is not a fourth
+disposition a loop can have; the reconciliation above lives on the
+Backlog audit item instead. Operator-question ceiling unchanged at
+**(bh)** (closed ACCEPT), next free **(bi)**.
+`tools/commits-filed-baseline.txt`: unchanged at **5 lines** — confirmed
+by direct read; neither `eac0853` nor `b1d7858` was ever a baseline line.
+Backup/git working-tree state not independently asserted — this librarian
+has no shell this dispatch (hard rule 8). This is the **seventieth**
+`SESSION_LOG.md` filing (the sixty-ninth confirmed present by direct read
+before this entry was appended).
+
 ### ★ `6f73843` FILED — `Pass 37.3` gains its third slice: `pdfce-cli fill-field` can fill a rich-text field for the first time, via an opt-in disclosed downgrade — the "interim lossy option" the amendment deliberately left open; `649017c` FILED — `Pass 54.0` ships: grouping-node DELETION, core + CLI, the subtree NAMED before it goes, GUI deliberately not built (R124); a hash misattribution in the sixty-eighth entry is corrected (`aac321c` did not build `--downgrade-rich-text` — `6f73843` did); `R179` gains an AMENDMENT naming three distinct audit-resolution shapes — baseline debt unchanged at **5** — 2026-08-10 (sixty-ninth filing)
 
 **Sourcing.** This librarian has Grep/Read but no shell this dispatch (hard
@@ -33497,6 +33750,23 @@ nothing gets forgotten, not as a commitment to build in this order.
   mid-loop failure writes nothing to disk. Recorded as R179's third named
   audit-resolution shape — see the `R179` *Standing rules* amendment.
   Not a reopening of this item; the core-only audit above remains DONE.]**
+  **[★★ CLOSED BY MECHANISM 2026-08-10 (`eac0853`, seventieth filing) —
+  the manual "eleven" above is SUPERSEDED, not merely re-confirmed, by a
+  mechanical brace-depth scan finding **17** loop sites (15 safe + the
+  same 2 already resolved), and the audit now ships as an enforcing
+  gate, `tools/check-one-commit-per-command.py` (fails on `self.commit(`
+  inside any `for`/`while` body under `crates/`; deliberately does not
+  check the `?` itself, to avoid crying wolf on the 15 legitimate
+  sites). **The 11-vs-17 discrepancy is entirely on the SAFE side** — the
+  two unsafe sites agree exactly across both audits — and at least four
+  of the six additional safe sites the mechanical scan found are named
+  in the gate's own docstring: `set_widget_as`, `set_widget_ap`,
+  `rotation_write`, `retarget_annot`, helpers that read like mutations
+  and are not. Full reconciliation table: `ROADMAP.md`'s `eac0853`
+  *Shipped* entry (seventieth filing), Part 1. **Lesson worth carrying
+  forward: a manual "loops shaped like this" tally under-covers a
+  mechanical scan for the identical shape**, even when both reach the
+  correct disposition on everything they individually find.]**
 - ~~**Redaction-search loop (`add_redaction`) shares `R179`'s shape and is
   DELIBERATELY UNFIXED, pending a contract decision**~~ **CLOSED BY PROOF,
   not by a contract ruling (`079394f`, 2026-08-10, sixty-eighth filing).**
@@ -33573,6 +33843,29 @@ nothing gets forgotten, not as a commitment to build in this order.
   *Shipped* entry (sixty-ninth filing), Part 2. **Still owed: the GUI
   half** — R124 says show nothing until the core verb exists; it does
   now, so this is real follow-on work, not a stub to fill in.]**
+  **[★ CORE API AMENDED + GUI DESIGN RECORDED 2026-08-10 (`b1d7858`,
+  seventieth filing) — still no GUI, but two things a future GUI
+  session should not have to re-derive.** `FieldGroupDeletion` gained
+  `nodes: Vec<String>` (deepest-first, named node last) alongside the
+  existing `nodes_removed: usize` — `pdfce-ui-specialist`, reviewing this
+  still-unbuilt panel, found that a shell holding per-FQN state (an open
+  rename draft, a cached selection) must invalidate it for intermediate
+  grouping nodes too, not only terminals, and that the shell must NOT
+  recover the freed set itself by prefix-matching `form.groups` (the
+  same anti-drift argument `AcroForm::descendants_of`'s own doc comment
+  already makes, with more force here). **Design, recorded not built:** a
+  "Grouped Fields" roster section; one button per group built as ONE
+  control, not deduplicated from per-row state (explicitly not the
+  `crumb_edited` `HashSet` pattern); affected fields listed always, never
+  behind a tooltip; no confirm step, on `forms_flatten_button`'s own
+  confirm-free precedent (decision 024 §4.4) — a subset of Flatten's
+  scope must not carry more friction than Flatten. **Naming collision
+  found and ruled on before any code exists:** "group" already names the
+  Dimension Groups panel (`group_manager_title()`, CLAUDE.md rule 15's
+  vocabulary) plus radio-button groups and comment threading — every new
+  string for this feature is `form_group_*`-prefixed, not bare "group".
+  Full record: `ROADMAP.md`'s `eac0853`/`b1d7858` *Shipped* entry
+  (seventieth filing), Part 2.]**
 - **★ NEW R169 register entry, named but not built — sub-pixel
   stroke-width clamp policy** (owed by the render fix filed 2026-08-09
   under *Shipped*, `9abf5b5` — "sub-pixel strokes stop rendering at 9%
@@ -44024,6 +44317,35 @@ and
   not merely on the value itself) — filed there rather than duplicated
   here, because that half is a fix pattern, not a testing bar.
   **Ceiling moves `R173` → `R174`; next free `R175`.**
+
+  **★ AMENDMENT (2026-08-10, seventieth filing, `eac0853`) — THE
+  AUDIENCE IS NOT ONLY THE OPERATOR; A GATE'S FAILURE TEXT HAS A READER
+  TOO, AND THAT READER IS AN ENGINEER ALREADY MID-TASK.** R174's
+  practical form as minted names "the specific operator action that
+  would make it redundant or unusable" — correct for its two founding
+  instances (a raw `f64` scale field; a paper-scale warning), both
+  product-facing strings read by the operator. `check-commits-filed.py`
+  had been printing *"each commit's full message ? they carry"* on a
+  Windows console that cannot encode the em-dash the string actually
+  contains — correct in substance, unreadable in the one place a human
+  reads it, and caught only because this session ran the gate and read
+  its output rather than its source. **The mechanism is identical to
+  R174's founding instances** (a string that is accurate and useless to
+  the reader in front of it) **on an audience the rule's own wording did
+  not name**: not the operator, but whoever runs a CI gate or a local
+  check script and reads what it prints. Fixed uniformly across five
+  Python tools via `sys.stdout.reconfigure(encoding="utf-8",
+  errors="replace")`, one mechanism rather than a per-file ASCII
+  flattening (which would have cost every reader whose console CAN
+  render the typography, to fix a terminal-encoding problem, not a
+  string-content one). **Practical form, restated to cover both
+  audiences:** before any disclosure ships — operator-facing or
+  tool/gate-facing — read it in the voice of whoever actually receives
+  it, including a console's own encoding limits, not only in the voice
+  of the code path that emits it. No new rule number: same failure
+  mode, wider audience, not a new mechanism. Full record: `ROADMAP.md`'s
+  `eac0853`/`b1d7858` *Shipped* entry (seventieth filing), Part 1.
+  Ceiling **unaffected** — stays **R181**, next free **R182**.
 
 - **R175 — A document's claim about the state of the world (git remote,
   CI status, backup currency, "local only") is only as true as its

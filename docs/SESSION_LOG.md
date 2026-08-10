@@ -30612,6 +30612,127 @@ own `6f73843`/`649017c` *Shipped* entry, Sourcing paragraph.
   both have shipped their first slice/their core+CLI half respectively.
   Not this librarian's file to edit; flagged for the engineer.
 
+## 2026-08-10 (seventieth filing) — `eac0853`: the R179 audit finishes by MECHANISM (17 loop sites, not the sixty-seventh filing's manual 11) and ships as an enforcing gate, `check-one-commit-per-command.py`; a Windows-console mojibake defect degrading FIVE Python gates' own failure text is found by reading a gate's output as its audience and fixed uniformly; `b1d7858`: `Pass 54.0` gains `FieldGroupDeletion.nodes: Vec<String>`, closing a shell-side cache-invalidation gap `pdfce-ui-specialist` found reviewing the still-unbuilt GUI, plus a `&mut self`/borrow-checker bug avoided before it was written; `R174` gains an AMENDMENT naming gate/tool output as a covered audience
+
+**Sourcing.** This librarian has Grep/Read but no shell this dispatch
+(hard rule 8). Verified by direct read: `tools/check-one-commit-per-command.py`
+in full (17-site audit, 15-safe/2-known taxonomy, the four named safe
+helpers, the gate mechanism, its stated `?`-blindness, its
+`reconfigure` block); `tools/check-settings-consumed.py`,
+`check-ledger-numbers.py`, `check-passes-filed.py`,
+`check-commits-filed.py` (each carrying the identical `reconfigure`
+block; `check-commits-filed.py:100-110` names the mojibake finding
+directly in its own comment); `crates/pdfce-core/src/edit.rs`
+(`FieldGroupDeletion.nodes` field and doc comment, `debug_assert_eq!`
+cross-check); `crates/pdfce-cli/src/main.rs` (`would-delete group=`
+dry-run line); `docs/FEATURES.md` row 160 before editing. Not
+independently verified: CLI runtime transcripts, the "third catch this
+session" tally for `pdfce-ui-specialist`, and the exact identity of two
+of the six additional loop sites the mechanical scan found. Full
+citation list: `ROADMAP.md`'s own `eac0853`/`b1d7858` *Shipped* entry,
+Sourcing paragraph.
+
+**Shipped:**
+- `eac0853` (2026-08-10) — full mechanical audit of `edit.rs`: 17 loops
+  containing a `?` on a `self.` call, 15 safe by the same structural
+  convention (helper builds an `ObjectWrite`, caller commits once after
+  the loop), 2 already resolved (`import_form_data`, `add_redaction`).
+  New gate `tools/check-one-commit-per-command.py`: fails if
+  `self.commit(` appears inside a loop body under `crates/`; green,
+  zero exemptions; deliberately does not check the `?` itself. Also
+  fixes a Windows-console encoding defect (`sys.stdout.reconfigure`)
+  degrading four existing gates' own failure text, and ships the same
+  fix built into the new one.
+- `b1d7858` (2026-08-10) — amends `Pass 54.0`'s core API (same ID, GUI
+  still owed). `FieldGroupDeletion.nodes: Vec<String>` (deepest-first,
+  named node last), cross-checked against `nodes_removed` via
+  `debug_assert_eq!`. CLI dry run now names freed grouping nodes, not
+  only terminals. GUI design (roster section, no confirm gate,
+  `form_group_*`-prefixed strings to avoid colliding with the shipped
+  Dimension Groups panel) recorded to the owed Backlog entry, not
+  built.
+
+**Decisions made this session:**
+- The 11-vs-17 loop-count discrepancy is reconciled as manual-review
+  undercount vs. mechanical-scan completeness, not a contradiction —
+  filed as a table (hard rule 10) in both `ROADMAP.md`'s Shipped entry
+  and the Backlog audit item.
+- `R174` gets an AMENDMENT, not a new number — a gate's failure text is
+  the same failure mode (accurate, unreadable-to-its-actual-reader) on
+  an audience the rule's founding wording didn't name.
+- The mojibake finding is NOT written to `D:\dev\rag\rust\` or
+  `D:\dev\rag\egui\` by this librarian — general Python-on-Windows
+  console-encoding knowledge, not Rust/egui-ecosystem-specific.
+  Redirected: belongs to `troubleshooting-librarian`'s
+  `C:\personal_rag\python\` subject, outside this librarian's remit
+  (see report to the engineer).
+- A separate, generalizable Rust/tooling finding — gate on the
+  observable EFFECT (`self.commit(`) rather than the syntactic risk
+  factor (`?`) to avoid a gate that cries wolf on legitimate uses — IS
+  within remit and is written to `D:\dev\rag\rust\` this filing.
+
+**Findings + decisions:**
+- **A manual audit's own count ("eleven loops") was an undercount, not
+  a wrong count.** All 6 additional sites the mechanical scan found
+  beyond the manual 11 were already correctly disposed as safe by
+  either audit; only the SAFE-side total differed. At least 4 of the 6
+  are named in the new gate's own docstring.
+- **`check-commits-filed.py` had been printing "each commit's full
+  message ? they carry"** — correct content, unreadable on a Windows
+  console defaulting to a code page that cannot encode the em-dash.
+  Caught only by running the gate and reading its output, not its
+  source — the engineer's own fix comment cites `R174` directly.
+- **A GUI bug avoided before it was written**: `field_group_deletion_preview`
+  takes `&mut self` and cannot be called from a render path already
+  holding the immutable `form` borrow used to draw the frame. No commit
+  exists for this — recorded in `ROADMAP.md`/`ARCHITECTURE.md` as the
+  design note that prevented it.
+- **A second instance of CLAUDE.md rule 15's exact problem, in a
+  different vocabulary**: "group" already names the Dimension Groups
+  panel, radio-button groups, and comment threading; the Grouped Fields
+  GUI (not yet built) will use `form_group_*`-prefixed strings
+  throughout to avoid a fourth collision. Flagged to the engineer as a
+  candidate for generalizing rule 15 beyond "dimension".
+
+**Still in flight:**
+- `Pass 54.0`: GUI half still open — now with a design brief on file
+  (roster section shape, confirm-step precedent, naming-collision
+  ruling) rather than a blank slate.
+- `Pass 37.3`: true `/RV`-preserving CLI fill still open, unchanged.
+- `tools/commits-filed-baseline.txt` unchanged at **5 lines**: `338076a`,
+  `1f319c0`, `55a0732`, `587e520`, `9141ded`.
+- `pdfce-spec-librarian` dispatch still owed (FDF `/Ff` namespace
+  collision; bit 23 precondition asymmetry) — unchanged.
+- A `troubleshooting-librarian` dispatch is owed for the Windows-console
+  mojibake finding (`C:\personal_rag\python\`) — this librarian
+  redirects rather than writes it.
+
+**For next session:**
+- When the Grouped Fields GUI is built, the design brief lives in
+  `ROADMAP.md` *Backlog*'s grouping-node-deletion entry — read it before
+  re-deriving the roster shape, the confirm-step precedent, or the
+  `form_group_*` naming ruling.
+- Consider whether CLAUDE.md rule 15 should generalize past "dimension"
+  now that "group" has collided twice (Dimension Groups vs. Grouped
+  Fields) — operator's call, not this librarian's to decide unilaterally.
+
+**Ledger for this filing.** No new Pass ID; `Pass 54.0` gains a core-API
+amendment under its existing ID. Pass family ceiling **unchanged at
+54.0**. `docs/FEATURES.md`: row 160 amended (addendum, no checkbox
+change). `docs/ARCHITECTURE.md` §12: **edited** — one new plain dated
+entry (no new decision number); ceiling unchanged at **035**, next free
+**036**. Standing rules: **`R174` gains an AMENDMENT** — no new number,
+ceiling unchanged at **R181**, next free **R182**; `R179` CITED (audit
+closed by mechanism), no new amendment paragraph. Operator-question
+ceiling unchanged at **(bh)**, next free **(bi)**. `tools/commits-filed-baseline.txt`
+unchanged at **5 lines**. New RAG file:
+`D:\dev\rag\rust\gate_on_the_observable_effect_not_the_syntactic_risk_factor.md`,
+indexed in that subdir's own `index.md` this filing. Backup/git
+working-tree state not independently asserted — this librarian has no
+shell this dispatch (hard rule 8). This is the **seventieth**
+`SESSION_LOG.md` filing (the sixty-ninth confirmed present by direct
+read before this entry was appended).
+
 **Ledger for this filing.** **New Pass ID minted: `Pass 54.0`**
 (grouping-node deletion, core + CLI). `Pass 37.3` gains a third slice
 under its existing ID, stays IN PROGRESS. Pass family ceiling moves

@@ -7498,8 +7498,107 @@ pub fn form_rename_cancel_button() -> &'static str {
 /// fact that is always true.
 pub fn form_rename_group_segment_tooltip_with_count(descendants: usize) -> String {
     format!(
-        "Rename this shared part of the name. It belongs to the {descendants} field(s) beneath it, so renaming it changes all of their full names — nothing of theirs is written."
+        "Rename this shared part of the name. It belongs to the {descendants} field(s) beneath it, so renaming it changes all of their full names — nothing of theirs is written. To delete the whole group instead, use the Grouped Fields list above."
     )
+}
+
+// ---------------------------------------------------------------------------
+// Forms — Grouped Fields roster (Pass 54.1)
+// ---------------------------------------------------------------------------
+//
+// ★ EVERY NAME HERE IS `form_group_*`, DELIBERATELY.
+//
+// "Group" already means three unrelated things in this application, and one
+// of them is a SHIPPED PANEL: `group_manager_title()` returns "Dimension
+// Groups" (ce-dimension groups — project rule 15's own territory). Radio
+// button groups are a second meaning, comment threading a third.
+//
+// A Forms-panel section headed plainly "Groups" would collide with a panel
+// that already exists under almost that name. So the prefix disambiguates
+// every identifier, and no visible string uses "group" as a bare noun
+// without "field" or a sentence around it that settles which is meant.
+// Rule 15's problem, in a second vocabulary — found by
+// `pdfce-ui-specialist` while reviewing this section's design.
+
+/// Heading of the Forms panel's Grouped Fields section.
+///
+/// Absent, not disabled, on a form with no nested fields — which is nearly
+/// every real-world form (the Pass 7.0 census found no corpus file nesting
+/// fields at all). A section that is empty on almost every document should
+/// not occupy space on almost every document.
+pub fn form_group_section_heading() -> &'static str {
+    "Grouped Fields"
+}
+
+/// One-line explainer under the heading.
+///
+/// This section is rare enough that an operator meeting it has probably
+/// never seen it before, and its delete button has a blast radius they
+/// cannot infer from the group's name. The explainer states the one thing
+/// that is not obvious: deleting the group deletes the fields.
+pub fn form_group_section_intro() -> &'static str {
+    "These fields share a name prefix. Deleting a group removes every field listed under it, not just the shared part of the name."
+}
+
+/// The always-visible pre-commit disclosure: the fields this group's
+/// delete button would remove, **by name**.
+///
+/// Never behind a tooltip. A group's terminals are, by construction, fields
+/// the operator did NOT navigate to — that is the entire hazard — so "how
+/// many" is not enough and requiring a hover to learn "which" puts a
+/// gesture in front of the one fact that makes the click safe.
+pub fn form_group_deletes_caption(terminal_labels: &[String]) -> String {
+    match terminal_labels {
+        [one] => format!("Deletes 1 field: {one}."),
+        many => format!("Deletes {} fields: {}.", many.len(), join_names(many)),
+    }
+}
+
+/// The group row's delete button.
+pub fn form_group_delete_button() -> &'static str {
+    "Delete group"
+}
+
+/// Tooltip on an enabled group-delete button.
+///
+/// Carries the same redaction caveat as the single-field delete, and for
+/// the same reason: under the default incremental save the removed fields
+/// are still present in the file's earlier revision, so deleting is not a
+/// way to remove sensitive answers. That caveat matters MORE here, because
+/// more answers leave at once.
+pub fn form_group_delete_tooltip(terminal_count: usize, widgets_removed: usize) -> String {
+    let fields = if terminal_count == 1 {
+        "1 field".to_owned()
+    } else {
+        format!("{terminal_count} fields")
+    };
+    format!(
+        "Delete this group and the {fields} nested beneath it, along with all {widgets_removed} of their appearances — the fields are listed above this button. One undo reverses the whole removal together. Note: with the normal save the fields remain in the file's earlier revision, so this is not a way to remove sensitive answers — use Redact for that."
+    )
+}
+
+/// Status note after a successful group deletion.
+///
+/// Reports the freed names, because that is the consequence an operator
+/// cannot see and may depend on: a grouping node that goes releases its
+/// slot in the §12.7.3.2 name space, and a later field may take it.
+pub fn form_group_deleted(
+    group_label: &str,
+    terminal_count: usize,
+    other_nodes_released: usize,
+) -> String {
+    let fields = if terminal_count == 1 {
+        "1 field".to_owned()
+    } else {
+        format!("{terminal_count} fields")
+    };
+    if other_nodes_released > 0 {
+        format!(
+            "Deleted the group {group_label} and the {fields} under it. {other_nodes_released} further shared name(s) were left empty and released — those names can be used again."
+        )
+    } else {
+        format!("Deleted the group {group_label} and the {fields} under it.")
+    }
 }
 
 /// Why the rename control is disabled on a row with no `/T` of its own.

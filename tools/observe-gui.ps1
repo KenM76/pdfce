@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Capture a screenshot of a running pdfce-gui window, so the ENGINEER can
     verify operator-facing behavior instead of asking the operator to test it.

@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Send a real mouse click (or a click sequence) to the running pdfce-gui
     window, in WINDOW-RELATIVE coordinates.

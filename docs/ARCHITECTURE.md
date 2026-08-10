@@ -14333,3 +14333,34 @@ started).
   extending the RT-N2 entry immediately above it, same "no number"
   convention this section already used for the `2b41b77` hover-predicate
   entry two entries up.
+
+- **2026-08-10 (`b1d7858`) — a cascade-deletion type must name what it
+  freed, not only count it, whenever a machine consumer (not just a
+  human reader) holds state keyed by the freed names; and a `&mut self`
+  preview method is a CLI-dry-run-only shape, never a GUI render-path
+  call.** `pdfce-ui-specialist`, reviewing the still-unbuilt Grouped
+  Fields GUI, found that `FieldGroupDeletion`'s original design —
+  `terminals: Vec<String>` named, `nodes_removed: usize` counted only —
+  was correct for a human reading a list on screen (an intermediate
+  node's name is a visible prefix of a terminal name already listed) and
+  wrong for a shell holding per-FQN state (a rename draft, a cached
+  selection), which needs the intermediate names too to invalidate them.
+  **General form for future `EditSession` preview/outcome types:** if
+  ANY plausible caller is a machine rather than a human eye, name what
+  changed; a count is only sufficient when nothing downstream keys state
+  by identity. Second, narrower finding from the same review: `core`'s
+  `field_group_deletion_preview` takes `&mut self`, which cannot be
+  called from a GUI panel's render path while that panel also holds the
+  immutable `form` borrow it parsed to draw the rest of the frame —
+  `pdfce-core` preview methods with this shape are CLI-dry-run
+  conveniences only; a GUI must call the mutating verb directly at
+  commit time, never a preview, to populate a live-canvas disclosure.
+  Reaffirms, at a second call site, the existing `AcroForm::descendants_of`
+  doc comment's rule that a shell must never reconstruct core's own
+  notion of "descendant" by pattern-matching FQNs itself — here applied
+  to which ancestors a cascade *would have* emptied, not merely which
+  fields currently exist. **No crate boundary or library choice
+  changes; no new decision number claimed** — a plain dated entry, same
+  "no number" convention as the two entries above it. Full record:
+  `ROADMAP.md`'s `eac0853`/`b1d7858` *Shipped* entry (seventieth
+  filing), Part 2.

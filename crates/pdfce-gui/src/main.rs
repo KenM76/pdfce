@@ -7309,6 +7309,12 @@ impl PdfceApp {
         // (fqn, label, widget-count) and (fqn, index, label, clears-selection)
         let mut delete_field: Option<(String, String, usize)> = None;
         let mut delete_widget: Option<(String, usize, String)> = None;
+        // (grouping-node fqn, its breadcrumbed display form). The display
+        // form is captured here rather than rebuilt at commit time: the
+        // `form` model it derives from is gone by then, and re-deriving a
+        // label from a deleted node is how a message ends up naming
+        // something that no longer exists.
+        let mut delete_group: Option<(String, String)> = None;
         // DELETION HAS ITS OWN GATE, and it is not `fill_refusal`'s.
         //
         // Filling takes the `/P`-aware certification gate; deleting a field
@@ -7361,6 +7367,120 @@ impl PdfceApp {
         // one editor. Rebuilt every draw, like every other frame-scoped
         // decision in this panel.
         let mut crumb_edited: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+        // -------------------------------------------------------------
+        // GROUPED FIELDS — the roster, and the only place a group can be
+        // deleted from (Pass 54.1).
+        // -------------------------------------------------------------
+        //
+        // ★ ONE BUTTON PER GROUP, *BUILT* AS ONE — NOT DEDUPLICATED TO ONE.
+        //
+        // The obvious home for this was the rename breadcrumb, which already
+        // draws a crumb per ancestor. It is the wrong home, for a reason
+        // worth keeping: a crumb for `Personal` appears on EVERY field
+        // beneath it, so the panel would carry three identical "Delete
+        // Personal" buttons, each removing three fields.
+        //
+        // The rename editor solves its own version of that with
+        // `crumb_edited` — first row this frame wins. That is fine for
+        // cooperating widgets sharing one draft, because whichever row wins
+        // opens the SAME editor. It is wrong for a destructive control: it
+        // would make frame draw order decide which of three visually
+        // identical buttons is the real one, and a click target that moves
+        // between frames for reasons the operator cannot see is its own
+        // hazard. The fix is structural, not a dedup patch — put the group
+        // in exactly one place so there is one button by construction.
+        //
+        // Absent, not disabled, when the form has no grouping node with a
+        // name of its own (R124). Nearly every real form takes this path.
+        let nameable_groups: Vec<&pdfce_core::forms::FieldGroupNode> = form
+            .groups
+            .iter()
+            .filter(|g| g.partial_name.is_some())
+            .collect();
+        if !nameable_groups.is_empty() {
+            ui.label(egui::RichText::new(ui_text::form_group_section_heading()).strong());
+            ui.label(
+                egui::RichText::new(ui_text::form_group_section_intro())
+                    .small()
+                    .weak(),
+            );
+            for node in &nameable_groups {
+                let node_fqn = node.fully_qualified_name.clone();
+
+                // ★ `descendants_of`, NOT `field_group_deletion_preview`.
+                //
+                // The preview takes `&mut self`, which this render pass
+                // cannot hold while it also holds the immutable `form`
+                // borrow it just parsed. Reaching for it here would not
+                // merely be slow, it would not compile — and the reflex to
+                // "just call the preview" is what `pdfce-ui-specialist`
+                // caught before it was written. The preview exists for the
+                // CLI's dry run, where there is no live form model to read.
+                //
+                // The label rule is the panel's existing one, not a second
+                // convention for the same data: `/TU` when present,
+                // fully-qualified name otherwise (see the row loop below).
+                let labels: Vec<String> = form
+                    .descendants_of(&node_fqn)
+                    .map(|f| {
+                        f.alternate_name
+                            .as_ref()
+                            .map(|b| String::from_utf8_lossy(b).into_owned())
+                            .filter(|s| !s.trim().is_empty())
+                            .unwrap_or_else(|| f.fully_qualified_name.clone())
+                    })
+                    .collect();
+                // A grouping node with nothing beneath it is a node an
+                // earlier deletion failed to prune. Core refuses to claim it
+                // (see `group_deletion_preflight`), so offering a button
+                // here would be an affordance for a no-op — R83.
+                if labels.is_empty() {
+                    continue;
+                }
+                let widgets: usize = form
+                    .descendants_of(&node_fqn)
+                    .map(|f| f.widgets.len())
+                    .sum();
+
+                ui.separator();
+                // The group's own path, breadcrumbed with the same glyph the
+                // rename breadcrumb uses, so one document reads one way.
+                // Built ONCE and reused for the status note: two `replace`
+                // calls would be two chances to render the same path two
+                // ways, and the note is written after the model is gone.
+                let display = node_fqn.replace('.', " › "); // ui-text-exempt: a document-derived field path, not prose
+                ui.label(egui::RichText::new(display.clone()).strong());
+                ui.label(
+                    egui::RichText::new(ui_text::form_group_deletes_caption(&labels))
+                        .small()
+                        .weak(),
+                );
+
+                ui.add_enabled_ui(deletes_enabled, |ui| {
+                    let b = ui.button(ui_text::form_group_delete_button());
+                    let b = match delete_refusal_note {
+                        Some(note) => b.on_disabled_hover_text(note),
+                        None => b.on_hover_text(ui_text::form_group_delete_tooltip(
+                            labels.len(),
+                            widgets,
+                        )),
+                    };
+                    diag::trace(|| {
+                        format!(
+                            "form-group-row fqn={node_fqn:?} terminals={} widgets={widgets} \
+                             enabled={deletes_enabled} rect={:?}",
+                            labels.len(),
+                            b.rect
+                        )
+                    });
+                    if b.clicked() {
+                        delete_group = Some((node_fqn.clone(), display.clone()));
+                    }
+                });
+            }
+            ui.separator();
+        }
 
         egui::ScrollArea::vertical().show(ui, |ui| {
             for field in &form.fields {
@@ -7939,6 +8059,45 @@ impl PdfceApp {
         // prune, which is not cosmetic because a named node with nothing
         // under it still occupies its slot in the §12.7.3.2 name space and
         // would refuse a later field wanting that name.
+        // A whole subtree, applied after the `form` borrow ends like every
+        // other action here.
+        //
+        // ★ THE DRAFT PURGE IS WHY `FieldGroupDeletion` NAMES ITS NODES.
+        //
+        // Every FQN this removal frees must lose its per-field shell state,
+        // and that set is NOT just the terminals. An open rename draft on
+        // `Personal.Address` — an intermediate node — survives deleting
+        // `Personal` if only the terminals are purged. Harmless until
+        // something later reuses the freed name, at which point a stale
+        // draft resurfaces pre-filled with a value from a field that no
+        // longer exists.
+        //
+        // The shell could prefix-match `form.groups` to find those nodes.
+        // It must not: `descendants_of`'s own documentation says a shell
+        // reconstructing core's notion of descendant is how the two drift,
+        // and here it would be re-deriving which ancestors a cascade WOULD
+        // HAVE emptied. So core returns `outcome.nodes`, and this reads it.
+        if let Some((fqn, label)) = delete_group {
+            doc.pending_note = Some(match doc.session_mut().delete_field_group(&fqn) {
+                Ok(outcome) => {
+                    doc.refresh_pages();
+                    for gone in outcome.terminals.iter().chain(outcome.nodes.iter()) {
+                        self.form_drafts.remove(gone);
+                        self.form_rename_drafts.remove(gone);
+                    }
+                    // `nodes` includes the named group itself, so the count
+                    // of OTHER released names is one less. Reported from the
+                    // list rather than from `nodes_removed` so the number and
+                    // the keys just purged cannot disagree.
+                    ui_text::form_group_deleted(
+                        &label,
+                        outcome.terminals.len(),
+                        outcome.nodes.len().saturating_sub(1),
+                    )
+                }
+                Err(err) => err.to_string(),
+            });
+        }
         if let Some((fqn, label, widgets)) = delete_field {
             doc.pending_note = Some(match doc.session_mut().delete_field(&fqn) {
                 Ok(outcome) => {
