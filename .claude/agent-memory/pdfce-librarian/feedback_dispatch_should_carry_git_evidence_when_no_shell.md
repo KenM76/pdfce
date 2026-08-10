@@ -57,3 +57,16 @@ Nothing to change here — this is a working pattern, not a hypothesis;
 keep noting IN THE FILING when it's used (as both the fifty-fifth and
 fifty-sixth entries do) so the pattern's track record stays visible in
 `SESSION_LOG.md` itself, not only in this memory file.
+
+**Third confirmation, 2026-08-09 (fifty-seventh filing, `a3ba0f8`).**
+Same shape again: dispatch text explicitly opened with "Git evidence
+carried in the dispatch, per your own agent-memory note — third time,
+still working," quoted the full commit message, and stated the
+engineer verified the hash against `git log` this session. Three for
+three. This is no longer worth a fourth confirmation note in the
+ordinary case — treat it as the settled default for this project's
+librarian dispatches rather than something to keep re-verifying is
+still true. Only write a new dated confirmation here again if the
+pattern is ever DROPPED (a dispatch reverting to bare hash citation
+with no evidence) — that would be the surprising event worth recording,
+not another instance of it working.

@@ -29296,3 +29296,122 @@ being exercised the very next dispatch. Full technical delivery record:
   asserted beyond the sourcing note above (hard rule 8). This is the
   **fifty-sixth** `SESSION_LOG.md` filing (the fifty-fifth confirmed
   present by direct read before this entry was appended).
+
+## 2026-08-09 (fifty-seventh filing) — `a3ba0f8`: form field RENAME reaches the GUI, closing the R151 debt `Pass 20.6` left on its own core+CLI-only capability; a display-string/edit-string prefill trap caught before ship; a draft-cache invalidation bug found by reasoning, not by a test; `R174` earns a THIRD instance in one hour
+
+**Filed by `pdfce-librarian`, dispatched with the commit's evidence
+carried IN the dispatch** — third consecutive filing this pattern has
+been used (fifty-fifth/fifty-sixth, now this one), following this
+librarian's own agent-memory recommendation. The coordinator message
+quoted `a3ba0f8`'s full commit message verbatim and stated it is the
+tip of `pass-8-redaction` immediately after `aa9ed38`, verified by the
+engineer against `git log` this session. Full technical delivery
+record: `ROADMAP.md`'s new top-of-*Shipped* entry, this same date.
+
+**★ A Pass-ID correction, made before filing rather than after.** The
+engineer's own source comments provisionally called this `Pass 20.7` —
+not free: decision 020 §6 already reserves it for F7
+(`merge --on-field-collision`), an unrelated capability, and F6
+(`Pass 20.6`, the core+CLI half of rename) was explicitly scoped
+CLI-and-core-only, so this is not F6's unbuilt remainder either. Filed
+as a fresh top-level ID, **`Pass 53.0`** — the same shape `Pass 46.0`
+already used to close a different R151 debt (`move_widget`) under a
+new number rather than reopening the Pass that shipped the core verb.
+Flagged to the engineer; source comments citing `Pass 20.7` for this
+feature need correcting.
+
+**Shipped:**
+- `Pass 53.0` (`a3ba0f8`) — the Forms panel gained a rename affordance
+  on every row with a name of its own. Prefilled from
+  `Field::partial_name`, never the row's `/TU`-preferring label. Rows
+  whose FQN is shared with a parent (`shares_parent_name`) get the
+  control disabled-and-explained (R83), not hidden. Live caption
+  discloses the resulting full name and `descendants_renamed` before
+  commit; no confirm gate (decision 024 §4.4 — a deliberate direct
+  manipulation with undo as the escape hatch). Gated on the same
+  `Encrypt`/certification query `deletion_refusal()` already uses,
+  reworded for rename so it does not claim a field was "added or
+  removed."
+
+**Decisions made this session:**
+- **The Pass-ID correction above** — `Pass 20.7` refused, `Pass 53.0`
+  minted instead. Recorded because a re-numbering call is exactly the
+  kind of thing a future session will want the reasoning for, same as
+  every prior instance of this shape in this project.
+- **Two plain `ARCHITECTURE.md` §12 entries added, neither claiming a
+  new decision number**: (1) a display-string/edit-string prefill
+  invariant — an editor must source its initial value from the SAME
+  property its commit will write, never from whichever string is
+  already on screen for layout reasons; (2) a derived-key cache
+  invalidation shape — a map keyed by a value the core model derives
+  (here, a field's FQN) must be explicitly re-keyed by every operation
+  that can change what the key derives to, not merely protected against
+  the operations it was designed against (reordering). Both judged
+  pdfce-internal; neither escalated to `D:\dev\rag\rust\`,
+  `D:\dev\rag\egui\`, or `personal_rag\pdf\` — reasoning for each call
+  is written into the §12 entry itself.
+
+**Findings + decisions:**
+- **★ The prefill trap** (full form above) — caught before ship by
+  `pdfce-ui-specialist`, not found empirically. This is the sharpest
+  finding in the commit: it would have been silently wrong on every
+  form carrying `/TU` tooltips, with no error and no visible symptom.
+- **★ The draft-cache invalidation bug** (full form above) — found by
+  reasoning about `form_drafts`'s own doc comment, not by a failing
+  test. Two-stage failure: the renamed field's draft silently orphans,
+  then a LATER field created or renamed into the vacated key inherits
+  a stranger's half-typed text on its next `lost_focus()`. Fixed by
+  `rekey_form_drafts`; `the_vacated_key_cannot_be_inherited_by_a_later_field`
+  asserts the dangerous half specifically.
+- **`R174` (minted fifty-sixth filing, same day) earns a THIRD instance
+  within the hour, in a different subsystem, by the same mechanism.**
+  First build's rename confirmation read *"Renamed 'Personal.Name (p.
+  1)' to 'Personal.NameX'"* — the page-number suffix reads as part of
+  the old name, and the label prefers `/TU`, which a rename does not
+  touch, so on any field with an accessible name the sentence announces
+  a change to a string that is untouched. Fixed by sourcing both halves
+  from `FieldRename` directly. Unusually fast corroboration for a
+  freshly minted rule — worth noting as evidence the rule is real
+  rather than an artefact of one session's mood (this librarian's own
+  read; see its persistent memory).
+- **A harness-transferability misfire, named rather than smoothed
+  over.** Aiming a `gui-shot` click from screenshot pixels hit Delete
+  instead of Rename — `gui-shot` defaults to 1760×1150, `gui-drive` to
+  1600×1000, the exact non-transferability
+  `D:\dev\rag\egui\two_gui_harnesses_with_different_default_window_sizes...`
+  already documents. Re-run with `-W 1600 -H 1000` and the traced rect
+  landed. R172 says read the trace's rect, never a screenshot's pixels
+  — done anyway, cost one cycle.
+
+**Still in flight:**
+- **Renaming a pure grouping node is not reachable from the GUI** —
+  `form.fields` projects TERMINAL fields only, so a dotted name's
+  shared prefix segment (`Personal` in `Personal.Address.Zip`) has no
+  row at all. Filed to `ROADMAP.md` *Backlog* this filing — needs its
+  own row source, bigger than a row-level affordance.
+- `pdfce-ui-specialist` polish items 8 (a thin `rename_refusal()` core
+  wrapper — zero behaviour change) and 10 (extend `Pass 47.3`'s
+  hover-highlight to persist while a rename editor is open) — not done,
+  named in the Shipped entry rather than left implicit.
+- Same open items as the fifty-sixth filing, otherwise unchanged:
+  `docs/LEGAL.md` §1.1's three-way history decision (operator question
+  (bh)); whether a fuller `docs/decisions/035-*.md` KenAgent record adds
+  value; item (b) of `ae59ce3`'s deferred scope.
+
+**For next session:**
+- The grouping-node rename gap is the natural next slice of this same
+  capability if the operator wants it — it is a real, operator-visible
+  symptom (a dotted name they can only partly edit), not a paper cut.
+
+- **Ledger for this filing.** **New Pass ID minted: `Pass 53.0`.** Pass
+  family ceiling moves `52.3` → `53.0`. `docs/FEATURES.md`: *RENAME a
+  form field* row, `gui` `[ ]` → `[x]`, R151-deliberate note struck in
+  place with a resolution footer. Standing rules: **`R174` CITED**
+  (third instance), not re-minted — ceiling stays `R174`, next free
+  `R175`. Decision records: no new number claimed, two plain dated
+  `ARCHITECTURE.md` §12 entries added — ceiling stays **035**, next
+  free **036**. Operator-question ceiling unchanged at **(bh)**, next
+  free **(bi)**. `docs/decisions/` untouched. Backup/git working-tree
+  state not asserted beyond the sourcing note above (hard rule 8). This
+  is the **fifty-seventh** `SESSION_LOG.md` filing (the fifty-sixth
+  confirmed present by direct read before this entry was appended).

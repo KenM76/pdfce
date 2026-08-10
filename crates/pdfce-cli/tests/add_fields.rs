@@ -191,13 +191,13 @@ fn add_check_box_creates_a_field_list_fields_can_see() {
 
     let fields = list_fields(&output);
     assert!(
-        fields.contains("name=Agree type=Btn button=check"),
+        fields.contains("name=\"Agree\" type=Btn button=check"),
         "read back as a CHECK box, not another kind of button: {fields}"
     );
     // Created unticked, and with a usable appearance — no /NeedAppearances
     // fallback (R51).
     assert!(
-        fields.contains("value=Off"),
+        fields.contains("value=\"Off\""),
         "unticked by default: {fields}"
     );
     assert!(fields.contains("ap=1"), "has an appearance: {fields}");
@@ -230,7 +230,7 @@ fn the_on_state_and_checked_flags_reach_the_file() {
         &output.display().to_string(),
     ]);
     assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
-    assert!(list_fields(&output).contains("value=Red"));
+    assert!(list_fields(&output).contains("value=\"Red\""));
 }
 
 /// `Off` cannot name the on state (§12.7.4.2.3), and the refusal is an exit
@@ -305,7 +305,7 @@ fn add_choice_field_creates_a_field_and_splits_export_from_label() {
 
     let fields = list_fields(&output);
     assert!(
-        fields.contains("name=Country type=Ch"),
+        fields.contains("name=\"Country\" type=Ch"),
         "read back as a choice field: {fields}"
     );
     // Created UNSELECTED — the deliberate `/V`-absent decision.
@@ -328,7 +328,7 @@ fn add_choice_field_creates_a_field_and_splits_export_from_label() {
     assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
     let fields = list_fields(&filled);
     assert!(
-        fields.contains("value=CA"),
+        fields.contains("value=\"CA\""),
         "the form must submit the EXPORT value, not the label: {fields}"
     );
 }
@@ -371,7 +371,7 @@ fn an_option_label_may_contain_an_equals_sign() {
         "the label kept its '=' and stayed selectable: {}",
         stderr(&out)
     );
-    assert!(list_fields(&filled).contains("value=EQ"));
+    assert!(list_fields(&filled).contains("value=\"EQ\""));
 }
 
 /// `--editable` without `--combo` is impossible (§12.7.4.4 Table 230) and is
@@ -459,7 +459,7 @@ fn a_choice_field_with_no_options_succeeds_and_warns() {
         stderr(&out)
     );
     assert!(output.exists(), "the field is still created");
-    assert!(list_fields(&output).contains("name=Country type=Ch"));
+    assert!(list_fields(&output).contains("name=\"Country\" type=Ch"));
 }
 
 /// A same-name add MERGES, for every authoring subcommand — end to end.
@@ -611,7 +611,7 @@ fn a_merged_field_fills_through_the_existing_verb_and_paints_both_widgets() {
         "still one field with two widgets after the fill: {fields}"
     );
     assert!(
-        fields.contains("value=R-2000"),
+        fields.contains("value=\"R-2000\""),
         "the shared value reached the field: {fields}"
     );
     assert!(
@@ -651,7 +651,7 @@ fn a_dotted_name_creates_a_hierarchy() {
 
     let fields = list_fields(&out_path);
     assert!(
-        fields.contains("name=Personal.Address.Zip"),
+        fields.contains("name=\"Personal.Address.Zip\""),
         "the composed FQN, not a flat /T: {fields}"
     );
     assert!(fields.contains("fields=1"), "one TERMINAL field: {fields}");
@@ -677,8 +677,8 @@ fn a_dotted_name_creates_a_hierarchy() {
     assert_eq!(code(&out), 0, "{}", stderr(&out));
     let fields = list_fields(&two);
     assert!(
-        fields.contains("name=Personal.Address.Zip")
-            && fields.contains("name=Personal.Address.City")
+        fields.contains("name=\"Personal.Address.Zip\"")
+            && fields.contains("name=\"Personal.Address.City\"")
             && fields.contains("fields=2"),
         "both terminals under ONE group: {fields}"
     );
@@ -1072,7 +1072,7 @@ fn a_tagged_structure_tab_order_page_discloses_both_conditions() {
     assert!(o.contains("tagged=1"), "machine-readable: {o}");
     assert!(o.contains("struct_tabs=1"), "machine-readable: {o}");
 
-    assert!(list_fields(&out_path).contains("name=Ref"));
+    assert!(list_fields(&out_path).contains("name=\"Ref\""));
 }
 
 // ---------------------------------------------------------------------------
@@ -1116,11 +1116,11 @@ fn add_push_button_creates_a_button_that_list_fields_reads_back() {
     assert!(line.contains("merged=0"), "a first add creates: {line}");
 
     let listed = list_fields(&out_path);
-    assert!(listed.contains("name=Submit"), "{listed}");
+    assert!(listed.contains("name=\"Submit\""), "{listed}");
     assert!(listed.contains("button=push"), "{listed}");
     assert!(
-        listed.contains("caption=Send"),
-        "the caption is listed (token-sanitised): {listed}"
+        listed.contains("caption=\"Send it\""),
+        "the caption is listed EXACTLY, spaces and all: {listed}"
     );
     assert!(
         listed.contains("fillable=0"),
@@ -1322,7 +1322,7 @@ fn a_second_push_button_of_the_same_name_merges_and_keeps_its_own_caption() {
 
     let listed = list_fields(&out_path);
     assert!(
-        listed.matches("name=Submit").count() == 1,
+        listed.matches("name=\"Submit\"").count() == 1,
         "one FIELD, not two: {listed}"
     );
     assert!(listed.contains("widgets=2"), "with two views: {listed}");
@@ -1432,4 +1432,110 @@ fn add_push_button_refuses_a_name_held_by_a_check_box() {
         "the refusal names BOTH kinds: {e}"
     );
     assert!(!out_path.exists());
+}
+
+// ---------------------------------------------------------------------------
+// A field name containing a SPACE must survive discovery → write
+// ---------------------------------------------------------------------------
+
+/// **★ `list-fields` must report a name every write verb accepts.**
+///
+/// A field's `/T` is a §7.9.2 **text string** and may contain spaces.
+/// Acrobat produces them constantly, because it derives field names from
+/// nearby label text — `Home Phone`, `Address 1_3`, `Cell Phone_2`.
+///
+/// `list-fields` used to run those through a whitespace-mangling
+/// `sanitize_token`, justified by a doc comment citing §7.3.5 — which
+/// governs **name objects** (`/Foo`) and says nothing about `/T`. So it
+/// printed `Home_Phone` for a field called `Home Phone`, while every write
+/// verb's `--name` documents itself as taking the name *"as `list-fields`
+/// reports it"*. The documented discovery path emitted names the write path
+/// rejected with *"no fillable form field with the fully-qualified name"*.
+///
+/// Found 2026-08-09 on a real government form (Arizona courts' Health Care
+/// Power of Attorney): of six fields needing repair, **five were
+/// unreachable** and the sixth worked only because its name happened to
+/// have no space in it. That is why this test asserts the ROUND TRIP rather
+/// than the output format — the format is a means, and what broke was the
+/// promise that discovery feeds the write verbs.
+#[test]
+fn a_field_name_containing_a_space_round_trips_from_list_fields_to_a_write_verb() {
+    let (dir, input) = TempDir::seeded("spacey");
+    let input_s = input.display().to_string();
+    let out_path = dir.join("out.pdf");
+    let out_s = out_path.display().to_string();
+
+    let out = run(&[
+        "add-text-field",
+        &input_s,
+        "--name",
+        "Home Phone",
+        "--page",
+        "1",
+        "--rect",
+        "20,20,220,44",
+        "--no-tooltip",
+        "-o",
+        &out_s,
+    ]);
+    assert_eq!(code(&out), 0, "add-text-field failed: {}", stderr(&out));
+
+    // 1. Discovery reports the name EXACTLY, quoted so the line stays
+    //    machine-readable without the value being altered to achieve it.
+    let listed = list_fields(&out_path);
+    assert!(
+        listed.contains("name=\"Home Phone\""),
+        "the name must appear verbatim, not whitespace-mangled: {listed}"
+    );
+    assert!(
+        !listed.contains("Home_Phone"),
+        "an underscore here means the mangling is back: {listed}"
+    );
+
+    // 2. ★ The reported name is accepted by a WRITE verb. This is the
+    //    assertion the bug would have failed; the format check above would
+    //    not have been enough on its own, because a differently-wrong
+    //    encoding could still satisfy it.
+    let filled = dir.join("filled.pdf");
+    let filled_s = filled.display().to_string();
+    let out = run(&[
+        "fill-field",
+        &out_s,
+        "--set",
+        "Home Phone=555-0100",
+        "-o",
+        &filled_s,
+    ]);
+    assert_eq!(
+        code(&out),
+        0,
+        "the name list-fields printed was rejected by fill-field: {}",
+        stderr(&out)
+    );
+    assert!(
+        list_fields(&filled).contains("value=\"555-0100\""),
+        "the fill landed: {}",
+        list_fields(&filled)
+    );
+
+    // 3. And by a second write verb, so this is a property of the reported
+    //    name rather than of one command's argument parsing.
+    let renamed = dir.join("renamed.pdf");
+    let renamed_s = renamed.display().to_string();
+    let out = run(&[
+        "rename-field",
+        &filled_s,
+        "--name",
+        "Home Phone",
+        "--to",
+        "Home Phone_2",
+        "-o",
+        &renamed_s,
+    ]);
+    assert_eq!(code(&out), 0, "rename-field rejected it: {}", stderr(&out));
+    assert!(
+        list_fields(&renamed).contains("name=\"Home Phone_2\""),
+        "{}",
+        list_fields(&renamed)
+    );
 }

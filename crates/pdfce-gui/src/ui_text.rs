@@ -7406,7 +7406,7 @@ still be filled in, but none can be added or removed without invalidating the si
 }
 
 // ---------------------------------------------------------------------------
-// Forms — RENAME a field (Pass 20.7, the GUI half of Pass 20.6's `rename-field`)
+// Forms — RENAME a field (Pass 53.0, the GUI half of Pass 20.6's `rename-field`)
 // ---------------------------------------------------------------------------
 //
 // The distinction every string here has to carry, because getting it wrong is

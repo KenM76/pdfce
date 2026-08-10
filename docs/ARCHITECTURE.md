@@ -13998,3 +13998,63 @@ started).
   **Decision-number status: no new number claimed.** Sixth fork and
   disclosure-gating note both extend `035`, same posture as the fourth
   and fifth forks.
+
+- **2026-08-09 (`Pass 53.0`, `a3ba0f8`) — a display-string/edit-string
+  prefill invariant: when a list row shows one property but an editor
+  gathered from that row commits a DIFFERENT property, the editor must
+  never be prefilled from the displayed one.** Found shipping the Forms
+  panel's rename affordance. The row's own label prefers `/TU`
+  (§12.7.3.3, the accessible name) over `/T`; `rename_field` writes
+  `/T`. A field can carry both, and they can differ, so a naive
+  "prefill from what's on screen" implementation would show the
+  operator one string in the editor while the commit silently replaced
+  a *different* one — no error, no warning, wrong every time a form
+  carries tooltips. Caught before ship by `pdfce-ui-specialist`, not
+  found empirically. **Decided: the rename editor is prefilled from
+  `Field::partial_name` exclusively, never from the row's display
+  label, and the tooltip states the `/T`-vs-`/TU` distinction rather
+  than leaving it to be inferred.** No new decision number claimed —
+  filed as a plain dated entry, not a fork of an existing multi-part
+  decision. **General form, stated once because the project has already
+  shown this pattern is not a one-off**: any UI surface where a row's
+  DISPLAY string and its EDITABLE string are properties of the object
+  that can diverge (Acrobat form fields have three name-shaped
+  properties alone — `/T`, `/TU`, and the derived FQN) must source an
+  editor's initial value from the SAME property the commit will write,
+  never from whichever string happened to already be on screen for
+  layout reasons. Judged pdfce-internal (a UI-authoring invariant for
+  this codebase's editors generally, not a Rust/egui-ecosystem fact or
+  a PDF-producer-behaviour fact) — no `D:\dev\rag\rust\`,
+  `D:\dev\rag\egui\`, or `personal_rag\pdf\` entry filed for it.
+
+- **2026-08-09 (`Pass 53.0`, `a3ba0f8`) — a map keyed by a derived
+  identifier is invalidated by the operation that derives that
+  identifier differently; keying alone does not protect against every
+  operation that changes the key.** `form_drafts` (the GUI's
+  half-typed-field-value cache) is keyed by a field's fully-qualified
+  name specifically to survive reordering — its own doc comment already
+  argued that an index key "would silently re-target the draft the
+  moment a field's position changed." That reasoning has exactly one
+  blind spot: **a rename changes the FQN itself**, which is the key,
+  which the stability argument never considered because renaming did
+  not exist yet when it was written. Unfixed, this produces a two-stage
+  failure rather than a one-stage one: first the renamed field's
+  half-typed value is silently orphaned (the box reverts with no
+  error), and second — the more dangerous half — the orphaned entry
+  persists under the vacated key, so a LATER field created or renamed
+  into that same name inherits a stranger's half-typed draft, and the
+  next `lost_focus()` writes one field's text into a different field's
+  dictionary. Nothing about that moment looks like a bug. **Decided:
+  any GUI-side cache keyed by a core-model-derived identifier must be
+  explicitly re-keyed by every core operation that can change what that
+  identifier derives to, not merely protected against the operations it
+  was originally designed to survive.** Fixed here by
+  `rekey_form_drafts`, called from the rename commit path, moving both
+  the renamed field's own draft and every descendant's under the same
+  `descendants_of` definition the rename's own disclosure count uses.
+  Test `the_vacated_key_cannot_be_inherited_by_a_later_field` asserts
+  the dangerous half specifically, not just the orphaning half. No new
+  decision number claimed. Judged pdfce-internal (specific to this
+  codebase's derived-key caches, not a general Rust `HashMap` gotcha
+  the ecosystem RAG would want, and not a PDF-domain fact) — no
+  cross-project RAG entry filed.

@@ -69,12 +69,24 @@
 //! ## stdout result-line format (stable, parseable)
 //!
 //! Every subcommand that succeeds prints exactly **one LF-terminated,
-//! pure-ASCII line to stdout** summarizing what it did. Two lines are
-//! specified so far; both are part of the compatibility surface and are
-//! versioned like any other public API (a change is breaking).
+//! pure-ASCII line to stdout** summarizing what it did. The lines below are
+//! part of the compatibility surface and are versioned like any other
+//! public API (a change is breaking).
+//!
+//! **A `key=` whose value is a §7.9.2 TEXT STRING is debug-QUOTED**
+//! (`name="Home Phone"`), because such a value may legally contain spaces
+//! and a bare one would make the line unsplittable — or, worse, tempt the
+//! printer into altering the value to keep it splittable, which is exactly
+//! the defect fixed on 2026-08-09: `list-fields` mangled whitespace to `_`
+//! and so reported field names that every write verb rejected. A value that
+//! is absent prints as the bare sentinel `-`, which is therefore
+//! distinguishable from a present-but-empty `""`.
 //!
 //! ```text
 //! inspect:      <input>: PDF <major>.<minor>
+//! list-fields:  field name=<"quoted"|(unnamed)> type=<T> button=<B> \
+//!               flags=0x<H> value=<"quoted"|-> widgets=<N> ap=<0|1> \
+//!               fillable=<0|1> readonly=<0|1> aa=<0|1> caption=<"quoted"|->
 //! round-trip:   round-trip <input> mode=<M> -> <output>; \
 //!               identical=<0|1> in_bytes=<N> out_bytes=<N> appended=<N> \
 //!               objects=<N> verbatim=<N> reserialized=<N> reloaded=<0|1> \
@@ -2721,26 +2733,6 @@ enum Command {
         #[arg(long)]
         verify_undo: bool,
     },
-    /// **Delete one subpath** of a path object (Pass 25.2): remove a single
-    /// subpath's construction operators via surgery (R46/§5.7), leaving the
-    /// object's other subpaths byte-verbatim.
-    ///
-    /// This is the operation for CAD output. A producer routinely emits a whole
-    /// drawing view as ONE path object — a measured SolidWorks export has a
-    /// single stroked path holding 1194 subpaths for one isometric view — so
-    /// `object-delete` there removes the entire view. This removes one line of
-    /// it. Find the index with
-    /// `object-list --hit X,Y --enter OBJECT`, which prints `subpath-hit` lines
-    /// nearest-first.
-    ///
-    /// NOT redaction: it removes a drawing element from a page, not covered
-    /// content for security.
-    ///
-    /// Refused, by name and before any mutation, when the path defines a
-    /// clipping region (deleting part of it would change what OTHER content is
-    /// visible), and when the subpaths found in the operators disagree in count
-    /// with the geometry (the index could then name a different line from the
-    /// one intended). Deleting the only subpath deletes the object.
     /// **Export a page's vector geometry as DXF** — the format SOLIDWORKS,
     /// AutoCAD and plasma-table controllers import natively.
     ///
@@ -2865,6 +2857,26 @@ enum Command {
         #[arg(long)]
         verify_undo: bool,
     },
+    /// **Delete one subpath** of a path object (Pass 25.2): remove a single
+    /// subpath's construction operators via surgery (R46/§5.7), leaving the
+    /// object's other subpaths byte-verbatim.
+    ///
+    /// This is the operation for CAD output. A producer routinely emits a whole
+    /// drawing view as ONE path object — a measured SolidWorks export has a
+    /// single stroked path holding 1194 subpaths for one isometric view — so
+    /// `object-delete` there removes the entire view. This removes one line of
+    /// it. Find the index with
+    /// `object-list --hit X,Y --enter OBJECT`, which prints `subpath-hit` lines
+    /// nearest-first.
+    ///
+    /// NOT redaction: it removes a drawing element from a page, not covered
+    /// content for security.
+    ///
+    /// Refused, by name and before any mutation, when the path defines a
+    /// clipping region (deleting part of it would change what OTHER content is
+    /// visible), and when the subpaths found in the operators disagree in count
+    /// with the geometry (the index could then name a different line from the
+    /// one intended). Deleting the only subpath deletes the object.
     SubpathDelete {
         /// Input PDF.
         input: PathBuf,
@@ -5416,17 +5428,48 @@ fn cmd_list_fields(input: &Path, fillable_only: bool) -> u8 {
             Some(pdfce_core::forms::ButtonKind::Radio) => "radio",
             None => "-",
         };
+        // ★ QUOTED, NOT WHITESPACE-MANGLED — and this was a real defect.
+        //
+        // These three columns carry §7.9.2 TEXT STRINGS (`/T`, `/V`, `/MK`
+        // `/CA`), and a text string may contain spaces. They used to run
+        // through `sanitize_token`, whose doc comment justified itself with
+        // *"names cannot legally contain whitespace (§7.3.5 uses `#20` for a
+        // space), so this only fires on pathological input."* §7.3.5 governs
+        // **name objects** (`/Foo`). It has nothing to say about `/T`.
+        //
+        // What that cost, measured on a real form (Arizona courts' Health
+        // Care Power of Attorney, 2026-08-09): `/T` values of `Home Phone`,
+        // `Address 1_3`, `Cell Phone_2` and eleven more printed as
+        // `Home_Phone`, `Address_1_3`, `Cell_Phone_2` — and this verb's own
+        // help calls its output *"also how `fill-field` and `list-fields`
+        // refer to it"*, while `--name` on every write verb says *"as
+        // `list-fields` reports it"*. So for every field whose name contains
+        // a space — which on Acrobat-authored forms is most of them, because
+        // Acrobat derives field names from nearby label text — the
+        // documented discovery path emitted a name that `fill-field`,
+        // `rename-field`, `delete-field`, `delete-widget` and `move-widget`
+        // all reject with "no fillable form field with the fully-qualified
+        // name". Five of that form's six broken fields were unreachable.
+        //
+        // Debug-quoting is not a new convention: `delete-widget`,
+        // `rename-field` and `delete-field` already print `name={:?}` in
+        // their own result lines. This verb — the DISCOVERY one, the only
+        // one whose output is meant to be fed back in — was the odd one out.
+        //
+        // The bare sentinels stay bare, so `-` (absent) stays distinguishable
+        // from `""` (present and empty), which quoting everything would have
+        // merged.
         let name = if field.fully_qualified_name.is_empty() {
             "(unnamed)".to_owned()
         } else {
-            sanitize_token(&field.fully_qualified_name)
+            format!("{:?}", field.fully_qualified_name)
         };
         let value = {
             let v = field.value.display_text();
             if v.is_empty() {
                 "-".to_owned()
             } else {
-                sanitize_token(&v)
+                format!("{v:?}")
             }
         };
         // `/MK` `/CA`, from the first widget that has one. Appended LAST so
@@ -5444,7 +5487,7 @@ fn cmd_list_fields(input: &Path, fillable_only: bool) -> u8 {
             .find_map(|w| w.caption.as_deref())
             .map_or_else(
                 || "-".to_owned(),
-                |c| sanitize_token(&String::from_utf8_lossy(c)),
+                |c| format!("{:?}", String::from_utf8_lossy(c)),
             );
         println!(
             "field name={name} type={ty} button={button} flags=0x{:X} value={value} \
@@ -5878,9 +5921,28 @@ fn classify_for_listing(annot: &pdfce_core::annot::Annotation) -> (&'static str,
 }
 
 /// Replace ASCII whitespace in a token with `_` so a stable stdout line
-/// stays splittable on spaces. Names cannot legally contain whitespace
-/// (§7.3.5 uses `#20` for a space), so this only fires on pathological
-/// input.
+/// stays splittable on spaces.
+///
+/// # ⚠ ONLY for tokens that are genuinely PDF NAME OBJECTS (§7.3.5)
+///
+/// Annotation subtypes (`/Widget`, `/Redact`) are name objects, and §7.3.5
+/// writes a space in one as `#20`, so a decoded subtype containing raw
+/// whitespace really is pathological and mangling it costs nothing.
+///
+/// **It must never be applied to a §7.9.2 TEXT STRING.** This function's
+/// doc comment used to assert the §7.3.5 rule as though it covered every
+/// caller, and on that reasoning it was applied to a form field's `/T`, its
+/// `/V` and a widget's `/MK` `/CA` — none of which are name objects and all
+/// of which may legally contain spaces.
+///
+/// The cost, measured on a real government form (2026-08-09): `list-fields`
+/// printed `Home_Phone` for a field whose `/T` is `Home Phone`, while every
+/// write verb's `--name` documents itself as taking the name *"as
+/// `list-fields` reports it"*. The discovery path emitted names the write
+/// path rejected, for the majority of fields on any Acrobat-authored form —
+/// Acrobat derives field names from nearby label text, so spaces are the
+/// norm rather than the exception. Those columns are now debug-quoted; see
+/// the comment at their construction.
 fn sanitize_token(s: &str) -> String {
     s.chars()
         .map(|c| if c.is_whitespace() { '_' } else { c })

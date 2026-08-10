@@ -925,7 +925,7 @@ struct PdfceApp {
     /// draft the moment a field's position changed.
     form_drafts: std::collections::HashMap<String, String>,
     /// In-flight field RENAMES, keyed by the field's fully-qualified name,
-    /// holding the new **partial** name being typed (Pass 20.7).
+    /// holding the new **partial** name being typed (Pass 53.0).
     ///
     /// # The key's presence IS the editor's open/closed state
     ///
@@ -6645,7 +6645,7 @@ impl PdfceApp {
     }
 
     /// Move every in-flight value draft from under `from` to under `to`,
-    /// including the drafts of fields nested beneath it (Pass 20.7).
+    /// including the drafts of fields nested beneath it (Pass 53.0).
     ///
     /// # ★ Why a rename has to do this, and what happens if it does not
     ///
@@ -6706,7 +6706,7 @@ impl PdfceApp {
         }
     }
 
-    /// One field row's **rename** affordance (Pass 20.7 — the GUI half of
+    /// One field row's **rename** affordance (Pass 53.0 — the GUI half of
     /// Pass 20.6's `rename-field`).
     ///
     /// # What the operator is editing, and why that needed deciding
@@ -23252,7 +23252,7 @@ mod tests {
 
     use super::*;
 
-    // ---- Pass 20.7: a rename moves the value drafts with it ----
+    // ---- Pass 53.0: a rename moves the value drafts with it ----
 
     fn drafts(pairs: &[(&str, &str)]) -> std::collections::HashMap<String, String> {
         pairs

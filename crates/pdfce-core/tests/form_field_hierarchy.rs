@@ -823,7 +823,7 @@ fn a_widget_without_a_rect_is_refused_rather_than_placed() {
 
 // ---------------------------------------------------------------------------
 // `AcroForm::descendants_of` — the blast radius, and the separator that
-// bounds it (Pass 20.7 extracted it out of `rename_field`)
+// bounds it (Pass 53.0 extracted it out of `rename_field`)
 // ---------------------------------------------------------------------------
 //
 // The function is a one-line filter, and that is exactly why it is a shared

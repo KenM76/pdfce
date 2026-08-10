@@ -81,6 +81,204 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★ `Pass 53.0` — form field RENAME reaches the GUI, closing the R151 debt Pass 20.6 left on its own core+CLI-only capability; a display-string/edit-string prefill trap caught before ship; a draft-cache invalidation bug found that no automated test would have caught; and `R174` earns a THIRD instance within the hour — 2026-08-09, committed `a3ba0f8` (fifty-seventh filing)
+
+**Sourcing.** This librarian has no shell this dispatch (hard rule 8).
+Git evidence carried directly IN the dispatch, per the pattern this
+librarian's own agent memory has now recommended and seen followed
+twice before (fifty-fifth/fifty-sixth filings) — a third consecutive
+instance. The coordinator message states `a3ba0f8` is the tip of
+`pass-8-redaction`, immediately after `aa9ed38`, verified against
+`git log` by the engineer this session, and reproduces the commit
+message in full. The technical content below is drawn from that
+quoted message; no code was independently `Read` by this librarian
+this dispatch.
+
+**⚠ PASS-ID CORRECTION — the engineer's own source comments provisionally
+called this `Pass 20.7`; that ID is not free.** `Pass 20.7` was already
+named, by decision 020 §6, for **F7** — `merge --on-field-collision` —
+a wholly different capability (`ROADMAP.md` line 32390: *"`Pass 20.7`
+(F7, `merge --on-field-collision`) are named"*). This commit is not
+part of decision 020's F0–F7 slicing at all: F6 (`Pass 20.6`, `rename-
+field` + `--defaults-from`) was **explicitly scoped as CLI-and-core
+only** (line 5196: *"NO GUI for either half of F6 (R151)"*) — GUI was
+never F6's job, so this is not F6's unbuilt remainder either. **Filed
+as a fresh top-level Pass, `Pass 53.0`** (current ceiling was `Pass
+52.3`; `Pass 20.7` stays reserved and unbuilt for F7). This is the same
+shape as `Pass 46.0` — the operator's *"form fields and everything
+else should be draggable and resizeable"* request, which closed a
+different R151 debt (`move_widget`, shipped core-only in `Pass 28.0`)
+under a brand-new number rather than reopening `Pass 28.0`. **Source
+comments citing `Pass 20.7` for this feature should be corrected to
+`Pass 53.0`** — flagged to the engineer, not silently fixed by this
+librarian.
+
+**The feature.** Form fields can now be renamed from the Forms panel.
+`EditSession::rename_field` and `pdfce-cli rename-field` shipped
+2026-08-07 (`3d345aa`, `Pass 20.6`); `FEATURES.md` line 160 carried the
+`gui` box `[ ]` with a note stating the omission was R151-deliberate,
+not missed. This commit is that box, dispatched by the operator's own
+words this session: *"I want editing field names to be the next
+feature to work on in the queue if it hasn't already been completed."*
+It had not.
+
+**★ THE ONE THAT WOULD HAVE BEEN A SILENT WRONG ANSWER — a display-
+string/edit-string prefill trap.** The Forms-panel row's own LABEL
+prefers `/TU` (the accessible name, §12.7.3.3) over `/T`; a rename
+edits `/T`. A field can carry both, and they can differ. Prefilling
+the rename editor from the label (the natural first instinct — it's
+already on screen) would put the operator's cursor in a box showing
+one string while the commit silently replaced a *different* one —
+invisible, unnoticeable, and wrong on every form that carries
+tooltips. **Caught before ship by `pdfce-ui-specialist`** (its
+load-bearing list, item 2). Fixed by prefilling from
+`Field::partial_name` exclusively, never from the label, with the
+tooltip stating the distinction rather than leaving it to be inferred.
+**General form, worth stating once because it will recur**: *when a
+list row's DISPLAY string and its EDITABLE string are different
+properties of the same object, prefilling an editor from the display
+string is a silent wrong-target edit.* Recorded as an `ARCHITECTURE.md`
+§12 entry, below.
+
+**Rows with no name of their own.** `Field::partial_name` is `None`
+exactly when `shares_parent_name` — a `/T`-less representation whose
+FQN belongs to an ancestor and is shared with siblings (§12.7.3.2).
+Renaming "it" would rename the ancestor at a scope the row gives no
+hint of. Disabled-and-explained (R83), not hidden — also caught by
+`pdfce-ui-specialist`, and per the dispatch, missed by the engineer
+until flagged.
+
+**Disclosed before the commit, without a confirm step.** The live
+captions show the resulting full name (always) and the count of
+fields nested beneath it (when non-zero) — both free (a string
+substitution and a prefix filter over a list already in hand), so the
+consequence is readable before acting rather than after. Deliberately
+not a confirm gate: decision 024 §4.4 narrowed rule 4 so a deliberate
+direct manipulation commits with undo as the escape hatch, and typing
+a name and pressing Enter is that. A confirm gated on
+`descendants_renamed > 0` would fire only on the mixed-`/Kids` shape —
+which no file in the measured corpus has, and which pdfce's own merge
+path is the main producer of — i.e. first met when least expected,
+exactly the hazard §4.4 exists to prevent.
+
+**★ A draft-key invalidation bug that was in no one's change list.**
+`form_drafts` is keyed by FQN, and its own doc comment explains why: an
+index "would silently re-target the draft the moment a field's
+position changed." That reasoning has one blind spot — **a rename
+changes the key itself.** Two consequences: (1) the renamed field's
+half-typed value is orphaned and the box silently reverts; (2) the
+orphan is still there, so a later field created or renamed *into* the
+vacated name inherits it, and the next `lost_focus()` writes one
+field's half-typed text into a different field. Nothing about that
+looks like a bug at the moment it happens. Fixed by
+`rekey_form_drafts`, which moves the renamed field's own draft and its
+descendants'; `the_vacated_key_cannot_be_inherited_by_a_later_field`
+asserts the second half specifically. Recorded as an `ARCHITECTURE.md`
+§12 entry, below — a map keyed by a derived identifier is invalidated
+by the operation that derives it differently, a general shape.
+
+**One definition of "descendant," not two.** `AcroForm::descendants_of`
+is extracted out of `rename_field` as a shared one-line filter, kept
+shared precisely because the line hides a subtlety once written: **the
+prefix match must carry the FQN separator**, so `Address` renames
+`Address.City` and leaves `Addressed` alone. Three consumers now share
+one definition (the core disclosure, the GUI caption, the draft
+re-keying) — a drift between them would make the count the operator
+reads disagree with the set that actually moved.
+`a_shared_prefix_without_the_separator_is_not_a_descendant` pins the
+near-miss no fixture contained.
+
+**Rename takes deletion's gate, from the same query — verified, not
+assumed.** `rename_field` guards `Encrypt` then `check_certification()`,
+identically ordered to `deletion_refusal()`. One `Option<EditError>`,
+asked once, mapped to TWO wordings — deletion's says fields cannot be
+"added or removed," true and not what someone who pressed Rename just
+tried to do.
+
+**`R174` (minted fifty-sixth filing this same day) earns its THIRD
+instance within the hour, in a different subsystem, by the same
+mechanism.** First build reported: *"Renamed 'Personal.Name (p. 1)' to
+'Personal.NameX'."* The page suffix is a row decoration reading as part
+of the old name — and worse, the label prefers `/TU`, which a rename
+does not touch, so on any field with an accessible name the sentence
+announces a string was renamed when that exact string is untouched.
+Both halves now come straight off `FieldRename` itself, not the row
+label. Found by reading the disclosure as its audience — R174's own
+prescription, exercised the same day it was written. Also: no
+`refresh_pages()` call after a rename — `/T` affects no appearance and
+no rendered pixel, and the row labels re-read from the session every
+frame, so calling it would discard every page texture and the
+thumbnail cache to redraw an identical document. Recorded as the
+"this call is not boilerplate" data point the project has been
+accumulating.
+
+**Verified in the running application, not reasoned about.**
+- `nested-form` — Rename offered on all 3 rows, prefilled from `/T`.
+- `mixed-kids` — "Order" → "OrderZ", `descendants=1` shown live BEFORE
+  commit, disclosure named the consequence after.
+- `certified-p2` — rename `enabled=false` alongside delete, filling
+  still offered.
+
+One misfire, named rather than smoothed over: aiming a `gui-shot`
+click from screenshot pixels hit Delete instead of Rename, because
+`gui-shot` defaults to 1760×1150 and `gui-drive` to 1600×1000 — the
+non-transferability `D:\dev\rag\egui\
+two_gui_harnesses_with_different_default_window_sizes...` already
+documents. Re-run with `-W 1600 -H 1000` and the traced rect landed.
+The fixture was untouched (pdfce never writes the open file), and R172
+says read the trace's rect, never a screenshot's pixels — done anyway,
+cost one cycle.
+
+**Not done, named rather than dropped.** Renaming a pure grouping node
+(`Personal` in `Personal.Address.Zip`) is **not possible from the GUI**
+— `form.fields` is a projection of TERMINAL fields only
+(`walk_field` returns early on a pure non-terminal), so grouping nodes
+are not rows at all and the GUI gives no hint a dotted name is only
+partly editable. Needs its own row source; filed to *Backlog*, below,
+rather than left to be rediscovered. Also not done:
+`pdfce-ui-specialist` polish items 8 (a thin `rename_refusal()` core
+wrapper — zero behaviour change, closes a hazard `deletion_refusal`'s
+own doc comment already argues against) and 10 (extend `Pass 47.3`'s
+hover-highlight to persist while a rename editor is open).
+
+**Numbers.** **2674 workspace tests, 0 failed** (8 new). `cargo clippy
+--workspace --all-targets`: 0. `cargo fmt --all --check`: clean. Seven
+gates green (relayed, not independently re-run). No GUI dependency in
+`pdfce-core` or `pdfce-render` (relayed).
+
+**Invariant checks**
+- **GUI-core separation**: not addressed by this commit's own account
+  beyond the "no GUI dep in core or render" figure above — the new
+  core surface (`AcroForm::descendants_of`, `rekey_form_drafts`,
+  `FieldRename`'s widened caption fields) is ordinary data-model code,
+  no windowing dependency implied or reported.
+- **Round-trip / minimal-diff**: unaffected — this commit adds no new
+  object-write path; `rename_field`'s own write behaviour was settled
+  at `Pass 20.6`. **Rendered appearance is explicitly unaffected and
+  explicitly unverified by this commit** (the commit's own words) — a
+  rename changes `/T`, not any `/AP`.
+- **Packaging smoke test**: not applicable — no packaging surface
+  changed.
+
+**Ledger for this filing.** **New Pass ID minted: `Pass 53.0`** (form
+field rename, GUI half) — see the ⚠ correction note above for why it
+is not `Pass 20.7`. Pass family ceiling moves `52.3` → `53.0`.
+`docs/FEATURES.md`: *RENAME a form field* row (line 160), `gui` box
+`[ ]` → `[x]`; the R151-deliberate note struck in place with a
+resolution footer, per this filing's own edit (see the matching
+`FEATURES.md` diff). Standing rules: **`R174` CITED (third instance),
+not re-minted** — ceiling stays `R174`, next free `R175`. Decision
+records: no new number claimed; two plain dated `ARCHITECTURE.md` §12
+entries added (the prefill-trap invariant, the derived-key cache
+invalidation shape) — ceiling stays **035**, next free **036**.
+Operator-question ceiling unchanged at **(bh)**, next free **(bi)**.
+`docs/decisions/` untouched. Backup/git working-tree state not
+asserted beyond the sourcing note above (hard rule 8). This is the
+**fifty-seventh** `SESSION_LOG.md` filing (the fifty-sixth confirmed
+present by direct read before this entry was written).
+
+---
+
 ### ★ `Pass 52.1` extended — CLI multi-page DXF export (`--pages`, `--output-dir`), closing the batch-export gap the GUI already had; plus the paper-scale disclosure's THIRD gate clause — 2026-08-09, committed `c58cca1` (fifty-sixth filing)
 
 **Sourcing.** No shell this dispatch (hard rule 8). Unlike the two prior
@@ -31109,6 +31307,18 @@ Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
 
+- **Rename a pure grouping node — not reachable from the GUI, and
+  nothing tells the operator so** (owed by `Pass 53.0`, `a3ba0f8`,
+  2026-08-09). `form.fields` is a projection of TERMINAL fields only
+  (`walk_field` returns early on a pure non-terminal per §12.7.3.2), so
+  a grouping node like `Personal` in `Personal.Address.Zip` is not a
+  Forms-panel row at all — the operator can rename `Address` or `Zip`
+  but never the `Personal` segment both share. Real capability gap with
+  a real operator-visible symptom (a dotted name they can only partly
+  edit), not a paper cut: needs its own row source (grouping nodes
+  currently have no on-screen representation whatsoever), which is a
+  bigger change than `Pass 53.0`'s row-level rename affordance. Not yet
+  scoped to a Pass.
 - **★ NEW R169 register entry, named but not built — sub-pixel
   stroke-width clamp policy** (owed by the render fix filed 2026-08-09
   under *Shipped*, `9abf5b5` — "sub-pixel strokes stop rendering at 9%

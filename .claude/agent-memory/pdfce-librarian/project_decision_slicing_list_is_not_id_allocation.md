@@ -58,3 +58,25 @@ untallied in the same window.
 from a decision record's own proposed list (not just from a remembered
 ceiling), run the live checker anyway — the record's list is never
 sufficient evidence of what is free, no matter how carefully re-read.
+
+**Near-miss caught, not a new collision, 2026-08-09 (fifty-seventh
+filing, `a3ba0f8`).** Same root mechanism one layer earlier: the
+engineer's own source comments provisionally called a new Pass
+`Pass 20.7`, reading it as "the next sequential sub-ID in family 20,"
+without checking that decision 020 §6 had already reserved `20.7` for
+an unrelated capability (F7, `merge --on-field-collision`). The
+dispatch explicitly deferred the Pass-number decision to this librarian
+("Pass number is your call... if 20.7 is free, take it; if not, assign
+what is and tell me") rather than asserting the number outright — the
+dispatcher's own uncertainty was the tell. Grepping `ROADMAP.md` for
+`Pass 20.7` before filing found the reservation; assigned `Pass 53.0`
+instead (fresh top-level ID, same shape as `Pass 46.0`'s earlier R151
+closure). **The difference from the six enumerated collisions above:
+this one never reached a commit or a filed entry** — it was caught at
+the filing gate, which is this memory's whole "how to apply" clause
+working as intended. Worth recording anyway: it confirms the failure
+mode recurs in a THIRD shape (not just "read a decision record's
+slicing list from memory," but "assume the next sequential sub-ID is
+free without checking who else claimed it") and that grepping the
+target ID before filing is a five-second check that pays for itself
+every time it's actually run.
