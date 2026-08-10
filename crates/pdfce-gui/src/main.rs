@@ -12725,12 +12725,23 @@ fn collect_keyboard_actions(ctx: &egui::Context, actions: &mut Vec<Action>, keys
     // it — and the operator, who is typing, watches the document do
     // something else instead.
     //
-    // Demonstrated, not theorised. Focus the Redact panel's query box,
-    // type `hello`, press Home, type `X`:
+    // ★ DEMONSTRATED IN THE RUNNING APPLICATION (2026-08-10, second
+    // attempt). Focus a panel's text box, type `hello`, press Home, type
+    // `X`:
     //
-    //     before this guard:  "helloX"   (Home stolen; document jumped
-    //                                     to page 1 mid-word)
-    //     after:              "Xhello"   (Home moved the caret)
+    //     query="hello"  ->  key:home  ->  query="Xhello"
+    //
+    // with `pre-collect-home n=2 typing=true` upstream, confirming Home
+    // reaches the frame AND that this guard declines to consume it.
+    //
+    // The first attempt at this test reported failure and could not
+    // explain it, and `e46c3a8` shipped saying so. That was wrong for a
+    // reason worth keeping: the test sent `nav:home`, and the harness
+    // has no `nav:` prefix — every navigation key lives under `key:`. No
+    // Home was ever pressed. The harness traced
+    // `script-step-UNPARSEABLE step="nav:home"` on every run; the
+    // `-Filter` regex matched only the traces the test expected, so the
+    // line that explained it never appeared.
     //
     // `[` and `]` were the worse half and the easier to miss: they are
     // PRINTABLE CHARACTERS. Typing a bracket into any text field in this
