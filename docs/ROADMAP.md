@@ -81,6 +81,342 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★ `df874ca` COMPLETES `Pass 55.0` — the Find bar stops silently running every query as a wildcard pattern; whole-word matching ships; a prior redaction-search "hard-coded case-insensitive" claim CHECKED and CLOSED as not a defect — 2026-08-10
+
+**Sourcing.** No shell this dispatch (hard rule 8) — `df874ca`'s hash,
+its relative order against `71592d3` (filed below), and the stated gate
+figures are relayed from the dispatching engineer, not confirmed against
+`git log`/`git show`. **Independently verified by direct read of current
+source:** `crates/pdfce-core/src/edit.rs:5484` (`pub enum WordBoundary`)
+and its three variants' doc comments (§14.8.2.5 NOTE 1's *"the notion of
+a word is not precisely defined"* and NOTE 4's menu, cited in full);
+`edit.rs:5819`–`5991` (`TextSearchOptions` — the `wildcards: bool` field,
+its doc comment naming `#`/`?` and stating the default is **off**, and
+`with_wildcards`/`with_word_boundary` builder methods); `edit.rs:10684`–
+`10691` (`EditSession::find_text` — confirmed it now calls
+`find_text_with` with `.with_wildcards(true)` explicitly, so its own
+documented pattern-search contract and every existing caller's results
+are unchanged); `edit.rs:10745` (`find_text_with`, the new full-options
+entry point); three tests read in full —
+`find_texts_pattern_contract_survived_the_default_change` (asserting
+`find_text`'s own behaviour did not move),
+`question_mark_is_literal_unless_wildcards_requested` (line ~17326,
+confirming a literal `?` search on `TextSearchOptions::default()` does
+NOT match every character, and does when `.with_wildcards(true)` is set),
+and `wildcards_and_whole_word_compose` (line 17381, confirming the two
+options combine). `crates/pdfce-gui/src/main.rs:942`–`983` (`find_whole_word`/
+`find_wildcards`/`redact_search_is_pattern` fields, all three defaulting
+`false`/`false`/`false` at `:1558`–`:1569`); `:9301`–`:9310` (the two Find
+bar checkboxes, `ui_text::find_whole_word_label`/`find_wildcards_label`,
+each with a hover tooltip); `:9380`–`:9388` (the Find bar's search call
+site now reads `find_text_with` with a comment naming the legacy verb by
+name — *"never `find_text`: the legacy verb hard-codes"* — and building
+`TextSearchOptions` from both checkboxes). `crates/pdfce-gui/src/ui_text.rs:8655`–
+`:8670` (`find_whole_word_label` → `"Whole word"`, `find_wildcards_label`
+→ `"Wildcards"`). **The redaction-panel claim, checked directly rather
+than taken on the dispatch's word:** `crates/pdfce-gui/src/main.rs:976`–
+`:983` (`redact_search_is_pattern: bool`, doc comment: *"Whether the
+redaction search box is read as a PATTERN (`#` = any digit, `?` = any
+character)"*) and `:9084` (a `selectable_value` mode switch between
+literal and pattern search) — **this is a separate query box on the
+Redact panel, with its own literal/pattern selector already built, not
+the Find bar's case-insensitivity flag** — confirming the dispatch's
+closure finding rather than merely relaying it. `crates/pdfce-cli/src/main.rs:6419`–
+`:6454` (`cmd_find_text`, confirmed still calling the two-argument
+`session.find_text(needle, ignore_case)` — **no `--whole-word` or
+`--wildcards` CLI flag exists**, so this Pass's `cli` box does NOT round
+up to include either capability). **Not independently verified:** the
+stated test count (**2870, 0 failed**) and gate results (clippy 0 with
+`--all-features`, fmt clean, ui-strings/disclosure-channel gates clean)
+— relayed, no `cargo`/gate invocation run by this librarian; `df874ca`'s
+position relative to `71592d3` in the actual commit graph (both are
+relayed in the order the dispatch presented them — oldest first is
+assumed, not confirmed).
+
+**Shipped:**
+- `df874ca` — **Rule-4 ("fuzzy, never sneaky") defect fix, filed against
+  the existing `Pass 55.0` ID rather than a new mint, per the project's
+  own convention that a defect found and fixed while extending a shipped
+  capability stays on that capability's ID (R170).** The Find bar ran
+  every query through `find_text`, which is documented as a *pattern*
+  search (`#` = any digit, `?` = any character) — so a literal `?` in an
+  operator's search string matched every character on the page, silently,
+  with no control and no disclosure that a reinterpretation had happened
+  at all. Fixed at the root, not patched at the call site: a new
+  `TextSearchOptions::wildcards` field defaults **off**, and `find_text`
+  (the two-argument legacy verb, still used by redaction's own search
+  path) is changed to pass `.with_wildcards(true)` explicitly — so
+  `find_text`'s own documented contract, and every existing caller's
+  results, provably did not move (test above). The Find bar now calls the
+  new `find_text_with(&needle, &TextSearchOptions)` entry point instead,
+  with wildcards off by default and a **Wildcards** checkbox the operator
+  must tick to opt in — literal search is the default an operator gets
+  from typing into a search box, matching every other search surface in
+  the application (and the redaction panel's own pre-existing literal/
+  pattern selector, confirmed above, which had already made the same
+  choice independently).
+- **Whole-word matching ships**, closing the gap carried forward as
+  "still owed" across four prior filings (74th–77th). `WordBoundary`
+  (`Alphanumeric` default / `NonSpace` / `NonSpaceOrDash`) is a
+  **setting**, not a hard-coded rule, because §14.8.2.5 NOTE 1 states
+  *"the notion of a word is not precisely defined"* and NOTE 4 offers
+  a menu of reasonable readings rather than one normative answer — the
+  same "spec ambiguity becomes a setting" posture as R15. A soft hyphen
+  (U+00AD) is interior to a word under every rule (§14.8.2.2.3); a
+  text-RUN edge is explicitly NOT treated as a word boundary (a phrase a
+  producer split across two `Tj` operators must not falsely count as
+  bounded). Wired to a **Whole word** checkbox on the Find bar, off by
+  default (substring search is `find_text`'s and `find_text_with`'s
+  long-standing default behaviour, unchanged).
+- **A new `search:` diag step** drives the Find bar's own path in the
+  GUI-driving harness (distinct from the panel's own click/type steps),
+  per the dispatch — not independently re-run this filing (no GUI
+  harness access).
+- **Closure, not a fix:** a previously reported defect — "the GUI
+  hard-codes `case_insensitive: true`, ignoring the Find bar's case
+  toggle" — was checked and found to describe a DIFFERENT call site: the
+  redaction panel's own separate search box, which has no case toggle at
+  all, and whose case-insensitivity is a documented, pre-existing,
+  deliberate choice (confirmed above, `redact_search_is_pattern` and its
+  neighbouring fields). Recorded here as a closed non-defect so a future
+  session does not re-open it from the same stale report.
+
+**Decisions made this session:**
+- **`R185` MINTED** — see Standing rules, below. A query/search string
+  typed by the operator is matched **literally** by default; any
+  pattern-language reinterpretation of the characters the operator typed
+  (wildcards, regex, or similar) is opt-in via a visible control, never
+  inferred from the text's own content. This is Find's own defect
+  generalized to a rule the next search-shaped surface can be checked
+  against before it ships, not after.
+- Plain `ARCHITECTURE.md` §12 entry (no decision number — a UI/behavior
+  default, not a crate-boundary or library choice) recording the
+  wildcards-default-off posture as the policy going forward for any
+  future search surface.
+
+**Still owed, carried forward:** Enter-key firing in the Find bar was
+already corrected at the 75th filing (`1bf6ab2`) — the earlier "Enter
+doesn't fire" claim was itself the defect, per that filing's own
+correction; not reopened here. Printer job SPOOLING (operator
+go-ahead); OCG-layer TOGGLING (a document-wide panel checkbox — **NOT**
+affected by this filing or by `Pass 56.0` below: see that entry's own
+note on why the "renderer visibility override" prerequisite is still
+unmet); attachment EXTRACTION-to-file (R151); decisions `037`/`038`
+still CLAIMED, NOT YET AUTHORED (see this filing's own note under
+`Pass 56.0`, below, for a discrepancy found while checking their status).
+
+**Ledger for this filing.** **No new Pass ID** — filed against the
+existing `Pass 55.0` (checked free of a fresher claimant by grepping
+this file for "Pass 55.0" before filing; it already existed as the
+Find capability's own ID, per R156's spirit even though no NEW number is
+being minted). Pass family ceiling unchanged at **55.6** by this entry
+alone (see `Pass 56.0` below for where it actually moves).
+`docs/FEATURES.md`: row 203 (Find text) updated in the same filing —
+whole-word and wildcards now `[x]` for `gui`, both stay unticked for
+`cli` (no flag exists, confirmed above by direct read — **not rounded
+up**), `core` stays `[x]` (both were already core capabilities as of
+this commit). Standing rules: **`R185` minted**, ceiling moves
+**R184 → R185**, next free **R186**. Decision ceiling: **unchanged** —
+no new numbered decision claimed by this entry (see the plain dated
+`ARCHITECTURE.md` §12 entry instead). `docs/ARCHITECTURE.md`: new plain
+dated §12 entry (wildcards-default-off policy). Backup/git working-tree
+state **not independently asserted** (hard rule 8) — no shell this
+dispatch.
+
+---
+
+### ★★ `71592d3` FILES `Pass 56.0` — content-stream `BDC`/`EMC` `/OC` and XObject `/OC` are now honored by the renderer, closing a gap named since Pass 6.0 (2026-08-01) and deferred again at Pass 12.M2; suppression is BLIT-ONLY, so a hidden section's clip/CTM/text-advance still apply — 2026-08-10
+
+**Sourcing.** No shell this dispatch (hard rule 8) — `71592d3`'s hash and
+the stated gate figures (**2870 tests, 0 failed**; clippy 0 with
+`--all-features`; fmt clean; ui-strings/disclosure-channel gates clean)
+are relayed from the dispatching engineer, not confirmed against
+`git log`/`git show`. **Independently verified by direct read of current
+source:** `crates/pdfce-render/src/interpret.rs:1943`–`:2008`
+(`begin_marked_content` in full — the tag-not-`/OC` stack-and-return
+path that keeps `EMC` balanced for non-optional-content marked content;
+the "operand must be an indirect `/Properties` reference" tolerance path,
+confirmed to SHOW and count `tolerated` rather than hide when the operand
+is inline or unresolvable, with the function's own doc comment stating
+*"a hidden-by-mistake region is content silently missing... while a
+shown-by-mistake region is visible and therefore arguable"*; the actual
+hide decision via `pdfce_core::annot::oc_is_hidden` against the lazily-
+computed `oc_off_set()`); `:2010`–`:2026` (`end_marked_content` — a
+surplus `EMC` pops nothing rather than underflowing `hidden_depth`, with
+the doc comment naming why: underflow would un-hide content still inside
+an open hidden section, strictly worse than ignoring a stray operator);
+`:1723` and `:2639` (`skip_paint = crate::profile::skip_paint() ||
+self.oc_hidden()` — confirmed suppression happens at exactly two paint
+call sites, not earlier in the operator dispatch, so every CTM/clip/
+text-position-advancing operator inside a hidden section still executes);
+`:2235`–`:2251` (`do_xobject`'s `/OC` check, confirmed passed down to
+`run_nested` as `self.oc_hidden() || oc_off`, i.e. XObject-level `/OC`
+composes with an already-hidden ANCESTOR section rather than replacing
+its state); `crates/pdfce-render/src/interpret.rs:208` (`oc_sections_hidden:
+usize` diagnostic field) and `:576` (`self.oc_sections_hidden +=
+other.oc_sections_hidden` — merges correctly across nested `Do`
+recursion). `crates/pdfce-cli/src/main.rs:5142` (the pinned `render-page`
+stdout contract's format string, confirmed `oc_hidden={}` is the LAST
+key, appended after every pre-existing key per the module's own
+"append-never-reorder" comment at `:5121`–`:5127` — same contract
+discipline as the Pass 6.0 annotation counters before it).
+`crates/pdfce-gui/src/main.rs:15962`–`:15964`
+(`ui_text::diagnostics_oc_sections_hidden(d.oc_sections_hidden)`,
+gated on `> 0`, in the GUI diagnostics expander).
+`fixtures/synthetic/layers/PROVENANCE.md:78` (`painted-layers.pdf`'s
+entry, confirmed to name all three claims the dispatch stated: an OFF
+layer's mark absent, an ON layer nested inside an OFF one also absent
+because visibility is inherited down the stack, and a hidden section's
+clip still bounding the unlayered content that follows). **Not
+independently verified:** the stated test count and gate results
+(relayed, no `cargo` invocation this dispatch); whether `71592d3`
+precedes or follows `df874ca` in the actual commit graph (see that
+entry's own Sourcing note — both filings assume the dispatch's
+presentation order, unconfirmed).
+
+**A citation this librarian could NOT substantiate and is flagging
+rather than silently carrying:** the dispatch attributed the "`oc_hidden`
+deliberately NOT folded into the GUI's `unsupported` headline sum"
+design choice to **`R183`**. Direct read of `R183`
+(`ROADMAP.md` Standing rules, 2026-08-10, 75th filing) shows it is about
+a verification `-Filter` silently discarding a harness's own reject
+channel — **unrelated to diagnostic-counter categorization.** The actual
+precedent for "a correctness/informational counter stays out of the
+`unsupported` tally" is the **Pass 6.0** decision-log item this very
+commit supersedes (`ARCHITECTURE.md` §12, item (c)(4): *"GUI diagnostics
+... NOT folded into the content unsupported-tally... still honest
+R50/R27/R51"*) — no single R-number governs it by name. This entry cites
+the correct precedent instead of repeating the mis-citation; see the
+dispatching prompt's own warning that a prior dispatch described three
+panels uniformly when the ledger disagreed for one — this is the same
+class of check, applied here.
+
+**Shipped:**
+- `71592d3` — **`Pass 56.0`, a new Pass ID** (grepped `Pass 56` against
+  this file before filing, per R156 — zero hits; Pass family ceiling
+  was **55.6**, moves to **56.0**). Filed as new scope rather than folded
+  into `Pass 12.M2` or `Pass 55.5`: it is a general renderer capability
+  that benefits every PDF containing content-stream-level optional
+  content (CAD-drawing layer exports foremost among them — see the new
+  `personal_rag/pdf` finding, below), not scoped to ce-dimension groups
+  (`Pass 12.M2`) or to the Layers panel's own read surface (`Pass 55.5`),
+  and it closes a gap that predates both — the original "§8.11 is a RAG
+  GAP" note dates to `Pass 6.0` (2026-08-01), before `Pass 12.M2` or
+  decision 036 existed.
+- **The load-bearing invariant, and the reason this is recorded in
+  `ARCHITECTURE.md` §12 as well as here:** §8.11.3.1 states hidden
+  content **"shall not be drawn"** and nothing more. Suppression happens
+  at exactly the paint call (`skip_paint`, confirmed above at two call
+  sites) — every operator that mutates graphics state, clip, or text
+  position still executes normally inside a hidden section. Concretely:
+  a hidden section's `W n` clip still bounds whatever unlayered content
+  paints after it (verified on `painted-layers.pdf`, third claim); a
+  hidden glyph's show operator still advances the text position by its
+  full width, so subsequent visible text does not collapse onto it.
+  Getting this wrong would make page **layout** depend on which layers
+  happen to be on — the kind of defect invisible on a fixture where the
+  hidden and visible content don't share a line.
+- **Marked content is tracked ONLY for optional content** — no structure
+  tree involvement. Every `BDC` (regardless of tag) is stacked so `EMC`
+  stays balanced; a non-`/OC` `BDC` is counted `deferred_ops` and noted
+  by tag name, never affects `hidden_depth`. A surplus `EMC` pops nothing
+  (confirmed above) rather than underflowing and un-hiding still-open
+  content.
+- **Tolerance choice, named rather than silent:** an `/OC` operand that
+  is not a resolvable indirect `/Properties` reference (§8.11.3.2
+  requires one) is **shown** and counted `tolerated`. Deliberately the
+  same-shaped choice as `Pass 6.0`'s annotation-level `/OC` tolerance:
+  showing content pdfce could not classify is the recoverable direction
+  of being wrong (visible and arguable), where hiding by mistake is
+  content silently missing with nothing on screen to suggest it.
+- **New diagnostic `oc_sections_hidden`**, surfaced as `oc_hidden=<N>`
+  appended to `render-page`'s pinned stdout contract (confirmed the LAST
+  key, append-never-reorder) and as a status line in the GUI diagnostics
+  expander (`diagnostics_oc_sections_hidden`, gated `> 0`). **Deliberately
+  NOT folded into the GUI's `unsupported` headline sum** — correct,
+  spec-conforming suppression must not read as a shortfall; see the
+  citation-correction note above for which precedent actually governs
+  this, since the dispatch's own `R183` citation does not.
+- **New fixture `fixtures/synthetic/layers/painted-layers.pdf`** — per
+  the dispatch and the confirmed `PROVENANCE.md` entry, the first layer
+  fixture in the corpus that actually **paints** (every prior layer
+  fixture exercised only annotation-level `/OC` or structural reading,
+  never content that visibly differs between the ON and OFF cases).
+  Generator + `PROVENANCE.md` updated in the same commit. Verified by the
+  engineer rendering the fixture and inspecting the raster (relayed, not
+  independently re-rendered by this librarian — no shell).
+
+**Decisions made this session:**
+- **Plain `ARCHITECTURE.md` §12 entry (no decision number)** recording
+  the §8.11.3.1 "hidden means not drawn, not run differently" invariant —
+  an invariant definition per this librarian's own charter, but filed
+  without a formal decision number per this log's established convention
+  (the `annot::oc_refs` consolidation and the `R184` reachability finding,
+  both 76th/77th filings, are the same shape: a finding worth recording
+  precisely because it constrains future work, but not a crate-boundary
+  or library choice needing the `docs/decisions/NNN-*.md` protocol).
+
+**Still owed, carried forward, and NOT discharged by this commit —
+stated explicitly because it is easy to over-read "layers now render
+correctly" as "the layers panel can now toggle":** the document-wide
+OCG/layers panel's **TOGGLE** capability (`docs/FEATURES.md`'s *Planned*
+row) remains blocked on **two** prerequisites, and this commit supplies
+**neither**. It makes the renderer correctly honor the STATIC default
+visibility state a PDF's own `/OCProperties /D` already declares — it
+does **not** add a session-scoped override a GUI checkbox could invoke to
+show a group the document says is off (grepped `crates/pdfce-render/src/lib.rs`
+for `visibility_override`/`oc_override`/`forced_visible`/session-state
+naming before filing this claim — zero hits, confirmed absent, not
+assumed absent). The panel stays read-only (R83), unchanged by this
+Pass. Decisions `037` (OCG `/BaseState /OFF` and unregistered groups) and
+`038` (Table 101 vs §8.11.4.5 b), both/ON arrays vs the array opposite
+base state) remain **CLAIMED, NOT YET AUTHORED**, unaffected by this
+commit — `annot.rs`'s current single-array reading (§8.11.4.5 b)) is
+what `71592d3`'s content-stream path also consumes via `oc_off_set()`,
+so both open questions apply equally to the new content-stream path, not
+only to the pre-existing annotation path.
+
+**A discrepancy found while checking 037/038's status, flagged rather
+than silently corrected:** the 76th filing's `ARCHITECTURE.md` §12 entry
+states *"`docs/decisions/` remains at 036 files on disk as of this
+filing."* A direct `Glob` of `docs/decisions/*.md` by this librarian
+finds **33 numbered files, the highest being `033`** — no `034`, `035`,
+or `036` file exists on disk, despite all three being referenced
+elsewhere in this log as claimed or minted decision numbers (`034`:
+JPEG CMYK/YCCK, explicitly noted elsewhere as "OWED, not yet authored";
+`035`: referenced only via a "ceiling moves 035 → 036" note; `036`: the
+Reader-parity-sweep campaign, referenced throughout the 74th–77th filings
+as though decided). This librarian did not attempt to reconcile which of
+these figures is right, or to author the missing files — that is the
+engineer's/`autonomous-builder`'s call, per this project's own decision-
+record protocol — but the disagreement between "036 files on disk" and
+"33 files, highest 033" is real and is recorded here so it is not
+silently repeated in a future filing.
+
+**Ledger for this filing.** **One new Pass ID minted: `Pass 56.0`**
+(content-stream/XObject `/OC` honoring), grepped free before filing per
+R156. Pass family ceiling moves **55.6 → 56.0**. `docs/FEATURES.md`: new
+row added under *Fonts & rendering* (content-stream/XObject `/OC`
+honoring — `core [x]` / `cli` `—` / `gui [x]`, automatic pipeline
+behaviour with no batch shape of its own, same pattern as the DeviceCMYK
+calibration row); row 207 (Document layers, OCG) gains an annotation
+noting the renderer now also honors content-stream-level `/OC`, boxes
+unchanged (already all `[x]` for the VIEW capability this row tracks);
+Planned row "Document-wide OCG/layers panel — TOGGLE" **left unchanged,
+explicitly** — see the "still owed" note above for why. `docs/ARCHITECTURE.md`:
+new plain dated §12 entry (§8.11.3.1 invariant); §3's `pdfce-render`
+module note and §12's `Pass 6.0`/`Pass 12.M2` historical items both gain
+forward-pointer annotations to this entry, left in place rather than
+rewritten (append-only convention for historical entries). Standing
+rules: unaffected by this entry (`R185` is minted by the `df874ca` entry
+above); ceiling stays whatever that entry leaves it at. Decision ceiling:
+**unchanged** — no new numbered decision claimed; `037`/`038` remain
+CLAIMED-not-authored, and the disk-count discrepancy above is flagged,
+not resolved, by this filing. Backup/git working-tree state **not
+independently asserted** (hard rule 8) — no shell this dispatch.
+
+---
+
 ### ★★ Three Reader-parity panels — Bookmarks, Layers, Signatures — were unreachable in a real build for the entire time they were reported shipped: the only code that ever set their `PaneSubject` was the GUI-driving harness's own step handler, and every verification run drove that harness; `ec8abfe` gives all three a real rail control and a gate that would have caught it, on its SECOND draft — the first draft passed on the broken source; `R184` MINTED — 2026-08-10 (seventy-seventh filing)
 
 **Sourcing.** No shell this dispatch (hard rule 8) — the commit hash and
@@ -25202,7 +25538,12 @@ visibility), not just the substrate (12.0/9a/12.M1) it's built on.
   `/OCProperties /D` (default-hidden via `/D /OFF`); each dimension
   annotation's `/OC` points at its group's OCG; render honors
   annotation-level `/OC` (content-stream BDC/EMC-level OCG honoring is
-  deferred — out of scope for annotation-only dimensioning).
+  deferred — out of scope for annotation-only dimensioning). **★ DEFERRAL
+  CLOSED 2026-08-10 (`Pass 56.0`, `71592d3`) — content-stream `BDC`/`EMC`
+  `/OC` and XObject `/OC` are both now honored by the renderer; see
+  `Pass 56.0`'s own Shipped entry (top of *Shipped*) for the full build
+  record.** Annotation-level `/OC` honoring (this Pass) is unaffected and
+  stays as originally shipped.
 - **Public API (rule-10 trail):** `dimension::{fit_circle_taubin,
   fit_circle_taubin_refined, FitCircle, Unit, NumberFormat,
   FractionMode, ScaleState, ScaleEntry, ScalePreview,
@@ -27979,7 +28320,15 @@ continuation-23):**
 2. **`/OC` optional-content visibility test not implemented** —
    consistent with the renderer implementing NO optional content
    anywhere (BDC/EMC deferred; §8.11 is a RAG GAP). An OC-off
-   annotation currently paints — named.
+   annotation currently paints — named. **★ SUPERSEDED 2026-08-01 (Pass
+   12.M2, annotation-level `/OC` honored) and 2026-08-10 (`Pass 56.0`,
+   `71592d3`, content-stream `BDC`/`EMC` `/OC` + XObject `/OC` honored) —
+   both the "not implemented" and "NO optional content anywhere" clauses
+   of this item are stale as of `Pass 56.0`. Left visible rather than
+   rewritten, per this log's own append-only convention for a historical
+   entry; see `Pass 56.0`'s Shipped entry for what changed and
+   `docs/ARCHITECTURE.md` §12's `Pass 56.0` decision entry for the
+   §8.11.3.1 invariant this closure established.**
 3. `need_appearances_documents` is a document-scoped query, not folded
    into per-page render `Diagnostics` (inherently document-level).
 4. GUI diagnostics placed as a separate always-evaluated status line
@@ -46738,6 +47087,36 @@ and
   re-run after this commit — this librarian has no shell and has not run
   it itself. Full record: `ROADMAP.md`'s `ec8abfe` Shipped entry (top of
   *Shipped*, seventy-seventh filing).
+
+- **R185 — A query/search string typed by the operator is matched
+  LITERALLY by default; any pattern-language reinterpretation of the
+  characters they typed (wildcards, regex, or similar) is opt-in via a
+  visible control, never inferred from the text's own content
+  (2026-08-10, `df874ca`; librarian-minted).** The Find bar (`Pass 55.0`)
+  ran every query through `find_text`, documented internally as a
+  *pattern* search where `#` matches any digit and `?` matches any
+  character — so an operator typing a literal `?` (a real character that
+  appears in real documents, e.g. as part of a question or a placeholder)
+  had it silently reinterpreted as "match anything here," with no control
+  to turn the behaviour off and no on-screen indication a reinterpretation
+  had happened at all. This is a **rule-4 ("fuzzy, never sneaky")
+  instance of a class distinct from the direct-manipulation cases decision
+  024 §4.4 narrowed rule 4 around** — a drag, a placed dimension, a typed
+  replacement are gestures the operator performs and can see the result
+  of; a search STRING is text the operator typed with a specific literal
+  meaning in mind, and pdfce assigning it a DIFFERENT meaning (a pattern)
+  is an inference about the input itself, not about a result on screen.
+  **Practical form:** any search/query/filter surface accepting free-text
+  operator input defaults to literal matching; pattern syntax (wildcards,
+  regex, glob) is available only behind an explicit, visible toggle the
+  operator must set, never inferred from which characters happen to
+  appear in the string. The redaction panel's own search box had already
+  reached this same design independently (a literal/pattern mode
+  selector, `redact_search_is_pattern`, confirmed pre-existing and
+  unaffected by this fix) — this rule generalizes what that box already
+  did, rather than introducing a new posture. Full record: `ROADMAP.md`'s
+  `df874ca` Shipped entry (this filing). **Ceiling moves `R184` → `R185`;
+  next free `R186`.**
 
 ## Update protocol
 

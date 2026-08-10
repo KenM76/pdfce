@@ -31706,3 +31706,192 @@ working-tree state **not asserted anywhere in this filing** (hard rule
 `git log`/`git status` directly before any push. This is the
 **seventy-seventh** `SESSION_LOG.md` filing (the seventy-sixth confirmed
 present by direct read before this entry was appended).
+
+## 2026-08-10 (seventy-eighth filing) — `71592d3`: content-stream `BDC`/`EMC` `/OC` and XObject `/OC` are now honored (`Pass 56.0`), closing a gap named since Pass 6.0/Pass 1 and deferred again at Pass 12.M2; `df874ca`: the Find bar stops silently running every query as a wildcard pattern, whole-word matching ships (`Pass 55.0` complete); `R185` MINTED; a stale "036 files on disk" claim from the 76th/77th filings CHECKED and found FALSE
+
+**Sourcing.** No shell this dispatch (hard rule 8) — both commit hashes,
+their relative order, and the stated gate figures (**2870 tests, 0
+failed**; clippy 0 `--all-features`; fmt clean; ui-strings/disclosure-
+channel gates clean) are relayed from the dispatching engineer, not
+confirmed against `git log`/`git show`. **Independently verified by
+direct read of current source** (full file/line citations in each
+`ROADMAP.md` entry, not repeated here): `interpret.rs`'s
+`begin_marked_content`/`end_marked_content`/`do_xobject` `/OC` handling,
+the two `skip_paint` call sites, the `oc_sections_hidden` diagnostic and
+its `render-page`/GUI-expander surfacing, `painted-layers.pdf`'s
+`PROVENANCE.md` entry; `TextSearchOptions`/`WordBoundary` in `edit.rs`,
+`find_text`'s `.with_wildcards(true)` preservation, three tests read in
+full, the Find bar's two new checkboxes and their wiring in
+`pdfce-gui/src/main.rs`, and confirmation that `pdfce-cli find-text`
+still calls the two-argument legacy verb (no `--whole-word`/`--wildcards`
+flag exists — `cli` box correctly NOT rounded up). **A citation error
+caught, not repeated:** the dispatch attributed the "`oc_hidden` excluded
+from the `unsupported` sum" design choice to `R183`; direct read of
+`R183`'s own text shows it is about verification `-Filter` scope,
+unrelated — the correct precedent is `Pass 6.0`'s own decision-log item
+(c)(4). **A second discrepancy found while checking decisions 037/038's
+status, unrelated to either commit's own content:** the 76th/77th
+filings both assert `docs/decisions/` is "036 files on disk" —
+a direct `Glob` finds **33 numbered files, highest `033`** — no `034`,
+`035`, `036` file exists, despite all three being cited as though
+decided/claimed elsewhere in this log. Not reconciled by this filing
+(that's the engineer's/`autonomous-builder`'s call); flagged so it is
+not silently repeated a further time. **Not independently verified:**
+the stated test count and gate results; the two commits' relative
+chronological order (assumed from the dispatch's presentation order,
+`71592d3` then `df874ca`).
+
+**Shipped:**
+- `71592d3` — **`Pass 56.0`, a new Pass ID** (grepped free before
+  filing, per R156; Pass family ceiling **55.6 → 56.0**). Content-stream
+  `BDC`/`EMC` `/OC` (§8.11.3.2) and XObject `/OC` (§8.11.3.3) are now
+  honored by the renderer, closing a gap named since `Pass 6.0`
+  (2026-08-01, "§8.11 is a RAG GAP") and deferred again at `Pass 12.M2`
+  ("out of scope for annotation-only dimensioning"). **The load-bearing
+  invariant: suppression is BLIT-ONLY** — §8.11.3.1 says hidden content
+  "shall not be drawn," not "shall not run"; a hidden section's clip
+  still bounds later visible content, and a hidden glyph's show operator
+  still advances the text position, so page LAYOUT never depends on
+  layer state. Marked content is tracked ONLY for `/OC` (a non-`/OC`
+  `BDC` still stacks so `EMC` balances); an `/OC` operand that isn't a
+  resolvable indirect `/Properties` reference is SHOWN and counted
+  tolerated (shown-by-mistake is arguable, hidden-by-mistake is
+  invisible — same posture as `Pass 6.0`'s annotation-level tolerance).
+  New diagnostic `oc_sections_hidden` (`oc_hidden=<N>`, appended last to
+  `render-page`'s pinned stdout contract; GUI diagnostics expander),
+  deliberately not folded into the `unsupported` headline sum. New
+  fixture `fixtures/synthetic/layers/painted-layers.pdf` — the first
+  layer fixture that actually paints (an OFF layer's mark absent, a
+  nested ON-inside-OFF layer also absent, a hidden section's clip
+  bounding later content). **Does NOT discharge the Document-wide
+  OCG/layers panel's TOGGLE prerequisite** — it honors the document's own
+  STATIC default state, not a session-scoped override; confirmed by grep,
+  zero hits for override/session-visibility naming in `pdfce-render`.
+- `df874ca` — **filed against the existing `Pass 55.0` ID (R170: a defect
+  found and fixed while extending a shipped capability stays on that
+  capability's ID), no new mint.** Two changes: (1) a rule-4 defect fix —
+  the Find bar ran every typed query through `find_text`, documented as a
+  PATTERN search (`#`=digit, `?`=any character), so a literal `?` silently
+  matched every character with no control and no disclosure. Fixed at the
+  root: `TextSearchOptions::wildcards` defaults **off**; `find_text`
+  itself now passes `.with_wildcards(true)` explicitly so its own
+  documented contract and every existing (redaction) caller's results are
+  provably unchanged (test-confirmed); the Find bar calls the new
+  `find_text_with` entry point with a **Wildcards** checkbox, off by
+  default. (2) **Whole-word matching ships**, closing the gap carried
+  forward across four prior filings — `WordBoundary` is a SETTING
+  (§14.8.2.5 NOTE 1: *"the notion of a word is not precisely defined"*;
+  NOTE 4 offers a menu), wired to a **Whole word** checkbox. **`cli` box
+  NOT rounded up** — `find-text` still has no `--whole-word`/`--wildcards`
+  flag (confirmed by direct read). **Closure recorded, not a fix:** a
+  previously reported "GUI hard-codes case-insensitive, ignoring the Find
+  bar's toggle" claim was checked and found to describe the REDACTION
+  panel's own separate search box (no case toggle, deliberately, pre-
+  existing), not the Find bar — closed as not-a-defect.
+
+**Decisions made this session:**
+- **`R185` MINTED** — a query/search string typed by the operator is
+  matched literally by default; pattern-language reinterpretation
+  (wildcards, regex) is opt-in via a visible control, never inferred from
+  the string's own characters. Distinct from decision 024 §4.4's rule-4
+  narrowing (which exempts direct manipulations with a visible result,
+  not typed input whose literal meaning the operator already had in
+  mind). The redaction panel's own search box had already reached this
+  design independently before this fix — the rule generalizes what that
+  box already did.
+- **Two plain `ARCHITECTURE.md` §12 entries, no decision numbers claimed**
+  — the §8.11.3.1 "hidden means not drawn, not not run" invariant
+  (`Pass 56.0`), and the wildcards-default-off policy (`df874ca`/`R185`).
+  Neither is a crate-boundary or library choice; both follow the same
+  "plain dated entry" convention as the 76th/77th filings' equivalent
+  findings.
+
+**Findings + decisions:**
+- The §8.11.3.1 invariant matters beyond this one commit: a future
+  performance pass that "optimizes" by skipping a whole hidden
+  marked-content section (not just its paint calls) would look more
+  efficient and would be silently wrong on any file where hidden and
+  visible content share clip or text-position state — recorded so a
+  future change has something concrete to check itself against.
+- The wildcards default-off fix targeted the DEFAULT, not the call site —
+  `find_text` keeps its own documented pattern-search contract unchanged
+  for its existing (redaction) caller, while the Find bar gets a new,
+  safer default via a new entry point. This is why "search results did
+  not move for `find_text`'s existing callers" could be asserted and
+  tested, rather than merely claimed.
+- Both discrepancies flagged this filing (the `R183` mis-citation, the
+  "036 files on disk" claim) were caught by checking the ledger's own
+  prior assertions against live source rather than trusting them —
+  exactly the discipline the dispatching prompt asked this filing to
+  apply, and the discipline hard rule 8 exists to enforce generally.
+
+**Still in flight:** decisions `037`/`038` still CLAIMED, NOT YET
+AUTHORED (unaffected by either commit — both apply equally to the new
+content-stream `/OC` path, since it shares the same resolver as the
+pre-existing annotation path); the `034`–`036` disk-file discrepancy
+flagged above, not resolved; test-count reconciliation still open (this
+filing's **2870** figure is relayed, not reconciled against the last
+confirmed count); printer job SPOOLING (operator go-ahead); OCG-layer
+TOGGLING (both prerequisites still unmet, confirmed unaffected by
+`Pass 56.0`); attachment EXTRACTION-to-file (R151).
+
+**For next session:** author or retire decisions `034`–`038` (currently
+all CLAIMED-only, no files on disk) via `autonomous-builder`/KenAgent, or
+correct every "N files on disk" claim in this log to "claimed, not yet
+filed" wherever it appears; reconcile the test-count deltas that have
+now stacked across several filings; escalate the `PDF_Spec` RAG
+correction named below to `pdfce-spec-librarian` (not this librarian's
+territory).
+
+**RAG escalation (per this filing's dispatch, item 6):**
+- **`D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__s__8.11.md`**
+  states content-stream `BDC`/`EMC` `/OC` as DEFERRED and names it a beta
+  limitation — **now false as of `Pass 56.0`, and needs correction.**
+  This is the spec-librarian's exclusive territory (hard rule 6) —
+  **flagged for the engineer to dispatch `pdfce-spec-librarian`**, not
+  edited by this librarian.
+- **`C:\personal_rag\pdf\`** — new lesson written this filing:
+  `lesson_20260810_cad_layer_exporters_use_content_stream_oc_not_only_annotation_oc.md`
+  (CAD exporters' native use of content-stream-level `/OC`, sourced from
+  Adobe's SDK docs, explicitly flagged as not yet corpus-measured on a
+  real file within this project). Subject index + master index both
+  updated in the same filing.
+- **The search-input-reinterpretation lesson** was judged to belong as a
+  project-specific standing rule (`R185`, `ROADMAP.md`) rather than a
+  cross-project RAG entry — it is neither Rust/egui-ecosystem knowledge
+  (`D:\dev\rag\`) nor PDF-domain knowledge (`personal_rag/pdf`); it is a
+  pdfce UX/engineering-discipline rule, and `ROADMAP.md`'s Standing rules
+  is already that rule's correct home.
+
+**Ledger for this filing.** **One new Pass ID: `Pass 56.0`** (content-
+stream/XObject `/OC`), grepped free before filing per R156; Pass family
+ceiling moves **55.6 → 56.0**. `df874ca` filed against the existing
+`Pass 55.0`, no new mint. `docs/FEATURES.md`: row 203 (Find) updated —
+whole-word and wildcards now `[x]` `gui`, unticked `cli` (confirmed no
+flag exists), `core` unchanged `[x]`; row 207 (Layers) gains an
+annotation, boxes unchanged; new row added under *Fonts & rendering*
+(content-stream/XObject `/OC` honoring, `core [x]`/`cli —`/`gui [x]`);
+Planned row "Document-wide OCG/layers panel — TOGGLE" gains a clarifying
+note, unchanged otherwise. `docs/ARCHITECTURE.md`: §3's `pdfce-render`
+module note gains a new paragraph; §12 gains **two plain dated entries**
+(no decision numbers) plus **one correction** to the 76th/77th filings'
+"036 files on disk" claim. Standing rules: **`R185` MINTED**, ceiling
+moves **R184 → R185**, next free **R186**. Decision ceiling: **unchanged**
+— `037`/`038` remain CLAIMED-not-authored; the 034–036 disk-count
+discrepancy is flagged, not resolved. Operator-question ceiling
+unchanged at **(bh)**, next free **(bi)**. `C:\personal_rag\pdf\`: one
+new lesson (above), subject + master index updated. `D:\dev\rag\rust\`/
+`D:\dev\rag\egui\`: no new file this filing — nothing found that was
+Rust/egui-ecosystem-generalizable beyond what R185 already captures at
+the project level. Gate figures (**2870 tests, 0 failed**, clippy 0
+`--all-features`, fmt clean, ui-strings/disclosure-channel gates clean)
+RELAYED, NOT independently re-run — no shell this dispatch; the
+test-count delta against the last confirmed figure (2839, 77th filing)
+is **+31**, plausible for two commits adding OC-rendering tests plus
+wildcard/whole-word tests, but not reconciled term-by-term. Backup/git
+working-tree state **not independently asserted anywhere in this filing**
+(hard rule 8) — no shell this dispatch; the engineer should check
+`D:\Dev\pdfce-backups\` and `git log`/`git status` directly before any
+push. This is the **seventy-eighth** `SESSION_LOG.md` filing (the
+seventy-seventh confirmed present by direct read before this entry was
+appended).

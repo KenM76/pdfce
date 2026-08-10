@@ -667,6 +667,52 @@ D:\Dev\pdfce\
                                    own doc comment) live here. P0 floor: `glyf`
                                    (TrueType-outline) donors only — CFF donors are
                                    refused by name (decision 021 §10, C-3).
+                                   **`interpret.rs` — content-stream `BDC`/`EMC`
+                                   `/OC` and XObject `/OC` honored (`Pass 56.0`,
+                                   2026-08-10, `71592d3`).** Closes the gap named
+                                   since Pass 1/Pass 6.0 ("§8.11 is a RAG GAP") and
+                                   deferred again at Pass 12.M2 ("out of scope for
+                                   annotation-only dimensioning"). **§8.11.3.1's
+                                   invariant, load-bearing for every future change
+                                   to this interpreter: hidden means NOT DRAWN, not
+                                   NOT RUN.** Suppression happens at exactly the
+                                   paint call (`skip_paint = ... || self.oc_hidden()`,
+                                   two call sites) — every operator that mutates
+                                   graphics state, clip, or text position still
+                                   executes normally inside a hidden marked-content
+                                   section. A hidden section's `W`/`W*` clip still
+                                   bounds whatever unlayered content paints after
+                                   it; a hidden glyph's show operator still
+                                   advances the text position by its full width.
+                                   Getting this backwards would make page LAYOUT
+                                   depend on which optional-content layers happen
+                                   to be on. Marked content is tracked ONLY for
+                                   `/OC` — every `BDC` is stacked so `EMC` stays
+                                   balanced regardless of tag, and a surplus `EMC`
+                                   pops nothing rather than underflowing (which
+                                   would un-hide still-open hidden content). An
+                                   `/OC` operand that is not a resolvable indirect
+                                   `/Properties` reference (§8.11.3.2 requires one)
+                                   is SHOWN and counted tolerated — the same
+                                   shown-by-mistake-is-recoverable posture as
+                                   Pass 6.0's annotation-level `/OC` tolerance.
+                                   New diagnostic `oc_sections_hidden`
+                                   (`oc_hidden=<N>` on `render-page`'s pinned
+                                   stdout contract, appended last; GUI diagnostics
+                                   expander), deliberately NOT folded into the
+                                   `unsupported` headline sum — see §12's
+                                   `Pass 56.0` entry for why. Shares
+                                   `annot.rs::optional_content_default_off`/
+                                   `oc_is_hidden` with the annotation-level path
+                                   and the Layers panel (`layers.rs`) — one
+                                   resolver, so all three cannot disagree about
+                                   which groups a `/D` array names. Decisions 037
+                                   (unregistered-OCG reading of `/BaseState /OFF`)
+                                   and 038 (Table 101 vs §8.11.4.5 b), both/ON vs.
+                                   opposite-array processing) remain CLAIMED, NOT
+                                   YET AUTHORED, and apply equally to this new
+                                   content-stream path — it consumes the same
+                                   `oc_off_set()` the annotation path already did.
     pdfce-gui\                  <- The native desktop shell. egui/eframe application,
                                    window chrome, file dialogs (rfd crate), menus,
                                    docking layout (egui_dock or hand-rolled), the
@@ -14857,3 +14903,165 @@ code.
 above, next genuinely free 039). Cross-reference: **`R184`**
 (`ROADMAP.md` Standing rules) for the full derivation, cross-references
 to R151/R177/R172/R163, and the practical/mechanical form of the check.
+
+**★ CORRECTION, seventy-eighth filing (2026-08-10): "036 on disk/complete"
+is FALSE, checked directly rather than repeated.** A `Glob` of
+`docs/decisions/*.md` finds **33 numbered files, the highest being
+`033`** — no `034`, `035`, or `036` file exists on disk, despite all
+three being cited throughout this log (`034`: JPEG CMYK/YCCK, elsewhere
+correctly marked OWED; `035`: referenced only via a bare "ceiling moves"
+note with no content of its own found; `036`: the Reader-parity-sweep
+campaign, cited across the 74th–77th filings as though decided and
+complete). This entry does not attempt to reconcile or author the
+missing files — authoring a decision record is the `autonomous-builder`/
+KenAgent protocol's job, not this librarian's — but repeating "036 on
+disk/complete" a further time, once it has been checked and found false,
+would be exactly the kind of unverified figure hard rule 8 exists to
+stop. Next engineer session: either author `034`–`036` from this log's
+own existing content, or correct the "on disk" framing to "claimed in
+`ROADMAP.md`/`ARCHITECTURE.md`, not yet filed" wherever it is asserted.
+
+### 2026-08-10 (seventy-eighth filing, `71592d3`) — §8.11.3.1 recorded as a load-bearing invariant: hidden optional content is not drawn, not not run; suppression is blit-only and everything upstream of the blit still executes
+
+**Filed by `pdfce-librarian`, no shell available — relaying the
+dispatching engineer's account for commit-level detail (hash, test
+figures), independently confirmed by direct source read for the
+technical claims below.** Full build record: `ROADMAP.md`'s `71592d3`
+Shipped entry (top of *Shipped*, seventy-eighth filing).
+
+**Plain entry, no decision number — an invariant definition per this
+librarian's own charter, but filed without the formal `docs/decisions/
+NNN-*.md` protocol, same convention as the `annot::oc_refs`
+consolidation (76th filing) and the `R184` reachability finding (77th
+filing): worth recording because it constrains every future change to
+this interpreter, but not a crate-boundary or library choice.**
+
+**The invariant.** ISO 32000-1 §8.11.3.1 states hidden optional content
+"shall not be drawn" — and nothing more. `pdfce-render`'s
+`begin_marked_content`/`end_marked_content` (`interpret.rs`) implement
+this literally: `hidden_depth` gates exactly two `skip_paint` call
+sites, confirmed by direct read (`interpret.rs:1723`, `:2639`). Every
+other operator inside a hidden marked-content section — `cm`, `q`/`Q`,
+`W`/`W*` clip construction, `Tj`/`TJ`'s text-position advance — executes
+normally. Two concrete consequences, both verified against the new
+`painted-layers.pdf` fixture's own `PROVENANCE.md`: a hidden section's
+clip still bounds whatever unlayered content paints after it; a hidden
+glyph's show operator still advances the text position by its full
+width, so visible text sharing a line with hidden text does not
+collapse onto it. **The wrong implementation — suppressing the whole
+marked-content section, including its state-mutating operators — would
+make page LAYOUT depend on which optional-content layers happen to be
+on**, a defect invisible on any fixture where the hidden and visible
+content don't share graphics state.
+
+**Why this needed recording rather than being left as an implementation
+detail.** The distinction between "not drawn" and "not run" is exactly
+the kind of thing a future performance pass or refactor could get wrong
+in the direction that LOOKS more efficient — skip the whole section,
+not just its paint calls — and the resulting defect would be silent:
+correct on any fixture that doesn't happen to interleave hidden and
+visible content in a way that shares clip or text-position state. Recording it here, alongside the two-call-site fact, gives a future
+change something concrete to check itself against.
+
+**Tolerance posture, consistent with the pre-existing annotation-level
+choice.** An `/OC` operand that is not a resolvable indirect
+`/Properties` reference (§8.11.3.2 requires one) is SHOWN and counted
+`tolerated`, not hidden — the same "showing content pdfce could not
+classify is the recoverable direction of being wrong" posture Pass 6.0
+established for annotation-level `/OC`, now applied consistently at the
+content-stream level.
+
+**Scope note, so this entry is not over-read.** This closes a rendering
+gap; it does **not** add a session-scoped visibility override, and does
+**not** discharge either prerequisite the Document-wide OCG/layers
+panel's TOGGLE capability is blocked on (`docs/FEATURES.md`'s *Planned*
+row, unchanged by this Pass) — confirmed by grep, zero hits for
+override/session-visibility naming in `pdfce-render`. Decisions 037/038
+(both concerning `/BaseState` and array-processing readings) remain
+CLAIMED, NOT YET AUTHORED, and apply identically to this new
+content-stream path, since it consumes the same `oc_off_set()` resolver
+the annotation-level path already did — resolving either decision
+changes both paths' answer together, by construction, not just one.
+
+**Body-section sync:** §3's `pdfce-render` module note gains a new
+paragraph (above) naming this Pass, the invariant, and the shared
+resolver; §12's `Pass 6.0`/`Pass 12.M2`-referencing historical items
+(both already forward-pointer-annotated in `ROADMAP.md`'s own text) are
+left as originally written here too, per this log's append-only
+convention for historical entries.
+
+**No decision-record ceiling change** (037/038 remain CLAIMED-not-
+authored, unaffected; see the correction immediately above for the
+034–036 disk-count discrepancy this filing found and flagged rather than
+silently repeated). Cross-reference: `ROADMAP.md`'s `71592d3` Shipped
+entry for the full sourcing (exact file/line citations for every claim
+above) and the `Pass 56.0` ledger note.
+
+### 2026-08-10 (seventy-eighth filing, `df874ca`) — a query string typed by the operator is matched literally by default; pattern-language reinterpretation (wildcards, regex) is opt-in and disclosed, never inferred from the string's own characters — R185
+
+**Filed by `pdfce-librarian`, no shell available — relaying the
+dispatching engineer's account for commit-level detail, independently
+confirmed by direct source read for the technical claims below.** Full
+build record: `ROADMAP.md`'s `df874ca` Shipped entry (seventy-eighth
+filing).
+
+**Plain entry, no decision number — a UI/behavior default policy, not a
+crate-boundary or library choice.** The mechanical rule this policy
+produced is filed as `ROADMAP.md` standing rule `R185`; this entry
+records the policy itself and why it generalizes beyond the one Find-bar
+defect that surfaced it.
+
+**The policy.** Any pdfce surface accepting free-text operator input for
+searching, filtering, or matching treats that text as a LITERAL string
+by default. Pattern-language reinterpretation of the same characters —
+`#`/`?` wildcards, regex, glob, or any future pattern syntax — is
+available only behind an explicit, visible control the operator sets
+before it applies, never inferred from which characters happen to appear
+in the typed string.
+
+**What this policy corrects, and why it is a distinct case from decision
+024 §4.4's rule-4 narrowing.** `EditSession::find_text` is documented
+internally as a PATTERN search (`#` matches any digit, `?` matches any
+character) — a contract that predates the Find bar and that redaction's
+own search path still legitimately depends on. The Find bar (`Pass
+55.0`) called it directly, which meant every operator-typed `?` was
+silently reinterpreted as "match any character here," with no control
+to disable the behaviour and no on-screen indication a reinterpretation
+had occurred. Decision 024 §4.4 narrowed rule 4 to exempt DIRECT
+MANIPULATIONS the operator performs and can see the result of (a drag, a
+placed dimension) from needing a confirm step — but a typed search
+STRING is not a manipulation with a visible result to judge; it is INPUT
+whose literal meaning the operator already has in mind, and assigning it
+a different meaning is an inference about the input itself. This policy
+is therefore not a reversal or a further narrowing of decision 024 —
+it's the rule-4 obligation applied to a case decision 024 never
+addressed.
+
+**Resolution, and why the fix targets the DEFAULT rather than the call
+site.** `TextSearchOptions::wildcards` is added, defaulting **off**.
+`find_text` (the pre-existing two-argument verb) is changed to pass
+`.with_wildcards(true)` explicitly, so its own documented pattern-search
+contract, and every existing caller's results (confirmed: redaction's
+search path), are provably unchanged — verified by a test asserting
+`find_text`'s own behaviour did not move. The Find bar is changed to
+call the new `find_text_with(&needle, &TextSearchOptions)` entry point
+instead, with a **Wildcards** checkbox (off by default) the operator
+must set to opt in, and a **Whole word** checkbox for the
+`WordBoundary`-based matching shipped in the same commit. The redaction
+panel's own search box had already reached the same design
+independently, before this fix (`redact_search_is_pattern`, a
+pre-existing literal/pattern mode selector, confirmed unaffected) —
+this policy generalizes what that box already did, rather than
+introducing a new posture pdfce had not tried before.
+
+**Body-section sync:** none required — no crate boundary, public API
+surface, or data-model invariant changed; `TextSearchOptions` and
+`WordBoundary` are additive `pdfce-core` public types, already covered
+by the rule-10 API-surface discipline at the point they were added
+(`ROADMAP.md`'s `Pass 55.0`/`df874ca` entries carry the full symbol
+list).
+
+**No decision-record ceiling change.** Cross-reference: `ROADMAP.md`
+standing rule `R185` for the full derivation and practical form, and
+`ROADMAP.md`'s `df874ca` Shipped entry for the exact file/line citations
+substantiating every claim above.
