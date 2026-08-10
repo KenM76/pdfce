@@ -1,15 +1,15 @@
-﻿<#
+<#
 .SYNOPSIS
     Capture a screenshot of a running pdfce-gui window, so the ENGINEER can
     verify operator-facing behavior instead of asking the operator to test it.
 
 .DESCRIPTION
     This is the observation half of the project's operator-visible definition of
-    done (decision 018 §11.2): *a Pass that adds or changes operator-facing
+    done (decision 018 sec. 11.2): *a Pass that adds or changes operator-facing
     behavior does not ship until that behavior has been observed working in the
     running application, not merely tested headlessly.*
 
-    Ken accepted that rule on 2026-08-02 with an explicit condition — "only if
+    Ken accepted that rule on 2026-08-02 with an explicit condition -- "only if
     you can do the observing. I don't want to be a beta tester." This script is
     what makes the rule executable. Without it, "observed working" degrades into
     "asked Ken to look," which is exactly what the condition forbids.
@@ -21,7 +21,7 @@
     for this: kittest drives a synthetic egui context, so it proves what the
     widget tree *would* paint. This captures the REAL process, with the real
     wgpu/glow backend, the real font stack, the real window manager, and the
-    real PDF raster — which is precisely the layer where the decision-018 defect
+    real PDF raster -- which is precisely the layer where the decision-018 defect
     lived (the widget tree was correct; the texture handed to it was of the
     wrong document revision). A kittest snapshot would have passed while the
     operator saw an unchanged page.
@@ -31,15 +31,15 @@
 
 .PARAMETER Path
     Output PNG path. Defaults to a timestamped file under tools/observations/,
-    which is gitignored — these are diagnostic artifacts, not fixtures, and must
+    which is gitignored -- these are diagnostic artifacts, not fixtures, and must
     never be committed (they are screenshots of whatever PDF happened to be
-    open, which would bypass the LEGAL.md §5 test-corpus provenance rules).
+    open, which would bypass the LEGAL.md sec. 5 test-corpus provenance rules).
 
 .PARAMETER ProcessName
     Process to capture. Defaults to pdfce-gui.
 
 .PARAMETER Foreground
-    Bring the window to the front before capturing. Default true — a window
+    Bring the window to the front before capturing. Default true -- a window
     that is behind another window captures the OCCLUDING window's pixels with
     the PrintWindow-free BitBlt path used here, which would produce a
     confidently wrong observation. Turning this off is only correct when the
@@ -65,7 +65,7 @@
 param(
     [string] $Path,
     [string] $ProcessName = 'pdfce-gui',
-    # NOTE: deliberately NOT named $Pid — that is a PowerShell AUTOMATIC
+    # NOTE: deliberately NOT named $Pid -- that is a PowerShell AUTOMATIC
     # variable holding the CURRENT process id, and shadowing it in a param
     # block is both an error and a genuinely confusing one to diagnose.
     [int]      $ProcessId   = 0,
@@ -120,7 +120,7 @@ $candidates = @(Get-Process -Name $ProcessName -ErrorAction SilentlyContinue |
 
 # Disambiguate BEFORE acting. Taking the first match by name was a real hazard:
 # a build agent verifying its own binary found a second instance running from
-# the shared checkout, and had to kill it — because a capture aimed at "the
+# the shared checkout, and had to kill it -- because a capture aimed at "the
 # pdfce-gui window" could equally have hit the other one. Pass -ProcessId to
 # name exactly which, or close the extras.
 if ($ProcessId -gt 0) {
@@ -129,13 +129,13 @@ if ($ProcessId -gt 0) {
         throw "No '$ProcessName' process with id $ProcessId and a visible main window. Running ids: $(($candidates | ForEach-Object { $_.Id }) -join ', ')"
     }
 } elseif ($candidates.Count -gt 1) {
-    throw "AMBIGUOUS TARGET: $($candidates.Count) '$ProcessName' processes have a visible window (ids: $(($candidates | ForEach-Object { $_.Id }) -join ', ')). Refusing to guess which one to capture — pass -ProcessId <id>, or close the others."
+    throw "AMBIGUOUS TARGET: $($candidates.Count) '$ProcessName' processes have a visible window (ids: $(($candidates | ForEach-Object { $_.Id }) -join ', ')). Refusing to guess which one to capture -- pass -ProcessId <id>, or close the others."
 } else {
     $proc = $candidates | Select-Object -First 1
 }
 
 if (-not $proc) {
-    throw "No running '$ProcessName' process with a visible main window. Launch it first — observing a process that is not running is the failure this script exists to make impossible to overlook."
+    throw "No running '$ProcessName' process with a visible main window. Launch it first -- observing a process that is not running is the failure this script exists to make impossible to overlook."
 }
 
 $hwnd = $proc.MainWindowHandle
@@ -159,7 +159,7 @@ if ($Foreground) {
     # terminal window came to the front between the raise and the capture, and
     # CopyFromScreen dutifully photographed THAT window. The screenshot was
     # returned as if it were pdfce. A capture of the wrong window is worse than
-    # no capture at all — it is evidence that looks like evidence, and under
+    # no capture at all -- it is evidence that looks like evidence, and under
     # standing rule R86 it would be used to certify a Pass as observed-working.
     #
     # So: fail loudly rather than return a plausible-looking wrong image.
@@ -177,7 +177,7 @@ if (-not [PdfceNative.Win32]::GetWindowRect($hwnd, [ref] $rect)) {
 $width  = $rect.Right  - $rect.Left
 $height = $rect.Bottom - $rect.Top
 if ($width -le 0 -or $height -le 0) {
-    throw "Window rect for '$ProcessName' is degenerate (${width}x${height}) — the window is probably minimized or mid-transition."
+    throw "Window rect for '$ProcessName' is degenerate (${width}x${height}) -- the window is probably minimized or mid-transition."
 }
 
 if (-not $Path) {
@@ -193,7 +193,7 @@ try {
     $graphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bitmap.Size)
 
     # REFUSE A UNIFORM FRAME. A capture that is entirely one colour is not a
-    # picture of the UI — it is a picture of nothing, and it is indistinguishable
+    # picture of the UI -- it is a picture of nothing, and it is indistinguishable
     # from a real screenshot until someone looks closely.
     #
     # Three distinct causes have all produced one in this project:
@@ -210,7 +210,7 @@ try {
     # Sample the CLIENT area only, never the whole window.
     #
     # The title bar is painted by the shell, not by the app, so it always has
-    # colour variation — an app icon, a caption, close buttons. Sampling the
+    # colour variation -- an app icon, a caption, close buttons. Sampling the
     # full window therefore finds "several distinct colours" even when the
     # application surface underneath is entirely blank, and the guard passes on
     # a frame containing no evidence.
@@ -218,7 +218,7 @@ try {
     # That is not theoretical: it let through a capture with a fully painted
     # title bar and a completely white client area, because eframe had not yet
     # presented. The all-black sleeping-display case fired correctly on the very
-    # next attempt, which is exactly the trap — a guard that catches the obvious
+    # next attempt, which is exactly the trap -- a guard that catches the obvious
     # failure and misses the subtle one is more dangerous than no guard, because
     # it earns trust it does not deserve.
     $clientOrigin = New-Object PdfceNative.Win32+POINT
@@ -249,7 +249,7 @@ try {
     }
     if ($distinct.Count -le 1) {
         $only = ($distinct.Keys | Select-Object -First 1)
-        throw "REFUSING TO RETURN A BLANK CAPTURE: every sampled pixel of '$ProcessName'`s CLIENT AREA is ($only). That is not a screenshot of the UI — the display is likely asleep, or eframe has not presented a frame yet (it repaints only on input; send a real mouse move or click first), or a window animation was mid-flight. No observation was made."
+        throw "REFUSING TO RETURN A BLANK CAPTURE: every sampled pixel of '$ProcessName'`s CLIENT AREA is ($only). That is not a screenshot of the UI -- the display is likely asleep, or eframe has not presented a frame yet (it repaints only on input; send a real mouse move or click first), or a window animation was mid-flight. No observation was made."
     }
 
     $bitmap.Save($Path, [System.Drawing.Imaging.ImageFormat]::Png)

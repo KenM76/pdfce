@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Send a real mouse click (or a click sequence) to the running pdfce-gui
     window, in WINDOW-RELATIVE coordinates.
@@ -6,13 +6,13 @@
 .DESCRIPTION
     The other half of the observation harness that `tools/observe-gui.ps1`
     starts. Observation alone can only confirm static state; most of pdfce's
-    operator-facing behavior is a GESTURE — pick two points, then Accept — and
+    operator-facing behavior is a GESTURE -- pick two points, then Accept -- and
     cannot be reached without driving the pointer.
 
-    This exists because of standing rule R86 (decision 018 §11.2): a Pass that
+    This exists because of standing rule R86 (decision 018 sec. 11.2): a Pass that
     adds or changes operator-facing behavior does not ship until that behavior
     has been observed working in the running application. Ken accepted that rule
-    on 2026-08-02 conditioned on the ENGINEER doing the observing — "I don't want
+    on 2026-08-02 conditioned on the ENGINEER doing the observing -- "I don't want
     to be a beta tester." Verifying a two-click authoring gesture therefore
     requires synthesizing the two clicks.
 
@@ -21,7 +21,7 @@
     Callers reason about positions by looking at a screenshot from
     `observe-gui.ps1`, whose origin is the window's top-left. Making this script
     take the same coordinate space means a pixel measured in the screenshot can
-    be clicked directly, with no mental offset arithmetic — the single most
+    be clicked directly, with no mental offset arithmetic -- the single most
     likely source of a confidently-wrong automated click. The script resolves
     the window rect itself and adds the offset.
 
@@ -30,7 +30,7 @@
     egui/winit consume real input events from the OS queue. Posting synthetic
     WM_LBUTTONDOWN to the window handle does not reliably drive winit's event
     loop and, worse, can appear to work while bypassing the hit-testing path the
-    operator actually exercises — an observation that proves nothing. SendInput
+    operator actually exercises -- an observation that proves nothing. SendInput
     injects at the same layer a physical mouse does, so what is verified is the
     real path.
 
@@ -51,22 +51,22 @@
     land before the UI has reacted to the previous click.
 
 .PARAMETER MoveOnly
-    Move the cursor to the single given point without clicking — used to park
+    Move the cursor to the single given point without clicking -- used to park
     the pointer somewhere harmless before a screenshot, so a hover highlight or
     tooltip does not contaminate the observation.
 
 .PARAMETER Modifiers
     Modifier keys to HOLD DOWN for the whole click sequence: any of Shift,
     Ctrl, Alt. Added because several canvas gestures are only reachable with a
-    modifier — Shift+click toggles selection membership, and Alt+click steps
-    click-through cycling to the next object under the pointer — and R86 says
+    modifier -- Shift+click toggles selection membership, and Alt+click steps
+    click-through cycling to the next object under the pointer -- and R86 says
     those behaviors do not ship until they have been observed in the running
     app. Without this the modifier paths could only ever be tested headlessly,
     which is exactly the gap the harness exists to close.
 
     The keys are pressed before the first point and released in a `finally`, so
     an exception mid-sequence (a refused out-of-window point, a foreground
-    steal) cannot leave Alt latched down across the operator's desktop — a
+    steal) cannot leave Alt latched down across the operator's desktop -- a
     stuck modifier is a far nastier side effect than a failed observation.
 
     Uses `keybd_event` for the same reason the clicks use `mouse_event`: it
@@ -80,7 +80,7 @@
     `FormatError::CoverageFailure`, the encoding triggers) is reached only by
     SELECTING a run and then TYPING a replacement. Clicks alone get you to the
     property bar and no further, so those messages could never be read on
-    screen — which is exactly how two of them went several releases telling
+    screen -- which is exactly how two of them went several releases telling
     the operator to do something that could not work.
 
     WHY KEYEVENTF_UNICODE AND NOT VIRTUAL KEY CODES
@@ -90,7 +90,7 @@
     characters on different machines is worse than no harness, because it
     fails in a way that looks like an application bug.
 
-    KEYEVENTF_UNICODE bypasses the layout entirely — `wScan` carries the UTF-16
+    KEYEVENTF_UNICODE bypasses the layout entirely -- `wScan` carries the UTF-16
     code unit and Windows delivers exactly that character. It is also the only
     practical way to type the non-Latin text FF-C exists to support; a Greek or
     Cyrillic probe has no virtual-key code on a Latin keyboard at all.
@@ -106,7 +106,7 @@
 .EXAMPLE
     pwsh -File tools/gui-click.ps1 -Clicks "487,277" -Type "ABZ"
     # select a text run, then type a replacement containing a character the
-    # page's embedded subset font does not carry — the R-INV-1 probe
+    # page's embedded subset font does not carry -- the R-INV-1 probe
 
 .EXAMPLE
     pwsh -File tools/gui-click.ps1 -Clicks "700,300","900,300" -DelayMs 500
@@ -117,7 +117,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string[]] $Clicks,
     [string]   $ProcessName = 'pdfce-gui',
-    # NOTE: deliberately NOT named $Pid — that is a PowerShell AUTOMATIC
+    # NOTE: deliberately NOT named $Pid -- that is a PowerShell AUTOMATIC
     # variable holding the CURRENT process id, and shadowing it in a param
     # block is both an error and a genuinely confusing one to diagnose.
     [int]      $ProcessId   = 0,
@@ -184,7 +184,7 @@ $candidates = @(Get-Process -Name $ProcessName -ErrorAction SilentlyContinue |
 
 # Disambiguate BEFORE acting. Taking the first match by name was a real hazard:
 # a build agent verifying its own binary found a second instance running from
-# the shared checkout, and had to kill it — because a click aimed at "the
+# the shared checkout, and had to kill it -- because a click aimed at "the
 # pdfce-gui window" could equally have hit the other one. Pass -ProcessId to
 # name exactly which, or close the extras.
 if ($ProcessId -gt 0) {
@@ -193,7 +193,7 @@ if ($ProcessId -gt 0) {
         throw "No '$ProcessName' process with id $ProcessId and a visible main window. Running ids: $(($candidates | ForEach-Object { $_.Id }) -join ', ')"
     }
 } elseif ($candidates.Count -gt 1) {
-    throw "AMBIGUOUS TARGET: $($candidates.Count) '$ProcessName' processes have a visible window (ids: $(($candidates | ForEach-Object { $_.Id }) -join ', ')). Refusing to guess which one to click — pass -ProcessId <id>, or close the others."
+    throw "AMBIGUOUS TARGET: $($candidates.Count) '$ProcessName' processes have a visible window (ids: $(($candidates | ForEach-Object { $_.Id }) -join ', ')). Refusing to guess which one to click -- pass -ProcessId <id>, or close the others."
 } else {
     $proc = $candidates | Select-Object -First 1
 }
@@ -207,14 +207,14 @@ Start-Sleep -Milliseconds 400
 # but a CLICK delivered to the wrong window is an unintended action on someone
 # else's application. SendInput goes to whatever is under the cursor, and the
 # per-point rect check below only proves the coordinates fall inside pdfce's
-# rectangle — not that pdfce is the window actually on top of that rectangle.
+# rectangle -- not that pdfce is the window actually on top of that rectangle.
 #
 # This bit on 2026-08-02: an unrelated terminal window occupying the same screen
 # region came to the foreground mid-sequence, so synthesized canvas picks landed
 # in it. Refuse instead.
 $fg = [PdfceInput.Win32]::GetForegroundWindow()
 if ($fg -ne $proc.MainWindowHandle) {
-    throw "REFUSING TO CLICK: '$ProcessName' (handle $($proc.MainWindowHandle)) is not the foreground window (foreground is $fg). Clicks would be delivered to whatever window is on top — possibly another application. Raise '$ProcessName' and retry."
+    throw "REFUSING TO CLICK: '$ProcessName' (handle $($proc.MainWindowHandle)) is not the foreground window (foreground is $fg). Clicks would be delivered to whatever window is on top -- possibly another application. Raise '$ProcessName' and retry."
 }
 
 $rect = New-Object PdfceInput.Win32+RECT
@@ -235,7 +235,7 @@ Start-Sleep -Milliseconds 80
 try {
     foreach ($c in $Clicks) {
         $parts = $c -split ','
-        if ($parts.Count -ne 2) { throw "Bad point '$c' — expected 'X,Y'." }
+        if ($parts.Count -ne 2) { throw "Bad point '$c' -- expected 'X,Y'." }
         $x = [int]$parts[0].Trim()
         $y = [int]$parts[1].Trim()
 
@@ -276,7 +276,7 @@ finally {
 
 # ---------------------------------------------------------------------------
 # Typing stage. Runs AFTER the clicks and AFTER the modifiers are released,
-# because every use so far is "click to focus something, then type into it" —
+# because every use so far is "click to focus something, then type into it" --
 # and a modifier still held would turn the text into a shortcut sequence.
 # ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
@@ -330,21 +330,21 @@ if ($Type) {
     $size = [System.Runtime.InteropServices.Marshal]::SizeOf([type]'PdfceInput.Win32+INPUT')
 
     # One UTF-16 code unit per event pair. `wVk` MUST be 0 when
-    # KEYEVENTF_UNICODE is set — a non-zero virtual key silently wins and the
+    # KEYEVENTF_UNICODE is set -- a non-zero virtual key silently wins and the
     # layout-independence this exists for is lost.
     foreach ($unit in [System.Text.Encoding]::Unicode.GetBytes($Type) | ForEach-Object -Begin { $i = 0; $buf = @() } -Process { $buf += $_ } -End { for ($j = 0; $j -lt $buf.Count; $j += 2) { [uint16]($buf[$j] -bor ($buf[$j+1] -shl 8)) } }) {
         # keybd_event, NOT SendInput.
         #
         # SendInput is the modern API and the first implementation used it.
         # It returned 0 with ERROR_INVALID_PARAMETER (87) on every call,
-        # despite `Marshal.SizeOf` confirming the expected x64 layout —
-        # INPUT 32 bytes, KEYBDINPUT 24 — so the declaration was right and
+        # despite `Marshal.SizeOf` confirming the expected x64 layout --
+        # INPUT 32 bytes, KEYBDINPUT 24 -- so the declaration was right and
         # PowerShell's marshalling of the `INPUT[]` union array was not.
         # Chasing that is a PowerShell interop problem, not a pdfce problem.
         #
         # `keybd_event` is the legacy entry point that Windows implements in
         # terms of SendInput internally, it takes no union and no array, and
-        # it is ALREADY PROVEN IN THIS SCRIPT — the modifier press/release
+        # it is ALREADY PROVEN IN THIS SCRIPT -- the modifier press/release
         # above uses it and works. With `bVk = 0` and KEYEVENTF_UNICODE it is
         # layout-independent in exactly the same way, which was the whole
         # reason for preferring SendInput.

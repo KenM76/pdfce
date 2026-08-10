@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Run pdfce-gui off-screen, drive it with a scripted input sequence, and
     print its diagnostic trace. Never touches the operator's screen, mouse,
@@ -46,7 +46,7 @@
 
 .NOTES
     PICKING SCREEN COORDINATES. Do not guess them, and do not reuse them
-    across a layout change — a hard-coded point silently stops hitting
+    across a layout change -- a hard-coded point silently stops hitting
     anything, which reads exactly like a broken feature. Take `rect=` and
     `zoom=` from one run's `canvas` trace line, then:
 
@@ -63,7 +63,7 @@
     message ordering tried, including move and button posted back to back.
     Recorded here so nobody rebuilds it. (Full finding: D:\dev\rag\egui\.)
 
-    SendInput / keybd_event — as tools/gui-click.ps1 uses — are a different
+    SendInput / keybd_event -- as tools/gui-click.ps1 uses -- are a different
     thing again: they inject at the system level, moving the real cursor and
     acting on whatever window is in front. Correct for driving a window the
     operator can see; completely wrong here.
@@ -80,21 +80,43 @@ param(
     # while still a real on-screen-coordinate window that lays out and
     # interacts normally.
     [int]$X = -4000, [int]$Y = -4000, [int]$W = 1600, [int]$H = 1000,
-    # Run against a binary older than the sources. Escape hatch only —
+    # Run against a binary older than the sources. Escape hatch only --
     # see the staleness check below for why this defaults off.
     [switch]$AllowStaleBinary
 )
 
+
+# ROBUST $Exe DEFAULT -- do not fold this back into the param block.
+#
+# The param-block default above is correct PowerShell and works under
+# PowerShell 7 (pwsh). Under Windows PowerShell 5.1 invoked as
+# `powershell -File <this>`, this file's $Exe default came back WITHOUT
+# the $PSScriptRoot prefix, resolving to `\..\target\release\pdfce-gui.exe`
+# and throwing "no binary at" before doing anything.
+#
+# A minimal script with the same `param([string]$P = "$PSScriptRoot\x")`
+# shape does NOT reproduce it -- $PSScriptRoot expands correctly there
+# under both hosts -- so the cause is specific to this file and is NOT
+# the general "PSScriptRoot is unavailable in param defaults" claim it
+# first looked like. Rather than ship an explanation that testing had
+# already contradicted, the value is recomputed here, in the BODY, where
+# $PSScriptRoot is verified to work under both hosts.
+#
+# Only when the caller did not pass -Exe: an explicit path must win.
+if (-not $PSBoundParameters.ContainsKey('Exe') -and $PSScriptRoot) {
+    $Exe = Join-Path $PSScriptRoot '..\target\release\pdfce-gui.exe'
+}
+
 $ErrorActionPreference = 'Stop'
-if (-not (Test-Path $Exe)) { throw "no binary at $Exe — cargo build --release -p pdfce-gui" }
+if (-not (Test-Path $Exe)) { throw "no binary at $Exe -- cargo build --release -p pdfce-gui" }
 if (-not (Test-Path $Pdf)) { throw "no document at $Pdf" }
 
 # ---------------------------------------------------------------------------
-# STALENESS GATE — refuse to drive a binary older than the code.
+# STALENESS GATE -- refuse to drive a binary older than the code.
 #
 # This script defaults to target\release\. A developer who has been running
 # `cargo test` (debug) and then drives this harness is testing a build that
-# predates everything they just wrote — and the failure mode is the worst
+# predates everything they just wrote -- and the failure mode is the worst
 # kind: the traces they expect are simply ABSENT, which reads as "the feature
 # does not work" rather than "the feature was never compiled".
 #
@@ -113,11 +135,11 @@ $newestSrc = Get-ChildItem "$PSScriptRoot\..\crates" -Recurse -Include *.rs, Car
     -ErrorAction SilentlyContinue | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
 if ($newestSrc -and $newestSrc.LastWriteTimeUtc -gt $exeTime) {
     # The verb differs per path, because a warning that says "refusing to
-    # run" while it runs is itself a misleading instrument — which is the
+    # run" while it runs is itself a misleading instrument -- which is the
     # entire class of defect this gate exists to prevent.
     $verb = if ($AllowStaleBinary) { "running anyway (-AllowStaleBinary)" } else { "refusing to run" }
     $msg = @"
-STALE BINARY — $verb.
+STALE BINARY -- $verb.
 
   binary : $Exe
            built $exeTime UTC
@@ -142,7 +164,7 @@ $env:PDFCE_DIAG_SCRIPT = $Script
 $proc = Start-Process -FilePath $Exe -ArgumentList $Pdf -PassThru `
     -RedirectStandardError $Log -WindowStyle Hidden
 if (-not $proc.WaitForExit($TimeoutSeconds * 1000)) {
-    Write-Warning "script did not run dry within ${TimeoutSeconds}s — killing"
+    Write-Warning "script did not run dry within ${TimeoutSeconds}s -- killing"
     $proc | Stop-Process -Force
 }
 
@@ -150,9 +172,9 @@ $trace = Get-Content $Log -ErrorAction SilentlyContinue
 if (-not $trace) {
     # An empty trace is ambiguous, so the app emits an unconditional `start`
     # line. No output at all means the process never got as far as that.
-    throw "no trace at $Log — the process produced nothing (bad binary? crash on open?)"
+    throw "no trace at $Log -- the process produced nothing (bad binary? crash on open?)"
 }
 if (-not ($trace | Select-String -Pattern '^pdfce-diag start')) {
-    throw "trace has no 'start' line — PDFCE_DIAG did not reach the process"
+    throw "trace has no 'start' line -- PDFCE_DIAG did not reach the process"
 }
 $trace | Select-String -Pattern $Filter
