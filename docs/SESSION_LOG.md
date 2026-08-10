@@ -31625,3 +31625,84 @@ state **not asserted anywhere in this filing** (hard rule 8) — engineer
 should check `D:\Dev\pdfce-backups\` and `git log`/`git status` directly.
 This is the **seventy-sixth** `SESSION_LOG.md` filing (the seventy-fifth
 confirmed present by direct read before this entry was appended).
+
+## 2026-08-10 (seventy-seventh filing) — `ec8abfe`: three Reader-parity panels (Bookmarks, Layers, Signatures) were unreachable in a real build for their entire shipped lifetime — only the GUI-driving harness's own step handler ever set their pane subject; a gate is added, and its OWN first draft passes on the broken source before being fixed to look for the right thing; `R184` MINTED
+
+**Sourcing.** No shell this dispatch (hard rule 8) — the commit hash and
+its account are taken from the dispatching engineer, not confirmed
+against `git log`/`git show`. Verified by direct read of current source:
+`ribbon.rs:613`–`:623` (`PaneSubject::ALL`); `main.rs:10994`–`:11005`
+(`Action::ShowBookmarks`/`ShowLayers`/`ShowSignatures`, each calling
+`show_pane_subject` from production `Action` dispatch, outside
+`raw_input_hook`); `main.rs:13722`,`:13733`,`:13744` (the rail's own
+click handlers, one per panel); `main.rs:14607`–`:14609` (the
+pre-existing panel-DRAW `match`, confirmed to still name the bare
+variant — the exact string the gate's first draft matched on);
+`main.rs:24992`–`:25064` (the new test in full, doc comment and
+assertion logic both read). **Not independently verified:** relayed gate
+figures (2839 tests / 0 failed / clippy 0 / fmt clean / ui-strings
+clean); the exact wording of the build note that told the operator to
+open Bookmarks.
+
+**Shipped:**
+- `ec8abfe` — Bookmarks/Layers/Signatures each gain a real rail-driven
+  route (`Action::ShowBookmarks`/`ShowLayers`/`ShowSignatures`), landing
+  at the same dispatch point as the three Find actions for the same
+  structural reason (`find_text`-style methods need `&mut self`, so they
+  can't run inside a render closure). No new Pass ID — this is a defect
+  fix inside `Pass 55.3`/`Pass 55.5`/`Pass 10.0`, not new scope. Three
+  engineer-authored glyphs land with it (`bookmarks.svg`/`layers.svg`/
+  `signatures.svg`); `signatures.svg` deliberately avoids every
+  seal/badge/shield/checkmark shape because pdfce performs no
+  cryptographic verification. A stale intra-doc link at `layers.rs:1472`
+  (flagged, not fixed, by the seventy-sixth filing) is fixed in the same
+  commit.
+
+**Decisions made this session:**
+- `R184` minted — a call site inside the harness's own driver function
+  satisfies "something calls this" but not "an operator can reach this";
+  a reachability audit must exclude the harness's driver body, not
+  merely find a non-empty caller set. Distinct from R151 (whose
+  mechanical check, applied literally, would have PASSED here — the call
+  site existed, just inside the harness).
+- No `ARCHITECTURE.md` §12 decision number claimed — filed as a plain
+  dated entry, same convention as the `45a88f2` harness-convention entry.
+
+**Findings + decisions:**
+- The root cause is a class: every verification drove the harness, and
+  the harness genuinely could reach all three panels, so R86
+  ("verify in the running app") was satisfied on its literal terms while
+  the actual defect — no operator-facing route — went unobserved.
+- The gate's own first draft passed on the broken source: it searched
+  for the bare variant token, which the panel-dispatch `match` arm also
+  contains (that arm decides what to DRAW, not what SETS the subject).
+  Fixed by making the needle the state-changing call/assignment.
+
+**Still in flight:** unchanged from the seventy-sixth filing — decisions
+`037`/`038` still OWED, test-count reconciliation still unclosed.
+
+**For next session:** unchanged from the seventy-sixth filing's own list.
+
+**Ledger for this filing.** No new Pass ID; Pass-family ceiling unchanged
+at **55.6**. `docs/FEATURES.md`: rows 204 (Bookmarks) and 207 (Layers)
+get a corrective annotation, boxes unchanged (already
+`[x]`, now actually substantiated). Row 209 (Signatures) changes VALUE,
+not just text: `gui` moves `[ ]` to `[x]`, correctly left unticked at
+`Pass 10.0`'s own filing and only true as of this commit.
+`docs/ARCHITECTURE.md` §12: one
+plain dated entry, no decision number — ceiling unchanged at **036 on
+disk/complete** (037/038 CLAIMED-by-citation/UNAUTHORED, next free
+**039**). Standing rules: **`R184` MINTED** — ceiling moves R183 → R184,
+next free R185. Operator-question ceiling unchanged at **(bh)**, next
+free **(bi)**. `D:\dev\rag\egui\`: one new file
+(`enum_keyed_panel_with_no_production_setter_compiles_and_runs_cleanly.md`),
+index updated. `C:\personal_rag\claude_code\`: one new lesson
+(`lesson_20260810_diagnostic_harness_embedded_in_production_binary_is_not_an_operator_route.md`),
+subject index + master index both updated. Gate figures (2839 tests / 0
+failed, clippy 0 `--all-features`, fmt clean, ui-strings clean) RELAYED,
+NOT independently re-run — no shell this dispatch. Backup/git
+working-tree state **not asserted anywhere in this filing** (hard rule
+8) — engineer should check `D:\Dev\pdfce-backups\` and
+`git log`/`git status` directly before any push. This is the
+**seventy-seventh** `SESSION_LOG.md` filing (the seventy-sixth confirmed
+present by direct read before this entry was appended).

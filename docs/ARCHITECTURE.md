@@ -14798,3 +14798,62 @@ this file's normative description of OCG default-visibility resolution
 behavior, not a settled invariant; changing the body section to assert
 either reading as "the" answer before the decision record exists would
 misstate the record's own status.
+
+### 2026-08-10 (seventy-seventh filing, `ec8abfe`) — a reachability audit must EXCLUDE the observation/diagnostic harness's own driver function before searching, not merely find a caller; `R184` minted; NO decision number claimed
+
+**Filed by `pdfce-librarian`, no shell available — relaying the
+dispatching engineer's account, independently confirmed by direct
+source read where stated.** Full build record: `ROADMAP.md`'s `ec8abfe`
+Shipped entry (top of *Shipped*, seventy-seventh filing).
+
+**Plain entry, no decision number — this is a verification-methodology
+finding, not a crate-boundary/library-choice/invariant decision.** Same
+convention as the `45a88f2` harness-convention entry above (sixtieth
+filing): harness-internal method, not a product-facing invariant.
+
+**What happened.** Three GUI panels — Bookmarks (§12.3.3 outline),
+Layers (§8.11 optional content), Signatures (§12.8 `/ByteRange`
+coverage) — each shipped with a `ribbon::PaneSubject` variant, a panel
+body, a rail entry, and a `diag` step, for their entire lifetime as
+"shipped" capabilities (Bookmarks since `Pass 55.3`, Layers since
+`Pass 55.5`, Signatures since `Pass 10.0`). The ONLY code that ever
+constructed one of those three `PaneSubject` variants lived inside
+`PdfceApp::raw_input_hook` — the GUI-driving harness's own step-handler
+function. Every verification the engineer ran drove that harness, so
+every verification passed; the harness genuinely could reach all three
+panels. No production code path — rail click, menu, keyboard shortcut —
+ever set the subject. A build note told the operator to open the
+Bookmarks panel; that was impossible in the shipped binary.
+
+**Why this is not simply another R151 instance.** R151's mechanical
+check ("does a `pub fn`/state-setter have a GUI call site and a CLI call
+site") treats any existing call site as discharging the audit. Here a
+call site existed the whole time — it just lived inside the harness.
+Applied literally, R151's own check would have PASSED on this exact
+broken source. **The fix is a sharpened predicate, filed as a new
+standing rule (`R184`, `ROADMAP.md` Standing rules) rather than an
+amendment to R151's text**, because the distinguishing fact — production
+dispatch vs. harness-internal dispatch — has no analogue in R151's
+original shape (a `pub fn` either has a caller or it doesn't; there is
+no harness/production split to draw for a core-layer function with no
+embedded observation harness calling it).
+
+**The gate's own first draft is worth recording as its own data point.**
+The new test (`tests::every_pane_subject_is_reachable_without_the_harness`,
+`crates/pdfce-gui/src/main.rs`) initially searched for the bare variant
+token outside the excised `raw_input_hook` body and PASSED on the
+pre-fix source, because the panel-DRAW `match` arm
+(`PaneSubject::Bookmarks => self.bookmarks_panel(ui, actions)`) names the
+same token while deciding what to draw once a subject is already set —
+not what sets it. Fixed by requiring the state-changing call
+(`show_pane_subject(...)`) or assignment (`pane_subject = ...`) as the
+needle. **No `docs/ARCHITECTURE.md` §3/§4 change accompanies this
+entry** — no crate boundary, public API, or data-model invariant
+changed; the fix is entirely inside `pdfce-gui`'s own dispatch and test
+code.
+
+**Decision-record ceiling unaffected: stays 036 on disk/complete** (037,
+038 still CLAIMED-by-citation/UNAUTHORED per the entry immediately
+above, next genuinely free 039). Cross-reference: **`R184`**
+(`ROADMAP.md` Standing rules) for the full derivation, cross-references
+to R151/R177/R172/R163, and the practical/mechanical form of the check.

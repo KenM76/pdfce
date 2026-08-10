@@ -81,6 +81,131 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★ Three Reader-parity panels — Bookmarks, Layers, Signatures — were unreachable in a real build for the entire time they were reported shipped: the only code that ever set their `PaneSubject` was the GUI-driving harness's own step handler, and every verification run drove that harness; `ec8abfe` gives all three a real rail control and a gate that would have caught it, on its SECOND draft — the first draft passed on the broken source; `R184` MINTED — 2026-08-10 (seventy-seventh filing)
+
+**Sourcing.** No shell this dispatch (hard rule 8) — the commit hash and
+its account are taken from the dispatching engineer, not confirmed
+against `git log`/`git show`. **Independently verified by direct read of
+current source, not merely relayed:** `crates/pdfce-gui/src/ribbon.rs:613`–`:623`
+— `pub const ALL: &'static [PaneSubject]` exists and lists
+`ArmedTool`/`Properties`/`BatchTools`/`Redact`/`Comments`/`Forms`/
+`Bookmarks`/`Layers`/`Signatures`; `crates/pdfce-gui/src/main.rs:10994`–`:11005`
+— `Action::ShowBookmarks`/`ShowLayers`/`ShowSignatures` each now call
+`self.show_pane_subject(ribbon::PaneSubject::…)` from the production
+`Action` dispatch (outside `raw_input_hook`), immediately below a comment
+explaining why the three Find actions sit at the same dispatch point
+(`find_text` needs `&mut self` and cannot run inside a render closure —
+the same shape reused, not coincidence); `crates/pdfce-gui/src/main.rs:13722`,
+`:13733`, `:13744` — the rail's own `ui.selectable_label` /
+`actions.push(Action::Show…)` triple, one per panel, the actual
+operator-clickable control; `crates/pdfce-gui/src/main.rs:14607`–`:14609`
+— the pre-existing panel-DRAW `match` (`PaneSubject::Bookmarks =>
+self.bookmarks_panel(ui, actions)`), confirmed to still contain the bare
+variant name, which is exactly what fooled the gate's first draft (below);
+`crates/pdfce-gui/src/main.rs:24992`–`:25064` — the new test
+`tests::every_pane_subject_is_reachable_without_the_harness` in full,
+including its own doc comment naming the defect, the first-draft failure,
+and the fix, and its assertion logic (`include_str!("main.rs")`, slice out
+`raw_input_hook`'s body by locating the next `fn ` at the same indent,
+require `show_pane_subject(ribbon::PaneSubject::{subject:?})` OR
+`pane_subject = ribbon::PaneSubject::{subject:?}` in what remains, for
+every member of `PaneSubject::ALL`). **Not independently verified:** the
+stated gate figures (2839 tests, 0 failed, clippy 0 with `--all-features`,
+fmt clean, ui-strings clean) — relayed, not re-run, no shell this
+dispatch; the exact wording of the build note that told the operator to
+open the Bookmarks panel (not located in this librarian's own read,
+taken on the engineer's account); the three new icon files' PROVENANCE.md
+entry (`bookmarks.svg`/`layers.svg`/`signatures.svg` exist on disk,
+confirmed by Glob — their PROVENANCE.md §5 item-4 text itself not
+re-read).
+
+**Shipped:**
+- `ec8abfe` — Bookmarks, Layers, and Signatures each gain a real
+  production route: a new `Action::ShowBookmarks`/`ShowLayers`/
+  `ShowSignatures` dispatched from the rail's own click handler, landing
+  at the same dispatch point as the three Find actions and for the same
+  structural reason. **This is a defect fix inside the Reader-parity
+  sweep, not new scope** — Bookmarks was `Pass 55.3`, Layers was
+  `Pass 55.5`, Signatures was `Pass 10.0`; no new Pass ID is minted, per
+  the engineer's own framing and per this project's convention that a
+  bug found and fixed while building something is filed against the
+  Pass it belongs to (R170), not a fresh one. Three engineer-authored
+  glyphs (`bookmarks.svg`, `layers.svg`, `signatures.svg`,
+  `crates/pdfce-gui/assets/icons/PROVENANCE.md` §5 item 4) — `signatures.svg`
+  is deliberately NOT a seal/badge/shield/checkmark, because every one of
+  those shapes reads as VALIDATED and pdfce performs no cryptographic
+  verification (`Pass 10.0`'s own coverage-only caveat, carried into the
+  icon). A stale rustdoc intra-doc link (`layers.rs:1472`, naming a
+  deleted `group_refs`, flagged not fixed by the seventy-sixth filing) is
+  fixed in the same commit.
+
+**Decisions made this session:**
+- **`R184` MINTED** — see Standing rules, below. A call site inside the
+  GUI-driving harness's own step handler satisfies "something calls
+  this" without satisfying "an operator can reach this," and a
+  reachability audit must positively exclude the harness's own driver
+  function rather than merely test for a non-empty caller set.
+- **No `ARCHITECTURE.md` §12 decision number claimed.** This is a
+  verification-methodology finding, not a crate-boundary/library-choice/
+  invariant decision — filed as a plain dated entry, same convention as
+  the `45a88f2` harness-convention entry (sixtieth filing).
+
+**Findings + decisions:**
+- **The root cause is a class, not a missed button.** Every verification
+  the engineer ran drove `raw_input_hook`; the harness genuinely could
+  reach all three panels, so every verification passed. R86 ("verify in
+  the running app") was satisfied on its own literal terms — the harness
+  *is* a running instance of the app — while the actual defect (no
+  operator-facing route) went completely unobserved. This is a distinct
+  blind spot from R177 (screen geometry: constructed-and-run vs.
+  visible-on-screen) — here the panel was fully visible and correctly
+  drawn; the gap was entirely in who could make it appear.
+- **The gate's own first draft is the sharper finding.** It searched for
+  the bare variant token `PaneSubject::Bookmarks` outside the excised
+  hook body and PASSED on the pre-fix source, because the panel-dispatch
+  `match` arm (`PaneSubject::Bookmarks => self.bookmarks_panel(...)`,
+  confirmed above) contains that same token — and that arm decides what
+  to DRAW once a subject is already set, not what SETS it. Every one of
+  the three unreachable panels had exactly this kind of arm, so the gate
+  as first written would have certified the exact defect it was built to
+  catch. Fixed by making the needle the state-changing CALL
+  (`show_pane_subject(...)`) or ASSIGNMENT (`pane_subject = ...`), never
+  the bare symbol.
+
+**Still in flight:** unchanged from the seventy-sixth filing — decisions
+`037`/`038` still OWED (alongside `034`/`035`), neither authored this
+filing; test-count reconciliation still a stacked, unclosed delta.
+
+**For next session:** unchanged from the seventy-sixth filing's own list;
+this filing adds nothing new to it beyond what's captured above.
+
+**Ledger for this filing.** No new Pass ID (bug fix inside the existing
+Reader-parity sweep — Bookmarks/Layers/Signatures keep `Pass 55.3`/
+`Pass 55.5`/`Pass 10.0`); Pass-family ceiling unchanged at **55.6**.
+`docs/FEATURES.md`: rows 204 (Bookmarks) and 207 (Layers) get a
+corrective annotation — their `gui` `[x]` was substantiated only by the
+harness until this commit; boxes unchanged (already `[x]`, now actually
+true). **Row 209 (Signatures) changes VALUE, not just text** — `gui`
+moves `[ ]` → `[x]`, since it was correctly left unticked at
+`Pass 10.0`'s own filing (seventy-sixth) and only becomes true with this
+commit's rail control. `docs/ARCHITECTURE.md`
+§12: one plain dated entry, **no decision number claimed** — decision-
+record ceiling unchanged at **036 on disk/complete**, **037/038 still
+CLAIMED-by-citation/UNAUTHORED**, next genuinely free **039**. Standing
+rules: **`R184` MINTED** (librarian-assigned, checked against zero prior
+hits before minting per R156) — ceiling moves **R183 → R184**, next free
+**R185**. Operator-question ceiling unchanged at **(bh)**, next free
+**(bi)**. `tools/check-ledger-numbers.py --stats` should be re-run after
+this commit — this librarian has no shell and has not run it itself.
+Gate figures (2839 tests / 0 failed, clippy 0 `--all-features`, fmt
+clean, ui-strings clean) RELAYED, NOT independently re-run — no shell
+this dispatch. Backup/git working-tree state **not asserted anywhere in
+this filing** (hard rule 8) — engineer should check
+`D:\Dev\pdfce-backups\` and `git log`/`git status` directly before any
+push. This is the **seventy-seventh** `SESSION_LOG.md`/`ROADMAP.md`
+joint filing (the seventy-sixth confirmed present by direct read before
+this entry was written).
+
 ### ★★ The seventh Reader-parity gap gets its non-cryptographic half — `Pass 10.0` ships `signature::byte_range_coverage` + `pdfce-cli list-signatures`; a duplicate OCG resolver is deleted in favour of the one `annot.rs` already had; `gui-drive.ps1`'s own default `-Filter` closes the exact gap `R183` named it for, the same session `R183` was minted — TWO OCG spec disagreements filed as decisions OWED (037, 038), deliberately not settled from a relayed summary — 2026-08-10 (seventy-sixth filing)
 
 **Sourcing.** This librarian has Grep/Read/Glob but no shell this
@@ -46535,6 +46660,84 @@ and
   every fresh build look like it already has state). This is a standing
   engineering practice, not a one-off Pass; the engineer runs the tool
   at each milestone without being asked again each time.
+
+- **R184 — A call site inside the observation/diagnostic harness's own
+  driver function satisfies "something calls this," never "an operator
+  can reach this"; a reachability audit must positively EXCLUDE that
+  driver's body before searching, not merely test for a non-empty caller
+  set (2026-08-10, `ec8abfe`; librarian-minted).** `PaneSubject::Bookmarks`,
+  `::Layers` and `::Signatures` each shipped with a variant, a full panel
+  body, a rail entry referencing an `Action`, and a `diag` step — and for
+  the entire time each was reported shipped (Bookmarks since `Pass 55.3`,
+  Layers since `Pass 55.5`, Signatures since `Pass 10.0`), the ONLY code
+  that ever constructed one of those variants lived inside
+  `PdfceApp::raw_input_hook` — the GUI-driving harness's own step-handler
+  function. Every verification the engineer ran drove that harness, so
+  every verification passed; the harness genuinely could reach all three
+  panels. An operator, given the same shipped binary, could not — there
+  was no rail click, menu entry, or keyboard shortcut anywhere outside
+  the harness that ever set the subject. A build note told the operator
+  to open the Bookmarks panel; that was impossible in the binary as
+  shipped.
+  **Distinct from R151, and the distinction is the whole point.** R151's
+  mechanical check is "does a `pub fn`/state-setter have a GUI call site
+  and a CLI call site" — a call site that exists at all discharges the
+  audit. Here a call site existed the entire time; it simply lived inside
+  the harness rather than in production dispatch. A literal, un-scoped
+  application of R151's check would have PASSED on this exact broken
+  source, because "something calls `show_pane_subject(PaneSubject::Bookmarks)`"
+  was true throughout — inside `raw_input_hook`. This rule sharpens
+  R151's "caller" predicate for any project where a synthetic-input
+  injection harness is compiled into the SAME binary as production
+  dispatch: the predicate must be "a caller outside the harness's own
+  driver function," not "a caller."
+  **The false-pass mode inside the FIX's own first draft, worth naming
+  because it recurred one level down from the bug it was built to catch.**
+  The new gate
+  (`tests::every_pane_subject_is_reachable_without_the_harness`,
+  `crates/pdfce-gui/src/main.rs`) first searched for the bare variant
+  name `PaneSubject::Bookmarks` outside the cut-out hook body, and
+  PASSED on the pre-fix source — because the panel-dispatch `match`
+  (`PaneSubject::Bookmarks => self.bookmarks_panel(ui, actions)`) names
+  the variant too, and that match decides what to DRAW once a subject is
+  already set, not what SETS it. Every one of the three unreachable
+  panels had exactly this kind of arm. The gate would have certified the
+  exact defect it was written to catch. Fixed by making the needle the
+  call that SETS the subject — `show_pane_subject(ribbon::PaneSubject::X)`
+  or the direct `pane_subject = ribbon::PaneSubject::X` assignment
+  (`ArmedTool`'s own pattern, which is not "opened" so much as it
+  FOLLOWS the armed tool) — never the bare variant token, which a
+  drawing `match`, a doc comment, or a log line can all contain while
+  contributing nothing to reachability.
+  **Practical form, stated so it is checkable at review time.** (1) A
+  "does anything call X" reachability audit in any project embedding an
+  observation/injection harness in the production binary must define its
+  search space as production dispatch ONLY, with the harness's own driver
+  function's body excised first — for this project, `raw_input_hook`'s
+  body, cut via `include_str!` plus a bounded slice to the next `fn ` at
+  the same indent, the exact technique this rule's own gate uses. (2)
+  Within that search, the needle must be the STATE-CHANGING call or
+  assignment, never the bare symbol.
+  **Cross-references.** **R151** (production call-graph audit — this rule
+  sharpens its "caller" predicate rather than amending its text, for the
+  reason argued above). **R177** (a green trace proves CONSTRUCTED and
+  RUN, never VISIBLE — a sibling finding about a different blind spot in
+  the same class of instrument: R177 is about screen geometry after a
+  subject is already set; this rule is about whether the CALLER that sets
+  the subject is inside or outside the harness). **R172** (a harness
+  failure mode already read and then re-derived — this is a genuinely new
+  failure mode, not a recurrence, hence cited rather than widened).
+  **R163** (prefer a mechanical gate over a remembered rule — this rule's
+  own gate, and its own corrected first draft, are both direct instances).
+  **Ceiling moves `R183` → `R184`; next free `R185`.** No new Pass family,
+  decision record, or operator question minted by this filing: Pass-family
+  ceiling stays **55.6**; decision-record ceiling stays **036 on
+  disk/complete** (037/038 still CLAIMED-by-citation/UNAUTHORED, next
+  genuinely free 039); operator-question ceiling stays **(bh)**, next
+  free **(bi)**. `tools/check-ledger-numbers.py --stats` should be
+  re-run after this commit — this librarian has no shell and has not run
+  it itself. Full record: `ROADMAP.md`'s `ec8abfe` Shipped entry (top of
+  *Shipped*, seventy-seventh filing).
 
 ## Update protocol
 
