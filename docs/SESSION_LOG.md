@@ -31360,3 +31360,163 @@ this dispatch; engineer should check `D:\Dev\pdfce-backups\` directly.
 This is the **seventy-fourth** `SESSION_LOG.md` filing (the
 seventy-third confirmed present by direct read before this entry was
 appended).
+
+## 2026-08-10 (seventy-fifth filing) — the Reader-parity sweep COMPLETES: layers (view-only), read mode, and full screen ship, closing all seven `decision 036` gaps; TWO CORRECTIONS to the seventy-fourth filing's own claims (`1bf6ab2`: Enter was never broken; `77e0b50`: R86 IS discharged), both traced to one root cause in the test harness; `R183` MINTED
+
+**Sourcing.** This librarian has Grep/Read/Glob but no shell this
+dispatch (hard rule 8) — none of the seven hashes confirmed against
+`git log`/`git show`; all seven taken from the dispatch, no hash-to-
+change attribution independently re-verified. **Independently verified
+by direct read of current source:** `main.rs` (GUI) `read_mode`/
+`full_screen` fields, `ToggleReadMode`/`ToggleFullScreen` actions and
+handlers (Escape-ladder ordering confirmed), F11/Ctrl+H bindings;
+`bookmarks_panel`/`bookmark_rows` and `layers_panel` both exist, wired
+via `PaneSubject`, not scaffolding; `icons.rs` — `Icon::Search` is a
+real variant with its own SVG; `main.rs` (CLI) — `cmd_list_outline`'s
+diagnostics loop prints only non-zero counters and self-cites R174 in
+its own comment; the attachment `kind=` formatter builds a compact
+string instead of `Debug`-printing raw bytes; `ListLayers` command +
+`cmd_list_layers` exist and are wired; `pdfce-core/src/lib.rs:92` —
+`pub mod layers;` confirms registration; `layers.rs`'s module doc
+states the `/Order`-empty-default-is-a-`shall` finding and
+cross-references `annot.rs`'s `optional_content_default_off`, confirmed
+to exist in both files (shared resolver); grepped for
+`pdf_to_canvas_space` (the near-duplicate mapping nearly shipped) and
+found zero occurrences, confirming the revert; `pdf_space_to_canvas` is
+the live consumer inside the find-highlight draw code; `diag.rs` —
+`parse_script` returns rejects, traced as `script-step-UNPARSEABLE` on
+every run; `tools/gui-drive.ps1:75` — the `$Filter` default regex does
+NOT contain `UNPARSEABLE`, independently confirming the root-cause
+claim. **Not independently verified:** exact hash-to-change mapping;
+the stated test count (2834, +30 over the last confirmed 2804, itself
+already unreconciled against 2716 two filings ago — neither gap closed
+by this filing); clippy/fmt results; the `pre-collect-home` trace
+figure for `77e0b50` (GUI-harness output, no shell); the two
+`pdfce-spec-librarian` dispatches' own sourcing (their territory,
+finding TEXT confirmed present in source, correctness relayed).
+
+**Shipped:**
+- `e47a30f` (2026-08-10) — bug fixes to `Pass 55.3`/`Pass 55.4`:
+  `list-outline` now calls `read_outline` (diagnostics-carrying) not
+  `parse_outline` (silently drops truncation); outline diagnostics
+  print only non-zero counters (R174, self-cited in source); the
+  `/EFF` warning treated as a refusal condition where relevant;
+  attachment `kind=` stops printing raw UTF-16BE bytes where a name
+  belonged.
+- `675b0fd` (2026-08-10) — `Pass 55.6`: read mode (Ctrl+H) and full
+  screen (F11), kept as two SEPARATE toggles on purpose — the Acrobat
+  RAG records a sourced complaint that Reader conflates them. Escape
+  leaves a mode before the canvas's own escape ladder is consulted.
+- `42b86cd` (2026-08-10) — amends `Pass 55.0`: Escape closes the Find
+  bar; a status-bar Find toggle (Ctrl+F alone judged not discoverable);
+  `Icon::Search` authored under R158 (handle points down-right; lens
+  drawn empty so `ZoomIn`/`ZoomOut` can carry the `+`/`-` and still read
+  as the same family).
+- `4810b49` (2026-08-10) — amends `Pass 55.0`: find-match highlighting
+  on the canvas via `pdf_space_to_canvas` (a near-duplicate mapping was
+  nearly added and reverted before shipping — the specialist's own
+  warning against exactly that was quoted while writing it). Also:
+  `pdfce_core::layers` registered in `lib.rs` (substrate only, no
+  CLI/GUI yet).
+- `6b806a9` (2026-08-10) — `Pass 55.5`: `list-layers` + a read-only
+  Layers panel. Reuses `annot.rs`'s `optional_content_default_off`
+  rather than reimplementing it. No toggle offered (R83) — session-
+  scoped viewer state with no renderer override or save path to back
+  it. Spec finding: `/OCProperties /D /Order`'s empty default is itself
+  a `shall` (§8.11.4.3) — a producer that omits `/Order` gets NO groups
+  shown, not an inferred full list.
+- `1bf6ab2` (2026-08-10) — **correction**, not a feature: the
+  seventy-fourth filing's claim that Enter never fired in the Find bar
+  was wrong. The test sent `nav:enter`; the harness has no `nav:`
+  prefix; the step was silently `UNPARSEABLE`.
+- `77e0b50` (2026-08-10) — **correction**, not a feature: R86 IS now
+  discharged for `e46c3a8`/`Pass 55.1`. The prior "not discharged"
+  finding traced to the same root cause as `1bf6ab2` (`nav:home` sent
+  where `key:Home` was required); re-run with the corrected grammar
+  confirms the guard works.
+
+**Decisions made this session:**
+- **`decision 036` marked COMPLETE** (`ARCHITECTURE.md` §12, forward-
+  dated entry appended, not rewritten) — all seven named gaps now have
+  a surface. Printer spooling and OCG-layer toggling remain named,
+  each blocked on a real prerequisite, not merely unscheduled.
+- **`R183` MINTED**: a verification filter that matches only your
+  expectation cannot tell you your input was wrong. Both corrections
+  above trace to one cause — `gui-drive.ps1`'s default `-Filter` never
+  matched `script-step-UNPARSEABLE`, the harness's own line naming the
+  exact defect, even though `diag.rs` traces it on every run. Practical
+  form: any verification filter must include the instrument's own
+  reject/warning channel, not only the traces the test under
+  verification expects to produce.
+
+**Findings + decisions:**
+- **The root-cause method worth carrying forward**: instrument the
+  CONDITION, not the outcome, then walk upstream of each false reading
+  rather than trying a third fix. A probe placed downstream of a
+  suspect measures the suspect's output, not its input — the first
+  probe (after the six-key consumer) had to move to before it before a
+  zero reading became informative.
+- **`/OCProperties /D /Order`'s empty-array default is itself a `shall`**
+  (§8.11.4.3) — a strictly conforming layers panel shows nothing for a
+  producer that omitted `/Order`, the same shape of easy-to-misread
+  clause as `/Count`'s sign-vs-magnitude finding from the seventy-
+  fourth filing.
+- **Shared resolvers are a correctness property, not code reuse** — the
+  layers subagent reusing `annot.rs`'s `optional_content_default_off`
+  is the same argument the seventy-fourth filing made for `find_text`
+  sharing redaction's scanner: two independent implementations of the
+  same semantic question drift, and the direction they drift in is
+  exactly the one that matters (a panel saying "on" about hidden
+  content; a redaction covering the wrong box).
+
+**Still in flight:**
+- Printer job spooling — still deferred pending explicit operator
+  go-ahead, unchanged.
+- OCG-layer TOGGLING (as opposed to viewing, now built) — blocked on a
+  renderer visibility override and a save path, neither built.
+- Whole-word matching in Find — still a core `TextMatch`-context gap.
+- Attachment extraction-to-file — core verb exists, R151-flagged,
+  still zero callers.
+- `troubleshooting-librarian` dispatch (Windows-console mojibake
+  family) — still owed, now three filings running.
+- `pdfce-spec-librarian` dispatch (FDF `/Ff` namespace collision) —
+  still owed.
+- Test-count reconciliation — now TWO unexplained deltas stacked
+  (2716→2804 from the seventy-fourth filing, 2804→2834 from this one),
+  neither closed.
+
+**For next session:**
+- Reconcile both test-count deltas against an actual `cargo test` run.
+- Scope printer spooling once the operator gives explicit go-ahead.
+- Scope OCG-layer toggling once a renderer visibility override and a
+  save path exist (currently no Pass targets either prerequisite).
+- Consider whether `gui-drive.ps1`'s default `-Filter` should simply
+  always include `UNPARSEABLE` rather than relying on each caller to
+  remember R183.
+
+**Ledger for this filing.** Two new Pass IDs (`Pass 55.5` — document
+layers, view-only, core+CLI+GUI; `Pass 55.6` — read mode + full screen,
+GUI-only), both checked against zero prior hits before filing (R156).
+Two existing Pass IDs amended, not renumbered (`Pass 55.0` — Find bar
+gains highlighting/Escape/status toggle, Enter claim corrected;
+`Pass 55.3`/`Pass 55.4` — bug fixes only). `decision 036` marked
+COMPLETE, decision ceiling unaffected at **036**, next free **037**.
+Standing rules: **`R183` MINTED** — ceiling moves **R182 → R183**, next
+free **R184**. Operator-question ceiling unchanged at **(bh)**, next
+free **(bi)**. `docs/FEATURES.md`: two new *Implemented* rows (document
+layers view-only, read mode + full screen), its "Reading, navigation &
+printing" section header now states COMPLETE; three existing rows
+(Find, Bookmarks, Attachments) amended in place; *Planned* loses the
+full-screen/read-mode row entirely and narrows the OCG-panel row to
+name only the still-blocked toggle half. `tools/commits-filed-
+baseline.txt` unchanged at **5 lines**, confirmed by direct read; none
+of this filing's seven hashes was ever a baseline line. Gate status
+(2834 tests / 0 failed, clippy 0 with `--all-features`, fmt clean,
+ui-strings green) RELAYED, NOT independently re-run — no shell this
+dispatch; the test-count delta is flagged, stacked on the prior
+unreconciled gap, neither closed. Backup/git working-tree state not
+independently asserted (hard rule 8) — no shell this dispatch; engineer
+should check `D:\Dev\pdfce-backups\` directly if backup currency needs
+confirming before any push. This is the **seventy-fifth**
+`SESSION_LOG.md` filing (the seventy-fourth confirmed present by direct
+read before this entry was appended).

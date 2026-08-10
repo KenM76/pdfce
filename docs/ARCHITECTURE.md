@@ -224,6 +224,38 @@ D:\Dev\pdfce\
                                    per-TEXT-RUN, so a phrase a producer
                                    split across two `Tj` calls is missed;
                                    page content only.
+                                   **`layers.rs` (`Pass 55.5`, 2026-08-10,
+                                   `4810b49` registration, `6b806a9`
+                                   CLI+GUI; §12 decision 036):** a
+                                   READ-only §8.11 optional-content (OCG)
+                                   tree reader — `[Layer]` plus the
+                                   `[OrderNode]` presentation tree
+                                   `/OCProperties /D /Order` declares.
+                                   Reuses `annot.rs`'s
+                                   `optional_content_default_off` rather
+                                   than a second resolver, so this
+                                   module's notion of "starts visible"
+                                   cannot drift from the renderer's own —
+                                   two independent resolvers disagreeing
+                                   would mean a layers panel claiming
+                                   "on" about content the page actually
+                                   hides. **`/Order`'s default in `/D` is
+                                   the empty array, and that default is
+                                   itself a `shall`** (§8.11.4.3): a
+                                   producer that omits `/Order` gets a
+                                   strictly-conforming reading of NO
+                                   groups presented, not an inferred full
+                                   list. Depth/cycle-guarded
+                                   (`MAX_ORDER_DEPTH`) the same way
+                                   `outline.rs` is. **No write path** —
+                                   toggling a layer's visibility is
+                                   session state a viewer holds, with no
+                                   file-format footprint unless the
+                                   operator explicitly saves; pdfce has
+                                   neither a renderer visibility override
+                                   nor a save path for one, so this
+                                   module is deliberately view-only (R83)
+                                   until both exist.
     pdfce-render\               <- Takes pdfce-core's draw-op stream + resources
                                    (fonts, images, color spaces) and rasterizes to an
                                    in-memory pixel buffer via `tiny-skia` (CPU-only,
@@ -3305,7 +3337,10 @@ debug afterthought. Design points:
   print-preview <input> [--printer NAME] [--scale-percent N]` (Windows
   spooler enumeration + page-fit report; **does not print anything** —
   see §3's `printing.rs` note for why spooling is deliberately
-  unbuilt).
+  unbuilt). **Completed 2026-08-10 (seventy-fifth filing) with a sixth:**
+  `pdfce-cli list-layers <input>` (§8.11 optional-content groups,
+  READ-only — see §3's `layers.rs` note; no toggle subcommand exists,
+  by design, R83).
 - **Exit codes matter.** Since this is meant to be genuinely scriptable
   (unlike Acrobat, which has no real CLI), follow normal Unix
   conventions: `0` success, non-zero on any failure, with a specific,
@@ -14598,3 +14633,39 @@ started).
   precedent for RAG-worthy-but-not-yet-rule-worthy findings (the R166/
   R167 "stays free" pattern) — if it recurs, the second instance is the
   one that should mint it, not this one.
+
+  **★ 2026-08-10 (seventy-fifth filing) — decision 036 marked
+  COMPLETE.** All seven gaps named above now have a surface: document
+  layers (`pdfce_core::layers`, `Pass 55.5`) ship core+CLI+GUI as a
+  READ-ONLY view of an arbitrary `/OCProperties` tree — no toggle,
+  because pdfce has neither a renderer visibility override nor a save
+  path for session-scoped OCG state, so a checkbox would be either
+  inert or silently non-persistent (R83); read mode and full screen
+  (`Pass 55.6`) ship as two DELIBERATELY separate GUI toggles (Ctrl+H,
+  F11) rather than one, because the Acrobat feature-parity RAG records
+  a sourced complaint that Reader conflates them. Two residuals remain
+  named, not silently dropped: printer job SPOOLING (blocked on an
+  explicit operator go-ahead, unchanged since this decision's opening)
+  and OCG layer TOGGLING (blocked on the two prerequisites above, not
+  merely unscheduled). See `ROADMAP.md`'s seventy-fifth-filing *Shipped*
+  entry for the full build record and `docs/FEATURES.md`'s *Reading,
+  navigation & printing* section, whose own header now states the
+  section COMPLETE.
+
+  **Also corrected in the same filing, recorded here because the
+  original claims were made under this decision's own verification
+  constraint (text-trace-only, above) and the correction is therefore
+  part of this decision's record, not a separate one.** Two claims filed
+  under `Pass 55.0`/`Pass 55.1` — Enter not firing in the Find bar, and
+  R86 explicitly not discharged for the six-key keyboard-focus guard —
+  were both artifacts of a test-harness grammar mismatch (`nav:` sent
+  where `key:` was required) compounded by a verification `-Filter` that
+  excluded the harness's own `UNPARSEABLE` warning. Both are corrected,
+  not merely superseded: Enter works and always did; R86 is now
+  genuinely discharged for `e46c3a8`, verified with the corrected
+  grammar. New standing rule `R183` (`ROADMAP.md` *Standing rules*)
+  names the reusable shape. **No crate boundary or library choice
+  changes; decision ceiling unaffected, stays 036, next free 037** —
+  this is a completion-and-correction entry appended to the existing
+  decision, per this file's own append-only convention, not a new
+  decision.

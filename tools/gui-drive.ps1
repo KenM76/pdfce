@@ -72,7 +72,22 @@
 param(
     [Parameter(Mandatory = $true)][string]$Pdf,
     [string]$Script = "wait",
-    [string]$Filter = 'plain-click|vector-click|depth-click|commit-|canvas tool|refus|error',
+    # UNPARSEABLE leads this list on purpose, and is the one term a caller
+    # must not be able to lose by overriding -Filter with something
+    # narrower. See the always-shown block below, which prints rejects
+    # regardless of this regex.
+    #
+    # It was added 2026-08-10 after the same defect cost two false bug
+    # reports: `nav:enter` and `nav:home` are not steps (every navigation
+    # key lives under `key:`), so two tests pressed no key at all and two
+    # working features were declared broken -- one of them twice. The
+    # harness traced `script-step-UNPARSEABLE` on every single run, and
+    # every -Filter used matched only the traces its test expected to
+    # find, so the explanation never appeared.
+    #
+    # A filter that matches only your expectation cannot tell you your
+    # input was wrong (R183).
+    [string]$Filter = 'UNPARSEABLE|plain-click|vector-click|depth-click|commit-|canvas tool|refus|error',
     [string]$Exe = "$PSScriptRoot\..\target\release\pdfce-gui.exe",
     [string]$Log = "$env:TEMP\pdfce-diag.txt",
     [int]$TimeoutSeconds = 120,
@@ -177,4 +192,21 @@ if (-not $trace) {
 if (-not ($trace | Select-String -Pattern '^pdfce-diag start')) {
     throw "trace has no 'start' line -- PDFCE_DIAG did not reach the process"
 }
+# ALWAYS SHOWN, whatever -Filter says: a rejected script step means the
+# run did not do what the caller asked, and no filter should be able to
+# hide that. Printed BEFORE the filtered trace so it is read first.
+#
+# R183. Two working features were declared broken because their tests
+# sent `nav:enter`/`nav:home` -- not step names -- and every -Filter used
+# matched only what the test expected to see. The harness said so every
+# time and nobody could hear it.
+$rejects = $trace | Select-String -Pattern 'script-step-UNPARSEABLE'
+if ($rejects) {
+    Write-Host ""
+    Write-Host "!! THIS RUN DID NOT DO WHAT YOU ASKED -- steps were rejected:" -ForegroundColor Red
+    $rejects | ForEach-Object { Write-Host "   $_" -ForegroundColor Red }
+    Write-Host "   Valid keys are key:left/right/up/down/home/end/enter -- there is no nav: prefix." -ForegroundColor Red
+    Write-Host ""
+}
+
 $trace | Select-String -Pattern $Filter

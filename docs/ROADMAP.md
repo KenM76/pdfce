@@ -81,6 +81,282 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★★ THE READER-PARITY SWEEP COMPLETES — all seven `decision 036` gaps now have a surface (layers view-only via `Pass 55.5`, read mode + full screen via `Pass 55.6`; `Pass 55.0` gains match highlighting/Escape-to-close/a status-bar toggle); **TWO CORRECTIONS to already-filed claims** — `1bf6ab2`: Enter in the Find bar was NEVER broken; `77e0b50`: R86 IS discharged for `e46c3a8` — both trace to ONE root cause; `R183` MINTED — 2026-08-10 (seventy-fifth filing)
+
+**Sourcing.** This librarian has Grep/Read/Glob but no shell this
+dispatch (hard rule 8) — none of the seven hashes is confirmed against
+`git log`/`git show` directly; all seven are taken from the dispatch,
+and no commit-to-hash attribution below is independently re-verified
+(no way to run `git show <hash>` without a shell). **Independently
+verified by direct read of current source, not merely relayed:**
+`crates/pdfce-gui/src/main.rs` fields `read_mode`/`full_screen`
+(:917/:923), `Action::ToggleReadMode`/`Action::ToggleFullScreen`
+(:4105/:4107), their handlers including the Escape-ladder ordering
+(:10909–:10929, `full_screen` checked before `read_mode` before the
+canvas's own ladder), and the key bindings themselves
+(`pressed(Modifiers::NONE, Key::F11, Action::ToggleFullScreen)` /
+`pressed(Modifiers::COMMAND, Key::H, Action::ToggleReadMode)`,
+:12793–:12794); `fn bookmarks_panel`/`fn bookmark_rows` (:7367–:7500) and
+`fn layers_panel` (:7284–:7334) both exist and are wired via
+`PaneSubject::Bookmarks`/`PaneSubject::Layers` (:14434–:14435), not a
+new `DockPanel` variant — confirms both panels are real, reachable UI,
+not scaffolding; `crates/pdfce-gui/src/icons.rs` — `Icon::Search` is a
+real variant with its own SVG (`assets/icons/search.svg`) and name
+string (:400–:514), not a placeholder reusing an existing glyph;
+`crates/pdfce-cli/src/main.rs` — `cmd_list_outline`'s diagnostics loop
+(:5673–:5722) prints only non-zero counters and its own comment cites
+R174 by name (*"Found by reading the command's own output (R174)"* —
+the engineer self-cited correctly, unprompted); the attachment `kind=`
+formatter (:5918–:5933) builds a compact `document`/`page:N` string
+instead of `Debug`-printing `AttachmentKind`, with a comment naming the
+old defect exactly as the dispatch describes (*"the real one prints
+`tree_key: [254, 255, 0, 115, ...]` — UTF-16BE bytes where a reader
+expects a name"*); `ListLayers` command variant (:973), its wiring
+(:3897) and `cmd_list_layers` (:5753) all exist;
+`crates/pdfce-core/src/lib.rs:92` — `pub mod layers;` confirms
+registration; `crates/pdfce-core/src/layers.rs` module doc (lines
+56–150) states the `/Order` empty-default-is-a-`shall` finding in the
+terms the dispatch describes, and cross-references `annot.rs`'s
+`optional_content_default_off`, confirmed by grep to exist in BOTH
+`annot.rs` and `layers.rs` (shared resolver, not a duplicate); grepped
+the GUI crate for `pdf_to_canvas_space` (the near-duplicate coordinate
+mapping the dispatch says it nearly shipped) and found **zero
+occurrences** — confirms the revert; `viewer::pdf_space_to_canvas` is
+the live consumer at `main.rs:16500` inside the find-highlight draw
+code, with a comment naming it as such; `crates/pdfce-gui/src/diag.rs`
+(:409–:415) — `parse_script` returns `(steps, rejected)` and every
+reject is traced as `script-step-UNPARSEABLE step={bad:?} skipped=1`,
+confirming the harness's own warning channel exists and is emitted;
+`tools/gui-drive.ps1:75` — the `$Filter` parameter's own DEFAULT regex
+(`'plain-click|vector-click|depth-click|commit-|canvas tool|refus|error'`)
+does **not** contain `UNPARSEABLE` or `script-step`, independently
+confirming the root-cause claim rather than taking it on the dispatch's
+word. **Not independently verified:** the exact hash-to-change mapping
+for all seven commits (no `git show`); the stated test count (**2834**,
+delta **+30** over the last confirmed **2804**, itself already flagged
+unreconciled against **2716** two filings ago — this filing does not
+close that gap either, and is not attempting to); clippy/fmt results;
+the `pre-collect-home n=2 typing=true` trace figure cited for `77e0b50`
+(GUI-harness output, no shell this dispatch); the two
+`pdfce-spec-librarian` dispatches' own `/Order`-clause sourcing
+(spec-librarian's exclusive territory per hard rule 6 — the finding
+text above is independently confirmed present in `layers.rs`'s doc
+comment, but the CORRECTNESS of the spec reading is relayed, not
+re-verified against the spec RAG by this librarian).
+
+---
+
+**★★ THE TWO CORRECTIONS, filed first because the operator asked for
+them prominently and because they revise claims two prior filings made
+under this librarian's own name.** Per hard rule 1, the 74th filing's
+Shipped entry is **not edited** — corrections are filed forward, with a
+pointer back, matching this project's own established precedent (see
+the fifty-eighth filing's "ten historical sites reviewed, none
+rewritten" entry for the git-remote correction).
+
+**Correction 1 — `1bf6ab2`: Enter in the Find bar was never broken.**
+The 74th filing's Part 3 stated, as fact, *"Enter did not fire, on two
+separate attempts... Enter remains wired in the source and is recorded
+as still not working."* That was wrong. The empirical test behind the
+claim sent a `nav:enter` step to `gui-drive.ps1`; the harness's `Step`
+grammar has no `nav:` prefix at all — every navigation key, Enter
+included, lives under `key:`. The step was therefore silently
+`UNPARSEABLE`, traced as such by `diag.rs` (confirmed above by direct
+read), and no key was ever sent to the running application. The
+"defect" was a property of the test script, not the product.
+
+**Correction 2 — `77e0b50`: R86 IS discharged for `e46c3a8`.** The 74th
+filing's Part 2 and ledger both stated R86 was explicitly **NOT**
+discharged for the six-key keyboard-focus guard — two independent code
+analyses agreed the fix was correct, but the caret test built to
+OBSERVE it (`hello` → Home → `X` → `Xhello` if the guard works)
+reportedly printed `helloX` both before and after the fix, an
+unresolved discrepancy carried forward as owed. **Same root cause as
+Correction 1**: the test sent `nav:home`, not `key:Home`, so the guard
+was never exercised in either run — both runs measured the SAME
+untouched code path, which is exactly why they agreed with each other
+while disagreeing with two independent code readings. Corrected and
+re-run with the right grammar: `query="hello"` → `key:Home` →
+`query="Xhello"`, with an upstream `pre-collect-home n=2 typing=true`
+trace independently confirming both that the Home keypress reaches the
+frame and that the six-key guard declines to consume it (relayed —
+GUI-harness output, no shell this dispatch, see Sourcing above). **R86
+is now discharged** for `e46c3a8`/`Pass 55.1` — the observation
+requirement is satisfied by a genuine empirical run, not by two
+code-level readings agreeing with each other.
+
+**The single root cause, and why it produced two false claims instead
+of one.** `gui-drive.ps1`'s `Step` grammar (`diag.rs`) has exactly the
+prefixes it defines and no others; `nav:` was never one of them, in
+either test. **The `-Filter` regex is what let it stay hidden.**
+`gui-drive.ps1`'s own default `-Filter` (confirmed above,
+`plain-click|vector-click|depth-click|commit-|canvas tool|refus|error`)
+matches only the trace lines a passing test was expected to produce —
+it does not match `script-step-UNPARSEABLE`, the harness's own line
+naming exactly this failure, even though `diag.rs` traces it on every
+single run. Both investigations read a `-Filter`ed trace that was
+consistent with "the key press happened and did nothing," when the
+unfiltered trace said "the key press never happened at all." **`R183`
+MINTED** (Standing rules, below) for the reusable shape: *a
+verification filter that matches only your expectation cannot tell you
+your input was wrong* — it is a wider-scoped sibling of R176 ("a CI
+pipeline that RUNS is not evidence anyone LOOKED AT it") pointed at a
+different kind of blindness: not "did anyone look," but "did the LOOK
+include the channel that could disconfirm the claim." Practical form:
+any `-Filter`/grep/regex used to verify a harness or gate's output must
+include that harness's own reject/warning/error channel by name, not
+only the trace lines the test under verification expects to produce.
+
+**What actually found it, worth carrying forward as method, not just
+as the R183 rule text.** The engineer instrumented the CONDITION rather
+than the outcome — traced `has_focus`/`lost_focus`/`key_pressed`
+separately (all false) — then walked upstream rather than trying a
+third binding: is the event in the frame at all (a probe placed AFTER
+the six-key consumer read zero, so it was moved to BEFORE the consumer
+and still read zero), is the apply arm even reached (never), which
+led to reading the parse table directly rather than the runtime.
+**A probe placed downstream of a suspect measures the suspect's
+OUTPUT, not its INPUT** — the general form of why the first probe
+placement gave a false negative. Not minted as its own rule: it is
+R86's own "observed working" discipline applied recursively to the
+observation instrument itself, not a new mechanism.
+
+---
+
+**Part 1 — `e47a30f`: `list-outline` + `list-attachments` bug fixes,
+found by reading their own output.** Confirmed above by direct read:
+the outline diagnostics fix (only non-zero counters print, R174
+self-cited in the source comment) and the attachment `kind=` fix
+(compact `document`/`page:N` string, not `Debug`-printed bytes). Two
+further fixes reported by the dispatch, not independently re-verified
+line-by-line but consistent with the module's stated design: `outline.rs`
+now calls `read_outline` (the diagnostics-carrying entry point) rather
+than `parse_outline` (which silently discards the "this tree was
+truncated" signal — confirmed the two functions exist with exactly that
+relationship at `outline.rs:1066`/`:1162`, `parse_outline` a thin
+`read_outline(...).items` wrapper); the `/EFF` warning is now treated as
+a REFUSAL condition in the relevant surface rather than a note-only
+warning. Amends `Pass 55.3` and `Pass 55.4` — bug fixes to already-
+shipped commands, not new capability.
+
+**Part 2 — `675b0fd`: read mode and full screen, filed as `Pass 55.6`
+— kept apart on purpose.** The Acrobat feature-parity RAG records a
+sourced complaint that Reader CONFLATES the two; pdfce deliberately
+does not, per `Action::ToggleReadMode`/`Action::ToggleFullScreen` being
+two independent booleans rather than one enum (confirmed above). Escape
+leaves a mode before the canvas's own escape ladder is consulted,
+innermost state first (confirmed above, :10909–:10929) — a document
+must never be able to trap the operator inside either mode. `core`/`cli`
+`—`: GUI window-state only, per `FEATURES.md`'s own legend for this
+shape.
+
+**Part 3 — `42b86cd`: Escape closes Find; a status-bar Find toggle;
+`Icon::Search` AUTHORED under R158.** Amends `Pass 55.0`. Ctrl+F alone
+was judged not discoverable, so a status-bar control now exists
+alongside it. Two icon-design decisions recorded rather than left
+implicit, per this project's standing practice for authored icons
+(R158): the magnifying-glass handle points down-right, not down-left,
+because down-left mirrors the established idiom in a way that reads as
+subtly wrong rather than as a deliberate variant; the lens is drawn
+EMPTY rather than carrying a `+`/`-`, because `Icon::ZoomIn`/`ZoomOut`
+are the SAME magnifier carrying those marks — the empty lens is where
+the family member gets its name from shape alone, not from a glyph
+inside it.
+
+**Part 4 — `4810b49`: find-match highlighting on the canvas, plus
+`pdfce_core::layers` registered in `lib.rs`.** Amends `Pass 55.0`.
+`TextMatch.quad` (page space) is now drawn via `viewer::pdf_space_to_canvas`
+— confirmed above to be the actual call site inside the highlight draw
+code, and confirmed that `pdf_to_canvas_space`, a near-duplicate mapping
+the dispatch reports nearly shipping while it was itself quoting the UI
+specialist's warning against exactly that, does **not** exist anywhere
+in the crate. `pdf_space_to_canvas` is the better of the two — it
+guards on invertibility, which a hand-rolled second mapping would not
+have inherited "for free." The layers half of this commit is the
+substrate only: `crates/pdfce-core/src/layers.rs` (~1969 lines, written
+by a subagent across the 74th-filing session per `docs/NEXT_SESSION.md`)
+is registered via `pub mod layers;` (confirmed, `lib.rs:92`) but gains
+no CLI or GUI surface until Part 5.
+
+**Part 5 — `6b806a9`: `list-layers` + the Layers panel, filed as
+`Pass 55.5`.** The layers subagent reused `annot.rs`'s
+`optional_content_default_off` rather than reimplementing it —
+confirmed above, the same function name resolves in both `annot.rs`
+and `layers.rs`, which is the correctness property this matters for:
+two independent resolvers could disagree about whether a layer starts
+visible, and a panel that says "on" about content the renderer hides is
+worse than no panel. On finding zero spec-RAG coverage of `/OCProperties`,
+the agent dispatched `pdfce-spec-librarian` unprompted (same discipline
+the 74th filing's outline/attachments subagents showed) and surfaced
+that **`/OCProperties /D /Order`'s default is the empty array, and that
+default is itself a `shall`** (§8.11.4.3) — confirmed present in
+`layers.rs`'s own module doc, independently, above. Consequence stated
+in the panel's own doc comment (confirmed above, :7284–:7308): a
+strictly conforming panel shows NOTHING when a producer omits `/Order`,
+not an inferred full list. **No toggle is offered, and the panel says
+so on screen rather than looking broken** — R83 (a setting/affordance
+never outstrips actual capability): toggling a layer in a viewer is
+session state with no file-format footprint unless the operator
+explicitly saves, and pdfce has neither a renderer visibility override
+nor a save path for one; a checkbox that silently failed to persist
+would be worse than its absence.
+
+---
+
+**Ledger for this filing.** **Two new Pass IDs minted, both checked
+against `Pass 55.5`/`Pass 55.6` returning zero hits before filing, per
+R156**: `Pass 55.5` (document-layers VIEW, core+CLI+GUI, `4810b49`
+core registration + `6b806a9` CLI+GUI — toggling remains a named,
+blocked residual, not this Pass's scope) and `Pass 55.6` (read mode +
+full screen, GUI-only, `675b0fd`). **Two existing Pass IDs amended, not
+re-numbered**: `Pass 55.0` (Find — gains match highlighting, Escape-to-
+close, a status-bar toggle, `Icon::Search`; the Enter claim CORRECTED,
+above) and `Pass 55.3`/`Pass 55.4` (bookmarks/attachments — bug fixes
+to already-shipped commands: outline diagnostics, attachment `kind=`
+display, `read_outline`-not-`parse_outline`). **`decision 036` marked
+COMPLETE** in `ARCHITECTURE.md` §12 (forward-dated entry appended to
+the existing decision, not rewritten — decision ceiling **unaffected,
+stays 036**, next free **037**): all seven named gaps now have a
+surface; printer-job SPOOLING and OCG layer TOGGLING remain named,
+each blocked on a real prerequisite (an operator go-ahead; a renderer
+override + save path) rather than merely unscheduled. **`R183` MINTED**
+(see *Standing rules*, below) — ceiling moves **R182 → R183**, next
+free **R184**. Operator-question ceiling unchanged at **(bh)**, next
+free **(bi)** — nothing in this filing reads as a question owed back;
+this was a completion-and-correction filing, not new scope. `docs/
+FEATURES.md`: the *Reading, navigation & printing* Implemented
+subsection gains two rows (document layers, view-only; read mode +
+full screen) and its own header note marks the section COMPLETE; three
+existing rows (Find, Bookmarks, Attachments) amended in place for the
+Enter correction, the clickable panel, and the bug fixes respectively;
+*Planned* loses its full-screen/read-mode row entirely (fully shipped)
+and its OCG-panel row is narrowed to name only the still-blocked
+TOGGLE half. `tools/commits-filed-baseline.txt`: **unchanged at 5
+lines**, confirmed by direct read; none of this filing's seven hashes
+was ever a baseline line. **Gate status (2834 tests / 0 failed, clippy
+0 with `--all-features`, fmt clean, ui-strings green) is RELAYED from
+the dispatch, NOT independently re-run — no shell this dispatch.** The
+test-count delta (**2804 → 2834, +30**) is noted but not reconciled by
+this filing — the OLDER unreconciled gap (2716+83≠2804, flagged 74th
+filing) is also still open; both are flagged together rather than one
+silently absorbing the other. Backup/git working-tree state **not
+independently asserted anywhere in this filing** (hard rule 8) — no
+shell this dispatch; the engineer should check `D:\Dev\pdfce-backups\`
+directly if backup currency needs confirming before any push. **Still
+owed, carried forward:** printer job SPOOLING (operator go-ahead);
+OCG-layer TOGGLING (renderer override + save path, two prerequisites,
+neither built); whole-word matching in Find (core `TextMatch`-context
+gap); attachment EXTRACTION-to-file (core verb exists, R151); a
+`troubleshooting-librarian` dispatch for the Windows-console-mojibake
+finding family (carried forward unchanged, now three filings running);
+a `pdfce-spec-librarian` dispatch for the FDF `/Ff` namespace collision
+(carried forward unchanged); the test-count reconciliation (now two
+unexplained deltas stacked, not one). This is the **seventy-fifth**
+`SESSION_LOG.md` filing (the seventy-fourth confirmed present by direct
+read before this entry was written).
+
+---
+
 ### ★★★ THE READER-PARITY SWEEP OPENS — `Pass 55.0`–`Pass 55.4` FILED across five commits: `find-text` extracted from redaction's own buried scan; a six-key keyboard-focus defect fixed (R86 explicitly NOT discharged); a Find bar built; printer enumeration + page-fit preview ship (spooling deliberately NOT built); bookmarks/outline and attachments both go from zero to read+CLI in one filing. `decision 036` MINTED — 2026-08-10 (seventy-fourth filing)
 
 **The campaign, first, because it is the thing that makes the next five
@@ -45926,6 +46202,51 @@ and
   across all four files) in the very next commit, same session. Full
   record: `ROADMAP.md`'s `6798e8b`/`e8de47c` *Shipped* entry (seventy-first
   filing), Part 2. **Ceiling moves `R181` → `R182`; next free `R183`.**
+
+- **R183 — A verification filter that matches only your expectation
+  cannot tell you your input was wrong; include the harness's own
+  reject/warning channel in every `-Filter`, not just the traces under
+  test (2026-08-10, `1bf6ab2`+`77e0b50`; librarian-minted).** Two
+  separate defect claims — Enter not firing in the Find bar (74th
+  filing) and R86 explicitly NOT discharged for a six-key keyboard
+  guard (also 74th filing) — turned out to be the same false negative,
+  produced by the same mistake in the TEST, not the product: both sent
+  a `nav:` step (`nav:enter`, `nav:home`) to `gui-drive.ps1`, and the
+  harness's `Step` grammar has no `nav:` prefix at all. Every one of
+  those steps was silently `UNPARSEABLE` — `diag.rs`'s `parse_script`
+  returns rejects as a value specifically so a caller "is at least doing
+  so visibly," and traces every one as `script-step-UNPARSEABLE`, on
+  every single run, in both investigations. **What kept it hidden was
+  not the harness — the harness worked exactly as designed — but
+  `gui-drive.ps1`'s own `-Filter` default**
+  (`plain-click|vector-click|depth-click|commit-|canvas tool|refus|error`),
+  which matches only the trace lines a PASSING test was expected to
+  produce and does not match `script-step-UNPARSEABLE`. Two independent
+  investigations each read a filtered trace consistent with "the key
+  press happened and did nothing," when the unfiltered trace said "the
+  key press never happened." **Distinct from R176** (a CI pipeline that
+  RUNS is not evidence anyone LOOKED AT it — R176 is about whether a
+  human reads existing output; R183 is about whether the CAPTURE of that
+  output was even capable of showing the disconfirming evidence) **and
+  from R174** (a disclosure's wording read as its audience — R174 is
+  about legibility of what IS shown; R183 is about a filter silently
+  DISCARDING the one line that mattered before a reader ever sees it).
+  **Practical form:** any `-Filter`/grep/regex used to verify a
+  harness's or gate's output must include that instrument's own
+  reject/warning/error channel by name — for this project, any
+  `gui-drive.ps1 -Filter` should include `UNPARSEABLE` — not only the
+  trace lines the test under verification is expected to produce; a
+  filter built exclusively from the confirming case cannot, by
+  construction, surface the disconfirming one. **Worth carrying as
+  method alongside the rule**: found by instrumenting the CONDITION
+  rather than the outcome (`has_focus`/`lost_focus`/`key_pressed` traced
+  separately, all false) and then walking upstream of each false reading
+  rather than trying a third key binding — a probe placed downstream of
+  a suspect measures the suspect's OUTPUT, not its INPUT, and the first
+  placement (after the six-key consumer) had to be moved before it
+  before the zero reading became informative. Full record: `ROADMAP.md`'s
+  `1bf6ab2`/`77e0b50` *Shipped* entry (seventy-fifth filing). **Ceiling
+  moves `R182` → `R183`; next free `R184`.**
 
 - **A portable build lands in `D:\builds` at every milestone (operator
   request, 2026-08-10) — `tools/package-portable.py`, `9146b41`.**
