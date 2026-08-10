@@ -97,6 +97,12 @@
 // part most worth unit-testing — so it compiles and its tests run on the
 // Linux and macOS CI jobs too. Only the spooler-facing half is gated.
 
+// Imposition — N-up, booklet and poster. Pure geometry, deliberately NOT
+// `cfg`-gated, for the reason stated in the note above: it is the part
+// most worth testing, and gating it would delete its coverage on two of
+// three CI jobs without telling anyone.
+pub mod imposition;
+
 #[cfg(windows)]
 use std::fmt;
 
@@ -160,6 +166,8 @@ pub enum PrintError {
     Blit,
     /// A page's pixel dimensions exceed what GDI accepts.
     PageTooLarge,
+    /// Printing is not available on this platform.
+    Unsupported,
 }
 
 #[cfg(windows)]
@@ -191,6 +199,10 @@ impl fmt::Display for PrintError {
                 "the job did not close cleanly. Some pages may already have reached the                  printer — check the queue rather than reprinting blind"
             ),
             Self::Blit => write!(f, "the page image could not be drawn to the printer"),
+            Self::Unsupported => write!(
+                f,
+                "printing is not available on this platform in this release"
+            ),
             Self::PageTooLarge => write!(
                 f,
                 "the page is too large in pixels for the print system; try a lower resolution"
@@ -1154,6 +1166,164 @@ pub fn plan_job(
 }
 
 // ---------------------------------------------------------------------------
+// Driver settings (DEVMODE)
+// ---------------------------------------------------------------------------
+
+/// Which way up the sheet is fed.
+///
+/// # `Auto` is per-page, not per-job
+///
+/// Acrobat's default computes orientation **for each page** within one
+/// job — a document mixing portrait text with a landscape drawing gets
+/// both, from one command. That is the behaviour worth matching, and it
+/// is why this is resolved per page in [`resolve_orientation`] rather
+/// than once when the job starts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Orientation {
+    /// Choose per page from its own aspect ratio.
+    #[default]
+    Auto,
+    /// Force portrait.
+    Portrait,
+    /// Force landscape.
+    Landscape,
+}
+
+/// Two-sided printing.
+///
+/// # Driver-gated, never simulated
+///
+/// Acrobat does not software-simulate duplex, and neither does pdfce. A
+/// printer that cannot do it will not be made to by reordering pages and
+/// asking the operator to reinsert the stack: that is a workflow with a
+/// documented mis-assembly failure mode, and offering it as though it
+/// were duplex would be claiming a capability the hardware does not
+/// have.
+///
+/// [`Duplex::Simplex`] is not "the default" so much as "what a device
+/// that cannot duplex does". `supports_duplex` on the capabilities is
+/// what a shell must consult before offering the control at all (R83).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Duplex {
+    /// One side only.
+    #[default]
+    Simplex,
+    /// Two-sided, flipped on the long edge — the usual "book" binding.
+    LongEdge,
+    /// Two-sided, flipped on the short edge — "notepad" binding.
+    ShortEdge,
+}
+
+/// Driver-level settings applied to the device before the job starts.
+///
+/// # Why these are separate from [`JobSpec`]
+///
+/// Everything in `JobSpec` is arithmetic pdfce performs itself — which
+/// pages, at what scale, in what order. Everything here is a request to
+/// the DRIVER, which may refuse it. The two fail differently: a scale
+/// pdfce computes is exact, and a duplex setting a device declines is a
+/// job that silently comes out single-sided.
+///
+/// Keeping them apart means the shells can report the second kind
+/// honestly rather than presenting both as though pdfce controlled them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct DeviceSettings {
+    /// Sheet orientation.
+    pub orientation: Orientation,
+    /// Two-sided printing, if the device supports it.
+    pub duplex: Duplex,
+    /// Ask the driver to pick the input tray from each page's size
+    /// rather than using its default tray.
+    ///
+    /// The operator-facing companion to a document's own
+    /// `/PickTrayByPDFSize` viewer preference: this is the per-job
+    /// override of the same idea.
+    pub pick_tray_by_page_size: bool,
+}
+
+/// The orientation a page will actually print at.
+///
+/// Landscape when the page is wider than it is tall — the only sensible
+/// reading of `Auto`, and the one that keeps a mixed document upright
+/// throughout instead of rotating the drawing to match the text.
+#[must_use]
+pub fn resolve_orientation(requested: Orientation, page_pt: (f64, f64)) -> Orientation {
+    match requested {
+        Orientation::Auto => {
+            if page_pt.0 > page_pt.1 {
+                Orientation::Landscape
+            } else {
+                Orientation::Portrait
+            }
+        }
+        explicit => explicit,
+    }
+}
+
+/// What the device says it can do, beyond geometry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct DeviceFeatures {
+    /// The driver reports duplex support.
+    ///
+    /// A shell must check this before offering a duplex control: an
+    /// affordance the hardware cannot honour is R83's failure, and a
+    /// duplex checkbox that silently prints single-sided is worse than
+    /// no checkbox, because the operator finds out from the paper.
+    pub supports_duplex: bool,
+    /// The number of copies the DRIVER can produce itself.
+    ///
+    /// Not the number pdfce will offer. A device that can collate in
+    /// hardware does it faster than pdfce re-sending pages, but pdfce
+    /// sends its own sequence today, so this is reported rather than
+    /// used — and reporting it is what lets a later decision be made on
+    /// evidence instead of assumption.
+    pub max_copies: u16,
+}
+
+#[cfg(windows)]
+/// Read the non-geometric capabilities of a device.
+///
+/// # Errors
+///
+/// [`PrintError::OpenDevice`] if the printer name does not resolve.
+pub fn device_features(printer: &str) -> Result<DeviceFeatures, PrintError> {
+    use windows::Win32::Storage::Xps::{DC_COPIES, DC_DUPLEX, DeviceCapabilitiesW};
+    use windows::core::PCWSTR;
+
+    let wide: Vec<u16> = printer.encode_utf16().chain(std::iter::once(0)).collect();
+    // SAFETY: `wide` is NUL-terminated and outlives both calls. A
+    // negative return is the documented failure and is treated as
+    // "the driver will not say", never as a capability.
+    let (duplex, copies) = unsafe {
+        (
+            DeviceCapabilitiesW(PCWSTR(wide.as_ptr()), PCWSTR::null(), DC_DUPLEX, None, None),
+            DeviceCapabilitiesW(PCWSTR(wide.as_ptr()), PCWSTR::null(), DC_COPIES, None, None),
+        )
+    };
+    if duplex < 0 && copies < 0 {
+        return Err(PrintError::OpenDevice(printer.to_owned()));
+    }
+    Ok(DeviceFeatures {
+        // `DC_DUPLEX` returns 1 when the device supports it. A driver
+        // that will not answer is treated as NOT supporting it — the
+        // safe direction, because the cost of being wrong the other way
+        // is a job the operator believes is two-sided and is not.
+        supports_duplex: duplex == 1,
+        max_copies: u16::try_from(copies.max(1)).unwrap_or(1),
+    })
+}
+
+#[cfg(not(windows))]
+/// Non-Windows stub. Printing is a Windows capability in this release.
+///
+/// # Errors
+///
+/// Always [`PrintError::Unsupported`].
+pub fn device_features(_printer: &str) -> Result<DeviceFeatures, PrintError> {
+    Err(PrintError::Unsupported)
+}
+
+// ---------------------------------------------------------------------------
 // Spooling (§ the irreversible half)
 // ---------------------------------------------------------------------------
 
@@ -1248,11 +1418,13 @@ pub struct SpoolReport {
 /// each shell — a control the operator clicked. Nothing here runs as a
 /// side effect of rendering, previewing, saving or opening.
 #[cfg(windows)]
+#[allow(clippy::too_many_arguments)]
 pub fn spool(
     printer: &str,
     pages: &[PageBitmap],
     dry_run: DryRun,
     output: Option<&std::path::Path>,
+    settings: DeviceSettings,
 ) -> Result<SpoolReport, PrintError> {
     use windows::Win32::Graphics::Gdi::{CreateDCW, DeleteDC};
     use windows::Win32::Storage::Xps::{AbortDoc, DOCINFOW, EndDoc, EndPage, StartDocW, StartPage};
@@ -1261,9 +1433,23 @@ pub fn spool(
     let caps = printer_caps(printer)?;
     let wide: Vec<u16> = printer.encode_utf16().chain(std::iter::once(0)).collect();
 
-    // SAFETY: `wide` is NUL-terminated and outlives the call. A null DC
-    // is the documented failure and is checked rather than assumed.
-    let hdc = unsafe { CreateDCW(PCWSTR::null(), PCWSTR(wide.as_ptr()), PCWSTR::null(), None) };
+    // The driver settings reach the device through a `DEVMODE` handed to
+    // `CreateDC`, not through anything pdfce computes. Built here so the
+    // device context is created WITH them: changing orientation after
+    // the DC exists means the printable area already read is wrong.
+    let devmode = build_devmode(&wide, settings, pages);
+
+    // SAFETY: `wide` is NUL-terminated and outlives the call, and
+    // `devmode` (when present) outlives it too. A null DC is the
+    // documented failure and is checked rather than assumed.
+    let hdc = unsafe {
+        CreateDCW(
+            PCWSTR::null(),
+            PCWSTR(wide.as_ptr()),
+            PCWSTR::null(),
+            devmode.as_ref().map(std::ptr::from_ref),
+        )
+    };
     if hdc.is_invalid() {
         return Err(PrintError::DeviceContext {
             printer: printer.to_owned(),
@@ -1375,6 +1561,71 @@ pub fn spool(
     outcome.map(|()| report)
 }
 
+/// Build the `DEVMODE` that carries the operator's driver settings.
+///
+/// # Why it starts from the driver's own default rather than zeroed
+///
+/// A `DEVMODE` is a driver-defined structure with a documented header
+/// and an opaque tail. Handing a zeroed one to `CreateDC` throws away
+/// every setting the driver holds — tray assignments, media type,
+/// quality — and replaces them with nothing. So the driver's current
+/// default is fetched first and only the requested fields are
+/// overwritten, with `dmFields` naming exactly which.
+///
+/// Returns `None` when the driver will not supply one, in which case the
+/// caller creates the device context with no override and the device's
+/// own defaults apply. That is a silent loss of the operator's
+/// orientation and duplex choice, and it is reported by the caller
+/// rather than hidden — see [`SpoolReport::settings_applied`].
+///
+/// `pages` decides `Auto` orientation: the FIRST page's aspect sets the
+/// sheet, because a `DEVMODE` applies to the job. Per-page orientation
+/// within one job needs `ResetDC` between pages and is not built.
+#[cfg(windows)]
+fn build_devmode(
+    _printer_wide: &[u16],
+    settings: DeviceSettings,
+    pages: &[PageBitmap],
+) -> Option<windows::Win32::Graphics::Gdi::DEVMODEW> {
+    use windows::Win32::Graphics::Gdi::{
+        DEVMODEW, DM_DUPLEX, DM_ORIENTATION, DMDUP_HORIZONTAL, DMDUP_SIMPLEX, DMDUP_VERTICAL,
+        DMORIENT_LANDSCAPE, DMORIENT_PORTRAIT,
+    };
+    // Nothing to say to the driver.
+    if settings == DeviceSettings::default() {
+        return None;
+    }
+    let mut dm = DEVMODEW {
+        dmSize: u16::try_from(std::mem::size_of::<DEVMODEW>()).unwrap_or(0),
+        ..Default::default()
+    };
+
+    let first = pages.first().map_or((612.0, 792.0), |p| p.page_pt);
+    let orientation = resolve_orientation(settings.orientation, first);
+    dm.Anonymous1.Anonymous1.dmOrientation = match orientation {
+        Orientation::Landscape => DMORIENT_LANDSCAPE as i16,
+        // `Auto` is already resolved above; portrait is the remaining
+        // case and the documented default.
+        Orientation::Auto | Orientation::Portrait => DMORIENT_PORTRAIT as i16,
+    };
+    dm.dmFields |= DM_ORIENTATION;
+
+    dm.dmDuplex = match settings.duplex {
+        Duplex::Simplex => DMDUP_SIMPLEX,
+        // Long-edge binding is `VERTICAL` in Win32's vocabulary and
+        // short-edge is `HORIZONTAL`, which reads backwards until you
+        // notice the name describes the FLIP AXIS rather than the edge
+        // the pages are bound on. Getting these the wrong way round
+        // produces a booklet whose alternate pages are upside down, and
+        // nothing catches it before the paper.
+        Duplex::LongEdge => DMDUP_VERTICAL,
+        Duplex::ShortEdge => DMDUP_HORIZONTAL,
+    };
+    dm.dmFields |= DM_DUPLEX;
+
+    Some(dm)
+}
+
 /// Blit one page's pixels onto the current page of `hdc`.
 ///
 /// # The two conversions that are easy to get wrong
@@ -1470,6 +1721,7 @@ pub fn spool(
     _pages: &[PageBitmap],
     _dry_run: DryRun,
     _output: Option<&std::path::Path>,
+    _settings: DeviceSettings,
 ) -> Result<SpoolReport, PrintError> {
     Err(PrintError::Unsupported)
 }

@@ -103,26 +103,39 @@ pub(crate) struct PendingPrint {
     /// The custom percentage, kept across mode switches for the same
     /// reason as `range_text`.
     custom_percent: u32,
-    /// Whether annotation appearances print.
+    /// Which classes of annotation print.
     ///
-    /// ONE flag, deliberately. `RenderOptions::annotations` is a single
-    /// `bool`, so a Comments-and-Forms taxonomy with separate markup,
-    /// stamp and form-field entries would be a control implying a
-    /// capability that does not exist — R83's failure, even though the
-    /// toggle itself is real. Per-kind filtering is a `pdfce-render`
-    /// change, not a GUI arrangement.
-    annotations: bool,
+    /// # This was one checkbox until the renderer could back four
+    ///
+    /// `RenderOptions` carried a single `bool`, so the dialog offered a
+    /// single honestly-labelled toggle rather than Acrobat's four-way
+    /// selector — a control implying a capability that does not exist is
+    /// R83's failure even when the control itself works. The renderer
+    /// gained `AnnotationScope`, so the selector is backed and offered.
+    ///
+    /// Defaulted to `Document` for PRINTING, which differs from the
+    /// renderer's own `DocumentAndMarkups` default. Deliberate on both
+    /// sides: the canvas should show markup, and a print should not
+    /// carry review comments unless asked. Acrobat Pro defaults the
+    /// other way and Reader defaults to `Document`; pdfce takes
+    /// Reader's here, because a comment reaching paper unasked is the
+    /// costlier mistake.
+    pub(crate) scope: pdfce_render::AnnotationScope,
     /// Rendering resolution ceiling, in DPI. A memory bound, editable
     /// because the disclosure is worth more as a control than a warning.
     max_dpi: u32,
+    /// Driver-level settings: orientation, duplex, tray choice.
+    pub(crate) device: pdfce_print::DeviceSettings,
+    /// What the device says it can do, read once when the dialog opens.
+    pub(crate) features: pdfce_print::DeviceFeatures,
     /// Odd/even filtering.
     pub(crate) subset: pdfce_print::PageSubset,
     /// Print back to front.
     pub(crate) reverse: bool,
     /// Copy count.
     pub(crate) copies: u16,
-    /// Copy ordering.
-    pub(crate) collate: pdfce_print::Collate,
+    /// Copy ordering, as the checkbox holds it.
+    pub(crate) uncollated: bool,
     /// Which page the preview shows.
     preview_page: usize,
     /// The last spool attempt's outcome, once there is one.
@@ -149,6 +162,14 @@ impl PdfceApp {
     pub(crate) fn open_print_dialog(&mut self) {
         let printers = pdfce_print::list_printers().unwrap_or_default();
         let selected = printers.iter().position(|p| p.is_default).unwrap_or(0);
+        // Read ONCE, here. A duplex control must not appear for a device
+        // that cannot duplex (R83), and asking the driver that question
+        // sixty times a second while a dialog sits open would be rude to
+        // a service other applications share.
+        let features = printers
+            .get(selected)
+            .and_then(|p| pdfce_print::device_features(&p.name).ok())
+            .unwrap_or_default();
         let preview_page = match &self.status {
             Status::Open(doc) => doc.view.page_index,
             _ => 0,
@@ -160,12 +181,14 @@ impl PdfceApp {
             range_text: String::new(),
             scale: pdfce_print::ScaleMode::Fit,
             custom_percent: 100,
-            annotations: true,
+            scope: pdfce_render::AnnotationScope::Document,
             max_dpi: 300,
+            device: pdfce_print::DeviceSettings::default(),
+            features,
             subset: pdfce_print::PageSubset::All,
             reverse: false,
             copies: 1,
-            collate: pdfce_print::Collate::Collated,
+            uncollated: false,
             preview_page,
             outcome: None,
             plans: Vec::new(),
@@ -252,7 +275,11 @@ impl PdfceApp {
             subset: pending.subset,
             reverse: pending.reverse,
             copies: pending.copies,
-            collate: pending.collate,
+            collate: if pending.uncollated {
+                pdfce_print::Collate::Uncollated
+            } else {
+                pdfce_print::Collate::Collated
+            },
         };
         let geometry = caps.as_ref().map(pdfce_print::DeviceGeometry::from);
         let plans = geometry
@@ -571,10 +598,101 @@ impl PdfceApp {
         egui::CollapsingHeader::new(ui_text::print_more_options())
             .default_open(false)
             .show(ui, |ui| {
+                ui.label(ui_text::print_orientation_heading());
+                for (o, label) in [
+                    (
+                        pdfce_print::Orientation::Auto,
+                        ui_text::print_orientation_auto(),
+                    ),
+                    (
+                        pdfce_print::Orientation::Portrait,
+                        ui_text::print_orientation_portrait(),
+                    ),
+                    (
+                        pdfce_print::Orientation::Landscape,
+                        ui_text::print_orientation_landscape(),
+                    ),
+                ] {
+                    if ui.radio(pending.device.orientation == o, label).clicked() {
+                        pending.device.orientation = o;
+                    }
+                }
+                ui.add_space(6.0);
+
+                // ★ R83: no duplex control for a device that cannot
+                // duplex. pdfce does NOT simulate it by reordering pages
+                // and asking the operator to reinsert the stack — that
+                // workflow has a documented mis-assembly failure mode,
+                // and offering it as though it were duplex would claim a
+                // capability the hardware does not have.
+                //
+                // Absent rather than disabled: a greyed control implies
+                // something the operator could turn on, and no setting
+                // in this dialog will ever make this printer two-sided.
+                if pending.features.supports_duplex {
+                    ui.label(ui_text::print_duplex_heading());
+                    for (d, label) in [
+                        (pdfce_print::Duplex::Simplex, ui_text::print_duplex_off()),
+                        (pdfce_print::Duplex::LongEdge, ui_text::print_duplex_long()),
+                        (
+                            pdfce_print::Duplex::ShortEdge,
+                            ui_text::print_duplex_short(),
+                        ),
+                    ] {
+                        if ui.radio(pending.device.duplex == d, label).clicked() {
+                            pending.device.duplex = d;
+                        }
+                    }
+                    ui.add_space(6.0);
+                }
+
+                ui.horizontal(|ui| {
+                    ui.label(ui_text::print_copies_label());
+                    ui.add(egui::DragValue::new(&mut pending.copies).range(1..=999));
+                });
+                ui.checkbox(&mut pending.uncollated, ui_text::print_uncollated());
+                ui.checkbox(&mut pending.reverse, ui_text::print_reverse());
+                ui.horizontal(|ui| {
+                    ui.label(ui_text::print_subset_label());
+                    for (s, label) in [
+                        (pdfce_print::PageSubset::All, ui_text::print_subset_all()),
+                        (pdfce_print::PageSubset::Odd, ui_text::print_subset_odd()),
+                        (pdfce_print::PageSubset::Even, ui_text::print_subset_even()),
+                    ] {
+                        if ui.radio(pending.subset == s, label).clicked() {
+                            pending.subset = s;
+                        }
+                    }
+                });
                 ui.checkbox(
-                    &mut pending.annotations,
-                    ui_text::print_include_annotations(),
+                    &mut pending.device.pick_tray_by_page_size,
+                    ui_text::print_pick_tray(),
                 );
+                ui.add_space(6.0);
+
+                ui.label(ui_text::print_comments_heading());
+                for (s, label) in [
+                    (
+                        pdfce_render::AnnotationScope::Document,
+                        ui_text::print_scope_document(),
+                    ),
+                    (
+                        pdfce_render::AnnotationScope::DocumentAndMarkups,
+                        ui_text::print_scope_markups(),
+                    ),
+                    (
+                        pdfce_render::AnnotationScope::DocumentAndStamps,
+                        ui_text::print_scope_stamps(),
+                    ),
+                    (
+                        pdfce_render::AnnotationScope::FormFieldsOnly,
+                        ui_text::print_scope_fields_only(),
+                    ),
+                ] {
+                    if ui.radio(pending.scope == s, label).clicked() {
+                        pending.scope = s;
+                    }
+                }
                 ui.add_space(4.0);
                 // Always true, so a static caption rather than a warning.
                 // A banner that fires on every job trains an operator to
@@ -630,15 +748,15 @@ impl PdfceApp {
         let Some(pending) = self.pending_print.as_ref() else {
             return Err(ui_text::print_no_document().to_owned());
         };
-        let (Some(printer), annotations) = (pending.printer_name.clone(), pending.annotations)
-        else {
+        let (Some(printer), scope) = (pending.printer_name.clone(), pending.scope) else {
             return Err(ui_text::print_button_why_disabled().to_owned());
         };
         let plans = pending.plans.clone();
+        let settings = pending.device;
         let Status::Open(doc) = &self.status else {
             return Err(ui_text::print_no_document().to_owned());
         };
-        let mut options = pdfce_render::RenderOptions::default().with_annotations(annotations);
+        let mut options = pdfce_render::RenderOptions::default().with_annotation_scope(scope);
         options.fonts = self.font_env.clone();
         let view = doc.session.view();
 
@@ -664,7 +782,7 @@ impl PdfceApp {
                 page_pt: size,
             });
         }
-        pdfce_print::spool(&printer, &bitmaps, pdfce_print::DryRun::No, None)
+        pdfce_print::spool(&printer, &bitmaps, pdfce_print::DryRun::No, None, settings)
             .map_err(|e| e.to_string())
     }
 }

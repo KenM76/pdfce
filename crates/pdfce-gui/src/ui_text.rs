@@ -2789,17 +2789,6 @@ pub fn print_more_options() -> &'static str {
     "More options"
 }
 
-/// The single annotations toggle.
-///
-/// Named for exactly what the one flag underneath does. Acrobat offers a
-/// four-way choice here — document, document and markups, document and
-/// stamps, form fields only — and pdfce's renderer has a single boolean.
-/// Offering the four-way choice would be a control implying a capability
-/// that is not there.
-pub fn print_include_annotations() -> &'static str {
-    "Include comments, markup and form field appearances"
-}
-
 /// The standing note that pdfce prints by rasterising.
 ///
 /// A caption rather than a warning, because it is true on EVERY job. A
@@ -2897,6 +2886,133 @@ pub fn print_open_tooltip() -> &'static str {
 /// Label on the ribbon's Print button.
 pub fn print_open_label() -> &'static str {
     "Print…"
+}
+
+/// Heading over the comments-and-forms selector.
+pub fn print_comments_heading() -> &'static str {
+    "Comments and forms"
+}
+
+/// Print scope: the page and its form fields, no review markup.
+///
+/// Named for what it INCLUDES rather than what it excludes, because
+/// "Document" alone tells an operator nothing about whether their
+/// comments will appear on the paper.
+pub fn print_scope_document() -> &'static str {
+    "Document only (no comments or markup)"
+}
+
+/// Print scope: page plus all markup.
+pub fn print_scope_markups() -> &'static str {
+    "Document and markup"
+}
+
+/// Print scope: page plus stamps, a narrower slice than markup.
+pub fn print_scope_stamps() -> &'static str {
+    "Document and stamps only"
+}
+
+/// Print scope: form fields, no page content.
+///
+/// Says the page will be blank, because that is the surprising half.
+/// This scope exists for printing onto a pre-printed form, and an
+/// operator who picks it expecting the page as well gets a sheet with a
+/// few boxes on it and no explanation.
+pub fn print_scope_fields_only() -> &'static str {
+    "Form fields only (the page itself is not printed)"
+}
+
+/// Heading over the orientation controls.
+pub fn print_orientation_heading() -> &'static str {
+    "Orientation"
+}
+
+/// Orientation: decide from each page.
+pub fn print_orientation_auto() -> &'static str {
+    "Automatic"
+}
+
+/// Orientation: portrait.
+pub fn print_orientation_portrait() -> &'static str {
+    "Portrait"
+}
+
+/// Orientation: landscape.
+pub fn print_orientation_landscape() -> &'static str {
+    "Landscape"
+}
+
+/// Heading over the duplex controls. Shown only when the device
+/// supports two-sided printing.
+pub fn print_duplex_heading() -> &'static str {
+    "Two-sided"
+}
+
+/// Duplex off.
+pub fn print_duplex_off() -> &'static str {
+    "One side only"
+}
+
+/// Duplex, long-edge binding.
+///
+/// Named for the BINDING an operator wants rather than the flip axis
+/// Win32 names it by — nobody chooses a print setting by thinking about
+/// which axis the sheet turns on.
+pub fn print_duplex_long() -> &'static str {
+    "Both sides, bound on the long edge (like a book)"
+}
+
+/// Duplex, short-edge binding.
+pub fn print_duplex_short() -> &'static str {
+    "Both sides, bound on the short edge (like a notepad)"
+}
+
+/// Label beside the copy count.
+pub fn print_copies_label() -> &'static str {
+    "Copies:"
+}
+
+/// The uncollated checkbox.
+///
+/// Worded as what it produces rather than as the jargon: "collate" is a
+/// word people reliably disagree about the meaning of, and the page
+/// order is the thing actually being chosen.
+pub fn print_uncollated() -> &'static str {
+    "Group copies of each page together (1,1,2,2)"
+}
+
+/// The reverse-order checkbox.
+pub fn print_reverse() -> &'static str {
+    "Print back to front"
+}
+
+/// Label beside the odd/even filter.
+pub fn print_subset_label() -> &'static str {
+    "Print:"
+}
+
+/// Subset: every selected page.
+pub fn print_subset_all() -> &'static str {
+    "All"
+}
+
+/// Subset: odd document pages.
+///
+/// "page numbers" rather than a bare "Odd", because the filter is by the
+/// number printed on the paper and not by position in the range — the
+/// distinction that decides which sheets come out.
+pub fn print_subset_odd() -> &'static str {
+    "Odd page numbers"
+}
+
+/// Subset: even document pages.
+pub fn print_subset_even() -> &'static str {
+    "Even page numbers"
+}
+
+/// The tray-selection checkbox.
+pub fn print_pick_tray() -> &'static str {
+    "Choose the paper tray from each page's size"
 }
 
 /// Ribbon group: printing.

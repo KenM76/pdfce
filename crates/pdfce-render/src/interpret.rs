@@ -427,7 +427,10 @@ pub struct Diagnostics {
     // ---- annotation appearances (Pass 6.0, ISO 32000-1 §12.5) --------
     //
     // These count what the annotation-painting pass (`crate::annot`,
-    // gated by `RenderOptions::annotations`) did on this page. They are
+    // gated by `RenderOptions::effective_annotation_scope`) did on this
+    // page — the census (`annotations_total`, `annotations_widget`,
+    // `annotations_without_ap`) is taken under EVERY scope, so a narrowed
+    // or suppressed render still discloses what it is not showing. They are
     // page-level: nested form XObjects never evaluate annotations, so a
     // merged child contributes zero to them. Every counter is APPENDED
     // to the CLI stable-line contract, never reordered (module docs of
@@ -468,6 +471,48 @@ pub struct Diagnostics {
     /// divide-by-zero and never a fabricated placement (risk X2). The
     /// specific reason is in [`Diagnostics::annotation_notes`].
     pub annotations_placement_degenerate: usize,
+    /// Annotations withheld because the render's
+    /// [`AnnotationScope`](crate::AnnotationScope) does not paint their
+    /// class — a `/Highlight` under "Document", a sticky note under
+    /// "Document and Stamps", any annotation at all under
+    /// [`ContentOnly`](crate::AnnotationScope::ContentOnly).
+    ///
+    /// # Why this is its own counter and not folded into `annotations_hidden`
+    ///
+    /// They answer different questions and have different owners. A hidden
+    /// annotation was hidden **by the document** (§12.5.3's flags, or an
+    /// OFF optional-content group); an out-of-scope one was withheld **by
+    /// the caller**, and can be brought back by changing one option. Summing
+    /// them would tell an operator "six annotations are not shown" while
+    /// destroying the only information that says which of those six they
+    /// can do anything about.
+    ///
+    /// The two are independent, not exclusive: an annotation that is both
+    /// out of scope and Hidden increments both counters, because both
+    /// statements about it are true.
+    ///
+    /// Zero under the default scope, where every class is painted — so this
+    /// counter is also the answer to "did a narrowed scope actually change
+    /// what this page shows?"
+    pub annotations_out_of_scope: usize,
+    /// The page's own content streams were **not painted** because the
+    /// render's [`AnnotationScope`](crate::AnnotationScope) was
+    /// [`FormFieldsOnly`](crate::AnnotationScope::FormFieldsOnly) — the
+    /// print-onto-pre-printed-paper scope, where the page background is the
+    /// physical paper and drawing it again would double-print it.
+    ///
+    /// The one diagnostic here that reports a **deliberate** omission the
+    /// caller asked for, rather than a shortfall. It exists because the
+    /// resulting raster is indistinguishable by inspection from a page
+    /// whose content failed to decode, and a caller handed a nearly-blank
+    /// pixmap must be able to tell the two apart without knowing which
+    /// options it passed three layers up.
+    ///
+    /// While this is `true`, [`Diagnostics::contents_streams_unresolved`]
+    /// stays `0`: pdfce never looked at the content streams, so it has
+    /// nothing to report about them, and reporting an incompleteness it did
+    /// not measure would be an invented fact.
+    pub page_content_suppressed: bool,
     /// First few distinct annotation-handling reasons (degenerate box,
     /// missing `/Rect`/`/BBox`, deferred NoZoom/NoRotate adjustment),
     /// for the diagnostics surfaces. Kept separate from
@@ -618,6 +663,11 @@ polarity unverifiable (decision 006 R30)",
         self.annotations_appearance_state_missing += other.annotations_appearance_state_missing;
         self.annotations_widget += other.annotations_widget;
         self.annotations_placement_degenerate += other.annotations_placement_degenerate;
+        self.annotations_out_of_scope += other.annotations_out_of_scope;
+        // A `bool`, so the merge is OR rather than `+`: page-content
+        // suppression is a property of the whole render, and a merged child
+        // can only ever confirm it, never retract it.
+        self.page_content_suppressed |= other.page_content_suppressed;
         for (subtype, count) in other.annotations_without_ap {
             *self.annotations_without_ap.entry(subtype).or_insert(0) += count;
         }

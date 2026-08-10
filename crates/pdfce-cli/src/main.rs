@@ -1077,6 +1077,21 @@ enum Command {
         /// Print the sequence back to front.
         #[arg(long)]
         reverse: bool,
+        /// Sheet orientation. `auto` decides from the page's own shape.
+        #[arg(long, value_enum, default_value_t = OrientationArg::Auto)]
+        orientation: OrientationArg,
+        /// Two-sided printing, if the device supports it. Never
+        /// simulated: a printer that cannot duplex will print
+        /// single-sided and `list-printers` says which can.
+        #[arg(long, value_enum, default_value_t = DuplexArg::Simplex)]
+        duplex: DuplexArg,
+        /// Ask the driver to choose the input tray from each page's
+        /// size rather than using its default tray.
+        #[arg(long)]
+        pick_tray: bool,
+        /// Which annotation classes print.
+        #[arg(long, value_enum, default_value_t = CommentsArg::Document)]
+        comments: CommentsArg,
     },
 
     PrintPreview {
@@ -4026,6 +4041,10 @@ fn run() -> ExitCode {
             uncollated,
             subset,
             reverse,
+            orientation,
+            duplex,
+            pick_tray,
+            comments,
         } => cmd_print(
             &input,
             printer.as_deref(),
@@ -4039,6 +4058,10 @@ fn run() -> ExitCode {
             uncollated,
             subset,
             reverse,
+            orientation,
+            duplex,
+            pick_tray,
+            comments,
         ),
         Command::PrintPreview {
             input,
@@ -6423,6 +6446,78 @@ fn cmd_list_attachments(input: &Path) -> u8 {
 /// variant, and because the CLI's vocabulary is allowed to differ from
 /// the engine's — `shrink` reads better than `ShrinkOversized` in a
 /// shell.
+/// `--comments` on `print` — which annotation classes reach the paper.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
+enum CommentsArg {
+    /// Page content and form fields only, no review markup. The
+    /// DEFAULT, matching Reader rather than Acrobat Pro: a comment
+    /// reaching paper unasked is the costlier mistake.
+    Document,
+    /// Page content plus all markup annotations.
+    Markups,
+    /// Page content plus stamps only — narrower than markup.
+    Stamps,
+    /// Form fields alone. The page itself is NOT printed, which is the
+    /// point: this is for printing onto a pre-printed form.
+    FieldsOnly,
+}
+
+impl CommentsArg {
+    /// The render type this maps to.
+    const fn to_scope(self) -> pdfce_render::AnnotationScope {
+        match self {
+            Self::Document => pdfce_render::AnnotationScope::Document,
+            Self::Markups => pdfce_render::AnnotationScope::DocumentAndMarkups,
+            Self::Stamps => pdfce_render::AnnotationScope::DocumentAndStamps,
+            Self::FieldsOnly => pdfce_render::AnnotationScope::FormFieldsOnly,
+        }
+    }
+}
+
+/// `--orientation` on `print`.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
+enum OrientationArg {
+    /// Decide per page from its own aspect ratio.
+    Auto,
+    /// Force portrait.
+    Portrait,
+    /// Force landscape.
+    Landscape,
+}
+
+impl OrientationArg {
+    /// The core type this maps to.
+    const fn to_orientation(self) -> pdfce_print::Orientation {
+        match self {
+            Self::Auto => pdfce_print::Orientation::Auto,
+            Self::Portrait => pdfce_print::Orientation::Portrait,
+            Self::Landscape => pdfce_print::Orientation::Landscape,
+        }
+    }
+}
+
+/// `--duplex` on `print`.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
+enum DuplexArg {
+    /// One side only.
+    Simplex,
+    /// Flip on the long edge (book binding).
+    LongEdge,
+    /// Flip on the short edge (notepad binding).
+    ShortEdge,
+}
+
+impl DuplexArg {
+    /// The core type this maps to.
+    const fn to_duplex(self) -> pdfce_print::Duplex {
+        match self {
+            Self::Simplex => pdfce_print::Duplex::Simplex,
+            Self::LongEdge => pdfce_print::Duplex::LongEdge,
+            Self::ShortEdge => pdfce_print::Duplex::ShortEdge,
+        }
+    }
+}
+
 /// `--subset` on `print`.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
 enum SubsetArg {
@@ -6524,6 +6619,10 @@ fn cmd_print(
     uncollated: bool,
     subset: SubsetArg,
     reverse: bool,
+    orientation: OrientationArg,
+    duplex: DuplexArg,
+    pick_tray: bool,
+    comments: CommentsArg,
 ) -> u8 {
     let doc = match pdfce_core::document::Document::load(input) {
         Ok(doc) => doc,
@@ -6574,6 +6673,11 @@ fn cmd_print(
         }
     };
 
+    let device_settings = pdfce_print::DeviceSettings {
+        orientation: orientation.to_orientation(),
+        duplex: duplex.to_duplex(),
+        pick_tray_by_page_size: pick_tray,
+    };
     let mode = match scale_percent {
         Some(pct) => pdfce_print::ScaleMode::Custom(f64::from(pct) / 100.0),
         None => scale.to_mode(),
@@ -6618,7 +6722,8 @@ fn cmd_print(
         };
         let placement = plan.placement;
         let render_scale = plan.render_scale;
-        let options = pdfce_render::RenderOptions::default();
+        let options =
+            pdfce_render::RenderOptions::default().with_annotation_scope(comments.to_scope());
         let rendered = match pdfce_render::render_page_with_view(
             &session.view(),
             page,
@@ -6645,7 +6750,8 @@ fn cmd_print(
     } else {
         pdfce_print::DryRun::Yes
     };
-    let report = match pdfce_print::spool(&name, &bitmaps, dry, to_file.as_deref()) {
+    let report = match pdfce_print::spool(&name, &bitmaps, dry, to_file.as_deref(), device_settings)
+    {
         Ok(r) => r,
         Err(err) => {
             eprintln!("pdfce-cli: {err}");

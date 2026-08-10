@@ -24,6 +24,11 @@ pub mod select;
 /// plain-data `FontEmbedPlan` that `pdfce-core::font_embed` emits from.
 pub mod subset;
 
+// The annotation scope lives in `crate::annot` — beside the markup
+// classification it selects over and the walk that enforces it — rather
+// than here, so the sourced Table 169 partition and the type that consumes
+// it cannot drift apart across two files.
+use crate::annot::AnnotationScope;
 use pdfce_core::settings::{
     CmykIntent, CmykJpegPolarity, MaskResample, MinifyFilter, MissingAppearanceState,
 };
@@ -270,10 +275,11 @@ impl Default for FontEnvironment {
 /// construct it through [`Default`] plus field assignment, which keeps
 /// every future addition source-compatible.
 ///
-/// The default is [`FontEnvironment::bundled`] plus **annotations on**,
-/// which is what makes rendering reproducible on any machine (R19) and
-/// matches what a reader shows by default (a document's stamps, markup and
-/// form-field appearances are part of the page).
+/// The default is [`FontEnvironment::bundled`] plus **annotations on, every
+/// class** ([`AnnotationScope::DocumentAndMarkups`]), which is what makes
+/// rendering reproducible on any machine (R19) and matches what a reader
+/// shows by default (a document's stamps, markup and form-field appearances
+/// are part of the page).
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct RenderOptions {
@@ -282,12 +288,57 @@ pub struct RenderOptions {
     /// itself never goes looking.
     pub fonts: FontEnvironment,
     /// Whether to paint annotation appearances (`/AP` `/N`) over the page
-    /// content (Pass 6.0, ISO 32000-1 §12.5). **Default `true`** — a
+    /// content at all (Pass 6.0, ISO 32000-1 §12.5). **Default `true`** — a
     /// reader shows annotations. Set `false` to reproduce the pre-6.0
     /// content-only raster (the CLI's `render-page --no-annotations` and
     /// the GUI's annotation-visibility toggle), which keeps the round-trip
     /// raster oracle's self-comparison and any A/B baseline reproducible.
+    ///
+    /// # This is a MASTER GATE over [`Self::annotation_scope`]
+    ///
+    /// Two fields now describe annotation painting, and they compose in
+    /// exactly one direction: `annotations = false` forces the effective
+    /// scope to [`AnnotationScope::ContentOnly`] whatever
+    /// [`Self::annotation_scope`] says, and `annotations = true` lets the
+    /// scope decide. The composition lives in one place —
+    /// [`Self::effective_annotation_scope`] — and every consumer in this
+    /// crate reads it from there rather than looking at either field.
+    ///
+    /// The gate can therefore only ever **subtract**: it cannot cause page
+    /// content to disappear (that is [`AnnotationScope::FormFieldsOnly`]'s
+    /// doing, and this field suppresses annotations, not content), and it
+    /// cannot make an excluded class paint. So the pre-existing meaning of
+    /// `with_annotations(false)` — "reproduce the content-only raster" — is
+    /// preserved *unconditionally*, which is the property the round-trip
+    /// oracle depends on.
+    ///
+    /// # Why the `bool` was kept rather than replaced
+    ///
+    /// [`AnnotationScope`] could have absorbed it; `ContentOnly` is
+    /// precisely `annotations = false`. It was not absorbed because this
+    /// struct's own contract invites `let mut o = RenderOptions::default();
+    /// o.annotations = false;` (see the type docs — `#[non_exhaustive]`
+    /// means field assignment is the documented way to reach a field), and
+    /// deleting a `pub` field a type's documentation tells callers to
+    /// assign is a breaking change dressed as a refactor. Keeping it costs
+    /// one `match` arm in [`Self::effective_annotation_scope`] and buys
+    /// every existing caller — including any this crate cannot see —
+    /// compiling and rendering exactly as before.
     pub annotations: bool,
+    /// **Which classes** of annotation to paint when [`Self::annotations`]
+    /// permits any — the four-way Acrobat print scope (Document / Document
+    /// and Markups / Document and Stamps / Form fields only) plus pdfce's
+    /// own content-only scope. See [`AnnotationScope`].
+    ///
+    /// **Default [`AnnotationScope::DocumentAndMarkups`]** — every class,
+    /// which together with `annotations = true` is exactly the behaviour
+    /// every pre-existing caller already had. A caller that never mentions
+    /// this field cannot observe that it exists.
+    ///
+    /// Read it through [`Self::effective_annotation_scope`], never
+    /// directly: this field alone does not account for the
+    /// [`Self::annotations`] gate.
+    pub annotation_scope: AnnotationScope,
     /// An optional flag the render polls between operators so a caller
     /// can abandon it in flight ([`crate::cancel::RenderCancel`]).
     ///
@@ -452,6 +503,13 @@ impl Default for RenderOptions {
         Self {
             fonts: FontEnvironment::default(),
             annotations: true,
+            // Every class painted — the pre-existing "annotations on"
+            // behaviour, spelled as a scope. See `AnnotationScope`'s type
+            // docs for why the default is Acrobat Pro's rather than
+            // Reader's: it is a compatibility decision about what
+            // `render_page` has always drawn, not a choice of which product
+            // to imitate.
+            annotation_scope: AnnotationScope::default(),
             cancel: None,
             // Every R169 knob reads its default off the enum that models
             // the choice, never a literal — so `RenderOptions::default()`,
@@ -490,6 +548,67 @@ impl RenderOptions {
     pub fn with_annotations(mut self, annotations: bool) -> Self {
         self.annotations = annotations;
         self
+    }
+
+    /// Set which classes of annotation are painted (the four-way Acrobat
+    /// print scope), returning `self` for chaining.
+    ///
+    /// Same `#[non_exhaustive]` consuming-builder reasoning as
+    /// [`Self::with_annotations`]. This does **not** touch
+    /// [`Self::annotations`], so
+    /// `RenderOptions::default().with_annotations(false).with_annotation_scope(s)`
+    /// still paints nothing — the `bool` is a master gate that only
+    /// subtracts. Callers that want the scope to be the only control
+    /// should leave `annotations` at its `true` default and set this alone.
+    #[must_use]
+    pub fn with_annotation_scope(mut self, scope: AnnotationScope) -> Self {
+        self.annotation_scope = scope;
+        self
+    }
+
+    /// The annotation scope this render will actually use — the
+    /// composition of [`Self::annotations`] and [`Self::annotation_scope`].
+    ///
+    /// **The one place the two fields are combined**, and the only value
+    /// the render path reads. Having exactly one composition point is the
+    /// point: two knobs that describe the same thing are a standing
+    /// invitation for a caller's setting to be honoured on one code path
+    /// and dropped on another, which is the failure mode
+    /// [`RenderPolicy`]'s own docs were written to prevent one level down.
+    ///
+    /// The rule is a single sentence: **the `bool` can only subtract.**
+    /// `annotations = false` ⇒ [`AnnotationScope::ContentOnly`], full stop;
+    /// otherwise the scope field stands.
+    ///
+    /// ```
+    /// use pdfce_render::{AnnotationScope, RenderOptions};
+    ///
+    /// // The default: every annotation class, exactly as before.
+    /// let options = RenderOptions::default();
+    /// assert_eq!(
+    ///     options.effective_annotation_scope(),
+    ///     AnnotationScope::DocumentAndMarkups
+    /// );
+    ///
+    /// // Acrobat's "Document": page content plus form fields, no markups.
+    /// let options = RenderOptions::default()
+    ///     .with_annotation_scope(AnnotationScope::Document);
+    /// assert_eq!(options.effective_annotation_scope(), AnnotationScope::Document);
+    ///
+    /// // The master gate wins over any scope.
+    /// let options = options.with_annotations(false);
+    /// assert_eq!(
+    ///     options.effective_annotation_scope(),
+    ///     AnnotationScope::ContentOnly
+    /// );
+    /// ```
+    #[must_use]
+    pub const fn effective_annotation_scope(&self) -> AnnotationScope {
+        if self.annotations {
+            self.annotation_scope
+        } else {
+            AnnotationScope::ContentOnly
+        }
     }
 
     /// Set how `DeviceCMYK` is converted for display (§8.6.4.4),
