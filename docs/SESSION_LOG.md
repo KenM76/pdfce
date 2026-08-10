@@ -29528,3 +29528,94 @@ value; item (b) of `ae59ce3`'s deferred scope.
   8). This is the **fifty-eighth** `SESSION_LOG.md` filing (the
   fifty-seventh confirmed present by direct read before this entry was
   appended).
+
+## 2026-08-10 (fifty-ninth filing) — `ef88973`: pdfce did not compile on Linux since its CI could first run, found by reading the run history nobody had read; Pass 24.0's deferred Enter-commit half ships NARROWER than filed; `R176` MINTED
+
+**Filed by `pdfce-librarian`, dispatched with the engineer's own git/CI
+evidence carried IN the dispatch** — this librarian has no shell this
+filing (hard rule 8); every figure below is relayed, not independently
+re-run.
+
+**Shipped:**
+- No Pass ID — Linux/CI build-defect fix: `mod tests` in
+  `crates/pdfce-render/src/lib.rs` is inline, so its `#[path]`-targeted
+  fixture imports resolved against a phantom `src/tests/` directory.
+  Windows collapses `..` lexically and never touches it; Linux resolves
+  component-by-component and ENOENTs on the phantom directory before
+  reaching the `..`s — identical path string, opposite outcome. Six
+  GitHub Actions runs (2026-08-09 04:57Z–10:18Z, the full run history
+  since the remote could first host CI) had all failed on exactly this,
+  Windows job green throughout, Linux/clippy/fmt jobs red throughout,
+  undiscovered until this session read the run history directly. Fixed
+  by hoisting the three fixture modules to file scope in `lib.rs`
+  (`mod tests` now aliases them); `include!` was tried and rejected first
+  (cannot carry a leading `//!` doc comment), confirming `#[path]` was
+  the right tool and the module nesting was the actual defect.
+- **`Pass 24.0` (completion)** — Enter now commits typing-flow drafts
+  (Add-Text/Edit-Text canvas box, Forms-panel value editors, the
+  `Pass 53.0` rename editor), closing `ae59ce3`'s deferred "universal
+  Enter/Escape" remainder — but `pdfce-ui-specialist` ruled the word
+  "universal" was wrong: Enter completes a TYPING flow, and the measure
+  gesture types nothing, so it gets no Enter arm, permanently, by design.
+  Built as a non-consuming per-tool peek gated on
+  `image_response.has_focus()`, not the frame-global `consume_key` the
+  engineer first drafted — which the specialist caught would have broken
+  Enter-to-commit in the Forms panel and the rename editor, both of which
+  rely on egui itself seeing Enter to trigger `lost_focus()`.
+  `text_edit_committable` is now one function serving both the
+  click-away path and the new Enter arm.
+- `Pass 53.0`'s owed polish item 8 — `EditSession::rename_refusal()`, a
+  thin wrapper sharing `deletion_refusal()`'s new `structural_form_refusal`
+  core, so the GUI stops disabling Rename through a method named for
+  Delete. Item 10 (hover-highlight persistence during a rename edit)
+  stays owed.
+
+**Decisions made this session:**
+- **New standing rule `R176`**: a CI pipeline that runs is not evidence
+  anyone looked at it — this project's dev machine is Windows-only, so a
+  Linux-only CI failure is structurally invisible to every local gate run
+  this session can perform; the run history itself must be checked.
+  Distinct from `R173` (a gate whose coverage window silently shrank) and
+  the "verify no HTTP/TLS client" gate fix (a gate that could never fire)
+  — this gate was correct and firing the whole time; nobody read it.
+- **`ARCHITECTURE.md` §12 gained a plain dated entry** refining the
+  decision-024 Tier-3 convention: Enter-to-commit is scoped to text-entry
+  surfaces only, never to a pick-and-click gesture, formalising a line
+  decision 031 §2's own convention table had already drawn without being
+  connected to Pass 24.0's "universal" wording.
+
+**Findings + decisions:**
+- The `#[path]`-inside-inline-`mod` mechanism is filed to
+  `D:\dev\rag\rust\` — a pure Rust/Cargo cross-platform fact with nothing
+  pdfce-specific in it.
+- Verification of the Enter binding is **split, and recorded as split**:
+  driven live for the `Pass 53.0` rename editor; the canvas text-edit-draft
+  half rests on construction only (shared predicate, no trace exists yet
+  to locate a text run for the harness to drive) — named as owed, not
+  claimed as observed.
+- `docs/decisions/003-distribution-posture.md` §1.1 is now stale on BOTH
+  halves of its opening sentence ("no git remote… CI has never run once")
+  — flagged again to the engineer, not edited (outside this librarian's
+  five tiers).
+
+**Still in flight:** unchanged from the fifty-eighth filing, plus: the
+canvas half of Enter-to-commit is unverified by live drive; decision
+003 §1.1's superseding note is still owed to the engineer, now doubly so.
+
+**For next session:**
+- Consider driving the canvas Enter-commit path once the harness can
+  locate a text run (no `rect=` trace exists for it today).
+- `docs/decisions/003-distribution-posture.md` §1.1 still needs a
+  superseding note from the engineer (not this librarian's tier).
+
+- **Ledger for this filing.** No new Pass ID (Linux fix is infra; Enter
+  binding files as `Pass 24.0`'s own completion). Pass ceiling unchanged
+  at **53.0**. Standing rules: **`R176` MINTED** — ceiling moves `R175` →
+  `R176`, next free `R177`. Decision records: no new number claimed — one
+  plain dated `ARCHITECTURE.md` §12 entry added; ceiling stays **035**,
+  next free **036**. Operator-question ceiling unchanged at **(bh)**, next
+  free **(bi)**. `docs/decisions/` untouched by this librarian (one stale
+  site re-flagged, not edited). Backup/git working-tree state not
+  independently asserted (hard rule 8). This is the **fifty-ninth**
+  `SESSION_LOG.md` filing (the fifty-eighth confirmed present by direct
+  read before this entry was appended).

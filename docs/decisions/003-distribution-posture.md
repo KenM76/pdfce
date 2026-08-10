@@ -66,6 +66,25 @@ checker for an artifact nobody can verify the integrity of.
 
 ### 1.1 The framing fact everyone should read first
 
+> **★★ SUPERSEDED 2026-08-10 — BOTH HALVES OF THE SENTENCE BELOW ARE NOW
+> FALSE, and it called itself the thing to read first.**
+>
+> - **There IS a remote, and it is public.** `github.com/KenM76/pdfce`,
+>   created 2026-08-09 04:56Z, `main` pushed 10:18Z. See `LEGAL.md` §1.1.
+> - **CI HAS run — six times, and every run was RED.** Not "no signal":
+>   *unread* signal. `cargo test (ubuntu-latest)`, `cargo clippy` and
+>   `cargo fmt --check` failed on all six while `cargo test
+>   (windows-latest)` passed, because a `#[path]` inside an inline
+>   `mod tests` resolves through a phantom directory that Linux cannot
+>   traverse — **pdfce did not compile on Linux at all.** Fixed in
+>   `ef88973`; standing rule **R176** is the lesson.
+>
+> The reasoning below is left intact because it was sound on its date and
+> the decision it reaches still stands. Read it as a record of 2026-07-2x,
+> not as a description of today. Verify any environmental claim in this
+> file with the command, not by reading the sentence — that is R175, and
+> this section is the reason it exists.
+
 **pdfce has no git remote. CI has never run once.**
 
 `.github/workflows/ci.yml` says so in its own header comment, and it is

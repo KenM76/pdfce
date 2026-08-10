@@ -14109,3 +14109,41 @@ started).
   rules move `R174` → `R175` (`R176` next free); operator questions
   stay **(bh)**, closed (next free **(bi)**); Pass ceiling unchanged at
   **53.0**.
+
+- **2026-08-10 (`ef88973`, Pass 24.0's Enter-commit half) — Enter-to-commit
+  is an invariant of TYPING flows, not of every Tier-2 inference; a
+  pick-and-click gesture with nothing typed gets no Enter arm, by design
+  and permanently.** Refines the Tier-3 convention recorded above (§12's
+  decision-024 entry, *"Enter commits, Escape resolves through
+  `canvas::resolve_escape`… today Enter commits in exactly one tool of
+  three"*) at the point that entry's own "universal" framing turned out to
+  be imprecise. `pdfce-ui-specialist` was asked whether Enter should
+  extend to every gesture rule 4 / decision 024 §4.4 permits a key-press
+  commit for, and ruled **no**: Enter is the "yes" to something typed, and
+  the measure gesture types nothing, so there is no typed state for Enter
+  to affirm. `measure_status_ui` therefore carries a permanent, documented
+  absence of an Enter arm rather than an owed one. **Decided: Enter-to-
+  commit is scoped to text-entry surfaces only** — the Add-Text/Edit-Text
+  canvas draft, the Forms panel's value editors, and the `Pass 53.0` rename
+  editor — **never to a pick-and-click measurement or selection gesture**,
+  which commits by click-away or Escape alone. Implemented as a
+  non-consuming, per-tool peek (`image_response.has_focus()`) rather than a
+  frame-global `consume_key`, specifically because the Forms panel and the
+  rename editor already commit on `lost_focus()`, which egui only fires
+  because it sees the Enter keypress itself — a global consume upstream of
+  panel drawing would have silently broken both. `text_edit_committable` is
+  now the single predicate both `committable_gesture` (click-away) and the
+  new Enter arm call, so the two commit paths cannot independently drift
+  on what counts as a committable draft. **No new decision number
+  claimed** — filed as a plain dated entry refining the existing
+  decision-024 Tier-3 record rather than forking it. **Verification is
+  partial and stated as such**: driven live only for the `Pass 53.0` rename
+  editor (`edit-note "Renamed…"` observed); Enter committing a canvas
+  text-edit draft is unverified by live drive (no trace exists to locate a
+  text run on the canvas) and rests on construction (the shared predicate)
+  rather than an observed run — recorded as owed, not asserted. Full
+  record: `ROADMAP.md`'s `ef88973` Shipped entry (top of *Shipped*) and the
+  `★ Pass 24.0–24.5` family entry's matching 2026-08-10 banner (*Next up*).
+  New standing rule **R176** (unrelated to this entry's own subject —
+  minted the same commit, from the Linux CI-blind-spot half of `ef88973`;
+  see `ROADMAP.md` Standing rules) does not touch this invariant.

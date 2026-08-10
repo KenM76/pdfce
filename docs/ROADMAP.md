@@ -81,6 +81,191 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★ `ef88973` — pdfce did not compile on Linux since the day its CI could first run (found by reading the run history, not by running it); Pass 24.0's deferred "universal Enter/Escape" ships NARROWER than filed, on a `pdfce-ui-specialist` ruling that caught a global-key regression before ship; `Pass 53.0`'s owed polish item 8 discharged — 2026-08-10, tip of `pass-8-redaction` (fifty-ninth filing)
+
+**Sourcing.** This librarian has no shell this dispatch (hard rule 8).
+Every figure below is carried in the dispatch: `ef88973` is stated to be
+the tip of `pass-8-redaction`, immediately after `269361d` (the prior,
+fifty-eighth filing's own commit). GitHub Actions run history, `cargo
+test`/`clippy`/`fmt` output and the commit message are the engineer's own
+readings, relayed, not independently re-run.
+
+**Part 1 — the Linux build defect, and why it earns more than a bug-fix
+line.** Six workflow runs, ALL failure, 2026-08-09 04:57Z – 10:18Z, branch
+`main` — the FULL run history of a CI pipeline that could not have run
+before that window (the remote did not exist until 04:56Z that same day —
+see the fifty-eighth filing, immediately above). Every run's Windows job
+(`cargo test (windows-latest)`) passed; every run's Linux job (`cargo test
+(ubuntu-latest)`), `cargo clippy -D warnings` and `cargo fmt --check`
+failed, all on the same error: `couldn't read
+crates/pdfce-render/src/tests/../../../pdfce-core/src/image_codec/
+fixtures.rs`. Nobody had read the run history before this session — a
+public repository carried genuine, continuous failure on a whole platform
+for about a day, and the project's own dev machine (Windows) could not
+have surfaced it locally by construction.
+
+**Root cause, precisely, because the shape generalises past this one
+file.** `mod tests` is declared INLINE inside
+`crates/pdfce-render/src/lib.rs`. A `#[path]` attribute written inside an
+inline module resolves relative to a directory named for THAT module —
+`src/tests/` — whether or not that directory exists on disk. It does not,
+here; the fixture files it targets (via `..` components) live in
+`pdfce-core`. **Windows collapses the `..` sequence lexically** without
+ever touching the phantom `src/tests/` directory, so the resulting path is
+correct and the file opens. **Linux resolves the path one component at a
+time**, and the first component it tries to enter — `src/tests/` — does
+not exist, so it fails ENOENT before it ever processes the `..`s. The
+path string is identical on both platforms and is lexically correct; only
+one platform's resolution behaviour tolerates a phantom intermediate
+directory.
+
+**The right construct, wrongly placed — worth stating because the fix is
+not "stop using `#[path]`".** The three fixture modules (`fixtures.rs`,
+`fixtures_bilevel.rs`, `fixtures_jpx.rs`, all `#[cfg(test)]`-only, living
+in `pdfce-core`) open with `//!` inner module docs. `include!` cannot
+carry them — an inner attribute must be lexically FIRST in the block it
+documents, and a macro expansion is never lexically first;
+`mod jpeg { include!(...) }` was tried first and rejected by the compiler
+immediately, confirming `#[path]` was the right tool. **The defect was
+the module nesting it was invoked from, not the attribute itself** — a
+correct justification for a construct sitting directly above an incorrect
+use of it. Fixed by hoisting the three fixture modules to FILE scope in
+`lib.rs` (base directory is the real `src/`, so one fewer `..` resolves
+identically on both platforms), with `mod tests` now aliasing them
+(`use crate::jpeg_fixtures as jpeg;` and siblings) so every call site
+inside the test module is unchanged.
+
+**Filed to `D:\dev\rag\rust\`** (see the new-file list at the head of
+this filing's report) — a pure Rust/Cargo fact with nothing pdfce-specific
+in it: a `#[path]` inside an inline `mod` resolves against a phantom
+directory named for that module, and `..` traversal through it is
+lexically tolerant on Windows and ENOENT on Linux.
+
+**No Pass ID** — consistent with this ledger's own precedent for CI/
+build-tooling fixes (the `ui-strings` CI gate fix and the "verify no
+HTTP/TLS client" gate repair, both elsewhere in *Shipped*): a Pass ID
+marks a capability, and this restores a platform rather than adding one.
+`docs/FEATURES.md` is not touched by this half of the entry, for the same
+reason.
+
+**Flagged again, not resolved by this filing:**
+`docs/decisions/003-distribution-posture.md` §1.1 still reads *"pdfce has
+no git remote. CI has never run once,"* framed as *"the framing fact
+everyone should read first"* — now false on BOTH halves (a remote has
+existed since 2026-08-09 04:56Z per the fifty-eighth filing, and CI has
+now run six times, all six red). Very likely the same shape as `R175`
+rather than a fresh instance needing its own rule — a document's claim
+about environment state, stale — but `docs/decisions/` sits outside this
+librarian's five tiers and was already flagged unedited once. Recorded
+again because this filing is the first to know the sentence's SECOND half
+("CI has never run once") is also now false, which the fifty-eighth
+filing's flag did not yet know.
+
+**New standing rule `R176`** (Standing rules, below) — a CI pipeline that
+runs is not evidence anyone looked at it, minted from this incident.
+
+**Part 2 — Pass 24.0's deferred "universal Enter/Escape" ships, and
+"universal" turns out to be the wrong word for it.** `ae59ce3` (2026-08-04,
+Pass 24.0 part) shipped Escape's four-way precedence chain
+(`canvas::resolve_escape`) and deliberately deferred Enter — see
+`ARCHITECTURE.md` §12's decision-024 quote, *"today Enter commits in
+exactly one tool of three"* (Add Text). Until this commit, Enter was bound
+to nothing beyond that one pre-existing case.
+
+**The ruling that changes what "done" means for this criterion.**
+`pdfce-ui-specialist` was asked whether Enter should commit MORE than
+click-away, since rule 4 / decision 024 §4.4 names "a key press" as a
+valid deliberate commit — which would appear to license extending Enter
+to every Tier-2 inference, the measure gesture included. **Its ruling: no,
+and narrower than click-away, on a reason neither Pass 24.0's original
+criterion nor decision 024 §4.4 stated: Enter completes a TYPING flow, and
+a measure gesture is pick-and-click with nothing typed, so there is
+nothing for Enter to be the "yes" to.** Decision 031 §2's own convention
+table already drew this line without anyone connecting it to Pass 24.0's
+"universal" wording. **`measure_status_ui` gets no Enter arm, by design,
+permanently** — not an omission; the function carries a comment stating
+why, so the absence reads as decided rather than missed.
+
+**★★ The specialist caught a change that would have shipped a regression
+in two OTHER subsystems.** The engineer's first design was a global
+`consume_key(NONE, Key::Enter)` inside `collect_keyboard_actions` — which
+runs before any panel is drawn and REMOVES the Enter event from the frame
+entirely. Both the Forms panel's value editors and the `Pass 53.0`
+field-rename editor commit on `lost_focus()`, and a singleline
+`egui::TextEdit` only surrenders focus because egui itself sees the Enter
+keypress. A global consume would have silently broken Enter-to-commit in
+every one of those editors — the very capability `Pass 53.0` shipped one
+filing ago. Built instead as a non-consuming peek inside each tool's own
+loop, gated on `image_response.has_focus()`, so the event stays live for
+whichever panel wants it. `text_edit_committable` is now one function with
+two callers (`committable_gesture` and the new Enter arm) specifically so
+the two paths cannot disagree about what counts as a committable draft.
+
+**Verification, stated precisely because half of it is real and half is
+not.**
+- **DRIVEN LIVE:** the `Pass 53.0` rename editor still commits on Enter
+  (`edit-note "Renamed \"Personal.Name\" to \"Personal.NameQ\"."`) — the
+  regression that mattered most, confirmed not to have happened.
+- **NOT DRIVEN:** Enter committing a text-edit draft on the canvas itself.
+  Locating a text run needs canvas coordinates the observation harness has
+  no way to discover today, and there is no `rect=` trace on that path
+  (R172: read the trace, don't guess coordinates). **Recorded as owed, not
+  asserted** — it rests on the same shared predicate and `do_accept` path
+  the rename editor exercises (construction, not observation), a real but
+  weaker form of evidence than a driven run.
+- `key:enter` was added to the diagnostic harness as part of this work —
+  the feature was not drivable at all without it, and the canvas half
+  remains undriven regardless.
+
+**Ledger effect: Pass 24.0's acceptance criterion narrows in place, not by
+deletion.** The original text ("Enter commits in all three tools") is now
+known to describe a set that does not include the measure tool, by design
+— see the `★ Pass 24.0–24.5` family entry (*Next up*, below) for the
+matching update banner and `ARCHITECTURE.md` §12 for the decision-log
+record of the ruling itself.
+
+**Part 3 — `Pass 53.0`'s owed polish item 8 discharged; item 10 stays
+owed.** `EditSession::rename_refusal()` — a thin core wrapper returning
+`deletion_refusal()`'s answer, both now delegating to a new private
+`structural_form_refusal`, zero behaviour change — closes the hazard the
+`Pass 53.0` Shipped entry named: the GUI was disabling a Rename button
+through a method literally named `deletion_refusal`. `pdfce-ui-specialist`'s
+item 10 (extending `Pass 47.3`'s hover-highlight to persist while a rename
+editor is open) is **not** touched by this commit and stays owed under
+`Pass 53.0`.
+
+**Numbers.** **2675 workspace tests, 0 failed** (1 more than `Pass 53.0`'s
+2674). `cargo clippy --workspace --all-targets`: 0. `cargo fmt --all
+--check`: clean. Seven gates green (relayed, not independently re-run).
+
+**Invariant checks**
+- **GUI-core separation**: `rename_refusal()`/`structural_form_refusal`
+  are ordinary `pdfce-core` data-model code; the fixture-module hoist
+  touches only `pdfce-render`'s test-only `#[cfg(test)]` surface. No
+  windowing dependency implied or reported by either change.
+- **Round-trip / minimal-diff**: unaffected by all three parts — no new
+  object-write path introduced.
+- **Packaging smoke test**: not applicable — no packaging surface
+  changed.
+
+**Ledger for this filing.** **No new Pass ID.** The Linux fix is
+build/CI infrastructure, filed with no Pass ID per this ledger's own
+precedent; the Enter binding is filed as `Pass 24.0`'s own completion,
+not a new number — same convention as `Pass 20.0 + Pass 20.1
+(completion)`. Pass family ceiling unchanged at **53.0**.
+`docs/FEATURES.md`: the *Pass 24.0, 24.2–24.5* row (line 267) is split —
+the Enter-commit half moves to *Implemented* as its own new row (scoped
+to typing-flow tools only), and the row's remaining scope narrows to
+*24.2–24.5*. Standing rules: **`R176` MINTED** (below) — ceiling moves
+`R175` → `R176`, next free `R177`. Decision records: no new number
+claimed — one plain dated `ARCHITECTURE.md` §12 entry added (the
+Enter-scoped-to-typing-flows invariant); ceiling stays **035**, next free
+**036**. Operator-question ceiling unchanged at **(bh)**, next free
+**(bi)**. `docs/decisions/003-distribution-posture.md` §1.1 flagged
+again, not edited (Part 1, above). Backup/git working-tree state not
+independently asserted — this librarian has no shell this dispatch (hard
+rule 8).
+
 ### docs/fix — the project record said "no git remote"; the remote has existed since 2026-08-09 04:56Z and the repository is PUBLIC — ten historical sites reviewed, none rewritten; Open operator question (bh) CLOSES as ACCEPT — 2026-08-10 (fifty-eighth filing, no Pass ID)
 
 **Sourcing.** This librarian has no shell this dispatch (hard rule 8).
@@ -28551,8 +28736,31 @@ which is the Pass 8.0 advance-preserving-surgery problem, not the Pass
 > own drawing **one text object holds all 237 pdf-dimension labels**, so
 > deleting *"a label"* today deletes **all of them**.
 
-### ★ Pass 24.0–24.5 — Ribbon command surface + the end of the floating Accept/Reject box (decision 024, filed 2026-08-04, DECIDED — Pass 24.1 SHIPPED; Pass 24.0 PARTIALLY SHIPPED `ae59ce3` 2026-08-04 (superseded by Pass 34.1, see the 2026-08-09 banner below); 24.2–24.5 NOT STARTED)
+### ★ Pass 24.0–24.5 — Ribbon command surface + the end of the floating Accept/Reject box (decision 024, filed 2026-08-04, DECIDED — Pass 24.1 SHIPPED; Pass 24.0 SHIPPED IN TWO HALVES — confirm-strip `ae59ce3` 2026-08-04 (superseded by Pass 34.1, see the 2026-08-09 banner below), Enter-commit `ef88973` 2026-08-10 (NARROWER than filed, see the 2026-08-10 banner below); 24.2–24.5 NOT STARTED)
 
+> **⚠ UPDATE 2026-08-10 (fifty-ninth filing) — Pass 24.0's OTHER deferred
+> half ships, and "universal Enter/Escape" turns out to be the wrong
+> phrase for it.** `ae59ce3` deferred wiring Enter beyond the one
+> pre-existing Add-Text case; `ef88973` wires it via a non-consuming
+> per-tool peek (`image_response.has_focus()` + a shared
+> `text_edit_committable` predicate), not the global key-consume the
+> engineer first drafted — `pdfce-ui-specialist` caught that the global
+> form would have broken Enter-to-commit in the Forms panel and the
+> `Pass 53.0` rename editor, both of which already commit on
+> `lost_focus()` and rely on egui itself seeing the Enter keypress to
+> trigger it. **The specialist also ruled the criterion itself was
+> mis-stated**: Enter completes a TYPING flow, and the measure gesture is
+> pick-and-click with nothing typed, so it gets no Enter arm — permanently,
+> by design, not as an omission. Pass 24.0's "all three tools" is now
+> known to mean the **typing-flow** tools, not literally every tool
+> decision 024 named. **Verified DRIVEN LIVE only for the rename editor**
+> (`Pass 53.0`'s own surface) — Enter committing a text-edit draft on the
+> canvas itself is unverified by live drive (no `rect=` trace exists to
+> locate a text run; R172) and rests on the shared predicate rather than
+> an observed run. Full record: `ROADMAP.md`'s `ef88973` Shipped entry
+> (top of *Shipped*); `ARCHITECTURE.md` §12's matching dated entry for the
+> Enter-scoped-to-typing-flows invariant.
+>
 > **⚠ UPDATE 2026-08-09 (fifty-fifth filing) — the "Pass 24.0 … NOT
 > STARTED" claim in the 2026-08-05 banner immediately below was WRONG
 > WHEN WRITTEN, by one day.** Full evidence trail:
@@ -41827,6 +42035,36 @@ and
   confidentiality incident once the remote existed, independent of
   whether any given commit is pushed yet. **Ceiling moves `R174` →
   `R175`; next free `R176`.**
+
+- **R176 — A CI pipeline that RUNS is not evidence anyone LOOKED AT it;
+  once a repository has live CI, a "tests pass" claim describes this
+  session's own platform only unless the run history itself is checked
+  (2026-08-10; librarian-minted, from `ef88973`, six consecutive failing
+  GitHub Actions runs, 2026-08-09 04:57Z–10:18Z, undetected until read
+  directly).** The repository's Windows job (`cargo test
+  (windows-latest)`) passed on every one of those six runs; the Linux job
+  (`cargo test (ubuntu-latest)`), `cargo clippy -D warnings` and `cargo
+  fmt --check` failed on all six, on a real defect (a `#[path]` attribute
+  inside an inline `mod` resolving against a phantom directory — lexically
+  tolerated by Windows path collapsing, ENOENT on Linux's
+  component-by-component resolution; see `D:\dev\rag\rust\` for the
+  mechanism). **The gate was correct and working the entire time** —
+  unlike `R173`'s shrinking-window gate or the "verify no HTTP/TLS
+  client" gate that could never fail (both elsewhere in *Shipped*), this
+  was a gate doing its job and simply not being read. **Distinct root
+  cause from both**: this is not a miscalibrated or broken instrument, it
+  is a correct instrument nobody consulted, made worse by a structural
+  fact specific to this project — **the dev machine is Windows-only, so
+  local `cargo test`/`clippy`/`fmt` runs are structurally incapable of
+  ever surfacing a Linux-only failure; CI is the ONLY channel that can
+  catch this class, and a session that doesn't check it defeats the
+  entire reason the Linux job exists.** Practical form: whenever a
+  session's own gate figures are all local (this machine, Windows), and
+  the repository has a configured remote with CI attached (true since
+  2026-08-09, per `R175`), check the CI run history itself — not merely
+  that a workflow file exists — before treating "tests pass" as true of
+  every platform the matrix claims to cover. **Ceiling moves `R175` →
+  `R176`; next free `R177`.**
 
 ## Update protocol
 
