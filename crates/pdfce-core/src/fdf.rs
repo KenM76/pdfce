@@ -69,6 +69,27 @@ pub struct FieldData {
     pub name: String,
     /// The field's value(s): one entry, or several for a multi-select.
     pub values: Vec<String>,
+    /// `/RV` (FDF Table 246) / `<value-richtext>` (XFDF) — the field's
+    /// **rich text value**, the XHTML/CSS2-subset document that carries its
+    /// formatting (§12.7.3.4).
+    ///
+    /// `None` for the overwhelming majority of fields, which are plain.
+    ///
+    /// # Why exporting this matters more than it looks
+    ///
+    /// Both formats have the slot precisely so formatting travels beside the
+    /// plain value. pdfce dropped it, so a styled field exported and
+    /// re-imported came back unstyled — and the operator only found out on
+    /// the re-import, by which time the styled original might be gone.
+    ///
+    /// **Carrying it out is safe; writing it back in is not yet done.**
+    /// Import deliberately does not apply this: §12.7.3.3 makes `/DS` + `/RV`
+    /// the inputs to appearance generation with an unconditional `shall` to
+    /// regenerate on every value change, and pdfce cannot yet generate a
+    /// rich-text appearance. Writing `/RV` without that would leave the
+    /// stored value and the rendered one disagreeing — which is the same
+    /// wrong-value-on-screen failure `fill_text_field` refuses for.
+    pub rich_value: Option<String>,
 }
 
 /// A form's exported field data, format-independent.
@@ -133,6 +154,13 @@ impl FormData {
             if values.is_empty() {
                 continue;
             }
+            // Decoded the same way `/V` is — `/RV` is a §7.9.2 text string
+            // (Table 228's `/RV` row), not a byte blob, so a UTF-16BE-marked
+            // rich value must come out as text rather than as mojibake.
+            let rich_value = field
+                .rich_value
+                .as_ref()
+                .map(|b| crate::edit::decode_text_string(b).text);
             // Same-FQN duplicate representations export once.
             if fields.iter().any(|f| f.name == field.fully_qualified_name) {
                 continue;
@@ -140,6 +168,7 @@ impl FormData {
             fields.push(FieldData {
                 name: field.fully_qualified_name.clone(),
                 values,
+                rich_value,
             });
         }
         Self { fields }
@@ -173,6 +202,17 @@ impl FormData {
                     write_fdf_value(&mut out, v);
                 }
                 out.extend_from_slice(b" ]");
+            }
+            // `/RV` beside `/V`, per FDF Table 246 (§12.7.7.3.2) — the same
+            // key and meaning the field dictionary uses. Emitted only when
+            // the field has one, so a plain form's FDF is byte-identical to
+            // what it was before this existed.
+            if let Some(rv) = &field.rich_value {
+                out.extend_from_slice(b" /RV ");
+                crate::writer::serialize::write_string(
+                    &mut out,
+                    &crate::edit::encode_text_string(rv),
+                );
             }
             out.extend_from_slice(b" >>");
         }
@@ -211,6 +251,17 @@ impl FormData {
                 s.push_str("<value>");
                 s.push_str(&xml_escape_text(v));
                 s.push_str("</value>");
+            }
+            // `<value-richtext>` — XFDF's slot for the same content `/RV`
+            // carries in FDF. Escaped as TEXT, deliberately: the rich value
+            // is itself an XML document, and embedding it raw would let its
+            // markup merge into the XFDF's own tree, so a `<span>` inside a
+            // field value would become an XFDF element. Adobe's own readers
+            // expect it escaped.
+            if let Some(rv) = &field.rich_value {
+                s.push_str("<value-richtext>");
+                s.push_str(&xml_escape_text(rv));
+                s.push_str("</value-richtext>");
             }
             s.push_str("</field>\n");
         }
@@ -310,11 +361,25 @@ fn walk_fdf_field(field: &Object, parent: &str, out: &mut Vec<FieldData>) {
         }
         return;
     }
-    // A terminal field: read /V.
+    // A terminal field: read /V, and /RV beside it (FDF Table 246).
     if let Some(v) = dict.get(b"V") {
         let values = fdf_value_strings(v);
+        // Read even though import does not yet APPLY it — a parse that drops
+        // the entry cannot round-trip, and the round-trip is what the export
+        // half exists for.
+        let rich_value = dict
+            .get(b"RV")
+            .and_then(|o| match o {
+                Object::String(b) => Some(b.as_slice()),
+                _ => None,
+            })
+            .map(|b| crate::edit::decode_text_string(b).text);
         if !values.is_empty() && !fqn.is_empty() {
-            out.push(FieldData { name: fqn, values });
+            out.push(FieldData {
+                name: fqn,
+                values,
+                rich_value,
+            });
         }
     }
 }
@@ -352,9 +417,14 @@ fn walk_xfdf_field(el: &XmlElement, parent: &str, out: &mut Vec<FieldData>) {
     // Collect direct <value> children; recurse into nested <field> children.
     let mut values: Vec<String> = Vec::new();
     let mut has_subfields = false;
+    let mut rich_value = None;
     for child in &el.children {
         match child.name.as_str() {
             "value" => values.push(child.text.clone()),
+            // XFDF's slot for what `/RV` carries in FDF. The parser already
+            // un-escapes element text, so this arrives as the rich document
+            // itself rather than as escaped markup.
+            "value-richtext" => rich_value = Some(child.text.clone()),
             "field" => {
                 has_subfields = true;
                 walk_xfdf_field(child, &fqn, out);
@@ -363,7 +433,11 @@ fn walk_xfdf_field(el: &XmlElement, parent: &str, out: &mut Vec<FieldData>) {
         }
     }
     if !has_subfields && !values.is_empty() && !fqn.is_empty() {
-        out.push(FieldData { name: fqn, values });
+        out.push(FieldData {
+            name: fqn,
+            values,
+            rich_value,
+        });
     }
 }
 
@@ -771,6 +845,7 @@ mod tests {
                 .map(|(n, vs)| FieldData {
                     name: (*n).to_owned(),
                     values: vs.iter().map(|s| (*s).to_owned()).collect(),
+                    rich_value: None,
                 })
                 .collect(),
         }

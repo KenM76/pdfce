@@ -15865,10 +15865,12 @@ mod tests {
                 crate::fdf::FieldData {
                     name: "Name".to_owned(),
                     values: vec!["Grace".to_owned()],
+                    rich_value: None,
                 },
                 crate::fdf::FieldData {
                     name: "Ghost".to_owned(),
                     values: vec!["x".to_owned()],
+                    rich_value: None,
                 },
             ],
         };

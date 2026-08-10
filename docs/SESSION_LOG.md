@@ -30070,3 +30070,114 @@ working-tree state not independently asserted — this librarian has no
 shell this dispatch (hard rule 8). This is the **sixty-fourth**
 `SESSION_LOG.md` filing (the sixty-third confirmed present by direct
 read before this entry was appended).
+
+## 2026-08-10 (sixty-fifth filing) — `1e3422e` FILED: a form-data import that refused an entire batch on ONE rich-text field is fixed by matching a sibling arm that already had the right answer, and the more serious half (the batch was already half-applied behind the reported failure) is caught with it; `R179` MINTED and written to `D:\dev\rag\rust\`; `Pass 37.3` SCOPED
+
+**Sourcing.** This librarian has no shell this dispatch (hard rule 8).
+`1e3422e`'s content is the commit message text supplied in the dispatch,
+quoted as received — not independently confirmed against `git log`.
+Independently verified **by direct read**: `tools/commits-filed-baseline.txt`
+(still **5** lines, `1e3422e` was never one of them — a fresh citation,
+not a baseline-debt discharge); the full *Next up* "Rich-text fill" entry
+before amending it further; `Acrobat_Features\forms__rich_text_fields.md`
+in full; and `iso32000__s__12.7.3.4.md`'s `A1`, `RT-M6`/`M7`/`M9`,
+`RT-N2`/`N3`/`N7`, and its `RT-A1`–`RT-A9` ambiguity table.
+
+**Shipped:**
+- `1e3422e` (2026-08-10) — `EditSession::fill_text_field`'s rich-text
+  refusal is correct (§12.7.3.4 makes `/DS`+`/RV` the inputs to
+  appearance generation; writing `/V` alone leaves every conforming
+  reader displaying stale text). But `import_form_data` reached that
+  refusal through a bare `?` inside a loop that mutates the session
+  overlay per entry, and two things were wrong with that: (1) one
+  rich-text field in a data file failed the WHOLE import, discarding
+  every other applicable field; (2) the loop had already written earlier
+  entries before the refusing one, so the caller got an `Err` — reads as
+  "nothing happened" — for a call that had, in fact, partially mutated
+  the document. Fixed by matching the sibling `SIGNATURE`-field arm four
+  lines below, which already did the right thing for the identical
+  question: skip and count via the existing `skipped` field. Written
+  test-first (`FieldIsRichText { name: "Notes" }` failed before the fix,
+  establishing the partial-application problem, not only the
+  granularity one). Found while SCOPING rich-text fill, not building it —
+  no fixture had ever mixed a supported field with a rich-text one.
+  Gate figures as supplied, not re-run: 2683 tests / 0 failed / 3 new,
+  clippy 0, fmt clean.
+
+**Decisions made this session:**
+- **`Pass 37.3` assigned** to the previously-unnumbered "Rich-text fill:
+  should core refuse too?" question, with acceptance criteria written
+  against the now-verified Acrobat-parity RAG (`pdfce-acrobat-librarian`
+  confirmed all four claims relayed by `b8f96b1`, and sharpened the
+  auto-size finding into a concrete exceed-Acrobat opportunity) and the
+  spec RAG. See `ROADMAP.md`'s second `★★ AMENDMENT` on that entry for
+  the full nine-point list (`/RV` round-trips FDF+XFDF; `/V` a `should`
+  per `A1`/`RT-M7`; regeneration a `shall` unconditional on
+  `/NeedAppearances` per `RT-M9`/`RT-N7`; no lists; pdfce's rendering
+  disclosed as policy not conformance per `RT-N2`; the font-substitution
+  defect must not be reproduced; the bit-26 collision trap still applies;
+  auto-size and flatten owed as `nice_to_have`/`should_have`
+  respectively). **Which of the two remaining honest options (explicit
+  lossy downgrade vs. true `/RV`-preserving fill) ships first is left
+  open** — this scoping supplies the destination's criteria, not a
+  build-order ruling.
+- **A citation in the dispatch was wrong and corrected before it could
+  propagate.** "Appearance regeneration… per A5" should have read
+  `RT-M9`/`RT-N7` — `RT-A5` is an unrelated ambiguity (CSS `font`-
+  shorthand optionality). Caught by direct read of the spec file rather
+  than trusted, the same discipline `R178` names.
+- **A recorded, non-code architectural posture**: rich-text `/AP`
+  generation is pdfce's own policy, never a conformance claim (`RT-N2` —
+  the spec states a `shall` for THAT regeneration happens, and nothing
+  at all for HOW). `ARCHITECTURE.md` §12 gained a new entry recording
+  this as a standing constraint on the eventual implementation, even
+  though no code exists yet for it.
+
+**Findings + decisions:**
+- **New standing rule `R179` MINTED, and written to `D:\dev\rag\rust\`
+  in full** (not kept pdfce-internal — it's a general Rust API-design
+  hazard, unrelated to PDFs): a loop that mutates a `&mut` receiver as it
+  iterates must never propagate a per-item refusal with bare `?`; every
+  per-item failure needs a deliberately-chosen disposition
+  (skip-and-count / abort-with-partial-report / pre-flight-then-apply).
+  New file:
+  `D:\dev\rag\rust\a_loop_that_mutates_as_it_goes_must_not_question_mark_a_per_item_refusal.md`,
+  indexed in that subdir's own `index.md`.
+
+**Still in flight:**
+- New Backlog entry (unscoped): audit every other `pdfce-core`
+  mutating-loop verb for `R179`'s shape — not yet started, `git grep`
+  for `?` inside a loop over a `&mut EditSession`-taking function is the
+  concrete starting point named in the entry.
+- `Pass 37.3` itself is scoped, not built — build-order between the two
+  remaining honest options is still an engineer call.
+- Baseline debt unchanged at **5 lines** (`1e3422e` postdates the gate
+  and was never in it — a fresh citation, not a debt-reduction).
+
+**For next session:**
+- Whoever picks up `Pass 37.3` should read the `★★ AMENDMENT` on the
+  *Next up* "Rich-text fill" entry, not the original 2026-08-05 framing,
+  as the acceptance-criteria source.
+- The `?`-in-mutating-loop audit (Backlog, above) is a candidate for a
+  short, self-contained session — a grep, not a design decision.
+
+**Ledger for this filing.** **Pass family ceiling UNCHANGED at 53
+(53.1 highest)** — `Pass 37.3` is a within-family mint (family `37`
+predates family `53`), confirmed collision-free by direct grep before
+assignment, not a fresh top-level claim. `docs/FEATURES.md`: two rows
+edited (Forms *Import/export form data* — notes the skip-and-count fix;
+Planned *Rich-text fill* — gains the `Pass 37.3` pointer and criteria
+summary) — no checkbox moves. `docs/ARCHITECTURE.md` §12: **edited** —
+new dated entry recording the rich-text-rendering-is-policy posture.
+Standing rules: **`R179` MINTED** — ceiling moves **R178 → R179**, next
+free **R180**. Decision records: no new number claimed; ceiling stays
+**035**, next free **036**. Operator-question ceiling unchanged at
+**(bh)**, next free **(bi)**. Baseline-debt count: **5 → 5, unchanged**
+(`1e3422e` was never a baseline-debt line; this is a fresh-commit
+citation, a different claim from a debt-line removal — see this
+filing's `ROADMAP.md` entry for why conflating the two would itself be
+a hard-rule-10 violation). Backup/git working-tree state not
+independently asserted — this librarian has no shell this dispatch
+(hard rule 8). This is the **sixty-fifth** `SESSION_LOG.md` filing (the
+sixty-fourth confirmed present by direct read before this entry was
+appended).

@@ -205,6 +205,7 @@ fn field_data(name: &str, value: &str) -> pdfce_core::fdf::FieldData {
     pdfce_core::fdf::FieldData {
         name: name.to_owned(),
         values: vec![value.to_owned()],
+        rich_value: None,
     }
 }
 
@@ -336,5 +337,127 @@ fn a_refused_entry_of_any_kind_is_skipped_not_fatal() {
             .display_text(),
         "CA",
         "an entry BEFORE the refused one is not rolled back and not lost"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// `/RV` survives EXPORT — the first slice of Pass 37.3
+// ---------------------------------------------------------------------------
+//
+// Carrying the rich value OUT is safe and purely additive. Writing it back
+// IN is deliberately not done yet: §12.7.3.3 makes `/DS` + `/RV` the inputs
+// to appearance generation with an unconditional `shall` to regenerate on
+// every value change (RT-M9, not gated by `/NeedAppearances` — RT-N7), and
+// pdfce cannot yet generate a rich-text appearance. Writing `/RV` without
+// that would leave the stored value and the rendered one disagreeing, which
+// is exactly what `fill_text_field` refuses for.
+
+/// **The field's `/RV` reaches the exported FDF and XFDF.**
+///
+/// Before this, both formats have the slot and pdfce wrote neither — so a
+/// styled field exported and came back plain, and the operator found out on
+/// the re-import.
+#[test]
+fn the_rich_value_reaches_both_export_formats() {
+    let s = session();
+    let form = pdfce_core::forms::parse_acroform(&s.graph()).expect("AcroForm");
+
+    let notes = form.field_by_name("Notes").expect("Notes exists");
+    assert!(
+        notes.rich_value.is_some(),
+        "the fixture's Notes carries /RV — every assertion below is vacuous otherwise"
+    );
+
+    let data = pdfce_core::fdf::FormData::from_acroform(&form);
+    let entry = data
+        .fields
+        .iter()
+        .find(|f| f.name == "Notes")
+        .expect("Notes is exported");
+    let rich = entry
+        .rich_value
+        .as_ref()
+        .expect("and carries its rich value");
+
+    let fdf = String::from_utf8_lossy(&data.to_fdf(None)).into_owned();
+    assert!(fdf.contains("/RV"), "FDF Table 246's key is written: {fdf}");
+
+    let xfdf = String::from_utf8_lossy(&data.to_xfdf(None)).into_owned();
+    assert!(
+        xfdf.contains("<value-richtext>"),
+        "XFDF's slot is written: {xfdf}"
+    );
+    // The rich value is XML, and it is escaped as TEXT rather than embedded
+    // raw — otherwise its own markup would merge into the XFDF's element
+    // tree and a `<span>` in a field value would become an XFDF element.
+    if rich.contains('<') {
+        assert!(
+            xfdf.contains("&lt;"),
+            "the embedded XML is escaped, not merged into the tree: {xfdf}"
+        );
+    }
+}
+
+/// **And it survives a parse back — both formats round-trip.**
+///
+/// The export is only non-destructive if something can read it again. This
+/// asserts the value that comes back is the value that went out, not merely
+/// that a slot was populated.
+#[test]
+fn the_rich_value_round_trips_through_fdf_and_xfdf() {
+    let s = session();
+    let form = pdfce_core::forms::parse_acroform(&s.graph()).expect("AcroForm");
+    let data = pdfce_core::fdf::FormData::from_acroform(&form);
+    let original = data
+        .fields
+        .iter()
+        .find(|f| f.name == "Notes")
+        .and_then(|f| f.rich_value.clone())
+        .expect("Notes has a rich value to round-trip");
+
+    for (label, bytes) in [("FDF", data.to_fdf(None)), ("XFDF", data.to_xfdf(None))] {
+        let parsed = if label == "FDF" {
+            pdfce_core::fdf::FormData::parse_fdf(&bytes)
+        } else {
+            pdfce_core::fdf::FormData::parse_xfdf(&bytes)
+        }
+        .unwrap_or_else(|e| panic!("{label} re-parse failed: {e}"));
+
+        let back = parsed
+            .fields
+            .iter()
+            .find(|f| f.name == "Notes")
+            .unwrap_or_else(|| panic!("{label}: Notes missing after re-parse"))
+            .rich_value
+            .clone()
+            .unwrap_or_else(|| panic!("{label}: the rich value was dropped"));
+
+        assert_eq!(back, original, "{label}: the rich value changed in transit");
+    }
+}
+
+/// **A plain form's export is unchanged** — no empty slot, no new key.
+///
+/// `rich_value` is `None` for the overwhelming majority of fields, and this
+/// pins that the feature is invisible on them. A `/RV` emitted as an empty
+/// string would make every plain field look like a degenerate rich one.
+#[test]
+fn a_plain_form_gains_no_rich_text_markup() {
+    let s = pdfce_core::edit::EditSession::new(
+        Document::load(&fixture("demo-form.pdf")).expect("load the plain fixture"),
+    );
+    let form = pdfce_core::forms::parse_acroform(&s.graph()).expect("AcroForm");
+    let data = pdfce_core::fdf::FormData::from_acroform(&form);
+    assert!(
+        data.fields.iter().all(|f| f.rich_value.is_none()),
+        "no plain field invents a rich value"
+    );
+
+    let fdf = String::from_utf8_lossy(&data.to_fdf(None)).into_owned();
+    assert!(!fdf.contains("/RV"), "no /RV key on a plain form: {fdf}");
+    let xfdf = String::from_utf8_lossy(&data.to_xfdf(None)).into_owned();
+    assert!(
+        !xfdf.contains("value-richtext"),
+        "no rich-text element on a plain form: {xfdf}"
     );
 }

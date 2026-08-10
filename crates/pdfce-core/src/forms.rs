@@ -438,6 +438,28 @@ pub struct Field {
     pub alternate_name: Option<Vec<u8>>,
     /// `/TM` — the export mapping name (raw bytes), distinct from `/T`.
     pub mapping_name: Option<Vec<u8>>,
+    /// `/RV` — the **rich text value** (§12.7.3.4, PDF 1.5): an XHTML/CSS2
+    /// subset document carrying the field's formatting, raw bytes.
+    ///
+    /// # Why this is modelled even though pdfce cannot yet author it
+    ///
+    /// Reading it is what makes an EXPORT non-destructive. FDF Table 246 and
+    /// XFDF's `<value-richtext>` both carry `/RV` precisely so formatting
+    /// travels beside the plain value; pdfce's exporter dropped it, so a
+    /// styled field round-tripped out and came back unstyled.
+    ///
+    /// # The `/V` relationship, which is not symmetrical
+    ///
+    /// §12.7.3.4 says the flat text **should** also be preserved in `/V` — a
+    /// `should`, so `/RV` without `/V` is conforming but under-serving. The
+    /// reverse violates a `shall` (Table 228 bit 26). And §12.7.3.3 makes
+    /// `/DS` + `/RV` the inputs to appearance generation, so a fresh `/V`
+    /// beside a stale `/RV` renders the OLD text in any conforming reader —
+    /// which is why `fill_text_field` refuses a rich-text field outright
+    /// rather than writing half the pair.
+    ///
+    /// `None` on any field without the entry, which is nearly all of them.
+    pub rich_value: Option<Vec<u8>>,
     /// The resolved field type, or `None` for a terminal field with no
     /// resolvable `/FT` (a malformed field — surfaced, not repaired).
     pub field_type: Option<FieldType>,
@@ -1184,6 +1206,14 @@ fn walk_field<G: ObjectGraph + ?Sized>(
         partial_name,
         alternate_name: dict
             .get(b"TU")
+            .map(|o| graph.resolve(o))
+            .and_then(string_bytes),
+        // Read unconditionally, NOT gated on the RichText flag. A file may
+        // carry `/RV` with bit 26 clear — malformed under Table 228, and
+        // exactly the case where silently dropping the entry on export would
+        // destroy the only copy of the formatting.
+        rich_value: dict
+            .get(b"RV")
             .map(|o| graph.resolve(o))
             .and_then(string_bytes),
         mapping_name: dict
@@ -2131,6 +2161,7 @@ mod tests {
             fully_qualified_name: "Choice".to_owned(),
             partial_name: None,
             alternate_name: None,
+            rich_value: None,
             mapping_name: None,
             field_type: Some(FieldType::Button),
             button_kind: Some(ButtonKind::Radio),
@@ -2172,6 +2203,7 @@ mod tests {
             fully_qualified_name: "Notes".to_owned(),
             partial_name: None,
             alternate_name: None,
+            rich_value: None,
             mapping_name: None,
             field_type: Some(FieldType::Text),
             button_kind: None,
@@ -2207,6 +2239,7 @@ mod tests {
             fully_qualified_name: "Sig1".to_owned(),
             partial_name: None,
             alternate_name: None,
+            rich_value: None,
             mapping_name: None,
             field_type: Some(FieldType::Signature),
             button_kind: None,

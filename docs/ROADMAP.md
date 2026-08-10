@@ -81,6 +81,130 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★ `1e3422e` FILED — a form-data import that refuses one rich-text field no longer costs the operator every OTHER field in the batch, and no longer leaves the document half-changed behind a reported failure; the reusable shape MINTED as `R179` and written to `D:\dev\rag\rust\`; `Pass 37.3` SCOPED (acceptance criteria written against the now-verified Acrobat/spec RAG record) — baseline debt unchanged at **5** — 2026-08-10 (sixty-fifth filing)
+
+**Sourcing.** This librarian has no shell this dispatch (hard rule 8).
+`1e3422e`'s technical content is exactly the commit message text supplied
+in the dispatch, quoted here as received — not independently confirmed
+against `git log` (no shell to run it, and no partial-relay flag was
+raised this time, unlike `b8f96b1`'s truncated tail). Independently
+verified **by direct read**, not relayed: `tools/commits-filed-baseline.txt`
+(still **5** lines — `338076a`, `1f319c0`, `55a0732`, `587e520`,
+`9141ded` — `1e3422e` was never a baseline-debt line, so this filing is a
+fresh citation of a new commit, not a baseline-debt discharge; see
+*Numbers*, below, for why those are different claims); the full existing
+text of the *Next up* "Rich-text fill" entry before amending it further;
+`D:\Dev\Rag-Specialized\Acrobat_Features\forms__rich_text_fields.md` in
+full (confirms the "four relayed claims verified" report and supplies the
+Acrobat-parity acceptance criteria used in the `Pass 37.3` amendment,
+below); and `D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__s__12.7.3.4.md`,
+re-read directly for `A1`, `RT-M6`/`RT-M7`/`RT-M9`, `RT-N2`/`RT-N3`/`RT-N7`
+and the `RT-A1`–`RT-A9` ambiguity table, both to build the acceptance
+criteria and to correct a citation in the dispatch (see below).
+
+**The finding, restated so this entry stands alone.**
+`EditSession::fill_text_field` correctly refuses a rich-text field —
+§12.7.3.4 makes `/DS` + `/RV` the inputs to appearance generation, so
+writing `/V` and leaving `/RV` stale makes every conforming reader
+regenerate the OLD text (RT-N3, `A2` in the spec RAG's own ambiguity
+table: "not a cosmetic loss — a wrong value on screen"). But
+`import_form_data` reached that refusal through a bare `?`, and two
+things were wrong with that, not one:
+
+1. A data file naming **one** rich-text field failed the **entire**
+   import — every other field in it, all individually applicable, landed
+   nowhere.
+2. **★ The more serious half.** The loop writes each entry to the overlay
+   as it goes, so aborting on entry two left entry one **already
+   written**, AND handed the caller an `Err`. A document changed by a
+   call that reported failure, with nothing saying how far it got.
+
+Fixed by doing what the sibling `SIGNATURE`-field arm four lines below
+already did for the **identical class of question** ("pdfce cannot apply
+this entry, what now?"): skip it and count it via the already-existing
+`skipped` field, rather than aborting. Written test-first — both new
+tests failed with `FieldIsRichText { name: "Notes" }` **before** the
+change, which is what established the SECOND problem (partial
+application survives the `Err`) rather than only the first (all-or-
+nothing granularity); the failing assertion alone would not have shown
+that entry one had already landed. **Found while SCOPING a feature
+(rich-text fill), not while building one** — no test anywhere had
+exercised a data file mixing a supported field with a rich-text field,
+so the defect had no reachable regression coverage until this session's
+scoping work created the first fixture that combines them.
+
+**Gate figures**, quoted directly from the commit message as supplied
+(not independently re-run — no shell): 2683 workspace tests, 0 failed, 3
+new; clippy 0; fmt clean.
+
+**★ New standing rule `R179` MINTED, and written to `D:\dev\rag\rust\`
+rather than kept pdfce-internal** — see *Standing rules*, below, for the
+project-facing statement, and
+`D:\dev\rag\rust\a_loop_that_mutates_as_it_goes_must_not_question_mark_a_per_item_refusal.md`
+for the full cross-project finding (this is a general Rust API-design
+hazard — a mutating loop that propagates a per-item refusal with `?`
+abandons the call half-applied behind an `Err` that reads as "nothing
+happened" — not a PDF-domain or pdfce-internal fact, so it belongs in
+tier 4, not a project standing rule alone). Judged NOT a
+`personal_rag/pdf` finding (hard rule 6 doesn't apply here at all — this
+is neither spec text nor real-world-PDF-producer behavior, it's ordinary
+Rust control flow) and NOT an `ARCHITECTURE.md` §12 entry (no crate
+boundary, library choice, or project invariant is redrawn — it's a
+coding-pattern rule, the same class of finding `R178` was).
+
+**`Pass 37.3` SCOPED** — the previously-unnumbered "Rich-text fill:
+should `pdfce-core` refuse too?" question (*Next up*, filed 2026-08-05,
+already amended once 2026-08-10/sixty-fourth-filing with the operator's
+2026-08-06 ruling) now has a Pass ID and acceptance criteria written
+against the verified Acrobat-parity + spec-RAG record. Assigned `37.3`
+(within the pre-existing forms family — `37.0`/`37.1`/`37.2` already
+shipped 2026-08-05; confirmed collision-free by direct grep, zero hits
+for `Pass 37.3` anywhere in this file, before assignment, per `R156`).
+See the second `★★ AMENDMENT` block on that entry, below, for the full
+criteria — not restated here to avoid two disagreeing copies existing at
+once.
+
+**New Backlog entry filed** (unscoped, no Pass ID) for the audit this
+finding's dispatch explicitly asked for: whether any OTHER
+`pdfce-core` verb shares `import_form_data`'s shape (a per-item loop that
+mutates as it goes, propagating a per-item refusal with `?`). See
+*Backlog*, below.
+
+**Numbers.** Baseline debt: **5 lines, unchanged**
+(`tools/commits-filed-baseline.txt`), verified by direct read before and
+after this edit — **`1e3422e` removing zero lines is correct, not a
+miss**: the baseline file's own header defines it as commits predating
+`check-commits-filed.py` (written 2026-08-09); `1e3422e` postdates the
+gate and was never added to it, so filing it here discharges the gate's
+"cite within the window" requirement, a *different* claim from "this
+line was in the debt list and is now filed." Conflating the two would be
+exactly the shape hard rule 10 exists to prevent — a figure that looks
+like a debt-reduction but isn't one. `docs/FEATURES.md`: two rows edited
+— the *Import/export form data* row (Forms section) gains a note that a
+rich-text entry is now skipped-and-counted rather than fatal; the
+*Rich-text fill* Planned row gains the `Pass 37.3` pointer. Neither row's
+checkboxes move — the fix is a robustness/disclosure change to an
+already-`[x]`/`[x]`/`[ ]` capability, not a new one, and the *Rich-text
+fill* row stays all-unticked (still unbuilt).
+
+**Invariant checks.** Not stated in the commit message as supplied; not
+independently re-run (no shell).
+
+**Ledger for this filing.** **Pass family ceiling: UNCHANGED at 53
+(53.1 highest)** — `Pass 37.3` is a within-family mint (family `37`
+predates family `53`), not a fresh top-level family claim, confirmed
+collision-free by direct grep before assignment. `docs/ARCHITECTURE.md`
+§12: **not edited** — this finding is a coding-pattern rule, not an
+architectural one (see above). Standing rules: **`R179` MINTED** (below)
+— ceiling moves `R178` → `R179`, next free `R180`. Decision records: no
+new number claimed; ceiling stays **035**, next free **036**.
+Operator-question ceiling **unchanged at (bh)**, next free **(bi)** — no
+new lettered question minted. Backup/git working-tree state not
+independently asserted — this librarian has no shell this dispatch (hard
+rule 8).
+
+---
+
 ### ★ `b8f96b1` FILED — form-data export/import discloses rich-text data loss conditionally, not as boilerplate; the operator's own 2026-08-06 ruling that overturned VT3 is brought into `ROADMAP.md` for the first time (amended into the *Next up* entry above); `R178` MINTED — baseline debt **6 → 5** — 2026-08-10 (sixty-fourth filing)
 
 **Sourcing.** This librarian has no shell this dispatch (hard rule 8).
@@ -28772,6 +28896,103 @@ than carry it.
 > amendment, not the original 2026-08-05 framing above it, as the
 > live statement of the question.
 
+> **★★ AMENDMENT 2026-08-10 (sixty-fifth filing) — SCOPED. `Pass 37.3`
+> assigned. `pdfce-acrobat-librarian` returned all four claims relayed by
+> `b8f96b1` VERIFIED and sharpened, closing the remaining sourcing gap
+> the prior amendment left open ("whether the Acrobat-parity findings
+> are already on file… was not checked by this filing"). Acceptance
+> criteria below are written directly against that verified record —
+> `forms__rich_text_fields.md` (built 2026-08-06, deepened 2026-08-10)
+> and `iso32000__s__12.7.3.4.md` — cited by section/ID, not re-derived.**
+>
+> **★ Citation correction, made here rather than propagated.** The
+> dispatch that requested this scoping cited "`/RV` kept in step… a
+> `should`, per A1" (correct) and "appearance regeneration… a `shall`,
+> unconditional on `/NeedAppearances`, per A5" — **`A5` is the wrong
+> pointer.** Direct read of `iso32000__s__12.7.3.4.md` shows `RT-A5` is
+> an unrelated ambiguity (whether the CSS `font`-shorthand's leading
+> components are optional). The `shall` for unconditional regeneration
+> is **`RT-M9`** ("the entire annotation appearance shall be regenerated
+> each time the value is changed"), and its independence from
+> `/NeedAppearances` is **`RT-N7`** ("Regeneration on value change is a
+> `shall` for rich text and only for rich text… it does **not**
+> generalise to plain fields, and it is **not** gated by
+> `/NeedAppearances`"). Correcting the pointer here, before it becomes
+> the citation an implementation's own doc comments carry forward — the
+> exact failure shape `R178` (immediately above this entry's own
+> heritage) exists to catch: a wrong citation is invisible to every
+> reader who trusts it.
+>
+> **`Pass 37.3` acceptance criteria:**
+>
+> 1. **`/RV` round-trips through BOTH FDF and XFDF**, not just one.
+>    XFDF's `<value-richtext>` (ISO 19444-1 §6.3.2/§6.3.2.2) and FDF's
+>    own `/RV` (Table 246, §12.7.7.3.2 — upgraded 2026-08-10 from a
+>    weak, pdftk-behavior-only source to a **spec-primary, verbatim**
+>    confirmation: identical key, identical meaning, identical PDF-1.5
+>    gate as the AcroForm field's own `/RV`) are **both** first-class,
+>    neither the "lesser" format for this capability.
+> 2. **`/V` is kept in step, correctly graded as a `should` not a
+>    `shall`** (`A1`/`RT-M7`) — pdfce's own write path regenerates `/V`
+>    FROM `/RV` as its plain-text projection on every write, per the
+>    Acrobat RAG's own recommended posture ("pdfce should define and
+>    disclose its OWN deterministic rule rather than guess at an
+>    unspecified Acrobat behavior… `/RV` (+`/DS`) is authoritative for
+>    both display and formatting"), never allowing the two to be
+>    independently edited through pdfce's own tooling.
+> 3. **Appearance regeneration is a `shall`, unconditional on
+>    `/NeedAppearances`** (`RT-M9` + `RT-N7`, corrected citation above)
+>    — every value change to a rich-text field rebuilds the ENTIRE
+>    annotation appearance from `/RV`+`/DS` (`RT-M6`), never a splice,
+>    and never gated behind the flag that governs plain-field
+>    regeneration.
+> 4. **No list authoring** — matching Acrobat's own field-level ceiling
+>    (confirmed unsupported in Acrobat itself, two independent
+>    community threads), not a pdfce deficiency to fix. `must_have`
+>    scope is the enumerable `Span`-axis formatting (font family/style/
+>    weight/stretch/size/color, underline, strikethrough, sub/
+>    superscript, alignment) — explicitly EXCLUDING bulleted/numbered
+>    lists.
+> 5. **The disclosure that pdfce's rich-text rendering is POLICY, not a
+>    conformance claim** (`RT-N2` — "no `/BBox` rule, no resource-
+>    population rule, no marked-content tag, no line-breaking rule, no
+>    leading rule, no `/Q`-vs-`text-align` precedence rule, no auto-size
+>    rule, no overflow rule, and no worked example"). Any doc comment,
+>    `--help` text, or `FEATURES.md` row claiming spec-correct rich-text
+>    rendering would be a claim-bearing-copy violation (`CLAUDE.md`
+>    global rule).
+> 6. **Do not reproduce Acrobat's documented font-substitution defect**
+>    (a multi-year, Adobe-acknowledged bug: enabling `RichText` on an
+>    already-`/DA`-styled field silently substitutes a different font
+>    instead of carrying the existing style forward). If pdfce ever
+>    converts a plain field into rich-text-capable, it must carry the
+>    existing font/size/color into the new `/DS` explicitly and
+>    disclose the conversion.
+> 7. **The bit-26 `RichText`/`RadiosInUnison` collision trap** (already
+>    on record above) still applies unchanged — gate on field type
+>    first.
+> 8. **Not required for acceptance, but named so it isn't lost:** a
+>    per-run-aware auto-size (shrink by the neediest `Span`, or size off
+>    the largest run) is a well-defined **exceed-Acrobat** opportunity —
+>    Acrobat's own size-0 auto-size is architecturally disabled the
+>    moment `RichText` is set, because a single document-wide shrink
+>    target is undefined once a field can hold multiple run sizes at
+>    once. `nice_to_have`, not a blocker.
+> 9. **Flatten's interaction with `/RV`+`/DS` is UNDOCUMENTED in
+>    Acrobat** (new GAP, recorded 2026-08-10) — pdfce's own flatten
+>    should deterministically bake from `/RV`+`/DS` (never a possibly-
+>    stale cached picture) and disclose that as pdfce's own policy, per
+>    item 5 above. `should_have`, not blocking `Pass 37.3`'s initial
+>    ship but owed before flatten is called complete for rich-text
+>    fields.
+>
+> **Still open, and deliberately left for the implementing engineer, not
+> decided here:** which of options (2) [explicit lossy downgrade] and
+> (3) [true `/RV`-preserving fill] ships FIRST, and whether an interim
+> `pdfce-cli fill-field` opt-in flag is needed for whichever stays lossy
+> meanwhile. This scoping supplies acceptance criteria for the
+> DESTINATION, not a ruling on build order.
+
 ### ★ Operator request 2026-08-05 — GUI usability: docked tool options, implicit gesture-commit, and the ce-dimension property surface (Pass families 34 and 35, decision 031, question (aw))
 
 **Verbatim, 2026-08-05** (operator, relayed through `pdfce-engineer`):
@@ -32414,6 +32635,20 @@ Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
 
+- **Audit every other `pdfce-core` mutating-loop verb for `R179`'s shape**
+  (owed by `1e3422e`, 2026-08-10 — see that *Shipped* entry, top of
+  *Shipped*). `import_form_data` propagated a per-item refusal with a
+  bare `?` inside a loop that had already mutated the session overlay for
+  earlier entries, abandoning the import half-applied behind a reported
+  failure — fixed by matching the sibling arm that already did the right
+  thing (skip-and-count). **Not audited: whether any other verb that
+  iterates and mutates as it goes shares the shape** — `git grep` for `?`
+  inside a `for`/`while` loop in a function whose signature takes
+  `&mut EditSession` (or an equivalent mutable receiver) is the concrete
+  starting point; `R179` (Standing rules, below) is the checklist
+  question to ask at each hit. Not yet scoped to a Pass — a review/audit
+  task, not necessarily a feature-shaped one; may turn into several
+  one-line fixes or zero, depending what the grep turns up.
 - ~~**Rename a pure grouping node — not reachable from the GUI, and
   nothing tells the operator so** (owed by `Pass 53.0`, `a3ba0f8`,
   2026-08-09). `form.fields` is a projection of TERMINAL fields only
@@ -43011,6 +43246,44 @@ and
   reader) — R178 asks whether a true, informative disclosure string is
   still standing on ground a real caller crosses. **Ceiling moves
   `R177` → `R178`; next free `R179`.**
+
+- **R179 — A loop that mutates a `&mut` receiver as it iterates must
+  never propagate a per-item refusal with a bare `?`; every per-item
+  failure needs a deliberately-chosen disposition (skip-and-count,
+  abort-with-a-partial-report, or pre-flight-validate-then-apply), never
+  the implicit "none of the above" `?` supplies by default (2026-08-10;
+  librarian-minted from `1e3422e`).** `import_form_data` refused an
+  entire FDF/XFDF import on the FIRST unsupported (rich-text) field via
+  `?`, discarding every other individually-applicable field in the same
+  batch, and — the more serious half — the loop had already written
+  earlier entries to the session overlay before the refusing entry, so
+  the caller received an `Err` (which reads as "nothing happened") for a
+  call that had in fact partially mutated the document. Fixed by
+  matching a SIBLING match arm four lines below (the `SIGNATURE`-field
+  case) that already did the right thing for the identical question —
+  "pdfce cannot apply this entry, what now?" — skip it and count it via
+  the already-existing `skipped` field. **Found while SCOPING a feature
+  (rich-text fill), not while building one**: no test anywhere had
+  exercised a data file mixing a supported field with an unsupported one,
+  so the defect had no reachable regression coverage until this
+  session's own scoping work produced the first fixture combining them.
+  **Practical form:** for every `?` inside a loop, ask whether anything
+  EARLIER in that same call already mutated state through the same
+  receiver — if yes, a per-item condition needs a `match` with a named
+  disposition, not `?`, even when only one refusal branch exists today
+  (the absence of a second refusal branch is not evidence the loop is
+  safe, only that nobody has hit it yet). **Judged a general Rust
+  API-design hazard, not a pdfce- or PDF-domain-specific one** — filed to
+  `D:\dev\rag\rust\` in full
+  (`a_loop_that_mutates_as_it_goes_must_not_question_mark_a_per_item_refusal.md`),
+  cross-referenced here rather than duplicated, because the shape has
+  nothing to do with PDFs and everything to do with `Result`/`?`
+  semantics under partial mutation — any future Rust project on this
+  machine can hit the identical trap. A Backlog entry (below) tracks the
+  still-owed audit of whether any OTHER `pdfce-core` verb shares this
+  shape — `R179` is the checklist question that audit applies at each
+  hit, not the audit itself. **Ceiling moves `R178` → `R179`; next free
+  `R180`.**
 
 ## Update protocol
 

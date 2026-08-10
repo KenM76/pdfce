@@ -14272,3 +14272,40 @@ started).
   judged pdfce-specific (the FQN/grouping-node distinction it turns on is
   this project's own field model, not an egui mechanic). Full record:
   `ROADMAP.md`'s `2b41b77` Shipped entry (top of *Shipped*), Part 1.
+
+- **2026-08-10 (`Pass 37.3` scoping, no code yet — `1e3422e` +
+  `pdfce-acrobat-librarian`'s 2026-08-10 deepening) — a rich-text field's
+  baked `/AP` is pdfce's own RENDERING POLICY, not a spec-conformance
+  claim, and this is a standing constraint on whatever `Pass 37.3`
+  eventually builds, not merely a documentation note.** ISO 32000-1
+  §12.7.3.4 states a `shall` for THAT an entire rich-text annotation
+  appearance is regenerated from `/RV`+`/DS` on every value change
+  (`RT-M9`, unconditional on `/NeedAppearances` per `RT-N7`), but is
+  silent on HOW: no `/BBox` rule, no resource-population rule, no
+  marked-content tag, no line-breaking rule, no leading rule, no
+  `/Q`-vs-`text-align` precedence rule, no auto-size rule, no overflow
+  rule, and no worked example (`RT-N2`,
+  `D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__s__12.7.3.4.md`).
+  **Decided:** whatever pdfce's eventual rich-text `/AP` generator
+  produces is pdfce's own rendering, never a claim of matching the
+  standard or matching Acrobat's own (also undocumented) internal
+  pipeline — every doc comment, `--help` string, and `FEATURES.md` row
+  touching rich-text rendering must say so, per the project's own
+  claim-bearing-copy discipline (`CLAUDE.md` global rule) applied to a
+  spec-conformance claim rather than a marketing one. Two concrete
+  consequences already scoped into `Pass 37.3`'s acceptance criteria
+  (`ROADMAP.md` *Next up*): (1) `/V` is regenerated FROM `/RV` on every
+  write, never independently editable through pdfce's own tooling, so
+  the two representations cannot drift apart the way the Acrobat-parity
+  RAG's "two-representation architecture" finding describes real-world
+  producers doing; (2) flatten (when it reaches rich-text fields) bakes
+  deterministically from `/RV`+`/DS`, never from a possibly-stale cached
+  picture — Acrobat's own flatten behavior here is UNDOCUMENTED (new GAP,
+  `forms__rich_text_fields.md`, 2026-08-10), so pdfce cannot match it and
+  must not imply it does. **No crate boundary or library choice changes**
+  — this is a data-flow/disclosure invariant on a subsystem (`pdfce-core`
+  form-field appearance generation) that does not exist in code yet;
+  recorded now so the eventual implementation is built against a decided
+  posture rather than an ad hoc one discovered mid-Pass. Full record:
+  `ROADMAP.md`'s `1e3422e` Shipped entry (top of *Shipped*) and the
+  `★★ AMENDMENT` on the *Next up* "Rich-text fill" entry it points to.
