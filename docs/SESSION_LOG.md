@@ -30398,3 +30398,122 @@ free **(bi)**. Backup/git working-tree state not independently asserted
 — this librarian has no shell this dispatch (hard rule 8). This is the
 **sixty-seventh** `SESSION_LOG.md` filing (the sixty-sixth confirmed
 present by direct read before this entry was appended).
+
+## 2026-08-10 (sixty-eighth filing) — `079394f`: a redaction search refuses an encrypted document BEFORE reading any text, closing a Backlog question by PROOF (R179's fourth instance); `aac321c`: `FEATURES.md` row 155's rich-text-fill direction, INVERTED, is corrected, the CLI gains `fill-field --downgrade-rich-text`, and this librarian catches that same row going stale again inside the SAME commit; a `DocumentEncrypted`-coverage finding is flagged to the Encryption Backlog bucket, correcting a reported "42" to a verified 44 total / 26 raise sites; three baseline-debt claims (`338076a`, `1f319c0`, `9141ded`) are corroborated against source but NOT discharged
+
+**Sourcing.** This librarian has no shell this dispatch (hard rule 8).
+`079394f` and `aac321c` were relayed as prose summaries rather than full
+commit messages. Independently verified by direct read (full list in
+`ROADMAP.md`'s own `079394f`/`aac321c` *Shipped* entry, opening
+paragraph): `edit.rs`'s `author_text_matches` gate hoist and
+`add_redaction`'s three failure modes; the `DocumentEncrypted` occurrence
+count (44 total / 26 raise sites, correcting "42"); zero
+`DocumentEncrypted` references anywhere in `crates/pdfce-core/tests/`;
+`docs/FEATURES.md` row 155 before and after two rounds of correction;
+`FieldIsRichText` / `fill_text_field_downgrading_rich_text` in `edit.rs`;
+the GUI's six `set_button_state`/`set_choice_value` call sites and its
+rich-text-downgrade call site; **the CLI's `fill-field
+--downgrade-rich-text` flag and its `cmd_fill_field` routing, found by
+this librarian while verifying the dispatch's claim rather than
+reported by the dispatch** (see Findings, below); `crates/pdfce-cli/tests/fill_rich_text.rs`
+in full; `forms.rs`'s bit 23/bit 26 documentation; `fdf.rs`'s zero `/Ff`
+references; the existing `R158` entry (already recording the operator's
+glyph ruling since 2026-08-06); `tools/check-ledger-numbers.py` in full;
+`main.rs`'s property-bar movable/closable comment block.
+
+**Shipped:**
+- `079394f` (2026-08-10) — `author_text_matches` (shared engine behind
+  `mark_redactions_by_search`/`mark_redactions_by_pattern`) hoists its two
+  document-wide gates (`/Encrypt`; certification) ahead of the scan-and-mark
+  loop. Closes the Backlog's redaction-loop entry **by proof**: given
+  this loop's fixed shape (`spec.quads` always one quad; `page_index`
+  always in range), every failure `add_redaction` can raise is
+  document-wide, so a partial mark set was never reachable — the "partial
+  set: better or worse than none?" contract question the Backlog entry
+  posed does not arise. R179's fourth instance.
+- `aac321c` (2026-08-10) — corrects `docs/FEATURES.md` row 155's
+  inverted rich-text-fill description (core refuses via
+  `FieldIsRichText`; GUI fills via a disclosed downgrade; CLI, at the
+  time of writing, did not) and ships `fill-field --downgrade-rich-text`:
+  an opt-in, lossy CLI flag through `fill_text_field_downgrading_rich_text`,
+  refusal remaining the default, per-field disclosure on stderr, inert on
+  plain-text fields — pinned by `crates/pdfce-cli/tests/fill_rich_text.rs`.
+- `52f18bf` — confirmed already landed (its content, the sixty-seventh
+  entry's splice correction and the `ARCHITECTURE.md` §12 "not edited"
+  wording, was already visible on direct read before this filing began;
+  no further action needed).
+
+**Decisions made this session:**
+- The redaction-loop Backlog entry is edited IN PLACE with a strikethrough
+  + correction, per hard rule 1 (append-only applies to *Shipped*/log
+  entries; a Backlog item tracking open work is not history and is
+  correctly updated rather than duplicated).
+- The two `/Ff` findings named in `587e520`'s message are canonical
+  spec-clause facts, not empirical producer-divergence findings — per
+  hard rule 6, redirected to an owed `pdfce-spec-librarian` dispatch
+  rather than authored into `personal_rag/pdf` by this librarian.
+
+**Findings + decisions:**
+- **A reported figure of "42" `DocumentEncrypted` sites in `edit.rs` did
+  not match direct measurement.** 44 total occurrences; 26 actual raise
+  sites; 17 doc-comment cross-references; 1 enum declaration. Filed per
+  hard rule 10 — the corrected figures, not the reported one, are what
+  went into `ROADMAP.md`'s Encryption Backlog bucket.
+- **`docs/FEATURES.md` row 155 went stale a second time within the SAME
+  commit that corrected it — found by this librarian, not reported by
+  the dispatch.** `aac321c` corrected the row's GUI/core direction AND
+  shipped `fill-field --downgrade-rich-text` in the CLI; the row's
+  freshly-written CLI clause ("does not expose the downgrade") was true
+  of the commit's starting state and false of its ending state, in the
+  same commit. A live R180 recurrence, caught by reading
+  `crates/pdfce-cli/src/main.rs` directly while verifying the dispatch's
+  own claim that "row 155 is rewritten," rather than accepting the
+  restatement. Row corrected again, in place.
+- **`import_form_data`'s fixed pattern (skip-and-count) does not
+  generalize to every loop sharing R179's surface shape.** `add_redaction`
+  shares the `?`-in-a-mutating-loop shape but the right fix was a
+  pre-flight hoist, not skip-and-count — R179's practical form already
+  named "pre-flight-validate-then-apply" as one of three valid
+  dispositions; this is that branch's first instance.
+- Three baseline-debt commits (`338076a`, `1f319c0`, `9141ded`) had their
+  DESCRIBED content corroborated against current source and check out.
+  **None removed from `tools/commits-filed-baseline.txt`** — corroborating
+  a description is not the same discipline as reading the commit's own
+  message in full and filing it properly, which is what the baseline
+  exists to hold the line on.
+
+**Still in flight:**
+- `tools/commits-filed-baseline.txt` unchanged at **5 lines**: `338076a`,
+  `1f319c0`, `55a0732`, `587e520`, `9141ded`. All five now have some
+  amount of external corroboration on record; none has had its own full
+  commit message read and properly filed.
+- `pdfce-spec-librarian` dispatch owed: the FDF `/Ff` namespace-collision
+  fact and the bit 23 precondition-asymmetry fact, both canonical
+  spec-clause content redirected out of this librarian's territory.
+- The `DocumentEncrypted`-coverage finding is a pre-implementation
+  checklist item on the Encryption Backlog bucket (Pass 5), not yet
+  actionable — Pass 5 is not active.
+
+**For next session:**
+- Read `338076a`, `1f319c0`, `55a0732`, `587e520`, `9141ded` in full and
+  file them properly — three of five now have source-level corroboration
+  on record, which should make the actual filing faster, not a
+  substitute for it.
+- When Pass 5 (Encryption) is scoped, read the new Backlog checklist item
+  before writing `EditSession` construction for an encrypted document.
+
+**Ledger for this filing.** Pass family ceiling **UNCHANGED at 53** (53.1
+highest); no new Pass ID. `docs/FEATURES.md`: row 155 edited (net one
+row, corrected in both directions this filing accounts for).
+`docs/ARCHITECTURE.md` §12: **not edited** — no crate boundary, library
+choice, or invariant was redrawn; the coverage finding went to *Backlog*
+as a checklist item, not a decision. Standing rules: **no new rule
+minted** — ceiling unchanged at **R181**, next free **R182** (`079394f`
+is R179's fourth instance; the FEATURES.md self-staling is a further
+live R180 instance, not a new numbered shape). Decision records:
+unchanged, ceiling **035**, next free **036**. Operator-question ceiling
+unchanged at **(bh)** (closed ACCEPT), next free **(bi)**. Backup/git
+working-tree state not independently asserted — this librarian has no
+shell this dispatch (hard rule 8). This is the **sixty-eighth**
+`SESSION_LOG.md` filing (the sixty-seventh confirmed present by direct
+read before this entry was appended).

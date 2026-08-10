@@ -70,3 +70,16 @@ still true. Only write a new dated confirmation here again if the
 pattern is ever DROPPED (a dispatch reverting to bare hash citation
 with no evidence) — that would be the surprising event worth recording,
 not another instance of it working.
+
+**Partial regression noted, 2026-08-10 (sixty-eighth filing) — not a
+full drop, but not the settled pattern either.** The dispatch for
+`079394f`/`aac321c` carried rich prose summaries (defect, fix, reasoning
+all present) but not the raw commit messages themselves, and this
+librarian ended up doing more direct-source verification than usual as
+a result — which is how the FEATURES.md self-staling catch happened
+(see `feedback_verify_dispatch_claims_against_live_source.md`), so the
+narrower sourcing was not purely a cost this time. Worth watching
+whether this was a one-off (the dispatching engineer working from its
+own summary rather than pasting `git show`) or a genuine drift back
+toward pre-fifty-fifth-filing behavior — one instance is not yet a
+second data point either way.

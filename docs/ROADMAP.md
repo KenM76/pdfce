@@ -81,6 +81,227 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★ `079394f` FILED — a redaction search refuses an encrypted document BEFORE it reads any text, closing the Backlog's redaction-loop question by PROOF rather than by a contract ruling (R179's FOURTH instance); `aac321c` FILED — `docs/FEATURES.md` row 155's rich-text-fill direction was INVERTED and is corrected, the CLI gains `fill-field --downgrade-rich-text`, and this librarian's own read catches that same row's just-written correction going stale within the SAME commit; `52f18bf` CONFIRMED already landed (sixty-seventh entry's splice + `ARCHITECTURE.md` §12 "not edited" correction) — a `DocumentEncrypted`-coverage finding flagged for Pass 5, correcting a reported "42" to a verified 44/26 — baseline debt unchanged at **5** — 2026-08-10 (sixty-eighth filing)
+
+**Sourcing.** This librarian has no shell this dispatch (hard rule 8).
+`079394f` and `aac321c` were relayed by the dispatching engineer as prose
+summaries, not full commit messages — narrower sourcing than most recent
+filings, so more of this entry's content is this librarian's own direct
+read than usual, and is marked as such throughout. **Independently
+verified by direct read, not relayed:** `crates/pdfce-core/src/edit.rs`
+(`author_text_matches`'s gate hoist, its `R179` comment, `add_redaction`'s
+own three failure modes); the `DocumentEncrypted` occurrence count in
+`edit.rs` (44 total, 26 raise sites — see below, corrects the dispatch's
+reported "42"); `crates/pdfce-core/tests/` (zero `DocumentEncrypted`
+references); `docs/FEATURES.md` rows 155/157 before AND after editing row
+155 further; `crates/pdfce-core/src/edit.rs`'s `FieldIsRichText`/
+`fill_text_field_downgrading_rich_text` definitions; `crates/pdfce-gui/src/main.rs`'s
+rich-text-downgrade call site and its six `set_button_state`/
+`set_choice_value` call sites; `crates/pdfce-cli/src/main.rs`'s
+`cmd_fill_field` and its `--downgrade-rich-text` `clap` arg (see Part 2);
+`crates/pdfce-cli/tests/fill_rich_text.rs` in full; `crates/pdfce-core/src/forms.rs`
+lines 90–154 (bit 23 `DoNotSpellCheck` precondition note) and lines
+1225–1240 (`/RV` read ungated on bit 26); `crates/pdfce-core/src/fdf.rs`
+(zero `/Ff` references — confirms the FDF-collision hazard is latent, not
+live); this document's own `R158` *Standing rules* entry (the operator's
+glyph-authoring ruling, already recorded 2026-08-06, independent of
+commit `1f319c0`'s own filing status); `tools/check-ledger-numbers.py` in
+full (the filing-ordinal collision checker named in `338076a`'s subject —
+present, integrated, and its own docstring dates the ordinal check to
+2026-08-07); `crates/pdfce-gui/src/main.rs`'s property-bar `MOVABLE and
+CLOSABLE (operator request 2026-08-04)` comment block and its
+`close_tool` handling (confirms `9141ded`'s described closable half).
+**Not independently re-run:** gate/test-count figures, where quoted, are
+as relayed.
+
+**Part 1 — `079394f`: the redaction-search loop's Backlog question is
+answered by PROOF, closing it without a contract ruling.** `author_text_matches`
+(`crates/pdfce-core/src/edit.rs`, shared engine behind
+`mark_redactions_by_search` and `mark_redactions_by_pattern`) calls
+`add_redaction` once per match, inside a loop, via `?` — the identical
+shape `import_form_data` had before `1e3422e`/`b2574f6`. Unlike that case,
+this one is **not fixed with skip-and-count**, because it does not need
+to be: `add_redaction` has exactly three failure modes —
+`EmptyGeometry` and `PageOutOfRange` (both per-entry) and two
+document-wide gates (`/Encrypt` in the trailer; `check_certification_for_annotation`).
+In this loop `spec.quads` is always `vec![quad]` (so `EmptyGeometry`
+cannot fire) and `page_index` comes from the same scan `add_redaction`
+resolves it against (so `PageOutOfRange` cannot fire either) — **every
+reachable failure is document-wide**, so `add_redaction` fails on the
+FIRST match or never, and a partial mark set was never reachable in the
+first place. The Backlog entry this closes had framed the open question
+as a contract call ("is a partial redaction set better or worse than
+none?"); that question turns out not to arise.
+
+The fix hoists the two document-wide gates to the top of
+`author_text_matches`, ahead of the loop, and leaves them in
+`add_redaction` too. Two independent reasons this is not redundant: (1)
+it converts a global argument (depends on facts declared elsewhere —
+`spec.quads`'s shape, `page_index`'s provenance) into a LOCAL one (holds
+regardless of what per-entry errors `add_redaction` grows later, because
+those are excluded before the first mutation); (2) a refusal should be
+the cheapest path through a function, not the most expensive — without
+the hoist, `mark_redactions_by_search` on an encrypted document extracts
+and scans every page's text before discarding all of it at the first
+`add_redaction` call, a long stall producing nothing. Backlog entry
+updated in place (see below) rather than deleted, per hard rule 1.
+
+**Part 1b — a `DocumentEncrypted`-coverage finding, flagged to the
+Encryption Backlog bucket rather than filed as a standing rule, because
+it names a future risk rather than a present defect.** The dispatch
+reported `EditError::DocumentEncrypted` as raised at "42 sites" in
+`edit.rs`, asserted by zero tests. **Independently re-counted by this
+librarian, per hard rule 10** (a figure should be filed in a form that
+can disagree with something): direct grep finds **44 total occurrences**
+of `DocumentEncrypted` in `edit.rs`, of which **26 are actual raise
+sites** (`return Err(...)`/`return Some(...)`), **17 are
+`[EditError::DocumentEncrypted]` doc-comment cross-references**, and
+**1 is the enum variant's own declaration**. None of those three numbers
+is 42 — the reported figure does not match either a natural "total
+mentions" or "actual raises" reading, and is corrected rather than
+relayed. The "zero tests" half stands independently verified: `crates/pdfce-core/tests/`
+contains no `DocumentEncrypted` reference, and the term appears in
+exactly one `crates/` source file, `edit.rs` itself. Both entry paths
+into pdfce (`xref.rs`'s `EncryptionUnsupported`, `recover.rs`'s
+`RecoverError::Encrypted`) refuse `/Encrypt` before an `EditSession` can
+exist, so no public API can construct the state these 26 guards check —
+correct defence-in-depth, genuinely unreachable today, and flipping to
+load-bearing all at once, untested, the day Pass 5 (Encryption) ships.
+Full text filed to the Encryption Backlog bucket, below, as a
+pre-implementation checklist item rather than a standing rule — it names
+a specific future obligation on a specific future Pass, not a recurring
+shape worth a rule number.
+
+**Part 2 — `aac321c`: `docs/FEATURES.md` row 155 corrected, the CLI
+gains `fill-field --downgrade-rich-text`, and this librarian catches the
+SAME row going stale again within the same commit.** Row 155 read *"Rich-text
+fields are REFUSED in the GUI ... core/CLI do NOT yet refuse"* — both
+halves backwards. Verified against source: **core refuses**
+(`fill_text_field` → `EditError::FieldIsRichText`); **the GUI is the
+surface that FILLS them**, via `fill_text_field_downgrading_rich_text`
+(`crates/pdfce-gui/src/main.rs`), with the downgrade disclosed at the
+call site (`ui_text::form_field_rich_text_converted`) — verified at the
+call site specifically, because "a downgrade verb exists" and "the
+operator is told it happened" are different claims. `aac321c` corrected
+the row to name the GUI as the filling surface and, at the time it was
+written, correctly described the CLI as refusing outright with no
+downgrade route.
+
+**That CLI clause was already wrong the moment this same commit shipped**
+— caught by this librarian reading `crates/pdfce-cli/src/main.rs`
+directly rather than accepting the row's own prose. `aac321c` also built
+`fill-field --downgrade-rich-text`: an opt-in, lossy CLI flag routing a
+rich-text field through `fill_text_field_downgrading_rich_text`, refusal
+staying the default, each converted field disclosed BY NAME on stderr
+(not a count — the same reasoning as `R181`, arrived at from the other
+direction: there a count described the wrong THING, here a count would
+be the wrong SHAPE), and inert on a field with no formatting to lose —
+pinned by `crates/pdfce-cli/tests/fill_rich_text.rs`'s four assertions
+in full. The CLI's own doc comment names the defect precisely: *"docs/FEATURES.md
+asserted the exact opposite of both facts until `aac321c`"* — true of
+the row's ORIGINAL wording, and no longer true of the row `aac321c`
+itself wrote, because the flag shipped in the same commit as the
+correction. **This is a live R180 recurrence inside the commit meant to
+fix a disclosure**, not a new instance report from the dispatch — this
+librarian found it independently while verifying the dispatch's claim
+that "row 155 is rewritten." `docs/FEATURES.md` row 155 corrected again,
+in place, to its current accurate form (both CLI facts, in the right
+direction, in the same edit) — see the row itself for the final text
+rather than duplicating it here.
+
+Also confirmed, not newly filed: `55a0732`'s described radio/choice GUI
+capability and the deleted (now-obsolete) refusal strings are consistent
+with `crates/pdfce-gui/src/main.rs`'s current six
+`set_button_state`/`set_choice_value` call sites — this librarian has
+still not read `55a0732`'s own commit message in full, so it stays in
+`tools/commits-filed-baseline.txt` pending a proper filing, not removed
+on the strength of this corroboration.
+
+**Part 3 — two `/Ff` findings, named in `587e520`'s own message per the
+dispatch, corroborated against source, and REDIRECTED rather than
+written to `personal_rag/pdf` by this librarian.** Both are canonical
+spec-clause facts (which dictionary type's `/Ff` means what, under which
+precondition) rather than empirical "how a real file diverges from spec"
+findings, so per hard rule 6 they belong to `pdfce-spec-librarian`'s
+`PDF_Spec` RAG, not this librarian's territory — flagged here as an OWED
+`pdfce-spec-librarian` dispatch, not authored into `personal_rag/pdf`.
+
+1. **FDF carries its own, unrelated `/Ff` word.** ISO 32000-1 defines
+   `/Ff` in four different dictionaries with four different meanings
+   (field, `/SV`, `/SV /Cert`, and FDF's own) — a decoder keyed on the
+   KEY NAME rather than the containing dictionary type mis-decodes any of
+   them. **Latent, not live**: `crates/pdfce-core/src/fdf.rs` contains
+   zero `/Ff` references today (verified — grep returns nothing), so
+   nothing is presently wrong. Flagged because this session's engineer
+   wrote `/RV` handling into `fdf.rs` without knowing the hazard existed.
+2. **Bit 23 `DoNotSpellCheck` — same meaning, different precondition.**
+   Table 228 (`/Tx`) states it unconditionally; Table 230 (`/Ch`) gates it
+   on `Combo` AND `Edit`. Already documented at the constant
+   (`crates/pdfce-core/src/forms.rs` lines 140–154, verified) rather than
+   wrapped in an accessor, because unlike bit 26 (which can yield a WRONG
+   MEANING) this can only yield a missed VALIDATION. Nothing in pdfce
+   consumes bit 23 today, so this too is latent.
+
+**Confirmations answering three items the dispatch asked this librarian
+to check, none of which change any ledger:**
+
+- **`338076a`'s filing-ordinal collision checker exists and is
+  integrated**, not merely proposed: `tools/check-ledger-numbers.py`
+  checks Pass IDs, standing-rule numbers, decision numbers AND (since
+  2026-08-07, per its own docstring) `SESSION_LOG.md` filing ordinals —
+  the exact gap `338076a`'s subject names. Confirmed present and
+  internally consistent by direct read; the commit's own full message is
+  still unread by this librarian, so it stays in the baseline.
+- **`1f319c0`'s glyph ruling is safely recorded, independent of the
+  commit's own filing status.** `R158` (*Standing rules*, below) already
+  records the operator's verbatim ruling — *"if an appropriate glyph is
+  missing for a feature or function, they should just be created as part
+  of the process"* — dated 2026-08-06, a rule number assigned before
+  `1f319c0` was even committed. `Icon::Back` (`crates/pdfce-gui/src/icons.rs`)
+  is confirmed present as an instance of R158 being applied, but the
+  commit's own message is still unread, so `1f319c0` also stays in the
+  baseline.
+- **`9141ded`'s closable half checks out**, from source rather than from
+  the commit message: `crates/pdfce-gui/src/main.rs`'s property-bar block
+  is headed `"MOVABLE and CLOSABLE (operator request 2026-08-04)"` and
+  implements both — `close_tool` puts the whole measure-family tool away,
+  not merely the panel, with its own reasoning comment (dismissing a
+  panel mid-gesture must not leave a half-finished two-point measurement
+  completable by the next canvas click). The floating box itself was
+  later removed by Pass 34.1 (its controls now live in the dock's Tool
+  Options pane), but the close/movable mechanics were carried forward
+  rather than lost — a later refactor preserved behaviour it did not
+  originate. `9141ded`'s own message remains unread; baseline unchanged.
+
+**Ledger for this filing.** No new Pass ID — all three commits are
+fixes/corrections/a documentation-parity flag, not new capability. Pass
+family ceiling **UNCHANGED at 53** (53.1 highest). `docs/FEATURES.md`:
+row 155 edited twice in this entry's own account (the dispatch's
+correction, then this librarian's further correction to the same row) —
+net effect is one row, now accurate in both directions on both surfaces.
+`docs/ARCHITECTURE.md` §12: **not edited** — none of the three commits
+redraws a crate boundary, picks a library, or defines/refines an
+invariant; the `DocumentEncrypted`-coverage finding is filed to *Backlog*
+as a pre-implementation checklist item, not a decision. Standing rules:
+**no new rule minted** — `079394f` is R179's fourth instance (cited
+above and at the *Backlog* entry it closes); the FEATURES.md self-staling
+is a further live instance of R180, not a new shape distinct enough to
+number. Ceiling **unchanged at R181**, next free **R182**. Decision
+records: unchanged, ceiling **035**, next free **036**. Operator-question
+ceiling unchanged at **(bh)** (closed ACCEPT), next free **(bi)**.
+`tools/commits-filed-baseline.txt`: **unchanged at 5 lines** — none of
+`079394f`/`aac321c`/`52f18bf` was ever a baseline line (verified by
+direct read before this entry was written), and none of the three
+baseline items touched in the Confirmations section above (`338076a`,
+`1f319c0`, `9141ded`) is removed, because corroborating a commit's
+DESCRIBED content against current source is not the same thing as
+reading its own message in full and filing it properly — that discipline
+is the thing this baseline exists to hold the line on. Backup/git
+working-tree state not independently asserted — this librarian has no
+shell this dispatch (hard rule 8). This is the **sixty-eighth**
+`SESSION_LOG.md` filing (the sixty-seventh confirmed present by direct
+read before this entry was appended).
+
 ### ★ `b2574f6` FILED — the `R179` audit is RUN, not only proposed, and finds `import_form_data` had TWO more untouched instances of its own already-"fixed" bug; `6a42ffa` FILED — `R180` applied to itself one commit after being minted, correcting two now-false sentences in SOURCE plus a clippy doc-list gotcha; `c46a6ce` FILED — an export disclosure count wired to the wrong predicate disagreed with the file it described in BOTH directions; `R181` MINTED — baseline debt unchanged at **5** — 2026-08-10 (sixty-seventh filing)
 
 **Sourcing.** This librarian has no shell this dispatch (hard rule 8). All
@@ -33022,22 +33243,30 @@ nothing gets forgotten, not as a commitment to build in this order.
   two). The redaction loop is the one remaining item; see the new entry
   immediately below, split out because it needs a decision this audit
   correctly declined to make on its own.]**
-- **Redaction-search loop (`add_redaction`) shares `R179`'s shape and is
-  DELIBERATELY UNFIXED, pending a contract decision** (found by the audit
-  above, `b2574f6`, 2026-08-10). `add_redaction` commits per match found,
-  identical to `import_form_data`'s pre-fix shape — a mid-search refusal
-  would leave earlier matches already redacted while the caller receives
-  an `Err`. Not fixed alongside `import_form_data` because it is a
-  different verb with a different open question: **is a partial
-  redaction set better or worse than none?** An operator who asked for
-  five redactions and got three applied before a refusal may prefer the
-  three over none — or may not; unlike form-import (every field
-  independently applicable, skip-and-count is obviously right),
-  redaction's correctness expectations are not obviously the same
-  shape, and picking a disposition without asking is exactly how a
-  drive-by cleanup becomes an undiscussed behavior change. **Needs an
-  operator or engineer ruling on the contract question before this is
-  fixed** — not yet scoped to a Pass.
+- ~~**Redaction-search loop (`add_redaction`) shares `R179`'s shape and is
+  DELIBERATELY UNFIXED, pending a contract decision**~~ **CLOSED BY PROOF,
+  not by a contract ruling (`079394f`, 2026-08-10, sixty-eighth filing).**
+  The open question this entry posed — *is a partial redaction set better
+  or worse than none?* — turned out to be **unanswerable because the
+  situation cannot occur**, not merely undecided. `author_text_matches`
+  (the shared engine behind `mark_redactions_by_search` AND
+  `mark_redactions_by_pattern`) always calls `add_redaction` with
+  `spec.quads == vec![quad]` (so `EmptyGeometry` can never fire) and a
+  `page_index` sourced from the same scan `add_redaction` resolves it
+  against (so `PageOutOfRange` can never fire either) — **every failure
+  `add_redaction` can raise today is document-wide** (`/Encrypt` in the
+  trailer; `check_certification_for_annotation`), so it fails on the
+  FIRST match or never, and a partial mark set was never reachable. The
+  two document-wide gates are now hoisted to the top of
+  `author_text_matches`, ahead of the loop (kept in `add_redaction` too —
+  the hoist is what makes the argument hold LOCALLY, independent of any
+  per-entry error `add_redaction` grows later, and what makes the refusal
+  CHEAP: without it, a search on an encrypted file extracted and scanned
+  every page's text before discarding all of it at the first match).
+  **This is R179's FOURTH instance** — see this document's own `079394f`
+  *Shipped* entry (top of *Shipped*) for the full account. Not fixed by
+  choosing a disposition; fixed by proving the disposition question does
+  not arise.
 - ~~**Rename a pure grouping node — not reachable from the GUI, and
   nothing tells the operator so** (owed by `Pass 53.0`, `a3ba0f8`,
   2026-08-09). `form.fields` is a projection of TERMINAL fields only
@@ -34835,6 +35064,31 @@ nothing gets forgotten, not as a commitment to build in this order.
   Adobe-supplement copyright contradiction and the `/R 6` sourcing
   method — are on the SESSION_LOG operator-items list (continuation 22),
   Ken's calls, not resolvable autonomously.
+  **★ Pre-implementation finding, flagged 2026-08-10 (sixty-eighth
+  filing), so whoever activates this Pass finds it before starting rather
+  than after:** `EditError::DocumentEncrypted` is currently **unreachable
+  from any public entry point** — both places a document can enter pdfce
+  refuse `/Encrypt` before an `EditSession` can exist
+  (`crates/pdfce-core/src/xref.rs:534`'s `XrefErrorKind::EncryptionUnsupported`;
+  `crates/pdfce-core/src/recover.rs:387`'s `RecoverError::Encrypted`), so
+  no test anywhere in the workspace can construct the state the guard
+  checks for. **Verified by direct grep, correcting a reported figure of
+  "42": `edit.rs` contains 44 total occurrences of `DocumentEncrypted`,
+  of which 26 are actual raise sites (`return Err(...)`/`return
+  Some(...)`), 17 are `[EditError::DocumentEncrypted]` doc-comment
+  cross-references, and 1 is the enum variant's own declaration — none of
+  those figures is 42.** `crates/pdfce-core/tests/` contains zero
+  references to `DocumentEncrypted`; the term appears in exactly one
+  `crates/` source file (`edit.rs` itself). This is correct
+  defence-in-depth, not dead code — but it means all 26 raise sites flip
+  from unreachable to load-bearing **on the same day**, the day Pass 5
+  activates, with **no regression coverage in between** to catch a
+  mistake among any of them. **Action for whoever scopes Pass 5:** before
+  wiring `EditSession` construction to accept an encrypted document,
+  synthesize the encrypted state directly (through the type, not through
+  a real encrypted fixture) against a representative sample of these 26
+  sites, so the first real test of each guard is not the first real
+  encrypted document a user opens.
 - **Redaction** — true content removal (not visual-overlay-only), per
   `ARCHITECTURE.md` §5 corollary. This is a trust-critical feature;
   needs explicit test coverage proving removed content is actually

@@ -41,6 +41,21 @@ trailing text of the LAST header (by position, not by date-recency), (3)
 append the new `## YYYY-MM-DD ((N+1)th filing) — <title>` section after
 that trailing text, never before an existing header.
 
+**RECURRED 2026-08-10 (sixty-eighth filing) — same error, same shape,
+self-caught before it left the session.** Used an `Edit` `old_string`
+anchored to the sixty-seventh filing's header text to insert the new
+entry — which again placed it immediately BEFORE the sixty-seventh
+filing rather than after it. Caught by re-grepping `^## \d{4}-\d{2}-\d{2}`
+after the edit and checking the LINE NUMBER order, not just that both
+headers existed; fixed with a removal + re-append at the confirmed true
+end. **The generalizable lesson, sharpened by a second occurrence: an
+`Edit` whose `old_string` is a HEADER (as opposed to trailing body text)
+is the wrong anchor for an append to this file, full stop — anchor to
+the trailing text of the LAST entry's own final paragraph instead, every
+time, even when it feels slower.** Muscle memory from `ROADMAP.md`'s
+reverse-chronological Shipped section (where anchoring to a header to
+insert "above it" is correct) is exactly what produces this mistake here.
+
 ---
 
 **SUPERSEDED CONTENT BELOW, kept for the historical reasoning only —
