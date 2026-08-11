@@ -5200,6 +5200,25 @@ fn run() -> ExitCode {
 /// Implement `pdfce-cli inspect <file>`: probe the header and print the
 /// declared version, or print a diagnostic and map the error to the
 /// documented exit code.
+/// Warn when the visible document is a cover page for an encrypted payload.
+///
+/// # Why this is a warning and not a refusal
+///
+/// The wrapper really is a readable PDF, and everything pdfce says about it
+/// is true *of the wrapper*. Refusing to open it would withhold a document
+/// the operator can legitimately read — the cover page is often the only
+/// instructions they have. What must not happen is the operator taking
+/// "1 page, no fields" as a fact about the protected content.
+///
+/// So: open it, report it, and say plainly that the counts describe the
+/// cover. On stderr, so a script capturing stdout still shows a human.
+fn disclose_wrapper(file: &Path, doc: &pdfce_core::document::Document) {
+    let info = pdfce_core::wrapper::detect(doc);
+    if let Some(message) = info.message() {
+        eprintln!("pdfce-cli: {}: {message}", file.display());
+    }
+}
+
 fn cmd_inspect(file: &Path) -> u8 {
     let probe = pdfce_core::probe_file(file);
     // A full load additionally surfaces cross-reference RECOVERY (decision
@@ -5232,6 +5251,13 @@ fn cmd_inspect(file: &Path) -> u8 {
         // probe line, unchanged.
         (Ok(version), _) => {
             println!("{}: PDF {version}", file.display());
+            // ISO 32000-2 §7.6.7. Checked here rather than only in a forms
+            // or attachments command because `inspect` is what a sweep runs
+            // first, and the whole hazard is an operator concluding from a
+            // clean result that they are looking at the document.
+            if let Some(loaded) = full.as_ref() {
+                disclose_wrapper(file, loaded);
+            }
             exit::SUCCESS
         }
         // Header probe failed and recovery did not open it: not a PDF.

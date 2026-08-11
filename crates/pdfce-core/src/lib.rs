@@ -114,6 +114,7 @@ pub mod textstring;
 pub mod vartext;
 pub mod vector;
 pub mod view;
+pub mod wrapper;
 pub mod writer;
 pub mod xref;
 
