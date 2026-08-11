@@ -35698,3 +35698,192 @@ directly. This is the **hundred-and-ninth** `SESSION_LOG.md`/
 header AND body both confirmed present by direct read this time,
 per this filing's own sharpened formula — before this entry was
 appended).
+
+## 2026-08-11 (hundred-and-tenth filing) — `f79f044..f79d9a2`: pdfce opens AES-256 encrypted PDFs at `/R` 5, `Pass 5` increment 3 ships across core/CLI/GUI; decision 039 extended to `sha2`; two new decisions (044 `/Perms`, 045 non-ASCII passwords); a padding-strip bug survived every existing test because random keys happened to avoid its 1-in-16 trigger
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — `git log
+f79f044^..HEAD` not run. Relayed from the dispatching engineer across
+two messages (an initial brief, then a same-session addendum after two
+more commits landed, folded into this single filing per the addendum's
+own instruction). Independently cross-checked by direct `Read`/`Grep`
+of live source: `crates/pdfce-core/src/crypto/r5.rs`'s module doc
+comment (Algorithms cited, `/R` 6 refusal reasoning, the deliberately
+un-factored `hash` substitution point — all verbatim-consistent with
+the dispatch); `crypto/standard.rs` (`check_perms`, `PermsCheck`
+variants, `pub perms`, T27 citation — confirmed); `document.rs`
+(`DocError::PasswordRequiresNormalisation`, SASLprep/RFC 4013 doc
+comment, one raise site — confirmed); `Cargo.toml`'s `sha2` entry and
+its own in-line comment, which independently corroborates the
+dispatch's decision-039-extension reasoning almost word for word. Not
+independently reproduced: the "71 unit tests / 20 decrypts" figures, the
+corrected "+40" test count, or the CI re-run — relayed as engineer-
+measured.
+
+**Shipped:**
+- `Pass 5` increment 3 (nine commits, `f79f044..f79d9a2`) — AES-256 read
+  support at `/R` 5. New module `crypto/r5.rs` implements Algorithms
+  3.2a (password → key), 3.11/3.12 (`/U`/`/O` and `/UE`/`/OE`
+  authentication/unwrap) and 3.13 (`/Perms` integrity check), per the
+  Adobe Supplement to ISO 32000, ExtensionLevel 3, §3.5. `crypto/aes.rs`
+  gains three AES-256 routines, sharing block-framing code with the
+  existing AES-128 routines with no new generic bound (`Block<Aes128>`
+  and `Block<Aes256>` are the identical concrete 16-byte type in
+  RustCrypto's `cipher` crate) and needing no dedicated `ecb` crate for
+  the single-block `/Perms` check. Opens with either password across
+  core, CLI (`--open-password`/`--open-password-file`, unchanged
+  surface) and GUI (existing inline canvas prompt, unchanged surface) —
+  no new shell-facing UI needed, both already generalize over cipher.
+- `21f9c31` — four rustdoc-link warnings fixed in the new crypto
+  modules (nothing was gate-red; named because these particular module
+  docs are where the three-AES-modes trap and the `/R` 6 sourcing gap
+  are written down, and this project treats docs as load-bearing).
+- `f79d9a2` — a third occurrence of an already-twice-recorded
+  fixture-vacuity pattern (the generator's own comment promised "a
+  silent-empty-password fixture in every cipher," and `/R` 5 was
+  missing one when it shipped — closed with `enc-emptyuser-aes-256-r5.pdf`
+  and a new test), plus a fourth-axis instance found by design: `r5.rs`'s
+  unit tests embed bytes from a generated fixture that is
+  shape-reproducible but never byte-reproducible (fresh salt/key every
+  regeneration, by design), so a new guard test
+  (`the_r5_fixture_still_matches_the_unit_test_constants`) ties the
+  embedded constants to the fixture on disk.
+
+**The other five commits, by short hash** (added on a post-filing check
+against `tools/check-commits-filed.py`, which still reported them
+unfiled after the rest of this entry was written — the two named above
+had their own findings; these five carry the increment's actual
+engineering and are named here so the gate, and any future reader, has
+something true to match against each hash):
+- `f79f044` — first commit of the range (substrate/setup).
+- `3618072` — implement `/R` 5's key algorithms, and mark where `/R` 6
+  is missing.
+- `02d6cb2` — give AES-256 three routines, because `/R` 5 uses three
+  modes.
+- `bb6d678` — open `/R` 5, keep `/R` 6 shut, and report what `/Perms`
+  says.
+- `08ea0d2` — prove `/R` 5 decrypts CORRECTLY, and say what the
+  fixtures cannot fail on.
+- `9601682` — disclose a `/Perms` disagreement without accusing anyone
+  of anything.
+
+One-line descriptions relayed from the engineer, not derived from a
+`git show` this librarian ran (no shell this dispatch).
+
+**Decisions made this session:**
+- **Decision 039 EXTENDED to `sha2`, not superseded.** Same cfg-selected-
+  backend shape as `aes` (a cfg cannot be set from a dependency line and
+  is not inherited by a downstream library consumer), same CI-job
+  pattern extended rather than duplicated. Three new permissive
+  packages, `THIRD_PARTY_LICENSES.md` Apache-2.0 count 142 → 145.
+- **Decision 044 — `/Perms` mismatch is reported, never refused on,
+  never silently substituted for.** `/R` 5 decoupled the file
+  encryption key from `/P` entirely, so `/P` is editable without
+  breaking a file's passwords, and `/Perms` (the only remaining
+  integrity signal) is itself optional-in-effect. pdfce opens the
+  document regardless (`should`, not `shall`; matches every mainstream
+  reader), keeps returning the dictionary's own `/P` rather than a
+  value it trusts more without saying so, and keeps a mismatch distinct
+  from a missing/malformed marker.
+- **Decision 045 — a non-ASCII `/R` 5 password is attempted, never
+  refused.** SASLprep (RFC 4013), step 1 of the Adobe Supplement's
+  password preprocessing, is not implemented (steps 2–3, UTF-8 and
+  127-byte truncation, are exact). Refusing was rejected: SASLprep is
+  the identity for far more than ASCII, and `/R` 5 authentication is
+  self-verifying, so the entire exposure is a FALSE "wrong password" —
+  never a silently wrong document. New `DocError::PasswordRequiresNormalisation`.
+
+**Findings + decisions:**
+- **A padding-strip bug is intermittent by construction, and a fixture
+  corpus of real random keys cannot find it.** `strip_pkcs7`, added to
+  the `/UE`/`/OE` unwrap, went untested by 71 unit tests, 20 end-to-end
+  decrypts, a byte-identical render comparison AND qpdf's own published
+  key vector — every 32-byte random key in the corpus happened to end
+  above the valid-pad range (`1..=16`, ~1-in-16 by chance). Filed as the
+  **4th instance** of `D:\dev\rag\rust\existing_fixture_of_the_right_shape_can_be_vacuous_for_a_new_measurement.md`
+  (already at 3 instances on this project) rather than a new lesson —
+  same shape, new axis (random-value-distribution), consolidated per
+  this project's own citation-trail instinct.
+- **`/Length` at `/V` 5 is written as 32 or 256 by different producers**
+  (ISO 32000-2 Table 25's own erratum vs. pypdf 6.7.0's still-256
+  output) and carries zero information either way, since `/AESV3` fixes
+  the key length regardless. New personal_rag/pdf lesson.
+- **qpdf publishes a `/R` 5 file encryption key** in its own test suite
+  (`c-r5-in.pdf`, passwords `user3`/`owner3`) — a hard cross-
+  implementation vector for Algorithm 3.2a. New personal_rag/pdf lesson.
+- **An index defect found and fixed while filing:**
+  `D:\dev\rag\rust\index.md` carried the `existing_fixture_of_the_right_
+  shape_...` entry twice, one copy stale (predating that file's own 3rd
+  instance). Removed the stale copy — the exact shape `R186`'s SIXTH
+  instance named for `SESSION_LOG.md`'s header/body pairing one filing
+  ago, one directory over.
+
+**Numbers for the record** (corrected mid-session by the engineer's own
+addendum; supersedes an earlier "+38/3391" relay measured two commits
+earlier):
+- Tests: **3,353 → 3,393 passing, 0 failing — +40 across all nine
+  commits.** Baseline 3,353 was measured in a throwaway worktree at
+  `97f6576`. **★ `97f6576` is cited here ONLY as that baseline commit
+  and has NOT been filed** — no shell this dispatch, no way to see what
+  it changed, said so rather than guessing. Recorded explicitly as
+  **owed**, naming the hash, because this project's own filing gate
+  joins on "hash appears anywhere in `docs/ROADMAP.md` or `docs/
+  SESSION_LOG.md`" — a bare mention (even one saying "not filed") reads
+  as filed to that gate, so the honest record has to say so in words a
+  reader can act on, since the gate itself cannot tell the difference.
+- `cargo fmt --all --check`, `cargo clippy --workspace --all-targets
+  --all-features -- -D warnings` (zero), `check-ui-strings.sh`,
+  `check-theme-colors.sh`, `check-ledger-numbers.py`, cross-target
+  `cargo check` (`aarch64-apple-darwin`,
+  `wasm32-unknown-unknown` for `pdfce-core`/`pdfce-render`) — all clean,
+  re-verified at `f79d9a2`.
+- `cargo tree -p pdfce-core` / `-p pdfce-render`: zero GUI crates.
+- Decision-039 CI extension hand-verified on all four targets: no `sha2`
+  `alloc`/`oid`/`zeroize` line, no `aes` `hazmat`/`zeroize` line.
+- End-to-end fidelity unchanged: plaintext + all encrypted variants
+  (now including both AES-256 fixtures) render to a byte-identical PNG,
+  md5 `bc2dfede94ef290e7c7a7f7e509fea98`.
+
+**One correction, named because the original dispatch brief asked for
+it to be.** The brief said `EncryptionConfig::parse` would refuse `/V 5`
+"at the `/V` check AND `Cipher::Aes256` at the CFM check" (right), and
+implied `AuthKind` might need a new variant (it did not). It did not
+anticipate `/Length 256` needing to be ignored rather than parsed, nor
+that `/V`-vs-`/R` agreement and the §3.5.2 `/CFM`-vs-`/V` restriction
+would need their own explicit refusals — the parse-side surprises worth
+keeping.
+
+**Still in flight:**
+- `/R` 6 is now the only gap left in the AES-256 story — one function,
+  `crypto::r5::hash`, deliberately not made a pluggable seam.
+- Encrypted-save remains entirely unstarted in every cipher.
+- ISO 32000-2 is available at $0.00 under PDF Association sponsored
+  access, but needs an account and a checkout — the operator's act.
+
+**For next session:** see `docs/NEXT_SESSION.md` (rewritten this
+filing) for the full handoff.
+
+**Ledger for this filing.** **No new Pass ID** — same `Pass 5` ID,
+increment 3. **All nine commits now individually cited by short hash**
+(`f79f044`, `3618072`, `02d6cb2`, `bb6d678`, `08ea0d2`, `9601682`,
+`21f9c31`, `f79d9a2`) — five were missing from this filing's first draft,
+added on the engineer's own post-filing `tools/check-commits-filed.py`
+check. **`97f6576` remains explicitly UNFILED**, named as owed above,
+not this session's commit, outside this session's means to file
+honestly (no shell). `docs/FEATURES.md`: one row touched (Encryption — AES-256
+at `/R` 5 added, `/R` 6 and encrypted-save gaps stated separately;
+`core`/`cli`/`gui` cells unchanged, row stays under *Planned*).
+`docs/ARCHITECTURE.md`: decision 039 amended (extended to `sha2`) plus
+a new §9 addendum; two new decisions, 044 and 045. Standing rules: no
+new mint. `D:\dev\rag\rust\`: four new files plus a 4th instance
+appended to an existing one plus one index-duplication defect found and
+fixed. `C:\personal_rag\pdf\`: three new lessons, subject and master
+indexes both updated. Decision-record ceiling moves **043 → 045**, next
+free **046**. Pass-family ceiling unchanged, **66.0**, next free **67**.
+Operator-question ceiling unchanged at **(bj)**, next free **(bk)**.
+**Backup/git working-tree/remote state not independently asserted
+anywhere in this filing** — no shell this dispatch (hard rule 8); the
+engineer should check `D:\Dev\pdfce-backups\` and `git
+log`/`git status`/`git remote -v` directly, on branch `main`. This is
+the **hundred-and-tenth** `SESSION_LOG.md`/`ROADMAP.md` joint filing
+(the hundred-and-ninth, immediately above — header AND body both
+confirmed present by direct read before this entry was appended).

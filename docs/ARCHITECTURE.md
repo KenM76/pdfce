@@ -3844,6 +3844,21 @@ and resolves to the soft backend automatically, so the WASM web-fork
 target keeps zero-`unsafe` without any special-casing. Full reasoning:
 §12's decision 039.
 
+**Second dependency under decision 039's exception, same shape, no new
+decision: `sha2` 0.11.0 (2026-08-11, `Pass 5` increment 3, commits
+`f79f044..f79d9a2`; see §12's decision 039 amendment).** SHA-256 is the
+entire `/R` 5 (AES-256) key-derivation primitive (Adobe Supplement
+ExtensionLevel 3 §3.5, Algorithms 3.2a/3.8–3.13). Three new packages
+(`sha2`, `digest`, `block-buffer`), all `MIT OR Apache-2.0`, zero
+copyleft — `THIRD_PARTY_LICENSES.md` Apache-2.0 count 142 → 145. Its
+intrinsic backend is **cfg**-selected (`sha2_backend` etc.), identical
+in shape to `aes`'s hardware-backend dispatch, so it cannot be forced
+off via `default-features = false` for the same reason `aes` cannot;
+`default-features = false` still removes `sha2`'s own `alloc`/`oid`
+defaults, and a CI job (extending decision 039's existing one) asserts
+`alloc`/`oid`/`zeroize` stay off across all four targets. Full
+reasoning: §12's decision 039 amendment.
+
 ## 10. Adversarial input hardening & fuzzing
 
 `pdfce-core` parses files from the public internet by design — every
@@ -17260,6 +17275,39 @@ refusal (§5, decision from the `14a7400` entry above) is unchanged, and
 this increment remains read-only. Full build record: `ROADMAP.md`'s
 `f7aee60` Shipped entry (hundredth filing).
 
+**★ EXTENDED 2026-08-11 (hundred-and-tenth filing, `Pass 5` increment 3,
+commits `f79f044..f79d9a2`) — `sha2` 0.11.0 falls under this decision's
+existing exception rather than needing a new one.** `sha2` is `pdfce-
+core`'s SHA-256 dependency for the `/R` 5 password/key algorithms
+(Adobe Supplement ExtensionLevel 3 §3.5, Algorithms 3.2a and 3.8–3.13 —
+the entire key derivation at `/R` 5, which the supplement states
+explicitly no longer uses MD5). It has the **identical shape** to `aes`:
+its backends are chosen on a **cfg** (`sha2_backend`/`sha2_256_backend`/
+`sha2_512_backend`, declared in its own `check-cfg` table), not on a
+Cargo feature, so `default-features = false` cannot switch it off for
+the same structural reason it cannot switch off `aes`'s hardware
+backend — a cfg is settable only from `RUSTFLAGS`/`.cargo/config.toml`,
+global to the build and not inherited by any downstream consumer of
+`pdfce-core` as a library. Five `unsafe` sites live in its `sha256.rs`
+backend dispatch. `sha2` enables no extra feature on `aes` and adds no
+new dependency to `aes`'s own graph, so decision 039's boundary (bounded
+by the `hazmat`/`zeroize`-off CI job) is untouched by its arrival —
+this is a second instance of the same exception, not a widening of it.
+Three new packages (`sha2` 0.11.0, `digest` 0.11.3, `block-buffer`
+0.12.1), all `MIT OR Apache-2.0`, zero copyleft; rule 13's escalation
+trigger did not fire. `THIRD_PARTY_LICENSES.md` regenerated via
+`cargo-about` (Apache-2.0 count 142 → 145, exactly the three new
+crates). `sha2`'s own genuinely-controllable features (`alloc`/`oid`/
+`zeroize`, `default = ["alloc", "oid"]`) ARE ordinary Cargo features —
+`default-features = false` drops both defaults (pdfce calls only
+`Sha256::new`/`.update`/`.finalize`, needing neither owned-buffer
+`alloc` nor the `oid` ASN.1 identifier), and a new CI check extends the
+decision-039 job to assert all three stay off across the same four
+targets. Cross-project half:
+`D:\dev\rag\rust\sha2_0_11_default_features_and_cfg_selected_backend_same_shape_as_aes.md`.
+Full build record: `ROADMAP.md`'s `Pass 5` increment 3 Shipped entry
+(hundred-and-tenth filing).
+
 ### 2026-08-11 (hundred-and-second filing, `5d2b19b` + `483cb4d`) — decision 040: `print_render_options` is the single shared builder for print render policy; a second independent construction site is what let `cmyk_intent` go missing from one of two
 
 **Sourcing.** No shell tool this dispatch (hard rule 8). The dispatching
@@ -17584,3 +17632,135 @@ short correction sentence noting the `#[cfg(windows)]` drift on
 `cargo tree -p pdfce-core` / `-p pdfce-render` name no GUI crate,
 unaffected by this commit. Full build record: `ROADMAP.md`'s `f2ac2af`
 Shipped entry (hundred-and-seventh filing).
+
+### 2026-08-11 (hundred-and-tenth filing, `Pass 5` increment 3, commits `f79f044..f79d9a2`) — decision 044: pdfce REPORTS `/Perms` mismatch, never refuses on it and never silently substitutes it — `/P` stops being tamper-evident at `/R` 5, and the reporting posture is chosen to match what that actually means
+
+**Sourcing.** No shell tool this dispatch (hard rule 8). The dispatching
+engineer's summary cross-checked by direct `Read`/`Grep` of
+`crates/pdfce-core/src/crypto/standard.rs` (`check_perms`,
+`PermsCheck::NotApplicable`/`MarkerMissing`, the `pub perms` field on
+`EncryptionConfig`, its own doc comment citing **T27** and the
+`/R` 5-only applicability) and `crates/pdfce-core/src/crypto/r5.rs`
+(Algorithm 3.13's ECB `/Perms` decrypt). Both match the dispatch's
+account.
+
+**The fact this decision is answering.** At `/R` ≤ 4, `/P` (the Table 22
+permission integer) feeds Algorithm 2's password-hash derivation
+directly — editing `/P` in a hex editor changes the hash the file's
+passwords must reproduce, so the file simply stops opening. `/R` 5
+removed that coupling: the file encryption key comes from the
+password-derived key plus the `/UE`/`/OE` salts alone (Algorithm 3.2a),
+with no `/P` dependency anywhere in that path. `/Perms` (Algorithm
+3.13 — a bare AES-256-ECB-encrypted 16-byte block, no IV, no chaining,
+Algorithm 3.13's own wire format is exactly what
+`D:\dev\rag\rust\rustcrypto_ecb_single_block_decrypt_needs_no_ecb_crate.md`
+records) is the ONLY integrity check that can now catch a `/P` edit —
+and it is optional-in-effect: nothing stops a hex editor from patching
+`/P` alone and leaving `/Perms` at its original value, since `/Perms`
+is not itself re-derived from `/P` at open time, only compared against
+it.
+
+**Decision — three refusals, each named against a specific wrong
+move.** On a `/Perms` mismatch, pdfce:
+
+1. **Does not refuse to open the document.** §7.6.3.1's own language
+   for the check is `should`, not `shall`; every mainstream reader
+   (measured against the installed Acrobat Reader, per this project's
+   existing `acrobat-reader-is-available` posture) opens a mismatched
+   file rather than refusing it, and a stricter-than-the-ecosystem
+   refusal here would fail files nothing else fails.
+2. **Does not silently substitute the decrypted `/P` value it derived
+   more confidence in.** `permissions()` keeps returning the
+   DICTIONARY's `/P`, unconditionally — substituting a value pdfce
+   trusts more, without saying so, is precisely what `CLAUDE.md` rule 4
+   (fuzzy, never sneaky) forbids: an inferred correction becoming
+   document state without disclosure.
+3. **Does not treat a mismatch as file damage.** `MarkerMissing` (the
+   `/Perms` entry absent or malformed) is kept as its own, separate
+   `PermsCheck` variant — a well-formed-but-disagreeing `/Perms` is a
+   different fact from a missing one, and collapsing the two would
+   make "the check ran and disagreed" indistinguishable from "the check
+   could not run at all."
+
+**Disclosure.** `DocumentEncryption::perms` (renamed from the earlier,
+narrower framing) exposes `PermsCheck` — `NotApplicable` (`/R` ≤ 4,
+where the check does not exist), `MarkerMissing`, `Match`, `Mismatch` —
+and the GUI's Security section shows one conditional line only when the
+check actually ran and disagreed, never a blocking dialog.
+
+**Framing that must not drift, restated from the Backlog bucket's own
+2026-08-11 amendment because a decision record is more durable than a
+Backlog bullet.** `/P` was already established as reader-**convention**,
+not cryptographic enforcement — a compliant reader keeps the promise
+voluntarily, because the bytes must already be decryptable to display at
+all. This decision does not change that; it names the ADDITIONAL,
+narrower fact that at `/R` 5 even the weak self-consistency check
+(`/Perms` agreeing with `/P`) is bypassable without breaking the file's
+passwords, which was not true at any earlier revision. **Never describe
+either half of this as "security."**
+
+**Not a crate-boundary or round-trip change.** No new dependency, no
+change to §3's GUI-core boundary or §5's round-trip contract — this is
+an invariant definition (what a mismatch means and how it is surfaced),
+the class of decision this log exists for. Full build record:
+`ROADMAP.md`'s `Pass 5` increment 3 Shipped entry (hundred-and-tenth
+filing).
+
+### 2026-08-11 (hundred-and-tenth filing, `Pass 5` increment 3, commits `f79f044..f79d9a2`) — decision 045: a non-ASCII `/R` 5 password is ATTEMPTED, never refused, because the one preprocessing step pdfce skips (SASLprep) can only produce a FALSE "wrong password" — never a silently wrong document
+
+**Sourcing.** No shell tool this dispatch (hard rule 8). Cross-checked
+by direct `Read` of `crates/pdfce-core/src/document.rs` (the
+`DocError::PasswordRequiresNormalisation` variant, its doc comment
+naming RFC 4013/SASLprep and the 127-byte truncation, and its one raise
+site) — confirmed present and worded consistently with the dispatch's
+account.
+
+**The gap named precisely.** The Adobe Supplement's password
+preprocessing for `/R` 5 (step 1 of the algorithm feeding Algorithms
+3.2a/3.6/3.7) is three steps: (1) SASLprep (RFC 4013) normalisation,
+(2) UTF-8 encoding, (3) truncate to 127 **bytes**. pdfce implements
+steps 2 and 3 exactly and does not implement step 1 — neither RFC 4013
+nor its prerequisite RFC 3454 (stringprep) is staged as a dependency or
+hand-rolled in this project.
+
+**Decision — attempt, never refuse, and name the gap only on failure.**
+Two designs were weighed and the refusal option was REJECTED, for a
+reason specific to what SASLprep actually does and what authentication
+failure actually means here:
+
+1. **SASLprep is the identity transform for the overwhelming majority of
+   passwords**, not merely ASCII ones — it normalises case-folding,
+   width, and a small set of prohibited/mapped code points, but leaves
+   most Unicode text unchanged. A blanket refusal of any password
+   containing a non-ASCII code point would reject a large class of
+   passwords that would have opened the document correctly regardless.
+2. **The exposure is bounded to a FALSE NEGATIVE, never a false
+   positive, because `/R` 5 authentication is self-verifying.** Algorithm
+   3.11/3.12 computes `SHA-256(password ‖ salt [‖ U])` and compares
+   against a stored 32-byte value; there is no path by which a
+   mis-normalised password produces a document that opens with the
+   WRONG plaintext — it either reproduces the stored hash (succeeds,
+   correctly) or it does not (fails, correctly, by the algorithm's own
+   design). A missing SASLprep step can therefore only make a password
+   that *should* work read as "wrong" — it cannot make a wrong password
+   read as right, and it cannot silently corrupt output the way, for
+   example, the `/Perms`-integrity gap in decision 044 could have if
+   pdfce had chosen to trust it. This asymmetry is why refusal is the
+   worse option here specifically, and is not a general licence to
+   attempt-then-diagnose in every ambiguous-preprocessing situation.
+
+**Disclosure.** `DocError::PasswordRequiresNormalisation` is raised only
+when authentication has already failed at `/R` 5 with a password
+containing at least one non-ASCII code point — the caller sees a
+diagnostic naming SASLprep and RFC 4013 by name, not a generic "wrong
+password," on exactly the population of failures where the missing
+normalisation step is a plausible cause. It is never raised on an
+all-ASCII password (SASLprep is the identity there, so the diagnostic
+would be actively misleading) or on any `/R` ≤ 4 document (SASLprep is
+`/R` 5-specific).
+
+**Not a crate-boundary or invariant-redefinition beyond the error
+surface.** No new dependency (stringprep is explicitly NOT taken, which
+is the substance of this decision); `DocError`'s existing shape gains
+one new variant. Full build record: `ROADMAP.md`'s `Pass 5` increment 3
+Shipped entry (hundred-and-tenth filing).

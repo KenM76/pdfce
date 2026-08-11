@@ -194,7 +194,7 @@ the model or verb exists and only the named shell is missing. The
 
 | core | cli | gui | Acrobat | Feature |
 |:----:|:---:|:---:|:-------:|---------|
-| [x] | [x] | [x] | [x] | **Encryption** — RC4 (40–128 bit) and AES-128 (`/AESV2`) decrypt read-only, including the empty-user-password case every other reader opens silently; both CLI (`--open-password`/`--open-password-file`) and GUI (inline canvas prompt) can supply a password for any RC4 or AES-128 document. All eight Table 22 permission bits shown read-only in the GUI's Properties > Security section, captioned as declared-by-the-author and unenforced (pdfce does not check them). AES-256, `/R 6` and any encrypted save are still refused by name. |
+| [x] | [x] | [x] | [x] | **Encryption** — RC4 (40–128 bit), AES-128 (`/AESV2`) and AES-256 at `/R` 5 (`/AESV3`) decrypt read-only, including the empty-user-password case every other reader opens silently; CLI (`--open-password`/`--open-password-file`) and GUI (inline canvas prompt) can supply a password for any of the three. All eight Table 22 permission bits shown read-only in Properties > Security, captioned declared-by-the-author and unenforced; a `/Perms` mismatch (possible only at `/R` 5) is reported, never refused on. `/R` 6 is still refused by name — its Algorithm 2.B is unsourced. **Writing an encrypted document is still unimplemented in every configuration.** |
 | — | — | [ ] | [x] | Imposition in the GUI — needs the sheet composition extracted into `pdfce-print` so both shells share one implementation. |
 | [ ] | [ ] | [ ] | [x] | Move and resize anything carrying a `/Rect` — widgets, markup, redaction marks, links, ce dimensions. |
 | [ ] | [ ] | [ ] | ? | Resize a vector object. |

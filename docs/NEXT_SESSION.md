@@ -1,268 +1,168 @@
 # NEXT SESSION — start here
 
-Engineer-owned handoff. Read this **before** the librarian's record —
-`ROADMAP.md` says what shipped, this says what is in flight and what the
-next hour should be. Overwrite it once acted on.
+Engineer-owned handoff (this filing written by `pdfce-librarian` at the
+engineer's explicit request, per the dispatch brief for `Pass 5`
+increment 3). Read this **before** the librarian's record — `ROADMAP.md`
+says what shipped, this says what is in flight and what the next hour
+should be. Overwrite it once acted on.
 
-Written 2026-08-11 at `cfc20dd`, branch **`main`**.
-
----
-
-## ★ Read this first: the branch moved and a release went out
-
-**`v0.3.0` is tagged and released** at `cfc20dd`, 35 commits after `v0.2.0`.
-Operator gave the explicit go-ahead for it.
-
-**★ AND THAT GO-AHEAD IS NOW STANDING FOR RELEASES — read the scope.**
-On 2026-08-11 he said, verbatim: *"please continue to post the latest
-versions to git so I can try them on my laptop at home."* That is an
-ongoing instruction, so **rule 8's per-release ask no longer applies to
-cutting a release of this project**: build it, tag it, publish the asset,
-run `tools/verify-release.py`, and report what went out.
-
-Read the scope narrowly, because it is narrow. It authorises **releasing
-pdfce builds so the operator can install and test them**. It is NOT
-blanket authority to publish anything else, to make the repository's
-history or visibility a decision an agent makes, or to skip the
-verification. He needs a **downloadable binary** — pushing source alone
-does not satisfy the request.
-
-Rule 8 in `CLAUDE.md` still reads "per release"; that wording predates
-this and should be reconciled by `pdfce-librarian` rather than by
-assuming this note outranks it.
-
-**You are on `main`, not `post-v0.2.0`.** Those two refs are identical at
-`cfc20dd`; `main` was fast-forwarded and pushed, and `origin/main` is AT
-the tagged commit. Do not resume work on `post-v0.2.0` — it is a stale
-duplicate name for the same commit, and the next branch should be cut
-from `main`.
-
-`tools/verify-release.py v0.3.0` passes all six checks. This was its
-**first real outing** — it was written after the `v0.2.0` near-miss, where
-a tag pointed at the right commit while `git push origin main` pushed a
-local `main` 36 commits behind and *reported success*. The check that
-would have caught that (`origin/main` is AT the tagged commit) is the one
-that matters; run the script before believing any future release.
-
-**RESOLVED, but the lesson stands.** The operator reported *"my mouse
-navigation is getting screwy"* right after a session that drove
-`tools/gui-shot.ps1` about eight times, and later confirmed *"mouse is
-working now"*. Nothing was ever proven to be the cause: no harness
-process was running and no button or modifier was held when checked,
-though all were defensively released.
-
-**Treat `gui-shot.ps1` / `gui-drive.ps1` as input-hijacking tools.** They
-move the REAL cursor and synthesise Ctrl+scroll and click-drag on the
-live desktop — an interrupted run can leave a modifier logically held,
-which makes scrolling zoom and clicks drag. **Say so before running one
-while the operator is at the machine**, and prefer headless verification
-(CLI, unit tests, `cargo test`) when it will do.
+Written 2026-08-11, branch **`main`**, after commits `f79f044..f79d9a2`
+(nine commits, `Pass 5` increment 3 — AES-256 read at `/R` 5).
 
 ---
 
-## Verified state
+## ★ Read this first: AES-256 now opens; `/R` 6 is the one gap left
 
-Measured this session, not relayed:
+`/V` 5, `/R` 5, `/CFM /AESV3` (AES-256) now decrypts across core, CLI and
+GUI, at parity with RC4's and AES-128's own shell coverage — no new
+shell-facing UI was needed, both already generalize over cipher.
+Algorithms 3.2a/3.11/3.12/3.13 (Adobe Supplement ExtensionLevel 3 §3.5),
+new module `crates/pdfce-core/src/crypto/r5.rs`.
 
-- `cargo test --workspace` — **3,353 passing / 0 failing** (3,311 at the
-  start of the session).
-- `cargo clippy --workspace --all-targets --all-features -D warnings` — 0.
-- `cargo fmt --check`, `check-ui-strings.sh`, `check-theme-colors.sh`,
-  `check-ledger-numbers.py`, `check-passes-filed.py`,
-  `check-bypass-paths.sh` — clean.
-- `cargo tree -p pdfce-core` / `-p pdfce-render` name no GUI crate.
-- Portable build **`D:\builds\pdfce-20260811-1322-cfc20dd`** — this is the
-  RELEASED build; the same bytes are the `v0.3.0` asset. Smoke-tested
-  by copying to a fresh folder and running both binaries there — the AES
-  render matched `bc2dfede94ef290e7c7a7f7e509fea98` from the packaged
-  binary, and `print-preview` reported `auto` at `0.9725` against
-  `portrait` at `0.7515`.
+**`/R` 6 is now the ONLY thing between pdfce and the common AES-256
+case** — `/R` 6 is the default Acrobat X+ "AES-256" setting actually
+produces, so it is plausibly the *common* real-world shape, not the
+exotic one. The gap is exactly one function:
 
-## ★ CI IS GREEN — for the first time in the project's history
+```
+crates/pdfce-core/src/crypto/r5.rs — private fn hash
+```
 
-All **10 jobs pass** at `10e9b0c`. Before 2026-08-11 CI had failed on
-**every push ever made**, including both prior releases, and nobody was
-looking. Two independent causes, both fixed today:
+Its own doc comment names it as Algorithm 2.B's substitution point and
+states everything AROUND it — the `/O`/`/U` layout, the `/UE`/`/OE`
+unwrap, the `/Perms` check, the harness that calls it — is already
+implemented and tested. **That is precisely the situation where filling
+it from memory is most tempting and least detectable.** The refusal
+fixture (`enc-aes-256-r6.pdf`) and the refusal tests exist specifically
+to make that hard — do not remove or weaken either to "make progress."
 
-1. **`pdfce-print` did not compile for any non-Windows target**
-   (`Pass 66.0`). A `#[cfg(windows)]` on a plain-data error type that the
-   file's own non-Windows stubs returned. `cargo tree` proved no GUI crate
-   was linked; nothing proved the crate *built* — the GUI-separation
-   invariant failing quietly one crate over.
-2. **`check-commits-filed.py` was reading a one-commit repository.**
-   `actions/checkout` defaults to `fetch-depth: 1`, and a shallow boundary
-   commit has no parent, so git reports it as adding every file — making
-   docs-only filing commits look like unfiled code. It printed a
-   confident, specific, **wrong** list for as long as that job existed.
+**Routes to close it, unchanged from before this session, now the only
+remaining item in this bucket:**
+1. **ISO 32000-2 is $0.00 under PDF Association sponsored access** — but
+   needs an account and a checkout. **This is the operator's act, not an
+   agent's** — surface it to Ken rather than attempting a workaround.
+2. Any other primary, citeable source for Algorithm 2.B (its inner
+   AES-128-CBC step, SHA-256/384/512 selector, round count, termination
+   condition) that isn't itself a derivation from another
+   implementation's output — deriving from another implementation's
+   *output* and then testing against that same implementation would be
+   circular, which is exactly why `enc-aes-256-r6.pdf` is a
+   refusal-only fixture today.
 
-**Two things to know before you touch this.** The filing check runs *in*
-CI, so **every CODE commit leaves CI red until its filing lands** — that
-is by design here, not a defect, and a session that pushes code and stops
-will always leave a red build behind. And `check-passes-filed.py` has the
-identical latent shallow-clone flaw; it is not run in CI today, so the
-risk is theoretical, and it is filed in Backlog rather than fixed.
-
-**Check CI after pushing.** `gh run list --limit 1`. Green local gates
-stood in for a green build for the entire project's history.
-
-Filing gate: `check-commits-filed.py` is **clean** (5 known-unfiled carried
-in the baseline as pre-existing debt). Everything this session is filed.
-
-**`check-ledger-numbers.py` was itself wrong until `e293143` and is worth
-re-reading.** It printed `clean` while reporting two ceilings that were
-false: decision numbers counted only `docs/decisions/*.md` files (missing
-034-036, 039, 040, which live only in ARCHITECTURE §12), and its ordinal
-vocabulary stopped at "ninety" on the very day `SESSION_LOG.md` reached
-its hundredth filing. **Run it; do not infer the ceilings from anywhere
-else.** As of `cfc20dd` it reads: Pass **65.0**, decisions **042 → next
-free 043**, rules **R186 → next free R187**, filings **104 → next free
-105**, questions next free **(bk)**.
+Once `/R` 6 is sourced, the remaining Encryption scope is: encrypt-on-
+save (every cipher, every shell — entirely unstarted), and nothing else
+new — `/R` 6 is genuinely the last read-side gap.
 
 ---
 
-## What shipped
+## Two new decisions this session, worth knowing before touching this code again
 
-Four pieces, all verified in a running build rather than by compiling.
+- **Decision 044 — a `/Perms` mismatch is REPORTED, never refused on,
+  never silently substituted for.** `/R` 5 decoupled the file encryption
+  key from `/P` entirely (Algorithm 3.2a has no `/P` dependency, unlike
+  every earlier revision's Algorithm 2), so `/P` is editable in a hex
+  editor without breaking a document's passwords, and `/Perms` — the
+  only remaining integrity signal — is itself optional-in-effect
+  (nothing re-derives it from `/P` at open time). `DocumentEncryption::
+  perms` exposes `PermsCheck::{NotApplicable, MarkerMissing, Match,
+  Mismatch}`; the GUI shows one conditional line only when the check
+  ran and disagreed. **Never describe this as "security"** — `/P` is
+  reader-convention enforcement, not cryptographic; this decision only
+  narrows how a disagreement is surfaced, it does not change what `/P`
+  ever actually protected.
+- **Decision 045 — a non-ASCII `/R` 5 password is ATTEMPTED, never
+  refused.** SASLprep (RFC 4013) is not implemented (no stringprep
+  dependency taken); UTF-8 encoding and 127-byte truncation are exact.
+  New `DocError::PasswordRequiresNormalisation`, raised only on an
+  authentication FAILURE with a non-ASCII password at `/R` 5 — never on
+  an all-ASCII password (SASLprep is the identity there) and never at
+  `/R` ≤ 4 (SASLprep is `/R` 5-specific). The reasoning that makes
+  "attempt, don't refuse" correct here is specific to `/R` 5's
+  self-verifying authentication (SHA-256 either matches or it doesn't) —
+  **do not generalize this "attempt then diagnose on failure" pattern to
+  a context where a missing preprocessing step could produce a silently
+  WRONG result instead of only a false failure.**
 
-### Encryption increment 2 — AES-128 (`f7aee60`, `74e54a5`)
-
-`/CFM /AESV2` decrypts in core, CLI and GUI. `FileKey::object_key` needed
-no change — increment 1 had already written the `sAlT` variant (T1).
-**Decision 039** records the `aes`/`cbc` dependency and the R24 exception
-(the backend is cfg-selected, so the usual `default-features = false`
-lever does not exist; bounded in CI instead).
-
-`74e54a5` closed a hole found by asking what the fixtures *cannot* fail
-on: every `enc-*.pdf` has zero object streams, and pypdf flattens them on
-clone, so the commonest real-world AES shape was untested. Covered with
-PDFium's `encrypted.pdf` (a third independent implementation).
-
-**Still refused:** `/AESV3` keys off Algorithm 2.A, not Algorithm 1 — the
-block cipher bought nothing there. `/R 6` stays unsourced. Writing an
-encrypted document is unimplemented in all three shells.
-
-### Print dialog — `Pass 63.0` (`5d2b19b`, `483cb4d`)
-
-Tabs, `min_size` + one `ScrollArea::both()`, variable-height preview,
-zoom/pan, Ctrl+P, and a preview that renders the page instead of a flat
-rectangle. Two bugs fixed that nobody asked about: `pending_print` was
-missing from `apply()`'s one-question gate (reachable via the ribbon
-alone), and `spool_print` built render options **without** the operator's
-CMYK intent.
-
-### Landscape orientation — `Pass 64.0` (`d1756e5`, `290aef9`, `4837009`)
-
-**Orientation turned the paper but not the placement.** `printer_caps` is
-read before any DEVMODE exists, `plan_job` never saw orientation, and
-`build_devmode` then told the driver to turn the sheet. A landscape page
-printed at ~77% of size.
-
-★ **The diagnosis that reached this file first was half wrong, and the
-correction is the better finding.** It did NOT fire at pure defaults:
-`build_devmode` returned `None` when `settings == default`, so no DEVMODE
-was sent and planner and driver agreed *by accident*. The real shape:
-the mismatch fired whenever **any** setting differed from default —
-changing duplex alone was enough — and, worse, because `Auto` **is** the
-default, **auto-orientation never turned anything**. A "disturb nothing by
-default" guard had disabled the behaviour it was guarding.
-
-`From<&PrinterCaps> for DeviceGeometry` was **deleted**: an infallible
-conversion that silently gives the wrong answer for a landscape job gets
-reached again. `DeviceGeometry::from_caps(caps, requested, first_page_pt)`
-is now the only route, so the un-turned view is unreachable.
-**Decision 041**; **R171 widened in place** (third instance in
-`print_flow.rs` alone of two copies of one derivation drifting).
-
-Measured in the packaged CLI: portrait `0.7515`, landscape `0.9725`,
-**auto `0.9725`** — auto matching landscape is the inert-Auto bug closed.
-
-### Escape cancels every dialog — `Pass 65.0` (`4ddd6c4`)
-
-Operator question **(bj)**, answered by Ken: *"escape should work like it
-does for any other program."* Escape was bound on **none** of the five
-confirmation dialogs and fell through to the canvas ladder, so it acted on
-the document *underneath* the question. One new top rung, above the
-password prompt AND above view mode — the latter because read mode and
-full screen hide the ribbon, so a view-mode win would drop the operator
-out of full screen and leave the question sitting there. Every arm returns
-a **Cancel**, never a Confirm (redaction's confirmed branch is the only
-irreversible operation pdfce has). **Decision 042.**
-
-Two things the tests found, both recorded because they are the reusable
-part. My own doc comment claimed the resolver's match order was
-load-bearing; measured, it is not — the five are mutually exclusive, so
-the tiebreak is never reached, and the comment was corrected in place
-rather than left standing. And a **latent deadlock**: with two questions
-somehow set, *neither* can be answered, because `apply()`'s gate checks
-run in sequence and each dialog's Cancel is dropped by the other's gate.
-Unreachable today only because every pending state is set from inside
-`apply()`. That invariant is now held by
-`at_most_one_confirmation_question_is_ever_up`, driven through the real
-`CloseDocument` path — **a test, not a comment.**
-
-### The ledger gate (`e293143`) — see "Verified state" above.
+Full text, both: `docs/ARCHITECTURE.md` §12, hundred-and-tenth filing.
 
 ---
 
-## ★ Start here: pick one
+## The habit that caught this session's sharpest bug
 
-1. **Encryption increment 3 — AES-256 `/R` 5.** Sourced (Algorithm 2.A /
-   3.2a: SHA-256 over password+salt, unwrap `UE`/`OE`, **key used as-is**,
-   no per-object step). The block cipher exists; new is the derivation and
-   the three AES *modes* `/R 5` uses (**T25**: CBC+random-IV+padding for
-   data, CBC+zero-IV+**no** padding for `UE`/`OE`, **ECB — no IV at all**
-   for `Perms`). `enc-aes-256-r5.pdf` is already a fixture. **`/R 6` stays
-   blocked**; `enc-aes-256-r6.pdf` is a refusal fixture on purpose.
-2. **Two dead/stale printing items found and deliberately not fixed**
-   (both filed to Backlog): `DeviceSettings::pick_tray_by_page_size` sets
-   no `DEVMODE` field at all — `DM_DEFAULTSOURCE` is never written, so the
-   control does nothing; and `build_devmode`'s doc claims it "starts from
-   the driver's own default rather than zeroed" while the code builds a
-   zeroed `DEVMODEW` and leaves `_printer_wide` unused.
-3. **Imposition has no GUI.** Extract sheet composition into `pdfce-print`
-   FIRST so both shells share one implementation.
-4. **No open operator questions.** `(bj)` was answered and closed
-   2026-08-11; next free is `(bk)`.
-5. Static hybrid XFA read/fill · wide-shape CSV · colour management
-   (`D:\Dev\iccce\`, planned, no code).
-6. **Ledger-accuracy defect** (librarian-reported, not fixed): filings
-   ninety-two through ninety-five cite `(bh)`/`(bi)` as if `(bi)` had not
-   been minted.
-7. **Spec-librarian flag**: confirm the eight-item never-encrypted list
-   (E1–E9) is in the §7.6 corpus rather than only in pdfce's code.
+A `strip_pkcs7` added to the `/UE`/`/OE` key unwrap passed **71 unit
+tests, 20 end-to-end decrypts, a byte-identical render comparison, AND
+qpdf's own published-key vector** — all of it, clean — because every
+32-byte random key already in the corpus happened to end above the
+valid-pad-length range (`1..=16`), which a uniformly random byte does
+about 15 times out of 16. **A bigger corpus of real random keys would
+not have caught this; only a DELIBERATELY CONSTRUCTED edge-case key
+would.** Full finding:
+`D:\dev\rag\rust\existing_fixture_of_the_right_shape_can_be_vacuous_for_a_new_measurement.md`
+(4th instance). Worth carrying into `/R` 6 work and any future crypto
+code in this project: when a branch's execution depends on a property
+of RANDOM data crossing a threshold, build at least one fixture
+deliberately on each side of that threshold — don't rely on a "realistic"
+corpus to happen to hit it.
 
 ---
 
-## Live decisions worth not re-litigating
+## What the operator can try
 
-- **`R186` — now FIVE instances**, and the newest is the sharpest.
-  Increment 1 guarded the in-buffer write-back on
-  `plain.len() == span.len` and asserted "RC4 must preserve length". True
-  then. AES plaintext is **strictly shorter**, so the equality is *always*
-  false, the copy *always* skipped, and every stream in an AES document
-  would silently stay ciphertext. Nothing failed; no test went red.
-- **A limit set before there is a case to argue is worth more than one set
-  during the argument.** `crypto/md5.rs` recorded in increment 1 why MD5
-  and RC4 were hand-rolled AND that the reasoning "does not extend to
-  AES". Increment 2 honoured it without re-opening it.
+Latest portable build should be re-packaged before this is meaningful —
+check `D:\builds\` for a build at or after `f79d9a2` before pointing Ken
+at anything below; if none exists, `tools/package-portable.py` first.
+
+- **`enc-aes-256-r5.pdf`** — now opens (previously refused by cipher
+  name). `enc-emptyuser-aes-256-r5.pdf` — opens with no prompt at all,
+  same as the RC4/AES-128 empty-user-password cases.
+- **`enc-aes-256-r6.pdf`** — still refused, by cipher name, on purpose.
+- Properties > Security — the permission bits section now shows a
+  `/Perms`-mismatch line on any `/R` 5 file whose `/P` and `/Perms`
+  disagree (none of the shipped fixtures currently exercise this; would
+  need a hand-edited `/P` on an `/R` 5 file to see it fire).
+
+CLI: `pdfce-cli --open-password userpw <cmd> enc-aes-256-r5.pdf` —
+unchanged flag surface, now also reaches AES-256.
+
+---
+
+## Live decisions worth not re-litigating (carried from prior sessions, still current)
+
+- **`R186` — SIX instances now recorded** (Standing rules, `ROADMAP.md`
+  — full text there). Newest: a verification keyed on a marker (a `## `
+  header) failing open when the same hazard arrives without the marker
+  (`SESSION_LOG.md`'s hundred-and-ninth filing).
+- **A limit set before there is a case to argue is worth more than one
+  set during the argument.** `crypto/md5.rs` recorded in increment 1 why
+  MD5/RC4 are hand-rolled AND that the reasoning does not extend to
+  AES; increments 2 and 3 both honoured it without re-opening it — `aes`
+  and `sha2` are both dependencies, decided once (decision 039),
+  extended rather than re-litigated.
 - **`DocError::PasswordRequired` is not a capability gap.**
 - **A derived value with one producer cannot drift** (`149fd03`).
 - **Decision 037** — `/BaseState /OFF` applies to registered groups only.
 - **Decision 038** — cite **both** loci; `Table 101` is 1.7-only
   (ISO 32000-2 renumbers it to **Table 99**).
+- **`EncryptionUnsupported::CipherNotImplemented` is UNREACHABLE** as of
+  this session — pdfce implements all four of Table 25's `/CFM` values.
+  Kept deliberately, documented in place, for whatever the standard
+  adds next.
 
 ---
 
-## Tooling — three corrections that cost time this session
+## Tooling — corrections that cost time in prior sessions, still true
 
 - **`PDFCE_DIAG_VIEWPORT`**, not `PDFCE_VIEWPORT`. Four comma-separated
   numbers: `x,y,w,h`.
-- **The diag script separator is `;`, not `,`.** A comma-separated script
-  parses as ONE unparseable step, is silently skipped, and the run then
-  looks like a *feature* failure. The trace says
-  `script-step-UNPARSEABLE` — read it.
+- **The diag script separator is `;`, not `,`.** A comma-separated
+  script parses as ONE unparseable step, is silently skipped — the
+  trace says `script-step-UNPARSEABLE`, read it.
 - **`gui-shot.ps1` and `gui-drive.ps1` default to different window
   sizes.** Read the trace's own `rect=`, never a screenshot's pixels.
+- **These two scripts move the REAL cursor and synthesise Ctrl+scroll
+  and click-drag on the live desktop.** Say so before running one while
+  the operator is at the machine; prefer headless verification (CLI,
+  unit tests, `cargo test`) when it will do.
 
 `tools/splice.py` — anchored substitution, all-or-nothing.
 `tools/verify-release.py <tag>` · `tools/gen-encryption-fixtures.py`
@@ -270,51 +170,40 @@ Unreachable today only because every pending state is set from inside
 
 ---
 
-## What the operator can try
+## Standing release authorisation (still in force)
 
-`D:\builds\pdfce-20260811-1322-cfc20dd\pdfce-gui.exe` — or the released
-`v0.3.0` asset, which is the same bytes:
-
-- **`enc-aes-128.pdf`** — prompts; `userpw` or `ownerpw` open it.
-- **`enc-emptyuser.pdf`** — AES-128, opens with **no prompt at all**, and
-  the status bar says why. Save is greyed out with its reason stated at
-  OPEN, not sprung at Ctrl+S.
-- **Ctrl+P**, or the ribbon Print button. Tabs; drag the window smaller
-  and both scrollbars appear; Ctrl+wheel over the preview zooms; drag
-  pans; **the sheet now turns with the Orientation radio.**
-- **`enc-aes-256-r5.pdf`** — still refused, **by cipher name**.
-- **Escape** now closes any confirmation dialog — print, close, copy,
-  save-conflict, redaction-apply — and always takes the safe branch.
-
-CLI: `pdfce-cli --open-password userpw <cmd> <file>`;
-`print-preview --orientation portrait|landscape|auto <file>` reports the
-turned sheet and the scale the job would use.
+The operator's 2026-08-11 instruction — *"please continue to post the
+latest versions to git so I can try them on my laptop at home"* — is
+ongoing. Rule 8's per-release ask does not apply to cutting a release of
+THIS project: build it, tag it, publish the asset, run
+`tools/verify-release.py`, report what went out. Scope is narrow:
+authorises releasing pdfce builds for the operator's own testing, NOT
+blanket publishing authority, NOT a licence to treat repository
+visibility as an agent's own decision, NOT permission to skip
+verification. `CLAUDE.md` rule 8's literal per-release wording is still
+technically stale against this — flagged to the operator across two
+prior filings, not yet amended by him; not this librarian's or the
+engineer's file to edit.
 
 ---
 
-## The habit worth carrying
+## Open items, in the order they're likely to matter
 
-Unchanged, and it paid four times today: **prove a guard by making it
-fail.** The old length guard was reinstated (render still exited 0 and
-wrote a plausible PNG — only a byte comparison caught it); the ObjStm
-test's password was changed to `wrong`; `hazmat` was temporarily enabled
-to see the new CI gate fire; the `pending_print` gate was deleted to see
-its test go red. A test that has never been seen to fail is a test nobody
-has tested.
-
-**And the newest one, which is about *searching* rather than testing.**
-I reported `UI_PREFERENCES.md` as never having existed, from
-`ls docs/UI_PREFERENCES.md` and `git log --all -- docs/UI_PREFERENCES.md`.
-It exists — **at the repo root**. `--all` reads as exhaustive (all
-branches, all refs) but is still **path-scoped**, so a wrong path returns
-silence indistinguishable from a true negative. `pdfce-ui-specialist` hit
-the identical blind spot the same day by globbing. **A negative result
-from a path-scoped query is a fact about the path, not the repository** —
-use `git ls-files | grep`, `git log --all -- '*name*'`, or `find -iname`
-before calling anything absent.
-
-A near-miss from the same family, caught only by comparing rather than
-concluding: the packaging smoke test appeared to show a stale 2.7 MB CLI
-with no `--open-password` flag. The package was fine; `ls …-smoke-* |
-head -1` had picked up a **leftover folder from a previous session**.
-One `stat` separated "product regression" from "my glob".
+1. **`/R` 6 sourcing** — see above. The only encryption read-side gap.
+2. **Encrypted-save**, any cipher — entirely unstarted.
+3. Two dead/stale printing items, filed to Backlog, deliberately not
+   fixed: `DeviceSettings::pick_tray_by_page_size` sets no `DEVMODE`
+   field at all; `build_devmode`'s doc claims a driver-default start
+   the code doesn't actually do.
+4. **Imposition has no GUI** — extract sheet composition into
+   `pdfce-print` first so both shells share one implementation.
+5. **No open operator questions** as of this filing — `(bj)` was
+   answered and closed 2026-08-11; next free is `(bk)`.
+6. Static hybrid XFA read/fill · wide-shape CSV · colour management
+   (`D:\Dev\iccce\`, planned, no code).
+7. **Ledger-accuracy defect, still not fixed** (carried from two
+   sessions ago): filings ninety-two through ninety-five cite `(bh)`/
+   `(bi)` as if `(bi)` had not been minted.
+8. **Spec-librarian flag, still open**: confirm the eight-item
+   never-encrypted list (E1–E9) is in the §7.6 corpus rather than only
+   in pdfce's code.
