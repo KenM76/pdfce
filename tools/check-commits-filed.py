@@ -161,10 +161,23 @@ def main() -> int:
     for h in hashes:
         files = git("show", "--stat", "--format=", "--name-only", h).splitlines()
         files = [f.strip() for f in files if f.strip()]
-        if any(f.startswith("docs/") for f in files):
-            continue  # a filing commit — see the header
-        if not any(f.startswith(CODE_PREFIXES) for f in files):
+        has_code = any(f.startswith(CODE_PREFIXES) for f in files)
+        if not has_code:
             continue  # not engineering work the record narrates
+        # A commit touching docs/ used to be skipped outright as "a filing
+        # commit". That exempted MIXED commits — code bundled with a
+        # filing — and a mixed commit is precisely where code hides.
+        #
+        # Found live on 2026-08-11: `b4a66ed` carried a real CLI/GUI change
+        # plus a librarian filing of three OTHER commits, swept in by a
+        # `git add -A`. Its own hash appears nowhere in the record, and the
+        # gate reported clean. The commit self-certified by containing the
+        # record files it was never described in.
+        #
+        # Now: docs-only commits are still skipped (nothing to narrate),
+        # but a commit with code in it is checked whatever else it touches.
+        if not has_code:
+            continue
         checked += 1
         if h in baseline:
             continue
