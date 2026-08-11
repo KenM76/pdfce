@@ -5236,9 +5236,14 @@ fn cmd_inspect(file: &Path) -> u8 {
     // header-valid-but-otherwise-broken file still reports its version) —
     // but a RECOVERED open is disclosed and gets a distinct exit status
     // (R20, fuzzy-never-sneaky).
-    let full = std::fs::read(file)
-        .ok()
-        .and_then(|bytes| pdfce_core::document::Document::from_bytes(bytes).ok());
+    // The load ERROR is kept, not discarded. It used to be `.ok()`-ed away,
+    // which is why an encrypted document reported the same clean line as a
+    // readable one — the reason it could not be read was thrown away one
+    // expression before anyone could report it.
+    let full_result = std::fs::read(file)
+        .map_err(pdfce_core::document::DocError::Io)
+        .and_then(pdfce_core::document::Document::from_bytes);
+    let full = full_result.as_ref().ok();
 
     match (&probe, &full) {
         // Opened via recovery — disclose + distinct status, whether or not
@@ -5258,6 +5263,27 @@ fn cmd_inspect(file: &Path) -> u8 {
         // probe line, unchanged.
         (Ok(version), _) => {
             println!("{}: PDF {version}", file.display());
+            // ★ The header probe succeeding is NOT the same as the document
+            // being readable, and `inspect` used to say only the former.
+            //
+            // An encrypted PDF produced exactly the line above and exit 0 —
+            // byte-identical in shape to a plain readable file. An operator
+            // sweeping a directory to find what pdfce can handle would have
+            // been told every file was fine, and found out otherwise one
+            // command later.
+            //
+            // That is R186's shape a third time: the refusal fires correctly
+            // at the LOAD layer, and the layer a sweep actually runs first
+            // never mentioned it. Reported here rather than moved, because
+            // the probe line is genuinely useful on a file whose body will
+            // not load — it is how you learn it is a PDF at all.
+            if let Err(err) = &full_result {
+                eprintln!(
+                    "pdfce-cli: {}: the header reads as PDF {version}, but pdfce could NOT load the document body: {err}. Anything reported above describes the header alone.",
+                    file.display()
+                );
+                return exit_code_for_doc(err);
+            }
             // ISO 32000-2 §7.6.7. Checked here rather than only in a forms
             // or attachments command because `inspect` is what a sweep runs
             // first, and the whole hazard is an operator concluding from a

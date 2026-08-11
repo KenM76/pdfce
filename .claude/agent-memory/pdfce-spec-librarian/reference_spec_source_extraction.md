@@ -332,6 +332,17 @@ and `pdfminer` installed. Extraction recipe that works:
   own Introduction points at as the free reference index — so the
   "is document X a clause-2 normative reference of 32000-2?" question currently
   has **no free route** and must be recorded as NEEDS VERIFICATION.
+- **★ READER-BEHAVIOUR ROUTE — Mozilla pdf.js raw source (verified 2026-08-11,
+  HTTP 200).** `https://raw.githubusercontent.com/mozilla/pdf.js/master/src/<path>`
+  — `core/catalog.js` (parsing: `#readOptionalContentConfig`, `parseOnOff`) and
+  `display/optional_content_config.js` (the **state-assignment constructor**, which
+  is where the actual behaviour lives — the parser will mislead you). Apache-2.0,
+  so short code quotation is fine. **Two curls answered "what do other readers do
+  with a group in both `/ON` and `/OFF`" definitively** where the corpus had only
+  been able to route the question to `personal_rag\pdf`. **Label the result
+  BEHAVIOUR, NOT SPECIFICATION**, fence it in its own section, and expect it to be
+  able to contradict the corpus's own ruling (it did). See [[pdf-spec-corpus-state]]
+  item 44.
 - **Adobe font technical notes** live at
   `https://adobe-type-tools.github.io/font-tech-notes/pdfs/<NNNN>.<Name>.pdf`
   (e.g. `5004.AFM_Spec.pdf`). **All `partners.adobe.com` TN URLs are dead.**

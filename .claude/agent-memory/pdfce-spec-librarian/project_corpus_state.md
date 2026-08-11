@@ -54,6 +54,7 @@ heading (`**<N>. `).**
 | 41 | ★ **"(see the Bibliography)" IN ISO 32000-1 IS A SYSTEMATIC ERRATUM — the pointed-at documents are in clause 3 (Normative references); grep clause 3, dump lines 340–486, before any informative-vs-normative claim. When the "only informative" leg of a hollow-`shall` dies, rebuild on the INVOCATION VERB ("give details on" vs "shall conform to").** Plus: "IS THIS CLAIM STILL RIGHT?" on a BEHAVIOURAL NEGATIVE: the clause can RENUMBER/RENAME across editions and a later standard can dissolve a hollow `shall` without the original clause changing (check the edition axis; split VERIFIED vs NEEDS VERIFICATION; forbid the un-editioned "the spec" paraphrase) · a dispatch's wanted spec ANCHOR can be affirmatively CONTRADICTED ⇒ name it a pdfce invariant and quote the permission it declines · DEFINITION and NORMATIVITY can live in different tables in different clauses (grep the key name document-wide) · confirm a dispatch's own HEDGE loudly · expect the whole normative surface to be two table rows · sibling-row contrast settles element types · PARTIALLY CLOSED is a valid gap state |
 | 42 | ★ **THE NULL-DELTA DISPATCH — relayed findings ALREADY recorded.** Re-verify from the source anyway and say so · **grep artifact: annex headings are `Annex<2 SPACES><LETTER>`, so `grep "Annex B"` = 0 hits in 756 pp; a 0-hit on something visible in the TOC is an artifact, not absence** · the residue is the CONSEQUENCE not the fact (an erratum without its FAILURE MODE is a curiosity; a definition-shaped sentence can be the non-normative source while an attribute column is normative) · promote a "corpus-wide" rule out of the session audit log into `index.md`'s reading-discipline block |
 | 43 | ★ **THE EDITION-AXIS RESIDUE** — when a `free_primary` clause family is complete, the gap left is "is this clause NUMBER still valid in the next edition?" (build a renumbering map as §1) · **★ in an errata source `[INS]` is a CORRECTION, not the standard as printed — tag every delta, because files in the wild follow the PRINTED text; an erratum can close a corpus ambiguity AND create a read-tolerance requirement at once** · an errata page prints only what CHANGED, so its silence is not evidence · OPEN → PARTIALLY CLOSED by acquiring an algorithm's HARNESS without its KERNEL (restate the refusal as UNCHANGED) · a later edition can WITHDRAW an option the previous session offered · the best find can be an ABSENCE in the edition already held (1.7 lacks 2.0's signature-`/Contents` exception ⇒ pdfce invariant citing 2.0, never §7.6.1) · a new-in-edition-N FEATURE can make a shipped guard fail OPEN (an unencrypted wrapper has no `/Encrypt`) · grade all three sources in a §0 table and mark the slide-only claims "do not act on this" |
+| 44 | ★ **THE SECOND NULL-DELTA — a dispatch RE-ASKS an already-RULED question.** The residue is your own EVIDENCE, not the answer: re-extract the quotes anyway and say so · **re-run term-frequency counts (a clause span bounded by a non-existent next heading silently runs to EOF ⇒ 6 vs the true 4); and ask whether the TERM was right — search the MODALITY (`shall not` = 11, none on point) not the noun** · **separate what a source PROVES from what you claimed (an ERRATA record's silence ≠ "the edition did not change it") ⇒ restate PERMANENT on the weaker basis** · **an edition map stranded in a sibling `ref` file is a GAP — duplicate it into the section a decision will cite; split self-inconsistent VERIFIED rows** · **reader behaviour from permissive source is 2 curls and can land on the OTHER SIDE of your ruling (pdf.js = naive order) ⇒ fence it as BEHAVIOUR NOT SPEC and warn that a "match other readers" tiebreak pushes away** · **a MEASURED behaviour can contradict a claim you graded SOURCED — file both, retract neither, and register the ambiguity on the DOMAIN of the quantifier** |
 | 37 | ADJUDICATING A CLAUSE-NUMBER CONFLICT: rule from the source's own enumeration, never from your heading (headings are RECONSTRUCTED); "the sub-clause does not exist" beats "the other one is right"; status leaks to anywhere the PRODUCT NAME appears, not just to headings and the index |
 
 ---
@@ -2307,3 +2308,85 @@ edition*:
   the 2017 edition, not 2020). Then mark every claim that rests on the weakest
   one — here D15 (Table 22 bit 10 deprecated) is slide-only ⇒ **explicitly "do
   not act on this"**, rather than being quietly blended in.
+
+**44. ★ THE SECOND NULL-DELTA — a dispatch RE-ASKS a question the corpus already
+RULED on, and the residue is your own EVIDENCE, not the answer.** Established
+2026-08-11 when pdfce decision 038 re-asked `DA-A10` (§8.11 Table 101 vs
+§8.11.4.5 b)) as though open; `DA.15` had ruled on it 2026-08-10. Item 42 covers
+the *relayed-findings* null delta ("they already told you and you already knew").
+This is the harder one: **the dispatch is not relaying, it genuinely does not
+know, and the corpus's answer is right — so the only way to add value is to
+audit the ruling's own evidentiary basis.** Doing that found **two errors inside
+a section that was correct**. Six sub-rules:
+
+- **RE-EXTRACT THE QUOTES ANYWAY, and say the outcome out loud.** Both loci came
+  back **confirmed verbatim, word for word**; the deliverable's first line is
+  "re-verified from source, verdict UNCHANGED", which is what makes the rest of
+  the answer trustworthy. Cost: two `sed` commands against the cached dump.
+- **★ RE-RUN THE TERM-FREQUENCY COUNTS. A count that cannot be reproduced
+  devalues every other count in the corpus.** `DA.15.4` evidenced a NEGATIVE
+  RESULT with "`both` occurs **6 times** in §8.11". Re-measured on the exact span
+  (dump lines 11686–12461, bounded by the `8.11 Optional Content` and `9 Text`
+  headings): **4**. The 6 came from a span whose end-marker (`8.12`) **does not
+  exist** — §8.11 is the last sub-clause of clause 8, so `find('8.12')` returned
+  −1 and the span silently ran to EOF, absorbing clause 9. **Bound a clause span
+  by the NEXT CLAUSE'S heading, and assert the char count**; a `-1` end index is
+  the failure mode that produces a plausible, wrong number. Conclusion was
+  unaffected — only the number — but item 14's whole premise is that a
+  hit-counted negative does not get re-litigated.
+- **★ WHEN YOU RE-COUNT, ALSO ASK WHETHER THE TERM WAS THE RIGHT ONE.** `both`
+  was never the search term that could prove "nothing forbids it" — the term
+  that carries a prohibition is the modal verb. **`shall not` = 11 occurrences
+  in §8.11, and not one concerns array membership**, enumerable in a table. That
+  is a far stronger negative than "the word `both` is unrelated 4 times", and it
+  reframes the answer: the standard *spends eleven prohibitions on other things
+  and none here*. Search for the MODALITY, not the noun.
+- **★ SEPARATE WHAT A SOURCE PROVES FROM WHAT YOU CLAIMED IT PROVES.** `DA.15.2`
+  wrote "**measured, not assumed**" for "did ISO 32000-2 change this?", citing 0
+  hits on `pdf-issues.pdfa.org/32000-2-2020/clause08.html`. **That page is the
+  ERRATA record for 2.0 — the delta between 2.0 as printed and its corrections.**
+  A 0-hit proves *no defect was raised*; it does **not** prove 2.0's printed text
+  matches 1.7's. Those are different propositions and the file had merged them.
+  Generalise: **an errata source is silent about everything that was already
+  correct AND about everything that changed between editions.** A PERMANENT
+  label resting on it should be restated as *"no erratum, and no reachable
+  evidence of a change"* — weaker, and honest. New negative-result class.
+- **★ AN EDITION MAP STRANDED IN A SIBLING FILE IS A GAP.** The 1.7→2.0 table
+  renumbering (Table 101 = 2.0 **Table 99**) already existed — in the derived
+  `ref` consolidator, built the same day. But **the RULING section is what a
+  decision record cites**, and it quoted "Table 101" throughout with no edition
+  caveat. **Duplicate an edition map into every section a citation will be
+  lifted from**; this is the one place the no-duplication rule loses. Also
+  tighten the map itself: a row reading "clauses `8.11.4.2`, `8.11.4.5` …
+  unchanged | **VERIFIED** for `8.11`, `8.11.3.2`, `8.11.4.3`, `8.11.4.4`" is
+  **self-inconsistent** — the two unverified numbers must be their own row.
+  Split them. (And the ISO free preview cannot help: its clause-8 TOC is
+  **two-level**, stopping at `8.11`. Confirming a *sub*-clause number needs a
+  route the preview does not provide.)
+- **★ READER BEHAVIOUR IS CHEAPLY SOURCEABLE FROM PERMISSIVE SOURCE, AND CAN
+  LAND ON THE OTHER SIDE OF YOUR RULING.** Two `curl`s of Mozilla pdf.js
+  (Apache-2.0) settled it: `src/display/optional_content_config.js` processes
+  `/ON` then `/OFF` **unconditionally**, i.e. the naive order the ruling says
+  Table 101 forbids ⇒ **pdf.js diverges from the ruling in exactly the one
+  divergent cell the corpus had identified.** Report it as **BEHAVIOUR, NOT
+  SPECIFICATION**, in its own fenced section, with the explicit warning that a
+  *"match other readers"* tiebreak would push **away** from the ruling. A
+  deployed counter-implementation does not falsify a reading, but concealing it
+  would make the corpus's cell-count look academic when it is an interop fact.
+  `src/core/catalog.js` + `src/display/*.js` on `raw.githubusercontent.com` are
+  the reachable route; read the CONSTRUCTOR, not the parser.
+- **★ A MEASURED BEHAVIOUR CAN CONTRADICT A CLAIM YOU GRADED `SOURCED` — file
+  BOTH, do not retract either.** Decision 037 measured that `/BaseState /OFF`
+  leaves an **unregistered** OCG **VISIBLE** (Acrobat Reader; pdf.js corroborates
+  in source). The corpus already graded **SOURCED** three sentences that reach
+  *every* group in the document (§8.11.2.1; Table 101 `BaseState` "all the
+  optional content groups in a document"; §8.11.4.5 a) "all the groups") — **none
+  of which says "listed in `/OCGs`"**. The right output is a four-row
+  reading-vs-implementation table, the SOURCED row explicitly **not retracted**
+  ("it remains a correct statement of what ISO says"), and a new ambiguity on the
+  **DOMAIN** of a universal quantifier. **Two independent implementations
+  narrowing a quantifier the same way is evidence the silence is load-bearing** —
+  that is the finding, and it belongs here; the *census* ("do real producers emit
+  unregistered OCGs?") stays `personal_rag\pdf`'s. Tag the measurement
+  ⚠ **MEASURED BEHAVIOUR, NOT SPEC TEXT** at every site, including `index.md`,
+  because the whole reason it is interesting is that ISO's wording says otherwise.
