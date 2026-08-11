@@ -12076,11 +12076,37 @@ fn commit_measure_linear_draft(doc: &mut OpenDoc) -> CommitOutcome {
 /// as the live capability gap — the branch, its `ui_text` strings and
 /// this classifier stay because "named gap ≠ damaged file" is a
 /// standing honesty commitment, not scaffolding for one feature.
+///
+/// ★ **Amended 2026-08-11, and the amendment is R186's shape a fourth
+/// time.** This function keyed on `XrefErrorKind::EncryptionUnsupported`
+/// alone. That was correct while *every* encrypted document produced
+/// exactly that error — and became wrong the moment `pdfce-core` gained a
+/// security handler, because the variant was **re-scoped** to mean
+/// "encrypted AND the cross-reference machinery is broken, so
+/// rebuild-by-scan would have to parse ciphertext".
+///
+/// An AES-encrypted document now raises `DocError::Encryption(..)`, which
+/// this did not match, so it fell through to `Status::Failed` and read to
+/// the operator as **a damaged file**. Nothing failed; the classifier
+/// simply stopped covering the case it was written for, silently, because
+/// it keyed on a marker rather than on the fact.
+///
+/// R186: when a guard keys on a marker, ask what the same hazard looks
+/// like *without* it. The three earlier instances were the
+/// `/Encrypt`-keyed refusal a §7.6.7 wrapper walks past, `fill_guards`
+/// never checking XFA, and `inspect` reporting a clean version line for a
+/// document whose body would not load.
+///
+/// Note what is deliberately **not** here: [`DocError::PasswordRequired`].
+/// That is not a capability gap at all — pdfce *can* decrypt the document
+/// and is waiting to be told how. Classifying it as "unsupported" would
+/// tell the operator pdfce cannot open a file it is one password away from
+/// opening.
 fn is_unsupported_structure(err: &DocError) -> bool {
     matches!(
         err,
         DocError::Xref(x) if matches!(x.kind, XrefErrorKind::EncryptionUnsupported)
-    )
+    ) || matches!(err, DocError::Encryption(_))
 }
 
 // ---------------------------------------------------------------------------
@@ -24141,14 +24167,109 @@ mod tests {
     /// a damaged file.
     #[test]
     fn named_capability_gaps_are_not_reported_as_damage() {
+        use pdfce_core::crypto::EncryptionUnsupported;
         use pdfce_core::xref::XrefError;
-        // Encryption (§7.6) is currently the only such gap; when a
-        // second one lands, extend this into a loop over the list.
+
+        // Encryption that blocks cross-reference RECOVERY — the surviving
+        // meaning of this variant now that ordinary encrypted files load.
         let err = DocError::Xref(XrefError {
             offset: 0,
             kind: XrefErrorKind::EncryptionUnsupported,
         });
         assert!(is_unsupported_structure(&err));
+
+        // ★ And every refusal the security handler itself raises. This half
+        // of the test is the one that was missing: when `pdfce-core` gained a
+        // handler, an AES document started raising `DocError::Encryption`,
+        // which this classifier did not match, and it read to the operator as
+        // a DAMAGED FILE. Each variant below is a real configuration a real
+        // file carries.
+        for e in [
+            EncryptionUnsupported::CipherNotImplemented("AES-128"),
+            EncryptionUnsupported::CipherNotImplemented("AES-256"),
+            EncryptionUnsupported::UnsourcedRevision,
+            EncryptionUnsupported::UndocumentedAlgorithm(3),
+            EncryptionUnsupported::Handler("Adobe.PubSec".into()),
+            EncryptionUnsupported::NoFilter,
+            EncryptionUnsupported::UnknownCfm("Whirlpool".into()),
+            EncryptionUnsupported::Malformed("test"),
+        ] {
+            assert!(
+                is_unsupported_structure(&DocError::Encryption(e.clone())),
+                "{e:?} is a named capability gap, not file damage"
+            );
+        }
+    }
+
+    /// ★ End-to-end through `open_path`, because the classifier passing is
+    /// not the same as the operator seeing the right thing.
+    ///
+    /// Three real files, three distinct outcomes, and the middle one is the
+    /// regression this pins: before the classifier was amended, the AES file
+    /// landed in `Status::Failed` and the GUI told the operator their
+    /// document was **damaged**. It is not damaged. It is a perfectly valid
+    /// file encrypted with a cipher pdfce has not written yet, and those are
+    /// not the same sentence.
+    #[test]
+    fn encrypted_documents_reach_the_right_status_through_open_path() {
+        // (1) A permissions-only RC4 document opens with NO password and no
+        // prompt — §7.6.3.1's silent empty-password attempt, which happens
+        // inside `pdfce-core` for every document. This needs no GUI feature
+        // at all, which is exactly why it is worth asserting: it is the case
+        // an operator hits most and the one most likely to be assumed.
+        let mut app = PdfceApp::default();
+        app.open_path(fixture("encryption/enc-emptyuser-rc4-128.pdf"));
+        assert!(
+            matches!(app.status, Status::Open(_)),
+            "a permissions-only RC4 document must just open; got {:?}",
+            std::mem::discriminant(&app.status)
+        );
+
+        // (2) An AES document is a NAMED CAPABILITY GAP, not damage.
+        let mut app = PdfceApp::default();
+        app.open_path(fixture("encryption/enc-aes-128.pdf"));
+        match &app.status {
+            Status::Unsupported { message, .. } => {
+                assert!(
+                    message.contains("AES-128"),
+                    "the message must name the cipher, so the operator learns \
+                     the machinery works and one algorithm is missing: {message}"
+                );
+            }
+            other => panic!(
+                "an AES document must read as a capability gap, never as a \
+                 damaged file; got {:?}",
+                std::mem::discriminant(other)
+            ),
+        }
+
+        // (3) A document needing a password is NEITHER. It is not damaged and
+        // it is not unsupported — pdfce can decrypt it and has not been told
+        // how. It currently lands in `Status::Failed` carrying the honest
+        // "password-protected" message, which is not yet the right surface;
+        // the prompt is designed but unbuilt. Asserted anyway so the day it
+        // changes, this test says so instead of quietly agreeing.
+        let mut app = PdfceApp::default();
+        app.open_path(fixture("encryption/enc-rc4-128.pdf"));
+        let (Status::Failed { message, .. } | Status::Unsupported { message, .. }) = &app.status
+        else {
+            panic!("a password-protected document must not silently open");
+        };
+        assert!(
+            message.contains("password"),
+            "whatever surface it lands on must say the word the operator needs: {message}"
+        );
+    }
+
+    /// A document that merely needs a password is **not** a capability gap.
+    ///
+    /// pdfce can decrypt it and is waiting to be told how. Reporting it as
+    /// "not yet supported" would tell the operator pdfce cannot open a file
+    /// it is one password away from opening — which is the same class of
+    /// untruth as reporting it as damaged, just in the other direction.
+    #[test]
+    fn needing_a_password_is_not_a_capability_gap() {
+        assert!(!is_unsupported_structure(&DocError::PasswordRequired));
     }
 
     #[test]

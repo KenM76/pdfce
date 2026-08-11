@@ -134,7 +134,6 @@ provisional; re-verify before any acceptance criterion leans on them.
 | [x] | [x] | [x] | [x] | Mark redactions by text search, named region or pattern. |
 | [x] | [x] | [x] | ◐ | Apply redaction with a runtime-verified true-removal proof. |
 | [x] | [x] | [ ] | ? | Detect an unencrypted wrapper (§7.6.7) and warn that the visible page is a cover, not the document. **No GUI surface.** |
-| [ ] | [ ] | [ ] | [x] | **Encryption — pdfce cannot open a password-protected PDF at all.** It refuses by name at load. |
 
 ### Fonts & rendering
 
@@ -195,7 +194,7 @@ the model or verb exists and only the named shell is missing. The
 
 | core | cli | gui | Acrobat | Feature |
 |:----:|:---:|:---:|:-------:|---------|
-| [ ] | [ ] | [ ] | [x] | **Encryption** — open and save password-protected PDFs. RC4 and AES-128 are fully sourced; AES-256 R6 is blocked on a paywalled algorithm and refused by name. |
+| [x] | ◐ | [ ] | [x] | **Encryption** — RC4 (40–128 bit) decrypts read-only, including the empty-user-password case every other reader opens silently. No CLI `--password` flag yet (empty-password documents only); no GUI password prompt at all. AES-128/256, `/R 6` and any encrypted save are still refused by name. |
 | — | — | [ ] | [x] | Imposition in the GUI — needs the sheet composition extracted into `pdfce-print` so both shells share one implementation. |
 | [ ] | [ ] | [ ] | [x] | Move and resize anything carrying a `/Rect` — widgets, markup, redaction marks, links, ce dimensions. |
 | [ ] | [ ] | [ ] | ? | Resize a vector object. |

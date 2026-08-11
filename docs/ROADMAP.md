@@ -81,6 +81,269 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★ `14a7400` — `Pass 5` (Encryption) ACTIVATES: increment 1 ships RC4 decryption, and the refusal narrows from "no encrypted file at all" to exactly what pdfce still cannot open — 2026-08-11, branch `post-v0.2.0` (ninety-sixth filing)
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — `git log`/
+`git show --stat` not run, the diff itself not read. The dispatching
+engineer supplied the commit message **in full, verbatim** (reproduced
+below by section) plus a `git show --stat` file list — a stronger
+source than the usual paraphrase-relay, but "verbatim message" is not
+"independently confirmed": this librarian did not check that `14a7400`
+on disk actually carries this text. **Independently confirmed by direct
+file read, which IS available without a shell:** `crypto/mod.rs`,
+`apply.rs`, `md5.rs`, `rc4.rs`, `standard.rs` all exist under
+`crates/pdfce-core/src/crypto/`, and all seven named fixtures
+(`enc-rc4-40.pdf`, `enc-rc4-128.pdf`, `enc-aes-128.pdf`,
+`enc-aes-256-r5.pdf`, `enc-aes-256-r6.pdf`, `enc-emptyuser-rc4-128.pdf`,
+`enc-emptyuser.pdf`, `PROVENANCE.md`) exist under
+`fixtures/synthetic/encryption/` — filesystem state, not git history,
+per the hard-rule-8 boundary.
+
+**`Pass 5` was on the fallback/interleave track (decision 010 candidate
+D), not *In progress*, when this filing opened.** This is the first
+real code against it since the 2026-08-01 spec-corpus session closed
+its spec prerequisite. **Activation, not promotion** — the queue
+position decision 010 set is unchanged; the engineer chose to build
+against an already-scoped, already-spec-sourced Backlog entry, which
+this project's own protocol treats as a normal engineering call, not a
+re-sequencing that needed escalating (see the `In progress` amendment
+below).
+
+**Scope of increment 1: read-only, RC4 only, refused everywhere else by
+name.** `/V` 1 and 2 (`/R` 2 and 3, Algorithm 1/2/3) and `/V` 4 with
+`/CFM /V2` (`/R` 4) — 40 through 128 bit. AES-128/256, `/R` 6, `/V` 0/3,
+and any non-Standard `/Filter` are refused, each with its own reason
+rather than one collapsed "encrypted, unsupported" message (see
+"REFUSALS NAME THE CONFIGURATION" below) — one of the four,
+AES/`/R` 6, is the OPEN SUB-DECISION the Encryption Backlog bucket has
+carried since 2026-08-01 (three options, none chosen); this increment
+does not resolve it, it just makes the refusal for that specific case
+precise instead of generic.
+
+**Where the code lands.** New `crates/pdfce-core/src/crypto/` — `md5.rs`
+(413 lines), `rc4.rs` (148), `standard.rs` (1177, the Algorithm 2/3/4/5
+key-derivation and authentication machinery), `apply.rs`, `mod.rs`.
+`document.rs` +258: the `decrypt_in_place` seam, `DocumentEncryption`,
+`Document::load_with_password`/`Document::from_bytes_with_password`,
+new `DocError::Encryption` and `DocError::PasswordRequired` variants.
+`xref.rs` +77/−…: **the refusal moved out of the xref layer and up to
+the document layer** — `XrefErrorKind::EncryptionUnsupported` is
+**re-scoped**, from "pdfce refuses to open any encrypted file" to "an
+`/Encrypt` trailer blocks the RECOVERY path specifically" (recovery
+needs the raw, still-encrypted bytes; the normal load path now
+decrypts before recovery would ever be reached). `writer/mod.rs` +
+`writer/save.rs`: new `WriteError::EncryptedSaveUnsupported`, refused
+in **both** save modes, before any bytes are written.
+
+**Why saving is refused by name, deliberately, rather than attempted.**
+After decryption the retained buffer and the parsed objects
+**deliberately disagree**: stream bytes are plaintext in both; string
+bytes are plaintext only in the parsed objects (a decrypted string
+cannot generally be re-escaped back into its original byte count, so
+strings are decrypted at the object layer instead of in the buffer).
+Both save modes re-emit untouched objects **verbatim from their source
+span** — so a save here would write a file whose `/Encrypt` dict still
+claims encryption, whose streams are plaintext, and whose strings are
+ciphertext: not a partially-saved document, a file nothing can open,
+pdfce included, with the save reporting success. **Two alternatives
+were considered and rejected, not merely unconsidered:** re-encrypting
+needs a key the document deliberately does not retain, and would have
+to emit RC4 (which pdfce never writes — standing rule **W14**);
+stripping `/Encrypt` would silently discard protection the document's
+own author applied, which is the operator's call, never pdfce's
+(project rule 4, fuzzy-never-sneaky). Tested: the refusal fires before
+any bytes are written and leaves no file behind.
+
+**Why this increment needed no object-model change, and why the NEXT
+one will.** `Stream` holds a **span** into the retained buffer, not
+owned bytes. RC4 is a stream cipher and preserves length exactly, so
+decrypted plaintext fits precisely where the ciphertext was — every
+span, every `/Length`, every provenance record stays valid with zero
+schema change. **AES will not have this property**: CBC-mode IV plus
+padding make the plaintext *shorter* than the ciphertext it replaces,
+so the AES increment inherits a problem this one structurally could
+not have. (Full generalizable form, written up for reuse beyond pdfce:
+`D:\dev\rag\rust\length_preserving_cipher_lets_a_byte_span_object_model_skip_a_schema_change.md`.)
+
+**Decryption's position in the load pipeline is load-bearing, not
+incidental.** It runs **between** phase 1 and phase 2 of the load.
+Object-stream contents are **not separately encrypted per contained
+object** — the container stream is encrypted once, and the objects
+inside it were serialized into that one plaintext blob before
+encryption (finding **T4**). Decrypting between the phases makes each
+container plaintext *before* phase 2 parses the objects out of it, so
+nothing downstream needs its own decrypt step. Decrypting **after**
+phase 2 instead would re-apply Algorithm 1 per already-extracted
+object and corrupt every string in every object-stream-bearing (i.e.
+every PDF ≥1.5-typical) modern file.
+
+**The never-encrypted list is eight items, not the three §7.6.1
+bullets a literal reading suggests:** xref streams; external `/F` data;
+`/Metadata` when `/EncryptMetadata false`; `/Crypt`+`/Identity` (a
+second, unrelated spelling of "not encrypted" from the `/Crypt`
+filter); and an **indirect `/Encrypt` dictionary matched by object
+number** — its own `/O` and `/U` entries are the key-derivation
+**inputs**, so decrypting them with a key derived from themselves
+authenticates successfully and then yields noise. (This eight-item
+list is spec-derived, not producer-empirical — flagged for
+`pdfce-spec-librarian` to confirm it is already captured in the §7.6
+spec-RAG corpus rather than filed here, per hard rule 6's spec/
+empirical boundary.)
+
+**Permissions (`/P`) are reported, never silently enforced.** §7.6.3.1
+states directly that nothing in PDF encryption inherently enforces the
+document's permission bits; they are unauthenticated plaintext at every
+`/V` 1–4, and the standard specifies no mapping from a bit to a reader
+operation at all (finding **N4**). `Permissions` ships as a
+**disclosure only** in this increment — which pdfce *operation* each
+bit should gate is a separate product decision, still owed, and must be
+visible as a decision rather than baked in silently.
+
+**No dependency was added — the workspace's Cargo dependency count is
+unchanged, and that is a scoped, temporary judgement, not a general
+answer.** MD5 and RC4 are implemented **in-crate**: both are frozen
+(no future revision), needed only to read bytes another compatible
+producer already wrote (never to write new ciphertext — RC4 write is
+independently forbidden by W14 regardless), and small enough to audit
+in one sitting against a published reference (RFC 1321; RC4's public
+test vectors). **The module docs state this boundary explicitly so the
+same reasoning cannot be reused to justify hand-rolling AES**, which
+has real side-channel/constant-time hazards and well-audited permissive
+crates already pre-selected for it (decision 001 §6.2: `aes`, `cbc`).
+Rule 13's dependency-licensing discipline is therefore **deferred, not
+answered**, to the AES increment. (Full generalizable form:
+`D:\dev\rag\rust\hand_rolled_frozen_legacy_crypto_primitives_defer_not_answer_the_vetted_crate_question.md`.)
+
+**Two fixture findings, both surfaced by USING the corpus rather than
+reading it — both fixed in this commit.**
+
+(a) The empty-user-password path — the single most operator-visible
+behaviour in the whole clause (a document that opens with no dialog
+because its user password is empty, which every other reader does
+silently) — had exactly **one** fixture, `enc-emptyuser.pdf`, and it
+was **AES-128**, which this increment refuses on cipher grounds
+**before authentication is ever attempted**. The path was implemented,
+believed covered, and **never once executed end to end**. Fixed:
+`enc-emptyuser-rc4-128.pdf` added. (Full write-up:
+`D:\dev\rag\rust\existing_fixture_of_the_right_shape_can_be_vacuous_for_a_new_measurement.md`'s
+2nd instance, added this filing.)
+
+(b) The corpus was **not reproducible**: its plaintext source lived
+outside the repo at an uncommitted path, so re-running the generator
+could silently produce a different corpus. It surfaced only because
+adding a seventh fixture made the other six change size — **one week
+after `PROVENANCE.md`'s own closing sentence had already warned this
+exact failure was possible.** Fixed: `tools/gen-encryption-fixtures.py`
+now defaults its plaintext source to a committed, in-repo path. (Full
+write-up:
+`D:\dev\rag\rust\uncommitted_fixture_generator_source_makes_a_committed_corpus_silently_unreproducible.md`.)
+
+**Two gates re-pointed rather than deleted, because their underlying
+contract genuinely reversed:** `xref.rs`'s encryption test now asserts
+the **opposite** of what it asserted before this commit — that
+`/Encrypt` **survives** to the document layer intact (resolving an
+indirect `/O`/`/U`/`/CF` needs objects the xref layer never has). The
+CLI's capability-gap test moves from asserting "encrypted files are
+refused" to asserting "**AES-128** files are refused" specifically, and
+gains a **complement** that renders a real RC4 page — without which the
+test would keep passing against a build that had quietly stopped
+opening encrypted files at all.
+
+**Test/gate figures — total beside the per-item count, per hard rule
+10.** **3,301 tests pass, 0 fail** (previous recorded baseline **3,256**
+at `v0.2.0`, this file's own head-of-*Shipped* entry two filings back —
+**+45 total**). Of that +45, **10 are the named integration tests** in
+the new `crates/pdfce-core/tests/encryption_rc4.rs` (318 lines); **the
+remaining 35 are not individually itemized by this dispatch** —
+plausibly `#[cfg(test)]` unit tests inside the new crypto module files
+themselves (`md5.rs`'s RFC 1321 vectors, `rc4.rs`'s published test
+vectors, `standard.rs`'s key-derivation unit tests), which is a
+reasonable shape for four new source files totalling 1,738 lines, but
+this is **inference, not a reconciled count** — flagged rather than
+silently accepted, matching this project's own standing discipline
+around figures that don't disaggregate cleanly (see the R166/R181
+family). `cargo fmt --check`, `cargo clippy --workspace --all-targets
+--all-features`, `check-ui-strings.sh`, `check-theme-colors.sh`,
+`check-ledger-numbers.py` all reported clean — **relayed, not
+independently re-run, no shell this dispatch.** `cargo tree -p
+pdfce-core` reported naming no GUI crate — **relayed, not
+independently re-run** (the GUI-core-separation invariant, project
+rule 2).
+
+**`docs/FEATURES.md` — genuinely uneven, reflected honestly rather than
+ticked.** Core reads RC4 (`[x]`); CLI reads it for **empty-password
+documents only** — there is no `--password` flag yet, named by the
+engineer as the very next commit (`◐`); GUI has **no password prompt at
+all** (`[ ]`). The stale Implemented-section row asserting "pdfce
+cannot open a password-protected PDF at all" is retired (literally
+false as of this commit) and consolidated into the single Planned-
+section Encryption row, which now carries the accurate, uneven state.
+Full row text: see the `FEATURES.md` diff this filing makes.
+
+**Ledger for this filing.** **No new Pass ID** — `Pass 5` is
+decision-007's own pre-existing ID, reused for its first real
+increment; Pass-family ceiling **unchanged at 62.0**, next free **63**.
+`docs/FEATURES.md`: **two rows touched** — the stale *Redaction &
+security* "cannot open at all" row retired, the *Planned* Encryption
+row rewritten with core/cli/gui `[x]`/`◐`/`[ ]`. `docs/ARCHITECTURE.md`
+§12: **one new dated entry** (in-crate MD5/RC4 vs. deferred-dependency
+decision, plus the new `pdfce-core` public surface —
+`DocumentEncryption`, `load_with_password`, `from_bytes_with_password`,
+`DocError::Encryption`/`PasswordRequired`). **§4.1 (the API surface
+sync) is NOT resynced by this filing** — flagged as owed, same
+already-acknowledged drift this document's own §4.1 header names, not
+newly introduced by this commit. **Standing rules: `W14`, rule 4, and
+project rule 2 all CITED, none minted** — this increment's refusal
+shape (name the exact reason, never collapse to one generic message) is
+a clean instance of the "REFUSALS NAME THE CONFIGURATION" discipline
+already established elsewhere in this project (redaction, form-fill
+guards), not a new failure class. Decision-record ceiling **unchanged
+at 038**, next free **039** — no new `docs/decisions/NNN` file; the
+in-crate-crypto call is logged at `ARCHITECTURE.md` §12 as a dated
+entry, not a numbered decision record, matching this project's own
+established pattern for calls of this size.
+
+**★ Operator-question ceiling — reported at its TRUE current value,
+`(bi)`, next free `(bj)`, per direct read of the *Open operator
+questions* section (question **(bi)**, "strip protection without a
+password," minted the eighty-eighth filing, confirmed still open,
+unresolved, no safe default) — NOT the `(bh)`/`(bi)` figure this
+file's own "Ledger for this filing" footers repeated across at least
+the **ninety-second through ninety-fifth** filings (four consecutive
+filings, this file's lines 204/301/378/1928/2858/etc., all citing
+`(bh)`/`(bi)` after `(bi)` had already been correctly minted at the
+eighty-eighth filing and correctly cited at the ninety-first). **This
+librarian is not correcting those four historical footers** — each is
+a self-contained snapshot of what THAT filing asserted, and rewriting
+them would misrepresent what was actually filed at the time — but is
+naming the drift here rather than propagating it a fifth time, and
+recommending a dedicated "index check" dispatch to add dated correction
+footers to the affected entries. This is exactly the class of error
+hard rule 10 exists to make visible: four filings' worth of a figure
+that could have disagreed with the *Open operator questions* section
+itself, and did, unnoticed, because nothing forced the two to be
+read together.
+
+**`D:\dev\rag\rust\`: four new findings, one existing file amended.**
+`hand_rolled_frozen_legacy_crypto_primitives_defer_not_answer_the_vetted_crate_question.md`,
+`length_preserving_cipher_lets_a_byte_span_object_model_skip_a_schema_change.md`,
+`uncommitted_fixture_generator_source_makes_a_committed_corpus_silently_unreproducible.md`
+(all new); `existing_fixture_of_the_right_shape_can_be_vacuous_for_a_new_measurement.md`
+gains a 2nd-instance section. `index.md` updated with all four.
+**`C:\personal_rag\pdf\`: one new lesson** —
+`lesson_20260811_pypdf_rc4_encrypt_parameter_conventions.md` (pypdf
+6.7.0's `/V`/`/R` pairing and default `/P` value), per the operator's
+own explicit flag that this was producer behaviour, not spec text; both
+subject and master `index.md` updated. **Backup/git working-tree/
+remote state not independently asserted anywhere in this filing** — no
+shell this dispatch (hard rule 8); the engineer should check
+`D:\Dev\pdfce-backups\` and `git log`/`git status`/`git remote -v`
+directly, on branch `post-v0.2.0`. This is the **ninety-sixth**
+`SESSION_LOG.md`/`ROADMAP.md` joint filing (the ninety-fifth confirmed
+present by direct read before this entry was written).
+
+---
+
 ### ★ `5dfef4d` — the v0.2.0 near-miss becomes a check: `tools/verify-release.py` catches a tag on the right commit but the wrong BRANCH — 2026-08-11, branch `post-v0.2.0` (ninety-fifth filing)
 
 **Sourcing.** No shell tool this dispatch (hard rule 8) — `git log -1
@@ -33804,6 +34067,19 @@ when it activates. Scope, constraints, and the 0.67% `/Encrypt` census
 at the Encryption Backlog bucket and in SESSION_LOG continuations 20 and
 22. Only its queue position changed.
 
+**★ AMENDED 2026-08-11 (ninety-sixth filing, `14a7400`) — Pass 5 has
+ACTIVATED: increment 1 (RC4 decrypt, read-only) shipped. This is NOT a
+promotion** — the queue-position framing above (fallback/interleave,
+decision 010 candidate D) is a statement about SCHEDULING PRIORITY
+relative to the other candidates, not a statement that no code would
+ever be written against Pass 5 until it reached the front of that
+queue. The engineer built increment 1 as a normal engineering call
+against an already-scoped, already-spec-sourced Backlog entry; nothing
+here re-sequences decision 010's candidate order. Full build record:
+this file's own `14a7400` *Shipped* entry, top of *Shipped*. The `/R 6`
+open sub-decision named above is UNCHANGED and still gates any AES-256
+write path — increment 1 does not touch it (RC4-only, read-only).
+
 ## Next up
 
 ### Pass 52.0–52.3 — PDF → DXF export, so SOLIDWORKS can import pdfce output without an Acrobat Pro licence at all — operator request 2026-08-09, redirected from "make pdfce satisfy SOLIDWORKS' Acrobat gate" to "make the gate irrelevant"
@@ -41422,6 +41698,34 @@ nothing gets forgotten, not as a commitment to build in this order.
   every signature it touches. See `ROADMAP.md`'s `5039ecf`+`ce5642d`
   Shipped entry and the new **R186** standing rule (guards keyed on a
   marker fail open without it) for the full record.
+  **AMENDMENT (2026-08-11, ninety-sixth filing, `14a7400`) — INCREMENT 1
+  SHIPPED: this bucket is no longer purely a scoping record.** Read-only
+  RC4 (`/V` 1/2/4 at `/R` 2/3/4, `/CFM /V2`, 40–128 bit) now decrypts,
+  including the empty-user-password case named as the highest-priority
+  gap since the 2026-07-31 corpus session. **AES-128/256, `/R` 6, `/V`
+  0/3 and non-Standard `/Filter` handlers are still refused, each by its
+  own name** (see "REFUSALS NAME THE CONFIGURATION" in the `14a7400`
+  Shipped entry) — the `/R 6` open sub-decision three paragraphs above
+  is UNCHANGED, still gates any AES-256 write path, and increment 1 does
+  not touch it. **Saving an already-encrypted document is refused by
+  name in both modes** (`WriteError::EncryptedSaveUnsupported`) —
+  structural, not a shortcut: the retained buffer and parsed objects
+  deliberately disagree post-decrypt (streams plaintext both, strings
+  plaintext only in the objects), and re-emitting untouched objects
+  verbatim from their source span is exactly what both save modes do.
+  `/P` permission-flag disclosure (the AMENDMENT two paragraphs above)
+  ships alongside — reported, never enforced, per §7.6.3.1. **Remaining
+  scope, in the order the engineer named next:** a CLI `--password` flag
+  (increment 1 opens empty-password RC4 documents automatically but has
+  no way to supply a real one); a GUI password-prompt dialog (currently
+  no surface at all); the AES-128/256 decrypt path, which will need an
+  object-model change increment 1 did not (AES's IV+padding make
+  plaintext shorter than ciphertext, unlike RC4 — see
+  `D:\dev\rag\rust\length_preserving_cipher_lets_a_byte_span_object_model_skip_a_schema_change.md`);
+  and eventually encrypt-on-save (AES-128/256 only, RC4 never written,
+  per W14). `docs/FEATURES.md`'s Encryption row now reads core `[x]` /
+  cli `◐` / gui `[ ]` — see the `14a7400` Shipped entry for the exact
+  row text.
 - **Adobe LiveCycle / AEM Document Security, and third-party proprietary
   DRM handlers (FileOpen, Locklizard, and similar) — recorded as
   IMPOSSIBLE, not declined.** Added 2026-08-11, operator request (*"can
