@@ -43,7 +43,10 @@ WHAT IT CHECKS, AND THE RULE BEHIND EACH
 2. **No standing-rule number is defined twice.** With one documented
    exception class — see KNOWN_RULE_AMENDMENTS below.
 
-3. **No two decision files share a number.**
+3. **No two decision files share a number.** Decision numbers declared
+   only in ARCHITECTURE.md §12 are counted toward the reported CEILING but
+   are NOT uniqueness-checked — their declaration form is not separable
+   from amendments and prose by regex. See collect_decisions().
 
 4. **Reports the live ceiling of every ledger.** This is the part that
    actually prevents collisions rather than detecting them afterwards. R106
@@ -249,16 +252,88 @@ def collect_rules(lines: list[str]):
     return found
 
 
+ARCHITECTURE = os.path.join("docs", "ARCHITECTURE.md")
+
+# A dated decision entry in ARCHITECTURE.md §12, e.g.
+#   "### Decision 040 — printing honours the operator's CMYK intent"
+#   "**Decision 039 (2026-08-11)** — the `aes` dependency ..."
+# Only a DECLARATION counts: a heading, or a bolded "Decision NNN" opening
+# a paragraph. Prose back-references ("see decision 019") must not count,
+# or every cross-reference would read as a second declaration.
+ARCH_DECISION = re.compile(
+    r"^(?:#{2,4}\s.*?|\*\*)[Dd]ecision\s+(\d{3})\b",
+)
+
+
 def collect_decisions():
+    """Every decision number that is SPOKEN FOR, from both places they live.
+
+    ★ This used to read `docs/decisions/NNN-*.md` and nothing else, and that
+    silently under-counted for a long time: not every decision gets its own
+    file. On 2026-08-11 the files stopped at 038 while ARCHITECTURE.md §12
+    had already minted 039 and 040, so this checker printed
+    "next free is 039" — a number that was ALREADY TAKEN, TWICE.
+
+    That is worse than no answer. The whole point of the line is to be
+    trusted by whoever mints the next one, and a confidently wrong ceiling
+    is how a duplicate gets created rather than caught. (Filed the same day
+    a Pass ID was duplicated for exactly this reason — an unverified number
+    relayed as fact. See `feedback_absence_needs_an_unscoped_query`'s
+    cousin: a number you did not measure is not a number you know.)
+
+    Numbers 034, 035, 036, 039 and 040 exist ONLY in §12 with no file, so
+    file-only counting is not a stricter reading of the convention — it is
+    a wrong one. Both sources are authoritative; the ceiling is the max.
+
+    ★ THE TWO SOURCES ARE USED FOR DIFFERENT JOBS, AND THAT IS THE TRICK.
+
+    `files` drives BOTH the ceiling and duplicate detection. `arch` drives
+    the CEILING ONLY. Two reasons, and the second is the interesting one:
+
+    1. A decision having both a file and a §12 entry is the NORMAL shape —
+       027, 037 and 038 all do — so a merged list would flag every properly
+       documented decision as a duplicate.
+    2. §12 uniqueness is **not reliably detectable by regex**, and pretending
+       otherwise was tried and reverted on 2026-08-11. Its entries put the
+       number AFTER the em dash (`### 2026-08-11 (…) — decision 040: …`),
+       and amendments reuse the identical shape
+       (`— decision 038 RECONCILED: …`), as does ordinary bolded prose
+       (`**Decision 038 is explicitly UNCHANGED by this entry`). A pattern
+       tight enough to exclude those would exclude real declarations too.
+
+       This is the same false-positive class `collect_passes` above already
+       documents — "headings routinely name other Passes in their
+       descriptive half … counting those as declarations produced 9 false
+       duplicates on the first attempt." The first attempt here reproduced
+       it exactly, on 038.
+
+    So §12 duplicates are NOT checked. That is a real hole and it is stated
+    in the module docstring's "WHAT IT DOES NOT CHECK" rather than left for
+    someone to infer from a green run. The hole this closes is the worse
+    one: before this, the printed ceiling was **wrong**, not merely
+    incomplete — it said "next free is 039" while §12 had already minted
+    039 AND 040. A confidently wrong ceiling is how a duplicate gets
+    created; a missing check only fails to catch one.
+
+    Returns `(files, arch)`, each `{number: [where]}`.
+    """
     if not os.path.isdir(DECISIONS):
         print(f"ERROR: {DECISIONS} is not a directory.", file=sys.stderr)
         raise SystemExit(2)
-    found = defaultdict(list)
+    files = defaultdict(list)
     for name in sorted(os.listdir(DECISIONS)):
         m = re.match(r"^(\d+)-.*\.md$", name)
         if m:
-            found[int(m.group(1))].append(name)
-    return found
+            files[int(m.group(1))].append(name)
+
+    # ...and the ones declared in ARCHITECTURE.md §12, which is where a
+    # decision that never got its own file lives (034-036, 039, 040).
+    arch = defaultdict(list)
+    for lineno, line in enumerate(read_lines(ARCHITECTURE), start=1):
+        m = ARCH_DECISION.match(line.strip())
+        if m:
+            arch[int(m.group(1))].append(f"{ARCHITECTURE}:{lineno}")
+    return files, arch
 
 
 def pass_sort_key(pid: str):
@@ -289,6 +364,13 @@ _TENS_PREFIX = {
     "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50,
     "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90,
 }
+# Cardinals, for the hundreds multiplier only: "two-hundred-and-fifth" has a
+# CARDINAL "two" and an ordinal "fifth". Kept separate from _UNITS rather
+# than merged, because merging would also make "two filing" parse as 2.
+_CARDINAL_UNITS = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+    "six": 6, "seven": 7, "eight": 8, "nine": 9,
+}
 FILING_HEADING = re.compile(r"^#{2,4}\s.*?\(([a-z][a-z-]*)\s+filing\)", re.I)
 
 
@@ -298,12 +380,59 @@ def ordinal_to_int(word):
     Returning None rather than raising is deliberate: an unrecognised word
     is reported as a parse gap, not a crash. A checker that dies on a
     heading it does not understand stops covering everything else too.
+
+    ★ HUNDREDS ADDED 2026-08-11, ON THE DAY THEY WERE FIRST NEEDED. The
+    vocabulary above stops at "ninety-nine". `SESSION_LOG.md` reached its
+    hundredth filing that morning, so `hundredth`, `hundred-and-first` and
+    `hundred-and-second` all parsed as None — which meant the three newest
+    filings were the ONLY ones not uniqueness-checked, and the summary
+    still printed "clean".
+
+    That is the R186 shape in the tooling itself: a guard keyed on a
+    vocabulary, meeting the case the vocabulary does not cover, and failing
+    OPEN. Nothing broke; it just quietly stopped checking the entries most
+    likely to collide (the newest ones, written by whoever is filing next).
+
+    Accepts both `hundred-and-first` and the un-conjuncted `hundred-first`,
+    because the heading text is written by hand and the checker should not
+    fail over a hyphen the author chose differently.
     """
     w = word.lower()
     if w in _UNITS:
         return _UNITS.index(w)
     if w in _TENS:
         return _TENS[w]
+    # The hundreds MULTIPLIER is a cardinal ("two-hundred-and-fifth"), not
+    # an ordinal — only the final element takes the ordinal form. Checking
+    # it against _UNITS (which holds ordinals) silently returned None for
+    # every multiple of 100 above the first; caught by unit-testing the
+    # function rather than by any document reaching filing 200.
+    if w == "hundredth":
+        return 100
+    m = re.match(r"^(\w+)-hundredth$", w)
+    if m:
+        mult = _CARDINAL_UNITS.get(m.group(1))
+        return mult * 100 if mult else None
+
+    # "hundred-and-first" / "hundred-first" / "two-hundred-and-fifth".
+    # Split off any leading multiplier, then recurse on the remainder so
+    # the tens/units logic below is written exactly once.
+    m = re.match(r"^(?:(\w+)-)?hundred(?:-and)?-(.+)$", w)
+    if m:
+        mult_word, rest = m.group(1), m.group(2)
+        if mult_word is None:
+            mult = 1
+        elif mult_word in _CARDINAL_UNITS:
+            mult = _CARDINAL_UNITS[mult_word]
+        else:
+            return None
+        rest_val = ordinal_to_int(rest)
+        # `rest` must be a sub-hundred remainder; guarding this stops
+        # "hundred-and-hundredth" resolving to something.
+        if rest_val is None or not 1 <= rest_val < 100:
+            return None
+        return mult * 100 + rest_val
+
     if "-" in w:
         tens, _, unit = w.partition("-")
         if tens in _TENS_PREFIX and unit in _UNITS and _UNITS.index(unit) < 10:
@@ -334,7 +463,12 @@ def main() -> int:
 
     passes = collect_passes(lines, secs)
     rules = collect_rules(lines)
-    decisions = collect_decisions()
+    decision_files, decision_arch = collect_decisions()
+    # Union, for the ceiling and the sanity check only.
+    decisions = defaultdict(list)
+    for src in (decision_files, decision_arch):
+        for k, v in src.items():
+            decisions[k].extend(v)
 
     # Guard against a vacuous pass. If the conventions this parses ever
     # change, the counts collapse and every check trivially succeeds — which
@@ -387,7 +521,8 @@ def main() -> int:
         for n, title in hits:
             print(f"    {ROADMAP}:{n}: {title}")
 
-    dup_decisions = {k: v for k, v in decisions.items() if len(v) > 1}
+    # Files only — see collect_decisions for why §12 cannot be checked here.
+    dup_decisions = {k: v for k, v in decision_files.items() if len(v) > 1}
     for num, names in sorted(dup_decisions.items()):
         failures += 1
         print(f"DUPLICATE decision number {num:03d}: {', '.join(names)}")
@@ -466,10 +601,24 @@ def main() -> int:
     # used the same way — as identifiers in prose across every document.
     ord_lines = read_lines(SESSION_LOG)
     ordinals, unparsed_ordinals = collect_filing_ordinals("\n".join(ord_lines))
+    # ★ A PARSE GAP IS A FAILURE, NOT A NOTE (changed 2026-08-11).
+    #
+    # This printed a NOTE and let the run finish "clean". On the day the
+    # log reached its hundredth filing, three headings stopped parsing at
+    # once and the summary still said clean — so the checker reported
+    # success for a run in which it had checked less than it used to.
+    #
+    # "I could not read this, and I am therefore not covering it" is not a
+    # note. It is the checker telling you it has a hole, and the only
+    # honest exit code for that is non-zero: whoever extends the ordinal
+    # vocabulary is the same person who would otherwise mint a duplicate.
     for word_line, word in unparsed_ordinals:
+        failures += 1
         print(
-            f"NOTE  {SESSION_LOG}:{word_line}: filing heading ordinal "
-            f"{word!r} not recognised — it is NOT uniqueness-checked"
+            f"UNCHECKED  {SESSION_LOG}:{word_line}: filing heading ordinal "
+            f"{word!r} not recognised — it is NOT uniqueness-checked. "
+            f"Extend the vocabulary in ordinal_to_int() rather than "
+            f"renaming the heading."
         )
     for num, at in sorted(ordinals.items()):
         if len(at) > 1:
