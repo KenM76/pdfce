@@ -4,7 +4,7 @@ Engineer-owned handoff. Read this **before** the librarian's record —
 `ROADMAP.md` says what shipped, this says what is in flight and what the
 next hour should be. Overwrite it once acted on.
 
-Written 2026-08-11 at `b3ba63b`.
+Written 2026-08-11 at `149fd03`, branch `post-v0.2.0`.
 
 ---
 
@@ -12,158 +12,263 @@ Written 2026-08-11 at `b3ba63b`.
 
 Measured, not relayed:
 
-- Full workspace `cargo test` — **81 suites, 3256 passed, 0 failed**.
-- `cargo clippy --workspace --all-targets --all-features` — **0**.
-- `cargo fmt --check`, `check-ui-strings.sh`, `check-theme-colors.sh` —
-  clean.
-- All four filing gates clean as of `5e4a602`. **`b3ba63b`, `3fe8a19`,
-  `ecf2302` and `04f8acd`'s follow-ups are NOT yet filed** — run
-  `check-commits-filed.py` first and dispatch `pdfce-librarian` for
-  whatever it lists. That outranks new work.
+- `cargo test --workspace` — **3,306 passing / 0 failing**, measured at
+  `149fd03` (this commit).
+- `cargo clippy --workspace --all-targets --all-features` — 0.
+- `cargo fmt --check`, `check-ui-strings.sh`, `check-theme-colors.sh`,
+  `check-ledger-numbers.py`, `check-passes-filed.py` — clean.
+- `cargo tree -p pdfce-core` names no GUI crate. **Zero dependencies were
+  added this session**, including for the crypto.
 
-Portable build `D:\builds\pdfce-20260811-0349-23eee9b` predates the last
-few commits. Rebuild before asking the operator to try anything.
+Portable build `D:\builds\pdfce-20260811-0806-0a79da4-dirty` is **stale
+and marked dirty** — it predates three commits and was built from an
+uncommitted tree. Rebuild before asking the operator to try anything:
+`python tools/package-portable.py --note "..."`.
+
+Filing gate: `check-commits-filed.py` may list `149fd03`; a librarian
+dispatch for the three commits before it was in flight when this was
+written. Run the gate and file whatever it names before new work.
 
 ---
 
-## ★ Start here: encryption, and the increment order matters
+## What shipped: encryption, increment 1 (Pass 5)
 
-The operator asked for it (2026-08-11) and pdfce still **cannot open a
-password-protected PDF at all** — `xref.rs` refuses with
-`XrefErrorKind::EncryptionUnsupported`. This is `Pass 5`.
+**pdfce opens password-protected PDFs.** It could not, at all, before
+this session.
 
-**Everything needed to start is now in place except the code.**
+| | |
+|---|---|
+| **Reads** | RC4 — `/V` 1, 2 at `/R` 2, 3; `/V` 4 at `/R` 4 with `/CFM /V2`. 40–128 bit. |
+| **Refuses, by name** | AES-128 / AES-256 (unimplemented cipher) · `/R` 6 (**unsourced** algorithm) · `/V` 0, `/V` 3 (*no conforming reader* may open these) · non-`/Standard` handler |
+| **Cannot** | write an encrypted document — **saving is refused in both modes** |
 
-### Sourcing — done, do not re-dispatch
+The operator-visible payoff is the **empty user password** case: a
+permissions-only PDF opens with no prompt anywhere, because §7.6.3.1
+requires trying it first and silently. That works in core, CLI and GUI
+today with no flag.
 
-`D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__ref__encryption_impl.md`
-is the entry point. §7.6 is fully covered: Algorithms 1–7 verbatim,
-the padding string, `/P`'s little-endian unsigned hashing, crypt
-filters, the never-encrypted list (**eight** items — the §7.6.1 bullet
-list alone is incomplete, three live in other clauses).
+New surface: `Document::load_with_password` /
+`from_bytes_with_password` (`None` ≠ empty password), `doc.encryption()`
+→ `DocumentEncryption { config, auth }`, `DocError::PasswordRequired`,
+`DocError::Encryption(EncryptionUnsupported)`,
+`WriteError::EncryptedSaveUnsupported`. CLI: global `--open-password` /
+`--open-password-file`.
 
-**Read the transposition traps before writing a line.** They are
-numbered `T4`–`T16` in that file and each produces a wrong key for
-every document. The worst pair: Algorithm 2 step (h) truncates the
-digest to `n` bytes **between** its 50 rounds; Algorithm 3's 50-round
-loop does **not**. Two 50-round MD5 loops with opposite truncation
-rules, three pages apart.
+### The fidelity proof, and why it is the one that matters
 
-### Fixtures — done
+Load tests prove a document *loads*. RC4 with a wrong key **does not
+fail** — it yields bytes a lenient parser walks — so a transposed
+50-round loop produces a document that opens and is subtly wrong.
 
-`fixtures/synthetic/encryption/` — six files, `PROVENANCE.md` states
-what each can prove. **Read that file before assuming they should all
-pass.** `enc-aes-256-r6.pdf` is a **refusal** fixture: its algorithm is
-unsourced, so testing a derived implementation against the
-implementation it was derived from cannot fail. Passwords are `userpw`
-/ `ownerpw`; `enc-emptyuser.pdf`'s user password is the empty string.
+`decrypting_reproduces_the_plaintext_document_exactly` renders the
+plaintext source and all three RC4 encryptions of it and requires the
+four PNGs byte-identical (`bc2dfede94ef290e7c7a7f7e509fea98` × 4).
+**Keep that test.** If AES work breaks decryption, this is what says so.
 
-Regenerate with `tools/gen-encryption-fixtures.py` (needs `pypdf`).
+---
 
-### ★ The dependency question, which decides the increment order
+## ★ Start here: the GUI password prompt
 
-**`pdfce-core` has NO crypto dependencies today** — `thiserror`,
-`flate2`, four codecs, `jpeg-encoder`. Nothing else. So:
+**The one real gap.** A document needing a non-empty password is
+currently **CLI-only** — the GUI reports it honestly but cannot ask.
 
-| Increment | Needs | Dependency |
-|---|---|---|
-| **1. RC4 modes** (`/R` 2, 3, and 4 with `/CFM /V2`) | MD5 + RC4 | **none** — both are small and frozen; implement in-crate |
-| **2. AES-128** (`/R` 4, `/CFM /AESV2`) | AES-128-CBC decrypt | one permissive crate, or ~200 lines |
-| **3. `/R` 5** | SHA-256 | permissive crate |
-| **4. `/R` 6** | **BLOCKED** — Algorithm 2.B unsourced past step (a) | — |
+`pdfce-ui-specialist` has already designed it in full (dispatched
+2026-08-11; the design is summarised below because no spec file was
+written). It called the whole thing cheap and said to ship it together.
 
-**Do increment 1 first and ship it.** It needs no dependency decision
-(rule 13), covers the commonest real-world protected PDFs, and proves
-the whole plumbing — `/Encrypt` parsing, password authentication,
-per-object keys, and the decrypt hook in the parser — against two
-independent fixtures. Everything after it is a cipher swap behind the
-same machinery.
+### The states — one new `Status` variant, not two
 
-Implementing MD5 and RC4 in-crate rather than adding crates is a
-judgement, not a rule: both are frozen, tiny, and used nowhere
-security-critical here (the file must be decryptable to be read at
-all). Say so in the module header, and **do not** hand-roll AES on the
-same reasoning — that one is worth a dependency.
+```rust
+Status::NeedsPassword { path: PathBuf }   // NEW — that is the whole variant
+```
 
-### Two things that will bite later, recorded now
+- **Opens normally** → `Status::Open`, unchanged.
+- **Opens, encrypted, no prompt** (`AuthKind::EmptyUser`) → still
+  `Status::Open`. **No new variant, no new field on `OpenDoc`.** Read
+  `doc.session.document().encryption()` **live, every frame**.
+- **Needs a password** → the new variant. There is no `Document` at all
+  when this happens, so it cannot be a flag on `Status::Open`.
+- **Refused cipher** → `Status::Unsupported`, already correct as of
+  `e4b6533`. `EncryptionUnsupported`'s `Display` text is already
+  specific; `canvas_unsupported(path, message)` interpolates it.
 
-- **ISO 32000-2 exempts a signature's `/Contents` from encryption and
-  ISO 32000-1's never-encrypted list does not.** A writer following
-  32000-1 literally breaks every signature it touches, and it presents
-  as a bad certificate rather than as an encryption bug.
-- **`/P` permission bits are not a security boundary**, and the
-  standard says so itself (§7.6.3.1: *"There is nothing inherent in PDF
-  encryption that enforces the document permissions"*). Quote that
-  sentence; do not file this half under "security".
+Typed-input state (`input`, `show`, `rejected`) goes in a **separate
+app-level `PasswordPrompt` struct**, sibling to `PendingCopy` — not
+nested in the enum, which would mean mutating a `String` inside the
+`Status` you are matching on.
+
+### The prompt
+
+- **Inline canvas arm, not a modal.** A fourth arm of the same
+  `match &self.status` that already draws `Idle`/`Failed`/`Unsupported`.
+  **Zero new dialog conventions** — there are already three.
+- **Do NOT add it to `apply()`'s pending-gate.** That gate protects an
+  *already-open* document's in-progress question. Here nothing is open,
+  and gating would lock the operator away from the documents they *do*
+  have open in the switcher.
+- **Escape hatch is structural**: the switcher stays live, and
+  `switch_to_parked` already discards `NeedsPassword` for free. Add an
+  explicit **Cancel** anyway (→ `Status::Idle`) for the first-file-of-
+  the-session case, plus Escape — but check the existing 4-way Escape
+  precedence chain (~L13228) before wiring a new top rung.
+- **Enter submits.** This is *not* the redaction-apply no-Enter case —
+  that rule protects the app's one irreversible action; a password guess
+  is reversible and routine.
+- **Wrong password → same surface**, `rejected = true`, an
+  `error_fg_color` line above the field, and **clear the input**. Never
+  `rejected` on first arrival — the empty password was already tried
+  silently, so claiming "wrong password" for something never typed is a
+  lie.
+- **Show-password checkbox**, default masked, `.password(!show)` — the
+  idiom already exists at ~L18500. Tooltip should say pdfce **does not
+  store the password**; nothing currently discloses that.
+- **No retry limit, no lockout.** N6 — the spec has no error model here;
+  inventing one is pdfce policy dressed as security.
+
+### Disclosure, at open time
+
+- One factual status-bar line when the open document is encrypted, naming
+  the `AuthKind`. Computed **live**, never cached.
+- **Disclose the save-refusal at OPEN, not at save.** An operator who
+  edits for an hour and learns at `Ctrl+S` was let down by a UI that knew
+  the whole time. Warn-coloured, same block.
+- **Disable Save / Save As** with an explaining tooltip rather than
+  leaving them clickable to fail. `WriteError::EncryptedSaveUnsupported`
+  stays as the safety net.
+- **Permission bits → Properties panel, read-only "Security" section**,
+  never toggles. One pinned caption doing the N4 / §7.6.3.1 work: these
+  are author-declared, PDF encryption does not enforce them, **and pdfce
+  does not check or restrict anything based on them**. Do *not* repeat it
+  at each action — that is a nag.
+
+### Do not build yet
+
+Re-encrypt-on-save UI · permission *editing* · attempt limiting · an
+owner-vs-user password chooser (`authenticate()` tries both and reports
+`AuthKind` after the fact — one field, no selector).
+
+### One bug to avoid reintroducing
+
+Reset `password_prompt` in **both** `open_path` and `switch_to_parked`,
+exactly as they reset `edit_note`/`copy_result`. Otherwise a half-typed
+password for file A leaks into file B's prompt.
+
+---
+
+## Then: encryption increment 2 — AES-128
+
+Sourcing is done (`iso32000__ref__encryption_impl.md`). The plumbing
+exists and is proven. What is genuinely new:
+
+- **A dependency decision (rule 13).** `pdfce-core` still has **no**
+  crypto dependency. MD5 and RC4 were written in-crate because both are
+  frozen, tiny, and needed only to read files others made — and
+  `crypto/md5.rs`'s module docs say explicitly that **this reasoning does
+  not extend to AES**. Take a vetted permissive crate; classify it,
+  check `PRIOR_ART.md`, record it.
+- **★ AES breaks the property this increment leaned on.** RC4 preserves
+  length exactly, so plaintext was written back over ciphertext in the
+  retained buffer and every `ByteSpan`, `/Length` and provenance record
+  stayed true — which is why `Stream` needed no change. AES output is
+  IV + padding, so **plaintext is shorter than ciphertext**. Decide how
+  `Stream` carries decrypted bytes before writing any AES code; this is
+  the increment's real design problem, not the cipher.
+- `/R` 5 (AES-256) is next after that. **`/R` 6 stays blocked** — its
+  Algorithm 2.B is unsourced past step (a), and deriving it from another
+  implementation then testing against that same implementation could not
+  fail. `enc-aes-256-r6.pdf` is a **refusal** fixture on purpose.
 
 ---
 
 ## Other outstanding work
 
-- **Imposition has no GUI at all.** `print_flow.rs` contains zero
-  references to `n_up`, `booklet` or `poster` — verified by grep. Do the
-  sheet composition extraction into `pdfce-print` FIRST so both shells
-  share one implementation; duplicating `cmd_print`'s loops into the GUI
-  is the drift this session kept flagging. The three modes are mutually
-  exclusive and a GUI must express that as a *choice*.
-- **Static hybrid XFA read/fill.** The staleness disclosure shipped
+- **Imposition has no GUI at all.** Extract sheet composition into
+  `pdfce-print` FIRST so both shells share one implementation. The three
+  modes are mutually exclusive and a GUI must express that as a *choice*.
+- **Static hybrid XFA read/fill** — the staleness disclosure shipped
   (`ce5642d`); syncing the XFA half has not.
-- **Wide-shape CSV** — one column per field, for filling many copies
-  from a spreadsheet. Backlog.
+- **Wide-shape CSV** — one column per field, for filling many copies.
 - **Colour management** — `D:\Dev\iccce\`, fully planned, no code.
+- **Ledger-accuracy defect** (librarian-reported, not fixed): filings
+  ninety-two through ninety-five cite `(bh)`/`(bi)` as if `(bi)` had not
+  been minted. Historical entries were left as snapshots; a future
+  "index check" dispatch should add correction footers.
+- **Spec-librarian flag**: confirm the eight-item never-encrypted list
+  (E1–E9) is in the §7.6 corpus rather than only in pdfce's code.
 
 ---
 
 ## Live decisions worth not re-litigating
 
-- **`R186`**: when a guard keys on a marker, ask what the same hazard
-  looks like *without* it. **Three instances now** — the `/Encrypt`-keyed
-  refusal a §7.6.7 wrapper walks past, `fill_guards` never checking XFA,
-  and `inspect` reporting a clean version line for a document whose body
-  would not load.
-- **Decision 037 — answered by measurement.** `/BaseState /OFF` applies
-  to registered groups only. But say it precisely: the *literal* reading
-  of the text is still correct as a reading; what is falsified is that
-  any reader implements it. Acrobat and `pdf.js` both narrow the
-  quantifier to the `/OCGs` registry, which the standard nowhere states.
-- **Decision 038 — reconciles, and pdfce was already right.** Table
-  101's own redundancy sentences hold under exactly one processing
-  order. Cite **both** loci; citing only §8.11.4.5 b) makes the code look
-  like it ignored the table. `Table 101` is a 1.7-only citation — ISO
-  32000-2 renumbers it to **Table 99**. `pdf.js` diverges here, so a
-  "match other readers" tiebreak would push *away* from the ruling.
-- **A format helper never writes `/V`** — an invariant declining
-  spec-granted latitude, never compliance.
-- **An ambiguous stored date is refused**, not guessed.
-- **CSV values that look like formulae are neutralised and disclosed.**
+- **`R186` — now FOUR instances.** A guard keyed on a *marker* fails open
+  when the hazard arrives without it. The `/Encrypt`-keyed refusal a
+  §7.6.7 wrapper walks past · `fill_guards` never checking XFA ·
+  `inspect` reporting a clean version line for an unloadable body · and
+  now the GUI's `is_unsupported_structure`, which kept matching an error
+  variant that had been **re-scoped underneath it**, so AES documents
+  read as *damaged*. Nothing failed. No test went red. The guard just
+  stopped covering its own case.
+- **`DocError::PasswordRequired` is not a capability gap.** pdfce can
+  open it and has not been told how. Calling it "unsupported" is the same
+  untruth as calling it damaged, pointing the other way.
+- **A derived value with one producer cannot drift** (`149fd03`).
+  `recovery_note` was cached and *cleared* by two of three call sites,
+  so a recovery banner vanished on document switch. Fixed by deleting the
+  cache, not by adding a third reset — which would have fixed today's two
+  and left the fourth waiting.
+- **Decision 037** — `/BaseState /OFF` applies to registered groups only.
+  The *literal* reading of the text is still correct as a reading; what
+  is falsified is that any reader implements it.
+- **Decision 038** — cite **both** loci; `Table 101` is 1.7-only (ISO
+  32000-2 renumbers it to **Table 99**).
+- **A format helper never writes `/V`** · **an ambiguous stored date is
+  refused** · **CSV values that look like formulae are neutralised and
+  disclosed.**
 
 ---
 
 ## Tooling
 
-`tools/splice.py` — anchored source substitution that validates every
-anchor before applying any, refuses an ambiguous anchor, and writes
-all-or-nothing. Use it for edits to the big files.
+`tools/splice.py` — anchored substitution, validates every anchor before
+applying any, refuses an ambiguous anchor, writes all-or-nothing. Use it
+for the big files. **It caught a bad edit this session by refusing.**
 
-`tools/gen-encryption-fixtures.py` — regenerates the encrypted corpus.
+`tools/verify-release.py <tag>` — clean tree, tag at HEAD, tag pushed,
+**`origin/main` at the tagged commit**, release has an asset.
+
+`tools/gen-encryption-fixtures.py` — no arguments needed now; source and
+output default to committed paths.
+
+`tools/package-portable.py --note "..."` — dated portable build in
+`D:\builds`.
 
 ---
 
 ## The habit worth carrying
 
-Every expensive error this session had one shape: **an assertion nobody
-had measured, which read as settled for as long as nobody looked.**
-Decision 009's Bibliography premise across four documents. A comment
-claiming `--poster --booklet` was exclusive while nothing enforced it. A
-property test that was itself backwards. An empty-percent rendering
-reproduced faithfully from a real source, flagged as single-tier, and
-still wrong.
+Every expensive error has one shape: **an assertion nobody had measured,
+which read as settled for as long as nobody looked.** Four fresh
+instances, all found by *using* something rather than reading it:
 
-And two from the other direction, worth naming separately: a subagent
-reported a `SESSION_LOG` ledger as *duplicated* when it was
-*misplaced* — acting on the report as written would have destroyed the
-only copy. A `check-ui-strings` gate overruled a judgement that would
-have been defended with an exemption comment, and the gate was right.
+- The empty-password path had one fixture and it was **AES**, which is
+  refused *before authentication is reached*. The most operator-visible
+  behaviour in clause 7.6 was implemented, believed, and never once
+  executed. **A fixture that cannot fail for the reason you care about is
+  not covering that reason.**
+- The fixture corpus was not reproducible — its plaintext source was
+  never committed — so re-running the generator silently produced a
+  *different* corpus. Found only because adding a seventh fixture made
+  the other six change size, **one week after `PROVENANCE.md`'s own
+  closing sentence warned about exactly that.**
+- The `--open-password` sweep missed a load site that **was not a call**:
+  `Document::from_bytes` passed to `.and_then()` as a function
+  *reference*. `inspect` would have accepted the flag and ignored it.
+- `recovery_note`'s comment argued its case correctly and emphatically —
+  on the wrong axis. **A carefully-reasoned comment about the wrong axis
+  is not a smaller error than no comment**; it reads as though the
+  question was settled.
 
-Prefer running the thing. When a new test fails, check the test first.
-When a report proposes something destructive, measure before acting.
+And the discipline that caught them: **prove a guard by making it fail.**
+`verify-release.py` was run against a stale tag; the recovery regression
+test was run with the bug deliberately reinstated. A test that has never
+been seen to fail is a test nobody has tested.
