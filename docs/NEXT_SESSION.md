@@ -4,7 +4,7 @@ Engineer-owned handoff. Read this **before** the librarian's record —
 `ROADMAP.md` says what shipped, this says what is in flight and what the
 next hour should be. Overwrite it once acted on.
 
-Written 2026-08-11 at `6ae476e`, branch `post-v0.2.0`.
+Written 2026-08-11 at `19c86bd`, branch `post-v0.2.0`.
 
 ---
 
@@ -12,17 +12,18 @@ Written 2026-08-11 at `6ae476e`, branch `post-v0.2.0`.
 
 Measured this session, not relayed:
 
-- `cargo test --workspace` — **3,350 passing / 0 failing** (3,311 at the
+- `cargo test --workspace` — **3,353 passing / 0 failing** (3,311 at the
   start of the session).
 - `cargo clippy --workspace --all-targets --all-features -D warnings` — 0.
 - `cargo fmt --check`, `check-ui-strings.sh`, `check-theme-colors.sh`,
   `check-ledger-numbers.py`, `check-passes-filed.py`,
   `check-bypass-paths.sh` — clean.
 - `cargo tree -p pdfce-core` / `-p pdfce-render` name no GUI crate.
-- Portable build **`D:\builds\pdfce-20260811-1222-6ae476e`**, smoke-tested
+- Portable build **`D:\builds\pdfce-20260811-1247-19c86bd`**, smoke-tested
   by copying to a fresh folder and running both binaries there — the AES
   render matched `bc2dfede94ef290e7c7a7f7e509fea98` from the packaged
-  binary, and `print-preview` reported the turned sheet.
+  binary, and `print-preview` reported `auto` at `0.9725` against
+  `portrait` at `0.7515`.
 
 Filing gate: `check-commits-filed.py` is **clean** (5 known-unfiled carried
 in the baseline as pre-existing debt). Everything this session is filed.
@@ -32,8 +33,10 @@ re-reading.** It printed `clean` while reporting two ceilings that were
 false: decision numbers counted only `docs/decisions/*.md` files (missing
 034-036, 039, 040, which live only in ARCHITECTURE §12), and its ordinal
 vocabulary stopped at "ninety" on the very day `SESSION_LOG.md` reached
-its hundredth filing. Ceilings now read **decisions 041 → next free 042**,
-**filings 103 → next free 104**, **Pass 64.0**, **R186**, **(bj)**.
+its hundredth filing. **Run it; do not infer the ceilings from anywhere
+else.** As of `19c86bd` it reads: Pass **65.0**, decisions **042 → next
+free 043**, rules **R186 → next free R187**, filings **104 → next free
+105**, questions next free **(bk)**.
 
 ---
 
@@ -93,6 +96,30 @@ is now the only route, so the un-turned view is unreachable.
 Measured in the packaged CLI: portrait `0.7515`, landscape `0.9725`,
 **auto `0.9725`** — auto matching landscape is the inert-Auto bug closed.
 
+### Escape cancels every dialog — `Pass 65.0` (`4ddd6c4`)
+
+Operator question **(bj)**, answered by Ken: *"escape should work like it
+does for any other program."* Escape was bound on **none** of the five
+confirmation dialogs and fell through to the canvas ladder, so it acted on
+the document *underneath* the question. One new top rung, above the
+password prompt AND above view mode — the latter because read mode and
+full screen hide the ribbon, so a view-mode win would drop the operator
+out of full screen and leave the question sitting there. Every arm returns
+a **Cancel**, never a Confirm (redaction's confirmed branch is the only
+irreversible operation pdfce has). **Decision 042.**
+
+Two things the tests found, both recorded because they are the reusable
+part. My own doc comment claimed the resolver's match order was
+load-bearing; measured, it is not — the five are mutually exclusive, so
+the tiebreak is never reached, and the comment was corrected in place
+rather than left standing. And a **latent deadlock**: with two questions
+somehow set, *neither* can be answered, because `apply()`'s gate checks
+run in sequence and each dialog's Cancel is dropped by the other's gate.
+Unreachable today only because every pending state is set from inside
+`apply()`. That invariant is now held by
+`at_most_one_confirmation_question_is_ever_up`, driven through the real
+`CloseDocument` path — **a test, not a comment.**
+
 ### The ledger gate (`e293143`) — see "Verified state" above.
 
 ---
@@ -114,8 +141,8 @@ Measured in the packaged CLI: portrait `0.7515`, landscape `0.9725`,
    zeroed `DEVMODEW` and leaves `_printer_wide` unused.
 3. **Imposition has no GUI.** Extract sheet composition into `pdfce-print`
    FIRST so both shells share one implementation.
-4. **Escape-to-cancel is bound on none of the five gated dialogs** — open
-   operator question **(bj)**. **Ken's call; do not settle it solo.**
+4. **No open operator questions.** `(bj)` was answered and closed
+   2026-08-11; next free is `(bk)`.
 5. Static hybrid XFA read/fill · wide-shape CSV · colour management
    (`D:\Dev\iccce\`, planned, no code).
 6. **Ledger-accuracy defect** (librarian-reported, not fixed): filings
@@ -175,6 +202,8 @@ Measured in the packaged CLI: portrait `0.7515`, landscape `0.9725`,
   and both scrollbars appear; Ctrl+wheel over the preview zooms; drag
   pans; **the sheet now turns with the Orientation radio.**
 - **`enc-aes-256-r5.pdf`** — still refused, **by cipher name**.
+- **Escape** now closes any confirmation dialog — print, close, copy,
+  save-conflict, redaction-apply — and always takes the safe branch.
 
 CLI: `pdfce-cli --open-password userpw <cmd> <file>`;
 `print-preview --orientation portrait|landscape|auto <file>` reports the
