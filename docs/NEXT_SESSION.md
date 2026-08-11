@@ -1,160 +1,153 @@
 # NEXT SESSION — start here
 
-**Rewritten 2026-08-10 (third time that day).** Read this, then
-`docs/ROADMAP.md` and the latest `docs/SESSION_LOG.md` entry. This is a
-*handoff*, not a record — the record is the librarian's. Overwrite it
-once acted on.
+Engineer-owned handoff. Read this **before** the librarian's record —
+`ROADMAP.md` says what shipped, this says what is in flight and what the
+next hour should be. Overwrite it once acted on.
 
-Not owned by `pdfce-librarian`. Safe to edit without racing a filing.
-
----
-
-## State
-
-- Branch `pass-8-redaction`, HEAD **`24e07e3`**.
-- **2902 workspace tests, 0 failed.** clippy 0 with `--all-features`,
-  `cargo fmt --all --check` clean. `check-ui-strings.sh`,
-  `check-theme-colors.sh` and `check-disclosure-channel.sh` clean.
-- **117 commits unpushed**, and `main` upstream still does not compile on
-  Linux (`ef88973` fixes it, locally). Pushing is permitted on request
-  and is the operator's call, never an agent's. **R176.**
-- Baseline debt: **5 hashes** in `tools/commits-filed-baseline.txt`. The
-  file is 25 LINES — twenty of them are its header. Count the hashes
-  (`grep -cE '^[0-9a-f]{7,40}'`), not the lines; `wc -l` gives 25 and is
-  wrong.
-- A `pdfce-librarian` filing for the theme + split commits was dispatched
-  at the end of the session and may not have landed. Check
-  `git status` before assuming `docs/` is clean.
+Written 2026-08-10 at `f3dd8ff`.
 
 ---
 
-## ★ WHAT THE OPERATOR IS WAITING TO DECIDE
+## Verified state at `f3dd8ff`
 
-**Three visual themes ship and he has not chosen one.** He asked whether
-the GUI's look would be improved and whether it could be changed without
-a refactor; the answer was "not yet", and the session built the layer
-that makes it yes. He then set the order himself — *"1 then 4 then 3"*:
-theme extraction, then split `main.rs`, then back to features. Both are
-done. For visual direction he answered **"show me options first"**.
+Measured, not assumed:
 
-So: `Settings → Appearance` has **Quiet / Airy / Dark**, applying live.
-**No visual redesign has happened** — only the layer that makes one
-cheap. When he reports back, acting on it is a `theme.rs` edit, not a
-sweep.
+- `cargo test --workspace` — 81 suites, 0 failures.
+- `cargo clippy --workspace --all-targets --all-features` — 0.
+- `cargo fmt --check` — clean. Theme-colour gate — clean.
+- Portable build: `D:\builds\pdfce-20260810-2128-e61f075`.
 
-**Do not restyle before he chooses.** The presets exist to make the
-question answerable, not to pre-empt it.
+`tools/check-commits-filed.py` was **not** clean when this was written —
+`pdfce-librarian` was mid-sweep on an 11-commit backlog. **Run it first**;
+if it still reports, that sweep did not finish and finishing it outranks
+new work.
 
 ---
 
-## Two things blocked on the operator, unchanged
+## ★ Start here: Reset Form
 
-1. **Cryptographic signature verification** needs a crypto dependency —
-   a licensing and scope decision under rule 13, his to make. Everything
-   the Signatures panel shows today is arithmetic over `/ByteRange`, and
-   it says so on screen.
-2. **Printing** previews without spooling. A real job consumes paper on a
-   shared device and is irreversible; it needs an explicit go-ahead.
+The next item on the forms gap list, and the one whose sourcing is
+**already done** — do not re-dispatch for it. `pdfce-spec-librarian`
+returned §12.7.5.3 verbatim this session:
 
----
+> "Upon invocation of a reset-form action, a conforming processor **shall
+> reset** selected interactive form fields to their default values; that
+> is, it **shall set the value of the `V` entry** in the field dictionary
+> **to that of the `DV` entry** (see Table 220). **If no default value is
+> defined for a field, its `V` entry shall be removed.** For fields that
+> can have no value (such as pushbuttons), the action has no effect."
 
-## ★ DECISION 037 — ruled, fixture built, NOT implemented, and that order matters
+Both branches are `shall`, and the second one is the interesting half:
 
-`docs/decisions/037-base-state-off-covers-unregistered-groups.md` rules
-that `/BaseState /OFF` covers groups missing from `/OCProperties /OCGs`.
-pdfce currently answers the opposite (registered-only).
+- **`/DV` present ⇒ `/V := /DV`.**
+- **`/DV` absent ⇒ `/V` is REMOVED** — a key deletion in the incremental
+  save delta, not a value rewritten to empty. Those are different bytes
+  and a different round-trip.
+- **`/DV` is inheritable** (Table 220). Resolve up `/Parent` *before*
+  choosing the branch, or a child with an inherited default takes the
+  removal branch and loses it.
+- Pushbuttons are unaffected; §12.7.4.2.2 says they "shall not use the
+  `V` and `DV` entries" at all.
 
-**Run the falsifier first.** Open
-`fixtures/synthetic/layers/base-state-off-unregistered.pdf` in Acrobat
-Reader and look at the **right-hand square**:
+Two points ISO leaves open, registered in the spec RAG's ambiguity
+register — decide them deliberately and disclose, per the project's
+standing habit of making an unresolvable ambiguity a setting rather than
+a hard-coded guess:
 
-- **square absent** → Reader agrees with the ruling → implement it as a
-  straight fix.
-- **square present** → Reader agrees with pdfce's *current* behaviour →
-  the standard is not adjudicating this, and 037 becomes setting
-  **`OC-A2`** (`AllGroups` / `RegisteredOnly`, default `RegisteredOnly`,
-  evidence tier (a)) instead.
+- **Exclude-mode descendant expansion.** Table 239's descendant
+  parenthetical appears only in the *"if clear"* sentence — an asymmetric
+  row.
+- **Whether a reset re-runs the `/CO` calculation pass.** Now directly
+  relevant, because posture B exists: after a reset, are the calculated
+  fields recomputed or left at their reset values? Acrobat presumably
+  recomputes. pdfce should probably offer the reset and the recompute as
+  two visible steps rather than fusing them.
 
-It could not be run this session: the operator was using the machine and
-`tools/gui-shot.ps1` raises a real window and takes foreground. Acrobat
-Reader is installed (Reader only — not Pro).
+### Implementation notes
 
-`base_state_off_currently_leaves_unregistered_groups_visible` in
-`crates/pdfce-core/tests/layers.rs` pins today's answer **on purpose**,
-so the flip cannot happen quietly. Editing it is the step that forces
-whoever implements 037 to confirm the falsifier ran.
+`EditSession` has no reset verb. The key-deletion pattern it needs
+already exists — `crates/pdfce-core/src/edit.rs:11396` removes `/RV` in
+the rich-text downgrade, and `:7427` removes `/V`/`/AS` — so this is a
+new verb over an established mechanism, not new machinery.
 
-**The refactor is right under either outcome.** 037's real finding is
-that the answer should never have been a `BTreeSet`: a set of OFF groups
-is complete only if its complement is genuinely ON, which fails under
-`/BaseState /OFF`, where the true set is "every group in the document
-minus `/ON`" and is not enumerable. A per-group `OcDefaultState`
-resolver makes the question disappear and is *cheaper* than the
-registry-walk it replaces. It reaches ~5 call sites
-(`oc_is_hidden`, `interpret.rs`'s cache, `render/annot.rs`, the CLI, the
-GUI) plus a defect **`LayerVisibility` inherits for the same reason** —
-it is a bare set documented as "a COMPLETE answer", which under
-`/BaseState /OFF` a set cannot be. Fix both together or the override
-path reintroduces the bug the moment anyone toggles a layer.
-
-Decision **038** is ruled AND implemented; its contingency was
-discharged by a verbatim re-read. Nothing owed there.
-
----
-
-## §8.11 is nearly finished
-
-Shipped this session: content-stream `BDC`/`EMC` `/OC`, XObject `/OC`,
-the operator visibility override, Table 99 `/P` policies, §8.11.2.3
-`/Intent` filtering (with disclosure in both shells), and `/VE`
-visibility expressions.
-
-**Remaining: `/AS` + `/Usage` auto-state application only.** Confirmed by
-a spec-librarian sweep against live source. `/RBGroups` is enforced by
-the GUI panel and correctly out of scope for the renderer; `/Configs` is
-correctly unused.
+Ship it the usual way: core verb, `pdfce-cli reset-form`, and a GUI
+button in the Forms panel beside "Flatten form". **A reset is
+destructive and must not be a bare button** — it discards everything the
+operator typed. Follow the recompute's shape: say what it will clear
+before clearing it.
 
 ---
 
-## Where the GUI is now
+## What just shipped, in case it matters to what you touch
 
-`main.rs` went **27,647 → 25,511** in three separately-revertable moves:
-`canvas_overlay.rs` (749), `panels_structure.rs` (520), `ribbon_ui.rs`
-(1,121). Pure moves — same 2,901 tests before and after.
+**Posture B** (`crates/pdfce-core/src/form_script/`, 7 files, 75 tests) —
+native recompute of recognised Acrobat calculation helpers, with no
+JavaScript engine anywhere. CLI `list-scripts` and `recompute`; GUI
+"Calculated fields" in the Forms panel.
 
-If you continue splitting, the next natural seams are the **form-field
-panel and its helpers** (`forms_panel` at ~7840 through the field-draft
-helpers) and the **text-edit tool** (`run_add_text_tool` onward). Both
-are `&mut self` methods, so use the same technique: an `impl PdfceApp`
-block in the new module. A child module reaches its ancestors' private
-items, so only the calls `main.rs` makes back *up* need `pub(crate)`.
+Read `form_script/shape.rs`'s header before touching any of it. The
+false-positive/false-negative asymmetry there is the whole safety
+argument, and the recogniser must **never** grow into a JavaScript
+parser — that is the first step toward posture C, which R57 prohibits.
 
-**Colour is now gated.** `theme.rs` owns every colour role;
-`tools/check-theme-colors.sh` refuses a raw one elsewhere. The escape
-hatch is real and load-bearing: `// DOCUMENT COLOUR:` marks the three
-sites whose colour reaches a saved PDF, and those must never be themed.
+**Poster imposition** got its CLI route, closing the R83 debt `163742a`
+opened.
 
 ---
 
-## Lessons this session that will save you time
+## Three corrections filed this session — do not re-derive the old versions
 
-- **A textual gate that asserts a needle is PRESENT fails loudly when it
-  loses its subject; one that asserts ABSENCE goes quiet and keeps
-  passing while checking nothing.** Both happened today, hours apart.
-  Prefer present-assertions.
-- **A `diag` step is not an operator route (R184).** Three panels shipped
-  reachable only by the harness, and every verification passed.
-- **Unused-import warnings from a build that ERRORED are meaningless** —
-  analysis stops at the first failure. Cost two cycles.
-- **`wc -l` is not a count of anything you care about.** It was wrong
-  about the baseline file, and `ls docs/decisions | wc -l` is not a count
-  of decisions — §12 numbers and filenames share ONE space and the
-  directory is legitimately sparse. Written into
-  `docs/decisions/README.md` after two agents got it wrong.
-- **Heredocs in this environment halve backslashes.** Any Rust or shell
-  string containing `\n` or a line continuation should be written with
-  the Write tool and spliced, not pasted into a `<<'PY'` block. It
-  silently produced runs of spaces inside two operator-facing messages.
-- **Read the output as its audience (R174).** Two contradictory warnings
-  in one `list-signatures` run, and a wrapped CLI message, were both
-  found by looking at output rather than by any test.
+1. **Decision 009's "hollow shall" premise was false.** The two
+   JavaScript references are in ISO 32000-1 **clause 3, Normative
+   references**, not the Bibliography; the clause's own "(see the
+   Bibliography)" is one of 8+ instances of a systematic erratum. The
+   conclusion survives on the **invocation verb** instead — §12.6.4.16
+   says the documents "give details on", never "shall conform to". So
+   non-execution is a deliberate decision not to implement one clause,
+   **not** a free win. Decision 009 §0 carries the retraction.
+
+2. **`/CO` is §12.7.2 Table 218, and its order is normative** — the
+   `shall` is in §12.6.3 Table 196's `C` row, not in Table 218, whose own
+   wording reads advisory.
+
+3. **§12.6.3 Table 196's `F` row PERMITS a format action to modify the
+   field's value**, and NOTE 2 uses that exact case as its example.
+   pdfce's "a format helper never writes `/V`" is an invariant declining
+   spec-granted latitude. Never document it as compliance.
+
+---
+
+## Outstanding, roughly in value order
+
+- **Reset Form** — above.
+- **Forms authoring gaps**: border style is hard-coded Solid; no
+  password/comb authoring; no `/F` visibility authoring at creation;
+  no XML/CSV import-export; the GUI reaches only `tooltip` of ~30
+  authoring properties.
+- **Decision 037** — ruled, fixture built
+  (`base-state-off-unregistered.pdf`), not implemented. The falsifier is
+  opening that fixture in Acrobat Reader and checking the right-hand
+  square.
+- **Date/time format helpers** decline rather than render
+  (`form_script/format.rs`). The token grammar is fully sourced and
+  implemented-ready; what is missing is how Acrobat *parses* a stored
+  date string back out of a field, which nothing sourced covers. Needs a
+  conservative parser that declines on ambiguity, not a guess.
+- **`sepStyle` 4 and `currStyle`** are unsourced and decline by name. A
+  live-Acrobat spot-check would close both cheaply.
+- **Colour management** — planned as its own project at `D:\Dev\iccce\`,
+  which has a full plan and no code. Its `docs/NEXT_SESSION.md` is the
+  entry point.
+
+---
+
+## The habit worth carrying
+
+Three separate errors this session had one shape: **an assertion nobody
+had measured, which read as settled for as long as nobody looked.** The
+Bibliography claim survived in four documents. A doc comment claimed
+`--poster --booklet` was mutually exclusive while nothing enforced it. A
+montage made correct poster tiles look wrong because every tile was
+scaled to the same size.
+
+`git remote -v` costs nothing. So does running the thing.
