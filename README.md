@@ -20,16 +20,28 @@ creation, editing, filling, flattening and FDF/XFDF import/export;
 markup annotations; redaction (mark, review and apply); Bates
 numbering; PDF/A validation and conversion; digital-signature
 inspection; vector object and node editing; measurement and dimension
-authoring; image placement from PNG, JPEG, BMP and TIFF.
+authoring; image placement from PNG, JPEG, BMP and TIFF; printing, with
+page placement, orientation, duplex, copies and n-up/booklet/poster
+imposition; and **opening password-protected documents** — RC4 40–128
+bit and AES-128, including the empty-user-password case that opens with
+no prompt at all.
 
-**Not built yet**, among other things: OCR, JavaScript, XFA, encrypted
-documents, and a long tail of Acrobat Pro's surface. Some capabilities
-exist in `pdfce-core` and `pdfce-cli` but have no GUI yet.
+**Not built yet**, among other things: OCR, JavaScript, XFA, *writing*
+an encrypted document (pdfce decrypts to read and edit, but cannot yet
+write one back out), AES-256 and `/R 6` decryption, and a long tail of
+Acrobat Pro's surface. Some capabilities exist in `pdfce-core` and
+`pdfce-cli` but have no GUI yet.
 
 **`docs/FEATURES.md` is the honest, current answer** — a capability
 list with per-surface (core / CLI / GUI) checkboxes, updated whenever a
 feature lands rather than at release time. Read that before assuming
-anything here is complete. There has been no tagged release yet.
+anything here is complete.
+
+The current release is
+**[v0.3.0](https://github.com/KenM76/pdfce/releases/latest)** — a
+single-folder portable build for Windows x64. No installer, no registry
+writes: unzip it and run `pdfce-gui.exe`, or `pdfce-cli.exe` for the
+scriptable side.
 
 ## Privacy, platform and signing
 
@@ -108,6 +120,7 @@ affects the file or only the view.
 | `docs/ARCHITECTURE.md` | Crate layout, data model, invariants, packaging, dated decision log. |
 | `docs/ROADMAP.md` | Pass-by-pass plan and history, with the full reasoning. Large. |
 | `docs/decisions/` | Numbered decision records for the choices that needed one. |
+| `docs/DEPENDENCIES.md` | What each third-party package is *for*, by crate, and what pdfce implements itself instead. The purpose-shaped view `THIRD_PARTY_LICENSES.md` (generated, licence-shaped) can't give you. |
 | `docs/LEGAL.md` | Licensing posture, PDF-spec sourcing rules, test-corpus rules, dependency attribution. |
 | `docs/PRIOR_ART.md` | What existing crates and tools were adopted, what was reference-only, and why. |
 | `docs/SESSION_LOG.md` | Append-only development record. |
