@@ -626,6 +626,146 @@ struct ObjectWrite {
     after: Option<Object>,
 }
 
+/// Build a `/BS` border-style dictionary (§12.5.4 Table 166).
+///
+/// One place, called from both widget branches of `add_text_field`. Writing
+/// the two inline would be two implementations of one rule that could drift
+/// — R171 — and the drift would show only as a merged field and a separate
+/// widget disagreeing about a border the operator set once.
+fn border_dict(border: BorderSpec) -> Dict {
+    let mut bs = Dict::new();
+    bs.insert(
+        Name::from(b"S"),
+        Object::Name(Name(border.style.name().to_vec())),
+    );
+    bs.insert(Name::from(b"W"), Object::Real(border.width));
+    bs
+}
+
+/// A widget's border style (§12.5.4, **Table 166**).
+///
+/// pdfce wrote no `/BS` at all until now, which is not the same as writing
+/// nothing: Table 166 gives `/S` a default of `S` and `/W` a default of `1`,
+/// so every field pdfce authored had a solid one-point border by omission.
+/// That was a real style choice made by not making one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BorderStyle {
+    /// `S` — a solid rectangle. Table 166's default, and pdfce's.
+    #[default]
+    Solid,
+    /// `D` — dashed, using the `/D` dash array.
+    Dashed,
+    /// `B` — beveled, a solid border with an embossed highlight.
+    Beveled,
+    /// `I` — inset, a solid border with an engraved lowlight.
+    Inset,
+    /// `U` — underline, a single line along the bottom edge only.
+    Underline,
+}
+
+impl BorderStyle {
+    /// The `/S` name this style writes.
+    #[must_use]
+    pub const fn name(self) -> &'static [u8] {
+        match self {
+            Self::Solid => b"S",
+            Self::Dashed => b"D",
+            Self::Beveled => b"B",
+            Self::Inset => b"I",
+            Self::Underline => b"U",
+        }
+    }
+
+    /// A stable token for CLI arguments and disclosure lines.
+    #[must_use]
+    pub const fn token(self) -> &'static str {
+        match self {
+            Self::Solid => "solid",
+            Self::Dashed => "dashed",
+            Self::Beveled => "beveled",
+            Self::Inset => "inset",
+            Self::Underline => "underline",
+        }
+    }
+}
+
+/// A widget's border, as authored.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BorderSpec {
+    /// The line style.
+    pub style: BorderStyle,
+    /// `/W` — the border width in points. **Zero means no border**, which
+    /// Table 166 states explicitly; it is not a degenerate value to refuse.
+    pub width: f64,
+}
+
+impl Default for BorderSpec {
+    /// Table 166's own defaults: solid, one point. Chosen so that adding
+    /// this type changed no existing output — a field authored before border
+    /// styling existed is byte-identical to one authored with the default.
+    fn default() -> Self {
+        Self {
+            style: BorderStyle::Solid,
+            width: 1.0,
+        }
+    }
+}
+
+/// Where a widget is visible (§12.5.3, Table 165's `/F` flags).
+///
+/// Only the three combinations that make sense for a form field are offered.
+/// The flag word admits others — `Invisible`, `NoZoom`, `ToggleNoView` — and
+/// exposing every bit would let an operator author a field that is legal and
+/// meaningless. This is the smaller, decidable surface.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Visibility {
+    /// Visible on screen and printed. `/F 4` (`Print`) — pdfce's long-standing
+    /// hard-coded value, and still the default.
+    #[default]
+    VisibleAndPrints,
+    /// On screen but never printed. `/F 0`.
+    ///
+    /// Table 165 on `Print`: *"If clear, never print the annotation,
+    /// regardless of whether it is displayed on the screen."*
+    ScreenOnly,
+    /// Printed but not shown on screen. `/F 36` (`Print` + `NoView`).
+    ///
+    /// The inverse of `ScreenOnly`, and genuinely useful: a field that
+    /// carries data onto paper without cluttering the working view.
+    PrintOnly,
+    /// Suppressed everywhere. `/F 2` (`Hidden`).
+    ///
+    /// Distinct from `NoView` and the distinction matters: Table 165 says
+    /// `Hidden` means *"do not display or print … regardless of its
+    /// annotation type"* — gone from screen AND print — whereas `NoView`
+    /// suppresses only the screen and leaves printing to the `Print` flag.
+    Hidden,
+}
+
+impl Visibility {
+    /// The `/F` value this choice writes.
+    #[must_use]
+    pub const fn flags(self) -> i64 {
+        match self {
+            Self::VisibleAndPrints => 4,
+            Self::ScreenOnly => 0,
+            Self::PrintOnly => 36,
+            Self::Hidden => 2,
+        }
+    }
+
+    /// A stable token for CLI arguments and disclosure lines.
+    #[must_use]
+    pub const fn token(self) -> &'static str {
+        match self {
+            Self::VisibleAndPrints => "visible",
+            Self::ScreenOnly => "screen-only",
+            Self::PrintOnly => "print-only",
+            Self::Hidden => "hidden",
+        }
+    }
+}
+
 /// What to author when creating a new **text** form field (§12.7.4.3).
 ///
 /// Construct with [`NewTextField::new`] and refine with the `with_*`
@@ -671,6 +811,28 @@ pub struct NewTextField {
     pub read_only: bool,
     /// `/Ff` bit 2 — the field must have a value when the form is submitted.
     pub required: bool,
+    /// `/Ff` bit 14 — the value is echoed as bullets and **not stored**.
+    ///
+    /// pdfce authors the flag; it does not implement the obscuring, because
+    /// the obscuring is a viewer behaviour and pdfce has no text entry to
+    /// obscure. What the flag changes for pdfce is that a password field's
+    /// value must not be written to disk by a fill, which is the caller's
+    /// obligation to honour and this type's obligation to make visible.
+    pub password: bool,
+    /// `/Ff` bit 25 — the value is laid out in equally-spaced cells.
+    ///
+    /// **Constrained by the spec, and the constraint is enforced.** Table 228
+    /// bit 25: comb *"may be set only if"* `/MaxLen` is present **and**
+    /// `Multiline`, `Password` and `FileSelect` are all clear. pdfce refuses
+    /// the combination rather than emitting it, because the ambiguity
+    /// register records this as one of four producer gates with **no reader
+    /// recovery rule at all** — a file that breaks it has no defined
+    /// rendering, so every reader is free to do something different.
+    pub comb: bool,
+    /// `/BS` — the widget's border style and width (§12.5.4 Table 166).
+    pub border: BorderSpec,
+    /// `/F` — where the widget is visible (§12.5.3 Table 165).
+    pub visibility: Visibility,
 }
 
 /// Whether the operator has decided about `/TU`, the accessibility name
@@ -996,7 +1158,44 @@ impl NewTextField {
             multiline: false,
             read_only: false,
             required: false,
+            password: false,
+            comb: false,
+            // Table 166's own defaults, so a field authored with no border
+            // opinion is byte-identical to one authored before this existed.
+            border: BorderSpec::default(),
+            visibility: Visibility::default(),
         }
+    }
+
+    /// Set the border style and width (§12.5.4 Table 166).
+    #[must_use]
+    pub const fn with_border(mut self, style: BorderStyle, width: f64) -> Self {
+        self.border = BorderSpec { style, width };
+        self
+    }
+
+    /// Set where the widget is visible (§12.5.3 Table 165).
+    #[must_use]
+    pub const fn with_visibility(mut self, visibility: Visibility) -> Self {
+        self.visibility = visibility;
+        self
+    }
+
+    /// Set the password flag (`/Ff` bit 14).
+    #[must_use]
+    pub const fn with_password(mut self, password: bool) -> Self {
+        self.password = password;
+        self
+    }
+
+    /// Set the comb flag (`/Ff` bit 25).
+    ///
+    /// Refused at authoring time unless `/MaxLen` is present and multiline,
+    /// password and file-select are clear — see [`NewTextField::comb`].
+    #[must_use]
+    pub const fn with_comb(mut self, comb: bool) -> Self {
+        self.comb = comb;
+        self
     }
 
     /// Set the initial value.
@@ -1053,7 +1252,36 @@ impl NewTextField {
         if self.multiline {
             ff |= i64::from(forms::FieldFlags::MULTILINE);
         }
+        if self.password {
+            ff |= i64::from(forms::FieldFlags::PASSWORD);
+        }
+        if self.comb {
+            ff |= i64::from(forms::FieldFlags::COMB);
+        }
         ff
+    }
+
+    /// Whether this spec would emit a `Comb` flag the standard forbids.
+    ///
+    /// Table 228 bit 25: comb *"may be set only if"* `/MaxLen` is present
+    /// **and** `Multiline`, `Password` and `FileSelect` are all clear.
+    /// (`FileSelect` cannot be set through this type at all, so it cannot
+    /// conflict.) Returns the first unmet condition, for a refusal that names
+    /// what is wrong rather than merely that something is.
+    fn comb_conflict(&self) -> Option<&'static str> {
+        if !self.comb {
+            return None;
+        }
+        if self.max_len.is_none() {
+            return Some("comb needs /MaxLen, which says how many cells to draw");
+        }
+        if self.multiline {
+            return Some("comb and multiline cannot both be set");
+        }
+        if self.password {
+            return Some("comb and password cannot both be set");
+        }
+        None
     }
 }
 
@@ -2031,6 +2259,20 @@ pub enum EditError {
         w: f64,
         /// Height in user-space units.
         h: f64,
+    },
+    /// A `Comb` text field that breaks Table 228 bit 25's precondition.
+    ///
+    /// Refused at authoring rather than emitted, because the ambiguity
+    /// register records this as one of four **producer** gates with no reader
+    /// recovery rule anywhere in the standard. A file that breaks it has no
+    /// defined rendering, so two viewers may legitimately disagree about what
+    /// it looks like — and pdfce would have authored that disagreement.
+    #[error("{name}: {reason}")]
+    CombPreconditionUnmet {
+        /// The field being created.
+        name: String,
+        /// Which precondition failed.
+        reason: &'static str,
     },
     /// An authoring write could not resolve its name against the field tree.
     ///
@@ -6524,6 +6766,14 @@ impl EditSession {
     /// `check_certification`, the same gate `add_markup` and `flatten_fields`
     /// take.
     pub fn add_text_field(&mut self, spec: &NewTextField) -> Result<FieldAuthorOutcome, EditError> {
+        // Checked BEFORE the preflight, so a refusal costs nothing and
+        // nothing partial is staged.
+        if let Some(reason) = spec.comb_conflict() {
+            return Err(EditError::CombPreconditionUnmet {
+                name: spec.name.clone(),
+                reason,
+            });
+        }
         let (w, h) = (spec.rect.urx - spec.rect.llx, spec.rect.ury - spec.rect.lly);
         let (page_id, slots, path, disclosures) = self.field_authoring_preflight(
             &spec.name,
@@ -6595,6 +6845,8 @@ impl EditSession {
                 ]),
             );
             w.insert(Name::from(b"MK"), Object::Dict(mk));
+            w.insert(Name::from(b"BS"), Object::Dict(border_dict(spec.border)));
+            w.insert(Name::from(b"F"), Object::Integer(spec.visibility.flags()));
 
             let mut objects = vec![ObjectWrite {
                 id: ap_id,
@@ -6703,6 +6955,13 @@ impl EditSession {
             ]),
         );
         d.insert(Name::from(b"MK"), Object::Dict(mk));
+        // `/BS` — §12.5.4 Table 166. Written unconditionally, including for
+        // the default: an explicit solid one-point border and an absent
+        // `/BS` render identically, but only the explicit one survives an
+        // operator later reading the file to see what was chosen.
+        d.insert(Name::from(b"BS"), Object::Dict(border_dict(spec.border)));
+        // Overwrites `widget_base_dict`'s Print default.
+        d.insert(Name::from(b"F"), Object::Integer(spec.visibility.flags()));
         let mut ap = Dict::new();
         ap.insert(Name::from(b"N"), Object::Reference(ap_id));
         d.insert(Name::from(b"AP"), Object::Dict(ap));
@@ -7401,6 +7660,10 @@ impl EditSession {
             ]),
         );
         d.insert(Name::from(b"P"), Object::Reference(page_id));
+        // `/F` defaults to Print here and every caller that wants otherwise
+        // overwrites it after. Kept as a default rather than a parameter so
+        // the four existing callers did not all have to grow an argument to
+        // say "the thing you already did".
         d.insert(Name::from(b"F"), Object::Integer(4));
         // `/TU` only when the operator SUPPLIED one. A declined tooltip
         // writes nothing and is reported instead (R105) — an empty `/TU`
@@ -16201,6 +16464,217 @@ mod tests {
             .expect("field")
             .value
             .clone()
+    }
+
+    // -----------------------------------------------------------------
+    // Text-field authoring properties: border, visibility, password, comb
+    // -----------------------------------------------------------------
+
+    /// A one-page document with nothing on it, ready to author into.
+    fn blank_page_doc() -> Vec<u8> {
+        crate::pageops::tests_support::build_pdf_bytes(&[
+            (1, "<< /Type /Catalog /Pages 2 0 R >>"),
+            (2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
+            (
+                3,
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] \
+                 /Resources << /Font << /Helv 4 0 R >> >> >>",
+            ),
+            (4, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"),
+        ])
+    }
+
+    fn authored(spec: &NewTextField) -> (EditSession, ObjId) {
+        let mut session = EditSession::new(Document::from_bytes(blank_page_doc()).unwrap());
+        let out = session.add_text_field(spec).expect("authors");
+        (session, out.field_id)
+    }
+
+    fn dict_of(session: &EditSession, id: ObjId) -> Dict {
+        session
+            .graph()
+            .resolved(id)
+            .as_dict()
+            .cloned()
+            .expect("field dict")
+    }
+
+    fn spec_named(name: &str) -> NewTextField {
+        NewTextField::new(
+            0,
+            name,
+            page_tree::Rect {
+                llx: 10.0,
+                lly: 700.0,
+                urx: 200.0,
+                ury: 722.0,
+            },
+        )
+        .with_tooltip("t")
+    }
+
+    /// ★ **Every border style reaches `/BS /S`, and the width reaches `/W`.**
+    ///
+    /// Before this existed pdfce wrote no `/BS` at all — which is not the
+    /// same as writing nothing, because Table 166 defaults `/S` to `S` and
+    /// `/W` to 1. Every field pdfce authored had a solid one-point border by
+    /// omission: a style choice made by not making one.
+    #[test]
+    fn every_border_style_reaches_the_widget() {
+        for (style, want) in [
+            (BorderStyle::Solid, "S"),
+            (BorderStyle::Dashed, "D"),
+            (BorderStyle::Beveled, "B"),
+            (BorderStyle::Inset, "I"),
+            (BorderStyle::Underline, "U"),
+        ] {
+            let spec = spec_named("F").with_border(style, 2.5);
+            let (session, id) = authored(&spec);
+            let d = dict_of(&session, id);
+            let bs = d.get(b"BS").and_then(Object::as_dict).expect("/BS written");
+            assert_eq!(
+                bs.get(b"S").and_then(Object::as_name).map(|n| n.as_bytes()),
+                Some(want.as_bytes()),
+                "{style:?}"
+            );
+            let w = bs
+                .get(b"W")
+                .and_then(Object::as_number)
+                .expect("/W written");
+            assert!((w - 2.5).abs() < 1e-9);
+        }
+    }
+
+    /// A zero width is a real setting — Table 166 says zero means no border —
+    /// and is written rather than treated as "unset".
+    #[test]
+    fn a_zero_border_width_is_a_setting_not_an_omission() {
+        let (session, id) = authored(&spec_named("F").with_border(BorderStyle::Solid, 0.0));
+        let d = dict_of(&session, id);
+        let bs = d.get(b"BS").and_then(Object::as_dict).expect("/BS");
+        assert_eq!(bs.get(b"W").and_then(Object::as_number), Some(0.0));
+    }
+
+    /// ★ **`Hidden` and `PrintOnly` are different flag words, and the
+    /// difference is the whole point of offering both.**
+    ///
+    /// Table 165: `Hidden` suppresses screen AND print "regardless of its
+    /// annotation type"; `NoView` suppresses only the screen and leaves
+    /// printing to the `Print` flag. Collapsing them would silently stop a
+    /// field printing that the operator asked to print.
+    #[test]
+    fn visibility_writes_the_flag_word_that_matches_its_name() {
+        for (visibility, want) in [
+            (Visibility::VisibleAndPrints, 4),
+            (Visibility::ScreenOnly, 0),
+            (Visibility::PrintOnly, 36),
+            (Visibility::Hidden, 2),
+        ] {
+            let (session, id) = authored(&spec_named("F").with_visibility(visibility));
+            let d = dict_of(&session, id);
+            assert_eq!(
+                d.get(b"F").and_then(Object::as_int),
+                Some(want),
+                "{visibility:?}"
+            );
+        }
+        assert_ne!(
+            Visibility::Hidden.flags(),
+            Visibility::PrintOnly.flags(),
+            "hidden everywhere and hidden-on-screen-only are not the same"
+        );
+    }
+
+    /// The default is what pdfce always wrote, so adding the setting changed
+    /// nothing for a caller that did not ask for it.
+    #[test]
+    fn the_authoring_defaults_reproduce_the_previous_output() {
+        let (session, id) = authored(&spec_named("F"));
+        let d = dict_of(&session, id);
+        assert_eq!(d.get(b"F").and_then(Object::as_int), Some(4));
+        let bs = d.get(b"BS").and_then(Object::as_dict).expect("/BS");
+        assert_eq!(
+            bs.get(b"S").and_then(Object::as_name).map(|n| n.as_bytes()),
+            Some(b"S".as_slice())
+        );
+        assert_eq!(bs.get(b"W").and_then(Object::as_number), Some(1.0));
+    }
+
+    /// The password flag reaches `/Ff` bit 14.
+    #[test]
+    fn the_password_flag_reaches_the_field() {
+        let (session, id) = authored(&spec_named("F").with_password(true));
+        let ff = dict_of(&session, id)
+            .get(b"Ff")
+            .and_then(Object::as_int)
+            .expect("/Ff");
+        assert_eq!(ff & i64::from(forms::FieldFlags::PASSWORD), 8192);
+    }
+
+    /// ★ **A comb field that breaks Table 228 bit 25 is REFUSED, and the
+    /// refusal names which precondition failed.**
+    ///
+    /// The ambiguity register records this as one of four producer gates
+    /// with **no reader recovery rule at all** — a file that breaks it has no
+    /// defined rendering, so authoring one would author a disagreement
+    /// between viewers.
+    #[test]
+    fn a_comb_field_breaking_its_precondition_is_refused_by_name() {
+        // No /MaxLen: nothing says how many cells to draw.
+        let err = {
+            let mut session = EditSession::new(Document::from_bytes(blank_page_doc()).unwrap());
+            session
+                .add_text_field(&spec_named("F").with_comb(true))
+                .expect_err("must refuse")
+        };
+        assert!(matches!(err, EditError::CombPreconditionUnmet { .. }));
+        assert!(err.to_string().contains("MaxLen"), "{err}");
+
+        // With /MaxLen but also multiline.
+        let err = {
+            let mut session = EditSession::new(Document::from_bytes(blank_page_doc()).unwrap());
+            let spec = spec_named("F")
+                .with_comb(true)
+                .with_max_len(10)
+                .with_flags(true, false, false);
+            session.add_text_field(&spec).expect_err("must refuse")
+        };
+        assert!(err.to_string().contains("multiline"), "{err}");
+
+        // With /MaxLen but also password.
+        let err = {
+            let mut session = EditSession::new(Document::from_bytes(blank_page_doc()).unwrap());
+            let spec = spec_named("F")
+                .with_comb(true)
+                .with_max_len(10)
+                .with_password(true);
+            session.add_text_field(&spec).expect_err("must refuse")
+        };
+        assert!(err.to_string().contains("password"), "{err}");
+    }
+
+    /// A comb field that MEETS the precondition is authored, so the gate
+    /// refuses the malformed case rather than the feature.
+    #[test]
+    fn a_comb_field_meeting_its_precondition_is_authored() {
+        let (session, id) = authored(&spec_named("F").with_comb(true).with_max_len(8));
+        let d = dict_of(&session, id);
+        let ff = d.get(b"Ff").and_then(Object::as_int).expect("/Ff");
+        assert_eq!(ff & i64::from(forms::FieldFlags::COMB), 16777216);
+        assert_eq!(d.get(b"MaxLen").and_then(Object::as_int), Some(8));
+    }
+
+    /// A refused comb leaves NOTHING staged — the check runs before the
+    /// preflight, so a rejected spec cannot half-create a field.
+    #[test]
+    fn a_refused_comb_stages_nothing() {
+        let mut session = EditSession::new(Document::from_bytes(blank_page_doc()).unwrap());
+        let before = forms::parse_acroform(&session.graph()).map(|f| f.fields.len());
+        session
+            .add_text_field(&spec_named("F").with_comb(true))
+            .expect_err("refuses");
+        let after = forms::parse_acroform(&session.graph()).map(|f| f.fields.len());
+        assert_eq!(before, after, "no form was created by a refused add");
     }
 
     /// ★ **The preview agrees with the act it previews.**
