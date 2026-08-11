@@ -112,15 +112,25 @@
 //!   safe fallback rather than a guess. A broken *primary* section is
 //!   still fatal.
 //!
-//! ## Encryption is detected, not guessed at (§7.6)
+//! ## Encryption is detected here and handled one layer up (§7.6)
 //!
 //! If the newest trailer has `/Encrypt`, strings and stream data in the
 //! file are encrypted and every downstream layer would silently decode
-//! garbage. That is refused up front with
-//! [`XrefErrorKind::EncryptionUnsupported`] — a *named capability gap*,
-//! the same detect-don't-misparse posture the rest of this module
-//! takes. It lands here (rather than in the document layer) because the
-//! trailer is where the fact is discovered.
+//! garbage.
+//!
+//! **This module used to refuse such a document outright.** It no longer
+//! does: [`crate::crypto`] implements the `/Standard` handler for RC4, so
+//! the decision is no longer "encrypted or not" but "which configuration,
+//! and does a password open it" — and neither question can be answered
+//! from the cross-reference layer, which has no objects yet and so cannot
+//! resolve an indirect `/O`, `/U` or `/CF`.
+//!
+//! So this layer *detects* and reports; [`crate::document::Document`]
+//! decides. [`XrefErrorKind::EncryptionUnsupported`] survives for the one
+//! case that genuinely belongs here — a document whose cross-reference
+//! machinery is broken **and** which is encrypted, where rebuild-by-scan
+//! would have to parse ciphertext to find objects (see
+//! [`crate::recover`]).
 //!
 //! ## Entry format enforced strictly (§7.5.4)
 //!
@@ -316,12 +326,21 @@ pub enum XrefErrorKind {
     /// damaged or unsupported-filter stream).
     #[error("cross-reference stream could not be decoded: {0}")]
     XrefStreamDecode(#[from] FilterError),
-    /// The document is encrypted (§7.6): the newest trailer carries
-    /// `/Encrypt`. A *named capability gap*, not file damage — pdfce
-    /// has no security handler yet, and decoding an encrypted file
-    /// without one yields plausible-looking garbage rather than an
-    /// error, so it is refused here (module docs).
-    #[error("encrypted documents (\u{a7}7.6) are not yet supported")]
+    /// The document is encrypted (§7.6) **and** its cross-reference
+    /// machinery could not be read, so rebuild-by-scan would have to find
+    /// objects in ciphertext.
+    ///
+    /// **No longer raised for a merely encrypted document.** Since
+    /// [`crate::crypto`] implements the `/Standard` handler, an encrypted
+    /// file with an intact cross-reference table is loaded and decrypted
+    /// (or refused with a *specific* reason — a named cipher, a named
+    /// handler, a password prompt). This variant now means exactly what its
+    /// name says in the recovery context: encryption that blocks
+    /// *recovery*, raised by [`crate::document`] when
+    /// [`crate::recover::RecoverError::Encrypted`] comes back.
+    #[error(
+        "encrypted documents (\u{a7}7.6) cannot be recovered by scanning: object bodies are ciphertext"
+    )]
     EncryptionUnsupported,
     /// A subsection header line wasn't `first count` (two
     /// non-negative integers).
@@ -529,14 +548,11 @@ pub fn load_xref_chain(buf: &[u8]) -> Result<LoadedXref, XrefError> {
         XrefErrorKind::NotAnXrefSection,
     ))?;
 
-    // §7.6: refuse encrypted documents up front rather than decoding
-    // ciphertext as if it were content (module docs).
-    if trailer.contains_key(b"Encrypt") {
-        return Err(XrefError::new(
-            first_offset,
-            XrefErrorKind::EncryptionUnsupported,
-        ));
-    }
+    // §7.6: encryption is NOT refused here any more. The trailer is where
+    // the fact is discovered, but not where it can be acted on — resolving
+    // an `/O`, `/U` or `/CF` entry that is an indirect reference needs
+    // objects, and there are none yet. `Document::assemble` authenticates
+    // and decrypts; see `crate::crypto`.
 
     // Captured BEFORE the filter: the writer needs to know what the
     // file physically mentions, not what a reader is allowed to see.
@@ -1479,17 +1495,26 @@ mod tests {
     }
 
     #[test]
-    fn encrypted_document_is_a_named_capability_gap() {
-        // §7.6: pdfce has no security handler, and decoding ciphertext
-        // as content produces plausible garbage rather than an error —
-        // so the refusal is up front and specific.
+    fn encryption_is_reported_to_the_document_layer_not_refused_here() {
+        // This assertion is the REVERSE of what it was before
+        // `crate::crypto` existed, and the reversal is the point: an
+        // encrypted document with an intact cross-reference table now loads
+        // as far as the trailer, and the decision about ciphers, passwords
+        // and refusals belongs to `Document::assemble`, which has objects to
+        // resolve indirect `/O`, `/U` and `/CF` entries with.
+        //
+        // What this layer must still do is carry `/Encrypt` through intact —
+        // silently dropping it would hand ciphertext to the content parser.
         let buf = with_xref_tail(
             b"",
             "xref\n0 1\n0000000000 65535 f\r\n",
             "trailer\n<< /Size 1 /Root 1 0 R /Encrypt 9 0 R >>\n",
         );
-        let e = load_xref_chain(&buf).unwrap_err();
-        assert_eq!(e.kind, XrefErrorKind::EncryptionUnsupported);
+        let loaded = load_xref_chain(&buf).expect("encryption is no longer refused here");
+        assert!(
+            loaded.trailer.contains_key(b"Encrypt"),
+            "/Encrypt must survive to the document layer"
+        );
     }
 
     // ---- cross-reference stream row/dictionary decoding (§7.5.8.2-3) ----

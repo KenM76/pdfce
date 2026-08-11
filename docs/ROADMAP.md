@@ -81,6 +81,307 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★ `5dfef4d` — the v0.2.0 near-miss becomes a check: `tools/verify-release.py` catches a tag on the right commit but the wrong BRANCH — 2026-08-11, branch `post-v0.2.0` (ninety-fifth filing)
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — `git log -1
+--format=%B 5dfef4d` not run, and the diff itself not read. The
+dispatching engineer supplied the commit message **verbatim, in full**,
+which is a stronger source than the paraphrase-relay most filings work
+from — but "verbatim message" is not "independently confirmed": this
+librarian did not check that `5dfef4d` on disk actually carries this
+text, or that `tools/verify-release.py`'s code matches what the message
+claims about it. Reported as **quoted, not verified**.
+
+**No Pass ID — ledger/gate infrastructure, same class as
+`check-commits-filed.py` (2026-08-09), `check-disclosure-channel.sh`
+(2026-08-09) and `gui-drive.ps1`'s filter fix (2026-08-10): a report-only
+script enforcing a discipline already written down elsewhere, not new
+product capability. No `ARCHITECTURE.md` §12 entry for the same reason
+those had none — nothing here redraws a crate boundary, library choice,
+or invariant.**
+
+**What the incident was, in the commit's own words.** The engineering
+session had been on branch `pass-8-redaction` throughout. `git push
+origin main` therefore pushed the **local `main`** — **36 commits
+behind** the session's actual `HEAD` — while the release tag correctly
+pointed at `HEAD`:
+
+```
+5007bef..826e351  main -> main     <- an OLD commit, not HEAD
+```
+
+The push **reported success**, because it did exactly what was typed
+(`push origin main`) and not what was meant (publish the tagged commit's
+own history) — "there is no error to read" is the commit's own framing,
+and it is the accurate one: a stale local branch fast-forwarding to
+another stale point is, from git's perspective, an entirely ordinary
+push. The release asset itself would have been correct (built from the
+working tree, genuinely at `HEAD`); the repository's `main` would not
+have been, and anyone cloning at the release would have gotten neither
+the tagged code nor any visible sign anything was wrong. This is the
+same incident this document's own ninety-fourth-filing entry (`v0.2.0`
+tagged at `5beecf6`, immediately below) already recorded as a
+release-process finding and explicitly flagged for follow-up tooling;
+`5dfef4d` is that follow-up, cross-referenced both directions.
+
+**What the gate checks, and the one check that is the actual point.**
+Clean working tree; tag exists; tag is at `HEAD`; tag is pushed; a
+GitHub release exists carrying at least one asset — and, the check the
+incident itself was missing, **`origin/main` is AT the tagged commit.**
+A tag reachable only from a side branch means the branch anyone actually
+clones does not contain the release, no matter how correct the tag
+itself is.
+
+**Verified by making it fail, not merely by passing — R162's own bar,
+cited by the commit itself.** Passing against `v0.2.0` (where everything
+is currently correct) proves little on its own, since a script that
+printed "ok" unconditionally would look identical on that one input. Run
+instead against `v0.1.0` — genuinely stale — the gate fails on exactly
+the two checks it should (tag-is-at-`HEAD`, `origin/main`-is-at-the-tag),
+**both hashes named in the failure output.** A guard tested only against
+its own passing case is a guard nobody has tested; this one was tested
+against the case it exists to catch. Exit status was confirmed
+separately from the pipeline it normally runs inside, because `| sed`
+had been masking the real status behind the pipeline's own — 1 on
+failure, 0 on a clean release, so it can gate a release script rather
+than merely inform one.
+
+**Two small, deliberate details, both process-shaped rather than
+logic-shaped, per the commit's own text.** Printed output is kept pure
+ASCII — an em dash rendered as a replacement character on the Windows
+console this project actually runs from, a recurrence of a finding
+already on file in `D:\dev\rag\rust\`
+(`lesson_20260506_powershell_ps1_ascii_only.md`'s own Python-side
+addendum, `check-commits-filed.py`'s prior mojibake) — while prose
+inside the script's own docstring keeps its typography, since nothing
+ever prints that text to a console. And the tool **reports and never
+acts**: no push, no tag, no publish call anywhere in it — those stay the
+operator's per rule 8, unchanged by this commit.
+
+**★ The generalizable half — not Rust, not PDF-domain, a git-workflow
+finding — escalated to `C:\personal_rag\claude_code\` rather than left
+only in this project's own history.** `git push origin <branch>`
+publishes whichever LOCAL ref is literally named `<branch>`, irrespective
+of what is checked out, and reports ordinary success either way; the
+check that catches it is comparing `git rev-parse origin/main` against
+the tagged commit, run **after** pushing, not inferred from the push
+command's own exit code. New lesson:
+`C:\personal_rag\claude_code\lesson_20260811_git_push_origin_branch_ignores_checked_out_branch.md`,
+indexed under a new "Git push / release-branch verification (2026-08-11)"
+section in that subject's own `index.md`, and given a top-slot entry in
+the master `C:\personal_rag\index.md`. **Filed to `claude_code/`, not
+`D:\dev\rag\rust\`** — this librarian's own judgment call, per the
+dispatching engineer's explicit invitation to make it: the finding is
+about `git`'s own push semantics under a release workflow an agent was
+executing, not about the Rust toolchain, Cargo, or Windows packaging,
+which is what that RAG's scope statement (its own `index.md` header)
+actually names. It sits beside that subject's existing "Git / GitHub
+history hygiene" section (the force-push/orphaned-commit lesson,
+2026-06-12) as a second, distinct git-release-workflow finding, not a
+duplicate of it — that one is about purging already-published history;
+this one is about a push never reaching the intended branch at all.
+
+**`docs/FEATURES.md`: not touched, genuinely a no-op, not an oversight.**
+`tools/verify-release.py` is a dev-only release gate with no `pdfce-core`/
+`pdfce-cli`/`pdfce-gui` surface and no user-facing capability — there is
+no row for it to tick and inventing one would be exactly the kind of
+row-for-a-dev-tool the operator's own instruction for this filing warned
+against.
+
+**Gates and tests, relayed (per the sourcing note above, not
+independently re-run):** confirmed passing on `v0.2.0`; confirmed failing
+on `v0.1.0` on the two expected checks with both hashes named; exit
+status 0/1 confirmed independent of the pipeline that had been masking
+it.
+
+**Ledger for this filing.** No new Pass ID. Pass-family ceiling unchanged
+at **62.0**, next free **63**. Standing rules: **`R162` cited**
+(proven-to-fail-first, discharged by running the gate against a
+genuinely stale tag) — no new mint; this is a clean instance of an
+already-named discipline, not a new failure shape. `ARCHITECTURE.md`
+§12: **not edited** — see the entry's own opening classification.
+Decision records: unchanged, ceiling **035**, next free **036**.
+Operator-question ceiling unchanged at **(bh)**, next free **(bi)**.
+`docs/FEATURES.md`: **explicitly not touched — a stated no-op, not an
+omission** (see above). `D:\dev\rag\rust\`: **not written to** — the
+generalizable finding was filed to `personal_rag/claude_code` instead,
+per this librarian's own scoping judgment, recorded above. `C:\personal_rag\pdf\`:
+not applicable, no PDF-domain content in this commit. **Backup/git
+working-tree/remote state beyond what this entry explicitly relays is
+not asserted** — no shell this dispatch (hard rule 8); the engineer
+should check `D:\Dev\pdfce-backups\` and `git log`/`git status`/`git
+remote -v` directly, on the current branch (`post-v0.2.0`), not
+`pass-8-redaction` where the incident happened. This is the
+**ninety-fifth** `ROADMAP.md` filing (the ninety-fourth confirmed present
+by direct read, immediately below, before this entry was prepended).
+
+---
+
+### ★ `2fddcdd` closes `b4a66ed`'s own GUI-side R151 debt: `commit_field_draft`'s `CheckBox`/`Radio`/`Choice` arms now forward border/visibility instead of silently discarding it; `docs/FEATURES.md` is rewritten to a scan (407 → 265 lines, longest row 12,965 → 313 chars) — 2026-08-11 (ninety-fourth filing)
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — `git log -1
+--format=%B 2fddcdd` not run. Content relayed by the dispatching
+engineer, who identified this commit as forwarding the exact defect
+this librarian's own ninety-third-filing entry (`b4a66ed`, immediately
+below) found and flagged. **Independently confirmed by direct
+`Read`:** `docs/FEATURES.md` in full — 265 lines (`Grep` count),
+one-sentence-per-row, no bracketed addenda anywhere in the file,
+matching the concision contract its own header states. Not
+independently confirmed: the `commit_field_draft` diff itself (no
+shell), and the 407-line/12,965-character before-figures (relayed;
+this librarian never read the file in its pre-rewrite state to check
+them against).
+
+**Two unrelated halves, one commit — a mixed commit in the same shape
+`check-commits-filed.py`'s own docstring names (the `b4a66ed`
+blind-spot fix).**
+
+**Half 1 — the GUI-side R151 debt `b4a66ed` flagged is now closed.**
+That entry (ninety-third filing, immediately below) found that
+`crates/pdfce-gui/src/main.rs`'s `commit_field_draft` drew
+border/visibility controls for every field kind but only the `Text`
+match arm actually forwarded `draft.border`/`draft.border_width`/
+`draft.visibility` onto the built spec — the `CheckBox`, `Radio` and
+`Choice` arms silently discarded an operator's change to either
+control, invisible in the common case only because `New*::new()`'s own
+defaults happen to match the draft's initial values. Per the
+dispatching engineer, `2fddcdd` adds the matching `.with_border(...)`/
+`.with_visibility(...)` calls to those three arms. **`PushButton`
+remains out of scope** — there is still no `PushButton` arm in the
+GUI's `NewFieldKind` at all, a separate, pre-existing gap `b4a66ed`
+named as out of this defect's scope, unchanged by this commit.
+`docs/FEATURES.md`'s *CREATE a form field* row already read `◐` for
+`gui` on the push-button gap alone and needs no further edit — the
+border/visibility defect was never itself named in that row's
+sentence (it was a silent commit-path bug, not a documented capability
+gap), so fixing it changes no checkbox.
+
+**Half 2 — the `FEATURES.md` concision rewrite, operator-requested,
+that this librarian deliberately stood aside for.** `b4a66ed`'s own
+Ledger paragraph already recorded the reason: a bracketed addendum
+this librarian had added to the *CREATE a form field* row was
+superseded mid-dispatch when "the coordinator claimed the file... for
+a full concision rewrite... and instructed this librarian not to touch
+it further." This entry records the rewrite's own numbers, relayed:
+**407 lines → 265 lines**, and the single most telling figure — the
+longest table row's length, **12,965 characters → 313 characters**.
+The file's own header already read *"deliberately concise — this is a
+scan, not a record"* before this rewrite; per the dispatching
+engineer, that instruction had been losing to accretion one addendum
+at a time, which is exactly the shape 12,965 characters in one row
+describes. **The operating rule going forward, stated so it binds this
+librarian's own future filings and not only the rewritten file's
+header:** when a row changes, the sentence is **replaced**, never
+appended to. This librarian's own memory file
+(`project_features_md_concision_rewrite_20260811.md`) already records
+this instruction; restated here so it is binding from `ROADMAP.md`
+itself, not only from a memory note the next session may not load.
+
+**Why this is filed as one entry rather than two.** The commit is one
+object in git history; splitting its citation across two Shipped
+entries would make `check-commits-filed.py`'s join technically
+satisfied twice for no added clarity, and the two halves share a
+single cause worth stating together — an operator-visible defect this
+librarian found, and the document that defect's own citation-history
+lives in, landed in the same commit because the coordinator's
+mid-session claim on `FEATURES.md` and the engineer's fix to the
+defect this librarian flagged happened to close out together.
+
+**Ledger for this filing.** No new Pass ID — filed against the
+existing `Pass 20.0` (R170), same family as `f83be5a`/`30c0940`/
+`3fe8a19`/`b4a66ed`. `docs/FEATURES.md`: **the concision rewrite
+itself, recorded above** — no row's checkboxes changed as a further
+result of the border/visibility fix (see Half 1). `docs/ARCHITECTURE.md`
+§12: **not edited** — a GUI commit-path fix plus a documentation
+concision pass redraws no crate boundary, library choice, or
+invariant. **Standing rules: `R151` cited** — this closes the GUI-side
+residual `b4a66ed` (fourth instance, CLI-side) left flagged rather than
+minting a fifth instance; no new number. Decision records: unchanged,
+ceiling **035**, next free **036**. Operator-question ceiling
+unchanged at **(bh)**, next free **(bi)**. Gate figures not
+independently re-run — no shell this dispatch (hard rule 8); relayed
+gate status is carried under the v0.2.0 release entry immediately
+below, which the engineer reported as measured before tagging.
+**Backup/git working-tree state not asserted anywhere in this filing**
+— the engineer should check `D:\Dev\pdfce-backups\` and `git log`/`git
+status` directly. This is the **ninety-fourth** `ROADMAP.md` filing
+(the ninety-third confirmed present by direct read, above, before this
+entry was prepended).
+
+---
+
+### ★ `v0.2.0` tagged and released at `5beecf6` — second release since `v0.1.0` (35 commits back); a release-process finding worth a permanent record: tagging the right commit does not mean pushing the right BRANCH — 2026-08-11 (ninety-fourth filing, same dispatch as `2fddcdd` above)
+
+**Sourcing.** No shell tool this dispatch (hard rule 8). All content —
+the tag, the push, the GitHub release, the gate figures, and the
+branch-mismatch finding itself — is relayed from the dispatching
+engineer's own account of a check that engineer performed (`git
+rev-parse origin/main` against `HEAD`, after the push). Nothing here
+is independently re-verified against `git`; per hard rule 8 this
+librarian reports the figures as **relayed, not measured**, and does
+not claim to have checked backup or remote state itself.
+
+**What shipped.** `v0.2.0` tagged at `5beecf6`, pushed, GitHub release
+created carrying the portable Windows zip. Per the dispatching
+engineer, verified before tagging: **81 suites / 3,256 tests / 0
+failures**; `cargo clippy` **0** with `--all-features`; all gates
+green; `THIRD_PARTY_LICENSES.md` regenerated via `cargo-about` and
+confirmed **content-identical** to the pre-regeneration file — no
+dependency was added this cycle, so the regeneration is a proof of
+stability, not a record of change.
+
+**★ The release-process finding, recorded because it is reusable
+process knowledge, not a one-off correction to this cycle's own
+numbers.** The engineer had been working the entire session on branch
+`pass-8-redaction`. `git push origin main` therefore pushed the
+**local `main` branch** — **36 commits behind** the engineer's actual
+`HEAD` — while the tag correctly pointed at `HEAD`. The push **reported
+success**, because it did exactly what was asked (`push origin main`)
+and not what was meant (publish the tagged commit's own history). This
+would have shipped a GitHub release whose tag pointed at code the
+pushed branch did not contain. Caught only because the engineer
+independently ran `git rev-parse origin/main` against `HEAD` **after**
+the push, rather than trusting the push command's own exit status.
+**The reusable rule, stated for any future release checklist on this or
+any project:** a release checklist verifies the remote's `HEAD` equals
+the tagged commit **as an explicit step, after pushing** — not merely
+that the push command exited 0, and not merely that the tag itself
+points at the right commit. A correct tag on a wrong branch is a
+release that looks complete by every check except the one that was
+skipped.
+
+**Where this belongs, and where it does not.** This is process
+knowledge about `git push`/branch semantics under a release workflow,
+not a Rust- or egui-specific finding, and not a PDF-domain finding —
+it does not obviously fit `D:\dev\rag\rust\`'s scope (Cargo/toolchain/
+packaging) or `D:\dev\rag\egui\`'s. Flagged for the engineer's
+judgment rather than written to either RAG on this librarian's own
+initiative: if a future release repeats this workflow (working branch
+≠ `main`, tag on `HEAD`, push `origin main` by habit), a
+`D:\dev\rag\rust\` entry titled on "git push publishes a branch name,
+not a commit" would be the right shape — held back here because one
+instance on one project is thin evidence for a cross-project RAG entry,
+and this librarian has no shell to verify the git mechanics described
+match `git`'s actual documented behavior rather than this session's
+particular remote configuration.
+
+**Ledger for this filing.** No Pass ID — a release/tag event, not
+engineering work with acceptance criteria of its own. `docs/FEATURES.md`:
+not touched — a release publishes existing capability, it does not
+change what row is ticked. `docs/ARCHITECTURE.md` §12: not edited — no
+crate boundary, library choice or invariant changed by tagging;
+`THIRD_PARTY_LICENSES.md` regeneration is confirmed content-identical,
+i.e., explicitly NOT a dependency-set change. Standing rules: no new
+number; the release-checklist finding above is recorded here and
+flagged for the engineer rather than minted as an R-numbered rule
+solo. Decision records: unchanged, ceiling **035**, next free **036**.
+Operator-question ceiling unchanged at **(bh)**, next free **(bi)**.
+**Backup/git working-tree/remote state beyond what the engineer
+explicitly relayed is not asserted** — per hard rule 8, this librarian
+did not run `git remote -v`/`git rev-parse` itself this dispatch.
+
+---
+
 ### ★ `b4a66ed` — R151, 4th instance this session, discharged for the CLI across all five field types; independent verification found the GUI's own affordance only HALF wired — the controls moved out of the Text gate but three of four commit-path branches still discard the operator's choice silently — 2026-08-11 (ninety-third filing)
 
 **Sourcing.** No shell tool this dispatch (hard rule 8). Content
@@ -6491,7 +6792,18 @@ it, not a property of the caveat in isolation.**
 
 **Numbers.** Baseline debt: **6 lines → 5 lines**
 (`tools/commits-filed-baseline.txt`), verified by direct read before
-and after. `docs/FEATURES.md`: two rows edited — the *Import/export
+and after.
+
+**★ CITATION ADDED (2026-08-11, ninety-fourth filing) — `2ffd808` is the
+`tools/commits-filed-baseline.txt` edit this entry describes.** Not
+diff-confirmed (no shell either dispatch); touches **only**
+`tools/commits-filed-baseline.txt` per the relayed diffstat, dated
+2026-08-10 (matches this filing), and its subject — "the rich-text
+blocker cleared four days ago and nobody noticed" — names this entry's
+own central finding (the ★ factual correction, above: `b8f96b1`'s
+"blocked on §12.7.3.4" claim was true 2026-08-06 and false by
+2026-08-07, four days before this filing caught it on 2026-08-10). No
+other candidate in the relayed set names that finding. `docs/FEATURES.md`: two rows edited — the *Import/export
 form data* row (Forms section) gains a note naming the new conditional
 disclosure; the *Rich-text fill* Planned row is reframed to match the
 amended *Next up* entry (the question is no longer "should core
@@ -6669,6 +6981,19 @@ count before this filing: **0** by hash (its substance was filed under
 `ae59ce3`'s and `2b41b77`'s own entries, never under its own hash) — the
 gate's flag was correct on that narrow technical point even though the
 work itself was not owed.
+
+**★ CITATION ADDED (2026-08-11, ninety-fourth filing) — `5c3a228` is the
+`tools/commits-filed-baseline.txt` edit this entry describes.** Not
+diff-confirmed (no shell either dispatch); the correspondence rests on
+four independent, converging facts rather than a subject-line topic
+match: the commit touches **only** `tools/commits-filed-baseline.txt`
+(the engineer's relayed diffstat), its date (2026-08-10) matches this
+filing's own date, its subject ("R177: green traces do not establish
+that a control is on screen") names the exact standing rule minted
+here, and the file-content delta this entry independently reports
+(8 lines → 6 lines) is the kind of fact a baseline-only commit's diff
+would produce. No other candidate commit in the relayed set fits all
+four.
 
 **Invariant checks.** No code changed by this filing itself (a librarian
 dispatch, not an engineering one). `0febeb6`'s own invariant checks —
@@ -6867,6 +7192,18 @@ discharges THIS claim. Kept separate, on purpose.
 `24b392c`/`b0b387b` citations before this filing: **1 each**, both in
 `ROADMAP.md` (the debt-list line only), independently counted. Baseline
 debt: **10 lines → 8 lines**, both removals made in this same filing.
+
+**★ CITATION ADDED (2026-08-11, ninety-fourth filing) — `60ce9c6` is the
+`tools/commits-filed-baseline.txt` edit this entry describes.** Not
+diff-confirmed (no shell either dispatch); the correspondence rests on
+the same class of converging facts as the sixty-third filing's own
+baseline-edit citation below: touches **only**
+`tools/commits-filed-baseline.txt`, dated 2026-08-10 (matches this
+filing), and its subject — "the debt reaches eight, and the owed
+review I reported was never owed" — names both this entry's own
+**10 → 8** figure and its Part 4 correction of `b0b387b`'s false "a UX
+review is owed" claim (above) in one sentence. No other candidate in
+the relayed set matches the 8-count specifically.
 
 **Invariant checks.** No code changed by this filing itself (a librarian
 dispatch, not an engineering one). `2b41b77`'s own invariant checks —

@@ -1,32 +1,36 @@
 # Encrypted-document fixtures
 
 **Synthetic and self-generated** (project rule 7 / `LEGAL.md` §5). The
-plaintext document is pdfce's own synthetic form fixture; the encryption was
-applied by **pypdf 6.7.0**, chosen deliberately as an *independent*
-implementation.
+plaintext source is `fixtures/synthetic/forms/demo-form.pdf` — pdfce's own
+synthetic form fixture, **committed**, so the corpus is reproducible from a
+clean checkout. The encryption was applied by **pypdf 6.7.0**, chosen
+deliberately as an *independent* implementation.
 
-Passwords: user `userpw`, owner `ownerpw`, except `enc-emptyuser.pdf` whose
-user password is the **empty string** — the case §7.6.3.1 says a reader
+Passwords: user `userpw`, owner `ownerpw`, except the two `emptyuser` files
+whose user password is the **empty string** — the case §7.6.3.1 says a reader
 *shall* try silently before prompting, and the reason permissions-only PDFs
 open everywhere with no dialog.
 
-| File | `/V` | `/R` | `/Length` | `/CFM` |
-|---|---|---|---|---|
-| `enc-rc4-40.pdf` | 1 | 2 | 40 | — |
-| `enc-rc4-128.pdf` | 2 | 3 | 128 | — |
-| `enc-aes-128.pdf` | 4 | 4 | 128 | `/AESV2` |
-| `enc-aes-256-r5.pdf` | 5 | 5 | 256 | `/AESV3` |
-| `enc-aes-256-r6.pdf` | 5 | 6 | 256 | `/AESV3` |
-| `enc-emptyuser.pdf` | 4 | 4 | 128 | `/AESV2` |
+| File | `/V` | `/R` | `/Length` | `/CFM` | pdfce reads it? |
+|---|---|---|---|---|---|
+| `enc-rc4-40.pdf` | 1 | 2 | 40 | — | **yes** |
+| `enc-rc4-128.pdf` | 2 | 3 | 128 | — | **yes** |
+| `enc-emptyuser-rc4-128.pdf` | 2 | 3 | 128 | — | **yes**, with no password |
+| `enc-aes-128.pdf` | 4 | 4 | 128 | `/AESV2` | refused by cipher name |
+| `enc-aes-256-r5.pdf` | 5 | 5 | 256 | `/AESV3` | refused by cipher name |
+| `enc-aes-256-r6.pdf` | 5 | 6 | 256 | `/AESV3` | refused as **unsourced** |
+| `enc-emptyuser.pdf` | 4 | 4 | 128 | `/AESV2` | refused by cipher name |
 
 ## ★ What these can and cannot prove
 
 **They cut one way only, and the distinction is the whole point.**
 
 For **`/R` 2, 3 and 4**, ISO 32000-1 §7.6 fully specifies the algorithms.
-pdfce's decryption will be written from the clause, then checked against
-files it did not produce — so agreement means two independent readings of the
-same specification agree. That is evidence.
+pdfce's decryption was written from the clause, then checked against files it
+did not produce — so agreement means two independent readings of the same
+specification agree. That is evidence, and as of 2026-08-11 it is *collected*
+evidence: `crates/pdfce-core/tests/encryption_rc4.rs` opens both RC4 fixtures
+with both the user and the owner password.
 
 For **`/R` 6**, the algorithm (2.B) is **not sourced**: ISO 32000-2 is
 paywalled past step (a). Deriving it from another implementation and then
@@ -41,8 +45,39 @@ extension, paraphrased in the corpus rather than sourced from ISO, and PDF
 Acrobat wrote such files between 2008 and 2011, and deprecation does not
 un-write them.
 
+## ★ Why there are two `emptyuser` files
+
+There was one, and it was AES-128, and that was a hole.
+
+The empty-user-password path is the most operator-visible behaviour in clause
+7.6 — it is what makes a permissions-only PDF open with no dialog anywhere.
+But pdfce implements ciphers one increment at a time, and while AES is
+refused, an AES-only empty-password fixture is rejected **on cipher grounds
+before authentication is ever reached**. The path was implemented, believed,
+and never once executed end-to-end.
+
+`enc-emptyuser-rc4-128.pdf` exists so it is. The AES file stays, because it
+becomes the same test for the next increment.
+
+The general form is worth keeping: *a fixture that cannot fail for the reason
+you care about is not covering that reason.*
+
 ## Regenerating
 
-`tools/gen-encryption-fixtures.py` produces all six from a plaintext source. Kept
-because a fixture whose construction nobody can repeat is a fixture nobody
-can extend.
+```
+python tools/gen-encryption-fixtures.py
+```
+
+No arguments needed — source and output default to committed paths.
+
+**That defaulting is a fix, not a convenience.** The first six fixtures were
+generated from a document that was never committed (a four-field calculation
+form in a session temp folder), so re-running the script produced a *different
+corpus*, silently. It surfaced only when someone tried to add a seventh
+fixture and noticed the other six changing size — one week after this file's
+own closing sentence warned about exactly that. The whole corpus was
+regenerated on 2026-08-11 from the committed source, so the promise below is
+now true rather than aspirational.
+
+Kept because a fixture whose construction nobody can repeat is a fixture
+nobody can extend.

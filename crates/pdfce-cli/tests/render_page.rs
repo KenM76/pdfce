@@ -555,20 +555,25 @@ fn capability_gap_refusal_is_honest_and_distinguishable_from_corruption() {
     // this *yet*", not "your file is broken" — the same honesty the GUI
     // owes on its error surface.
     //
-    // The live case is an ENCRYPTED document (§7.6): pdfce has no
-    // security handler, and every layer downstream would decode
-    // ciphertext into plausible-looking garbage. (Cross-reference
-    // streams used to be the case pinned here; they now load — see
-    // `a_pdf_15_file_with_xref_and_object_streams_renders` below.)
+    // ★ The case pinned here has CHANGED, and the change is the interesting
+    // part. This test used to pin *any* encrypted document (§7.6), because
+    // pdfce had no security handler at all and refused the lot. It now has
+    // one: RC4 documents open, so "encrypted" is no longer the gap.
+    //
+    // The gap is now a NAMED CIPHER, which is a strictly better refusal — it
+    // tells an operator that the machinery works and one algorithm is
+    // missing, rather than implying pdfce cannot read protected files. This
+    // test moves to that case rather than being deleted, because the property
+    // it guards is unchanged: a refusal must read as a pdfce limitation, not
+    // as a broken file.
+    //
+    // (Cross-reference streams used to be pinned here before encryption was;
+    // they now load — see `a_pdf_15_file_with_xref_and_object_streams_renders`
+    // below. This slot has become a rolling record of what pdfce cannot do
+    // yet, which is exactly what it should be.)
     let dir = TempDir::new("encrypted");
-    let mut buf = b"%PDF-1.4\n".to_vec();
-    let xref_at = buf.len();
-    buf.extend_from_slice(b"xref\n0 1\n0000000000 65535 f\r\n");
-    buf.extend_from_slice(
-        format!("trailer\n<< /Size 1 /Root 1 0 R /Encrypt 2 0 R >>\nstartxref\n{xref_at}\n%%EOF\n")
-            .as_bytes(),
-    );
-    let pdf = dir.write("encrypted.pdf", &buf);
+    let pdf = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/synthetic/encryption/enc-aes-128.pdf");
 
     let out = run(&[
         "render-page",
@@ -580,10 +585,43 @@ fn capability_gap_refusal_is_honest_and_distinguishable_from_corruption() {
     assert_eq!(code(&out), 1, "an unsupported structure is a runtime error");
     let err = stderr(&out);
     assert!(
-        err.contains("not yet supported"),
+        err.contains("not implemented yet"),
         "the refusal must read as a pdfce limitation, not a broken file: {err:?}"
     );
+    assert!(
+        err.contains("AES-128"),
+        "the refusal must name WHICH cipher is missing — 'encrypted files are \
+         unsupported' is now false, and a vague message would teach the \
+         operator something untrue: {err:?}"
+    );
     assert_eq!(stdout(&out), "");
+}
+
+#[test]
+fn an_rc4_encrypted_document_renders_once_its_password_is_supplied() {
+    // The complement of the refusal above, and the thing that makes it
+    // meaningful: what pdfce refuses by cipher name, it opens where the
+    // cipher is implemented. Without this, the test above would also pass
+    // against a build that had quietly stopped opening encrypted files at all.
+    let dir = TempDir::new("rc4-render");
+    let pdf = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/synthetic/encryption/enc-emptyuser-rc4-128.pdf");
+    let png = dir.join("page.png");
+
+    let out = run(&[
+        "render-page",
+        pdf.to_str().unwrap(),
+        "-o",
+        png.to_str().unwrap(),
+    ]);
+
+    assert_eq!(
+        code(&out),
+        0,
+        "a permissions-only RC4 document must render with no password: {}",
+        stderr(&out)
+    );
+    assert!(png.exists(), "the page must actually be written");
 }
 
 #[test]

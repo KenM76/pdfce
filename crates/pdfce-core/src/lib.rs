@@ -76,6 +76,7 @@ pub mod annot_author;
 pub mod attachments;
 pub mod color;
 pub mod content;
+pub mod crypto;
 pub mod dimension;
 pub mod document;
 pub mod edit;

@@ -108,6 +108,29 @@ pub enum DocError {
     /// File I/O failed.
     #[error("I/O error reading PDF: {0}")]
     Io(#[from] std::io::Error),
+    /// The document is encrypted with a configuration pdfce will not decrypt
+    /// (§7.6). The inner error names *which* configuration and why — an
+    /// unimplemented cipher, an unsourced algorithm, a different security
+    /// handler, or a document no conforming reader may open at all.
+    ///
+    /// Those are four different facts with four different next actions, which
+    /// is why this is not one flat "encrypted files are unsupported".
+    #[error("{0}")]
+    Encryption(#[from] crate::crypto::EncryptionUnsupported),
+    /// The document is encrypted with a configuration pdfce **can** decrypt,
+    /// but no password opened it.
+    ///
+    /// §7.6.3.1 requires trying the empty user password first and silently, so
+    /// reaching this error means the empty password was already tried and
+    /// failed: the document genuinely has a non-empty user password. The
+    /// caller should prompt and retry with
+    /// [`Document::from_bytes_with_password`].
+    ///
+    /// **N6**: ISO 32000-1 states no error model here at all — no retry limit,
+    /// no reporting requirement, nothing about distinguishing a wrong password
+    /// from a malformed one. All of that is pdfce policy.
+    #[error("this document is password-protected; supply the user or owner password")]
+    PasswordRequired,
     /// The `%PDF-` header probe failed — not a PDF.
     #[error(transparent)]
     Header(PdfError),
@@ -239,6 +262,35 @@ pub struct Document {
     /// file — recovery lives entirely on the strict-load error path, so a
     /// clean file's flow never sets it.
     recovery: Option<RecoveryReport>,
+    /// `Some` when this document was loaded from an **encrypted** file and
+    /// successfully decrypted (§7.6, [`crate::crypto`]).
+    ///
+    /// Holds the configuration and which password opened it — deliberately
+    /// **not** the file encryption key. Nothing after load needs the key
+    /// (every object is already plaintext in memory), and keeping key
+    /// material alive for the document's lifetime buys nothing. The
+    /// re-encrypt-on-save path, when it exists, will re-derive it from a
+    /// password the operator supplies at that moment.
+    encryption: Option<DocumentEncryption>,
+}
+
+/// What a successfully-decrypted document was protected with.
+///
+/// Reported so the shells can tell the operator the document is encrypted,
+/// which cipher, and what the author's permissions ask for. It is a
+/// **disclosure**, not a gate: §7.6.3.1 states plainly that "there is nothing
+/// inherent in PDF encryption that enforces the document permissions", so
+/// anywhere pdfce chooses to act on a permission bit it must say so (rule 4).
+#[derive(Debug, Clone)]
+pub struct DocumentEncryption {
+    /// The parsed `/Encrypt` dictionary.
+    pub config: crate::crypto::EncryptionConfig,
+    /// Which password opened it. [`AuthKind::EmptyUser`] is the no-prompt
+    /// case — the document had an empty user password, which every
+    /// conforming reader tries silently before prompting.
+    ///
+    /// [`AuthKind::EmptyUser`]: crate::crypto::AuthKind::EmptyUser
+    pub auth: crate::crypto::AuthKind,
 }
 
 impl Document {
@@ -252,6 +304,28 @@ impl Document {
         Self::from_bytes(std::fs::read(path)?)
     }
 
+    /// Load a document from disk, supplying a password for an encrypted file.
+    ///
+    /// `password` is `None` to mean "no password known" — which is **not** the
+    /// same as an empty password. §7.6.3.1 requires a reader to try the empty
+    /// user password first and silently in *either* case, so `None` still
+    /// opens a permissions-only document with no prompt; what `None` means is
+    /// that if that fails, there is nothing else to try and the load returns
+    /// [`DocError::PasswordRequired`].
+    ///
+    /// Either the user or the owner password opens the document
+    /// (§7.6.3.1). Which one it was is reported by
+    /// [`Document::encryption`].
+    ///
+    /// # Errors
+    ///
+    /// [`DocError`] — as [`Document::load`], plus [`DocError::Encryption`] for
+    /// a configuration pdfce will not decrypt and
+    /// [`DocError::PasswordRequired`] when no supplied password authenticated.
+    pub fn load_with_password(path: &Path, password: Option<&[u8]>) -> Result<Self, DocError> {
+        Self::from_bytes_with_password(std::fs::read(path)?, password)
+    }
+
     /// Load a document from bytes (takes ownership — the buffer is
     /// retained for the document's lifetime; see module docs).
     ///
@@ -259,6 +333,21 @@ impl Document {
     ///
     /// [`DocError`] — see [`Document::load`].
     pub fn from_bytes(buf: Vec<u8>) -> Result<Self, DocError> {
+        Self::from_bytes_with_password(buf, None)
+    }
+
+    /// Load a document from bytes, supplying a password for an encrypted file.
+    ///
+    /// See [`Document::load_with_password`] for what `None` means (it is not
+    /// the empty password).
+    ///
+    /// # Errors
+    ///
+    /// [`DocError`] — see [`Document::load_with_password`].
+    pub fn from_bytes_with_password(
+        buf: Vec<u8>,
+        password: Option<&[u8]>,
+    ) -> Result<Self, DocError> {
         // 1. Header (§7.5.2 via the Pass 0 probe).
         match crate::probe_header(&buf) {
             // Header OK: try the strict §7.5.5 cross-reference load.
@@ -273,6 +362,7 @@ impl Document {
                     loaded.highest_object_number,
                     loaded.suppressed_by_size,
                     None,
+                    password,
                 ),
                 // The strict path failed. Decision 013: attempt
                 // rebuild-by-scan recovery, but ONLY on the specific
@@ -319,7 +409,7 @@ impl Document {
     #[allow(clippy::too_many_arguments)] // a private assembly seam; the
     // alternative (a builder struct) buys nothing for two call sites.
     fn assemble(
-        buf: Vec<u8>,
+        mut buf: Vec<u8>,
         header_version: PdfVersion,
         table: XrefTable,
         trailer: Dict,
@@ -328,6 +418,7 @@ impl Document {
         highest_object_number: u32,
         suppressed_by_size: usize,
         recovery: Option<RecoveryReport>,
+        password: Option<&[u8]>,
     ) -> Result<Self, DocError> {
         // Phase 1. Eagerly parse every file-level in-use object. Strict on
         // the clean path; on the recovery path the SAME `/Length`-vs-
@@ -379,6 +470,19 @@ impl Document {
             }
         }
 
+        // Phase 1.5. Decrypt (7.6), if the trailer says so.
+        //
+        // The position of this step is load-bearing, not stylistic. It runs
+        // AFTER phase 1 -- which needs only spans and `/Length`, both of which
+        // are plaintext integers -- and BEFORE phase 2, which inflates object
+        // streams. Decrypting here makes every object stream's data plaintext
+        // by the time phase 2 reads it, and the objects phase 2 parses out of
+        // that data are then correctly left alone: strings inside an object
+        // stream are NOT separately encrypted (TRAP T4). Moving this after
+        // phase 2 would re-apply Algorithm 1 per contained object and corrupt
+        // every string in every modern file.
+        let encryption = Self::decrypt_in_place(&mut buf, &trailer, &mut objects, password)?;
+
         // Phase 2. Resolve compressed objects through their containers,
         // decoding each container at most once. Deterministic order so
         // that a file with several broken containers always reports the
@@ -405,7 +509,152 @@ impl Document {
             highest_object_number,
             suppressed_by_size,
             recovery,
+            encryption,
         })
+    }
+
+    /// Authenticate and decrypt the loaded objects in place (7.6).
+    ///
+    /// Returns `Ok(None)` for an unencrypted document -- the overwhelmingly
+    /// common case, and a single `contains_key` away.
+    ///
+    /// # What "in place" means, and its consequence for saving
+    ///
+    /// **Stream data is decrypted in the retained buffer.** RC4 is a stream
+    /// cipher and preserves length exactly, so the plaintext fits precisely
+    /// where the ciphertext was and every span, `/Length` and provenance
+    /// record stays true. That is what lets this increment land without
+    /// touching [`Stream`](crate::object::Stream), which holds a span rather
+    /// than owning bytes. AES will not have that property -- its plaintext is
+    /// shorter than its ciphertext -- so the AES increment has to solve a
+    /// problem this one did not.
+    ///
+    /// **Strings are decrypted in the parsed objects**, because
+    /// [`Object::String`] owns its bytes and a decrypted string cannot
+    /// generally be re-escaped into the same number of source bytes.
+    ///
+    /// So after this runs, the buffer and the parsed objects **disagree**:
+    /// streams are plaintext in both, strings are plaintext only in the
+    /// objects. That is precisely why [`Document::save_full`] and
+    /// [`Document::save_incremental`] refuse a decrypted document -- the
+    /// writer re-emits untouched objects verbatim from their source span, and
+    /// doing that here would produce a file whose `/Encrypt` claims
+    /// encryption while half its content is plaintext. A file like that is
+    /// not "partly saved"; it is unreadable by everything, including pdfce.
+    ///
+    /// # Errors
+    ///
+    /// [`DocError::Encryption`] for a configuration pdfce will not decrypt;
+    /// [`DocError::PasswordRequired`] when nothing authenticated.
+    fn decrypt_in_place(
+        buf: &mut [u8],
+        trailer: &Dict,
+        objects: &mut HashMap<ObjId, IndirectObject>,
+        password: Option<&[u8]>,
+    ) -> Result<Option<DocumentEncryption>, DocError> {
+        use crate::crypto::{EncryptionConfig, EncryptionUnsupported, apply};
+
+        let Some(entry) = trailer.get(b"Encrypt") else {
+            return Ok(None);
+        };
+
+        // The `/Encrypt` dictionary is usually direct in the trailer, but may
+        // be indirect. If it is, its object number must be remembered: its
+        // `/O` and `/U` are the INPUTS to the key derivation, so decrypting
+        // them with a key derived from themselves would authenticate
+        // successfully and then produce a document of noise (E2/E3).
+        let (encrypt_dict, encrypt_dict_id) = match entry {
+            Object::Dict(d) => (d.clone(), None),
+            Object::Reference(id) => match objects.get(id).map(|o| &o.value) {
+                Some(Object::Dict(d)) => (d.clone(), Some(id.num)),
+                _ => {
+                    return Err(DocError::Encryption(EncryptionUnsupported::Malformed(
+                        "/Encrypt names an object that is not a dictionary",
+                    )));
+                }
+            },
+            _ => {
+                return Err(DocError::Encryption(EncryptionUnsupported::Malformed(
+                    "/Encrypt is neither a dictionary nor a reference",
+                )));
+            }
+        };
+
+        // Resolution for indirect `/O`, `/U` and `/CF` entries. Snapshotting
+        // the values a closure needs is simpler than fighting the borrow
+        // checker over `objects`, which is about to be mutated.
+        let snapshot: HashMap<ObjId, Object> = objects
+            .iter()
+            .map(|(id, io)| (*id, io.value.clone()))
+            .collect();
+        let resolve = move |id: ObjId| snapshot.get(&id).cloned();
+
+        let config = EncryptionConfig::parse(&encrypt_dict, &resolve)?;
+
+        // Algorithm 2 step (e) and Algorithm 5 step (c) hash `/ID[0]`.
+        // 7.6.1 E1: trailer `/ID` strings are never encrypted and are direct
+        // objects, so this reads them as-is. A file with no `/ID` hashes
+        // nothing there, which an empty slice expresses exactly -- the
+        // algorithm has no branch for "no ID" (SPEC AMBIGUITY A4).
+        let id0: Vec<u8> = match trailer.get(b"ID") {
+            Some(Object::Array(items)) => match items.first() {
+                Some(Object::String(s)) => s.clone(),
+                _ => Vec::new(),
+            },
+            _ => Vec::new(),
+        };
+
+        let Some((key, auth)) = config.authenticate(password, &id0) else {
+            return Err(DocError::PasswordRequired);
+        };
+
+        // Decrypt every file-level object. Order within the map does not
+        // matter: each object's key depends only on its own identity
+        // (Algorithm 1), never on another object's contents.
+        for (id, obj) in objects.iter_mut() {
+            if apply::skip(obj, encrypt_dict_id, config.encrypt_metadata).is_some() {
+                continue;
+            }
+            if key.streams_encrypted()
+                && let Object::Stream(stream) = &obj.value
+            {
+                let span = stream.data_span;
+                let end = span.start.saturating_add(span.len);
+                // Checked access, not an in-bounds proof: `data_span` comes
+                // from a `/Length` in an untrusted file, and a stream whose
+                // declared length runs past the buffer is a real thing a
+                // malformed (or deliberately hostile) document contains. A
+                // span that does not fit is left alone -- the object then
+                // fails to decode later, with an error about the object, which
+                // is the honest place for it.
+                if let Some(cipher_text) = buf.get(span.start..end) {
+                    let plain = key.decrypt_stream(*id, cipher_text);
+                    // RC4 preserves length; this is the invariant that makes
+                    // in-buffer decryption sound at all, so it is checked
+                    // rather than assumed. A cipher that changed length would
+                    // silently truncate or overflow the next object.
+                    debug_assert_eq!(plain.len(), span.len, "RC4 must preserve length");
+                    if let Some(slot) = buf.get_mut(span.start..end)
+                        && plain.len() == span.len
+                    {
+                        slot.copy_from_slice(&plain);
+                    }
+                }
+            }
+            if key.strings_encrypted() {
+                apply::decrypt_strings(&mut obj.value, *id, &key);
+            }
+        }
+
+        Ok(Some(DocumentEncryption { config, auth }))
+    }
+
+    /// How this document was encrypted, if it was -- `None` for a plain file.
+    ///
+    /// A **disclosure**, not a gate. See [`DocumentEncryption`].
+    #[must_use]
+    pub fn encryption(&self) -> Option<&DocumentEncryption> {
+        self.encryption.as_ref()
     }
 
     /// Assemble a [`Document`] from a [`recover::RecoveredXref`].
@@ -437,6 +686,13 @@ impl Document {
             rec.highest_object_number,
             0,
             Some(rec.report),
+            // The recovery path never carries a password: `recover` refuses an
+            // encrypted file outright (`RecoverError::Encrypted`), because
+            // rebuild-by-scan looks for `N G obj` headers in bytes that would
+            // be ciphertext. So a recovered document is never encrypted, and
+            // threading a password here would be dead weight that read as
+            // support.
+            None,
         )
     }
 

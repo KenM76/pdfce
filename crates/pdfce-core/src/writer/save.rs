@@ -310,6 +310,15 @@ pub fn save_incremental(
         return Err(WriteError::RecoveredBaseForbidsIncremental);
     }
 
+    // 7.6: a decrypted document's buffer and parsed objects deliberately
+    // disagree (streams plaintext in both, strings plaintext only in the
+    // objects), so re-emitting either verbatim produces a file that claims
+    // encryption it does not have. See `WriteError::EncryptedSaveUnsupported`
+    // for why this is a refusal rather than a best effort.
+    if doc.encryption().is_some() {
+        return Err(WriteError::EncryptedSaveUnsupported);
+    }
+
     let base = doc.bytes();
     // Resolve `EOL-A1` against the FILE BEING SAVED, once, here.
     //
@@ -573,6 +582,12 @@ pub fn save_full(
         SectionShape::Classic { xref_stm: Some(_) }
     ) {
         return Err(WriteError::HybridFullRewrite);
+    }
+
+    // 7.6: same refusal as the incremental path, and for the same reason --
+    // a full rewrite re-emits untouched objects from their source span too.
+    if doc.encryption().is_some() {
+        return Err(WriteError::EncryptedSaveUnsupported);
     }
 
     // The header region.

@@ -33718,3 +33718,215 @@ alone are not enough to safely place a hash citation next to existing
 prose without risking a false correspondence. The GUI border/visibility
 commit-path gap (above) is a small, well-located fix for the engineer
 to pick up directly.
+
+## 2026-08-11 (ninety-fourth filing) — the GUI border/visibility gap `b4a66ed` flagged is CLOSED (`2fddcdd`), `FEATURES.md`'s concision rewrite is recorded (407→265 lines, longest row 12,965→313 chars), `v0.2.0` is tagged and released with a release-checklist finding worth keeping, and the 18-commit citation backlog is TRIAGED — 3 baseline-bookkeeping commits cited by strong converging evidence, 2 filing-commit candidates identified but left uncited, 8 remain genuinely undescribed
+
+**Sourcing.** No shell tool this dispatch (hard rule 8). The engineer
+relayed a fresh 14-hash list from `check-commits-filed.py`, generated at
+`5beecf6`, stating it supersedes the ninety-third filing's 18 (4
+resolved in the interim: `b4a66ed` already filed that same filing; three
+others "handled" without further detail). **Independently verified by
+direct `Grep`/`Read`, not relayed:** none of the 14 hashes appear
+anywhere in `ROADMAP.md` or this file before this dispatch's own edits
+(confirmed by direct grep, zero matches on all 14); `docs/FEATURES.md`
+in full (265 lines, one sentence per row, no addenda); the four
+`ROADMAP.md` locations cited below for the three baseline-bookkeeping
+commits, read in full before citing. **Not independently verified:**
+the diff/full commit message of any of the 14 — this librarian still has
+no shell, and none was relayed for any of the 14 (subject lines +
+touched-file lists only), which is the ceiling on how far triage could
+go this dispatch.
+
+**Shipped:**
+- `2fddcdd` — closes `b4a66ed`'s own GUI-side R151 debt
+  (`commit_field_draft`'s `CheckBox`/`Radio`/`Choice` arms now forward
+  border/visibility) and records the `FEATURES.md` concision rewrite.
+  Filed against `Pass 20.0` (R170), no new Pass ID. Full detail: new
+  `ROADMAP.md` Shipped entry, top of *Shipped*.
+- `v0.2.0` — tagged and released at `5beecf6`. Full detail: new
+  `ROADMAP.md` Shipped entry immediately below `2fddcdd`'s.
+
+**Decisions made this session:** none — this filing is triage and two
+Shipped citations, not new project policy.
+
+**Findings + decisions:**
+- **The citation backlog is not one problem — it is three, and they
+  need three different levels of evidence.** (1) Three commits
+  (`60ce9c6`, `5c3a228`, `2ffd808`) touch **only**
+  `tools/commits-filed-baseline.txt` and, on inspection, each matches
+  an existing `ROADMAP.md` entry on **four independent facts at once**
+  — file-touch list, date, subject-line content, and a specific
+  numeric figure the entry itself states (baseline debt 10→8, 8→6,
+  6→5 respectively) — strong enough to cite despite having no diff.
+  (2) Two commits (`4d9cea4`, `3032888`) are self-describing "docs:
+  file X" commits whose named content (`82228b1`; Passes 25.2–27.1 +
+  decisions 025/026) is already filed under ITS OWN separate hash —
+  meaning these two are very likely the **filing commits themselves**,
+  which structurally cannot cite their own hash (the hash does not
+  exist until the commit is written, the same limit
+  `check-commits-filed.py`'s own docstring names for rule 1's
+  exemption). **Left UNCITED anyway** — the correspondence is
+  plausible, even likely, but not evidenced the way the baseline trio
+  is: no numeric or diff confirmation, only a subject-line self-report
+  matching a pre-existing entry. Flagged as candidates, not cited,
+  per the standing instruction against citing on topic-match alone.
+  (3) The remaining nine (`7b374bd`, `7e926ae`, `16399cc`, `bb195cb`,
+  `88532d5`, `cb403a8`, `d73f8e2`, `f185064`, plus `7b374bd`'s own
+  partial lead below) returned no confident match across an extensive
+  targeted-phrase search of `ROADMAP.md` and `ARCHITECTURE.md` §12 —
+  genuinely undescribed by this librarian's search, or narrated in
+  wording too different from the subject line to find without the
+  commit's own diff.
+- **One partial lead, named rather than silently dropped:** `7b374bd`
+  (cli/main.rs, core/annot.rs, core/layers.rs, core/tests/layers.rs,
+  gui/main.rs; 2026-08-10) is very likely the `OcDefaultState` resolver
+  refactor that decision 037/038's own ninety-first/ninety-second
+  filings (`04f8acd`, `ecf2302`) reference in passing — *"now
+  `OcDefaultState`, per decision 037's own resolver refactor"* — but
+  neither of those two entries narrates the refactor **itself** (what
+  changed, why, what tests cover it); `OcDefaultState` appears exactly
+  once in `ROADMAP.md`, in that one passing mention. This is a
+  genuine gap even if `7b374bd` is the right hash: the refactor has no
+  Shipped entry of its own anywhere. Not cited, not filed — needs the
+  commit's own message before either can happen responsibly.
+- **`bb195cb`'s sibling in its own numbering series is confirmed still
+  unfiled, which is itself evidence about `bb195cb`.** Its subject
+  ("GUI-gap sweep 4/N: flatten, redraw, and form-data import/export")
+  places it in a "sweep N/N" series distinct from the Passes 37.0–37.2
+  sweep (which used no such numbering in its own entries). Item 5 of
+  that same series, `55a0732` ("GUI-gap sweep 5/N: radio groups and
+  choice fields are editable"), is confirmed **still present** in
+  `tools/commits-filed-baseline.txt` today — meaning the whole
+  numbered series was flagged as owed at the fifty-first filing and
+  never actually filed. `bb195cb` sharing that series is a real signal
+  it shares that fate, not proof by itself.
+- **`88532d5`'s named gate is real and confirmedly unbuilt-by-record.**
+  `ARCHITECTURE.md` §12's 2026-08-05 decision-030 entry explicitly
+  recommends `tools/check-bypass-paths.sh` as a guardrail and states,
+  in the same sentence, **"not built by this record."** `88532d5`
+  touches `tools/check-bypass-paths.sh` as a real file and is dated the
+  same day. The gate demonstrably exists today (cited as an established,
+  results-reporting check from the fifty-fifth filing onward) but no
+  `ROADMAP.md`/`ARCHITECTURE.md` entry anywhere narrates its
+  construction — only its recommendation (explicitly not-yet-built) and
+  its later results (relayed as already-standing). `88532d5` is the
+  leading candidate for the gap between those two states, but — same
+  discipline as `4d9cea4`/`3032888` — a leading candidate is not a
+  citation.
+
+**Still in flight:**
+- **9 of the 14 relayed hashes have no citation and no confident
+  narration match:** `7b374bd` (partial lead, above), `7e926ae`,
+  `16399cc`, `bb195cb` (partial lead, above), `88532d5` (partial lead,
+  above), `cb403a8`, `d73f8e2`, `f185064`. Two more (`4d9cea4`,
+  `3032888`) have plausible but unconfirmed filing-commit candidacy,
+  also uncited.
+- `tools/commits-filed-baseline.txt` unchanged at **5 lines** by this
+  filing — none of the 14 relayed hashes was ever a baseline entry, so
+  this filing neither adds to nor shrinks that separate, older debt.
+- The engineer's own release-checklist finding (git push publishing the
+  wrong branch under a correct tag) is recorded on the `v0.2.0`
+  `ROADMAP.md` entry but deliberately **not** written to
+  `D:\dev\rag\rust\` this filing — flagged there as one instance, thin
+  evidence for a cross-project RAG entry, held for the engineer's
+  judgment rather than written solo.
+
+**For next session:** the fastest way to close the remaining 9–11
+candidates is the same one named at the ninety-third filing and still
+true — either grant this librarian a shell (`git show --stat`/`git log
+-1 --format=%B` per hash), or have the engineer relay each hash's full
+commit message. A subject line and a touched-file list, alone, were
+enough to place high-confidence citations for exactly the 3 commits
+whose content was a single-file numeric delta (the baseline-bookkeeping
+trio) and not enough for anything narrating real engineering content —
+that is not a coincidence of this session, it is the shape of the
+evidence bar this librarian is holding itself to, and it will hold the
+same way next time.
+
+**Ledger for this filing.** No new Pass ID beyond the citation already
+recorded against `Pass 20.0` for `2fddcdd`. `docs/FEATURES.md`: not
+independently re-touched this filing (already rewritten before this
+dispatch began; confirmed, not re-edited). `docs/ARCHITECTURE.md` §12:
+not edited. Standing rules: `R151`/`R170` cited (no new number).
+Decision records: unchanged, ceiling **035**, next free **036**.
+Operator-question ceiling unchanged at **(bh)**, next free **(bi)**.
+`tools/commits-filed-baseline.txt`: unchanged at **5 lines**, confirmed
+by direct read. Backup/git working-tree/remote state not independently
+asserted — this librarian has no shell this dispatch (hard rule 8);
+the release entry above states plainly which figures are the
+engineer's own relayed account rather than an independent check. This
+is the **ninety-fourth** `SESSION_LOG.md` filing (the ninety-third
+confirmed present by direct read before this entry was appended).
+
+## 2026-08-11 (ninety-fifth filing) — `5dfef4d` turns the v0.2.0 near-miss into a check (`tools/verify-release.py`), proven to fail on a stale tag before being trusted on a current one; the git-push finding escalates to `C:\personal_rag\claude_code\`
+
+**Sourcing.** No shell tool this dispatch (hard rule 8). The dispatching
+engineer supplied `5dfef4d`'s full commit message **verbatim** — a
+stronger source than the usual paraphrase-relay, but still not
+independently confirmed against `git log`/the diff (no shell). Reported
+as quoted, not verified.
+
+**Shipped:**
+- `5dfef4d` — `tools/verify-release.py`, a report-only release gate.
+  Checks a clean tree, tag existence, tag-at-`HEAD`, tag-pushed, a
+  GitHub release with an asset, and — the check the ninety-fourth
+  filing's own `v0.2.0` incident was missing — `origin/main` at the
+  tagged commit. Proven to fail (R162) against the genuinely stale
+  `v0.1.0` tag on exactly the two checks that matter, both hashes named
+  in the output; confirmed passing on `v0.2.0`. No Pass ID (tooling,
+  same class as `check-commits-filed.py`); no `ARCHITECTURE.md` §12
+  entry (no crate boundary/library/invariant redrawn). Full detail: new
+  `ROADMAP.md` Shipped entry, top of *Shipped*, cross-referenced both
+  directions with the ninety-fourth filing's `v0.2.0` entry.
+
+**Decisions made this session:** none — this filing is a tooling
+citation plus a cross-project escalation, not new project policy.
+
+**Findings + decisions:**
+- **The release-checklist finding the ninety-fourth filing held back
+  from `D:\dev\rag\rust\` "for the engineer's judgment" is now
+  escalated — to `personal_rag/claude_code`, not that RAG.** This
+  librarian's own call: the finding (`git push origin <branch>`
+  publishes whichever local ref is literally named `<branch>`,
+  regardless of what's checked out, and reports ordinary success either
+  way) is about git's own push semantics under a release workflow an
+  agent was executing — not the Rust toolchain, Cargo, or Windows
+  packaging, which is what `D:\dev\rag\rust\index.md`'s own scope
+  statement actually names. New lesson:
+  `C:\personal_rag\claude_code\lesson_20260811_git_push_origin_branch_ignores_checked_out_branch.md`,
+  new "Git push / release-branch verification (2026-08-11)" section in
+  that subject's `index.md`, top-slot entry in the master
+  `C:\personal_rag\index.md`. Distinct from that subject's existing
+  "Git / GitHub history hygiene" section (2026-06-12, force-push/
+  orphaned-commit purging) — sibling finding, not a duplicate: that one
+  is about scrubbing already-published history, this one is about a
+  push never reaching the intended branch at all.
+- **`docs/FEATURES.md`: explicitly not touched — checked and confirmed
+  a genuine no-op, per the dispatching engineer's own instruction not
+  to invent a row for a dev tool.** `tools/verify-release.py` has no
+  `pdfce-core`/`pdfce-cli`/`pdfce-gui` surface and no user-facing
+  capability.
+
+**Still in flight:** unchanged from the ninety-fourth filing's own
+"Still in flight" — the 9–11 undescribed commits from the 14-hash
+citation backlog remain open, untouched by this dispatch.
+
+**For next session:** unchanged from the ninety-fourth filing — a shell
+grant or relayed full commit messages are what would let this librarian
+close the remaining backlog candidates.
+
+**Ledger for this filing.** No new Pass ID. Pass-family ceiling
+unchanged at **62.0**, next free **63**. `docs/FEATURES.md`: not
+touched, stated no-op (see above). `docs/ARCHITECTURE.md` §12: not
+edited. Standing rules: `R162` cited (proven-to-fail-first), no new
+number. Decision records: unchanged, ceiling **035**, next free **036**.
+Operator-question ceiling unchanged at **(bh)**, next free **(bi)**.
+`D:\dev\rag\rust\`: not written to this filing — the generalizable
+finding went to `personal_rag/claude_code` instead, per this librarian's
+own scoping judgment, recorded above. Backup/git working-tree/remote
+state not independently asserted — no shell this dispatch (hard rule
+8); the engineer should check `D:\Dev\pdfce-backups\` and `git log`/
+`git status`/`git remote -v` directly, on the current branch
+(`post-v0.2.0`). This is the **ninety-fifth** `SESSION_LOG.md` filing
+(the ninety-fourth confirmed present by direct read before this entry
+was appended).

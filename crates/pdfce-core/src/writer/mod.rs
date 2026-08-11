@@ -762,6 +762,40 @@ pub enum WriteError {
          was invalid, so its save must be a full rewrite (save_full)"
     )]
     RecoveredBaseForbidsIncremental,
+    /// A save was requested for a document loaded from an **encrypted** file
+    /// (7.6). pdfce can decrypt such a file but cannot yet write one.
+    ///
+    /// # Why this is a refusal and not a best effort
+    ///
+    /// After [`Document`](crate::document::Document) decrypts a file, its two
+    /// halves deliberately disagree. Stream data was decrypted **in the
+    /// retained buffer** (RC4 preserves length, so the plaintext fits exactly
+    /// where the ciphertext was and every span stays true); strings were
+    /// decrypted **in the parsed objects**, because a decrypted string cannot
+    /// generally be re-escaped into the same number of source bytes.
+    ///
+    /// Both save modes re-emit untouched objects verbatim from their source
+    /// span (R32). Doing that here would produce a file whose `/Encrypt`
+    /// dictionary still claims the document is encrypted, whose streams are
+    /// plaintext, and whose strings are ciphertext. That is not a partly-saved
+    /// document — it is one that **no reader can open, including pdfce**, and
+    /// it would look like a successful save.
+    ///
+    /// The alternatives were considered and rejected for this increment.
+    /// Re-encrypting on save needs the file key, which the document
+    /// deliberately does not retain, and would emit RC4 — which pdfce never
+    /// writes (**W14**). Stripping `/Encrypt` and saving plaintext would
+    /// silently remove protection the author applied, which is precisely the
+    /// kind of decision rule 4 forbids taking on the operator's behalf.
+    ///
+    /// So: reading encrypted documents works, and writing them is named,
+    /// scoped, unfinished work rather than a surprise at save time.
+    #[error(
+        "this document was loaded from an encrypted file; pdfce can read encrypted \
+         documents but cannot yet write them, so saving is refused rather than \
+         producing a file that claims encryption it does not have"
+    )]
+    EncryptedSaveUnsupported,
 }
 
 #[cfg(test)]
