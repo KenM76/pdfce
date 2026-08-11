@@ -2112,6 +2112,57 @@ enum Command {
         verify_undo: bool,
     },
 
+    /// Recompute recognised Acrobat calculation scripts natively, without
+    /// executing any JavaScript (decision 009 posture B).
+    ///
+    /// **Shows the plan and changes nothing unless `--apply` is given.** A
+    /// recomputed total is something pdfce inferred from a script it did not
+    /// run, so it is visible before it becomes document state (rule 4).
+    ///
+    /// Only exact-shape `AFSimple_Calculate` calls are recomputed. Anything
+    /// else — author code, an edited built-in, a calculation naming a field
+    /// this document does not contain — is left alone and reported.
+    Recompute {
+        /// Input PDF.
+        input: PathBuf,
+        /// Apply the plan and write `--output`. Without this, nothing is
+        /// written and the plan is printed for review.
+        #[arg(long)]
+        apply: bool,
+        /// Output path. Required with `--apply`.
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        /// Which save path to use.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// How to read a comma in a stored value. A comma is ambiguous
+        /// between a decimal point and a thousands separator, and pdfce
+        /// refuses to guess by default.
+        #[arg(long, value_enum, default_value_t = CommaArg::NotNumeric)]
+        comma: CommaArg,
+        /// Also verify that undoing the recompute reproduces the input file
+        /// byte for byte.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+
+    /// List every form-field script, classified (decision 009 posture B).
+    ///
+    /// One stable line per script: which field, which `/AA` trigger, what
+    /// pdfce recognised it as, and whether pdfce can natively reproduce its
+    /// effect. **pdfce never executes any of it** — a recognised built-in is
+    /// *read*, never run, and everything else is disclosed as unrun.
+    ///
+    /// Lines are locale-invariant and ordered by the field tree, so the
+    /// output diffs cleanly between two revisions of the same form.
+    ListScripts {
+        /// Input PDF.
+        input: PathBuf,
+        /// Show only the scripts pdfce can natively reproduce.
+        #[arg(long)]
+        reproducible_only: bool,
+    },
+
     /// Fill one or more interactive-form fields and save (Pass 7).
     ///
     /// Each `--set NAME=VALUE` sets a field by fully-qualified name: a text
@@ -3730,6 +3781,33 @@ enum ProducerArg {
     Preserve,
 }
 
+/// How the CLI reads a comma in a stored field value.
+///
+/// Mirrors [`pdfce_core::form_script::calc::CommaPolicy`]. Kept as its own
+/// clap enum rather than deriving `ValueEnum` on the core type, so the core
+/// crate gains no CLI dependency — the GUI-core separation applies to
+/// argument parsing too.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, clap::ValueEnum)]
+enum CommaArg {
+    /// A comma makes the value non-numeric, so it counts as a disclosed
+    /// zero. The default: refusing to guess cannot turn `1,234` into `1.234`.
+    NotNumeric,
+    /// A comma is the decimal separator (`1,5` is 1.5).
+    Decimal,
+    /// A comma is the thousands separator (`1,234` is 1234).
+    Grouping,
+}
+
+impl From<CommaArg> for pdfce_core::form_script::calc::CommaPolicy {
+    fn from(arg: CommaArg) -> Self {
+        match arg {
+            CommaArg::NotNumeric => Self::NotNumeric,
+            CommaArg::Decimal => Self::DecimalSeparator,
+            CommaArg::Grouping => Self::GroupingSeparator,
+        }
+    }
+}
+
 /// Which save path an **editing** subcommand uses.
 ///
 /// Deliberately a separate enum from [`RoundTripMode`], which carries a
@@ -4379,6 +4457,25 @@ fn run() -> ExitCode {
             defaults_from: defaults_from.as_deref(),
             verify_undo,
         }),
+        Command::Recompute {
+            input,
+            apply,
+            output,
+            mode,
+            comma,
+            verify_undo,
+        } => cmd_recompute(
+            &input,
+            apply,
+            output.as_deref(),
+            mode,
+            comma.into(),
+            verify_undo,
+        ),
+        Command::ListScripts {
+            input,
+            reproducible_only,
+        } => cmd_list_scripts(&input, reproducible_only),
         Command::FillField {
             input,
             sets,
@@ -7659,6 +7756,271 @@ that Adobe Acrobat/Reader would run; pdfce recognizes them but NEVER executes an
             input.display(),
             js.network_action_count,
             js.launch_action_count,
+        );
+    }
+    exit::SUCCESS
+}
+
+/// `recompute`: natively recompute recognised calculation scripts.
+///
+/// # Plan first, apply second — and that is not a convenience
+///
+/// Without `--apply` this writes nothing. Decision 009 §5.1 makes a recompute
+/// an operator-invoked act rather than a side effect, and project rule 4
+/// requires anything pdfce inferred to be visible before it becomes document
+/// state. A recomputed total is an inference: pdfce read a script it did not
+/// run and reproduced what it believes the script means.
+///
+/// On a batch surface the dry run is doing more work than on a screen. A
+/// script that pipes `recompute --apply` across a directory has no operator
+/// watching; the plan is what makes it possible to look first.
+///
+/// # Output contract
+///
+/// One `change` line per field, one `skip` line per recognised calculation
+/// left alone, then a summary. All locale-invariant and stable across runs:
+///
+/// ```text
+/// change field="Total" from="0" to="132.5" op=SUM operands=2 coerced=0
+/// skip   field="Bad" reason=refused detail="..."
+/// recompute <path> changes=1 skipped=1 order=calc_order applied=0
+/// ```
+///
+/// # Exit status
+///
+/// A dry run with changes pending still exits `SUCCESS`: it did what it was
+/// asked and found work. Distinguishing "nothing to do" from "changes
+/// pending" is what the `changes=` count is for — an exit code that varied
+/// would make `recompute` unusable in a `set -e` script that only wanted the
+/// report.
+fn cmd_recompute(
+    input: &Path,
+    apply: bool,
+    output: Option<&Path>,
+    mode: SaveMode,
+    policy: pdfce_core::form_script::calc::CommaPolicy,
+    verify_undo: bool,
+) -> u8 {
+    use pdfce_core::form_script::recompute::{OrderSource, Skip};
+
+    if apply && output.is_none() {
+        eprintln!("pdfce-cli: --apply needs --output");
+        return exit::EDIT_REFUSED;
+    }
+
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let plan = {
+        let view = session.view();
+        pdfce_core::form_script::recompute::plan(&view, policy)
+    };
+
+    for change in &plan.changes {
+        println!(
+            "change field={:?} from={:?} to={:?} op={} operands={} coerced={}",
+            change.field,
+            change.previous,
+            change.proposed,
+            change.computation.op.code(),
+            change.computation.operands.len(),
+            change.computation.coerced_operands(),
+        );
+    }
+    for skipped in &plan.skipped {
+        let reason = match skipped.reason {
+            Skip::Refused(_) => "refused",
+            Skip::CircularDependency => "circular",
+            Skip::AlreadyCorrect => "already_correct",
+            Skip::NotAValueField => "not_a_value_field",
+        };
+        println!(
+            "skip   field={:?} reason={reason} detail={:?}",
+            skipped.field,
+            skipped.reason.to_string(),
+        );
+    }
+
+    let order = match plan.order_source {
+        OrderSource::CalculationOrder => "calc_order",
+        OrderSource::Mixed => "mixed",
+        OrderSource::Derived => "derived",
+        OrderSource::Empty => "none",
+    };
+
+    // The caveats, on stderr, before any write. Each is a fact that changes
+    // how much the numbers should be trusted, and burying them under the
+    // summary line would put them after the thing they qualify.
+    if plan.order_source.is_pdfce_choice() {
+        eprintln!(
+            "pdfce-cli: {}: this form has {} calculated field(s) its /CO array does not \
+list, which ISO 32000-1 requires it to. The standard gives no recovery rule, so pdfce \
+ordered them by their own dependencies — another reader may legitimately compute \
+different values.",
+            input.display(),
+            plan.unlisted_calculations,
+        );
+    }
+    if plan.coerced_operands() > 0 {
+        eprintln!(
+            "pdfce-cli: {}: {} operand(s) were blank or non-numeric and counted as zero, \
+matching Acrobat. The totals are arithmetically correct for a partly-empty form.",
+            input.display(),
+            plan.coerced_operands(),
+        );
+    }
+    if plan.not_reproducible > 0 {
+        eprintln!(
+            "pdfce-cli: {}: {} script(s) were NOT considered — pdfce recognises no \
+built-in in them, so their fields keep the values last saved. Run list-scripts to see \
+which.",
+            input.display(),
+            plan.not_reproducible,
+        );
+    }
+
+    if !apply {
+        println!(
+            "recompute {} changes={} skipped={} order={order} applied=0",
+            input.display(),
+            plan.changes.len(),
+            plan.skipped.len(),
+        );
+        if !plan.is_empty() {
+            eprintln!(
+                "pdfce-cli: {}: nothing was written. Re-run with --apply --output FILE to \
+store these values. The source scripts stay in the file either way, so a \
+JavaScript-running reader still recomputes independently.",
+                input.display()
+            );
+        }
+        return exit::SUCCESS;
+    }
+
+    for change in &plan.changes {
+        if let Err(err) = session.fill_text_field(&change.field, &change.proposed) {
+            return report_edit_error(input, &err);
+        }
+    }
+
+    let Some(output) = output else {
+        // Unreachable: guarded at entry. Handled rather than unwrapped so a
+        // future edit to the guard cannot turn this into a panic.
+        eprintln!("pdfce-cli: --apply needs --output");
+        return exit::EDIT_REFUSED;
+    };
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    println!(
+        "recompute {} changes={} skipped={} order={order} applied={}",
+        input.display(),
+        plan.changes.len(),
+        plan.skipped.len(),
+        plan.changes.len(),
+    );
+    finish_edit(input, &outcome)
+}
+
+/// `list-scripts`: classify every form-field script (decision 009 posture B).
+///
+/// # Why this exists as its own subcommand rather than more columns on
+/// `list-fields`
+///
+/// `list-fields` already prints a posture-A *histogram* — how many fields
+/// calculate, how many format, how many are custom. That answers "is this
+/// form script-driven?" and stops. The question posture B raises is
+/// per-field and has four parts: **which** field, on **which trigger**,
+/// recognised as **what**, and **can pdfce reproduce it**. Four facts per
+/// script do not fit on a summary line, and folding them in would make the
+/// summary line unstable in width — the property that makes it greppable.
+///
+/// # Output contract
+///
+/// One line per script, fields space-separated `key=value`, locale-invariant
+/// and stable across runs:
+///
+/// ```text
+/// script field=Total trigger=calculate helper=AFSimple_Calculate reproducible=1 source=string bytes=38
+/// ```
+///
+/// Then one summary line with the histogram. A form with no scripts prints
+/// the summary with a zero count rather than nothing at all — silence would
+/// be indistinguishable from a failed read, and "this form has no scripts"
+/// is a positive finding worth stating (R162's shape: an absence claim is
+/// only meaningful once the reader has shown it can find the thing).
+///
+/// # The non-execution disclaimer is unconditional
+///
+/// Printed to stderr whenever any script exists, whether or not pdfce
+/// recognised any of them. An operator reading a list of recognised Acrobat
+/// built-ins is at their most likely to assume the values on the page are
+/// live, and that is exactly the moment to say they are not.
+fn cmd_list_scripts(input: &Path, reproducible_only: bool) -> u8 {
+    let doc = match pdfce_core::document::Document::load(input) {
+        Ok(doc) => doc,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit_code_for_doc(&err);
+        }
+    };
+    let view = pdfce_core::view::DocumentView::new(&doc, doc.bytes(), doc.version());
+    let inv = pdfce_core::form_script::inventory::inventory(&view);
+
+    let mut shown = 0usize;
+    for s in &inv.scripts {
+        if reproducible_only && !s.is_reproducible() {
+            continue;
+        }
+        shown += 1;
+        let source = match s.source {
+            pdfce_core::form_script::inventory::ScriptSource::LiteralString => "string",
+            pdfce_core::form_script::inventory::ScriptSource::Stream => "stream",
+            pdfce_core::form_script::inventory::ScriptSource::Unreadable => "unreadable",
+        };
+        // The field name is quoted because a fully-qualified name may
+        // contain spaces (`/T` is a text string, not a name object), and an
+        // unquoted one would silently break the key=value parse this line
+        // promises.
+        println!(
+            "script field={:?} trigger={} helper={} reproducible={} source={source} bytes={}",
+            s.field,
+            s.trigger.token(),
+            s.class.token(),
+            u32::from(s.is_reproducible()),
+            s.length,
+        );
+    }
+
+    let histogram = inv
+        .histogram()
+        .iter()
+        .map(|(token, n)| format!("{token}={n}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    println!(
+        "list-scripts {} scripts={} shown={shown} reproducible={} {histogram}",
+        input.display(),
+        inv.scripts.len(),
+        inv.reproducible().count(),
+    );
+
+    if !inv.scripts.is_empty() {
+        eprintln!(
+            "pdfce-cli: {}: this form carries {} script(s) that Adobe Acrobat/Reader would \
+run. pdfce NEVER executes any of them (R53/R54). A recognised built-in is read, not run; \
+its stored value is shown as last saved and may be stale until you recompute it.",
+            input.display(),
+            inv.scripts.len(),
         );
     }
     exit::SUCCESS

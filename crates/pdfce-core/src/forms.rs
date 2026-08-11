@@ -776,11 +776,39 @@ pub struct AcroForm {
     /// non-incremental save — the document-level echo of pdfce's default
     /// incremental-save discipline (R36).
     pub append_only: bool,
-    /// The number of fields in `/CO` (the calculation order, §12.6.3).
-    /// **Recognition only** — pdfce round-trips `/CO` and never executes the
-    /// calculation scripts it orders (NF4). Non-zero means the form has
-    /// calculated fields whose stored `/V` pdfce shows but does not recompute.
+    /// The number of entries in `/CO` (the calculation order, **§12.7.2
+    /// Table 218** — not §12.6.3, which is where the *obligation* to honour
+    /// it lives).
+    ///
+    /// Counts the raw array's length, including any entry that is not an
+    /// indirect reference. Table 218 admits **only** indirect references —
+    /// deliberately, since the sibling `/Fields` array of a reset-form action
+    /// (Table 238) goes out of its way to permit names as well — so a
+    /// difference between this and [`AcroForm::calc_order`]'s length means
+    /// the file carries malformed entries.
     pub calc_order_count: usize,
+    /// The `/CO` calculation order as object ids, in array order (§12.7.2
+    /// Table 218).
+    ///
+    /// # Why the order is worth carrying, not just the count
+    ///
+    /// Because it is **normative**. Table 218's own wording is descriptive
+    /// ("will be recalculated"), but §12.6.3 Table 196's `C` row supplies the
+    /// obligation: *"The order in which the document's fields are
+    /// recalculated **shall** be defined by the `CO` entry in the interactive
+    /// form dictionary."* Quoting Table 218 alone makes `/CO` look advisory;
+    /// it is not.
+    ///
+    /// pdfce does not execute the scripts `/CO` orders (R53/R54), but its
+    /// native recompute
+    /// ([`form_script::recompute`](crate::form_script::recompute)) evaluates
+    /// in this order precisely so its results match what a JavaScript-running
+    /// reader would produce.
+    ///
+    /// Entries that are not indirect references are dropped here rather than
+    /// represented, because there is nothing to represent: a `/CO` element
+    /// that is not a reference names no field.
+    pub calc_order: Vec<ObjId>,
     /// Whether the AcroForm has a `/DR` default-resources dictionary (the
     /// fonts a widget `/DA` resolves against, §12.7.3.3).
     pub has_default_resources: bool,
@@ -939,11 +967,17 @@ pub fn parse_acroform<G: ObjectGraph + ?Sized>(graph: &G) -> Option<AcroForm> {
         .and_then(Object::as_int)
         .and_then(|v| u32::try_from(v).ok())
         .unwrap_or(0);
-    let calc_order_count = acro
+    let co = acro
         .get(b"CO")
         .map(|o| graph.resolve(o))
-        .and_then(Object::as_array)
-        .map_or(0, <[Object]>::len);
+        .and_then(Object::as_array);
+    let calc_order_count = co.map_or(0, <[Object]>::len);
+    // Only the indirect references; see `AcroForm::calc_order`. Taken from
+    // the array BEFORE resolution, because an entry's identity is the
+    // reference itself — resolving first would lose which object was named.
+    let calc_order: Vec<ObjId> = co
+        .map(|items| items.iter().filter_map(Object::as_reference).collect())
+        .unwrap_or_default();
     let has_default_resources = acro
         .get(b"DR")
         .map(|o| graph.resolve(o))
@@ -1017,6 +1051,7 @@ pub fn parse_acroform<G: ObjectGraph + ?Sized>(graph: &G) -> Option<AcroForm> {
         signatures_exist: sig_flags & 1 != 0,
         append_only: sig_flags & 2 != 0,
         calc_order_count,
+        calc_order,
         has_default_resources,
         default_appearance,
         quadding,
@@ -1525,10 +1560,38 @@ fn string_bytes(obj: &Object) -> Option<Vec<u8>> {
 /// A recognition-only inventory of a document's embedded form/document
 /// JavaScript and its action triggers (decision 009, posture A).
 ///
-/// **pdfce NEVER executes any of this** (R53/R54): §12.6.4.16 is a "hollow
-/// shall" — ISO 32000-1 defines the JavaScript *carrier* and *hook points*
-/// but no JavaScript semantics, API, DOM, or security model, so
-/// non-execution is fully ISO-conformant. This struct exists to **disclose**
+/// **pdfce NEVER executes any of this** (R53/R54). ISO 32000-1 §12.6.4.16
+/// does say a conforming processor "shall execute a script that is written in
+/// the JavaScript programming language", so non-execution is a **disclosed,
+/// deliberate departure from one clause** — not, as this comment previously
+/// claimed, a free win because the obligation was hollow.
+///
+/// # What the standard actually does and does not supply
+///
+/// The clause specifies **no** JavaScript semantics, API, DOM, or security
+/// model of its own. It defines only the carrier (Table 217: `/S
+/// /JavaScript`, `/JS` as string or stream) and the hook points, then says
+/// two external documents "give details on the contents and effects of
+/// JavaScript scripts" — a 1999 Mozilla reference and Adobe's API reference
+/// for Acrobat 8.0.
+///
+/// Those two are in **clause 3, Normative references** — the earlier reading
+/// that placed them in the Bibliography was wrong, and the clause's own
+/// "(see the Bibliography)" pointer is one of eight-plus instances of the
+/// same erratum. What carries the argument instead is the **invocation
+/// verb**: ISO 32000-1 has a formula for binding an external document
+/// normatively — "shall conform to", used on Adobe Technical Note #5014,
+/// XFA 2.0 and RFC 2315 — and §12.6.4.16 uses none of it. The documents
+/// merely "give details on". The consequence is permissive too: fields
+/// "**may** update their values".
+///
+/// So there is no ISO-defined correct result a processor could be measured
+/// against, and non-execution forfeits no measurable conformance — but the
+/// honest description is a decision not to implement a clause, taken for
+/// reasons of attack surface and auditability, rather than the absence of an
+/// obligation. See `docs/decisions/009-forms-javascript-posture.md`.
+///
+/// This struct exists to **disclose**
 /// what a document *would* run in Acrobat/Reader, so the operator knows a
 /// field is script-driven (its stored `/V` is shown as-last-saved, never
 /// recomputed) and knows a document runs scripts on open.
