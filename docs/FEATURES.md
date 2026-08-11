@@ -157,7 +157,7 @@ provisional; re-verify before any acceptance criterion leans on them.
 | [x] | [x] | [x] | [x] | Find text on the page. |
 | — | [x] | [x] | [x] | Read and navigate an existing bookmark tree. **No authoring.** |
 | [x] | [x] | [ ] | [x] | List embedded attachments. **Cannot extract their bytes**, and no GUI surface. |
-| [x] | [x] | [x] | ◐ | Print — enumerate printers, spool a real job honouring the operator's CMYK intent, with orientation, duplex, copies, page subsets and a four-way comments-and-forms filter; GUI dialog is tabbed, resizable with both scrollbars, previews real page content zoomable/pannable, and opens on Ctrl+P. |
+| [x] | [x] | [x] | ◐ | Print — enumerate printers, spool a real job honouring the operator's CMYK intent and the sheet orientation it's planned against (the GUI preview turns with it), with duplex, copies, page subsets and a four-way comments-and-forms filter; GUI dialog is tabbed, resizable with both scrollbars, previews real page content zoomable/pannable, and opens on Ctrl+P. |
 | — | [x] | [ ] | [x] | Imposition — N-up, booklet, poster; mutually exclusive, refused in combination. **No GUI surface at all.** |
 | [x] | [x] | [x] | [x] | View and toggle a foreign producer's `/OCProperties` layer tree. |
 | — | — | [x] | [x] | Read mode and full screen, as two separate toggles. |

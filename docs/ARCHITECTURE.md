@@ -879,9 +879,25 @@ D:\Dev\pdfce\
                                    its smaller axis, an out-of-range page skipped not
                                    refused) behind a `cfg` the Linux/macOS CI jobs never
                                    build — green locally, silently uncovered on every
-                                   other platform. `DeviceGeometry: From<&PrinterCaps>`
-                                   bridges the two. **Shared by BOTH pdfce-cli and
-                                   pdfce-gui**, deliberately — the alternative (each shell
+                                   other platform. **★ CORRECTED 2026-08-11 (`Pass
+                                   64.0`, decision 041) — `DeviceGeometry:
+                                   From<&PrinterCaps>` is REMOVED.** That infallible
+                                   `From` impl had no orientation parameter, so it
+                                   always read `PrinterCaps`' printable area BEFORE any
+                                   `DEVMODE` existed — the device's own DEFAULT
+                                   orientation, portrait on nearly every real printer —
+                                   and `plan_job` never saw the operator's orientation
+                                   choice at all: every LANDSCAPE job was planned
+                                   against the PORTRAIT sheet (measured: scale 0.727
+                                   where correct is 0.941). The only route from
+                                   `PrinterCaps` to `DeviceGeometry` is now
+                                   `DeviceGeometry::from_caps(caps, requested,
+                                   first_page_pt)`, which cannot be called without
+                                   stating the requested orientation; the un-rotated
+                                   view is unreachable by construction. See §12's new
+                                   decision 041 entry for the full record. **Shared by
+                                   BOTH pdfce-cli and pdfce-gui**, deliberately — the
+                                   alternative (each shell
                                    computing its own page placement) is how a GUI print
                                    comes to land differently from a CLI print of the same
                                    document at the same settings, a divergence nobody
@@ -17272,3 +17288,116 @@ new type or a new field on `RenderPolicy` — the bug was that one of two
 call sites never populated an existing field, not that the field was
 missing from the model. Full build record: `ROADMAP.md`'s `5d2b19b` +
 `483cb4d` Shipped entry (hundred-and-second filing).
+
+### 2026-08-11 (hundred-and-third filing) — decision 041: `DeviceGeometry::from_caps`/`for_orientation` REPLACE `From<&PrinterCaps>`; the un-rotated device view becomes unreachable by construction, not merely a thing to remember to rotate
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — `git show` not
+run against `d1756e5`/`290aef9`/`4837009`. The dispatching engineer
+supplied the defect, the measurement and the fix shape in full;
+independently confirmed by direct `Read`/`Grep` against the working tree:
+`crates/pdfce-print/src/lib.rs` (module carrying `DeviceGeometry`,
+`sheet_orientation`, `for_orientation`, `from_caps`), and the absence of
+any `impl From<&PrinterCaps> for DeviceGeometry` in the crate (grepped
+for `From<&PrinterCaps>` — zero hits, confirming the removal).
+
+**Decision.** `impl From<&PrinterCaps> for DeviceGeometry` (§3, the
+eighty-fifth filing's original crate-boundary decision, corrected in
+place above) is REMOVED. It was infallible and had no orientation
+parameter — every call site that reached for `.into()` silently built a
+`DeviceGeometry` from `PrinterCaps`' printable area as reported BEFORE
+any `DEVMODE` existed, which is the device's own default orientation
+(portrait, for nearly every real printer). `plan_job` therefore never
+saw the operator's Orientation choice at all, and every LANDSCAPE job
+was planned against the PORTRAIT sheet: measured on a landscape US
+Letter page (792×612 pt) against a portrait printable area (576×756 pt),
+pdfce planned scale **0.727** where correct is **0.941** — the page
+printed at roughly 77% of its intended size inside a large blank
+margin, not clipped, under-scaled.
+
+**The corrected diagnosis, which matters more than the bug itself.**
+The defect does **not** fire only at default settings. `build_devmode`
+separately returned `None` whenever `settings == DeviceSettings::
+default()`, so at PURE defaults no `DEVMODE` was ever sent and the
+driver stayed portrait on its own — planning and driver agreed by
+accident, masking the mismatch. The real shape: the mismatch fired
+whenever **any** setting differed from default (changing duplex alone
+was enough to mis-scale a landscape page), and — the more damaging half
+— because `Auto` **is** the default orientation, pdfce's own advertised
+automatic-orientation resolution **never turned anything** unless the
+operator happened to also touch an unrelated control. A "disturb nothing
+by default" guard was silently disabling the very default behaviour it
+was meant to be guarding. Both are fixed together: a `DEVMODE` is now
+built whenever the resolved orientation differs from the device's own
+default, independent of whether any other setting changed; `DM_DUPLEX`
+stays gated on the pre-existing condition so an `Auto` turn cannot
+accidentally cancel a driver's own duplex default.
+
+**The fix.** `DeviceGeometry` gains the whole sheet, not only the
+printable rectangle — `physical_pt`, `offset_pt` alongside the existing
+`printable_pt`/`dpi` — plus `default_orientation()` and
+`for_orientation(requested, first_page_pt)`; a new free function
+`sheet_orientation(physical_pt)`; `JobSpec::first_page_pt(&page_sizes)`;
+a new `pub const US_LETTER_PORTRAIT_PT`. The infallible `From` impl is
+replaced by `DeviceGeometry::from_caps(caps, requested, first_page_pt)`
+— it cannot be called without stating the orientation, so the un-rotated
+view is unreachable by construction rather than merely a step a future
+caller has to remember. `build_devmode` gains a `device_default:
+Orientation` parameter and takes `first_page_pt` instead of `&[PageBitmap]`;
+`spool` gains an explicit `first_page_pt` parameter rather than inferring
+one from `pages.first().page_pt` — the imposition paths (N-up/booklet/
+poster) hand `spool` one bitmap per printed SHEET, not per source page,
+so the old inference resolved `Auto` from the wrong quantity for every
+imposition job while looking correct for an ordinary one.
+
+**Two corrections to the implementer's own design, both load-bearing,
+neither merely stylistic.** (1) The rotation helper could not live on
+`PrinterCaps` — that type is `cfg(windows)`, and the geometry rotation
+arithmetic is deliberately un-gated so it is unit-testable on the
+project's Linux/macOS CI. Putting it there would have hidden the most
+test-worthy code in the crate behind a `cfg` CI never builds — the same
+reasoning the eighty-fifth filing's original decision already applied to
+`PrinterCaps` itself, now applied a second time to its rotation. (2)
+`spool`'s own internal `printer_caps` call needs the device's
+**UN-rotated** default view specifically, because `build_devmode` needs
+to know the device's own default orientation to decide whether THIS job
+needs a `DEVMODE` turn at all — handing it an already-rotated view would
+make every job look like it needed none, silently reintroducing the
+`None`-on-default failure mode this same fix closes.
+
+**Falsification, not merely assertion.** Forcing `for_orientation` to
+`return self` unconditionally turns 3 of 8 new geometry tests red with
+`expected 0.9411764705882353, got 0.7272727272727273`; restored, all
+green. `0.9411764705882353` is `576/612` (the SHORT axis binding after
+the turn), not the more obvious-looking `756/792` — the number was
+already correct in the design, the derivation attached to it was not; a
+doc-test caught the mislabel. Observed live via the harness on a real
+Windows printer (ET-16600, portrait default): landscape `sheet=792x612
+printable=775x595`, plan `scale=2.584`; portrait `sheet=612x792
+printable=595x775`, plan `scale=1.984`; screenshot confirms the preview
+sheet is wide under Landscape, tall under Portrait. Confirmed a second,
+independent way through Microsoft Print to PDF's own driver output:
+`MediaBox [0 0 792 612]` for `auto`, `[0 0 612 792]` for `portrait`.
+
+**Standing rule: `R171` cited, not re-minted, and a widening recorded
+instead — see `ROADMAP.md`'s Standing rules section, the paragraph
+appended to R171's own entry this filing.** `R171` as first worded
+("a constant, default, or token…") is literally about restated LITERAL
+values; this defect and its two siblings filed the same session
+(`parse_page_range`'s own module-header-documented instance, and the
+`print_render_options`/CMYK-intent divergence closed by decision 040
+immediately above) are about a DERIVED value or an assembled options/
+builder struct being independently reconstructed a second time, not a
+literal being copied. Ruled a widening of R171's stated scope rather
+than a new rule number — the underlying principle (one owner, read from
+it, never restated) is identical whether the restated thing is a literal
+or a computed result, and a second rule number for the same principle
+would fragment which rule a future citation should point at. Three
+instances inside `crates/pdfce-gui/src/print_flow.rs` alone comfortably
+clear this project's own two-occurrence promotion bar; see `ROADMAP.md`
+for the full instance list.
+
+**Not a GUI-core boundary change.** `pdfce-print` still depends on
+neither `pdfce-core` nor `pdfce-render` (§3, eighty-fifth filing,
+unaffected). `cargo tree -p pdfce-core` / `-p pdfce-render` name no GUI
+crate. Full build record: `ROADMAP.md`'s `d1756e5`/`290aef9`/`4837009`
+Shipped entry (hundred-and-third filing).

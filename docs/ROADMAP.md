@@ -81,6 +81,319 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★★ tooling — `check-ledger-numbers.py` stops printing a wrong Pass-family ceiling: decision numbers declared only in `ARCHITECTURE.md` §12 now feed the ceiling, and an unparsed SESSION_LOG ordinal is a FAILURE, not a NOTE — `e293143` — 2026-08-11, branch `post-v0.2.0` (hundred-and-third filing, filed alongside `Pass 64.0` below)
+
+**No Pass ID — ledger/gate infrastructure, same class as
+`check-passes-filed.py` and `check-commits-filed.py`; no `ARCHITECTURE.md`
+§12 entry either, for the same reason those had none — no crate boundary,
+library choice or invariant is redrawn here, only a checker's own
+coverage being repaired.**
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — `git show
+e293143` not run. Independently confirmed by direct `Read` of
+`tools/check-ledger-numbers.py` against the working tree: `collect_
+decisions()` now reads both `docs/decisions/NNN-*.md` AND every
+`### `/`**Decision NNN` declaration in `ARCHITECTURE.md` §12 (via
+`ARCH_DECISION`, a regex anchored on a heading or bolded paragraph
+start, deliberately not matching prose back-references like "see
+decision 019"); the ceiling is the union's max, duplicate DETECTION
+stays file-only (the module's own docstring states why §12 declarations
+are not regex-separable from its own amendment prose — the same
+false-positive class `collect_passes` already documents for Pass
+headings); `ordinal_to_int` now parses `hundredth`/`hundred-and-Nth`/
+`N-hundred-and-Mth`; an unrecognised ordinal word is now counted into
+`failures` (exit 1) rather than only printed as a `NOTE` (exit 0).
+
+**The bug, and why it is worse than a missing check.** Before this
+commit, `check-ledger-numbers.py` reported "decisions: 038, next free
+039" while `ARCHITECTURE.md` §12 had already minted decisions 039 and
+040 with no file under `docs/decisions/` for either — a **confidently
+wrong ceiling**, not merely an incomplete one, printed on the very day a
+Pass ID collision (`Pass 62.0` vs `Pass 63.0`, this document's own
+immediately-following entry) demonstrated exactly what a wrong ceiling
+costs. Separately, `SESSION_LOG.md` reached its **hundredth** filing the
+same day, and the ordinal-word vocabulary stopped at "ninety" —
+`hundredth`/`hundred-and-first`/`hundred-and-second` all failed to
+parse, silently, and the three NEWEST filings (the ones most likely to
+collide, being the ones a future filer reads last) were the only three
+never uniqueness-checked, while the tool's own summary line still
+printed "clean." Both are the same shape this project's own **R186**
+names in application code — a guard that fails OPEN on a hazard shape
+its own vocabulary/coverage does not yet reach — now confirmed to recur
+in the tooling that exists to catch defects of this kind, not only in
+the codebase the tooling watches.
+
+**Live ceilings after the fix, stated because a fixed checker earns
+being cited by its own output rather than by description:** decisions
+**040**, next free **041**; `SESSION_LOG.md` filings **102** (hundred-
+and-second), next free **103**.
+
+**`docs/FEATURES.md`: not touched.** Nothing user-facing; this is CI/
+tooling. **Ledger for this filing:** no Pass ID; no `ARCHITECTURE.md`
+§12 entry (see the header line above for why); no new decision, rule,
+or operator-question number claimed. `D:\dev\rag\rust\`/`C:\personal_rag\
+pdf\`: not touched by this entry (the general "checker fails open on an
+unparsed vocabulary word" shape is already covered by this project's own
+`R186` and by `D:\dev\rag\rust\ci_gate_red_at_baseline_enforces_nothing.md`'s
+Amendment 2/3 — filed as a citation, not a new finding).
+
+---
+
+### ★★★ `d1756e5` + `290aef9` + `4837009` — landscape jobs were planned against the PORTRAIT sheet: `DeviceGeometry::from_caps`/`for_orientation` replace an infallible `From` that had no orientation parameter, and `Auto` orientation is fixed a SECOND time after the first diagnosis turns out to be half wrong — `Pass 64.0` ships, plus `8177ec4` discharges the `Pass 62.0`→`63.0` stale-citation debt named at the hundred-and-second filing — 2026-08-11, branch `post-v0.2.0` (hundred-and-third filing)
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — `git show` not
+run against any of the four hashes. The dispatching engineer supplied
+each commit's full message, the defect, the corrected diagnosis, the
+measurements and the falsification in full; independently confirmed by
+direct `Read`/`Grep` against the working tree: `crates/pdfce-print/src/
+lib.rs` carries `DeviceGeometry` (with `physical_pt`/`offset_pt`
+alongside the pre-existing `printable_pt`/`dpi`), `default_orientation`,
+`for_orientation`, `from_caps`, the free function `sheet_orientation`,
+and `pub const US_LETTER_PORTRAIT_PT`; grepping the crate for
+`From<&PrinterCaps>` returns zero hits, confirming the removal named
+below; `JobSpec::first_page_pt` exists on the type named. Not
+independently re-run: `cargo test`, `cargo fmt`/`clippy`, or the
+`tools/gui-shot.ps1` capture — relayed, engineer-verified per the
+dispatch, not re-executed by this librarian (no shell).
+
+**The bug.** Selecting or auto-resolving Landscape rotated the paper but
+never moved the page placement. `printer_caps` was read BEFORE any
+`DEVMODE` existed, so it reported the device's DEFAULT printable area
+(portrait, on nearly every real printer); `plan_job` never saw
+orientation at all; `build_devmode` then separately told the driver to
+turn the physical sheet. Measured on a landscape Letter page (792×612 pt)
+against a portrait printable area (576×756 pt): pdfce planned scale
+**0.727** where correct is **0.941** — the page printed at roughly 77%
+of its intended size inside a large blank margin. Not clipping,
+under-scaling.
+
+**★ THE CORRECTED DIAGNOSIS IS THE MORE IMPORTANT FINDING, AND IT IS
+RECORDED HERE BECAUSE THE FIRST PASS AT IT WAS WRONG.** The dispatch's
+own initial read — "this fires at DEFAULT settings" — is false, and the
+reason is a SECOND, independent bug: `build_devmode` returned `None`
+whenever `settings == DeviceSettings::default()`, so at PURE defaults no
+`DEVMODE` was ever sent and the driver stayed at its own default
+(portrait) orientation — planning's wrong answer and the driver's
+actual behaviour happened to AGREE, by accident, masking the mismatch
+completely. The real shape, once traced through:
+
+1. The mismatch fired whenever **ANY** setting differed from default —
+   changing duplex ALONE was enough to mis-scale a landscape page, with
+   nothing about duplex itself at fault.
+2. And the flip side, arguably worse: because `Auto` **is** the default
+   orientation value, pdfce's own advertised automatic-orientation
+   resolution **never turned anything**, for as long as the operator
+   never happened to also touch an unrelated control that took
+   `settings` out of its default state. The advertised `Auto` behaviour
+   was inert from the day it shipped.
+
+Both are now fixed together, in the same change: a `DEVMODE` is built
+whenever the **resolved** orientation differs from the device's own
+default — independent of whether any other setting changed — and
+`DM_DUPLEX` stays gated on the OLD `settings == default` condition, so
+an `Auto`-driven turn cannot accidentally cancel a driver's own duplex
+default. A general write-up of this exact shape — a change-detection
+guard silently disabling a feature whose own default value is meant to
+actively resolve to something — is filed to `D:\dev\rag\rust\` (see the
+RAG paragraph below); it generalises well past pdfce and past printing.
+
+**What shipped.** `DeviceGeometry` now carries the WHOLE sheet
+(`physical_pt`, `offset_pt`, alongside the pre-existing `printable_pt`/
+`dpi`), plus `default_orientation()` and `for_orientation(requested,
+first_page_pt)`. New free function `sheet_orientation(physical_pt)`;
+`JobSpec::first_page_pt(&page_sizes)`; `pub const
+US_LETTER_PORTRAIT_PT`. **`impl From<&PrinterCaps> for DeviceGeometry`
+is REMOVED**, replaced by `DeviceGeometry::from_caps(caps, requested,
+first_page_pt)` — an infallible conversion with no orientation parameter
+is a call site every future caller could reach for and get silently
+wrong again; the new function cannot be called without stating the
+orientation, so the un-rotated view is unreachable by construction, not
+merely a step someone has to remember. `build_devmode` gains a
+`device_default: Orientation` parameter and takes `first_page_pt`
+instead of `&[PageBitmap]`; `spool` gains an explicit `first_page_pt`
+parameter (previously inferred from `pages.first().page_pt`, which is
+correct for an ordinary job and silently wrong for every imposition job
+— N-up/booklet/poster hand `spool` one bitmap per printed SHEET, not per
+source page, so the old inference resolved `Auto` from the wrong
+quantity for exactly the paths this project shipped last session).
+**CLI:** `device` is now built AFTER `spec`, turned via `from_caps`; all
+four layout paths (plain, n-up, poster, booklet) read the turned
+`printable_pt` from one shared binding. `print-preview` gains
+`--orientation`, and reports `orientation=` plus the turned sheet.
+**GUI:** `PreviewInputs.caps: Option<&PrinterCaps>` becomes `geometry:
+Option<&DeviceGeometry>` — the preview's sheet, printable rect and
+margins now come from the geometry the job was actually planned
+against, closing the Backlog gap named at the hundred-and-second
+filing ("the print preview does not reflect the operator's Orientation
+radio"). New harness step `print-orientation:auto|portrait|landscape`;
+`print-preview-rect` gained `sheet=`/`printable=`/`margin=`,
+`print-plan` gained `orientation=` and `scale=`.
+
+**Two corrections to the implementer's own design, both load-bearing.**
+(1) The rotation helper could not live on `PrinterCaps` — that type is
+`cfg(windows)`, and the geometry math is deliberately un-gated so it
+tests on Linux/macOS CI; putting it there would have hidden the most
+test-worthy code in the crate behind a `cfg` CI never builds. (2)
+`spool`'s own internal `printer_caps` call needs the **UN-rotated**
+device-default view specifically — `build_devmode` needs to know the
+device's own default orientation to decide whether THIS job needs a
+`DEVMODE` turn at all, and an already-rotated view handed to it would
+make every job look like it needed none, silently reintroducing the
+`None`-at-default failure mode this same fix closes.
+
+**A fourth, smaller correction, recorded because a doc-test caught a
+mislabelled-but-correct number, not a wrong one:** `0.9411764705882353`
+is `576/612` — the SHORT axis binding after the turn — not the more
+obvious-looking `756/792`. The value itself was right from the first
+draft; the comment explaining where it came from was not.
+
+**Falsification, not merely assertion.** Forcing `for_orientation` to
+`return self` unconditionally turns 3 of 8 new geometry tests red with
+`expected 0.9411764705882353, got 0.7272727272727273`; restored, all
+green. **Observed live in a release build** via the harness against a
+real Windows printer (ET-16600, portrait default): Landscape —
+`sheet=792x612 printable=775x595`, plan `scale=2.584`; Portrait —
+`sheet=612x792 printable=595x775`, plan `scale=1.984`; a screenshot
+confirms the preview sheet is wide under Landscape, tall under Portrait.
+**Confirmed a second, independent way**, end to end through Microsoft
+Print to PDF's own driver output: the driver's own `MediaBox` reads
+`[0 0 792 612]` for `auto`, `[0 0 612 792]` for `portrait`.
+
+**`8177ec4` — discharges the stale-citation debt named at the
+hundred-and-second filing, not new engineering work.** That filing's
+Pass-ID-collision correction (`Pass 62.0` → `Pass 63.0`) flagged three
+source-comment sites and two commit messages still reading `Pass 62.0`
+as "flagged for the engineer to correct; not this librarian's file to
+edit." `8177ec4` is that correction — a comment-only renumber to `Pass
+63.0`, no behaviour change. Recorded here rather than as its own entry
+because it is bookkeeping for a Pass already fully filed, not a new
+capability.
+
+**Test results: relayed, engineer-verified, not independently re-run by
+this librarian (no shell).** Workspace-wide `cargo test`, `cargo fmt
+--check`, `cargo clippy --workspace --all-targets --all-features -D
+warnings` (zero), `check-ui-strings.sh`, `check-theme-colors.sh`,
+`check-ledger-numbers.py` all reported clean by the dispatching
+engineer. `cargo tree -p pdfce-core` / `-p pdfce-render` name no GUI
+crate (also independently confirmed: neither crate's source under
+`crates/pdfce-print/` — checked directly, `pdfce-print` depends on
+neither).
+
+**Decision 041 — `DeviceGeometry::from_caps`/`for_orientation` are the
+ONLY route between `PrinterCaps` and `DeviceGeometry`; the un-rotated
+view is unreachable by construction, not merely a convention to
+remember.** Full record: `ARCHITECTURE.md` §12's new entry, this filing
+— also corrects §3's tree text for `pdfce-print` in place, since the
+`From<&PrinterCaps>` sentence it previously carried is no longer true.
+
+**Standing rule: `R171` is CITED, WIDENED, not re-minted — this
+librarian's call, stated so the reasoning is checkable.** `R171`'s
+literal wording ("a constant, default, or token…") covers a RESTATED
+LITERAL; this defect and its two siblings filed inside
+`crates/pdfce-gui/src/print_flow.rs` alone this session —
+`parse_page_range` (documented in that file's own module header), the
+`print_render_options`/CMYK-intent divergence closed by decision 040
+immediately above, and now `DeviceGeometry`'s un-rotated-view reuse —
+are about a DERIVED VALUE or an assembled options/builder struct being
+independently reconstructed a second time, not a copied literal. Three
+instances in one file comfortably clears this project's own
+two-occurrence promotion bar (see `R172`'s own minting note for the
+precedent that two is sometimes already enough). **Ruled a WIDENING of
+R171's stated scope, not a new rule number**, for the same reason `R172`
+was widened in place rather than superseded at its own third instance:
+the underlying principle — one owner, read from it, never restated — is
+identical whether the restated thing is a literal or a computed result,
+and minting a second rule number for the identical principle would
+fragment which rule a future citation should point at. The widening
+paragraph is appended to `R171`'s own entry in *Standing rules* below,
+not filed as a new top-level rule bullet (matching `R172`'s own "★
+WIDENED" precedent, which keeps the ceiling honest against
+`check-ledger-numbers.py`'s regex — a second `- **R171 —` line would
+read as a duplicate declaration, not an amendment). **Ceiling stays
+`R186`, next free `R187`** — no new number minted.
+
+**`docs/FEATURES.md`: one row touched, sentence REPLACED (not
+appended).** The existing "Reading, navigation & printing" *Print* row
+now also states that orientation turns the sheet the job is planned
+against and that the GUI preview turns with it, replacing the prior
+sentence's flatter "with orientation, duplex, copies…" clause.
+`core`/`cli`/`gui` cells unchanged (`[x]`/`[x]`/`[x]` — this Pass
+delivered correctness inside an already-shipped capability, not new
+capability; the *Imposition* row (`—`/`[x]`/`[ ]`) is likewise
+unchanged for the same reason, even though the orientation fix also
+touches its four layout paths).
+
+**RAG additions — three `D:\dev\rag\rust\` files, no `C:\personal_rag\
+pdf\` file this filing (see the redirect note below).**
+`an_infallible_from_impl_that_drops_a_required_parameter_is_a_trap_not_a_convenience.md`
+(the `From<&PrinterCaps>` removal, generalised);
+`a_caller_supplied_disambiguator_must_be_a_parameter_not_rederived_from_a_sometimes_equal_proxy.md`
+(the `spool`/`first_page_pt` fix, generalised);
+`a_disturb_nothing_by_default_guard_can_silently_disable_the_default_behaviour_it_is_guarding.md`
+(the corrected-diagnosis finding above, generalised past printing).
+**Redirect, not omission:** the dispatch proposed a fourth finding for
+`C:\personal_rag\pdf\` — the Win32 landscape coordinate-space rotation
+`(x, y) -> (H - y, x)` and its margin-ring consequence for asymmetric
+printable-area offsets. Checked against this tree's own precedent
+first (hard rule 4): two prior Win32-GDI-printing findings
+(`windows_dmduplex_flag_names_the_flip_axis_not_the_binding_edge.md`,
+`windows_bitmapinfoheader_top_down_dib_and_bi_rgb_channel_order.md`)
+already live in `D:\dev\rag\rust\`, not `personal_rag/pdf` — the finding
+is about a Windows driver/API coordinate convention, not about how a
+real-world PDF FILE's bytes diverge from spec, which is `personal_rag/
+pdf`'s actual scope. Filed as the fourth sibling in the same directory
+instead:
+`win32_landscape_device_space_rotates_the_whole_margin_ring_not_just_width_and_height.md`.
+
+**Backlog: one entry closed, two new entries added, both flagged by the
+implementer as pre-existing defects OUTSIDE this Pass's own scope, not
+fixed here.** The "print preview does not reflect the operator's
+Orientation radio" entry (filed hundred-second filing) is marked ★
+SHIPPED below, discharged by this Pass's GUI half. Two new entries:
+`DeviceSettings::pick_tray_by_page_size` sets no `DEVMODE` field at all
+(`DM_DEFAULTSOURCE` is never written — the control participates only in
+the `!= default` comparison that decides whether to build a `DEVMODE`,
+so choosing a tray currently does nothing to the actual job); and
+`build_devmode`'s own doc comment claims it "starts from the driver's
+own default rather than zeroed," while the code it documents builds a
+zeroed `DEVMODEW` and leaves a `_printer_wide` binding unused — a doc
+comment describing code that is not there. See *Backlog* below for both,
+filed near the existing printer-spooling entries.
+
+**Ledger for this filing.** **New Pass ID minted: `Pass 64.0`** (device-
+geometry orientation fix — `From<&PrinterCaps>` removal, `spool`'s
+`first_page_pt` parameter, the `Auto`-never-fires correction). Pass-
+family ceiling moves **63.0 → 64.0**, next free **65**. Four commits
+cited by hash (`d1756e5`, `290aef9`, `4837009`, `8177ec4` — the last a
+debt-discharge correction, not new work, folded into this entry rather
+than filed separately). `docs/FEATURES.md`: **one row touched** (Print,
+sentence replaced — see above); no row moves section (already
+*Implemented*). `docs/ARCHITECTURE.md`: **one new §12 entry, decision
+041**, dated 2026-08-11, plus an in-place correction to §3's `pdfce-print`
+tree text (the stale `From<&PrinterCaps>` sentence). Standing rules:
+**no new mint** — `R171` WIDENED in place (see the paragraph above and
+the one appended to its own entry below), `R186` referenced by
+analogy in the `e293143` tooling entry above. **Ceiling stays `R186`,
+next free `R187`.** Decision-record ceiling moves **040 → 041**, next
+free **042**. Operator-question ceiling **unchanged at `(bj)`, next
+free `(bk)`** — no new question minted. `D:\dev\rag\rust\`: **three new
+files**, listed above, plus their `index.md` bullets, same filing.
+`D:\dev\rag\egui\`: not touched. `C:\personal_rag\pdf\`: **no new file
+this filing** — a fourth candidate was redirected to `D:\dev\rag\rust\`
+instead, per the precedent check above. Test/gate figures: relayed,
+engineer-verified, not independently re-run by this librarian (no shell
+this dispatch) — see the Test results paragraph above for the specific
+gates named clean. **Packaging smoke test: not reported this filing** —
+flagged, not assumed. **Backup/git working-tree/remote state not
+independently asserted anywhere in this filing** — no shell this
+dispatch (hard rule 8); the engineer should check `D:\Dev\pdfce-backups\`
+and `git log`/`git status`/`git remote -v` directly, on branch
+`post-v0.2.0`. This is the **hundred-and-third** `SESSION_LOG.md`/
+`ROADMAP.md` joint filing (the hundred-and-second, immediately below,
+confirmed present by direct read before this entry was appended).
+
+---
+
 ### ★★★ `5d2b19b` + `483cb4d` — the print dialog gets a real preview, tabs, resize/scroll and Ctrl+P; a shared builder closes a silent CMYK-intent divergence, and a live pre-existing confirmation-gate gap is fixed alongside it — `Pass 63.0` ships (renumbered: the source comments and commit messages used `Pass 62.0`, already taken by the form-data-CSV Pass minted at the ninetieth filing) — 2026-08-11, branch `post-v0.2.0` (hundred-and-second filing)
 
 **Sourcing.** No shell tool this dispatch (hard rule 8) — `git log`/`git
@@ -41490,6 +41803,35 @@ nothing gets forgotten, not as a commitment to build in this order.
   a chosen Portrait/Landscape override — so a document previewed at the
   default orientation and then printed Landscape shows a preview that
   never matched the job. Not yet scoped to a Pass.
+  **★ SHIPPED 2026-08-11 (`Pass 64.0`, hundred-and-third filing,
+  `d1756e5`+`290aef9`+`4837009`) — `PreviewInputs.caps: Option<&
+  PrinterCaps>` became `geometry: Option<&DeviceGeometry>`; the
+  preview's sheet, printable rect and margins now come from the SAME
+  orientation-aware geometry the job is actually planned against. Found
+  alongside a deeper, related bug in the same Pass — see this file's
+  own `Pass 64.0` Shipped entry (top of *Shipped*) for the full
+  `DeviceGeometry::from_caps`/`for_orientation` record. Retained here,
+  not deleted, per this section's own append-adjacent discipline.**
+- **`DeviceSettings::pick_tray_by_page_size` sets no `DEVMODE` field —
+  the tray-selection control does nothing to the actual job** (filed
+  2026-08-11, `Pass 64.0`'s hundred-and-third filing — flagged by the
+  implementer as a pre-existing defect outside that Pass's own scope,
+  not fixed). `DM_DEFAULTSOURCE` is never written by `build_devmode`;
+  the resolved tray only participates in the `settings != default`
+  comparison that decides whether a `DEVMODE` gets built at all, so
+  choosing a specific tray currently has zero effect on which tray the
+  driver actually pulls from. Not yet scoped to a Pass.
+- **`build_devmode`'s own doc comment describes code that is not
+  there** (filed 2026-08-11, `Pass 64.0`'s hundred-and-third filing —
+  flagged by the implementer, not fixed). The doc comment claims the
+  function "starts from the driver's own default rather than zeroed,"
+  but the code it documents builds a zeroed `DEVMODEW` outright and
+  leaves a `_printer_wide` binding unused — the described "read the
+  driver's real default first" behaviour does not exist in the
+  function it is attached to. A doc-comment correction, not
+  necessarily a behaviour change (the zeroed-then-populated approach
+  may be the right one; the comment is what's wrong). Not yet scoped
+  to a Pass.
 - **Document-wide OCG/layers panel — distinct from the existing
   ce-dimension-group layer toggle (filed 2026-08-10, Reader-parity
   sweep).** pdfce can already toggle the OCG visibility of its OWN
@@ -51826,6 +52168,39 @@ and
   copy so there is only one place to keep in step with anything. Applies
   to defaults, enum-to-string tables, generated-file grammars, and any
   doctest or fixture that quotes a value the source already names.
+
+  **★ WIDENED 2026-08-11 (hundred-and-third filing) — the scope is a
+  DERIVED VALUE or an assembled options/builder struct, not only a
+  literal constant, and three instances inside ONE file are what forced
+  the widening rather than a fourth RAG cross-reference.**
+  `crates/pdfce-gui/src/print_flow.rs` alone carries three separate
+  instances of "two independently-written copies of one derivation
+  drift apart": `parse_page_range` (documented in that file's own
+  module header), the `print_render_options`/CMYK-intent divergence
+  (decision 040, `Pass 63.0`, hundred-and-second filing), and
+  `DeviceGeometry`'s un-rotated-view reuse (decision 041, `Pass 64.0`,
+  this filing — `plan_job` and `build_devmode` each formed their own
+  view of the device's printable area instead of reading one shared,
+  orientation-aware `DeviceGeometry`). None of the three restates a
+  literal the way the rule's original three founding instances did
+  (a hard-coded default, a copied token, a duplicated constant array) —
+  each restates a COMPUTATION: a parsed range, an assembled render-
+  options struct, a rotated device geometry. Ruled a widening of this
+  rule's stated scope rather than a new rule number, matching `R172`'s
+  own "★ WIDENED" precedent immediately below at its own third
+  instance: the underlying principle (one owner, read from it, never
+  restated) does not change when the restated thing is a derived
+  result instead of a literal, and a second rule number for the
+  identical principle would only fragment which rule a future citation
+  should point at. **Scope, restated to cover what the founding
+  wording under-specified:** *a constant, default, token, DERIVED
+  VALUE, or ASSEMBLED OPTIONS/BUILDER STRUCT that must agree with
+  another place in the codebase is read off the one place that owns
+  it, never independently reconstructed at the second place.* Full
+  record: `ROADMAP.md`'s `d1756e5`/`290aef9`/`4837009` Shipped entry
+  (hundred-and-third filing) and `ARCHITECTURE.md` §12's decision 041.
+  **Ceiling stays `R186`, next free `R187`** — this is a scope widening
+  on an existing rule, not a new mint.
 - **R172 — Before driving the GUI observation/injection harness through
   a gesture class not already exercised THIS session, grep the relevant
   `D:\dev\rag\egui\` (or `D:\dev\rag\rust\`) file first; hitting a

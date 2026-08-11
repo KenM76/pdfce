@@ -34892,3 +34892,138 @@ the **hundred-and-second** `SESSION_LOG.md`/`ROADMAP.md` joint filing
 (the hundred-and-first, immediately above, filed in the same dispatch;
 the hundredth confirmed present by direct read before either entry was
 appended).
+
+## 2026-08-11 (hundred-and-third filing) — `d1756e5`+`290aef9`+`4837009`: landscape print jobs were planned against the PORTRAIT sheet, `Pass 64.0` ships; the first diagnosis ("fires at defaults") was itself wrong, and the corrected one is worse; `e293143` fixes the Pass-ceiling checker that a same-day collision exposed
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — `git show` not
+run against any of the five hashes filed this session (`d1756e5`,
+`290aef9`, `4837009`, `8177ec4`, `e293143`). The dispatching engineer
+supplied every commit's full message, the defect, the corrected
+diagnosis, the measurements, and the falsification results in full;
+independently confirmed by direct `Read`/`Grep` against the working
+tree — `crates/pdfce-print/src/lib.rs` (`DeviceGeometry`, `for_
+orientation`, `from_caps`, `sheet_orientation`, `US_LETTER_PORTRAIT_PT`,
+zero remaining hits for `From<&PrinterCaps>`), `tools/check-ledger-
+numbers.py` (the decision-ceiling union fix, the ordinal-parse-failure
+gate). Not independently re-run: `cargo test`/`fmt`/`clippy`, the GUI
+harness capture — relayed, engineer-verified, not re-executed here.
+
+**Shipped:**
+- `d1756e5`+`290aef9`+`4837009` — filed as `Pass 64.0`: `DeviceGeometry`
+  gains the whole sheet (`physical_pt`, `offset_pt`) plus
+  `default_orientation`/`for_orientation`; `impl From<&PrinterCaps> for
+  DeviceGeometry` REMOVED, replaced by `DeviceGeometry::from_caps(caps,
+  requested, first_page_pt)`, which cannot be called without stating
+  the orientation; `spool` takes an explicit `first_page_pt` parameter
+  instead of inferring one from `pages.first().page_pt` (wrong for
+  every imposition job); CLI's four layout paths and the GUI preview
+  both now read the turned geometry from one shared binding.
+- `8177ec4` — comment-only renumber, discharging the `Pass 62.0`→`63.0`
+  stale-citation debt named at the hundred-and-second filing. Not new
+  engineering work.
+- `e293143` — `tools/check-ledger-numbers.py`: decision numbers
+  declared only in `ARCHITECTURE.md` §12 (034–036, 039, 040 had no
+  file) now feed the printed ceiling; an unparsed `SESSION_LOG.md`
+  filing ordinal is now a FAILURE (exit 1), not a silent `NOTE` — the
+  vocabulary had stopped at "ninety" the same day the log reached its
+  hundredth filing, so the three newest filings were the only ones
+  never uniqueness-checked while the summary still read clean.
+
+**Decisions made this session:**
+- **Decision 041** — `DeviceGeometry::from_caps`/`for_orientation` are
+  the only route from `PrinterCaps` to `DeviceGeometry`; the un-rotated
+  view is unreachable by construction. Corrects §3's tree text in
+  place (the prior `From<&PrinterCaps>` sentence is no longer true).
+  Full record: `ARCHITECTURE.md` §12, this filing.
+- **Standing rule R171 WIDENED, not re-minted.** Its founding wording
+  ("a constant, default, or token…") covered a restated LITERAL; three
+  instances inside `crates/pdfce-gui/src/print_flow.rs` alone this
+  session — `parse_page_range`, the CMYK-intent options-builder
+  divergence (decision 040), and this Pass's `DeviceGeometry` reuse
+  (decision 041) — are all restated DERIVATIONS, not literals. Ruled a
+  scope widening rather than a new rule number (same reasoning R172
+  used at its own third instance): the principle is identical either
+  way, and a second number would fragment which rule a future citation
+  points at. Paragraph appended to R171's own entry in `ROADMAP.md`.
+  **Ceiling stays R186, next free R187.**
+
+**Findings + decisions:**
+- **The corrected diagnosis matters more than the bug.** The dispatch's
+  own first read — "this fires at default settings" — was FALSE, and
+  the reason is a second, independent bug: `build_devmode` returned
+  `None` whenever `settings == DeviceSettings::default()`, so at pure
+  defaults no `DEVMODE` was ever sent and the driver stayed at its own
+  default (portrait) orientation — planning's wrong answer and the
+  driver's real behaviour happened to AGREE, masking the mismatch
+  entirely. The real shape: (1) the mismatch fired whenever ANY
+  setting differed from default — duplex alone was enough to mis-scale
+  a landscape page; (2) because `Auto` IS the default orientation,
+  pdfce's own advertised `Auto` orientation resolution never turned
+  anything, for as long as nobody touched an unrelated control. Fixed
+  together: a `DEVMODE` is now built whenever the RESOLVED orientation
+  differs from the device default, independent of any other setting;
+  `DM_DUPLEX` stays gated on the old condition.
+- **Falsification.** Forcing `for_orientation` to `return self`
+  unconditionally turns 3 of 8 new geometry tests red
+  (`0.9411764705882353` expected, `0.7272727272727273` got); restored,
+  green. Observed live on a real Windows printer (ET-16600) and a
+  second, independent way through Microsoft Print to PDF's own driver
+  `MediaBox` output (`[0 0 792 612]` auto, `[0 0 612 792]` portrait).
+- **Two design corrections, both load-bearing:** the rotation helper
+  could not live on `PrinterCaps` (that type is `cfg(windows)`, and the
+  geometry math is deliberately un-gated for Linux/macOS CI); `spool`'s
+  own `printer_caps` call needs the UN-rotated device-default view
+  specifically, or `build_devmode` cannot tell whether this job needs a
+  turn at all.
+- **A live Backlog entry closed** (the preview-doesn't-reflect-
+  Orientation gap named at the hundred-second filing) **and two new
+  ones added, both flagged by the implementer, neither fixed this
+  Pass:** `DeviceSettings::pick_tray_by_page_size` writes no
+  `DEVMODE` field at all (the control does nothing to the real job);
+  `build_devmode`'s doc comment claims a driver-default starting point
+  the code does not actually build.
+- **The ledger-checker bug (`e293143`) was itself a confidently WRONG
+  ceiling, not merely an incomplete one** — it printed "next free 039"
+  the same day 039 and 040 were already minted in `ARCHITECTURE.md`
+  §12 with no file, on the same day a Pass-ID collision demonstrated
+  exactly what trusting a wrong ceiling costs. Same shape as this
+  project's own `R186` (a guard failing OPEN on a hazard its own
+  coverage doesn't reach), now confirmed inside the tooling that
+  exists to catch that shape, not only in the application code it
+  watches.
+
+**Still in flight:**
+- The two new Backlog entries above (tray-selection dead control;
+  stale `build_devmode` doc comment) — not yet scoped to Passes.
+- Escape-to-cancel (`bj`), still open from the hundred-second filing.
+
+**For next session:** `Pass 64.0` ships end to end, falsified and
+restored, verified two independent ways (a real device, a virtual
+driver). `Pass 63.0`'s stale `Pass 62.0` source-comment debt is fully
+discharged. The ledger-ceiling checker is trustworthy again for
+decisions and filing ordinals; re-run it before minting any new number.
+
+**Ledger for this filing.** **New Pass ID minted: `Pass 64.0`.**
+Pass-family ceiling moves **63.0 → 64.0**, next free **65**. Five
+commits cited by hash (`d1756e5`, `290aef9`, `4837009`, `8177ec4`,
+`e293143`). `docs/FEATURES.md`: one row touched (Print, sentence
+replaced). `docs/ARCHITECTURE.md`: one new §12 entry (decision 041) +
+an in-place §3 correction. Standing rules: **no new mint** — R171
+WIDENED in place. Ceiling stays **R186**, next free **R187**.
+Decision-record ceiling moves **040 → 041**, next free **042**.
+Operator-question ceiling unchanged at **(bj)**, next free **(bk)**.
+`D:\dev\rag\rust\`: **three new files** (the `From`-impl trap, the
+caller-supplied-disambiguator, the disturb-nothing-by-default guard —
+plus a fourth Win32-coordinate-rotation finding redirected here from a
+proposed `personal_rag/pdf` location, matching this tree's own
+existing Win32-GDI-printing precedent). `C:\personal_rag\pdf\`: no new
+file this filing — see the redirect above. Test/gate figures: relayed,
+engineer-verified, not independently re-run by this librarian (no
+shell this dispatch). **Packaging smoke test: not reported this
+filing.** **Backup/git working-tree/remote state not independently
+asserted anywhere in this filing** — no shell this dispatch (hard rule
+8); the engineer should check `D:\Dev\pdfce-backups\` and `git log`/
+`git status`/`git remote -v` directly, on branch `post-v0.2.0`. This
+is the **hundred-and-third** `SESSION_LOG.md`/`ROADMAP.md` joint
+filing (the hundred-and-second confirmed present by direct read before
+this entry was appended).
