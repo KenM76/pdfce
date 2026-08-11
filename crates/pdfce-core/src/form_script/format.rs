@@ -66,6 +66,7 @@
 
 use super::FormatHelper;
 use super::calc::{CommaPolicy, parse_number};
+use super::datetime;
 
 /// Grouping and decimal separator convention (`sepStyle`).
 ///
@@ -196,6 +197,13 @@ pub enum FormatOutcome {
     /// Distinct from [`FormatOutcome::UnknownStyle`]: pdfce understood the
     /// helper perfectly and the *document* has nothing formattable.
     NotNumeric,
+    /// The stored value could not be read as a date **unambiguously**.
+    ///
+    /// Not a parser shortfall to apologise for. `03/04/2026` genuinely does
+    /// not determine a date, and the alternative to declining is rendering a
+    /// confident wrong one — which on a form is indistinguishable from a
+    /// right one. See [`super::datetime::parse`] for what is accepted.
+    NotADate,
     /// The helper is one pdfce recognises but does not render in this cut.
     Unsupported {
         /// A stable token naming the helper.
@@ -231,6 +239,12 @@ impl FormatOutcome {
             Self::NotNumeric => {
                 Some("the stored value is not a number, so there is nothing to format".to_owned())
             }
+            Self::NotADate => Some(
+                "the stored value does not name a date unambiguously — a value like \
+                 03/04/2026 means different days in different countries, so pdfce shows \
+                 it as stored rather than guess"
+                    .to_owned(),
+            ),
             Self::Unsupported { helper } => Some(format!(
                 "pdfce recognises {helper} but does not yet reproduce its display"
             )),
@@ -270,20 +284,19 @@ pub fn render(helper: &FormatHelper, stored_value: &str, policy: CommaPolicy) ->
             separator_style,
         } => percent(stored_value, *decimals, *separator_style, policy),
         FormatHelper::Special { selector } => special(stored_value, *selector),
-        // Date and time need a parsed instant, and nothing sourced describes
-        // how Acrobat parses a stored date string back out of a field. The
-        // token GRAMMAR is sourced and implemented in `super::datetime`; what
-        // is missing is the parse, so these decline rather than render a date
-        // pdfce reconstructed by guesswork.
-        FormatHelper::Date { .. } => FormatOutcome::Unsupported {
-            helper: "AFDate_Format",
-        },
-        FormatHelper::DateEx { .. } => FormatOutcome::Unsupported {
-            helper: "AFDate_FormatEx",
-        },
-        FormatHelper::Time { .. } => FormatOutcome::Unsupported {
-            helper: "AFTime_Format",
-        },
+        FormatHelper::Date { index } => predefined_datetime(
+            stored_value,
+            datetime::date_format(*index),
+            "pdfFormat",
+            *index,
+        ),
+        FormatHelper::Time { index } => predefined_datetime(
+            stored_value,
+            datetime::time_format(*index),
+            "pdfFormat",
+            *index,
+        ),
+        FormatHelper::DateEx { format } => date_through(stored_value, format),
     }
 }
 
@@ -431,6 +444,53 @@ fn group_digits(digits: &str, separator: char) -> String {
         out.push(c);
     }
     out
+}
+
+/// `AFDate_Format` / `AFTime_Format` — a predefined format by index.
+///
+/// An index no source describes declines by name rather than falling back to
+/// treating the raw index as a literal format string. One reimplementation
+/// does exactly that, which would render a stored `99` as the text `99`;
+/// nothing confirms real Acrobat behaves so, and inventing output for an
+/// undocumented mode is the guessing this posture exists to refuse.
+fn predefined_datetime(
+    stored: &str,
+    format: Option<&'static str>,
+    parameter: &'static str,
+    code: i64,
+) -> FormatOutcome {
+    match format {
+        Some(f) => date_through(stored, f.as_bytes()),
+        None => FormatOutcome::UnknownStyle { parameter, code },
+    }
+}
+
+/// Render a stored value through a date/time format string.
+///
+/// # The parse is the limit, not the grammar
+///
+/// The token grammar is fully sourced and [`datetime::render`] implements all
+/// of it. What nothing describes is how Acrobat reads a stored date string
+/// back out of a field, so [`datetime::parse`] accepts only shapes that
+/// cannot be read two ways and returns `None` for the rest — most notably for
+/// `03/04/2026`, which is 3 April to most of the world and 4 March in the
+/// United States.
+///
+/// A value that will not parse yields [`FormatOutcome::NotADate`] and the
+/// stored text is shown unformatted. That is the honest outcome: pdfce
+/// understood the helper perfectly and could not read the document's value,
+/// which is a different fact from not supporting the helper, and an operator
+/// acting on it would do different things.
+fn date_through(stored: &str, format: &[u8]) -> FormatOutcome {
+    // An empty field formats to nothing, matching the number path: a blank
+    // box must not sprout a date.
+    if stored.trim().is_empty() {
+        return FormatOutcome::Rendered(Formatted::plain(String::new()));
+    }
+    match datetime::parse(stored) {
+        Some(when) => FormatOutcome::Rendered(Formatted::plain(datetime::render(format, &when))),
+        None => FormatOutcome::NotADate,
+    }
 }
 
 /// `AFSpecial_Format` — the four fixed masks.
@@ -726,29 +786,107 @@ mod tests {
         assert_eq!(text_of(&got), "(555) 123-4567");
     }
 
-    /// Date and time decline explicitly rather than rendering a guess, and
-    /// say which helper they are declining.
+    /// ★ **A date renders through its predefined format when the stored
+    /// value is unambiguous.**
+    ///
+    /// The token grammar is fully sourced; what was missing until now was a
+    /// parse, and these are the shapes that cannot be read two ways.
     #[test]
-    fn date_and_time_decline_by_name() {
-        for (helper, token) in [
-            (FormatHelper::Date { index: 1 }, "AFDate_Format"),
-            (
-                FormatHelper::DateEx {
-                    format: b"yyyy-mm-dd".to_vec(),
+    fn a_date_renders_when_the_stored_value_is_unambiguous() {
+        let d = |index: i64, stored: &str| {
+            render(
+                &FormatHelper::Date { index },
+                stored,
+                CommaPolicy::default(),
+            )
+        };
+        assert_eq!(text_of(&d(1, "2026-08-11")), "8/11/26");
+        assert_eq!(text_of(&d(11, "2026-08-11")), "August 11, 2026");
+        assert_eq!(
+            text_of(&d(12, "2026-08-11 14:05:09")),
+            "8/11/26 2:05 PM",
+            "index 12 carries a time despite being a 'date' format"
+        );
+        assert_eq!(
+            text_of(&render(
+                &FormatHelper::Time { index: 0 },
+                "2026-08-11 14:05:09",
+                CommaPolicy::default()
+            )),
+            "14:05"
+        );
+        assert_eq!(
+            text_of(&render(
+                &FormatHelper::DateEx {
+                    format: b"mm/dd/yyyy HH:MM".to_vec()
                 },
-                "AFDate_FormatEx",
+                "2026-08-11 14:05:09",
+                CommaPolicy::default()
+            )),
+            "08/11/2026 14:05",
+            "and the case-sensitive month-versus-minutes pair survives the \
+             whole path, not just the tokeniser"
+        );
+    }
+
+    /// ★ **An ambiguous stored date declines, and says why.**
+    ///
+    /// `03/04/2026` names different days in different countries and the
+    /// stored value settles nothing. Rendering a guess would be a confident
+    /// wrong date, which on a form is indistinguishable from a right one.
+    #[test]
+    fn an_ambiguous_stored_date_declines_and_explains_itself() {
+        let got = render(
+            &FormatHelper::Date { index: 1 },
+            "03/04/2026",
+            CommaPolicy::default(),
+        );
+        assert_eq!(got, FormatOutcome::NotADate);
+        let why = got.decline_reason().expect("explains itself");
+        assert!(why.contains("different"), "{why}");
+        assert!(
+            why.contains("03/04/2026"),
+            "and names the shape that is ambiguous: {why}"
+        );
+    }
+
+    /// An empty date field formats to nothing, matching the number path — a
+    /// blank box must not sprout a date.
+    #[test]
+    fn an_empty_date_field_formats_to_nothing() {
+        assert_eq!(
+            text_of(&render(
+                &FormatHelper::Date { index: 1 },
+                "   ",
+                CommaPolicy::default()
+            )),
+            ""
+        );
+    }
+
+    /// A predefined index no source describes declines by name rather than
+    /// treating the index as a literal format string.
+    #[test]
+    fn an_unsourced_predefined_index_declines() {
+        assert!(matches!(
+            render(
+                &FormatHelper::Date { index: 99 },
+                "2026-08-11",
+                CommaPolicy::default()
             ),
-            (FormatHelper::Time { index: 0 }, "AFTime_Format"),
-        ] {
-            let got = render(&helper, "2026-08-10", CommaPolicy::default());
-            assert_eq!(got, FormatOutcome::Unsupported { helper: token });
-            assert!(
-                got.decline_reason()
-                    .expect("explains itself")
-                    .contains(token),
-                "the decline names the helper"
-            );
-        }
+            FormatOutcome::UnknownStyle {
+                parameter: "pdfFormat",
+                code: 99
+            }
+        ));
+        assert!(matches!(
+            render(
+                &FormatHelper::Time { index: 4 },
+                "2026-08-11",
+                CommaPolicy::default()
+            ),
+            FormatOutcome::UnknownStyle { .. }
+        ));
     }
 
     /// ★ **Nothing here produces a value a caller could store.**

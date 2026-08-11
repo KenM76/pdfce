@@ -69,6 +69,7 @@
 //! disclosed false negative — never a bigger parser.
 
 pub mod calc;
+pub mod datetime;
 pub mod disclose;
 pub mod format;
 pub mod inventory;
