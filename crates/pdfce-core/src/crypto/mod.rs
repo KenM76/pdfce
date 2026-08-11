@@ -10,13 +10,13 @@
 //! silently and without a prompt. To an operator, pdfce refusing a file Chrome
 //! opens does not read as a scoped capability gap.
 //!
-//! # Increment 1 — RC4 only, read direction only
+//! # Increments 1 and 2 — read direction only
 //!
 //! | | Status |
 //! |---|---|
 //! | `/V` 1, 2 at `/R` 2, 3 (RC4, 40–128 bit) | **implemented** |
 //! | `/V` 4 at `/R` 4 with `/CFM /V2` (RC4 via crypt filter) | **implemented** |
-//! | `/V` 4 with `/CFM /AESV2` (AES-128) | refused by cipher name |
+//! | `/V` 4 with `/CFM /AESV2` (AES-128) | **implemented** (increment 2) |
 //! | `/V` 5, `/R` 5 (AES-256) | refused by cipher name |
 //! | `/V` 5, `/R` 6 (AES-256 hardened) | refused as **unsourced** — Algorithm 2.B is not in the project's spec corpus past step (a) |
 //! | Public-key handler, third-party handlers | refused by handler name |
@@ -34,9 +34,9 @@
 //! `pdfce-core` had no cryptographic dependency at all before this; RC4 and
 //! MD5 are frozen, tiny, and needed only to *read* documents other producers
 //! already made, so implementing them in-crate avoided a rule-13 dependency
-//! decision entirely. AES does not qualify for that reasoning and gets a
-//! dependency in the next increment — see [`md5`]'s module docs, which state
-//! the limits of the judgement in full.
+//! decision entirely. AES does not qualify for that reasoning and took a
+//! dependency in increment 2 — see [`md5`]'s module docs, which state the
+//! limits of the judgement in full, and [`aes`]'s, which honour them.
 //!
 //! RC4 is broken. So is MD5. So, structurally, is PDF encryption at `/V` 1–4:
 //! there is **no integrity protection anywhere in it** (negative result N7 —
@@ -59,11 +59,15 @@
 //!
 //! - [`md5`] — RFC 1321 digest. Key derivation only.
 //! - [`rc4`] — the stream cipher. Encryption and decryption are one operation.
+//! - [`aes`] — AES-128-CBC for `/AESV2`. The one place `pdfce-core` takes a
+//!   cryptographic dependency, and the one place its dependency tree is not
+//!   compiler-enforced free of `unsafe` (decision 039).
 //! - [`standard`] — the `/Standard` handler: `/Encrypt` parsing, Algorithms
 //!   1–7, authentication, per-object keys.
 //!
 //! [`XrefErrorKind::EncryptionUnsupported`]: crate::xref::XrefErrorKind::EncryptionUnsupported
 
+pub mod aes;
 pub mod apply;
 pub mod md5;
 pub mod rc4;

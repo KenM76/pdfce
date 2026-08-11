@@ -24,4 +24,4 @@
 - [Gates I owe myself](feedback_gates_i_owe_myself.md) — the cargo-fuzz gate is the one I skip; and a harness enumerating a module's entry points goes stale every Pass
 - [Rungs: click-out commits, and the three-rung ladder](project_rung_ladder_state.md) — 2026-08-05: Passes 34.0/36.0/36.1/36.2 shipped; what commits implicitly and what still doesn't
 - [Screenshot when the question is visual](feedback_screenshot_when_the_question_is_visual.md) — `drawn=true` in a trace hid a 680px coordinate-space bug; use gui-shot.ps1 for "I can't see X"
-- [Design system + the Acrobat-GUI rule conflict](project_design_system_and_rule12_conflict.md) — UI_PREFERENCES.md exists; chrome is theme-aware, canvas overlay is theme-INVARIANT; handoff doc vs CLAUDE.md rule 12
+- [Design system + the Acrobat-GUI rule conflict](project_design_system_and_rule12_conflict.md) — UI_PREFERENCES.md is MISSING (7 files cite it); use theme.rs + check-theme-colors.sh; handoff doc vs CLAUDE.md rule 12

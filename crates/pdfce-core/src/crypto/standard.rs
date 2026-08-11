@@ -15,15 +15,20 @@
 //! a *derivation* trap, and derivation is exactly what is testable in
 //! isolation against a fixture whose password is known.
 //!
-//! # Scope of this increment: RC4 only
+//! # Scope: everything Algorithm 1 keys
 //!
-//! Implemented: `/V` 1, 2 and 4 at `/R` 2, 3 and 4 with `/CFM /V2` — i.e.
-//! **RC4 at 40–128 bits**. Refused, by name, with the reason stated:
+//! Implemented: `/V` 1, 2 and 4 at `/R` 2, 3 and 4 — **RC4 at 40–128 bits**
+//! (`/CFM /V2`) and **AES-128** (`/CFM /AESV2`). The boundary is not the
+//! cipher, it is the *key derivation*: everything above is keyed by Algorithm 1
+//! out of an Algorithm 2 file key, which is why adding AES-128 in increment 2
+//! needed no change here beyond deleting a refusal — [`FileKey::object_key`]
+//! already emitted the `sAlT` variant (**T1**).
+//!
+//! Refused, by name, with the reason stated:
 //!
 //! | Configuration | Why refused |
 //! |---|---|
-//! | `/CFM /AESV2` | AES-128 is the next increment; the cipher is missing, not the plumbing |
-//! | `/V 5` (`/R` 5, 6) | AES-256; `/R 6`'s Algorithm 2.B is additionally **unsourced** past step (a) |
+//! | `/V 5` (`/R` 5, 6) | AES-256 keys off **Algorithm 2.A**, not Algorithm 1 — a different derivation, not a different cipher. `/R 6`'s Algorithm 2.B is additionally **unsourced** past step (a) |
 //! | `/V 0`, `/V 3` | `/V 3` is an *unpublished* algorithm that "shall not appear in a conforming PDF file"; `/V 0` is undocumented. Nobody can open these |
 //! | `/Filter` ≠ `/Standard` | Public-key and third-party handlers |
 //!
@@ -74,6 +79,7 @@
 //! gates is a product decision that belongs in the shells, disclosed under
 //! rule 4, not buried here.
 
+use crate::crypto::aes::decrypt_cbc_128;
 use crate::crypto::md5::{Md5, md5};
 use crate::crypto::rc4::rc4;
 use crate::object::{Dict, ObjId, Object};
@@ -122,8 +128,17 @@ pub enum EncryptionUnsupported {
     )]
     UndocumentedAlgorithm(i64),
 
-    /// AES, at any key length. A capability gap with a known shape.
-    #[error("{0} encryption is not implemented yet (this increment covers RC4 only)")]
+    /// A cipher pdfce recognises but has not implemented. A capability gap
+    /// with a known shape.
+    ///
+    /// The parenthetical names what *is* covered, because "AES-256 is not
+    /// implemented" alone invites the reading that pdfce cannot open encrypted
+    /// files at all. It said "this increment covers RC4 only" until increment 2
+    /// implemented AES-128 and made that false — a message that describes the
+    /// implementation's scope has to be revisited whenever the scope moves, so
+    /// it is deliberately phrased as a capability list rather than as an
+    /// increment number.
+    #[error("{0} encryption is not implemented yet (pdfce reads RC4 40-128 bit and AES-128)")]
     CipherNotImplemented(&'static str),
 
     /// `/R` 6's Algorithm 2.B is not sourced in the project's spec corpus
@@ -165,9 +180,12 @@ pub enum Cipher {
     None,
     /// `/V2` — RC4 with the file key length. **Implemented.**
     Rc4,
-    /// `/AESV2` — AES-128 in CBC mode. Recognised, not implemented.
+    /// `/AESV2` — AES-128 in CBC mode, IV prefixed to the data. **Implemented**
+    /// (increment 2). Keyed by Algorithm 1 with the `sAlT` suffix, **T1**.
     Aes128,
-    /// `/AESV3` — AES-256 in CBC mode. Recognised, not implemented.
+    /// `/AESV3` — AES-256 in CBC mode. Recognised, not implemented: the block
+    /// cipher exists in [`crate::crypto::aes`], but the *key* comes from
+    /// Algorithm 2.A, which is unsourced at `/R` 6.
     Aes256,
 }
 
@@ -586,13 +604,15 @@ impl EncryptionConfig {
 
         for c in [stream_cipher, string_cipher] {
             match c {
-                Cipher::Aes128 => {
-                    return Err(EncryptionUnsupported::CipherNotImplemented("AES-128"));
-                }
+                // AES-256 is still refused, and the reason is key derivation
+                // rather than the cipher: `/AESV3` uses Algorithm 2.A, not
+                // Algorithm 1, and at `/R` 6 that algorithm is unsourced past
+                // step (a). Implementing the block cipher (increment 2) bought
+                // nothing here -- the primitive was never the blocker.
                 Cipher::Aes256 => {
                     return Err(EncryptionUnsupported::CipherNotImplemented("AES-256"));
                 }
-                Cipher::None | Cipher::Rc4 => {}
+                Cipher::None | Cipher::Rc4 | Cipher::Aes128 => {}
             }
         }
 
@@ -845,10 +865,12 @@ impl FileKey {
     ///   truncation, not an implementation shortcut, and it means objects
     ///   whose numbers differ only above 2^24 share a key.
     /// - **T1** — for AES the four bytes `73 41 6C 54` (`sAlT`) extend the
-    ///   *MD5 input*, not the derived key; the key stays `min(n+5, 16)`.
-    ///   Not reachable in this increment (AES is refused at parse time), but
-    ///   the length rule is written here because that is where the next
-    ///   increment will need it and where getting it wrong would be invisible.
+    ///   *MD5 input*, not the derived key; the key stays `min(n+5, 16)`. This
+    ///   was written in increment 1 while AES was still refused at parse time,
+    ///   on the grounds that getting it wrong would be invisible. Increment 2
+    ///   made it live and it needed no change — which is the argument for
+    ///   writing the rule where it belongs rather than where it is first
+    ///   reachable.
     ///
     /// Slicing is in bounds by construction: `n` is `min(key.len() + 5, 16)`
     /// and the digest is exactly 16 bytes, so the `min` is what makes it
@@ -887,11 +909,12 @@ impl FileKey {
         match self.string_cipher {
             Cipher::None => data.to_vec(),
             Cipher::Rc4 => rc4(&self.object_key(id, Cipher::Rc4), data),
-            // Unreachable: parse refuses AES. Returning the input unchanged
-            // rather than panicking keeps a library parsing untrusted input
-            // from aborting the host, and the refusal upstream means no
-            // document can reach it.
-            Cipher::Aes128 | Cipher::Aes256 => data.to_vec(),
+            Cipher::Aes128 => decrypt_cbc_128(&self.object_key(id, Cipher::Aes128), data),
+            // Unreachable: parse refuses AES-256, whose key derivation is
+            // Algorithm 2.A rather than Algorithm 1. Returning the input
+            // unchanged rather than panicking keeps a library parsing
+            // untrusted input from aborting the host.
+            Cipher::Aes256 => data.to_vec(),
         }
     }
 
@@ -900,12 +923,23 @@ impl FileKey {
     /// "Raw" is load-bearing: §7.6.2 W1 puts encryption *outside* the filter
     /// chain, so this runs **before** `/FlateDecode` and friends. Decrypting
     /// after decoding would attempt to inflate ciphertext.
+    ///
+    /// # The result is not necessarily the same length as the input
+    ///
+    /// Under RC4 it always was, and the whole of increment 1 leaned on that:
+    /// plaintext was written back over ciphertext in the retained buffer and
+    /// every span stayed true. Under `/AESV2` the ciphertext carries a 16-byte
+    /// IV and at least one byte of padding (**T5**), so the plaintext is
+    /// **strictly shorter — by at least 17 bytes.** Callers must record
+    /// `result.len()` rather than reuse the input length.
     #[must_use]
     pub fn decrypt_stream(&self, id: ObjId, data: &[u8]) -> Vec<u8> {
         match self.stream_cipher {
             Cipher::None => data.to_vec(),
             Cipher::Rc4 => rc4(&self.object_key(id, Cipher::Rc4), data),
-            Cipher::Aes128 | Cipher::Aes256 => data.to_vec(),
+            Cipher::Aes128 => decrypt_cbc_128(&self.object_key(id, Cipher::Aes128), data),
+            // Unreachable: parse refuses AES-256. See `decrypt_string`.
+            Cipher::Aes256 => data.to_vec(),
         }
     }
 
@@ -1108,9 +1142,14 @@ mod tests {
 
     /// T1 — the `sAlT` bytes change the key's *value*, not its length.
     ///
-    /// AES is refused at parse time in this increment, so this is a guard on
-    /// the next one: if the salt were appended to the key instead of the hash
-    /// input, the length would change here and every AES document would fail.
+    /// Written in increment 1 as a guard on the next one, while AES was still
+    /// refused at parse time: if the salt were appended to the *key* instead of
+    /// to the hash *input*, the length would change here and every AES document
+    /// would fail. Increment 2 made it live, and the end-to-end proof is now
+    /// `pdfce-cli`'s `decrypting_reproduces_the_plaintext_document_exactly`.
+    /// This unit test stays because it localises the failure: it says *which*
+    /// of the two salt mistakes was made, where the pixel comparison only says
+    /// that something is wrong.
     #[test]
     fn aes_salt_changes_value_not_length() {
         let fk = FileKey {
@@ -1238,11 +1277,19 @@ mod tests {
         assert!(c.encrypt_metadata);
     }
 
-    /// A `/V 4` document routing streams through an AES filter is refused by
-    /// cipher name, not by revision — the plumbing is fine, the cipher is not
-    /// written yet.
+    /// A `/V 4` document routing streams through `/AESV2` **parses**, and
+    /// resolves to [`Cipher::Aes128`] on both the stream and string sides.
+    ///
+    /// This was a refusal assertion until increment 2 implemented AES-128. It
+    /// is kept as an acceptance assertion rather than deleted, because the
+    /// thing worth pinning never was the refusal — it is that `/CFM /AESV2`
+    /// reaches the AES branch **at all**. Table 25 lists four `/CFM` names and
+    /// an unrecognised one falls through to `Cipher::None`, i.e. "do not
+    /// decrypt", which would leave every stream as ciphertext with no error
+    /// raised. Asserting the resolved cipher catches that; asserting only that
+    /// `parse` succeeded would not.
     #[test]
-    fn refuses_aesv2_by_cipher_name() {
+    fn aesv2_resolves_to_the_aes_128_cipher() {
         let mut cf = Dict::new();
         let mut stdcf = Dict::new();
         stdcf.insert(Name(b"CFM".to_vec()), name("AESV2"));
@@ -1256,10 +1303,9 @@ mod tests {
             ("StmF", name("StdCF")),
             ("StrF", name("StdCF")),
         ]);
-        assert_eq!(
-            EncryptionConfig::parse(&d, &nothing).unwrap_err(),
-            EncryptionUnsupported::CipherNotImplemented("AES-128")
-        );
+        let c = EncryptionConfig::parse(&d, &nothing).expect("AES-128 is implemented");
+        assert_eq!(c.stream_cipher, Cipher::Aes128);
+        assert_eq!(c.string_cipher, Cipher::Aes128);
     }
 
     /// `/V 4` + `/CFM /V2` is the supported crypt-filter case, and `/StmF`

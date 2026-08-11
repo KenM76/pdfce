@@ -153,6 +153,44 @@ jobs:
             done
           done
           exit $fail
+      # Decision 039: `aes` is the ONE dependency in pdfce-core whose
+      # unsafe cannot be turned off by a feature. Its intrinsic backends
+      # are selected on a **cfg** (`aes_backend = "soft"`), and a cfg
+      # cannot be set from a dependency line — only from RUSTFLAGS or
+      # .cargo/config.toml, which is global and, crucially, is NOT
+      # inherited by anyone consuming pdfce-core as a library. So the
+      # hardware backend was accepted deliberately rather than forced
+      # off with a guarantee that would be true for pdfce's own builds
+      # and false for every downstream consumer.
+      #
+      # THE EXCEPTION IS BOUNDED TO EXACTLY THAT. This check asserts the
+      # two things still under our control:
+      #
+      #   - `hazmat` stays OFF. It exposes raw round functions with no
+      #     key schedule, exists for building other ciphers, and nothing
+      #     in pdfce needs it. It is the only feature that widens the
+      #     unsafe surface beyond backend dispatch.
+      #   - `zeroize` stays OFF, and that is a considered choice rather
+      #     than an omission: `FileKey` holds the file encryption key in
+      #     an ordinary `Vec<u8>`, so zeroizing only the cipher's round
+      #     keys would be theatre. If key-material hygiene is ever taken
+      #     seriously it must start at `FileKey`, and this line should
+      #     be revisited in that same change, not before.
+      #
+      # Turning either on requires a new decision record, same bar as
+      # R24 itself.
+      - name: decision 039 — assert `aes` carries no extra features
+        run: |
+          set -e
+          fail=0
+          for t in "" "--target x86_64-pc-windows-msvc" "--target aarch64-apple-darwin" "--target wasm32-unknown-unknown"; do
+            if cargo tree -p pdfce-core -e features $t 2>/dev/null \
+                 | grep -E 'aes feature "(hazmat|zeroize)"'; then
+              echo "::error::pdfce-core $t enables an extra feature on the `aes` crate. Decision 039 accepted ONLY the intrinsic backend (which is cfg-selected and cannot be disabled per-dependency); hazmat/zeroize are separate widenings and need a new decision record."
+              fail=1
+            fi
+          done
+          exit $fail
 
   ui-strings:
     name: verify pdfce-gui strings live in ui_text.rs

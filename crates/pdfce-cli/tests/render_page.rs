@@ -567,13 +567,21 @@ fn capability_gap_refusal_is_honest_and_distinguishable_from_corruption() {
     // it guards is unchanged: a refusal must read as a pdfce limitation, not
     // as a broken file.
     //
+    // ★ AND IT HAS MOVED AGAIN, for exactly the same reason: increment 2
+    // implemented AES-128, so `enc-aes-128.pdf` now RENDERS, and pinning it
+    // here would assert a refusal that no longer happens. The slot moves to
+    // AES-256 (`/R` 5), which is still refused — and refused for a reason
+    // worth keeping distinct: its key comes from **Algorithm 2.A**, not
+    // Algorithm 1. Implementing the AES block cipher bought nothing there,
+    // because the cipher was never what blocked it.
+    //
     // (Cross-reference streams used to be pinned here before encryption was;
     // they now load — see `a_pdf_15_file_with_xref_and_object_streams_renders`
     // below. This slot has become a rolling record of what pdfce cannot do
     // yet, which is exactly what it should be.)
     let dir = TempDir::new("encrypted");
     let pdf = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/synthetic/encryption/enc-aes-128.pdf");
+        .join("../../fixtures/synthetic/encryption/enc-aes-256-r5.pdf");
 
     let out = run(&[
         "render-page",
@@ -589,7 +597,7 @@ fn capability_gap_refusal_is_honest_and_distinguishable_from_corruption() {
         "the refusal must read as a pdfce limitation, not a broken file: {err:?}"
     );
     assert!(
-        err.contains("AES-128"),
+        err.contains("AES-256"),
         "the refusal must name WHICH cipher is missing — 'encrypted files are \
          unsupported' is now false, and a vague message would teach the \
          operator something untrue: {err:?}"
@@ -612,9 +620,20 @@ fn capability_gap_refusal_is_honest_and_distinguishable_from_corruption() {
 /// (reached through dictionaries whose strings are decrypted in the parsed
 /// objects).
 ///
-/// The three encrypted files span `/R` 2 at 40 bits, `/R` 3 at 128, and the
-/// empty-password case that needs no password at all — three different key
-/// derivations, one image.
+/// The five encrypted files span `/R` 2 at 40 bits, `/R` 3 at 128, the
+/// empty-password case that needs no password at all, and both of those again
+/// under **AES-128** — five key/cipher combinations, one image.
+///
+/// ★ The two AES rows carry a second job the RC4 rows cannot. RC4 preserves
+/// length, so increment 1 could write plaintext back over ciphertext in the
+/// retained buffer and every `ByteSpan` stayed true. AES output is IV +
+/// padding, so the plaintext is **strictly shorter** and `data_span.len` has
+/// to shrink to match. That was verified by breaking it deliberately: with the
+/// old `plain.len() == span.len` guard reinstated, every AES stream silently
+/// stays ciphertext, the CLI **still exits 0**, and it still writes a
+/// plausible PNG — just a different one. Nothing else in the suite goes red.
+/// This byte-comparison is the only thing standing between that bug and a
+/// release.
 #[test]
 fn decrypting_reproduces_the_plaintext_document_exactly() {
     let dir = TempDir::new("decrypt-fidelity");
@@ -637,7 +656,7 @@ fn decrypting_reproduces_the_plaintext_document_exactly() {
     );
 
     let enc = fixtures.join("encryption");
-    let cases: [(&str, Vec<String>); 3] = [
+    let cases: [(&str, Vec<String>); 5] = [
         (
             "rc4-40 via the owner password",
             vec![
@@ -663,6 +682,22 @@ fn decrypting_reproduces_the_plaintext_document_exactly() {
                 enc.join("enc-emptyuser-rc4-128.pdf")
                     .to_string_lossy()
                     .into_owned(),
+            ],
+        ),
+        (
+            "aes-128 via the user password",
+            vec![
+                "--open-password".into(),
+                "userpw".into(),
+                "render-page".into(),
+                enc.join("enc-aes-128.pdf").to_string_lossy().into_owned(),
+            ],
+        ),
+        (
+            "aes-128 with an empty user password, no flag at all",
+            vec![
+                "render-page".into(),
+                enc.join("enc-emptyuser.pdf").to_string_lossy().into_owned(),
             ],
         ),
     ];

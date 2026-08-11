@@ -1253,9 +1253,12 @@ truncated, or is not a PDF at all.\n\nTechnical detail: {message}",
 /// have to parse first.
 pub fn canvas_unsupported(path: &Path, message: &str) -> String {
     // The naming of the gap is left entirely to `message`, which comes from
-    // the core error and is specific ("AES-128 encryption is not implemented
+    // the core error and is specific ("AES-256 encryption is not implemented
     // yet", "/R 6 ... cannot be implemented: its key-derivation algorithm is
-    // not available"). This wrapper used to assert the gap was "a
+    // not available"). That first example was AES-128 until increment 2
+    // implemented it -- even an ILLUSTRATIVE string in a comment goes stale,
+    // which is the argument for this wrapper naming no gap of its own.
+    // This wrapper used to assert the gap was "a
     // cross-reference structure this version of pdfce does not read yet" —
     // true when cross-reference streams were the live gap, and FALSE from the
     // moment encryption took their place, which is where it was still sitting

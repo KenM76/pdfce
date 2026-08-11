@@ -1,6 +1,6 @@
 ---
 name: design-system-and-rule12-conflict
-description: UI_PREFERENCES.md exists as of 2026-08-05; its governing rule is chrome-theme-aware vs canvas-overlay-theme-INVARIANT; and Ken's design handoff conflicts with CLAUDE.md rule 12
+description: UI_PREFERENCES.md is MISSING (never committed, though 7 files cite it); the governing rule is chrome-theme-aware vs canvas-overlay-theme-INVARIANT, now superseded by Pass 58.0's theme.rs + check-theme-colors.sh; and Ken's design handoff conflicts with CLAUDE.md rule 12
 metadata:
   type: project
 ---
@@ -9,10 +9,29 @@ metadata:
 will "fix" into a bug, and one live conflict that is Ken's to settle and must
 not be routed around.
 
-## The counter-intuitive rule
+## ★ CORRECTION 2026-08-11 — the file does not exist and never did
 
-`D:\Dev\pdfce\UI_PREFERENCES.md` (2026-08-05, written by pdfce-ui-specialist).
-Its §1 governs every colour decision:
+This memory previously asserted `UI_PREFERENCES.md` **exists**. Measured on
+2026-08-11: it is absent from disk **and from git history entirely** —
+`git log --all -- docs/UI_PREFERENCES.md` returns nothing, so it was never
+committed under that path. Yet it is cited by `ARCHITECTURE.md`,
+`ROADMAP.md`, `SESSION_LOG.md`, three `docs/ui_specs/*.md`, and
+`crates/pdfce-gui/src/main.rs`.
+
+**Do not go looking for it, and do not cite it as governing.** The rule below
+is still correct as a *principle*, but the authority for colour decisions is
+now `crates/pdfce-gui/src/theme.rs` plus the `tools/check-theme-colors.sh`
+gate (Pass 58.0), both of which exist and are enforced in CI. Prefer those.
+
+Same failure shape as the handoff's catalogue: a document asserted a fact
+about the environment nobody had measured, and it read as settled until
+someone ran `ls`.
+
+## The counter-intuitive rule (still true as a principle)
+
+Originally attributed to `UI_PREFERENCES.md` §1 (2026-08-05,
+pdfce-ui-specialist) — see the correction above for why that citation is
+unusable. Now enforced by `theme.rs` + `check-theme-colors.sh`:
 
 - **Chrome** (panels, tabs, buttons, text, separators) is **theme-aware** —
   must route through `ui.visuals()`, never a bare `Color32`.

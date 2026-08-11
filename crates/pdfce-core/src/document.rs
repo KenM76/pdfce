@@ -616,7 +616,7 @@ impl Document {
                 continue;
             }
             if key.streams_encrypted()
-                && let Object::Stream(stream) = &obj.value
+                && let Object::Stream(stream) = &mut obj.value
             {
                 let span = stream.data_span;
                 let end = span.start.saturating_add(span.len);
@@ -629,16 +629,36 @@ impl Document {
                 // is the honest place for it.
                 if let Some(cipher_text) = buf.get(span.start..end) {
                     let plain = key.decrypt_stream(*id, cipher_text);
-                    // RC4 preserves length; this is the invariant that makes
-                    // in-buffer decryption sound at all, so it is checked
-                    // rather than assumed. A cipher that changed length would
-                    // silently truncate or overflow the next object.
-                    debug_assert_eq!(plain.len(), span.len, "RC4 must preserve length");
-                    if let Some(slot) = buf.get_mut(span.start..end)
-                        && plain.len() == span.len
+                    // ** The plaintext may be SHORTER than the ciphertext. **
+                    //
+                    // Increment 1 asserted the opposite here -- `RC4 must
+                    // preserve length` -- and guarded the copy on
+                    // `plain.len() == span.len`. That was true and correct for
+                    // RC4, and it is the R186 shape: a guard keyed on a
+                    // property that quietly stopped holding. Under `/AESV2`
+                    // the ciphertext carries a 16-byte IV plus padding (T5), so
+                    // the equality is ALWAYS false, the copy would ALWAYS be
+                    // skipped, and every stream in an AES document would stay
+                    // ciphertext -- with no test red and no error raised.
+                    //
+                    // Shorter is the easy direction: the plaintext still fits
+                    // at `span.start`, so only the recorded length changes.
+                    // Nothing re-reads the dictionary's `/Length` after parse
+                    // (it is consumed once, at parser.rs's stream read), and
+                    // `data_span` is what every downstream reader actually
+                    // slices -- content.rs, attachments.rs, the object-stream
+                    // path, edit.rs. So shortening the span is sufficient and
+                    // `Stream` needs no new field.
+                    if plain.len() <= span.len
+                        && let Some(slot) = buf.get_mut(span.start..span.start + plain.len())
                     {
                         slot.copy_from_slice(&plain);
+                        stream.data_span.len = plain.len();
                     }
+                    // A plaintext LONGER than its ciphertext is impossible for
+                    // both implemented ciphers, so there is no branch for it:
+                    // it would have to overwrite the following object, and
+                    // silently declining is the only safe response.
                 }
             }
             if key.strings_encrypted() {

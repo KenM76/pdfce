@@ -24618,19 +24618,28 @@ mod tests {
             std::mem::discriminant(&app.status)
         );
 
-        // (2) An AES document is a NAMED CAPABILITY GAP, not damage.
+        // (2) A still-unimplemented cipher is a NAMED CAPABILITY GAP, not
+        // damage.
+        //
+        // ★ This case used to be the AES-128 file. Increment 2 implemented
+        // AES-128, so that file now asks for a password like any other
+        // protected document — see (4) — and the capability-gap assertion
+        // moves to AES-256, which is still refused. Note the reason moved
+        // with it and is NOT "AES is missing": `/AESV3` keys off Algorithm
+        // 2.A rather than Algorithm 1, so having the block cipher changed
+        // nothing here.
         let mut app = PdfceApp::default();
-        app.open_path(fixture("encryption/enc-aes-128.pdf"));
+        app.open_path(fixture("encryption/enc-aes-256-r5.pdf"));
         match &app.status {
             Status::Unsupported { message, .. } => {
                 assert!(
-                    message.contains("AES-128"),
+                    message.contains("AES-256"),
                     "the message must name the cipher, so the operator learns \
                      the machinery works and one algorithm is missing: {message}"
                 );
             }
             other => panic!(
-                "an AES document must read as a capability gap, never as a \
+                "an AES-256 document must read as a capability gap, never as a \
                  damaged file; got {:?}",
                 std::mem::discriminant(other)
             ),
@@ -24648,6 +24657,38 @@ mod tests {
         assert!(
             matches!(app.status, Status::NeedsPassword { .. }),
             "a password-protected document must ask, not fail; got {:?}",
+            std::mem::discriminant(&app.status)
+        );
+
+        // (4) The same, for AES-128 — the file case (2) used to hold. It now
+        // takes the ordinary protected-document route, which is the whole
+        // operator-visible payoff of increment 2: the GUI stopped saying "not
+        // implemented" and started asking a question it can act on.
+        let mut app = PdfceApp::default();
+        app.open_path(fixture("encryption/enc-aes-128.pdf"));
+        assert!(
+            matches!(app.status, Status::NeedsPassword { .. }),
+            "an AES-128 document must now ASK for a password rather than \
+             report a missing cipher; got {:?}",
+            std::mem::discriminant(&app.status)
+        );
+        app.password_prompt.input = "userpw".to_owned();
+        app.submit_password();
+        assert!(
+            matches!(app.status, Status::Open(_)),
+            "the AES-128 document must open once its password is supplied; got {:?}",
+            std::mem::discriminant(&app.status)
+        );
+
+        // (5) An AES-128 document with an EMPTY user password opens with no
+        // prompt at all, same as its RC4 twin in (1). Until increment 2 this
+        // file was refused on cipher grounds before authentication was ever
+        // reached, so §7.6.3.1's silent attempt had never run on an AES file.
+        let mut app = PdfceApp::default();
+        app.open_path(fixture("encryption/enc-emptyuser.pdf"));
+        assert!(
+            matches!(app.status, Status::Open(_)),
+            "a permissions-only AES-128 document must just open; got {:?}",
             std::mem::discriminant(&app.status)
         );
     }

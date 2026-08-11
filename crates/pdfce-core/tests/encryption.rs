@@ -1,4 +1,5 @@
-//! End-to-end decryption of RC4-encrypted documents (ISO 32000-1 §7.6).
+//! End-to-end decryption of encrypted documents — RC4 and AES-128
+//! (ISO 32000-1 §7.6).
 //!
 //! # Why these tests are the ones that matter
 //!
@@ -142,10 +143,17 @@ fn owner_password_opens_both_revisions() {
 /// something a caller opts into.
 ///
 /// This test could not exist until its fixture did. The corpus had exactly one
-/// empty-user-password file and it was AES-128, which this increment refuses on
-/// cipher grounds *before authentication is ever reached* — so the empty-password
-/// path was implemented, believed, and never once executed end-to-end. A fixture
-/// that cannot fail for the reason you care about is not covering that reason.
+/// empty-user-password file and it was AES-128, which increment 1 refused on
+/// cipher grounds *before authentication was ever reached* — so the
+/// empty-password path was implemented, believed, and never once executed
+/// end-to-end. A fixture that cannot fail for the reason you care about is not
+/// covering that reason.
+///
+/// Increment 2 implemented AES-128, so that fixture now reaches authentication
+/// too (`aes_128_with_an_empty_user_password_needs_no_password`). **Both stay.**
+/// The RC4 file is the one that proved the path when AES could not, and
+/// deleting it now would re-create the original hole the moment some future
+/// increment changes how AES is handled.
 #[test]
 fn empty_user_password_opens_with_no_prompt() {
     let doc = Document::load(&fixture("enc-emptyuser-rc4-128.pdf"))
@@ -202,20 +210,93 @@ fn no_password_on_a_protected_file_asks_for_one() {
     assert!(matches!(e, DocError::PasswordRequired), "got {e:?}");
 }
 
-/// AES is refused by **cipher name**, not as "encrypted files are
-/// unsupported". The plumbing works; one cipher is missing, and saying so is
-/// the difference between an operator waiting for a feature and an operator
-/// assuming pdfce cannot open encrypted files at all.
+/// AES-128 (`/CFM /AESV2`) opens, with either password (increment 2).
+///
+/// This assertion replaced a refusal test. The refusal was correct when it was
+/// written and is now false, which is the honest reason to change a test
+/// rather than add one beside it.
 #[test]
-fn aes_128_is_refused_by_cipher_name() {
-    let e = Document::load_with_password(&fixture("enc-aes-128.pdf"), Some(b"userpw"))
-        .expect_err("AES-128 is not implemented in this increment");
+fn aes_128_opens_with_either_password() {
+    for pw in [&b"userpw"[..], b"ownerpw"] {
+        let doc = Document::load_with_password(&fixture("enc-aes-128.pdf"), Some(pw))
+            .expect("AES-128 is implemented");
+        assert!(
+            doc.encryption().is_some(),
+            "the document is still encrypted"
+        );
+        assert!(
+            !page_tree::pages(&doc)
+                .expect("the page tree walks after decryption")
+                .is_empty(),
+            "a decrypted document has pages"
+        );
+    }
+}
+
+/// **AES decryption produces the right STRINGS, which pixels cannot prove.**
+///
+/// The end-to-end fidelity proof for this increment lives in `pdfce-cli`'s
+/// `decrypting_reproduces_the_plaintext_document_exactly` and compares
+/// *rendered pixels*. That covers stream data thoroughly and strings barely:
+/// a form field's `/T` name is never drawn, so string decryption could be
+/// entirely broken and every pixel would still match.
+///
+/// Strings take a genuinely different path — decrypted in the *parsed object*
+/// by `apply::decrypt_strings`, not in the retained buffer — so they need
+/// their own assertion. A field name is ideal: it is an encrypted string
+/// (**E7** exempts numbers and names, not strings), it is compared here
+/// against the plaintext document the fixture was made from, and an
+/// off-by-one in the `sAlT` key derivation would turn it into noise rather
+/// than into a plausible different name.
+#[test]
+fn aes_128_decrypts_strings_not_only_stream_data() {
+    let plain = Document::load(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/synthetic/forms/demo-form.pdf"),
+    )
+    .expect("the plaintext source of every encryption fixture");
+    let enc = Document::load_with_password(&fixture("enc-aes-128.pdf"), Some(b"userpw"))
+        .expect("AES-128 is implemented");
+
+    let names = |d: &Document| -> Vec<String> {
+        let form = pdfce_core::forms::parse_acroform(d).expect("the fixture has an AcroForm");
+        let mut v: Vec<String> = form
+            .fields
+            .iter()
+            .map(|f| f.fully_qualified_name.clone())
+            .collect();
+        v.sort();
+        v
+    };
+
+    let expected = names(&plain);
     assert!(
-        matches!(
-            e,
-            DocError::Encryption(EncryptionUnsupported::CipherNotImplemented("AES-128"))
-        ),
-        "got {e:?}"
+        !expected.is_empty(),
+        "the fixture must actually have named fields, or this test proves nothing"
+    );
+    assert_eq!(
+        names(&enc),
+        expected,
+        "AES-decrypted field names must equal the plaintext document's. A \
+         mismatch here is a string-path bug that renders byte-identically."
+    );
+}
+
+/// AES-128 with an **empty user password** opens with no password at all —
+/// the §7.6.3.1 silent attempt, now exercised on the AES path too.
+///
+/// This fixture was the *only* empty-password fixture once, and because AES
+/// was refused before authentication was ever reached, the most
+/// operator-visible behaviour in clause 7.6 went unexecuted. It is now a real
+/// acceptance case rather than a file that fails early for an unrelated reason.
+#[test]
+fn aes_128_with_an_empty_user_password_needs_no_password() {
+    let doc = Document::load(&fixture("enc-emptyuser.pdf"))
+        .expect("an empty user password is tried silently, §7.6.3.1");
+    assert!(doc.encryption().is_some(), "it is still an encrypted file");
+    assert!(
+        !page_tree::pages(&doc)
+            .expect("the page tree walks after decryption")
+            .is_empty()
     );
 }
 

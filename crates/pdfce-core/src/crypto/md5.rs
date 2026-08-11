@@ -21,11 +21,17 @@
 //!   all.
 //!
 //! **That reasoning does not generalise.** It explicitly does *not* extend to
-//! AES, which is the next increment's cipher: AES has real implementation
-//! hazards (timing, key schedules, mode handling), a live ecosystem, and
-//! well-audited permissive crates. Hand-rolling MD5 and RC4 is a judgement
-//! about *these two* frozen algorithms; the same sentence must not be reused
-//! to justify hand-rolling the next one.
+//! AES: AES has real implementation hazards (timing, key schedules, mode
+//! handling), a live ecosystem, and well-audited permissive crates.
+//! Hand-rolling MD5 and RC4 is a judgement about *these two* frozen
+//! algorithms; the same sentence must not be reused to justify hand-rolling
+//! the next one.
+//!
+//! Increment 2 honoured that. AES-128 took the dependency — RustCrypto's `aes`
+//! and `cbc` — and [`crate::crypto::aes`]'s module docs cite this paragraph as
+//! the reason. Recorded here because the paragraph was written *before* there
+//! was anything to apply it to, which is the only time such a limit can be set
+//! without arguing about a specific case.
 //!
 //! # What it is used for
 //!
