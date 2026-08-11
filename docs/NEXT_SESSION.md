@@ -20,9 +20,8 @@ Measured, not relayed:
 - `cargo tree -p pdfce-core` names no GUI crate. **Zero dependencies were
   added this session**, including for the crypto.
 
-Portable build **`D:\builds\pdfce-20260811-0846-f5f5b06`** carries
-everything except the Properties Security section (`17f4d82`). Rebuild
-if that matters: `python tools/package-portable.py --note "..."`.
+Portable build **`D:\builds\pdfce-20260811-0846-f5f5b06`** is current
+at HEAD and carries everything described below.
 
 Filing gate: `check-commits-filed.py` may list `17f4d82`; a librarian
 dispatch was in flight when this was written. Run the gate and file
