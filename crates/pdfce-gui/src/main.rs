@@ -23304,6 +23304,89 @@ fn place_draft_commit(
 /// it does not perform, about a mechanism §7.6.3.1 says outright is not
 /// enforced. It is pinned above the rows, shown every time, not
 /// dismissible.
+/// Turn a `/Perms` verdict into the sentence to draw, or `None` for the two
+/// cases that must draw nothing.
+///
+/// # Why the numbers are decoded here rather than in `ui_text`
+///
+/// `PermsCheck::Mismatch` carries two 32-bit flag words. Those are meaningless
+/// to an operator — nobody has memorised Table 22 — and this section has never
+/// shown raw PDF syntax. So the flag words are decoded into the *same*
+/// plain-English names the permission rows below use, and `ui_text` is handed
+/// finished names rather than integers. That is the division of labour
+/// [`ui_text::permission_label`] and [`ui_text::permission_value`] already
+/// establish: main.rs turns model values into presentable terms, `ui_text`
+/// turns terms into sentences.
+///
+/// [`Permissions`] is a plain `pub struct` with public fields, so the second
+/// copy can be built directly from `perms_p` at the same revision and diffed
+/// bit by bit against the declared one. Comparing `granted()` rather than the
+/// raw words is deliberate: `granted()` returns `None` for a bit that carries
+/// no meaning at this revision, so two words differing only in a *reserved*
+/// bit produce no reported difference — which is right, because such a bit
+/// expresses nothing either way.
+///
+/// # `/EncryptMetadata` is handled separately, and always
+///
+/// It is **not** one of Table 22's bits and has no row in the grid, so it is
+/// named in words rather than pointed at. And it is examined independently of
+/// whether any permission bit differs, because `PermsCheck::Mismatch` fires if
+/// *either* half disagrees — a document whose two copies differ only on
+/// metadata encryption would otherwise produce an empty list and a sentence
+/// that trailed off.
+///
+/// Its third state matters too. `perms_encrypt_metadata` is an `Option<bool>`:
+/// `None` means the second copy's byte is neither of the two values the format
+/// defines, which is an *unreadable byte* rather than a disagreement, and gets
+/// its own wording.
+///
+/// [`Permissions`]: pdfce_core::crypto::Permissions
+fn perms_disclosure(enc: &pdfce_core::document::DocumentEncryption) -> Option<String> {
+    use pdfce_core::crypto::{PermissionBit, Permissions, PermsCheck};
+
+    match enc.perms {
+        // The ordinary cases. `NotApplicable` is every /R <= 4 document.
+        PermsCheck::NotApplicable | PermsCheck::Match => None,
+        PermsCheck::MarkerMissing => Some(ui_text::security_perms_marker_missing().to_owned()),
+        PermsCheck::Mismatch {
+            perms_p,
+            perms_encrypt_metadata,
+            dict_encrypt_metadata,
+            ..
+        } => {
+            let declared = enc.config.permissions();
+            let second_copy = Permissions {
+                raw: perms_p,
+                revision: declared.revision,
+            };
+            let mut differing: Vec<&str> = PermissionBit::all()
+                .into_iter()
+                .filter(|&bit| declared.granted(bit) != second_copy.granted(bit))
+                .map(ui_text::permission_label)
+                .collect();
+
+            match perms_encrypt_metadata {
+                Some(v) if v != dict_encrypt_metadata => {
+                    differing.push(ui_text::security_perms_metadata_item());
+                }
+                None => differing.push(ui_text::security_perms_metadata_unreadable_item()),
+                Some(_) => {}
+            }
+
+            // A Mismatch with nothing to name is not reachable -- core raises
+            // it only when a compared value differs -- but drawing a sentence
+            // that ends in ": ." would be worse than drawing nothing, and this
+            // is a disclosure surface where the failure mode should be
+            // silence rather than a broken line.
+            if differing.is_empty() {
+                None
+            } else {
+                Some(ui_text::security_perms_mismatch(&differing))
+            }
+        }
+    }
+}
+
 fn security_section(doc: &OpenDoc, ui: &mut egui::Ui) {
     let Some(enc) = doc.session.document().encryption() else {
         return;
@@ -23314,6 +23397,21 @@ fn security_section(doc: &OpenDoc, ui: &mut egui::Ui) {
     ui.label(ui_text::encryption_status_line(enc.auth));
     ui.add_space(4.0);
     ui.label(ui_text::security_section_caption());
+
+    // ★ The /R 5 second-copy disclosure, between the general claim above and
+    // the data below: general truth, then this file's instance of it, then the
+    // values themselves.
+    //
+    // Drawn ONLY when the two copies disagree or the second one is unreadable.
+    // `Match` needs no sentence -- the caption already covers the ordinary
+    // case -- and `NotApplicable` (every /R <= 4 document, where the second
+    // copy does not exist) must be silent, or every RC4 and AES-128 file an
+    // operator owns would carry a line about a comparison that was never
+    // possible.
+    if let Some(note) = perms_disclosure(enc) {
+        ui.add_space(6.0);
+        ui.label(egui::RichText::new(note).color(crate::theme::Theme::of(ui.ctx()).palette.notice));
+    }
     ui.add_space(6.0);
 
     egui::Grid::new("security-permissions-grid")
@@ -24819,26 +24917,57 @@ mod tests {
         // ★ This case used to be the AES-128 file. Increment 2 implemented
         // AES-128, so that file now asks for a password like any other
         // protected document — see (4) — and the capability-gap assertion
-        // moves to AES-256, which is still refused. Note the reason moved
-        // with it and is NOT "AES is missing": `/AESV3` keys off Algorithm
-        // 2.A rather than Algorithm 1, so having the block cipher changed
-        // nothing here.
+        // moved to AES-256 at `/R` 5.
+        //
+        // ★ Increment 3 implemented `/R` 5, so it moves again, to `/R` 6 —
+        // and the *kind* of gap changes with it. Every earlier occupant was
+        // "pdfce has not written this yet". `/R` 6 is a SOURCING gap: its
+        // Algorithm 2.B is not in the project's spec corpus past step (a), so
+        // pdfce declines to guess. The message has to carry that, because the
+        // operator's next action differs — there is nothing to wait for that
+        // an engineer can simply do.
         let mut app = PdfceApp::default();
-        app.open_path(fixture("encryption/enc-aes-256-r5.pdf"));
+        app.open_path(fixture("encryption/enc-aes-256-r6.pdf"));
         match &app.status {
             Status::Unsupported { message, .. } => {
                 assert!(
-                    message.contains("AES-256"),
-                    "the message must name the cipher, so the operator learns \
-                     the machinery works and one algorithm is missing: {message}"
+                    message.contains("AES-256") && message.contains("/R 6"),
+                    "the message must name the cipher AND the revision, so the \
+                     operator learns the machinery works and one revision is \
+                     out of reach: {message}"
+                );
+                assert!(
+                    message.contains("not available"),
+                    "and it must say the ALGORITHM is unavailable rather than \
+                     unwritten — those have different next actions: {message}"
                 );
             }
             other => panic!(
-                "an AES-256 document must read as a capability gap, never as a \
-                 damaged file; got {:?}",
+                "an AES-256 /R 6 document must read as a capability gap, never \
+                 as a damaged file; got {:?}",
                 std::mem::discriminant(other)
             ),
         }
+
+        // (2b) And the contrast. `/R` 5 is the same cipher and the same
+        // dictionary shape as `/R` 6, differing only in a hash function, and
+        // it now takes the ordinary protected-document route. Without this,
+        // (2) would be consistent with pdfce having no AES-256 support at all.
+        let mut app = PdfceApp::default();
+        app.open_path(fixture("encryption/enc-aes-256-r5.pdf"));
+        assert!(
+            matches!(app.status, Status::NeedsPassword { .. }),
+            "an AES-256 /R 5 document must now ASK for a password; got {:?}",
+            std::mem::discriminant(&app.status)
+        );
+        app.password_prompt.input = "ownerpw".to_owned();
+        app.submit_password();
+        assert!(
+            matches!(app.status, Status::Open(_)),
+            "and the OWNER password must open it — the /OE unwrap path (T26); \
+             got {:?}",
+            std::mem::discriminant(&app.status)
+        );
 
         // (3) A document needing a password is NEITHER damaged nor
         // unsupported — pdfce can decrypt it and has not been told how.
@@ -24885,6 +25014,85 @@ mod tests {
             matches!(app.status, Status::Open(_)),
             "a permissions-only AES-128 document must just open; got {:?}",
             std::mem::discriminant(&app.status)
+        );
+    }
+
+    /// ★ The Security section's `/Perms` disclosure — drawn for a
+    /// disagreement, **silent** for everything else.
+    ///
+    /// The silence half is the half that matters most. `/Perms` exists only
+    /// from handler revision 5, so every RC4 and AES-128 document reports
+    /// `NotApplicable` — and if that rendered as a note, every encrypted file
+    /// an operator owns would carry a line about a comparison that was never
+    /// possible. A disclosure that fires on the ordinary case is not a
+    /// disclosure; it is noise that teaches people to skip the section.
+    ///
+    /// The speaking half is asserted through the same length-preserving `/P`
+    /// edit `pdfce-core`'s `a_tampered_p_is_reported_and_neither_value_is_\
+    /// silently_preferred` uses: at `/R` 5 the permission word does not feed
+    /// the key, so it can be edited in place and the document still opens.
+    /// The sentence must then name the permissions that differ **in the same
+    /// words the rows below use**, and must not contain "check", which would
+    /// read as contradicting the caption directly above it.
+    #[test]
+    fn the_perms_disclosure_speaks_only_when_the_two_copies_disagree() {
+        let load = |path: &std::path::Path, pw: &str| -> pdfce_core::document::Document {
+            pdfce_core::document::Document::load_with_password(path, Some(pw.as_bytes()))
+                .expect("fixture must open")
+        };
+
+        // Silent: /R <= 4 has no second copy at all, and an untampered /R 5
+        // document's two copies agree.
+        for (name, pw) in [
+            ("encryption/enc-rc4-128.pdf", "userpw"),
+            ("encryption/enc-aes-128.pdf", "userpw"),
+            ("encryption/enc-aes-256-r5.pdf", "userpw"),
+        ] {
+            let doc = load(&fixture(name), pw);
+            let enc = doc.encryption().expect("encrypted");
+            assert!(
+                perms_disclosure(enc).is_none(),
+                "{name}: nothing disagrees, so nothing must be said"
+            );
+        }
+
+        // Speaking: the same /R 5 file with its plaintext permission word
+        // edited in place. `-4` (everything allowed) becomes `-6`, which
+        // clears bit 2 -- reserved -- and bit 3, "Print". Ten digits either
+        // way, so every xref offset survives.
+        let original = std::fs::read(fixture("encryption/enc-aes-256-r5.pdf"))
+            .expect("the fixture is readable");
+        let from = b"/P 4294967292";
+        let to = b"/P 4294967290";
+        let at = original
+            .windows(from.len())
+            .position(|w| w == from)
+            .expect("the fixture carries a plaintext /P");
+        let mut tampered = original.clone();
+        tampered[at..at + to.len()].copy_from_slice(to);
+
+        let doc =
+            pdfce_core::document::Document::from_bytes_with_password(tampered, Some(b"userpw"))
+                .expect("editing /P must not stop an /R 5 document opening");
+        let enc = doc.encryption().expect("encrypted");
+        let note = perms_disclosure(enc).expect("a disagreement must be disclosed");
+
+        assert!(
+            note.contains(ui_text::permission_label(
+                pdfce_core::crypto::PermissionBit::Print
+            )),
+            "the note must name the permission that differs, in the same words \
+             the row below uses: {note}"
+        );
+        assert!(
+            !note.contains("check"),
+            "the caption directly above says pdfce does not CHECK anything — \
+             that is a claim about enforcement, and repeating the word here \
+             reads as a contradiction: {note}"
+        );
+        assert!(
+            !note.contains("tamper") && !note.contains("0x"),
+            "no accusation, and no raw flag words: {note}"
         );
     }
 

@@ -1409,6 +1409,102 @@ data — and pdfce does not check or restrict anything in this application based
 on them. They are shown so you know what the author asked for."
 }
 
+/// ★ The `/R` 5 second-copy disclosure: this document carries an encrypted
+/// copy of its permissions and it disagrees with the plaintext one.
+///
+/// # What this is reporting
+///
+/// From handler revision 5, an encrypted document carries a 16-byte block
+/// holding a copy of its permission flags, encrypted under the file
+/// encryption key. The plaintext copy — the one the list below shows, and the
+/// one every viewer shows — sits in the file as ordinary editable data. So the
+/// two can disagree, and a disagreement is the only signal PDF encryption
+/// gives that a document's stated permissions are not the ones its encryptor
+/// recorded.
+///
+/// # Three things this copy deliberately does not do
+///
+/// 1. **It does not say "check", "verify", "detect" or "found".** The caption
+///    directly above says pdfce *"does not check or restrict anything"* — a
+///    claim about **enforcement**, i.e. pdfce does not gate features on these
+///    values. This line is a statement about **the file's contents**. The
+///    logic does not collide, but the *word* does: an operator skimming two
+///    adjacent sentences that both contain "check" reads a contradiction that
+///    is not there. Passive framing costs nothing and removes it.
+/// 2. **It does not say "tampered" or "corrupted".** A producer that edited
+///    `/P` without re-encrypting the second copy is an entirely innocent
+///    explanation, and **nothing in the file distinguishes it** from the other
+///    kind. The innocent reading is named first, matching the ordering
+///    `PermsCheck`'s own docs use.
+/// 3. **It does not show the numbers.** The values are 32-bit flag words like
+///    `0xFFFFFFFC`, meaningless to anyone who has not memorised Table 22, and
+///    this section has never shown raw PDF syntax to the operator. `differing`
+///    arrives already decoded into the same plain-English names the rows below
+///    use, so the operator can look straight down at the rows in question.
+///
+/// `differing` must be non-empty — the caller only reaches this for a real
+/// disagreement, and an empty list would produce a sentence ending in nothing.
+#[must_use]
+pub fn security_perms_mismatch(differing: &[&str]) -> String {
+    let list = differing.join(", ");
+    format!(
+        "This document also carries a second, encrypted copy of its permissions. \
+That copy disagrees with the plaintext values shown below on: {list}. pdfce shows \
+both and is not choosing between them — the file itself does not say which one is \
+right."
+    )
+}
+
+/// The `/R` 5 second-copy disclosure, for the case where that copy did not
+/// decrypt to anything recognisable.
+///
+/// Kept as separate copy from [`security_perms_mismatch`] rather than folded
+/// into it, because the two describe genuinely different situations and one
+/// sentence covering both would have to lie in one direction or the other: a
+/// mismatch means two known values disagree, this means **no second value was
+/// recovered at all**. Merging would either imply a specific disagreement that
+/// does not exist, or imply the block is intact when it is not.
+///
+/// Damage is named as the likely cause because it is: this runs only after a
+/// password has already authenticated, so the key is known to be right, and a
+/// block that then fails to decrypt to its expected marker points at the bytes
+/// rather than at anyone's intent.
+#[must_use]
+pub fn security_perms_marker_missing() -> &'static str {
+    "This document also carries a second, encrypted copy of its permissions, but it \
+did not decrypt to a value pdfce recognises — most likely that copy is damaged rather \
+than edited. The list below still shows the plaintext values from the file; there is \
+nothing to compare them against."
+}
+
+/// The metadata-encryption item, for [`security_perms_mismatch`]'s list.
+///
+/// **Not a permission**, and deliberately not phrased as one. The
+/// `/EncryptMetadata` flag is a separate entry in the encryption dictionary
+/// that says whether the document's metadata stream is encrypted along with
+/// everything else; it is not one of the eight Table 22 bits the grid below
+/// enumerates, and it has no row there. Describing it as a permission would
+/// misstate what it is and would send the operator looking for a row that does
+/// not exist.
+#[must_use]
+pub fn security_perms_metadata_item() -> &'static str {
+    "whether the document's metadata is encrypted"
+}
+
+/// The metadata item when the second copy holds a value that is neither of the
+/// two the format defines.
+///
+/// A *different* fact from the item above, and the distinction is not
+/// pedantry: "the two copies say different things about metadata encryption"
+/// and "the second copy's metadata byte is not one of the two possible values"
+/// are different observations, and reporting the second as the first would
+/// describe a value dispute where there is only an unreadable byte.
+#[must_use]
+pub fn security_perms_metadata_unreadable_item() -> &'static str {
+    "whether the document's metadata is encrypted (the second copy does not hold a \
+recognisable value there)"
+}
+
 /// Label for one permission row.
 #[must_use]
 pub fn permission_label(bit: PermissionBit) -> &'static str {
