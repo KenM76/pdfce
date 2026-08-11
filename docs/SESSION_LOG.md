@@ -35983,3 +35983,86 @@ log`/`git status`/`git remote -v` directly. This is the
 **hundred-and-eleventh** `SESSION_LOG.md`/`ROADMAP.md` joint filing (the
 hundred-and-tenth, immediately above — header AND body both confirmed
 present by direct read before this entry was appended).
+
+## 2026-08-11 (hundred-and-twelfth filing) — `Pass 67.0` amended: two phases become six, the operator's answer ("give all options") closes the four-motivations question, replace-font added as the parity-plus sixth op
+
+**Sourcing.** No shell tool this dispatch (hard rule 8). This is an
+amendment to the hundred-and-eleventh filing's own scoping, directed by
+the engineer relaying the operator's verbatim answer; independently
+confirmed by direct read of `ROADMAP.md`'s existing `Pass 67.0` entry
+and its three Backlog bullets before editing either.
+
+**Shipped:** nothing — still a scoping filing, no code touched.
+
+**Decisions made this session:** none new — this amends scope, not
+architecture. No `ARCHITECTURE.md` §12 entry.
+
+**Findings + decisions:**
+- **The four-motivations question is ANSWERED, not outstanding.** Asked
+  which of licensing / file size / RIP-printer / PDF-A drove the
+  request, the operator answered verbatim: *"just give all options that
+  someone might need to choose from."* Read as "all of them" — the
+  reason the Pass becomes a menu rather than a single pre-selected
+  operation.
+- **`Pass 67.0` widens from two phases to six, kept as one Pass ID.** A
+  (report, in flight) and B (unembed) are unchanged. Three phases are
+  pulled back in from Backlog rather than tracked separately: **C —
+  re-subset** (shrink an embedded font to used glyphs, no removal, works
+  even where B is refused), **D — convert text to outlines** (the
+  universal escape hatch — the only phase that works where B is refused,
+  including the ~40% Identity-H/CID case; irreversible, no search/copy/
+  reflow after, file usually grows), **E — embed missing fonts** (the
+  reverse of B, reuses decision 012's `font_embed.rs`). One phase is new
+  this filing: **F — replace font X with Y**, remapping encodings and
+  widths; Acrobat has no equivalent (already sourced hundred-and-eleventh
+  filing — three-session search, genuine absence), so this phase is
+  parity-plus.
+- **Sequence recorded, not left to build order.** A gates B–F; D is
+  pulled forward ahead of E and F despite being the more substantial
+  build, because it is the only phase that answers the ~40%
+  Identity-H/CID case — shipping B alone would leave that case with no
+  route at all.
+- **The reasoning for six ops instead of one "remove fonts" verb,
+  restated for the record:** no single removal operation is correct for
+  every file — unembedding is refused for ~40% of real documents,
+  re-subsetting beats removal when the problem is size, removal is right
+  only once `fsType` says which fonts are actually restricted, and
+  outlines are the only universal answer when the font dependency must
+  go no matter what. The operator cannot know which is needed until
+  phase A's report tells them.
+- **Three Backlog candidates withdrawn, not left duplicated.** Embed
+  Missing Fonts, re-subsetting, and convert-text-to-outlines are struck
+  through in `ROADMAP.md`'s *Backlog* section with a dated pointer back
+  to their new home as `Pass 67.0` phases E, C and D — not deleted
+  outright, so the record of when they were first flagged survives.
+
+**Still in flight:**
+- Phase A (reporting) has not started; it remains the prerequisite for
+  every other phase.
+- Encryption's `/R` 6 gap and encrypted-save remain untouched, by the
+  operator's own explicit instruction (hundred-and-eleventh filing).
+
+**For next session:** see `docs/NEXT_SESSION.md` — not edited by this
+librarian this filing (engineer-owned).
+
+**Ledger for this filing.** **No new Pass ID minted** — amends the
+existing `Pass 67.0` in place. Pass-family ceiling stays **67.0**, next
+free **68**. No `ARCHITECTURE.md` §12 entry, no standing-rule mint —
+ceiling stays **R187**, next free **R188**. Decision-record ceiling
+unaffected, **045**, next free **046**. `docs/FEATURES.md`: **four new
+rows**, all *Planned*, `[ ] core / [ ] cli / [ ] gui`, nothing ticked —
+re-subset, outlines, embed-missing (Acrobat `◐`, matching the report/
+unembed rows) and replace-font (Acrobat `**[ ]**`, this table's
+pdfce-only-verified-absence convention). Operator-question ceiling
+unaffected at **(bj)**, next free **(bk)** — the four-motivations
+question is answered inline rather than retroactively lettered.
+`D:\dev\rag\rust\`/`D:\dev\rag\egui\`/`C:\personal_rag\pdf\`: not
+touched — no new generalizable finding. **Backlog: three entries
+withdrawn** (not net-new; folded into `Pass 67.0` as phases C, D, E).
+**Backup/git working-tree/remote state not independently asserted
+anywhere in this filing** — no shell this dispatch (hard rule 8); the
+engineer should check `D:\Dev\pdfce-backups\` and `git
+log`/`git status`/`git remote -v` directly. This is the
+**hundred-and-twelfth** `SESSION_LOG.md`/`ROADMAP.md` joint filing (the
+hundred-and-eleventh, immediately above — header AND body both
+confirmed present by direct read before this entry was appended).

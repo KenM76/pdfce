@@ -37017,6 +37017,116 @@ dispatch (hard rule 8); the engineer should check
 directly, on the current branch. This is the **hundred-and-eleventh**
 `ROADMAP.md` filing.
 
+**★★★★★ AMENDED 2026-08-11 (hundred-and-twelfth filing) — scope widened
+from a two-phase Pass to a six-operation family; the four-motivations
+question above is ANSWERED, not outstanding.**
+
+Asked which of the four motivations (licensing / file size / RIP-printer
+/ PDF-A) drove the request, the operator answered verbatim: *"just give
+all options that someone might need to choose from."* The answer is "all
+of them" — the reason a menu is the right shape, not a single
+pre-selected operation. **The "Outstanding operator question" paragraph
+above is CLOSED as of this amendment**, retained above in place
+(append-only) as the record of what was asked and when; it is not
+retroactively rewritten to look pre-answered.
+
+**`Pass 67.0` is now a six-phase family, kept as one Pass rather than
+split into six Pass IDs.** All six phases share one font inventory
+(phase A), one refusal model (Identity-H/CID), and one disclosure
+surface — splitting them would fragment substrate that phase A alone
+already builds, and that sharing is the actual reason to keep one Pass,
+not merely convenience.
+
+- **A — Report.** Unchanged from the original scoping above; in flight.
+- **B — Unembed.** Unchanged from the original scoping above: strip
+  `/FontFile*`, refuse Identity-H/CID by name with a stated reason.
+- **C — Re-subset** (pulled in from Backlog, was a separate candidate).
+  Shrink an already-embedded font's program to only the glyphs the
+  document actually uses. No visual change, no text loss, works on
+  *every* embedded font including the ~40% phase B must refuse. Usually
+  the right answer when the motivation is file size rather than
+  licensing.
+- **D — Convert text to outlines** (pulled in from Backlog, was a
+  separate candidate). Glyphs become vector paths; no font program
+  survives at all. ★ **The universal escape hatch, and the reason it is
+  sequenced early despite being substantial**: it is the only one of the
+  six that works where phase B is REFUSED, including the ~40%
+  Identity-H/CID case, because it never needs a substitute font to sit
+  at those glyph positions. Costs, to be stated wherever this phase is
+  offered, not merely implied by a confirm button (rule 4 / fuzzy-never-
+  sneaky): irreversible; the text stops being text (no search, no copy,
+  no accessibility, no reflow); the file usually grows rather than
+  shrinks.
+- **E — Embed missing fonts** (pulled in from Backlog, was a separate
+  candidate). The reverse of phase B: a font is *referenced* but not
+  embedded; embed an operator-supplied source font. Reuses pdfce's
+  existing font-embedding machinery (decision 012, `font_embed.rs`, FF-C
+  / `Pass 21.0`) rather than building a second embedding path.
+- **F — Replace font X with Y** (new in this amendment; did not exist in
+  the original filing). Substitute one font for another, remapping
+  encodings and widths so text does not reflow wrongly — the hardest of
+  the six precisely because it is not just swapping a program name.
+  **Acrobat has no equivalent capability** — `pdfce-acrobat-librarian`
+  searched across three sessions and recorded the absence as genuine,
+  not merely unlooked-up (already cited above, "What Acrobat does").
+  This phase is parity-plus, not parity.
+
+**Sequence, recorded rather than left to build order.** A is the
+prerequisite for B through F — none of the other five can be safely
+offered without the inventory A produces. D is pulled forward ahead of E
+and F despite being the more substantial build, because it is the
+*only* phase that answers the ~40% Identity-H/CID case: shipping B alone
+would leave the commonest hard case in the corpus with no route at all.
+
+**Why six operations and not one "remove embedded fonts" verb — the
+reasoning behind the whole family, stated once.** There is no single
+removal operation correct for every file. Unembedding is refused
+outright for ~40% of real documents; for a file whose problem is size,
+re-subsetting beats removal; for a file whose problem is a font licence,
+removal is right but only once `fsType` says which fonts are actually
+restricted; and for a file that must lose its font dependency no matter
+what, outlines are the only universal answer. An operator who says
+"remove embedded fonts" usually cannot know which of these they need
+until the report (phase A) tells them — which is why A ships first
+regardless of which of B–F follows it.
+
+**Backlog entries pulled back in, not tracked in two places.** The
+three Backlog candidates this librarian filed in the original scoping
+filing above — Embed Missing Fonts, re-subsetting, convert-text-to-
+outlines — are **withdrawn from *Backlog* and folded into this Pass as
+phases E, C and D respectively**. Each Backlog bullet is amended in
+place with a short dated pointer back to this entry rather than deleted
+outright, so the record of when and why they were first flagged
+survives; see *Backlog* below.
+
+**`docs/FEATURES.md`: four new *Planned* rows added** — re-subset,
+outlines, embed-missing, replace-font — all `[ ] core / [ ] cli / [ ]
+gui`, nothing ticked (phase A has not landed). Acrobat column: `◐` for
+re-subset / outlines / embed-missing, matching the `◐` already recorded
+for reporting and unembedding; replace-font uses this table's existing
+"pdfce-only, verified Acrobat absence" convention (bold `**[ ]**`, the
+same styling as the CLI row and the ce-dimension-tolerances row). The
+two rows from the original filing (report, unembed) are unchanged.
+
+**Ledger for this filing.** **No new Pass ID minted** — this amends the
+existing `Pass 67.0` in place, per the operator's own instruction not to
+fragment the family; Pass-family ceiling stays **67.0**, next free
+**68**. No `ARCHITECTURE.md` §12 entry — still no crate boundary,
+library choice or invariant decided, only scope. Decision-record ceiling
+unaffected, **045**, next free **046**. Standing-rule ceiling unaffected,
+**R187**, next free **R188**. Operator-question ceiling unaffected,
+**(bj)**, next free **(bk)** — the four-motivations question is answered
+inline above rather than retroactively assigned a letter, consistent
+with the original filing's own reasoning for not lettering it.
+`D:\dev\rag\rust\`/`D:\dev\rag\egui\`/`C:\personal_rag\pdf\`: not
+touched — this is a scope amendment to project-internal scoping, no new
+generalizable finding. **Backup/git working-tree/remote state not
+independently asserted anywhere in this filing** — no shell this
+dispatch (hard rule 8); the engineer should check
+`D:\Dev\pdfce-backups\` and `git log`/`git status`/`git remote -v`
+directly, on the current branch. This is the **hundred-and-twelfth**
+`ROADMAP.md` filing.
+
 ---
 
 ### Pass 52.0–52.3 — PDF → DXF export, so SOLIDWORKS can import pdfce output without an Acrobat Pro licence at all — operator request 2026-08-09, redirected from "make pdfce satisfy SOLIDWORKS' Acrobat gate" to "make the gate irrelevant"
@@ -46881,29 +46991,26 @@ not a judgment call:**
   acceptance criteria written yet — needs its own Pass when the
   operator asks for it, likely alongside or reusing pdfce's existing
   Batch Tools surface.
-- **Embed Missing Fonts — the reverse repair of `Pass 67.0`'s
-  unembedding** (flagged 2026-08-11, `Pass 67.0`'s scoping filing).
-  Scan a document for non-embedded fonts and offer to embed a matching
-  system/donor face, closing the gap where a viewer without the named
-  font falls back to substitution. Deliberately NOT folded into
-  `Pass 67.0` — the operator's own wording ("fonts REMOVED") named
-  unembedding, not repair; this is the opposite direction and needs its
-  own font-matching design (which system font counts as "matching," and
-  what happens when none does). UNSCOPED, no acceptance criteria written.
-- **Re-subset an already-embedded font to only its used glyphs**
-  (flagged 2026-08-11, `Pass 67.0`'s scoping filing). The low-risk
-  companion to unembedding: shrinks file size without removing the font
-  program, so it never hits `Pass 67.0`'s Identity-H refusal case and
-  works on every embedded font, not just the ~60% unembedding can safely
-  touch. Likely the right default recommendation when the operator's
-  motivation turns out to be file size rather than licensing. UNSCOPED.
-- **Convert text to outlines (vector paths)** (flagged 2026-08-11,
-  `Pass 67.0`'s scoping filing). The RIP/printer-safe alternative to
-  either embedding or unembedding — no font dependency survives at all,
-  at the cost of the text no longer being text (unselectable,
-  unsearchable, unreflowable). Relevant if the operator's motivation
-  turns out to be a RIP/printer choking on an embedded font program
-  rather than licensing or file size. UNSCOPED.
+- ~~**Embed Missing Fonts — the reverse repair of `Pass 67.0`'s
+  unembedding.**~~ **WITHDRAWN 2026-08-11 (hundred-and-twelfth filing) —
+  pulled back into `Pass 67.0` as phase E.** Flagged as a separate
+  candidate at `Pass 67.0`'s original scoping filing on the theory the
+  operator's wording ("fonts REMOVED") named unembedding specifically;
+  the operator's follow-up answer ("give all options") widened scope to
+  the whole family instead. No longer tracked here — see `Pass 67.0`
+  phase E for the live scoping.
+- ~~**Re-subset an already-embedded font to only its used glyphs.**~~
+  **WITHDRAWN 2026-08-11 (hundred-and-twelfth filing) — pulled back into
+  `Pass 67.0` as phase C.** Flagged as a separate candidate at
+  `Pass 67.0`'s original scoping filing; no longer tracked here — see
+  `Pass 67.0` phase C for the live scoping.
+- ~~**Convert text to outlines (vector paths).**~~ **WITHDRAWN
+  2026-08-11 (hundred-and-twelfth filing) — pulled back into `Pass 67.0`
+  as phase D.** Flagged as a separate candidate at `Pass 67.0`'s
+  original scoping filing; no longer tracked here — see `Pass 67.0`
+  phase D for the live scoping, including why it is sequenced early
+  despite being substantial (the only phase that answers the ~40%
+  Identity-H/CID case phase B must refuse).
 
 ## Standing rules
 
