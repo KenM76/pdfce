@@ -252,6 +252,101 @@ impl Permissions {
     pub fn print_high_quality(self) -> bool {
         self.revision >= 3 && self.bit(12)
     }
+
+    /// Whether `bit` is granted — the iterable form of the accessors above.
+    ///
+    /// Returns `None` when the bit carries no meaning at this document's
+    /// revision, which a front end must render differently from `Some(false)`:
+    /// "the author did not permit this" and "this document's encryption
+    /// revision has no such concept" are different statements, and collapsing
+    /// them shows the operator a restriction nobody wrote.
+    #[must_use]
+    pub fn granted(self, bit: PermissionBit) -> Option<bool> {
+        if bit.applies_at(self.revision) {
+            Some(self.bit(bit.position()))
+        } else {
+            None
+        }
+    }
+}
+
+/// One permission a document's author may declare (Table 22).
+///
+/// Enumerated so a front end can iterate the whole set and show a complete
+/// picture. A partial list would be worse than none: an operator seeing four
+/// permissions cannot tell whether the other four were omitted because they
+/// are allowed, because they are absent, or because nobody implemented them.
+///
+/// Ordered as Table 22 orders the bits, with the two print entries adjacent
+/// because they are read together — bit 3 is "may print", bit 12 is "may
+/// print at full quality", and bit 12 without bit 3 means nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PermissionBit {
+    /// Bit 3 — print the document.
+    Print,
+    /// Bit 12 — print at full fidelity. `/R` 3+ only.
+    PrintHighQuality,
+    /// Bit 4 — modify contents, other than what bits 6, 9 and 11 govern.
+    ModifyContents,
+    /// Bit 5 — copy or extract text and graphics.
+    Copy,
+    /// Bit 6 — add or modify annotations and fill form fields.
+    Annotate,
+    /// Bit 9 — fill existing form fields even if bit 6 is clear. `/R` 3+ only.
+    FillForms,
+    /// Bit 10 — extract for accessibility. `/R` 3+ only.
+    AccessibilityExtract,
+    /// Bit 11 — insert, rotate or delete pages. `/R` 3+ only.
+    Assemble,
+}
+
+impl PermissionBit {
+    /// Every permission, in Table 22 order.
+    #[must_use]
+    pub const fn all() -> [Self; 8] {
+        [
+            Self::Print,
+            Self::PrintHighQuality,
+            Self::ModifyContents,
+            Self::Copy,
+            Self::Annotate,
+            Self::FillForms,
+            Self::AccessibilityExtract,
+            Self::Assemble,
+        ]
+    }
+
+    /// The 1-based bit position Table 22 assigns.
+    #[must_use]
+    pub const fn position(self) -> u32 {
+        match self {
+            Self::Print => 3,
+            Self::ModifyContents => 4,
+            Self::Copy => 5,
+            Self::Annotate => 6,
+            Self::FillForms => 9,
+            Self::AccessibilityExtract => 10,
+            Self::Assemble => 11,
+            Self::PrintHighQuality => 12,
+        }
+    }
+
+    /// Whether this bit carries any meaning at handler revision `revision`.
+    ///
+    /// Bits 9–12 were introduced at `/R` 3. Below that they are reserved, and
+    /// **reporting a reserved bit as "not allowed" would invent a restriction
+    /// the document never expressed** — the author of an `/R` 2 file did not
+    /// decline to permit form-filling; the concept did not exist to decline.
+    #[must_use]
+    pub const fn applies_at(self, revision: u8) -> bool {
+        match self {
+            Self::Print | Self::ModifyContents | Self::Copy | Self::Annotate => true,
+            Self::FillForms
+            | Self::AccessibilityExtract
+            | Self::Assemble
+            | Self::PrintHighQuality => revision >= 3,
+        }
+    }
 }
 
 /// Which password opened the document.
@@ -887,6 +982,62 @@ mod tests {
         let p = -44i64 as i32 as u32;
         assert_eq!(p, 0xFFFF_FFD4);
         assert_eq!(p.to_le_bytes(), [0xD4, 0xFF, 0xFF, 0xFF]);
+    }
+
+    /// `granted` must distinguish "the author said no" from "the revision has
+    /// no such concept". Collapsing them shows a restriction nobody wrote.
+    #[test]
+    fn reserved_bits_report_none_rather_than_false() {
+        // `-44` has bits 9-12 SET. At R2 they are reserved, so every one of
+        // them must report `None` — not `Some(true)` (which would invent a
+        // permission) and not `Some(false)` (which would invent a
+        // restriction).
+        let raw = -44i64 as i32 as u32;
+        let r2 = Permissions { raw, revision: 2 };
+        let r3 = Permissions { raw, revision: 3 };
+
+        for bit in [
+            PermissionBit::FillForms,
+            PermissionBit::AccessibilityExtract,
+            PermissionBit::Assemble,
+            PermissionBit::PrintHighQuality,
+        ] {
+            assert_eq!(r2.granted(bit), None, "{bit:?} is reserved at R2");
+            assert_eq!(r3.granted(bit), Some(true), "{bit:?} is set at R3");
+        }
+
+        // The four that exist at every revision answer at both.
+        for bit in [
+            PermissionBit::Print,
+            PermissionBit::ModifyContents,
+            PermissionBit::Copy,
+            PermissionBit::Annotate,
+        ] {
+            assert!(
+                r2.granted(bit).is_some(),
+                "{bit:?} applies at every revision"
+            );
+            assert_eq!(r2.granted(bit), r3.granted(bit));
+        }
+    }
+
+    /// Every bit position must match Table 22, and no two may collide.
+    #[test]
+    fn permission_bit_positions_are_table_22() {
+        let all = PermissionBit::all();
+        assert_eq!(all.len(), 8, "Table 22 defines eight meaningful bits");
+        let mut seen: Vec<u32> = Vec::new();
+        for bit in all {
+            let p = bit.position();
+            assert!((3..=12).contains(&p), "{bit:?} at {p} is outside Table 22");
+            assert!(!seen.contains(&p), "two permissions claim bit {p}");
+            seen.push(p);
+        }
+        // Bits 7 and 8 are reserved and must not be claimed by anything.
+        assert!(
+            !seen.contains(&7) && !seen.contains(&8),
+            "bits 7 and 8 are reserved"
+        );
     }
 
     /// T12 — the standard's `-44` example is R2-only.

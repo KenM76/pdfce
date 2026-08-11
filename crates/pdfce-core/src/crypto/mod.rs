@@ -70,5 +70,5 @@ pub mod rc4;
 pub mod standard;
 
 pub use standard::{
-    AuthKind, Cipher, EncryptionConfig, EncryptionUnsupported, FileKey, Permissions,
+    AuthKind, Cipher, EncryptionConfig, EncryptionUnsupported, FileKey, PermissionBit, Permissions,
 };

@@ -14388,6 +14388,7 @@ impl PdfceApp {
         ui.separator();
         dimension_groups_section(doc, ui);
         ui.separator();
+        security_section(doc, ui);
         ui.heading(ui_text::properties_document_heading());
         if doc.properties_lossy {
             // Honesty over tidiness: some stored bytes could not be decoded
@@ -23086,6 +23087,66 @@ fn place_draft_commit(
 /// (and lives here), never both with a precedence rule the operator has to
 /// learn. Per-ce-dimension overrides are a real ask and a real design problem;
 /// deferring them whole is honest, and half-shipping them is not.
+/// The read-only Security section (ISO 32000-1 §7.6, Table 22).
+///
+/// Shown only for an encrypted document — for an unencrypted one there is
+/// nothing to report, and a section reading "no permissions declared"
+/// would suggest a mechanism was consulted when none exists.
+///
+/// # Read-only, and not a checkbox
+///
+/// Every value is plain text. A checkbox — even a disabled one — reads as
+/// a setting this panel could change, and pdfce has no path to write a
+/// `/P` value at all. These are facts about the file.
+///
+/// # The caption is not decoration
+///
+/// `ui_text::security_section_caption` states that PDF encryption does not
+/// enforce these and that pdfce does not check them. Both halves are
+/// required, and the second is the one an operator cannot discover any
+/// other way. Without it a list headed "Security" reads as a set of
+/// restrictions in force — which would be pdfce claiming an enforcement
+/// it does not perform, about a mechanism §7.6.3.1 says outright is not
+/// enforced. It is pinned above the rows, shown every time, not
+/// dismissible.
+fn security_section(doc: &OpenDoc, ui: &mut egui::Ui) {
+    let Some(enc) = doc.session.document().encryption() else {
+        return;
+    };
+    let perms = enc.config.permissions();
+
+    ui.heading(ui_text::security_section_heading());
+    ui.label(ui_text::encryption_status_line(enc.auth));
+    ui.add_space(4.0);
+    ui.label(ui_text::security_section_caption());
+    ui.add_space(6.0);
+
+    egui::Grid::new("security-permissions-grid")
+        .num_columns(2)
+        .spacing([12.0, DENSE_ROW_SPACING_Y])
+        .show(ui, |ui| {
+            for bit in pdfce_core::crypto::PermissionBit::all() {
+                ui.label(ui_text::permission_label(bit));
+                match perms.granted(bit) {
+                    Some(allowed) => {
+                        ui.label(ui_text::permission_value(allowed));
+                    }
+                    // Distinguished from "not allowed" deliberately: at
+                    // `/R` 2 these bits are reserved, and the author of
+                    // such a file did not decline to permit form-filling
+                    // — the concept did not exist to decline. Rendering
+                    // it as a refusal would show a restriction nobody
+                    // wrote.
+                    None => {
+                        ui.weak(ui_text::permission_not_applicable());
+                    }
+                }
+                ui.end_row();
+            }
+        });
+    ui.separator();
+}
+
 fn selected_dimension_section(doc: &mut OpenDoc, ui: &mut egui::Ui) {
     use pdfce_core::dimension::DimensionKind;
 

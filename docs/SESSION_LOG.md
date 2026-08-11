@@ -34246,3 +34246,143 @@ engineer should check `D:\Dev\pdfce-backups\` and `git log`/
 the **ninety-seventh** `SESSION_LOG.md`/`ROADMAP.md` joint filing (the
 ninety-sixth confirmed present by direct read before this entry was
 appended).
+
+## 2026-08-11 (ninety-eighth filing) — `94cf228`: the GUI can open a password-protected PDF, closing `Pass 5`'s shell-coverage gap named one filing ago; Ctrl+S guarded before the file dialog, not after; a stale wrapper string found by reading it, not by a test failing
+
+**Sourcing.** No shell tool this dispatch (hard rule 8). The dispatching
+engineer supplied the full commit message verbatim via a scratchpad file
+(read directly). Independently confirmed by direct filesystem read (no
+shell needed): `Status::NeedsPassword { path }`, the `PasswordPrompt`
+struct, `Action::SubmitPassword`/`CancelPassword` with their `apply()`
+pending-gate exclusion, `begin_save`'s encryption guard placed *before*
+`save_dialog()` with a doc comment naming the exact hazard it closes, and
+`ui_text::canvas_unsupported`'s rewritten body (its own inline comment
+states the staleness finding almost verbatim to the commit message) —
+all exactly as described. `encrypted_documents_reach_the_right_status_through_open_path`
+confirmed present with the described three-fixture structure.
+`docs/NEXT_SESSION.md` not touched this filing (engineer-owned this
+session, per instruction); unchanged at `89291ce` since the prior
+filing. **No `pdfce-ui-specialist` spec file exists for this design** —
+flagged so a future session doesn't go looking for a `ui_specs/`
+document that was never written; the design's only durable records are
+this commit's own code/doc comments and `docs/NEXT_SESSION.md`.
+
+**Shipped:**
+- `94cf228` — `Status::NeedsPassword { path }`, a new variant (not a
+  flag on `Status::Open`, since no `Document` exists at that point; not
+  `Failed` or `Unsupported`, since pdfce can open the file and simply
+  hasn't been told how). A `PasswordPrompt` on the app carries the typed
+  input, reset in both `open_path` and `switch_to_parked` (a test proves
+  a half-typed password does not follow the operator to the next file).
+  Rendered inline on the canvas as a fourth arm of the existing
+  Idle/Failed/Unsupported match, deliberately excluded from `apply()`'s
+  pending-gate (that gate protects an already-open document's question;
+  here nothing is open, so gating would lock the operator away from
+  documents they DO have open). Escape gains a new top rung above
+  view-mode. `Ctrl+S` guarded at `begin_save` itself — without the
+  guard it would open a Save-As dialog and only refuse after the
+  operator picked a folder and typed a filename. Two status-bar
+  disclosures at open (what opened the document; that saving is
+  unavailable for it), both computed live from the `Document`, never
+  cached, explicitly citing `149fd03`'s `recovery_note` fix as the
+  reason. `canvas_unsupported`'s stale cross-reference-structure wording
+  (true when xref streams were the only gap, false since encryption
+  replaced them) found by reading the string and fixed to defer to the
+  underlying `DocError`'s own message.
+
+**Decisions made this session:** none — this is UI wiring on top of
+`Pass 5`'s already-decided core crypto choice (`14a7400`). No crate
+boundary redrawn, no library picked, no invariant redefined; no new
+`ARCHITECTURE.md` §12 entry.
+
+**Findings + decisions:**
+- **A stale hardcoded diagnostic string, found by reading it rather
+  than by a test failing.** `canvas_unsupported` named a specific cause
+  ("cross-reference structure") for `Status::Unsupported` when that was
+  the status's only producer; `e4b6533` (one filing prior) correctly
+  widened the *classifier* to also match `DocError::Encryption(_)`,
+  leaving the *string* pointing at the old cause with nothing to catch
+  the drift — no compile error, no lint, no test (nothing asserts
+  message content for this arm, only the status). **Judged adjacent to,
+  not an instance of, project standing rule `R186`**: R186 is a guard
+  *failing open* (silently missing a hazard); this is a guard *firing
+  correctly* with a *stale caption*. Recorded beside R186 in
+  `ROADMAP.md`'s Standing rules section rather than folded in as a fifth
+  instance — the shapes are close but not the same, and stretching R186
+  to cover both would blur the distinction that makes the rule useful.
+  Whether a third occurrence of either shape should merge them is
+  flagged to the engineer, not decided here. New finding:
+  `D:\dev\rag\rust\a_hardcoded_diagnostic_string_naming_one_cause_goes_stale_when_its_status_grows_a_second_cause.md`.
+- **The `149fd03` "derive live, never cache" lesson propagated within
+  one commit, in the same session.** This commit's two new disclosures
+  were built live from the start, explicitly citing that fix. Recorded
+  as an amendment to
+  `D:\dev\rag\egui\a_derived_value_with_one_producer_cannot_drift_a_cached_copy_with_n_producers_will.md`
+  rather than a new file — a positive instance of a lesson applied
+  pre-emptively rather than rediscovered.
+- **A deliberately loose test assertion caught exactly what it was built
+  to catch.** `encrypted_documents_reach_the_right_status_through_open_path`
+  (written last filing) asserted the password-RC4 case landed in
+  `Failed | Unsupported` "the day it changes, this test says so instead
+  of quietly agreeing" — it failed the moment `NeedsPassword` landed,
+  and was updated rather than deleted. Not filed as a new RAG finding
+  (the predicted, already-recorded outcome of a mechanism the prior
+  filing already described), but worth naming: the safety net worked.
+
+**Still in flight:**
+- Permission-bit display (print/copy/modify/annotate/fill-forms/
+  accessibility-extract/assemble/high-quality-print) — not shown
+  anywhere. The dispatching engineer names a design (read-only
+  "Security" section in Properties, one pinned caption citing N4/§7.6.3.1
+  that PDF encryption's permission bits are unenforced and pdfce does
+  not check them) as **starting next**, explicitly reported as
+  design-in-progress, not shipped.
+- The AES-128/256 decrypt path and eventual encrypt-on-save — unchanged,
+  untouched by this commit.
+- The `/R 6` AES-256 sourcing open sub-decision — unchanged.
+- Carried-forward items from prior filings (stale `(bh)`/`(bi)` ceiling
+  footers across the ninety-second through ninety-fifth filings; the
+  eight-item never-encrypted list still owed to `pdfce-spec-librarian`)
+  — still open, untouched this dispatch.
+
+**For next session:** GUI reading is now at parity with the CLI for RC4
+— the shell-coverage gap named at the top of *Shipped* one filing ago is
+closed. The next named piece of work is the permission-bit disclosure in
+Properties, already designed per the dispatching engineer but not yet
+built. A shell grant would let this librarian independently verify the
+git-history claims (test-count deltas, `fmt`/`clippy` results, the
+portable-build hash) it could only relay this filing.
+
+**Ledger for this filing.** **No new Pass ID** — same `Pass 5` ID,
+continuing increment 1. Pass-family ceiling unchanged at **62.0**, next
+free **63**. `docs/FEATURES.md`: **one row touched** — the Encryption
+row's gui cell `[ ]` → `[x]`, sentence rewritten to cover both shells and
+name the still-undisplayed permission bits. `docs/ARCHITECTURE.md`: **no
+change** — no crate-boundary/library/invariant decision this filing; **no
+new §12 entry**. Standing rules: **`R186` cited, NOT amended** — the
+stale-string finding is filed as an adjacent, cross-referenced entry, not
+a fifth instance (shapes differ: fail-open vs. correctly-fired-but-stale-
+caption). Ceiling stays **R186**, next free **R187**. Decision-record
+ceiling **unchanged at 038**, next free **039**. Operator-question
+ceiling **unchanged at `(bi)`, next free `(bj)`**. `D:\dev\rag\rust\`:
+**one new file**
+(`a_hardcoded_diagnostic_string_naming_one_cause_goes_stale_when_its_status_grows_a_second_cause.md`),
+`index.md` updated. `D:\dev\rag\egui\`: **one file amended**
+(`a_derived_value_with_one_producer_cannot_drift_a_cached_copy_with_n_producers_will.md`),
+no `index.md` change needed (amendment, not a new file). **No
+`C:\personal_rag\pdf\` finding this filing** — nothing here is
+producer-empirical PDF behavior. Test/gate figures: **3,309 workspace
+tests measured passing at `94cf228`** — relayed, not independently
+re-run (no shell this dispatch); baseline **3,306** at the prior
+filing's `89291ce`, **delta +3**. `cargo fmt --check`,
+`cargo clippy --workspace --all-targets --all-features`,
+`check-ui-strings.sh`, `check-theme-colors.sh` all reported clean —
+relayed. **Packaging smoke test**: portable build cut at
+`D:\builds\pdfce-20260811-0836-94cf228` — relayed, not independently
+re-run. **Backup/git working-tree/remote state not independently
+asserted anywhere in this filing** — no shell this dispatch (hard rule
+8); the engineer should check `D:\Dev\pdfce-backups\` and `git log`/
+`git status`/`git remote -v` directly, on branch `post-v0.2.0`. This is
+the **ninety-eighth** `SESSION_LOG.md`/`ROADMAP.md` joint filing (the
+ninety-seventh confirmed present by direct read before this entry was
+appended).

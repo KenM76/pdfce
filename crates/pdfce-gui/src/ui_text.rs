@@ -45,7 +45,7 @@
 use std::path::Path;
 
 use pdfce_core::PdfVersion;
-use pdfce_core::crypto::AuthKind;
+use pdfce_core::crypto::{AuthKind, PermissionBit};
 use pdfce_core::dimension::Unit;
 use pdfce_core::edit::{CommandKind, InfoField};
 use pdfce_core::vector::{AxisConstraint, FillRule, PaintStyle, Rgb, SnapKind, TextBoundsBasis};
@@ -1369,6 +1369,75 @@ pub fn encryption_save_unsupported_note() -> &'static str {
 #[must_use]
 pub fn save_disabled_encrypted_tooltip() -> &'static str {
     "pdfce cannot write an encrypted PDF yet, so this document cannot be saved."
+}
+
+/// Heading of the Properties panel's read-only Security section.
+#[must_use]
+pub fn security_section_heading() -> &'static str {
+    "Security"
+}
+
+/// ★ The non-enforcement caption, pinned above the permission list.
+///
+/// This is the one string in the encryption set that is a **correctness
+/// claim**, not interface copy, and it should be changed only against the
+/// clause it restates. ISO 32000-1 §7.6.3.1, verbatim: *"There is nothing
+/// inherent in PDF encryption that enforces the document permissions
+/// specified in the encryption dictionary."*
+///
+/// Two facts, both required, and the second is the one an operator cannot
+/// discover any other way:
+///
+/// 1. These are the **author's declaration**, not a lock. The `/P` value is
+///    plaintext in the file and trivially editable, and at `/V` 1–4 there is
+///    no integrity protection over it whatsoever (negative result **N7**).
+/// 2. **pdfce does not check them.** ISO 32000-1 specifies no mapping from a
+///    permission bit to a reader operation at all (**N4**) — "assemble the
+///    document" is not an object-level predicate — so any mapping would be
+///    pdfce's own invention. Under rule 4 a tool must not quietly disable a
+///    feature on a guess, so pdfce shows the declaration and does nothing
+///    with it. Saying so is what keeps the list from reading as a set of
+///    restrictions in force.
+#[must_use]
+pub fn security_section_caption() -> &'static str {
+    "These are the permissions the document's author declared. PDF encryption \
+does not enforce them — the values are stored in the file as ordinary, editable \
+data — and pdfce does not check or restrict anything in this application based \
+on them. They are shown so you know what the author asked for."
+}
+
+/// Label for one permission row.
+#[must_use]
+pub fn permission_label(bit: PermissionBit) -> &'static str {
+    match bit {
+        PermissionBit::Print => "Print",
+        PermissionBit::PrintHighQuality => "Print at full quality",
+        PermissionBit::ModifyContents => "Change the contents",
+        PermissionBit::Copy => "Copy text and graphics",
+        PermissionBit::Annotate => "Add or change annotations and fill fields",
+        PermissionBit::FillForms => "Fill existing form fields",
+        PermissionBit::AccessibilityExtract => "Extract for accessibility",
+        PermissionBit::Assemble => "Insert, rotate or delete pages",
+    }
+}
+
+/// Value shown against a permission row.
+///
+/// "Allowed" / "Not allowed" rather than a tick and a cross: colour and glyph
+/// alone are not accessible, and a checkbox would imply the value is a setting
+/// this panel can change. It is a fact about the file.
+#[must_use]
+pub fn permission_value(allowed: bool) -> &'static str {
+    if allowed { "Allowed" } else { "Not allowed" }
+}
+
+/// Note appended to permission rows that only exist above `/R` 3.
+///
+/// At `/R` 2 bits 9–12 are reserved and carry no meaning, so reporting them as
+/// "Not allowed" would invent a restriction the document never expressed.
+#[must_use]
+pub fn permission_not_applicable() -> &'static str {
+    "Not specified at this encryption revision"
 }
 
 /// Centered canvas message when the document loaded but a page failed
