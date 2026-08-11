@@ -8651,9 +8651,18 @@ impl PdfceApp {
         }
         if let Some((fqn, text)) = fill {
             doc.pending_note = Some(match doc.session_mut().fill_text_field(&fqn, &text) {
-                Ok(_) => {
+                Ok(out) => {
                     doc.refresh_pages();
-                    ui_text::form_field_filled(&fqn)
+                    // The XFA caveat REPLACES the plain confirmation rather
+                    // than appending to it. A note reading "saved" followed
+                    // by a caveat invites the operator to stop at the first
+                    // word; the caveat is the whole message or it is not
+                    // doing its job.
+                    if out.xfa_may_disagree {
+                        ui_text::fill_xfa_may_disagree(&fqn)
+                    } else {
+                        ui_text::form_field_filled(&fqn)
+                    }
                 }
                 // Reported, never swallowed. A certification signature, an
                 // encrypted document, or a field the model no longer holds all

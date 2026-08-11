@@ -5470,6 +5470,29 @@ pub struct FillOutcome {
     /// How many characters of the filled text had no `WinAnsi` code and were
     /// substituted with `?` (the named Base-14-Latin limit, disclosed).
     pub unencodable_chars: usize,
+    /// ★ **The document also carries an XFA packet, so this fill may not be
+    /// the value an XFA-aware viewer shows.**
+    ///
+    /// # The fail-open this closes
+    ///
+    /// A hybrid form (§12.7.8) describes its fields *twice*: once as an
+    /// AcroForm and once inside `/AcroForm /XFA`. pdfce fills the AcroForm
+    /// half — which is what most viewers read, and is why filling is allowed
+    /// rather than refused. It cannot write the XFA half.
+    ///
+    /// So the two halves now disagree, and **which one an operator sees
+    /// depends on their viewer**: a plain reader shows the new value, an
+    /// XFA-aware one may show the old. Nothing about the saved file looks
+    /// wrong, and nothing else would have said so.
+    ///
+    /// Field *authoring* already refuses outright on an XFA document
+    /// ([`EditError::FieldAuthoringRefusedXfa`], decision 020) because a
+    /// one-sided ADD makes the two halves disagree about how many fields
+    /// exist. A fill is the weaker case — the field exists in both halves and
+    /// only its value diverges — so it is disclosed rather than refused.
+    /// Refusing would make every hybrid form unfillable, which is a worse
+    /// answer than a visible caveat.
+    pub xfa_may_disagree: bool,
     /// The `/TI` top index written on a scrollable list box so the selection
     /// is on screen (§12.7.4.4 Table 231), or `None` when the key was left
     /// absent — its default of 0, a combo box, or no matched selection.
@@ -11799,6 +11822,9 @@ impl EditSession {
             widgets_updated,
             applied_autosize,
             unencodable_chars,
+            // Read from the form modelled at the top of this function, so it
+            // reflects the session rather than the file on disk.
+            xfa_may_disagree: form.xfa.is_present(),
             // `/TI` is a CHOICE-field key (§12.7.4.4 Table 231). A text
             // field has no option list to scroll.
             top_index: None,
@@ -12640,6 +12666,9 @@ impl EditSession {
             widgets_updated,
             applied_autosize,
             unencodable_chars,
+            // Read from the form modelled at the top of this function, so it
+            // reflects the session rather than the file on disk.
+            xfa_may_disagree: form.xfa.is_present(),
             top_index,
         })
     }
@@ -16675,6 +16704,69 @@ mod tests {
             .expect_err("refuses");
         let after = forms::parse_acroform(&session.graph()).map(|f| f.fields.len());
         assert_eq!(before, after, "no form was created by a refused add");
+    }
+
+    /// A one-field form, optionally with an `/XFA` packet beside it.
+    fn form_maybe_xfa(with_xfa: bool) -> Vec<u8> {
+        let acro = if with_xfa {
+            "<< /Fields [4 0 R] /XFA 6 0 R /DA (/Helv 0 Tf 0 g) \
+             /DR << /Font << /Helv 5 0 R >> >> >>"
+        } else {
+            "<< /Fields [4 0 R] /DA (/Helv 0 Tf 0 g) \
+             /DR << /Font << /Helv 5 0 R >> >> >>"
+        };
+        let catalog = format!("<< /Type /Catalog /Pages 2 0 R /AcroForm {acro} >>");
+        crate::pageops::tests_support::build_pdf_bytes(&[
+            (1, &catalog),
+            (2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
+            (
+                3,
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] \
+                 /Resources << /Font << /Helv 5 0 R >> >> /Annots [4 0 R] >>",
+            ),
+            (
+                4,
+                "<< /Type /Annot /Subtype /Widget /FT /Tx /T (Name) /V (old) \
+                 /Rect [10 250 200 272] /DA (/Helv 0 Tf 0 g) >>",
+            ),
+            (5, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"),
+            (6, "<< /Length 6 >>\nstream\n<xdp/>\nendstream"),
+        ])
+    }
+
+    /// ★ **Filling a hybrid-XFA form succeeds AND says the two halves may
+    /// now disagree.**
+    ///
+    /// The fail-open this closes: pdfce writes the AcroForm half, which most
+    /// viewers read, and cannot write the XFA half. Nothing about the saved
+    /// file looks wrong, and which value an operator sees depends on their
+    /// viewer. Field AUTHORING already refuses outright on an XFA document
+    /// (decision 020) because a one-sided add makes the halves disagree
+    /// about how many fields exist; a fill is the weaker case, so it is
+    /// disclosed rather than refused — refusing would make every hybrid form
+    /// unfillable.
+    #[test]
+    fn filling_a_hybrid_xfa_form_succeeds_and_discloses_the_divergence() {
+        let mut session = EditSession::new(Document::from_bytes(form_maybe_xfa(true)).unwrap());
+        let out = session.fill_text_field("Name", "new").expect("fills");
+        assert!(
+            out.xfa_may_disagree,
+            "the XFA packet must be reported, not silently ignored"
+        );
+        assert_eq!(
+            value_of(&session, "Name"),
+            forms::FieldValue::Text(b"new".to_vec()),
+            "and the AcroForm half really is filled"
+        );
+    }
+
+    /// The same fill on a plain AcroForm says nothing — the caveat must not
+    /// become noise on the common case.
+    #[test]
+    fn filling_a_plain_form_reports_no_xfa_divergence() {
+        let mut session = EditSession::new(Document::from_bytes(form_maybe_xfa(false)).unwrap());
+        let out = session.fill_text_field("Name", "new").expect("fills");
+        assert!(!out.xfa_may_disagree);
     }
 
     /// ★ **The preview agrees with the act it previews.**

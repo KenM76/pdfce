@@ -8743,6 +8743,16 @@ fn report_disclosures(disclosures: &[String]) {
 /// Print the fuzzy-never-sneaky disclosures a fill owes (an applied
 /// auto-size, any unencodable characters) to stderr.
 fn disclose_fill(name: &str, out: &pdfce_core::edit::FillOutcome) {
+    // Stated FIRST, before the cosmetic caveats. The others describe how the
+    // value was drawn; this one says the value may not be the one a reader
+    // sees at all, which is a different order of consequence.
+    if out.xfa_may_disagree {
+        eprintln!(
+            "pdfce-cli: field {name:?}: this form also carries an XFA packet. pdfce filled the \
+AcroForm half, which most viewers read, but cannot write the XFA half — so an XFA-aware viewer \
+may still show the OLD value."
+        );
+    }
     if let Some(sz) = out.applied_autosize {
         eprintln!(
             "pdfce-cli: field {name:?}: auto-sized to {sz} pt (a reviewable pdfce heuristic; \

@@ -10334,6 +10334,20 @@ pub const fn draft_multiline_label() -> &'static str {
     "Multi-line"
 }
 
+/// Warning that a filled hybrid-XFA field may not be what a reader shows.
+///
+/// Leads with the consequence rather than the mechanism: an operator who has
+/// just typed a value cares that it might not stick, not that the document
+/// has two field descriptions.
+#[must_use]
+pub fn fill_xfa_may_disagree(field: &str) -> String {
+    format!(
+        "{field}: saved, but this form also carries an XFA packet. pdfce filled the \
+part most viewers read and cannot write the XFA part, so an XFA-aware viewer may \
+still show the old value."
+    )
+}
+
 /// Heading for the new field's appearance and behaviour controls.
 #[must_use]
 pub const fn draft_style_heading() -> &'static str {
