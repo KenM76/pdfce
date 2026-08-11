@@ -15104,6 +15104,20 @@ Whether a formal record is still wanted for its own sake, now that
 the substance is settled, is the engineer's/operator's call — flagged
 here, not decided.
 
+**★ CORRECTION (2026-08-11, ninety-second filing, `ecf2302`) — the
+"falsified" wording immediately above overstates the ninety-first
+filing's own measurement.** The literal "every OCG-shaped object"
+reading remains a correct reading of the standard's TEXT — none of
+§8.11.2.1, Table 101's `BaseState` sentence, or §8.11.4.5 a) says "all
+groups listed in `/OCGs`." What the Acrobat measurement falsifies is
+narrower: that any conforming READER implements the literal reading.
+Acrobat and (separately measured, same filing) `pdf.js` both narrow the
+quantifier to the registry, which the text nowhere states — so pdfce
+matches READERS, not the literal spec, and that is a deliberate,
+measured divergence from the text rather than a discovery that the text
+meant "registry only" all along. Full account: `ROADMAP.md`'s `ecf2302`
+Shipped entry (ninety-second filing).
+
 **Decision 2 — CLAIMED as decision number `038`, NOT YET AUTHORED —
 Table 101 vs §8.11.4.5 b): does `/BaseState` propagate by processing
 BOTH the `/ON` and `/OFF` arrays, or only the array OPPOSITE the base
@@ -15141,6 +15155,41 @@ this file's normative description of OCG default-visibility resolution
 behavior, not a settled invariant; changing the body section to assert
 either reading as "the" answer before the decision record exists would
 misstate the record's own status.
+
+**Status update (2026-08-11, ninety-second filing, `ecf2302`) —
+RECONCILED, not merely claimed; the apparent contradiction was a
+partial reading, not a genuine one.** `pdfce-spec-librarian`
+re-extracted Table 101's `ON` and `OFF` rows verbatim (cross-verified,
+`pdfminer.six` against `pypdf`, agreeing sentence-for-sentence) and
+found each carries a redundancy sentence usually omitted when this
+"conflict" gets quoted: *"If the `BaseState` entry is `ON`, this entry
+is redundant"* (and the `OFF` row's mirror). Redundancy is a testable
+claim — delete the redundant array, compare — and it holds under
+exactly one processing order: matching array first (a no-op), opposite
+array last, which **is** §8.11.4.5 b) verbatim. **Table 101 read as a
+whole table, not one row quoted against one clause, IS §8.11.4.5 b)
+with a redundant no-op prepended — one function, two descriptions, not
+two competing rules.** `docs/decisions/038-basestate-array-
+propagation.md` (now fully authored, including this addendum) carries
+the full falsification table. `optional_content_default_off`'s
+resolution rule needs NO change — it was already correct under both
+readings, because there was never a second reading to diverge from; its
+doc comment now cites Table 101 in full alongside §8.11.4.5 b), not the
+clause alone, so it no longer reads as having ignored the table.
+**Citation note for future references to this table: "Table 101" is an
+ISO 32000-1 citation only — ISO 32000-2:2020 renumbers it to Table 99;
+carry the edition.** **`pdf.js` diverges from this ruling** (applies
+`/ON` then `/OFF` unconditionally, no `/BaseState` dependence — the
+order the redundancy sentence rules out) — recorded, not followed, since
+a "match other readers" tiebreak would push away from a ruling that
+rests on the standard's own text; Acrobat's behaviour in this specific
+cell was not measured (unlike decision 037, where an Acrobat
+measurement is the entire ruling). **`docs/decisions/037-*.md` and
+`038-*.md` both exist in full** — the "no file authored"/"NOT YET
+AUTHORED" language in this entry and the one above was accurate when
+first written and stale by this filing; corrected here rather than
+edited in place, per this file's own append-only convention. Full
+account: `ROADMAP.md`'s `ecf2302` Shipped entry (ninety-second filing).
 
 ### 2026-08-10 (seventy-seventh filing, `ec8abfe`) — a reachability audit must EXCLUDE the observation/diagnostic harness's own driver function before searching, not merely find a caller; `R184` minted; NO decision number claimed
 
@@ -16854,3 +16903,96 @@ prior commit `5e4a602`, carried forward as still clean (no source
 change between the two besides this measurement/doc-comment commit).
 **Backup/git working-tree state not asserted anywhere in this entry**
 — check `D:\Dev\pdfce-backups\` and `git log`/`git status` directly.
+
+**★ CORRECTION (2026-08-11, ninety-second filing, `ecf2302`) — the
+"Result" paragraph above overstates what this measurement showed, and
+the "Decision 038 ... stays CLAIMED, NOT YET AUTHORED" paragraph above
+was stale the moment it was written.** On the first: the literal
+"every OCG-shaped object" reading remains a correct reading of the
+standard's TEXT (none of §8.11.2.1, Table 101's `BaseState` sentence, or
+§8.11.4.5 a) says "all groups listed in `/OCGs`") — what this
+measurement falsifies is narrower, that any conforming READER
+implements the literal reading. pdfce matches readers (Acrobat here,
+`pdf.js` separately, both narrowing the quantifier to the registry),
+not the literal spec — a measured divergence from the text, not a
+discovery of the text's true meaning. On the second: `docs/decisions/
+038-basestate-array-propagation.md` already existed in full (with an
+addendum reconciling Table 101 and §8.11.4.5 b) as one function, not
+two competing rules) by the time of this correction — see the new dated
+entry below for the full account, and the seventy-sixth filing's own
+entry (above) for the matching correction there. Not edited in place,
+per this file's append-only convention for §12.
+
+### 2026-08-11 (ninety-second filing, `ecf2302`) — decision 038 RECONCILED: Table 101 read whole is §8.11.4.5 b) with a redundant no-op prepended, not a second competing rule; plus the correction to this project's own decision-037 wording
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — `git log -1
+--format=%B ecf2302` not run. Recorded from the engineer's dispatch
+text, cross-checked by direct `Read` of `docs/decisions/038-basestate-
+array-propagation.md`, which already carries the reconciliation
+argument and the verbatim Table 101 `ON`/`OFF` row text this entry
+summarizes.
+
+**The substance is fully recorded in the two amendment footers added
+this filing (above, on the seventy-sixth and ninety-first filing
+entries) and is not re-derived here.** In short: Table 101's `ON` and
+`OFF` rows each carry a redundancy sentence ("if `BaseState` is X, this
+entry is redundant") usually omitted when this "conflict" is quoted.
+Redundancy is testable — delete the redundant array, compare — and
+holds under exactly one processing order, matching array first (a
+no-op) then the opposite array, which is §8.11.4.5 b) verbatim. Table
+101 in full and §8.11.4.5 b) are one function, not two. No change to
+`optional_content_default_off`'s resolution rule (it was already
+correct under both readings); the doc comment at that site now cites
+Table 101 in full alongside the clause, not the clause alone.
+
+**Not a crate-boundary or round-trip-invariant change.** This is a
+spec-interpretation reconciliation with no behavior change — the
+resolution rule pdfce ships was correct before this filing and remains
+correct after it. Recorded in §12 because the reasoning (how to read a
+table row against a procedural clause when they appear to disagree; how
+to test a "redundant" claim rather than argue it) is exactly the kind
+of interpretive methodology a future spec-ambiguity question in this
+project should be able to reuse rather than re-derive. Decision-record
+ceiling **unchanged at 038**, next free **039** — this is a status
+change (CLAIMED → RECONCILED) on an existing decision, not a new
+number. Full account: `ROADMAP.md`'s `ecf2302` Shipped entry
+(ninety-second filing).
+
+### 2026-08-11 (ninety-second filing, `b3ba63b`) — encrypted-fixture provenance: `/R` 2–4 are real evidence against a from-spec implementation, `/R` 6 is a refusal-only fixture because its algorithm is unsourced, and testing against it would be circular
+
+**Sourcing.** No shell tool this dispatch (hard rule 8). Confirmed by
+direct `Read` of `fixtures/synthetic/encryption/PROVENANCE.md` and
+`Glob` of the fixture directory — six files present, matching the
+dispatch account.
+
+**Decision: the six new encrypted fixtures (`fixtures/synthetic/
+encryption/`) are not a uniform test set, and the reason is recorded
+here so a future session does not treat them as one.** For `/R` 2, 3
+and 4, ISO 32000-1 §7.6 fully specifies the algorithm, so pdfce's
+eventual decryption — written from the clause — being checked against
+these files (produced by **pypdf**, an independent implementation) is
+real evidence: two independent readings of the same specification
+agreeing. For `/R` 6, Algorithm 2.B is **unsourced** (ISO 32000-2 is
+paywalled past step (a)); deriving the algorithm from pypdf's own
+implementation and then testing against pypdf's own output would be
+circular — the test could not fail. `enc-aes-256-r6.pdf` is therefore
+designed as a **refusal fixture**: pdfce must decline it by name,
+distinguished from `/R` 5, and the eventual test asserts the refusal,
+not a decrypt. `/R` 5 sits between the two — a deprecated Adobe
+extension, paraphrased rather than sourced from ISO, but real files
+exist (Acrobat wrote them 2008–2011) so reading it stays required
+despite PDF 2.0 deprecating handler revisions 1–5 outright.
+
+**Why this belongs in §12 rather than only in the fixture's own
+`PROVENANCE.md`.** The general shape — a fixture produced by an
+independent implementation is evidence only where the target algorithm
+is independently sourced from the specification itself; where it is
+not, the same fixture can only be a refusal fixture — is exactly the
+kind of testing-methodology reasoning that will recur the next time
+this project builds test fixtures for a spec area with an unsourced
+sub-algorithm (the corpus's own evidence-tier discipline, applied to
+fixture DESIGN rather than to a spec claim). Not a crate-boundary or
+round-trip-invariant change; `Pass 5` (Encryption) itself remains fully
+Backlog — these are test-infrastructure fixtures with no code built
+against them yet. Full account: `ROADMAP.md`'s `b3ba63b` Shipped entry
+(ninety-second filing).

@@ -18401,62 +18401,71 @@ fn place_field_options_ui(doc: &mut OpenDoc, ui: &mut egui::Ui) -> (bool, bool) 
         .on_hover_text(ui_text::create_field_tooltip_decline_tooltip());
     diag::trace(|| format!("field-decline-box rect={:?}", decline.rect));
 
-    // -- Appearance and behaviour, for a TEXT field only. --
+    // -- Appearance and behaviour. --
+    //
+    // Border and visibility apply to EVERY field type — they are widget
+    // annotation properties (Table 165, Table 166), so a check box has a
+    // border for the same reason a text field does. They were briefly
+    // text-only here, which made a capability arbitrary by field kind.
+    //
+    // Max length, multi-line, password and comb stay text-only below,
+    // because those really are `/Ff` bits on a `/Tx` field.
+    ui.separator();
+    ui.label(ui_text::draft_style_heading());
+    ui.horizontal(|ui| {
+        ui.label(ui_text::draft_border_label());
+        egui::ComboBox::from_id_salt("draft-border")
+            .selected_text(ui_text::draft_border_option(draft.border))
+            .show_ui(ui, |ui| {
+                for style in [
+                    pdfce_core::edit::BorderStyle::Solid,
+                    pdfce_core::edit::BorderStyle::Dashed,
+                    pdfce_core::edit::BorderStyle::Beveled,
+                    pdfce_core::edit::BorderStyle::Inset,
+                    pdfce_core::edit::BorderStyle::Underline,
+                ] {
+                    ui.selectable_value(
+                        &mut draft.border,
+                        style,
+                        ui_text::draft_border_option(style),
+                    );
+                }
+            });
+        ui.label(ui_text::draft_border_width_label());
+        // Zero is a real setting — Table 166 says zero means no border.
+        ui.add(
+            egui::DragValue::new(&mut draft.border_width)
+                .range(0.0..=12.0)
+                .speed(0.25),
+        );
+    });
+    ui.horizontal(|ui| {
+        ui.label(ui_text::draft_visibility_label());
+        egui::ComboBox::from_id_salt("draft-visibility")
+            .selected_text(ui_text::draft_visibility_option(draft.visibility))
+            .show_ui(ui, |ui| {
+                for v in [
+                    pdfce_core::edit::Visibility::VisibleAndPrints,
+                    pdfce_core::edit::Visibility::ScreenOnly,
+                    pdfce_core::edit::Visibility::PrintOnly,
+                    pdfce_core::edit::Visibility::Hidden,
+                ] {
+                    ui.selectable_value(
+                        &mut draft.visibility,
+                        v,
+                        ui_text::draft_visibility_option(v),
+                    );
+                }
+            });
+    });
+
+    // -- Text-only behaviour below. --
     //
     // Below the accessibility decision on purpose: `/TU` is a decision the
     // core refuses to default (R105) and Accept stays disabled until it is
     // made, so it belongs above everything optional. These four all have
     // real defaults and none of them blocks a commit.
     if draft.kind == NewFieldKind::Text {
-        ui.separator();
-        ui.label(ui_text::draft_style_heading());
-        ui.horizontal(|ui| {
-            ui.label(ui_text::draft_border_label());
-            egui::ComboBox::from_id_salt("draft-border")
-                .selected_text(ui_text::draft_border_option(draft.border))
-                .show_ui(ui, |ui| {
-                    for style in [
-                        pdfce_core::edit::BorderStyle::Solid,
-                        pdfce_core::edit::BorderStyle::Dashed,
-                        pdfce_core::edit::BorderStyle::Beveled,
-                        pdfce_core::edit::BorderStyle::Inset,
-                        pdfce_core::edit::BorderStyle::Underline,
-                    ] {
-                        ui.selectable_value(
-                            &mut draft.border,
-                            style,
-                            ui_text::draft_border_option(style),
-                        );
-                    }
-                });
-            ui.label(ui_text::draft_border_width_label());
-            // Zero is a real setting — Table 166 says zero means no border —
-            // so the range starts there rather than at a hairline.
-            ui.add(
-                egui::DragValue::new(&mut draft.border_width)
-                    .range(0.0..=12.0)
-                    .speed(0.25),
-            );
-        });
-        ui.horizontal(|ui| {
-            ui.label(ui_text::draft_visibility_label());
-            egui::ComboBox::from_id_salt("draft-visibility")
-                .selected_text(ui_text::draft_visibility_option(draft.visibility))
-                .show_ui(ui, |ui| {
-                    for v in [
-                        pdfce_core::edit::Visibility::VisibleAndPrints,
-                        pdfce_core::edit::Visibility::ScreenOnly,
-                        pdfce_core::edit::Visibility::PrintOnly,
-                        pdfce_core::edit::Visibility::Hidden,
-                    ] {
-                        ui.selectable_value(
-                            &mut draft.visibility,
-                            v,
-                            ui_text::draft_visibility_option(v),
-                        );
-                    }
-                });
-        });
         ui.horizontal(|ui| {
             ui.label(ui_text::draft_max_len_label());
             ui.add(egui::DragValue::new(&mut draft.max_len).range(0..=9999));

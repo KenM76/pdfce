@@ -1597,6 +1597,15 @@ enum Command {
         /// byte.
         #[arg(long)]
         verify_undo: bool,
+        /// Border line style (§12.5.4 Table 166).
+        #[arg(long, value_enum, default_value_t = BorderArg::Solid)]
+        border: BorderArg,
+        /// Border width in points. Zero means no border.
+        #[arg(long, default_value_t = 1.0)]
+        border_width: f64,
+        /// Where the widget is visible (§12.5.3 Table 165).
+        #[arg(long, value_enum, default_value_t = VisibilityArg::Visible)]
+        visibility: VisibilityArg,
     },
 
     /// Author one member of a radio group (ISO 32000-1 §12.7.4.2.1).
@@ -1706,6 +1715,15 @@ enum Command {
         /// byte.
         #[arg(long)]
         verify_undo: bool,
+        /// Border line style (§12.5.4 Table 166).
+        #[arg(long, value_enum, default_value_t = BorderArg::Solid)]
+        border: BorderArg,
+        /// Border width in points. Zero means no border.
+        #[arg(long, default_value_t = 1.0)]
+        border_width: f64,
+        /// Where the widget is visible (§12.5.3 Table 165).
+        #[arg(long, value_enum, default_value_t = VisibilityArg::Visible)]
+        visibility: VisibilityArg,
     },
 
     /// Delete a form field entirely (ISO 32000-1 §12.7.3).
@@ -2050,6 +2068,15 @@ enum Command {
         /// byte.
         #[arg(long)]
         verify_undo: bool,
+        /// Border line style (§12.5.4 Table 166).
+        #[arg(long, value_enum, default_value_t = BorderArg::Solid)]
+        border: BorderArg,
+        /// Border width in points. Zero means no border.
+        #[arg(long, default_value_t = 1.0)]
+        border_width: f64,
+        /// Where the widget is visible (§12.5.3 Table 165).
+        #[arg(long, value_enum, default_value_t = VisibilityArg::Visible)]
+        visibility: VisibilityArg,
     },
 
     /// Author a new list box or drop-down (ISO 32000-1 §12.7.4.4).
@@ -2158,6 +2185,15 @@ enum Command {
         /// byte.
         #[arg(long)]
         verify_undo: bool,
+        /// Border line style (§12.5.4 Table 166).
+        #[arg(long, value_enum, default_value_t = BorderArg::Solid)]
+        border: BorderArg,
+        /// Border width in points. Zero means no border.
+        #[arg(long, default_value_t = 1.0)]
+        border_width: f64,
+        /// Where the widget is visible (§12.5.3 Table 165).
+        #[arg(long, value_enum, default_value_t = VisibilityArg::Visible)]
+        visibility: VisibilityArg,
     },
 
     /// Recompute recognised Acrobat calculation scripts natively, without
@@ -4463,6 +4499,9 @@ fn run() -> ExitCode {
             mode,
             defaults_from,
             verify_undo,
+            border,
+            border_width,
+            visibility,
         } => cmd_add_check_box(&AddCheckBoxArgs {
             input: &input,
             name: &name,
@@ -4478,6 +4517,9 @@ fn run() -> ExitCode {
             mode,
             defaults_from: defaults_from.as_deref(),
             verify_undo,
+            border,
+            border_width,
+            visibility,
         }),
         Command::AddRadioButton {
             input,
@@ -4496,6 +4538,9 @@ fn run() -> ExitCode {
             mode,
             defaults_from,
             verify_undo,
+            border,
+            border_width,
+            visibility,
         } => cmd_add_radio_button(&AddRadioButtonArgs {
             input: &input,
             name: &name,
@@ -4513,6 +4558,9 @@ fn run() -> ExitCode {
             mode,
             defaults_from: defaults_from.as_deref(),
             verify_undo,
+            border,
+            border_width,
+            visibility,
         }),
         Command::DeleteField {
             input,
@@ -4575,6 +4623,9 @@ fn run() -> ExitCode {
             mode,
             defaults_from,
             verify_undo,
+            border,
+            border_width,
+            visibility,
         } => cmd_add_push_button(&AddPushButtonArgs {
             input: &input,
             name: &name,
@@ -4588,6 +4639,9 @@ fn run() -> ExitCode {
             mode,
             defaults_from: defaults_from.as_deref(),
             verify_undo,
+            border,
+            border_width,
+            visibility,
         }),
         Command::AddChoiceField {
             input,
@@ -4607,6 +4661,9 @@ fn run() -> ExitCode {
             mode,
             defaults_from,
             verify_undo,
+            border,
+            border_width,
+            visibility,
         } => cmd_add_choice_field(&AddChoiceFieldArgs {
             input: &input,
             name: &name,
@@ -4625,6 +4682,9 @@ fn run() -> ExitCode {
             mode,
             defaults_from: defaults_from.as_deref(),
             verify_undo,
+            border,
+            border_width,
+            visibility,
         }),
         Command::Recompute {
             input,
@@ -13489,6 +13549,9 @@ struct AddCheckBoxArgs<'a> {
     mode: SaveMode,
     defaults_from: Option<&'a str>,
     verify_undo: bool,
+    border: BorderArg,
+    border_width: f64,
+    visibility: VisibilityArg,
 }
 
 /// Borrowed argument bundle for [`cmd_add_choice_field`] (clippy arg-count).
@@ -13510,6 +13573,9 @@ struct AddChoiceFieldArgs<'a> {
     mode: SaveMode,
     defaults_from: Option<&'a str>,
     verify_undo: bool,
+    border: BorderArg,
+    border_width: f64,
+    visibility: VisibilityArg,
 }
 
 /// Borrowed argument bundle for [`cmd_add_push_button`] (clippy arg-count).
@@ -13526,6 +13592,9 @@ struct AddPushButtonArgs<'a> {
     mode: SaveMode,
     defaults_from: Option<&'a str>,
     verify_undo: bool,
+    border: BorderArg,
+    border_width: f64,
+    visibility: VisibilityArg,
 }
 
 /// Borrowed argument bundle for [`cmd_add_radio_button`] (clippy arg-count).
@@ -13546,6 +13615,9 @@ struct AddRadioButtonArgs<'a> {
     mode: SaveMode,
     defaults_from: Option<&'a str>,
     verify_undo: bool,
+    border: BorderArg,
+    border_width: f64,
+    visibility: VisibilityArg,
 }
 
 /// Parse `--page` (1-based) and `--rect` (`llx,lly,urx,ury`), the two
@@ -13606,7 +13678,9 @@ fn cmd_add_check_box(args: &AddCheckBoxArgs<'_>) -> u8 {
     let mut spec = pdfce_core::edit::NewCheckBox::new(page_index, args.name, rect)
         .with_on_state(args.on_state)
         .checked(args.checked)
-        .with_flags(args.read_only, args.required);
+        .with_flags(args.read_only, args.required)
+        .with_border(args.border.into(), args.border_width)
+        .with_visibility(args.visibility.into());
     // R105: exactly one of the two must have been chosen. `clap`'s
     // `conflicts_with` rules out BOTH; only "neither" can reach here, and it
     // is refused rather than defaulted.
@@ -14243,7 +14317,9 @@ fn cmd_add_radio_button(args: &AddRadioButtonArgs<'_>) -> u8 {
         pdfce_core::edit::NewRadioButton::new(page_index, args.name, rect, args.export_value)
             .selected(args.selected)
             .with_group_flags(args.no_toggle_to_off, args.radios_in_unison)
-            .with_flags(args.read_only, args.required);
+            .with_flags(args.read_only, args.required)
+            .with_border(args.border.into(), args.border_width)
+            .with_visibility(args.visibility.into());
     // R105, exactly as the sibling verbs: `clap`'s `conflicts_with` rules out
     // BOTH being passed, so only "neither" can reach here, and it is refused
     // rather than defaulted.
@@ -14360,7 +14436,9 @@ fn cmd_add_choice_field(args: &AddChoiceFieldArgs<'_>) -> u8 {
     let mut spec = pdfce_core::edit::NewChoiceField::new(page_index, args.name, rect, options)
         .multi_select(args.multi_select)
         .sorted(args.sort)
-        .with_flags(args.read_only, args.required);
+        .with_flags(args.read_only, args.required)
+        .with_border(args.border.into(), args.border_width)
+        .with_visibility(args.visibility.into());
     if args.combo {
         spec = spec.as_combo(args.editable);
     } else {
@@ -14486,7 +14564,9 @@ fn cmd_add_push_button(args: &AddPushButtonArgs<'_>) -> u8 {
     };
 
     let mut spec = pdfce_core::edit::NewPushButton::new(page_index, args.name, rect, args.caption)
-        .with_flags(args.read_only);
+        .with_flags(args.read_only)
+        .with_border(args.border.into(), args.border_width)
+        .with_visibility(args.visibility.into());
     // R105: exactly one of the two must have been chosen. `clap`'s
     // `conflicts_with` rules out BOTH; only "neither" can reach here, and it
     // is refused rather than defaulted.

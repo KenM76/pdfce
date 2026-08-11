@@ -43,6 +43,6 @@ un-write them.
 
 ## Regenerating
 
-`scratchpad/mkcrypt.py` produces all six from a plaintext source. Kept
+`tools/gen-encryption-fixtures.py` produces all six from a plaintext source. Kept
 because a fixture whose construction nobody can repeat is a fixture nobody
 can extend.

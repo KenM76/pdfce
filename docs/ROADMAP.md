@@ -81,6 +81,356 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★ `b3ba63b` — `R186`'s THIRD instance: `inspect` said nothing about a document it could not read, because the load error was `.ok()`-ed away one expression before anyone could report it; plus six encrypted fixtures with a one-way provenance rule — 2026-08-11 (ninety-second filing)
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — `git log -1
+--format=%B b3ba63b` not run. Recorded from the engineer's dispatch
+text, then **independently confirmed by direct `Read`/`Grep`** against
+`crates/pdfce-cli/src/main.rs` (`cmd_inspect`, ≈ line 5229) and
+`fixtures/synthetic/encryption/PROVENANCE.md` — both match the dispatch
+account exactly, including the `R186`-shape doc comment already sitting
+in the source.
+
+**The bug.** `inspect` on an encrypted PDF printed `enc-aes-128.pdf: PDF
+1.3` and exited 0 — byte-identical in shape to a plain readable file.
+The header-probe line has always been correct and useful even on a body
+that won't load (`cmd_inspect`'s own comment: *"it is how you learn it
+is a PDF at all"*), but the code that decided whether to say more used
+`std::fs::read(file).and_then(Document::from_bytes)` and then discarded
+the `Result`'s error half — `full_result.as_ref().ok()` — one expression
+before anything downstream could see *why* the body didn't load. The
+refusal itself (`XrefErrorKind`/`DocError::EncryptionUnsupported`, keyed
+on `/Encrypt` in the trailer) was correct and had been all along; it
+simply fired at the LOAD layer and was never asked by the layer an
+operator sweeping a directory actually runs first.
+
+**Confirmed live, `crates/pdfce-cli/src/main.rs:5243–5286`:** the load
+error is now kept (`full_result`, not `.ok()`), and on a header-valid
+body that failed to load, `cmd_inspect` prints the probe line, THEN
+`eprintln!`s *"the header reads as PDF {version}, but pdfce could NOT
+load the document body: {err}. Anything reported above describes the
+header alone"* and returns `exit_code_for_doc(err)` — non-zero, not
+`exit::SUCCESS`. The source's own doc comment names this explicitly as
+**`R186`'s shape a third time** (after the §7.6.7 wrapper and the
+hybrid-XFA fill, both `5039ecf`/`ce5642d`, eighty-ninth filing): a guard
+that is correct where it fires and silent everywhere a caller doesn't
+ask it directly. The probe line itself is deliberately UNCHANGED — a
+file whose body will not load still gets its header reported, which
+remains the one piece of information obtainable about it.
+
+**Six encrypted fixtures, `fixtures/synthetic/encryption/`** (confirmed
+present: `enc-rc4-40.pdf`, `enc-rc4-128.pdf`, `enc-aes-128.pdf`,
+`enc-aes-256-r5.pdf`, `enc-aes-256-r6.pdf`, `enc-emptyuser.pdf`), built
+from pdfce's own synthetic form fixture and encrypted by **pypdf 6.7.0**
+— an independent implementation, chosen deliberately (rule 7 / `LEGAL.md`
+§5: synthetic and self-generated only). `enc-emptyuser.pdf`'s user
+password is the empty string — the §7.6.3.1 case a reader *shall* try
+silently before prompting, and the reason a permissions-only PDF opens
+everywhere with no dialog.
+
+**★ The provenance rule worth carrying past this one fixture set: these
+fixtures cut ONE WAY ONLY, and a directory of encrypted PDFs invites
+treating them as a uniform "make them all pass" set, which would be
+wrong for one of the six.** For `/R` 2, 3 and 4, ISO 32000-1 §7.6 fully
+specifies the algorithm; pdfce's decryption will be written from the
+clause and then checked against files it did not produce, so agreement
+is evidence of two independent readings of the same spec agreeing. For
+`/R` 6, Algorithm 2.B is **unsourced** — ISO 32000-2 is paywalled past
+step (a) — so deriving the algorithm from another implementation and
+testing against that same implementation's output would be circular:
+the test could not fail. `enc-aes-256-r6.pdf` is therefore a **refusal
+fixture** — pdfce must decline it BY NAME, distinguished from `/R` 5,
+and the eventual test asserts the refusal, not a decrypt.
+`enc-aes-256-r6.pdf` sits between the two: a deprecated Adobe extension
+(PDF 2.0 deprecates handler revisions 1–5 outright), paraphrased rather
+than sourced from ISO, but Acrobat wrote such files 2008–2011 and
+deprecation doesn't un-write them — so reading it stays required.
+
+**A stale path caught while confirming this, not part of the shipped
+change — flagged for the engineer, not fixed here.**
+`fixtures/synthetic/encryption/PROVENANCE.md` line 46 names the
+regeneration script as `scratchpad/mkcrypt.py`; the file that actually
+exists on disk is `tools/gen-encryption-fixtures.py` (confirmed by
+`Glob` both ways — the named path does not exist, the real one does).
+Small, but exactly the shape R180 names: a document's claim was true at
+some point and is false now, and a future session trying to regenerate
+these fixtures from the documented path would fail. One-line fix, not
+made here since it is outside this filing's own commit.
+
+**Ledger for this filing.** **No new Pass ID** — the fix is to an
+already-existing capability (the load-time encryption refusal; `inspect`
+itself is `Pass 0`'s own minimal subcommand), matching the project's
+existing "no Pass ID — root-cause defect fix" precedent (`5039ecf`/
+`ce5642d`, eighty-ninth filing). The six fixtures are test
+infrastructure for the still-Backlog `Pass 5` (Encryption), not a
+capability of their own. Pass-family ceiling unchanged at **62.0**, next
+free **63**. One commit cited by hash (`b3ba63b`). `docs/FEATURES.md`:
+one short addendum to the *Encryption* Planned row (*Redaction &
+security*) noting the `inspect` disclosure fix and the fixture set;
+`core`/`cli`/`gui` on that row stay unticked — nothing about decryption
+itself shipped. `docs/ARCHITECTURE.md`: **one new §12 entry** — the
+fixture provenance/one-way-evidence rule (`/R` 2–4 as real evidence,
+`/R` 6 as a refusal-only fixture, `/R` 5 in between), because that
+reasoning is exactly the kind of testing-methodology decision a future
+session building `Pass 5` should not have to re-derive. **Standing
+rules: `R186` cited, THIRD instance — amendment footer added to `R186`'s
+own Standing-rules bullet, below; no new rule minted** (a third instance
+of an already-minted rule doesn't earn a new number, per the project's
+own R174 precedent of appending an amendment rather than re-minting).
+Decision-record ceiling unchanged at **038**, next free **039** — not a
+numbered `docs/decisions/` record. **No `D:\dev\rag\rust\`/`egui\`
+finding** — an application-level disclosure bug, not Rust/egui-ecosystem
+general. **No `C:\personal_rag\pdf\` finding** — this is pdfce's own
+guard-completeness defect and its own fixture-sourcing methodology, not
+an observation about how a real-world PDF *producer* diverges from
+spec. Gate figures relayed per the engineer's own report, **not
+independently re-run, no shell this dispatch** (hard rule 8) — see the
+ledger note below for the session-wide figures covering all three
+commits filed this session. **Backup/git working-tree state not
+asserted anywhere in this filing** — the engineer should check
+`D:\Dev\pdfce-backups\` and `git log`/`git status` directly. This is the
+**ninety-second** `SESSION_LOG.md`/`ROADMAP.md` joint filing (the
+ninety-first confirmed present by direct read before this entry was
+written).
+
+---
+
+### ★ `ecf2302` — decision 038 was never a contradiction: Table 101 read whole IS §8.11.4.5 b) with a redundant no-op prepended; and a correction to this project's OWN prior wording on decision 037, which overstated what the Acrobat measurement showed — 2026-08-11 (ninety-second filing)
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — `git log -1
+--format=%B ecf2302` not run. Recorded from the engineer's dispatch
+text. **Confirmed by direct read:** `docs/decisions/038-basestate-array-
+propagation.md`'s "ADDENDUM 2026-08-10 — the contingency is discharged"
+section already carries the falsification-table derivation and the
+verbatim Table 101 `ON`/`OFF` row text described below — this filing
+records `ARCHITECTURE.md`/`ROADMAP.md`'s own catch-up to a decision file
+that had already moved past what this project's own prior filings (see
+the seventy-sixth and ninety-first filings, both amended below) said
+about it.
+
+**Decision 038 is RECONCILED, not merely re-measured — the two clauses
+were never actually in conflict.** `pdfce-spec-librarian` re-extracted
+Table 101's `ON` and `OFF` rows verbatim from the staged source
+(cross-verified with a second extractor, `pdfminer.six` against
+`pypdf`, agreeing sentence-for-sentence) and found each carries a
+sentence usually omitted when this "conflict" gets quoted: *"If the
+`BaseState` entry is `ON`, this entry is redundant"* (and the `OFF`
+row's mirror). Redundancy is a **testable** claim, checked by deleting
+the redundant array and comparing the result — and it holds under
+exactly one processing order: matching array first (a no-op, since
+`BaseState` already set every group to that value), opposite array
+last. That order **is** §8.11.4.5 b) verbatim. Table 101, read as a
+whole table rather than one row quoted against one clause, is the same
+function as §8.11.4.5 b) with a redundant no-op prepended — not a
+second, competing rule. `docs/decisions/038-basestate-array-
+propagation.md`'s addendum carries the full falsification table (four
+rows: `BaseState` × processing order, each checked against whether
+deleting the "redundant" array changes the answer).
+
+**What this means for `pdfce_core::annot::optional_content_default_off`
+(now `OcDefaultState`, per decision 037's own resolver refactor):
+NOTHING changes in the resolution rule.** `if base_off {
+!on.contains(g) } else { off.contains(g) }` was already correct under
+both readings, because there was never a second reading to diverge
+from. The doc comments at that site now cite BOTH Table 101 (in full,
+not the `BaseState` row alone) AND §8.11.4.5 b) — citing only the
+clause, which is what shipped before this filing, made the code look
+like it had picked a side and ignored the table, when in fact it
+already implemented what both require.
+
+**Two facts that change how this gets cited going forward, both new to
+this filing:**
+- **"Table 101" is an ISO 32000-1 citation only.** ISO 32000-2:2020
+  renumbers the same configuration-dictionary table to **Table 99**.
+  Any future citation of this table for optional content should carry
+  the edition, the same discipline `docs/decisions/038-*.md`'s own
+  header already applies (`Table 101 (= ISO 32000-2:2020 Table 99)`).
+- **`pdf.js` diverges from this ruling — recorded, not followed.** It
+  applies `/ON` then `/OFF` unconditionally, with no `/BaseState`
+  dependence — exactly the order Table 101's redundancy sentence rules
+  out. For a group listed in both arrays under `/BaseState /OFF`, pdf.js
+  hides it; pdfce shows it. A "match other readers" tiebreak would push
+  AWAY from this ruling, which is why it is recorded rather than acted
+  on — the ruling rests on the standard's own text, not on a headcount
+  of implementations, and Acrobat's behaviour in this specific cell was
+  **not** measured (unlike decision 037, where an Acrobat measurement
+  IS the ruling).
+
+**★ The correction to this project's own prior wording — decision 037's
+"falsified" language was too strong, and both the ninety-first filing's
+`ROADMAP.md`/`ARCHITECTURE.md` entries stated it the stronger way.**
+Those entries wrote: *"the literal 'every OCG-shaped object' reading is
+FALSIFIED."* That overstates what the Acrobat measurement in the
+ninety-first filing actually showed. **The literal reading remains a
+correct reading of the text** — §8.11.2.1's "shall be assigned a
+state," Table 101's "all the optional content groups in a document,"
+§8.11.4.5 a)'s "all the groups" — none of these three sourced
+quotations says "all groups listed in `/OCGs`." What the Acrobat
+measurement falsifies is narrower and different: that **any reader
+implements the literal reading**. Acrobat and pdf.js both narrow the
+quantifier to the registry, which the standard's text nowhere states.
+**pdfce matches readers, not the literal spec — a deliberate, measured
+divergence from the text, not a discovery that the text meant "registry
+only" all along.** Amendment footers added below to both the
+seventy-sixth filing's original decision-037 claim and the ninety-first
+filing's own "FALSIFIED" wording, per this project's append-only
+convention (the original text stays; the correction is appended,
+dated, and named).
+
+**Decision-record status, corrected.** The ninety-first filing recorded
+"no `docs/decisions/037-*.md` file has been authored" and "decision 038
+... stays CLAIMED, NOT YET AUTHORED." **Both `037-base-state-off-
+covers-unregistered-groups.md` and `038-basestate-array-propagation.md`
+exist in full** (confirmed by direct `Read` this filing) — the
+ninety-first filing's claim was stale at the moment it was written; the
+files' own internal dates (2026-08-10) predate that filing. Recorded as
+a correction, not a new fact this commit created.
+
+**Ledger for this filing.** **No new Pass ID and no new decision
+number** — this closes out the STATUS of an existing decision (038) and
+corrects this project's OWN prior wording about another (037); it
+neither opens a new decision nor changes any shipped resolution rule.
+`docs/FEATURES.md`: **no change** — no capability shipped or altered,
+matching the ninety-first filing's own precedent for this same decision
+pair. `docs/ARCHITECTURE.md`: **one new §12 entry** (this filing,
+below) plus **amendment footers on two existing entries** — the
+seventy-sixth filing's original "CLAIMED as OWED (037, 038), neither
+authored" line, and the ninety-first filing's "FALSIFIED"/"stays
+CLAIMED, NOT YET AUTHORED" entry. `docs/ROADMAP.md`: an amendment
+footer on the ninety-first filing's own Shipped entry (`04f8acd`,
+above), same correction, per the append-only convention (history is not
+rewritten; a dated footer is appended). **Standing rules: no new mint.**
+Decision-record ceiling **unchanged at 038**, next free **039** — 038
+moves CLAIMED → RECONCILED (a status change on an existing decision
+file, not a new number); 037's status is unchanged, only this project's
+OWN prior description of it is corrected. **No `D:\dev\rag\rust\`/
+`egui\` finding — spec-interpretation reasoning, not Rust/egui-ecosystem
+general. No `C:\personal_rag\pdf\` finding** — this is pdfce's own
+spec-interpretation question, settled by reading the standard's own
+text in full and by a reader-implementation comparison (`pdf.js`) that
+is itself closer to spec-interpretation methodology than to "how a real
+PDF *producer* diverges from spec." **The spec-RAG-level corrections
+(a term count of 6 that was 4; an "errata page shows 0 hits" measurement
+correctly scoped to "no defect raised" rather than "2.0 matches 1.7")
+belong to `pdfce-spec-librarian`'s own territory (`D:\Dev\Rag-
+Specialized\PDF_Spec\`, hard rule 6) — not written here, noted only so
+this filing doesn't look like it silently dropped them.** Gate figures
+relayed per the engineer's own report, **not independently re-run, no
+shell this dispatch** (hard rule 8). **Backup/git working-tree state
+not asserted anywhere in this filing** — the engineer should check
+`D:\Dev\pdfce-backups\` and `git log`/`git status` directly. This is
+part of the **ninety-second** `SESSION_LOG.md`/`ROADMAP.md` joint
+filing.
+
+---
+
+### `3fe8a19` — a border is a property of a WIDGET, not of a text field: border style + visibility consolidated into `widget_base_dict`, the shared base all five field types call — a 5th field type the compiler caught, not the dispatch — 2026-08-11 (ninety-second filing)
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — `git log -1
+--format=%B 3fe8a19` not run. **Confirmed by direct `Read`/`Grep`**
+against `crates/pdfce-core/src/edit.rs` (`widget_base_dict`, ≈ line
+7777, and all five call sites at ≈ 6957/7896/8101/9272/9509 —
+`NewTextField`/`NewCheckBox`/`NewRadioButton`/`NewChoiceField`/
+`NewPushButton`), `crates/pdfce-cli/src/main.rs`, and
+`crates/pdfce-gui/src/main.rs` — not merely relayed from the dispatch.
+
+**The fix.** Border style (`/BS`, §12.5.4 Table 166) and visibility
+(`/F`, §12.5.3 Table 165) had landed on `NewTextField` alone
+(`f83be5a`, eighty-eighth filing). Both are properties of a **widget
+annotation**, not of a field — a check box has a border for the same
+reason a text field does — so the capability was arbitrary by field
+type: an operator could give a text field a dashed border and not a
+check box, for no reason either could see. Both properties moved into
+`widget_base_dict`, the shared dict-building function all five field
+types already call. The source's own new doc comment names this as
+**`R171`'s shape: one rule, one place** — the four (now five) field
+types cannot drift apart on a shared widget property once there is only
+one function that writes it.
+
+**★ Confirmed by independent read: core support for border/visibility
+now genuinely spans all five field types, not just text.** All five
+`New*` builders (`NewTextField`, `NewCheckBox`, `NewRadioButton`,
+`NewChoiceField`, `NewPushButton`) carry their own `.with_border()`/
+`.with_visibility()` methods (confirmed at `edit.rs` lines
+1172/1179/1550/1557/1676/1683/1963/1970/2181/2188), and all five
+`widget_base_dict` call sites pass `spec.border`/`spec.visibility` —
+not a hard-coded default. `every_field_type_carries_border_and_visibility`
+(`edit.rs` ≈ line 16713) asserts non-default values reach `/BS` for at
+least text, check box and choice by name. Password and comb correctly
+**stayed** on `NewTextField` alone — they are `/Ff` bits meaningful only
+on a `/Tx` field (Table 228), so the split now follows a real line
+instead of an arbitrary one.
+
+**★ What routing it through a shared signature actually caught: a
+forgotten field type, found by the compiler, not by the dispatch.** The
+engineer's own account: patching `widget_base_dict`'s signature to add
+the two new parameters, then fixing every call site the compiler
+flagged, named check box, radio and choice — three, not four. The
+compiler then named `NewPushButton` as a fourth call site needing the
+same fix; there were five call sites total (including the original
+text-field one), not four. The test asserts across constructed field
+types and states why in its own name: the failure it guards against is
+a **sixth** field type being added later and quietly not getting border/
+visibility, the same class of gap this very commit fixed for push
+button.
+
+**★ Confirmed by independent read: the CLI and GUI still customize
+border/visibility for TEXT FIELDS ONLY — this is a real gap, not
+resolved by this commit.** `crates/pdfce-cli/src/main.rs` has exactly
+one `.with_border(...)`/`.with_visibility(...)` call site, inside
+`cmd_add_text_field` (≈ line 15106). `cmd_add_check_box`,
+`cmd_add_radio_button`, `cmd_add_choice_field` and `cmd_add_push_button`
+call neither. `crates/pdfce-gui/src/main.rs` shows the identical
+pattern — one call site, the text-field placement path (≈ line 18773).
+**This is NOT the same defect `30c0940` (eighty-ninth filing) already
+closed** — that commit reached all four properties for text fields on
+both shells; this is a *different* four field types now having core
+support with no CLI/GUI customization path at all. Check box, radio,
+choice and push button widgets built through either shell today get the
+Table 165/166 **defaults** (solid one-point border, visible-and-prints)
+— correct, spec-compliant, and NOT yet operator-adjustable. Flagged
+here as an **R151 candidate**, not filed as an instance yet — the debt
+is real but was not created by this commit (core-only was already true
+for these four types before `f83be5a` ever shipped; this commit only
+widened WHAT core-only means for them, from "no border support" to
+"border support, unreachable from either shell").
+
+**Ledger for this filing.** **No new Pass ID — filed against the
+existing `Pass 20.0` (R170: an extension of an already-shipped Pass's
+own capability stays on that Pass's ID)**, same as `f83be5a`/`30c0940`
+before it. `docs/FEATURES.md`: one further dated addendum to the
+existing *CREATE a form field* row (*Forms (AcroForm)*) — `core`/`cli`/
+`gui` on that combined row stay `◐`/`◐`/`◐` UNCHANGED (the row's own
+long-standing split is unaffected; this addendum only corrects WHICH
+field types have core border/visibility support and names the CLI/GUI
+gap for the four non-text types). `docs/ARCHITECTURE.md`: not touched —
+a shared-function consolidation inside `pdfce-core`'s existing field-
+authoring surface is not a crate-boundary or round-trip-invariant
+change (same reasoning `30c0940`'s own entry gave). **Standing rules:
+`R171` cited, no new mint** — this is a clean instance of an
+already-minted rule, not a new shape. Decision-record ceiling unchanged
+at **038**, next free **039** — not a numbered `docs/decisions/`
+record. **No `D:\dev\rag\rust\`/`egui\` finding** — a project-local
+data-model consolidation, not Rust/egui-ecosystem general. **No
+`C:\personal_rag\pdf\` finding.** Gate figures relayed per the
+engineer's own report, **not independently re-run, no shell this
+dispatch** (hard rule 8) — session-wide figures below. **Backup/git
+working-tree state not asserted anywhere in this filing** — the
+engineer should check `D:\Dev\pdfce-backups\` and `git log`/`git
+status` directly. This is part of the **ninety-second**
+`SESSION_LOG.md`/`ROADMAP.md` joint filing.
+
+**Session-wide gate figures for all three commits filed this session
+(`3fe8a19`, `ecf2302`, `b3ba63b`), per the engineer's own report — none
+independently re-run, no shell this dispatch (hard rule 8):** full
+workspace `cargo test` **81 suites, 3256 passed, 0 failed**; `cargo
+clippy --workspace --all-targets --all-features` **0**; `cargo fmt
+--check`, `check-ui-strings.sh` and `check-theme-colors.sh` all clean.
+This ledger note is not repeated in the two entries above to avoid
+triple-stating the same session-wide figure.
+
+---
+
 ### `04f8acd` — decision 037 ANSWERED BY MEASUREMENT: the literal "every OCG-shaped object" reading of `/BaseState /OFF` is falsified against the installed Acrobat; pdfce's shipped "registered only" reading is confirmed — 2026-08-11 (ninety-first filing)
 
 **Sourcing.** No shell tool this dispatch (hard rule 8) — `git log -1
@@ -207,6 +557,26 @@ ceiling unchanged at **(bi)**, next free **(bj)**. This is the
 **ninety-first** `SESSION_LOG.md`/`ROADMAP.md` joint filing (the
 ninetieth confirmed present by direct read before this entry was
 written).
+
+**★ AMENDMENT (2026-08-11, ninety-second filing, `ecf2302`) — the
+"FALSIFIED" wording above is too strong; corrected, not retracted.**
+This entry's own "Result" paragraph, above, wrote: *"the literal 'every
+OCG-shaped object' reading is FALSIFIED."* That overstates the Acrobat
+measurement. **The literal reading remains a correct reading of the
+standard's text** — none of §8.11.2.1, Table 101's `BaseState` sentence,
+or §8.11.4.5 a) says "all groups listed in `/OCGs`." What the
+measurement falsifies is narrower: that any conforming READER
+implements the literal reading. Acrobat (measured here) and `pdf.js`
+(measured separately, same day) both narrow the quantifier to the
+registry, which the text nowhere states — so pdfce matches readers, not
+the literal spec, and that is a deliberate measured divergence, not a
+discovery that the text meant "registry only" all along. **Also
+corrected: this entry's "decision 038 ... stays CLAIMED, NOT YET
+AUTHORED" was stale the moment it was written** —
+`docs/decisions/038-basestate-array-propagation.md` already existed in
+full, addendum included, reconciling Table 101 with §8.11.4.5 b) rather
+than leaving them in conflict. Full account:
+`ecf2302`'s own Shipped entry, above.
 
 ---
 
@@ -49948,6 +50318,20 @@ and
   which disposition a reached case should get. Full record: `ROADMAP.md`'s
   `5039ecf`+`ce5642d` Shipped entry (this filing). **Ceiling moves
   `R185` → `R186`; next free `R187`.**
+
+  **★ THIRD INSTANCE (2026-08-11, `b3ba63b`, ninety-second filing).**
+  `inspect`'s encryption refusal keys on `/Encrypt` being present AND on
+  the load error being kept — it was, correctly, all along at the guard
+  itself, but the CALLER discarded the error with `.ok()` one expression
+  before `inspect` could report it, so a file the refusal correctly
+  rejected still printed a clean header line and exited 0. Same shape as
+  both founding instances: the guard was right for the case it was built
+  against (a caller that checks the `Result`); it was silently reached
+  by the adjacent case (a caller that doesn't) without saying so. Not
+  re-numbered — a third instance of an already-minted rule is recorded
+  as an amendment, not a new rule, matching this project's own R174
+  precedent. Full record: `ROADMAP.md`'s `b3ba63b` Shipped entry
+  (ninety-second filing).
 
 ## Update protocol
 

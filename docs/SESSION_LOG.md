@@ -33502,3 +33502,121 @@ filing** — check `D:\Dev\pdfce-backups\` and `git log`/`git status`
 directly. This is the **ninety-first** `SESSION_LOG.md`/`ROADMAP.md`
 joint filing (the ninetieth confirmed present by direct read before
 this entry was written).
+
+## 2026-08-11 (ninety-second filing) — `R186`'s THIRD instance: `inspect` said nothing about a document it could not read (`b3ba63b`) + six encrypted fixtures; decision 038 RECONCILED, not a genuine contradiction (`ecf2302`); border/visibility consolidated to a WIDGET property across all five field types, and the compiler caught a fifth one the dispatch missed (`3fe8a19`)
+
+**Shipped:** no new Pass. Three commits, each a fix/correction to
+already-shipped capability. `3fe8a19` — border style + visibility
+moved from `NewTextField` alone into `widget_base_dict`, the shared
+dict-builder all five field types call; core support now spans all
+five, CLI/GUI customization still text-field-only (new R151 flag).
+`ecf2302` — decision 038 (`/BaseState` array propagation) reconciled:
+Table 101 read whole is §8.11.4.5 b) with a redundant no-op prepended,
+not two competing rules; plus a correction to this project's own
+decision-037 "falsified" wording (too strong — falsifies that any
+READER implements the literal text, not that the literal text is a
+misreading). `b3ba63b` — `inspect` now reports a load failure instead
+of discarding it; six encrypted fixtures added for `Pass 5`.
+
+**Decisions made this session:**
+- **A border/visibility is a WIDGET-ANNOTATION property (§12.5.3/
+  §12.5.4), not a field-type property** — the arbitrary-by-field-type
+  shape (`f83be5a` gave it to text fields only) is R171's shape: one
+  rule, one place, now enforced by `widget_base_dict`'s single
+  signature. Password/comb correctly stayed text-only (`/Ff` bits
+  meaningful only on `/Tx`).
+- **Decision 038 is RECONCILED, not settled by picking a winner.**
+  Table 101's `ON`/`OFF` rows each carry a redundancy sentence normally
+  omitted when this "conflict" is quoted; redundancy is testable
+  (delete the array, compare), and holds under exactly one processing
+  order — which is §8.11.4.5 b) verbatim. `docs/decisions/038-
+  basestate-array-propagation.md`'s existing addendum carries the full
+  falsification table. No change to the shipped resolution rule.
+- **This project's OWN decision-037 wording, filed at the ninety-first
+  filing, was corrected — not the underlying finding.** "The literal
+  reading is FALSIFIED" overstated the Acrobat measurement. The literal
+  text remains a correct reading of the text; what's falsified is that
+  any reader (Acrobat, `pdf.js`) implements it that way — both narrow
+  the quantifier to the registry, which the text never states. pdfce
+  matches readers, not the literal spec: a deliberate divergence, not
+  a discovery of true meaning.
+- **`Table 101` is an ISO 32000-1-only citation — ISO 32000-2:2020
+  renumbers it to Table 99.** Carry the edition on future citations.
+
+**Findings + decisions:**
+- **A guard that fires correctly at the LOAD layer can still say
+  nothing at the layer a sweep actually runs first — `R186`'s third
+  instance.** `inspect`'s encryption refusal was always correct; the
+  caller (`cmd_inspect`) discarded the `Result`'s error half with
+  `.ok()` one expression before it could be reported, so an encrypted
+  file produced a clean header line and exit 0, indistinguishable from
+  a readable file. Recorded as an amendment on `R186`'s own
+  Standing-rules bullet, not a new rule.
+- **A test fixture's evidentiary value depends on whether its target
+  algorithm is independently sourced from the spec, not on which
+  implementation produced it.** `/R` 2–4 (fully specified by ISO
+  32000-1) are real evidence when pdfce's spec-derived decryption is
+  checked against them; `/R` 6 (Algorithm 2.B, unsourced past step (a))
+  would make the same comparison circular, so `enc-aes-256-r6.pdf` is
+  built as a refusal-only fixture instead.
+- **A stale path caught, not fixed:** `fixtures/synthetic/encryption/
+  PROVENANCE.md` names `scratchpad/mkcrypt.py` as the regeneration
+  script; the file that actually exists is `tools/gen-encryption-
+  fixtures.py`. Flagged for the engineer, one-line fix, outside this
+  filing's own commits.
+- **CLI/GUI customization of border/visibility remains text-field-only
+  even after `3fe8a19`'s consolidation** — check box, radio, choice and
+  push button get the Table 165/166 DEFAULTS (correct, spec-compliant)
+  with no operator-facing way to change them. New R151 candidate,
+  flagged not filed as an instance (the debt predates this commit; this
+  commit only widened what "core-only" means for those four types).
+
+**Still in flight:** the CLI/GUI border/visibility gap for check box/
+radio/choice/push button (above) — not yet an R151 instance filing, a
+candidate for one if it recurs or is picked up. `Pass 5` (Encryption)
+itself remains fully Backlog; the six new fixtures are test
+infrastructure only, nothing decrypts yet.
+
+**For next session:** the `PROVENANCE.md` stale-path fix (above) is a
+one-line, no-context-needed pickup. If `Pass 5` activates, the fixture
+provenance rule (`ARCHITECTURE.md` §12, this filing) and the
+signature-`/Contents` encryption-exemption forward-pointer (recorded
+`5039ecf`, eighty-ninth filing) both need to be read first.
+
+**Ledger for this filing.** **No new Pass ID** — `3fe8a19` filed
+against the existing `Pass 20.0` (R170); `b3ba63b` filed without a Pass
+number, matching the project's "no Pass ID — root-cause defect fix"
+precedent; `ecf2302` claims no Pass and no new decision number. Pass-
+family ceiling unchanged at **62.0**, next free **63**. Three commits
+cited by hash (`3fe8a19`, `ecf2302`, `b3ba63b`). `docs/FEATURES.md`:
+one addendum to the *CREATE a form field* row (*Forms (AcroForm)*,
+`3fe8a19`'s consolidation + new R151 flag), one addendum to the
+*Encryption* Planned row (*Redaction & security*, `b3ba63b`'s `inspect`
+fix + fixture set) — no checkbox changes on either row. `docs/
+ARCHITECTURE.md`: **two new dated §12 entries** (decision 038's
+reconciliation; the encrypted-fixture provenance/one-way-evidence
+methodology) plus **three amendment footers on existing entries** (the
+seventy-sixth filing's decision-037/038 claims; the ninety-first
+filing's own "FALSIFIED"/"038 stays CLAIMED" entry). `docs/ROADMAP.md`:
+one amendment footer on the ninety-first filing's own Shipped entry,
+same correction. **Standing rules: no new mint** — `R186` amended with
+a third-instance footer on its own bullet; `R171`/`R170` cited, neither
+minted. Decision-record ceiling **unchanged at 038**, next free
+**039** — 038 moves CLAIMED → RECONCILED (status change, not a new
+number); 037 itself is unchanged, only this project's own prior
+description of it is corrected. **No `D:\dev\rag\rust\`/`egui\`
+finding** — none of the three commits is Rust/egui-ecosystem-general.
+**No `C:\personal_rag\pdf\` finding** — all three are pdfce's own
+guard-completeness/consolidation/spec-interpretation matters, not
+observations about how a real-world PDF *producer* diverges from spec.
+Operator-question ceiling unchanged at **(bi)**, next free **(bj)**.
+Gate figures relayed per the engineer's own report, **not
+independently re-run, no shell this dispatch** (hard rule 8): full
+workspace `cargo test` **81 suites, 3256 passed, 0 failed**; `cargo
+clippy --workspace --all-targets --all-features` **0**; `cargo fmt
+--check`, `check-ui-strings.sh`, `check-theme-colors.sh` all clean.
+**Backup/git working-tree state not asserted anywhere in this filing**
+— the engineer should check `D:\Dev\pdfce-backups\` and `git log`/`git
+status` directly. This is the **ninety-second** `SESSION_LOG.md`/
+`ROADMAP.md` joint filing (the ninety-first confirmed present by direct
+read before this entry was written).
