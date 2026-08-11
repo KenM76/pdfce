@@ -741,9 +741,29 @@ pub struct LayerDiagnostics {
     /// `basestate-off.pdf` fixture for why — and records it here.
     pub base_state_off_in_default: bool,
     /// `/D /BaseState` is `OFF` **and** at least one unregistered group
-    /// was found: the one case where this module's `visible_by_default`
-    /// is knowingly more permissive than Table 101's wording. See the
-    /// module docs' caveat section.
+    /// was found — the case decision 037 was claimed for.
+    ///
+    /// # ★ MEASURED 2026-08-11: pdfce's reading matches Acrobat
+    ///
+    /// The open question was whether `/BaseState /OFF`'s "all groups"
+    /// means all groups **registered** in `/OCProperties /OCGs`, or
+    /// literally every OCG-shaped object reachable. pdfce answered
+    /// "registered only" as a pragmatic choice while shipping — an
+    /// unregistered OCG-shaped dictionary reports VISIBLE — and that was
+    /// named rather than ratified, precisely because nobody had checked.
+    ///
+    /// The `base-state-off-unregistered.pdf` fixture was built to settle
+    /// it: three squares, one registered and in `/ON`, one registered and
+    /// not, one never registered anywhere. Opened in the installed
+    /// Acrobat, it paints the **first and third** and hides the second —
+    /// measured as two dark runs 180 pt apart on a scanline, not
+    /// eyeballed. pdfce renders exactly the same three-way answer.
+    ///
+    /// So the more literal reading is **falsified**, and this is no longer
+    /// "knowingly more permissive" — it is the behaviour a reader actually
+    /// has. The diagnostic stays: the configuration is still unusual
+    /// enough to be worth reporting, and a document relying on it is
+    /// relying on something Table 101 does not spell out.
     pub base_state_off_with_unregistered: bool,
     /// Groups named in **both** `/D /ON` and `/D /OFF` — a
     /// self-contradictory configuration (decision 038).
