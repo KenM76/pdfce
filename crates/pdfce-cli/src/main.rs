@@ -7190,6 +7190,13 @@ impl PrintScaleArg {
         }
     }
 
+    /// `#[cfg(windows)]` because every caller is: the mode name is only
+    /// ever printed on a result line that reports a real device, and the
+    /// non-Windows build has no device to report. Without the gate this is
+    /// a dead-code warning that `-D warnings` turns into a failed build —
+    /// which was invisible for as long as the crate did not compile on
+    /// non-Windows at all.
+    #[cfg(windows)]
     fn name(self) -> &'static str {
         match self {
             Self::Fit => "fit",

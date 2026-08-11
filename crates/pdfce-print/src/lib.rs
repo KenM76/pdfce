@@ -103,11 +103,14 @@
 // three CI jobs without telling anyone.
 pub mod imposition;
 
-#[cfg(windows)]
+// Un-gated: `PrintError`'s Display impl needs it on every platform. See
+// that type's own note for why the error type is not Windows-only.
 use std::fmt;
 
 /// One printer the system knows about.
-#[cfg(windows)]
+///
+/// Not `cfg(windows)`: it holds four `String`/`bool` fields and no Win32
+/// handle. Only the code that FILLS it is Windows-only. See [`PrintError`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Printer {
     /// The printer's name, as the spooler reports it. This is the string
@@ -124,7 +127,19 @@ pub struct Printer {
 }
 
 /// Why the print system could not be queried.
-#[cfg(windows)]
+///
+/// **Not `cfg(windows)`, and that is load-bearing rather than tidy.** Every
+/// non-Windows stub in this file returns `Result<_, PrintError>` — that is
+/// how they say "printing is a Windows capability in this release" in the
+/// type system rather than by refusing to compile. Gating the enum meant
+/// those stubs referenced a type that did not exist, so `pdfce-print` did
+/// not build for **any** non-Windows target, including the `wasm32` one the
+/// future web shell depends on.
+///
+/// The variants carry only `u32` and `String`, never a Win32 handle, so
+/// there is nothing platform-specific to gate in the first place. What is
+/// Windows-only is the code that *constructs* them, and that is still gated
+/// individually.
 #[derive(Debug, Clone)]
 pub enum PrintError {
     /// `EnumPrinters` failed. Carries the Win32 error code, because
@@ -170,7 +185,9 @@ pub enum PrintError {
     Unsupported,
 }
 
-#[cfg(windows)]
+// Un-gated for the same reason as the enum: a non-Windows caller that gets
+// `PrintError::Unsupported` back must be able to PRINT it, and an error type
+// whose Display exists on only one platform is not a usable error type.
 impl fmt::Display for PrintError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -374,7 +391,10 @@ fn utf16_to_string(buf: &[u16]) -> String {
 /// That conversion is the one place a printing bug hides most easily:
 /// mixing device pixels and points silently produces output that is right
 /// on one printer and wrong on the next.
-#[cfg(windows)]
+/// Not `cfg(windows)`, for the same reason as [`Printer`]: it is `u32` and
+/// `f64` pairs, and `DeviceGeometry::from_caps` — which is pure geometry and
+/// deliberately un-gated so it tests on every platform — takes one by
+/// reference.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PrinterCaps {
     /// Horizontal resolution in dots per inch.
@@ -1755,7 +1775,6 @@ impl DeviceGeometry {
     /// takes the orientation and the job's first page because it must:
     /// see the type docs for what the infallible conversion this replaced
     /// got wrong.
-    #[cfg(windows)]
     #[must_use]
     pub fn from_caps(
         caps: &PrinterCaps,
@@ -1832,6 +1851,32 @@ pub fn device_features(printer: &str) -> Result<DeviceFeatures, PrintError> {
 ///
 /// Always [`PrintError::Unsupported`].
 pub fn device_features(_printer: &str) -> Result<DeviceFeatures, PrintError> {
+    Err(PrintError::Unsupported)
+}
+
+#[cfg(not(windows))]
+/// Non-Windows stub. Printing is a Windows capability in this release.
+///
+/// Returns an error rather than an empty list, deliberately: §`list_printers`
+/// on Windows documents that an empty `Vec` means "this machine has no
+/// printers installed", which is a normal machine. Reporting the same value
+/// for "this platform cannot enumerate printers at all" would collapse two
+/// different facts into one and send a caller looking for hardware.
+///
+/// # Errors
+///
+/// Always [`PrintError::Unsupported`].
+pub fn list_printers() -> Result<Vec<Printer>, PrintError> {
+    Err(PrintError::Unsupported)
+}
+
+#[cfg(not(windows))]
+/// Non-Windows stub. Printing is a Windows capability in this release.
+///
+/// # Errors
+///
+/// Always [`PrintError::Unsupported`].
+pub fn printer_caps(_name: &str) -> Result<PrinterCaps, PrintError> {
     Err(PrintError::Unsupported)
 }
 
