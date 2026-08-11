@@ -598,6 +598,89 @@ fn capability_gap_refusal_is_honest_and_distinguishable_from_corruption() {
 }
 
 #[test]
+fn password_reaches_every_load_path_and_bad_input_fails_by_name() {
+    // ★ The affordance half of the capability. `pdfce-core` can decrypt RC4
+    // documents; a core capability no shell can reach is not a feature yet.
+    //
+    // This test exists because the sweep that wired `--open-password` through
+    // the CLI's load sites MISSED ONE — `inspect` passed
+    // `Document::from_bytes` to `.and_then()` as a function REFERENCE, not a
+    // call, so a search for call sites walked straight past it. The symptom
+    // was `--password` being accepted, reported as successful, and silently
+    // ignored by the one subcommand most likely to be tried first.
+    let dir = TempDir::new("cli-password");
+    let rc4 = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/synthetic/encryption/enc-rc4-128.pdf");
+    let rc4_40 = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/synthetic/encryption/enc-rc4-40.pdf");
+
+    // Without a password: refused, and refused as a PASSWORD problem.
+    let out = run(&["inspect", rc4.to_str().unwrap()]);
+    assert_eq!(code(&out), 1, "{}", stderr(&out));
+    assert!(
+        stderr(&out).contains("password-protected"),
+        "the refusal must name the actual problem: {:?}",
+        stderr(&out)
+    );
+
+    // With the user password: opens.
+    let out = run(&[
+        "--open-password",
+        "userpw",
+        "inspect",
+        rc4.to_str().unwrap(),
+    ]);
+    assert_eq!(
+        code(&out),
+        0,
+        "--open-password must reach `inspect`'s load path: {}",
+        stderr(&out)
+    );
+
+    // With the OWNER password: also opens (§7.6.3.1 — either password).
+    let out = run(&[
+        "--open-password",
+        "ownerpw",
+        "inspect",
+        rc4_40.to_str().unwrap(),
+    ]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+
+    // From a file, with the trailing newline every editor adds. Stripping it
+    // matters more than it looks: a newline silently included in the password
+    // fails in a way indistinguishable from a wrong password.
+    let pw_file = dir.write("pw.txt", b"userpw\n");
+    let out = run(&[
+        "--open-password-file",
+        pw_file.to_str().unwrap(),
+        "inspect",
+        rc4.to_str().unwrap(),
+    ]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+
+    // An --open-password-file that cannot be read fails immediately and by name,
+    // rather than proceeding password-less and surfacing later as "this
+    // document is password-protected" — which would send the operator
+    // hunting for the wrong problem entirely.
+    let out = run(&[
+        "--open-password-file",
+        dir.join("does-not-exist.txt").to_str().unwrap(),
+        "inspect",
+        rc4.to_str().unwrap(),
+    ]);
+    assert_eq!(
+        code(&out),
+        3,
+        "an unreadable password file is a usage error"
+    );
+    assert!(
+        stderr(&out).contains("password file"),
+        "the error must name the password file, not the PDF: {:?}",
+        stderr(&out)
+    );
+}
+
+#[test]
 fn an_rc4_encrypted_document_renders_once_its_password_is_supplied() {
     // The complement of the refusal above, and the thing that makes it
     // meaningful: what pdfce refuses by cipher name, it opens where the

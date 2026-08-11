@@ -390,6 +390,135 @@ whose real behaviour ships alongside each feature's own development Pass \
 struct Cli {
     #[command(subcommand)]
     command: Command,
+
+    /// Password for an encrypted PDF (ISO 32000-1 §7.6). Either the user or
+    /// the owner password opens the document.
+    ///
+    /// NOT NEEDED for most protected PDFs. A document with an empty user
+    /// password — the common "permissions-only" PDF — opens with no password
+    /// at all, because §7.6.3.1 requires a reader to try the empty one first
+    /// and silently. Supply this only when pdfce asks for it.
+    ///
+    /// SECURITY: a password on the command line is visible to every other
+    /// process on the machine (`ps`, Task Manager) and is written to your
+    /// shell's history file. Prefer --open-password-file, which is not.
+    ///
+    /// NAMED `--open-password`, not `--password`, because `--password` is
+    /// already taken: `add-text-field --password` is the Table 228 field flag
+    /// that makes a form field mask its input. Two unrelated meanings, and
+    /// `clap` refuses the collision outright (it panics at run time, which is
+    /// how this was found). Renaming the shipped field flag would break
+    /// existing scripts, so the newcomer takes the qualified name — and
+    /// "open" is the more accurate word anyway: this password opens the
+    /// document, it does not set one.
+    #[arg(long, global = true, value_name = "PASSWORD")]
+    open_password: Option<String>,
+
+    /// Read the PDF password from a file, or from standard input with `-`.
+    ///
+    /// The first line is used, with a trailing newline (and CR) stripped; a
+    /// file with no newline is used whole. Nothing else in the file is read,
+    /// so a one-line secrets file works unchanged.
+    ///
+    /// Preferred over --open-password: the value never appears in a process
+    /// listing or a shell history file.
+    #[arg(
+        long,
+        global = true,
+        value_name = "PATH",
+        conflicts_with = "open_password"
+    )]
+    open_password_file: Option<PathBuf>,
+}
+
+/// The password supplied by `--open-password` / `--open-password-file`,
+/// resolved once.
+///
+/// # Why a process global rather than a threaded parameter
+///
+/// This is a genuinely process-wide option: it applies to every subcommand
+/// that opens a document, and there are twenty-six such call sites. Threading
+/// an `Option<&[u8]>` through all of them would change twenty-six function
+/// signatures — and every future one — to carry a value that is constant for
+/// the life of the process and that only two lines of code ever set. `clap`
+/// models exactly this shape with `global = true`; this is its storage.
+///
+/// Written once, in [`run`], before any subcommand executes. [`OnceLock`]
+/// rather than a mutable static so that ordering is enforced by the type
+/// system: a read before the write yields `None`, which is the same answer as
+/// "no password supplied" and therefore cannot produce a wrong decryption —
+/// it can only produce a `PasswordRequired` the operator will understand.
+static CLI_PASSWORD: std::sync::OnceLock<Option<Vec<u8>>> = std::sync::OnceLock::new();
+
+/// The password for opening encrypted documents, or `None` if none was given.
+///
+/// `None` is **not** the empty password. §7.6.3.1's silent empty-password
+/// attempt happens inside `pdfce-core` for every document regardless; `None`
+/// means only that if that attempt fails there is nothing else to try.
+fn cli_password() -> Option<&'static [u8]> {
+    CLI_PASSWORD
+        .get()
+        .and_then(Option::as_ref)
+        .map(Vec::as_slice)
+}
+
+/// Resolve `--open-password` / `--open-password-file` into [`CLI_PASSWORD`].
+///
+/// Returns an error string for an `--open-password-file` that cannot be read, since
+/// silently proceeding without a password the operator explicitly supplied
+/// would surface as "this document is password-protected" and send them
+/// hunting for the wrong problem.
+fn resolve_cli_password(
+    password: Option<String>,
+    password_file: Option<PathBuf>,
+) -> Result<Option<Vec<u8>>, String> {
+    if let Some(p) = password {
+        return Ok(Some(p.into_bytes()));
+    }
+    let Some(path) = password_file else {
+        return Ok(None);
+    };
+
+    let raw = if path.as_os_str() == "-" {
+        let mut s = String::new();
+        std::io::Read::read_to_string(&mut std::io::stdin(), &mut s)
+            .map_err(|e| format!("reading the password from stdin: {e}"))?;
+        s
+    } else {
+        std::fs::read_to_string(&path)
+            .map_err(|e| format!("reading the password file {}: {e}", path.display()))?
+    };
+
+    // First line only, newline stripped. A password file is conventionally one
+    // line, and a trailing newline that every editor adds must not silently
+    // become part of the password — that failure looks exactly like a wrong
+    // password and is unusually hard to see.
+    let line = raw.split('\n').next().unwrap_or("");
+    let line = line.strip_suffix('\r').unwrap_or(line);
+    Ok(Some(line.as_bytes().to_vec()))
+}
+
+/// Open a document at `path`, supplying the CLI password if one was given.
+///
+/// Every subcommand that reads a file goes through here rather than calling
+/// [`Document::load`] directly, so `--open-password` reaches all of them and a new
+/// subcommand cannot forget it. That is the affordance half of the capability:
+/// `pdfce-core` gained decryption, and a core capability no shell can reach is
+/// not a feature yet.
+fn open_document(
+    path: &Path,
+) -> Result<pdfce_core::document::Document, pdfce_core::document::DocError> {
+    pdfce_core::document::Document::load_with_password(path, cli_password())
+}
+
+/// Parse a document from bytes, supplying the CLI password if one was given.
+///
+/// The `from_bytes` counterpart of [`open_document`], for the subcommands that
+/// have already read the file (usually because they also need the raw bytes).
+fn open_document_bytes(
+    bytes: Vec<u8>,
+) -> Result<pdfce_core::document::Document, pdfce_core::document::DocError> {
+    pdfce_core::document::Document::from_bytes_with_password(bytes, cli_password())
 }
 
 /// The planned subcommand surface. Only [`Command::Inspect`] is implemented
@@ -4219,6 +4348,20 @@ fn main() -> ExitCode {
 
 fn run() -> ExitCode {
     let cli = Cli::parse();
+
+    // Resolve the password BEFORE any subcommand runs, so a bad
+    // --password-file fails immediately and by name rather than surfacing
+    // later as "this document is password-protected".
+    match resolve_cli_password(cli.open_password, cli.open_password_file) {
+        Ok(pw) => {
+            let _ = CLI_PASSWORD.set(pw);
+        }
+        Err(msg) => {
+            eprintln!("pdfce-cli: {msg}");
+            return ExitCode::from(3);
+        }
+    }
+
     let code = match cli.command {
         Command::Inspect {
             file,
@@ -5302,7 +5445,7 @@ fn cmd_inspect(file: &Path) -> u8 {
     // expression before anyone could report it.
     let full_result = std::fs::read(file)
         .map_err(pdfce_core::document::DocError::Io)
-        .and_then(pdfce_core::document::Document::from_bytes);
+        .and_then(open_document_bytes);
     let full = full_result.as_ref().ok();
 
     match (&probe, &full) {
@@ -5621,7 +5764,7 @@ fn cmd_render_page(
         eprintln!("pdfce-cli: font-dir: {note}");
     }
 
-    let doc = match pdfce_core::document::Document::load(input) {
+    let doc = match open_document(input) {
         Ok(doc) => doc,
         Err(err) => {
             eprintln!("pdfce-cli: {}: {err}", input.display());
@@ -6220,7 +6363,7 @@ flag; honoured (not painted) AND disclosed",
 /// `0` success; `3`/`4` unreadable / not-a-PDF; `1` for a structural
 /// failure or an out-of-range `--pages` selection.
 fn cmd_list_annotations(input: &Path, pages_spec: &str) -> u8 {
-    let doc = match pdfce_core::document::Document::load(input) {
+    let doc = match open_document(input) {
         Ok(doc) => doc,
         Err(err) => {
             eprintln!("pdfce-cli: {}: {err}", input.display());
@@ -6337,7 +6480,7 @@ with_note={with_note} with_author={with_author} need_appearances={need_appearanc
 /// A command that reported a partial outline as if it were the whole
 /// thing would be making a claim about the document it cannot support.
 fn cmd_list_outline(input: &Path, flat: bool) -> u8 {
-    let doc = match pdfce_core::document::Document::load(input) {
+    let doc = match open_document(input) {
         Ok(doc) => doc,
         Err(err) => {
             eprintln!("pdfce-cli: {}: {err}", input.display());
@@ -6468,7 +6611,7 @@ fn cmd_list_signatures(input: &Path) -> u8 {
             return exit::IO_ERROR;
         }
     };
-    let doc = match pdfce_core::document::Document::load(input) {
+    let doc = match open_document(input) {
         Ok(doc) => doc,
         Err(err) => {
             eprintln!("pdfce-cli: {}: {err}", input.display());
@@ -6576,7 +6719,7 @@ fn cmd_list_signatures(input: &Path) -> u8 {
 /// toggle that silently did not persist would be worse than not offering
 /// one (R83).
 fn cmd_list_layers(input: &Path) -> u8 {
-    let doc = match pdfce_core::document::Document::load(input) {
+    let doc = match open_document(input) {
         Ok(doc) => doc,
         Err(err) => {
             eprintln!("pdfce-cli: {}: {err}", input.display());
@@ -6761,7 +6904,7 @@ fn cmd_list_layers(input: &Path) -> u8 {
 /// reachable by the two standard paths, and the summary line says so
 /// rather than implying exhaustiveness.
 fn cmd_list_attachments(input: &Path) -> u8 {
-    let doc = match pdfce_core::document::Document::load(input) {
+    let doc = match open_document(input) {
         Ok(doc) => doc,
         Err(err) => {
             eprintln!("pdfce-cli: {}: {err}", input.display());
@@ -7102,7 +7245,7 @@ fn cmd_print(
     binding: BindingArg,
     booklet_subset: BookletSubsetArg,
 ) -> u8 {
-    let doc = match pdfce_core::document::Document::load(input) {
+    let doc = match open_document(input) {
         Ok(doc) => doc,
         Err(err) => {
             eprintln!("pdfce-cli: {}: {err}", input.display());
@@ -7698,7 +7841,7 @@ fn cmd_print_preview(
     scale_percent: Option<u32>,
     pages: &str,
 ) -> u8 {
-    let doc = match pdfce_core::document::Document::load(input) {
+    let doc = match open_document(input) {
         Ok(doc) => doc,
         Err(err) => {
             eprintln!("pdfce-cli: {}: {err}", input.display());
@@ -7916,7 +8059,7 @@ fn cmd_list_printers() -> u8 {
 /// indistinguishable from "could not read the file" in a shell pipeline.
 /// The count is on the summary line for a caller that wants to branch.
 fn cmd_find_text(input: &Path, needle: &str, ignore_case: bool) -> u8 {
-    let doc = match pdfce_core::document::Document::load(input) {
+    let doc = match open_document(input) {
         Ok(doc) => doc,
         Err(err) => {
             eprintln!("pdfce-cli: {}: {err}", input.display());
@@ -8037,7 +8180,7 @@ fn describe_style(s: &pdfce_core::richtext::Style) -> String {
 }
 
 fn cmd_list_fields(input: &Path, fillable_only: bool, rich_text: bool) -> u8 {
-    let doc = match pdfce_core::document::Document::load(input) {
+    let doc = match open_document(input) {
         Ok(doc) => doc,
         Err(err) => {
             eprintln!("pdfce-cli: {}: {err}", input.display());
@@ -8591,7 +8734,7 @@ the signature, and removing it would destroy it.",
 /// built-ins is at their most likely to assume the values on the page are
 /// live, and that is exactly the moment to say they are not.
 fn cmd_list_scripts(input: &Path, reproducible_only: bool) -> u8 {
-    let doc = match pdfce_core::document::Document::load(input) {
+    let doc = match open_document(input) {
         Ok(doc) => doc,
         Err(err) => {
             eprintln!("pdfce-cli: {}: {err}", input.display());
@@ -8961,7 +9104,7 @@ objects={} out_bytes={}",
 
 /// `export-data`: write a filled form's field data to FDF or XFDF (Pass 7.1).
 fn cmd_export_data(input: &Path, output: &Path, format: DataFormat) -> u8 {
-    let doc = match pdfce_core::document::Document::load(input) {
+    let doc = match open_document(input) {
         Ok(doc) => doc,
         Err(err) => {
             eprintln!("pdfce-cli: {}: {err}", input.display());
@@ -9280,7 +9423,7 @@ fn cmd_round_trip(
             return exit::IO_ERROR;
         }
     };
-    let doc = match Document::from_bytes(source.clone()) {
+    let doc = match open_document_bytes(source.clone()) {
         Ok(doc) => doc,
         Err(err) => {
             eprintln!("pdfce-cli: {}: {err}", input.display());
@@ -9371,7 +9514,7 @@ fn cmd_round_trip(
             .and_then(pdfce_core::object::Object::as_reference),
         ProducerArg::Preserve => None,
     };
-    let reloaded = Document::from_bytes(bytes.clone());
+    let reloaded = open_document_bytes(bytes.clone());
     let reload_ok = match &reloaded {
         Ok(back) => doc.objects().all(|io| {
             is_section_object(&doc, io.id)
@@ -9692,7 +9835,7 @@ fn open_for_edit(input: &Path) -> Result<(Vec<u8>, pdfce_core::edit::EditSession
         eprintln!("pdfce-cli: {}: {err}", input.display());
         exit::IO_ERROR
     })?;
-    let doc = pdfce_core::document::Document::from_bytes(source.clone()).map_err(|err| {
+    let doc = open_document_bytes(source.clone()).map_err(|err| {
         eprintln!("pdfce-cli: {}: {err}", input.display());
         exit_code_for_doc(&err)
     })?;
@@ -10319,7 +10462,7 @@ fn cmd_edit_text(args: &EditTextArgs<'_>) -> u8 {
             return exit::IO_ERROR;
         }
     };
-    let doc = match pdfce_core::document::Document::from_bytes(source) {
+    let doc = match open_document_bytes(source) {
         Ok(d) => d,
         Err(err) => {
             eprintln!("pdfce-cli: {}: {err}", args.input.display());
@@ -10572,7 +10715,7 @@ fn cmd_add_text(args: &AddTextArgs<'_>) -> u8 {
             return exit::IO_ERROR;
         }
     };
-    let doc = match pdfce_core::document::Document::from_bytes(source) {
+    let doc = match open_document_bytes(source) {
         Ok(d) => d,
         Err(err) => {
             eprintln!("pdfce-cli: {}: {err}", args.input.display());
@@ -10853,7 +10996,7 @@ fn cmd_reflow(
             return exit::IO_ERROR;
         }
     };
-    let doc = match pdfce_core::document::Document::from_bytes(source) {
+    let doc = match open_document_bytes(source) {
         Ok(d) => d,
         Err(err) => {
             eprintln!("pdfce-cli: {}: {err}", input.display());
@@ -11109,7 +11252,7 @@ fn cmd_format_text(args: &FormatTextArgs<'_>) -> u8 {
             return exit::IO_ERROR;
         }
     };
-    let doc = match pdfce_core::document::Document::from_bytes(source) {
+    let doc = match open_document_bytes(source) {
         Ok(d) => d,
         Err(err) => {
             eprintln!("pdfce-cli: {}: {err}", args.input.display());
@@ -11320,7 +11463,7 @@ fn cmd_redact_apply(input: &Path, output: &Path, acknowledge_residuals: bool) ->
             return exit::IO_ERROR;
         }
     };
-    let doc = match pdfce_core::document::Document::from_bytes(source) {
+    let doc = match open_document_bytes(source) {
         Ok(d) => d,
         Err(err) => {
             eprintln!("pdfce-cli: {}: {err}", input.display());
@@ -11405,7 +11548,7 @@ fn cmd_list_redactions(input: &Path) -> u8 {
             return exit::IO_ERROR;
         }
     };
-    let doc = match pdfce_core::document::Document::from_bytes(source) {
+    let doc = match open_document_bytes(source) {
         Ok(d) => d,
         Err(err) => {
             eprintln!("pdfce-cli: {}: {err}", input.display());
@@ -11733,7 +11876,7 @@ fn cmd_extract_text(
 ) -> u8 {
     use pdfce_core::text_extract::{self, ExtractOptions};
 
-    let doc = match pdfce_core::document::Document::load(input) {
+    let doc = match open_document(input) {
         Ok(doc) => doc,
         Err(err) => {
             eprintln!("pdfce-cli: {}: {err}", input.display());
@@ -12126,7 +12269,7 @@ fn cmd_inspect_text_blocks(input: &Path, pages_spec: &str, json: bool) -> u8 {
     use pdfce_core::text_edit::{BlockRecognitionOptions, EditableTextModel};
     use pdfce_core::text_extract::{self, ExtractOptions};
 
-    let doc = match Document::load(input) {
+    let doc = match open_document(input) {
         Ok(doc) => doc,
         Err(err) => {
             eprintln!("pdfce-cli: {}: {err}", input.display());
@@ -12471,7 +12614,7 @@ fn cmd_inspect_reflow_preview(
         },
     };
 
-    let doc = match Document::load(input) {
+    let doc = match open_document(input) {
         Ok(doc) => doc,
         Err(err) => {
             eprintln!("pdfce-cli: {}: {err}", input.display());
@@ -13211,7 +13354,7 @@ fn report_page_op_error(err: &PageOpError) -> u8 {
 
 /// Load a document for a read-only structural operation.
 fn open_for_read(path: &Path) -> Result<Document, u8> {
-    Document::load(path).map_err(|err| {
+    open_document(path).map_err(|err| {
         eprintln!("pdfce-cli: {}: {err}", path.display());
         exit_code_for_doc(&err)
     })
@@ -16777,7 +16920,7 @@ fn cmd_export_dxf(args: ExportDxfArgs<'_>) -> u8 {
         return exit::RUNTIME_ERROR;
     }
 
-    let doc = match pdfce_core::document::Document::load(input) {
+    let doc = match open_document(input) {
         Ok(doc) => doc,
         Err(err) => {
             eprintln!("pdfce-cli: {}: {err}", input.display());
