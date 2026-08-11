@@ -33930,3 +33930,161 @@ state not independently asserted — no shell this dispatch (hard rule
 (`post-v0.2.0`). This is the **ninety-fifth** `SESSION_LOG.md` filing
 (the ninety-fourth confirmed present by direct read before this entry
 was appended).
+
+## 2026-08-11 (ninety-sixth filing) — `14a7400`: `Pass 5` (Encryption) ACTIVATES — RC4 decryption reaches `pdfce-core`, read-only, and the refusal narrows from "no encrypted file at all" to exactly what pdfce still cannot open
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — `git log`/
+`git show` not run. The dispatching engineer supplied the commit
+message in full, verbatim, plus a `git show --stat` file list —
+reported as quoted, not independently git-verified. Independently
+confirmed by direct filesystem read (not git, so within hard rule 8's
+boundary): all five new `crates/pdfce-core/src/crypto/*.rs` files and
+all eight `fixtures/synthetic/encryption/*` paths exist on disk exactly
+as named.
+
+**Shipped:**
+- `14a7400` — `Pass 5` (Encryption) increment 1. RC4 decrypt only
+  (`/V` 1/2/4, `/R` 2/3/4, `/CFM /V2`, 40–128 bit), read-only. Refuses
+  AES-128/256, `/R 6`, `/V` 0/3 and non-Standard `/Filter` handlers,
+  each by its own name. Saving an encrypted document is refused in
+  both modes, before any bytes are written
+  (`WriteError::EncryptedSaveUnsupported`) — deliberate, not a
+  shortcut: post-decrypt the retained buffer and parsed objects
+  disagree by design (streams plaintext both, strings plaintext only
+  in the objects), and both save modes re-emit untouched objects
+  verbatim from their source span. `/P` permission-flag disclosure
+  ships alongside, reported never enforced (§7.6.3.1). Zero new Cargo
+  dependencies — MD5/RC4 hand-rolled in-crate under an explicitly
+  bounded, non-precedent-setting condition (frozen algorithm,
+  read-compat-only, one-sitting-auditable); does NOT extend to AES.
+  Full build record: `ROADMAP.md`'s `14a7400` Shipped entry, top of
+  *Shipped*.
+
+**Decisions made this session:**
+- **In-crate MD5/RC4 vs. a RustCrypto dependency, scoped explicitly so
+  it cannot be reused to justify hand-rolling AES.** Logged as a dated
+  `ARCHITECTURE.md` §12 entry (no new decision-record number — same
+  class as several other dated-but-unnumbered §12 entries this
+  project already carries). Rule 13's dependency-licensing question is
+  **deferred**, not answered, to the AES increment.
+- **`Pass 5` is ACTIVATED, not PROMOTED.** The decision-010 candidate-D
+  fallback/interleave queue position is unchanged; the engineer built
+  against an already-scoped, already-spec-sourced Backlog entry as a
+  normal engineering call. `ROADMAP.md`'s *In progress* Pass-5
+  reconciliation note amended in place to record this, rather than
+  silently left to read as still-fully-Backlog.
+
+**Findings + decisions:**
+- **RC4's length-preserving property is why increment 1 needed no
+  `Stream` schema change, and that property does not carry to AES**
+  (IV+padding make AES plaintext shorter than its ciphertext) — written
+  up generalizably at
+  `D:\dev\rag\rust\length_preserving_cipher_lets_a_byte_span_object_model_skip_a_schema_change.md`
+  and logged as a project-internal note in the new `ARCHITECTURE.md`
+  §12 entry, so the AES increment starts from the correct expectation.
+- **Two fixture-corpus findings, both from USING the corpus rather than
+  reading it, both fixed in the same commit.** (a) The one
+  empty-user-password fixture was AES-128, refused on cipher grounds
+  before authentication — the RC4 empty-password path (the single most
+  operator-visible behaviour in §7.6) was implemented and never
+  executed end to end; fixed with a new RC4 empty-password fixture.
+  Written up as a 2nd instance of an existing finding:
+  `D:\dev\rag\rust\existing_fixture_of_the_right_shape_can_be_vacuous_for_a_new_measurement.md`.
+  (b) The fixture corpus was not reproducible — its plaintext source
+  lived outside the repo — surfaced only because a 7th fixture made the
+  other six change size, one week after `PROVENANCE.md`'s own closing
+  sentence had warned this exact thing was possible; fixed by
+  defaulting the generator's source to a committed path. New finding:
+  `D:\dev\rag\rust\uncommitted_fixture_generator_source_makes_a_committed_corpus_silently_unreproducible.md`.
+- **pypdf 6.7.0 producer-behaviour finding, PDF-domain not Rust/egui:**
+  `RC4-40`/`RC4-128` presets write `/V 1 /R 2` and `/V 2 /R 3`
+  respectively; unmodified default `/P` is `-4` (`4294967292` unsigned,
+  `0xFFFFFFFC`) — all-ones with the two Table-22 reserved bits pinned.
+  New lesson:
+  `C:\personal_rag\pdf\lesson_20260811_pypdf_rc4_encrypt_parameter_conventions.md`,
+  per the dispatching engineer's own flag that this was producer
+  behaviour worth recording, not spec text.
+- **A ledger-accuracy finding, incidental to this filing's own primary
+  task, surfaced by cross-checking the *Open operator questions*
+  section against this file's own "Ledger for this filing" footers
+  before writing a new one.** Operator question `(bi)` was correctly
+  minted at the eighty-eighth filing and correctly cited as the ceiling
+  at the ninety-first filing — but the footers of at least the
+  ninety-second through ninety-fifth filings (four consecutive
+  filings) reverted to citing `(bh)`, next free `(bi)`, as if `(bi)`
+  had not yet been minted. **Not corrected in those four historical
+  entries** (each is a self-contained snapshot of what that filing
+  actually asserted; rewriting them would misstate the record) —
+  named here instead, with a recommendation that a future "index
+  check" dispatch add dated correction footers. This filing's own
+  footer, below, cites the TRUE current ceiling, `(bi)`/`(bj)`, not the
+  stale figure.
+- **The eight-item never-encrypted list (xref streams, external `/F`
+  data, `/Metadata` under `/EncryptMetadata false`, `/Crypt`+
+  `/Identity`, and the indirect `/Encrypt` dict matched by object
+  number) is spec-derived content, flagged rather than written to any
+  RAG this librarian owns** — candidate for `pdfce-spec-librarian` to
+  confirm is already captured in the §7.6 spec-RAG corpus, per hard
+  rule 6's spec-vs-empirical boundary.
+
+**Still in flight:**
+- `Pass 5`'s remaining scope, in the order the engineer named:
+  CLI `--password` flag (increment 1 opens empty-password RC4
+  documents automatically but has no way to supply a real one) — named
+  as the very next commit; a GUI password-prompt dialog (no surface at
+  all today); the AES-128/256 decrypt path (needs the `Stream`
+  schema change increment 1 avoided); eventual encrypt-on-save
+  (AES-128/256 only, RC4 never written, W14).
+- The `/R 6` AES-256 sourcing open sub-decision (three options, none
+  chosen, carried since 2026-08-01) — unchanged, untouched by this
+  increment.
+- The stale operator-question-ceiling footers (ninety-second through
+  ninety-fifth filings) — flagged above, not fixed; owed to a future
+  "index check" dispatch.
+- The 9–11 undescribed commits from the earlier 14-hash citation
+  backlog — unchanged from the ninety-fourth/ninety-fifth filings,
+  untouched by this dispatch.
+
+**For next session:** the CLI `--password` flag and the GUI password
+prompt are the two most immediately actionable next slices of `Pass 5`,
+per the engineer's own stated order; a shell grant would let this
+librarian independently verify the git-history claims this filing could
+only relay.
+
+**Ledger for this filing.** **No new Pass ID** — `Pass 5` reused, its
+decision-007 ID never renumbered; Pass-family ceiling unchanged at
+**62.0**, next free **63**. `docs/FEATURES.md`: **two rows touched** —
+the stale *Redaction & security* "cannot open at all" row retired, the
+*Planned* Encryption row rewritten (core `[x]` / cli `◐` / gui `[ ]`).
+`docs/ARCHITECTURE.md` §12: **one new dated entry** (in-crate MD5/RC4
+decision + new `pdfce-core` public surface); §4.1 flagged as owed, not
+resynced. Standing rules: **`W14`, project rule 2, project rule 4 and
+project rule 13 all cited, none minted** — this increment's per-cause
+refusal shape is a clean instance of an already-established discipline.
+Decision-record ceiling **unchanged at 038**, next free **039** — the
+in-crate-crypto call is a dated §12 entry, not a numbered decision
+record, matching this project's own precedent for calls of this size.
+**Operator-question ceiling: `(bi)`, next free `(bj)`** — the TRUE
+current value per direct read of *Open operator questions*, not the
+stale `(bh)`/`(bi)` this file's own recent footers repeated (see
+Findings, above). `D:\dev\rag\rust\`: **four files** — three new
+(`hand_rolled_frozen_legacy_crypto_primitives_defer_not_answer_the_vetted_crate_question.md`,
+`length_preserving_cipher_lets_a_byte_span_object_model_skip_a_schema_change.md`,
+`uncommitted_fixture_generator_source_makes_a_committed_corpus_silently_unreproducible.md`),
+one amended (`existing_fixture_of_the_right_shape_can_be_vacuous_for_a_new_measurement.md`,
+2nd instance); `index.md` updated with all four.
+`C:\personal_rag\pdf\`: **one new lesson**
+(`lesson_20260811_pypdf_rc4_encrypt_parameter_conventions.md`); subject
+and master `index.md` both updated. Test/gate figures: **3,301 tests
+pass, 0 fail** (was 3,256 at the `v0.2.0` baseline = **+45 total**; only
+10 of the 45 individually itemized by this dispatch, in
+`encryption_rc4.rs` — the remaining 35 are inferred, not reconciled,
+flagged rather than assumed, per hard rule 10) — relayed, not
+independently re-run, no shell this dispatch. `cargo tree -p
+pdfce-core`: relayed as naming no GUI crate, not independently re-run.
+**Backup/git working-tree/remote state not independently asserted
+anywhere in this filing** — no shell this dispatch (hard rule 8); the
+engineer should check `D:\Dev\pdfce-backups\` and `git log`/
+`git status`/`git remote -v` directly, on branch `post-v0.2.0`. This is
+the **ninety-sixth** `SESSION_LOG.md` filing (the ninety-fifth
+confirmed present by direct read before this entry was appended).

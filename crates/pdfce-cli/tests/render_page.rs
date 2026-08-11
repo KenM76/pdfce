@@ -597,6 +597,86 @@ fn capability_gap_refusal_is_honest_and_distinguishable_from_corruption() {
     assert_eq!(stdout(&out), "");
 }
 
+/// ★ Decryption produces the RIGHT plaintext, not merely parseable bytes.
+///
+/// Every other test in this increment proves a document *loads*. None of them
+/// proves it loads **correctly** — and a wrong-but-self-consistent decryption
+/// is entirely possible: RC4 with a wrong key yields bytes that a lenient
+/// parser can still walk, and the failure would show up as subtly wrong
+/// content rather than as an error.
+///
+/// So: render the plaintext source and all three RC4 encryptions of it to
+/// PNG, and require the four files to be **byte-identical**. That exercises
+/// both halves of decryption at once — content streams (decrypted in the
+/// retained buffer) all the way to pixels, and the resources they reference
+/// (reached through dictionaries whose strings are decrypted in the parsed
+/// objects).
+///
+/// The three encrypted files span `/R` 2 at 40 bits, `/R` 3 at 128, and the
+/// empty-password case that needs no password at all — three different key
+/// derivations, one image.
+#[test]
+fn decrypting_reproduces_the_plaintext_document_exactly() {
+    let dir = TempDir::new("decrypt-fidelity");
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/synthetic");
+
+    let render = |args: &[&str], out: &Path| {
+        let mut argv: Vec<&str> = args.to_vec();
+        argv.push("-o");
+        let out_s = out.to_str().unwrap();
+        argv.push(out_s);
+        let r = run(&argv);
+        assert_eq!(code(&r), 0, "render failed: {}", stderr(&r));
+        std::fs::read(out).expect("the PNG must exist")
+    };
+
+    let plain_path = fixtures.join("forms/demo-form.pdf");
+    let plain = render(
+        &["render-page", plain_path.to_str().unwrap()],
+        &dir.join("plain.png"),
+    );
+
+    let enc = fixtures.join("encryption");
+    let cases: [(&str, Vec<String>); 3] = [
+        (
+            "rc4-40 via the owner password",
+            vec![
+                "--open-password".into(),
+                "ownerpw".into(),
+                "render-page".into(),
+                enc.join("enc-rc4-40.pdf").to_string_lossy().into_owned(),
+            ],
+        ),
+        (
+            "rc4-128 via the user password",
+            vec![
+                "--open-password".into(),
+                "userpw".into(),
+                "render-page".into(),
+                enc.join("enc-rc4-128.pdf").to_string_lossy().into_owned(),
+            ],
+        ),
+        (
+            "rc4-128 with an empty user password, no flag at all",
+            vec![
+                "render-page".into(),
+                enc.join("enc-emptyuser-rc4-128.pdf")
+                    .to_string_lossy()
+                    .into_owned(),
+            ],
+        ),
+    ];
+
+    for (label, argv) in cases {
+        let borrowed: Vec<&str> = argv.iter().map(String::as_str).collect();
+        let got = render(&borrowed, &dir.join("enc.png"));
+        assert_eq!(
+            got, plain,
+            "{label}: the decrypted document must render byte-identically to              the plaintext it was made from. A difference here means the key              derivation produced something the parser could still walk, which              is the failure mode no load test can see."
+        );
+    }
+}
+
 #[test]
 fn password_reaches_every_load_path_and_bad_input_fails_by_name() {
     // ★ The affordance half of the capability. `pdfce-core` can decrypt RC4

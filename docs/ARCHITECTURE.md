@@ -16996,3 +16996,86 @@ round-trip-invariant change; `Pass 5` (Encryption) itself remains fully
 Backlog — these are test-infrastructure fixtures with no code built
 against them yet. Full account: `ROADMAP.md`'s `b3ba63b` Shipped entry
 (ninety-second filing).
+
+### 2026-08-11 (ninety-sixth filing, `14a7400`) — `Pass 5` (Encryption) ACTIVATES: in-crate MD5/RC4 defers, not answers, the AES dependency question; `pdfce-core` gains its first decryption surface
+
+**Sourcing.** No shell tool this dispatch (hard rule 8). Commit message
+supplied verbatim in full by the dispatching engineer. Independently
+confirmed by direct file read (not git): `crates/pdfce-core/src/crypto/
+{mod,apply,md5,rc4,standard}.rs` all exist on disk. Full build record:
+`ROADMAP.md`'s `14a7400` Shipped entry (top of *Shipped*, ninety-sixth
+filing).
+
+**Decision: MD5 and RC4 are implemented in-crate, with no new Cargo
+dependency, under a narrow and explicitly-bounded condition — not as a
+general answer to how pdfce sources cryptographic primitives.** The
+condition, all three parts required: (1) the algorithm is **frozen** —
+no future revision will ever need to be added (true of both MD5 and
+RC4, unlike AES's revision-bearing key-length/mode variants); (2)
+**read-only, compat-only** — needed solely to decrypt bytes an
+independent, compatible producer already wrote, never to author new
+ciphertext (RC4 write is independently forbidden regardless, by
+standing rule **W14**); (3) **small enough to audit in one sitting**
+against a published reference (RFC 1321 for MD5; RC4's public test
+vectors) rather than an evolving, parameter-heavy construction. **This
+explicitly does NOT extend to AES** — real side-channel/constant-time
+implementation hazards, and well-audited permissive crates already
+pre-selected for it at decision 001 §6.2 (`aes`, `cbc`). Rule 13's
+dependency-licensing discipline (§9) is therefore **deferred, not
+satisfied**, for this increment; the AES increment inherits the actual
+decision. Recorded here specifically so a future reader does not read
+"pdfce hand-rolls its own crypto" as an established project posture —
+it is a scoped exception, and the module's own doc comments state the
+boundary in the same terms as this entry.
+
+**New `pdfce-core` public surface (§4 SYNC candidate, not yet
+performed — see below).** `document.rs`: `DocumentEncryption`,
+`Document::load_with_password`, `Document::from_bytes_with_password`,
+new `DocError::Encryption` and `DocError::PasswordRequired` variants.
+`writer/`: new `WriteError::EncryptedSaveUnsupported`, returned by both
+`save_full` and `save_incremental` before any bytes are written whenever
+the document carries `/Encrypt` — encrypted-document saving is refused
+by name rather than attempted, because after decryption the retained
+byte buffer and the parsed object graph deliberately disagree (streams
+plaintext in both; strings plaintext only in the parsed objects, since a
+decrypted string cannot generally be re-escaped to its original byte
+count), and both save modes re-emit untouched objects verbatim from
+their source span — writing over that disagreement would silently
+produce a file that opens nowhere, pdfce included, while reporting
+success.
+
+**Object-model consequence, load-bearing for whoever builds the AES
+increment next.** `Stream` represents its data as a **span into the
+document's retained buffer**, not owned bytes (§4's existing `Subpath`-
+style span convention, unrelated subsystem, same underlying pattern).
+RC4 is a stream cipher and preserves length exactly, so this increment
+decrypts in place with **zero `Stream` schema change** — plaintext
+fits exactly where ciphertext was. **This property is specific to RC4,
+not to "decryption" as a category**: AES-CBC's IV-plus-padding makes
+plaintext *shorter* than the ciphertext it replaces, so the AES
+increment will need an actual model change (owned bytes, or a
+plaintext-length field distinct from the on-disk length) that this one
+structurally could not need. Recorded explicitly so "decryption needed
+no model change" is not carried forward as a general result of this
+increment rather than a property of RC4 specifically. (Cross-project,
+language-general write-up:
+`D:\dev\rag\rust\length_preserving_cipher_lets_a_byte_span_object_model_skip_a_schema_change.md`.)
+
+**§4.1 (API surface sync) is NOT resynced by this entry — flagged, not
+performed.** §4.1's own header already documents that it runs behind
+the shipped crate surface by design (dated snapshot, not a live
+mirror); this filing adds one more surface delta to the backlog rather
+than closing it. A future full §4.1 resync should fold in
+`DocumentEncryption`/`load_with_password`/`from_bytes_with_password`/
+`DocError::{Encryption,PasswordRequired}`/`WriteError::
+EncryptedSaveUnsupported` alongside whatever else has accumulated since
+the last sync (2026-08-05).
+
+**Round-trip / minimal-diff invariant (§5): unaffected by construction,
+not merely by observation.** This increment is read-only — no code path
+this commit adds ever writes an encrypted document, so §5's invariant
+has nothing new to prove here; the writer's own refusal is what keeps
+it that way (see the `EncryptedSaveUnsupported` note above). The GUI-
+core separation invariant (§3): unaffected — `cargo tree -p pdfce-core`
+still names no GUI crate (relayed by the dispatching engineer, not
+independently re-run this filing, no shell).
