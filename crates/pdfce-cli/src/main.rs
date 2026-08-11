@@ -1297,6 +1297,16 @@ enum Command {
         /// 1-based pages: `all`, `3`, `1-4`, `5,1-2`.
         #[arg(long, default_value = "all")]
         pages: String,
+        /// Sheet orientation, exactly as `print` takes it. `auto`
+        /// decides from the first page's own shape.
+        ///
+        /// It is here because orientation TURNS THE SHEET: the printable
+        /// area a landscape job is placed on is the device's own,
+        /// transposed. A preview that ignored it would report a scale the
+        /// real print would not use, which is the one thing a preview
+        /// must not do.
+        #[arg(long, value_enum, default_value_t = OrientationArg::Auto)]
+        orientation: OrientationArg,
     },
 
     /// **List the printers this machine can reach** (Windows only).
@@ -4520,7 +4530,15 @@ fn run() -> ExitCode {
             scale,
             pages,
             scale_percent,
-        } => cmd_print_preview(&input, printer.as_deref(), scale, scale_percent, &pages),
+            orientation,
+        } => cmd_print_preview(
+            &input,
+            printer.as_deref(),
+            scale,
+            scale_percent,
+            &pages,
+            orientation,
+        ),
         Command::FindText {
             input,
             needle,
@@ -7308,7 +7326,6 @@ fn cmd_print(
     // come to disagree about where a page lands — the drift whose
     // symptom is a GUI print landing differently from a CLI print of the
     // same document, which nobody thinks to compare.
-    let device = pdfce_print::DeviceGeometry::from(&caps);
     let page_sizes: Vec<(f64, f64)> = page_list
         .iter()
         .map(|p| {
@@ -7329,6 +7346,23 @@ fn cmd_print(
             pdfce_print::Collate::Collated
         },
     };
+    // ★ TURNED for this job before ANY layout is computed against it —
+    // and it must be built after `spec`, because the page that decides
+    // `--orientation auto` is the first page the SEQUENCE sends, not
+    // `pages[0]`.
+    //
+    // `printer_caps` reports the device's default `DEVMODE`, so on a
+    // portrait-default printer it hands back a portrait printable area
+    // while a landscape job prints on a sheet the driver has turned.
+    // Every consumer below reads `device.printable_pt` — plain placement,
+    // n-up cells, poster tiles, booklet halves — so turning it here is
+    // what keeps all four honest rather than four separate fixes that
+    // would eventually disagree.
+    let device = pdfce_print::DeviceGeometry::from_caps(
+        &caps,
+        device_settings.orientation,
+        spec.first_page_pt(&page_sizes),
+    );
     // ---- The three job-shape modes are mutually exclusive ----
     //
     // N-up, booklet and poster each REMAP the job rather than scale it,
@@ -7764,8 +7798,20 @@ untiled; {tiled_pages} page(s) were tiled."
     } else {
         pdfce_print::DryRun::Yes
     };
-    let report = match pdfce_print::spool(&name, &bitmaps, dry, to_file.as_deref(), device_settings)
-    {
+    // The orientation page is passed EXPLICITLY, and it is the same one
+    // `device` was turned for. The imposition paths hand the spooler one
+    // bitmap per SHEET, so letting `spool` re-derive the page from the
+    // bitmaps would resolve `--orientation auto` from the sheet in those
+    // paths and from a source page in this one — two answers where the
+    // job has room for only one.
+    let report = match pdfce_print::spool(
+        &name,
+        &bitmaps,
+        dry,
+        to_file.as_deref(),
+        device_settings,
+        spec.first_page_pt(&page_sizes),
+    ) {
         Ok(r) => r,
         Err(err) => {
             eprintln!("pdfce-cli: {err}");
@@ -7840,6 +7886,7 @@ fn cmd_print_preview(
     scale: PrintScaleArg,
     scale_percent: Option<u32>,
     pages: &str,
+    orientation: OrientationArg,
 ) -> u8 {
     let doc = match open_document(input) {
         Ok(doc) => doc,
@@ -7899,18 +7946,48 @@ fn cmd_print_preview(
         }
     };
 
+    // ★ The sheet as the DRIVER will present it, not as it was reported.
+    //
+    // `printer_caps` reads the device's default `DEVMODE`, so a
+    // portrait-default printer reports a portrait sheet even for a job
+    // that will print landscape. Reporting and placing against that
+    // un-turned sheet is what made a landscape page come out at about
+    // 77% of correct size, and a preview repeating the same mistake would
+    // agree with the wrong print instead of catching it.
+    //
+    // The orientation page is the FIRST selected page, matching what
+    // `print` resolves `auto` from — one `DEVMODE` covers the whole job.
+    let page_sizes: Vec<(f64, f64)> = page_list
+        .iter()
+        .map(|p| {
+            let mb = p.media_box;
+            ((mb.urx - mb.llx).abs(), (mb.ury - mb.lly).abs())
+        })
+        .collect();
+    let first_page_pt = indices
+        .first()
+        .and_then(|&i| page_sizes.get(i).copied())
+        .unwrap_or(pdfce_print::US_LETTER_PORTRAIT_PT);
+    let device =
+        pdfce_print::DeviceGeometry::from_caps(&caps, orientation.to_orientation(), first_page_pt);
+    let turned = device.default_orientation();
+
     println!(
         "printer name={:?} dpi={}x{} sheet_pt={:.1}x{:.1} printable_pt={:.1}x{:.1} \
-         margin_pt={:.1},{:.1}",
+         margin_pt={:.1},{:.1} orientation={}",
         chosen,
-        caps.dpi_x,
-        caps.dpi_y,
-        caps.physical_pt.0,
-        caps.physical_pt.1,
-        caps.printable_pt.0,
-        caps.printable_pt.1,
-        caps.offset_pt.0,
-        caps.offset_pt.1,
+        device.dpi.0,
+        device.dpi.1,
+        device.physical_pt.0,
+        device.physical_pt.1,
+        device.printable_pt.0,
+        device.printable_pt.1,
+        device.offset_pt.0,
+        device.offset_pt.1,
+        match turned {
+            pdfce_print::Orientation::Landscape => "landscape",
+            pdfce_print::Orientation::Auto | pdfce_print::Orientation::Portrait => "portrait",
+        },
     );
 
     // A percentage wins over the word. Clap has already bounded it to
@@ -7935,7 +8012,7 @@ fn cmd_print_preview(
         // prints the page.
         let mb = page.media_box;
         let size = ((mb.urx - mb.llx).abs(), (mb.ury - mb.lly).abs());
-        let p = pdfce_print::place_page(size, caps.printable_pt, mode);
+        let p = pdfce_print::place_page(size, device.printable_pt, mode);
         if p.clipped {
             clipped += 1;
         }
@@ -7984,6 +8061,7 @@ fn cmd_print_preview(
     _scale: PrintScaleArg,
     _scale_percent: Option<u32>,
     _pages: &str,
+    _orientation: OrientationArg,
 ) -> u8 {
     eprintln!(
         "pdfce-cli: printing is available on Windows only in this build \
