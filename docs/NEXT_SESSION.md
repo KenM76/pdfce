@@ -4,7 +4,7 @@ Engineer-owned handoff. Read this **before** the librarian's record —
 `ROADMAP.md` says what shipped, this says what is in flight and what the
 next hour should be. Overwrite it once acted on.
 
-Written 2026-08-11 at `149fd03`, branch `post-v0.2.0`.
+Written 2026-08-11 at `17f4d82`, branch `post-v0.2.0`.
 
 ---
 
@@ -12,22 +12,21 @@ Written 2026-08-11 at `149fd03`, branch `post-v0.2.0`.
 
 Measured, not relayed:
 
-- `cargo test --workspace` — **3,306 passing / 0 failing**, measured at
-  `149fd03` (this commit).
+- `cargo test --workspace` — **3,311 passing / 0 failing**, measured at
+  `17f4d82` (this commit).
 - `cargo clippy --workspace --all-targets --all-features` — 0.
 - `cargo fmt --check`, `check-ui-strings.sh`, `check-theme-colors.sh`,
   `check-ledger-numbers.py`, `check-passes-filed.py` — clean.
 - `cargo tree -p pdfce-core` names no GUI crate. **Zero dependencies were
   added this session**, including for the crypto.
 
-Portable build `D:\builds\pdfce-20260811-0806-0a79da4-dirty` is **stale
-and marked dirty** — it predates three commits and was built from an
-uncommitted tree. Rebuild before asking the operator to try anything:
-`python tools/package-portable.py --note "..."`.
+Portable build **`D:\builds\pdfce-20260811-0836-94cf228`** carries
+everything except the Properties Security section (`17f4d82`). Rebuild
+if that matters: `python tools/package-portable.py --note "..."`.
 
-Filing gate: `check-commits-filed.py` may list `149fd03`; a librarian
-dispatch for the three commits before it was in flight when this was
-written. Run the gate and file whatever it names before new work.
+Filing gate: `check-commits-filed.py` may list `17f4d82`; a librarian
+dispatch was in flight when this was written. Run the gate and file
+whatever it names before new work.
 
 ---
 
@@ -67,14 +66,24 @@ four PNGs byte-identical (`bc2dfede94ef290e7c7a7f7e509fea98` × 4).
 
 ---
 
-## ★ Start here: the GUI password prompt
+## ✅ The GUI password prompt — BUILT (`94cf228`, `17f4d82`)
 
-**The one real gap.** A document needing a non-empty password is
-currently **CLI-only** — the GUI reports it honestly but cannot ask.
+**Increment 1 is now complete across core, CLI and GUI.**
 
-`pdfce-ui-specialist` has already designed it in full (dispatched
-2026-08-11; the design is summarised below because no spec file was
-written). It called the whole thing cheap and said to ship it together.
+This section is kept as the record of *why* it is shaped the way it is:
+`pdfce-ui-specialist` wrote no spec file, so this is the only durable
+account of the design. What follows describes **what shipped**, not what
+to do next.
+
+Built: `Status::NeedsPassword`; the inline prompt (Enter submits, Escape
+cancels via a new top rung on the ladder, show-password toggle,
+wrong-password on the same surface with the field cleared);
+`begin_save` refusing *before* the file dialog so Ctrl+S cannot carry an
+operator as far as a file picker; both status-bar disclosures computed
+live; Save disabled with a stated reason; and the read-only Properties
+**Security** section with its non-enforcement caption.
+
+**★ Start here instead: encryption increment 2 — AES-128** (below).
 
 ### The states — one new `Status` variant, not two
 
@@ -141,21 +150,18 @@ nested in the enum, which would mean mutating a `String` inside the
   does not check or restrict anything based on them**. Do *not* repeat it
   at each action — that is a nag.
 
-### Do not build yet
+### Still deliberately not built
 
-Re-encrypt-on-save UI · permission *editing* · attempt limiting · an
+Re-encrypt-on-save UI · permission **editing** (the Security section is
+read-only, and pdfce has no path to write a `/P` value at all) · attempt
+limiting (**N6** — ISO 32000-1 states no error model here, so a counter
+would be pdfce policy wearing the costume of a security feature) · an
 owner-vs-user password chooser (`authenticate()` tries both and reports
 `AuthKind` after the fact — one field, no selector).
 
-### One bug to avoid reintroducing
-
-Reset `password_prompt` in **both** `open_path` and `switch_to_parked`,
-exactly as they reset `edit_note`/`copy_result`. Otherwise a half-typed
-password for file A leaks into file B's prompt.
-
 ---
 
-## Then: encryption increment 2 — AES-128
+## ★ Start here: encryption increment 2 — AES-128
 
 Sourcing is done (`iso32000__ref__encryption_impl.md`). The plumbing
 exists and is proven. What is genuinely new:
@@ -241,6 +247,26 @@ output default to committed paths.
 
 `tools/package-portable.py --note "..."` — dated portable build in
 `D:\builds`.
+
+---
+
+## What the operator can try in the build
+
+`D:uilds\pdfce-20260811-0836-94cf228\pdfce-gui.exe`:
+
+- **Open `fixtures\synthetic\encryption\enc-emptyuser-rc4-128.pdf`** — it
+  just opens, no prompt. The status bar says it is encrypted and that
+  saving is unavailable. Properties → Security lists the eight declared
+  permissions and states that nobody enforces them.
+- **Open `enc-rc4-128.pdf`** — the prompt appears. `userpw` or `ownerpw`
+  both open it; anything else says so and clears the field. Escape or
+  Cancel abandons it.
+- **Press Ctrl+S on either** — refused with a reason, and no file dialog
+  opens.
+- **Open `enc-aes-128.pdf`** — refused *by cipher name*, not as damage.
+
+CLI: `pdfce-cli --open-password userpw inspect <file>`, or
+`--open-password-file <path>` (`-` reads stdin).
 
 ---
 
