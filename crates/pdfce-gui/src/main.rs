@@ -10650,6 +10650,34 @@ impl PdfceApp {
         {
             return;
         }
+        // Pass 62.0 — the FOURTH independent pending state, and it was
+        // already collidable before `Ctrl+P` existed.
+        //
+        // ★ THIS IS A LIVE BUG BEING CLOSED, not a precaution taken while
+        // adding a shortcut. `print_dialog` is centre-anchored at
+        // `Align2::CENTER_CENTER` — the exact shape this gate exists to
+        // prevent — and the ribbon's Print button is not disabled while a
+        // copy, save or redaction question is on screen. So today, on
+        // `main` at f7aee60, clicking Print while an unanswered
+        // confirmation is up stacks a second centre-anchored window over
+        // the first: only the later-painted one can receive clicks, and the
+        // question underneath becomes invisible and unanswerable.
+        //
+        // `D:\dev\rag\egui\egui_0.35_two_center_anchored_windows_pending_state_gate_dispatcher.md`
+        // has the corollary that found it: audit this gate the first time a
+        // project grows from one confirmation surface to two. Print is the
+        // fifth, and it was the one that had been missed.
+        //
+        // Safe against the dialog's own controls: `print_options_column`
+        // and `print_preview_column` mutate `PendingPrint` through a `&mut`
+        // borrow and never go through `Action`/`apply`, so tab switching,
+        // zooming and every radio button keep working while this holds.
+        // The two actions exempted are the only ways out of the dialog.
+        if self.pending_print.is_some()
+            && !matches!(action, Action::CancelPrint | Action::SpoolPrint)
+        {
+            return;
+        }
         // The close question joins the same gate, for the same reason: while
         // it is on screen it is the ONLY thing that may be answered.
         if self.pending_close
@@ -13355,6 +13383,16 @@ fn collect_keyboard_actions(ctx: &egui::Context, actions: &mut Vec<Action>, keys
     pressed(Modifiers::COMMAND, Key::Num0, Action::ZoomActualSize);
 
     pressed(Modifiers::COMMAND, Key::S, Action::Save);
+    // Ctrl+P OPENS the print dialog and nothing more — this file's own
+    // rule that no chord commits an irreversible action is untouched, and
+    // `print_flow`'s header states it in as many words.
+    //
+    // Pushed BLIND, with no "is a document open" or "is it already open"
+    // condition here, because that is this function's pattern: Ctrl+S does
+    // not check either, and the guards live in `open_print_dialog` where
+    // the ribbon button reaches them too. A condition duplicated at the
+    // keymap is a condition the next caller forgets.
+    pressed(Modifiers::COMMAND, Key::P, Action::OpenPrintDialog);
     // Undo/redo, with BOTH conventional redo chords bound. Ctrl+Y is
     // the Windows convention and Ctrl+Shift+Z is the cross-platform
     // one; operators arrive with one or the other in muscle memory and
@@ -26669,6 +26707,110 @@ mod tests {
     // and its tab lifetime.
     // -----------------------------------------------------------------
 
+    /// ★ THE LIVE BUG. While the print dialog is open, nothing else may be
+    /// answered.
+    ///
+    /// This is not a precaution taken while adding `Ctrl+P` — it was
+    /// reachable on `main` before any shortcut existed. `print_dialog` is
+    /// anchored `CENTER_CENTER`, the same as the copy, save, redaction and
+    /// close confirmations, and egui paints later windows over earlier ones
+    /// with only the top one clickable. Two of those on screen at once is an
+    /// unanswerable question hidden behind a second one, which is exactly
+    /// what this gate was built for and what `pending_print` had been left
+    /// out of.
+    ///
+    /// Asserted through a side effect an action HAS rather than through the
+    /// dispatcher's shape: `NextPage` moves the page index, so "was it
+    /// dropped" is a fact about the document, not about the code.
+    #[test]
+    fn an_open_print_dialog_drops_every_action_but_its_own_two() {
+        let mut app = PdfceApp::default();
+        app.open_path(fixture("pageops/four-pages.pdf"));
+        assert!(
+            matches!(app.status, Status::Open(_)),
+            "the fixture must open"
+        );
+
+        // The page turn works before the dialog is up, so the assertion
+        // below is about the gate and not about the fixture.
+        app.apply_for_test(Action::NextPage);
+        let moved_to = match &app.status {
+            Status::Open(doc) => doc.view.page_index,
+            _ => unreachable!("just asserted open"),
+        };
+        assert_eq!(moved_to, 1, "the page turn must work with no dialog up");
+
+        app.open_print_dialog();
+        assert!(app.pending_print.is_some(), "the dialog must be up");
+
+        app.apply_for_test(Action::NextPage);
+        app.apply_for_test(Action::LastPage);
+        app.apply_for_test(Action::Undo);
+        let held = match &app.status {
+            Status::Open(doc) => doc.view.page_index,
+            _ => unreachable!("just asserted open"),
+        };
+        assert_eq!(
+            held, moved_to,
+            "every action other than Cancel/Spool must be dropped while the \
+             print dialog owns the screen"
+        );
+
+        // Cancel is one of the two exemptions, and it is the way out.
+        app.apply_for_test(Action::CancelPrint);
+        assert!(
+            app.pending_print.is_none(),
+            "CancelPrint must not be dropped by the gate it is exempt from — \
+             otherwise the dialog could never be closed"
+        );
+
+        // And the application is live again.
+        app.apply_for_test(Action::NextPage);
+        let after = match &app.status {
+            Status::Open(doc) => doc.view.page_index,
+            _ => unreachable!("just asserted open"),
+        };
+        assert_eq!(after, moved_to + 1, "the gate must lift with the dialog");
+    }
+
+    /// `SpoolPrint` is the second exemption, and it must reach `spool_print`
+    /// rather than being swallowed.
+    ///
+    /// Asserted through `pending.outcome`, which `apply` sets from the spool
+    /// attempt's result and which stays `None` if the action never arrived.
+    /// Nothing is sent to a real device: `printer_name` is `None` until
+    /// `print_dialog` has drawn a frame, so `spool_print` refuses at its own
+    /// first guard — which is the point. A test that CAN reach a spooler is
+    /// a test that will, on somebody's machine, by accident.
+    #[test]
+    fn spool_print_is_not_dropped_by_the_gate() {
+        let mut app = PdfceApp::default();
+        app.open_path(fixture("pageops/four-pages.pdf"));
+        app.open_print_dialog();
+        assert!(
+            app.pending_print
+                .as_ref()
+                .is_some_and(|p| p.outcome.is_none()),
+            "nothing has been attempted yet"
+        );
+        assert!(
+            app.pending_print
+                .as_ref()
+                .is_some_and(|p| p.printer_name.is_none()),
+            "no frame has been drawn, so there is no resolved printer and the \
+             spool cannot reach a device"
+        );
+
+        app.apply_for_test(Action::SpoolPrint);
+        assert!(
+            app.pending_print
+                .as_ref()
+                .is_some_and(|p| p.outcome.is_some()),
+            "SpoolPrint must reach spool_print; an outcome of either kind \
+             proves the gate let it through"
+        );
+    }
+
     /// ★ `Ctrl+P` with no document open must do nothing at all.
     ///
     /// The ribbon's Print button is wrapped in `add_enabled_ui(has_doc, …)`
@@ -26684,6 +26826,117 @@ mod tests {
         assert!(
             app.pending_print.is_none(),
             "no document means no print dialog, whichever surface asked for it"
+        );
+    }
+
+    /// ★ A second `Ctrl+P` must not reset the job being configured.
+    ///
+    /// `open_print_dialog` REBUILDS `PendingPrint` from defaults. Without
+    /// the already-open guard, pressing the shortcut again half-way through
+    /// silently discards the copy count, the range, the annotation scope and
+    /// the chosen tab — the operator's own settings, thrown away by the
+    /// shortcut they pressed to look at them.
+    ///
+    /// This doubles as the tab-lifetime test: the tab survives repeated
+    /// dispatch, and is reset only by a deliberate close-and-reopen.
+    #[test]
+    fn a_second_print_shortcut_preserves_the_job_being_configured() {
+        let mut app = PdfceApp::default();
+        app.open_path(fixture("pageops/four-pages.pdf"));
+        app.apply_for_test(Action::OpenPrintDialog);
+
+        {
+            let pending = app.pending_print.as_mut().expect("the dialog is up");
+            assert_eq!(
+                pending.active_tab,
+                print_flow::PrintTab::PagesLayout,
+                "a fresh dialog starts on the first tab"
+            );
+            pending.active_tab = print_flow::PrintTab::CommentsResolution;
+            pending.copies = 7;
+            pending.reverse = true;
+        }
+
+        // Twice, because the second press goes through the one-question gate
+        // as well as the open guard and both must hold.
+        app.apply_for_test(Action::OpenPrintDialog);
+        app.apply_for_test(Action::OpenPrintDialog);
+
+        let pending = app.pending_print.as_ref().expect("still up");
+        assert_eq!(
+            pending.active_tab,
+            print_flow::PrintTab::CommentsResolution,
+            "the chosen tab must survive a second press of the shortcut"
+        );
+        assert_eq!(pending.copies, 7, "the copy count must survive it too");
+        assert!(pending.reverse, "and so must every other setting");
+
+        // A deliberate close, then a fresh open, DOES reset — the tab is a
+        // fact about the job being configured, not a preference.
+        app.apply_for_test(Action::CancelPrint);
+        app.apply_for_test(Action::OpenPrintDialog);
+        let pending = app.pending_print.as_ref().expect("reopened");
+        assert_eq!(
+            pending.active_tab,
+            print_flow::PrintTab::PagesLayout,
+            "a new dialog starts at the default tab, not where the last one ended"
+        );
+        assert_eq!(pending.copies, 1, "and with default settings");
+    }
+
+    /// ★ Ctrl+P produces exactly one `OpenPrintDialog` and nothing else.
+    ///
+    /// Driven through a real `egui::Context` rather than by reading the
+    /// binding, because `collect_keyboard_actions` works by
+    /// `consume_key` — a chord that is registered but shadowed by an
+    /// earlier, more specific binding would still be *present in the
+    /// source* and would still never fire. The GUI harness cannot answer
+    /// this: its script grammar injects navigation keys and pointer
+    /// events, and has no way to hold a modifier.
+    ///
+    /// The plain `P` case is checked in the same test because it is the
+    /// half that would bite an operator rather than a reviewer: `P` with
+    /// no modifier must stay available to whatever has focus, and a chord
+    /// registered against the wrong modifier set is invisible until
+    /// somebody types a `p` into a form field and watches a print dialog
+    /// open.
+    #[test]
+    fn ctrl_p_is_bound_to_the_print_dialog_and_bare_p_is_not() {
+        fn actions_for(modifiers: egui::Modifiers) -> Vec<Action> {
+            let ctx = egui::Context::default();
+            let input = egui::RawInput {
+                events: vec![egui::Event::Key {
+                    key: egui::Key::P,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers,
+                }],
+                ..Default::default()
+            };
+            let mut actions = Vec::new();
+            // `begin_pass`/`end_pass` rather than a closure-taking helper:
+            // this is the seam the real frame uses, and the key must be
+            // consumed from a live `InputState` for `consume_key` to mean
+            // anything.
+            ctx.begin_pass(input);
+            collect_keyboard_actions(&ctx, &mut actions, CanvasKeys::default());
+            let _ = ctx.end_pass();
+            actions
+        }
+
+        let chord = actions_for(egui::Modifiers::COMMAND);
+        assert_eq!(
+            chord,
+            vec![Action::OpenPrintDialog],
+            "Ctrl+P must produce exactly the print action — no more, no less"
+        );
+
+        let bare = actions_for(egui::Modifiers::NONE);
+        assert!(
+            !bare.contains(&Action::OpenPrintDialog),
+            "an unmodified P belongs to whatever has focus; it must never open \
+             the print dialog. Collected: {bare:?}"
         );
     }
 
