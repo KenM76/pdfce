@@ -78,7 +78,18 @@ for name, algo in MODES:
 # never exercised end-to-end — the file is rejected on cipher grounds before
 # authentication is ever reached. A fixture that cannot fail for the reason
 # you care about is not covering that reason.
-for name, algo in [('emptyuser-rc4-128', 'RC4_128'), ('emptyuser', 'AES_128')]:
+#
+# ★ AND IT WAS A HOLE AGAIN, ONE CIPHER LATER. The comment above promises a
+# fixture in EVERY cipher; when AES-256 at /R 5 was implemented (increment 3)
+# there were still only two, so the /R 5 branch of the silent empty-password
+# attempt was implemented, believed and never once executed. Exactly the shape
+# the paragraph above describes, in the code that describes it. A promise in a
+# comment is not a fixture — `enc-emptyuser-aes-256-r5.pdf` is.
+for name, algo in [
+    ('emptyuser-rc4-128', 'RC4_128'),
+    ('emptyuser', 'AES_128'),
+    ('emptyuser-aes-256-r5', 'AES_256_R5'),
+]:
     w = PdfWriter(clone_from=src)
     w.encrypt(user_password='', owner_password=OWNER, algorithm=algo)
     with open(f'{outdir}/enc-{name}.pdf', 'wb') as f:

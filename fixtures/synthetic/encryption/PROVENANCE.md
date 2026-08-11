@@ -20,6 +20,7 @@ open everywhere with no dialog.
 | `enc-aes-256-r5.pdf` | 5 | 5 | 256 | `/AESV3` | **yes** |
 | `enc-aes-256-r6.pdf` | 5 | 6 | 256 | `/AESV3` | refused as **unsourced** |
 | `enc-emptyuser.pdf` | 4 | 4 | 128 | `/AESV2` | **yes**, with no password |
+| `enc-emptyuser-aes-256-r5.pdf` | 5 | 5 | 256 | `/AESV3` | **yes**, with no password |
 
 Note `enc-aes-256-r5.pdf`'s `/Length 256`. `/AESV3` fixes the key at 256 bits,
 so the entry carries no information and pdfce does not read it — ISO 32000-2's
@@ -84,7 +85,7 @@ normalisation would change, and none can be built without implementing
 SASLprep first — which is why pdfce *discloses* the gap on a failed non-ASCII
 authentication rather than claiming to have handled it.
 
-## ★ Why there are two `emptyuser` files
+## ★ Why there are three `emptyuser` files
 
 There was one, and it was AES-128, and that was a hole.
 
@@ -98,8 +99,33 @@ and never once executed end-to-end.
 `enc-emptyuser-rc4-128.pdf` exists so it is. The AES file stays, because it
 becomes the same test for the next increment.
 
+**★ And it happened again, one cipher later.** Increment 3 implemented AES-256
+at `/R` 5 — a genuinely different authentication path, Algorithm 3.11 against
+`/U[0..32]` rather than Algorithm 6 against `/U[0..16]` — and there were still
+only two empty-password fixtures. So the `/R` 5 branch of the silent attempt
+was in exactly the state the paragraphs above describe: implemented, believed,
+never executed. `enc-emptyuser-aes-256-r5.pdf` closes it. Note where the miss
+happened: the generator script's own comment already promised "a fixture in
+EVERY cipher rather than one", and the promise was not kept by the change that
+added the cipher. A promise in a comment is not a fixture.
+
 The general form is worth keeping: *a fixture that cannot fail for the reason
 you care about is not covering that reason.*
+
+## ★ This corpus is NOT byte-reproducible, and one test depends on that
+
+Re-running the generator produces a **different** `/O`, `/U`, `/OE`, `/UE` and
+`/Perms` for the same document every time — encryption generates fresh salts
+and a fresh file encryption key, by design. Only the *shape* is reproducible.
+
+`crypto::r5`'s unit tests embed `enc-aes-256-r5.pdf`'s actual bytes as
+constants, so each `/R` 5 algorithm can be exercised in isolation and say
+*which* one broke. That coupling is invisible from both sides, so it is
+asserted:
+`crates/pdfce-core/tests/encryption.rs::the_r5_fixture_still_matches_the_unit_test_constants`
+goes red if the fixture is regenerated. **If it does, copy the new bytes into
+those constants — do not weaken the test.** Without it a regeneration would
+leave the unit tests quietly passing against a file that no longer exists.
 
 ## Regenerating
 

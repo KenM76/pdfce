@@ -847,3 +847,126 @@ fn aes_256_r5_decrypts_a_document_whose_objects_live_in_object_streams() {
         );
     }
 }
+
+/// AES-256 at `/R` 5 with an **empty user password** opens with no password
+/// at all — §7.6.3.1's silent attempt, on the `/R` 5 branch.
+///
+/// # This fixture had to be built, and the reason is a repeat
+///
+/// `tools/gen-encryption-fixtures.py` already carries the argument, written
+/// when the corpus had exactly one empty-password file and it was AES-128:
+/// while a cipher is refused, an empty-password fixture in that cipher is
+/// rejected on cipher grounds *before authentication is ever reached*, so the
+/// path is implemented, believed, and never executed. Its own comment then
+/// promises "a fixture in EVERY cipher rather than one".
+///
+/// When `/R` 5 landed there were still two. So the `/R` 5 branch of the
+/// silent empty-password attempt — which is a genuinely different code path,
+/// running Algorithm 3.11 against `/U[0..32]` rather than Algorithm 6 against
+/// `/U[0..16]` — was in exactly the state that paragraph describes. A promise
+/// in a comment is not a fixture.
+///
+/// The RC4 and AES-128 files stay. Each was the one that proved the path when
+/// the others could not, and deleting any of them re-creates the hole the
+/// moment some future increment changes how its cipher is handled.
+#[test]
+fn aes_256_r5_with_an_empty_user_password_needs_no_password() {
+    let doc = Document::load(&fixture("enc-emptyuser-aes-256-r5.pdf"))
+        .expect("an empty user password is tried silently at /R 5 too, §7.6.3.1");
+
+    let enc = doc.encryption().expect("it is still an encrypted file");
+    assert_eq!(enc.config.revision, 5);
+    assert_eq!(
+        enc.auth,
+        AuthKind::EmptyUser,
+        "opening via the default password must be reported as such, not as a \
+         user password the operator supplied"
+    );
+    assert_eq!(enc.perms, PermsCheck::Match);
+    assert!(
+        !page_tree::pages(&doc)
+            .expect("the page tree must resolve")
+            .is_empty()
+    );
+
+    // The owner password still opens it and still reports owner access — the
+    // empty user password succeeding must not shadow the stronger claim, and
+    // at /R 5 the owner branch is a different unwrap (/OE, T26) rather than a
+    // different comparison.
+    let as_owner =
+        Document::load_with_password(&fixture("enc-emptyuser-aes-256-r5.pdf"), Some(b"ownerpw"))
+            .expect("the owner password must also open it");
+    assert_eq!(
+        as_owner.encryption().expect("encrypted").auth,
+        AuthKind::Owner
+    );
+}
+
+/// ★ The `/R` 5 fixture still holds the exact bytes `crypto::r5`'s unit tests
+/// were written against.
+///
+/// # Why this guard exists
+///
+/// `crypto::r5`'s unit tests embed this fixture's `/O`, `/U`, `/OE`, `/UE` and
+/// `/Perms` as constants, so each algorithm can be exercised in isolation and
+/// say *which* one broke where an end-to-end test only says that something
+/// did. That is worth having, and it introduces a coupling that is invisible
+/// from either side: **the corpus is not byte-reproducible.** Encryption
+/// generates fresh salts and a fresh file key every run, so re-running
+/// `tools/gen-encryption-fixtures.py` produces a different `/O` and `/U` for
+/// the same document — by design, not by accident.
+///
+/// Without this test, a regeneration would leave the unit tests passing
+/// against a file that no longer exists, while the integration tests passed
+/// against the new one. Nothing would be wrong and nothing would be red; the
+/// unit tests would simply have stopped being about the fixture, and the next
+/// person to trust them would be trusting a coincidence.
+///
+/// So the coupling is asserted where it can be seen. If this goes red after a
+/// regeneration, the fix is to copy the new bytes into `crypto::r5`'s
+/// constants — not to weaken this test.
+///
+/// The `/Perms` byte layout is checked here too (Algorithm 3.10), because it
+/// is the one place a fixture could change *shape* rather than just value:
+/// `/O` and `/U` are 48 bytes at this revision and `/Perms` is 16, and a
+/// producer that wrote them otherwise would be describing a different format.
+#[test]
+fn the_r5_fixture_still_matches_the_unit_test_constants() {
+    let doc = Document::load_with_password(&fixture("enc-aes-256-r5.pdf"), Some(b"userpw"))
+        .expect("/R 5 opens");
+    let c = &doc.encryption().expect("encrypted").config;
+
+    // The first eight bytes of each are enough to pin the file: /O and /U are
+    // hashes, so any regeneration changes every byte of both.
+    assert_eq!(
+        &c.u[..8],
+        &[0x58, 0xc0, 0x57, 0x8f, 0xec, 0x62, 0x7b, 0x8b],
+        "/U has changed — the fixture was regenerated. Copy the new /O, /U, \
+         /OE, /UE and /Perms into crypto::r5's test constants, and the new \
+         file encryption key into FILE_KEY; do not relax this assertion."
+    );
+    assert_eq!(
+        &c.o[..8],
+        &[0xf8, 0xd6, 0xbf, 0xa3, 0x1b, 0x64, 0x5d, 0x37],
+        "/O has changed — see the /U message above"
+    );
+    assert_eq!(c.o.len(), 48, "/O is 48 bytes at /R 5 (Table 3.19)");
+    assert_eq!(c.u.len(), 48);
+
+    let keys = c.aes256.as_ref().expect("/R 5 carries /OE, /UE and /Perms");
+    assert_eq!(
+        &keys.ue[..8],
+        &[0xe2, 0x24, 0xdc, 0x92, 0x32, 0x71, 0x44, 0xdf]
+    );
+    assert_eq!(
+        &keys.oe[..8],
+        &[0xde, 0xd9, 0x20, 0x92, 0x7c, 0x17, 0xc9, 0xc0]
+    );
+    assert_eq!(
+        keys.perms,
+        [
+            0x71, 0x6a, 0xf6, 0xa5, 0x5e, 0xa2, 0xaf, 0xb6, 0xa9, 0xb8, 0x8a, 0xe3, 0x6e, 0x38,
+            0xb5, 0xe1,
+        ]
+    );
+}
