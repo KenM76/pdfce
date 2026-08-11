@@ -16203,6 +16203,109 @@ mod tests {
             .clone()
     }
 
+    /// ★ **The preview agrees with the act it previews.**
+    ///
+    /// This is the whole reason `reset_preview` exists in the core rather
+    /// than once per shell: a preview that disagreed with `reset_form` would
+    /// be worse than no preview, because the operator would have approved
+    /// something other than what happened. Asserted as a PROPERTY over the
+    /// whole fixture rather than field by field, so a future field type
+    /// cannot be added to one path and not the other.
+    #[test]
+    fn the_preview_agrees_with_the_reset_it_previews() {
+        let mut session = EditSession::new(Document::from_bytes(reset_fixture()).unwrap());
+        let preview = session.reset_preview(None);
+        let predicted_changes = preview.iter().filter(|r| r.would_change).count();
+        let predicted_removed = preview
+            .iter()
+            .filter(|r| r.would_change && r.would_remove)
+            .count();
+        let predicted_skips = preview.iter().filter(|r| r.ineligible.is_some()).count();
+
+        let out = session.reset_form(None).expect("resets");
+        assert_eq!(out.fields_reset, predicted_changes, "field count");
+        assert_eq!(out.values_removed, predicted_removed, "removal count");
+        assert_eq!(
+            out.skipped_pushbuttons + out.skipped_signatures + out.skipped_read_only,
+            predicted_skips,
+            "skip count"
+        );
+    }
+
+    /// Each ineligible kind is reported as itself, not as one undifferentiated
+    /// "skipped" — a preserved signature and a read-only field are different
+    /// facts to an operator.
+    #[test]
+    fn the_preview_names_why_each_field_is_ineligible() {
+        let session = EditSession::new(Document::from_bytes(reset_fixture()).unwrap());
+        let preview = session.reset_preview(None);
+        let reason = |name: &str| {
+            preview
+                .iter()
+                .find(|r| r.field == name)
+                .expect("row")
+                .ineligible
+        };
+        assert_eq!(reason("Push"), Some(ResetIneligible::PushButton));
+        assert_eq!(reason("Locked"), Some(ResetIneligible::ReadOnly));
+        assert_eq!(reason("Keep"), None);
+    }
+
+    /// ★ **A field already holding its reset value is `would_change: false`,
+    /// and a field with no default whose value is EMPTY still counts as a
+    /// change** — because there is a key to remove even though nothing
+    /// visible would move.
+    #[test]
+    fn already_at_default_is_distinguished_from_an_empty_value_with_a_key() {
+        let mut session = EditSession::new(Document::from_bytes(reset_fixture()).unwrap());
+        session.reset_form(None).expect("resets");
+        let preview = session.reset_preview(None);
+        let row = |name: &str| {
+            preview
+                .iter()
+                .find(|r| r.field == name)
+                .expect("row")
+                .clone()
+        };
+        assert!(
+            !row("Keep").would_change,
+            "Keep now holds its /DV, so a second reset would change nothing"
+        );
+        assert!(
+            !row("Drop").would_change,
+            "Drop's /V is gone, so there is no key left to remove"
+        );
+
+        // And on a FRESH document, an empty-but-present /V is still a change.
+        let session = EditSession::new(Document::from_bytes(reset_fixture()).unwrap());
+        assert!(
+            session
+                .reset_preview(None)
+                .iter()
+                .find(|r| r.field == "Drop")
+                .expect("row")
+                .would_change,
+            "a present /V is a key to remove, whatever it holds"
+        );
+    }
+
+    /// The preview reports a row for EVERY field in scope, including the ones
+    /// it will not touch. A preview that silently dropped rows could not
+    /// explain why a field the operator expected is missing.
+    #[test]
+    fn the_preview_reports_a_row_for_every_field_in_scope() {
+        let session = EditSession::new(Document::from_bytes(reset_fixture()).unwrap());
+        let all = session.reset_preview(None);
+        let modelled = forms::parse_acroform(&session.graph())
+            .expect("form")
+            .fields
+            .len();
+        assert_eq!(all.len(), modelled, "one row per field, none dropped");
+
+        let only = vec!["Keep".to_owned()];
+        assert_eq!(session.reset_preview(Some(&only)).len(), 1);
+    }
+
     /// ★ **Both `shall` branches: a default is restored, and a field with
     /// none has its `/V` REMOVED rather than blanked.**
     ///
