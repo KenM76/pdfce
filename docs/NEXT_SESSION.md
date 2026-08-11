@@ -4,7 +4,37 @@ Engineer-owned handoff. Read this **before** the librarian's record —
 `ROADMAP.md` says what shipped, this says what is in flight and what the
 next hour should be. Overwrite it once acted on.
 
-Written 2026-08-11 at `19c86bd`, branch `post-v0.2.0`.
+Written 2026-08-11 at `cfc20dd`, branch **`main`**.
+
+---
+
+## ★ Read this first: the branch moved and a release went out
+
+**`v0.3.0` is tagged and released** at `cfc20dd`, 35 commits after `v0.2.0`.
+Operator gave the explicit go-ahead (project rule 8 requires one per
+release, and it is not standing).
+
+**You are on `main`, not `post-v0.2.0`.** Those two refs are identical at
+`cfc20dd`; `main` was fast-forwarded and pushed, and `origin/main` is AT
+the tagged commit. Do not resume work on `post-v0.2.0` — it is a stale
+duplicate name for the same commit, and the next branch should be cut
+from `main`.
+
+`tools/verify-release.py v0.3.0` passes all six checks. This was its
+**first real outing** — it was written after the `v0.2.0` near-miss, where
+a tag pointed at the right commit while `git push origin main` pushed a
+local `main` 36 commits behind and *reported success*. The check that
+would have caught that (`origin/main` is AT the tagged commit) is the one
+that matters; run the script before believing any future release.
+
+**Open with the operator, not resolved:** he reported *"my mouse
+navigation is getting screwy"* right after a session that drove
+`tools/gui-shot.ps1` about eight times. That harness moves the REAL
+cursor and synthesises Ctrl+scroll and click-drag. No harness process was
+running and nothing was held when checked, and all buttons/modifiers were
+defensively released — but the cause was never confirmed. **Treat the GUI
+harness as an input-hijacking tool and say so before running it while the
+operator is at the machine.**
 
 ---
 
@@ -19,7 +49,8 @@ Measured this session, not relayed:
   `check-ledger-numbers.py`, `check-passes-filed.py`,
   `check-bypass-paths.sh` — clean.
 - `cargo tree -p pdfce-core` / `-p pdfce-render` name no GUI crate.
-- Portable build **`D:\builds\pdfce-20260811-1247-19c86bd`**, smoke-tested
+- Portable build **`D:\builds\pdfce-20260811-1322-cfc20dd`** — this is the
+  RELEASED build; the same bytes are the `v0.3.0` asset. Smoke-tested
   by copying to a fresh folder and running both binaries there — the AES
   render matched `bc2dfede94ef290e7c7a7f7e509fea98` from the packaged
   binary, and `print-preview` reported `auto` at `0.9725` against
@@ -34,7 +65,7 @@ false: decision numbers counted only `docs/decisions/*.md` files (missing
 034-036, 039, 040, which live only in ARCHITECTURE §12), and its ordinal
 vocabulary stopped at "ninety" on the very day `SESSION_LOG.md` reached
 its hundredth filing. **Run it; do not infer the ceilings from anywhere
-else.** As of `19c86bd` it reads: Pass **65.0**, decisions **042 → next
+else.** As of `cfc20dd` it reads: Pass **65.0**, decisions **042 → next
 free 043**, rules **R186 → next free R187**, filings **104 → next free
 105**, questions next free **(bk)**.
 
@@ -192,7 +223,8 @@ Unreachable today only because every pending state is set from inside
 
 ## What the operator can try
 
-`D:\builds\pdfce-20260811-1247-19c86bd\pdfce-gui.exe`:
+`D:\builds\pdfce-20260811-1322-cfc20dd\pdfce-gui.exe` — or the released
+`v0.3.0` asset, which is the same bytes:
 
 - **`enc-aes-128.pdf`** — prompts; `userpw` or `ownerpw` open it.
 - **`enc-emptyuser.pdf`** — AES-128, opens with **no prompt at all**, and
