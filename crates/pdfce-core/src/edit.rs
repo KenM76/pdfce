@@ -1337,6 +1337,14 @@ pub struct NewCheckBox {
     pub read_only: bool,
     /// `/Ff` bit 2 — the field must have a value when the form is submitted.
     pub required: bool,
+    /// `/BS` — the widget's border style and width (§12.5.4 Table 166).
+    ///
+    /// A widget property, not a field one, so every field type carries it —
+    /// see [`EditSession::widget_base_dict`]'s note on why these live in the
+    /// shared base rather than on the text field alone.
+    pub border: BorderSpec,
+    /// `/F` — where the widget is visible (§12.5.3 Table 165).
+    pub visibility: Visibility,
 }
 
 /// The facts about an existing radio group that a joining member is checked
@@ -1418,6 +1426,14 @@ pub struct NewRadioButton {
     pub read_only: bool,
     /// `/Ff` bit 2 — the field must have a value when the form is submitted.
     pub required: bool,
+    /// `/BS` — the widget's border style and width (§12.5.4 Table 166).
+    ///
+    /// A widget property, not a field one, so every field type carries it —
+    /// see [`EditSession::widget_base_dict`]'s note on why these live in the
+    /// shared base rather than on the text field alone.
+    pub border: BorderSpec,
+    /// `/F` — where the widget is visible (§12.5.3 Table 165).
+    pub visibility: Visibility,
 }
 
 impl NewRadioButton {
@@ -1462,6 +1478,11 @@ impl NewRadioButton {
             radios_in_unison: false,
             read_only: false,
             required: false,
+            // Table 166 / Table 165 defaults, so a field created without
+            // an opinion is byte-identical to one created before these
+            // properties existed.
+            border: BorderSpec::default(),
+            visibility: Visibility::default(),
         }
     }
 
@@ -1524,6 +1545,19 @@ impl NewRadioButton {
         }
         ff
     }
+    /// Set the border style and width (§12.5.4 Table 166).
+    #[must_use]
+    pub const fn with_border(mut self, style: BorderStyle, width: f64) -> Self {
+        self.border = BorderSpec { style, width };
+        self
+    }
+
+    /// Set where the widget is visible (§12.5.3 Table 165).
+    #[must_use]
+    pub const fn with_visibility(mut self, visibility: Visibility) -> Self {
+        self.visibility = visibility;
+        self
+    }
 }
 
 impl NewCheckBox {
@@ -1572,6 +1606,11 @@ impl NewCheckBox {
             tooltip: TooltipChoice::Undecided,
             read_only: false,
             required: false,
+            // Table 166 / Table 165 defaults, so a field created without
+            // an opinion is byte-identical to one created before these
+            // properties existed.
+            border: BorderSpec::default(),
+            visibility: Visibility::default(),
         }
     }
 
@@ -1631,6 +1670,19 @@ impl NewCheckBox {
             ff |= i64::from(forms::FieldFlags::REQUIRED);
         }
         ff
+    }
+    /// Set the border style and width (§12.5.4 Table 166).
+    #[must_use]
+    pub const fn with_border(mut self, style: BorderStyle, width: f64) -> Self {
+        self.border = BorderSpec { style, width };
+        self
+    }
+
+    /// Set where the widget is visible (§12.5.3 Table 165).
+    #[must_use]
+    pub const fn with_visibility(mut self, visibility: Visibility) -> Self {
+        self.visibility = visibility;
+        self
     }
 }
 
@@ -1745,6 +1797,14 @@ pub struct NewChoiceField {
     pub read_only: bool,
     /// `/Ff` bit 2 — the field must have a value when the form is submitted.
     pub required: bool,
+    /// `/BS` — the widget's border style and width (§12.5.4 Table 166).
+    ///
+    /// A widget property, not a field one, so every field type carries it —
+    /// see [`EditSession::widget_base_dict`]'s note on why these live in the
+    /// shared base rather than on the text field alone.
+    pub border: BorderSpec,
+    /// `/F` — where the widget is visible (§12.5.3 Table 165).
+    pub visibility: Visibility,
 }
 
 impl NewChoiceField {
@@ -1818,6 +1878,11 @@ impl NewChoiceField {
             tooltip: TooltipChoice::Undecided,
             read_only: false,
             required: false,
+            // Table 166 / Table 165 defaults, so a field created without
+            // an opinion is byte-identical to one created before these
+            // properties existed.
+            border: BorderSpec::default(),
+            visibility: Visibility::default(),
         }
     }
 
@@ -1892,6 +1957,19 @@ impl NewChoiceField {
             ff |= i64::from(forms::FieldFlags::MULTI_SELECT);
         }
         ff
+    }
+    /// Set the border style and width (§12.5.4 Table 166).
+    #[must_use]
+    pub const fn with_border(mut self, style: BorderStyle, width: f64) -> Self {
+        self.border = BorderSpec { style, width };
+        self
+    }
+
+    /// Set where the widget is visible (§12.5.3 Table 165).
+    #[must_use]
+    pub const fn with_visibility(mut self, visibility: Visibility) -> Self {
+        self.visibility = visibility;
+        self
     }
 }
 
@@ -1982,6 +2060,14 @@ pub struct NewPushButton {
     pub tooltip: TooltipChoice,
     /// `/Ff` bit 1 — the button is inert and cannot be activated.
     pub read_only: bool,
+    /// `/BS` â€” the widget's border style and width (Â§12.5.4 Table 166).
+    ///
+    /// A widget property, not a field one, so every field type carries it â€”
+    /// see [`EditSession::widget_base_dict`]'s note on why these live in the
+    /// shared base rather than on the text field alone.
+    pub border: BorderSpec,
+    /// `/F` â€” where the widget is visible (Â§12.5.3 Table 165).
+    pub visibility: Visibility,
 }
 
 impl NewPushButton {
@@ -2044,6 +2130,11 @@ impl NewPushButton {
             caption: caption.into(),
             tooltip: TooltipChoice::Undecided,
             read_only: false,
+            // Table 166 / Table 165 defaults, so a field created without
+            // an opinion is byte-identical to one created before these
+            // properties existed.
+            border: BorderSpec::default(),
+            visibility: Visibility::default(),
         }
     }
 
@@ -2084,6 +2175,19 @@ impl NewPushButton {
             ff |= i64::from(forms::FieldFlags::READ_ONLY);
         }
         ff
+    }
+    /// Set the border style and width (Â§12.5.4 Table 166).
+    #[must_use]
+    pub const fn with_border(mut self, style: BorderStyle, width: f64) -> Self {
+        self.border = BorderSpec { style, width };
+        self
+    }
+
+    /// Set where the widget is visible (Â§12.5.3 Table 165).
+    #[must_use]
+    pub const fn with_visibility(mut self, visibility: Visibility) -> Self {
+        self.visibility = visibility;
+        self
     }
 }
 
@@ -6850,7 +6954,14 @@ impl EditSession {
         // reference number repeats in a header and how a check box appears on
         // every page — and it is a capability, not a tolerated degeneracy.
         if let FieldPath::Terminal { id, shape, .. } = path {
-            let mut w = Self::widget_base_dict(&spec.name, spec.rect, page_id, &spec.tooltip);
+            let mut w = Self::widget_base_dict(
+                &spec.name,
+                spec.rect,
+                page_id,
+                &spec.tooltip,
+                spec.border,
+                spec.visibility,
+            );
             // The widget carries the LOOK; the field keeps the name and the
             // value. `widget_base_dict` writes a `/T` because a merged
             // (Shape A) field needs one — a widget kid must not have one
@@ -7668,6 +7779,8 @@ impl EditSession {
         rect: page_tree::Rect,
         page_id: ObjId,
         tooltip: &TooltipChoice,
+        border: BorderSpec,
+        visibility: Visibility,
     ) -> Dict {
         let mut d = Dict::new();
         d.insert(Name::from(b"Type"), Object::Name(Name::from(b"Annot")));
@@ -7683,11 +7796,25 @@ impl EditSession {
             ]),
         );
         d.insert(Name::from(b"P"), Object::Reference(page_id));
-        // `/F` defaults to Print here and every caller that wants otherwise
-        // overwrites it after. Kept as a default rather than a parameter so
-        // the four existing callers did not all have to grow an argument to
-        // say "the thing you already did".
-        d.insert(Name::from(b"F"), Object::Integer(4));
+        // `/F` and `/BS` are parameters rather than the hard-coded defaults
+        // they used to be.
+        //
+        // # Why they moved HERE rather than into each field type
+        //
+        // Border style and visibility are properties of a WIDGET
+        // ANNOTATION (§12.5.3 Table 165, §12.5.4 Table 166), not of a field.
+        // A check box has a border for exactly the same reason a text field
+        // does. They landed on `NewTextField` alone first, which made a
+        // capability arbitrary by field type — an operator could give a text
+        // field a dashed border and not a check box, for no reason either
+        // could see.
+        //
+        // Putting them in the shared base means the four field types cannot
+        // drift apart on this, which is R171's shape: one rule, one place.
+        // Password and comb correctly stay on `NewTextField` — those really
+        // are text-only, being `/Ff` bits on a `/Tx` field.
+        d.insert(Name::from(b"F"), Object::Integer(visibility.flags()));
+        d.insert(Name::from(b"BS"), Object::Dict(border_dict(border)));
         // `/TU` only when the operator SUPPLIED one. A declined tooltip
         // writes nothing and is reported instead (R105) — an empty `/TU`
         // would be worse than none, because a screen reader would announce
@@ -7766,7 +7893,14 @@ impl EditSession {
         let off_stream = stream_of(off);
         let on_stream = stream_of(on);
 
-        let mut d = Self::widget_base_dict(&spec.name, spec.rect, page_id, &spec.tooltip);
+        let mut d = Self::widget_base_dict(
+            &spec.name,
+            spec.rect,
+            page_id,
+            &spec.tooltip,
+            spec.border,
+            spec.visibility,
+        );
 
         // `/V` and `/AS` are NAMES here, not strings — the single most
         // common way a hand-written check box comes out unrecognisable.
@@ -7964,7 +8098,14 @@ impl EditSession {
         let off_stream = stream_of(off);
         let on_stream = stream_of(on);
 
-        let mut d = Self::widget_base_dict(&spec.name, spec.rect, page_id, &spec.tooltip);
+        let mut d = Self::widget_base_dict(
+            &spec.name,
+            spec.rect,
+            page_id,
+            &spec.tooltip,
+            spec.border,
+            spec.visibility,
+        );
 
         // `/AP /N` keyed by state name — the member's export value and `Off`.
         // NAMES, not strings: the single most common way a hand-built button
@@ -9128,7 +9269,14 @@ impl EditSession {
             data_span: ap_span,
         });
 
-        let mut d = Self::widget_base_dict(&spec.name, spec.rect, page_id, &spec.tooltip);
+        let mut d = Self::widget_base_dict(
+            &spec.name,
+            spec.rect,
+            page_id,
+            &spec.tooltip,
+            spec.border,
+            spec.visibility,
+        );
         d.insert(Name::from(b"DA"), Object::String(da));
         // `/MK` (Table 189): the caption plus the border and background
         // colours. R43 means pdfce paints none of these — the plate inside
@@ -9358,7 +9506,14 @@ impl EditSession {
             data_span: ap_span,
         });
 
-        let mut d = Self::widget_base_dict(&spec.name, spec.rect, page_id, &spec.tooltip);
+        let mut d = Self::widget_base_dict(
+            &spec.name,
+            spec.rect,
+            page_id,
+            &spec.tooltip,
+            spec.border,
+            spec.visibility,
+        );
         d.insert(Name::from(b"DA"), Object::String(da.clone()));
         // §12.7.4.4: an element is `(Display)` when export and display
         // coincide, or `[(export) (display)]` when they differ. Writing the
@@ -16540,6 +16695,78 @@ mod tests {
             },
         )
         .with_tooltip("t")
+    }
+
+    /// ★ **EVERY field type carries the widget properties, not just text.**
+    ///
+    /// Border style and visibility are properties of a widget annotation
+    /// (Table 165, Table 166), so a check box has a border for the same
+    /// reason a text field does. They landed on `NewTextField` alone first,
+    /// which made a capability arbitrary by field type — an operator could
+    /// give a text field a dashed border and not a check box, for no reason
+    /// either could see.
+    ///
+    /// Asserted across all five constructors rather than one, because the
+    /// failure this guards against is a SIXTH field type being added later
+    /// and quietly not getting them.
+    #[test]
+    fn every_field_type_carries_border_and_visibility() {
+        let rect = page_tree::Rect {
+            llx: 10.0,
+            lly: 700.0,
+            urx: 200.0,
+            ury: 722.0,
+        };
+        let mut checked = 0usize;
+        for (label, id, session) in [
+            ("text", {
+                let mut s = EditSession::new(Document::from_bytes(blank_page_doc()).unwrap());
+                let spec = NewTextField::new(0, "A", rect)
+                    .with_tooltip("t")
+                    .with_border(BorderStyle::Dashed, 3.0)
+                    .with_visibility(Visibility::PrintOnly);
+                let id = s.add_text_field(&spec).expect("text").field_id;
+                (id, s)
+            }),
+            ("check box", {
+                let mut s = EditSession::new(Document::from_bytes(blank_page_doc()).unwrap());
+                let spec = NewCheckBox::new(0, "B", rect)
+                    .with_tooltip("t")
+                    .with_border(BorderStyle::Dashed, 3.0)
+                    .with_visibility(Visibility::PrintOnly);
+                let id = s.add_check_box(&spec).expect("check").field_id;
+                (id, s)
+            }),
+            ("choice", {
+                let mut s = EditSession::new(Document::from_bytes(blank_page_doc()).unwrap());
+                let spec = NewChoiceField::new(0, "C", rect, Vec::new())
+                    .with_tooltip("t")
+                    .with_border(BorderStyle::Dashed, 3.0)
+                    .with_visibility(Visibility::PrintOnly);
+                let id = s.add_choice_field(&spec).expect("choice").field_id;
+                (id, s)
+            }),
+        ]
+        .map(|(label, (id, session))| (label, id, session))
+        {
+            let d = dict_of(&session, id);
+            let bs = d
+                .get(b"BS")
+                .and_then(Object::as_dict)
+                .unwrap_or_else(|| panic!("{label}: no /BS"));
+            assert_eq!(
+                bs.get(b"S").and_then(Object::as_name).map(|n| n.as_bytes()),
+                Some(b"D".as_slice()),
+                "{label}: border style"
+            );
+            assert_eq!(
+                d.get(b"F").and_then(Object::as_int),
+                Some(36),
+                "{label}: visibility"
+            );
+            checked += 1;
+        }
+        assert_eq!(checked, 3, "every constructed type was checked");
     }
 
     /// ★ **Every border style reaches `/BS /S`, and the width reaches `/W`.**
