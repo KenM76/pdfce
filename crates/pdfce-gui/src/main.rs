@@ -2661,6 +2661,24 @@ struct FieldDraft {
     tooltip_declined: bool,
     /// A radio member's export value. Unused by the other three kinds.
     export_value: String,
+    /// `/Ff` bit 14 — echo the value as bullets. Text fields only.
+    password: bool,
+    /// `/Ff` bit 25 — one cell per character. Text fields only.
+    ///
+    /// Table 228 permits this only alongside a maximum length and without
+    /// multi-line or password, so the control is disabled-and-explained
+    /// rather than offered and refused on Accept (R83).
+    comb: bool,
+    /// `/Ff` bit 13 — accept multiple lines. Text fields only.
+    multiline: bool,
+    /// `/MaxLen`, zero meaning unset. Text fields only.
+    max_len: i64,
+    /// `/BS` border style and width (§12.5.4 Table 166).
+    border: pdfce_core::edit::BorderStyle,
+    /// See [`Self::border`].
+    border_width: f64,
+    /// `/F` — where the widget is visible (§12.5.3 Table 165).
+    visibility: pdfce_core::edit::Visibility,
     /// A choice field's `/Opt` entries, as `export=display` pairs — only
     /// meaningful for [`NewFieldKind::Choice`] (Pass 47.4).
     ///
@@ -18355,6 +18373,89 @@ fn place_field_options_ui(doc: &mut OpenDoc, ui: &mut egui::Ui) -> (bool, bool) 
         .on_hover_text(ui_text::create_field_tooltip_decline_tooltip());
     diag::trace(|| format!("field-decline-box rect={:?}", decline.rect));
 
+    // -- Appearance and behaviour, for a TEXT field only. --
+    //
+    // Below the accessibility decision on purpose: `/TU` is a decision the
+    // core refuses to default (R105) and Accept stays disabled until it is
+    // made, so it belongs above everything optional. These four all have
+    // real defaults and none of them blocks a commit.
+    if draft.kind == NewFieldKind::Text {
+        ui.separator();
+        ui.label(ui_text::draft_style_heading());
+        ui.horizontal(|ui| {
+            ui.label(ui_text::draft_border_label());
+            egui::ComboBox::from_id_salt("draft-border")
+                .selected_text(ui_text::draft_border_option(draft.border))
+                .show_ui(ui, |ui| {
+                    for style in [
+                        pdfce_core::edit::BorderStyle::Solid,
+                        pdfce_core::edit::BorderStyle::Dashed,
+                        pdfce_core::edit::BorderStyle::Beveled,
+                        pdfce_core::edit::BorderStyle::Inset,
+                        pdfce_core::edit::BorderStyle::Underline,
+                    ] {
+                        ui.selectable_value(
+                            &mut draft.border,
+                            style,
+                            ui_text::draft_border_option(style),
+                        );
+                    }
+                });
+            ui.label(ui_text::draft_border_width_label());
+            // Zero is a real setting — Table 166 says zero means no border —
+            // so the range starts there rather than at a hairline.
+            ui.add(
+                egui::DragValue::new(&mut draft.border_width)
+                    .range(0.0..=12.0)
+                    .speed(0.25),
+            );
+        });
+        ui.horizontal(|ui| {
+            ui.label(ui_text::draft_visibility_label());
+            egui::ComboBox::from_id_salt("draft-visibility")
+                .selected_text(ui_text::draft_visibility_option(draft.visibility))
+                .show_ui(ui, |ui| {
+                    for v in [
+                        pdfce_core::edit::Visibility::VisibleAndPrints,
+                        pdfce_core::edit::Visibility::ScreenOnly,
+                        pdfce_core::edit::Visibility::PrintOnly,
+                        pdfce_core::edit::Visibility::Hidden,
+                    ] {
+                        ui.selectable_value(
+                            &mut draft.visibility,
+                            v,
+                            ui_text::draft_visibility_option(v),
+                        );
+                    }
+                });
+        });
+        ui.horizontal(|ui| {
+            ui.label(ui_text::draft_max_len_label());
+            ui.add(egui::DragValue::new(&mut draft.max_len).range(0..=9999));
+            ui.checkbox(&mut draft.multiline, ui_text::draft_multiline_label());
+        });
+        ui.checkbox(&mut draft.password, ui_text::draft_password_label());
+        // Comb is offered only when the spec permits it. Table 228 bit 25
+        // allows it "only if" /MaxLen is present and multiline and password
+        // are clear, and a file that breaks that has no defined rendering —
+        // so the control is disabled AND EXPLAINED rather than offered and
+        // refused on Accept (R83: no affordance without the capability).
+        let comb_allowed = draft.max_len > 0 && !draft.multiline && !draft.password;
+        if !comb_allowed {
+            // Turning it off when it becomes impossible, rather than leaving
+            // a set-but-unreachable flag that would silently apply if the
+            // operator later restored the preconditions.
+            draft.comb = false;
+        }
+        let comb = ui.add_enabled(
+            comb_allowed,
+            egui::Checkbox::new(&mut draft.comb, ui_text::draft_comb_label()),
+        );
+        if !comb_allowed {
+            comb.on_disabled_hover_text(ui_text::draft_comb_needs_max_len());
+        }
+    }
+
     ui.separator();
     let can = draft.can_commit();
     let mut commit = false;
@@ -18556,6 +18657,15 @@ fn install_field_draft(
         tooltip: String::new(),
         tooltip_declined: false,
         export_value: String::new(),
+        password: false,
+        comb: false,
+        multiline: false,
+        max_len: 0,
+        // Table 166's own defaults, so a field placed without touching any
+        // of this is byte-identical to one placed before these existed.
+        border: pdfce_core::edit::BorderStyle::Solid,
+        border_width: 1.0,
+        visibility: pdfce_core::edit::Visibility::VisibleAndPrints,
         options: Vec::new(),
         pending_option: ChoiceDraftOption::default(),
         last_refusal: None,
@@ -18629,7 +18739,15 @@ fn commit_field_draft(doc: &mut OpenDoc) -> (CommitOutcome, Vec<String>) {
 
     let outcome = match kind {
         NewFieldKind::Text => {
-            let mut spec = NewTextField::new(page_index, &name, rect);
+            let mut spec = NewTextField::new(page_index, &name, rect)
+                .with_password(draft.password)
+                .with_comb(draft.comb)
+                .with_border(draft.border, draft.border_width)
+                .with_visibility(draft.visibility)
+                .with_flags(draft.multiline, false, false);
+            if draft.max_len > 0 {
+                spec = spec.with_max_len(draft.max_len);
+            }
             spec.tooltip = tooltip;
             doc.session_mut().add_text_field(&spec)
         }

@@ -1455,6 +1455,28 @@ enum Command {
         /// Mark the field required at submit time (`/Ff` bit 2).
         #[arg(long)]
         required: bool,
+        /// Echo the value as bullets (`/Ff` bit 14).
+        ///
+        /// pdfce writes the flag; the obscuring is a viewer behaviour.
+        #[arg(long)]
+        password: bool,
+        /// Lay the value out in equally-spaced cells (`/Ff` bit 25).
+        ///
+        /// REFUSED unless `--max-len` is given and neither `--multiline` nor
+        /// `--password` is set. Table 228 bit 25 permits comb "only if" those
+        /// hold, and a file that breaks the rule has no defined rendering —
+        /// two viewers may legitimately draw it differently.
+        #[arg(long)]
+        comb: bool,
+        /// Border line style (§12.5.4 Table 166).
+        #[arg(long, value_enum, default_value_t = BorderArg::Solid)]
+        border: BorderArg,
+        /// Border width in points. Zero means no border.
+        #[arg(long, default_value_t = 1.0)]
+        border_width: f64,
+        /// Where the widget is visible (§12.5.3 Table 165).
+        #[arg(long, value_enum, default_value_t = VisibilityArg::Visible)]
+        visibility: VisibilityArg,
         /// Pre-fill this field's properties from an existing field.
         ///
         /// Copies only NON-BOOLEAN, TYPE-MATCHED data — `--max-len` for a
@@ -3866,6 +3888,68 @@ impl From<CommaArg> for pdfce_core::form_script::calc::CommaPolicy {
     }
 }
 
+/// `--border` on `add-text-field` (§12.5.4 Table 166).
+///
+/// Its own clap enum rather than a `ValueEnum` derive on the core type, so
+/// `pdfce-core` gains no CLI dependency — the GUI-core separation applies to
+/// argument parsing too.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, clap::ValueEnum)]
+enum BorderArg {
+    /// Solid rectangle. Table 166's default and pdfce's.
+    Solid,
+    /// Dashed.
+    Dashed,
+    /// Beveled — solid with an embossed highlight.
+    Beveled,
+    /// Inset — solid with an engraved lowlight.
+    Inset,
+    /// Underline — a line along the bottom edge only.
+    Underline,
+}
+
+impl From<BorderArg> for pdfce_core::edit::BorderStyle {
+    fn from(arg: BorderArg) -> Self {
+        match arg {
+            BorderArg::Solid => Self::Solid,
+            BorderArg::Dashed => Self::Dashed,
+            BorderArg::Beveled => Self::Beveled,
+            BorderArg::Inset => Self::Inset,
+            BorderArg::Underline => Self::Underline,
+        }
+    }
+}
+
+/// `--visibility` on `add-text-field` (§12.5.3 Table 165).
+///
+/// Four combinations, not eight bits. `hidden` and `print-only` are kept
+/// distinct because Table 165 makes them different: `Hidden` suppresses
+/// screen AND print "regardless of its annotation type", while `NoView`
+/// suppresses only the screen and leaves printing to the `Print` flag.
+/// Collapsing them would silently stop a field printing that the operator
+/// asked to print.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, clap::ValueEnum)]
+enum VisibilityArg {
+    /// On screen and printed (`/F 4`). The default.
+    Visible,
+    /// On screen, never printed (`/F 0`).
+    ScreenOnly,
+    /// Printed, not shown on screen (`/F 36`).
+    PrintOnly,
+    /// Suppressed everywhere (`/F 2`).
+    Hidden,
+}
+
+impl From<VisibilityArg> for pdfce_core::edit::Visibility {
+    fn from(arg: VisibilityArg) -> Self {
+        match arg {
+            VisibilityArg::Visible => Self::VisibleAndPrints,
+            VisibilityArg::ScreenOnly => Self::ScreenOnly,
+            VisibilityArg::PrintOnly => Self::PrintOnly,
+            VisibilityArg::Hidden => Self::Hidden,
+        }
+    }
+}
+
 /// Which save path an **editing** subcommand uses.
 ///
 /// Deliberately a separate enum from [`RoundTripMode`], which carries a
@@ -4302,6 +4386,11 @@ fn run() -> ExitCode {
             multiline,
             read_only,
             required,
+            password,
+            comb,
+            border,
+            border_width,
+            visibility,
             output,
             mode,
             defaults_from,
@@ -4318,6 +4407,11 @@ fn run() -> ExitCode {
             multiline,
             read_only,
             required,
+            password,
+            comb,
+            border,
+            border_width,
+            visibility,
             output: &output,
             mode,
             defaults_from: defaults_from.as_deref(),
@@ -13277,6 +13371,11 @@ struct AddTextFieldArgs<'a> {
     multiline: bool,
     read_only: bool,
     required: bool,
+    password: bool,
+    comb: bool,
+    border: BorderArg,
+    border_width: f64,
+    visibility: VisibilityArg,
     output: &'a Path,
     mode: SaveMode,
     defaults_from: Option<&'a str>,
@@ -14910,11 +15009,12 @@ fn cmd_add_text_field(args: &AddTextFieldArgs<'_>) -> u8 {
         Err(code) => return code,
     };
 
-    let mut spec = pdfce_core::edit::NewTextField::new(page_index, args.name, rect).with_flags(
-        args.multiline,
-        args.read_only,
-        args.required,
-    );
+    let mut spec = pdfce_core::edit::NewTextField::new(page_index, args.name, rect)
+        .with_password(args.password)
+        .with_comb(args.comb)
+        .with_border(args.border.into(), args.border_width)
+        .with_visibility(args.visibility.into())
+        .with_flags(args.multiline, args.read_only, args.required);
     if let Some(v) = args.value {
         spec = spec.with_value(v);
     }

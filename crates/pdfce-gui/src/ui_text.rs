@@ -10322,6 +10322,94 @@ pub fn reset_done(reset: usize, removed: usize) -> String {
     format!("Reset {reset} field(s); {removed} had no stored default and were emptied.")
 }
 
+/// Label for the maximum-length control on a new text field.
+#[must_use]
+pub const fn draft_max_len_label() -> &'static str {
+    "Max length"
+}
+
+/// Label for the multi-line checkbox on a new text field.
+#[must_use]
+pub const fn draft_multiline_label() -> &'static str {
+    "Multi-line"
+}
+
+/// Heading for the new field's appearance and behaviour controls.
+#[must_use]
+pub const fn draft_style_heading() -> &'static str {
+    "Appearance and behaviour"
+}
+
+/// Label for the border-style picker.
+#[must_use]
+pub const fn draft_border_label() -> &'static str {
+    "Border"
+}
+
+/// Label for the border-width control.
+#[must_use]
+pub const fn draft_border_width_label() -> &'static str {
+    "Width (pt)"
+}
+
+/// Label for the visibility picker.
+#[must_use]
+pub const fn draft_visibility_label() -> &'static str {
+    "Shown"
+}
+
+/// Label for the password checkbox.
+#[must_use]
+pub const fn draft_password_label() -> &'static str {
+    "Hide typing (password)"
+}
+
+/// Label for the comb checkbox.
+#[must_use]
+pub const fn draft_comb_label() -> &'static str {
+    "Comb (one cell per character)"
+}
+
+/// Why the comb control is unavailable.
+///
+/// Shown rather than leaving a disabled control unexplained: the operator
+/// can act on this — set a maximum length — and a control that is simply
+/// grey teaches them nothing about how to reach it.
+#[must_use]
+pub const fn draft_comb_needs_max_len() -> &'static str {
+    "Comb needs a maximum length, and cannot be combined with multi-line or \
+password."
+}
+
+/// Human-readable name of a border style, for the picker.
+#[must_use]
+pub const fn draft_border_option(style: pdfce_core::edit::BorderStyle) -> &'static str {
+    use pdfce_core::edit::BorderStyle;
+    match style {
+        BorderStyle::Solid => "Solid",
+        BorderStyle::Dashed => "Dashed",
+        BorderStyle::Beveled => "Beveled",
+        BorderStyle::Inset => "Inset",
+        BorderStyle::Underline => "Underline",
+    }
+}
+
+/// Human-readable name of a visibility choice, for the picker.
+///
+/// "Screen only" and "Print only" are spelled out rather than abbreviated
+/// because they are opposites and an operator scanning a list must not have
+/// to decode which is which.
+#[must_use]
+pub const fn draft_visibility_option(v: pdfce_core::edit::Visibility) -> &'static str {
+    use pdfce_core::edit::Visibility;
+    match v {
+        Visibility::VisibleAndPrints => "On screen and printed",
+        Visibility::ScreenOnly => "On screen only",
+        Visibility::PrintOnly => "Printed only",
+        Visibility::Hidden => "Hidden everywhere",
+    }
+}
+
 /// How many fields already hold their reset value.
 ///
 /// Stated rather than left as a gap in the list. A field the operator
