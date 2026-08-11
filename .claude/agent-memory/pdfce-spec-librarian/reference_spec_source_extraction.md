@@ -116,6 +116,18 @@ and `pdfminer` installed. Extraction recipe that works:
    - Subscripts land on their **own y-row** (`αr` → `α` then `r`), so bucket
      rows loosely (`round(y/3)*3`) and expect to reassemble subscripts by eye.
 
+4a-quinquies. **★ ISO 32000-1's ANNEX HEADINGS ARE `Annex<SPACE><SPACE><LETTER>`
+   — `grep "Annex B"` returns ZERO hits in all 756 pages.** Found 2026-08-11
+   while re-verifying Annex B (type-4 operators). `grep -n "^Annex"` finds all
+   twelve; the body heading at dump line 32930 reads `Annex  B` / `(normative)` /
+   `Operators in Type 4 Functions` on three lines. Same false-negative class as
+   the PLRM ligature trap below. **A 0-hit on a structural element you can see in
+   the TOC is an extraction artifact, not evidence of absence.** Cheap
+   cross-check: the TOC at dump lines **129–190** lists every annex letter with
+   its `(normative)`/`(informative)` marker on the *next* line and the printed
+   page number two lines after — enough to settle an annex's normative status
+   without reading its body.
+
 4b. **The strongest cross-check is against a SIBLING table already in the
    corpus** — two independently extracted datasets that must reconcile
    arithmetically. Annex D.3 (2026-07-31): 256 codes, 24 marked undefined ⇒ 232
@@ -208,6 +220,24 @@ and `pdfminer` installed. Extraction recipe that works:
     legitimate **narrow 1.7→2.0 delta source** (`free_secondary_paraphrase`).
     Strip tags with a 3-line `re.sub` and grep the flat text; `clause12.html` is
     ~135 kB → ~57 kB of text.
+  - **★ `pdfa.org` 403s AT THE ORIGIN BUT ITS PDFs SERVE THROUGH WAYBACK.**
+    Established 2026-08-11. `curl -A <browser UA>` on
+    `https://pdfa.org/wp-content/uploads/<yyyy>/<mm>/<file>.pdf` and
+    `https://pdfa.org/download-area/publications/<file>.pdf` both return
+    **403, 103 bytes of HTML** — but
+    `https://web.archive.org/web/2020if_/https://pdfa.org/wp-content/uploads/2018/06/1415_Toda-1.pdf`
+    returns **HTTP 200, `application/pdf`, `%%EOF` present**. So the PDF
+    Association's **conference decks and application notes are reachable after
+    all**, via the `/web/<YYYY>if_/` form (same trick as PLRM3). Find the exact
+    upload path with `WebSearch` — the paths are stable and appear in results
+    even though the origin refuses. Recovered this way: *"Encryption with
+    PDF 2.0"*, Roman Toda (Normex), 2017-05-15, 27 slides — which supplies the
+    **`/R 6` algorithm HARNESS as a diagram** (Alg 8/9/10/2a with `Alg2b(...)`
+    everywhere R5 has `SHA-256(...)`), the ExtensionLevel-8 provenance, and
+    product-level 2.0 commentary. **Licence: `free_secondary_paraphrase`, and
+    grade it MEDIUM — a slide deck by a standards participant is not a
+    standard**, and a 2017 deck describes ISO 32000-2:**2017**, not 2020.
+    Retire the old note that PDF Association material is "not machine-reachable".
   - **`https://www.pdfa-inc.org/product/iso-32000-2-pdf-2-0-bundle-sponsored-access/`**
     — states ISO 32000-2:2020 + ISO/TS 32001–32005 are **$0.00 since 2023-04-05**
     under sponsored access. **Acquisition needs an account + a $0 cart checkout =

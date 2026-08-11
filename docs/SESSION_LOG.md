@@ -32841,3 +32841,439 @@ matching entry) — **NOT independently re-run, no shell this dispatch**
 this filing** — the engineer should check `D:\Dev\pdfce-backups\` and
 `git log`/`git status` directly before any push. This is the
 **eighty-fifth** `SESSION_LOG.md`/`ROADMAP.md` joint filing.
+
+## 2026-08-11 (eighty-sixth filing) — `Pass 61.0` ships reset-form (§12.7.5.3) core+CLI+GUI in one session; R171 cited a live third time, closing a hard-coded-always-zero CLI summary it had been hiding; a text-anchored insertion detached an attribute and then a doc comment, twice, escalated to `C:\personal_rag\claude_code\`
+
+**Shipped:**
+- **`Pass 61.0` (new mint)** — `7d2b71b` ships `EditSession::reset_form`/
+  `reset_preview`, `pdfce-cli reset-form` (plan by default; `--apply
+  --output`; `--field NAME` repeatable; `--verify-undo`), and the GUI's
+  collapsed "Reset to defaults" Forms-panel section. `7c13b97` fixes
+  the first commit's own test shape — the preview was tested against
+  itself rather than against `reset_form`'s actual output — matching
+  its title exactly.
+
+**Decisions made this session:**
+- **`ARCHITECTURE.md` §12, new entry (2026-08-11)** — the §12.7.5.3
+  design record: `/DV` absent removes `/V` rather than blanking it; the
+  branch is chosen from the RESOLVED, inherited default
+  (`Field::default_value`), never the field's raw dictionary; three
+  skip categories (pushbutton/read-only/signature) stay separately
+  counted; `/DV` is never written by a reset; a calculated field is
+  reset but not recomputed, deliberately, so the operator sees the
+  reset before choosing to also recompute; the reset-form action's
+  exclude mode is scoped OUT of the editor verb because Table 239
+  leaves its descendant behaviour unspecified.
+- **This closes one of the two open questions `docs/NEXT_SESSION.md`
+  had recorded for Reset Form** (whether a reset re-runs `/CO`) — now
+  decided, not merely re-stated, with the reasoning above.
+
+**Findings + decisions:**
+- **R171 cited a third live instance, not re-minted.** `7d2b71b`'s own
+  CLI dry run and GUI panel each independently derived reset
+  eligibility/target values before `reset_preview` existed — two
+  implementations of one rule, free to drift. It paid for itself
+  immediately: the CLI's dry-run summary had been hard-coded to
+  `reset=0 defaulted=0 removed=0`, always, and neither shell had
+  distinguished "would change" from "already at its default."
+- **A text-anchored insertion detached a preceding attribute, then a
+  doc comment, in the same session — filed as a new methodology
+  finding.** `#[allow(clippy::too_many_arguments)]` silently
+  transferred from `regen_field_appearance` to the newly-inserted
+  `reset_form`; a doc comment was detached the same way when
+  `reset_preview` was inserted. Both surfaced only as a lint warning on
+  untouched code. `C:\personal_rag\claude_code\
+  lesson_20260811_text_anchored_insertion_detaches_a_preceding_attribute_or_doc_comment.md`
+  — judged to generalize beyond pdfce (a property of text-anchored
+  patch application against any "attribute/doc-comment binds to the
+  NEXT declaration" language convention), so it goes to `claude_code/`,
+  not kept pdfce-local.
+- **Not filed as a lesson, noted instead** — a GUI screenshot showed
+  the new panel section missing because the binary was launched while
+  the release build was still running; Windows cannot replace a
+  running executable's bytes. `tools/package-portable.py`'s own header
+  already documents this hazard; the bar to write a new RAG file
+  (`personal_rag` README's "trivially derivable in under a minute") is
+  not met by a well-known OS file-lock fact.
+
+**Still in flight:** unchanged from the eighty-fifth filing — decisions
+037/038 still CLAIMED-not-authored; theme-preset default (open operator
+question); print dialog has no separations/colour-management panel;
+the `imposition.rs` "(R123)" miscitation still wants its one-line fix
+to "(R171)."
+
+**For next session:** `docs/NEXT_SESSION.md` is stale in two places as
+of this filing and is engineer-owned, not corrected here — its "★
+Start here: Reset Form" section names now-shipped work, and its
+"11-commit backlog" note was cleared by the eighty-fifth filing before
+this one began. Flagged for the engineer to refresh, not edited by
+this librarian.
+
+**Ledger for this filing.** **New Pass ID minted: `Pass 61.0`**,
+grepped free before minting per R156. **Pass-family ceiling moves from
+60.0 to 61.0, next free 62.** **Two commits cited by hash** (`7d2b71b`,
+`7c13b97`) for `check-commits-filed.py`'s literal-hash join.
+`docs/FEATURES.md`: one new row under *Forms (AcroForm)* — Reset Form —
+`core [x]` / `cli [x]` / `gui [x]`, all three in one filing, never
+having appeared in *Planned*. `docs/ARCHITECTURE.md`: one new dated §12
+entry, above. **Standing rules: no new mint** — R171 cited; ceiling
+stays **R185**, next free **R186** (per the eighty-fifth filing's own
+citation, **not independently re-verified against
+`tools/check-ledger-numbers.py`, no shell this dispatch**).
+Decision-record ceiling unchanged at **038**, next free **039**.
+`C:\personal_rag\claude_code\`: **one new lesson**, that subject's own
+`index.md` and the master `C:\personal_rag\index.md` both updated this
+filing. **No `D:\dev\rag\rust\`/`egui\` finding.** **No
+`C:\personal_rag\pdf\` finding** — the §12.7.5.3 content is canonical
+spec reasoning, `ARCHITECTURE.md`'s territory, not a real-world-producer
+divergence (hard rule 6's boundary). Operator-question ceiling
+unchanged at **(bh)**, next free **(bi)**. Gate figures relayed per the
+engineer's report — full workspace `cargo test`: **81 suites, 3209
+passed, 0 failed** (measured at `7d2b71b`, before the four
+`reset_preview` tests `7c13b97` adds — eleven tests total across the
+two commits is the engineer's own count); clippy `--workspace
+--all-targets --all-features`: **0**; fmt/ui-strings/theme-colour
+gates: clean; `check-commits-filed.py`/`check-passes-filed.py`/
+`check-ledger-numbers.py`/`check-one-commit-per-command.py`: clean as
+of `c5e8bfa`, the commit immediately before this filing's two —
+**none independently re-run, no shell this dispatch** (hard rule 8).
+**Backup/git working-tree state not asserted anywhere in this filing**
+— the engineer should check `D:\Dev\pdfce-backups\` and `git
+log`/`git status` directly. This is the **eighty-sixth**
+`SESSION_LOG.md`/`ROADMAP.md` joint filing.
+
+## 2026-08-11 (eighty-seventh filing) — `ed6db1c` filed against `Pass 7.2`: the format layer's last three declines now render; grammar sourced, parse not (and declines rather than guesses); an inverted property test caught before it inverted a correct table
+
+**Shipped:**
+- `ed6db1c` — **"dates format, and an ambiguous one refuses rather than
+  guessing."** New `pdfce-core` module `form_script/datetime.rs`
+  (11 `#[test]` functions confirmed live), wired into `form_script/
+  format.rs`. Closes the last three declines in `Pass 7.2`'s posture-B
+  format layer — `AFDate_Format`, `AFTime_Format`, `AFDate_FormatEx`
+  now render. Filed against the existing `Pass 7.2` (R170), no new
+  Pass ID minted.
+
+**Decisions made this session:**
+- **`ARCHITECTURE.md` §12, new addendum entry (2026-08-11)** to the
+  2026-08-10 `Pass 7.2` decision record — a format helper's grammar and
+  its parse can have different evidential footing, and the module
+  treats them differently: the grammar (20 tokens, both predefined
+  tables) is fully sourced; the parse (how Acrobat reads a stored date
+  string back out of a field) is sourced nowhere, so it accepts only
+  unambiguous shapes (ISO `yyyy-mm-dd`, `D:YYYYMMDDHHmmSS`) and declines
+  the rest — `03/04/2026` refused outright rather than guessed. Also
+  recorded: case-sensitivity is the grammar (`m`/`mm` month vs `M`/`MM`
+  minutes), out-of-range predefined indices decline by name rather than
+  falling back to a literal-index render, and a zone offset on a stored
+  date is ignored rather than applied.
+
+**Findings + decisions:**
+- **A property test can itself be inverted, and its failure argues for
+  the wrong fix — the third instance of this session's "plausible-
+  looking wrongness" family.** `tokens_match_longest_first` failed on
+  first run; the table was correct, the assertion had been written
+  backwards. Reading the failure as "the code is broken" would have
+  reordered a correct table into a broken one, silently. Filed as
+  `C:\personal_rag\claude_code\
+  lesson_20260811_inverted_property_test_assertion_argues_for_the_wrong_fix.md`
+  — judged to generalize beyond pdfce (a property test is not immune to
+  being the wrong half of the pair), sits beside the eighty-sixth
+  filing's text-anchored-splice lesson; both are about a mechanism that
+  produces plausible-looking wrongness. That subject's `index.md` and
+  the master `C:\personal_rag\index.md` updated this filing.
+- No `D:\dev\rag\rust\`/`egui\` finding — the property-test finding is
+  language/tool-agnostic methodology, not Rust-specific, hence
+  `claude_code/` rather than `D:\dev\rag\rust\`.
+- No `C:\personal_rag\pdf\` finding — the grammar-sourced/parse-unsourced
+  split is pdfce's own engineering decision about an unsourced Acrobat
+  behaviour, not an observation about real-world PDF producer
+  divergence.
+
+**Still in flight:** unchanged from the eighty-sixth filing — decisions
+037/038 still CLAIMED-not-authored; theme-preset default (open operator
+question); print dialog has no separations/colour-management panel; the
+`imposition.rs` "(R123)" miscitation still wants its one-line fix to
+"(R171)." `docs/NEXT_SESSION.md` was rewritten by the engineer this
+session (not this librarian's edit) — its stale Reset-Form and backlog
+notes are resolved there; not touched here.
+
+**For next session:** the forms-authoring gap cluster, or the two
+live-Acrobat spot-checks (`sepStyle` 4 and `currStyle`, both
+`UNSOURCED` and declined by name) — per `docs/NEXT_SESSION.md`
+(engineer-owned, relayed here for continuity, not independently
+verified by this librarian). The portable build in `D:\builds\` is
+flagged stale (predates Reset Form and this commit) — relayed, not
+independently checked (no shell).
+
+**Ledger for this filing.** **No new Pass ID** — `ed6db1c` filed against
+the existing `Pass 7.2` (R170), the second commit under that Pass's own
+ID. Pass-family ceiling unchanged at **61.0**, next free **62**. One
+commit cited by hash (`ed6db1c`) for `check-commits-filed.py`'s
+literal-hash join. `docs/FEATURES.md`: the existing `Pass 7.2` row under
+*Forms (AcroForm)* extended in place to name the date/time helpers —
+`core [x]` / `cli [x]` / `gui [ ]` unchanged. `docs/ARCHITECTURE.md`:
+one new dated §12 addendum entry, above. **Standing rules: no new
+mint** — R170 cited; ceiling stays **R185**, next free **R186**.
+Decision-record ceiling unchanged at **038**, next free **039** — a
+body-section addendum, not a new numbered decision. `C:\personal_rag\
+claude_code\`: **one new lesson**, that subject's own `index.md` and the
+master `C:\personal_rag\index.md` both updated this filing. **No
+`D:\dev\rag\rust\`/`egui\` finding. No `C:\personal_rag\pdf\`
+finding.** Operator-question ceiling unchanged at **(bh)**, next free
+**(bi)**. Gate figures relayed per the engineer's report: `cargo test -p
+pdfce-core --lib` **1485 passed, 0 failed**; clippy `--workspace
+--all-targets --all-features` **0**; fmt clean — **none independently
+re-run, no shell this dispatch** (hard rule 8). **Backup/git
+working-tree state not asserted anywhere in this filing** — the
+engineer should check `D:\Dev\pdfce-backups\` and `git log`/`git
+status` directly. This is the **eighty-seventh** `SESSION_LOG.md`/
+`ROADMAP.md` joint filing (the eighty-sixth confirmed present by direct
+read before this entry was written). **This was the only commit
+`check-commits-filed.py` still listed after the eighty-sixth filing,
+per the operator's own confirmation relayed by the engineer** — not
+independently re-run by this librarian.
+
+## 2026-08-11 (eighty-eighth filing) — `f83be5a` filed against `Pass 20.0`: a text field gains border/visibility/password/comb, core-only (R151); Adobe XFA+DRM parsed five ways — Encryption reinforced onto Pass 5, a `/P`-is-convention-not-security correction, a new DRM-removal operator question (bi), an IMPOSSIBLE DRM bucket now grounded in `ARCHITECTURE.md` §12, and a sourced XFA-deprecation finding plus a new hybrid read/fill recommendation
+
+**Shipped:**
+- `f83be5a` — **"four authoring properties a field could not have, and
+  one the spec forbids."** `NewTextField` gains `/BS` border style
+  (Table 166), `/F` visibility (Table 165), the password flag (`/Ff`
+  bit 14), and the comb flag (`/Ff` bit 25) — eight new tests, all
+  confirmed live. Filed against the existing `Pass 20.0` (R170), no new
+  Pass ID. **Core-only (R151)** — verified zero CLI flags and zero GUI
+  builder calls reach any of the four properties.
+
+**Decisions made this session:**
+- **`ARCHITECTURE.md` §12, new entry (2026-08-11)** — pdfce's document
+  model is local and standalone; Adobe's actual DRM products
+  (LiveCycle/AEM Document Security) are server-mediated, requiring an
+  Adobe-hosted rights authority pdfce has no access to and would refuse
+  to call even if it did (§1.1's no-undisclosed-network posture).
+  Third-party handlers (FileOpen, Locklizard) are the same shape —
+  undocumented, non-Standard security handlers, nothing published to
+  implement against. Standard PDF encryption (§7.6) sits entirely on
+  pdfce's own side of this boundary — bytes already in the file, a
+  published algorithm — which is why Pass 5 is buildable and LiveCycle/
+  AEM/FileOpen/Locklizard are not merely deprioritised but structurally
+  out of reach. This grounds a `docs/FEATURES.md` *Cannot*-section line
+  that existed before this session with no supporting reasoning
+  anywhere in the project.
+- **No new Pass ID for any of the five parsed DRM/XFA items** — standard
+  encryption (item 1) and `/P` permission-flag disclosure (item 2) both
+  land as amendments to the already-scoped `Pass 5` Encryption Backlog
+  bucket; item 3 (stripping protection without a password) is filed as
+  a new operator question, not a Pass; item 4 (LiveCycle/AEM/third-party
+  DRM) is impossible, so nothing to schedule; item 5's 5b (static-XFA
+  hybrid read/fill) is a new UNSCOPED Backlog recommendation.
+
+**Findings + decisions:**
+- **A stronger fact was already sourced while a standing open item still
+  asked a narrower version of the same question.**
+  `iso32000__delta__pdf20_pass1.md` line 66 records XFA as deprecated at
+  the **ISO level** in ISO 32000-2 (not just Adobe's product decision),
+  while `CLAUDE.md`'s open item and this file's own question (p) both
+  still ask specifically for "Acrobat's exact version-level deprecation
+  date" — a narrower, still-genuinely-open question the ISO fact doesn't
+  answer, but a materially stronger data point for the same underlying
+  concern. Same mechanism as the cross-RAG-deliverable failure
+  `pdfce-engineer.md` already documents (a producing document answers a
+  question a consuming document still lists open, and nothing is
+  watching the gap between them) — here between the spec RAG and this
+  project's own open-item tracking. `CLAUDE.md`'s mirror-image bullet
+  needs the same update; flagged to the engineer, not editable by this
+  librarian.
+- **`docs/FEATURES.md` had two genuine content gaps, not stale claims**:
+  no row anywhere for XFA-presence detect+disclose (shipped since Pass
+  7.0, 2026-08-01) despite `ROADMAP.md` naming `XfaPresence` at that
+  Pass's own entry; and the *Cannot*-section AEM-DRM line had no
+  matching reasoning anywhere in `ROADMAP.md` (grepped `LiveCycle`/
+  `AEM`/`rights server`, zero hits before this filing). Both closed this
+  session — new *Implemented* row for the first, a new Backlog bullet
+  plus `ARCHITECTURE.md` §12 entry for the second.
+- No `D:\dev\rag\rust\`/`egui\` finding — nothing ecosystem-general
+  surfaced. No `C:\personal_rag\pdf\` finding — every finding this
+  filing is pdfce's own scoping/documentation-currency work, not an
+  observation about a real-world PDF producer diverging from spec.
+
+**Still in flight:** Pass 5 (Encryption) remains on the fallback/
+interleave track (decision 010 candidate D) — this filing records a
+renewed operator request as a priority signal, it does not promote the
+Pass. The `/R 5` vs `/R 6` AES-256 sourcing sub-decision and the two
+operator decisions on `LEGAL.md` §2 remain exactly as owed as before.
+Question (p) (retire/re-scope the XFA-deprecation open item) is
+UNCHANGED, still open, still Ken's call. New question (bi) (strip
+protection without a password) is open with no safe default — silence
+means NOT building the without-password path, per this filing's own
+recommendation, not per any ruling.
+
+**For next session:** if Pass 5 is scoped, both AMENDMENT paragraphs on
+the Encryption Backlog bucket (the renewed request, and the `/P`
+permission-flag framing) should shape its acceptance criteria alongside
+the existing decision-007/010 scoping. If XFA work is ever picked up,
+5b (hybrid read/fill) is the recommended increment — 5c (dynamic XFA)
+stays `out_of_scope`. `CLAUDE.md`'s XFA open item and DRM/security
+posture could both use an operator/engineer-authored update reflecting
+this session's findings; this librarian has flagged both, not edited
+either.
+
+## 2026-08-11 (eighty-ninth filing) — two guards that failed OPEN (`5039ecf`, `ce5642d`), found back to back and closed the same session `R186` names the shape they share; `30c0940` discharges `f83be5a`'s own R151 debt; `96a6065` closes three format markers and FALSIFIES a prior weakly-sourced reproduction; a test-count discrepancy flagged eighty-eighth filing is fully reconciled
+
+**Shipped:**
+- `5039ecf` — an ISO 32000-2 §7.6.7 unencrypted wrapper (a fully
+  readable cover-sheet PDF hiding an encrypted payload) is now detected
+  (`/AFRelationship /EncryptedPayload` only — NOT the erratum-deleted
+  "exactly one `EmbeddedFiles` entry" test) and disclosed with a
+  warning. Core + CLI. Independent of Pass 5.
+- `ce5642d` — `fill_guards` now checks `XfaPresence` before a form fill
+  and warns when filling a hybrid form's AcroForm half will leave the
+  XFA half stale. Core + CLI + GUI. Interim disclosure only — the full
+  keep-both-halves-in-sync capability (5b, eighty-eighth filing) stays
+  unscoped.
+- `30c0940` — CLI flags + a GUI section reach `f83be5a`'s four new
+  `NewTextField` properties (border/visibility/password/comb); R151
+  discharged. Comb is disabled-and-explained and self-clears when its
+  precondition stops holding. `scratchpad/splice.py` ships alongside it
+  (anchor-validated, all-or-nothing text edits).
+- `96a6065` — `sepStyle 4` (Swiss convention) implemented; `currStyle`
+  confirmed inert by measurement; `AFPercent_Format`'s zero-coercion
+  behaviour CORRECTS a prior reproduction of a weakly-sourced example
+  that turned out to be wrong.
+
+**Decisions made this session:**
+- **`ARCHITECTURE.md` §12, two new entries (2026-08-11).** (1) The
+  wrapper-detection design: marker choice (`/AFRelationship
+  /EncryptedPayload`, not the erratum-deleted entry-count test),
+  warn-not-refuse rationale (the cover page is often the operator's only
+  instructions), and a forward-pointer for Pass 5 (ISO 32000-2 exempts a
+  signature's `/Contents` from encryption; ISO 32000-1's list does not —
+  a crypt stage following 32000-1 literally corrupts every signature it
+  touches). (2) The authoring-properties design, covering `f83be5a` and
+  `30c0940` together as one continuous decision: typed enums over raw
+  flag bits at the core boundary; the SAME Table 228 precondition
+  enforced as a hard refusal at the core layer and as a live,
+  self-clearing disabled state at the GUI layer — one fact, two
+  obligations for two different callers.
+- **`R186` MINTED** — a guard keyed on a marker of a hazard fails OPEN,
+  not closed, when the same hazard arrives without that marker, and open
+  failure is silent because nothing tells the operator anything was
+  withheld. Two independent instances in one session (the `/Encrypt`-
+  trailer guard missing the markerless wrapper case; `fill_guards`
+  checking encryption and hidden objects but never XFA) is what earned
+  it the mint rather than a one-off note.
+- **No new Pass ID for any of the four commits** — `96a6065` and
+  `30c0940` extend already-shipped Passes (7.2 and 20.0 respectively,
+  R170); `5039ecf` and `ce5642d` are guard/detection fixes to existing
+  capabilities (document-open handling; the Pass 7.0/7.1 fill path),
+  filed with no Pass number, matching the project's existing "no Pass
+  ID — root-cause defect fix" precedent already used for render fixes.
+
+**Findings + decisions:**
+- **The eighty-eighth filing's own "NOT reconciled" test-count flag is
+  resolved, and the flag itself worked as intended.** `f83be5a` reported
+  1494 passed against a checked baseline of 1485 + 8 = 1493, one short.
+  `96a6065` (this session, but chronologically the earlier commit) added
+  `currency_style_is_inert`, moving the real baseline to 1486 before
+  `f83be5a` was measured. 1486 + 8 = 1494 — the reported figure was
+  correct all along; the eighty-eighth filing's baseline was one commit
+  behind. Recorded as a dated footer on the eighty-eighth filing's own
+  `ROADMAP.md` entry, per the append-only convention (the entry's text
+  is not rewritten). **The flag did its job** — it stopped a wrong
+  number from being silently accepted, and the discrepancy turned out to
+  be a filing-order artifact, not an error.
+- **A wrong behaviour survived being correctly flagged as weakly
+  sourced.** `AFPercent_Format` on an unreadable value had been
+  reproducing a single prior source's "%"-only display, disclosed in
+  code as possibly the source's own quirk — and it was wrong; Acrobat
+  shows `0.0%`. Generalizable: marking a fact as weakly-sourced records
+  the evidence tier, it does not perform the check. The flag made this
+  cheap to find later; it did not prevent it from shipping wrong first.
+- **Two mechanical test-authoring failures let `sepStyle 4` ship
+  untested for two commits**: a line-range edit overwrote a `#[test]`
+  attribute (silent — Rust does not error, the function just stops being
+  a test), and an earlier script asserted out mid-run after printing
+  "ok" for a prior edit but before its own single write landed.
+  `scratchpad/splice.py` (`30c0940`) is the direct answer to both.
+- No `D:\dev\rag\rust\`/`egui\` finding this session — nothing
+  ecosystem-general surfaced (the `splice.py` tool is project-local, not
+  a Rust-ecosystem gotcha). No `C:\personal_rag\pdf\` finding — every
+  finding this session is pdfce's own guard-completeness or
+  authoring-tool-scripting behaviour, not an observation about a
+  real-world PDF *producer* diverging from spec.
+
+**Still in flight:** Pass 5 (Encryption) unchanged — still Backlog,
+still blocked on the `/R 5` vs `/R 6` sourcing sub-decision; the
+wrapper-detection finding is filed as independent of it, not a step
+toward it. The XFA 5b recommendation (keep AcroForm and XFA halves in
+sync on fill) now has its interim disclosure shipped but remains
+UNSCOPED for the actual sync capability. `f83be5a`'s per-type detail
+fields, tab-order authoring and push-button/GUI residue (Pass 20.5)
+remain exactly as owed as before — none of this session's four commits
+touched them.
+
+**For next session:** if a `C:\personal_rag\claude_code\` methodology
+lesson is ever written for "a weak-source flag is not a check," check
+it against R182's existing "grep institutional memory first" shape
+before deciding it's distinct enough to earn its own file — flagged,
+not written, this session. If Pass 5 is ever scoped, the `/Contents`
+signature-exemption divergence between ISO 32000-1 and 32000-2 (filed
+this session, `ARCHITECTURE.md` §12) needs to land in the crypt stage's
+object-exemption list from the start, not be discovered by a corrupted
+signature later.
+
+**Ledger for this filing.** **No new Pass ID** — all four commits filed
+against existing Passes or with no Pass number (see above). Pass-family
+ceiling unchanged at **61.0**, next free **62**. Four commits cited by
+hash (`5039ecf`, `ce5642d`, `30c0940`, `96a6065`). `docs/FEATURES.md`:
+two new *Implemented* rows (§7.6.7 wrapper detection under *Redaction &
+security*; XFA-fill staleness disclosure under *Forms (AcroForm)*), two
+row addenda (the `f83be5a` CREATE-a-form-field row's R151 discharge; the
+Pass 7.2 JS-format row's three closed markers), two Planned-row
+amendments (Encryption cross-referenced to the new wrapper row;
+static-XFA hybrid read/fill noting the interim disclosure). `docs/
+ARCHITECTURE.md`: **two new dated §12 entries** (wrapper-detection
+design; authoring-properties design covering both `f83be5a` and
+`30c0940`). **Standing rules: `R186` MINTED** — ceiling **R185 → R186**,
+next free **R187**. Decision-record ceiling unchanged at **038**, next
+free **039** — neither new §12 entry is a numbered `docs/decisions/`
+record. **No `D:\dev\rag\rust\`/`egui\` finding. No
+`C:\personal_rag\pdf\` finding.** No operator-question ceiling change —
+no new lettered question this session; ceiling stays `(bi)`, next free
+`(bj)`. Gate figures relayed per the operator's dispatch, measured by
+the engineer at `ce5642d` (covering all four commits) — `cargo test -p
+pdfce-core --lib` **1502 passed, 0 failed**; `cargo clippy --workspace
+--all-targets --all-features` **0**; `cargo fmt --check`,
+`check-ui-strings.sh` and `check-theme-colors.sh` all clean — **none
+independently re-run, no shell this dispatch** (hard rule 8). **Backup/
+git working-tree state not asserted anywhere in this filing** — check
+`D:\Dev\pdfce-backups\` and `git log`/`git status` directly. This is the
+**eighty-ninth** `SESSION_LOG.md`/`ROADMAP.md` joint filing (the
+eighty-eighth confirmed present by direct read before this entry was
+written).
+
+**Ledger for this filing.** **No new Pass ID** — `f83be5a` filed against
+the existing `Pass 20.0`. Pass-family ceiling unchanged at **61.0**,
+next free **62**. One commit cited by hash (`f83be5a`) for
+`check-commits-filed.py`'s literal-hash join. `docs/FEATURES.md`: one
+row addendum (*CREATE a form field*), one new *Implemented* row (XFA
+presence), one *Planned* row amended (Encryption), one new *Planned* row
+(static-XFA hybrid read/fill), one *Cannot*-section line broadened
+(AEM DRM + third-party handlers). `docs/ARCHITECTURE.md`: **one new
+dated §12 entry** (2026-08-11, the DRM server-mediation scope
+boundary). **Standing rules: no new mint** — R151 and R170 both cited;
+ceiling stays **R185**, next free **R186**. Decision-record ceiling
+unchanged at **038**, next free **039** — both new pieces are Backlog/
+plain-§12 content, not numbered `docs/decisions/` records. **No
+`D:\dev\rag\rust\`/`egui\` finding. No `C:\personal_rag\pdf\` finding.**
+**Operator-question ceiling moves `(bh)` → `(bi)`, next free `(bj)`** —
+new question filed OPEN (strip protection without a password). Gate
+figures relayed per the operator's dispatch — `cargo test -p pdfce-core
+--lib` **1494 passed, 0 failed** (NOT reconciled against 1485+8=1493,
+see the `ROADMAP.md` entry); `cargo clippy --workspace --all-targets
+--all-features` **0**; `cargo fmt --check` clean — **none independently
+re-run, no shell this dispatch** (hard rule 8). **Backup/git working-tree
+state not asserted anywhere in this filing** — check
+`D:\Dev\pdfce-backups\` and `git log`/`git status` directly. This is the
+**eighty-eighth** `SESSION_LOG.md`/`ROADMAP.md` joint filing (the
+eighty-seventh confirmed present by direct read before this entry was
+written).

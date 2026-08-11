@@ -328,9 +328,22 @@ become a ce dimension because pdfce can see it.
     can write the AcroForm half of a hybrid but not the XFA half, and a
     one-sided add would make an XFA-aware viewer and a plain viewer
     show different field counts for the same document.
-  - **What is still genuinely unverified**: Acrobat's exact
-    version-level deprecation date (only third-party approximate
-    timing found, no Adobe-primary source).
+  - **★ ANSWERED 2026-08-11, and by a stronger fact than the one being
+    sought.** This bullet read "what is still genuinely unverified:
+    Acrobat's exact version-level deprecation date (only third-party
+    approximate timing found, no Adobe-primary source)". The spec
+    corpus records **XFA as deprecated in ISO 32000-2 itself**,
+    including the `NeedsRendering` catalog entry, and notes explicitly
+    that the deprecation is "at the ISO level, not just Adobe's
+    product" (`iso32000__delta__pdf20_pass1.md`). A vendor's
+    product-version timeline is a weaker fact than the standard
+    dropping the feature.
+    Note the shape of the error rather than just the correction: **the
+    answer was already sourced in one document while another still
+    asked the question.** Nothing was wrong, nothing contradicted
+    anything — the finding simply never propagated to the place that
+    needed it. Grep the corpus before recording something as
+    unverified.
   Net: the verification is **no longer a prerequisite for form
   *authoring*** — both branches were decided without needing it. It
   would still be a prerequisite for any XFA **read/fill** work.

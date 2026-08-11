@@ -85,6 +85,7 @@ pub mod filters;
 pub mod font_embed;
 pub mod fontdata;
 pub mod form_script;
+pub mod formcsv;
 pub mod forms;
 pub mod forms_author;
 pub mod function;

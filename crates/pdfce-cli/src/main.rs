@@ -3987,6 +3987,13 @@ enum DataFormat {
     Fdf,
     /// XML Forms Data Format — the XML companion format.
     Xfdf,
+    /// Two-column `name,value` CSV — the format a spreadsheet opens.
+    ///
+    /// Not a PDF-world format: FDF and XFDF interchange between PDF
+    /// programs, and this one leaves that world. Values a spreadsheet would
+    /// read as formulae are prefixed with an apostrophe and the change is
+    /// reported.
+    Csv,
 }
 
 /// A document-information field, as a CLI value for `--clear`.
@@ -8887,6 +8894,17 @@ fn cmd_export_data(input: &Path, output: &Path, format: DataFormat) -> u8 {
     let bytes = match format {
         DataFormat::Fdf => data.to_fdf(Some(&src_hint)),
         DataFormat::Xfdf => data.to_xfdf(Some(&src_hint)),
+        DataFormat::Csv => {
+            let export = pdfce_core::formcsv::to_csv(&data);
+            // Reported BEFORE the success line, because it describes a
+            // difference between the CSV and the PDF that an operator
+            // comparing the two would otherwise have to explain to
+            // themselves.
+            if let Some(message) = export.message() {
+                eprintln!("pdfce-cli: {}: {message}", input.display());
+            }
+            export.csv
+        }
     };
     // Rich-text disclosure, on stderr in prose like every other one this
     // binary emits. Counted from the data itself rather than re-derived from
@@ -8915,6 +8933,7 @@ fn cmd_export_data(input: &Path, output: &Path, format: DataFormat) -> u8 {
     let fmt = match format {
         DataFormat::Fdf => "fdf",
         DataFormat::Xfdf => "xfdf",
+        DataFormat::Csv => "csv",
     };
     println!(
         "export-data {} fields={} format={fmt} -> {}; out_bytes={}",
@@ -8936,16 +8955,26 @@ fn cmd_import_data(input: &Path, data_path: &Path, output: &Path, mode: SaveMode
             return exit::IO_ERROR;
         }
     };
-    // Detect FDF vs XFDF by content: an XFDF file starts (after whitespace)
-    // with `<`; an FDF file carries the `%FDF` header / `/FDF` dictionary.
-    let is_xml = data_bytes
+    // Detect the format by CONTENT rather than by extension: a file named
+    // `.txt` that is plainly an XFDF should still import, and an operator
+    // who renamed one should not have to know that renaming mattered.
+    //
+    // The three tests are ordered by how specific their marker is. FDF
+    // carries a `%FDF` header, XFDF opens with `<`, and CSV is the residue —
+    // which is right, because CSV has no marker of its own and anything that
+    // is neither of the other two is at least worth *trying* to read as two
+    // columns before giving up.
+    let first = data_bytes
         .iter()
         .find(|b| !b.is_ascii_whitespace())
-        .is_some_and(|b| *b == b'<');
-    let parsed = if is_xml {
-        pdfce_core::fdf::FormData::parse_xfdf(&data_bytes)
+        .copied();
+    let looks_pdfish = data_bytes.starts_with(b"%FDF") || first == Some(b'%');
+    let parsed = if first == Some(b'<') {
+        pdfce_core::fdf::FormData::parse_xfdf(&data_bytes).map_err(|e| e.to_string())
+    } else if looks_pdfish {
+        pdfce_core::fdf::FormData::parse_fdf(&data_bytes).map_err(|e| e.to_string())
     } else {
-        pdfce_core::fdf::FormData::parse_fdf(&data_bytes)
+        pdfce_core::formcsv::parse_csv(&data_bytes).map_err(|e| e.to_string())
     };
     let data = match parsed {
         Ok(d) => d,

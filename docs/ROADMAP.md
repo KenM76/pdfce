@@ -81,6 +81,801 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★ `5039ecf` + `ce5642d` — TWO GUARDS FAIL OPEN, found back to back: an unencrypted §7.6.7 wrapper presents its cover sheet as the document, and a hybrid-XFA fill goes stale on the half `fill_guards` never checked; `R186` MINTED — 2026-08-11 (eighty-ninth filing)
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — `git log`/`git
+show` not run for either hash. The engineer's dispatch text carried both
+commits' mechanism, detection logic and citations in detail; nothing
+below is independently re-derived from source, only organized and
+cross-checked against this file's own existing record. **Grepped first:**
+`EncryptedPayload`, `fill_guards`, `wrapper`, `AFRelationship` — zero
+prior hits anywhere in `ROADMAP.md` or `docs/FEATURES.md`, confirming
+both are genuinely new capabilities, not restatements of something
+already filed.
+
+**`5039ecf` — an unencrypted wrapper (ISO 32000-2 §7.6.7) presents its
+cover sheet AS the document, and pdfce's own encryption refusal never
+saw it.** pdfce refuses an encrypted file by the presence of `/Encrypt`
+in the trailer (`XrefErrorKind::EncryptionUnsupported`). A §7.6.7
+unencrypted wrapper has **no `/Encrypt` at all** — it is an ordinary,
+fully readable PDF whose visible page is a cover sheet, carrying the
+real, encrypted document as an embedded payload. pdfce parsed it,
+rendered the cover, and reported success: every count and every page it
+gave was true of the wrapper and false of the content the operator
+actually asked about. Found by `pdfce-spec-librarian` while sourcing
+§7.6 for the operator's renewed encryption request (eighty-eighth
+filing) — a defect found while looking for a gap, not while looking for
+a defect.
+
+Detection: `/AFRelationship /EncryptedPayload` in the catalog `/AF`
+array, and nothing else. **Deliberately NOT used: "exactly one
+`EmbeddedFiles` entry"** — present in ISO 32000-2 as originally printed,
+**removed by erratum**; a detector keyed on it would miss any wrapper
+that also carries a readme or instructions file alongside the payload.
+Warns rather than refuses — the cover page is frequently the only
+human-readable instructions the operator has for the document
+underneath.
+
+**Also recorded in this commit's own message, for when Pass 5 activates,
+not yet actioned:** ISO 32000-2 exempts a signature's `/Contents` entry
+from encryption; ISO 32000-1's never-encrypted list does not carry the
+same exemption. A crypt-stage implementation following 32000-1 literally
+corrupts every signature it touches, presenting as a bad certificate
+rather than as an encryption bug. Forward-pointer only — Pass 5 is still
+Backlog.
+
+**`ce5642d` — a hybrid-XFA form fills its AcroForm half and leaves the
+XFA half stale, silently.** Field *authoring* has refused `/XFA`
+documents since Pass 20 (decision 020: a one-sided add makes the two
+halves disagree about how many fields exist). `fill_guards` checks
+encryption and hidden-object state and had **never** checked XFA
+presence — so a *fill* (not an *add*) writes the AcroForm half and
+leaves the XFA half describing the old value, and which one the operator
+sees next depends on which kind of viewer opens the file. Disclosed
+rather than refused: the asymmetry with authoring is deliberate — an
+*add* changes what fields exist, which no viewer can reconcile after the
+fact; a *fill* changes one value on a field both halves already agree
+exists. Refusing every fill on every hybrid form would make such forms
+permanently unfillable in pdfce, worse than a disclosed staleness risk.
+Ships the **interim DISCLOSURE half** of the 5b recommendation
+(eighty-eighth filing's XFA Backlog amendment) — not the full
+keep-both-halves-in-sync capability, which stays UNSCOPED. See
+`docs/FEATURES.md`'s new *Forms (AcroForm)* row, below.
+
+**★ `R186` MINTED — the shape both defects share, worth a standing rule
+because it is the second instance inside one session and a shape, not a
+coincidence: a guard keyed on a marker of a hazard fails OPEN, not
+closed, when the same hazard arrives WITHOUT that marker — and open
+failure is silent, because nothing on screen tells the operator anything
+was withheld.** The encryption guard keyed on `/Encrypt`'s presence and
+missed the wrapper hazard, which arrives with no `/Encrypt` at all.
+`fill_guards` keyed on the hazards it was told to check (encryption,
+hidden objects) and missed XFA, which was never added to the list. Both
+guards were correct for the case they were built against; neither was
+reached by the adjacent case. **Practical form: when writing or
+reviewing a guard that keys on a marker, ask what the same hazard looks
+like WITHOUT that marker before considering the guard complete.** A
+guard failing closed says "I cannot do this," which the operator can act
+on; a guard failing open says nothing at all. Full record: this entry.
+**Ceiling moves `R185` → `R186`; next free `R187`.**
+
+**Ledger for this filing (both commits).** **No new Pass ID for either
+commit** — both are guard/detection fixes to existing capabilities
+(document-open handling; Pass 7.0/7.1's fill path), filed without a Pass
+number, matching the project's existing "no Pass ID — root-cause defect
+fix" precedent for render fixes. Pass-family ceiling unchanged at
+**61.0**, next free **62**. Two commits cited by hash (`5039ecf`,
+`ce5642d`). `docs/FEATURES.md`: one new *Implemented* row under
+*Redaction & security* (unencrypted-wrapper detection), one new
+*Implemented* row under *Forms (AcroForm)* (XFA-fill staleness
+disclosure), the *Static-XFA hybrid read/fill* Planned row amended to
+name the interim disclosure now shipped, and the *Encryption* Planned
+row gets a short cross-reference to the wrapper-detection row.
+`docs/ARCHITECTURE.md`: **one new §12 entry** for the wrapper-detection
+design (marker choice, erratum note, warn-not-refuse rationale, the
+signature-`/Contents` forward-pointer for Pass 5). **Standing rules: R186
+MINTED**, ceiling **R185 → R186**, next free **R187**. Decision-record
+ceiling unchanged at **038**, next free **039** — neither commit is a
+numbered `docs/decisions/` record. **No `D:\dev\rag\rust\`/`egui\`
+finding — neither defect is Rust/egui-ecosystem-general.** **No
+`C:\personal_rag\pdf\` finding — both are pdfce's own guard-completeness
+defects, not an observation about how a real-world PDF producer diverges
+from spec.** Gate figures not independently re-run this entry — see the
+`96a6065` entry below for the reconciled test-count figure that covers
+this session's commits together; `ce5642d`'s own dispatch reported
+**`cargo test -p pdfce-core --lib` 1502 passed, 0 failed**; `cargo
+clippy --workspace --all-targets --all-features` **0**; `cargo fmt
+--check`, `check-ui-strings.sh` and `check-theme-colors.sh` all clean —
+**none independently re-run, no shell this dispatch** (hard rule 8).
+**Backup/git working-tree state not asserted anywhere in this filing** —
+check `D:\Dev\pdfce-backups\` and `git log`/`git status` directly. This
+is part of the **eighty-ninth** `SESSION_LOG.md`/`ROADMAP.md` joint
+filing (the eighty-eighth confirmed present by direct read before this
+entry was written).
+
+---
+
+### ★ `30c0940` closes the R151 debt `f83be5a` left on itself: border style, `/F` visibility, password and comb reach BOTH remaining shells — comb is disabled-and-explained, not offered-and-refused, and clears itself the moment its precondition stops holding — 2026-08-11 (eighty-ninth filing)
+
+**Sourcing.** No shell tool this dispatch. Engineer's dispatch text
+described the CLI flags, the GUI section and the comb self-clearing
+behaviour; recorded as reported, not independently re-grepped this
+filing given the volume of the other three commits in the same dispatch.
+
+**Filed against the existing `Pass 20.0` (R170), no new Pass ID** — same
+pattern as `f83be5a` itself: an extension of an already-shipped Pass's
+own capability stays on that Pass's ID rather than minting a new one.
+
+- CLI flags and a GUI section expose all four of `f83be5a`'s new
+  `NewTextField` properties (border style, `/F` visibility, password,
+  comb) on both remaining shells, discharging the R151 debt `f83be5a`
+  incurred by shipping core-only.
+- **Comb is disabled-and-explained, not offered-and-refused** — the GUI
+  does not let the operator tick a box the core verb will then refuse;
+  the control is greyed with the reason shown, and it **clears itself**
+  the moment its own precondition (`/MaxLen` present, `Multiline`/
+  `Password`/`FileSelect` all clear) stops holding, rather than staying
+  ticked-but-unreachable. Verified in the running GUI: grey at Max length
+  0, enabled at 9.
+- Verified on emitted bytes for the CLI: `/BS` with `/S /D` and `/W 2`,
+  `/F 36`, `/Ff 8192` — the four properties reach the saved file, not
+  just the in-memory model.
+- **`scratchpad/splice.py`**, new this commit — validates every anchor
+  before applying any substitution, refuses an ambiguous anchor rather
+  than guessing which occurrence was meant, and writes all-or-nothing.
+  Caught a four-way ambiguous `required: bool` anchor on first use, which
+  would otherwise have added password and comb options to the check-box
+  subcommand — a wrong-target edit this tool is built to make
+  impossible rather than to catch after the fact. Project-local tool, not
+  a `D:\dev\rag\rust\` finding (a text-editing-safety tool this project
+  now owns, not a Rust-ecosystem gotcha) — no RAG write for it.
+
+**Ledger for this filing.** No new Pass ID. `docs/FEATURES.md`: the
+existing *CREATE a form field* row's `f83be5a` addendum (*Forms
+(AcroForm)*) gets a short correction — R151 discharged for these four
+properties specifically; **`core`/`cli`/`gui` on that combined row stay
+`◐`/`◐`/`◐` UNCHANGED**, the row's own long-standing split (push
+buttons/tab order/per-type-detail-fields) is unaffected. `ARCHITECTURE.md`:
+not touched by this piece — a CLI-flag/GUI-widget wiring for an
+already-modelled core struct is not a crate-boundary or invariant
+change. Standing rules: no new mint here (R186 minted by the entry
+above, same filing); R151/R170 both cited. **No `D:\dev\rag\rust\`/
+`egui\` finding beyond the `splice.py` note above (project-local tool,
+not written to the RAG). No `C:\personal_rag\pdf\` finding.** Gate
+figures: none independently re-run, no shell this dispatch (hard rule
+8) — see the `ce5642d` entry above for the session's own reported
+figures. This is part of the **eighty-ninth** joint filing.
+
+---
+
+### ★ `96a6065` filed against `Pass 7.2`: three UNSOURCED format-script markers closed by measurement against the installed Acrobat, one of them by FALSIFYING pdfce's own already-shipped behaviour — plus two mechanical test-authoring failures that let `sepStyle 4` ship untested for two commits — 2026-08-11 (eighty-ninth filing)
+
+**Sourcing.** No shell tool this dispatch. Engineer's dispatch text
+described a seven-field probe form (stored value + one format script per
+field, controls beside each unknown) opened in the installed Acrobat.
+Findings below are recorded as reported, not independently re-measured.
+
+**Filed against the existing `Pass 7.2` (R170), no new Pass ID** — third
+addendum to that Pass's format-script scope, after the 2026-08-10
+posture-B ship and the eighty-seventh filing's date/time addendum.
+
+- **`sepStyle 4` is the Swiss thousands-separator convention** —
+  `1'234.56` (apostrophe thousands, period decimal), measured against a
+  `sepStyle 0` control showing `1,234.56` in the same probe document.
+  Previously undescribed at any evidence tier in this project. Now
+  implemented; moves out of `UNSOURCED`.
+- **`currStyle` confirmed inert** — styles 1 and 0 render identically
+  against the installed Acrobat. pdfce already ignored the flag; this
+  promotes that behaviour from assumption to measurement
+  (`currency_style_is_inert` — the test that also moved the `Pass 7.2`
+  baseline test count from 1485 to 1486; see the reconciliation
+  paragraph below).
+- **★ The percent finding FALSIFIED pdfce's own already-shipped
+  behaviour, not merely filled a gap.** The one prior source available
+  had an empty `AFPercent_Format` field display a bare `%`, and pdfce
+  reproduced exactly that, flagged in its own comment as possibly the
+  source clone's own quirk rather than confirmed Acrobat behaviour. The
+  installed Acrobat instead displays **`0.0%`** — percent coerces an
+  unreadable value to *zero* and formats it, where `AFNumber_Format` on
+  the same input leaves the field blank. A real asymmetry between the
+  two format families, and the opposite of what pdfce was doing.
+
+**The generalizable finding, kept distinct from the three individual
+corrections above: marking a fact as weakly-sourced is not the same as
+checking it.** The wrong percent behaviour was reproduced faithfully
+from a real prior source, disclosed as single-tier evidence at its own
+use site, and was still wrong — the flag made it cheap to find on the
+next pass, but a flag is a promise to check later, not a substitute for
+having checked. Recorded here as the pdfce-local instance; a
+`C:\personal_rag\claude_code\` methodology write-up is a candidate but
+NOT written this filing (it is neither PDF-domain nor Rust/egui-
+ecosystem, and the librarian has not yet judged it distinct enough from
+R182's existing "grep institutional memory first" shape to earn its own
+file) — flagged for a future filing's judgment rather than written
+speculatively here.
+
+**Two mechanical failures, unrelated to the format findings themselves,
+recorded because they explain how `sepStyle 4` shipped untested for two
+commits:** a line-range edit overwrote a `#[test]` attribute (Rust does
+not error on this — the function silently stops running as a test), and
+an earlier script asserted out mid-run after printing "ok" for an
+earlier edit but before its single write landed, so the run looked
+half-successful and was entirely unapplied. `scratchpad/splice.py`
+(shipped one commit later, `30c0940`, above) is the direct answer to
+both — anchor-validated, all-or-nothing.
+
+**Test-count reconciliation, resolving the eighty-eighth filing's own
+open flag on `f83be5a`'s "1494 passed" figure.** This commit's
+`currency_style_is_inert` moved the `Pass 7.2` baseline from 1485 to
+1486 **before** `f83be5a` was measured. `f83be5a` then added exactly 8
+(`edit.rs`'s `#[test]` count independently confirmed 101 → 109 by the
+eighty-eighth filing itself). 1486 + 8 = 1494, matching the dispatch's
+reported figure exactly — nothing was uncounted; the two commits simply
+landed in an order where the baseline the eighty-eighth filing checked
+against (1485) was already one behind. **Footer added to the
+eighty-eighth filing's own `f83be5a` Shipped entry, below, per the
+append-only convention** (that entry's own text is not rewritten; a
+dated correction is appended to it).
+
+**Ledger for this filing.** No new Pass ID. `docs/FEATURES.md`: existing
+*Recognize, classify + disclose form-JavaScript-driven fields* row
+(*Forms (AcroForm)*) gets a short addendum for the three closed markers
+— `core`/`cli` unchanged, `gui` stays `[ ]` (R151, no shell reaches any
+of this row's helpers). `ARCHITECTURE.md`: not touched — a format-script
+value-table correction inside an already-documented module is not a
+crate-boundary or invariant change. Standing rules: no new mint (R186
+minted by the first entry above, same filing). **No `D:\dev\rag\rust\`/
+`egui\` finding. No `C:\personal_rag\pdf\` finding** — `AFPercent_Format`/
+`sepStyle`/`currStyle` are AcroForm-JavaScript authoring-tool behaviour
+internal to Acrobat, not a real-world PDF *producer* divergence from
+spec; the personal_rag/pdf scope is producer behaviour (Word/
+LibreOffice/CAD exporters/scanners), not Acrobat's own scripting engine.
+Gate figures: **`cargo test -p pdfce-core --lib` 1502 passed, 0
+failed** (matches the `ce5642d` entry's own figure — this is the SAME
+final test run covering all four commits filed this session, not a
+separate number); **`cargo clippy --workspace --all-targets
+--all-features` 0**; `cargo fmt --check`, `check-ui-strings.sh` and
+`check-theme-colors.sh` all clean — **none independently re-run, no
+shell this dispatch** (hard rule 8). **Backup/git working-tree state not
+asserted anywhere in this filing** — check `D:\Dev\pdfce-backups\` and
+`git log`/`git status` directly. This is part of the **eighty-ninth**
+`SESSION_LOG.md`/`ROADMAP.md` joint filing.
+
+---
+
+### ★ `f83be5a` filed against `Pass 20.0`: a text field can now carry a border style, a visibility flag, a password flag and a comb flag — four properties `NewTextField` could not express before, all core-only (R151) — 2026-08-11 (eighty-eighth filing)
+
+**Sourcing.** No shell tool this dispatch; `git log`/`git show f83be5a` not
+run (hard rule 8). The engineer's dispatch text carried the commit subject,
+the four properties, the §12.5.3/§12.5.4/Table 228 citations, and an
+"eight tests" figure. **Confirmed live** via `Read`/`Grep` against the
+working tree instead: `crates/pdfce-core/src/edit.rs:652` (`BorderStyle`,
+five variants — Solid/Dashed/Beveled/Inset/Underline), `:721`
+(`Visibility`, four variants — VisibleAndPrints/ScreenOnly/PrintOnly/
+Hidden), `:790` (`NewTextField`)'s `password`/`comb`/`visibility` fields
+(`:821`, `:831`, `:835`), the `with_border`/`with_visibility`/
+`with_password`/`with_comb` builders (`:1172`–`:1196`), and
+`comb_conflict` (`:1271`) refusing Table 228 bit 25's precondition by
+name. **Test count independently confirmed at exactly 8, by name:**
+`every_border_style_reaches_the_widget`,
+`a_zero_border_width_is_a_setting_not_an_omission`,
+`visibility_writes_the_flag_word_that_matches_its_name`,
+`the_authoring_defaults_reproduce_the_previous_output`,
+`the_password_flag_reaches_the_field`,
+`a_comb_field_breaking_its_precondition_is_refused_by_name`,
+`a_comb_field_meeting_its_precondition_is_authored`,
+`a_refused_comb_stages_nothing` (all `crates/pdfce-core/src/edit.rs`,
+lines 16523–16677). **Not reconciled:** the dispatch's "1494 passed"
+figure against the eighty-seventh filing's own confirmed baseline of
+1485 — 1485 + 8 = 1493, one short of 1494; plausibly a ninth test this
+grep did not name, not independently accounted for here. **Independently
+confirmed: this capability is core-only.**
+`crates/pdfce-cli/src/main.rs:14913`'s `cmd_add_text_field` constructs
+`NewTextField` via `.with_flags(...)` only — zero calls to
+`.with_border`/`.with_visibility`/`.with_password`/`.with_comb` anywhere
+in the file, and zero CLI flags named `--border`/`--password`/`--comb`/
+`--visibility`. `crates/pdfce-gui/src/main.rs:18632`'s field-placement
+path is the same — bare `NewTextField::new(...)`, no builder chained.
+**R151 applies directly:** `core [x]` / `cli [ ]` / `gui [ ]`, not yet
+reachable from either shell. **Not independently re-run:** the
+`cargo test`/clippy/fmt figures below.
+
+**Shipped — filed against the existing `Pass 20.0` (R170: an extension of
+an already-shipped Pass's own capability stays on that Pass's ID rather
+than minting a new one) — no new Pass ID:**
+
+- `f83be5a` — **"four authoring properties a field could not have, and
+  one the spec forbids."** `NewTextField` (Pass 20.0's own struct) gains
+  `/BS` border style + width (§12.5.4 Table 166), `/F` visibility
+  (§12.5.3 Table 165), the password flag (`/Ff` bit 14), and the comb
+  flag (`/Ff` bit 25) — all core-only, eight new tests (confirmed above).
+  - **"Border style hard-coded Solid" was truer than the description
+    sounded.** Before this commit pdfce wrote no `/BS` at all — not the
+    same thing as writing nothing: Table 166 defaults `/S` to `S` and
+    `/W` to 1, so every field pdfce ever authored had a solid one-point
+    border **by omission** — a choice made by not making one.
+    `the_authoring_defaults_reproduce_the_previous_output` asserts the
+    new default reproduces exactly that prior, unwritten choice; the
+    addition changes nothing for a caller that doesn't ask.
+  - **Comb is refused, not silently accepted, when Table 228 bit 25's
+    own precondition is unmet** — comb requires `/MaxLen` present and
+    `Multiline`/`Password`/`FileSelect` all clear, and pdfce's ambiguity
+    register already records this as one of four producer gates with
+    **no reader recovery rule at all**: a file that breaks the
+    precondition has no defined rendering, so authoring one would author
+    a disagreement between viewers, not a field. Each of the three
+    failure shapes (no `/MaxLen`; comb+multiline; comb+password) is
+    refused by name with the specific unmet clause in the error string,
+    and `a_refused_comb_stages_nothing` proves the refusal runs before
+    any object is staged — a rejected spec cannot half-create a field.
+  - `Hidden` (`/F 2`, suppresses screen AND print) and `PrintOnly`
+    (`/F 36`, prints but never shows) are separate `Visibility` variants
+    rather than composed from raw flag bits, because Table 165 gives
+    them genuinely different meanings and collapsing them risks silently
+    un-printing a field the operator asked to print.
+
+**Ledger for this filing.** **No new Pass ID** — `f83be5a` filed against
+the existing `Pass 20.0`, extending `NewTextField`'s own authoring
+surface. Pass-family ceiling unchanged at **61.0**, next free **62**. One
+commit cited by hash (`f83be5a`) for `check-commits-filed.py`'s
+literal-hash join. `docs/FEATURES.md`: the existing *CREATE a form
+field* row (*Forms (AcroForm)*) gets a short addendum naming the four
+new core-only properties, R151-flagged — `core`/`cli`/`gui` on that
+combined row stay `◐`/`◐`/`◐` UNCHANGED (the row's own long-established
+split; push buttons/tab order/per-type-detail-fields were already why
+none is `[x]`, and this addition doesn't move any of the three).
+`docs/ARCHITECTURE.md`: **not touched by this piece** — a per-field
+authoring-property addition inside an existing verb's own struct is not
+a crate-boundary or invariant change; see the DRM-scope entry below (a
+separate §12 addition, same filing) for what this filing DOES add to
+`ARCHITECTURE.md`. **Standing rules: no new mint** — R151 and R170 both
+cited, not re-minted; ceiling stays **R185**, next free **R186**.
+Decision-record ceiling unchanged at **038**, next free **039**. **No
+`D:\dev\rag\rust\`/`egui\` finding. No `C:\personal_rag\pdf\` finding**
+— this is pdfce's own authoring-surface completeness, not a real-world-
+producer-divergence observation or a Rust/egui-ecosystem finding.
+**Operator-question ceiling moves `(bh)` → `(bi)`, next free `(bj)`** —
+see the new DRM-removal question, below, same filing. Gate figures
+relayed per the operator's dispatch — `cargo test -p pdfce-core --lib`
+**1494 passed, 0 failed** (NOT reconciled against the 1485+8=1493
+arithmetic above); `cargo clippy --workspace --all-targets --all-features`
+**0**; `cargo fmt --check` clean — **none independently re-run, no shell
+this dispatch** (hard rule 8). **Backup/git working-tree state not
+asserted anywhere in this filing** — check `D:\Dev\pdfce-backups\` and
+`git log`/`git status` directly. This is the **eighty-eighth**
+`SESSION_LOG.md`/`ROADMAP.md` joint filing (the eighty-seventh confirmed
+present by direct read before this entry was written).
+
+**★ AMENDED 2026-08-11 (eighty-ninth filing) — the "NOT reconciled"
+figure above IS now reconciled, by a fact this entry didn't have when it
+was written: `96a6065` (filed in the eighty-ninth session, see the
+Shipped entry above this one) added `currency_style_is_inert`, moving
+the `Pass 7.2` baseline from 1485 to 1486 BEFORE this commit's own test
+run. 1486 + 8 = 1494 — the figure this entry reported. Not a ninth
+untested test; the two commits simply landed in an order this entry's
+own baseline didn't yet reflect. Full accounting: the `96a6065` Shipped
+entry, above.**
+
+---
+
+### ★ Backlog filing, no Pass ID: Adobe XFA and DRM support, parsed five ways — standard encryption reinforced onto its already-scoped `Pass 5`, a permission-flag disclosure correction, a sourced XFA-deprecation finding plus a new read/fill recommendation, a named-impossible DRM bucket, and a new operator question on stripping protection without a password — 2026-08-11 (eighty-eighth filing, same session as `f83be5a` above)
+
+**Sourcing.** Operator request, relayed verbatim by the engineer, already
+citing `iso32000__delta__pdf20_pass1.md` (spec RAG) by line number and
+this file's own existing Encryption/XFA Backlog buckets by content — not
+independently re-read against the spec RAG file this filing (no
+dispatch to `pdfce-spec-librarian` requested or needed; the citation was
+to confirm a fact already in this file's own ledger, not to source a new
+one). **Grepped this file first, per R156**, before writing anything
+below — `DRM`, `LiveCycle`, `AEM`, `FileOpen`, `Locklizard` all checked;
+only `FileOpen` had a prior hit (the `/Encrypt` census's one
+undetermined-R file, cited below).
+
+**No new Pass ID minted by this filing.** All five parsed items land as
+amendments to two EXISTING Backlog buckets, one NEW Backlog bullet
+(nothing to schedule — see below), and one NEW lettered operator
+question — not as scheduled engineering work. Scoping any of this into
+a real Pass is a separate, later act.
+
+**1 — Standard PDF encryption (§7.6): the operator's request IS Pass 5,
+already fully scoped.** No new bucket. Amendment appended to the
+existing **Encryption** Backlog bucket, below, recording the renewed
+2026-08-11 operator request as an additional, independent priority
+signal alongside the bucket's existing decision-007/010 scoping — Pass
+5 stays on the fallback/interleave track (decision 010 candidate D)
+unless the engineer chooses to promote it; this filing does not promote
+it, only records that the operator has now asked for it directly, twice
+(the original 2026-07-31 corpus-driven scoping, and this session's
+feature request).
+
+**2 — Permission flags (`/P`): same bucket, same mechanism, a
+description correction owed.** The existing Encryption bucket text
+covers §7.6's `/Encrypt` dict broadly but never named `/P` permission
+bits (print/modify/copy/annotate/fill/accessibility-extract/assemble/
+high-quality-print) as their own scope item with their own disclosure
+framing. Amendment below adds this, with the operator's own caution
+preserved verbatim in spirit: **these are enforced by reader
+CONVENTION, not cryptography** — the file must already be decryptable
+to be displayed at all, so honouring `/P` is Acrobat-parity behaviour,
+never a security boundary, and must never be filed or described using
+the word "security."
+
+**3 — Removing protection without the password: filed as a NEW operator
+question, not a Pass, not a refusal.** See the new **(bi)** entry under
+*Open operator questions*, below. Recommendation carried into the
+question per the operator's own text: support decrypt-with-supplied-
+password (ordinary, unrestricted); do not build a restriction-stripper
+that operates without one. **Not decided here** — this librarian does
+not rule on operator questions, only files them.
+
+**4 — Adobe LiveCycle/AEM Document Security + third-party DRM handlers
+(FileOpen, Locklizard, similar): recorded as IMPOSSIBLE, not declined.**
+New Backlog bullet added below, immediately after the amended Encryption
+bucket. This closes a standing inconsistency this filing found rather
+than created: `docs/FEATURES.md`'s *Cannot* section already asserted
+*"AEM Document Security / persistent DRM with remote revoke — requires
+an Adobe-hosted rights server"* (pre-existing, not from this session),
+but **`ROADMAP.md` itself carried no matching reasoning anywhere** —
+grepped for `LiveCycle`/`AEM`/`rights server` before writing, zero hits.
+Per `docs/FEATURES.md`'s own header, *"`ROADMAP.md` stays authoritative
+if the two ever disagree"* — a `FEATURES.md` claim with no `ROADMAP.md`
+backing is exactly the drift shape that line exists to prevent, even
+though in this case the claim itself was correct. This filing gives the
+existing `FEATURES.md` line its underlying reasoning for the first time
+and broadens its wording to name third-party handlers explicitly (the
+operator's own examples), matching a small piece of corroborating
+evidence this project's own corpus already holds: the 2026-07-31
+`/Encrypt` census (decision 007) found **1 of 19,940 scanned organic
+files** using **FileOpen** DRM — recorded then only as "non-Standard
+security handler, never silently openable by any reader," now cross-
+referenced from the new bullet as a live, if tiny, data point that a
+proprietary handler is something pdfce's own corpus has already met and
+already correctly refused to open, not merely a hypothetical.
+
+**5 — XFA, split three ways, one already done, one newly recommended,
+one a process finding about this file's own currency.** Amendment
+appended to the existing **XFA** Backlog bucket, below.
+- **5a (recognise + disclose) — VERIFIED ALREADY SHIPPED, confirmed live
+  this filing** via `Grep` against
+  `crates/pdfce-core/src/forms.rs` (`XfaPresence` enum, `None`/`Stream`/
+  `PacketArray { packets }`) and `crates/pdfce-cli/src/main.rs:7986`–
+  `:7997` (`list-fields`'s `xfa=<none|stream|packets:N>` summary
+  column). Shipped at **`Pass 7.0`**, 2026-08-01 — this file's own
+  Pass 7.0 entry already names `XfaPresence` (line ~29622 of this file)
+  but **`docs/FEATURES.md` carried no row for it at all** (grepped,
+  zero hits for `XfaPresence`) — a genuine gap, not a stale claim; new
+  *Implemented* row added this filing (see the `docs/FEATURES.md`
+  ledger line, below).
+- **5b (static-XFA hybrid READ/FILL) — NEW recommendation, distinct
+  from the ALREADY-REFUSED hybrid *authoring* case.** Decision 020
+  §3.2.2/§10.5 refuses creating a NEW AcroForm field on a document that
+  also carries static XFA (a one-sided add would make an XFA-aware and
+  a plain viewer disagree on field count) — that refusal is unaffected
+  and unchanged. **Reading and filling the AcroForm half of a hybrid
+  document, and keeping the XFA half in step, is a different act**:
+  pdfce already fills the AcroForm half (Pass 7.0/7.1); the gap is that
+  an XFA-aware viewer opening the same file afterward would still show
+  the pre-fill XFA data, silently disagreeing with what pdfce just
+  wrote. **UNSCOPED, no Pass ID** — new Backlog text below and a new
+  `docs/FEATURES.md` *Planned* row (see ledger, below).
+- **5c (dynamic XFA) — unchanged, `out_of_scope` since decision 020,
+  reinforced rather than reopened.** `iso32000__delta__pdf20_pass1.md`
+  line 66 (spec RAG, cited by the operator's own dispatch, not
+  independently re-read this filing) records **XFA as deprecated at the
+  ISO level in ISO 32000-2**, including the `NeedsRendering` catalog
+  entry — a stronger and different fact than "Acrobat's exact
+  version-level deprecation date," which is the specific gap the
+  standing `CLAUDE.md`/`ARCHITECTURE.md` open item and this file's own
+  Open operator question **(p)** were both still asking about.
+  **Process finding, worth naming on its own:** this is the SAME shape
+  as the cross-RAG-deliverable failure `pdfce-engineer.md`'s own working
+  notes already record (a producing document answered a question a
+  consuming document still listed as open, and nothing was looking at
+  the gap between them) — here the gap ran between the spec RAG and
+  this project's own `CLAUDE.md`, not between two RAGs, but the
+  mechanism is identical: an answer existed, filed correctly, and nobody
+  connected it to the standing question it partially closed. **This
+  librarian cannot edit `CLAUDE.md`** (outside the five owned tiers,
+  same boundary `LEGAL.md` sits behind) — flagged to the engineer/
+  operator in this report, not actioned here. Question **(p)** itself
+  is UNCHANGED by this filing (still open, still Ken's call whether to
+  retire or re-scope it) — the ISO-level fact strengthens the case for
+  the re-scoping decision 020 already recommended, it does not decide
+  the question.
+
+**Amendments applied to this file, in place, at the existing bucket
+locations** (see the Encryption and XFA Backlog bullets, and the new
+DRM bullet, all below in their normal reading position — this entry is
+the record of WHY, not a duplicate of the bucket text itself).
+
+---
+
+### ★ `ed6db1c` filed against `Pass 7.2`: the format layer's last three declines now render (`AFDate_Format`/`AFTime_Format`/`AFDate_FormatEx`) — the grammar is fully sourced, the read-back parse is not and DECLINES rather than guesses; an inverted property test caught before it could invert a correct table — 2026-08-11 (eighty-seventh filing)
+
+**Sourcing.** No shell tool this dispatch. The engineer's dispatch text carried
+the commit subject, the design points, the process finding, and gate
+figures — not a staged `git log`/`git show` file, and not independently
+re-run (hard rule 8). **Confirmed live** via `Read`/`Grep` against the
+working tree instead: `crates/pdfce-core/src/form_script/datetime.rs`'s
+own header doc comment verbatim-matches the "two halves, only one
+sourced" framing, the case-sensitivity table, the longest-match ordering
+rationale, and the "no locale, no time zone" scope note; `DateTime`/
+`is_valid`/`weekday` (Sakamoto's method, `rem_euclid` guarding a negative
+year) confirmed at lines 54–115; the `tokens_match_longest_first` property
+test confirmed at line 453, asserting **an earlier table entry must not be
+a prefix of a later one** — the correct direction. `format.rs:449`–`:494`
+confirmed `predefined_datetime` declines an out-of-range index BY NAME
+(`FormatOutcome::UnknownStyle`) rather than falling back to the raw index
+as a literal string, and `date_through` confirmed returning
+`FormatOutcome::NotADate` — a distinct outcome from an unsupported helper —
+when `datetime::parse` returns `None`. **Not reconciled:** `grep` counts
+**11** `#[test]` functions in `datetime.rs` against the dispatch's "~15
+tests" figure; the difference is plausibly `format.rs`'s own integration
+tests for the three newly-wired helpers, not counted separately here.
+**Not independently re-run:** the stated `cargo test -p pdfce-core --lib`
+(1485 passed, 0 failed), clippy (0), and fmt-clean figures below.
+
+**Shipped — filed against the existing `Pass 7.2` (R170: a same-session/
+same-capability extension of an already-shipped Pass stays on that Pass's
+own ID rather than minting a new one), no new mint:**
+
+- `ed6db1c` — **"dates format, and an ambiguous one refuses rather than
+  guessing."** New `pdfce-core` module `form_script/datetime.rs`
+  (11 `#[test]` functions, live-confirmed above), wired into
+  `form_script/format.rs`. This closes the last three declines in the
+  posture-B format layer `Pass 7.2` shipped — `AFDate_Format`,
+  `AFTime_Format`, `AFDate_FormatEx` now render.
+  - **The design point the whole module is built around: a grammar and a
+    parse have different evidential footing, and the module treats them
+    differently rather than pretending both are equally sourced.** The
+    **grammar** — all 20 tokens, both predefined tables (14 date formats,
+    4 time) — is fully sourced, corroborated by the token set documented
+    for `util.printd` (Adobe-primary). The **parse** — how Acrobat reads a
+    stored date string back out of a field — is sourced **nowhere**, so
+    `datetime::parse` accepts only shapes that cannot be read two ways
+    (ISO-ordered `yyyy-mm-dd`, and §7.9.4's `D:YYYYMMDDHHmmSS`) and
+    declines the rest. `03/04/2026` is refused outright — 3 April to most
+    of the world, 4 March in the United States, and the stored value
+    settles nothing. **The decline is its own outcome**,
+    `FormatOutcome::NotADate`, deliberately distinct from "unsupported
+    helper" — pdfce understood the helper perfectly and could not read the
+    *document's* value, and an operator acts differently on each fact.
+  - **The grammar is case-sensitive and that IS the grammar** — `m`/`mm`
+    is the month, `M`/`MM` the minutes; `h`/`hh` 12-hour, `H`/`HH`
+    24-hour. A case-insensitive tokeniser corrupts every string carrying
+    both, and `"mm/dd/yyyy HH:MM"` is the commonest such string there is.
+  - **Out-of-range predefined indices decline by name** rather than
+    falling back to treating the raw index as a literal format string —
+    one reimplementation does that; nothing confirms Acrobat does.
+  - **A zone offset on a PDF date string is ignored, not applied** — a
+    form field holds a wall-clock date, and shifting it would change what
+    the operator typed.
+  - Impossible dates refuse (`2026-02-31`), leap years checked properly.
+  - **★ A process finding, the third of its family this session: a
+    property test can itself be inverted, and its failure argues for the
+    wrong fix.** `tokens_match_longest_first` failed on first run — the
+    TABLE was correct; the assertion had been written backwards (asserting
+    a later token must not be a prefix of an earlier one, when the real
+    invariant is the reverse). Reading that failure as "the code is
+    broken" would have reordered a correct table into a broken one, and
+    the resulting bug would have been silent — only format strings using
+    the affected tokens would misrender. **A property test that is itself
+    inverted is a confident wrong answer wearing the costume of rigour**:
+    it looks *more* trustworthy than an example-based test, and its
+    failure message actively argues for the wrong fix. Mitigation: when a
+    new test fails on its first run, check the test before the code.
+    Judged to generalize beyond pdfce — filed to `C:\personal_rag\claude_code\`
+    (see *Findings + decisions*, below), alongside the text-anchored-splice
+    lesson from the prior (eighty-sixth) filing; both are about the same
+    thing, a mechanism that produces plausible-looking wrongness.
+
+**Findings + decisions:**
+- The inverted-property-test finding above is filed in full at
+  `C:\personal_rag\claude_code\lesson_20260811_inverted_property_test_assertion_argues_for_the_wrong_fix.md`
+  — `claude_code/index.md` and the master `C:\personal_rag\index.md` both
+  updated this filing.
+- No `D:\dev\rag\rust\`/`egui\` finding — nothing ecosystem-general
+  surfaced this filing (the finding is about testing methodology in
+  general, not a Rust-specific mechanism, hence `claude_code/` rather
+  than `D:\dev\rag\rust\`).
+- No `C:\personal_rag\pdf\` finding — the grammar-vs-parse sourcing split
+  and the refusal-on-ambiguity design are pdfce's own engineering
+  decisions about an UNSOURCED Acrobat behaviour, not an observation about
+  how a real-world PDF producer's files diverge from spec.
+
+**Still in flight:** `docs/NEXT_SESSION.md` was rewritten by the engineer
+this session (not this librarian's edit) and now correctly names the
+forms-authoring gap cluster and the two live-Acrobat spot-checks
+(`sepStyle` 4 and `currStyle`, both `UNSOURCED` and declined by name) as
+next tasks. The portable build in `D:\builds\` is **stale** (predates
+Reset Form and this commit) — flagged, not a claim this librarian can
+verify further without a shell.
+
+**Ledger for this filing.** **No new Pass ID** — `ed6db1c` filed against
+the existing `Pass 7.2` (R170), the second commit under that Pass's own
+ID (after `29e5e92`/`e61f075`). **Pass-family ceiling unchanged at
+`61.0`, next free `62`.** `docs/FEATURES.md`: the existing *Forms
+(AcroForm)* row for `Pass 7.2` (form-script recognise/classify/disclose +
+native recompute) gets its description extended to name the date/time
+format helpers now rendering — **`core [x]` / `cli [x]` / `gui [ ]`
+UNCHANGED** (no GUI surface consumes the format layer yet, same as the
+row's existing state), row stays under *Implemented* (it was already
+moved there at the eighty-fourth filing). `docs/ARCHITECTURE.md`: **one
+new dated §12 entry** (2026-08-11), an addendum to the 2026-08-10 Pass
+7.2 decision record — the grammar-sourced/parse-unsourced split, the
+unambiguous-shapes-only parse acceptance list, and the case-sensitivity/
+out-of-range/zone-offset decisions. **Standing rules: no new mint** — R170
+cited (a same-capability extension stays on the Pass's own ID); ceiling
+stays **R185**, next free **R186**. Decision-record ceiling unchanged at
+**038**, next free **039** — this is a body-section addendum, not a new
+numbered decision. `C:\personal_rag\claude_code\`: **one new lesson**,
+that subject's own `index.md` and the master `C:\personal_rag\index.md`
+both updated this filing. **No `D:\dev\rag\rust\`/`egui\` finding. No
+`C:\personal_rag\pdf\` finding** (see *Findings + decisions*, above).
+Operator-question ceiling unchanged at **(bh)**, next free **(bi)**. Gate
+figures relayed per the engineer's report — `cargo test -p pdfce-core
+--lib`: **1485 passed, 0 failed**; `cargo clippy --workspace --all-targets
+--all-features`: **0**; `cargo fmt --check`: clean — **NOT independently
+re-run, no shell this dispatch** (hard rule 8). **Backup/git working-tree
+state not asserted anywhere in this filing** — the engineer should check
+`D:\Dev\pdfce-backups\` and `git log`/`git status` directly. This is the
+**eighty-seventh** `SESSION_LOG.md`/`ROADMAP.md` joint filing (the
+eighty-sixth confirmed present by direct read before this entry was
+written). **This was the only commit `check-commits-filed.py` still
+listed after the eighty-sixth filing, per the operator's own confirmation
+relayed by the engineer** — not independently re-run by this librarian.
+
+---
+
+### ★ `Pass 61.0` — reset a form to its §12.7.5.3 defaults, core+CLI+GUI in one session; the CLI/GUI eligibility rule was independently re-derived twice until a shared `reset_preview` closed R171's exact gap — 2026-08-11 (eighty-sixth filing)
+
+**Sourcing.** No shell tool this dispatch. The engineer's dispatch text
+carried both commit subjects, the spec reasoning, the design points, and
+two process findings; `git log`/`git show` were not run (no shell).
+**Confirmed live** via `Read`/`Grep` against the working tree instead:
+`crates/pdfce-core/src/edit.rs:11750` (`reset_preview`) and `:11879`
+(`reset_form`), both doc comments verbatim-matching the engineer's
+account of §12.7.5.3's two `shall`s, the `/DV`-inheritance resolution
+through `Field::default_value`, the three skip categories, and the
+"no `/DV` written, no recompute" design notes; `:5115` (`ResetIneligible`),
+`:5139` (`ResetPreviewRow`), `:5169` (`ResetOutcome`);
+`crates/pdfce-cli/src/main.rs:2184` (`Command::ResetForm`), `:8226`
+(`cmd_reset_form`, its dry-run-by-default contract, the `to=<removed>`
+disclosure); `crates/pdfce-gui/src/main.rs:7603`–`:7658` (the "Reset to
+defaults" section, calling `reset_preview(None)`/`reset_form(None)`,
+with a comment citing R171 by name). **Not independently re-run:** the
+eleven-test count and the `cargo test`/clippy/fmt/gate figures below
+(relayed per the engineer's report).
+
+**Shipped — two commits.**
+
+- **`7d2b71b`** — "reset a form to its defaults, and remove the values
+  that have none." `EditSession::reset_form`/`reset_preview`
+  (§12.7.5.3), `pdfce-cli reset-form` (plan by default, `--apply
+  --output`, `--field NAME` repeatable, `--verify-undo`), and the GUI's
+  collapsed "Reset to defaults" Forms-panel section.
+- **`7c13b97`** — "test the preview against the act it previews, not
+  against itself." Corrects the first commit's own test shape — the
+  discipline the title names is the discipline the commit applies to
+  its own predecessor.
+
+**The spec content, filed as the record a future implementation would
+otherwise get wrong.** §12.7.5.3 has two `shall`s and the second is the
+trap: `/DV` present ⇒ `/V := /DV`; **`/DV` absent ⇒ `/V` is REMOVED**,
+not blanked — an absent key and a key holding `()` are different bytes,
+a different incremental-save delta, and (for a choice field, §12.7.4.4)
+a different meaning. `/DV` is **inheritable** (Table 220), so the
+branch is chosen from `Field::default_value` — the already-RESOLVED
+projection — never from the field's own raw dictionary; testing the raw
+dict would send every child of a parent default down the removal branch
+and silently discard it. **Three skip reasons, counted separately**,
+not folded into one total: pushbuttons (§12.7.5.3 says the action has
+no effect on them; §12.7.4.2.2 forbids them a `/V` at all), read-only
+fields, and signature fields — whose `/V` *is* the signature, so
+folding a signature skip into a generic "skipped" count would tell an
+operator nothing about whether their signature survived. **`/DV` is
+never written by a reset** — writing it would redefine what a *later*
+reset restores, invisible until that second reset produces a different
+answer than the first. **Calculated fields are reset and NOT
+recomputed** — ISO is silent on whether a reset re-runs `/CO`, and
+fusing the two would hide one operation inside another; an operator
+wanting both resets, then recomputes (`Pass 7.2`), and sees each result
+before the next. This closes one of the two open questions recorded in
+`docs/NEXT_SESSION.md`'s "Start here: Reset Form" section — recorded
+here as DECIDED, with the reasoning above, not merely re-stated.
+
+**Process finding 1 — R171's exact shape, shipped and then removed in
+the same two commits.** `7d2b71b`'s own CLI dry run and GUI panel each
+independently derived reset eligibility and target values — two
+implementations of one rule, free to drift, and the drift would have
+shown only as the two shells disagreeing about how many fields a reset
+touches. `reset_preview` (cited by name in `reset_form`'s own doc
+comment, `edit.rs:11738`) now owns the rule; both shells render it
+rather than recompute it. **Standing rule R171 CITED, not re-minted**
+— this is a live instance of the exact rule, not a new shape. It paid
+for itself immediately: neither shell had distinguished "would change"
+from "already at its default" before `reset_preview` existed, and the
+CLI's dry-run summary line had been hard-coded to `reset=0 defaulted=0
+removed=0` — always zero, always wrong, for as long as the duplicated
+logic stood.
+
+**Process finding 2 — a text-anchored source splice detached a
+declaration from its attributes, twice in the same session.**
+`#[allow(clippy::too_many_arguments)]` silently transferred from
+`regen_field_appearance` to the newly-inserted `reset_form` when the
+insertion landed between them; a doc comment was detached the same way
+when `reset_preview` was inserted. Both surfaced only as a lint warning
+on code the engineer had not touched — the tell that something upstream
+had moved. Filed as a new finding,
+`C:\personal_rag\claude_code\lesson_20260811_text_anchored_insertion_detaches_a_preceding_attribute_or_doc_comment.md`
+— judged to generalize beyond pdfce (a property of how text-anchored
+patch application interacts with any language's "attribute/doc-comment
+binds to the NEXT declaration" convention, not of PDF or of this
+codebase), so it goes to `claude_code/`, not into this session's own
+record alone.
+
+**Noted, not filed as a RAG lesson (bar not met — trivially
+derivable).** A GUI screenshot showed the new panel section missing
+because the binary was launched *while the release build was still
+running* — Windows cannot replace a running executable's bytes, so the
+stale prior build looked exactly like an unwritten feature.
+`tools/package-portable.py`'s own header already documents this hazard
+for packaging; the same trap applies to ad-hoc verification runs, noted
+here rather than in a new file.
+
+**Ledger for this filing.** **New Pass ID minted: `Pass 61.0`** —
+grepped free before minting per R156 (zero prior hits for `Pass
+61`/`Pass 61.0` in this file). **Pass-family ceiling moves from 60.0 to
+61.0, next free 62.** **Two commits cited by hash** (`7d2b71b`,
+`7c13b97`) for `tools/check-commits-filed.py`'s literal-hash join —
+both touch `crates/`, neither touches only `docs/`, so both need
+citation and both now have it. `docs/FEATURES.md`: **new row under
+*Forms (AcroForm)*** — Reset Form, `core [x]` / `cli [x]` / `gui [x]`
+— **all three ticked in one filing**, unusual enough on its own to
+note (R151's core-only-capability watch does not apply here). Never
+appeared in *Planned* — scoped and shipped inside the session that
+would have written the Planned row, same shape as `Pass 60.0`'s
+colour-pipeline row. `docs/ARCHITECTURE.md`: one new dated §12 entry
+(2026-08-11) carrying the §12.7.5.3 decision content above (the
+two-`shall`s reading, the resolved-`/DV` inheritance choice, the
+three-way skip split, the never-write-`/DV` and never-recompute
+decisions). **Standing rules: no new mint** — R171 cited, not
+re-minted; ceiling stays **R185**, next free **R186** (per the
+eighty-fifth filing's own citation — **not independently re-verified
+against `tools/check-ledger-numbers.py`, no shell this dispatch**).
+Decision-record ceiling unchanged at **038**, next free **039** — the
+new §12 entry is a dated architecture-log entry, not a numbered
+`docs/decisions/` record. **`C:\personal_rag\claude_code\`: one new
+lesson** (text-anchored attribute/doc-comment detachment), that
+subdirectory's own `index.md` and the master `C:\personal_rag\index.md`
+both updated this filing. **No `D:\dev\rag\rust\`/`egui\` finding** —
+nothing rendering/toolchain-general surfaced. **No
+`C:\personal_rag\pdf\` finding** — the §12.7.5.3 content above is
+canonical spec reasoning belonging in `ARCHITECTURE.md`'s decision log,
+not a real-world-producer-divergence finding (hard rule 6's boundary).
+Operator-question ceiling unchanged at **(bh)**, next free **(bi)**.
+Gate figures relayed per the engineer's report — **full workspace
+`cargo test`: 81 suites, 3209 passed, 0 failed** (taken at `7d2b71b`,
+before the four `reset_preview` tests the second commit added — eleven
+tests total across the two commits is the engineer's own count, not
+independently summed here from a visible per-file breakdown); `cargo
+clippy --workspace --all-targets --all-features`: **0**; `cargo fmt
+--check`, `check-ui-strings.sh`, `check-theme-colors.sh`: clean;
+`check-commits-filed.py`/`check-passes-filed.py`/
+`check-ledger-numbers.py`/`check-one-commit-per-command.py`: clean as
+of `c5e8bfa` (the commit immediately prior to this filing's two) —
+**none independently re-run, no shell this dispatch** (hard rule 8).
+**Backup/git working-tree state not asserted anywhere in this filing**
+— the engineer should check `D:\Dev\pdfce-backups\` and `git
+log`/`git status` directly. `docs/NEXT_SESSION.md`: **not edited**
+(engineer-owned, per its own header and per this dispatch's explicit
+instruction) — its "★ Start here: Reset Form" section is now stale (the
+work it names is done) and its "11-commit backlog" note is stale (the
+eighty-fifth filing cleared it); **flagged here for the engineer, not
+corrected**, since only the engineer edits that file.
+
+---
+
 ### ★★★ PRINTING BECOMES REAL — spooling, a GUI dialog, verification against a live spooler, orientation/duplex, and a four-way comments-and-forms filter complete `Pass 55.2`; imposition (N-up, booklet, poster) ships as `Pass 59.0` and closes its own R83 debt mid-dispatch; content-stream colour spaces + PDF functions ship as `Pass 60.0`, retiring the neutral stand-in for spot colour; `Pass 7.2`'s hash citations completed — ELEVEN COMMITS FILED FROM THE BASELINE GATE (ten at dispatch, one arriving mid-session), and a doc comment asserting an invariant nothing enforced — 2026-08-10 (eighty-fifth filing)
 
 **Sourcing.** No shell tool this dispatch. The engineer staged the full commit messages for eight commits (oldest to newest: `3619705`, `8ad0529`, `fc42388`, `b2913c1`, `72ade9c`, `163742a`, `32eb0a0`, `9e70247`), plus `29e5e92`/`e61f075` — already filed in substance as `Pass 7.2` (above) but never cited there by hash; see that entry's addendum. **A tenth… no, ELEVENTH commit, `f3dd8ff`, arrived mid-dispatch** via a direct message from the engineer (its subject and substance relayed, not a staged full message; verified against live source before being folded in — see the ★ ATTRIBUTION CORRECTED note under `Pass 59.0`, below). **Where a claim could be checked a different way — by reading the LIVE SOURCE the commits describe having produced — it was**, via `Read`/`Grep` (no `git log`/`git show`, no shell this dispatch). **Confirmed live:** `crates/pdfce-print/src/lib.rs`, `crates/pdfce-print/src/imposition.rs`, `crates/pdfce-gui/src/print_flow.rs` (zero N-up/booklet/poster references — confirms `gui [ ]` for imposition, below), `crates/pdfce-core/src/function.rs` (Annex-B-sourced Type 4 operator semantics, `atan`/`bitshift` doc comments), `crates/pdfce-render/src/color.rs` (Bradford chromatic-adaptation code), `crates/pdfce-render/src/interpret.rs`+`annot.rs` (annotation-scope filtering), and the CLI's `--n-up`/`--booklet`/`--poster`/`--comments`/`--orientation`/`--duplex`/`--binding`/`--booklet-subset` flags plus their execution blocks in `crates/pdfce-cli/src/main.rs`. **Not independently verified:** exact test/clippy/fmt counts (relayed per commit, below, including `f3dd8ff`'s — 81 suites/0 failures, clippy 0, fmt clean, theme-colour gate clean, and the 2× poster/1224×1584 pt/3×3-tile real-output figures — none re-run this dispatch).
@@ -39267,6 +40062,78 @@ nothing gets forgotten, not as a commitment to build in this order.
   own `CLAUDE.md` ("Outstanding open items") is a separate file outside
   `pdfce-librarian`'s owned tiers and was not edited by this filing —
   flagged so it doesn't silently drift out of sync with this entry.
+  **AMENDMENT (2026-08-11) — a stronger, different fact than the one
+  question (p) is still asking about, already sitting in the spec RAG.**
+  `iso32000__delta__pdf20_pass1.md` line 66 records XFA as **deprecated
+  at the ISO level in ISO 32000-2**, including the `NeedsRendering`
+  catalog entry, and states explicitly that the deprecation is at the
+  ISO level, not merely Adobe's product decision. The standing open item
+  (`CLAUDE.md`, and question (p) below) asks specifically for "Acrobat's
+  exact version-level deprecation date" — a narrower, still-unanswered
+  question. The ISO-level fact does not answer that narrower question,
+  but it is a materially stronger data point for the SAME underlying
+  concern (is XFA worth engineering time), and it was sitting in the
+  corpus, correctly filed, while this bucket and `CLAUDE.md` both still
+  described the broader deprecation question as open. **Filed as its
+  own process finding, not merely a correction**: this is the same
+  mechanism `pdfce-engineer.md`'s own working notes already record for
+  cross-RAG deliverables (a producing document answers a question a
+  consuming document still lists as open, and nothing is looking at the
+  gap between the two) — here the gap ran between the spec RAG and this
+  project's own open-item tracking, not between two RAGs, but the shape
+  is identical: an answer existed and nobody connected it to the
+  question it partially closed. Question **(p)** stays open, UNCHANGED
+  by this amendment — the ISO-level fact strengthens the case for
+  decision 020's re-scoping recommendation, it does not decide the
+  question, and retiring or re-scoping the item is still Ken's call.
+  **`CLAUDE.md`'s mirror-image bullet needs this same update — flagged
+  again, not edited (out of this librarian's five owned tiers).**
+  **AMENDMENT (2026-08-11) — a NEW recommendation, distinct from the
+  ALREADY-REFUSED hybrid-authoring case above: static-XFA hybrid
+  READ/FILL.** Decision 020's refusal (immediately above) covers
+  creating a NEW AcroForm field on a document that also carries static
+  XFA — that refusal is unaffected. **Reading and filling the AcroForm
+  half of an EXISTING hybrid field, and keeping the XFA half in sync, is
+  a different act.** pdfce already fills the AcroForm half of a hybrid
+  form (Pass 7.0/7.1's fill path does not check for XFA presence before
+  filling); the un-closed gap is that an XFA-aware viewer opening the
+  same file afterward still shows the pre-fill XFA-side value, silently
+  disagreeing with what pdfce just wrote to the AcroForm side. Bounded
+  scope — a hybrid file already carries both representations describing
+  the same fields, so this is a keep-two-representations-in-sync
+  problem, not a second layout engine (contrast with 5c/dynamic XFA,
+  immediately below). **UNSCOPED, no Pass ID** — recommended as the one
+  XFA increment worth building, not scheduled by this filing.
+  **AMENDMENT (2026-08-11, eighty-ninth filing) — the INTERIM disclosure
+  half of this recommendation is now SHIPPED; the full
+  keep-both-halves-in-sync capability described above remains entirely
+  unbuilt.** `fill_guards` (Pass 7.0/7.1's fill path) had never checked
+  XFA presence at all before this filing — `ce5642d` adds the check and
+  **warns** (does not refuse) that filling the AcroForm half of a hybrid
+  form leaves the XFA half stale for any XFA-aware viewer. This is
+  strictly the disclosure this bucket's own text above already
+  identified as the gap ("an XFA-aware viewer opening the same file
+  afterward still shows the pre-fill XFA-side value") — it makes the gap
+  VISIBLE to the operator, it does not close it. Deliberately not a
+  promotion of this row to built: the operator still cannot get a hybrid
+  form where both halves agree after a fill. See `docs/FEATURES.md`'s new
+  *Forms (AcroForm)* row (disclosure) and this same bucket's own Planned
+  row (the full capability, unchanged) for the two-sided record, and the
+  new **R186** standing rule this same session's `5039ecf` companion
+  finding minted (a guard keyed on a marker fails open without it —
+  `fill_guards` checking encryption and hidden objects but never XFA is
+  a second instance of that exact shape).
+  **AMENDMENT (2026-08-11) — 5a (recognise + disclose) reconfirmed
+  SHIPPED, and a `docs/FEATURES.md` gap closed.** `XfaPresence`
+  (`crates/pdfce-core/src/forms.rs`) and `list-fields`'s `xfa=` column
+  (`crates/pdfce-cli/src/main.rs:7986`) were both live-confirmed this
+  filing — shipped at **`Pass 7.0`**, 2026-08-01 (this bucket's own
+  sibling entry above already named `XfaPresence`). **`docs/FEATURES.md`
+  carried no row for this capability at all** (grepped, zero hits) —
+  not a stale claim, a genuine gap; a new *Implemented* row is added
+  this filing (see the ledger, below). **5c (dynamic XFA) is unchanged**
+  — `out_of_scope` per decision 020, reinforced rather than reopened by
+  the ISO-level fact above.
 - **Digital signatures** — PAdES profiles (B-B, B-T, B-LT, B-LTA),
   PKCS#7 signing + verification, incremental-update-based signing
   (see `ARCHITECTURE.md` §5), timestamp authority (RFC 3161) support.
@@ -39395,6 +40262,84 @@ nothing gets forgotten, not as a commitment to build in this order.
   a real encrypted fixture) against a representative sample of these 26
   sites, so the first real test of each guard is not the first real
   encrypted document a user opens.
+  **AMENDMENT (2026-08-11) — operator request, verbatim: *"can we have
+  Adobe xfa and drm support too?"*, parsed by the engineer into the
+  standard-encryption half of that request landing squarely on THIS
+  already-scoped Pass.** This is a **second, independent priority
+  signal** on top of the 2026-07-31 corpus-driven scoping above (which
+  found the promotion trigger NOT met, 0.67% `/Encrypt`, 92.5% legacy
+  R≤4) — the operator is now asking for the capability directly, not
+  only inferable from corpus share. **Not a promotion** — Pass 5 stays
+  on the fallback/interleave track (decision 010 candidate D) unless the
+  engineer separately chooses to move it; this amendment records the
+  renewed request so a future scoping session has both signals, not
+  just the older one.
+  **AMENDMENT (2026-08-11), scope correction — `/P` permission-flag
+  honour + disclosure is part of this bucket's own §7.6 scope and had
+  never been named as its own item.** `/P` covers print, modify,
+  copy/extract, annotate, fill, accessibility-extract, assemble, and
+  high-quality-print (Table 22). pdfce should honour these bits and
+  disclose them, matching Acrobat, once Pass 5's decrypt path exists.
+  **The framing matters and is deliberately recorded here so a future
+  Pass doesn't get it wrong:** `/P` is enforced by reader **convention**,
+  not cryptography — the file must already be decryptable to display at
+  all, so a permission bit is a promise a compliant reader keeps
+  voluntarily, not a barrier the bytes themselves enforce. **Never
+  describe this half of Pass 5 as "security"** — a future reader acting
+  on that word alone would draw a wrong conclusion about what the bits
+  actually protect.
+  **AMENDMENT (2026-08-11, eighty-ninth filing) — an adjacent gap, found
+  by `pdfce-spec-librarian` while sourcing §7.6 for the amendment above,
+  is now SHIPPED, distinct from Pass 5 itself and not blocked on it.**
+  pdfce's `/Encrypt`-trailer refusal cannot see an **ISO 32000-2 §7.6.7
+  unencrypted wrapper** — an ordinary, fully readable PDF (no `/Encrypt`
+  at all) whose visible page is a cover sheet, carrying the real,
+  encrypted document as an embedded payload. Before this filing pdfce
+  parsed such a file, rendered the cover, and reported success on a
+  document that was not the one the operator asked for. **`5039ecf`
+  ships detection and a warning** (`/AFRelationship /EncryptedPayload` in
+  the catalog `/AF` array, and nothing else — deliberately NOT "exactly
+  one `EmbeddedFiles` entry", a sentence ISO 32000-2 printed and then
+  removed by erratum, which would miss any wrapper also carrying a
+  readme). Warns, does not refuse. **Core + CLI only (`gui` not yet
+  wired)** — see `docs/FEATURES.md`'s new *Redaction & security* row.
+  **This is NOT part of Pass 5 and does not depend on it** — it detects
+  the presence of an encrypted payload without decrypting anything, so
+  it ships independent of the `/R 5` vs `/R 6` sourcing sub-decision
+  blocking Pass 5 itself. **Forward-pointer for whoever DOES activate
+  Pass 5, filed here because it belongs beside the crypt-stage scope:**
+  ISO 32000-2 exempts a signature's `/Contents` entry from encryption;
+  ISO 32000-1's never-encrypted list does not carry the same exemption —
+  a crypt-stage implementation following 32000-1 literally would corrupt
+  every signature it touches. See `ROADMAP.md`'s `5039ecf`+`ce5642d`
+  Shipped entry and the new **R186** standing rule (guards keyed on a
+  marker fail open without it) for the full record.
+- **Adobe LiveCycle / AEM Document Security, and third-party proprietary
+  DRM handlers (FileOpen, Locklizard, and similar) — recorded as
+  IMPOSSIBLE, not declined.** Added 2026-08-11, operator request (*"can
+  we have Adobe xfa and drm support too?"*, parsed four ways — this is
+  the branch with no buildable target). Adobe's actual DRM product
+  (LiveCycle / AEM Document Security) is **server-mediated**: usage
+  policies live on an Adobe-hosted rights-management server and the
+  client authenticates to it over a proprietary protocol requiring
+  Adobe licensing and infrastructure pdfce has no access to and no
+  standing to reimplement. Third-party handlers (FileOpen, Locklizard)
+  are the same shape — each is a proprietary, undocumented security
+  handler, not a published algorithm. **There is nothing to implement
+  against, which is a different fact from "declined" or "not yet
+  built."** This project's own corpus already has a live, if tiny, data
+  point: the 2026-07-31 `/Encrypt` census (decision 007, 19,940 organic
+  files scanned) found **1 file using FileOpen** — recorded then as
+  "non-Standard security handler, never silently openable by any
+  reader," which is exactly the behaviour this bullet describes: no
+  reader, pdfce included, can open such a file without the vendor's own
+  proprietary client. **This bullet gives `docs/FEATURES.md`'s existing
+  *Cannot*-section AEM-DRM line (present before this session) its
+  underlying reasoning for the first time** — that line had no matching
+  text anywhere in this file until now (grepped `LiveCycle`/`AEM`/
+  `rights server`, zero prior hits), which is the exact drift
+  `docs/FEATURES.md`'s own header warns against, corrected here rather
+  than left standing. No Pass ID — nothing here will ever be scheduled.
 - **Redaction** — true content removal (not visual-overlay-only), per
   `ARCHITECTURE.md` §5 corollary. This is a trust-critical feature;
   needs explicit test coverage proving removed content is actually
@@ -40143,6 +41088,33 @@ nothing gets forgotten, not as a commitment to build in this order.
   `UNESTABLISHED` above is an invitation to check, not a finding.
 
 ## Open operator questions (as of 2026-08-02 — answer any, all default to the stated fallback if not answered)
+
+**NEW this filing (eighty-eighth filing, 2026-08-11) — filed OPEN, not yet
+answered. Operator-question ceiling moves (bh) → (bi), next free (bj):**
+- **(bi) Strip protection from a PDF WITHOUT the password — build it, or
+  refuse it by name?** Raised by the operator's own request framing
+  (*"can we have Adobe xfa and drm support too?"*, parsed into five
+  items — this is item 3). Two distinct acts share the surface
+  "un-protect a PDF" and this project should not conflate them: (a)
+  **opening a file with its supplied password and re-saving it
+  unencrypted** — routine, every PDF tool does it, and Pass 5's own
+  scope already covers it (decrypt-with-password is not in question);
+  (b) **stripping `/Encrypt` or its `/P` permission restrictions from a
+  file WITHOUT the password** — a different act, with a legal dimension
+  that varies by jurisdiction and by how the file was obtained, not an
+  engineering question this librarian or the engineer should resolve
+  solo. **No safe default stated** — unlike most entries in this
+  section, this is not a "default to X if unanswered" item; leaving it
+  unbuilt is the safe posture until answered, so silence defaults to
+  NOT building (b), not to building it. **A recommendation is on
+  record, not a ruling:** support (a); do not build (b). **Distinct
+  from the encryption-refusal operator sign-off already tracked
+  elsewhere in this section** (the oldest-owed item, about whether
+  pdfce should even attempt to OPEN an encrypted file it cannot
+  decrypt) — that item is about read access to a file pdfce cannot get
+  into at all; this one is about REMOVING protection from a file pdfce
+  already CAN get into, without the credential that would normally
+  authorize doing so.
 
 **NEW this filing (fiftieth filing, 2026-08-09) — filed OPEN, not yet
 answered. Operator-question ceiling moves (bg) → (bh), next free (bi):**
@@ -48654,6 +49626,38 @@ and
   did, rather than introducing a new posture. Full record: `ROADMAP.md`'s
   `df874ca` Shipped entry (this filing). **Ceiling moves `R184` → `R185`;
   next free `R186`.**
+- **R186 — A guard keyed on a MARKER of a hazard fails OPEN, not closed,
+  when the same hazard arrives without that marker — and open failure is
+  SILENT, because nothing on screen tells the operator anything was
+  withheld (2026-08-11, `5039ecf`+`ce5642d`; librarian-minted).** Two
+  instances, found back to back in one session, same shape: (1) pdfce's
+  encryption refusal keys on `/Encrypt` in the trailer, so an ISO
+  32000-2 §7.6.7 **unencrypted wrapper** — an ordinary, fully readable
+  PDF whose visible page is a cover sheet hiding the real, encrypted
+  document as an embedded payload — carries no `/Encrypt` at all and
+  sails straight through; pdfce parsed it, rendered the cover, and
+  reported success on a document that was not the one the operator
+  asked for. (2) `fill_guards` checks encryption and hidden-object state
+  before a form fill and had never checked XFA presence, so filling a
+  hybrid-XFA form's AcroForm half leaves the XFA half silently stale —
+  the guard that already refuses *authoring* a new field on such a
+  document (decision 020) was never asked whether *filling* one needed
+  the same question. **Both guards were correct for the case they were
+  built against; neither was reached by the adjacent case that arrives
+  without the marker the guard is keyed on.** **Practical form: when
+  writing or reviewing a guard that keys on a marker, ask what the same
+  hazard looks like WITHOUT that marker before considering the guard
+  complete** — a guard failing closed says "I cannot do this," which the
+  operator can act on; a guard failing open says nothing at all, and the
+  operator has no signal anything was withheld. Both instances resolved
+  as DISCLOSURE, not refusal — the wrapper warns rather than blocks (the
+  cover page is often the operator's only instructions), and the XFA
+  fill warns rather than refuses (refusing every fill on every hybrid
+  form would make such forms permanently unfillable, worse than a
+  disclosed staleness risk); R186 is about the guard's REACH, not about
+  which disposition a reached case should get. Full record: `ROADMAP.md`'s
+  `5039ecf`+`ce5642d` Shipped entry (this filing). **Ceiling moves
+  `R185` → `R186`; next free `R187`.**
 
 ## Update protocol
 

@@ -1,6 +1,6 @@
 ---
 name: pdf-spec-corpus-state
-description: PDF_Spec RAG conventions NOT recorded in its own index.md — prefix splits, gap/retraction vocabulary, axis re-audits, evidencing negatives, and 36 numbered dispatch-shape findings. Too long to read whole; grep by item number or keyword using the index at the top.
+description: PDF_Spec RAG conventions NOT recorded in its own index.md — prefix splits, gap/retraction vocabulary, axis re-audits, evidencing negatives, and 43 numbered dispatch-shape findings. Too long to read whole; grep by item number or keyword using the index at the top.
 metadata:
   type: project
 ---
@@ -52,6 +52,8 @@ heading (`**<N>. `).**
 | 39 | NORMATIVE-FORMULA / TRANSFORM dispatch: constants survive recall but citations do not; the headline is WHERE THE SPEC STOPS (prove deliberateness with a sibling clause that DOES specify the analogue); an array's major order is provable from the clause's own EXAMPLE; check a transcribed formula against an unstated property (C¹); typography dropouts vs mis-pointers; one file vs three, and recording why |
 | 40 | "THE TABLE HAS NO SUCH COLUMN" dispatch: grep the standard's OWN normative ANNEXES before believing a delegating sentence (licence tier improves too); a dispatch can be wrong about WHERE while right about WHAT; the semantics authority can be an INFORMATIVE reference; recompute DERIVED COUNTS programmatically; ask whether a missing limit protects against anything reachable; PENDING-INTAKE for the ambiguity register |
 | 41 | ★ **"(see the Bibliography)" IN ISO 32000-1 IS A SYSTEMATIC ERRATUM — the pointed-at documents are in clause 3 (Normative references); grep clause 3, dump lines 340–486, before any informative-vs-normative claim. When the "only informative" leg of a hollow-`shall` dies, rebuild on the INVOCATION VERB ("give details on" vs "shall conform to").** Plus: "IS THIS CLAIM STILL RIGHT?" on a BEHAVIOURAL NEGATIVE: the clause can RENUMBER/RENAME across editions and a later standard can dissolve a hollow `shall` without the original clause changing (check the edition axis; split VERIFIED vs NEEDS VERIFICATION; forbid the un-editioned "the spec" paraphrase) · a dispatch's wanted spec ANCHOR can be affirmatively CONTRADICTED ⇒ name it a pdfce invariant and quote the permission it declines · DEFINITION and NORMATIVITY can live in different tables in different clauses (grep the key name document-wide) · confirm a dispatch's own HEDGE loudly · expect the whole normative surface to be two table rows · sibling-row contrast settles element types · PARTIALLY CLOSED is a valid gap state |
+| 42 | ★ **THE NULL-DELTA DISPATCH — relayed findings ALREADY recorded.** Re-verify from the source anyway and say so · **grep artifact: annex headings are `Annex<2 SPACES><LETTER>`, so `grep "Annex B"` = 0 hits in 756 pp; a 0-hit on something visible in the TOC is an artifact, not absence** · the residue is the CONSEQUENCE not the fact (an erratum without its FAILURE MODE is a curiosity; a definition-shaped sentence can be the non-normative source while an attribute column is normative) · promote a "corpus-wide" rule out of the session audit log into `index.md`'s reading-discipline block |
+| 43 | ★ **THE EDITION-AXIS RESIDUE** — when a `free_primary` clause family is complete, the gap left is "is this clause NUMBER still valid in the next edition?" (build a renumbering map as §1) · **★ in an errata source `[INS]` is a CORRECTION, not the standard as printed — tag every delta, because files in the wild follow the PRINTED text; an erratum can close a corpus ambiguity AND create a read-tolerance requirement at once** · an errata page prints only what CHANGED, so its silence is not evidence · OPEN → PARTIALLY CLOSED by acquiring an algorithm's HARNESS without its KERNEL (restate the refusal as UNCHANGED) · a later edition can WITHDRAW an option the previous session offered · the best find can be an ABSENCE in the edition already held (1.7 lacks 2.0's signature-`/Contents` exception ⇒ pdfce invariant citing 2.0, never §7.6.1) · a new-in-edition-N FEATURE can make a shipped guard fail OPEN (an unencrypted wrapper has no `/Encrypt`) · grade all three sources in a §0 table and mark the slide-only claims "do not act on this" |
 | 37 | ADJUDICATING A CLAUSE-NUMBER CONFLICT: rule from the source's own enumeration, never from your heading (headings are RECONSTRUCTED); "the sub-clause does not exist" beats "the other one is right"; status leaks to anywhere the PRODUCT NAME appears, not just to headings and the index |
 
 ---
@@ -2174,3 +2176,134 @@ carrier and no semantics ⇒ non-execution is conformant). Six sub-findings.
   NOT ingested** with the excluded tables enumerated) and edited the index's gap
   row to **PARTIALLY CLOSED**, naming what remains. Closing a gap *partially* and
   saying so beats either deferring it or silently implying full coverage.
+
+**42. THE NULL-DELTA DISPATCH — when a dispatch relays findings that are ALREADY
+recorded, the deliverable is the citation plus the ONE residue.** Established
+2026-08-11. `pdfce-librarian` relayed three engineering-session findings
+(§12.5.6.2-vs-Table 169 markup erratum · Annex B normative + 42 Type-4 operators
++ the missing §7.10.5 cross-reference · no XYZ→device transform in §10.2),
+explicitly flagged "**neither/none verified as already recorded**". **All three
+were already on disk**, filed the previous day (2026-08-10), with correct
+numbers, dual-extractor provenance, and index triggers. Four sub-rules:
+
+- **Do the independent re-verification anyway, and say you did.** The corpus's
+  own record is not self-certifying (item 41: the corpus has been wrong in the
+  load-bearing direction before). Four cheap dump greps re-confirmed everything
+  from the source: Table 169 page 398 = 26 rows, Markup=No exactly 9;
+  §12.5.6.2's non-markup listing = Popup bullet + a 5-name parenthetical;
+  Annex B page 655 header reads literally `Annex  B` / `(normative)` /
+  `Operators in Type 4 Functions`, 21+13+2+6 = **42**; §7.10.5.1/.2 cite
+  **Annex C** and never Annex B; §10.2 ends "The gamut mapping and colour
+  mapping functions **are part of the implementation of the conforming
+  reader**." Cost: ~5 commands. "Already recorded **and** independently
+  re-verified today" is a materially stronger answer than either alone.
+- **★ GREP ARTIFACT: ISO 32000-1's annex headings are `Annex<SPACE><SPACE><LETTER>`.**
+  `grep "Annex B"` returns **ZERO hits in 756 pages** while `grep "^Annex"`
+  finds all twelve. Same false-negative class as the PLRM ligature trap
+  (`ﬂoor`) in [[spec-source-extraction-toolchain]]. **A 0-hit result on a
+  structural element you can see in the TOC is an extraction artifact, never
+  evidence of absence** — re-grep with a looser pattern before recording a
+  NEGATIVE RESULT. The TOC (dump lines 129–190) is the cheap cross-check: it
+  lists every annex with its `(normative)`/`(informative)` marker on the line
+  *after* the annex letter.
+- **The residue is usually the CONSEQUENCE, not the fact.** The corpus had
+  T169-E1's *facts* (five vs nine; the three omitted subtypes; not fixed by the
+  2.0 errata) but never named **what goes wrong**. The dispatch supplied it and
+  it was worth writing: an annotation print-scope filter is a
+  `!is_markup(subtype)` predicate, so a prose-sourced `is_markup` **inverts the
+  misclassification into a silent suppression** — `/Watermark` vanishes from
+  printed output with no error, no exception, no diagnostic, detectable only by
+  pixel diff. **A corpus that records an erratum without its failure mode has
+  recorded a curiosity.** Ask, of every erratum already on disk: *what does an
+  implementation that believes the wrong text actually DO?* Note also the
+  general trap this instance illustrates: **the prose was phrased as a
+  definition** ("The remaining annotation types are not considered markup
+  annotations:") **while the normative source is a mere attribute column** in a
+  reference table — the definition-shaped sentence is the wrong source, and that
+  is precisely why the mistake is natural.
+- **A rule discovered during one build can end up filed only in that build's
+  audit log — promote it.** The "(see the Bibliography)" systematic erratum
+  (item 41) was in `index.md`'s *Verifications that PASSED this session* section
+  and in four clause files, but **not** in `index.md`'s `## How to use this RAG`
+  reading-discipline block, where a fresh lookup would meet it. Promoted there
+  2026-08-11. **Test to run on any rule you label "corpus-wide": is it in the
+  section a reader hits BEFORE grepping, or only in the log of the session that
+  found it?** An audit log is provenance; the discipline block is instruction.
+
+---
+
+**43. ★ THE EDITION-AXIS RESIDUE — a near-null-delta dispatch whose real gap is
+"which EDITION is this clause number from?", plus the `[INS]`-is-not-published
+rule.** Established 2026-08-11 re-dispatching ISO 32000-1 §7.6 (encryption) for
+a protection Pass. The 2026-07-31 build already covered every ISO 32000-1 item
+asked for — key derivation both revisions, the never-encrypted list, crypt
+filters, AES modes, `/P` bits, the enforcement quote — and **every quotation
+re-verified verbatim** against the staged source (padding string, Algorithm 2
+steps (a)–(i), Table 22, §7.6.3.1's "There is nothing inherent in PDF encryption
+that enforces the document permissions"). Extends item 42 (the null-delta
+dispatch) with the shape that appears when the corpus is *complete on one
+edition*:
+
+- **When a `free_primary` clause family is complete, the remaining gap is the
+  EDITION axis, and it is bigger than it looks.** Not "did the rule change?" but
+  **"is the clause NUMBER still valid?"** For §7.6 every sub-clause moved
+  (1.7 §7.6.1→2.0 §7.6.2, §7.6.3→§7.6.4, §7.6.5→§7.6.6, and a new §7.6.7), so a
+  bare "§7.6.3" written into a code comment is a **citation error** the moment
+  the reader assumes 2.0. Deliverable: a **renumbering map as §1 of the delta
+  file**, before any content. Reuses the item-33 finding (tables swap numbers
+  between editions) at clause granularity, and reinforces the standing ban on
+  the un-editioned "the spec" paraphrase (item 41).
+- **★ IN AN ERRATA SOURCE, `[INS]` IS A CORRECTION TO THE STANDARD — NOT THE
+  STANDARD AS PRINTED.** This is the single most dangerous reading error on the
+  `pdf-issues.pdfa.org` route, because both kinds of text sit in the same
+  paragraph and both look normative. **Tag every extracted delta with
+  "published-2.0" vs "ERRATUM"** — files in the wild were written against the
+  *printed* text. Concrete, all from one clause: 2.0-as-printed says a
+  standard-handler crypt filter's `/Length` is `256` for `AESV3` (the erratum
+  makes it `32`) ⇒ **accept both on read, write the corrected form**; and 2.0's
+  printed Algorithm 2.B step (a) can be read as building a **1**-repetition `K1`
+  on the user path and a **64**-repetition one on the owner path ⇒ an
+  implementation faithful to the printed standard is wrong on exactly one
+  password path. **An erratum can therefore CLOSE a corpus ambiguity (A1/A11 here)
+  and simultaneously CREATE a real-world tolerance requirement.** Record both.
+- **An errata page prints only what CHANGED — so its silence is not evidence,
+  and its coverage is a lottery.** It happened to quote Algorithm 2.B step (a)
+  (because step (a) was defective) and quotes nothing of steps (b)+. State that
+  limitation explicitly in the file, or a later session reads "the errata don't
+  mention X" as "X is unchanged" when it means "X had no defect worth fixing".
+- **A gap can go OPEN → PARTIALLY CLOSED by acquiring the HARNESS without the
+  KERNEL, and that is worth recording as a distinct state** (item 41's
+  PARTIALLY CLOSED, applied to an algorithm). The `/R 6` gap now has: the whole
+  surrounding structure (sourced twice, independently — the Adobe EL3 supplement
+  for R5's shape plus a PDF Association deck diagramming R6's), and step (a)
+  verbatim. It still has **none of the round structure**, which is exactly the
+  part recall confabulates most convincingly. **Do not let the narrowing soften
+  the refusal** — restate consequences 1 and 2 as UNCHANGED in the same edit.
+- **A later edition can REMOVE an option the previous session left open.** The
+  2026-07-31 build offered "ship AES-256 at `/R 5`" as one of three honest
+  options. ISO 32000-2 §7.6.4.1: *"Use of security handler revisions 1, 2, 3, 4
+  and 5 is deprecated in PDF 2.0."* ⇒ option withdrawn, and the sharper finding
+  falls out: **with 2.B unsourced and R5 deprecated, there is no conformant
+  AES-256 WRITE path at all** — a product-shaped negative the engineer can act
+  on immediately. When you narrow a gap, re-read what the old file *recommended*,
+  not just what it *stated*.
+- **The highest-value find was an ABSENCE in the edition already held.** 2.0's
+  never-encrypted list has a **fourth** bullet — a signature dictionary's
+  `/Contents` — and ISO 32000-1 has **three**. Evidenced item-14 style:
+  `"not be encrypted"` = **5 hits in 756 pp**, none about signatures. Failure
+  mode is the item-42 kind: encrypting `/Contents` makes the signature
+  unverifiable *and* breaks the `/ByteRange` arithmetic, presenting as a bad
+  certificate. **Ruling: adopt it as a pdfce invariant citing 2.0, and forbid
+  citing §7.6.1 for it** — the same "spec-guarantor vs pdfce-guarantor" split as
+  item 21.
+- **A new-in-2.0 FEATURE can defeat an existing refusal path.** §7.6.7
+  unencrypted wrapper documents are **not encrypted** — `/Encrypt` is absent —
+  so a reader gated on `/Encrypt` renders the cover page and presents it as the
+  document. When ingesting any "new in edition N" feature, ask: **does it make a
+  guard we already shipped fail OPEN?**
+- **Grade every source in a §0 table when a file mixes three of them.** Errata
+  site (high; verbatim clause text) / ISO free preview (high for existence and
+  naming, no clause bodies) / conference deck (medium; and a 2017 deck describes
+  the 2017 edition, not 2020). Then mark every claim that rests on the weakest
+  one — here D15 (Table 22 bit 10 deprecated) is slide-only ⇒ **explicitly "do
+  not act on this"**, rather than being quietly blended in.

@@ -16208,3 +16208,350 @@ future reader does not mistake it for a spec citation.
 stream colour spaces + PDF functions — `core [x]` / `cli` `—` / `gui
 [x]`, moved directly to *Implemented* (never appeared in *Planned*,
 built and shipped within the same session that would have scoped it).
+
+### 2026-08-11 — reset-form (§12.7.5.3): `/V` REMOVAL vs `/DV` assignment is chosen from the resolved, inherited default; three skip categories stay separate; a reset never writes `/DV` and never recomputes
+
+**Shipped this date as `Pass 61.0`** (`7d2b71b`+`7c13b97`) —
+`EditSession::reset_form`/`reset_preview`, `pdfce-cli reset-form`, and
+the GUI Forms-panel "Reset to defaults" section. This entry records the
+design decisions behind the core verb; `ROADMAP.md`'s matching Shipped
+entry (eighty-sixth filing) carries the full build record.
+
+**Decision: `/DV` absent means REMOVE `/V`, not set it to an empty
+value.** §12.7.5.3 is unambiguous — *"If no default value is defined
+for a field, its `V` entry shall be removed"* — and the two readings
+are not interchangeable: an absent key and a key holding `()` are
+different bytes in the saved file, a different entry in the
+incremental-save delta, and for a choice field a different MEANING
+(§12.7.4.4 documents an absent `/V` as "nothing selected," a reading
+`()` does not carry). `reset_form` removes the dictionary key outright
+on this branch rather than writing an empty string or array.
+
+**Decision: the branch is chosen from the RESOLVED default, not the
+field's own dictionary.** `/DV` is inheritable (Table 220) — a field
+with no `/DV` of its own but an ancestor that has one is NOT "no
+default value is defined," it is "the default is defined higher up the
+tree." `reset_form` reads `Field::default_value` (pdfce's existing
+resolved-default projection, walking `/Parent` as needed) rather than
+the raw `/DV` key, so an inheriting child takes the assignment branch,
+not the removal branch. Testing the raw dictionary instead would have
+silently discarded every inherited default on first reset.
+
+**Decision: three skip categories, counted separately, never folded
+into one "skipped" total.** Pushbuttons (§12.7.5.3: the action "has no
+effect" on them; §12.7.4.2.2 additionally forbids them a `/V` at all —
+writing one would create an entry the standard prohibits), read-only
+fields (not the operator's to clear via reset any more than via fill),
+and signature fields (a signature's `/V` **is** the signature —
+removing it destroys the signature, a categorically different act from
+clearing a typed answer, and not what an operator pressing "reset" is
+asking for). A single combined counter would tell an operator "N
+fields were skipped" without telling them whether the signature they
+cared about survived.
+
+**Decision: `/DV` is never written by a reset.** A reset reads `/DV`
+and writes `/V`; writing `/DV` too would redefine what a *later* reset
+restores to — a change nobody asked for, invisible until that second
+reset produces a different result than the first one did.
+
+**Decision: a calculated field is reset but NOT recomputed.** ISO
+32000-1 is silent on whether invoking a reset-form action also re-runs
+the `/CO`-ordered recalculation pass (`Pass 7.2`'s
+`form_script::recompute`). Fusing the two operations would hide one
+inside the other; pdfce keeps them separate and visible — an operator
+who wants both resets, then recomputes, seeing the intermediate state
+before committing to the recomputed one.
+
+**Decision, scoped OUT deliberately: the reset-form ACTION's exclude
+mode (Table 239 `/Flags` bit 1) is not offered by
+`EditSession::reset_form`.** Table 239's descendant-expansion
+parenthetical for exclude mode appears only in its *"if clear"*
+sentence, leaving what exclude mode does to a non-terminal field's
+descendants unspecified by the standard. An editor verb that guessed at
+this would be guessing on the destructive side of a data-loss
+operation; `only` (an explicit include-list by fully-qualified name) is
+the verb's only scoping mechanism.
+
+**Process note carried here because it shaped the API, not just the
+commit history.** `EditSession::reset_preview` exists as a public
+method (not folded into `reset_form` as a private helper) specifically
+so `pdfce-cli`'s dry run and `pdfce-gui`'s Forms panel read the SAME
+eligibility/target derivation rather than each re-deriving it — the
+general shape standing rule R171 names (`ROADMAP.md`'s Standing
+rules). Before `reset_preview` existed, both shells had independently
+— and differently — implemented the rule; the CLI's dry-run summary
+line had been hard-coded to always report `reset=0 defaulted=0
+removed=0` as a symptom of that drift, discovered and fixed in the same
+session that added the shared preview.
+
+---
+
+### 2026-08-11 (eighty-seventh filing, `ed6db1c`) — addendum to the 2026-08-10 `Pass 7.2` entry: a date/time GRAMMAR can be fully sourced while its PARSE is sourced nowhere, and the module is built to treat the two differently rather than borrow one's confidence for the other
+
+**Filed against `Pass 7.2`'s existing 2026-08-10 decision record** (the
+posture-B native-recompute entry, above) — this is a continuation of that
+Pass's own scope (the format layer's date/time helpers), not a new
+capability, so it is recorded as an addendum rather than a new numbered
+decision.
+
+**Decision: a format helper's grammar and its parse are sourced
+independently, and the module's design follows whichever evidential
+footing each one actually has — not a shared confidence level.**
+`form_script/datetime.rs` renders `AFDate_Format`, `AFTime_Format`, and
+`AFDate_FormatEx`. The **grammar** — all 20 tokens, both predefined
+tables (14 date formats, 4 time) — is fully sourced, corroborated by the
+token set documented for `util.printd`, which is Adobe-primary; `render`
+implements it completely. The **parse** — how Acrobat reads a stored date
+string back out of a field once it is already there — is sourced
+**nowhere**. Nothing available describes it. So `parse` does not attempt
+to reproduce Acrobat's unknown behaviour; it accepts only shapes that
+cannot be read two ways (ISO-ordered `yyyy-mm-dd`, and §7.9.4's
+`D:YYYYMMDDHHmmSS`) and declines everything else, disclosed as
+`FormatOutcome::NotADate` rather than papered over with a guess.
+`03/04/2026` is the canonical refusal: 3 April to most of the world, 4
+March in the United States, and the stored bytes do not say which. This
+generalizes the same posture-B discipline `Pass 7.2`'s original entry
+already established for `AFSimple_Calculate`/`AFNumber`/`AFPercent`/
+`AFSpecial` (never guess where the evidence runs out) to a case where
+part of one helper's own behaviour is sourced and part is not — the
+resolution is to split the helper along that seam, not to treat the
+whole thing as equally trustworthy because most of it is.
+
+**Decision: `FormatOutcome::NotADate` is a distinct outcome from
+"unsupported helper," and the distinction is load-bearing for the
+operator, not cosmetic.** A value pdfce cannot format because the helper
+itself is unrecognised (`Custom`) and a value pdfce cannot format because
+the stored text does not parse as any unambiguous date are different
+facts — the first means pdfce does not understand the script, the second
+means pdfce understood the script perfectly and could not read the
+*document's* value. An operator debugging the two would look in different
+places. Kept as separate enum variants rather than folded into one
+generic failure so the caller (CLI/future GUI) can say which.
+
+**Decision: the grammar's case-sensitivity is treated as normative
+content, not a formatting nicety, because getting it wrong corrupts a
+common real-world string.** `m`/`mm` (month) vs `M`/`MM` (minutes), and
+`h`/`hh` (12-hour) vs `H`/`HH` (24-hour) are case-distinguished tokens; a
+case-insensitive tokeniser would silently misrender any format string
+containing both a date and a time component — `"mm/dd/yyyy HH:MM"` is not
+an edge case, it is close to the default shape an author reaches for.
+
+**Decision: an out-of-range predefined format INDEX declines by name,
+never falls back to treating the raw index as a literal format string.**
+One known reimplementation takes the fallback path (rendering a stored
+`99` as the literal text `"99"`); nothing sourced confirms Acrobat
+behaves that way, so pdfce does not adopt it as a guess. `format.rs`'s
+`predefined_datetime` returns `FormatOutcome::UnknownStyle` instead.
+
+**Decision: a zone offset present on a PDF date string is ignored, not
+applied.** A form field holds a wall-clock date as the operator typed it;
+converting it against a zone offset would change the value, which is not
+what re-displaying a stored date is for.
+
+**Process note carried here because it is a distinct instance of a
+pattern this project keeps re-learning in a new shape.** The module's own
+property test (`tokens_match_longest_first`, asserting the token table is
+ordered so no earlier entry is a prefix of a later one — required for
+longest-match tokenising to work at all) was **itself written backwards**
+on first draft and failed against a correct table. A property test is not
+immune to being the wrong artifact in the pair; when one fails on first
+run, the test is worth checking before the code it exercises, precisely
+because a property test's failure reads as more authoritative than an
+example-based one and will argue confidently for reordering something
+that was already right. Filed as a `C:\personal_rag\claude_code\` lesson
+(`ROADMAP.md`'s eighty-seventh filing carries the full pointer) rather
+than a project-local standing rule, since the finding is about testing
+methodology in general, not a pdfce-specific invariant.
+
+### 2026-08-11 (eighty-eighth filing) — Adobe's actual DRM product is server-mediated and pdfce's is not: a scope boundary this project already assumed, now stated once, on this file, with a reason
+
+**Trigger.** Operator request, verbatim: *"can we have Adobe xfa and drm
+support too?"* — parsed by the engineer into five items (standard §7.6
+encryption, `/P` permission-flag disclosure, an operator question about
+stripping protection without a password, this scope boundary, and XFA).
+This entry covers the one item that is architectural rather than a
+Backlog scoping note: **what "DRM" can and cannot mean inside pdfce's
+own design.**
+
+**Decision, stated as the boundary rather than as a list of excluded
+products.** pdfce's document model is a **local, standalone object
+graph** — `pdfce-core` opens bytes, holds a graph in memory, and writes
+bytes back; nothing in that model has ever assumed a network round-trip
+to a rights-authority for permission to open, edit, or re-save a
+document (§1.1's no-undisclosed-network-call posture already forecloses
+this by a different route, for a different reason). **Adobe's own DRM
+products — LiveCycle Rights Management, AEM Document Security — are
+built on the opposite assumption**: a usage policy lives on an
+Adobe-hosted server, and the client authenticates to that server over a
+proprietary protocol at open time. Implementing that is not "more
+engineering effort than encryption" — it is a different *kind* of
+feature, one that requires an Adobe-operated service pdfce has no
+access to, no licence to interoperate with, and (per §1.1) would refuse
+to call even if it existed, since it is exactly the kind of undisclosed
+network dependency that section already rules out project-wide.
+**Third-party proprietary handlers (FileOpen, Locklizard, and similar)
+are architecturally the same shape as Adobe's own**, even though they
+are not server-mediated in every case: each defines its own
+undocumented, non-Standard `/Filter` for the security handler, so there
+is no published algorithm to implement against — the boundary is not
+"pdfce chose not to," it is "there is nothing on the other side of the
+boundary to reach."
+
+**Corollary the boundary makes precise: standard PDF encryption (§7.6)
+sits entirely on pdfce's own side of it.** The Standard security
+handler (RC4/AES `/Filter /Standard`) is a published, ISO-and-Adobe-
+ExtensionLevel-sourced algorithm operating entirely on bytes already in
+the file — no server, no proprietary protocol, nothing pdfce cannot
+already parse and hold in its own object graph. This is why Pass 5
+(Encryption, `docs/ROADMAP.md` Backlog) is scoped and buildable while
+LiveCycle/AEM/FileOpen/Locklizard are not merely deprioritised but
+structurally out of reach — the same operator request produced one
+answer of each kind, and the reason they differ is this boundary, not a
+difference in how much anyone wants either one.
+
+**Why this is worth a §12 entry rather than only a `ROADMAP.md` Backlog
+note.** `docs/FEATURES.md`'s *Cannot* section already asserted the AEM
+line before this session, correctly, but with no underlying reasoning
+recorded anywhere in the project — a claim resting on nothing citable.
+This entry is that reasoning, stated once, so a future session asking
+"why can't pdfce do DRM" finds an architectural answer instead of
+re-deriving it or, worse, re-opening it as though it were an
+unevaluated feature request. See `docs/ROADMAP.md`'s Encryption Backlog
+bucket (the new DRM bullet, filed the same session) for the Backlog-
+level record, and `docs/FEATURES.md`'s *Cannot* section for the
+now-broadened, now-grounded reader-facing line.
+
+### 2026-08-11 (eighty-ninth filing, `5039ecf`) — an unencrypted §7.6.7 wrapper is detected on a marker the spec's OWN erratum record rules out using differently, and disclosed rather than refused
+
+**Sourcing.** No shell tool this dispatch; `git log`/`git show 5039ecf`
+not run (hard rule 8). Recorded from the engineer's dispatch text, which
+itself cites `pdfce-spec-librarian`'s sourcing session as the origin of
+the finding — not independently re-verified against the spec RAG this
+filing.
+
+**Decision: a §7.6.7 unencrypted wrapper is detected on `/AFRelationship
+/EncryptedPayload` alone, and NOT on "exactly one `EmbeddedFiles`
+entry."** The wrapper mechanism exists precisely so a plain reader can
+open a cover page while an encrypted payload sits alongside it as an
+embedded file — no `/Encrypt` key anywhere in such a document's trailer,
+which is why pdfce's existing `XrefErrorKind::EncryptionUnsupported`
+refusal (keyed on `/Encrypt`'s presence) never fires for one: the
+document is not encrypted, only part of what it carries is. The
+`/AFRelationship /EncryptedPayload` marker in the catalog `/AF` array is
+the one piece of the mechanism that identifies *which* embedded file is
+the real payload, independent of how many other embedded files (readmes,
+instructions, alternate-format copies) the wrapper also carries. **The
+"exactly one `EmbeddedFiles` entry" test that appears elsewhere in
+discussions of this feature is deliberately NOT used** — that sentence
+was present in ISO 32000-2 as originally printed and was **removed by a
+later erratum**; a detector built on it would silently miss any wrapper
+that bundles a second embedded file beside the payload, which is exactly
+the case the erratum exists to correct for.
+
+**Decision: the detection WARNS, it does not REFUSE.** Every other
+`/Encrypt`-keyed refusal in pdfce blocks the operation outright, because
+an encrypted document's bytes genuinely cannot be read without the
+password. A §7.6.7 wrapper is different in kind: the visible page IS
+fully readable, and is frequently the *only* human-readable instructions
+the operator has for locating or unlocking the real document underneath
+(the wrapper mechanism is designed to carry exactly that kind of cover
+text). Refusing to open it would deny the operator the one page that
+tells them what to do next. The warning instead makes explicit what the
+render/parse path was already silently true of: the counts and pages
+pdfce reports describe the wrapper, not the payload.
+
+**Decision, forward-pointer only — not yet actioned, recorded here so
+whoever activates Pass 5 (Encryption) finds it before writing the crypt
+stage rather than after:** ISO 32000-2 exempts a digital signature's
+`/Contents` entry from encryption; ISO 32000-1's never-encrypted object
+list does not carry the same exemption. A crypt-stage implementation
+that follows 32000-1's list literally will encrypt a signature's
+`/Contents`, corrupting every signature in the file — the failure
+presents to the operator as an invalid certificate, not as an encryption
+defect, which makes it a specifically hard failure mode to diagnose from
+its symptom. Filed here rather than left only in the commit message
+because it belongs beside where the crypt stage's object-exemption list
+will eventually be designed (`ARCHITECTURE.md` §12's 2026-07-31
+Encryption entries, and `docs/ROADMAP.md`'s Encryption Backlog bucket).
+
+**Why this earns a §12 entry rather than staying a `ROADMAP.md` Backlog
+note only.** This is a document-open-time behavioural change — pdfce now
+tells the operator something about a file's structure (encrypted payload
+present) that it did not tell them before, on a class of file that opens
+successfully today and will continue to. That is a change to what "open
+and report on a PDF" means for one class of input, not merely a Backlog
+scoping note. **Not a §4/§5 body-section change** — the wrapper detection
+is additive disclosure layered on the existing open/parse path; it does
+not alter the object model, the round-trip contract, or any crate
+boundary, so no other section of this document needs a corresponding
+edit. See `docs/ROADMAP.md`'s `5039ecf`+`ce5642d` Shipped entry and the
+new standing rule **R186** (a guard keyed on a marker fails open without
+it) for the paired finding this same session produced.
+
+### 2026-08-11 (eighty-ninth filing, `f83be5a` design + `30c0940` wiring) — a field's four new authoring properties are represented as the spec's OWN refusal boundary, not smoothed over it; the comb precondition is a live, self-clearing GUI state, never a stale checkbox
+
+**Sourcing.** No shell tool this dispatch. Recorded from the engineer's
+dispatch text describing both commits together — the core data-model
+shape (`f83be5a`, filed 2026-08-11, eighty-eighth filing) and the
+CLI/GUI wiring built on top of it (`30c0940`, same session as this
+entry). No `ARCHITECTURE.md` entry existed for either before this
+filing (the eighty-eighth filing's own ledger recorded "not touched by
+this piece" for `f83be5a`) — this entry closes that gap for both
+commits together, since the data-model decision and the shell-facing
+decision it enables are one continuous design, not two.
+
+**Decision: `NewTextField`'s four new properties (border style `/BS`
+Table 166, visibility `/F` Table 165, password `/Ff` bit 14, comb `/Ff`
+bit 25) are each represented as their own typed field on the builder,
+not as a raw flags integer the caller must get right by hand.**
+`BorderStyle` (five variants: Solid/Dashed/Beveled/Inset/Underline) and
+`Visibility` (four variants: VisibleAndPrints/ScreenOnly/PrintOnly/
+Hidden) are enums, not bit patterns, so a caller cannot construct an
+invalid combination the type system should have ruled out — consistent
+with this project's existing preference (R151's sibling discipline)
+for making an authoring mistake a compile error or a named refusal
+rather than a silently-wrong byte pattern. **The pre-existing default
+(no `/BS` written at all) is preserved exactly, not merely
+approximated** — Table 166 defaults `/S` to `S` and `/W` to 1, so every
+field pdfce authored before this commit already had a solid one-point
+border *by omission*; the new default reproduces that same rendered
+result rather than introducing a visible change for callers who don't
+ask for anything different (asserted by `the_authoring_defaults_
+reproduce_the_previous_output`).
+
+**Decision: comb's Table 228 precondition (bit 25 requires `/MaxLen`
+present and `Multiline`/`Password`/`FileSelect` all clear) is enforced
+as a REFUSAL at the core boundary, and disclosed as a live, self-
+correcting STATE at the GUI boundary — the same fact, two different
+obligations for two different callers.** At the core layer
+(`comb_conflict`), a request that breaks the precondition is refused
+by name with the specific unmet clause in the error string, before any
+object is staged (`a_refused_comb_stages_nothing` proves no partial
+field can result from a rejected spec) — this is the right contract
+for a caller that already knows what it's asking for and needs a hard
+yes/no. At the GUI layer, the same precondition is exposed as a
+**disabled-and-explained control that clears itself the moment the
+precondition stops holding** (e.g. Max length dropping to 0), rather
+than staying ticked-but-unreachable — because an operator driving the
+canvas interactively is not submitting one atomic request, they are
+building one incrementally, and a control that silently disagrees with
+what it is bound to once the operator's own edits invalidate it would
+be exactly the kind of silent staleness **R186** (this same session)
+names as the failure mode to design against. **Why comb specifically
+has no reader-recovery rule to fall back on, which is why refusal (not
+a warning) is the core-layer choice:** a field that breaks Table 228's
+precondition has no defined rendering — pdfce's own ambiguity register
+already records this as one of four producer gates with no recovery
+rule at all — so authoring one would author a disagreement between
+viewers, not a field with merely imperfect behaviour.
+
+**Not a crate-boundary or round-trip-invariant change.** Both decisions
+live entirely inside `pdfce-core`'s existing field-authoring surface
+(`NewTextField`, `EditSession`) and its two existing shell callers; no
+new crate dependency, no change to how a written field's bytes are
+re-emitted on a later save. Recorded in §12 because the *shape* of the
+decision — spec refusal boundary vs. GUI disclosure boundary treating
+the same precondition differently on purpose — is exactly the kind of
+API-design reasoning `docs/decisions/` and §12 exist to keep from being
+re-derived from scratch the next time a Table-228-shaped precondition
+shows up on a different field type.
