@@ -215,6 +215,52 @@ NEW addition to the reliable-non-Adobe-domain list alongside
 `community.adobe.com`, `acrobatusers.com`, and the vendor-API-reference
 sites already noted above.
 
+Confirmed a fifteenth time (2026-08-10, sourcing the posture-B
+`AFSimple_Calculate`/`AF*_Format` whitelist for decision 009 §6) — a
+**NEW failure mode, distinct in kind from every prior entry in this
+file**: this session needed Adobe's own PDF-format primary documents
+(*Acrobat Forms API Reference*, *JavaScript for Acrobat API Reference*),
+not HTML pages. Every attempt to `WebFetch` a raw PDF URL — four tried,
+across `experienceleague.adobe.com`, `t10.org`, and a `pdfill.com`
+mirror — returned **bytes successfully** (no timeout, no 403) but the
+tool could only read the PDF's binary/xref/object structure, never a text
+layer; `WebFetch` appears to have no PDF-to-text extraction path at all,
+unlike its HTML-to-markdown conversion. The `Read` tool CAN read PDFs
+(confirmed elsewhere in this project for the `sw_api_docs` corpus) but
+its page-rendering path requires `pdftoppm`/poppler, which is **not
+installed in this environment** — so even the locally-saved copies
+`WebFetch` leaves behind (`.../tool-results/webfetch-*.pdf`) were
+unreadable this session. **Practical mitigation that worked**: an HTML
+mirror of the OLDER Acrobat 6 JavaScript Scripting Guide, paginated as
+individual `.htm` files at `verydoc.com/documents/acrojsguide/pg_NNNN.htm`,
+fetched cleanly and gave real (if incomplete/overview-level) content —
+worth trying this kind of paginated-HTML-mirror pattern for other
+old-Acrobat-documentation lookups before assuming a topic is unreachable.
+**The more load-bearing mitigation**: Mozilla's `pdf.js` project ships
+its own from-scratch, MPL-2.0, plain-text-JS reimplementation of exactly
+these Acrobat helper functions (`raw.githubusercontent.com/mozilla/pdf.js/master/src/scripting_api/aform.js`
+and `.../src/shared/scripting_utils.js`), built for Acrobat-form
+interoperability — `WebFetch` against `raw.githubusercontent.com` URLs
+succeeded cleanly and repeatedly (5/5 this session, zero failures), and
+because it's real source code (not Adobe's, no licensing conflict
+quoting short excerpts) it gave PRECISE, verbatim-quotable answers no
+community forum search had produced (e.g. the exact multiply-by-100 line
+in `AFPercent_Format`). **General lesson worth reusing beyond this one
+topic**: when a question is "what does Acrobat's JS engine actually do"
+and Adobe's own PDF documentation is unreachable, check whether a major
+open-source PDF engine (pdf.js is the standout, being the most
+widely-deployed and actively-tested against real Acrobat-authored forms)
+has independently reimplemented the same behavior — `raw.githubusercontent.com`
+source files are a consistently reliable `WebFetch` target across every
+attempt made this session, a new, notably clean addition to the
+reliable-non-Adobe-domain list. Tag every fact sourced this way at a
+distinct confidence tier from both Adobe-primary and community-forum
+sourcing (this session introduced `PDFJS-CLONE` as that tier name in
+`forms__calculation_validation_javascript.md`) — it's real tested code,
+stronger than a guess, but still a third party's behavioral clone, not
+Adobe's own word, and should be flagged for live-Acrobat re-verification
+before anything built on it ships as `must_have`-grade settled.
+
 Confirmed a ninth time (2026-08-01, extending `measure__scale_and_calibration.md`
 to try to close the static-vs-associative GAP for decision 011): `WebSearch`
 exhausted at 200/200 before the first query again; the one candidate

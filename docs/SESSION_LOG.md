@@ -2983,6 +2983,20 @@ contains; hook points reference `/URI`//`/SubmitForm`//`/ImportData`//
   (`pdfce-spec-librarian`); source the `AF*` canonical shapes
   (`pdfce-acrobat-librarian`); confirm PDF/A forbids JS actions.
 
+  **★ AMENDMENT 2026-08-10 (eighty-fourth filing) — the "hollow shall"
+  finding stated above was FALSE and is CORRECTED, not merely re-cited.**
+  The claim that the two external JS references are in ISO 32000-1's
+  Bibliography was wrong — both are clause-3 Normative References; the
+  standard's own "(see the Bibliography)" pointer is a systematic erratum
+  recurring at ≥8 sites. The conclusion (never execute) is unaffected;
+  the ISO-conformance argument for it is corrected to the invocation-verb
+  argument (§12.6.4.16 never uses the standard's "shall conform to"-class
+  formula). Posture B (deferred here as "Pass 7.x") **shipped this same
+  amendment's session as `Pass 7.2`**, on operator instruction rather than
+  the recognition-histogram trigger this entry named. Full record:
+  `docs/decisions/009-forms-javascript-posture.md` §0;
+  `ARCHITECTURE.md` §12's 2026-08-10 entry; today's entry, below.
+
 **Full-corpus R46 — GATE PASS (post-7.0 re-run, residual DISCHARGED):**
 the orchestrator re-ran the R46 content-identity gate over `fixtures/
 external` (3,020 files) post-7.0: **every content stream semantically
@@ -32534,3 +32548,151 @@ in this filing's `ROADMAP.md`/`ARCHITECTURE.md` edits, and none of that
 has happened as of this filing.** This is the **eighty-third**
 `SESSION_LOG.md`/`ROADMAP.md` joint filing (the eighty-second confirmed
 present by direct read before this entry was appended).
+
+## 2026-08-10 (eighty-fourth filing)
+
+**Shipped:**
+- **`Pass 7.2` — posture-B native recompute of AcroForm JavaScript
+  built-ins.** New `pdfce-core` module `form_script/` (`shape.rs`
+  exact-shape recogniser, `mod.rs` identity+trigger check, `calc.rs`
+  native `AFSimple_Calculate`, `format.rs` native `AFNumber`/`AFPercent`/
+  `AFSpecial` display rendering, `inventory.rs` per-field census,
+  `recompute.rs` whole-form `/CO`-ordered plan, `disclose.rs` the
+  decision-009 §7 disclosure contract) — 75 tests, all green. CLI
+  `list-scripts` + `recompute` (`--apply --output`, `--comma`,
+  `--verify-undo`). Fills decision 009 §5's reserved "Pass 7.x" slot,
+  shipped **on operator instruction ("add posture b")**, which discharges
+  §5's deferral gate directly — the recognition-histogram trigger §5
+  actually named was **not** run; do not infer it was. **No GUI surface**
+  this Pass (R151).
+
+**Decisions made this session:**
+- **Posture B's design was corrected mid-build, kept on record because
+  the wrong reasoning was seductive.** The first `recompute.rs` draft
+  deliberately ignored `/CO` for a derived dependency order, on the
+  theory that a disagreeing `/CO` would produce a stale subtotal. Wrong
+  twice: `/CO` order is normative (see Findings, below), and more
+  fundamentally posture B exists to **reproduce what another
+  JS-executing reader produces** — a "better" pdfce-only answer would
+  make one saved document show two different totals depending on who
+  opens it, exactly what R56's disclosure discipline exists to prevent.
+  `/CO` now wins when present and complete; a derived order is the
+  disclosed fallback, and `RecomputePlan::order_source` reports which was
+  used.
+- **pdf.js (MPL-2.0) adopted as a behavioural reference for Acrobat's
+  form-JS runtime**, the same shape as standing rule R61 (Inkscape) —
+  never a dependency, never a code source, behaviour read and
+  independently reimplemented only. Chosen because every attempt to
+  fetch Adobe's own primary *JavaScript for Acrobat API Reference* PDFs
+  this session returned binary structure with no extractable text.
+  Recorded as `docs/LEGAL.md` §6.6 (new) rather than a new standing
+  rule — it is R61's existing scope applied a second time, not a new
+  constraint.
+- **Evidence-tier discipline** (`ADOBE-PRIMARY`/`PDFJS-CLONE`/
+  `COMMUNITY`/`GAP`) carried into `form_script`'s doc comments per-claim,
+  so "Acrobat does X" is never written where what is actually known is
+  "one careful independent reimplementation does X."
+
+**Findings + decisions:**
+- **Decision 009's central spec claim was FALSE — corrected, not
+  re-cited.** `pdfce-spec-librarian` measured decision 009 §1's claim
+  that the two external JS references are in ISO 32000-1's (informative)
+  Bibliography, against the staged source. **Both are clause-3 Normative
+  References** (line 367, line 478); the Bibliography (line 37395+)
+  contains zero JavaScript/RFC/Unicode entries. §12.6.4.16's own "(see
+  the Bibliography)" pointer is a **systematic erratum recurring at ≥8
+  sites** in the standard. The conclusion (never execute) is unaffected;
+  the surviving argument is that §12.6.4.16 never uses the standard's
+  "shall conform to"-class binding formula (used elsewhere for Adobe TN
+  #5014, XFA 2.0, RFC 2315) — non-execution is a deliberate,
+  disclosed decision not to implement an under-specified clause, not
+  "nothing to conform to." A **second**, unconditional execute-`shall`
+  was also found (`/Names /JavaScript` document-level name tree, on
+  open) — no prior statement that the only execute-shall is
+  per-action/user-triggered is accurate. The ISO 32000-2 renumbering
+  (§12.6.4.16→§12.6.4.17, "JavaScript"→"ECMAScript" actions, ISO/DIS
+  21757-1 as replacement) is recorded as an **open, unverified
+  question** — paywalled. Full correction:
+  `docs/decisions/009-forms-javascript-posture.md` §0 (new section,
+  original §1 left intact); `ARCHITECTURE.md` §12's 2026-08-10 entry;
+  this file's 2026-08-01 entry above gains a dated amendment footer.
+- **`/CO`'s clause number was wrong in the codebase.** `forms.rs` cited
+  "§12.6.3"; **`/CO` is Table 218, §12.7.2** — descriptive alone. The
+  **obligation** lives in §12.6.3 Table 196's `C` row ("shall be defined
+  by the `CO` entry"). Also corrected: form-field `/AA` = Table 196
+  (distinct from annotation `/AA` = 194, page `/AA` = 195, document
+  `/AA` = 197 — four different tables share the name); full 1.7→2.0
+  renumbering recorded in `ARCHITECTURE.md` §12.
+- **§12.6.3 Table 196's `F` row permits a format action to modify
+  `/V`** (NOTE 2's own worked example) — pdfce's "format never writes
+  `/V`" rule is a **pdfce invariant declining spec-granted latitude**,
+  never documented as compliance.
+- **`/NeedAppearances` re-confirmed to oblige nothing** — R51
+  re-confirmed conformant, no change needed.
+- **The K/V/C/F trigger firing order is confirmed deliberately
+  unspecified by ISO** — §12.6.3 sequences the *page* trigger family
+  explicitly three times, proving the standard knows how to specify
+  order and chose not to here. Any order pdfce implements is Acrobat
+  convention, not compliance.
+- **A blank operand participates as ZERO in Acrobat's built-ins, not
+  skipped** — `PRD` with any blank member is 0; `AVG` divides by the
+  count including blanks; `MIN`/`MAX` are pulled toward 0.
+- **`AFPercent_Format` multiplies the stored `/V` by 100 for display
+  only** — the stored value is always the fraction.
+- **A decimal comma is ambiguous** — pdf.js's silent comma→point rewrite
+  would turn an en-locale `1,234` into `1.234`, a thousand-fold error
+  inside a plausible total. Exposed as `--comma`, safe default.
+- **Three new `C:\personal_rag\pdf\` lessons filed this session**
+  (blank-operand-as-zero, percent-stored-as-fraction-not-percent,
+  conditional phone mask) — see Ledger, below. **The "(see the
+  Bibliography)" erratum is NOT filed to `personal_rag/pdf`** — it is a
+  fact about the standard itself, spec-RAG territory (hard rule 6), and
+  is presumed recorded by `pdfce-spec-librarian` in
+  `D:\Dev\Rag-Specialized\PDF_Spec\` — not independently verified as
+  filed there by this librarian.
+
+**Still in flight:** unchanged from the eighty-third filing — decisions
+037/038 still CLAIMED-not-authored; printer job SPOOLING (operator
+go-ahead); attachment EXTRACTION-to-file (R151); theme-preset default
+(open operator question); GUI surface for form-script recompute (new,
+this filing — R151-flagged in `FEATURES.md`'s new row).
+
+**For next session:** if a GUI surface for form-script recognition/
+recompute is wanted, the disclosure-string contract is already fully
+specified in decision 009 §7 and `form_script::disclose` — no new design
+work, only a shell caller. Otherwise nothing new queued beyond what the
+eighty-third filing already named.
+
+**Ledger for this filing.** **New Pass ID minted: `Pass 7.2`** (posture-B
+native recompute) — fills decision 009 §5's reserved "Pass 7.x" slot;
+grepped free before minting per R156 (zero prior hits for
+`Pass 7.2`/`7.3`/`7.4`). **Does not move the Pass-family ceiling** —
+unchanged at **58.1**, next free **59** (the `Pass 10.0` precedent:
+filling an old family's reserved-but-unheaded slot is not a new
+high-water mark). `docs/FEATURES.md`: one new row under *Forms
+(AcroForm)* — `core [x]` / `cli [x]` / `gui [ ]` — filed directly to
+*Implemented* (no prior *Planned* placeholder existed for this row to be
+removed from — a historical gap in the Pass 7.1 filing, not corrected
+retroactively). `docs/ARCHITECTURE.md`: one new dated §12 entry
+(2026-08-10) carrying the full correction + design record; one inline
+strikethrough+correction at the pre-existing 2026-08-01 entry's false
+"hollow shall" claim. Decision record:
+`docs/decisions/009-forms-javascript-posture.md` gains a new §0
+correction section plus inline correction markers at §5 bullet 4, the
+JSON block, and the Orchestrator note; **decision-record ceiling
+unchanged at 038, next free 039** (a correction, not a new decision).
+Standing rules: **no new mint** — R53–R57 already covered posture B's
+shape, corrected in place rather than superseded; ceiling stays
+**R185**, next free **R186**. `docs/LEGAL.md`: new **§6.6** (pdf.js
+behavioural-reference precedent, the second instance of R61's pattern).
+`C:\personal_rag\pdf\`: **three new lessons**, subject index + master
+index both updated this filing. **No `D:\dev\rag\rust\`/`egui\`
+finding** this filing. Operator-question ceiling unchanged at **(bh)**,
+next free **(bi)**. Gate figures (75 new `form_script` tests, all green)
+RELAYED from the engineer's report, **NOT independently re-run — no
+shell this dispatch** (hard rule 8). **Backup/git working-tree state not
+asserted anywhere in this filing** — the engineer should check
+`D:\Dev\pdfce-backups\` and `git log`/`git status` directly before any
+push. This is the **eighty-fourth** `SESSION_LOG.md`/`ROADMAP.md` joint
+filing (the eighty-third confirmed present by direct read before this
+entry was appended).

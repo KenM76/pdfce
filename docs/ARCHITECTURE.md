@@ -5604,12 +5604,24 @@ with a forward pointer.
     decision-008 §5.1 embedded-JS scope trap and the Pass 6.2 open
     sub-decision. **Outcome: NEVER execute embedded PDF JavaScript** —
     field `/AA`, document `/AA`, `/OpenAction`, `/Names /JavaScript`,
-    built-in or custom, on load or interaction. This is fully
+    built-in or custom, on load or interaction. ~~This is fully
     ISO-conformant: §12.6.4.16 is a **"hollow shall"** — it mandates
     execution but defines no JS semantics/API/DOM/security model
     (deferring to two external non-ISO documents), specifying only the
     carrier (Table 217) and hook points (§12.6.3, `/AA`, `/CO`, `/Names
-    /JavaScript`); there is no normative JS behavior to conform to.
+    /JavaScript`); there is no normative JS behavior to conform to.~~
+    **★ CORRECTED 2026-08-10 (see the dated entry below) — the "defers to
+    two external non-ISO documents" claim was FALSE: both documents are
+    ISO 32000-1 clause-3 NORMATIVE references, not Bibliography entries;
+    the clause's own "(see the Bibliography)" pointer is a systematic
+    erratum recurring at 8+ sites in the standard. The surviving
+    conformance argument is that §12.6.4.16 never uses the standard's
+    "shall conform to"-class binding formula for these two documents
+    (used elsewhere for Adobe TN #5014, XFA 2.0, RFC 2315) — a
+    deliberate, disclosed non-implementation of an under-specified
+    clause, not "nothing to conform to." Practical outcome (never
+    execute) is UNCHANGED. Full correction:
+    `docs/decisions/009-forms-javascript-posture.md` §0.**
     **Phased hybrid:** posture A (recognize + classify + disclose +
     byte-exact round-trip, zero execution) is the mandatory floor and
     Pass 7's entire JS scope; posture B (native Rust recompute of an
@@ -15819,3 +15831,208 @@ belonged to a different feature sharing a name).
 this filing** — see the new §3 paragraph under `pdfce-render\layers.rs`
 (immediately following the `apply_view_usage` paragraph, above), added in
 this same filing.
+
+---
+
+### 2026-08-10 — Decision 009 CORRECTION (hollow-shall retraction) + `/CO` clause fix + Pass 7.2 (posture-B native recompute) ships
+
+**Three things filed together: a retraction of a false spec claim, a
+citation fix, and the Pass this decision's posture B was always deferred
+to.** Filed on operator instruction ("add posture b"), which discharges
+decision 009 §5's own deferral gate (posture B was to be "demand-driven by
+Pass 7's recognition histogram") **by direct instruction, not by a
+measurement** — no histogram was run; a future session must not infer one
+was.
+
+**(a) Decision 009's "hollow shall" argument corrected, not merely
+re-cited.** `pdfce-spec-librarian` measured the claim against the staged
+ISO 32000-1 source this session: the Mozilla Client-Side JS Reference and
+the Adobe JavaScript for Acrobat API Reference — which decision 009 §1
+said were "in the Bibliography" (informative) — are in fact ISO 32000-1
+**clause 3, Normative References** (line 367 and line 478 respectively).
+§12.6.4.16's own "(see the Bibliography)" parenthetical is a **systematic
+erratum recurring at ≥8 sites** in the standard (also Unicode Standard,
+RFC 1321, RFC 2045, RFC 3161, Adobe Glyph List, UAX #29, XDP) — never
+treat that parenthetical as evidence of informative status again.
+
+The conclusion (never execute) is unaffected, but its ISO-conformance
+argument is now the weaker, correct one: §12.6.4.16 never uses the
+standard's "shall conform to"-class formula for binding an external
+document normatively (used elsewhere for Adobe TN #5014 §9.7.5.3, XFA 2.0
+§12.7.3.4, RFC 2315 §12.8.1) — it invokes the two references only
+descriptively ("give details on the contents and effects"), and its own
+consequence is permissive ("may update their values"). **Non-execution is
+therefore a deliberate, disclosed decision not to implement a clause the
+standard did not itself fully specify — not "there is nothing to conform
+to."** Full retraction and rebuilt argument:
+`docs/decisions/009-forms-javascript-posture.md` §0 (new section, inserted
+ahead of the original §1 rather than editing it in place, so the original
+reasoning stays legible as what it was).
+
+**Also newly found, not previously recorded:** a **second** unconditional
+execute-`shall` — the catalog `/Names /JavaScript` name tree: *"When the
+document is opened, all of the actions in this name tree **shall** be
+executed."* Document-level, on-open, unconditional — distinct from the
+per-action, user-triggered field/document `/AA` and `/OpenAction` shalls
+decision 009 already discussed. Any statement that the only execute-shall
+is per-action/user-triggered is now known inaccurate.
+
+**And an ISO 32000-2 delta recorded as an OPEN QUESTION, not a finding:**
+§12.6.4.16 becomes §12.6.4.17 in 32000-2, retitled "JavaScript actions" →
+"ECMAScript actions," with ISO/DIS 21757-1 named as the replacement
+publication for several Adobe/ECMA/ISO ECMAScript-in-PDF documents.
+Whether 21757-1 is invoked normatively is **paywalled and unverified** —
+this decision's argument is scoped to **ISO 32000-1 only** until that is
+confirmed; every NF4-style citation from decision 009 should say
+"ISO 32000-1," never "PDF" or "the spec."
+
+**(b) `/CO`'s clause number was wrong in `pdfce-core/src/forms.rs`, and
+its normative force was understated.** `AcroForm::calc_order_count` was
+documented as "§12.6.3" — wrong. **`/CO` is defined in §12.7.2, Table
+218**, not §12.6.3 (§12.6.3 Table 196 covers the recalculation trigger
+event; Table 219 is `SigFlags`). Read alone, Table 218's own wording is
+*descriptive* ("will be recalculated"), which reads as advisory. **The
+obligation lives in a different clause**: §12.6.3 Table 196's `C` row —
+*"The order in which the document's fields are recalculated **shall** be
+defined by the `CO` entry in the interactive form dictionary."* `/CO`
+order is therefore **normative**, and citing Table 218 alone (as the
+pre-correction doc comment did) gets the direction backwards — the
+carrier is descriptive, the *obligation to honour it* lives one clause
+over. Fixed in `forms.rs`'s doc comments for both `calc_order_count` and
+`calc_order` (the corrected doc comment is now the canonical citation;
+this entry records the decision, not the code).
+
+**Other table numbers corrected while auditing this, recorded because a
+bare table number is meaningless across editions:** Annotation `/AA` =
+Table 194; page `/AA` = 195; **form-field `/AA` = Table 196**; **document-
+catalog `/AA` = Table 197**. 1.7→2.0 renumbering for this cluster: §12.7.2
+→ §12.7.3, §12.7.3 → §12.7.4, §12.7.3.3 → §12.7.4.3, §12.7.4 → §12.7.5,
+§12.7.5 → §12.7.6, §12.7.5.3 → §12.7.6.3, Table 218 → 224, Table 220 →
+226, Table 222 → 228, **Table 196 → 199**. Hazard: 1.7's Table 199 is
+*go-to action entries* — an unqualified table number crossing editions is
+a trap.
+
+**Two further spec facts, both acted on in the new code (§ below):**
+§12.6.3 Table 196's `F` (format) row **explicitly permits** a format
+action to modify the field's value, and NOTE 2 uses exactly that as its
+worked example — so pdfce's "a format helper never writes `/V`" design
+choice is a **pdfce invariant declining spec-granted latitude**, never
+documented as compliance. §12.6.3 NOTE 2 also states the `K`/`F`/`V`/`C`
+triggers are "not defined for button fields," and §12.7.4.2.2 says a
+pushbutton "shall not use the `V` and `DV` entries" — consistent with the
+existing `add_push_button` design (§12.7.4.2.2, ARCHITECTURE §12
+2026-08-08 entry). `/NeedAppearances` re-confirmed to oblige a conforming
+reader to do nothing (no shall/should/may attaches to honouring it,
+occurs exactly twice in 756 pages) — **standing rule R51 re-confirmed
+conformant**, no change needed.
+
+**The K/V/C/F firing order is confirmed UNSPECIFIED by ISO, and provably
+deliberately so** — §12.6.3 sequences the *page* trigger family explicitly
+three times (`PO` after `O`, `PC` before `C`, page `C` before any other
+page opens), demonstrating the standard knows how to specify an order and
+chose not to for the field-trigger family. Any order pdfce implements
+(§12.6.3 Table 196's `/CO` order, when present) is Acrobat-convention
+product choice, not spec compliance — documented as such at the site
+(§(c) below).
+
+**(c) Pass 7.2 ships posture B — native recompute of the
+`AFSimple_Calculate`/`AF*_Format` whitelist decision 009 §6 scoped, with
+the design corrected from the plan in one place.** New `pdfce-core`
+module `form_script/` (`shape.rs`, `mod.rs`, `calc.rs`, `format.rs`,
+`inventory.rs`, `recompute.rs`, `disclose.rs`; 75 tests). CLI `list-scripts`
+(classified per-field census) + `recompute` (plan by default, `--apply
+--output` to write, `--comma` policy, `--verify-undo`).
+
+**Design points recorded here because they are decisions, not
+implementation detail:**
+
+1. **Asymmetric error cost drives the whole recogniser.** A missed
+   built-in costs a disclosed-stale value (safe); a mis-recognised custom
+   script writes a wrong number that looks identical to a right one
+   (unsafe, and it is the R43/R44 failure — a private bake that looks
+   authoritative — one level over into semantics). Every ambiguity
+   therefore resolves to `Custom`, never to a guessed built-in.
+2. **The recogniser is an exact-shape matcher, deliberately not a
+   JavaScript parser** — becoming one is the first step toward posture C,
+   which R53 prohibits by name. A false negative (real built-in read as
+   custom) is the acceptable failure mode.
+3. **Helper/trigger pairing is checked**, so no code path lets a `/F`
+   (format) helper reach `/V` — the format/value separation R56 already
+   required is enforced structurally, not just by convention.
+4. **An unresolved operand refuses the whole calculation** rather than
+   skipping it (pdf.js) or throwing at runtime (real-Acrobat reports of
+   `"f is null"`) — the two references genuinely disagree, so pdfce
+   declines to pick either.
+5. **A blank operand participates as ZERO, matching Acrobat, not as an
+   ignored value**: `PRD` with any blank member is 0; `AVG` divides by
+   the operand count *including* blanks; `MIN`/`MAX` are pulled toward 0
+   by a blank. The "skip non-numeric operands" reading is wrong in all
+   three built-ins.
+6. **A decimal comma is ambiguous and defaults to non-numeric** rather
+   than being silently reinterpreted — pdf.js rewrites the first comma to
+   a decimal point, which turns an en-locale `1,234` into `1.234`, a
+   thousand-fold error inside what looks like a correct total. Exposed as
+   a policy flag (`--comma`), safe default.
+7. **`AFPercent_Format` multiplies the stored `/V` by 100 for display
+   only** — the field's stored value is the fraction, never the percent.
+8. **★ THE DESIGN CORRECTION.** The first `recompute.rs` draft deliberately
+   ignored `/CO` in favour of a derived dependency order, reasoning that a
+   `/CO` disagreeing with the dependency graph would make pdfce compute a
+   stale subtotal. **Wrong on two grounds, both now on record:** `/CO`
+   order is normative (§(b) above), and more fundamentally, **posture B
+   exists to reproduce what another JS-executing reader produces** — a
+   "better" pdfce-only answer would make one saved document show two
+   different totals depending on who opens it, which is exactly the
+   failure this decision's whole disclosure discipline (R56) exists to
+   prevent. `/CO` now wins when present and complete; the derived order is
+   the disclosed fallback for the non-conforming case (`/CO` absent or
+   partial), and `RecomputePlan::order_source` reports which was used —
+   never silently.
+
+**Evidence-tier discipline, recorded because it bears on the pdf.js
+question below:** the Acrobat behaviours above (blank-operand handling,
+percent storage, comma ambiguity) were sourced largely from Mozilla
+**pdf.js**'s independent MPL-2.0 reimplementation, because every attempt
+to fetch Adobe's own primary API-reference PDFs this session returned
+binary structure with no extractable text. **Behaviour only was read; no
+pdf.js code was copied, and pdfce links nothing from it.** The tiers
+(`ADOBE-PRIMARY` / `PDFJS-CLONE` / `COMMUNITY` / `GAP`) are carried into
+the `form_script` code doc comments rather than flattened to a single
+confidence level, and every single-tier fact is marked at its use site —
+"Acrobat does X" is never written where what is actually known is "one
+careful independent reimplementation does X."
+
+**(d) pdf.js-as-behavioural-reference is the SAME shape of question R61
+(Inkscape) already answered, and is recorded as its second instance.**
+R61 established: a copyleft project may be consulted as a **behavioural**
+reference — never a dependency, never a code source, never a GUI-mimicry
+target. pdf.js is MPL-2.0 (weak copyleft, not GPL/AGPL, so even less
+restrictive than Inkscape's GPL-2.0-or-later), consulted here for
+JavaScript-runtime *behaviour* only, with zero code linked and zero code
+copied — the same posture, on firmer copyleft footing. See `docs/LEGAL.md`
+§6.6 (new, this filing) for the recorded precedent.
+
+**Pass ID: `Pass 7.2`** — fills the "Pass 7.x" slot decision 009 §5
+reserved for posture B; grepped free before minting (R156). **Does not
+move the Pass-family numeric ceiling** (unchanged at 58.1) — the same
+precedent as `Pass 10.0` filling a reserved-but-unheaded family number
+(2026-08-05 entry, above): a fill of an old family's reserved slot is not
+a new high-water mark.
+
+**No new standing rule minted** — R53–R57 already cover posture B's shape
+(R56 specifically: "native recompute is limited to an exact-match
+built-in whitelist... every recomputed value is a reviewable hint"); this
+Pass is R53–R57 becoming *implemented*, not a new obligation. `ROADMAP.md`
+Standing rules' R53–R57 entry is updated in this filing to note
+implementation and to correct the same "hollow shall" wording present
+there.
+
+**`docs/FEATURES.md`:** new row under *Forms (AcroForm)* — "Recognize,
+classify + disclose form-script fields; native recompute of the
+AFSimple_Calculate/AF\*\_Format whitelist" — `core [x]` / `cli [x]` /
+`gui [ ]` (no GUI surface built this Pass; not ticked). Moved from
+*Planned* to *Implemented*.
+
+**`docs/decisions/009-forms-javascript-posture.md`** is the authority for
+the whitelist scope and disclosure contract; this entry records the
+correction and the shipped design points only, not a restatement.

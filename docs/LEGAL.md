@@ -622,6 +622,70 @@ truncation came from the invocation rather than from the data.
   confirms no prior MPL classification of veraPDF existed** (R87 — stated
   so the absence is checkable rather than asserted).
 
+### 6.6 pdf.js — behavioural reference only (2026-08-10), the second instance of R61's pattern
+
+**Flagged for recording by `pdfce-engineer` while sourcing Pass 7.2's
+posture-B AcroForm-JavaScript recompute (decision 009); written up here
+because it is the SAME shape of question `ARCHITECTURE.md` §12's
+2026-08-01 entry and standing rule **R61** already answered for Inkscape,
+not a new question.**
+
+**What happened.** Decision 009's posture B (native Rust reimplementation
+of a whitelisted subset of Acrobat's `AFSimple_Calculate`/`AF*_Format`
+JavaScript helpers — never executing any script, R53) needed to know real
+Acrobat *behaviour* for edge cases the Adobe API reference alone does not
+settle: how a blank operand participates in `SUM`/`AVG`/`PRD`/`MIN`/`MAX`,
+whether a decimal comma is reinterpreted, how `AFPercent_Format` relates
+its stored value to its displayed one. Every attempt to fetch Adobe's own
+primary *JavaScript for Acrobat API Reference* PDF this session returned
+binary structure with no extractable text. Mozilla's **pdf.js** —
+**MPL-2.0**, an independent clean-room reimplementation of Acrobat's
+form-scripting behaviour, no code shared with Adobe's — was consulted for
+the *behaviour* those edge cases produce.
+
+**The R61 pattern, applied.** R61 (2026-08-01, decision 010) established:
+a copyleft project may be a **behavioural reference** for pdfce — never a
+dependency, never a code source, never (in Inkscape's case) a GUI-mimicry
+target — provided pdfce reimplements independently from the observed
+behaviour and never links or copies. pdf.js sits on **weaker copyleft**
+than Inkscape's GPL-2.0-or-later (MPL-2.0 is file-level weak copyleft,
+§6.5.2 above), so the same posture is, if anything, on firmer ground here
+than it was for R61's original case.
+
+**What was and was not done, stated so it is checkable:**
+- **Read**: pdf.js's publicly-documented/observable calculation and
+  formatting behaviour (via its source, since it is the only available
+  primary evidence of Acrobat-compatible JS behaviour when Adobe's own
+  reference could not be extracted this session).
+- **Never copied**: no pdf.js source, expression, or algorithm text
+  appears in `pdfce-core`. The Rust implementation
+  (`crates/pdfce-core/src/form_script/`) was written from the *observed
+  behaviour*, independently.
+- **Never linked**: pdf.js is not a Cargo dependency, build-time or
+  otherwise, and will not appear in `THIRD_PARTY_LICENSES.md` for this
+  reason — same "correctly absent, don't fix it" note as §6.5's veraPDF
+  dev-tool rule.
+- **Evidence-tier discipline carried into the code**: `form_script`'s doc
+  comments tag each behavioural claim `ADOBE-PRIMARY` / `PDFJS-CLONE` /
+  `COMMUNITY` / `GAP` rather than flattening everything to "Acrobat does
+  X" — a single-source behavioural claim is marked as such at its use
+  site, per this project's general claim-sourcing discipline (global
+  CLAUDE.md, "Claim-bearing copy").
+
+**No new standing rule minted.** This is R61's existing scope, applied to
+a second copyleft project in a second subsystem — recorded as a §6.6
+precedent entry (matching R61's own "behavioural reference only" framing)
+rather than as R186, because minting a rule number for an instance of an
+already-stated rule would let a future reader satisfy "check R61" and
+"check R-pdf.js" separately and still miss that they are the same
+constraint under two names — the same reasoning `ROADMAP.md` Standing
+rules gives for treating a scope note as an amendment rather than a peer
+rule (2026-08-07 R156/R87 amendments).
+
+**Full technical record:** `docs/decisions/009-forms-javascript-posture.md`
+§6 (whitelist scope) and `ARCHITECTURE.md` §12's 2026-08-10 entry
+(design points + evidence-tier discipline for Pass 7.2).
+
 ## 7. Decision log
 
 - **2026-07-23** — Legal posture document created at project bootstrap.

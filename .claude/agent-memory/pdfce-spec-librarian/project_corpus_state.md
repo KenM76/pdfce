@@ -51,6 +51,7 @@ heading (`**<N>. `).**
 | 38 | VERBATIM-COLUMN / partition dispatch: the corpus's DERIVED list is what's under test (promoting a topic out of a summary silently breaks its lists); a spec's own PROSE goes stale vs its own TABLE in version cohorts; look for the THIRD list; answer the unstated IDENTITY test with the wrong-implementation it rules out; x-position check is mandatory for one-word classification columns |
 | 39 | NORMATIVE-FORMULA / TRANSFORM dispatch: constants survive recall but citations do not; the headline is WHERE THE SPEC STOPS (prove deliberateness with a sibling clause that DOES specify the analogue); an array's major order is provable from the clause's own EXAMPLE; check a transcribed formula against an unstated property (C¹); typography dropouts vs mis-pointers; one file vs three, and recording why |
 | 40 | "THE TABLE HAS NO SUCH COLUMN" dispatch: grep the standard's OWN normative ANNEXES before believing a delegating sentence (licence tier improves too); a dispatch can be wrong about WHERE while right about WHAT; the semantics authority can be an INFORMATIVE reference; recompute DERIVED COUNTS programmatically; ask whether a missing limit protects against anything reachable; PENDING-INTAKE for the ambiguity register |
+| 41 | ★ **"(see the Bibliography)" IN ISO 32000-1 IS A SYSTEMATIC ERRATUM — the pointed-at documents are in clause 3 (Normative references); grep clause 3, dump lines 340–486, before any informative-vs-normative claim. When the "only informative" leg of a hollow-`shall` dies, rebuild on the INVOCATION VERB ("give details on" vs "shall conform to").** Plus: "IS THIS CLAIM STILL RIGHT?" on a BEHAVIOURAL NEGATIVE: the clause can RENUMBER/RENAME across editions and a later standard can dissolve a hollow `shall` without the original clause changing (check the edition axis; split VERIFIED vs NEEDS VERIFICATION; forbid the un-editioned "the spec" paraphrase) · a dispatch's wanted spec ANCHOR can be affirmatively CONTRADICTED ⇒ name it a pdfce invariant and quote the permission it declines · DEFINITION and NORMATIVITY can live in different tables in different clauses (grep the key name document-wide) · confirm a dispatch's own HEDGE loudly · expect the whole normative surface to be two table rows · sibling-row contrast settles element types · PARTIALLY CLOSED is a valid gap state |
 | 37 | ADJUDICATING A CLAUSE-NUMBER CONFLICT: rule from the source's own enumeration, never from your heading (headings are RECONSTRUCTED); "the sub-clause does not exist" beats "the other one is right"; status leaks to anywhere the PRODUCT NAME appears, not just to headings and the index |
 
 ---
@@ -2063,3 +2064,113 @@ section**. Seven sub-findings:
   its §2 count summary or §3 priority tables — a naive insert silently falsifies
   the population arithmetic those sections depend on. Triage happens at the next
   register re-audit, which empties the section.
+
+---
+
+**41. "IS THIS CLAIM STILL EXACTLY RIGHT?" dispatch about a BEHAVIOURAL NEGATIVE —
+the claim can be perfectly right about the edition it was made against and stale
+because the CLAUSE MOVED. Check the edition axis explicitly; it is invisible from
+inside the edition you have.** Established 2026-08-10 re-verifying decision 009's
+hollow-`shall` claim (ISO 32000-1 §12.6.4.16 defines the JavaScript action's
+carrier and no semantics ⇒ non-execution is conformant). Six sub-findings.
+
+- **The 1.7 claim verified verbatim; the 2.0 half failed for a reason no amount of
+  re-reading 1.7 could surface.** In ISO 32000-2 the clause **renumbered
+  §12.6.4.16 → §12.6.4.17** and was **renamed "JavaScript actions" → "ECMAScript
+  actions"**, and 2.0's own Introduction says **ISO/DIS 21757-1 *replaces* the
+  Adobe/ECMA/ISO publications** — in a paragraph headed *Normative References*
+  changes. **ISO 21757-1:2020 clause 10 is an ISO-published "ECMAScript API".**
+  So the "the semantics live only in *informative* external documents" leg of a
+  hollow-`shall` argument is edition-scoped, and can be dissolved by a *later
+  standard existing*, with nothing in the original clause changing.
+  **How to apply: whenever a corpus file rests on "no ISO document defines X",
+  re-ask it per edition before restating it.** And when the answer is unverifiable,
+  the deliverable is the split — VERIFIED (renumber + rename + the Introduction
+  quote) vs NEEDS VERIFICATION (is 21757-1 clause-2 normative? what is
+  §12.6.4.17's modal wording?) — plus the explicit instruction *"do not restate
+  this as a claim about 'PDF' or 'the spec'"*. Extends item 37's leak paths: a
+  stale status also leaks through an **un-editioned "the spec" paraphrase**.
+- **★ A dispatch can ask you to ANCHOR a product guarantee in the spec, and the
+  spec can grant the OPPOSITE PERMISSION.** The engineer wanted "a format helper
+  never writes `/V`" grounded in what `/F` is *for*. Table 196's `F` row says the
+  action "**may modify the field's value** before formatting", and NOTE 2 offers
+  *that exact case* as its worked example of effects occurring "outside the
+  described scope of the event". Extends item 21 (an asserted guarantee is a
+  hypothesis) to its worse form: **not absent, affirmatively contradicted.** The
+  deliverable is (a) name it a **pdfce invariant, not conformance**, (b) quote the
+  permission it declines, (c) say *why* declining is right on independent grounds,
+  and (d) find the nearest genuinely-normative sentence that does point the same
+  way (here §12.7.4.3's "the contents … **shall** be used to construct an
+  appearance stream") and state exactly what it does and does not settle.
+- **★ A property's DEFINITION and its NORMATIVITY can live in different tables in
+  different clauses — quoting only the defining table yields the wrong modality.**
+  `/CO` is *defined* in §12.7.2 Table 218 with purely descriptive wording ("the
+  calculation order in which their values **will be** recalculated"). The `shall`
+  is in **§12.6.3 Table 196's `C` row** ("the order … **shall** be defined by the
+  `CO` entry"). Answering "is `/CO` normative?" from Table 218 alone gives
+  *advisory*; the true answer is *binding*. **How to apply: when a dispatch asks
+  "is X normative?", grep the KEY NAME document-wide** (`/CO` → 6 hits, 3
+  dictionaries) **and read every hit** — the modal verb may be in the row that
+  *cross-references* X, not the row that defines it.
+- **A dispatch's own hedge is evidence worth confirming loudly.** This one said
+  "I suspect the `K`/`V`/`C`/`F` ordering is unspecified — say so if it is". It
+  was right; `keystroke` = **1 hit in 756 pages**. Confirming a *self-doubt*
+  explicitly is as valuable as correcting an error, because it converts the
+  engineer's suspicion into a citable negative he can put in a doc comment. Pair
+  it with the **deliberateness proof** (item 39): §12.6.3 orders the *page*
+  trigger family explicitly three times (`PO` after `O` and `OpenAction`; `PC`
+  before `C`; page `C` before any other page opens), so the K/F/V/C silence is a
+  choice. Same move closed the circular-dependency question — §14.7.3 carries an
+  explicit anti-circularity `shall not` for role maps, so the standard writes them
+  when it wants to.
+- **On a form/calculation dispatch, expect the whole normative surface to be TWO
+  TABLE ROWS.** `recalculat*` = **3 hits in 756 pages** (two in Table 196's `C`
+  row, one in Table 218's `CO` row); `calculation order` = **1**. There is no
+  clause, no algorithm, no annex. Lead with that measurement — it tells the
+  engineer immediately that everything else he needs is a product decision, and it
+  pre-empts a future session searching for the algorithm.
+- **Sibling-row CONTRAST settles an element-type question the row itself leaves
+  bare.** Table 218's `/CO` says "indirect references to field dictionaries";
+  Table 238's Reset-Form `/Fields` says "**either** an indirect reference **or**
+  (PDF 1.3) a text string representing the fully qualified name … Elements of both
+  kinds **may be mixed**". The two rows in the same clause family prove `/CO`'s
+  reference-only restriction is deliberate rather than shorthand. (Item 32/36
+  discipline, applied to array element types.)
+- **★★ THE BIGGEST FINDING OF THE BUILD, and it was the CORPUS'S OWN ERROR:
+  "(see the Bibliography)" in ISO 32000-1 IS A SYSTEMATIC ERRATUM.** The corpus's
+  `NF4` said the two JavaScript semantic authorities "live in two external, non-ISO,
+  Adobe/Mozilla documents **(Bibliography)**" — the premise of the hollow-`shall`
+  argument and of pdfce decision 009. **Both are in ISO 32000-1 clause 3,
+  *Normative references*** (dump lines 367 and 478); the real Bibliography (line
+  37 395+) contains **zero** RFC / Unicode / AGL / JavaScript entries. **§12.6.4.16
+  says "(see the Bibliography)" and is wrong — as are ≥7 other citation sites**
+  (Unicode Standard, RFC 1321, RFC 2045, RFC 3161, Adobe Glyph List, UAX #29, XDP).
+  **Standing rule: in ISO 32000-1, a "(see the Bibliography)" parenthetical is NOT
+  evidence that a reference is informative. `grep -n "^3 Normative references"`
+  (clause 3 runs dump lines 340–486; clause 2 is *Conformance*) and read it before
+  building ANY argument on a reference's status.** This is memory item 27's "grep
+  clause 3 vs the Bibliography yourself" — which existed, and which the first draft
+  of the section did not apply. **How the error was caught: a late confirmation grep
+  on a sentence that already read as settled.** Run that grep FIRST on any
+  informative-vs-normative claim; it costs one command.
+  - **How to rebuild a hollow-`shall` argument when the "it's only informative" leg
+    dies: switch to the INVOCATION VERB.** §12.6.4.16 says the documents "**give
+    details on** the contents and effects" — while ISO 32000-1 uses an explicit
+    incorporation formula elsewhere, **including on Adobe documents**: "Embedded
+    CMap files **shall conform to** … Adobe Technical Note #5014" (§9.7.5.3), "the
+    rich text string **shall conform to** XFA 2.0" (§12.7.3.4), "The PKCS#7 object
+    **shall conform to** … RFC 2315" (§12.8.1). The standard knows how to bind a
+    clause-3 document and did not do it here. **A reference's clause membership and
+    its manner of invocation are two independent axes; check both.**
+  - **And state the WEAKER verdict honestly.** The rebuilt position is *"non-execution
+    is a deliberate, disclosed decision not to implement one clause whose content the
+    standard did not itself specify"*, **not** *"there is no normative behaviour to
+    conform to"*. When a retraction narrows a conclusion, say so in the conclusion,
+    and tell the consuming decision record to change its wording — the product
+    choice was independently justified, so only the justification moves.
+- **Also this build — SCOPED-file discipline paid off on a partial gap.** §12.7.5
+  was a recorded gap; the dispatch needed only Reset-Form. Built
+  `iso32000__s__12.7.5.md` as a SCOPED file (Reset + Import full, **Submit-Form
+  NOT ingested** with the excluded tables enumerated) and edited the index's gap
+  row to **PARTIALLY CLOSED**, naming what remains. Closing a gap *partially* and
+  saying so beats either deferring it or silently implying full coverage.

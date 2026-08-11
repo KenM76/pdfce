@@ -270,6 +270,38 @@ and `pdfminer` installed. Extraction recipe that works:
     two. Detect by "the entry head is missing but the index says the page is
     right"; repair by `' '.join(x.strip() for x in lines[a:b] if x.strip())`.
     Cheaper than the pdfminer x-position route (item 4a) and sufficient for prose.
+- **★ FREE PREVIEW SAMPLES of paywalled ISO standards — `cdn.standards.iteh.ai`
+  (verified 2026-08-10, HTTP 200, `application/pdf`, `%%EOF` present).** Pattern:
+  `https://cdn.standards.iteh.ai/samples/<ISO-doc-number>/<hex>/ISO-<num>-<part>-<year>.pdf`.
+  The `<hex>` is not guessable — **find the URL with `WebSearch`** for the standard
+  plus a clause number, then `curl -sL`. What you get is the **front matter only**
+  (~15 pp: cover, TOC, Foreword, **Introduction**, Scope, **clause 2 Normative
+  references**, and the first page or two of clause 3), watermarked
+  `iTeh STANDARD PREVIEW`. **That is enough to settle clause NUMBERS and TITLES,
+  what changed between editions, and which documents are normatively referenced —
+  without the clause bodies.** Two staged-nowhere fetches this way answered a
+  question ISO 32000-1 structurally could not: ISO 32000-2:2020's Introduction
+  states its own §12.6.4.16→**12.6.4.17 "ECMAScript actions"** renumber and that
+  **ISO/DIS 21757-1 replaces** the Adobe/ECMA references; ISO 21757-1:2020's Scope
+  and clause 2 confirmed it is an **API** definition that normatively references
+  ISO 32000-2 (the reverse direction). **Licensing: `free_secondary_paraphrase`.**
+  A preview is *publicly served* but the content is ISO's paywalled text — cite
+  clause numbers, titles and short factual sentences; **do not bulk-quote**, and
+  never label it `free_primary`. Do **not** stage these under `_sources\`.
+- **`pdf-issues.pdfa.org/<std>/clause<NN>.html` doubles as a CROSS-EDITION
+  RENUMBERING MAP.** Its per-clause page opens with a TOC listing **only the
+  sub-clauses that have errata** — but those entries carry the **new edition's
+  heading numbers and titles verbatim**, which is often exactly what you need
+  (`12.6.4.16 Go-To-3D-View actions` + `12.6.4.18 Rich-Media-Execute actions`
+  independently corroborated the 12.6.4.17 finding above). The errata bodies also
+  quote whole 2.0 table rows in `[INS]`/`[DEL]` form, from which the 2.0 table
+  **numbers** fall out (1.7 Table 218→2.0 Table 224; 1.7 Table 220→2.0 Table 226;
+  1.7 Table 196→**2.0 Table 199**, while **1.7's Table 199 is a go-to action** —
+  never cite a bare table number across editions). **`www.pdfa.org` still 403s**
+  (2026-08-10), including `/iso-32000-normative-references/`, which ISO 32000-2's
+  own Introduction points at as the free reference index — so the
+  "is document X a clause-2 normative reference of 32000-2?" question currently
+  has **no free route** and must be recorded as NEEDS VERIFICATION.
 - **Adobe font technical notes** live at
   `https://adobe-type-tools.github.io/font-tech-notes/pdfs/<NNNN>.<Name>.pdf`
   (e.g. `5004.AFM_Spec.pdf`). **All `partners.adobe.com` TN URLs are dead.**

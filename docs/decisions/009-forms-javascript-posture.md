@@ -27,7 +27,92 @@
 
 ---
 
+## 0. CORRECTION (2026-08-10) — §1's Bibliography claim was FALSE; the conclusion survives on different, weaker footing
+
+**Filed by `pdfce-librarian` at the engineer's request, sourced from a
+`pdfce-spec-librarian` measurement against the staged ISO 32000-1 source
+this session.** Read this section BEFORE §1 — it corrects the load-bearing
+claim §1 is built on, without deleting §1 (append-only discipline; the
+retraction is recorded here rather than the original wording erased).
+
+**The false claim.** §1 said ISO 32000-1 §12.6.4.16 "defers entirely to
+two external NON-ISO documents (Mozilla Client-Side JS Reference + Adobe
+JavaScript for Acrobat API Reference)" which are "in the Bibliography"
+(informative, non-normative). **This is false.** Both documents are listed
+in ISO 32000-1 **clause 3, "Normative references"** — *JavaScript for
+Acrobat API Reference, Version 8.0 (April 2007)* at clause 3 line 367,
+*Client-Side JavaScript Reference (May 1999), Mozilla Foundation* at line
+478. Neither appears in the Bibliography (which starts at line 37395+ and
+contains zero JavaScript/RFC/Unicode entries).
+
+**Why the error happened, and why it is not isolated to this decision.**
+§12.6.4.16's own text carries a parenthetical "(see the Bibliography)"
+pointing at these two references. That parenthetical is **itself a
+systematic erratum in the standard** — the same wrong pointer recurs at
+≥8 sites across ISO 32000-1 (Unicode Standard, RFC 1321, RFC 2045, RFC
+3161, Adobe Glyph List, UAX #29, XDP, and these two JavaScript
+references), all of which are in fact clause-3 Normative references.
+**Never treat "(see the Bibliography)" in ISO 32000-1 as evidence a
+reference is informative** — this is now recorded corpus-wide by
+`pdfce-spec-librarian`.
+
+**The conclusion survives, on a different and weaker argument.** ISO
+32000-1 has a formula for binding an external document normatively —
+"shall conform to", used on Adobe Technical Note #5014 (§9.7.5.3), XFA 2.0
+(§12.7.3.4), and RFC 2315 (§12.8.1). **§12.6.4.16 uses none of that
+formula.** The two documents are invoked only to "give details on the
+contents and effects of JavaScript scripts" — a weaker, descriptive
+invocation — and the clause's own obligation is phrased permissively
+("**may** update their values"), imposing no obligation on any processor
+to produce a particular computed value.
+
+**The accurate verdict, replacing §1's "there is no normative JS behavior
+to conform to" and §5 bullet 4's "there is nothing to conform to":**
+
+> Non-execution is a **deliberate, disclosed decision not to implement
+> one clause whose content the standard did not itself fully specify** —
+> **not** "there is no normative behaviour to conform to." The stronger
+> phrasing rested on the retracted Bibliography claim. **Everywhere in
+> this document that says "nothing to conform to" or "no normative JS
+> behavior," read it through this correction** — the practical outcome
+> (never execute) is UNCHANGED; only the strength of the ISO-conformance
+> argument for it is revised downward.
+
+**A second execute-`shall` this decision did not count.** Also newly
+found: the catalog `/Names /JavaScript` name tree carries its own
+unconditional shall — *"When the document is opened, all of the actions
+in this name tree **shall** be executed."* Document-level, on-open,
+unconditional (unlike the per-action, user-triggered `/AA`/`/OpenAction`
+shalls this decision already discussed). Hollow for the same corrected
+reason (§12.6.4.16's descriptive-not-conformance-binding invocation
+applies equally here), but **any statement that "the only execute-shall
+is per-action and user-triggered" is now known inaccurate** and must not
+be repeated.
+
+**ISO 32000-2 delta — recorded as an OPEN QUESTION, not a finding.**
+§12.6.4.16 becomes **§12.6.4.17 in ISO 32000-2**, retitled "JavaScript
+actions" → "**ECMAScript** actions." 32000-2's Introduction states
+"ISO/DIS 21757-1 replaces several Adobe, ECMA and ISO publications
+related to ECMAScript in PDF 2.0." **Whether ISO 21757-1 is invoked with
+a "shall conform to"-class formula (this decision's whole hinge) or a
+descriptive one, as in 1.7, is PAYWALLED and UNVERIFIED.** Do not cite a
+32000-2 posture for this decision until that verb is confirmed.
+
+**Every NF4-style spec-finding citation from this decision should say
+"ISO 32000-1," never "PDF" or "the spec"** — the edition matters, per the
+32000-2 delta above.
+
+---
+
 ## 1. The finding that settles this before the ranking begins
+
+**Read §0 above first — this section's central claim (the Bibliography
+sentence, and by extension "no normative JS behavior to conform to") was
+CORRECTED 2026-08-10. The surviving argument is the invocation-verb one
+(no "shall conform to"-class formula used), not the Bibliography-location
+one. The text below is left as originally written, per this project's
+append-only discipline for decision records; do not re-derive the old
+Bibliography argument from it.**
 
 The brief's most important input is a **spec finding**, not a preference:
 ISO 32000-1 contains a **"hollow shall."**
@@ -114,9 +199,13 @@ reasons that are structural to this project rather than matters of taste:
    is a large dependency with its own MSRV, wasm portability, CVE stream,
    and license-classification burden (rule 13), added to a project whose
    defining virtue is a small, auditable, offline surface.
-4. **There is nothing to conform to** (§1's hollow shall). C pays the
-   entire cost of an interpreter to satisfy a `shall` that defines no
-   behavior.
+4. ~~**There is nothing to conform to** (§1's hollow shall).~~
+   **CORRECTED 2026-08-10 (§0): the underlying Bibliography claim was
+   false; the accurate statement is that §12.6.4.16 invokes its two
+   external references descriptively, never with a "shall conform to"
+   -class formula, so ISO conformance does not oblige a particular
+   computed value.** C still pays the entire cost of an interpreter for
+   a clause whose content the standard did not itself fully specify.
 
 C is therefore not "deferred until we have time" — it is **out of scope
 permanently** (R-JS-1). Recording it as a prohibition, not a backlog
@@ -519,7 +608,15 @@ numbers (provisionally R53–R57).
     "B_rationale": "Restores functional parity on the common case (totals, number/date/percent/special formatting) WITHOUT running an interpreter, by pattern-matching a conservative whitelist and computing natively. It is the fuzzy-never-sneaky shape (rule 4): a reviewable value the operator sees, verifies, accepts or overrides. Deferred and opt-in because pattern-recognition is brittle and an editor must never bake a computed value as a side effect of opening a file. Built only after Pass 7 measures how many real forms actually use the whitelisted built-ins vs custom scripts — the same 'measure before you build the generator' discipline decision 008 used (6.0 read-side before 6.1 authoring).",
     "C_rationale": "REJECTED. Re-imports the exact security problem Adobe built a broker/sandbox process to contain (ISO 32000-1 §12.6.4.16 NOTE 2: a triggered action 'can occur outside the described scope of the event'); /AA hook points can reference /URI, /SubmitForm, /Launch, /ImportData actions that directly violate R12 (no network) and R13 (no process launch); adds a large dependency with its own MSRV/wasm/licensing (rule 13) and attack surface; and the spec defines NO JS security model to conform to (the 'hollow shall'). Wrong for a minimal-surface, no-network, no-process-launch editor. Prohibited by new standing rule."
   },
-  "spec_finding_hollow_shall": "ISO 32000-1 §12.6.4.16 says a conforming processor 'shall execute a script … in the JavaScript programming language' but the standard defines NO JavaScript semantics, API, DOM, or security model — it defers entirely to two external NON-ISO documents (Mozilla Client-Side JS Reference + Adobe JavaScript for Acrobat API Reference). ISO 32000 specifies only the CARRIER (Table 217: S=/JavaScript, JS=<string|stream>) and the HOOK POINTS (§12.6.3 trigger events; field/doc /AA; /CO calculation order; /Names/JavaScript name tree), plus NOTE 2's out-of-scope warning. There is therefore NO normative JS behavior to conform to — non-execution forfeits nothing an ISO conformance claim depends on. This finding is load-bearing: it means 'never execute' is fully ISO-conformant.",
+  "spec_finding_hollow_shall": "ISO 32000-1 §12.6.4.16 says a conforming processor 'shall execute a script … in the JavaScript programming language' but the standard defines NO JavaScript semantics, API, DOM, or security model. CORRECTED 2026-08-10 (see correction_2026_08_10 below): the two referenced documents (Mozilla Client-Side JS Reference + Adobe JavaScript for Acrobat API Reference) are NOT in the Bibliography — both are ISO 32000-1 clause-3 Normative References, and the clause's own '(see the Bibliography)' pointer is a systematic erratum recurring at 8+ sites in the standard. The surviving argument is the INVOCATION VERB, not the reference's informative/normative status: §12.6.4.16 never uses the 'shall conform to'-class formula the standard uses elsewhere (Adobe TN #5014, XFA 2.0, RFC 2315) to bind an external document normatively — it only says the two documents 'give details on the contents and effects,' and the clause's own consequence is permissive ('may update their values'). ISO 32000 specifies only the CARRIER (Table 217: S=/JavaScript, JS=<string|stream>) and the HOOK POINTS (§12.6.3 trigger events; field/doc /AA; /CO calculation order; /Names/JavaScript name tree, which carries its own separate unconditional on-open execute-shall), plus NOTE 2's out-of-scope warning. Non-execution is therefore a deliberate, disclosed decision not to implement a clause whose content the standard did not itself fully specify -- NOT 'there is no normative behavior to conform to' (that stronger phrasing is retracted). Practical outcome UNCHANGED: 'never execute' remains fully ISO-conformant.",
+  "correction_2026_08_10": {
+    "retracted": "The claim that the Mozilla Client-Side JS Reference and the Adobe JavaScript for Acrobat API Reference are in ISO 32000-1's (informative) Bibliography.",
+    "measured_fact": "Both are in ISO 32000-1 clause 3, Normative References (JavaScript for Acrobat API Reference V8.0 at clause-3 line 367; Client-Side JavaScript Reference May 1999 at line 478). The Bibliography (line 37395+) contains zero JavaScript/RFC/Unicode entries. Measured by pdfce-spec-librarian against the staged ISO 32000-1 source.",
+    "erratum_found": "Section 12.6.4.16's own '(see the Bibliography)' parenthetical is wrong, and is one of >=8 such wrong pointers in the standard (also: Unicode Standard, RFC 1321, RFC 2045, RFC 3161, Adobe Glyph List, UAX #29, XDP). Never treat '(see the Bibliography)' in ISO 32000-1 as evidence of informative status.",
+    "surviving_argument": "The invocation-verb argument: ISO 32000-1 binds an external document NORMATIVELY only via a 'shall conform to'-class formula (used on Adobe TN #5014 section 9.7.5.3, XFA 2.0 section 12.7.3.4, RFC 2315 section 12.8.1). Section 12.6.4.16 uses none of that formula -- the two documents are invoked only to 'give details on the contents and effects of JavaScript scripts,' and the clause's own consequence is permissive ('may update their values').",
+    "second_execute_shall_found": "The /Names/JavaScript document-level name tree carries its OWN unconditional shall, separate from the field/document /AA and /OpenAction shalls already discussed in this decision: 'When the document is opened, all of the actions in this name tree shall be executed.' Any statement in this decision or elsewhere that the only execute-shall is per-action/user-triggered is inaccurate.",
+    "iso_32000_2_delta_UNVERIFIED": "Section 12.6.4.16 becomes section 12.6.4.17 in ISO 32000-2, retitled 'JavaScript actions' to 'ECMAScript actions'; the 32000-2 Introduction states ISO/DIS 21757-1 replaces several Adobe/ECMA/ISO ECMAScript-in-PDF publications. Whether ISO 21757-1 is invoked with a 'shall conform to'-class formula (this decision's hinge) or descriptively as in 1.7 is PAYWALLED and NOT YET VERIFIED -- do not cite a 32000-2 posture for this decision until confirmed. Every NF4-style citation from this decision should say 'ISO 32000-1', never 'PDF' or 'the spec'."
+  },
   "first_implementation_scope_pass_7": {
     "summary": "Pass 7's ENTIRE JavaScript scope is posture A: recognize, classify, count, disclose, byte-preserve. ZERO execution, ZERO recompute. Native recompute (B) is explicitly NOT in Pass 7's first scope.",
     "core_pdfce_core": [
@@ -632,4 +729,10 @@ numbers (provisionally R53–R57).
 
 ## Orchestrator note (2026-08-01, at archival)
 
-Decision 009 archived from the KenAgent consultation, discharging the Pass-7 embedded-JavaScript open sub-decision flagged in decision 008 §5.1 and the Pass 6.2 ROADMAP entry. Outcome: NEVER execute embedded PDF JavaScript (fully ISO-conformant — §12.6.4.16 is a 'hollow shall'). Posture A (recognize + classify + disclose + byte-exact round-trip, zero execution) is Pass 7's entire JavaScript scope and is already the posture the in-flight Pass 7 engineer was dispatched with. Posture B (native reimplementation of the exact-match AFSimple_Calculate + AF*_Format whitelist) is opt-in, off-by-default per-document, deferred to Pass 7.x, demand-driven by Pass 7's recognition histogram; every B recompute is a reviewable/undoable EditSession edit that leaves the source script in place. Posture C (a sandboxed JS engine) is REJECTED and prohibited by standing rule. Adds standing rules provisionally R-JS-1..R-JS-5 — the pdfce-librarian assigns the actual next numbers (expected R53—R57) when it files decision 009 alongside the Pass 7 ship; this record is the authority for their content. Spec prerequisites (verify §12.6 carrier/hook coverage + record the hollow-shall finding formally; source the AF* helper canonical shapes via pdfce-acrobat-librarian; confirm PDF/A forbids JS actions) are queued for when Pass 7.x/posture-B is scoped, non-blocking for Pass 7's posture-A floor.
+**★ CORRECTED 2026-08-10 — see §0 above. The "hollow shall" / "fully
+ISO-conformant, nothing to conform to" phrasing below rested on a false
+Bibliography claim; the practical outcome (never execute) is unchanged,
+but the ISO-conformance argument for it is the weaker invocation-verb
+one, not "there is no normative JS behavior at all."**
+
+Decision 009 archived from the KenAgent consultation, discharging the Pass-7 embedded-JavaScript open sub-decision flagged in decision 008 §5.1 and the Pass 6.2 ROADMAP entry. Outcome: NEVER execute embedded PDF JavaScript (ISO-conformant on the invocation-verb argument — see §0's correction of the original "hollow shall" claim). Posture A (recognize + classify + disclose + byte-exact round-trip, zero execution) is Pass 7's entire JavaScript scope and is already the posture the in-flight Pass 7 engineer was dispatched with. Posture B (native reimplementation of the exact-match AFSimple_Calculate + AF*_Format whitelist) is opt-in, off-by-default per-document, deferred to Pass 7.x, demand-driven by Pass 7's recognition histogram; every B recompute is a reviewable/undoable EditSession edit that leaves the source script in place. Posture C (a sandboxed JS engine) is REJECTED and prohibited by standing rule. Adds standing rules provisionally R-JS-1..R-JS-5 — the pdfce-librarian assigns the actual next numbers (expected R53—R57) when it files decision 009 alongside the Pass 7 ship; this record is the authority for their content. Spec prerequisites (verify §12.6 carrier/hook coverage + record the hollow-shall finding formally; source the AF* helper canonical shapes via pdfce-acrobat-librarian; confirm PDF/A forbids JS actions) are queued for when Pass 7.x/posture-B is scoped, non-blocking for Pass 7's posture-A floor.
