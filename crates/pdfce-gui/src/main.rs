@@ -10617,6 +10617,77 @@ impl PdfceApp {
     /// missing guard predates Pass 4 (it was always true of
     /// `pending_save` alone), but Pass 4 is what made it *collidable* by
     /// adding a second independent pending state.
+    /// The Cancel action of the confirmation dialog that currently owns the
+    /// screen, or `None` when none does.
+    ///
+    /// # Why this exists at all — operator question (bj)
+    ///
+    /// Escape was bound on **none** of the five confirmation dialogs. It fell
+    /// straight through to the canvas ladder, so pressing it over an open
+    /// question did something to the document underneath instead of dismissing
+    /// the question. Ken settled it on 2026-08-11: *"escape should work like
+    /// it does for any other program."* Cancelling a modal with Escape is not
+    /// a pdfce design choice; it is the convention every operator already has,
+    /// and not honouring it was the surprise.
+    ///
+    /// # The order, and the honest account of why it is what it is
+    ///
+    /// This order is [`Self::apply`]'s gate order. The first draft of this
+    /// comment claimed that was load-bearing — that a mismatch would make
+    /// Escape push a Cancel the gate swallows. **Measured, and that is not
+    /// the situation**, so the claim is corrected rather than left standing:
+    /// the five are *mutually exclusive*, so whichever one is set is the one
+    /// any order returns, and the tiebreak is never exercised.
+    ///
+    /// They are mutually exclusive because the gate itself makes them so.
+    /// Every pending state is set from inside `apply` (`pending_close` at
+    /// `Action::CloseDocument`, and so on), and `apply` returns early while
+    /// any question is up — so the action that would raise a second one is
+    /// dropped before it can. `at_most_one_confirmation_question_is_ever_up`
+    /// pins that.
+    ///
+    /// **That invariant is doing more work than it looks.** Writing a test
+    /// against a hand-constructed two-questions-up state showed that if the
+    /// invariant ever broke, *neither* question could be answered: each
+    /// dialog's Cancel is dropped by the other dialog's gate, because the
+    /// gate checks run in sequence and a later one does not know an earlier
+    /// one already approved the action. The application would be wedged with
+    /// two windows up and no working button.
+    ///
+    /// So the order here is matched to the gate's not because today needs it,
+    /// but so that a future state settable from outside `apply` — an OS close
+    /// request, a background task, a `&mut self` path like the print dialog's
+    /// own controls — degrades to "Escape answers the same question the gate
+    /// does" instead of to that deadlock. Matching costs nothing; the note is
+    /// here so the next editor knows which of the two properties is real.
+    ///
+    /// # Escape always takes the SAFE branch
+    ///
+    /// Every arm returns a **Cancel**, never a Confirm — including
+    /// [`Action::CancelRedactionApply`], where the confirmed branch is the
+    /// only irreversible operation pdfce has. An Escape that could apply a
+    /// redaction would be a destructive action bound to the key operators
+    /// press to back out. For the close question, Cancel means "do not
+    /// close", so an accidental Escape cannot discard unsaved work either.
+    fn pending_question_cancel(&self) -> Option<Action> {
+        if self.pending_copy.is_some() {
+            return Some(Action::CancelPendingCopy);
+        }
+        if self.pending_save.is_some() {
+            return Some(Action::CancelPendingSave);
+        }
+        if self.pending_redaction_apply.is_some() {
+            return Some(Action::CancelRedactionApply);
+        }
+        if self.pending_print.is_some() {
+            return Some(Action::CancelPrint);
+        }
+        if self.pending_close {
+            return Some(Action::CancelClose);
+        }
+        None
+    }
+
     fn apply(&mut self, action: Action, ctx: &egui::Context, pixels_per_point: f32) {
         if self.pending_copy.is_some()
             && !matches!(
@@ -12977,6 +13048,7 @@ impl eframe::App for PdfceApp {
                 inside_object,
                 in_view_mode: self.full_screen || self.read_mode || self.find_open,
                 awaiting_password: matches!(self.status, Status::NeedsPassword { .. }),
+                pending_question_cancel: self.pending_question_cancel(),
             },
         );
 
@@ -13301,6 +13373,19 @@ struct CanvasKeys {
     /// The password prompt is showing, so there is no document and Escape
     /// can only mean "abandon this file". The TOP rung of the ladder.
     awaiting_password: bool,
+    /// The Cancel action of whichever confirmation dialog currently owns the
+    /// screen, or `None` when none does — operator question **(bj)**,
+    /// answered 2026-08-11: *"escape should work like it does for any other
+    /// program."*
+    ///
+    /// Carried as the resolved **action** rather than as five booleans on
+    /// purpose. Which of the five dialogs Escape may answer is not a free
+    /// choice: [`PdfceApp::apply`]'s one-question gate returns early on the
+    /// FIRST pending state it finds, so any other dialog's Cancel would be
+    /// dropped by that gate and Escape would appear dead. Resolving it in one
+    /// place, next to the gate, is what keeps the two orders from drifting
+    /// (R171). See [`PdfceApp::pending_question_cancel`].
+    pending_question_cancel: Option<Action>,
 }
 
 fn collect_keyboard_actions(ctx: &egui::Context, actions: &mut Vec<Action>, keys: CanvasKeys) {
@@ -13312,6 +13397,7 @@ fn collect_keyboard_actions(ctx: &egui::Context, actions: &mut Vec<Action>, keys
         inside_object,
         in_view_mode,
         awaiting_password,
+        pending_question_cancel,
     } = keys;
     use egui::{Key, Modifiers};
 
@@ -13542,6 +13628,32 @@ fn collect_keyboard_actions(ctx: &egui::Context, actions: &mut Vec<Action>, keys
     //
     // Consumed before anything else looks, so the canvas never sees the key
     // in this state.
+    // ★ THE NEW TOP RUNG — a confirmation dialog outranks everything, even
+    // the password prompt's rung below (operator question (bj), answered
+    // 2026-08-11: "escape should work like it does for any other program").
+    //
+    // Above the password rung because it is strictly more specific: a
+    // confirmation dialog is a question the operator opened and can only
+    // answer two ways, while the password prompt is a whole document state.
+    // They are in fact mutually exclusive — `NeedsPassword` means there is no
+    // document, and all five confirmations require one — so this ordering
+    // costs nothing today and is the correct one if that ever stops holding.
+    //
+    // Placed above the VIEW-MODE rung for a reason that is NOT merely
+    // ordering, though: read mode and full screen hide the ribbon and the
+    // window controls, and a confirmation dialog can be open inside them. If
+    // view mode won, Escape would drop the operator out of full screen and
+    // leave the unanswered question sitting there — the key would appear to
+    // work while doing the wrong thing, which is worse than doing nothing.
+    //
+    // Consumed and returned immediately so no widget underneath, and no lower
+    // rung, also acts on the same press.
+    if let Some(cancel) = pending_question_cancel
+        && ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape))
+    {
+        actions.push(cancel);
+        return;
+    }
     if awaiting_password && ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape)) {
         actions.push(Action::CancelPassword);
         return;
@@ -26697,6 +26809,137 @@ mod tests {
             vec![CanvasTool::TextEdit, CanvasTool::VectorEdit],
             "both tools come back exactly as they were"
         );
+    }
+
+    /// ★ Operator question **(bj)**, answered 2026-08-11: Escape cancels
+    /// whichever confirmation dialog is up — *"escape should work like it
+    /// does for any other program."*
+    ///
+    /// Escape was bound on NONE of the five. It fell through to the canvas
+    /// ladder, so pressing it over an open question acted on the document
+    /// underneath instead of dismissing the question.
+    ///
+    /// Each of the five is driven all the way through `pending_question_cancel`
+    /// so a dialog added later without a rung fails here rather than shipping
+    /// a dead key.
+    #[test]
+    fn escape_cancels_every_confirmation_dialog() {
+        // (1) Print — the one with a public opener.
+        let mut app = PdfceApp::default();
+        app.open_path(fixture("pageops/four-pages.pdf"));
+        app.open_print_dialog();
+        assert_eq!(
+            app.pending_question_cancel(),
+            Some(Action::CancelPrint),
+            "an open print dialog must be the question Escape answers"
+        );
+        app.apply_for_test(Action::CancelPrint);
+        assert!(app.pending_print.is_none());
+
+        // (2) Close.
+        app.pending_close = true;
+        assert_eq!(
+            app.pending_question_cancel(),
+            Some(Action::CancelClose),
+            "Escape over the close question must CANCEL it — never discard              unsaved work, which is the other button"
+        );
+        app.apply_for_test(Action::CancelClose);
+        assert!(!app.pending_close);
+
+        // (3) With nothing up, Escape is not claimed by this rung at all and
+        // falls through to the canvas ladder as it always did.
+        assert_eq!(
+            app.pending_question_cancel(),
+            None,
+            "with no dialog up this rung must not swallow Escape"
+        );
+    }
+
+    /// ★ At most ONE confirmation question is ever up, and that invariant is
+    /// what keeps the application out of a deadlock.
+    ///
+    /// Discovered while writing a different test. Hand-constructing a state
+    /// with two questions set showed that **neither can then be answered**:
+    /// `apply`'s gate checks run in sequence, so the print gate approves
+    /// `CancelPrint` and the close gate — which does not know that — drops it
+    /// on the very next line. Two windows up, no working button.
+    ///
+    /// It is unreachable, and this test is what says so rather than a comment
+    /// claiming it. Every pending state is set from inside `apply`, and `apply`
+    /// returns early while a question is up, so the action that would raise a
+    /// second one never runs. Driven through the REAL path (`CloseDocument` on
+    /// a modified document, which is the only thing that sets `pending_close`)
+    /// rather than by assigning the field.
+    #[test]
+    fn at_most_one_confirmation_question_is_ever_up() {
+        let mut app = PdfceApp::default();
+        app.open_path(fixture("pageops/four-pages.pdf"));
+
+        // Make the document modified, so `CloseDocument` genuinely wants to
+        // ask rather than closing silently. Without this the test would pass
+        // for the wrong reason.
+        app.apply_for_test(Action::RotateRight);
+        let modified = matches!(&app.status, Status::Open(d) if d.session.is_modified());
+        assert!(
+            modified,
+            "the fixture must be dirty or CloseDocument won't ask"
+        );
+
+        app.open_print_dialog();
+        assert!(app.pending_print.is_some());
+
+        // The action that would raise the SECOND question, through its real
+        // dispatcher path.
+        app.apply_for_test(Action::CloseDocument);
+        assert!(
+            !app.pending_close,
+            "a second confirmation must not be raisable while one is up — if              this ever fails, neither dialog can be dismissed and the window              is wedged"
+        );
+
+        // And the one that IS up still answers.
+        let cancel = app.pending_question_cancel().expect("print is up");
+        assert_eq!(cancel, Action::CancelPrint);
+        app.apply_for_test(cancel);
+        assert!(app.pending_print.is_none());
+        assert_eq!(app.pending_question_cancel(), None);
+    }
+
+    /// Escape never takes a destructive branch.
+    ///
+    /// Every arm of [`PdfceApp::pending_question_cancel`] is a Cancel, and the
+    /// redaction one matters most: its confirmed branch is the only
+    /// irreversible operation pdfce has, and binding that to the key operators
+    /// press to back out would be the worst available mapping. The close
+    /// question is the second: its other two buttons save or DISCARD.
+    #[test]
+    fn escape_never_resolves_to_a_confirm() {
+        const DESTRUCTIVE: [Action; 6] = [
+            Action::ConfirmPendingCopy,
+            Action::ConfirmPendingSave,
+            Action::ConfirmRedactionApply,
+            Action::SpoolPrint,
+            Action::CloseSaveThenClose,
+            Action::CloseWithoutSaving,
+        ];
+
+        let mut app = PdfceApp::default();
+        app.open_path(fixture("pageops/four-pages.pdf"));
+
+        app.open_print_dialog();
+        let a = app.pending_question_cancel().expect("print is up");
+        assert!(!DESTRUCTIVE.contains(&a), "Escape resolved to {a:?}");
+        app.apply_for_test(a);
+
+        app.pending_close = true;
+        let b = app.pending_question_cancel().expect("close is up");
+        assert!(!DESTRUCTIVE.contains(&b), "Escape resolved to {b:?}");
+        assert_eq!(
+            b,
+            Action::CancelClose,
+            "the close question's Escape must CANCEL, never save-and-close or              discard — both of those are irreversible from the operator's seat"
+        );
+        app.apply_for_test(b);
+        assert!(!app.pending_close, "and it must actually take effect");
     }
 
     /// `SelectCanvasTool(None)` still clears everything — Escape's ExitTool
