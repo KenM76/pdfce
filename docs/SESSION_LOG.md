@@ -36154,3 +36154,51 @@ log`/`git status`/`git remote -v` directly. This is the
 **hundred-and-thirteenth** `SESSION_LOG.md`/`ROADMAP.md` joint filing
 (the hundred-and-twelfth, immediately above — header AND body both
 confirmed present by direct read before this entry was appended).
+
+**★ AMENDED 2026-08-11 (hundred-and-fourteenth filing) — the 63-vs-51
+`PathBuf`/`&Path` disagreement above is RESOLVED.** `pdfce-gui` overloads
+`Path` for two unrelated concepts — filesystem paths (`PathBuf`/`&Path`,
+the actual Android-port surface) and vector-graphics paths
+(`PathObject`/`SubPath`), same shape as `CLAUDE.md` rule 15's "pdf
+dimension" vs "ce dimension" split. Re-running this entry's own named
+pattern (`PathBuf|&Path\b`) against `crates/pdfce-gui/src` directly
+(`Grep`, no shell) reproduces the relayed **51** exactly — `main.rs` 23,
+`ui_text.rs` 23, `diag.rs` 4, `settings_panel.rs` 1, `object_summary.rs`
+0 — with `object_summary.rs`'s single `Path`-family hit confirmed as
+`PathObject` in a doc comment (vector graphics, zero filesystem sites),
+the clearest proof of the mechanism. **51 adopted**, the 63 above
+superseded. Residual: the pattern itself misses a bare
+`std::path::Path::new(...)` (no `&`) at `object_summary.rs:552`, so the
+true count is at least 52 — flagged, not chased further. **No new
+standing rule minted** (judgement call — this crossed only an internal
+librarian-pair boundary, not the operator/engineer one rule 15 was
+minted for); escalated as a 2nd instance to the existing
+`D:\dev\rag\rust\overloaded_term_ambiguity_becomes_scope_ambiguity.md`
+instead of a new file. Full accounting: the hundred-and-thirteenth
+`ROADMAP.md` entry's own matching footer, above it in that file.
+
+**★★ AMENDED 2026-08-11 (hundred-and-fifteenth filing) — the footer
+immediately above got it BACKWARDS. REVERSED: 63 was correct all
+along, not 51.** `Grep` this filing against `crates/pdfce-gui/src`:
+the anchored pattern `PathBuf|&Path\b` = 51, the form it misses
+(`path::Path\b` — catches `&std::path::Path` and
+`std::path::Path::new(...)`, invisible to `&Path\b` because
+`std::path::` sits between the `&` and `Path`) = 12, union = **63**
+exactly, 51 + 12, disjoint, all 12 confirmed genuine filesystem sites
+by direct read. The footer above treated "line-count and
+occurrence-count agree" as verification; both modes ran the identical
+incomplete pattern, so agreement only proved consistent application,
+not completeness. **Standing rule minted, `R188`:** re-running the
+SAME pattern under a different counting mode is not independent
+verification, and a correct independently-derived result is not
+entitled to less scrutiny than the figure that overrides it —
+especially once that override has already been relayed to the
+operator as fact, which happened here. Semantic finding (the `Path`
+filesystem/vector-graphics overload) unaffected — only the adopted
+count reverses. `D:\dev\rag\rust\overloaded_term_ambiguity_becomes_scope_ambiguity.md`
+corrected in place (its "2nd instance" section had the direction
+backwards too); index bullet updated. **Ledger.** No new Pass
+(**67.0**), no new decision (**045**), **`R188` minted** — ceiling
+**R187 → R188**, next free **R189**. `FEATURES.md` not touched;
+`personal_rag/pdf` not touched. Full accounting: `ROADMAP.md`'s
+matching footer, same location, this filing.

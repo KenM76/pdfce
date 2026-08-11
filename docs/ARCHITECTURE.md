@@ -17816,7 +17816,13 @@ AndroidApp>`, exact, same field the dispatch cited);
 breakdown, and one figure this librarian independently re-measured and
 found to disagree with the relayed number (`PathBuf`/`&Path` call
 sites: 63 measured here vs. 51 relayed, flagged not silently
-reconciled): `ROADMAP.md`'s Backlog entry, this filing.
+reconciled): `ROADMAP.md`'s Backlog entry, this filing. **Resolved
+2026-08-11 (hundred-and-fifteenth filing, `R188`): 63 is correct.**
+An intermediate hundred-and-fourteenth-filing reconciliation wrongly
+adopted 51 (both its counting modes shared one incomplete pattern);
+reversed the same day once the pattern's own gap (`&std::path::Path`/
+`std::path::Path::new(...)`, 12 sites, 51 + 12 = 63) was found. See
+`ROADMAP.md`'s Android GUI port Backlog entry for the full chain.
 
 **Why this is not a decision — filed here anyway.** No library was
 picked, no invariant was redefined, no crate boundary moved. `pdfce-core`

@@ -244,6 +244,169 @@ amended `Pass 67.0` entirely within the *Next up* section and created no
 therefore the **hundred-and-tenth** filing's — confirmed present by
 direct read before this entry was prepended.
 
+**★ AMENDED 2026-08-11 (hundred-and-fourteenth filing) — the 63-vs-51
+`PathBuf`/`&Path` disagreement flagged above IS NOW RESOLVED, and the
+cause is semantic, not a counting error.** `pdfce-gui` uses the word
+`Path` for two unrelated things: **filesystem paths**
+(`std::path::Path`/`PathBuf`) — the actual Android-port surface this
+entry cared about — and **vector-graphics paths**
+(`PathObject`/`SubPath`/`PathBuilder`/`PathSeg`), which have nothing to
+do with file access. Re-measured by this librarian directly (`Grep`
+tool, no shell needed) with the exact pattern this entry named,
+`PathBuf|&Path\b`, against `crates/pdfce-gui/src`: **51** total —
+`main.rs` 23, `ui_text.rs` 23, `diag.rs` 4, `settings_panel.rs` 1,
+`object_summary.rs` 0 — reproducing the dispatch's originally-relayed 51
+exactly, stable under two independent count modes (line-count and
+occurrence-count agree, proving no line double-matches). **`object_summary.rs`
+is the clearest single proof of the mechanism**: its one
+`Path`-family hit is `PathObject` in a doc comment
+(`object_summary.rs:82`, confirmed by direct read) — zero filesystem-
+path sites, exactly matching a vector-graphics-only search
+(`PathObject|PathBuilder|PathSeg|SubPath|path_object` → 1 hit, same
+line). The 63 recorded above measured something looser than the pattern
+it named; not reproduced by re-running that exact pattern, and not
+chased further, since the 51-vs-0-vector split already answers the
+entry's practical question. **Adopt 51** as the figure for the
+filesystem-path plumbing surface, superseding the 63 above — left in
+place per the append-only convention; this footer is the correction.
+
+Residual caveat, found while verifying, flagged not chased to ground:
+the pattern `PathBuf|&Path\b` itself under-counts — it misses a bare
+`std::path::Path::new(...)` call with no leading `&` (one exists at
+`object_summary.rs:552`, test-only, `CARGO_MANIFEST_DIR`), so the true
+filesystem-path-site count is **at least 52**, not exactly 51.
+
+**Naming the disease this project already has a rule for.** `CLAUDE.md`
+rule 15 exists because one word ("dimension") named two unrelated
+things and an ambiguous report reached the operator unusably. `Path`
+has the identical shape — filesystem path and vector-graphics path
+coexist in the same crate, are as unrelated as pdf-dimension/ce-
+dimension, and today produced two independently-measured, disagreeing
+counts of "the same" quantity in the permanent record. **Judgement
+call: not minting a new numbered standing rule for this.** Rule 15 was
+minted because its ambiguity crossed the operator/engineer boundary in
+live conversation — the operator could not act on the report. This
+instance was caught entirely internally, by the re-derivation check
+hard rule 10 already requires, before it reached anyone outside the
+librarian pair. A note here is proportionate; a full rule would
+duplicate rule 15's own reasoning without a comparable failure to
+justify a second one. Escalated instead to
+`D:\dev\rag\rust\overloaded_term_ambiguity_becomes_scope_ambiguity.md`
+as a 2nd instance (not a new file — same class the "pdf dimension" vs
+"ce dimension" 1st instance already generalizes), since it extends
+past pdfce to any Rust GUI crate that also does vector graphics: the
+residual under-counting caveat above is filed there too.
+
+**Ledger for this footer.** No new Pass, no new decision, no new
+standing rule — Pass ceiling stays **67.0**, decision-record ceiling
+stays **045**, standing-rule ceiling stays **R187**, all next-free
+unchanged. **One `D:\dev\rag\rust\` file amended** (existing finding,
+2nd instance added, its own index bullet updated) — not a new file,
+per hard rule 4. `C:\personal_rag\pdf\`: not touched, no PDF-domain
+content here. `docs/FEATURES.md`: not touched. This is the
+**hundred-and-fourteenth** `ROADMAP.md`/`SESSION_LOG.md` joint filing,
+a correction to the hundred-and-thirteenth's own flagged disagreement —
+confirmed present by direct read before this footer was appended.
+
+**★★ AMENDED 2026-08-11 (hundred-and-fifteenth filing) — the footer
+immediately above got the correction BACKWARDS. "Adopt 51" is ITSELF
+WRONG. REVERSED: 63 was correct from the first measurement.**
+
+The arithmetic, verified directly by `Grep` this filing against
+`crates/pdfce-gui/src`:
+
+| pattern | count |
+|---|---|
+| `PathBuf\|&Path\b` (the anchored pattern the two footers above used) | 51 |
+| the missed form: `path::Path\b` | 12 |
+| union `PathBuf\|path::Path\b\|&Path\b` | **63** |
+
+51 + 12 = 63 exactly, and re-running the union pattern directly
+(rather than trusting the sum) reproduces 63 with nothing double-
+counted — the two sets are disjoint. All 12 sites of the missed form
+were read directly and are genuine filesystem paths
+(`std::path::Path::new(...)`, `&std::path::Path`, `use
+std::path::Path`), zero of them the vector-graphics `Path`.
+
+**What the anchored pattern missed, and why.** `&Path\b` requires the
+literal characters `&Path`; `&std::path::Path` does not contain them,
+because `std::path::` sits between the `&` and `Path`. The footer
+immediately above had already found one instance of exactly this form
+(`object_summary.rs:552`) and flagged it as pushing the true count to
+"at least 52" — the fix was sitting inside that footer's own text and
+was not chased to the pattern that would have closed the gap.
+
+**What still stands, unaltered.** The semantic finding —
+`pdfce-gui` overloads `Path` for a filesystem-path meaning and an
+unrelated vector-graphics-path meaning, and `object_summary.rs`'s one
+hit under the naive `\bPath\b` count is genuinely `PathObject`, not a
+filesystem site — is correct and independent of which number is
+adopted. Only the "which count is the filesystem-path plumbing
+surface" arithmetic is being reversed.
+
+**★ THE LESSON — sharper than the overloaded-word finding it rides on
+top of, and kept separate on purpose.** The footer immediately above
+treated "line-count and occurrence-count agree" as proof 51 was
+verified. Both counting modes ran the identical incomplete pattern
+(`PathBuf|&Path\b`) — agreement between them proves only that the
+pattern was applied consistently, not that the pattern was complete.
+**A measurement can be confidently wrong, and repeating it under a
+second counting MODE does not catch that — only a genuinely DIFFERENT
+method, one capable of landing somewhere else, is corroboration.**
+This inverts the project's usual "measure, don't assert" lesson: here
+the measurement itself was the failure, asserted with the same
+confidence a correct one would have carried.
+
+**And it crossed the operator boundary this time.** The
+hundred-and-thirteenth filing's 63 was this librarian's own
+independent re-derivation — correct. The hundred-and-fourteenth
+filing overrode it with 51 on the strength of a same-pattern
+reproduction, and that 51 was then relayed to the operator in
+conversation as a measured fact — not caught internally the way that
+footer's own "not minting a rule, caught entirely internally"
+reasoning assumed. The verification-culture failure here did not run
+in the usual direction (an agent relaying a claim uncritically); it
+ran the other way — a correct, independently-derived result was
+argued out of the record by a worse one, confidently presented.
+
+**Standing rule minted: `R188`.** Reproducing a measurement by
+re-running the SAME pattern under a different counting mode
+(line-count vs. occurrence-count, or any two views of one query) is
+not independent verification — only a structurally different method,
+capable of disagreeing, corroborates. And a correct,
+independently-derived measurement is not entitled to less scrutiny
+than the figure that overrides it, especially once the override has
+already been relayed to the operator as fact — the override needs the
+same re-derivation the original got, not less (2026-08-11,
+hundred-and-fifteenth filing; librarian-minted). Distinct from R93 (a
+code comment is not evidence of behavior), R174 (a disclosure string
+read as its audience), R175 (a document's environment claim), and
+R187 (a guard proven by making the hazard occur) — none of those name
+"same-method reproduction mistaken for corroboration" or "an override
+outranks a correct prior result without being re-derived itself."
+
+**`D:\dev\rag\rust\overloaded_term_ambiguity_becomes_scope_ambiguity.md`
+corrected this filing** — its "2nd instance" section reported the
+reconciliation as "51 adopted, 63 superseded"; that direction is
+backwards. Fixed in place with a dated correction block rather than
+left to mislead a future reader of that file specifically — see the
+RAG file itself; its index bullet in `D:\dev\rag\rust\index.md`
+updated to match.
+
+**Ledger for this footer.** No new Pass — ceiling stays **67.0**, next
+free **68**. No new decision — ceiling stays **045**, next free
+**046** (this is a measurement correction, not an architectural
+decision). **One standing rule minted, `R188`** — ceiling moves
+**R187 → R188**, next free **R189**. `docs/FEATURES.md`: not touched.
+Operator-question ceiling unaffected at **(bj)**, next free **(bk)**.
+**One `D:\dev\rag\rust\` file amended** (dated correction block
+appended, its own index bullet updated) — not a new file, per hard
+rule 4. `C:\personal_rag\pdf\`: not touched, no PDF-domain content
+here. This is the **hundred-and-fifteenth** `ROADMAP.md`/
+`SESSION_LOG.md` joint filing, a correction to the
+hundred-and-fourteenth's own footer — confirmed present by direct
+read before this footer was appended.
+
 ### ★★★ `f79f044..f79d9a2` (nine commits) — pdfce opens AES-256 encrypted PDFs at `/R` 5: `Pass 5` increment 3 ships Algorithms 3.2a/3.11/3.12/3.13 across core, CLI and GUI; decision 039 extended to `sha2`; `/Perms` handled by new decision 044, non-ASCII passwords by new decision 045; a padding-strip bug survived 71 tests + 20 decrypts + a byte-identical render + qpdf's own vector because every random test key happened to avoid its 1-in-16 trigger — 2026-08-11, branch `main` (hundred-and-tenth filing)
 
 **Sourcing.** No shell tool this dispatch (hard rule 8) — `git log
@@ -54695,6 +54858,36 @@ and
   implies but the code does not honour. Full record: `ROADMAP.md`'s
   `cd86adc` *Shipped* entry (hundred-and-eighth filing). **Ceiling
   moves `R186` → `R187`; next free `R188`.**
+
+- **R188 — Reproducing a measurement by re-running the SAME pattern
+  under a different counting mode is not independent verification;
+  and a correct, independently-derived result is not entitled to less
+  scrutiny than the figure that overrides it, especially once the
+  override has been relayed to the operator as fact (2026-08-11,
+  hundred-and-fifteenth filing; librarian-minted).** The
+  hundred-and-thirteenth filing measured 63 `PathBuf`/`&Path`-family
+  filesystem-path sites in `crates/pdfce-gui/src`, independently
+  derived by this librarian. The hundred-and-fourteenth filing
+  overrode it with 51, on the strength of a same-pattern reproduction
+  under two counting modes (line-count and occurrence-count) that
+  agreed with each other — but both modes ran the identical
+  incomplete pattern (`PathBuf|&Path\b`), which misses `&std::path::
+  Path` and `std::path::Path::new(...)` (the `std::path::` sits
+  between the `&` and `Path`, so the anchored pattern never matches
+  it). The complete union (`PathBuf|path::Path\b|&Path\b`) is 63 —
+  51 + 12, exactly, disjoint sets — so the original 63 was right and
+  the "reconciled" 51 was itself the miscount. Two counting modes
+  agreeing on one pattern's output proves the pattern was applied
+  consistently, not that the pattern was complete; only a
+  structurally different method, capable of landing somewhere else,
+  corroborates. **Distinct from R93** (a code comment is not evidence
+  of behavior — this is about a MEASUREMENT, not a comment) and from
+  **R175** (a document's claim about environment state — this is
+  about arithmetic reproducibility, not staleness). Full record:
+  `ROADMAP.md`'s "Android GUI port" *Backlog* entry (hundred-and-
+  thirteenth filing) and its two amendment footers (hundred-and-
+  fourteenth, hundred-and-fifteenth). **Ceiling moves `R187` →
+  `R188`; next free `R189`.**
 
 ## Update protocol
 
