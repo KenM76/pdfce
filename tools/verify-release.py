@@ -27,11 +27,25 @@ WHAT IT CHECKS
 1. The working tree is clean — a release built from uncommitted changes is not
    reproducible from the tag.
 2. The tag exists locally, and resolves to a commit.
-3. The tag's commit is **``HEAD``** — you tagged what you tested.
+3. ``HEAD`` **contains** the tag — you tagged what you tested.
 4. The tag exists on the **remote**, at the same commit.
-5. ``origin/main`` is at that commit too — **the check that would have caught
-   the incident.** A tag reachable only from a side branch means the default
-   branch does not contain the release.
+5. ``origin/main`` **contains** that commit — **the check that would have
+   caught the incident.** A tag reachable only from a side branch means the
+   default branch does not contain the release.
+
+   ★ Checks 3 and 5 were exact equality until 2026-08-11, and that was
+   right at release time and wrong immediately after. The first commit
+   pushed to ``main`` following a release made both of them fail, and check
+   5 announced "the default branch does not contain this release" about a
+   branch that demonstrably did. A gate guarding an irreversible step must
+   not cry wolf on correct state.
+
+   They now report three outcomes: **at** the tag (the release moment),
+   **ADVANCED** past it (normal afterwards — passes, and says so), or does
+   not contain it at all (**fails**). The incident is still caught exactly,
+   because in it ``origin/main`` was 36 commits **BEHIND**, and a behind
+   branch does not contain the tag. Verified against the real v0.2.0 and
+   v0.3.0 commits, not reasoned about.
 6. If ``gh`` is available: a GitHub release exists for the tag and has at least
    one asset attached. A release with no binary is a release nobody can use.
 
@@ -69,6 +83,23 @@ def git(*args: str) -> str:
     return r.stdout.strip() if r.returncode == 0 else ""
 
 
+def contains(ancestor: str, descendant: str) -> bool:
+    """Is `ancestor` reachable from `descendant`? (i.e. does it CONTAIN it)
+
+    The distinction this draws is the whole of the "ADVANCED" logic below.
+    `git merge-base --is-ancestor` exits 0 when the first commit is an
+    ancestor of the second, and a commit is its own ancestor, so an equal
+    pair also answers true.
+    """
+    return (
+        subprocess.run(
+            ("git", "merge-base", "--is-ancestor", ancestor, descendant),
+            capture_output=True,
+        ).returncode
+        == 0
+    )
+
+
 def main(tag: str) -> int:
     problems: list[str] = []
 
@@ -76,6 +107,35 @@ def main(tag: str) -> int:
         print(f"  {'ok  ' if ok else 'FAIL'}  {label}")
         if not ok:
             print(f"        {detail}")
+            problems.append(label)
+
+    def check_contains(label: str, note: str, fail_detail: str, *, at: str, of: str) -> None:
+        """Pass when `of` IS `at`, pass-with-a-note when it has moved PAST it,
+        fail only when it does not contain it at all.
+
+        ★ Why this is not just `==`. Both this script's commit-identity
+        checks were exact-equality, which is right at release time and
+        WRONG five minutes later: the moment `main` gains its next commit,
+        re-running the script reports two failures on a release that is
+        perfectly fine — and the `origin/main` one said "the default branch
+        does not contain this release" about a branch that demonstrably
+        did. A gate that cries wolf on correct state is a gate people learn
+        to ignore, and this one guards the step nobody can undo.
+
+        The incident it was written for is still caught exactly. On
+        2026-08-11 the tag was correct and `origin/main` was **36 commits
+        BEHIND** it. A behind branch does not contain the tag, so this
+        still fails — while an AHEAD branch, which is the normal state of
+        every repository after a release, now passes and says why.
+        """
+        at_sha, of_sha = git("rev-parse", at), git("rev-parse", of)
+        if at_sha == of_sha:
+            print(f"  ok    {label}")
+        elif contains(at_sha, of_sha):
+            print(f"  ok    {label} (ADVANCED: {note})")
+        else:
+            print(f"  FAIL  {label}")
+            print(f"        {fail_detail}")
             problems.append(label)
 
     print(f"verify-release {tag}")
@@ -96,11 +156,15 @@ def main(tag: str) -> int:
         # nothing to say that is not noise.
         return 1
 
-    check(
-        tagged == head,
+    check_contains(
         "tag is at HEAD",
-        f"tag={tagged[:7]} HEAD={head[:7]} -- you tagged something other than "
-        "what is checked out and tested",
+        f"HEAD={head[:7]} has moved on since the release; the tag is still an "
+        "ancestor, which is the normal state after any post-release commit",
+        f"tag={tagged[:7]} HEAD={head[:7]} -- HEAD does not contain the tag. "
+        "You tagged something other than what is checked out and tested, or "
+        "you are on a branch the release was never merged into.",
+        at=tagged,
+        of=head,
     )
 
     remote_tag = ""
@@ -115,13 +179,17 @@ def main(tag: str) -> int:
 
     # * The check the incident needed.
     origin_main = git("rev-parse", "origin/main")
-    check(
-        origin_main == tagged,
-        "origin/main is AT the tagged commit",
+    check_contains(
+        "origin/main CONTAINS the tagged commit",
+        f"origin/main={origin_main[:7]} is ahead of the tag -- development "
+        "continued after the release, which is expected",
         f"origin/main={origin_main[:7]} tag={tagged[:7]} -- the default branch "
-        "does not contain this release. A push can report success and move a "
+        "does NOT contain this release. A push can report success and move a "
         "DIFFERENT branch than the one you are on; that is how this check "
-        "came to exist.",
+        "came to exist. If origin/main is BEHIND the tag, that is the "
+        "incident itself.",
+        at=tagged,
+        of=origin_main,
     )
 
     gh = subprocess.run(
