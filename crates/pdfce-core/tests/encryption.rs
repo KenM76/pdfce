@@ -397,3 +397,83 @@ fn plain_documents_report_no_encryption() {
     let doc = Document::load(&plain).expect("plain fixture must load");
     assert!(doc.encryption().is_none());
 }
+
+/// ★ AES-128 **on a document whose objects live in object streams** — the
+/// combination every committed fixture misses, and the one that is normal in
+/// the wild.
+///
+/// # Why this needed its own test
+///
+/// Every `enc-*.pdf` fixture derives from `demo-form.pdf`, a PDF 1.3 file with
+/// a classic cross-reference table and **zero object streams**. pypdf, which
+/// generates the corpus, *flattens* object streams when it clones (measured:
+/// a 7-`ObjStm` source came out with 0), so the corpus cannot be extended to
+/// cover this by changing its source document.
+///
+/// That left the most consequential AES path untested. Increment 2 shortens
+/// `Stream::data_span` after decryption, because AES plaintext is shorter than
+/// its ciphertext — and an **object stream container is a stream**. Its
+/// shortened span is then handed to phase 2 of the load to be parsed for the
+/// objects inside it. If the shortening were wrong by even one byte, every
+/// object in every container would fail to parse, and no fixture in the
+/// committed corpus could have shown it.
+///
+/// It also covers three other things at once, all of which are silent when
+/// wrong: **T4** (the phase-1-before-phase-2 ordering, without which strings
+/// inside containers get Algorithm 1 applied a second time and every one is
+/// destroyed), **E5** (cross-reference streams are never encrypted — this file
+/// has two, and decrypting one produces bytes that fail to inflate and surface
+/// as a broken xref two layers from the cause), and content-stream decryption
+/// end to end.
+///
+/// # Provenance, and why the assertion is what it is
+///
+/// The file is PDFium's `encrypted.pdf` — a **third** independent
+/// implementation, after pdfce's own spec reading and pypdf's. Verified by
+/// inspection to be `/V 4`, `/R 4`, `/CFM /AESV2`, with 5 object streams and
+/// 2 cross-reference streams. Its user password is `1234`.
+///
+/// # Why it skips instead of failing when absent
+///
+/// `fixtures/external/` is **gitignored** (`docs/LEGAL.md` §5 — the corpus is
+/// cloned locally, never vendored), so this cannot be a hard dependency: it
+/// would fail every clean checkout and every CI run. It skips loudly instead.
+///
+/// That is a real, stated weakness and not a neutral choice — **a test that
+/// silently passes when its input is missing is the exact "fixture that cannot
+/// fail for the reason you care about" shape this file's own header warns
+/// about.** It is accepted here only because the alternative is no coverage of
+/// this path at all, and because the skip prints. If a committable synthetic
+/// AES + object-stream fixture is ever built, this should become an ordinary
+/// unconditional test and the skip should go.
+#[test]
+fn aes_128_decrypts_a_document_whose_objects_live_in_object_streams() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/external/pdfium/testing/resources/encrypted.pdf");
+    if !path.exists() {
+        eprintln!(
+            "SKIPPED aes_128_decrypts_a_document_whose_objects_live_in_object_streams: \
+             {} is absent. fixtures/external/ is gitignored; clone the corpus to run it. \
+             THIS PATH IS THEREFORE UNCOVERED IN THIS RUN.",
+            path.display()
+        );
+        return;
+    }
+
+    let doc = Document::load_with_password(&path, Some(b"1234"))
+        .expect("AES-128 with object streams must decrypt");
+
+    let enc = doc.encryption().expect("the document is encrypted");
+    assert_eq!(enc.config.revision, 4, "/R 4");
+    assert_eq!(enc.config.key_len, 16, "AES-128");
+
+    // The payoff. Pages live *inside* the object streams, so a page tree that
+    // resolves is proof the containers were decrypted with the right span and
+    // then parsed as plaintext -- neither of which any committed fixture can
+    // demonstrate.
+    let pages = page_tree::pages(&doc).expect("the page tree must resolve");
+    assert!(
+        !pages.is_empty(),
+        "pages are reachable only through decrypted object streams"
+    );
+}
