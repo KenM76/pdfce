@@ -10,17 +10,22 @@
 //! silently and without a prompt. To an operator, pdfce refusing a file Chrome
 //! opens does not read as a scoped capability gap.
 //!
-//! # Increments 1 and 2 — read direction only
+//! # Increments 1, 2 and 3 — read direction only
 //!
 //! | | Status |
 //! |---|---|
 //! | `/V` 1, 2 at `/R` 2, 3 (RC4, 40–128 bit) | **implemented** |
 //! | `/V` 4 at `/R` 4 with `/CFM /V2` (RC4 via crypt filter) | **implemented** |
 //! | `/V` 4 with `/CFM /AESV2` (AES-128) | **implemented** (increment 2) |
-//! | `/V` 5, `/R` 5 (AES-256) | refused by cipher name |
+//! | `/V` 5, `/R` 5 with `/CFM /AESV3` (AES-256) | **implemented** (increment 3) |
 //! | `/V` 5, `/R` 6 (AES-256 hardened) | refused as **unsourced** — Algorithm 2.B is not in the project's spec corpus past step (a) |
 //! | Public-key handler, third-party handlers | refused by handler name |
-//! | **Writing** encrypted documents | not implemented, and RC4 will never be written (standing rule W14) |
+//! | **Writing** encrypted documents | **not implemented, in any configuration.** RC4 will never be written (standing rule W14), and `/R` 5 must never be written either: ISO 32000-2 §7.6.4.1 deprecates handler revisions 1–5, so the only non-deprecated AES-256 revision is the one whose algorithm is unsourced (**W17**) |
+//!
+//! **Do not read "AES-256 is implemented" as "AES-256 is done".** `/R` 6 is
+//! the default for everything Acrobat X and later produced with the "AES-256"
+//! setting, and it is likely the *common* AES-256 case in the wild. Increment
+//! 3 covers the 2008–2011 `/R` 5 population and nothing after it.
 //!
 //! The refusals are deliberately distinguishable. "pdfce hasn't implemented
 //! AES yet", "no reader on earth may open this file", and "the algorithm isn't
@@ -59,20 +64,30 @@
 //!
 //! - [`md5`] — RFC 1321 digest. Key derivation only.
 //! - [`rc4`] — the stream cipher. Encryption and decryption are one operation.
-//! - [`aes`] — AES-128-CBC for `/AESV2`. The one place `pdfce-core` takes a
-//!   cryptographic dependency, and the one place its dependency tree is not
-//!   compiler-enforced free of `unsafe` (decision 039).
+//! - [`aes`] — AES-128 and AES-256 for `/AESV2` and `/AESV3`, in the **three**
+//!   modes `/R` 5 uses (T25). Together with [`r5`]'s SHA-256, the one place
+//!   `pdfce-core` takes a cryptographic dependency, and the one place its
+//!   dependency tree is not compiler-enforced free of `unsafe` (decision 039,
+//!   which `sha2` extends: `sha2` selects its backends on a `sha2_backend`
+//!   cfg exactly as `aes` does on `aes_backend`, so the same reasoning and the
+//!   same bounded exception apply).
+//! - [`r5`] — Algorithms 3.2a and 3.8–3.13: the `/R` 5 password preparation,
+//!   SHA-256 authentication, `/UE`/`/OE` key unwrap, and the `/Perms` check.
 //! - [`standard`] — the `/Standard` handler: `/Encrypt` parsing, Algorithms
-//!   1–7, authentication, per-object keys.
+//!   1–7, authentication, per-object keys, and the dispatch between the two
+//!   key derivations.
 //!
 //! [`XrefErrorKind::EncryptionUnsupported`]: crate::xref::XrefErrorKind::EncryptionUnsupported
 
 pub mod aes;
 pub mod apply;
 pub mod md5;
+pub mod r5;
 pub mod rc4;
 pub mod standard;
 
+pub use r5::{PermsCheck, PreparedPassword};
 pub use standard::{
-    AuthKind, Cipher, EncryptionConfig, EncryptionUnsupported, FileKey, PermissionBit, Permissions,
+    Aes256Keys, AuthKind, Cipher, EncryptionConfig, EncryptionUnsupported, FileKey, PermissionBit,
+    Permissions,
 };
