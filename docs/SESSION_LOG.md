@@ -14285,6 +14285,20 @@ by this filing, and not resolvable by any agent below him:**
   it once the token module (§3/§4 of the new document) actually ships
   and is battle-tested, not from a document alone; recorded here as a
   pending candidate so it is not lost, not as an accepted rule.
+
+  **★ AMENDMENT (2026-08-11, hundredth filing) — the path in this
+  bullet's opening sentence is WRONG and was wrong the day it was
+  written.** `UI_PREFERENCES.md` lives at the **repo root**
+  (`D:\Dev\pdfce\UI_PREFERENCES.md`), never under `docs/`. The file
+  itself was never missing or lost — a later filing's dispatch (this
+  session) grepped only `docs/UI_PREFERENCES.md` literally, found
+  nothing, and reported the document absent from disk and git history
+  entirely; it exists, dated 2026-08-05, at the location this footer
+  names. `ARCHITECTURE.md` §9 already carries the correct path (added
+  2026-08-06); this entry, being append-only, is corrected by footer
+  rather than in place. See `ROADMAP.md`'s `f7aee60` Shipped entry
+  (hundredth filing) for the full investigation and the other locations
+  this same stale path was found and fixed.
 - **★ RULE CONFLICT flagged, not resolved — see `ROADMAP.md` open
   question (ax).** The operator's `UI_PREFERENCES.md` handoff (Part 2
   §2, Part 4 Q4) recommends auditing Acrobat Pro's ribbon/panel/GUI
@@ -34510,3 +34524,150 @@ this dispatch (hard rule 8); the engineer should check
 directly, on branch `post-v0.2.0`. This is the **ninety-ninth**
 `SESSION_LOG.md`/`ROADMAP.md` joint filing (the ninety-eighth confirmed
 present by direct read before this entry was appended).
+
+## 2026-08-11 (hundredth filing) — `f7aee60`: pdfce opens AES-128 encrypted PDFs, `Pass 5` increment 2, core+CLI+GUI in one commit; `R186`'s FIFTH instance found by falsifying a guard whose own comment already said it was RC4-specific; a "missing document" turned out to be a wrong path, not a lost file
+
+**Sourcing.** No shell tool this dispatch (hard rule 8). The dispatching
+engineer supplied the commit summary in full; independently confirmed by
+direct `Read`/`Grep` of the resulting source (`crates/pdfce-core/src/
+crypto/aes.rs`, `crypto/mod.rs`, `Cargo.toml`, `.github/workflows/
+ci.yml`, `crates/pdfce-core/tests/encryption.rs`), not paraphrased — see
+the full sourcing paragraph on `ROADMAP.md`'s matching `f7aee60` Shipped
+entry for the exact symbols and files checked. **Test/gate figures and
+`cargo tree` invariant checks relayed, not independently re-run** — no
+shell this dispatch. **Backup/git working-tree/remote state not
+independently asserted** — check `D:\Dev\pdfce-backups\` and `git log`/
+`git status`/`git remote -v` directly.
+
+**Shipped:**
+- `f7aee60` — `/V 4` + `/CFM /AESV2` (AES-128-CBC) decrypts across core,
+  CLI and GUI, at parity with RC4's own shell coverage from `Pass 5`
+  increment 1. `Cipher::Aes128` no longer refused at parse time. A new
+  `crypto/aes.rs` module (`decrypt_cbc_128`, `BLOCK_LEN`, `IV_LEN`,
+  `MIN_CIPHERTEXT_LEN`) via RustCrypto's `aes`/`cbc` crates.
+  `FileKey::object_key` needed no change — increment 1 had already
+  implemented the `sAlT` per-object-key variant (TRAP T1) a full
+  increment before anything called it, which is the argument for
+  writing a rule where it belongs in the model rather than only where
+  it first becomes reachable. Test results: **3,324 passing / 0
+  failing**, up from 3,311 at `17f4d82` (**delta +13 tests**; no
+  diffstat figure was supplied this dispatch, so none is stated).
+
+**Decisions made this session:**
+- **Decision 039** — `aes 0.9.2` + `cbc 0.2.1` accepted as `pdfce-core`'s
+  first dependency where standing rule R24's own lever (`default-
+  features = false` turning off a SIMD/unsafe Cargo *feature*) does not
+  exist: `aes`'s intrinsic hardware backends are selected on a **cfg**
+  (`aes_backend = "soft"`), settable only globally via `RUSTFLAGS`/
+  `.cargo/config.toml` and **not inherited by any downstream consumer**
+  of `pdfce-core` as a library. Forcing the soft backend from pdfce's
+  own build config would be a guarantee true for pdfce's binaries and
+  false for everyone else depending on the crate — so the hardware
+  backend is accepted deliberately, bounded by a new CI job
+  (`hazmat`/`zeroize` OFF across four targets). `zeroize` staying off is
+  a considered choice: `FileKey` holds the file key in a plain
+  `Vec<u8>`, so zeroizing only round keys would be theatre. On
+  `wasm32-unknown-unknown`, `aes` pulls no `cpufeatures` and uses the
+  soft backend automatically — the web-fork target stays zero-`unsafe`
+  with no special-casing needed. Full record: `ARCHITECTURE.md` §12's
+  new entry + §9's new paragraph.
+
+**Findings + decisions:**
+- **`R186`'s fifth instance, and the sharpest yet.** Increment 1's
+  decrypt write-back guard (`plain.len() == span.len`) carried a comment
+  saying "RC4 must preserve length" — correct, and explicit about its
+  own scope. AES-128-CBC's plaintext is unconditionally shorter than its
+  ciphertext (16-byte IV + mandatory PKCS#7 padding), so the identical
+  guard's condition is false for every AES stream, always — the copy
+  branch was never taken, and every AES stream would have stayed silent
+  ciphertext behind an exit-0 process. Proved by reinstating the old
+  guard on the new path: the CLI still exited 0 and rendered a
+  plausible-but-wrong PNG, caught only by a pixel comparison (a
+  text-extraction oracle reports `chars=0` on these fixtures regardless).
+  Fixed by shortening `data_span.len` to the plaintext's true length at
+  decrypt time. Two findings graduated: `D:\dev\rag\rust\
+  a_length_equality_guard_silently_skips_the_write_back_when_a_new_
+  producer_shortens_the_output.md` (the general shape + falsification
+  technique) and `C:\personal_rag\pdf\lesson_20260811_aes_cbc_
+  ciphertext_is_longer_than_plaintext_so_a_byte_span_stream_model_needs_
+  a_length_correction.md` (the PDF-domain half).
+- **First crypto fuzz target: `fuzz/fuzz_targets/crypto_decrypt.rs`,
+  863,514 runs / 0 crashes.** RC4 and MD5 never needed one (neither has
+  an input-derived length or offset); AES-128-CBC's PKCS#7 pad-length
+  byte is read from *decrypted* output and used to truncate a buffer —
+  produced only after decryption, so a hand-written fixture cannot steer
+  it, only a fuzzer mutating ciphertext can.
+- **A "missing document" investigated and resolved as a wrong path, not
+  a lost file.** This filing's dispatch reported `docs/
+  UI_PREFERENCES.md` absent from disk and git history. It exists — at
+  the repo root, `D:\Dev\pdfce\UI_PREFERENCES.md`, dated 2026-08-05 —
+  and `ARCHITECTURE.md` §9 already carried the correct path since
+  2026-08-06. The dispatch that reported it "missing" checked only the
+  `docs/` path, which is itself the shape hard rule 8 exists to name: a
+  confident claim about disk state, checked against the wrong location,
+  reported as settled. Four stale citations of the wrong path found and
+  fixed this filing: two in `ROADMAP.md`'s Backlog section (corrected
+  in place), one in this file's own 2026-08-05 entry (footer added
+  above, append-only), and one flagged but not fixed —
+  `docs/ui_specs/ribbon-groupings-and-customization-architecture.md:39`,
+  outside this librarian's owned tiers, belongs to
+  `pdfce-ui-specialist`'s deliverable set.
+- **Stale-claim sweep, part of this Pass.**
+  `EncryptionUnsupported::CipherNotImplemented`'s message literally read
+  "this increment covers RC4 only"; five other "AES is refused" claims
+  found and corrected by grep, including an illustrative example
+  **inside a comment** in `ui_text.rs` — even a comment's worked example
+  goes stale exactly like operator-facing copy does, and neither
+  `cargo build` nor `clippy` can see it drift.
+
+**Still in flight:**
+- `Pass 5`'s remaining scope — AES-256 (`/AESV3`, blocked on `/R` 6's
+  unsourced Algorithm 2.A), `/R` 6 generally, and any encrypted-save
+  path — all still refused by name, entirely unstarted.
+- The flagged (not fixed) `docs/ui_specs/ribbon-groupings-and-
+  customization-architecture.md:39` stale path citation.
+- Carried-forward items from prior filings (stale `(bh)`/`(bi)` ceiling
+  footers; the eight-item never-encrypted list still owed to
+  `pdfce-spec-librarian`) — still open, untouched this dispatch.
+
+**For next session:** `Pass 5` increment 2's first slice (AES-128) is
+done end to end. AES-256/`/R 6`/encrypted-save remain the next named
+piece of encryption work, not yet scoped into slices. A shell grant
+would let this librarian independently verify the git-history claims,
+the exact "26 unsafe sites" figure (a grep-based recount this filing
+could not reproduce with any tried methodology), and the backup/remote
+state hard rule 8 requires be checked rather than inferred.
+
+**Ledger for this filing.** **No new Pass ID** — same `Pass 5` ID;
+increment 2 ships its first slice (AES-128) this filing; AES-256/`/R
+6`/encrypted-save remain unstarted, recorded in the *Next up* section's
+amendment chain. Pass-family ceiling unchanged at **62.0**, next free
+**63**. `docs/FEATURES.md`: **one row touched** — the Encryption row
+rewritten to add AES-128 alongside RC4 in the read-decrypt sentence,
+`core`/`cli`/`gui` cells unchanged (already `[x]`, describing
+"decryption reaches every shell," now true for AES-128 too); row stays
+under *Planned* (AES-256/`/R 6`/encrypted-save unbuilt). `docs/
+ARCHITECTURE.md`: **two changes** — new §9 paragraph, new §12 entry,
+**decision 039**. Standing rules: **no new mint** — `R186` cited, FIFTH
+instance, amendment footer added. Ceiling stays **R186**, next free
+**R187**. Decision-record ceiling moves **038 → 039**, next free
+**040**. Operator-question ceiling unchanged at `(bi)`, next free
+`(bj)`. `D:\dev\rag\rust\`: **one new file**
+(`a_length_equality_guard_silently_skips_the_write_back_when_a_new_producer_shortens_the_output.md`),
+`index.md` updated. `C:\personal_rag\pdf\`: **one new file**
+(`lesson_20260811_aes_cbc_ciphertext_is_longer_than_plaintext_so_a_byte_span_stream_model_needs_a_length_correction.md`),
+subject `index.md` and master `C:\personal_rag\index.md` both updated.
+Test/gate figures: **3,324 workspace tests passing** (baseline **3,311**
+at the ninety-ninth filing's `17f4d82`, **delta +13**) — relayed, not
+independently re-run (no shell this dispatch); `fmt`/`clippy
+--workspace --all-targets --all-features`/`check-ui-strings.sh`/
+`check-theme-colors.sh`/`check-ledger-numbers.py`/
+`check-passes-filed.py`/`check-bypass-paths.sh` all reported clean —
+relayed. **Packaging smoke test: not reported this filing** — flagged,
+not assumed. **Backup/git working-tree/remote state not independently
+asserted anywhere in this filing** — no shell this dispatch (hard rule
+8); the engineer should check `D:\Dev\pdfce-backups\` and `git log`/
+`git status`/`git remote -v` directly, on branch `post-v0.2.0`. This is
+the **hundredth** `SESSION_LOG.md`/`ROADMAP.md` joint filing (the
+ninety-ninth confirmed present by direct read before this entry was
+appended).

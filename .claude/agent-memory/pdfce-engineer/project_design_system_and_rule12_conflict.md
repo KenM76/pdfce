@@ -1,6 +1,6 @@
 ---
 name: design-system-and-rule12-conflict
-description: UI_PREFERENCES.md is MISSING (never committed, though 7 files cite it); the governing rule is chrome-theme-aware vs canvas-overlay-theme-INVARIANT, now superseded by Pass 58.0's theme.rs + check-theme-colors.sh; and Ken's design handoff conflicts with CLAUDE.md rule 12
+description: UI_PREFERENCES.md lives at the REPO ROOT not docs/ (a path error twice mistaken for a missing file); the governing rule is chrome-theme-aware vs canvas-overlay-theme-INVARIANT, enforced by theme.rs + check-theme-colors.sh; and Ken's design handoff conflicts with CLAUDE.md rule 12
 metadata:
   type: project
 ---
@@ -9,29 +9,38 @@ metadata:
 will "fix" into a bug, and one live conflict that is Ken's to settle and must
 not be routed around.
 
-## ★ CORRECTION 2026-08-11 — the file does not exist and never did
+## ★ THE PATH — get this right, it has been got wrong twice
 
-This memory previously asserted `UI_PREFERENCES.md` **exists**. Measured on
-2026-08-11: it is absent from disk **and from git history entirely** —
-`git log --all -- docs/UI_PREFERENCES.md` returns nothing, so it was never
-committed under that path. Yet it is cited by `ARCHITECTURE.md`,
-`ROADMAP.md`, `SESSION_LOG.md`, three `docs/ui_specs/*.md`, and
-`crates/pdfce-gui/src/main.rs`.
+**`D:\Dev\pdfce\UI_PREFERENCES.md` — REPO ROOT, not `docs/`.** Verified
+2026-08-11: 34 KB, git-tracked, first committed in `b0f57af`. It exists.
+`ARCHITECTURE.md` §9 has had the correct path since 2026-08-06.
 
-**Do not go looking for it, and do not cite it as governing.** The rule below
-is still correct as a *principle*, but the authority for colour decisions is
-now `crates/pdfce-gui/src/theme.rs` plus the `tools/check-theme-colors.sh`
-gate (Pass 58.0), both of which exist and are enforced in CI. Prefer those.
+**Why this warning is here.** On 2026-08-11 both `pdfce-ui-specialist` and
+then *this engineer* independently concluded the file was **missing** — the
+specialist by globbing, the engineer by running `ls docs/UI_PREFERENCES.md`
+and `git log --all -- docs/UI_PREFERENCES.md` and getting nothing. That
+`--all` is the trap: it *feels* exhaustive, but it is still **path-scoped**,
+so a wrong path returns empty with exactly the confidence of a true negative.
+The engineer then wrote "never existed in git history" into this memory as a
+measured fact and reported it to the operator.
 
-Same failure shape as the handoff's catalogue: a document asserted a fact
-about the environment nobody had measured, and it read as settled until
-someone ran `ls`.
+The lesson is not "check twice." It is: **a negative result from a
+path-scoped query is a fact about the path, not about the repository.** Use
+`git log --all -- '*UI_PREFERENCES.md'`, or `git ls-files | grep`, before
+concluding a tracked file is absent.
 
-## The counter-intuitive rule (still true as a principle)
+Several documents cite the stale `docs/` path, which is what makes the wrong
+conclusion so easy to reach. `pdfce-librarian` corrected `ROADMAP.md` and
+footer-corrected `SESSION_LOG.md` on 2026-08-11. **Still stale, flagged and
+unfixed:** `docs/ui_specs/ribbon-groupings-and-customization-architecture.md`
+line ~39.
 
-Originally attributed to `UI_PREFERENCES.md` §1 (2026-08-05,
-pdfce-ui-specialist) — see the correction above for why that citation is
-unusable. Now enforced by `theme.rs` + `check-theme-colors.sh`:
+## The counter-intuitive rule
+
+`UI_PREFERENCES.md` §1 (2026-08-05, pdfce-ui-specialist) states it; Pass
+58.0's `crates/pdfce-gui/src/theme.rs` + the `tools/check-theme-colors.sh`
+CI gate now *enforce* it. Both are authoritative and they agree — prefer the
+gate when you need a mechanical answer, the document when you need the why:
 
 - **Chrome** (panels, tabs, buttons, text, separators) is **theme-aware** —
   must route through `ui.visuals()`, never a bare `Color32`.

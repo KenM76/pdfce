@@ -3781,6 +3781,32 @@ direct operator ruling; the attribution sentence is generated into
 `about.hbs`, never hand-written. pdfce's first shipped image ENCODER,
 under standing rule R28's own named exception (`ROADMAP.md`).
 
+**First dependency for which R24's own lever does not exist: `aes`
+0.9.2 + `cbc` 0.2.1 (2026-08-11, `Pass 5` increment 2, `f7aee60`; see
+§12's decision 039).** Both `MIT OR Apache-2.0`; nine transitive crates
+(`cipher`, `crypto-common`, `inout`, `block-padding`, `typenum`,
+`hybrid-array`, `cpufeatures`, `cpubits`, `cfg-if`), all permissive,
+zero copyleft — rule 13's escalation trigger did not fire.
+`THIRD_PARTY_LICENSES.md` regenerated via `cargo-about` (Apache-2.0
+count 133 → 142, exactly the nine new crates). Every other codec/crypto
+dependency in this project is compiler-enforced free of `unsafe` via
+`default-features = false` (R24, and the in-crate MD5/RC4 posture at
+decision 039's own sibling entry). `aes` cannot be forced into that
+shape: its intrinsic hardware backends are selected on a **cfg**
+(`aes_backend = "soft"`), and a cfg is settable only from `RUSTFLAGS` or
+`.cargo/config.toml` — global to the build, and **not inherited by any
+downstream consumer of `pdfce-core` as a library**. Forcing the soft
+backend from pdfce's own build config would buy a guarantee true for
+pdfce's own binaries and false for every other crate that depends on
+`pdfce-core`. The hardware backend is therefore accepted deliberately,
+bounded by a CI job (`decision 039 — assert \`aes\` carries no extra
+features`, `.github/workflows/ci.yml`) pinning `hazmat` and `zeroize`
+OFF across four targets — the two widenings still under pdfce's control.
+On `wasm32-unknown-unknown` specifically, `aes` pulls no `cpufeatures`
+and resolves to the soft backend automatically, so the WASM web-fork
+target keeps zero-`unsafe` without any special-casing. Full reasoning:
+§12's decision 039.
+
 ## 10. Adversarial input hardening & fuzzing
 
 `pdfce-core` parses files from the public internet by design — every
@@ -17093,3 +17119,95 @@ it that way (see the `EncryptedSaveUnsupported` note above). The GUI-
 core separation invariant (§3): unaffected — `cargo tree -p pdfce-core`
 still names no GUI crate (relayed by the dispatching engineer, not
 independently re-run this filing, no shell).
+
+### 2026-08-11 (hundredth filing, `f7aee60`) — decision 039: `aes`/`cbc` accepted as `pdfce-core`'s first dependency where R24's own lever does not exist, the hardware backend taken deliberately rather than forced off with a guarantee that would be false for downstream consumers
+
+**Sourcing.** No shell tool this dispatch (hard rule 8). The dispatching
+engineer's summary cross-checked by direct `Read` of
+`crates/pdfce-core/src/crypto/aes.rs` (module doc comment, wire-format
+and padding-policy reasoning verbatim-consistent), `crates/pdfce-core/
+src/crypto/mod.rs` (module index citing decision 039 by name),
+`crates/pdfce-core/Cargo.toml` (`aes = { version = "0.9.2",
+default-features = false }`, `cbc = { version = "0.2.1",
+default-features = false }`, confirmed), and `.github/workflows/ci.yml`
+(the `decision 039 — assert \`aes\` carries no extra features` job,
+confirmed present, asserting `hazmat`/`zeroize` OFF across four
+`cargo tree -p pdfce-core -e features` targets: native,
+`x86_64-pc-windows-msvc`, `aarch64-apple-darwin`,
+`wasm32-unknown-unknown`). **The specific "26 unsafe sites" figure named
+in the dispatch was not independently reproduced to a matching count**:
+a direct grep of the cached crate source
+(`aes-0.9.2/src/backends/x86_aes.rs` + its `encdec.rs`/`expand.rs`
+submodules — the intrinsic backend a plain `x86_64` build selects)
+finds multiple `unsafe` blocks/functions across all three files, with
+the exact count depending on counting method (whole-word `unsafe`
+occurrences vs. `unsafe fn`/`unsafe {` sites only; neither method this
+librarian tried lands on 26). The **qualitative** claim — this crate's
+default backend uses `unsafe` intrinsics, is `cfg`-selected rather than
+feature-selected, and is therefore not compiler-forbidden the way every
+sibling codec dependency is — is independently confirmed from the
+source; the exact site count is relayed, not reconciled, and should not
+be treated as load-bearing on its own.
+
+**Decision.** `aes` 0.9.2 + `cbc` 0.2.1 (`MIT OR Apache-2.0`, nine
+transitive crates — `cipher`, `crypto-common`, `inout`, `block-padding`,
+`typenum`, `hybrid-array`, `cpufeatures`, `cpubits`, `cfg-if` — all
+permissive) are accepted as `pdfce-core`'s dependencies for `/AESV2`
+(AES-128-CBC). Rule 13's copyleft-escalation trigger did not fire — no
+operator flag was needed on the license axis. What this decision record
+exists to state is narrower and load-bearing: **R24's own lever ("build
+codec crates with SIMD/unsafe OFF via `default-features = false`") does
+not exist for `aes`.** Every codec dependency R24 governs selects its
+intrinsic path through a Cargo **feature** (`x86`, `neon`, `simd`,
+`portable_simd`), which `default-features = false` can turn off and CI
+can assert stays off. `aes`'s intrinsic hardware backends are instead
+selected on a **`cfg`** (`aes_backend = "soft"` forces the portable
+fallback), and a `cfg` is not a per-dependency Cargo knob — it is set
+only via `RUSTFLAGS` or `.cargo/config.toml`, both **global to the
+build** and, critically, **not inherited by anything that depends on
+`pdfce-core` as a library** rather than building it as the top-level
+crate. Setting `aes_backend = "soft"` in pdfce's own `.cargo/config.toml`
+would therefore produce a guarantee that is true for pdfce's own
+binaries and silently false for every downstream consumer — a worse
+outcome than stating plainly that the hardware backend is in play.
+
+**The exception is bounded, not open-ended.** A new CI job (`decision
+039 — assert \`aes\` carries no extra features`) asserts the two
+widenings still genuinely under pdfce's control stay off, across four
+targets (native + the three R24 already checks): `hazmat` (raw round
+functions with no key schedule, exists for building other ciphers,
+nothing in pdfce calls it — the one feature that would widen the unsafe
+surface beyond backend dispatch) and `zeroize`. `zeroize` staying off is
+a **considered choice, not an omission**: `FileKey` (`crypto/
+standard.rs`) holds the file encryption key in an ordinary `Vec<u8>`, so
+zeroizing only the cipher's derived round keys while the key that
+produced them sits unzeroized in an ordinary heap allocation would be
+theatre — hygiene has to start at `FileKey` itself or not at all, and is
+deliberately deferred as its own future decision rather than half-done
+here. Turning either feature on requires a new decision record, same bar
+as R24 itself (`.github/workflows/ci.yml`'s own comment states this).
+
+**On `wasm32-unknown-unknown`** (the eventual web-fork target, §1.1/§3):
+`aes` pulls no `cpufeatures` and resolves to its soft backend
+automatically — no special-casing needed to keep that target
+zero-`unsafe`; the exception this decision accepts is native-target-only
+by the crate's own feature resolution, not by anything pdfce configures.
+
+**The in-crate alternative was surveyed and explicitly declined, not
+silently skipped.** `crypto/md5.rs`'s own module doc comment (written at
+`Pass 5` increment 1, `14a7400`, before this decision existed to argue
+against) already states its hand-rolling judgement "does not extend to
+AES" — real side-channel/constant-time implementation hazards, a live
+ecosystem, and well-audited permissive crates already pre-selected for
+this at decision 001 §6.2. This decision honours that boundary rather
+than relitigating it: MD5 and RC4 stay in-crate under decision 001's
+narrow three-part test (frozen algorithm, read-only/compat-only, small
+enough to audit against a published reference); AES was never a
+candidate for that test and this record does not reopen it.
+
+**Not a crate-boundary or invariant change.** `pdfce-core`'s dependency
+tree gains two new leaves; nothing here redraws §3's GUI-core boundary
+or §5's round-trip contract — the writer's `EncryptedSaveUnsupported`
+refusal (§5, decision from the `14a7400` entry above) is unchanged, and
+this increment remains read-only. Full build record: `ROADMAP.md`'s
+`f7aee60` Shipped entry (hundredth filing).
