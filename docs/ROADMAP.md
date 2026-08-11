@@ -81,6 +81,151 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★ `v0.3.0` tagged and released at `cfc20dd` on `main` — third release since `v0.1.0`, 35 commits since `v0.2.0`; `tools/verify-release.py`'s FIRST real outing, all six checks green including the one written specifically for the v0.2.0 near-miss recorded immediately below — 2026-08-11 (hundred-and-fifth filing)
+
+**Sourcing.** No shell tool this dispatch (hard rule 8). Everything
+below — the tag, the two commits, the 35-commit range, the release
+asset, the version bump, the `verify-release.py` output, and the
+fresh-folder smoke test — is relayed from the dispatching engineer's
+own account. Nothing here is independently re-verified against `git`
+or GitHub by this librarian.
+
+**Operator authorisation, recorded because project rule 8 requires it
+per release.** Ken, verbatim, 2026-08-11: *"release the latest version
+to github."*
+
+**What shipped.** `v0.3.0` tagged and released at `cfc20dd`, branch
+`main`: <https://github.com/KenM76/pdfce/releases/tag/v0.3.0>. Asset
+`pdfce-v0.3.0-windows-x64.zip`, ~10.0 MB, single-folder portable (no
+installer, no registry writes). 35 commits land since `v0.2.0`
+(`5beecf6`) — everything filed today under `Pass 5` (AES-128 increment
+2), `Pass 63.0` (print dialog), `Pass 64.0` (landscape orientation),
+`Pass 65.0` (Escape, immediately below), decisions 039–042, plus the
+`check-ledger-numbers.py` tooling fix. Version bumped 0.2.0 → 0.3.0 in
+`[workspace.package]`; **both** lockfiles refreshed — the root
+workspace's and the `fuzz/` workspace's own separate lockfile,
+called out by name because a second lockfile is exactly the kind of
+file a version bump leaves behind unnoticed; `THIRD_PARTY_LICENSES.md`
+regenerated via `cargo-about` because the version string appears in
+it. Two commits carry the release: `2b4b2bf` (new `docs/DEPENDENCIES.md`)
+and `cfc20dd` (the version bump itself). `check-commits-filed.py`
+reports clean, so both are filed here as the release record rather
+than tracked as unfiled backlog.
+
+**What v0.3.0 adds over v0.2.0, per the release notes.** AES-128
+encrypted PDFs open in core/CLI/GUI, including the empty-user-password
+case that opens with no prompt; AES-256 and `/R 6` still refused BY
+NAME; writing an encrypted document remains unimplemented, now
+disclosed at OPEN rather than discovered at save. A redesigned print
+dialog: tabbed options, a resizable window with both scrollbars, a
+preview that renders the real page and can be zoomed/panned, Ctrl+P.
+Landscape printing's ~77%-of-size under-scaling is fixed, and Auto
+orientation — which had never actually turned anything — now does.
+Escape cancels any of the five confirmation-gated dialogs (`Pass
+65.0`, filed below). Two known, disclosed, not-yet-fixed defects ship
+alongside: stacked centre-anchored dialogs, and printing ignoring the
+operator's CMYK intent.
+
+**Gates at `cfc20dd`, per the dispatching engineer.** 3,353 tests
+passing / 0 failing; `cargo clippy --workspace --all-targets
+--all-features -D warnings` **zero**; `fmt`, `check-ui-strings`,
+`check-theme-colors`, `check-ledger-numbers`, `check-commits-filed`,
+`check-passes-filed`, `check-bypass-paths` all clean; `cargo tree -p
+pdfce-core` / `-p pdfce-render` name no GUI crate. Release binary
+smoke-tested **from a fresh folder**: reports `pdfce-cli 0.3.0`; the
+AES-128 render matches `bc2dfede94ef290e7c7a7f7e509fea98`;
+`print-preview --orientation auto` reports the turned sheet at
+`scale=0.9725`.
+
+**★ The finding worth a permanent record.** `tools/verify-release.py`
+was written after the `v0.2.0` near-miss recorded in this file's own
+entry immediately below: a tag pointed at the right commit while `git
+push origin main` published a local `main` **36 commits behind** that
+tagged `HEAD`, reporting success while doing exactly that. This is the
+first release since the tool existed, and **all six checks passed**,
+including the one written specifically because of that incident:
+
+```
+verify-release v0.3.0
+  ok    working tree clean
+  ok    tag v0.3.0 exists locally
+  ok    tag is at HEAD
+  ok    tag v0.3.0 is pushed
+  ok    origin/main is AT the tagged commit
+  ok    GitHub release has at least one asset
+```
+
+Worth recording *how* the release was produced, not only that the
+checks passed afterward: the procedure this time verified
+`origin/main` was an ancestor of `HEAD` **first**, then fast-forwarded
+local `main` to the release commit and pushed `main` itself — rather
+than tagging from a side branch and hoping a later merge would line
+up. The push reported `5beecf6..cfc20dd main -> main`, and `cfc20dd`
+is `HEAD` — exactly the comparison the `v0.2.0` incident skipped. The
+tool did its job; this time, so did the procedure that fed it.
+
+**`docs/DEPENDENCIES.md` registered.** New at `2b4b2bf` and, per the
+dispatching engineer, unreferenced from any pdfce doc at the time of
+that commit. Added to `README.md`'s Documentation table and to
+`ARCHITECTURE.md` §9's opening paragraph (both edited this filing). It
+exists to answer a question `THIRD_PARTY_LICENSES.md` cannot — what
+each dependency is *for* — asked by an operator who wanted exactly
+that and got a generated, licence-shaped file instead.
+
+**A correction worth carrying forward, not merely registering.**
+`docs/DEPENDENCIES.md` §3 states, carefully: *"no copyleft obligation
+anywhere,"* explicitly **not** the looser *"no GPL/LGPL string appears
+in the graph"* — that looser claim is false. Two crates in the
+resolved graph name a copyleft licence: `self_cell` (`Apache-2.0 OR
+GPL-2.0-only`) and `r-efi` (`MIT OR Apache-2.0 OR LGPL-2.1-or-later`).
+Both are **disjunctive** — `cargo-about` resolves `self_cell` to its
+permissive branch, so `THIRD_PARTY_LICENSES.md` carries no GPL
+section, and `r-efi` is a UEFI-target crate absent from the Windows
+build entirely. The only **conjunctive** licence in the tree — the one
+that actually binds regardless of which branch is chosen — is
+`jpeg-encoder`'s `AND IJG`. **Checked against `LEGAL.md` §6
+specifically, per the dispatch's request: §6 itself (lines 298–688)
+does not state the looser claim anywhere in its own text.** Its "zero
+copyleft" language, in §6.1, describes pdfce's *own current dependency
+set* as entirely permissive — a narrower, still-true claim, not the
+"no such string anywhere in the graph" one. The looser phrasing lives
+instead in `LEGAL.md` §1 (line 25, dated 2026-08-01: *"every
+dependency … is permissive … zero copyleft"*) and §7's decision log
+(line 731, same date, same wording) — both dated entries, both
+accurate as descriptions of the audit performed on that date, written
+before `self_cell`/`r-efi` are recorded as having been separately
+noticed anywhere. **Not edited here**: `LEGAL.md` is outside this
+librarian's four tiers, and both entries already carry this project's
+own dated-append convention rather than reading as live, undated
+claims. **Flagged to the engineer**: a forward-pointer from `LEGAL.md`
+§1/§7 to `DEPENDENCIES.md` §3's more precise framing — the same
+pattern that file already uses elsewhere for superseded claims — would
+close the gap without disturbing the historical record.
+
+**`docs/FEATURES.md` — not touched.** A release publishes existing,
+already-filed capability; nothing here is a new row or a box that
+flips. Every capability in this release was ticked under its own Pass
+today.
+
+**Ledger for this filing.** **No new Pass ID** — following the
+`v0.2.0` precedent immediately below: a release/tag event is not
+engineering work with acceptance criteria of its own.
+`docs/FEATURES.md`: not touched (above). `docs/ARCHITECTURE.md` §12:
+**not edited** by the release itself — tagging and pushing redraws no
+crate boundary, library choice, or invariant; §9's **body** paragraph
+WAS edited (a `docs/DEPENDENCIES.md` pointer), which is a body-section
+update, not a new decision-log entry. Standing rules: no new number.
+Decision records: unchanged, ceiling **042**, next free **043**.
+Operator-question ceiling unchanged at **(bj)**, next free **(bk)**.
+**Backup/git working-tree/remote state not asserted anywhere in this
+filing** — no shell this dispatch (hard rule 8); the engineer should
+check `D:\Dev\pdfce-backups\` and `git log`/`git status`/`git remote
+-v` directly. This is the **hundred-and-fifth** `ROADMAP.md` filing
+(the hundred-and-fourth, immediately below, confirmed present by
+direct read before this entry was prepended).
+
+---
+
 ### ★★ `4ddd6c4` — Escape closes the dialog, like it does everywhere else: **(bj) ANSWERED**, Escape now cancels whichever of pdfce's five confirmation-gated dialogs is up, and a latent two-question deadlock is found and closed by a TEST, not a comment — `Pass 65.0` ships — 2026-08-11, branch `post-v0.2.0` (hundred-and-fourth filing)
 
 **Sourcing.** No shell tool this dispatch (hard rule 8) — `git show

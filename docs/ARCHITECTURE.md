@@ -3778,6 +3778,16 @@ actually adopted is **generated**, not hand-maintained — `cargo-about`
 produces `THIRD_PARTY_LICENSES.md` from the real `Cargo.lock`,
 regenerated at every packaging pass (§6).
 
+**`docs/DEPENDENCIES.md` (new 2026-08-11, `2b4b2bf`)** is the
+purpose-shaped companion to the generated, licence-shaped
+`THIRD_PARTY_LICENSES.md` — every direct dependency, by crate, with
+what it's *for*, plus what pdfce implements itself instead (MD5/RC4,
+the PDF-specific predictors, the ASCII filters) and why. Written by
+hand because a generated file cannot answer "why is this here,"
+only "what license does it carry." Re-run its own §5 commands and
+update it whenever the dependency set changes, same discipline as
+`THIRD_PARTY_LICENSES.md`.
+
 **pdfce's own license is MIT (decided 2026-08-01, `LEGAL.md` §1; see
 §12 decision log).** `LICENSE` (repo root) + `license = "MIT"` in
 `Cargo.toml` `[workspace.package]`, inherited by all four member

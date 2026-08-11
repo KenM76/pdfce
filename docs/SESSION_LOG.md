@@ -35158,3 +35158,92 @@ status`/`git remote -v` directly, on branch `post-v0.2.0`. This is the
 **hundred-and-fourth** `SESSION_LOG.md`/`ROADMAP.md` joint filing (the
 hundred-and-third, immediately above, confirmed present by direct read
 before this entry was appended).
+
+## 2026-08-11 (hundred-and-fifth filing) — `v0.3.0` tagged and released at `cfc20dd` on `main`; `tools/verify-release.py`'s first outing, all six checks green including the one written for the `v0.2.0` near-miss; `docs/DEPENDENCIES.md` registered
+
+**Sourcing.** No shell tool this dispatch (hard rule 8). The tag, the
+two commits, the 35-commit range since `v0.2.0`, the release asset,
+the version bump, the `verify-release.py` six-check output, and the
+fresh-folder smoke test are all relayed from the dispatching
+engineer's own account, not independently re-verified against `git`
+or GitHub by this librarian.
+
+**Shipped:**
+- `v0.3.0` — tagged and released at `cfc20dd`, branch `main`:
+  <https://github.com/KenM76/pdfce/releases/tag/v0.3.0>. Asset
+  `pdfce-v0.3.0-windows-x64.zip`, ~10.0 MB, single-folder portable. 35
+  commits since `v0.2.0` (`5beecf6`): `Pass 5` increment 2 (AES-128),
+  `Pass 63.0` (print dialog), `Pass 64.0` (landscape orientation),
+  `Pass 65.0` (Escape), decisions 039–042, the `check-ledger-numbers.py`
+  fix. Version 0.2.0 → 0.3.0 in `[workspace.package]`; both lockfiles
+  refreshed (root + the `fuzz/` workspace's own separate one);
+  `THIRD_PARTY_LICENSES.md` regenerated via `cargo-about`. Two commits
+  carry it: `2b4b2bf` (new `docs/DEPENDENCIES.md`) and `cfc20dd` (the
+  version bump); `check-commits-filed.py` reports clean.
+- `docs/DEPENDENCIES.md` registered — added to `README.md`'s
+  Documentation table and `ARCHITECTURE.md` §9's opening paragraph
+  (both this filing). It was new at `2b4b2bf` and unreferenced from
+  any pdfce doc until now.
+
+**Decisions made this session:**
+- None new. No new `ARCHITECTURE.md` §12 entry — a release/tag event
+  redraws no crate boundary, library choice, or invariant. §9's body
+  paragraph was edited (a `DEPENDENCIES.md` pointer added), which is a
+  body-section update, not a decision.
+
+**Findings + decisions:**
+- **★ `tools/verify-release.py`'s first real outing, and it caught
+  nothing because there was nothing to catch this time.** Written
+  after the `v0.2.0` near-miss (immediately below in `ROADMAP.md`): a
+  tag on the right commit while `git push origin main` published a
+  local `main` 36 commits behind that `HEAD`, reporting success while
+  doing exactly that. All six checks passed this release, including
+  the one written specifically for that incident (`origin/main is AT
+  the tagged commit`). Worth recording *how*, not only *that*: the
+  procedure verified `origin/main` was an ancestor of `HEAD` first,
+  then fast-forwarded local `main` to the release commit and pushed
+  `main` itself, rather than tagging from a side branch. The push
+  reported `5beecf6..cfc20dd main -> main`, and `cfc20dd` is `HEAD` —
+  exactly the comparison the `v0.2.0` incident skipped.
+- **A correction worth carrying forward.** `docs/DEPENDENCIES.md` §3
+  states carefully that pdfce has "no copyleft obligation anywhere,"
+  explicitly not the false, looser claim "no GPL/LGPL string appears
+  in the graph." Two crates in the resolved graph name a copyleft
+  licence disjunctively — `self_cell` (`Apache-2.0 OR GPL-2.0-only`)
+  and `r-efi` (`MIT OR Apache-2.0 OR LGPL-2.1-or-later`) — both
+  resolved to their permissive branch (`r-efi` is absent from the
+  Windows build entirely); the only **conjunctive** licence is
+  `jpeg-encoder`'s `AND IJG`. **Checked `LEGAL.md` §6 specifically,
+  per the dispatch's request: §6 itself does not state the looser
+  claim anywhere.** The looser phrasing lives in `LEGAL.md` §1 (line
+  25) and §7's decision log (line 731), both dated 2026-08-01, both
+  accurate as of that date's audit, both predating `self_cell`/`r-efi`
+  being separately noticed. Not edited — `LEGAL.md` is outside this
+  librarian's four tiers, and both entries already carry the project's
+  dated-append convention. **Flagged to the engineer**: a
+  forward-pointer from `LEGAL.md` §1/§7 to `DEPENDENCIES.md` §3 would
+  close the gap without disturbing the historical record.
+
+**Still in flight:**
+- Nothing new opened this filing. The `LEGAL.md` §1/§7 forward-pointer
+  flagged above is a suggestion for the engineer, not a Backlog entry
+  — no Pass ID or open-question letter minted for it.
+
+**For next session:** `v0.3.0` is live on GitHub, tag and branch
+verified aligned by `verify-release.py`. `docs/DEPENDENCIES.md` is now
+discoverable from `README.md` and `ARCHITECTURE.md`. No engineering
+work opened by this filing.
+
+**Ledger for this filing.** **No new Pass ID** — a release/tag event,
+same precedent as the `v0.2.0` entry. `docs/FEATURES.md`: not touched
+— a release publishes already-filed capability. `docs/ARCHITECTURE.md`:
+no new §12 entry; one body-section edit (§9). Standing rules: no new
+mint, ceiling stays **R186**, next free **R187**. Decision-record
+ceiling unchanged, **042**, next free **043**. Operator-question
+ceiling unchanged at **(bj)**, next free **(bk)**. **Backup/git
+working-tree/remote state not independently asserted anywhere in this
+filing** — no shell this dispatch (hard rule 8); the engineer should
+check `D:\Dev\pdfce-backups\` and `git log`/`git status`/`git remote
+-v` directly. This is the **hundred-and-fifth** `SESSION_LOG.md`/
+`ROADMAP.md` joint filing (the hundred-and-fourth, immediately above,
+confirmed present by direct read before this entry was appended).
