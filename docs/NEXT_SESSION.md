@@ -4,7 +4,7 @@ Engineer-owned handoff. Read this **before** the librarian's record —
 `ROADMAP.md` says what shipped, this says what is in flight and what the
 next hour should be. Overwrite it once acted on.
 
-Written 2026-08-11 at `483cb4d`, branch `post-v0.2.0`.
+Written 2026-08-11 at `6ae476e`, branch `post-v0.2.0`.
 
 ---
 
@@ -12,94 +12,110 @@ Written 2026-08-11 at `483cb4d`, branch `post-v0.2.0`.
 
 Measured this session, not relayed:
 
-- `cargo test --workspace` — **3,338 passing / 0 failing** (3,311 at the
+- `cargo test --workspace` — **3,350 passing / 0 failing** (3,311 at the
   start of the session).
 - `cargo clippy --workspace --all-targets --all-features -D warnings` — 0.
 - `cargo fmt --check`, `check-ui-strings.sh`, `check-theme-colors.sh`,
   `check-ledger-numbers.py`, `check-passes-filed.py`,
   `check-bypass-paths.sh` — clean.
 - `cargo tree -p pdfce-core` / `-p pdfce-render` name no GUI crate.
-- Portable build **`D:\builds\pdfce-20260811-1116-483cb4d`**, smoke-tested
-  by copying to a fresh folder and running both binaries there.
+- Portable build **`D:\builds\pdfce-20260811-1222-6ae476e`**, smoke-tested
+  by copying to a fresh folder and running both binaries there — the AES
+  render matched `bc2dfede94ef290e7c7a7f7e509fea98` from the packaged
+  binary, and `print-preview` reported the turned sheet.
 
-Filing gate: a librarian dispatch covering `74e54a5`, `5d2b19b`, `483cb4d`
-was in flight when this was written. **Run `check-commits-filed.py` and
-file whatever it names before new work.**
+Filing gate: `check-commits-filed.py` is **clean** (5 known-unfiled carried
+in the baseline as pre-existing debt). Everything this session is filed.
+
+**`check-ledger-numbers.py` was itself wrong until `e293143` and is worth
+re-reading.** It printed `clean` while reporting two ceilings that were
+false: decision numbers counted only `docs/decisions/*.md` files (missing
+034-036, 039, 040, which live only in ARCHITECTURE §12), and its ordinal
+vocabulary stopped at "ninety" on the very day `SESSION_LOG.md` reached
+its hundredth filing. Ceilings now read **decisions 041 → next free 042**,
+**filings 103 → next free 104**, **Pass 64.0**, **R186**, **(bj)**.
 
 ---
 
 ## What shipped
 
+Four pieces, all verified in a running build rather than by compiling.
+
 ### Encryption increment 2 — AES-128 (`f7aee60`, `74e54a5`)
 
-`/V 4` + `/CFM /AESV2` decrypts in core, CLI and GUI. An AES-128 file now
-asks for a password (or opens silently when the user password is empty)
-instead of reporting an unimplemented cipher.
+`/CFM /AESV2` decrypts in core, CLI and GUI. `FileKey::object_key` needed
+no change — increment 1 had already written the `sAlT` variant (T1).
+**Decision 039** records the `aes`/`cbc` dependency and the R24 exception
+(the backend is cfg-selected, so the usual `default-features = false`
+lever does not exist; bounded in CI instead).
 
-New: `crates/pdfce-core/src/crypto/aes.rs`. `FileKey::object_key` needed
-**no** change — increment 1 had already written the `sAlT` variant (T1)
-while AES was still refused.
+`74e54a5` closed a hole found by asking what the fixtures *cannot* fail
+on: every `enc-*.pdf` has zero object streams, and pypdf flattens them on
+clone, so the commonest real-world AES shape was untested. Covered with
+PDFium's `encrypted.pdf` (a third independent implementation).
 
-**Still refused, and the reason is not the cipher.** `/AESV3` keys off
-**Algorithm 2.A**, not Algorithm 1, so having the block cipher bought
-nothing there. `/R 6` stays blocked as unsourced past step (a).
-Writing an encrypted document remains unimplemented in all three shells.
+**Still refused:** `/AESV3` keys off Algorithm 2.A, not Algorithm 1 — the
+block cipher bought nothing there. `/R 6` stays unsourced. Writing an
+encrypted document is unimplemented in all three shells.
 
-**Decision 039** — `aes 0.9.2` + `cbc 0.2.1`, all-permissive, and the
-R24 exception: `aes` selects its intrinsic backends on a **cfg**
-(`aes_backend = "soft"`), not a feature, so the project's usual
-`default-features = false` lever does not exist. Forcing soft globally
-would buy a guarantee true for pdfce's own builds and **false for anyone
-consuming `pdfce-core` as a library**, because `.cargo/config.toml` is not
-inherited. Hardware backend accepted; exception **bounded in CI**
-(`hazmat`/`zeroize` pinned off on four targets). On wasm32 no
-`cpufeatures` is pulled at all, so the web-fork target keeps zero-unsafe.
+### Print dialog — `Pass 63.0` (`5d2b19b`, `483cb4d`)
 
-### Print dialog (`5d2b19b`, `483cb4d`)
+Tabs, `min_size` + one `ScrollArea::both()`, variable-height preview,
+zoom/pan, Ctrl+P, and a preview that renders the page instead of a flat
+rectangle. Two bugs fixed that nobody asked about: `pending_print` was
+missing from `apply()`'s one-question gate (reachable via the ribbon
+alone), and `spool_print` built render options **without** the operator's
+CMYK intent.
 
-Operator request. Tabs (Pages & Layout / Copies & Finishing / Comments &
-Resolution), `min_size` + one `ScrollArea::both()`, variable-height
-preview canvas, zoom/pan (Ctrl+wheel, drag, Fit/−/+/100%), Ctrl+P, and
-the preview now **renders the page** instead of filling a flat rectangle.
+### Landscape orientation — `Pass 64.0` (`d1756e5`, `290aef9`, `4837009`)
 
-Two bugs fixed that nobody had asked about:
-- **`pending_print` was missing from `apply()`'s one-question gate** while
-  the print window is centre-anchored. Reachable today via the ribbon
-  alone — clicking Print over an open copy/save/redaction confirmation
-  stacked a second centre-anchored window on an unanswerable one.
-- **`spool_print` built render options without the operator's CMYK
-  intent** while the canvas uses it, so a document proofed under
-  `Calibrated` printed under `NeutralBlack`, silently. Found only by
-  extracting the shared builder.
+**Orientation turned the paper but not the placement.** `printer_caps` is
+read before any DEVMODE exists, `plan_job` never saw orientation, and
+`build_devmode` then told the driver to turn the sheet. A landscape page
+printed at ~77% of size.
+
+★ **The diagnosis that reached this file first was half wrong, and the
+correction is the better finding.** It did NOT fire at pure defaults:
+`build_devmode` returned `None` when `settings == default`, so no DEVMODE
+was sent and planner and driver agreed *by accident*. The real shape:
+the mismatch fired whenever **any** setting differed from default —
+changing duplex alone was enough — and, worse, because `Auto` **is** the
+default, **auto-orientation never turned anything**. A "disturb nothing by
+default" guard had disabled the behaviour it was guarding.
+
+`From<&PrinterCaps> for DeviceGeometry` was **deleted**: an infallible
+conversion that silently gives the wrong answer for a landscape job gets
+reached again. `DeviceGeometry::from_caps(caps, requested, first_page_pt)`
+is now the only route, so the un-turned view is unreachable.
+**Decision 041**; **R171 widened in place** (third instance in
+`print_flow.rs` alone of two copies of one derivation drifting).
+
+Measured in the packaged CLI: portrait `0.7515`, landscape `0.9725`,
+**auto `0.9725`** — auto matching landscape is the inert-Auto bug closed.
+
+### The ledger gate (`e293143`) — see "Verified state" above.
 
 ---
 
 ## ★ Start here: pick one
 
-Nothing is half-finished. These are the live candidates, roughly ordered:
-
 1. **Encryption increment 3 — AES-256 `/R` 5.** Sourced (Algorithm 2.A /
    3.2a: SHA-256 over password+salt, unwrap `UE`/`OE`, **key used as-is**,
-   no per-object step). The block cipher already exists; what is new is
-   the derivation and the three AES *modes* `/R 5` uses (**T25**:
-   CBC+random-IV+padding for data, CBC+zero-IV+**no** padding for
-   `UE`/`OE`, and **ECB — no IV at all** for `Perms`; ISO 32000-2's
-   errata strike "with an initialization vector of zero" from Algorithms
-   2.A(f), 10(f), 13(a)). `enc-aes-256-r5.pdf` is already a fixture.
-   **`/R 6` stays blocked** and `enc-aes-256-r6.pdf` is a refusal fixture
-   on purpose — deriving 2.B from another implementation and then testing
-   against that implementation could not fail.
-2. **Imposition has no GUI at all.** Extract sheet composition into
-   `pdfce-print` FIRST so both shells share one implementation. The three
-   modes are mutually exclusive and a GUI must express that as a *choice*.
-3. **The print preview ignores the Orientation radio** (new, pre-existing,
-   now filed). `pdfce_print::printer_caps` reports the device's default
-   sheet and nothing rotates the previewed geometry. Confirmed this
-   session: `plan_job` never reads `DeviceSettings`; orientation reaches
-   the job only as `DEVMODE::dmOrientation` in `spool`.
-4. **Escape-to-cancel is bound on none of the five gated dialogs.** Worth
-   ONE decision covering all five rather than a fifth convention. Filed as
-   an open operator question — **Ken's call, do not settle it solo.**
+   no per-object step). The block cipher exists; new is the derivation and
+   the three AES *modes* `/R 5` uses (**T25**: CBC+random-IV+padding for
+   data, CBC+zero-IV+**no** padding for `UE`/`OE`, **ECB — no IV at all**
+   for `Perms`). `enc-aes-256-r5.pdf` is already a fixture. **`/R 6` stays
+   blocked**; `enc-aes-256-r6.pdf` is a refusal fixture on purpose.
+2. **Two dead/stale printing items found and deliberately not fixed**
+   (both filed to Backlog): `DeviceSettings::pick_tray_by_page_size` sets
+   no `DEVMODE` field at all — `DM_DEFAULTSOURCE` is never written, so the
+   control does nothing; and `build_devmode`'s doc claims it "starts from
+   the driver's own default rather than zeroed" while the code builds a
+   zeroed `DEVMODEW` and leaves `_printer_wide` unused.
+3. **Imposition has no GUI.** Extract sheet composition into `pdfce-print`
+   FIRST so both shells share one implementation.
+4. **Escape-to-cancel is bound on none of the five gated dialogs** — open
+   operator question **(bj)**. **Ken's call; do not settle it solo.**
 5. Static hybrid XFA read/fill · wide-shape CSV · colour management
    (`D:\Dev\iccce\`, planned, no code).
 6. **Ledger-accuracy defect** (librarian-reported, not fixed): filings
@@ -149,17 +165,20 @@ Nothing is half-finished. These are the live candidates, roughly ordered:
 
 ## What the operator can try
 
-`D:\builds\pdfce-20260811-1116-483cb4d\pdfce-gui.exe`:
+`D:uilds\pdfce-20260811-1222-6ae476e\pdfce-gui.exe`:
 
 - **`enc-aes-128.pdf`** — prompts; `userpw` or `ownerpw` open it.
-- **`enc-emptyuser.pdf`** — AES-128, opens with no prompt at all.
-- **Ctrl+P** anywhere, or the ribbon Print button. Tabs across the top of
-  the options column; drag the window smaller and both scrollbars appear;
-  Ctrl+wheel over the preview zooms; drag pans.
+- **`enc-emptyuser.pdf`** — AES-128, opens with **no prompt at all**, and
+  the status bar says why. Save is greyed out with its reason stated at
+  OPEN, not sprung at Ctrl+S.
+- **Ctrl+P**, or the ribbon Print button. Tabs; drag the window smaller
+  and both scrollbars appear; Ctrl+wheel over the preview zooms; drag
+  pans; **the sheet now turns with the Orientation radio.**
 - **`enc-aes-256-r5.pdf`** — still refused, **by cipher name**.
 
-CLI: `pdfce-cli --open-password userpw <cmd> <file>`, or
-`--open-password-file <path>` (`-` reads stdin).
+CLI: `pdfce-cli --open-password userpw <cmd> <file>`;
+`print-preview --orientation portrait|landscape|auto <file>` reports the
+turned sheet and the scale the job would use.
 
 ---
 
