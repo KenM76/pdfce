@@ -35247,3 +35247,87 @@ check `D:\Dev\pdfce-backups\` and `git log`/`git status`/`git remote
 -v` directly. This is the **hundred-and-fifth** `SESSION_LOG.md`/
 `ROADMAP.md` joint filing (the hundred-and-fourth, immediately above,
 confirmed present by direct read before this entry was appended).
+
+## 2026-08-11 (hundred-and-sixth filing) — `0841a6c`: `verify-release.py`'s exact-equality checks replaced with a three-state AT/ADVANCED/CONTAINS read so a correct release stops failing five minutes later; `9649995` fixes two false claims on the public README; a prior-filing flag checked and found to need no correction
+
+**Sourcing.** No shell tool this dispatch (hard rule 8). Both commits'
+messages, the failure output, and the post-fix verification are
+relayed verbatim from the dispatching engineer's own account, not
+independently re-verified against `git` by this librarian.
+
+**Shipped:**
+- `0841a6c` — `verify-release.py` checks 3 and 5 were exact commit
+  equality, correct only at the release instant and false every commit
+  after. Found by re-running the script one docs-only commit after
+  `v0.3.0`: it reported `origin/main is AT the tagged commit` = false
+  even though `68ecba3` (then-current `main`) is a direct child of the
+  tagged `cfc20dd` and genuinely contained the release. Fixed to three
+  outcomes — AT (release instant), ADVANCED (normal afterwards, now
+  passes), does-not-CONTAIN (the only real failure, the `v0.2.0`
+  shape) — and check 5 relabelled `"is AT"` → `"CONTAINS"` to match
+  what it actually asserts.
+- `9649995` — `README.md` corrected: "no tagged release yet" (three
+  exist) replaced with a pointer to the current release; "encrypted
+  documents" under "not built yet" corrected (not deleted) to name the
+  actual residue — reading RC4/AES-128 works, writing an encrypted
+  document does not exist, AES-256/`/R 6` still refused by name.
+  Printing added to "working today", absent from the README despite
+  being `[x]`/`[x]`/`[x]` in `FEATURES.md`.
+
+**Decisions made this session:**
+- None new. No `ARCHITECTURE.md` §12 entry — a gate-script fix and a
+  README correction redraw no crate boundary, library choice, or
+  invariant, same reasoning as `5dfef4d`'s own entry.
+
+**Findings + decisions:**
+- **★ Re-verified against the actual `v0.2.0` incident, not merely
+  re-passed against today's release.** Three cases run against real
+  commits: AHEAD (today, normal) → True, passes; BEHIND (the `v0.2.0`
+  incident — 36 commits short) → **False, still fails, correctly**;
+  EQUAL (release instant) → True, passes. The gate still catches the
+  case it exists for.
+- **The weakening deliberately not made.** Relaxing check 5 to "the
+  tag exists reachable from somewhere in history" would also have
+  passed the `v0.2.0` incident (the tag was reachable from the
+  session's side branch). Reachability from `origin/main` specifically
+  is the actual assertion, and the fix preserves it rather than
+  loosening it to something that merely fails less often.
+- **A hundred-and-fifth-filing flag checked and closed with no
+  correction needed.** `LEGAL.md` §1/§7's "zero copyleft" language was
+  flagged as possibly overstated against `self_cell`/`r-efi`'s
+  disjunctive copyleft licence options. Both sections read this
+  dispatch: both are explicitly scoped to "verified against the
+  generated `THIRD_PARTY_LICENSES.md`," which genuinely shows 100%
+  permissive because `cargo-about` resolves both crates to their
+  permissive branch. The raw `cargo metadata` `license` field the
+  concern was built on is a different artefact. Nothing edited —
+  recorded so a future session does not re-open the same question.
+- **A pattern worth watching, not yet a rule.** Third document this
+  project found asserting something no longer true (after
+  `docs/UI_PREFERENCES.md`'s stale path and `CipherNotImplemented`'s
+  stale message). `FEATURES.md` has a maintenance contract that fires
+  on every capability change; `README.md` has none. One recurrence is
+  short of this project's two-occurrence promotion bar — not proposed
+  as a rule this filing.
+
+**Still in flight:**
+- Nothing new opened this filing.
+
+**For next session:** `verify-release.py` is now safe to re-run at any
+point after a release, not only at the release instant itself.
+`README.md`'s Status section is now accurate as of this filing; no
+mechanism guards it from drifting again the way `FEATURES.md` is
+guarded.
+
+**Ledger for this filing.** **No new Pass ID**, same class as
+`5dfef4d`. `docs/FEATURES.md`: not touched. `docs/ARCHITECTURE.md`: no
+new §12 entry, no body-section edit. Standing rules: no new mint,
+ceiling stays **R186**, next free **R187**. Decision-record ceiling
+unchanged, **042**, next free **043**. Operator-question ceiling
+unchanged at **(bj)**, next free **(bk)**. **Backup/git working-tree/
+remote state not independently asserted anywhere in this filing** — no
+shell this dispatch (hard rule 8); the engineer should check
+`D:\Dev\pdfce-backups\` and `git log`/`git status`/`git remote -v`
+directly. This is the **hundred-and-sixth** `SESSION_LOG.md`/
+`ROADMAP.md` joint filing (the hundred-and-fifth, immediately above,
+confirmed present by direct read before this entry was appended).

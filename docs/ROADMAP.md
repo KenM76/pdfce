@@ -81,6 +81,150 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★ `0841a6c` — `verify-release.py` stops crying wolf on a release that is correct: exact-equality replaced by a three-state AT/ADVANCED/CONTAINS read, proven to still catch the `v0.2.0` incident it exists for; plus `9649995` fixes two false claims on the public README — 2026-08-11 (hundred-and-sixth filing)
+
+**Sourcing.** No shell tool this dispatch (hard rule 8). Both commits'
+full messages, the failure output, the fix description, and the
+post-fix six-check pass are relayed verbatim from the dispatching
+engineer's own account, not independently re-verified against `git` by
+this librarian.
+
+**No Pass ID — same class as `5dfef4d` (2026-08-11, `verify-release.py`
+itself), `check-commits-filed.py` (2026-08-09) and
+`check-disclosure-channel.sh` (2026-08-09): a report-only gate script
+fix plus a doc correction, not new product capability.** Followed the
+dispatch's own precedent read rather than opening a new one. No
+`ARCHITECTURE.md` §12 entry for the same reason those had none —
+nothing here redraws a crate boundary, library choice, or invariant.
+
+**What broke, found by using the gate for its second real release
+check rather than only its first.** `verify-release.py` was run again
+after one docs-only commit landed on `main` following the `v0.3.0`
+release, and reported two failures **on a release that was correct**:
+
+```
+origin/main is AT the tagged commit
+origin/main=68ecba3 tag=cfc20dd -- the default branch does not
+contain this release
+```
+
+`68ecba3` is a direct child of `cfc20dd` — `main` demonstrably
+contained the release; the check's own equality comparison did not
+know how to say so. Checks 3 and 5 both asserted exact commit
+equality, which is right at the release instant and wrong five minutes
+later: **the first commit pushed to `main` after any release breaks
+both**, unconditionally, regardless of correctness. The commit's own
+framing, echoed here because it states the actual stakes: a gate that
+fails on correct state is one people learn to skip, and this is the
+gate guarding the one step (a push and a public release) nobody can
+undo.
+
+**The fix.** Three outcomes instead of two: **AT** the tag (the release
+instant itself), **ADVANCED** past it (the normal state five minutes
+and every day after — now passes, and prints why), or **does not
+contain it** (the only real failure — a `main` that never got the
+release, the `v0.2.0` shape). Check 5 renamed `"is AT"` → `"CONTAINS"`,
+so the label states what the check now actually asserts rather than a
+narrower thing it used to.
+
+**★ Re-verified against the actual incident, not merely re-passed
+against today's release — the same "prove it still catches the case it
+exists for" bar `5dfef4d` itself was held to.** Three cases run against
+real commits:
+
+| case | `origin/main` relative to tag | result | outcome |
+|---|---|---|---|
+| AHEAD (today, normal) | contains `v0.3.0` plus later commits | True | passes |
+| BEHIND (the `v0.2.0` incident itself) | 36 commits short of containing it | **False** | **still fails, correctly** |
+| EQUAL (the release instant) | is the tag | True | passes |
+
+**The weakening deliberately not made, worth recording precisely
+because it was the tempting shortcut.** Relaxing check 5 to "the tag
+exists reachable from somewhere in history" would *also* have passed
+the `v0.2.0` incident, since that tag genuinely existed — reachable
+from the session's side branch, just not from `origin/main`.
+Reachability from **`origin/main` specifically** is the entire
+assertion the check makes, and the fix preserves it rather than
+loosening it to something that happens to pass more often. The module
+docstring, which still described the old equality behaviour, was
+updated to match.
+
+**`9649995` — two false claims on the public front page, both flagged
+by this librarian's own hundred-and-fifth filing and acted on this
+one.** `README.md` said:
+
+- *"There has been no tagged release yet"* — three exist by this
+  point, and the `v0.3.0` release thirty minutes earlier made the
+  sentence more wrong than it already was. Replaced with a pointer to
+  the current release and what it contains.
+- Under "not built yet": *"encrypted documents"* — false since `Pass 5`
+  (RC4, shipped 2026-08-11) and AES-128 (shipped the same day). **The
+  claim was corrected, not deleted** — it was wrong in both directions,
+  not just stale in one. Reading works for RC4 40–128 and AES-128;
+  writing an encrypted document does not exist at all; AES-256 and
+  `/R 6` remain refused by name. The "not built yet" list now names
+  exactly that residue, worded from `docs/FEATURES.md`'s own Encryption
+  row rather than reconstructed from memory. Printing was also added to
+  the "working today" list — a capability ticked `[x]`/`[x]`/`[x]` in
+  `FEATURES.md` and absent from the README entirely.
+
+**★ The hundred-and-fifth filing's own flag, checked and found to need
+no correction — recorded because that outcome deserves the same
+visibility a correction would have gotten.** That filing asked whether
+`LEGAL.md` §1/§7's "zero copyleft" language overstated the dependency
+graph, given `self_cell` and `r-efi` both name a copyleft licence
+somewhere in their own disjunctive `license` field. Both sections were
+read this dispatch and found accurate: each is explicitly scoped to
+*"verified against the generated `THIRD_PARTY_LICENSES.md`,"* and that
+file genuinely shows 100% permissive, because `cargo-about` resolves
+both crates' disjunctive licences to their permissive branch before
+generating it. The raw `cargo metadata` `license` field the prior
+filing's concern was built on is a different artefact from the
+generated attribution the two sections actually cite. Nothing was
+edited — there was nothing to fix, and `LEGAL.md` sits outside this
+librarian's four tiers regardless. Filed here so a future session does
+not re-open the same question from the same starting confusion.
+
+**A pattern worth naming, not yet a rule.** This is the third document
+this project's own session found asserting something no longer true —
+after `docs/UI_PREFERENCES.md`'s stale path and `CipherNotImplemented`'s
+stale "RC4 only" message. `FEATURES.md` has a maintenance contract that
+fires on every capability change (this file's own primary duty);
+`README.md` has none, and its "Status" section is exactly the kind of
+narrative prose that goes stale silently and is read by outsiders as
+current. One recurrence is short of this project's own two-occurrence
+promotion bar for minting a standing rule (see **R186**'s repeated
+citations for what that bar looks like in practice) — noted here as a
+thing to watch, not proposed as a rule this filing.
+
+**Verification, per the dispatch.** `tools/verify-release.py v0.3.0` —
+clean, all six checks, after the fix and with `origin/main` legitimately
+ahead of the tag. `check-ledger-numbers.py` clean; `check-commits-filed.py`
+now names no unfiled commit. No `crates/` changes this filing, so no
+test/clippy delta from the 3,353-passing/0-failing baseline at
+`cfc20dd`. `origin/main` reported at `a2cce29`, both commits reported
+pushed.
+
+**`docs/FEATURES.md` — not touched.** No capability moved; a script
+fix and a README correction describe existing, already-ticked
+capability more accurately. A README problem, not a `FEATURES.md` one.
+
+**Ledger for this filing.** **No new Pass ID**, per the precedent
+above. `docs/FEATURES.md`: not touched. `docs/ARCHITECTURE.md` §12:
+not edited — nothing here redraws a crate boundary, library choice, or
+invariant. Standing rules: no new mint, ceiling stays **R186**, next
+free **R187**. Decision records: unchanged, ceiling **042**, next free
+**043**. Operator-question ceiling unchanged at **(bj)**, next free
+**(bk)**. **Backup/git working-tree/remote state not independently
+asserted anywhere in this filing** — no shell this dispatch (hard rule
+8); the engineer should check `D:\Dev\pdfce-backups\` and `git
+log`/`git status`/`git remote -v` directly. This is the
+**hundred-and-sixth** `ROADMAP.md` filing (the hundred-and-fifth,
+immediately below, confirmed present by direct read before this entry
+was prepended).
+
+---
+
 ### ★ `v0.3.0` tagged and released at `cfc20dd` on `main` — third release since `v0.1.0`, 35 commits since `v0.2.0`; `tools/verify-release.py`'s FIRST real outing, all six checks green including the one written specifically for the v0.2.0 near-miss recorded immediately below — 2026-08-11 (hundred-and-fifth filing)
 
 **Sourcing.** No shell tool this dispatch (hard rule 8). Everything
