@@ -10334,6 +10334,24 @@ pub const fn draft_multiline_label() -> &'static str {
     "Multi-line"
 }
 
+/// Note that exported values were prefixed to stop a spreadsheet running
+/// them.
+///
+/// Says the PDF is untouched in the same breath. An operator comparing the
+/// spreadsheet against the form will otherwise find a value that gained a
+/// character and reasonably wonder which of the two is now wrong.
+#[must_use]
+pub fn forms_data_csv_neutralised(count: usize, fields: &[String]) -> String {
+    // The separator joins names INSIDE a sentence, so it belongs in the
+    // catalog with the rest of the sentence rather than at the call site.
+    let fields = fields.join(", ");
+    format!(
+        "{count} value(s) ({fields}) start with a character a spreadsheet reads as a \
+formula, so each was prefixed with an apostrophe to keep it text. The PDF is \
+unchanged, and importing this file back removes the prefix."
+    )
+}
+
 /// Warning that a filled hybrid-XFA field may not be what a reader shows.
 ///
 /// Leads with the consequence rather than the mechanism: an operator who has

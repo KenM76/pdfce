@@ -8829,7 +8829,7 @@ impl PdfceApp {
             return;
         };
         let Some(path) = rfd::FileDialog::new()
-            .add_filter(ui_text::forms_data_filter_label(), &["fdf", "xfdf"])
+            .add_filter(ui_text::forms_data_filter_label(), &["fdf", "xfdf", "csv"])
             .set_file_name(ui_text::forms_export_default_name())
             .save_file()
         else {
@@ -8881,14 +8881,27 @@ impl PdfceApp {
             .filter(|f| f.rich_value.is_some())
             .count();
         let hint = doc.path.display().to_string();
-        let xfdf = path
+        let extension = path
             .extension()
             .and_then(|e| e.to_str())
-            .is_some_and(|e| e.eq_ignore_ascii_case("xfdf"));
-        let bytes = if xfdf {
-            data.to_xfdf(Some(&hint))
-        } else {
-            data.to_fdf(Some(&hint))
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        // CSV carries a disclosure the other two do not, so the format
+        // choice yields the note alongside the bytes rather than being
+        // re-derived later — one decision, one place.
+        let (bytes, csv_note) = match extension.as_str() {
+            "xfdf" => (data.to_xfdf(Some(&hint)), None),
+            "csv" => {
+                let export = pdfce_core::formcsv::to_csv(&data);
+                let note = (export.neutralised > 0).then(|| {
+                    ui_text::forms_data_csv_neutralised(
+                        export.neutralised,
+                        &export.neutralised_fields,
+                    )
+                });
+                (export.csv, note)
+            }
+            _ => (data.to_fdf(Some(&hint)), None),
         };
         self.set_edit_note(match std::fs::write(&path, &bytes) {
             Ok(()) => {
@@ -8897,6 +8910,10 @@ impl PdfceApp {
                 if rich > 0 {
                     note.push(' ');
                     note.push_str(&ui_text::forms_data_export_carries_rich_text(rich));
+                }
+                if let Some(csv_note) = &csv_note {
+                    note.push(' ');
+                    note.push_str(csv_note);
                 }
                 note
             }
@@ -8917,7 +8934,7 @@ impl PdfceApp {
     /// the difference between "imported" and "imported the wrong form".
     fn import_form_data(&mut self) {
         let Some(path) = rfd::FileDialog::new()
-            .add_filter(ui_text::forms_data_filter_label(), &["fdf", "xfdf"])
+            .add_filter(ui_text::forms_data_filter_label(), &["fdf", "xfdf", "csv"])
             .pick_file()
         else {
             return;
@@ -8929,20 +8946,22 @@ impl PdfceApp {
                 return;
             }
         };
-        // Content sniff, not extension: XFDF is XML and declares itself.
-        let is_xml = bytes
-            .iter()
-            .position(|b| !b.is_ascii_whitespace())
-            .is_some_and(|i| bytes[i] == b'<');
-        let parsed = if is_xml {
-            pdfce_core::fdf::FormData::parse_xfdf(&bytes)
+        // Content sniff, not extension, so a renamed file still imports.
+        // Ordered by how specific each marker is: FDF has a header, XFDF is
+        // XML and declares itself, and CSV is the residue — which is right,
+        // because CSV has no marker of its own.
+        let first = bytes.iter().find(|b| !b.is_ascii_whitespace()).copied();
+        let parsed = if first == Some(b'<') {
+            pdfce_core::fdf::FormData::parse_xfdf(&bytes).map_err(|e| e.to_string())
+        } else if first == Some(b'%') {
+            pdfce_core::fdf::FormData::parse_fdf(&bytes).map_err(|e| e.to_string())
         } else {
-            pdfce_core::fdf::FormData::parse_fdf(&bytes)
+            pdfce_core::formcsv::parse_csv(&bytes).map_err(|e| e.to_string())
         };
         let data = match parsed {
             Ok(d) => d,
             Err(err) => {
-                self.set_edit_note(ui_text::forms_data_import_failed(&err.to_string()));
+                self.set_edit_note(ui_text::forms_data_import_failed(&err));
                 return;
             }
         };
