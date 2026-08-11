@@ -81,6 +81,174 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★ `4ddd6c4` — Escape closes the dialog, like it does everywhere else: **(bj) ANSWERED**, Escape now cancels whichever of pdfce's five confirmation-gated dialogs is up, and a latent two-question deadlock is found and closed by a TEST, not a comment — `Pass 65.0` ships — 2026-08-11, branch `post-v0.2.0` (hundred-and-fourth filing)
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — `git show
+4ddd6c4` not run. The dispatching engineer states this work was
+verified BY THE ENGINEER directly (a running release build driven
+through the harness), not merely relayed from an implementing agent.
+Independently confirmed by direct `Read`/`Grep` of
+`crates/pdfce-gui/src/main.rs`: `PdfceApp::pending_question_cancel`
+(:10672–10689, with its doc comment at :10611–10671),
+`CanvasKeys::pending_question_cancel` (:13375–13388), the new top rung
+in `collect_keyboard_actions` (:13634–13656, placed above the
+password-prompt rung at :13657 and the view-mode rung at :13661), and
+all three named tests — `escape_cancels_every_confirmation_dialog`
+(:26825), `at_most_one_confirmation_question_is_ever_up` (:26873),
+`escape_never_resolves_to_a_confirm` (:26914).
+
+**What shipped.** Escape was bound on none of the five
+confirmation-gated dialogs (`pending_copy`, `pending_save`,
+`pending_redaction_apply`, `pending_print`, `pending_close` —
+question **(bj)**, filed hundred-second filing, above). Pressing it
+over an open question fell through to the canvas's own Escape ladder
+and acted on the document underneath instead of dismissing the
+question. `PdfceApp::pending_question_cancel()` returns the Cancel
+action of whichever dialog currently owns the screen (`None` if none
+does); a new `CanvasKeys::pending_question_cancel` field carries that
+resolved value into `collect_keyboard_actions`, which gets a new **top
+rung**, above both the password-prompt rung and the view-mode rung.
+**Above view mode is a correctness requirement, not mere convenience
+ordering**: read mode and full screen hide the ribbon and window
+controls, and a confirmation can be open inside either. Ordered below
+view mode, Escape would drop the operator out of full screen and leave
+the question sitting there unanswered — a key that *appears* to work
+while doing the wrong thing, which the entry's own source comment
+calls worse than doing nothing. **Every arm returns a Cancel, never a
+Confirm** — most consequential for redaction, whose confirmed branch
+is pdfce's only irreversible operation; for the close question, Cancel
+means "do not close," so a reflexive Escape cannot discard unsaved
+work.
+
+**★ (bj) ANSWERED, verbatim, closing the question filed under it.**
+Ken, 2026-08-11: *"yes, escape should work like it does for any other
+program."* See the *Open operator questions* section below for the
+formal closure.
+
+**★ A doc comment's own first draft was wrong on the interesting axis,
+and is corrected IN PLACE rather than left standing.** It first
+claimed that matching `pending_question_cancel`'s `if`-chain order to
+`apply()`'s own gate order was *load-bearing* — that a mismatch would
+make Escape push a Cancel the gate then silently swallows. Measured,
+and that is not the situation: the five pending states are **mutually
+exclusive by construction** (every one of them is set from inside
+`apply()`, which returns early the moment any one is up — so the
+action that would raise a second one never runs), which means
+whichever state is set is the one *any* match order returns; the
+tiebreak the original claim worried about is never exercised. This is
+the same shape as `149fd03`'s `recovery_note` finding, above: "the old
+comment argued the right principle on the wrong axis, and that is a
+larger error than no comment, not a smaller one" — a carefully-reasoned
+comment about the wrong property reads as though the question were
+already settled, which is worse than no comment at all.
+
+**★ A latent deadlock, currently unreachable, is now pinned by a test
+rather than by a comment's assertion that it can't happen.**
+Hand-constructing a state with two `pending_*` fields set at once
+showed that **neither question could then be answered**: `apply()`'s
+gate checks run in textual sequence, so (for example) the print gate
+approves `CancelPrint` and the close gate — which has no way to know
+the print gate already consumed the action — drops it on the very next
+line. Two dialogs on screen, no working button, no way out but killing
+the process. It is unreachable **only because** the mutual-exclusivity
+property above holds; break that property anywhere (an OS close
+request, a background task, any future `&mut self` path that sets a
+`pending_*` field from outside `apply()`) and the deadlock becomes
+live. `at_most_one_confirmation_question_is_ever_up` pins the
+invariant that prevents it, driven through the REAL `CloseDocument`
+dispatch path on a genuinely-dirtied document (`RotateRight` then
+`CloseDocument`) rather than by assigning fields directly — the test
+was written to fail for the right reason first (it does, per the
+Falsification paragraph below), not merely to pass.
+
+**Falsification, not merely assertion, on both new guards.** Resolving
+print to `SpoolPrint` (a Confirm) trips `escape_never_resolves_to_a_confirm`
+by name; exempting `CloseDocument` from the print gate trips
+`at_most_one_confirmation_question_is_ever_up` with its own "wedged"
+failure message. Both restored, both green.
+
+**Decision-record vs. standing-rule call — made explicitly, not left
+implicit.** The dispatch flagged the general shape — *a sequence of
+independent early-return guards can each individually approve an
+action and still collectively reject it, and the guards are only safe
+because their states are mutually exclusive, an invariant somebody has
+to test* — as a candidate for either a standing rule or a decision
+record, and asked this librarian's judgement. Filed as **decision
+042** (`ARCHITECTURE.md` §12, this filing), not a standing rule:
+this is the shape's **first** occurrence in this project, and the
+project's own two-occurrence promotion bar for a standing rule (used
+consistently elsewhere in this document — see e.g. the engineer's own
+declined single-instance rule at `.claude/agents/pdfce-engineer.md`'s
+"A RAG deliverable is not handed off" note) is not met by one instance.
+Recorded as a decision instead because it defines a real invariant
+(`pending_*` mutual exclusivity) that now has a name, a test, and a
+place other dialogs added later must respect — which is exactly what
+the decision log is for. **Not graduated to `D:\dev\rag\rust\` or
+`D:\dev\rag\egui\` either**: the shape is about composing this
+application's own action-dispatch gates, not about the Rust language,
+Cargo, or egui/eframe's own behaviour — nothing here would help a
+future unrelated Rust or egui project the way the tree's existing
+findings do.
+
+**`docs/FEATURES.md` — no row touched, judgement call made explicitly.**
+This is a keyboard-affordance fix on an existing capability (the five
+dialogs and their Cancel/Confirm controls already existed and are
+already covered, where covered at all, by capabilities elsewhere in
+the file), not a new capability, and it is not specific to Print (the
+one row the dispatch flagged as a candidate) — it spans all five
+gated dialogs. Ticking the Print row would misattribute a cross-cutting
+fix to one capability among five; adding a new row would misrepresent
+a bug fix as a capability. Left untouched.
+
+**Test/gate results — engineer-run, this dispatch's own words: "I did
+this myself."** `cargo test --workspace`: **3,353 passing / 0 failing**
+(**3,350** before this commit, **3** new tests named above).
+`cargo fmt --check` clean; `cargo clippy --workspace --all-targets
+--all-features -D warnings`: **zero**; `check-ui-strings.sh`,
+`check-theme-colors.sh` clean. Verified in a **running release build**,
+not merely compiled: harness script `panel:print` then `escape` leaves
+no dialog on screen and the document underneath untouched, screenshot-
+compared against the same script without the `escape` step.
+
+**Invariant checks.** `pdfce-core`/`pdfce-render` untouched by this
+commit — every changed file is under `crates/pdfce-gui/src/`; `cargo
+tree -p pdfce-core` / `-p pdfce-render` unaffected by construction (no
+`Cargo.toml` in either crate was touched). No new dependency.
+
+**Ledger for this filing.** **New Pass ID minted: `Pass 65.0`**
+(Escape-cancels-confirmation-dialogs — `pending_question_cancel`, the
+new top Escape rung, the mutual-exclusivity invariant and its test).
+Pass-family ceiling moves **64.0 → 65.0**, next free **66**. One
+commit cited by hash (`4ddd6c4`). `docs/FEATURES.md`: **no row
+touched** — see the judgement-call paragraph above. `docs/
+ARCHITECTURE.md`: **one new §12 entry, decision 042** (no new
+`docs/decisions/NNN-*.md` file — same §12-only pattern as 034–036,
+039–041). Standing rules: **no new mint** — the candidate shape is
+filed as decision 042 instead, reasoning above; ceiling stays
+**R186**, next free **R187**. Decision-record ceiling moves **041 →
+042**, next free **043**. **Operator-question ceiling stays `(bj)`
+— CLOSED, ANSWERED, not retired; next free remains `(bk)`.** See the
+*Open operator questions* section below for the formal closure.
+`D:\dev\rag\rust\`/`D:\dev\rag\egui\`: **no new file** — reasoning in
+the decision-record paragraph above (application-specific gate
+composition, not a Rust/Cargo/egui-ecosystem finding).
+`C:\personal_rag\pdf\`: not applicable — nothing PDF-domain-empirical
+in this commit. Test/gate figures: **engineer-run this dispatch**
+(stronger sourcing than this project's usual "relayed, not
+independently re-run" caveat — the engineer's own report states "I
+did this myself"), not independently re-executed by this librarian (no
+shell this dispatch). **Packaging smoke test: not reported this
+filing** — flagged, not assumed. **Backup/git working-tree/remote
+state not independently asserted anywhere in this filing** — no shell
+this dispatch (hard rule 8); the engineer should check
+`D:\Dev\pdfce-backups\` and `git log`/`git status`/`git remote -v`
+directly, on branch `post-v0.2.0`. This is the **hundred-and-fourth**
+`SESSION_LOG.md`/`ROADMAP.md` joint filing (the hundred-and-third,
+immediately below, confirmed present by direct read before this entry
+was written).
+
+---
+
 ### ★★★ tooling — `check-ledger-numbers.py` stops printing a wrong Pass-family ceiling: decision numbers declared only in `ARCHITECTURE.md` §12 now feed the ceiling, and an unparsed SESSION_LOG ordinal is a FAILURE, not a NOTE — `e293143` — 2026-08-11, branch `post-v0.2.0` (hundred-and-third filing, filed alongside `Pass 64.0` below)
 
 **No Pass ID — ledger/gate infrastructure, same class as
@@ -44295,6 +44463,21 @@ free (bk):**
   meaning-collision those rules were written to avoid. *Default if
   unanswered:* status quo — no dialog binds Escape; each stays
   dismissible only by its own explicit control.
+
+  > **★ ANSWERED 2026-08-11 — CLOSED. Operator's ruling, verbatim: "yes,
+  > escape should work like it does for any other program."** Shape (a)
+  > above: Escape now cancels every gated dialog uniformly, wired at the
+  > same `apply()` chokepoint the pending-confirmation gate already
+  > occupies (`PdfceApp::pending_question_cancel`, a new top rung in
+  > `collect_keyboard_actions`, above the password-prompt and view-mode
+  > rungs). No meaning-collision with R130–R132's level-ladder Escape
+  > materialized: the two are mutually exclusive states (a confirmation
+  > dialog and the canvas level ladder are never both live at once), so
+  > shape (b)'s concern did not apply once measured. `4ddd6c4` (this
+  > filing, `Pass 65.0` — see the Shipped entry above for the full
+  > record, including a latent two-question deadlock the audit found and
+  > closed by a test). **Operator-question ceiling stays `(bj)`** —
+  > closed, not retired; next free remains **(bk)**.
 
 **NEW this filing (eighty-eighth filing, 2026-08-11) — filed OPEN, not yet
 answered. Operator-question ceiling moves (bh) → (bi), next free (bj):**

@@ -17401,3 +17401,95 @@ neither `pdfce-core` nor `pdfce-render` (§3, eighty-fifth filing,
 unaffected). `cargo tree -p pdfce-core` / `-p pdfce-render` name no GUI
 crate. Full build record: `ROADMAP.md`'s `d1756e5`/`290aef9`/`4837009`
 Shipped entry (hundred-and-third filing).
+
+### 2026-08-11 (hundred-and-fourth filing, `4ddd6c4`) — decision 042: at most one confirmation dialog is ever pending, and that invariant — not the match order in `pending_question_cancel` — is what keeps Escape from wedging the application
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — `git show
+4ddd6c4` not run. The dispatching engineer states this work was
+verified directly, including in a running release build; independently
+confirmed by direct `Read` of `crates/pdfce-gui/src/main.rs`:
+`PdfceApp::pending_question_cancel` (:10672), `CanvasKeys::
+pending_question_cancel` (:13388), the new Escape rung in
+`collect_keyboard_actions` (:13651), and
+`at_most_one_confirmation_question_is_ever_up` (:26874).
+
+**Decision.** Operator question **(bj)** (`ROADMAP.md`, hundred-second
+filing) is answered: Escape now cancels whichever of pdfce's five
+confirmation-gated dialogs (`pending_copy`, `pending_save`,
+`pending_redaction_apply`, `pending_print`, `pending_close`) is up,
+resolved by a single function, `PdfceApp::pending_question_cancel`,
+checked in a new top rung of `collect_keyboard_actions`'s Escape ladder
+— above the password-prompt rung and the view-mode rung, the latter
+for a correctness reason (read mode/full screen can host an open
+confirmation, and losing view mode before the confirmation would leave
+the question unanswered underneath it). Every arm resolves to a
+Cancel, never a Confirm — the redaction arm matters most, since its
+Confirm branch is pdfce's only irreversible operation.
+
+**The invariant this decision actually rests on, made explicit and
+tested.** `pending_question_cancel`'s five-way `if`-chain has an
+order, and the first draft of its own doc comment claimed that order
+had to match `PdfceApp::apply()`'s own gate-check order, or a mismatch
+would let Escape push a Cancel action the gate would then silently
+swallow. Measured, and that turned out not to be the load-bearing
+property: the five `pending_*` fields are **mutually exclusive by
+construction** — every one is set only from inside `apply()`, and
+`apply()` returns early the instant any one of them is already set, so
+the action that would raise a second one never executes. Given mutual
+exclusivity, whichever field is set is the one *any* match order
+returns, and the ordering tiebreak the original comment worried about
+is never reached. The comment is corrected in place rather than left
+standing — a carefully-reasoned claim about the wrong property reads
+as though the question were settled, which is a worse state than no
+comment at all (same shape as the `recovery_note` finding, `ROADMAP.md`
+Shipped, `149fd03`).
+
+**Why the match order is kept aligned with the gate order anyway.**
+Not because today's correctness depends on it, but as a defence against
+tomorrow's: if this mutual-exclusivity invariant is ever broken — a
+`pending_*` field set from outside `apply()` (an OS close request, a
+background task, a future `&mut self` control) — a matching order
+degrades gracefully to "Escape answers the same question the gate
+would," rather than compounding the break. The cost of keeping the
+orders aligned is zero; the note is recorded so a future editor knows
+which of the two properties (the invariant, or the ordering) is the
+one actually doing the work.
+
+**A latent deadlock, currently unreachable, is the reason this counts
+as an invariant DEFINITION rather than a passing implementation
+detail.** Hand-constructing a state with two `pending_*` fields set at
+once shows that *neither* question could then be answered:
+`apply()`'s gate checks run in sequence, so an earlier gate approves
+its own Cancel and a later gate — with no way to know the action was
+already consumed — drops it on the next line. Two dialogs on screen,
+no working button. `at_most_one_confirmation_question_is_ever_up`
+(`crates/pdfce-gui/src/main.rs:26874`) pins the invariant that
+prevents this, driven through the real `CloseDocument` dispatch path
+on a genuinely-modified document, not by assigning fields by hand.
+Falsified deliberately: exempting `CloseDocument` from the print gate
+trips this test with its own "wedged" failure message; restored,
+green.
+
+**Decision-record, not a standing rule — the call made explicitly.**
+The general shape here — *a sequence of independent early-return
+guards can each individually approve an action and still collectively
+reject it, safe only because the states they gate on are mutually
+exclusive, which is an invariant someone has to test* — is filed as
+this decision rather than promoted to a standing rule. This is its
+**first** occurrence in the project; the project's own two-occurrence
+promotion bar for a standing rule is not met by one instance, and a
+single-instance rule would read as weightier than the evidence
+supports. Recorded here instead because a decision-log entry is
+exactly the right place for a newly-named, newly-tested invariant that
+future dialogs must respect: any `pending_*`-shaped state added later
+has to preserve "set only from inside a single gated dispatcher that
+returns early while any one is up," or `pending_question_cancel`'s
+safety argument (and `at_most_one_confirmation_question_is_ever_up`'s
+own reason for being unreachable) stops holding.
+
+**Not a crate-boundary or GUI-core change.** Every touched file is
+under `crates/pdfce-gui/src/`; `cargo tree -p pdfce-core` /
+`-p pdfce-render` unaffected by construction (no `Cargo.toml` in
+either crate touched). No new dependency. Full build record:
+`ROADMAP.md`'s `4ddd6c4` Shipped entry, `Pass 65.0` (hundred-and-fourth
+filing).

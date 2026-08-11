@@ -35027,3 +35027,134 @@ asserted anywhere in this filing** — no shell this dispatch (hard rule
 is the **hundred-and-third** `SESSION_LOG.md`/`ROADMAP.md` joint
 filing (the hundred-and-second confirmed present by direct read before
 this entry was appended).
+
+## 2026-08-11 (hundred-and-fourth filing) — `4ddd6c4`: Escape closes the dialog, like it does everywhere else; question `(bj)` ANSWERED verbatim; a latent two-question deadlock found and closed by a test, not a comment; `Pass 65.0` ships
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — `git show
+4ddd6c4` not run. The dispatching engineer states this work was
+verified directly, including in a running release build driven through
+the harness (`panel:print` then `escape`, screenshot-compared against
+the same script without the `escape` step). Independently confirmed by
+direct `Read`/`Grep` of `crates/pdfce-gui/src/main.rs`:
+`PdfceApp::pending_question_cancel` (:10672), `CanvasKeys::
+pending_question_cancel` (:13388), the new top Escape rung in
+`collect_keyboard_actions` (:13651, above the password-prompt rung at
+:13657 and the view-mode rung at :13661), and all three named tests
+(`escape_cancels_every_confirmation_dialog` :26825,
+`at_most_one_confirmation_question_is_ever_up` :26873,
+`escape_never_resolves_to_a_confirm` :26914).
+
+**Shipped:**
+- `4ddd6c4` — filed as `Pass 65.0`: Escape now cancels whichever of
+  pdfce's five confirmation-gated dialogs (`pending_copy`,
+  `pending_save`, `pending_redaction_apply`, `pending_print`,
+  `pending_close`) is up. New `PdfceApp::pending_question_cancel()`
+  resolves the Cancel action of whichever dialog owns the screen; a
+  new `CanvasKeys::pending_question_cancel` field carries that into a
+  new top rung of the Escape ladder, above the password-prompt rung
+  AND the view-mode rung (the latter for correctness: read
+  mode/full screen can host an open confirmation, and losing view
+  mode first would leave the question unanswered underneath it).
+  Every arm returns a Cancel, never a Confirm — most consequential for
+  redaction, pdfce's only irreversible operation.
+
+**Decisions made this session:**
+- **Decision 042** — at most one confirmation dialog is ever pending,
+  and that invariant (not the match order inside
+  `pending_question_cancel`) is what keeps Escape from wedging the
+  application. Full record: `ARCHITECTURE.md` §12, this filing.
+- **No standing rule minted.** The dispatch flagged the general shape
+  — a sequence of independent early-return guards can each
+  individually approve an action and still collectively reject it,
+  safe only because their gating states are mutually exclusive — as a
+  candidate for a standing rule. Ruled a decision-record entry instead
+  (decision 042 above): this is its first occurrence in the project,
+  and the project's own two-occurrence promotion bar for a standing
+  rule is not met by one instance. Recorded honestly as a single
+  instance rather than promoted to look weightier, per the dispatch's
+  own stated preference.
+- **`docs/FEATURES.md`: no row touched, judgement call made
+  explicitly.** This is a keyboard-affordance fix on existing
+  capability, not a new capability, and it is not Print-specific — it
+  spans all five gated dialogs. Ticking the Print row would
+  misattribute a cross-cutting fix to one capability among five.
+
+**Findings + decisions:**
+- **★ Operator question `(bj)` ANSWERED, verbatim, and closed.** Ken,
+  2026-08-11: *"yes, escape should work like it does for any other
+  program."* `ROADMAP.md`'s *Open operator questions* section carries
+  the formal closure (shape (a) of the two named there — Escape
+  cancels uniformly, wired at the same `apply()` chokepoint the
+  pending-confirmation gate already occupies). Ceiling stays `(bj)`,
+  closed not retired; next free remains `(bk)`.
+- **A doc comment's own first draft was wrong on the interesting axis,
+  corrected in place.** It claimed matching `pending_question_cancel`'s
+  match order to `apply()`'s gate order was *load-bearing* — that a
+  mismatch would let Escape push a Cancel the gate then swallows.
+  Measured: not the situation. The five `pending_*` states are mutually
+  exclusive by construction (every one is set only from inside
+  `apply()`, which returns early while any one is already up), so
+  whichever is set is the one any order returns and the tiebreak is
+  never reached. Same family as the already-recorded `recovery_note`
+  finding (`149fd03`): "the old comment argued the right principle on
+  the wrong axis," which reads as though the question were already
+  settled — worse than no comment at all.
+- **A latent deadlock, currently unreachable, is now pinned by a test
+  rather than by a comment's say-so.** Hand-constructing a state with
+  two `pending_*` fields set at once showed neither question could
+  then be answered: `apply()`'s gate checks run in sequence, so an
+  earlier gate approves its own Cancel and a later gate — with no way
+  to know the action was already consumed — drops it on the next line.
+  Two dialogs on screen, no working button. It is unreachable only
+  because the mutual-exclusivity invariant holds;
+  `at_most_one_confirmation_question_is_ever_up` pins it, driven
+  through the real `CloseDocument` dispatch path on a genuinely
+  modified document rather than by assigning fields by hand. The test
+  was NOT weakened to pass — it asserted on a state that cannot occur,
+  and was replaced by one asserting the invariant that makes it
+  impossible.
+- **Falsification, not merely assertion, on both new guards.**
+  Resolving print to `SpoolPrint` (a Confirm) trips
+  `escape_never_resolves_to_a_confirm` by name; exempting
+  `CloseDocument` from the print gate trips
+  `at_most_one_confirmation_question_is_ever_up` with its own "wedged"
+  message. Both restored, both green.
+
+**Still in flight:**
+- Nothing new opened this filing. The two Backlog entries from the
+  hundred-third filing (tray-selection dead control; stale
+  `build_devmode` doc comment) remain unscoped.
+
+**For next session:** `(bj)` is closed; `Pass 65.0` ships end to end,
+falsified and restored, verified in a running release build. Decision
+042 records the mutual-exclusivity invariant any future `pending_*`-
+shaped dialog state must preserve.
+
+**Ledger for this filing.** **New Pass ID minted: `Pass 65.0`.**
+Pass-family ceiling moves **64.0 → 65.0**, next free **66**. One
+commit cited by hash (`4ddd6c4`). `docs/FEATURES.md`: no row touched
+(judgement call, reasoning above). `docs/ARCHITECTURE.md`: one new
+§12 entry, decision 042 (no new `docs/decisions/NNN-*.md` file, same
+§12-only pattern as 034–036 and 039–041). Standing rules: **no new
+mint** — filed as decision 042 instead, reasoning above. Ceiling stays
+**R186**, next free **R187**. Decision-record ceiling moves **041 →
+042**, next free **043**. **Operator-question ceiling stays `(bj)` —
+CLOSED, ANSWERED, not retired; next free remains `(bk)`.**
+`D:\dev\rag\rust\`/`D:\dev\rag\egui\`: no new file — the finding is
+about this application's own action-dispatch gate composition, not a
+Rust/Cargo/egui-ecosystem behaviour. `C:\personal_rag\pdf\`: not
+applicable. Test/gate figures: **3,353 passing / 0 failing** (3,350
+before, 3 new tests) — **engineer-run this dispatch**, the engineer's
+own words "I did this myself," stronger sourcing than this project's
+usual relayed-only caveat, but still not independently re-executed by
+this librarian (no shell this dispatch). `cargo fmt --check` clean;
+`cargo clippy --workspace --all-targets --all-features -D warnings`
+zero; `check-ui-strings.sh`/`check-theme-colors.sh` clean, per the
+engineer's report. **Packaging smoke test: not reported this filing.**
+**Backup/git working-tree/remote state not independently asserted
+anywhere in this filing** — no shell this dispatch (hard rule 8); the
+engineer should check `D:\Dev\pdfce-backups\` and `git log`/`git
+status`/`git remote -v` directly, on branch `post-v0.2.0`. This is the
+**hundred-and-fourth** `SESSION_LOG.md`/`ROADMAP.md` joint filing (the
+hundred-and-third, immediately above, confirmed present by direct read
+before this entry was appended).
