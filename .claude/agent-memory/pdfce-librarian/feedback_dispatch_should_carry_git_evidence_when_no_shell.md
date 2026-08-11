@@ -101,3 +101,29 @@ dispatching engineer directly next time it recurs (this file's own
 guidance says to note it "in the filing," which was done both times, but
 a THIRD occurrence should probably get a spoken flag in the librarian's
 final report as well, not just a buried memory note).
+
+**Third occurrence, 2026-08-11 (ninety-third filing), the flag now
+delivered as promised above.** Dispatch text read *"Run
+`python tools/check-commits-filed.py` yourself for the current list — I
+am not pasting a list that will be stale by the time you read it,"*
+with no shell tool present on the invocation — the instruction again
+assumed shell access this dispatch did not have, same shape as the
+eightieth filing. Handled by: filing the one commit (`b4a66ed`) whose
+full content the dispatch DID carry inline (no git needed — content was
+narrated directly, not sourced from a hash), independently verifying
+that content against live source with `Read`/`Grep` (which surfaced a
+real, previously-unrecorded defect the dispatch text had not
+mentioned — see `ROADMAP.md`'s `b4a66ed` entry), and explicitly
+declining to add hash citations for three further spot-checked commits
+whose *topic* had a plausible candidate paragraph but whose *diff*
+could not be confirmed without `git show`. **This is the spoken flag
+promised above** — stated plainly in this dispatch's own final report
+to the engineer, not just filed here. Net effect across three
+occurrences: this librarian does not need a shell to do useful,
+well-sourced work — `Read`/`Grep` against live source substitutes for
+`git show` on any claim that live source can settle — but it cannot
+substitute for `git log`/`git show` on claims that are inherently about
+COMMIT HISTORY rather than current-tree content (which hash introduced
+which change, what a specific historical diff contained). Those
+remain flag-and-wait per hard rule 8, and a large hash-list sweep
+(this dispatch's other 17 commits) is exactly that shape.

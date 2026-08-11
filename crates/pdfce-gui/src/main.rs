@@ -18789,12 +18789,16 @@ fn commit_field_draft(doc: &mut OpenDoc) -> (CommitOutcome, Vec<String>) {
             doc.session_mut().add_text_field(&spec)
         }
         NewFieldKind::CheckBox => {
-            let mut spec = NewCheckBox::new(page_index, &name, rect);
+            let mut spec = NewCheckBox::new(page_index, &name, rect)
+                .with_border(draft.border, draft.border_width)
+                .with_visibility(draft.visibility);
             spec.tooltip = tooltip;
             doc.session_mut().add_check_box(&spec)
         }
         NewFieldKind::Radio => {
-            let mut spec = NewRadioButton::new(page_index, &name, rect, &export_value);
+            let mut spec = NewRadioButton::new(page_index, &name, rect, &export_value)
+                .with_border(draft.border, draft.border_width)
+                .with_visibility(draft.visibility);
             spec.tooltip = tooltip;
             doc.session_mut().add_radio_button(&spec)
         }
@@ -18805,7 +18809,9 @@ fn commit_field_draft(doc: &mut OpenDoc) -> (CommitOutcome, Vec<String>) {
             // so the distinction survives into the file rather than being
             // flattened into a pair of identical strings.
             let options = choice_options_from_draft(&draft.options);
-            let mut spec = NewChoiceField::new(page_index, &name, rect, options);
+            let mut spec = NewChoiceField::new(page_index, &name, rect, options)
+                .with_border(draft.border, draft.border_width)
+                .with_visibility(draft.visibility);
             spec.tooltip = tooltip;
             doc.session_mut().add_choice_field(&spec)
         }

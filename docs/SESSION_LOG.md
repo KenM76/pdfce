@@ -33620,3 +33620,101 @@ clippy --workspace --all-targets --all-features` **0**; `cargo fmt
 status` directly. This is the **ninety-second** `SESSION_LOG.md`/
 `ROADMAP.md` joint filing (the ninety-first confirmed present by direct
 read before this entry was written).
+
+## 2026-08-11 (ninety-third filing) — `b4a66ed`: R151's 4th instance discharged for the CLI, all five field types; independent verification of the GUI half found the fix is only HALF landed — a control shown for every field kind, applied on commit for only one of them
+
+**Shipped:** no new Pass — filed against the existing `Pass 20.0`
+(R170). `b4a66ed` wires `--border`/`--border-width`/`--visibility`
+onto all five `pdfce-cli add-*` field subcommands (confirmed live: five
+matching call-site pairs in `crates/pdfce-cli/src/main.rs`), closing
+the specific gap `3fe8a19`'s own entry flagged as an R151 candidate.
+
+**Decisions made this session:** none new — this filing applies
+existing convention (R151/R170 citation), it does not set new policy.
+
+**Findings + decisions:**
+- **R151's fourth instance this session, and the CLI half of it is
+  genuinely discharged** — `3fe8a19` gave all five `New*` field
+  builders core-side border/visibility support; the shells had only
+  ever reached it through the text-field path. `b4a66ed` closes that
+  for `pdfce-cli` across all five `add-*` subcommands, verified on
+  emitted bytes per the dispatch and independently confirmed by
+  `Grep`/`Read` against live source (call sites + argument structs,
+  five of each).
+- **★ Independent verification found the GUI half is NOT actually
+  discharged — a narrower, previously-unnamed defect, not caught by
+  any existing test.** `crates/pdfce-gui/src/main.rs` draws the
+  border/visibility controls outside the field-kind gate (so an
+  operator sees and can change them for check box, radio and choice,
+  not just text — the dispatch's description is correct as far as the
+  widgets go), but `commit_field_draft`'s `CheckBox`/`Radio`/`Choice`
+  match arms never call `.with_border()`/`.with_visibility()` on the
+  spec they build — only the `Text` arm does. The control's value is
+  read into the draft, shown, editable, and then silently discarded
+  for three of the four GUI-reachable field kinds on commit. It reads
+  as fixed (`New*::new()`'s defaults happen to match the draft's
+  initial values, so an untouched control produces the correct byte
+  output) and is fixed only for an operator who never changes the
+  control for those three kinds — an operator who does gets Table
+  165/166 defaults with no error, refusal or disclosure that their
+  choice was dropped. Same family as rule 4 (fuzzy, never sneaky)/R83,
+  on the inverse side of the usual finding: not a missing affordance,
+  an affordance whose effect is inert. Flagged for the engineer; not
+  filed as its own R-numbered instance (a source-code fix, not this
+  librarian's territory, and the naming judgment is the engineer's).
+- **A gate hole this session's own tooling opened and closed on the
+  same day.** `tools/check-commits-filed.py` originally skipped any
+  commit touching `docs/` outright, which exempted MIXED commits —
+  code bundled with a filing. `b4a66ed` itself was exactly that shape:
+  a `git add -A` swept a prior filing's docs edits into a real CLI/GUI
+  change, and the gate reported clean because it saw `docs/` and
+  stopped looking. Fixed in `cf66367` (docs-only commits still
+  skipped; a commit with code in it is now checked regardless of what
+  else it touches) — verified against `4afe402` per the engineer. This
+  is a false NEGATIVE in the filter (the commit was never examined),
+  distinct from the gate's own documented false-positive weakness in
+  the join (a hash cited in an OWED list counts as filed) — worth
+  recording as its own shape rather than folded into the existing
+  weakness note, since a gate that documents one weakness reads as
+  though that is the only one.
+- **Two self-inflicted tooling faults, reported by the engineer, not
+  independently re-verified** (process findings): a script matched
+  `.with_tooltip(` inside an error-message string and a blunt removal
+  deleted a legitimate occurrence alongside it; a follow-up script
+  threw between logging success and its single write, so a check box
+  silently got nothing. `scratchpad/splice.py` (built for exactly this
+  failure mode, shipped `30c0940`, eighty-ninth filing) was not reached
+  for this time — named explicitly by the engineer rather than omitted.
+
+**Still in flight:** the GUI-side border/visibility commit gap for
+check box/radio/choice (above) — a small, precisely-located fix (two
+calls, three match arms) but not made by this librarian. **A backlog
+of 17 further pre-existing unfiled commits was reported by the
+engineer this dispatch** (`check-commits-filed.py`'s widened coverage
+surfaced 18 total; `b4a66ed` is the one filed in this entry). **This
+librarian had no shell tool this dispatch and could not run the gate
+script to obtain or verify that list** — the engineer's dispatch text
+named three as spot-checked-probably-narrated (`2027a79` `pdfce-print`,
+`0714a35` "the splice guard", `b053c56` "bookmark states"); `Grep`
+against `docs/ROADMAP.md` and this file confirms none of the four
+hashes named in the dispatch (`2027a79`/`0714a35`/`b053c56`/`b4a66ed`,
+the last now filed above) appeared anywhere in the record before this
+edit. Topic-level candidates exist for the first three (the
+"printing becomes real" bundle, eighty-fifth filing, for `2027a79`;
+the `splice.py`-introduction text under `30c0940`, eighty-ninth filing,
+for `0714a35`; extensive `Bookmarks`/outline narration under the
+seventy-fourth/seventy-seventh filings for `b053c56`) but **none of
+these was confirmed against the commit's own diff** — no shell means
+no `git show <hash>`, and a citation added on topic-match alone risks
+being the gate's own documented "join" weakness in reverse, this time
+self-inflicted rather than found. Not added. The remaining 14 of the
+18 have no lead offered yet at all.
+
+**For next session:** either grant this librarian a shell for the
+remaining 17 commits, or have the engineer relay each one's full
+`git log -1 --format=%B <hash>` (or `git show --stat`) the way prior
+large sweeps did (eighty-fourth/eighty-fifth filings) — topic hints
+alone are not enough to safely place a hash citation next to existing
+prose without risking a false correspondence. The GUI border/visibility
+commit-path gap (above) is a small, well-located fix for the engineer
+to pick up directly.

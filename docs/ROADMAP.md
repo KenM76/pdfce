@@ -81,6 +81,130 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★ `b4a66ed` — R151, 4th instance this session, discharged for the CLI across all five field types; independent verification found the GUI's own affordance only HALF wired — the controls moved out of the Text gate but three of four commit-path branches still discard the operator's choice silently — 2026-08-11 (ninety-third filing)
+
+**Sourcing.** No shell tool this dispatch (hard rule 8). Content
+relayed by the engineer's dispatch text, **then independently checked
+against live source** — `Grep`/`Read` on `crates/pdfce-cli/src/main.rs`
+and `crates/pdfce-gui/src/main.rs` — because the dispatch also disclosed
+that this exact commit was produced by scripted edits that had already
+misfired twice in adjacent work this session (a four-way ambiguous
+match, a script that threw between its log line and its write), which
+is reason enough to check rather than relay.
+
+**Filed against the existing `Pass 20.0` (R170: an extension of an
+already-shipped Pass's own capability stays on that Pass's ID)** — same
+family as `f83be5a`/`30c0940`/`3fe8a19` before it.
+
+**Background.** `3fe8a19` (immediately below, ninety-second filing)
+consolidated border style (`/BS`) and visibility (`/F`) into
+`widget_base_dict`, so all five `New*` field builders in `pdfce-core`
+carry the properties — but flagged, in its own entry, that both
+remaining shells still reached them from the **text-field path alone**:
+check box, radio, choice and push button got Table 165/166 defaults
+with no operator-facing way to change them. That entry named it an
+**R151 candidate, not yet filed as an instance**. Separately, the
+ninetieth filing's own commentary on a different (CSV/reset-form)
+recurrence of the same shape said plainly: *"a fourth instance may earn
+[a citation]."* `b4a66ed` is that fourth instance, and closes the
+specific gap `3fe8a19` named — for the CLI.
+
+**CLI: confirmed fully wired, all five field types.** Five
+`.with_border(args.border.into(), args.border_width)` /
+`.with_visibility(args.visibility.into())` call sites in
+`crates/pdfce-cli/src/main.rs` (≈ lines 13682–13683, 14321–14322,
+14440–14441, 14568–14569, 15186–15187) and five matching
+`visibility: VisibilityArg` argument-struct fields (≈ lines 1479, 1608,
+1726, 2079, 2196 for the type definitions; 13529, 13554, 13578, 13597,
+13620 for the flag structs) — one pair per `add-*` subcommand
+(text/check-box/radio/choice/push-button). Verified on emitted bytes
+per type, per the dispatch. This half of R151's debt is genuinely
+discharged.
+
+**★ GUI: independent verification found the fix is only HALF landed —
+a new, narrower defect, not previously named anywhere in the record.**
+`crates/pdfce-gui/src/main.rs:18404–18461` draws the border/visibility
+controls **outside** the `if draft.kind == NewFieldKind::Text` gate
+(which now starts at line 18468 and correctly holds only the genuine
+`/Ff`-bit controls — max length, multiline, password, comb), with a doc
+comment at line 18406 stating exactly the intended shape: *"Border and
+visibility apply to EVERY field type... They were briefly text-only
+here, which made a capability arbitrary by field kind."* So far this
+matches the dispatch's description exactly.
+
+But `commit_field_draft` (`crates/pdfce-gui/src/main.rs:18750–18812`),
+which turns the drafted values into an actual core call, has four match
+arms — `Text`, `CheckBox`, `Radio`, `Choice` (there is no `PushButton`
+variant of `NewFieldKind` in the GUI at all — a pre-existing, separate
+gap, not part of this commit's scope). **Only the `Text` arm
+(18778–18789) calls `.with_border(draft.border, draft.border_width)`/
+`.with_visibility(draft.visibility)`.** The `CheckBox` (18791–18795),
+`Radio` (18796–18800) and `Choice` (18801–18811) arms each construct
+their spec via `New*::new(...)` and never touch `draft.border` or
+`draft.visibility` at all — those two draft fields are read from the UI
+widgets into the draft struct, then silently dropped on commit for
+three of the four GUI-reachable field kinds.
+
+**Why this is a live defect and not merely cosmetic.** `New*::new()`'s
+own defaults happen to match the draft's initial values (`BorderStyle::
+Solid`, width `1.0`, `Visibility::VisibleAndPrints` — Table 166/165's
+own defaults, per `3fe8a19`'s comment), so an operator who never
+touches the border/visibility controls for a check box, radio button or
+choice field gets the byte-identical, spec-correct result either way —
+which is exactly why this was not caught by any test asserting default
+output. But an operator who **does** change either control for one of
+those three kinds — picks Beveled, or sets Hidden — commits a field
+with the Table 165/166 *default* instead, with no error, no refusal, no
+disclosure that the choice was discarded. This is the same shape rule
+4 (fuzzy, never sneaky) and R83 exist to prevent, on the opposite side
+of the usual finding: not a capability with no affordance, but an
+**affordance whose effect is silently dropped** — a control shown,
+interactive, and inert for three of four kinds it now visually applies
+to. Not filed as its own R-numbered instance here — flagged for the
+engineer's judgment on whether it is a new named shape or an R83
+variant, since this librarian does not edit crate source and the fix
+is a two-line addition to three match arms, not a design question.
+
+**Two self-inflicted tooling faults, reported by the engineer and not
+independently re-verified (process findings, not output-correctness
+findings — not re-checked here):** a script matched `.with_tooltip(`
+inside an error-message string four times and a blunt removal also
+deleted the text field's legitimate occurrence (surfaced only as a
+`fields never read` warning); and the script meant to restore it threw
+after logging success but before its one write landed, so a check box
+silently got nothing while the log implied otherwise. `scratchpad/
+splice.py` — built for exactly this failure mode, per its own header,
+and shipped one commit before this session's segment of it (`30c0940`,
+eighty-ninth filing) — was not reached for on this occasion; the
+dispatch text names this explicitly rather than omitting it.
+
+**Ledger for this filing.** No new Pass ID. `docs/FEATURES.md`: **a
+bracketed addendum was added to the existing *CREATE a form field* row,
+then the coordinator claimed the file mid-dispatch for a full
+concision rewrite (operator request — one row, one sentence, old notes
+replaced rather than appended) and instructed this librarian not to
+touch it further.** The addendum stands only until that rewrite lands;
+this librarian's future filings will write a single replacement
+sentence there instead of another addendum, per the coordinator's
+instruction (recorded to this librarian's own memory,
+`project_features_md_concision_rewrite_20260811.md`). `docs/ARCHITECTURE.md`: not touched —
+CLI-flag wiring plus a GUI widget-visibility change is not a
+crate-boundary or round-trip-invariant change. **Standing rules: `R151`
+cited as a fourth, CLI-side-discharged instance this session** (per the
+ninetieth filing's own forward flag and the specific candidate `3fe8a19`
+named); the GUI-side residual is flagged, not minted, above. `R170`
+cited (Pass-extension convention). **No `D:\dev\rag\rust\`/`egui\`
+finding** — project-local field-authoring wiring, not Rust/egui-ecosystem
+general. **No `C:\personal_rag\pdf\` finding.** Gate figures: `cargo
+test --workspace` 81 suites, 0 failed; `cargo clippy --workspace
+--all-targets --all-features` 0 — relayed per the engineer's report at
+`cf66367`, **not independently re-run, no shell this dispatch** (hard
+rule 8). **Backup/git working-tree state not asserted anywhere in this
+filing** — the engineer should check `D:\Dev\pdfce-backups\` and `git
+log`/`git status` directly. This is the **ninety-third** filing.
+
+---
+
 ### ★ `b3ba63b` — `R186`'s THIRD instance: `inspect` said nothing about a document it could not read, because the load error was `.ok()`-ed away one expression before anyone could report it; plus six encrypted fixtures with a one-way provenance rule — 2026-08-11 (ninety-second filing)
 
 **Sourcing.** No shell tool this dispatch (hard rule 8) — `git log -1
