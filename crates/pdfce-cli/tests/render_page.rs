@@ -569,19 +569,31 @@ fn capability_gap_refusal_is_honest_and_distinguishable_from_corruption() {
     //
     // ★ AND IT HAS MOVED AGAIN, for exactly the same reason: increment 2
     // implemented AES-128, so `enc-aes-128.pdf` now RENDERS, and pinning it
-    // here would assert a refusal that no longer happens. The slot moves to
-    // AES-256 (`/R` 5), which is still refused — and refused for a reason
-    // worth keeping distinct: its key comes from **Algorithm 2.A**, not
-    // Algorithm 1. Implementing the AES block cipher bought nothing there,
-    // because the cipher was never what blocked it.
+    // here would assert a refusal that no longer happens. The slot moved to
+    // AES-256 at `/R` 5.
+    //
+    // ★ AND AGAIN. Increment 3 implemented `/R` 5, so the slot moves to
+    // `/R` 6 — and the nature of the refusal changes with it, which is the
+    // part worth reading. Every earlier occupant of this slot was "pdfce has
+    // not written this yet". `/R` 6 is not that: its Algorithm 2.B is not in
+    // the project's spec corpus past step (a), so writing it would mean
+    // deriving a normative algorithm from another implementation and then
+    // testing against that implementation — a test that could not fail.
+    //
+    // That distinction is what this test now pins. The message must still
+    // read as a pdfce-side limitation rather than as a broken file, and it
+    // must still name the cipher, but it must ALSO say the algorithm is
+    // unavailable rather than merely unwritten, because those have different
+    // next actions: one needs engineering time, the other needs a document
+    // nobody has found.
     //
     // (Cross-reference streams used to be pinned here before encryption was;
     // they now load — see `a_pdf_15_file_with_xref_and_object_streams_renders`
     // below. This slot has become a rolling record of what pdfce cannot do
     // yet, which is exactly what it should be.)
     let dir = TempDir::new("encrypted");
-    let pdf = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/synthetic/encryption/enc-aes-256-r5.pdf");
+    let enc = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/synthetic/encryption");
+    let pdf = enc.join("enc-aes-256-r6.pdf");
 
     let out = run(&[
         "render-page",
@@ -593,16 +605,37 @@ fn capability_gap_refusal_is_honest_and_distinguishable_from_corruption() {
     assert_eq!(code(&out), 1, "an unsupported structure is a runtime error");
     let err = stderr(&out);
     assert!(
-        err.contains("not implemented yet"),
-        "the refusal must read as a pdfce limitation, not a broken file: {err:?}"
-    );
-    assert!(
         err.contains("AES-256"),
-        "the refusal must name WHICH cipher is missing — 'encrypted files are \
+        "the refusal must name WHICH cipher is involved — 'encrypted files are \
          unsupported' is now false, and a vague message would teach the \
          operator something untrue: {err:?}"
     );
+    assert!(
+        err.contains("/R 6") && err.contains("not available"),
+        "the refusal must say the ALGORITHM is unavailable, not that pdfce has \
+         not got round to it — those resolve differently: {err:?}"
+    );
     assert_eq!(stdout(&out), "");
+
+    // ★ And the contrast, in the same test: the /R 5 file, same cipher, same
+    // dictionary shape, differing only in the hash function, RENDERS. Without
+    // this line the refusal above would be consistent with pdfce having no
+    // AES-256 support at all, which is what the assertion is trying not to
+    // say.
+    let ok = run(&[
+        "--open-password",
+        "userpw",
+        "render-page",
+        enc.join("enc-aes-256-r5.pdf").to_str().unwrap(),
+        "-o",
+        dir.join("r5.png").to_str().unwrap(),
+    ]);
+    assert_eq!(
+        code(&ok),
+        0,
+        "/R 5 must render, or the /R 6 refusal above proves nothing: {}",
+        stderr(&ok)
+    );
 }
 
 /// ★ Decryption produces the RIGHT plaintext, not merely parseable bytes.
@@ -620,11 +653,12 @@ fn capability_gap_refusal_is_honest_and_distinguishable_from_corruption() {
 /// (reached through dictionaries whose strings are decrypted in the parsed
 /// objects).
 ///
-/// The five encrypted files span `/R` 2 at 40 bits, `/R` 3 at 128, the
-/// empty-password case that needs no password at all, and both of those again
-/// under **AES-128** — five key/cipher combinations, one image.
+/// The seven encrypted files span `/R` 2 at 40 bits, `/R` 3 at 128, the
+/// empty-password case that needs no password at all, both of those again
+/// under **AES-128**, and **AES-256 at `/R` 5 with each of its two passwords**
+/// — seven key/cipher combinations, one image.
 ///
-/// ★ The two AES rows carry a second job the RC4 rows cannot. RC4 preserves
+/// ★ The AES rows carry a second job the RC4 rows cannot. RC4 preserves
 /// length, so increment 1 could write plaintext back over ciphertext in the
 /// retained buffer and every `ByteSpan` stayed true. AES output is IV +
 /// padding, so the plaintext is **strictly shorter** and `data_span.len` has
@@ -634,6 +668,16 @@ fn capability_gap_refusal_is_honest_and_distinguishable_from_corruption() {
 /// plausible PNG — just a different one. Nothing else in the suite goes red.
 /// This byte-comparison is the only thing standing between that bug and a
 /// release.
+///
+/// ★ The two `/R` 5 rows carry a third job, and it is the reason both
+/// passwords appear here rather than only one. At `/R` 5 the file encryption
+/// key is **wrapped twice** — once under a key derived from the user password
+/// (`/UE`), once under a key derived from the owner password plus the whole
+/// 48-byte `/U` (`/OE`, **T26**) — and both unwraps must yield the *same* 32
+/// bytes. Rendering both to the identical PNG is what proves they do. An owner
+/// path that authenticated correctly (Algorithm 3.12) and then unwrapped with
+/// the wrong salt would still open the document and would still exit 0; only
+/// the pixels differ.
 #[test]
 fn decrypting_reproduces_the_plaintext_document_exactly() {
     let dir = TempDir::new("decrypt-fidelity");
@@ -656,7 +700,7 @@ fn decrypting_reproduces_the_plaintext_document_exactly() {
     );
 
     let enc = fixtures.join("encryption");
-    let cases: [(&str, Vec<String>); 5] = [
+    let cases: [(&str, Vec<String>); 7] = [
         (
             "rc4-40 via the owner password",
             vec![
@@ -698,6 +742,28 @@ fn decrypting_reproduces_the_plaintext_document_exactly() {
             vec![
                 "render-page".into(),
                 enc.join("enc-emptyuser.pdf").to_string_lossy().into_owned(),
+            ],
+        ),
+        (
+            "aes-256 /R 5 via the user password (the /UE unwrap)",
+            vec![
+                "--open-password".into(),
+                "userpw".into(),
+                "render-page".into(),
+                enc.join("enc-aes-256-r5.pdf")
+                    .to_string_lossy()
+                    .into_owned(),
+            ],
+        ),
+        (
+            "aes-256 /R 5 via the owner password (the /OE unwrap, T26)",
+            vec![
+                "--open-password".into(),
+                "ownerpw".into(),
+                "render-page".into(),
+                enc.join("enc-aes-256-r5.pdf")
+                    .to_string_lossy()
+                    .into_owned(),
             ],
         ),
     ];

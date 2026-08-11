@@ -1,5 +1,5 @@
-//! End-to-end decryption of encrypted documents — RC4 and AES-128
-//! (ISO 32000-1 §7.6).
+//! End-to-end decryption of encrypted documents — RC4, AES-128 and AES-256 at
+//! `/R` 5 (ISO 32000-1 §7.6, Adobe ExtensionLevel 3 §3.5).
 //!
 //! # Why these tests are the ones that matter
 //!
@@ -41,7 +41,7 @@
 
 use std::path::{Path, PathBuf};
 
-use pdfce_core::crypto::{AuthKind, EncryptionUnsupported};
+use pdfce_core::crypto::{AuthKind, EncryptionUnsupported, PermsCheck};
 use pdfce_core::document::{DocError, Document};
 use pdfce_core::page_tree;
 use pdfce_core::writer::{DirtySet, SaveOptions, WriteError};
@@ -300,26 +300,248 @@ fn aes_128_with_an_empty_user_password_needs_no_password() {
     );
 }
 
-/// `/R` 5 and `/R` 6 are refused for **different reasons**, and this test
-/// exists to keep them different.
+/// AES-256 at `/R` 5 opens with **both** passwords, and the two are told
+/// apart.
 ///
-/// `/R` 5 is a sourced algorithm pdfce has not written. `/R` 6's Algorithm 2.B
-/// is **not sourced** past step (a) — ISO 32000-2 is paywalled and no public
-/// document carries it. Those resolve differently: one needs engineering time,
-/// the other needs a document nobody has found. Collapsing them into one
-/// message throws away the only part that tells anyone what to do next.
+/// The owner assertion is not a formality. `/R` 5's owner path is the only
+/// thing in the whole increment that exercises **T26** — Algorithms 3.12 and
+/// 3.2a concatenate the *whole 48-byte* `/U` string into both the validation
+/// hash and the unwrap-key hash, where the user path concatenates nothing at
+/// all. Passing `/U`'s 32-byte hash instead is a one-character slip, it cannot
+/// affect a user password, and without an owner test it would be entirely
+/// untested. (The same hole existed for RC4 and is why
+/// `owner_password_opens_both_revisions` exists.)
+///
+/// `key_len` is asserted at 32 because `/Length` is *not* what decides it
+/// here: this fixture carries `/Length 256`, which is outside the 40–128 range
+/// [`EncryptionConfig::parse`] enforces below `/R` 5. ISO 32000-2's Table 25
+/// erratum says a standard handler should write **32** while 2.0-as-printed
+/// said **256**, so both appear in the wild (**W18**, ambiguity **A11**), and
+/// pdfce reads neither — `/AESV3` fixes the key at 256 bits and the entry
+/// carries no information.
+///
+/// [`EncryptionConfig::parse`]: pdfce_core::crypto::EncryptionConfig::parse
 #[test]
-fn r5_and_r6_are_refused_for_different_reasons() {
-    let r5 = Document::load_with_password(&fixture("enc-aes-256-r5.pdf"), Some(b"userpw"))
-        .expect_err("R5 is not implemented");
+fn aes_256_r5_opens_with_either_password() {
+    for (pw, expected) in [
+        (&b"userpw"[..], AuthKind::User),
+        (b"ownerpw", AuthKind::Owner),
+    ] {
+        let doc = Document::load_with_password(&fixture("enc-aes-256-r5.pdf"), Some(pw))
+            .unwrap_or_else(|e| panic!("/R 5 must open with {pw:?}: {e}"));
+
+        let enc = doc.encryption().expect("the document is encrypted");
+        assert_eq!(enc.config.revision, 5);
+        assert_eq!(enc.config.version, 5, "/R 5 and /V 5 travel together");
+        assert_eq!(
+            enc.config.key_len, 32,
+            "/AESV3 fixes the file key at 256 bits; /Length is not consulted"
+        );
+        assert_eq!(
+            enc.auth, expected,
+            "the owner password must be reported as owner access, not silently \
+             downgraded — it is the only thing exercising T26"
+        );
+        assert_eq!(
+            enc.config.o.len(),
+            48,
+            "/O is 48 bytes at /R 5, not the 32 of /R 2-4 (Table 3.19)"
+        );
+        assert_eq!(enc.config.u.len(), 48);
+        assert!(
+            enc.config.aes256.is_some(),
+            "/OE, /UE and /Perms are Required if /R is 5"
+        );
+
+        assert!(
+            !page_tree::pages(&doc)
+                .expect("the page tree must resolve")
+                .is_empty(),
+            "pages are reachable only through decrypted objects"
+        );
+    }
+}
+
+/// **AES-256 decryption produces the right STRINGS**, which the pixel
+/// comparison in `pdfce-cli` cannot prove.
+///
+/// Same argument as `aes_128_decrypts_strings_not_only_stream_data`: a form
+/// field's `/T` name is never drawn, so string decryption could be entirely
+/// broken and every pixel would still match. At `/R` 5 there is an extra
+/// reason to check it — strings and streams share **one key with no per-object
+/// derivation at all** (**T24**), so if the two paths ever disagree it is
+/// because one of them did something to the key that the other did not.
+#[test]
+fn aes_256_r5_decrypts_strings_not_only_stream_data() {
+    let plain = Document::load(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/synthetic/forms/demo-form.pdf"),
+    )
+    .expect("the plaintext source of every encryption fixture");
+    let enc = Document::load_with_password(&fixture("enc-aes-256-r5.pdf"), Some(b"userpw"))
+        .expect("/R 5 is implemented");
+
+    let names = |d: &Document| -> Vec<String> {
+        let form = pdfce_core::forms::parse_acroform(d).expect("the fixture has an AcroForm");
+        let mut v: Vec<String> = form
+            .fields
+            .iter()
+            .map(|f| f.fully_qualified_name.clone())
+            .collect();
+        v.sort();
+        v
+    };
+
+    let expected = names(&plain);
     assert!(
-        matches!(
-            r5,
-            DocError::Encryption(EncryptionUnsupported::CipherNotImplemented("AES-256"))
-        ),
-        "R5 should report an unimplemented cipher, got {r5:?}"
+        !expected.is_empty(),
+        "the fixture must actually have named fields, or this test proves nothing"
+    );
+    assert_eq!(names(&enc), expected);
+}
+
+/// ★ `/Perms` — the only integrity check in PDF encryption — is actually run,
+/// and it passes on an untampered document.
+///
+/// Worth its own assertion because the check is entirely invisible otherwise:
+/// nothing downstream consumes it, so an implementation that never called
+/// Algorithm 3.13 at all would behave identically for every document that has
+/// not been tampered with, which is all of them.
+///
+/// The `/R` ≤ 4 half matters just as much. `/Perms` does not exist below
+/// `/R` 5, and reporting a document with no `/Perms` as a *failed* check would
+/// tell the operator that every RC4 and AES-128 file they own has been
+/// modified.
+#[test]
+fn perms_is_validated_at_r5_and_not_applicable_below_it() {
+    let r5 = Document::load_with_password(&fixture("enc-aes-256-r5.pdf"), Some(b"userpw"))
+        .expect("/R 5 opens");
+    assert_eq!(
+        r5.encryption().expect("encrypted").perms,
+        PermsCheck::Match,
+        "the fixture is untampered, so the encrypted permission copy must \
+         agree with /P and /EncryptMetadata"
     );
 
+    for name in ["enc-rc4-128.pdf", "enc-aes-128.pdf"] {
+        let doc = Document::load_with_password(&fixture(name), Some(b"userpw"))
+            .unwrap_or_else(|e| panic!("{name}: {e}"));
+        assert_eq!(
+            doc.encryption().expect("encrypted").perms,
+            PermsCheck::NotApplicable,
+            "{name}: /Perms was introduced at /R 5; its absence below that is \
+             the ordinary case and must never read as a failed check"
+        );
+    }
+}
+
+/// ★ A tampered `/P` is **reported and not acted on** (**T27**).
+///
+/// # What is being simulated
+///
+/// `/P` sits in the `/Encrypt` dictionary as a plaintext integer. At `/R` ≤ 4
+/// it also feeds Algorithm 2's hash, so editing it breaks authentication and
+/// the document simply stops opening. **At `/R` 5 it feeds nothing** — the key
+/// comes from the password and the salts alone — so `/P` can be edited freely
+/// and the document still opens with the original passwords. That is precisely
+/// the hole `/Perms` was added to detect, and this test walks through it: the
+/// bytes below widen the permissions of a document whose password the editor
+/// does not have.
+///
+/// The edit is length-preserving (`4294967292` → `4294967290`, ten digits
+/// either way) so every offset in the cross-reference table stays true and the
+/// only thing that changed is the number.
+///
+/// # What pdfce does about it, and why
+///
+/// Reports it. Nothing else:
+///
+/// - **The document still opens.** The supplement's verdict is `should`
+///   match, no clause says what to do on a mismatch, and every other reader
+///   opens the file. Refusing would make pdfce reject documents nothing else
+///   objects to.
+/// - **`permissions()` still reports the dictionary's `/P`** — the tampered
+///   one. That looks wrong for exactly one second and is the point: silently
+///   substituting the decrypted copy would be pdfce deciding, on an inference
+///   the standard declines to require, what the operator is shown. Rule 4.
+/// - **Both numbers are carried in the report**, so a front end can say what
+///   disagrees rather than only that something does.
+#[test]
+fn a_tampered_p_is_reported_and_neither_value_is_silently_preferred() {
+    let original = std::fs::read(fixture("enc-aes-256-r5.pdf")).expect("the fixture is readable");
+    let tampered = replace_once(&original, b"/P 4294967292", b"/P 4294967290");
+
+    let doc = Document::from_bytes_with_password(tampered, Some(b"userpw")).expect(
+        "editing /P must NOT stop an /R 5 document opening — the key does not depend on it",
+    );
+    let enc = doc.encryption().expect("encrypted");
+
+    match enc.perms {
+        PermsCheck::Mismatch {
+            perms_p,
+            dict_p,
+            perms_encrypt_metadata,
+            dict_encrypt_metadata,
+        } => {
+            assert_eq!(perms_p, 0xFFFF_FFFC, "the encrypted copy is untouched");
+            assert_eq!(dict_p, 0xFFFF_FFFA, "the plaintext copy is what moved");
+            assert_eq!(perms_encrypt_metadata, Some(true));
+            assert!(dict_encrypt_metadata);
+        }
+        other => panic!("a tampered /P must be reported as a mismatch, got {other:?}"),
+    }
+
+    // The dictionary value is what `permissions()` reports — pdfce does not
+    // quietly swap in the value it has more reason to trust.
+    assert_eq!(
+        enc.config.permissions().raw,
+        0xFFFF_FFFA,
+        "permissions() must report what the file declares; the disagreement is \
+         disclosed alongside, never resolved behind the operator's back"
+    );
+
+    // And the document is genuinely usable, not half-refused.
+    assert!(
+        !page_tree::pages(&doc)
+            .expect("the page tree must resolve")
+            .is_empty()
+    );
+}
+
+/// Replace the first occurrence of `from` with `to`, which must be the same
+/// length so byte offsets survive.
+///
+/// A same-length edit is the only kind that can be made to a PDF with a
+/// classic cross-reference table without rewriting the table — which is
+/// exactly what makes `/P` tampering realistic rather than a contrived test.
+fn replace_once(haystack: &[u8], from: &[u8], to: &[u8]) -> Vec<u8> {
+    assert_eq!(from.len(), to.len(), "the edit must preserve every offset");
+    let at = haystack
+        .windows(from.len())
+        .position(|w| w == from)
+        .unwrap_or_else(|| panic!("{from:?} is not in the fixture"));
+    let mut out = haystack.to_vec();
+    out.get_mut(at..at + to.len())
+        .expect("the window was found in bounds")
+        .copy_from_slice(to);
+    out
+}
+
+/// ★ `/R` 6 is still refused, and refused as a **sourcing** gap.
+///
+/// This test used to assert that `/R` 5 and `/R` 6 were refused for different
+/// reasons. `/R` 5 now opens, which makes the distinction sharper rather than
+/// moot: the two revisions share the entire harness — 48-byte `/O` and `/U`,
+/// the two 8-byte salts, the `/UE`/`/OE` unwrap, the `/Perms` block — and
+/// differ in exactly one function, the hash. Everything around that function
+/// is implemented and tested. That is the situation in which filling the gap
+/// from memory is most tempting and least detectable, which is why the refusal
+/// is pinned here rather than left to be noticed.
+///
+/// Deriving Algorithm 2.B from another implementation and then testing against
+/// that implementation's output could not fail. `enc-aes-256-r6.pdf` is
+/// therefore a refusal fixture on purpose and must stay one.
+#[test]
+fn r6_is_still_refused_as_unsourced_now_that_r5_opens() {
     let r6 = Document::load_with_password(&fixture("enc-aes-256-r6.pdf"), Some(b"userpw"))
         .expect_err("R6's key derivation is unsourced");
     assert!(
@@ -327,7 +549,71 @@ fn r5_and_r6_are_refused_for_different_reasons() {
             r6,
             DocError::Encryption(EncryptionUnsupported::UnsourcedRevision)
         ),
-        "R6 should report an unsourced algorithm, got {r6:?}"
+        "R6 must report an unsourced algorithm, got {r6:?}"
+    );
+
+    // The same file, the same cipher, the same everything except the hash —
+    // and /R 5 opens. The contrast IS the assertion.
+    assert!(
+        Document::load_with_password(&fixture("enc-aes-256-r5.pdf"), Some(b"userpw")).is_ok(),
+        "/R 5 must open, or the refusal above proves nothing about /R 6"
+    );
+}
+
+/// A wrong password on an `/R` 5 document is an ordinary password failure —
+/// the SHA-256 comparison either matches or it does not, and there is nothing
+/// ambiguous about an ASCII password that did not.
+#[test]
+fn a_wrong_ascii_password_at_r5_is_an_ordinary_password_failure() {
+    let e = Document::load_with_password(&fixture("enc-aes-256-r5.pdf"), Some(b"userpx"))
+        .expect_err("a wrong password must not open the document");
+    assert!(
+        matches!(e, DocError::PasswordRequired),
+        "expected PasswordRequired, got {e:?}"
+    );
+}
+
+/// ★ A **non-ASCII** password that fails is reported differently, because the
+/// failure is genuinely ambiguous.
+///
+/// `/R` 5's password preprocessing is SASLprep (RFC 4013) → UTF-8 → truncate
+/// to 127 bytes. pdfce implements the last two exactly and does not implement
+/// the first. For an ASCII password SASLprep is the identity, so nothing is
+/// lost; for a non-ASCII one it may not be, and a correct password can fail.
+///
+/// pdfce **attempts** such a password rather than refusing it — SASLprep is
+/// the identity for far more than ASCII, and a mis-normalised password cannot
+/// open a document with the wrong key, only fail to open one with the right
+/// password. The whole exposure is a false "wrong password", and a distinct
+/// diagnostic is the fix for that. Telling an operator their password is wrong
+/// when it is right sends them to re-check the one thing that is not the
+/// problem.
+///
+/// The `/R` ≤ 4 half of the assertion matters too: below `/R` 5 the password
+/// encoding is PDFDocEncoding (**T8**), a *different* unimplemented question,
+/// and reporting this one there would be wrong rather than merely imprecise.
+#[test]
+fn a_failed_non_ascii_password_discloses_the_missing_normalisation() {
+    let e =
+        Document::load_with_password(&fixture("enc-aes-256-r5.pdf"), Some("pässwörd".as_bytes()))
+            .expect_err("this is not the fixture's password");
+    assert!(
+        matches!(e, DocError::PasswordRequiresNormalisation),
+        "a non-ASCII password failing at /R 5 must disclose that SASLprep was \
+         not applied, got {e:?}"
+    );
+    assert!(
+        e.to_string().contains("SASLprep"),
+        "the message must name what is missing: {e}"
+    );
+
+    // The same password against an /R 3 document is a plain failure: SASLprep
+    // is not what that revision asks for.
+    let e = Document::load_with_password(&fixture("enc-rc4-128.pdf"), Some("pässwörd".as_bytes()))
+        .expect_err("not the password");
+    assert!(
+        matches!(e, DocError::PasswordRequired),
+        "/R 3 must not claim a SASLprep problem it does not have, got {e:?}"
     );
 }
 
@@ -476,4 +762,88 @@ fn aes_128_decrypts_a_document_whose_objects_live_in_object_streams() {
         !pages.is_empty(),
         "pages are reachable only through decrypted object streams"
     );
+}
+
+/// ★ AES-256 at `/R` 5 **on a document whose objects live in object streams**
+/// — the shape every committed fixture misses, and the normal one in the wild.
+///
+/// # Why this needed its own test, again
+///
+/// The AES-128 case above records the hole: every `enc-*.pdf` derives from
+/// `demo-form.pdf`, a PDF 1.3 file with a classic cross-reference table and
+/// **zero object streams**, and pypdf flattens object streams when it clones,
+/// so the synthetic corpus cannot be extended to cover this by changing its
+/// source. `enc-aes-256-r5.pdf` inherits that limitation exactly — asking
+/// "what can this fixture not fail on?" gives the same answer for increment 3
+/// as it did for increment 2.
+///
+/// The stakes are the same and the mechanism is the same: AES plaintext is
+/// shorter than its ciphertext, so `Stream::data_span` is shortened after
+/// decryption — and an **object-stream container is a stream**. Its shortened
+/// span is handed to phase 2 of the load to be parsed for the objects inside
+/// it. Wrong by one byte and every object in every container fails to parse.
+/// It also covers **T4** (phase 1 before phase 2, without which strings inside
+/// containers are decrypted twice) and **E5** (cross-reference streams are
+/// never encrypted).
+///
+/// # Provenance
+///
+/// qpdf's `c-r5-in.pdf` (Apache-2.0) — a **fourth** independent
+/// implementation, after pdfce's own spec reading, pypdf's and PDFium's.
+/// `/V` 5, `/R` 5, `/CFM /AESV3`, one object stream, user password `user3`,
+/// owner password `owner3`. The same file's `/Encrypt` values appear as an
+/// unconditional test vector in `crypto::r5`'s unit tests, where they check
+/// the derived key against the value qpdf's own test suite publishes; this
+/// test is the end-to-end half that the vector cannot cover.
+///
+/// # Why it skips instead of failing when absent
+///
+/// `fixtures/external/` is **gitignored** (`docs/LEGAL.md` §5), so this cannot
+/// be a hard dependency — it would fail every clean checkout and every CI run.
+/// It skips loudly. That is a real weakness and is stated as one: a test that
+/// silently passes when its input is missing is not covering its path. It is
+/// accepted only because the alternative is no coverage at all, and because
+/// the key-derivation half of the same file IS unconditional.
+#[test]
+fn aes_256_r5_decrypts_a_document_whose_objects_live_in_object_streams() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/external/qpdf/qpdf/qtest/qpdf/c-r5-in.pdf");
+    if !path.exists() {
+        eprintln!(
+            "SKIPPED aes_256_r5_decrypts_a_document_whose_objects_live_in_object_streams: \
+             {} is absent. fixtures/external/ is gitignored; clone the qpdf corpus to run it. \
+             THIS PATH IS THEREFORE UNCOVERED IN THIS RUN.",
+            path.display()
+        );
+        return;
+    }
+
+    for (pw, expected) in [
+        (&b"user3"[..], AuthKind::User),
+        (b"owner3", AuthKind::Owner),
+    ] {
+        let doc = Document::load_with_password(&path, Some(pw))
+            .unwrap_or_else(|e| panic!("/R 5 with object streams must decrypt ({pw:?}): {e}"));
+
+        let enc = doc.encryption().expect("the document is encrypted");
+        assert_eq!(enc.config.revision, 5);
+        assert_eq!(enc.config.key_len, 32);
+        assert_eq!(enc.auth, expected);
+        assert_eq!(
+            enc.perms,
+            PermsCheck::Match,
+            "a third-party /Perms block must validate too — the fixture corpus \
+             cannot show that a producer other than pypdf writes it the same way"
+        );
+
+        // The payoff. Pages live INSIDE the object stream, so a page tree that
+        // resolves proves the container was decrypted with the right span and
+        // then parsed as plaintext.
+        assert!(
+            !page_tree::pages(&doc)
+                .expect("the page tree must resolve")
+                .is_empty(),
+            "pages are reachable only through decrypted object streams"
+        );
+    }
 }

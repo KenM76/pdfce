@@ -16,10 +16,16 @@ open everywhere with no dialog.
 | `enc-rc4-40.pdf` | 1 | 2 | 40 | — | **yes** |
 | `enc-rc4-128.pdf` | 2 | 3 | 128 | — | **yes** |
 | `enc-emptyuser-rc4-128.pdf` | 2 | 3 | 128 | — | **yes**, with no password |
-| `enc-aes-128.pdf` | 4 | 4 | 128 | `/AESV2` | refused by cipher name |
-| `enc-aes-256-r5.pdf` | 5 | 5 | 256 | `/AESV3` | refused by cipher name |
+| `enc-aes-128.pdf` | 4 | 4 | 128 | `/AESV2` | **yes** |
+| `enc-aes-256-r5.pdf` | 5 | 5 | 256 | `/AESV3` | **yes** |
 | `enc-aes-256-r6.pdf` | 5 | 6 | 256 | `/AESV3` | refused as **unsourced** |
-| `enc-emptyuser.pdf` | 4 | 4 | 128 | `/AESV2` | refused by cipher name |
+| `enc-emptyuser.pdf` | 4 | 4 | 128 | `/AESV2` | **yes**, with no password |
+
+Note `enc-aes-256-r5.pdf`'s `/Length 256`. `/AESV3` fixes the key at 256 bits,
+so the entry carries no information and pdfce does not read it — ISO 32000-2's
+Table 25 erratum says a *standard* handler should write **32** while
+2.0-as-printed said **256**, and both appear in the wild (**W18**, ambiguity
+**A11**). pypdf followed the printed text.
 
 ## ★ What these can and cannot prove
 
@@ -43,7 +49,40 @@ asserts the refusal rather than a decrypt.
 extension, paraphrased in the corpus rather than sourced from ISO, and PDF
 2.0 deprecates handler revisions 1–5 outright. Reading it is still required —
 Acrobat wrote such files between 2008 and 2011, and deprecation does not
-un-write them.
+un-write them. **It became an acceptance fixture in encryption increment 3**
+(2026-08-11); the deprecation is a bar on *writing* `/R` 5, never on reading it.
+
+## ★ What this corpus still cannot fail on
+
+**Object streams.** Every file here derives from `demo-form.pdf`, a PDF 1.3
+document with a classic cross-reference table and **zero object streams**, and
+pypdf *flattens* object streams when it clones (measured: a 7-`ObjStm` source
+came out with 0). So the corpus cannot be extended to cover the commonest
+real-world shape by changing its source document — and that shape is exactly
+where AES is most dangerous, because an object-stream container is itself a
+stream whose span shortens on decryption and is then re-parsed.
+
+Two gitignored external files cover it instead, each skipping loudly when
+absent (`docs/LEGAL.md` §5 — the external corpora are cloned, never vendored):
+
+| File | Covers | Password |
+|---|---|---|
+| `fixtures/external/pdfium/testing/resources/encrypted.pdf` | `/V` 4, `/R` 4, `/AESV2`, 5 object streams, 2 xref streams | `1234` |
+| `fixtures/external/qpdf/qpdf/qtest/qpdf/c-r5-in.pdf` | `/V` 5, `/R` 5, `/AESV3`, 1 object stream | `user3` / `owner3` |
+
+The qpdf file earns a second mention: its test suite **publishes the expected
+file encryption key** (`35ea16a4…a020`, asserted by
+`qpdf --check --show-encryption-key` and accepted by
+`--password-is-hex-key`). That value is copied into `crypto::r5`'s unit tests
+as an **unconditional** cross-implementation vector, so the strongest half of
+the `/R` 5 evidence does not depend on a corpus that may not be present. A
+skipping test is not coverage; a test vector is.
+
+**Non-ASCII passwords.** Every password here is ASCII, where `/R` 5's SASLprep
+step is the identity function. No fixture exercises a password that
+normalisation would change, and none can be built without implementing
+SASLprep first — which is why pdfce *discloses* the gap on a failed non-ASCII
+authentication rather than claiming to have handled it.
 
 ## ★ Why there are two `emptyuser` files
 
