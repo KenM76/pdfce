@@ -131,6 +131,33 @@ pub enum DocError {
     /// from a malformed one. All of that is pdfce policy.
     #[error("this document is password-protected; supply the user or owner password")]
     PasswordRequired,
+    /// Nothing authenticated, **and** the supplied password contains
+    /// characters `/R` 5's password preprocessing may have changed before
+    /// hashing — so "wrong password" is not the only explanation.
+    ///
+    /// The Adobe supplement's step 1 applies **SASLprep** (RFC 4013) with the
+    /// Normalize and BIDI options before the UTF-8 conversion. pdfce
+    /// implements the UTF-8 conversion and the 127-byte truncation exactly and
+    /// does **not** implement SASLprep; neither RFC is staged in the project's
+    /// spec corpus, and a stringprep dependency was not taken for a read-only
+    /// increment.
+    ///
+    /// For an all-ASCII password SASLprep is the identity, so this error can
+    /// never arise from one. pdfce still *attempts* a non-ASCII password —
+    /// SASLprep is the identity for much more than ASCII, and getting it wrong
+    /// cannot open a document with a wrong key, only fail to open one with the
+    /// right password. This variant exists so that failure does not
+    /// masquerade as [`Self::PasswordRequired`]'s "you typed it wrong", which
+    /// would send the operator to re-check a password that was correct.
+    ///
+    /// Reported only at `/R` 5. Password encoding below that is PDFDocEncoding
+    /// (**T8**), a different unimplemented question.
+    #[error(
+        "this document is password-protected; the password supplied contains non-ASCII characters, \
+         and pdfce does not apply the RFC 4013 (SASLprep) normalisation that /R 5 specifies before \
+         hashing — so a correct password can be rejected here"
+    )]
+    PasswordRequiresNormalisation,
     /// The `%PDF-` header probe failed — not a PDF.
     #[error(transparent)]
     Header(PdfError),
@@ -291,6 +318,36 @@ pub struct DocumentEncryption {
     ///
     /// [`AuthKind::EmptyUser`]: crate::crypto::AuthKind::EmptyUser
     pub auth: crate::crypto::AuthKind,
+    /// The Algorithm 3.13 `/Perms` verdict — **the only integrity check in
+    /// PDF encryption**, and a `should`, not a `shall`.
+    ///
+    /// [`PermsCheck::NotApplicable`] for every `/R` ≤ 4 document, where the
+    /// entry does not exist. That is the *ordinary* answer, not a failed
+    /// check, and a front end must not render it as one.
+    ///
+    /// # Why it is here rather than acted on
+    ///
+    /// `/Perms` holds an encrypted copy of `/P` and `/EncryptMetadata`. The
+    /// plaintext copies sit in the `/Encrypt` dictionary where anyone can edit
+    /// them, with no integrity protection anywhere else in clause 7.6
+    /// (**N7**). So a disagreement is the one signal PDF gives that a
+    /// document's stated permissions are not the ones its encryptor recorded —
+    /// and no clause says what to do about it.
+    ///
+    /// pdfce reports it and **prefers neither value**:
+    /// [`EncryptionConfig::permissions`] keeps returning the dictionary's
+    /// `/P`, because that is what the file declares and what every other
+    /// viewer shows, and this field carries the disagreement beside it.
+    /// Silently substituting the decrypted copy would be pdfce deciding, on an
+    /// inference, what the operator is told — the exact shape project rule 4
+    /// forbids. Refusing the document would reject files nothing else objects
+    /// to, on the strength of a check the standard declines to require. See
+    /// [`PermsCheck`]'s own docs (**T27**).
+    ///
+    /// [`PermsCheck`]: crate::crypto::PermsCheck
+    /// [`PermsCheck::NotApplicable`]: crate::crypto::PermsCheck::NotApplicable
+    /// [`EncryptionConfig::permissions`]: crate::crypto::EncryptionConfig::permissions
+    pub perms: crate::crypto::PermsCheck,
 }
 
 impl Document {
@@ -605,8 +662,26 @@ impl Document {
         };
 
         let Some((key, auth)) = config.authenticate(password, &id0) else {
-            return Err(DocError::PasswordRequired);
+            // A failed authentication is normally just a wrong password. At
+            // `/R` 5 with a non-ASCII password it is ambiguous, because the
+            // SASLprep step pdfce does not implement may have been the thing
+            // that mattered -- and telling the operator "wrong password" for a
+            // password that was right sends them to re-check the one thing
+            // that is not the problem.
+            return Err(match password {
+                Some(pw) if config.password_may_need_normalisation(pw) => {
+                    DocError::PasswordRequiresNormalisation
+                }
+                _ => DocError::PasswordRequired,
+            });
         };
+
+        // Algorithm 3.13, run once, immediately after the key is recovered and
+        // before a single object is decrypted -- the check needs nothing but
+        // the key, and running it here means the verdict is available to the
+        // shells for the whole life of the document rather than being
+        // recomputed on demand from state they would have to keep.
+        let perms = config.check_perms(&key);
 
         // Decrypt every file-level object. Order within the map does not
         // matter: each object's key depends only on its own identity
@@ -666,7 +741,11 @@ impl Document {
             }
         }
 
-        Ok(Some(DocumentEncryption { config, auth }))
+        Ok(Some(DocumentEncryption {
+            config,
+            auth,
+            perms,
+        }))
     }
 
     /// How this document was encrypted, if it was -- `None` for a plain file.
