@@ -29,6 +29,18 @@
       zoom:F               a Ctrl+wheel step by factor F
       delete               press and release Delete
       tool:none|obj|measure  arm a tool through the real toolbar action
+      panel:print          open the print dialog (it can never spool)
+      print-tab:pages|copies|comments      select a print-dialog tab
+      print-orientation:auto|portrait|landscape
+                           set the print dialog's sheet orientation, which
+                           TURNS the sheet: read the resulting geometry off
+                           the `print-preview-rect` trace line's sheet= and
+                           printable= fields, not off a screenshot
+
+    This list is not exhaustive -- diag.rs's `Step` enum is the grammar,
+    and an unrecognised step is REJECTED and traced as
+    `script-step-UNPARSEABLE` rather than silently ignored (R183). If a
+    run does nothing, grep the trace for that word first.
 
 .PARAMETER Filter
     Regex applied to the trace before printing. Default shows the lines that

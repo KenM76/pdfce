@@ -199,14 +199,23 @@ impl PrintTab {
 /// — a control that changes the render, does not change the key, and
 /// therefore silently does nothing.
 ///
-/// **Orientation is deliberately absent, and that was verified rather
-/// than assumed.** `pdfce_print::plan_job` never reads
-/// [`pdfce_print::DeviceSettings`]; orientation reaches the job only in
-/// `spool`, as `DEVMODE::dmOrientation`, which turns the SHEET in the
-/// driver. The page bitmap handed to the spooler is rendered by
-/// `render_page_with_view`, which is not given an orientation and cannot
-/// rotate anything. So orientation changes no pixel of this bitmap and
-/// putting it in the key would only throw the cache away for nothing.
+/// **Orientation is deliberately absent, and the REASON changed even
+/// though the conclusion did not.** It used to be justified by
+/// "`plan_job` never reads [`pdfce_print::DeviceSettings`]" — which was
+/// true, and was the defect: the sheet turned in the driver while
+/// planning stayed upright, so a landscape job printed at about 77% of
+/// correct size. Orientation now reaches planning through
+/// [`pdfce_print::DeviceGeometry::for_orientation`], so it DOES change
+/// [`pdfce_print::Placement::scale`] and the rectangle the preview draws.
+///
+/// It still changes no pixel of THIS bitmap. The texture is rasterised at
+/// [`preview_raster_scale`], which is derived from the page's own size
+/// and the preview's target DPI and never from the placement — the
+/// placement scales the drawn rectangle, not the raster. Nothing here
+/// rotates page content either: the driver turns the sheet, pdfce does
+/// not turn the page. So the key stays as it is, and putting orientation
+/// in it would throw the cache away on every radio click for nothing.
+///
 /// Everything the preview needs that is NOT the dialog's own state.
 ///
 /// # Why a struct rather than eight parameters
@@ -227,8 +236,18 @@ struct PreviewInputs<'a> {
     font_generation: u64,
     /// The operator's CMYK conversion choice (R169).
     cmyk_intent: pdfce_core::settings::CmykIntent,
-    /// Real device geometry, or `None` when the driver would not answer.
-    caps: Option<&'a pdfce_print::PrinterCaps>,
+    /// Real device geometry TURNED FOR THIS JOB, or `None` when the
+    /// driver would not answer.
+    ///
+    /// ★ Not `PrinterCaps`. The preview drew its sheet, its printable
+    /// rectangle and its margins straight from the raw capabilities,
+    /// which is what made the Orientation radio appear to do nothing —
+    /// [`pdfce_print::printer_caps`] reports the device's DEFAULT
+    /// `DEVMODE`, so on a portrait-default printer the preview drew a
+    /// portrait sheet no matter what the operator selected. Taking the
+    /// same [`pdfce_print::DeviceGeometry`] the job was PLANNED against
+    /// is what makes the picture and the paper the same claim.
+    geometry: Option<&'a pdfce_print::DeviceGeometry>,
     /// Page sizes in DOCUMENT order — indexed by
     /// [`pdfce_print::PagePlan::index`], never by a position in
     /// [`Self::plans`].
@@ -656,7 +675,24 @@ impl PdfceApp {
                 pdfce_print::Collate::Collated
             },
         };
-        let geometry = caps.as_ref().map(pdfce_print::DeviceGeometry::from);
+        // ★ The device geometry is TURNED for this job before anything is
+        // planned against it. `printer_caps` reports the device's default
+        // `DEVMODE`, so on a portrait-default printer it hands back a
+        // portrait printable area — and a landscape job prints on a sheet
+        // the driver has turned. Planning against the un-turned area
+        // under-scales every page to about 77% of correct size with a wide
+        // empty margin, and reports no clip, so nothing says it happened.
+        //
+        // The orientation and the first page come from the same place the
+        // `DEVMODE` will: `pending.device.orientation` and the first page
+        // the job SENDS (not `pages[0]` — the sequence may be reversed).
+        let geometry = caps.as_ref().map(|c| {
+            pdfce_print::DeviceGeometry::from_caps(
+                c,
+                pending.device.orientation,
+                spec.first_page_pt(&page_sizes),
+            )
+        });
         let plans = geometry
             .as_ref()
             .map(|g| pdfce_print::plan_job(g, &page_sizes, &spec))
@@ -827,7 +863,7 @@ impl PdfceApp {
                                             fonts,
                                             font_generation,
                                             cmyk_intent,
-                                            caps: caps.as_ref(),
+                                            geometry: geometry.as_ref(),
                                             plans: &plans,
                                             page_sizes: &page_sizes,
                                             clipped,
@@ -871,7 +907,7 @@ impl PdfceApp {
                     } else {
                         ui_text::print_button().to_owned()
                     };
-                    let enabled = caps.is_some() && !plans.is_empty();
+                    let enabled = geometry.is_some() && !plans.is_empty();
                     if ui
                         .add_enabled(enabled, egui::Button::new(label))
                         .on_disabled_hover_text(ui_text::print_button_why_disabled())
@@ -905,11 +941,19 @@ impl PdfceApp {
         });
         crate::diag::trace(|| {
             format!(
-                "print-plan printer={:?} pages={} clipped={} dpi={:?}",
+                "print-plan printer={:?} pages={} clipped={} dpi={:?} orientation={:?} \
+                 scale={:?}",
                 printer_name,
                 plans.len(),
                 clipped,
-                resolution.map(|r| r.dpi)
+                resolution.map(|r| r.dpi),
+                pending.device.orientation,
+                // The FIRST plan's scale, which is the number the
+                // orientation defect moved. Traced beside the orientation
+                // that produced it so the two can be read together: a
+                // radio that changes `orientation=` and not `scale=` on a
+                // landscape page is the regression, restated.
+                plans.first().map(|p| p.placement.scale),
             )
         });
         // The preview's own state, traced separately from the plan because
@@ -988,7 +1032,7 @@ impl PdfceApp {
         column_height: f32,
     ) {
         let (plans, page_sizes, clipped) = (inputs.plans, inputs.page_sizes, inputs.clipped);
-        let Some(caps) = inputs.caps else {
+        let Some(device) = inputs.geometry else {
             ui.label(ui_text::print_device_unavailable());
             return;
         };
@@ -1023,7 +1067,7 @@ impl PdfceApp {
         // the desired half of R128, not the hazardous half — `rect` is
         // derived from a constant, so nothing the strip draws can feed
         // back into it.
-        let sheet = caps.physical_pt;
+        let sheet = device.physical_pt;
         let fit = (rect.width() / sheet.0 as f32).min(rect.height() / sheet.1 as f32) * 0.92;
 
         // ---- zoom and pan, before anything is drawn from them ----------
@@ -1065,10 +1109,10 @@ impl PdfceApp {
         // margins. This is the rectangle that actually constrains the
         // job.
         let printable = egui::Rect::from_min_size(
-            origin + egui::vec2(caps.offset_pt.0 as f32 * s, caps.offset_pt.1 as f32 * s),
+            origin + egui::vec2(device.offset_pt.0 as f32 * s, device.offset_pt.1 as f32 * s),
             egui::vec2(
-                caps.printable_pt.0 as f32 * s,
-                caps.printable_pt.1 as f32 * s,
+                device.printable_pt.0 as f32 * s,
+                device.printable_pt.1 as f32 * s,
             ),
         );
         painter.rect_stroke(
@@ -1229,7 +1273,7 @@ impl PdfceApp {
             // `PREVIEW_ZOOM_MAX` bound the multiplier and `fit` is a ratio
             // of two positive lengths, so the product cannot be negative
             // or large enough to saturate — but the clamp is written
-            // rather than argued, because a degenerate `caps.physical_pt`
+            // rather than argued, because a degenerate `physical_pt`
             // of zero would make `fit` infinite and a cast of infinity is
             // a silent zero.
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
@@ -1254,15 +1298,28 @@ impl PdfceApp {
         // Ctrl+wheel to zoom the preview" — and it is also the fastest way
         // to see that the resize coupling is live, since the height moves
         // with the window.
+        // ★ `sheet=` and `printable=` are on this line because they are
+        // the only honest evidence that the Orientation radio reaches the
+        // geometry. The radio changes no pixel of the page bitmap (see
+        // `PreviewKey`) and turns a rectangle whose aspect a screenshot
+        // can suggest but not measure. A trace of the two rectangles is
+        // what lets a harness assert the turn rather than photograph it.
         crate::diag::trace(|| {
             format!(
-                "print-preview-rect canvas=[{:.0},{:.0} {:.0}x{:.0}] fit={:.4} scale={:.4}",
+                "print-preview-rect canvas=[{:.0},{:.0} {:.0}x{:.0}] fit={:.4} scale={:.4} \
+                 sheet={:.0}x{:.0} printable={:.0}x{:.0} margin={:.0},{:.0}",
                 rect.min.x,
                 rect.min.y,
                 rect.width(),
                 rect.height(),
                 fit,
-                s
+                s,
+                device.physical_pt.0,
+                device.physical_pt.1,
+                device.printable_pt.0,
+                device.printable_pt.1,
+                device.offset_pt.0,
+                device.offset_pt.1,
             )
         });
         // The count, always, for a multi-page job whose clip is on a page
@@ -1774,8 +1831,24 @@ impl PdfceApp {
                 page_pt: size,
             });
         }
-        pdfce_print::spool(&printer, &bitmaps, pdfce_print::DryRun::No, None, settings)
-            .map_err(|e| e.to_string())
+        // The orientation page is passed explicitly, and it is the FIRST
+        // PLANNED page — the same one `print_dialog` turned the device
+        // geometry for. Taking it from `plans` rather than from the
+        // document keeps that guarantee even when the job is reversed or
+        // range-filtered, which is exactly when `pages[0]` would be the
+        // wrong page.
+        let first_page_pt = bitmaps
+            .first()
+            .map_or(pdfce_print::US_LETTER_PORTRAIT_PT, |b| b.page_pt);
+        pdfce_print::spool(
+            &printer,
+            &bitmaps,
+            pdfce_print::DryRun::No,
+            None,
+            settings,
+            first_page_pt,
+        )
+        .map_err(|e| e.to_string())
     }
 }
 

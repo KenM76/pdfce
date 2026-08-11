@@ -93,6 +93,22 @@ pub enum ScriptPrintTab {
     CommentsResolution,
 }
 
+/// Which sheet orientation a [`Step::PrintOrientation`] selects.
+///
+/// A diag-local mirror of `pdfce_print::Orientation`, for the same
+/// reason [`ScriptPrintTab`] mirrors `print_flow::PrintTab`: the
+/// harness's grammar is its own, and re-exporting a crate type would
+/// make any change to that type a change to the script language.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ScriptOrientation {
+    /// Decide from the first page's own shape.
+    Auto,
+    /// Force an upright sheet.
+    Portrait,
+    /// Force a turned sheet.
+    Landscape,
+}
+
 /// One step of a scripted input run — see [`Script`].
 // `Copy` was dropped in Pass 34.0 when `Text(String)` landed. Nothing needed
 // it: `Script::advance` clones one step per frame, and that path is off unless
@@ -215,6 +231,28 @@ pub enum Step {
     /// emission change, and this is it. It ships in the same Pass as the
     /// tabs rather than after the harness first fails to reach them.
     PrintTab(ScriptPrintTab),
+    /// Set the open print dialog's sheet orientation
+    /// (`print-orientation:auto|portrait|landscape`).
+    ///
+    /// # ★ Why this needed a step of its own
+    ///
+    /// Orientation TURNS THE SHEET, and until Pass 63.1 it turned the
+    /// sheet in the DRIVER while pdfce planned every page against the
+    /// un-turned printable area — a landscape job printed at about 77% of
+    /// correct size with a wide empty margin, and the preview, which drew
+    /// its sheet straight from the raw device capabilities, agreed with
+    /// the wrong answer. The defect was invisible from inside the
+    /// application and reached the operator on paper.
+    ///
+    /// The radio itself is three `ui.radio` calls in the Pages & Layout
+    /// tab whose whole body is `pending.device.orientation = o`, and
+    /// there is no `Action` for it — the dialog mutates `PendingPrint`
+    /// directly. So mirroring the field IS the operator's path, which is
+    /// the R184 test [`Self::PrintTab`] applies one variant up. Driving
+    /// it by pixel coordinate instead would depend on the dialog's
+    /// internal layout and on which harness measured it, and both of
+    /// those have their own recorded failures.
+    PrintOrientation(ScriptOrientation),
     LayerToggle(String),
     Search {
         /// The query text, as if typed.
@@ -569,6 +607,14 @@ fn parse_step(s: &str) -> Option<Step> {
             "comments" => Some(Step::PrintTab(ScriptPrintTab::CommentsResolution)),
             _ => None,
         },
+        // `print-orientation:auto|portrait|landscape`. See
+        // [`Step::PrintOrientation`].
+        "print-orientation" => match rest.trim() {
+            "auto" => Some(Step::PrintOrientation(ScriptOrientation::Auto)),
+            "portrait" => Some(Step::PrintOrientation(ScriptOrientation::Portrait)),
+            "landscape" => Some(Step::PrintOrientation(ScriptOrientation::Landscape)),
+            _ => None,
+        },
         "layer" => Some(Step::LayerToggle(rest.trim().to_owned())),
         "search" => {
             // `whole:` / `wild:` prefixes may be combined in either
@@ -781,6 +827,32 @@ mod tests {
         assert_eq!(parse_step("export"), None);
         assert_eq!(parse_step("export:pdf"), None);
         assert_eq!(parse_step("tool:dxf"), None);
+    }
+
+    /// The orientation step parses all three names, and an unknown one is
+    /// REJECTED rather than silently becoming `auto`.
+    ///
+    /// A step that coerced a typo to the default would be the worst
+    /// possible behaviour for this particular control: `auto` is already
+    /// the default, so `print-orientation:landscpae` would run green
+    /// while testing nothing, and the reject-tracing that R183 exists for
+    /// would never fire.
+    #[test]
+    fn the_print_orientation_step_parses_and_a_typo_is_rejected() {
+        assert_eq!(
+            parse_step("print-orientation:auto"),
+            Some(Step::PrintOrientation(ScriptOrientation::Auto))
+        );
+        assert_eq!(
+            parse_step("print-orientation: landscape "),
+            Some(Step::PrintOrientation(ScriptOrientation::Landscape))
+        );
+        assert_eq!(
+            parse_step("print-orientation:portrait"),
+            Some(Step::PrintOrientation(ScriptOrientation::Portrait))
+        );
+        assert_eq!(parse_step("print-orientation:landscpae"), None);
+        assert_eq!(parse_step("print-orientation"), None);
     }
 
     #[test]

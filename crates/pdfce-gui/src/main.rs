@@ -12513,6 +12513,29 @@ impl eframe::App for PdfceApp {
                 };
                 diag::trace(|| format!("print-tab set={tab:?} reached={}", u8::from(reached)));
             }
+            diag::Step::PrintOrientation(orientation) => {
+                // Same R184 reasoning as `PrintTab` one arm up: the
+                // Orientation radio's entire body is this assignment, and
+                // no `Action` carries it, so writing the field IS the
+                // operator's path rather than a bypass of it.
+                let orientation = match orientation {
+                    diag::ScriptOrientation::Auto => pdfce_print::Orientation::Auto,
+                    diag::ScriptOrientation::Portrait => pdfce_print::Orientation::Portrait,
+                    diag::ScriptOrientation::Landscape => pdfce_print::Orientation::Landscape,
+                };
+                let reached = if let Some(pending) = self.pending_print.as_mut() {
+                    pending.device.orientation = orientation;
+                    true
+                } else {
+                    false
+                };
+                diag::trace(|| {
+                    format!(
+                        "print-orientation set={orientation:?} reached={}",
+                        u8::from(reached)
+                    )
+                });
+            }
             diag::Step::LayerToggle(ref name) => {
                 // Goes through `set_layer_visible`, the same helper the
                 // checkbox calls — including its radio-group handling —
