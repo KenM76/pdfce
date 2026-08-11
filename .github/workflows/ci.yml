@@ -202,7 +202,25 @@ jobs:
     name: verify pdfce-gui strings live in ui_text.rs
     runs-on: ubuntu-latest
     steps:
+      # ★ FULL HISTORY REQUIRED, and its absence was SILENT.
+      #
+      # `check-commits-filed.py` walks every commit and skips the ones that
+      # only touch `docs/`. actions/checkout defaults to `fetch-depth: 1` —
+      # a ONE-COMMIT clone. A shallow boundary commit has no parent to diff
+      # against, so git reports it as adding every file in the tree, and a
+      # docs-only filing commit was therefore classified as a CODE commit
+      # and reported unfiled.
+      #
+      # The gate did not error. It printed a confident, specific, WRONG
+      # list, and it had been doing so for as long as this job has existed.
+      # Reproduced locally with `git clone --depth 1` before fixing —
+      # byte-identical output to the CI failure.
+      #
+      # The script now also refuses to run on a shallow clone rather than
+      # trusting this line to stay correct.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       # Decision 002 rule R1: every operator-visible string in pdfce-gui
       # lives in ui_text.rs. The rule now lives in tools/check-ui-strings.sh
       # so it can be RUN LOCALLY before pushing — see that script's header

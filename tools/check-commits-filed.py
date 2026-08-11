@@ -106,8 +106,16 @@ import sys
 # "each commit's full message ? they carry" while doing its job correctly.
 # Found by reading a gate's output as its audience (R174), not by reading
 # its source.
+#
+# ★ STDERR TOO, added 2026-08-11. This reconfigured only stdout, and the
+# shallow-clone guard below writes to STDERR — so its em-dash came out as
+# `?` on the first run. The same lesson, in the same file, one stream over:
+# the fix was applied where the problem had been SEEN rather than to every
+# stream that could have it.
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -145,6 +153,57 @@ def main() -> int:
     # commits buys nothing worth that.
     ap.add_argument("--since", default="")
     args = ap.parse_args()
+
+    # ★ REFUSE TO RUN ON A SHALLOW CLONE.
+    #
+    # This gate classifies a commit by the paths it touches, and a
+    # docs-only commit is skipped because it IS a filing. On a shallow
+    # clone the boundary commit has no parent to diff against, so git
+    # reports it as adding every file in the tree — and a docs-only
+    # filing commit gets classified as CODE and reported unfiled.
+    #
+    # That is exactly what happened in CI on 2026-08-11.
+    # `actions/checkout` defaults to `fetch-depth: 1`, and this gate had
+    # been running against a ONE-COMMIT history for as long as the job
+    # existed. It did not error and it did not look broken: it printed a
+    # confident, specific, WRONG list of unfiled commits. Reproduced with
+    # `git clone --depth 1` before the fix; byte-identical to the CI
+    # failure.
+    #
+    # The workflow now sets `fetch-depth: 0`. This check exists because
+    # that line can regress, and the failure mode when it does is not a
+    # crash but a plausible lie — the worst thing a gate can do, and the
+    # exact hazard R176 is about (a correct-looking signal that is not
+    # measuring what its reader believes).
+    # `.strip()` is load-bearing: THIS script's `git()` returns raw stdout,
+    # unlike `verify-release.py`'s identically-named helper which strips.
+    # Written without it first, and the guard silently never fired —
+    # `'true\n' == 'true'` is False. It cost a debug print to find, because
+    # a guard that does not fire looks exactly like a condition that is not
+    # met, which is the same class of quiet failure the guard itself exists
+    # to prevent.
+    if git("rev-parse", "--is-shallow-repository").strip() == "true":
+        print(
+            "ERROR: this is a SHALLOW clone, so commit classification is "
+            "meaningless here.",
+            file=sys.stderr,
+        )
+        print(
+            "       A shallow boundary commit has no parent, so git reports "
+            "it as adding every",
+            file=sys.stderr,
+        )
+        print(
+            "       file — and a docs-only filing commit then looks like "
+            "unfiled CODE.",
+            file=sys.stderr,
+        )
+        print(
+            "       Fix the checkout (`fetch-depth: 0`); do not interpret "
+            "any result below.",
+            file=sys.stderr,
+        )
+        return 2
 
     record = "\n".join(
         p.read_text(encoding="utf-8", errors="replace") for p in RECORD if p.exists()
