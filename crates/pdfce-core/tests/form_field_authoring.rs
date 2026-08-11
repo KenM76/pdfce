@@ -17,7 +17,8 @@
 
 use pdfce_core::document::Document;
 use pdfce_core::edit::{
-    ChoiceOption, EditError, EditSession, NewCheckBox, NewChoiceField, NewTextField,
+    ChoiceOption, EditError, EditSession, NewCheckBox, NewChoiceField, NewPushButton,
+    NewRadioButton, NewTextField,
 };
 use pdfce_core::forms::{self, ButtonKind, FieldFlags, FieldType, FieldValue};
 use pdfce_core::forms_author::FormAuthorError;
@@ -1115,4 +1116,109 @@ fn a_missing_template_is_refused() {
         s.field_defaults("NoSuchField"),
         Err(EditError::FieldNotFound { .. })
     ));
+}
+
+/// **Every authored form field is marked printable.**
+///
+/// §12.5.3 Table 165 bit 3. `/F` defaults to 0 — every flag clear — so a
+/// widget without it is one a conforming reader may show on screen and
+/// leave off the paper, and the operator would not find out until they
+/// printed.
+///
+/// # ★ This test exists because a reported defect turned out not to be one
+///
+/// An Acrobat-parity audit reported that `add_radio_button`,
+/// `add_push_button` and `add_choice_field` never set `/F`, while
+/// `add_text_field` and `add_check_box` did — concluding that
+/// pdfce-authored dropdowns and radio groups would not print. The
+/// evidence was a grep: five direct `Name::from(b"F")` writes in
+/// `edit.rs`, none of them inside those three functions.
+///
+/// The grep was accurate and the conclusion was wrong. Those three build
+/// their widget through `widget_base_dict`, which sets `/F` for all of
+/// them. The property held the whole time.
+///
+/// This test is what established that. Written to catch the reported
+/// defect, it passed — and then passed again with the "fix" removed,
+/// which is the only reason the fix was not committed along with a
+/// commit message describing a bug that never existed.
+///
+/// The lesson is narrow and worth keeping: **a grep for direct writes
+/// cannot see a shared helper.** Absence of a call site is not absence
+/// of the behaviour, and the cheap way to tell the difference is to
+/// assert the OUTCOME rather than the code shape.
+///
+/// So the test stays. It guards a real property — one no existing test
+/// covered — and it now guards it against a future refactor that moves a
+/// field type off the shared builder, which is the way this could still
+/// become true.
+///
+/// # Why one test over all five rather than five assertions
+///
+/// A sixth field type is how this would regress. As five separate tests,
+/// a new verb is simply uncovered and nothing says so. As one list,
+/// adding a verb without adding it here is a visible omission in the
+/// same file.
+#[test]
+fn every_authored_field_type_is_marked_printable() {
+    /// Table 165 bit 3.
+    const PRINT: i64 = 4;
+
+    let mut s = session("forms/demo-form.pdf");
+    // Built as one literal rather than pushed: clippy's `vec_init_then_push`
+    // is right that the pushes were a list wearing a loop's clothes.
+    let authored: Vec<(&str, pdfce_core::object::ObjId)> = vec![
+        (
+            "text",
+            s.add_text_field(&NewTextField::new(0, "T", rect()).declining_tooltip())
+                .expect("text field")
+                .field_id,
+        ),
+        (
+            "check box",
+            s.add_check_box(&NewCheckBox::new(0, "C", rect()).declining_tooltip())
+                .expect("check box")
+                .field_id,
+        ),
+        (
+            "radio button",
+            s.add_radio_button(&NewRadioButton::new(0, "R", rect(), "on").declining_tooltip())
+                .expect("radio button")
+                .field_id,
+        ),
+        (
+            "push button",
+            s.add_push_button(&NewPushButton::new(0, "P", rect(), "Go").declining_tooltip())
+                .expect("push button")
+                .field_id,
+        ),
+        (
+            "choice field",
+            s.add_choice_field(
+                &NewChoiceField::new(0, "L", rect(), countries()).declining_tooltip(),
+            )
+            .expect("choice field")
+            .field_id,
+        ),
+    ];
+
+    let graph = s.graph();
+    for (name, id) in authored {
+        let dict = graph
+            .resolved(id)
+            .as_dict()
+            .unwrap_or_else(|| panic!("{name}: the authored field must be a dictionary"));
+        let flags = graph
+            .resolve(dict.get(b"F").unwrap_or(&Object::Null))
+            .as_int()
+            .unwrap_or_else(|| {
+                panic!("{name}: has no /F at all, so it defaults to every flag clear — unprintable")
+            });
+        assert_eq!(
+            flags & PRINT,
+            PRINT,
+            "{name}: /F is {flags}, so bit 3 (Print) is clear — this field would be on \
+             screen and absent from the paper"
+        );
+    }
 }

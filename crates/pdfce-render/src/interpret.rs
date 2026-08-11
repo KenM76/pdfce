@@ -34,9 +34,20 @@
 //! unit-square mapping), `iso32000__s__7.9.5.md` (rectangle corner
 //! normalization).
 //!
+//! Also implemented: the **full §8.6 colour-space set** — `cs`/`CS` and
+//! `sc`/`scn`/`SC`/`SCN` over `DeviceGray`/`DeviceRGB`/`DeviceCMYK`,
+//! `CalGray`, `CalRGB`, `Lab`, `ICCBased` (through §8.6.5.5's own
+//! `/Alternate`-or-`/N` fallback), `Indexed`, `Separation` and `DeviceN`
+//! (parsed, with the tint transform **disclosed as unevaluated**), and
+//! `Pattern` (recognised, unpainted, counted). The model lives in
+//! [`crate::color`]; this module owns only the operator arms and the
+//! paint-suppression check. Until 2026-08-10 those six operators were
+//! deferred, which meant a stream that selected a space and set a colour
+//! painted in whatever colour was previously in force — see
+//! [`crate::color`]'s module docs for why that was worse than a gap.
+//!
 //! Recognized-but-deferred (counted in [`Diagnostics`], never silent —
-//! "fuzzy, never sneaky"): shading (`sh`), non-device colour ops
-//! (`cs CS sc scn SC SCN`), marked content, Type 3 glyph procedures
+//! "fuzzy, never sneaky"): shading (`sh`), marked content, Type 3 glyph procedures
 //! (`d0`/`d1`), and text **clipping** modes `Tr` 4–7 (their fill/stroke
 //! half is painted; the clip is not applied). Unknown operators outside
 //! `BX`/`EX` are — per the RAG's tolerance note — logged and skipped
@@ -520,6 +531,15 @@ pub struct Diagnostics {
     /// because "why was this annotation not placed?" is a distinct
     /// operator question (R27).
     pub annotation_notes: Vec<String>,
+    /// Colour-space disclosures (ISO 32000-1 §8.6) — an unresolvable
+    /// space, the `ICCBased` fallback, an unevaluated `Separation`/
+    /// `DeviceN` tint transform, an unpainted pattern.
+    ///
+    /// Nested rather than flattened into a dozen more fields here because
+    /// they are one subsystem's story and [`crate::color`] owns their
+    /// definitions and their wording; this struct owns the page-level
+    /// aggregation. See [`crate::color::ColorDiagnostics`].
+    pub color: crate::color::ColorDiagnostics,
 }
 
 impl Diagnostics {
@@ -671,6 +691,7 @@ polarity unverifiable (decision 006 R30)",
         for (subtype, count) in other.annotations_without_ap {
             *self.annotations_without_ap.entry(subtype).or_insert(0) += count;
         }
+        self.color.merge(other.color);
         for s in other.annotation_notes {
             push_sample(&mut self.annotation_notes, &s);
         }
@@ -833,6 +854,7 @@ pub fn trace_paths(
         text: None,
         clip_cache: crate::clip_cache::ClipCache::new(),
         font_cache: HashMap::new(),
+        color: crate::color::ColorState::new(),
         depth: 0,
         active: Vec::new(),
         trace: Some(Vec::new()),
@@ -899,6 +921,7 @@ fn run_nested(
         text: None,
         clip_cache: crate::clip_cache::ClipCache::new(),
         font_cache: HashMap::new(),
+        color: crate::color::ColorState::new(),
         depth,
         active,
         trace: None,
@@ -1002,6 +1025,7 @@ pub fn run_form_at(
         text: None,
         clip_cache: crate::clip_cache::ClipCache::new(),
         font_cache: HashMap::new(),
+        color: crate::color::ColorState::new(),
         depth: 0,
         active: Vec::new(),
         trace: None,
@@ -1111,6 +1135,12 @@ struct Interpreter<'a> {
     /// name so a cycle reached through two different names is still
     /// caught (module docs).
     active: Vec<ObjId>,
+    /// The §8.6 colour-space half of the graphics state: which space each
+    /// of `sc`/`scn`'s operand runs is to be interpreted in, and whether
+    /// painting in it marks the page at all. Carries its own `q`/`Q` stack
+    /// (Table 52 makes the colour space graphics state), pushed and popped
+    /// in lockstep with [`Interpreter::gs`]. See [`crate::color`].
+    color: crate::color::ColorState,
     /// When `Some`, [`Interpreter::paint`] records each finished path here
     /// (nodes + captured CTM) instead of only painting it — the Pass 9a
     /// object-model cross-check oracle ([`trace_paths`]). `None` for
@@ -1158,12 +1188,20 @@ impl Interpreter<'_> {
         match name {
             // ---- graphics state (Table 57) ----
             b"q" => {
-                if !self.gs.push() {
+                // The colour SPACE is a graphics-state parameter (Table
+                // 52) and lives in its own stack, so it is pushed here —
+                // gated on the same success, or the two stacks desync and
+                // a `Q` restores one half of the state.
+                if self.gs.push() {
+                    self.color.push();
+                } else {
                     self.diag.tolerated += 1;
                 }
             }
             b"Q" => {
-                if !self.gs.pop() {
+                if self.gs.pop() {
+                    self.color.pop();
+                } else {
                     self.diag.tolerated += 1; // unbalanced Q, tolerated
                 }
             }
@@ -1204,37 +1242,96 @@ impl Interpreter<'_> {
             b"i" | b"ri" => {} // flatness / rendering intent: recognized no-ops in Pass 1
             b"gs" => self.apply_ext_gstate(op),
 
-            // ---- device colours (Table 74 subset, §8.6.4) ----
+            // ---- device colours (Table 74, §8.6.4) ----
+            //
+            // Each of these sets the colour SPACE as well as the colour —
+            // Table 74's wording is "set the … colour space to DeviceGray
+            // … AND set the gray level". The `set_device` call is what
+            // makes a following `sc` read its operands in the space the
+            // document just chose rather than one three operators
+            // upstream. (§8.6.5.6's `DefaultGray`/`DefaultRGB`/
+            // `DefaultCMYK` redirection is not implemented; see
+            // `crate::color`'s module docs.)
             b"g" => {
                 if let &[v] = nums.as_slice() {
                     self.gs.current.fill_color = Rgb::from_gray(v);
+                    self.color
+                        .set_device(crate::color::DeviceSpace::Gray, false);
                 }
             }
             b"G" => {
                 if let &[v] = nums.as_slice() {
                     self.gs.current.stroke_color = Rgb::from_gray(v);
+                    self.color.set_device(crate::color::DeviceSpace::Gray, true);
                 }
             }
             b"rg" => {
                 if let &[r, g, b] = nums.as_slice() {
                     self.gs.current.fill_color = Rgb::from_rgb(r, g, b);
+                    self.color.set_device(crate::color::DeviceSpace::Rgb, false);
                 }
             }
             b"RG" => {
                 if let &[r, g, b] = nums.as_slice() {
                     self.gs.current.stroke_color = Rgb::from_rgb(r, g, b);
+                    self.color.set_device(crate::color::DeviceSpace::Rgb, true);
                 }
             }
             b"k" => {
                 if let &[c, m, y, kk] = nums.as_slice() {
                     self.gs.current.fill_color =
                         Rgb::from_cmyk(self.policy.cmyk_intent, c, m, y, kk);
+                    self.color
+                        .set_device(crate::color::DeviceSpace::Cmyk, false);
                 }
             }
             b"K" => {
                 if let &[c, m, y, kk] = nums.as_slice() {
                     self.gs.current.stroke_color =
                         Rgb::from_cmyk(self.policy.cmyk_intent, c, m, y, kk);
+                    self.color.set_device(crate::color::DeviceSpace::Cmyk, true);
+                }
+            }
+
+            // ---- colour spaces and non-device colour (Table 74, §8.6) ----
+            //
+            // These six were "recognized, deferred" until 2026-08-10, and
+            // the consequence was not a missing feature but WRONG PIXELS: a
+            // stream that selected a space and set a colour kept whatever
+            // colour was previously in force and painted with it, silently.
+            // Uppercase is stroking, lowercase non-stroking, universally.
+            // `SC`/`SCN` (and `sc`/`scn`) are handled by one arm because
+            // `SCN` is a strict superset and accepting its semantics for
+            // `SC` is harmless on read (`iso32000__s__8.6.md`).
+            b"cs" | b"CS" => {
+                let stroking = name == b"CS";
+                let initial = self.color.select(
+                    self.doc,
+                    self.resources,
+                    last_name(op).as_deref(),
+                    stroking,
+                    self.policy.cmyk_intent,
+                    &mut self.diag.color,
+                );
+                if let Some(rgb) = initial {
+                    self.set_current_color(rgb, stroking);
+                }
+            }
+            b"sc" | b"scn" | b"SC" | b"SCN" => {
+                let stroking = matches!(name, b"SC" | b"SCN");
+                // The trailing name is `scn`'s pattern operand (Table 74);
+                // its PRESENCE, not the operand count, distinguishes the
+                // two `scn` shapes, because an uncoloured tiling pattern
+                // takes numbers *and* a name.
+                let set = self.color.set(
+                    &nums,
+                    last_name(op).as_deref(),
+                    stroking,
+                    self.policy.cmyk_intent,
+                    &mut self.diag.color,
+                );
+                if let Some(rgb) = set {
+                    self.set_current_color(rgb, stroking);
                 }
             }
 
@@ -1479,8 +1576,7 @@ impl Interpreter<'_> {
             b"EMC" => self.end_marked_content(),
 
             // ---- recognized, deferred to later slices ----
-            b"sh" | b"cs" | b"CS" | b"sc" | b"scn" | b"SC" | b"SCN" | b"MP" | b"DP" | b"d0"
-            | b"d1" => {
+            b"sh" | b"MP" | b"DP" | b"d0" | b"d1" => {
                 self.diag.deferred_ops += 1;
                 self.diag.note(name);
             }
@@ -1497,6 +1593,17 @@ impl Interpreter<'_> {
                     self.diag.note(name);
                 }
             }
+        }
+    }
+
+    /// Write a colour into the stroking or non-stroking half of the
+    /// graphics state (§8.6: the uppercase/lowercase operator pairs map
+    /// one-for-one onto the two independent colour parameters).
+    fn set_current_color(&mut self, rgb: Rgb, stroking: bool) {
+        if stroking {
+            self.gs.current.stroke_color = rgb;
+        } else {
+            self.gs.current.fill_color = rgb;
         }
     }
 
@@ -1771,7 +1878,7 @@ impl Interpreter<'_> {
         // the ADVANCE would reflow the visible text around the hidden
         // run, so a layer toggle would move the rest of the line.
         let skip_paint = crate::profile::skip_paint() || self.oc_hidden();
-        if !skip_paint && self.gs.current.text.fills() {
+        if !skip_paint && self.gs.current.text.fills() && self.color.paints(false) {
             let paint = solid(self.gs.current.fill_color, self.gs.current.fill_alpha);
             // Glyph outlines are filled with the NONZERO winding rule
             // (§9.3.6: filling has "the same effects for a text object
@@ -1779,7 +1886,7 @@ impl Interpreter<'_> {
             // the opposite direction by the font, not by even-odd).
             pixmap.fill_path(&path, &paint, FillRule::Winding, ctm, clip);
         }
-        if !skip_paint && self.gs.current.text.strokes() {
+        if !skip_paint && self.gs.current.text.strokes() && self.color.paints(true) {
             let paint = solid(self.gs.current.stroke_color, self.gs.current.stroke_alpha);
             pixmap.stroke_path(&path, &paint, &self.stroke_params(), ctm, clip);
         }
@@ -2738,14 +2845,21 @@ impl Interpreter<'_> {
         // and the pending clip below is applied exactly as if it had
         // been painted (§8.11.3.1).
         let skip_paint = crate::profile::skip_paint() || self.oc_hidden();
+        // `self.color.paints(_)` is false only where the standard or
+        // pdfce's own limits say nothing is drawn: a `Pattern` space
+        // (unpainted, and counted), `Separation /None` and an all-`/None`
+        // `DeviceN` ("shall have no effect on the current page", §8.6.6.4).
+        // Painting white instead would erase the backdrop those cases
+        // require to show through.
         if !skip_paint
             && fill
+            && self.color.paints(false)
             && let Some(rule) = fill_rule
         {
             let paint = solid(self.gs.current.fill_color, self.gs.current.fill_alpha);
             pixmap.fill_path(&path, &paint, rule, ctm, clip);
         }
-        if !skip_paint && stroke {
+        if !skip_paint && stroke && self.color.paints(true) {
             let paint = solid(self.gs.current.stroke_color, self.gs.current.stroke_alpha);
             pixmap.stroke_path(&path, &paint, &self.stroke_params(), ctm, clip);
         }

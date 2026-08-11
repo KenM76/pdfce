@@ -49,6 +49,8 @@ heading (`**<N>. `).**
 | 35 | UI-PRESENTATION/TREE shape + the CLAIM-OF-CONTRADICTION ruling: the resolution is a third sentence in the same table; "process both" is a wrong shape for state assignment |
 | 36 | NAMED-TABLE shape: DIVERGENT SIBLING ROWS; a correct summary is the hardest gap to see; a purpose clause corroborates; global conjunction vs order-critical algebra; a `shall not` as a NEGATIVE WIRING constraint |
 | 38 | VERBATIM-COLUMN / partition dispatch: the corpus's DERIVED list is what's under test (promoting a topic out of a summary silently breaks its lists); a spec's own PROSE goes stale vs its own TABLE in version cohorts; look for the THIRD list; answer the unstated IDENTITY test with the wrong-implementation it rules out; x-position check is mandatory for one-word classification columns |
+| 39 | NORMATIVE-FORMULA / TRANSFORM dispatch: constants survive recall but citations do not; the headline is WHERE THE SPEC STOPS (prove deliberateness with a sibling clause that DOES specify the analogue); an array's major order is provable from the clause's own EXAMPLE; check a transcribed formula against an unstated property (C¹); typography dropouts vs mis-pointers; one file vs three, and recording why |
+| 40 | "THE TABLE HAS NO SUCH COLUMN" dispatch: grep the standard's OWN normative ANNEXES before believing a delegating sentence (licence tier improves too); a dispatch can be wrong about WHERE while right about WHAT; the semantics authority can be an INFORMATIVE reference; recompute DERIVED COUNTS programmatically; ask whether a missing limit protects against anything reachable; PENDING-INTAKE for the ambiguity register |
 | 37 | ADJUDICATING A CLAUSE-NUMBER CONFLICT: rule from the source's own enumeration, never from your heading (headings are RECONSTRUCTED); "the sub-clause does not exist" beats "the other one is right"; status leaks to anywhere the PRODUCT NAME appears, not just to headings and the index |
 
 ---
@@ -1882,3 +1884,182 @@ column at `x0 ≈ 297–299`, distinct from Description (`148`) and sub-clause
 (`337`), which proves no row inherited a neighbour's value through reflow.
 **For any one-word-per-cell classification column, run the x-position check —
 it is the only thing that rules out reading-order contamination.**
+
+---
+
+**39. A NORMATIVE-FORMULA / TRANSFORM dispatch ("give me the exact equations so I
+can implement them right now") — the equations are the easy half; the deliverable
+is the BOUNDARY where the spec stops specifying.** Established 2026-08-10 building
+`color__cie_based.md` (ISO 32000-1 §8.6.5.1–.4, `CalGray`/`CalRGB`/`Lab`). Six
+findings, four of them new.
+
+- **Split the dispatch's assertions by KIND: constants survived, citations did
+  not.** Every numeric constant the dispatch supplied was correct — `Gamma`
+  defaults, identity `Matrix`, `Range` `[−100 100 −100 100]`, L\* 0–100, and all
+  three of `g(x)`'s rationals (`6/29`, `4/29`, `108/841`). Every *pointer* was
+  wrong or unfounded: the three table numbers were **off by one** (62/63/64 →
+  **63/64/65**; Table 62 is *Colour Space Families*) and **both** recalled NOTEs
+  ("a reader may treat `CalGray` as an equivalent `DeviceGray`", same for
+  `CalRGB`) **do not exist**. Sharpens items 15/18/21: when triaging a dispatch,
+  expect *magnitudes* to be remembered well and *addresses* to be remembered
+  badly. Report the split explicitly — it tells the engineer which parts of their
+  own mental model to keep.
+- **A "surely there's a NOTE saying I can treat X as Y" question is almost always
+  a MISATTRIBUTED NEIGHBOUR.** There *is* such a NOTE two sub-clauses up, and its
+  subject is the **deprecated `CalCMYK`** (§8.6.5.1 NOTE 1, a `should`). The
+  answer shape that works: enumerate **every** occurrence of the term (14 for
+  `CalGray`), list where each one is, then name the real NOTE and its real
+  subject. Enumerating all hits is what makes the negative usable — "I searched
+  and it's not there" is not, and the true neighbour explains *why* the memory
+  felt reliable.
+- **★ THE HEADLINE OF A TRANSFORM DISPATCH IS USUALLY WHERE THE SPEC STOPS.** The
+  engineer asked for four transforms and got them, but the load-bearing answer was
+  the fifth question: **ISO 32000-1 specifies no CIE-XYZ → device-RGB transform at
+  all.** §10.1(a) makes the conversion a `shall`, §10.2 then says the gamut-mapping
+  and colour-mapping functions "**are part of the implementation of the conforming
+  reader**". Item 20's outcome-bound/method-deferred `shall`, now in a *rendering*
+  clause. **What proves it is deliberate rather than an omission: §10.3 DOES give
+  explicit device↔device formulas** (`gray = 0.3R + 0.59G + 0.11B`, CMYK↔RGB…) —
+  a neighbouring clause that *does* the thing the clause under test declines to do.
+  **Generalise: when reporting "the spec doesn't specify Z", look for a sibling
+  clause that specifies the analogous W. The contrast converts "I couldn't find it"
+  into "it was withheld on purpose."** Pair it with term-frequency zeros
+  (`chromatic adaptation`/`Bradford`/`von Kries`/`companding` = 0 across 756 pages).
+- **★ AN ARRAY'S MAJOR ORDER IS PROVABLE FROM THE CLAUSE'S OWN EXAMPLE — do it,
+  because the table caption will not tell you.** Table 64 names `/Matrix`'s nine
+  numbers `[X_A Y_A Z_A X_B Y_B Z_B X_C Y_C Z_C]` and never says row or column.
+  The EXAMPLE's matrix summed per axis gives `0.9505 / 0.9999 / 1.0891` = **its own
+  `/WhitePoint`**, which is only true under the column-major reading; row-major
+  yields `(0.7195, 1.1295, 1.1905)` matching nothing. Same class as item 25
+  (refute the rival reading *arithmetically*), applied to data layout instead of
+  geometry. Worked EXAMPLEs and their sibling dictionary entries are an **oracle**
+  (item 33) — and the transpose bug is silent, so this is the highest-value line
+  in the file.
+- **Cross-check a transcribed formula against a property the spec never states.**
+  `g(x)`'s two branches meet at `6/29` with equal value **and** equal derivative
+  (`3·(6/29)² = 108/841`) — C¹ continuity. The spec does not mention it; it is a
+  free, decisive check that the superscript-vs-fraction disambiguation was right.
+  Also worth stating in the file *why the check matters to the reader*: the
+  well-known `903.3 / 7.787` CIE approximations do **not** reproduce these
+  rationals, so an implementer who "knows this formula" will diverge.
+- **A source's TYPOGRAPHY can drop glyphs from a formula, and the fix is
+  structural, not another extraction.** §8.6.5.3's third gamma exponent keeps its
+  `B` subscript on the Z row and loses it on the X and Y rows; two `y_G`
+  subscripts vanish from the chromaticity block. Do **not** silently normalise:
+  record it as an erratum (`CIE-E1`/`E2`), state the reading you adopted, and say
+  what forces it (here Table 64's own `[G_R G_G G_B]` naming — the gamma is
+  per-*component*, not per-output-axis, so only one reading is self-consistent).
+  Distinct from a *mis-pointer* (`CIE-E3`: §8.6.5.5 NOTE 2 cites "the
+  Bibliography" for sRGB, but `IEC/3WD 61966-2.1:1999` is in **clause 3,
+  Normative references**) — worth separating, because normative-vs-Bibliography is
+  this corpus's standing test (items 27/30) for whether a deferred-to document is
+  invocable. Here the verdict is the third possibility: **normatively referenced
+  but never invoked by any `shall`** — availability without obligation.
+
+**Also this build — ONE FILE vs THREE, and recording the reason.** The corpus
+convention is one file per colour space (`color__separation.md`,
+`color__devicen.md`, `color__iccbased.md`), and the dispatch offered either. Chose
+**one** `color__cie_based.md` because the three spaces are specialisations of a
+single model (§8.6.5.1), share `WhitePoint`/`BlackPoint` semantics via mutual
+cross-reference, and — decisively — **splitting would let a `Lab` lookup miss the
+XYZ→device negative result**, which is the file's most important content. **Put
+the rationale in the file's own §0** ("do not split this without re-reading §6"),
+not only in the index: a convention deviation that does not explain itself gets
+"fixed" by a later session. General rule: **prefer one file when the highest-value
+finding is shared across the candidate splits.**
+
+**Index-count hygiene:** the `ls`-recompute found `iso32000__annex__*` had been
+recorded as **5** while disk had **6** (`annex__b` added without bumping the row).
+Item 15's concurrent-edit rule says recompute from disk — this build is the first
+time that caught a *stale* count rather than a *racing* one. Recompute every
+prefix, not just the one you touched.
+
+> **CORRECTION 2026-08-10 (by the type-4 build, item 39).** The parenthetical
+> above is **wrong and is a worked example of the trap it was trying to teach**.
+> `annex__b` had **not** "been added without bumping the row" — it was created
+> *minutes earlier by a concurrent session* and the prior count of 5 was correct
+> when written. The recompute caught a **racing** count and mislabelled it
+> **stale**, then wrote a blame-shaped explanation for it into both `index.md`
+> and this file. **Recomputing from disk tells you the NUMBER; it tells you
+> nothing about WHY it changed.** If a count moved and you did not move it,
+> the live hypothesis is a concurrent session, not prior sloppiness — check
+> file mtimes before narrating a cause, and prefer "recomputed, now N" to any
+> explanation at all.
+
+**40. A "THE TABLE HAS NO SUCH COLUMN" dispatch — the requested material exists,
+in the standard's OWN un-cross-referenced NORMATIVE ANNEX, and the dispatch's
+*premise* is wrong while its *hypotheses* are all right.** Established 2026-08-10
+closing the ISO 32000-1 type-4 (PostScript calculator) operator semantics
+(`iso32000__annex__b.md` NEW + `iso32000__s__7.10.md` § TYPE 4 OPERATOR
+SEMANTICS). Extends item 38 (the corpus's derived list is what's under test) and
+item 33 (the detail for key A lives in key B's row) to a **whole missing
+section**. Seven sub-findings:
+
+- **★ BEFORE accepting "the spec delegates this to an external document", GREP
+  THE STANDARD'S OWN ANNEXES.** §7.10.5.1 says the operators' semantics "are
+  those of the corresponding PostScript operators" and points at PLRM3 — which
+  reads as a total delegation, and a peer session independently reached exactly
+  that conclusion ("unanswerable from ISO 32000-1"). It is **false**: **Annex B
+  `(normative)`, "Operators in Type 4 Functions"**, gives the stack effect,
+  arity and operand/result typing for all 42, and settles the four highest-risk
+  questions (degrees, two-operand `atan`, `exp` = pow, `log` = base 10) **from
+  free_primary text**. **The clause never cross-references its own annex** — the
+  link runs one way only (B.1 → §7.10.5). Generalisation: **a delegating
+  sentence is evidence about the CLAUSE's scope, not about the DOCUMENT's.**
+  `grep -n "^Annex" the-dump` costs one command and here it moved most of the
+  answer from paraphrase-only to fully quotable.
+- **★ The licence tier of the answer changes with WHERE you find it, so finding
+  it in-standard is worth real money.** Annex B = `free_primary`, quotable
+  verbatim. PLRM3 = Adobe all-rights-reserved, `free_secondary_paraphrase`,
+  short fragments only. Same facts, two redistribution postures ⇒ **lead with
+  the in-standard source and tabulate the split (item 2b) with a per-row source
+  marker**, rather than sourcing the whole table from the convenient document.
+- **A dispatch can be WRONG ABOUT WHERE a fact lives while being RIGHT ABOUT
+  WHAT IT IS.** Every substantive hypothesis offered was confirmed (`and`/`or`/
+  `xor`/`not` polymorphic over `bool|int`; `not` on an int = bitwise complement;
+  `eq`/`ne` `any`-typed; `atan` two-operand; `cvi` truncates toward zero;
+  `bitshift` positive = left) while the premise ("Table 42's semantics column")
+  had **no referent**. Record both halves — the confirmations are what stop the
+  next session re-deriving them, and the split is the reusable shape.
+- **The SEMANTICS AUTHORITY can be an INFORMATIVE reference.** PLRM3 is
+  **Bibliography [15]**, not a clause-3 normative reference (check both lists
+  yourself — item 27). Yet the clause asserts the semantics *are* PostScript's.
+  This is **not** item 19's HOLLOW SHALL (there the deferred behaviour is
+  optional in effect); the semantics are real, obtainable and unambiguous, and
+  getting them wrong produces wrong output. Consequence to write down: **cite
+  the external document in code doc-comments next to the ISO clause**, because
+  the ISO clause alone does not support the implementation.
+- **★ A DERIVED COUNT is the most fragile thing in a corpus file — recompute it
+  programmatically, never by eye.** The 2026-08-08 file transcribed Table 42's
+  names **completely and correctly** and then summarised them as "**38**
+  operators". It is **42**. The dispatch inherited the 38 *and then enumerated
+  all 42 under it*, and neither side noticed. A correct list with a wrong count
+  is invisible to every check except re-harvesting the tokens. Sweep derived
+  consolidators too — `iso32000__ref__spot_colour_overprint.md` carried the 38.
+- **Two negatives that RE-PRICE a product decision rather than just recording a
+  silence.** The dispatch wanted "no step cap exists" sourced so it could label
+  its own cap *policy* — delivered with term-frequency evidence (`time limit`,
+  `number of operators`, `execution stack`, `limitcheck`, `nesting depth` = **0
+  hits each**; the lone `number of steps` hit is about shading). But the more
+  useful finding was **derived from the operator inventory**: the language has
+  **no loop, no `exec`, no procedures, no variables**, so a type 4 function
+  **cannot fail to terminate** — the cap is a bound on a hostile *stream size*,
+  and documenting it as loop protection would be a false claim in a comment.
+  **When you confirm "no limit exists", also ask whether the thing the limit
+  would protect against is even reachable.** Also: prove a nesting silence by
+  **sibling contrast** — Annex C Table C.1 *does* state `q/Q nesting 28`, so the
+  standard writes nesting bounds when it wants them.
+- **An error list can be shown to be a RESTRICTION of a known set, which makes
+  it verifiable rather than arbitrary.** §7.10.5.2's five classes map **1:1**
+  onto PostScript's `stackoverflow`/`stackunderflow`/`typecheck`/`rangecheck`/
+  `undefinedresult`, and each of ISO's own parenthetical examples (`not` on a
+  real, `sqrt` of a negative, divide by 0) is corroborated by the matching PLRM3
+  entry's error line. That also identifies the **unreachable** ones
+  (`invalidaccess`/`syntaxerror`/`limitcheck` — they belong to the string and
+  composite forms the subset bans), which is the part an implementer needs.
+- **PENDING-INTAKE convention for the ambiguity register (new, first use).** A
+  later build that finds a new ambiguity appends to a `§11a PENDING INTAKE`
+  section of `iso32000__ref__ambiguity_settings_register.md` instead of editing
+  its §2 count summary or §3 priority tables — a naive insert silently falsifies
+  the population arithmetic those sections depend on. Triage happens at the next
+  register re-audit, which empties the section.

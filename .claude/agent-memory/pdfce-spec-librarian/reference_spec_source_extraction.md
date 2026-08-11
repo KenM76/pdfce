@@ -73,6 +73,37 @@ and `pdfminer` installed. Extraction recipe that works:
    transcription of a normative formula object* in the RAG file, and say which
    page/index it came from.
 
+   **4a-bis. Row-bucketing is NOT enough for superscripts, fractions and
+   subscripts stacked in the same equation — add a SECOND, per-glyph pass that
+   prints `(x0, y0, size)`.** Established 2026-08-10 on ISO 32000-1 §8.6.5.4's
+   `g(x)`. The row pass returned `36` on one line and `1084` on another; those
+   are **not numbers**. The per-glyph pass resolves them instantly:
+   `3` at `x=135.9, size=9.0` (a superscript: smaller font, raised baseline) is
+   the exponent of `x³`, while `6` at `x=274.8, size=10.5` sits above a run of
+   `-` glyphs at `x=272–279` with `2 9` beneath ⇒ the fraction `6/29`. Likewise
+   `1084` is `108` (numerator, `x=130–141`) and `4` (`x=183.7`, a different
+   fraction's numerator). **Heuristics that work: a fraction is
+   numerator-row / a horizontal run of `-` at the same x-span / denominator-row;
+   a superscript is same-ish x but SMALLER `size` and a raised `y0`; a subscript
+   is smaller `size` and a lowered `y0`.** Variant script kept as `eq2.py`/
+   `eq3.py` in the session scratchpad — 15 lines, filters a y-window and prints
+   every glyph with coordinates.
+
+   **4a-ter. Cross-check every transcribed formula against a property the spec
+   never states.** `g(x)`'s branches are C¹-continuous at `6/29`
+   (`3·(6/29)² = 108/841`); `CalRGB`'s `(1−x)/y − 1 ≡ (1−x−y)/y` is the standard
+   CIE `z` relation; a 3×3 colour matrix's per-axis sums reproduce its own
+   `/WhitePoint`. Each is a decisive, cheap check that the superscript /
+   fraction / major-order reading was right. **A transcription with no
+   independent check is not finished.**
+
+   **4a-quater. Expect GLYPH DROPOUTS in the source's own text layer.** In
+   §8.6.5.3 the third gamma exponent's `B` subscript is present on the Z row and
+   absent on the X and Y rows; two `y_G` subscripts vanish from the chromaticity
+   block. Verify by selecting the exact y-band and confirming no glyph exists at
+   the expected x — then record it as an erratum with the reading you adopted
+   and what forces it, never silently normalise it.
+
    Three operational gotchas, all cost time on 2026-08-08:
    - **`pdfminer`'s `page_numbers` is 0-based**; the `=== PDFPAGE n ===` marker
      in the cached `pypdf` dump is **1-based** ⇒ `page_numbers=[n-1]`.
@@ -209,6 +240,36 @@ and `pdfminer` installed. Extraction recipe that works:
   version is pinned by the workspace lock so the reading is reproducible. This is
   *verification of a dependency claim*, **not** sourcing a normative algorithm
   from code — that remains the thing to put to the user first (memory item 16).
+- **PLRM3 — PostScript Language Reference, 3rd ed. (staged 2026-08-10 as
+  `_sources/Adobe_PLRM3_1999.pdf`, 7 771 729 B, 912 pp).** The **semantics
+  authority for ISO 32000-1's type-4 operator set** (§7.10.5.1: "the semantics
+  are those of the corresponding PostScript operators"), though ISO lists it only
+  as **Bibliography [15] = informative**. Every first-party route is dead:
+  `www.adobe.com/jp/print/postscript/pdfs/PLRM.pdf` **hangs** (curl exit 92 on
+  HTTP/2, then timeout on `--http1.1` — the known adobe.com failure mode),
+  `www-cdf.fnal.gov` **403**, two other mirrors **404**, and
+  `archive.org/wayback/available` **429**s. **Working route: skip the availability
+  API and hit `https://web.archive.org/web/2018if_/<url>` directly** — it 302s to
+  the nearest snapshot (here `20200722143236`) and serves `application/pdf`.
+  Worth remembering generally: **the `/web/<YYYY>if_/` form is a usable
+  substitute when the availability API is rate-limited.** `%%EOF` verified.
+  Operator entries are **Chapter 8 §8.2 "Operator Details"**; **Appendix B is
+  *Implementation Limits*, NOT operators** — which is what makes ISO 32000-1
+  §7.10.5.1's "see Appendix B … for these operators" an erratum.
+- **★ TWO PLRM-class extraction artifacts, both silent, both cost time:**
+  - **LIGATURES.** FrameMaker-set Adobe books store `fl`/`fi` as **U+FB02/U+FB01**,
+    so **`grep floor` returns 0 hits in 912 pages** while `grep ﬂoor` finds the
+    entry. Same for `ﬁle`, `closeﬁle`, `speciﬁed`, `inﬁll`. **A 0-hit result on a
+    common word containing `fl`/`fi`/`ff` is a ligature artifact, not evidence of
+    absence** — re-grep with the ligature before recording a NEGATIVE RESULT.
+    This is the one failure mode that can turn an extraction bug into a false
+    negative in the corpus.
+  - **PER-PAGE FRAGMENTATION.** Some pages extract **one token per line**
+    (`or\n\nbool\n\n1\n\nbool\n\n2`) while their neighbours extract normally, so a
+    regex anchored on a whole stack-effect line finds 40 of 42 entries and misses
+    two. Detect by "the entry head is missing but the index says the page is
+    right"; repair by `' '.join(x.strip() for x in lines[a:b] if x.strip())`.
+    Cheaper than the pdfminer x-position route (item 4a) and sufficient for prose.
 - **Adobe font technical notes** live at
   `https://adobe-type-tools.github.io/font-tech-notes/pdfs/<NNNN>.<Name>.pdf`
   (e.g. `5004.AFM_Spec.pdf`). **All `partners.adobe.com` TN URLs are dead.**

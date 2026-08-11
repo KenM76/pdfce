@@ -56,6 +56,7 @@ pub mod cancel;
 /// Reuse of identical clip masks within one render — see the module's
 /// own docs for the census that justified it.
 pub(crate) mod clip_cache;
+pub mod color;
 pub mod font;
 pub mod gstate;
 pub mod image;
@@ -84,6 +85,11 @@ pub use pdfce_core::view::DocumentView;
 // root alongside it — a shell should not have to know they live in
 // `annot` to write `pdfce_render::AnnotationScope::Document`.
 pub use annot::{AnnotationClass, AnnotationScope};
+// The §8.6 colour-space model and its disclosures. `ColorDiagnostics` is a
+// field of `Diagnostics`, which is already re-exported here, so a shell
+// reading `diagnostics.color.tint_transform_not_applied` must be able to
+// name its type without knowing which module it lives in.
+pub use color::{ColorDiagnostics, ColorSpace, ColorState, Colorant, DeviceSpace};
 pub use font::{FallbackKey, FontData, FontEnvironment, GlyphSource, RenderOptions, RenderPolicy};
 pub use interpret::Diagnostics;
 pub use layer_state::LayerVisibility;
