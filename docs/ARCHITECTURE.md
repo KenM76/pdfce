@@ -818,6 +818,44 @@ D:\Dev\pdfce\
                                    moves, not a defect in reading it. See
                                    §12's 2026-08-10 (eighty-third filing)
                                    entry for the full ruling.
+    pdfce-print\                 <- Printing: job planning + spooling. Shipped with
+                                   `Pass 55.2` (2026-08-10) but never documented in this
+                                   tree until the eighty-fifth filing — a filing gap this
+                                   entry closes. Depends on NEITHER pdfce-core NOR
+                                   pdfce-render — a printing crate that also rendered
+                                   would need the whole render stack to be testable for
+                                   failures (a wrong DEVMODE, an upside-down DIB, a job
+                                   left open) that have nothing to do with PDF content.
+                                   Rasterization stays in the CALLING SHELL (via
+                                   pdfce-render); this crate only plans placement/
+                                   resolution and, on Windows, spools bytes to a real
+                                   device. **The planning arithmetic (`plan_job`,
+                                   `job_resolution`, `imposition::{plan_n_up,
+                                   plan_booklet, plan_poster}`) takes a PLATFORM-FREE
+                                   `DeviceGeometry` (dpi + printable area), never
+                                   `PrinterCaps` directly** — `PrinterCaps` is
+                                   `cfg(windows)` (a real Win32 driver's report); taking
+                                   it as the planner's input would have moved the most
+                                   test-worthy code in the crate (six tests: render-scale
+                                   folding, an asymmetric-resolution device rendering at
+                                   its smaller axis, an out-of-range page skipped not
+                                   refused) behind a `cfg` the Linux/macOS CI jobs never
+                                   build — green locally, silently uncovered on every
+                                   other platform. `DeviceGeometry: From<&PrinterCaps>`
+                                   bridges the two. **Shared by BOTH pdfce-cli and
+                                   pdfce-gui**, deliberately — the alternative (each shell
+                                   computing its own page placement) is how a GUI print
+                                   comes to land differently from a CLI print of the same
+                                   document at the same settings, a divergence nobody
+                                   thinks to compare. `imposition.rs` (N-up/booklet/
+                                   poster, `Pass 59.0`, 2026-08-10) lives here for the
+                                   same reason — each changes the SHAPE of a print job
+                                   (many-pages-to-one-sheet, one-sheet-folded, one-page-
+                                   to-many-sheets), which the one-`Placement`-per-page
+                                   model cannot express, so each is its own planning path
+                                   rather than a scale-mode variant. See §12's 2026-08-10
+                                   (eighty-fifth filing) entry for the crate-boundary
+                                   decision record.
     pdfce-gui\                  <- The native desktop shell. egui/eframe application,
                                    window chrome, file dialogs (rfd crate), menus,
                                    docking layout (egui_dock or hand-rolled), the
@@ -16036,3 +16074,137 @@ AFSimple_Calculate/AF\*\_Format whitelist" — `core [x]` / `cli [x]` /
 **`docs/decisions/009-forms-javascript-posture.md`** is the authority for
 the whitelist scope and disclosure contract; this entry records the
 correction and the shipped design points only, not a restatement.
+
+### 2026-08-10 (eighty-fifth filing) — the `pdfce-print` crate boundary: no dependency on `pdfce-render`, a platform-free `DeviceGeometry` input, shared by both shells so they cannot disagree about where a page lands
+
+**The crate itself shipped 2026-08-10 with `Pass 55.2` and was never
+recorded here** — this entry is a filing-gap closure as much as a
+decision record; §3's tree gains the corresponding `pdfce-print\` block
+in this same filing.
+
+**Decision: `pdfce-print` depends on neither `pdfce-core` nor
+`pdfce-render`.** A printing crate that also rendered would need the
+whole render stack to be testable for the failures that actually matter
+here — a wrong DEVMODE, an upside-down DIB (`BITMAPINFOHEADER` height
+sign), a print job left open on an error path — none of which have
+anything to do with PDF content. Rasterization stays the CALLING
+SHELL's job (`pdfce-cli`/`pdfce-gui`, both via `pdfce-render`);
+`pdfce-print` only plans placement/resolution and, on Windows, spools
+bytes to a device.
+
+**Decision: the planning functions (`plan_job`, `job_resolution`,
+`imposition::plan_n_up`/`plan_booklet`/`plan_poster`) take a
+platform-free `DeviceGeometry` (dpi + printable-area rectangle), never
+`PrinterCaps` directly**, even though `PrinterCaps` (a real Win32
+driver's report, `cfg(windows)`) is the only thing that actually exists
+at runtime. `DeviceGeometry: From<&PrinterCaps>` bridges the gap at the
+one call site that needs it. Reasoning: taking `PrinterCaps` as the
+planner's own signature would have moved the crate's most test-worthy
+code — six tests pinning render-scale folding, an asymmetric-resolution
+device (600×300, real on plotters) rendering at its smaller axis rather
+than being upsampled by the driver, and an out-of-range page being
+skipped rather than failing the whole job — behind a `cfg(windows)` gate
+the project's Linux/macOS CI jobs never build. The tests would still
+pass locally and simply stop existing on those platforms, a coverage
+loss nothing in CI would report.
+
+**Decision: `pdfce-print` is SHARED by both `pdfce-cli` and
+`pdfce-gui`, not reimplemented per shell.** The alternative — each
+shell computing its own placement/resolution arithmetic — is exactly
+how a GUI print comes to land differently from a CLI print of the same
+document at the same settings, a divergence nobody thinks to compare
+until an operator reports mismatched output. This is the same
+single-source-of-truth shape as standing rule R171 (`ROADMAP.md`); a
+source comment in `imposition.rs`'s poster loop mislabels this
+reasoning "(R123)" — R123 is the unrelated competitor-derivation rule
+(ribbon/command-surface naming) — flagged in `ROADMAP.md`'s eighty-fifth
+filing for the engineer to correct.
+
+**Decision: N-up/booklet/poster imposition (`Pass 59.0`) lives in
+`pdfce-print::imposition`, not as a variant of the existing
+per-page `Placement`/`ScaleMode` model.** Each changes the SHAPE of a
+print job — many source pages onto one sheet (N-up), one sheet's
+sequence remapped into a folded order (booklet), one page cropped
+across many sheets (poster) — which the one-`Placement`-per-page
+arithmetic cannot express without a plan whose `index` field lies about
+which source page a sheet describes. Each is therefore its own planning
+path, mutually exclusive with the other two and with ordinary per-page
+scaling.
+
+**Open, not decided here:** whether `pdfce-print` should eventually gain
+a `cfg`-gated non-Windows spooling backend (CUPS via IPP, say) for a
+future Linux/macOS native build — no such build exists yet, and nothing
+in this crate's design forecloses it (the platform-conditional code is
+already isolated to `spool`/`PrinterCaps`/DEVMODE construction).
+
+**Addendum (`f3dd8ff`, same filing) — decision: the three job-shape
+modes (N-up/booklet/poster) are REFUSED in combination, never given a
+silent precedence.** Poster's CLI wiring (this commit) exposed a defect
+predating it: `--n-up`/`--booklet`/`--poster` were evaluated as three
+independent `if` blocks executed in sequence, so passing more than one
+silently ran all applicable branches and kept only the LAST one's
+output — `--poster --booklet` composed and threw away nine poster
+tiles before printing a booklet, with no diagnostic. A pre-existing doc
+comment already asserted the three modes were mutually exclusive;
+nothing in the code enforced the claim. Decision: refuse combining any
+two (exit `EDIT_REFUSED` = 9) before rendering begins, rather than
+adopt a precedence order — no reading of `--poster --booklet` is
+obviously the operator's intent, and any precedence pdfce chose would
+be a guess presented as a result, the same posture decision 027
+(refuse what has no good reading) already establishes elsewhere.
+
+### 2026-08-10 (eighty-fifth filing) — content-stream colour spaces + PDF functions ship; spot colour renders the document's own tint transform, not a neutral stand-in
+
+**Extends, does not redecide, `Pass 49.0`'s existing DeviceCMYK→sRGB
+colorimetry decision (2026-08-08 entry, above)** — that entry already
+settled "agreement with a documented default, not colorimetric
+correctness, since the spec is silent." This entry records the same
+posture applied to the CIE-based spaces (`CalGray`/`CalRGB`/`Lab`) and
+to `Separation`/`DeviceN` spot colour, plus the crate-boundary decision
+for the §7.10 function evaluator that makes spot colour possible at
+all.
+
+**Decision: the §7.10 function evaluator (`pdfce-core::function`) is
+`pdfce-core`, not `pdfce-render`.** A PDF function (Sampled/
+Exponential-Interpolation/Stitching/PostScript-Calculator) is
+spec-governed, headless arithmetic with no rasterization dependency —
+the same GUI-core-separation reasoning that keeps every other
+spec-governed subsystem in `pdfce-core`. `pdfce-render` calls into it to
+evaluate a `Separation`/`DeviceN` tint transform at paint time but owns
+no function-evaluation logic itself.
+
+**Decision: a Type 4 (PostScript calculator) function refuses rather
+than approximates on an operator it cannot resolve to Annex B's 42.**
+ISO 32000-1 Annex B is NORMATIVE and enumerates every legal Type 4
+operator; §7.10.5's own body text defers to the PostScript Language
+Reference and never cross-references Annex B, an easy place to under-
+scope an implementation from the body prose alone (the same erratum
+shape as the §12.5.6.2/Table 169 finding filed the same session, though
+this one is a citation gap, not a genuine content contradiction — flagged
+for `pdfce-spec-librarian`, not decided here).
+
+**Decision: DeviceN/Separation with a missing or malformed
+`tintTransform` still paints, at a neutral of the correct lightness,
+rather than refusing the page.** `tintTransform` is a Required key
+(§8.6.6.4/§8.6.6.5), so such a file is non-conforming — but the
+colorant NAME survives regardless, and painting a neutral of the right
+lightness preserves the drawing's legibility (line weights, layout)
+that refusing the whole page would lose. The disclosure counter this
+degrades through is the same shape as every other "recognised but
+degraded" signal in `pdfce-render` (ICCBased-without-profile, Pattern-
+recognised-but-unpainted).
+
+**Decision: no XYZ-to-device transform is invented to look more
+"correct" than the spec requires.** ISO 32000-1 specifies NO XYZ-to-
+device transform at all for CIE-based colour spaces (§8.6.5.4-.6 define
+the source spaces; nothing in the standard binds them to a device
+gamut). pdfce's Bradford chromatic-adaptation + sRGB pipeline
+(`pdfce-render::color`, already built for `Pass 49.0`'s CMYK work) is
+therefore explicitly a DOCUMENTED CHOICE for these spaces too, not a
+compliance requirement — carried in the module's own doc comments so a
+future reader does not mistake it for a spec citation.
+
+**`docs/FEATURES.md`:** new row under *Fonts & rendering* — content-
+stream colour spaces + PDF functions — `core [x]` / `cli` `—` / `gui
+[x]`, moved directly to *Implemented* (never appeared in *Planned*,
+built and shipped within the same session that would have scoped it).

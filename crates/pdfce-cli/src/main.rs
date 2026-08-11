@@ -7098,7 +7098,8 @@ fn cmd_print(
             };
             // `tile_only_large_pages` asks the planner, not this loop: the
             // predicate is the planner's to own so the CLI and the GUI
-            // cannot disagree about what counts as "large" (R123).
+            // cannot disagree about what counts as "large" (R171 — read the
+            // value off the one place that owns it, never restate it).
             if !spec_p.tiles_page(device.printable_pt, size) {
                 untiled_pages += 1;
                 // Printed at its natural placement, in sequence, so a

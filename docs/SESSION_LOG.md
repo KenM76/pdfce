@@ -32696,3 +32696,148 @@ asserted anywhere in this filing** — the engineer should check
 push. This is the **eighty-fourth** `SESSION_LOG.md`/`ROADMAP.md` joint
 filing (the eighty-third confirmed present by direct read before this
 entry was appended).
+
+## 2026-08-10 (eighty-fifth filing) — eleven baseline-gate commits filed (ten at dispatch, one mid-session): printing gains a spooler, a GUI dialog, real-device verification, orientation/duplex and a four-way comments-and-forms filter (`Pass 55.2`); imposition ships as `Pass 59.0` and its own R83 poster-unwired debt is discharged mid-dispatch by a defect-fixing commit (`f3dd8ff`); colour spaces + PDF functions ship as `Pass 60.0`; `Pass 7.2`'s missing hash citations added
+
+**Shipped:**
+- **`Pass 55.2` (continued)** — `3619705` spooler (`pdfce_print::spool`,
+  `--send`-gated, dry-run default) + `8ad0529` shared planner
+  (`plan_job`/`job_resolution` move into `pdfce-print`, platform-free
+  `DeviceGeometry`) + `fc42388` GUI print dialog (`print_flow.rs`,
+  `Ctrl+P`) + `b2913c1` real-spooler verification + page sequencing
+  (odd/even by document page number; subset→reverse→copies order
+  pinned) + `72ade9c` four-way Comments & Forms filter, orientation,
+  duplex, and an ISO §12.5.6.2/Table 169 erratum find (prose omits
+  `/Screen`/`/Watermark`/`/3D` from the non-markup partition).
+- **`Pass 59.0` (new mint)** — imposition: `163742a` N-up (wired,
+  verified on paper) + booklet/poster geometry, `32eb0a0` booklet
+  wiring (verified on the fold — Page Four beside Page One on sheet
+  one), `32eb0a0` explicitly left poster unwired (an R83 debt). **A
+  fourth print commit arrived mid-dispatch: `f3dd8ff` wires poster**
+  (verified on real "Microsoft Print to PDF" output: 2× gave a 3×3
+  poster, 1224×1584 pt) **and, finding the route, catches a defect
+  worth more than the feature** — the three job-shape modes
+  (N-up/booklet/poster) ran in sequence with no mutual-exclusion guard,
+  so the last to fire silently overwrote the others' work
+  (`--poster --booklet` composed and discarded nine tiles, then printed
+  a booklet with nothing said). Now refused, exit 9, before any
+  rendering — refusal chosen over a precedence because no reading of
+  the combination is obviously intended. A pre-existing doc comment had
+  already CLAIMED the three modes were mutually exclusive while nothing
+  enforced it, the same "asserted, not measured" shape as this
+  session's other two findings.
+- **`Pass 60.0` (new mint)** — `9e70247` content-stream colour spaces
+  (`cs`/`CS`/`sc`/`scn`/`SC`/`SCN`, previously all deferred) + §7.10
+  PDF functions (all 42 Annex-B Type-4 operators) + spot colour that
+  renders the document's own tint transform instead of a neutral
+  stand-in.
+- **`Pass 7.2` addendum** — `29e5e92`/`e61f075` cited by hash for the
+  first time; content was already filed at the eighty-fourth filing,
+  only the literal hashes were missing (which is what
+  `tools/check-commits-filed.py` actually checks).
+
+**Decisions made this session:**
+- **`pdfce-print` crate boundary recorded** (`ARCHITECTURE.md` §12,
+  new): no dependency on `pdfce-render` (rasterization stays in the
+  calling shell); planner takes a platform-free `DeviceGeometry`, never
+  `PrinterCaps`, so its tests run on every CI platform, not only
+  Windows; shared by both shells so they cannot disagree about page
+  placement. §3's workspace tree gained a `pdfce-print\` entry — the
+  crate shipped with `Pass 55.2` and was never documented there, a
+  filing gap this session closed.
+- **Colour/function pipeline decisions recorded** (`ARCHITECTURE.md`
+  §12, new): the §7.10 function evaluator lives in `pdfce-core`
+  (headless, spec-governed); a Type 4 function refuses on an
+  unresolvable operator rather than approximating; a missing/malformed
+  `tintTransform` still paints a neutral rather than refusing the
+  page; no XYZ-to-device transform is invented beyond what the spec
+  requires (it requires none) — extends `Pass 49.0`'s existing CMYK-
+  colorimetry decision rather than re-deciding it.
+- **The poster-attribution question this librarian first flagged mid-
+  filing was resolved by the engineer, not guessed at.** This
+  librarian's own draft found poster fully wired at HEAD, contradicting
+  both `163742a` and `32eb0a0`'s messages, and flagged it as
+  unattributed. The engineer's mid-dispatch message named `f3dd8ff` as
+  the commit; before folding it in, this librarian independently
+  confirmed the guard's line range, the `exit::EDIT_REFUSED = 9`
+  constant, and the pre-existing "mutually exclusive" doc comment
+  against live source — not taken on the relayed message alone.
+
+**Findings + decisions:**
+- **ISO §12.5.6.2's prose is incomplete against its own Table 169** —
+  the prose names five non-markup annotation subtypes, the table marks
+  nine (`/Screen`/`/Watermark`/`/3D` omitted from the prose). A print
+  filter built from the prose alone silently drops watermarks from a
+  "Document only" print. Flagged for `pdfce-spec-librarian`, not
+  written into the spec RAG by this librarian (hard rule 6).
+- **ISO 32000-1 Annex B is normative and specifies all 42 Type 4
+  operators; §7.10.5 never cross-references it** — an implementation
+  built from §7.10.5's body prose alone under-scopes. Also flagged for
+  `pdfce-spec-librarian`.
+- **ISO 32000-1 specifies no XYZ-to-device transform at all** —
+  pdfce's Bradford + sRGB pipeline for CIE-based colour spaces is a
+  documented choice, not a compliance requirement.
+- **Two Win32 GDI printing quirks, filed to `D:\dev\rag\rust\`**
+  (any-Rust-project findings, not PDF-domain): `DMDUP_VERTICAL`/
+  `DMDUP_HORIZONTAL` name the FLIP AXIS, not the bound edge (long-edge
+  binding is `DMDUP_VERTICAL`); a `BITMAPINFOHEADER` needs a NEGATED
+  height for a top-down source, and `BI_RGB` 32bpp is B,G,R,X in
+  memory, not R,G,B,A — both silently print wrong-orientation/wrong-
+  colour output with no error, caught only by printing to a real
+  device and reading the result back.
+- **A source-comment miscitation found, not fixed** — `imposition.rs`'s
+  poster loop cites "(R123)" for a single-source-of-truth predicate-
+  ownership pattern; R123 is the unrelated competitor-derivation rule.
+  R171 is the rule that actually matches. Flagged for the engineer;
+  this librarian does not edit crate source.
+
+**Still in flight:** decisions 037/038 still CLAIMED-not-authored;
+attachment EXTRACTION-to-file (R151); theme-preset default (open
+operator question); GUI surface for form-script recompute (R151-
+flagged, `Pass 7.2`); poster's commit attribution (new, this filing);
+print dialog has no separations/colour-management panel (named in
+`FEATURES.md`'s row, not scoped).
+
+**For next session:** the `imposition.rs` "(R123)" comment wants a
+one-line fix to "(R171)." Comments & Forms four-way filter and
+orientation/duplex are printing-option parity items Acrobat also has
+that pdfce's print dialog now matches at the CLI+GUI level — no
+separations/colour-management panel exists yet, named as this
+session's own remaining printing gap. Poster has no GUI route (CLI
+only, confirmed by `Grep` on `print_flow.rs`).
+
+**Ledger for this filing.** **Two new Pass IDs minted: `Pass 59.0`**
+(imposition — N-up/booklet/poster) **and `Pass 60.0`** (content-stream
+colour spaces + PDF functions), both grepped free before minting per
+R156. **Five commits filed against the existing `Pass 55.2`** (no new
+mint — `FEATURES.md`'s own pre-existing "Pass 55.2's remainder" framing
+already earmarked this work). **Eleven commits filed in total** — ten
+staged at dispatch plus `f3dd8ff`, sent by the engineer mid-session and
+folded into `Pass 59.0` after independent verification against live
+source. **Pass-family ceiling moves from 58.1 to 60.0, next free 61.** `docs/FEATURES.md`: the Printing row rewritten
+(`gui` `[ ]`→`[x]`, `core` `—`→`[x]` narrowly on `pdfce-render`'s new
+annotation-scope filter); the matching *Planned* row removed, folded
+in; two new *Implemented* rows added (Imposition; colour spaces/
+functions), neither having ever appeared in *Planned* — built and
+shipped within the session that would have scoped them.
+`docs/ARCHITECTURE.md`: §3 gains the `pdfce-print\` tree entry; §12
+gains two new dated entries (crate boundary; colour/function pipeline).
+`docs/ROADMAP.md` Backlog: the "Printer job SPOOLING" entry gets a
+dated correction footer (shipped, not deleted). **Standing rules: no
+new mint.** **`D:\dev\rag\rust\`: two new findings**, both this file
+and that subdir's `index.md` updated this filing. **No
+`C:\personal_rag\pdf\` finding this filing** — nothing qualifies as
+producer-behaviour distinct from the two spec-RAG-flagged erratum
+items. **Two items flagged for `pdfce-spec-librarian`, not written
+here** (hard rule 6) — not independently verified as already recorded
+in `D:\Dev\Rag-Specialized\PDF_Spec\` by this librarian. Operator-
+question ceiling unchanged at **(bh)**, next free **(bi)**.
+Decision-record ceiling unchanged at **038**, next free **039** — both
+new §12 entries are dated architecture-log entries, not numbered
+decision records. Gate figures relayed per the engineer's staged commit
+messages (test/clippy/fmt counts stated per-commit in `ROADMAP.md`'s
+matching entry) — **NOT independently re-run, no shell this dispatch**
+(hard rule 8). **Backup/git working-tree state not asserted anywhere in
+this filing** — the engineer should check `D:\Dev\pdfce-backups\` and
+`git log`/`git status` directly before any push. This is the
+**eighty-fifth** `SESSION_LOG.md`/`ROADMAP.md` joint filing.
