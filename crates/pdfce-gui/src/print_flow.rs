@@ -518,7 +518,7 @@ impl PdfceApp {
     ///
     /// # ★ Two guards, at the ONE place the dialog is ever built
     ///
-    /// `Ctrl+P` (Pass 62.0) made this reachable from a chord as well as
+    /// `Ctrl+P` (Pass 63.0) made this reachable from a chord as well as
     /// from the ribbon button. The ribbon button is wrapped in
     /// `add_enabled_ui(has_doc, …)` and cannot be pressed twice in a
     /// frame; a chord has neither property. Rather than duplicate the
@@ -1000,7 +1000,7 @@ impl PdfceApp {
     /// the SHEET and not the PRINTABLE AREA would be the naive version
     /// and would show a page fitting that will not.
     ///
-    /// # What changed in Pass 62.0, and why it was not a bug fix
+    /// # What changed in Pass 63.0, and why it was not a bug fix
     ///
     /// This function computed real device geometry from the first day and
     /// still never drew the page: the "placed" rectangle was a flat fill
@@ -1128,7 +1128,7 @@ impl PdfceApp {
         // `shown` walks the JOB (which may be a custom range, odd/even
         // filtered, or reversed) and `page_sizes` is in document order, so
         // the two coincide only for a whole-document forward job. Indexing
-        // it by `shown` — as this did until Pass 62.0 — drew the placed
+        // it by `shown` — as this did until Pass 63.0 — drew the placed
         // rectangle at the size of a page the job may not even contain,
         // which on a document mixing sheet sizes is a preview that reports
         // a clip that will not happen or misses one that will.
@@ -1147,7 +1147,7 @@ impl PdfceApp {
                 ),
             );
             // The rendered page, if one is cached. The fallback is the flat
-            // fill this drew before Pass 62.0 — a preview showing the right
+            // fill this drew before Pass 63.0 — a preview showing the right
             // rectangle and no content is degraded but honest; one showing
             // a stale page would be wrong.
             let texture = Self::preview_texture(ui.ctx(), inputs, pending, plan.index);
@@ -1432,7 +1432,7 @@ impl PdfceApp {
     /// exists to say what will come out of the printer, so a preview built
     /// from its own options is a preview that can be confidently wrong.
     /// It was extracted from `spool_print` when the preview started
-    /// rendering content (Pass 62.0).
+    /// rendering content (Pass 63.0).
     ///
     /// The three deliberate choices it encodes:
     ///
@@ -1802,7 +1802,7 @@ impl PdfceApp {
         let Status::Open(doc) = &self.status else {
             return Err(ui_text::print_no_document().to_owned());
         };
-        // The SAME builder the preview calls (Pass 62.0). See
+        // The SAME builder the preview calls (Pass 63.0). See
         // `print_render_options` for the three choices it encodes and why
         // a second copy of them here would defeat the preview's purpose.
         let options =

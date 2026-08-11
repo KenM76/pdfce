@@ -10650,7 +10650,7 @@ impl PdfceApp {
         {
             return;
         }
-        // Pass 62.0 — the FOURTH independent pending state, and it was
+        // Pass 63.0 — the FOURTH independent pending state, and it was
         // already collidable before `Ctrl+P` existed.
         //
         // ★ THIS IS A LIVE BUG BEING CLOSED, not a precaution taken while
@@ -26726,7 +26726,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------
-    // Pass 62.0 — the print dialog's one-question gate, its open guards,
+    // Pass 63.0 — the print dialog's one-question gate, its open guards,
     // and its tab lifetime.
     // -----------------------------------------------------------------
 
