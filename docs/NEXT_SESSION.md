@@ -56,6 +56,33 @@ Measured this session, not relayed:
   binary, and `print-preview` reported `auto` at `0.9725` against
   `portrait` at `0.7515`.
 
+## ★ CI IS GREEN — for the first time in the project's history
+
+All **10 jobs pass** at `10e9b0c`. Before 2026-08-11 CI had failed on
+**every push ever made**, including both prior releases, and nobody was
+looking. Two independent causes, both fixed today:
+
+1. **`pdfce-print` did not compile for any non-Windows target**
+   (`Pass 66.0`). A `#[cfg(windows)]` on a plain-data error type that the
+   file's own non-Windows stubs returned. `cargo tree` proved no GUI crate
+   was linked; nothing proved the crate *built* — the GUI-separation
+   invariant failing quietly one crate over.
+2. **`check-commits-filed.py` was reading a one-commit repository.**
+   `actions/checkout` defaults to `fetch-depth: 1`, and a shallow boundary
+   commit has no parent, so git reports it as adding every file — making
+   docs-only filing commits look like unfiled code. It printed a
+   confident, specific, **wrong** list for as long as that job existed.
+
+**Two things to know before you touch this.** The filing check runs *in*
+CI, so **every CODE commit leaves CI red until its filing lands** — that
+is by design here, not a defect, and a session that pushes code and stops
+will always leave a red build behind. And `check-passes-filed.py` has the
+identical latent shallow-clone flaw; it is not run in CI today, so the
+risk is theoretical, and it is filed in Backlog rather than fixed.
+
+**Check CI after pushing.** `gh run list --limit 1`. Green local gates
+stood in for a green build for the entire project's history.
+
 Filing gate: `check-commits-filed.py` is **clean** (5 known-unfiled carried
 in the baseline as pre-existing debt). Everything this session is filed.
 
