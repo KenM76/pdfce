@@ -81,6 +81,175 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★ `17f4d82` — the permission bits are displayed, captioned as declared-not-enforced: `Pass 5` increment 1 is now COMPLETE across core, CLI and GUI — 2026-08-11, branch `post-v0.2.0` (ninety-ninth filing)
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — `git log`/`git
+show` not run, no diff read. The dispatching engineer supplied the full
+commit message verbatim via a scratchpad file (`msg73.txt`, read
+directly, not paraphrased). **Independently confirmed by direct
+filesystem read** (within hard rule 8's boundary — this needs no shell):
+`crates/pdfce-core/src/crypto/standard.rs` carries `pub enum
+PermissionBit` (line 284, eight variants in Table 22 order) with
+`all()` (306), `position()` (321) and `applies_at(revision)` (341);
+`Permissions::granted(self, bit) -> Option<bool>` (264) returns `None`
+exactly when `!bit.applies_at(self.revision)`; the test
+`reserved_bits_report_none_rather_than_false` (990) exercises the
+standard's own `-44` (`0xFFFF_FFD4`) worked example, asserting `None` at
+`/R` 2 and `Some(true)` at `/R` 3 for all four `/R`-3-only bits, and
+`permission_bit_positions_are_table_22` (1025) walks every position for
+collisions. `crates/pdfce-gui/src/ui_text.rs` carries
+`security_section_heading` ("Security", 1376),
+`security_section_caption` (1402, the exact non-enforcement string
+quoted below) with a doc comment (1380–1400) marking it a correctness
+claim tied to §7.6.3.1, `permission_label`/`permission_value`
+("Allowed"/"Not allowed", 1410–1431), and `permission_not_applicable`
+("Not specified at this encryption revision", 1438–1440) for the
+reserved case. `crates/pdfce-gui/src/main.rs`'s `security_section`
+(23112) early-returns when `doc.session.document().encryption()` is
+`None` — absent entirely for an unencrypted document — and renders
+every bit via `PermissionBit::all()` in an `egui::Grid`, matching
+`Some(allowed)` to a plain-text row and the `None` arm to the
+reserved-note. **Test/gate figures (3,311 workspace tests passing,
+`fmt`/`clippy --all-features`/ui-strings/theme-colours clean) and the
+portable build at `D:\builds\pdfce-20260811-0846-f5f5b06` are relayed,
+not independently re-run** — no shell this dispatch. **`docs/
+NEXT_SESSION.md` not touched by this filing** (engineer-owned, per this
+project's standing instruction). Three docs-only commits follow
+`17f4d82` in the reflog and are named here so their hashes are on
+record, though the commit-filing gate skips docs-only commits by
+design (nothing to narrate beyond their own content): `f5f5b06` (the
+handoff stops describing work that is finished), `7fa488f` (points the
+handoff at a build that contains everything, and repairs a path),
+`ea1a5ec` (the build description stops contradicting the build it
+names). **Backup/git working-tree/remote state not independently
+asserted anywhere in this filing** — no shell this dispatch; the
+engineer should check `D:\Dev\pdfce-backups\` and `git log`/`git
+status`/`git remote -v` directly, on branch `post-v0.2.0`.
+
+**What this closes.** The ninety-eighth filing's own "Still open" note
+named the permission bits as the one piece of `Pass 5` increment 1 not
+yet built, already designed but not shipped. This commit builds exactly
+that design. **`Pass 5` increment 1 — RC4 read support reaching every
+shell, plus the declared-permission disclosure — is now COMPLETE.**
+What remains under `Pass 5`'s name is a second increment, entirely
+unstarted: AES-128/256 decrypt, `/R 6`, and any encrypted-save path —
+all still refused by name, untouched by this commit.
+
+**The caption is the feature, and it is a correctness claim, not
+interface copy.** A permission list headed "Security" reads as
+restrictions in force. That would be pdfce claiming an enforcement it
+does not perform, about a mechanism ISO 32000-1 §7.6.3.1 states
+outright is not enforced: *"There is nothing inherent in PDF encryption
+that enforces the document permissions specified in the encryption
+dictionary."* The pinned, non-dismissible caption carries two facts,
+both required. First — these are the author's **declaration**: `/P` is
+plaintext in the file and trivially editable, with no integrity
+protection at all at `/V` 1–4 (**N7**). Second, and the one an operator
+cannot discover any other way — **pdfce does not check them.** ISO
+32000-1 specifies no mapping from a permission bit to a reader
+operation at all (**N4**); "assemble the document" is not an
+object-level predicate, so any mapping would be pdfce's own invention,
+and rule 4 forbids quietly disabling a feature on a guess. The caption
+string carries a doc comment marking it a correctness claim tied to the
+clause it restates, to be changed only against that clause.
+
+**Reserved is not refused.** `Permissions::granted` returns
+`Option<bool>`, and the `None` is load-bearing, not a gap. Bits 9–12
+arrived at `/R` 3; below that they are reserved, and the author of an
+`/R` 2 file did not *decline* to permit form-filling — the concept did
+not exist to decline. Rendering that as "Not allowed" would show a
+restriction nobody wrote. Tested against the standard's own `-44`
+example, which happens to have bits 9–12 physically **set**: at `/R` 2
+all four must report `None` — not `Some(true)`, which invents a
+permission, and not `Some(false)`, which invents a restriction; at
+`/R` 3 the same four report `Some(true)`. One stored value, two honest
+readings, decided entirely by the revision. Filed below as a new,
+generalizable `D:\dev\rag\rust\` finding — this is Rust API-design
+reasoning (model a revision-gated field as `Option<T>`, never a
+default-valued `bool`), not PDF-domain-specific, so it does not belong
+in `personal_rag/pdf`.
+
+**Read-only, and not a checkbox; absent for an unencrypted document.**
+Every value is plain text ("Allowed"/"Not allowed") — a checkbox, even
+disabled, would imply this panel could write a setting, and pdfce has
+no path to write a `/P` value at all. Text also avoids colour-or-glyph-
+alone, which is not accessible. The whole section is absent for an
+unencrypted document; "no permissions declared" would suggest a
+mechanism was consulted when none exists.
+
+**`PermissionBit` lives in `pdfce-core`, and enumerates all eight.** Not
+GUI-local: the CLI will eventually want the identical list, and two
+hand-kept eight-bit lists would drift apart. `PermissionBit::all()`
+lets a front end show a **complete** picture — a partial list is worse
+than none, because an operator seeing four rows cannot tell whether the
+other four are allowed, absent, or simply unimplemented.
+
+**Documentation commits, noted but not this librarian's content to
+file.** `f5f5b06`/`7fa488f`/`ea1a5ec` are `docs/NEXT_SESSION.md` edits,
+engineer-owned per this project's standing instruction — their content
+is not filed here. Two of them carry findings worth keeping past this
+session, written up below as new `C:\personal_rag\claude_code\` lessons
+at the dispatching engineer's own suggestion: a `\b` escape silently
+eating a character out of a Windows build path inside a non-raw Python
+string (`7fa488f`), and a failed `splice.py` call followed by an
+unguarded `git commit` that published the pre-fix state under a message
+describing the fix (`ea1a5ec`).
+
+**`D:\dev\rag\rust\`: one new finding.**
+`a_revision_gated_reserved_field_needs_option_not_a_default_bool.md` —
+a field whose *meaning*, not just its default value, was introduced
+only from some later spec revision needs an `Option<T>`-returning
+accessor, never a `bool` with an implicit default; a `bool` cannot
+distinguish "the author declined this" from "this revision has no such
+concept," and silently fabricates the latter as the former. `index.md`
+updated. **`C:\personal_rag\claude_code\`: two new lessons.**
+`lesson_20260811_b_escape_eats_a_character_out_of_a_non_raw_windows_build_path.md`
+(the `\b`-in-a-Windows-path finding, generalizing past this project to
+any C-family non-raw string literal) and
+`lesson_20260811_unguarded_commit_after_a_failed_edit_step_publishes_the_unfixed_state_under_the_fix_message.md`
+(chain fix-then-commit with `&&`, never a bare newline, whenever the
+commit message asserts a prior step succeeded). Both subject `index.md`
+and the master `C:\personal_rag\index.md` updated. **No
+`C:\personal_rag\pdf\` finding this filing** — nothing here is
+producer-empirical PDF behavior; the permission-bit work is entirely
+Rust API design plus GUI disclosure.
+
+**Ledger for this filing.** **No new Pass ID** — same `Pass 5` ID;
+increment 1 (RC4 read, every shell, plus the permission-bit disclosure)
+is now **COMPLETE**; the amendment chain at the *Next up* section's
+"Carried Pass-5 reconciliation" pointer is extended below to record it.
+Pass-family ceiling **unchanged at 62.0**, next free **63**. `docs/
+FEATURES.md`: **one row touched** — the Encryption row's sentence
+rewritten to state the permission bits are now shown read-only in the
+GUI's Security section, replacing the "not shown anywhere yet" clause;
+`core`/`cli`/`gui` cells were already all `[x]` (they describe RC4
+read reaching every shell, not the permission-bit sub-feature
+specifically) and stay unchanged. `docs/ARCHITECTURE.md`: **no
+change** — nothing here redraws a crate boundary, picks a library, or
+redefines an invariant; `PermissionBit` living in `pdfce-core` rather
+than the GUI is an ordinary API-placement call under the already-decided
+core/GUI split, not a new decision. **No new §12 decision-log entry.**
+Standing rules: **no new mint, none amended** — the reserved-field
+finding above is Rust-ecosystem methodology, not a project-internal
+standing rule. Ceiling stays **R186**, next free **R187**.
+Decision-record ceiling **unchanged at 038**, next free **039**.
+Operator-question ceiling **unchanged at `(bi)`, next free `(bj)`**.
+`D:\dev\rag\rust\`: **one new file** (above), `index.md` updated.
+`C:\personal_rag\claude_code\`: **two new files** (above), subject
+`index.md` and master `index.md` both updated. **Test/gate figures
+relayed, not independently re-run** (no shell this dispatch): **3,311
+workspace tests passing** at `17f4d82` (baseline **3,309** at the
+ninety-eighth filing's `94cf228`; **delta +2**); `cargo fmt --check`,
+`cargo clippy --workspace --all-targets --all-features`,
+`check-ui-strings.sh`, `check-theme-colors.sh` all reported clean.
+**Packaging smoke test**: a portable build cut at
+`D:\builds\pdfce-20260811-0846-f5f5b06` — relayed, not independently
+re-run. This is the **ninety-ninth** `SESSION_LOG.md`/`ROADMAP.md`
+joint filing (the ninety-eighth confirmed present by direct read before
+this entry was written).
+
+---
+
 ### ★★ `94cf228` — the GUI can open a password-protected PDF: `Pass 5`'s shell-coverage gap named at the top of *Shipped* one filing ago is CLOSED, one `Status` variant carries the whole disclosure, Ctrl+S is guarded before the file dialog rather than after it, and a stale wrapper string is found by reading it, not by a test — 2026-08-11, branch `post-v0.2.0` (ninety-eighth filing)
 
 **Sourcing.** No shell tool this dispatch (hard rule 8) — `git log`/`git
@@ -34635,6 +34804,21 @@ password prompt (no surface at all) and the AES-128/256 decrypt path
 (needs the `Stream` schema change increment 1's RC4-only scope avoided).
 Full build record: this file's own `0a79da4`+`e4b6533`+`2db435c`
 *Shipped* entry, top of *Shipped*.
+
+**★★ FURTHER AMENDED 2026-08-11 (ninety-eighth + ninety-ninth filings,
+`94cf228` + `17f4d82`) — increment 1 is now COMPLETE.** `94cf228`
+(ninety-eighth filing) shipped the GUI password prompt the paragraph
+above named as the last open surface gap — the GUI can now open any
+RC4-encrypted document, prompt included, at parity with the CLI.
+`17f4d82` (ninety-ninth filing) shipped the declared-permission
+disclosure (a read-only "Security" section in Properties, all eight
+Table 22 bits, captioned as author-declared and unenforced per N4/
+§7.6.3.1) — the one remaining piece named at increment 1's own
+activation. **Nothing named as "still open" by either the ninety-sixth
+or ninety-seventh amendment above remains open for increment 1.** What
+carries forward to a second, entirely unstarted increment: AES-128/256
+decrypt, `/R 6`, and any encrypted-save path. Full build records: this
+file's own `94cf228` and `17f4d82` *Shipped* entries, top of *Shipped*.
 
 ## Next up
 

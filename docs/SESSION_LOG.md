@@ -34386,3 +34386,127 @@ asserted anywhere in this filing** — no shell this dispatch (hard rule
 the **ninety-eighth** `SESSION_LOG.md`/`ROADMAP.md` joint filing (the
 ninety-seventh confirmed present by direct read before this entry was
 appended).
+
+## 2026-08-11 (ninety-ninth filing) — `17f4d82`: the permission bits are displayed, captioned as declared-not-enforced; `Pass 5` increment 1 is now COMPLETE across core, CLI and GUI
+
+**Sourcing.** No shell tool this dispatch (hard rule 8). The dispatching
+engineer supplied the full commit message verbatim via a scratchpad file
+(`msg73.txt`, read directly). Independently confirmed by direct
+filesystem read (no shell needed): `PermissionBit` (eight variants,
+`all()`/`position()`/`applies_at()`) and `Permissions::granted(bit) ->
+Option<bool>` in `crates/pdfce-core/src/crypto/standard.rs`; the
+`-44`-example regression test asserting `None` at `/R` 2 and
+`Some(true)` at `/R` 3 for the four `/R`-3-only bits; the GUI's
+`security_section_heading`/`security_section_caption`/`permission_label`/
+`permission_value`/`permission_not_applicable` strings in `ui_text.rs`,
+with the caption's doc comment marking it a correctness claim tied to
+§7.6.3.1; and `main.rs`'s `security_section`, which early-returns for an
+unencrypted document and otherwise renders every bit via
+`PermissionBit::all()`, matching `Option<bool>`'s two arms to a
+plain-text row and a reserved-note respectively — all exactly as
+described. `docs/NEXT_SESSION.md` not touched this filing
+(engineer-owned); three docs-only commits (`f5f5b06`, `7fa488f`,
+`ea1a5ec`) follow `17f4d82` in the reflog and are named in this entry so
+their hashes are on record, though the commit-filing gate skips
+docs-only commits by design.
+
+**Shipped:**
+- `17f4d82` — `PermissionBit` (Table 22's eight permissions, in core
+  rather than the GUI so the CLI can later share the same list without
+  two hand-kept lists drifting) and `Permissions::granted(bit) ->
+  Option<bool>`, where `None` means "this revision has no such concept,"
+  never "not allowed." A read-only "Security" section in GUI Properties,
+  present only for an encrypted document, pinned with a non-dismissible
+  caption stating both that the values are the author's plaintext,
+  unenforced declaration and that pdfce itself does not check or
+  restrict anything based on them. Plain text ("Allowed"/"Not allowed"),
+  never a checkbox — a checkbox would imply a setting this panel could
+  write, and pdfce has no path to write `/P` at all. **This closes
+  `Pass 5` increment 1**: RC4 read support now reaches every shell
+  (core, CLI, GUI) with its permission declarations fully disclosed.
+
+**Decisions made this session:** none — this is an API-surface addition
+(`PermissionBit`/`granted`) plus a GUI disclosure panel on top of
+`Pass 5`'s already-decided core crypto choice (`14a7400`). No crate
+boundary redrawn, no library picked, no invariant redefined; no new
+`ARCHITECTURE.md` §12 entry.
+
+**Findings + decisions:**
+- **A reserved field has no value, and reporting a default for it
+  fabricates an author's intent.** Bits 9–12 of `/P` are reserved below
+  `/R` 3; `granted` returns `Option<bool>` specifically so "the author
+  declined this" and "this revision has no such concept" stay
+  distinguishable. Proven against the standard's own `-44` worked
+  example, which has those bits physically SET — a naive `bool` accessor
+  would report them "allowed" at `/R` 2 purely as a storage artifact,
+  never an author declaration. Filed as a new
+  `D:\dev\rag\rust\a_revision_gated_reserved_field_needs_option_not_a_default_bool.md`
+  — this is Rust API-design reasoning, not PDF-domain-specific, so it
+  belongs in the ecosystem RAG rather than `personal_rag/pdf`.
+- **The caption is the feature, and it is a correctness claim.** A
+  permission list headed "Security" with no further context would read
+  as restrictions in force — pdfce claiming an enforcement ISO 32000-1
+  §7.6.3.1 states outright does not exist. The caption is pinned, shown
+  every time, and its doc comment marks it as text to be changed only
+  against the clause it restates.
+- **Two documentation-commit findings, escalated at the dispatching
+  engineer's own suggestion.** A `\b` escape inside a non-raw Python
+  string literal silently ate a character out of a Windows build path
+  (`"D:\builds"` → `D:` + backspace + `uilds`), invisible because a
+  backspace renders as nothing — found by grepping for the exact
+  expected substring, not by reading the file. And a `splice.py` call
+  that correctly refused an ambiguous anchor was followed by an
+  unguarded `git commit` (separate command, not `&&`-chained), which ran
+  anyway and published the pre-fix tree under a message describing the
+  fix. Both filed as new `C:\personal_rag\claude_code\` lessons (see
+  Ledger).
+
+**Still in flight:**
+- `Pass 5`'s second increment — AES-128/256 decrypt, `/R 6`, and any
+  encrypted-save path — entirely unstarted, unchanged by this commit.
+- Carried-forward items from prior filings (stale `(bh)`/`(bi)` ceiling
+  footers across the ninety-second through ninety-fifth filings; the
+  eight-item never-encrypted list still owed to `pdfce-spec-librarian`)
+  — still open, untouched this dispatch.
+
+**For next session:** `Pass 5` increment 1 is done end to end. The next
+named piece of encryption work is increment 2 (AES/`/R 6`/encrypted
+save), not yet scoped into slices in this filing. A shell grant would
+let this librarian independently verify the git-history claims (test
+counts, `fmt`/`clippy` results, the portable-build hash, and the
+backup/remote state hard rule 8 requires be checked rather than
+inferred) it could only relay this filing.
+
+**Ledger for this filing.** **No new Pass ID** — same `Pass 5` ID;
+increment 1 is now marked COMPLETE (the *Next up* section's "Carried
+Pass-5 reconciliation" pointer amended accordingly). Pass-family ceiling
+unchanged at **62.0**, next free **63**. `docs/FEATURES.md`: **one row
+touched** — the Encryption row's sentence rewritten to state the
+permission bits are now shown read-only in the GUI, `core`/`cli`/`gui`
+cells unchanged (already `[x]`, describing RC4-read-reaches-every-shell,
+not the permission sub-feature specifically). `docs/ARCHITECTURE.md`:
+**no change** — no crate-boundary/library/invariant decision this
+filing; **no new §12 entry**. Standing rules: **no new mint, none
+amended**. Ceiling stays **R186**, next free **R187**. Decision-record
+ceiling **unchanged at 038**, next free **039**. Operator-question
+ceiling **unchanged at `(bi)`, next free `(bj)`**. `D:\dev\rag\rust\`:
+**one new file**
+(`a_revision_gated_reserved_field_needs_option_not_a_default_bool.md`),
+`index.md` updated. `C:\personal_rag\claude_code\`: **two new files**
+(`lesson_20260811_b_escape_eats_a_character_out_of_a_non_raw_windows_build_path.md`,
+`lesson_20260811_unguarded_commit_after_a_failed_edit_step_publishes_the_unfixed_state_under_the_fix_message.md`),
+subject `index.md` and master `C:\personal_rag\index.md` both updated.
+**No `C:\personal_rag\pdf\` finding this filing.** Test/gate figures:
+**3,311 workspace tests measured passing at `17f4d82`** — relayed, not
+independently re-run (no shell this dispatch); baseline **3,309** at the
+prior filing's `94cf228`, **delta +2**. `cargo fmt --check`, `cargo
+clippy --workspace --all-targets --all-features`, `check-ui-strings.sh`,
+`check-theme-colors.sh` all reported clean — relayed. **Packaging smoke
+test**: portable build cut at `D:\builds\pdfce-20260811-0846-f5f5b06` —
+relayed, not independently re-run. **Backup/git working-tree/remote
+state not independently asserted anywhere in this filing** — no shell
+this dispatch (hard rule 8); the engineer should check
+`D:\Dev\pdfce-backups\` and `git log`/`git status`/`git remote -v`
+directly, on branch `post-v0.2.0`. This is the **ninety-ninth**
+`SESSION_LOG.md`/`ROADMAP.md` joint filing (the ninety-eighth confirmed
+present by direct read before this entry was appended).
