@@ -197,6 +197,54 @@ jobs:
             fi
           done
           exit $fail
+      # Decision 039 EXTENDED — `sha2`, added for AES-256 at /R 5 (encryption
+      # increment 3). Not a new decision: `sha2` has the SAME SHAPE as `aes`
+      # and is covered by 039's recorded exception rather than needing its own.
+      #
+      #   - Its backends are selected on a **cfg** too --
+      #     `sha2_backend` / `sha2_256_backend` / `sha2_512_backend`, declared
+      #     in its own `[lints.rust.unexpected_cfgs] check-cfg` -- so exactly
+      #     as with `aes`, a dependency line cannot force the soft backend and
+      #     a `.cargo/config.toml` that did would not be inherited by anyone
+      #     consuming pdfce-core as a library. Five `unsafe` sites, all in
+      #     `sha256.rs`'s backend dispatch.
+      #   - It does NOT enable `hazmat` or `zeroize` on `aes`, so 039's
+      #     existing boundary is untouched by its arrival. (`digest`'s
+      #     `block-api` feature IS enabled -- by sha2 itself, unconditionally,
+      #     as its own dependency. That is not a feature pdfce selects and not
+      #     one it can turn off.)
+      #
+      # THE EXCEPTION IS BOUNDED TO EXACTLY THAT, and this asserts the three
+      # things still under our control. `sha2`'s default feature set is
+      # ["alloc", "oid"]; pdfce takes it with `default-features = false`, so
+      # all three below are OFF and must stay off:
+      #
+      #   - `alloc` / `oid` are not needed: pdfce calls `Sha256::new`,
+      #     `update` and `finalize` and nothing else. `oid` in particular
+      #     drags in const-oid for an ASN.1 identifier no PDF path uses.
+      #   - `zeroize` stays OFF for the SAME reason it does on `aes`, and the
+      #     reason is stronger here rather than weaker: `FileKey` holds the
+      #     file encryption key in an ordinary `Vec<u8>`, and at /R 5 the
+      #     SHA-256 output IS a key-unwrapping key. Zeroizing the hash state
+      #     while the key it produced sits in a plain Vec would be theatre.
+      #     Revisit at `FileKey`, in the same change, or not at all.
+      - name: decision 039 (extended) — assert `sha2` carries no extra features
+        run: |
+          set -e
+          fail=0
+          for t in "" "--target x86_64-pc-windows-msvc" "--target aarch64-apple-darwin" "--target wasm32-unknown-unknown"; do
+            if cargo tree -p pdfce-core -e features $t 2>/dev/null \
+                 | grep -E 'sha2 feature "(alloc|oid|zeroize)"'; then
+              # Same no-backticks rule as the step above, and for the same
+              # reason: this string is double-quoted, so a backtick would run
+              # the enclosed word as a command and silently delete it from the
+              # message. The comment is repeated rather than cross-referenced
+              # because the mistake is made while typing THIS line.
+              echo "::error::pdfce-core $t enables an extra feature on the sha2 crate. Decision 039 (extended to sha2) accepted ONLY the cfg-selected intrinsic backend; alloc/oid/zeroize are separate widenings and need a new decision record."
+              fail=1
+            fi
+          done
+          exit $fail
 
   ui-strings:
     name: verify pdfce-gui strings live in ui_text.rs

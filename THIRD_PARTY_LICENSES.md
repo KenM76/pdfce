@@ -61,7 +61,7 @@ alongside the other licenses harvested from `Cargo.lock`.
 
 ## License overview
 
-- **Apache License 2.0** — used by 142 crate(s)
+- **Apache License 2.0** — used by 145 crate(s)
 - **Unicode License v3** — used by 19 crate(s)
 - **MIT License** — used by 12 crate(s)
 - **BSD 3-Clause &quot;New&quot; or &quot;Revised&quot; License** — used by 2 crate(s)
@@ -3111,13 +3111,16 @@ limitations under the License.
 
 Used by:
 - [aes 0.9.2](https://github.com/RustCrypto/block-ciphers)
+- [block-buffer 0.12.1](https://github.com/RustCrypto/utils)
 - [cbc 0.2.1](https://github.com/RustCrypto/block-modes)
 - [cipher 0.5.2](https://github.com/RustCrypto/traits)
 - [cpubits 0.1.1](https://github.com/RustCrypto/utils)
 - [cpufeatures 0.3.0](https://github.com/RustCrypto/utils)
 - [crypto-common 0.2.2](https://github.com/RustCrypto/traits)
+- [digest 0.11.3](https://github.com/RustCrypto/traits)
 - [hybrid-array 0.4.14](https://github.com/RustCrypto/hybrid-array)
 - [inout 0.2.2](https://github.com/RustCrypto/utils)
+- [sha2 0.11.0](https://github.com/RustCrypto/hashes)
 
 ```
                               Apache License
