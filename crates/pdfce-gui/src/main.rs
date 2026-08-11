@@ -12463,6 +12463,28 @@ impl eframe::App for PdfceApp {
                     )
                 });
             }
+            diag::Step::PrintTab(tab) => {
+                // Sets the dialog's own field, the same one the tab strip
+                // writes — R184: a harness route that bypasses the
+                // operator's is not a test of the operator's. There is no
+                // Action for this because tab selection never goes through
+                // `apply` (the print dialog mutates `PendingPrint`
+                // directly), so mirroring the field IS the operator's path.
+                let tab = match tab {
+                    diag::ScriptPrintTab::PagesLayout => print_flow::PrintTab::PagesLayout,
+                    diag::ScriptPrintTab::CopiesFinishing => print_flow::PrintTab::CopiesFinishing,
+                    diag::ScriptPrintTab::CommentsResolution => {
+                        print_flow::PrintTab::CommentsResolution
+                    }
+                };
+                let reached = if let Some(pending) = self.pending_print.as_mut() {
+                    pending.active_tab = tab;
+                    true
+                } else {
+                    false
+                };
+                diag::trace(|| format!("print-tab set={tab:?} reached={}", u8::from(reached)));
+            }
             diag::Step::LayerToggle(ref name) => {
                 // Goes through `set_layer_visible`, the same helper the
                 // checkbox calls — including its radio-group handling —
@@ -26640,5 +26662,47 @@ mod tests {
             matches!(&app.status, Status::Open(d) if d.add_text.is_some() && d.text_edit.is_none()),
             "only the switched-off tool's state went"
         );
+    }
+
+    // -----------------------------------------------------------------
+    // Pass 62.0 — the print dialog's one-question gate, its open guards,
+    // and its tab lifetime.
+    // -----------------------------------------------------------------
+
+    /// ★ `Ctrl+P` with no document open must do nothing at all.
+    ///
+    /// The ribbon's Print button is wrapped in `add_enabled_ui(has_doc, …)`
+    /// and a chord is not. Without the guard in `open_print_dialog`, the
+    /// chord enumerates the spooler — a call that blocks on a network
+    /// printer — to build a window `print_dialog` tears down again on its
+    /// very next frame.
+    #[test]
+    fn the_print_dialog_does_not_open_without_a_document() {
+        let mut app = PdfceApp::default();
+        assert!(matches!(app.status, Status::Idle), "nothing open");
+        app.apply_for_test(Action::OpenPrintDialog);
+        assert!(
+            app.pending_print.is_none(),
+            "no document means no print dialog, whichever surface asked for it"
+        );
+    }
+
+    /// The preview opens fitted and centred.
+    ///
+    /// `1.0` means fit and `ZERO` means centred, so the Fit button is a
+    /// two-field reset rather than a recomputation — and a zoom chosen while
+    /// inspecting one sheet never follows the operator to the next.
+    #[test]
+    fn the_preview_opens_fitted_and_centred() {
+        let mut app = PdfceApp::default();
+        app.open_path(fixture("pageops/four-pages.pdf"));
+        app.open_print_dialog();
+        let pending = app.pending_print.as_ref().expect("the dialog is up");
+        assert!(
+            (pending.preview_zoom - 1.0).abs() < f32::EPSILON,
+            "1.0 is fit; got {}",
+            pending.preview_zoom
+        );
+        assert_eq!(pending.preview_pan, egui::Vec2::ZERO, "and centred");
     }
 }

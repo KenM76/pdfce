@@ -75,6 +75,24 @@ pub enum ScriptTool {
     PlaceField,
 }
 
+/// Which print-dialog tab a [`Step::PrintTab`] selects.
+///
+/// A diag-local mirror of `print_flow::PrintTab` rather than a re-export,
+/// matching [`ScriptTool`]'s relationship to the real tool enum. The two
+/// have different jobs: the UI enum may gain a tab that has no script
+/// name, or gain a variant a script should not be able to reach, and a
+/// shared type would make either of those a change to the harness's own
+/// grammar. `main.rs` owns the one mapping between them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ScriptPrintTab {
+    /// Range, subset, sizing, orientation.
+    PagesLayout,
+    /// Copies, collation, reverse, duplex, tray.
+    CopiesFinishing,
+    /// Annotation scope and resolution.
+    CommentsResolution,
+}
+
 /// One step of a scripted input run — see [`Script`].
 // `Copy` was dropped in Pass 34.0 when `Text(String)` landed. Nothing needed
 // it: `Script::advance` clones one step per frame, and that path is off unless
@@ -180,6 +198,23 @@ pub enum Step {
     /// panel shows and what a failing run should quote back.
     /// Open the print dialog (never spools).
     PrintDialog,
+    /// Switch the open print dialog to one of its three tabs
+    /// (`print-tab:pages|copies|comments`).
+    ///
+    /// # ★ Without this, two thirds of the dialog is unreachable
+    ///
+    /// `D:\dev\rag\egui\only_the_active_tab_is_emitted_so_scripted_harnesses_cannot_reach_other_tabs.md`
+    /// is exactly this situation, recorded by this project after it cost
+    /// two days on the ribbon: in immediate mode a control on an inactive
+    /// tab is not hidden, it **does not exist** — no `Response`, no
+    /// `Rect`, no trace, and a click injected at a remembered coordinate
+    /// lands on whatever the ACTIVE tab is drawing there instead, which
+    /// succeeds while doing something unrelated.
+    ///
+    /// The finding's own prescribed fix is a tab STEP rather than an
+    /// emission change, and this is it. It ships in the same Pass as the
+    /// tabs rather than after the harness first fails to reach them.
+    PrintTab(ScriptPrintTab),
     LayerToggle(String),
     Search {
         /// The query text, as if typed.
@@ -527,6 +562,13 @@ fn parse_step(s: &str) -> Option<Step> {
         // spools: a harness that can start a print job is a harness that
         // will, on somebody's machine, by accident.
         "panel" if rest.trim() == "print" => Some(Step::PrintDialog),
+        // `print-tab:pages|copies|comments`. See [`Step::PrintTab`].
+        "print-tab" => match rest.trim() {
+            "pages" => Some(Step::PrintTab(ScriptPrintTab::PagesLayout)),
+            "copies" => Some(Step::PrintTab(ScriptPrintTab::CopiesFinishing)),
+            "comments" => Some(Step::PrintTab(ScriptPrintTab::CommentsResolution)),
+            _ => None,
+        },
         "layer" => Some(Step::LayerToggle(rest.trim().to_owned())),
         "search" => {
             // `whole:` / `wild:` prefixes may be combined in either

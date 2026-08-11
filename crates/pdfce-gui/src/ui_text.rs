@@ -2976,9 +2976,103 @@ pub fn print_scale_custom() -> &'static str {
     "Custom:"
 }
 
-/// The collapsed extra-options header.
-pub fn print_more_options() -> &'static str {
-    "More options"
+/// Print-dialog tab: everything that decides WHICH pages and how each
+/// one lands on the sheet.
+///
+/// Named for the two questions it answers rather than for a mechanism,
+/// so the operator can predict what is behind it without opening it.
+pub fn print_tab_pages_layout() -> &'static str {
+    "Pages & Layout"
+}
+
+/// Tooltip for [`print_tab_pages_layout`].
+pub fn print_tab_pages_layout_tooltip() -> &'static str {
+    "Which pages print, how each one is sized onto the sheet, and which way up the sheet goes"
+}
+
+/// Print-dialog tab: how many, in what order, out of which side.
+pub fn print_tab_copies_finishing() -> &'static str {
+    "Copies & Finishing"
+}
+
+/// Tooltip for [`print_tab_copies_finishing`].
+///
+/// Deliberately hedged on duplex and tray selection: both controls only
+/// exist when the driver reports the capability (R83), so promising them
+/// unconditionally would describe a tab the operator may not be seeing.
+pub fn print_tab_copies_finishing_tooltip() -> &'static str {
+    "How many copies, in what order, and any two-sided or tray options this printer offers"
+}
+
+/// Print-dialog tab: what gets painted, and at what resolution.
+pub fn print_tab_comments_resolution() -> &'static str {
+    "Comments & Resolution"
+}
+
+/// Tooltip for [`print_tab_comments_resolution`].
+pub fn print_tab_comments_resolution_tooltip() -> &'static str {
+    "Whether review comments and stamps print, and the resolution pdfce renders at"
+}
+
+/// The preview's reset-to-fit button.
+pub fn print_preview_zoom_fit() -> &'static str {
+    "Fit"
+}
+
+/// Tooltip for [`print_preview_zoom_fit`].
+pub fn print_preview_zoom_fit_tooltip() -> &'static str {
+    "Show the whole sheet, and re-centre it"
+}
+
+/// The preview's actual-size button.
+///
+/// Reads `100%` because that is what the number beside it will say once
+/// the button is pressed — the two are the same scale expressed twice,
+/// not two different ideas.
+pub fn print_preview_zoom_actual() -> &'static str {
+    "100%"
+}
+
+/// Tooltip for [`print_preview_zoom_actual`].
+pub fn print_preview_zoom_actual_tooltip() -> &'static str {
+    "Show the sheet at its true size on this display"
+}
+
+/// Tooltip for the preview's zoom-in button.
+///
+/// Names the wheel gesture as well as the button. The button is the
+/// discoverable affordance and the gesture is the fast one; an operator
+/// who only ever finds the button is not blocked, and one who reads the
+/// tooltip learns the gesture without a separate help surface.
+pub fn print_preview_zoom_in_tooltip() -> &'static str {
+    "Zoom in on the preview (or hold Ctrl and turn the wheel over it)"
+}
+
+/// Tooltip for the preview's zoom-out button.
+pub fn print_preview_zoom_out_tooltip() -> &'static str {
+    "Zoom out of the preview (or hold Ctrl and turn the wheel over it)"
+}
+
+/// The preview's current scale, as a percentage of ACTUAL size.
+///
+/// A percentage of actual size rather than a percentage of the fit,
+/// because "fit" is a moving target — it changes with every window
+/// resize — and a number whose meaning changes when the operator drags a
+/// corner is not a number they can use. At 100% a 25 mm detail on the
+/// preview is 25 mm on the screen.
+pub fn print_preview_zoom_percent(percent: u32) -> String {
+    format!("{percent}% of actual size")
+}
+
+/// The hint under the preview, telling the operator it is draggable.
+///
+/// Present because a drag-to-pan affordance is invisible: nothing about
+/// a static picture says it can be moved, and the alternative (a scroll
+/// bar) was rejected because the preview deliberately owns no scroll
+/// area of its own — that is what keeps a plain wheel over it
+/// unambiguously the dialog's scroll rather than a nested consumer's.
+pub fn print_preview_pan_hint() -> &'static str {
+    "Drag to move the preview"
 }
 
 /// The standing note that pdfce prints by rasterising.

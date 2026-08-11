@@ -178,6 +178,40 @@ fn rasterize(
     Ok((texture, rendered.diagnostics))
 }
 
+/// Upload a pixmap as a texture, under a caller-chosen name.
+///
+/// # Why this is here rather than at its one call site
+///
+/// The print preview needs a page bitmap on screen, and the tempting
+/// version is four lines of `ColorImage::from_…` inline in
+/// `print_flow.rs`. This module's header explains what those four lines
+/// get wrong: `tiny-skia` stores pixels PREMULTIPLIED, both egui
+/// constructors accept the bytes without complaint, and the wrong one
+/// silently darkens every antialiased glyph edge. That is not a mistake a
+/// second call site should be given the opportunity to make — the whole
+/// reason [`pixmap_to_color_image`] exists is that the convention is
+/// enforced by there being one function, not by review.
+///
+/// `id` must be unique per LIVE texture (egui reuses the allocation when
+/// the same name is loaded again), which is exactly the property that
+/// makes it right for a single cached preview: re-rendering the preview
+/// replaces the previous upload instead of leaking a new one per page
+/// step.
+pub fn texture_from_pixmap(
+    ctx: &egui::Context,
+    id: &str,
+    pixmap: &tiny_skia::Pixmap,
+) -> egui::TextureHandle {
+    // LINEAR, matching both page paths above: a bitmap drawn at a size
+    // other than its native one should read as soft rather than blocky,
+    // and the preview draws at whatever the operator's zoom implies.
+    ctx.load_texture(
+        id,
+        pixmap_to_color_image(pixmap),
+        egui::TextureOptions::LINEAR,
+    )
+}
+
 /// Upload pixels a background worker produced, as a [`PageTexture`].
 ///
 /// # Why this exists separately from the synchronous `rasterize`
