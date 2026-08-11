@@ -35250,6 +35250,97 @@ confirmed present by direct read before this entry was appended).
 
 ## 2026-08-11 (hundred-and-sixth filing) — `0841a6c`: `verify-release.py`'s exact-equality checks replaced with a three-state AT/ADVANCED/CONTAINS read so a correct release stops failing five minutes later; `9649995` fixes two false claims on the public README; a prior-filing flag checked and found to need no correction
 
+## 2026-08-11 (hundred-and-seventh filing) — `f2ac2af`: pdfce compiles on something other than Windows; `pdfce-print` un-gated + two missing non-Windows stubs added, closing a build break that had made the crate un-compilable for wasm32 and every non-Windows target; `Pass 66.0` ships; and CI has been red on every push back past `v0.1.0`, undetected — `R176`'s SECOND instance
+
+**Sourcing.** No shell tool this dispatch (hard rule 8). The diff shape,
+the four cross-target `cargo check` runs, the host test/clippy/fmt
+results, and the GitHub Actions run-history read are relayed from the
+dispatching engineer's own account (stated as run directly, not merely
+compiled and assumed), not independently re-verified against `git` or
+GitHub by this librarian.
+
+**Shipped:**
+- `f2ac2af` — `pdfce-print`'s `PrintError` was `#[cfg(windows)]` while
+  its own `#[cfg(not(windows))]` stubs (`device_features`, `spool`)
+  returned `Result<_, PrintError>` — a type that does not exist on any
+  non-Windows target. `Printer`, `PrinterCaps`, and
+  `DeviceGeometry::from_caps` were gated the same way despite holding
+  only primitive/`String` fields; `list_printers`/`printer_caps` never
+  got the `#[cfg(not(windows))]` stubs their two siblings already had.
+  Net: `pdfce-print` compiled for NO non-Windows target, including
+  `wasm32-unknown-unknown`. Fixed by un-gating the four plain-data items
+  and adding the two missing stubs, in the exact shape of the two that
+  already existed. `list_printers`'s stub returns `Err(Unsupported)`,
+  not `Ok(vec![])`, deliberately — collapsing "can't enumerate" into
+  "no printers found" would send a caller hunting for hardware that was
+  never the problem. Also gated `PrintScaleArg::name` (`pdfce-cli`)
+  `#[cfg(windows)]` — a dead-code warning invisible for as long as the
+  crate failed to compile there at all.
+
+**Decisions made this session:**
+- **Decision 043** (`ARCHITECTURE.md` §12) — a dependency-graph check
+  (`cargo tree`) proves absence of a class of dependency, never that the
+  crate's source type-checks for the target that absence was assumed to
+  unlock; these are different properties, and only a cross-target
+  `cargo check` verifies the second. Amends/restores the eighty-fifth-
+  filing `pdfce-print` boundary decision and decision 041, both of which
+  this defect had silently violated. §3's `pdfce-print` block gains a
+  correction sentence in the same filing.
+
+**Findings + decisions:**
+- **★ The sharpest instance is from this project's own most recent
+  Pass.** `DeviceGeometry::from_caps` (`Pass 64.0`, decision 041) was
+  built specifically so the crate's test-worthy planning arithmetic
+  would stay reachable by Linux/macOS CI — its own doc comment says so —
+  and shipped `#[cfg(windows)]` anyway. A comment asserting a property
+  the code did not have, same shape as the `recovery_note` and
+  `pending_question_cancel` findings already on record.
+- **★ THE HEADLINE, separate from the fix.** `gh run list`: CI has
+  failed on every push going back past `v0.1.0` — both prior releases
+  shipped red. Found only because a CI job added earlier the same day
+  prompted checking whether it had actually run. Nothing this project
+  owns catches "CI is red" from the inside; every local gate passed the
+  whole time. Filed as `R176`'s SECOND instance (Standing rules,
+  `ROADMAP.md`) — wider window than the founding six-run case, same
+  shape: a correct signal, unconsulted.
+- Cross-target verification, all four locally run (targets already
+  installed): `aarch64-apple-darwin` ok, `wasm32-unknown-unknown`
+  (core+render) ok, `x86_64-unknown-linux-gnu` (all-features) ok, host
+  Windows 3,353/0 passing, clippy/fmt clean. Result on CI: 9 of 10 jobs
+  green, including `cargo test (ubuntu-latest)`, `clippy -D warnings`,
+  and the cross-target compile check — all three previously red. The
+  tenth, `check-commits-filed.py`, is closed by this filing.
+- Scope deliberately not taken, flagged by the dispatch: `pdfce-gui` now
+  type-checks on Linux/macOS; this is not a claim it runs there, or that
+  pdfce targets Linux as a product — that stays the operator's call.
+
+**Still in flight:**
+- Nothing new opened this filing. `check-commits-filed.py` should now
+  name no unfiled commit — worth confirming next session with a shell.
+
+**For next session:** CI run history is now worth checking periodically
+on its own, not only when a new job is added — `R176`'s second instance
+found two releases' worth of red CI that no local gate could ever have
+surfaced.
+
+**Ledger for this filing.** **New Pass ID minted: `Pass 66.0`.**
+`docs/FEATURES.md`: not touched — no capability gained on any platform.
+`docs/ARCHITECTURE.md`: **one new §12 entry, decision 043**, plus a §3
+body correction on `pdfce-print`. Standing rules: no new mint — `R176`
+cited, SECOND instance, amendment appended. Ceiling stays **R186**, next
+free **R187**. Decision-record ceiling moves **042 → 043**, next free
+**044**. Operator-question ceiling unchanged at **(bj)**, next free
+**(bk)**. `D:\dev\rag\rust\`: **one new file**,
+`cfg_windows_on_a_plain_data_type_referenced_by_a_non_windows_stub_breaks_every_non_windows_build.md`
+(index bullet added same filing). `C:\personal_rag\pdf\`: not touched.
+**Backup/git working-tree/remote state not independently asserted
+anywhere in this filing** — no shell this dispatch (hard rule 8); the
+engineer should check `D:\Dev\pdfce-backups\` and `git
+log`/`git status`/`git remote -v` directly. This is the
+**hundred-and-seventh** `SESSION_LOG.md`/`ROADMAP.md` joint filing (the
+hundred-and-sixth, immediately above, confirmed present by direct read
+before this entry was appended).
+
 **Sourcing.** No shell tool this dispatch (hard rule 8). Both commits'
 messages, the failure output, and the post-fix verification are
 relayed verbatim from the dispatching engineer's own account, not

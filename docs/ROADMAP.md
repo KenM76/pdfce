@@ -81,6 +81,158 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★ `f2ac2af` — pdfce compiles on something other than Windows: `pdfce-print` un-gates four plain-data items and gains two missing non-Windows stubs, closing a build break that had made the crate un-compilable for EVERY non-Windows target, including `wasm32`; `Pass 66.0` ships — and CI has been red on every push back past `v0.1.0`, undetected because nobody was watching it (`R176`, SECOND instance) — 2026-08-11, branch `post-v0.2.0` (hundred-and-seventh filing)
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — `git show
+f2ac2af` not run. Everything below — the diff shape, the four cross-target
+verification runs, the 3,353/0 host test result, the `cargo tree` checks,
+and the GitHub Actions run-history read — is relayed from the dispatching
+engineer's own account, who states these were run directly (not merely
+compiled and assumed), not independently re-verified against `git` or
+GitHub by this librarian.
+
+**★ THE HEADLINE, separate from the fix itself.** `gh run list` shows
+failure on every push going back past `v0.1.0` — **both prior releases
+(`v0.1.0`, `v0.2.0`) shipped with red CI.** This was found only because a
+CI job was added earlier the same day (decision 039's `aes` feature
+assertion) and the dispatching engineer checked whether it had actually
+run, rather than assuming a passing local gate meant a passing build.
+Nothing in this project's own gates catches "CI is red" — every local
+gate (`cargo test`/`clippy`/`fmt`, `check-ledger-numbers.py`,
+`check-commits-filed.py`) passed on the host the whole time. **A green
+local run had been standing in for a green build, unnoticed, across two
+releases.** Ruled the **SECOND instance of `R176`** ("A CI pipeline that
+RUNS is not evidence anyone LOOKED AT it") — see the Standing rules
+amendment below — the first instance (`ef88973`, six runs) was already
+this rule's founding case; this instance is wider in scope (the entire
+run history, not one recent window) and found the same way: by actually
+opening the run list rather than trusting a local pass.
+
+**What broke.** `pdfce-print`'s `PrintError` enum was `#[cfg(windows)]`,
+while the crate's own `#[cfg(not(windows))]` stubs for `device_features`
+and `spool` returned `Result<_, PrintError>` — a type that, on any
+non-Windows target, does not exist. **`pdfce-print` compiled for NO
+non-Windows target**, `wasm32-unknown-unknown` included. `Printer`,
+`PrinterCaps`, and `DeviceGeometry::from_caps` were gated the same way
+despite holding only `u32`/`f64`/`String`/`bool` fields — no Win32 handle
+anywhere in any of them. `list_printers` and `printer_caps` never got the
+`#[cfg(not(windows))]` stubs their two siblings already had.
+
+**★ The sharpest instance is from this project's own most recent Pass.**
+`DeviceGeometry::from_caps` — added by `Pass 64.0` (the landscape-
+orientation fix, decision 041) specifically to give the crate's
+test-worthy planning arithmetic a platform-free input — carries a doc
+comment stating it is deliberately un-gated *so it tests on Linux and
+macOS CI*. It was behind `#[cfg(windows)]` from the moment it was
+written and never once did. **This is the same eighty-fifth-filing
+`pdfce-print` crate-boundary decision failing to hold on its own most
+recent extension** — that decision's own stated reason for the
+`PrinterCaps`→`DeviceGeometry` split was "taking `PrinterCaps` directly
+would move the most test-worthy code behind a `cfg` the Linux/macOS CI
+jobs never build" (`ARCHITECTURE.md` §12, eighty-fifth filing); `Pass
+64.0` reintroduced exactly that gate on the very function built to avoid
+it, and nothing caught it until this filing. **This is not the
+GUI-core-separation invariant itself** — `pdfce-print` was never claimed
+to be dependency-free of Windows APIs, only of `pdfce-core`/`pdfce-render`
+— but it is the SAME underlying property that invariant protects, one
+crate over: a crate's dependency graph being clean for a target is a
+different fact from the crate's source actually type-checking for that
+target, and only the second is what a future web-fork shell-swap needs.
+
+**The fix.** Completed a pattern the crate already had, rather than
+inventing a new one — `device_features` and `spool` already carried
+matched `#[cfg(windows)]`/`#[cfg(not(windows))]` pairs. Un-gated the four
+plain-data items (`PrintError`, `Printer`, `PrinterCaps`,
+`DeviceGeometry::from_caps`); added the two missing stubs
+(`list_printers`, `printer_caps`) in the exact shape of the existing two.
+**`list_printers`'s stub returns `Err(PrintError::Unsupported)`, not
+`Ok(vec![])`, deliberately** — on Windows an empty `Vec` is a genuine
+answer ("this machine has no printers"); collapsing that with "this
+platform cannot enumerate at all" would send a future caller hunting for
+missing hardware that was never the actual problem. Also gated
+`PrintScaleArg::name` in `pdfce-cli` `#[cfg(windows)]` — its callers are
+all Windows-only, and it was a dead-code warning that `-D warnings` turns
+into a build failure, itself invisible for as long as the crate did not
+compile there at all (a warning hiding behind an error).
+
+**Verification — checked against every target CI uses, locally, not by
+pushing and hoping.**
+- `cargo check --workspace --target aarch64-apple-darwin` — ok
+- `cargo check -p pdfce-core -p pdfce-render --target wasm32-unknown-unknown` — ok
+- `cargo check --workspace --all-features --target x86_64-unknown-linux-gnu` — ok
+- Host (Windows): **3,353 tests passing / 0 failing** (unchanged from the
+  hundred-and-fourth filing's baseline — no test added or removed this
+  commit); `cargo clippy --workspace --all-targets --all-features -D
+  warnings` zero; `cargo fmt --check` clean.
+- `cargo tree -p pdfce-core` / `-p pdfce-print` name no GUI crate.
+- **Result on CI: 9 of 10 jobs now pass**, including `cargo test
+  (ubuntu-latest)`, `cargo clippy -D warnings`, and the cross-target
+  compile check (macOS/wasm32) — all three previously red. The tenth is
+  `check-commits-filed.py`, failing on `f2ac2af` itself, closed by this
+  filing.
+
+**Scope deliberately not taken, flagged explicitly by the dispatch.**
+`pdfce-gui` now type-checks on Linux/macOS; this is NOT a claim that
+`pdfce-gui` is a working Linux application, or that pdfce targets Linux
+as a shipping product — that is the operator's decision, not an
+engineering one, and nothing in this filing should be read as "pdfce
+runs on macOS/Linux."
+
+**`docs/FEATURES.md` — no row touched.** Printing remains Windows-only in
+capability; the non-Windows stubs return the same "unsupported" behavior
+that not-compiling-at-all effectively produced before, now expressed by a
+build that exists. No capability was gained on any platform.
+
+**Standing rules: `R176`, SECOND instance — amendment appended to `R176`'s
+own entry below.** No new rule minted; the shape is identical to the
+founding instance (a correct CI signal, unconsulted), only wider in the
+window it went unwatched.
+
+**Decision-record: new entry, decision 043.** The reusable shape — a
+dependency-graph check (`cargo tree`) proves absence of a class of
+dependency, never that the crate's source actually type-checks for the
+target that graph-cleanliness was meant to unlock — is filed as a new
+`ARCHITECTURE.md` §12 entry, cross-referencing and amending the
+eighty-fifth-filing `pdfce-print` boundary decision and decision 041 (the
+commit that introduced the very function this defect gated). Not folded
+into `R186`: `R186`'s shape is a runtime GUARD failing open on a hazard
+arriving without its expected marker; this is a VERIFICATION METHOD
+(`cargo tree`) being asked a narrower question than the one that
+mattered, at build time, with no runtime guard or hazard involved at all.
+§3's `pdfce-print` block also gains a short correction sentence
+(`ARCHITECTURE.md`, this filing).
+
+**Ledger for this filing.** **New Pass ID minted: `Pass 66.0`**
+(pdfce-print cross-platform compile fix — un-gate `PrintError`/`Printer`/
+`PrinterCaps`/`DeviceGeometry::from_caps`, add the two missing
+non-Windows stubs). Assigned rather than filed gate-script-class (unlike
+`5dfef4d`/`check-commits-filed.py`/`check-disclosure-channel.sh`) because
+this commit changes crate source, changes `pdfce-print`'s public API
+surface (four items un-gated, two stubs added), and restores a
+previously-decided invariant that had silently lapsed — the librarian's
+own read, per the dispatching engineer's explicit request to make this
+call. Pass-family ceiling moves **65.0 → 66.0**, next free **67**. One
+commit cited by hash (`f2ac2af`). `docs/FEATURES.md`: **no row touched**
+— reasoning above. `docs/ARCHITECTURE.md`: **one new §12 entry, decision
+043**, plus a short §3 body correction on the `pdfce-print` block (both
+this filing). Standing rules: **no new mint** — `R176` cited, SECOND
+instance, amendment appended to `R176`'s own entry below. Ceiling stays
+**R186**, next free **R187**. Decision-record ceiling moves **042 → 043**,
+next free **044**. Operator-question ceiling unchanged at **(bj)**, next
+free **(bk)**. `D:\dev\rag\rust\`: **one new file**,
+`cfg_windows_on_a_plain_data_type_referenced_by_a_non_windows_stub_breaks_every_non_windows_build.md`
+(index bullet added same filing). `C:\personal_rag\pdf\`: not touched —
+this is a Rust-toolchain/cross-compilation finding, not a PDF-domain one.
+**Backup/git working-tree/remote state not independently asserted
+anywhere in this filing** — no shell this dispatch (hard rule 8); the
+engineer should check `D:\Dev\pdfce-backups\` and `git
+log`/`git status`/`git remote -v` directly. This is the
+**hundred-and-seventh** `ROADMAP.md` filing (the hundred-and-sixth,
+immediately below, confirmed present by direct read before this entry
+was prepended).
+
+---
+
 ### ★ `0841a6c` — `verify-release.py` stops crying wolf on a release that is correct: exact-equality replaced by a three-state AT/ADVANCED/CONTAINS read, proven to still catch the `v0.2.0` incident it exists for; plus `9649995` fixes two false claims on the public README — 2026-08-11 (hundred-and-sixth filing)
 
 **Sourcing.** No shell tool this dispatch (hard rule 8). Both commits'
@@ -52902,6 +53054,22 @@ and
   that a workflow file exists — before treating "tests pass" as true of
   every platform the matrix claims to cover. **Ceiling moves `R175` →
   `R176`; next free `R177`.**
+
+  **★ SECOND INSTANCE (2026-08-11, `f2ac2af`, hundred-and-seventh
+  filing) — wider in scope than the founding case, same shape.**
+  `gh run list` showed failure on every push going back past `v0.1.0` —
+  **both prior tagged releases (`v0.1.0`, `v0.2.0`) shipped with red
+  CI** — undetected until a CI job added earlier the same session
+  (decision 039) prompted checking whether it had actually run. Every
+  local gate on the (Windows-only) dev machine passed the entire time;
+  nothing this project owns catches "CI is red" from the inside. Found
+  the same way the founding instance was: by reading the run history
+  directly rather than trusting a local pass. Root defect this instance
+  uncovered: `pdfce-print` failing to compile for any non-Windows
+  target — see `ROADMAP.md`'s `f2ac2af` *Shipped* entry (this filing)
+  and `D:\dev\rag\rust\cfg_windows_on_a_plain_data_type_referenced_by_a_
+  non_windows_stub_breaks_every_non_windows_build.md` for the mechanism.
+  No new rule minted — identical shape, wider window.
 
 - **R177 — A green headless trace proves a control was CONSTRUCTED and
   RUN, never that it is VISIBLE inside its parent's on-screen bounds;

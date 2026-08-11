@@ -895,7 +895,18 @@ D:\Dev\pdfce\
                                    first_page_pt)`, which cannot be called without
                                    stating the requested orientation; the un-rotated
                                    view is unreachable by construction. See §12's new
-                                   decision 041 entry for the full record. **Shared by
+                                   decision 041 entry for the full record. **★ CORRECTED
+                                   2026-08-11 (`f2ac2af`, decision 043) — `from_caps`
+                                   itself, plus `PrintError`/`Printer`/`PrinterCaps`,
+                                   were `#[cfg(windows)]` from `Pass 64.0` onward despite
+                                   holding no Win32 handle and despite `from_caps`'s own
+                                   doc comment saying it was deliberately un-gated for
+                                   Linux/macOS CI — the crate did not compile for ANY
+                                   non-Windows target, `wasm32` included, until this
+                                   commit un-gated the plain data and added the two
+                                   `list_printers`/`printer_caps` non-Windows stubs its
+                                   siblings already had. See §12's decision 043 entry.**
+                                   **Shared by
                                    BOTH pdfce-cli and pdfce-gui**, deliberately — the
                                    alternative (each shell
                                    computing its own page placement) is how a GUI print
@@ -17503,3 +17514,73 @@ under `crates/pdfce-gui/src/`; `cargo tree -p pdfce-core` /
 either crate touched). No new dependency. Full build record:
 `ROADMAP.md`'s `4ddd6c4` Shipped entry, `Pass 65.0` (hundred-and-fourth
 filing).
+
+### 2026-08-11 (hundred-and-seventh filing, `f2ac2af`) — decision 043: a dependency-graph check proves absence of a class of dependency, never that the crate type-checks for the target that absence was meant to unlock — `cargo tree` and cross-target `cargo check` verify two different properties
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — `git show
+f2ac2af` not run. The dispatching engineer states the four cross-target
+`cargo check` runs, the host test/clippy/fmt results, and the resulting
+9-of-10 green CI were run directly, not merely relayed as a claim.
+
+**What this amends.** The eighty-fifth-filing decision (above) built
+`pdfce-print`'s `PrinterCaps`→`DeviceGeometry` bridge specifically so the
+crate's most test-worthy planning arithmetic would stay reachable by the
+project's Linux/macOS CI jobs, rather than sitting behind a
+`#[cfg(windows)]` gate those jobs never build. Decision 041 (`Pass
+64.0`) extended that same crate with `DeviceGeometry::from_caps`, whose
+own doc comment restates the eighty-fifth-filing intent explicitly:
+un-gated so it tests on Linux/macOS CI. It shipped `#[cfg(windows)]`
+anyway, alongside three other plain-data items (`PrintError`, `Printer`,
+`PrinterCaps`) and two missing `#[cfg(not(windows))]` stubs
+(`list_printers`, `printer_caps`) — the crate did not compile for ANY
+non-Windows target, `wasm32-unknown-unknown` included, until this
+commit. This decision does not change the eighty-fifth-filing or
+041 decisions; it restores what both already specified. See
+`ROADMAP.md`'s `f2ac2af` Shipped entry (this filing) for the full defect
+account and fix.
+
+**The reusable shape, named because it generalises past this one
+crate.** `cargo tree -p <crate>` (and `cargo tree --target <target>`,
+metadata-only) proves the crate's DEPENDENCY GRAPH contains no member of
+a named class — here, no GUI/windowing crate. It does not, and cannot,
+prove the crate's SOURCE type-checks for a target that graph-cleanliness
+was assumed to unlock. These are different properties: a crate can have
+a spotless dependency graph for `wasm32-unknown-unknown` and still fail
+to compile for it, exactly as `pdfce-print` did here, because the defect
+was a `#[cfg]` mismatch internal to the crate's own source, invisible to
+any graph-shaped check and invisible to every gate run on a single-OS
+host. **The GUI-core separation invariant (§3, §12 2026-07-23) is the
+project's highest-stakes instance of this same distinction** — `cargo
+tree -p pdfce-core` / `-p pdfce-render` showing no GUI crate has never
+been sufficient on its own to prove either crate actually builds for a
+future web-fork target; the cross-target `cargo check` gate (this
+tree's own `D:\dev\rag\rust\cross_target_cargo_check_portability_gate.md`)
+is the artifact that verifies the second property, and this filing is
+the first time the distinction cost something concrete rather than
+being theoretical.
+
+**Standing rule vs. decision — the call made explicitly, same reasoning
+pattern as decision 042.** This is the shape's first occurrence in the
+project as a *named* distinction (it underlies the pre-existing
+cross-target-check tooling and `D:\dev\rag\rust\
+cross_target_cargo_check_portability_gate.md`, but had not previously
+been stated as its own principle against a real failure). The
+project's two-occurrence promotion bar for a standing rule is not met by
+one instance; filed as a decision instead, both because it names a real
+invariant (a graph-cleanliness check and a buildability check are
+different properties, and the second needs its own gate) and because it
+sits naturally beside the eighty-fifth-filing/041 decisions it amends.
+Distinct from `R186`: `R186`'s shape is a runtime GUARD failing OPEN on
+a hazard arriving without its expected marker; this is a static
+VERIFICATION METHOD answering a narrower question than the one that
+mattered, with no runtime guard or hazard in play.
+
+**§3 body update, same filing.** The `pdfce-print\` tree block gains a
+short correction sentence noting the `#[cfg(windows)]` drift on
+`DeviceGeometry::from_caps` and its siblings, now fixed — see below.
+
+**Not a crate-boundary or GUI-core-separation change in itself.**
+`pdfce-print` still depends on neither `pdfce-core` nor `pdfce-render`;
+`cargo tree -p pdfce-core` / `-p pdfce-render` name no GUI crate,
+unaffected by this commit. Full build record: `ROADMAP.md`'s `f2ac2af`
+Shipped entry (hundred-and-seventh filing).
