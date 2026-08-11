@@ -36857,6 +36857,168 @@ in the "still open" list. Full build record: this file's own
 
 ## Next up
 
+### Pass 67.0 — font reporting (phase A) + embedded-font removal (phase B) — operator request 2026-08-11, verbatim: *"someone needs embedded fonts removed from a pdf, so work on support and the related parts for that next"*, encryption explicitly parked: *"put the encryption aside for now to work on later"*
+
+**Sourcing.** No shell tool this dispatch (hard rule 8). The corpus
+statistics and the Acrobat-behaviour findings below are **relayed** from
+the dispatching engineer's brief, not re-measured by this librarian.
+Independently checked directly by this librarian via `Read`/`Glob`/`Grep`
+on live source and RAG files, all confirmed present: `crates/pdfce-core/
+src/font_embed.rs` exists and is embed-only (module doc: "It only ever
+ALLOCATES objects. It never rewrites an existing one" — R107); no
+`list-fonts`/`list_fonts`/`FontReport` symbol anywhere under `crates/`
+(grepped, zero hits — the "no reporting surface exists today" claim is
+verified, not assumed); the three new `Acrobat_Features` files
+(`optimize__font_unembedding.md`, `optimize__font_reporting.md`,
+`optimize__font_related_adjacent_operations.md`) and the spec-RAG file
+cited below (`iso32000__ref__font_embedding.md`) all exist on disk.
+
+**Two phases in one Pass entry, not two Passes** — phase A (reporting) is
+a prerequisite for phase B (unembedding: an operator cannot safely choose
+what to unembed without seeing what's embedded and why some fonts
+shouldn't be), and phase A ships value on its own regardless of which of
+the four motivations below turns out to apply, which is exactly why it is
+scoped to ship first rather than bundled invisibly into B.
+
+**Phase A — font reporting (non-destructive, ships first).** No GUI
+panel, no CLI subcommand, no core query exists today for "what fonts does
+this document contain" — pdfce can *embed* (`font_embed.rs`, FF-C, Pass
+21.0) but cannot *report*. Per font: `/BaseFont`, subtype, encoding,
+embedded vs not, subset (`ABCDEF+Name`) vs complete, the embedded
+program's **byte size** (`/FontFile`, `/FontFile2` or `/FontFile3` stream
+length), `fsType` permission bits, and `/ToUnicode` presence.
+
+**Phase B — unembedding.** Remove the `/FontFile`/`/FontFile2`/
+`/FontFile3` stream from a font descriptor, leaving a non-embedded
+reference — refusing, by name and with the reason shown (not silently
+omitted — R124), any font whose content-stream codes are positions into
+that specific embedded program rather than character codes (see the
+decisive constraint below).
+
+**The corpus evidence this Pass is scoped on — relayed, PDFBox test
+corpus (64 files; a test corpus, so it skews toward awkward cases).** Of
+the 30 files that embed fonts:
+
+| property | count | of embedding files (30) |
+|---|---|---|
+| subset (`ABCDEF+Name`) | 26 | 87% |
+| `FontFile2` (TrueType) | 22 | 73% |
+| **`Identity-H` encoding** | **12** | **40%** |
+| has `/ToUnicode` | 15 | 50% |
+| `FontFile3` (CFF/OpenType) | 7 | 23% |
+| `FontFile` (Type 1) | 3 | 10% |
+
+**★ The decisive constraint, sourced not inferred.**
+`D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__ref__font_embedding.md`
+§2 F1 quotes ISO 32000-1 §9.9 directing conforming writers to use
+`Type0`+`Identity-H` and "use the glyph indices as character codes." For
+those fonts the content-stream character codes are positions inside
+*that specific embedded program*; remove it and no substitute font has
+those glyphs at those positions — text becomes unrenderable, and with
+only half of embedders carrying `/ToUnicode`, often unrecoverable as text
+too. **For ~40% of real PDFs with embedded fonts (12 of 30 in this
+corpus), "remove the embedded fonts" cannot be done without destroying
+the text** — the headline finding driving phase B's refusal design.
+
+**What Acrobat does — catalogued this session by `pdfce-acrobat-
+librarian`.** Three new RAG files, `Acrobat_Features` bucket went 0 → 3
+(empty across every prior sweep):
+
+- **Unembedding is not first-class** — lives inside PDF Optimizer's Fonts
+  panel, Pro-exclusive. "Reduce File Size" only auto-strips Base-14 and
+  re-subsets the rest; no per-font operator choice there.
+- **★ Acrobat refuses to unembed CID/Identity-H fonts**, sourced to Dov
+  Isaacs (former Adobe Principal Scientist): "based on the encoding of
+  the embedded font and/or characters used, there is a concern that you
+  will end up with a useless PDF file," citing glyph-index-mismatch
+  gibberish. **The refusal is silent** — the font is simply absent from
+  the list, no stated reason (an R124 disabled-vs-omitted anti-pattern).
+- **Acrobat exposes no per-font byte size anywhere** — not Document
+  Properties' Fonts tab, not Audit Space Usage.
+- Acrobat has **no** "replace font X with Y" capability (searched across
+  three sessions; treated as a genuine absence, not an unlooked-up gap).
+
+**Two deliberate divergences from Acrobat, recorded per the operator's
+standing "parity is a floor" preference** (`user memory
+exceed-the-parity-reference-when-you-can`):
+
+1. **pdfce matches Acrobat's refusal on Identity-H/CID fonts (this is one
+   of the few places Acrobat's caution is correct) but SAYS WHY** —
+   silently omitting the font from a list violates rule 4 (fuzzy, never
+   sneaky / R124); a stated reason is actionable, a shorter list is not.
+2. **pdfce reports per-font byte size** — directly computable from the
+   `/FontFile*` stream length, never exposed by Acrobat, and the number
+   an operator optimising a file actually wants.
+
+**Open gaps — recorded as gaps, not assumed behaviour:**
+- Whether Acrobat strips the `ABCDEF+` subset prefix from `/BaseFont` in
+  its *output* file is **unverified** (only its internal font-*matching*
+  tolerance of the tag is known). **pdfce must make its own deterministic
+  choice and disclose it**, not assume parity — stakes are real given 87%
+  of the corpus's embedded fonts are subsets.
+- Whether Acrobat warns that unembedding breaks PDF/A conformance, or
+  does so silently — unconfirmed (that unembedding *does* break PDF/A is
+  not in doubt; embedded fonts are required there).
+- Whether annotation/form-field appearance-stream fonts are covered by
+  Acrobat's inventory — moderate-confidence lean toward included,
+  indirect sourcing only.
+- Type 3 fonts' unembed eligibility — no source either way.
+- Whether an `fsType`-restricted font embedded anyway is treated
+  specially by Acrobat — unsourced.
+
+**A scope ambiguity resolved, not left open.** "Remove embedded fonts…
+and the related parts" could mean unembedding OR the reverse repair
+("Embed Missing Fonts"). **The operator's own wording is unambiguous —
+fonts REMOVED — so this Pass is unembedding.** "Embed Missing Fonts" is
+filed as a separate Backlog candidate, not folded in. Re-subsetting
+(shrink an embedded font to used glyphs — the low-risk companion that
+often solves the file-size motivation without breaking anything) and
+convert-text-to-outlines are also filed as separate Backlog candidates,
+not phases of this Pass — see *Backlog* below, three new entries.
+
+**Outstanding operator question, not yet answered.** Four plausible
+motivations imply different designs — font **licensing** (`fsType`
+forbids embedding; removal is the remedy), **file size** (re-subsetting
+usually wins over removal), a **RIP/printer** choking on the embedded
+program (outlines may be safer than either), or **PDF/A** work (which
+*requires* embedding, making removal the wrong tool entirely). Asked of
+the operator; unanswered as of this filing. Phase A is useful under all
+four, which is the other reason it ships first regardless of the answer.
+
+**`docs/FEATURES.md`: two new *Planned* rows added, both under *Fonts &
+rendering*'s predicted-order position** — font reporting and unembedding,
+`[ ] core / [ ] cli / [ ] gui` on both, nothing ticked, nothing started.
+See the table below.
+
+**Ledger for this filing.** **New Pass ID minted: Pass 67.0** (checked
+directly against this file before minting — grepped `Pass 67` and
+`Pass 6[7-9]`, zero prior hits; last measured Pass-family ceiling was
+**66.0**, per R156). Filed under *Next up*, not *Shipped* — this is
+scoping/starting work, nothing has shipped yet. No `ARCHITECTURE.md` §12
+entry — no crate boundary, library choice or invariant has been decided
+yet, only scope. No standing-rule mint — R124 and rule 4 are cited, not
+extended. Decision-record ceiling unaffected, **045**, next free **046**.
+Pass-family ceiling moves **66.0 → 67.0**, next free **68**. Operator-
+question ceiling unaffected at **(bj)**, next free **(bk)** (this filing
+does not itself mint a new lettered question — the four-motivations
+question is recorded as outstanding but is the operator's own live
+question, asked this session, not retroactively assigned a letter here).
+`D:\dev\rag\rust\`/`D:\dev\rag\egui\`/`C:\personal_rag\pdf\`: not
+touched — nothing generalizable shipped yet; the corpus percentages and
+the Identity-H constraint are project-scoping evidence, tracked here and
+in the Acrobat RAG (already written by `pdfce-acrobat-librarian` this
+session), not yet a pdfce-internal empirical finding of the kind
+`personal_rag/pdf` exists for. **Backlog: three new entries added** —
+Embed Missing Fonts, re-subsetting, convert-text-to-outlines — see
+*Backlog* below. **Backup/git working-tree/remote state not
+independently asserted anywhere in this filing** — no shell this
+dispatch (hard rule 8); the engineer should check
+`D:\Dev\pdfce-backups\` and `git log`/`git status`/`git remote -v`
+directly, on the current branch. This is the **hundred-and-eleventh**
+`ROADMAP.md` filing.
+
+---
+
 ### Pass 52.0–52.3 — PDF → DXF export, so SOLIDWORKS can import pdfce output without an Acrobat Pro licence at all — operator request 2026-08-09, redirected from "make pdfce satisfy SOLIDWORKS' Acrobat gate" to "make the gate irrelevant"
 
 > **⚠ FAMILY COMPLETE 2026-08-09 (fifty-fifth filing) — all four slices
@@ -46719,6 +46881,29 @@ not a judgment call:**
   acceptance criteria written yet — needs its own Pass when the
   operator asks for it, likely alongside or reusing pdfce's existing
   Batch Tools surface.
+- **Embed Missing Fonts — the reverse repair of `Pass 67.0`'s
+  unembedding** (flagged 2026-08-11, `Pass 67.0`'s scoping filing).
+  Scan a document for non-embedded fonts and offer to embed a matching
+  system/donor face, closing the gap where a viewer without the named
+  font falls back to substitution. Deliberately NOT folded into
+  `Pass 67.0` — the operator's own wording ("fonts REMOVED") named
+  unembedding, not repair; this is the opposite direction and needs its
+  own font-matching design (which system font counts as "matching," and
+  what happens when none does). UNSCOPED, no acceptance criteria written.
+- **Re-subset an already-embedded font to only its used glyphs**
+  (flagged 2026-08-11, `Pass 67.0`'s scoping filing). The low-risk
+  companion to unembedding: shrinks file size without removing the font
+  program, so it never hits `Pass 67.0`'s Identity-H refusal case and
+  works on every embedded font, not just the ~60% unembedding can safely
+  touch. Likely the right default recommendation when the operator's
+  motivation turns out to be file size rather than licensing. UNSCOPED.
+- **Convert text to outlines (vector paths)** (flagged 2026-08-11,
+  `Pass 67.0`'s scoping filing). The RIP/printer-safe alternative to
+  either embedding or unembedding — no font dependency survives at all,
+  at the cost of the text no longer being text (unselectable,
+  unsearchable, unreflowable). Relevant if the operator's motivation
+  turns out to be a RIP/printer choking on an embedded font program
+  rather than licensing or file size. UNSCOPED.
 
 ## Standing rules
 

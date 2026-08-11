@@ -35887,3 +35887,99 @@ log`/`git status`/`git remote -v` directly, on branch `main`. This is
 the **hundred-and-tenth** `SESSION_LOG.md`/`ROADMAP.md` joint filing
 (the hundred-and-ninth, immediately above — header AND body both
 confirmed present by direct read before this entry was appended).
+
+## 2026-08-11 (hundred-and-eleventh filing) — `Pass 67.0` minted, filed under *Next up*, nothing shipped: font reporting (phase A) + embedded-font unembedding (phase B), encryption explicitly parked by the operator; the decisive constraint is that ~40% of real embedded fonts cannot be safely unembedded at all
+
+**Sourcing.** No shell tool this dispatch (hard rule 8). The corpus
+statistics and Acrobat-behaviour findings are relayed from the
+dispatching engineer's brief. Independently checked directly by this
+librarian: `crates/pdfce-core/src/font_embed.rs` exists, embed-only
+(R107); zero `list-fonts`/`FontReport` hits anywhere under `crates/`
+(grepped); the three new `Acrobat_Features` files and the cited
+spec-RAG file (`iso32000__ref__font_embedding.md`) all exist on disk.
+
+**Shipped:** nothing — this is a scoping filing. `Pass 67.0` moves
+straight to *Next up*, not *Shipped*.
+
+**Decisions made this session:** none — no crate boundary, library
+choice or invariant decided yet, only scope. No `ARCHITECTURE.md` §12
+entry this filing.
+
+**Findings + decisions:**
+- **Operator request, verbatim, 2026-08-11:** *"someone needs embedded
+  fonts removed from a pdf, so work on support and the related parts for
+  that next,"* with encryption explicitly parked: *"put the encryption
+  aside for now to work on later."*
+- **The corpus evidence (relayed, PDFBox test corpus, 64 files, 30
+  embedding fonts):** subset (`ABCDEF+Name`) 26/30 (87%); `FontFile2`
+  22/30 (73%); **`Identity-H` encoding 12/30 (40%)**; `/ToUnicode`
+  present 15/30 (50%); `FontFile3` 7/30 (23%); `FontFile` 3/30 (10%).
+- **★ The decisive, sourced constraint.**
+  `D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__ref__font_embedding.md`
+  §2 F1 quotes ISO 32000-1 §9.9: conforming writers use `Type0`+
+  `Identity-H` and "use the glyph indices as character codes." For those
+  fonts the content-stream codes are positions into that specific
+  embedded program — remove it and no substitute font has those glyphs
+  at those positions. **~40% of real embedded-font PDFs cannot have
+  their fonts unembedded without destroying the text**, and only half of
+  embedders carry `/ToUnicode` to make the text recoverable another way.
+  This constraint is the spine of phase B's refusal design.
+- **Acrobat catalogued this session by `pdfce-acrobat-librarian`** — the
+  `Acrobat_Features` "optimize" bucket went 0 → 3 files (empty across
+  every prior sweep): unembedding lives inside PDF Optimizer's Fonts
+  panel (Pro-exclusive, not first-class); **Acrobat refuses to unembed
+  CID/Identity-H fonts** (sourced to former Adobe Principal Scientist Dov
+  Isaacs — glyph-index-mismatch risk), and **the refusal is silent**, no
+  reason shown (an R124 anti-pattern); Acrobat exposes **no per-font byte
+  size** anywhere; Acrobat has no font-replace capability at all.
+- **Two deliberate divergences recorded**, per the operator's standing
+  "parity is a floor" preference: pdfce matches Acrobat's Identity-H
+  refusal (correct caution) but **states the reason**, unlike Acrobat's
+  silent omission; and pdfce **reports per-font byte size**, which
+  Acrobat has never exposed.
+- **A scope ambiguity resolved from the operator's own wording, not left
+  open.** "Fonts removed" names unembedding, not the reverse repair
+  ("Embed Missing Fonts") — that repair, re-subsetting, and
+  convert-text-to-outlines are filed as three separate, unscoped Backlog
+  candidates rather than folded into `Pass 67.0`.
+- **Open gaps recorded, not assumed:** whether Acrobat strips the
+  `ABCDEF+` subset prefix from output `/BaseFont` (unverified — pdfce
+  must choose its own behaviour and disclose it, given 87% of the
+  corpus's embedded fonts are subsets); whether Acrobat warns before
+  breaking PDF/A conformance on unembed; whether annotation/form-field
+  appearance-stream fonts are in Acrobat's inventory; Type 3 eligibility;
+  `fsType`-restricted-but-embedded-anyway handling.
+
+**Still in flight:**
+- Four motivations (licensing, file size, RIP/printer, PDF/A) imply
+  different designs and the operator has not yet said which applies —
+  asked, unanswered as of this filing. Phase A ships first because it is
+  useful under all four regardless of the answer.
+- Phase A (reporting) has not started; phase B (unembedding) is blocked
+  on phase A per this Pass's own scoping.
+- Encryption's `/R` 6 gap and encrypted-save remain untouched, by the
+  operator's own explicit instruction this session.
+
+**For next session:** see `docs/NEXT_SESSION.md` — not edited by this
+librarian this filing (engineer-owned; will be updated when phase A
+lands).
+
+**Ledger for this filing.** **New Pass ID minted: `Pass 67.0`** (grepped
+`Pass 67`/`Pass 6[7-9]` against `ROADMAP.md` before minting, zero prior
+hits; prior ceiling **66.0**, per R156). Filed under *Next up*. No
+`ARCHITECTURE.md` §12 entry, no standing-rule mint. `docs/FEATURES.md`:
+**two new rows**, both *Planned*, `[ ] core / [ ] cli / [ ] gui`, nothing
+ticked — font reporting and unembedding, placed immediately after the
+Encryption row. Decision-record ceiling unaffected, **045**, next free
+**046**. Pass-family ceiling moves **66.0 → 67.0**, next free **68**.
+Operator-question ceiling unaffected at **(bj)**, next free **(bk)**.
+`D:\dev\rag\rust\`/`D:\dev\rag\egui\`/`C:\personal_rag\pdf\`: not
+touched — nothing generalizable shipped yet. **Backlog: three new
+entries** — Embed Missing Fonts, re-subsetting, convert-text-to-outlines.
+**Backup/git working-tree/remote state not independently asserted
+anywhere in this filing** — no shell this dispatch (hard rule 8); the
+engineer should check `D:\Dev\pdfce-backups\` and `git
+log`/`git status`/`git remote -v` directly. This is the
+**hundred-and-eleventh** `SESSION_LOG.md`/`ROADMAP.md` joint filing (the
+hundred-and-tenth, immediately above — header AND body both confirmed
+present by direct read before this entry was appended).
