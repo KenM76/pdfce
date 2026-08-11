@@ -20,7 +20,7 @@ Measured, not relayed:
 - `cargo tree -p pdfce-core` names no GUI crate. **Zero dependencies were
   added this session**, including for the crypto.
 
-Portable build **`D:\builds\pdfce-20260811-0836-94cf228`** carries
+Portable build **`D:\builds\pdfce-20260811-0846-f5f5b06`** carries
 everything except the Properties Security section (`17f4d82`). Rebuild
 if that matters: `python tools/package-portable.py --note "..."`.
 
@@ -252,7 +252,7 @@ output default to committed paths.
 
 ## What the operator can try in the build
 
-`D:uilds\pdfce-20260811-0836-94cf228\pdfce-gui.exe`:
+`D:\builds\pdfce-20260811-0846-f5f5b06\pdfce-gui.exe`:
 
 - **Open `fixtures\synthetic\encryption\enc-emptyuser-rc4-128.pdf`** — it
   just opens, no prompt. The status bar says it is encrypted and that
