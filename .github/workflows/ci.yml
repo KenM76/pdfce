@@ -186,7 +186,13 @@ jobs:
           for t in "" "--target x86_64-pc-windows-msvc" "--target aarch64-apple-darwin" "--target wasm32-unknown-unknown"; do
             if cargo tree -p pdfce-core -e features $t 2>/dev/null \
                  | grep -E 'aes feature "(hazmat|zeroize)"'; then
-              echo "::error::pdfce-core $t enables an extra feature on the `aes` crate. Decision 039 accepted ONLY the intrinsic backend (which is cfg-selected and cannot be disabled per-dependency); hazmat/zeroize are separate widenings and need a new decision record."
+              # No backticks around 'aes' here: inside a double-quoted shell
+              # string they are COMMAND SUBSTITUTION, so bash runs `aes`,
+              # splices its empty output, and prints "on the  crate" -- the
+              # message loses the one word it exists to say. It fires only on
+              # failure, so it would have stayed broken until the day someone
+              # needed it.
+              echo "::error::pdfce-core $t enables an extra feature on the aes crate. Decision 039 accepted ONLY the intrinsic backend (which is cfg-selected and cannot be disabled per-dependency); hazmat/zeroize are separate widenings and need a new decision record."
               fail=1
             fi
           done
