@@ -311,6 +311,8 @@ pub enum CommandKind {
     /// regenerated (Pass 7, §12.7.3.3). One fill — the field's `/V` and
     /// every widget's `/AP` — is one undo entry.
     FillTextField,
+    /// [`EditSession::reset_form`] — §12.7.5.3.
+    ResetForm,
     /// A check-box or radio-button field's state was selected (Pass 7,
     /// §12.7.4.2.3): the field's `/V` and the widgets' `/AS` set together,
     /// with no appearance regeneration (state selection, not generation).
@@ -5103,6 +5105,110 @@ pub struct DeleteOutcome {
 
 /// What a text/choice form fill actually did (Pass 7).
 ///
+/// Why a field cannot be reset.
+///
+/// Each reason is its own variant rather than a boolean, because they mean
+/// different things to an operator: a skipped signature is a *preserved*
+/// signature, a skipped read-only field was never theirs to clear, and a
+/// pushbutton never had a value at all.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResetIneligible {
+    /// A pushbutton. §12.7.5.3 says the action has no effect on one, and
+    /// §12.7.4.2.2 forbids it a `/V` at all.
+    PushButton,
+    /// A signature field. Its `/V` IS the signature.
+    Signature,
+    /// A read-only field — not the operator's to clear.
+    ReadOnly,
+}
+
+impl ResetIneligible {
+    /// A stable token for CLI output.
+    #[must_use]
+    pub const fn token(self) -> &'static str {
+        match self {
+            Self::PushButton => "pushbutton",
+            Self::Signature => "signature",
+            Self::ReadOnly => "read_only",
+        }
+    }
+}
+
+/// What a reset would do to one field, before it does it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResetPreviewRow {
+    /// The field's fully-qualified name.
+    pub field: String,
+    /// The value it holds now, rendered for display.
+    pub current: String,
+    /// The value it would hold, rendered for display. Empty when the field
+    /// would be emptied — see [`Self::would_remove`], which is the bit that
+    /// distinguishes "emptied" from "set to an empty default".
+    pub target: String,
+    /// Whether `/V` would be REMOVED rather than set. Carried separately
+    /// because an absent key and an empty string are different bytes, and a
+    /// shell that showed both as `""` would be describing the wrong edit.
+    pub would_remove: bool,
+    /// Whether this is a real change. `false` for a field that already holds
+    /// its reset value — reported rather than hidden, so a shell can say
+    /// "already at its default" instead of listing a change that is not one.
+    pub would_change: bool,
+    /// Set when the field cannot be reset at all.
+    pub ineligible: Option<ResetIneligible>,
+}
+
+/// What a [`EditSession::reset_form`] did, and what it deliberately left
+/// alone.
+///
+/// Every "left alone" case is a separate counter rather than a single
+/// skipped total. They have different reasons and different consequences —
+/// a skipped signature is a preserved signature, a skipped read-only field
+/// is a field the operator never controlled — and a shell that can only say
+/// "3 skipped" cannot tell the operator which of those happened.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ResetOutcome {
+    /// Fields whose `/V` was set or removed.
+    pub fields_reset: usize,
+    /// Of those, how many took a `/DV` value.
+    pub values_defaulted: usize,
+    /// Of those, how many had `/V` REMOVED for want of a `/DV`.
+    pub values_removed: usize,
+    /// Widget appearances or `/AS` states updated.
+    pub widgets_updated: usize,
+    /// Pushbuttons skipped — §12.7.5.3 says the action has no effect on
+    /// them, and §12.7.4.2.2 forbids them a `/V` at all.
+    pub skipped_pushbuttons: usize,
+    /// Signature fields skipped. Their `/V` IS the signature; removing it
+    /// destroys it, which is not what "reset" means.
+    pub skipped_signatures: usize,
+    /// Read-only fields skipped — not the operator's to clear.
+    pub skipped_read_only: usize,
+}
+
+/// The `/DV` a field inherits from its nearest ancestor that sets one
+/// (§12.7.3.1, Table 220).
+///
+/// `Field::default_value` already reports the RESOLVED default, which is what
+/// decides whether a reset takes the set-or-remove branch. This exists for
+/// the other half of the job: writing `/V` needs the default's own OBJECT,
+/// with its original COS type intact, and the resolved projection has already
+/// flattened a name or an array into a typed enum. Re-encoding from that
+/// would turn a choice field's `/DV` array into a single string.
+fn inherited_dv<G: ObjectGraph + ?Sized>(graph: &G, start: ObjId) -> Option<Object> {
+    let mut id = start;
+    let mut seen = std::collections::HashSet::new();
+    // Bounded like every other walk in this crate: a `/Parent` cycle in a
+    // hostile file must not spin.
+    while seen.insert(id) {
+        let dict = graph.resolved(id).as_dict()?;
+        if let Some(dv) = dict.get(b"DV") {
+            return Some(graph.resolve(dv).clone());
+        }
+        id = dict.get(b"Parent").and_then(Object::as_reference)?;
+    }
+    None
+}
+
 /// The disclosures a fuzzy-never-sneaky fill owes the operator: how many
 /// widgets it repainted, and the two variable-text caveats the §12.7.3.3
 /// generator surfaces (an applied auto-size, and any characters it could not
@@ -11620,6 +11726,323 @@ impl EditSession {
         })
     }
 
+    /// What [`Self::reset_form`] would do, without doing any of it.
+    ///
+    /// # Why this is in the core rather than in each shell
+    ///
+    /// Because both shells need it and they were each deciding it for
+    /// themselves. The CLI's dry run and the GUI's panel independently
+    /// re-derived which fields are eligible and what each would become —
+    /// two implementations of one rule, free to drift, with the drift
+    /// showing only as "the CLI says it will clear five fields and the GUI
+    /// says four". That is exactly the shape standing rule **R171** names:
+    /// read the value off the one place that owns it, never restate it.
+    ///
+    /// The rule is owned here because [`Self::reset_form`] enforces it, and
+    /// a preview that disagreed with the act it previews would be worse than
+    /// no preview at all.
+    ///
+    /// Rows are returned for **every** field in scope, including ineligible
+    /// ones and ones already at their default. Filtering is the shell's
+    /// business; a preview that silently dropped rows could not be used to
+    /// explain why a field the operator expected to see is missing.
+    #[must_use]
+    pub fn reset_preview(&self, only: Option<&[String]>) -> Vec<ResetPreviewRow> {
+        let Some(form) = forms::parse_acroform(&self.graph()) else {
+            return Vec::new();
+        };
+        form.fields
+            .iter()
+            .filter(|f| only.is_none_or(|names| names.contains(&f.fully_qualified_name)))
+            .map(|field| {
+                let ineligible = if field.button_kind == Some(forms::ButtonKind::Push) {
+                    Some(ResetIneligible::PushButton)
+                } else if matches!(field.value, forms::FieldValue::Signature)
+                    || field.field_type == Some(FieldType::Signature)
+                {
+                    Some(ResetIneligible::Signature)
+                } else if field.flags.read_only() {
+                    Some(ResetIneligible::ReadOnly)
+                } else {
+                    None
+                };
+                let has_default = field.default_value.is_present();
+                let current = field.value.display_text();
+                let target = if has_default {
+                    field.default_value.display_text()
+                } else {
+                    String::new()
+                };
+                // "Already at its reset value" is not simply `current ==
+                // target`: a field with no default whose `/V` is an empty
+                // STRING still has a key to remove, and removing it is a real
+                // edit even though nothing visible changes.
+                let would_change = if ineligible.is_some() {
+                    false
+                } else if has_default {
+                    field.value != field.default_value
+                } else {
+                    field.value.is_present()
+                };
+                ResetPreviewRow {
+                    field: field.fully_qualified_name.clone(),
+                    current,
+                    target,
+                    would_remove: !has_default,
+                    would_change,
+                    ineligible,
+                }
+            })
+            .collect()
+    }
+
+    /// **Reset form fields to their default values** (§12.7.5.3).
+    ///
+    /// The editor-side equivalent of a reset-form action, as one undoable
+    /// command however many fields it touches.
+    ///
+    /// # What the standard requires, in both branches
+    ///
+    /// §12.7.5.3, verbatim: *"Upon invocation of a reset-form action, a
+    /// conforming processor **shall reset** selected interactive form fields
+    /// to their default values; that is, it **shall set the value of the `V`
+    /// entry** in the field dictionary **to that of the `DV` entry** (see
+    /// Table 220). **If no default value is defined for a field, its `V`
+    /// entry shall be removed.** For fields that can have no value (such as
+    /// pushbuttons), the action has no effect."*
+    ///
+    /// Both branches are `shall`, and the second is the one worth reading
+    /// twice: **`/V` is REMOVED, not blanked.** An absent key and a key
+    /// holding an empty string are different bytes, a different incremental
+    /// delta, and — for a choice field — a different meaning, since §12.7.4.4
+    /// gives an absent `/V` the documented "nothing selected" reading that
+    /// `()` does not carry.
+    ///
+    /// # `/DV` is inherited, and the branch is chosen AFTER resolving it
+    ///
+    /// `/DV` is inheritable (Table 220), so "no default value is defined"
+    /// means none anywhere up the `/Parent` chain — not merely none on this
+    /// dictionary. [`Field::default_value`] is already the resolved value, so
+    /// this reads it rather than the raw key. Testing the field's own dict
+    /// instead would send every child with an inherited default down the
+    /// removal branch and silently discard it.
+    ///
+    /// # What is skipped, and why each is skipped rather than refused
+    ///
+    /// - **Pushbuttons** — the standard says the action has no effect on
+    ///   them, and §12.7.4.2.2 goes further: a pushbutton *"shall not use the
+    ///   `V` and `DV` entries"*. Writing one would create an entry the
+    ///   standard forbids.
+    /// - **Signature fields** — a signature's `/V` is the signature
+    ///   (§12.7.4.5). Removing it destroys the signature, which is a
+    ///   categorically different act from clearing a typed answer and is not
+    ///   what an operator pressing "reset" is asking for. Skipped and
+    ///   counted, never silently cleared.
+    /// - **Read-only fields** — they are not the operator's to clear, and
+    ///   clearing them here would let reset do what fill is refused.
+    ///
+    /// Every skip is counted in [`ResetOutcome`] rather than swallowed, so a
+    /// shell can say "reset 9 fields, left 1 signature alone" instead of
+    /// letting the operator infer it from the page.
+    ///
+    /// # Scope
+    ///
+    /// `only` names the fields to reset by fully-qualified name; `None`
+    /// resets every eligible field. The reset-form ACTION also has an
+    /// exclude mode (Table 239's `/Flags` bit 1), and that is deliberately
+    /// **not** offered here: Table 239's descendant-expansion parenthetical
+    /// appears only in its *"if clear"* sentence, so what exclude mode does
+    /// to a non-terminal field's descendants is unspecified, and an editor
+    /// verb that guessed would be guessing on the destructive side.
+    ///
+    /// # `/DV` is never written
+    ///
+    /// A reset reads `/DV` and writes `/V`. Writing `/DV` would redefine what
+    /// a *later* reset restores — a change nobody asked for, invisible until
+    /// the second reset produces a different result from the first.
+    ///
+    /// # Calculated fields are NOT recomputed
+    ///
+    /// A field whose value comes from a recognised calculation
+    /// ([`crate::form_script`]) is reset like any other, and pdfce does not
+    /// then re-run the calculation. ISO says nothing about whether a reset
+    /// re-runs the `/CO` pass, and fusing the two would hide one operation
+    /// inside another: an operator who wants both can reset and then
+    /// recompute, and can see each result before the next.
+    ///
+    /// # Errors
+    ///
+    /// - [`EditError::FieldNotFound`] — the document has no form, or a name
+    ///   in `only` matches nothing. A named field that does not exist is a
+    ///   mistake worth surfacing, not a silent no-op.
+    /// - The fill certification/encryption guards.
+    pub fn reset_form(&mut self, only: Option<&[String]>) -> Result<ResetOutcome, EditError> {
+        self.fill_guards()?;
+
+        let form =
+            forms::parse_acroform(&self.graph()).ok_or_else(|| EditError::FieldNotFound {
+                name: only
+                    .and_then(<[String]>::first)
+                    .cloned()
+                    .unwrap_or_else(|| "<any>".to_owned()),
+            })?;
+
+        // A requested name that matches nothing is an error, checked BEFORE
+        // anything is written so a typo cannot half-reset a form.
+        if let Some(names) = only {
+            for name in names {
+                if !form.fields.iter().any(|f| &f.fully_qualified_name == name) {
+                    return Err(EditError::FieldNotFound { name: name.clone() });
+                }
+            }
+        }
+
+        let targets: Vec<Field> = form
+            .fields
+            .iter()
+            .filter(|f| only.is_none_or(|names| names.contains(&f.fully_qualified_name)))
+            .cloned()
+            .collect();
+
+        let fonts = self.resolve_dr_fonts(&form);
+        let default_da = form
+            .default_appearance
+            .clone()
+            .unwrap_or_else(|| b"/Helv 0 Tf 0 g".to_vec());
+
+        let mut objects: Vec<ObjectWrite> = Vec::new();
+        let mut out = ResetOutcome::default();
+
+        for field in &targets {
+            // Pushbutton: the standard says the action has no effect.
+            if field.button_kind == Some(forms::ButtonKind::Push) {
+                out.skipped_pushbuttons += 1;
+                continue;
+            }
+            if matches!(field.value, forms::FieldValue::Signature)
+                || field.field_type == Some(FieldType::Signature)
+            {
+                out.skipped_signatures += 1;
+                continue;
+            }
+            if field.flags.read_only() {
+                out.skipped_read_only += 1;
+                continue;
+            }
+
+            let has_default = field.default_value.is_present();
+            let Some(Object::Dict(field_dict)) = self.value(field.id) else {
+                return Err(EditError::NotADictionary {
+                    id: field.id,
+                    key: "V",
+                });
+            };
+            let field_dict = field_dict.clone();
+            let before = self.state.get(&field.id).cloned();
+            let mut updated = field_dict.clone();
+
+            match field.field_type {
+                Some(FieldType::Button) => {
+                    // Check box / radio: the state is the default's name, or
+                    // `Off`. `/AS` follows on every widget — a `/V` without a
+                    // matching `/AS` leaves the box drawn in its old state,
+                    // which is the visible half of the reset simply not
+                    // happening.
+                    let state: Vec<u8> = match &field.default_value {
+                        forms::FieldValue::Name(n) => n.clone(),
+                        _ => b"Off".to_vec(),
+                    };
+                    for widget in &field.widgets {
+                        if widget.id == field.id {
+                            // Shape A: `/AS` lives on the field dict, folded
+                            // into the single patch below.
+                            continue;
+                        }
+                        objects.push(self.set_widget_as(widget.id, &state)?);
+                        out.widgets_updated += 1;
+                    }
+                    if field.merged {
+                        updated.insert(Name::from(b"AS"), Object::Name(Name(state.clone())));
+                        out.widgets_updated += 1;
+                    }
+                    if has_default {
+                        updated.insert(Name::from(b"V"), Object::Name(Name(state)));
+                    } else {
+                        // `Off` is the absence of a selection, and §12.7.4.2.3
+                        // reaches it through an absent `/V` as readily as
+                        // through the name. Removing follows the clause.
+                        updated.remove(b"V");
+                    }
+                }
+                _ => {
+                    // Text and choice, plus the unmodelled fallback. The
+                    // appearance is regenerated from the default's text, or
+                    // from nothing — a reset that left the old text drawn on
+                    // the widget would clear the value and not the page.
+                    let text = match &field.default_value {
+                        forms::FieldValue::Absent => String::new(),
+                        other => other.display_text(),
+                    };
+                    let multiline = field.flags.has(forms::FieldFlags::MULTILINE);
+                    let merged_ap = self.regen_field_appearance(
+                        field,
+                        &text,
+                        &default_da,
+                        multiline,
+                        &fonts,
+                        &mut objects,
+                        &mut None,
+                        &mut 0,
+                    )?;
+                    out.widgets_updated += field.widgets.len();
+                    if let Some(ap_id) = merged_ap {
+                        let mut ap = Dict::new();
+                        ap.insert(Name::from(b"N"), Object::Reference(ap_id));
+                        updated.insert(Name::from(b"AP"), Object::Dict(ap));
+                    }
+                    if has_default {
+                        // Copied from the field's OWN resolved default rather
+                        // than re-encoded from `text`: a `/DV` that is a name
+                        // or an array must survive as one, and round-tripping
+                        // it through a display string would flatten it.
+                        let dv = field_dict
+                            .get(b"DV")
+                            .cloned()
+                            .or_else(|| inherited_dv(&self.graph(), field.id))
+                            .unwrap_or_else(|| Object::String(encode_text_string(&text)));
+                        updated.insert(Name::from(b"V"), dv);
+                    } else {
+                        updated.remove(b"V");
+                        // `/I` is the choice field's selected-index cache
+                        // (§12.7.4.4). Left behind, it names a selection the
+                        // value no longer has.
+                        updated.remove(b"I");
+                    }
+                }
+            }
+
+            if has_default {
+                out.values_defaulted += 1;
+            } else {
+                out.values_removed += 1;
+            }
+            out.fields_reset += 1;
+            objects.push(ObjectWrite {
+                id: field.id,
+                before,
+                after: Some(Object::Dict(updated)),
+            });
+        }
+
+        self.commit(Command {
+            kind: CommandKind::ResetForm,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(out)
+    }
+
     /// Regenerate every widget appearance of `field` to display `text`,
     /// pushing the created `/AP` stream writes (and Shape-B widget `/AP`
     /// patches) onto `objects`, and returning the merged-widget `/AP` stream
@@ -15713,6 +16136,209 @@ impl EditSession {
 )]
 mod tests {
     use super::*;
+
+    // -----------------------------------------------------------------
+    // reset_form (§12.7.5.3)
+    // -----------------------------------------------------------------
+
+    /// A form with one field of each interesting kind.
+    ///
+    /// `Keep` has a `/DV`, `Drop` has none, `Inherit` has none of its own but
+    /// a parent that does, `Push` is a pushbutton, `Locked` is read-only.
+    fn reset_fixture() -> Vec<u8> {
+        crate::pageops::tests_support::build_pdf_bytes(&[
+            (
+                1,
+                "<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R 5 0 R 6 0 R 8 0 R 9 0 R] \
+                 /DA (/Helv 0 Tf 0 g) /DR << /Font << /Helv 10 0 R >> >> >> >>",
+            ),
+            (2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
+            (
+                3,
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] \
+                 /Resources << /Font << /Helv 10 0 R >> >> \
+                 /Annots [4 0 R 5 0 R 7 0 R 8 0 R 9 0 R] >>",
+            ),
+            (
+                4,
+                "<< /Type /Annot /Subtype /Widget /FT /Tx /T (Keep) /V (typed) /DV (factory) \
+                 /Rect [10 250 200 270] /DA (/Helv 0 Tf 0 g) >>",
+            ),
+            (
+                5,
+                "<< /Type /Annot /Subtype /Widget /FT /Tx /T (Drop) /V (typed) \
+                 /Rect [10 220 200 240] /DA (/Helv 0 Tf 0 g) >>",
+            ),
+            (
+                6,
+                "<< /FT /Tx /T (Parent) /DV (from-parent) /Kids [7 0 R] >>",
+            ),
+            (
+                7,
+                "<< /Type /Annot /Subtype /Widget /Parent 6 0 R /T (Inherit) /V (typed) \
+                 /Rect [10 190 200 210] /DA (/Helv 0 Tf 0 g) >>",
+            ),
+            (
+                8,
+                "<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 65536 /T (Push) /V (x) \
+                 /Rect [10 160 200 180] >>",
+            ),
+            (
+                9,
+                "<< /Type /Annot /Subtype /Widget /FT /Tx /Ff 1 /T (Locked) /V (typed) \
+                 /Rect [10 130 200 150] /DA (/Helv 0 Tf 0 g) >>",
+            ),
+            (10, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"),
+        ])
+    }
+
+    fn value_of(session: &EditSession, fqn: &str) -> forms::FieldValue {
+        forms::parse_acroform(&session.graph())
+            .expect("form")
+            .fields
+            .iter()
+            .find(|f| f.fully_qualified_name == fqn)
+            .expect("field")
+            .value
+            .clone()
+    }
+
+    /// ★ **Both `shall` branches: a default is restored, and a field with
+    /// none has its `/V` REMOVED rather than blanked.**
+    ///
+    /// The removal is the half a plausible implementation gets wrong. An
+    /// empty string and an absent key are different bytes and, for a choice
+    /// field, different meanings — §12.7.4.4 gives an absent `/V` the
+    /// documented "nothing selected" reading that `()` does not carry.
+    #[test]
+    fn a_reset_restores_a_default_and_removes_a_value_that_has_none() {
+        let mut session = EditSession::new(Document::from_bytes(reset_fixture()).unwrap());
+        let out = session.reset_form(None).expect("resets");
+
+        assert_eq!(
+            value_of(&session, "Keep"),
+            forms::FieldValue::Text(b"factory".to_vec()),
+            "a /DV is restored verbatim"
+        );
+        assert_eq!(
+            value_of(&session, "Drop"),
+            forms::FieldValue::Absent,
+            "no /DV means /V is REMOVED, not emptied"
+        );
+        // And removed as a key, not written as an empty string.
+        let dict = session
+            .graph()
+            .resolved(ObjId::new(5, 0))
+            .as_dict()
+            .cloned()
+            .unwrap();
+        assert!(dict.get(b"V").is_none(), "the /V key itself is gone");
+
+        assert_eq!(out.values_defaulted, 2, "Keep and Inherit");
+        assert_eq!(out.values_removed, 1, "Drop");
+    }
+
+    /// ★ **An inherited `/DV` is found, so a child with a parent's default
+    /// does not take the removal branch.**
+    ///
+    /// `/DV` is inheritable (Table 220). Testing the field's own dictionary
+    /// instead of the resolved value would silently discard every inherited
+    /// default in the document.
+    #[test]
+    fn an_inherited_default_is_restored_not_discarded() {
+        let mut session = EditSession::new(Document::from_bytes(reset_fixture()).unwrap());
+        session.reset_form(None).expect("resets");
+        assert_eq!(
+            value_of(&session, "Parent.Inherit"),
+            forms::FieldValue::Text(b"from-parent".to_vec()),
+            "the parent's /DV reached the child"
+        );
+    }
+
+    /// A pushbutton, a read-only field and a signature are left alone, each
+    /// counted separately so a shell can say which.
+    #[test]
+    fn a_reset_leaves_pushbuttons_and_read_only_fields_alone_and_counts_them() {
+        let mut session = EditSession::new(Document::from_bytes(reset_fixture()).unwrap());
+        let out = session.reset_form(None).expect("resets");
+        assert_eq!(out.skipped_pushbuttons, 1);
+        assert_eq!(out.skipped_read_only, 1);
+        assert_eq!(
+            value_of(&session, "Locked"),
+            forms::FieldValue::Text(b"typed".to_vec()),
+            "a read-only field keeps its value"
+        );
+    }
+
+    /// A named subset resets only those fields.
+    #[test]
+    fn a_named_subset_resets_only_those_fields() {
+        let mut session = EditSession::new(Document::from_bytes(reset_fixture()).unwrap());
+        let only = vec!["Keep".to_owned()];
+        let out = session.reset_form(Some(&only)).expect("resets");
+        assert_eq!(out.fields_reset, 1);
+        assert_eq!(
+            value_of(&session, "Drop"),
+            forms::FieldValue::Text(b"typed".to_vec()),
+            "an unnamed field is untouched"
+        );
+    }
+
+    /// ★ **A name that matches nothing refuses BEFORE anything is written**,
+    /// so a typo cannot half-reset a form.
+    #[test]
+    fn an_unknown_field_name_refuses_without_writing_anything() {
+        let mut session = EditSession::new(Document::from_bytes(reset_fixture()).unwrap());
+        let only = vec!["Keep".to_owned(), "Nonexistent".to_owned()];
+        let err = session.reset_form(Some(&only)).expect_err("must refuse");
+        assert!(matches!(err, EditError::FieldNotFound { .. }));
+        assert_eq!(
+            value_of(&session, "Keep"),
+            forms::FieldValue::Text(b"typed".to_vec()),
+            "the field named FIRST was not reset either"
+        );
+    }
+
+    /// A reset is ONE undoable command however many fields it touches, and
+    /// undoing it restores every value.
+    #[test]
+    fn a_reset_is_one_undoable_command() {
+        let mut session = EditSession::new(Document::from_bytes(reset_fixture()).unwrap());
+        session.reset_form(None).expect("resets");
+        assert_eq!(
+            value_of(&session, "Keep"),
+            forms::FieldValue::Text(b"factory".to_vec())
+        );
+        session.undo().expect("undoes");
+        assert_eq!(
+            value_of(&session, "Keep"),
+            forms::FieldValue::Text(b"typed".to_vec()),
+            "one undo restores the whole reset"
+        );
+        assert_eq!(
+            value_of(&session, "Drop"),
+            forms::FieldValue::Text(b"typed".to_vec())
+        );
+    }
+
+    /// A reset never writes `/DV` — doing so would redefine what a LATER
+    /// reset restores, invisibly until the second one produced a different
+    /// result from the first.
+    #[test]
+    fn a_reset_never_rewrites_the_default_it_read() {
+        let mut session = EditSession::new(Document::from_bytes(reset_fixture()).unwrap());
+        session.reset_form(None).expect("resets");
+        let dict = session
+            .graph()
+            .resolved(ObjId::new(5, 0))
+            .as_dict()
+            .cloned()
+            .unwrap();
+        assert!(dict.get(b"DV").is_none(), "no /DV was invented for Drop");
+        // And resetting twice is stable.
+        let out = session.reset_form(None).expect("resets again");
+        assert_eq!(out.values_removed, 1, "Drop still has no default to take");
+    }
 
     /// A small classic PDF with one page and an `/Info` dictionary.
     fn pdf_with_info() -> Vec<u8> {

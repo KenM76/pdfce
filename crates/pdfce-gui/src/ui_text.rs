@@ -10253,3 +10253,81 @@ pub fn recompute_not_considered(count: usize) -> String {
 built-in in them, so those fields keep the values last saved."
     )
 }
+
+// ---------------------------------------------------------------------------
+// Reset form (§12.7.5.3)
+// ---------------------------------------------------------------------------
+
+/// Heading for the reset section of the Forms panel.
+#[must_use]
+pub const fn reset_heading() -> &'static str {
+    "Reset to defaults"
+}
+
+/// The standing explanation, shown whenever the section is open.
+///
+/// Says the destructive part first. A section titled "reset" that opens with
+/// how it works has buried the only sentence that changes the operator's
+/// decision.
+#[must_use]
+pub const fn reset_explainer() -> &'static str {
+    "This DISCARDS what has been typed. Each field goes back to the default \
+stored in the document, and a field with no stored default is emptied \
+completely. Signature, read-only and button fields are left alone."
+}
+
+/// One field the reset would clear.
+#[must_use]
+pub fn reset_row(field: &str, from: &str, to: &str) -> String {
+    format!("{field}: {from} -> {to}")
+}
+
+/// What a field with no stored default becomes.
+#[must_use]
+pub const fn reset_to_empty() -> &'static str {
+    "(emptied)"
+}
+
+/// Summary of what a reset would do.
+#[must_use]
+pub fn reset_pending(clearing: usize, skipped: usize) -> String {
+    if skipped == 0 {
+        format!("{clearing} field(s) would be cleared.")
+    } else {
+        format!("{clearing} field(s) would be cleared; {skipped} left alone.")
+    }
+}
+
+/// Shown when nothing is eligible.
+#[must_use]
+pub const fn reset_nothing_to_do() -> &'static str {
+    "No field in this form can be reset."
+}
+
+/// The button that performs the reset.
+#[must_use]
+pub const fn reset_button() -> &'static str {
+    "Reset these fields"
+}
+
+/// Tooltip for that button.
+#[must_use]
+pub const fn reset_tooltip() -> &'static str {
+    "Clears the values listed above. One undo step."
+}
+
+/// Note after a successful reset.
+#[must_use]
+pub fn reset_done(reset: usize, removed: usize) -> String {
+    format!("Reset {reset} field(s); {removed} had no stored default and were emptied.")
+}
+
+/// How many fields already hold their reset value.
+///
+/// Stated rather than left as a gap in the list. A field the operator
+/// expected to see and does not is a question; "3 already hold their
+/// default" is the answer, given before it is asked.
+#[must_use]
+pub fn reset_already_default(count: usize) -> String {
+    format!("{count} field(s) already hold their default.")
+}

@@ -7600,6 +7600,68 @@ impl PdfceApp {
             doc.pending_note = Some(failure.unwrap_or_else(|| ui_text::recompute_applied(count)));
         }
 
+        // -- Reset to defaults (§12.7.5.3). --
+        //
+        // Beside the recompute section and collapsed for the same reason,
+        // but the disclosure is doing more work here: a recompute writes a
+        // number the operator can check, a reset DESTROYS what they typed.
+        // So the section lists every field it would clear, with its current
+        // value, before offering the button — the loss is what has to be on
+        // screen, not the outcome.
+        let mut do_reset = false;
+        egui::CollapsingHeader::new(ui_text::reset_heading())
+            .default_open(false)
+            .show(ui, |ui| {
+                ui.colored_label(ui.visuals().warn_fg_color, ui_text::reset_explainer());
+                // From the core, not re-derived here — see
+                // `EditSession::reset_preview` for why (R171).
+                let preview = doc.session.reset_preview(None);
+                let mut clearing = 0usize;
+                let mut skipped = 0usize;
+                let mut already = 0usize;
+                for row in &preview {
+                    if row.ineligible.is_some() {
+                        skipped += 1;
+                        continue;
+                    }
+                    if !row.would_change {
+                        already += 1;
+                        continue;
+                    }
+                    clearing += 1;
+                    let to = if row.would_remove {
+                        ui_text::reset_to_empty().to_owned()
+                    } else {
+                        row.target.clone()
+                    };
+                    ui.label(ui_text::reset_row(&row.field, &row.current, &to));
+                }
+                if already > 0 {
+                    ui.label(ui_text::reset_already_default(already));
+                }
+                if clearing == 0 {
+                    ui.label(ui_text::reset_nothing_to_do());
+                    return;
+                }
+                ui.label(ui_text::reset_pending(clearing, skipped));
+                let can_edit = doc.editing_enabled && fill_refusal_note.is_none();
+                let button = ui.add_enabled(can_edit, egui::Button::new(ui_text::reset_button()));
+                let button = match fill_refusal_note {
+                    Some(note) => button.on_disabled_hover_text(note),
+                    None => button.on_hover_text(ui_text::reset_tooltip()),
+                };
+                if button.clicked() {
+                    do_reset = true;
+                }
+            });
+        if do_reset {
+            doc.pending_note = Some(match doc.session_mut().reset_form(None) {
+                Ok(out) => ui_text::reset_done(out.fields_reset, out.values_removed),
+                Err(err) => err.to_string(),
+            });
+            doc.refresh_pages();
+        }
+
         // -- Form-wide actions, ABOVE the list. --
         //
         // Placed here, not at the bottom, because they act on the WHOLE form:

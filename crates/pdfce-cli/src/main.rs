@@ -2172,6 +2172,38 @@ enum Command {
         verify_undo: bool,
     },
 
+    /// Reset form fields to their default values and save (§12.7.5.3).
+    ///
+    /// Sets each field's `/V` to its `/DV`, and **removes `/V` entirely**
+    /// where there is no `/DV` — both halves are `shall` in the clause, and
+    /// removal is not the same as blanking.
+    ///
+    /// Pushbuttons, signature fields and read-only fields are left alone and
+    /// counted. **Destructive**: this discards typed answers, so it prints
+    /// what it will clear unless `--apply` is given.
+    ResetForm {
+        /// Input PDF.
+        input: PathBuf,
+        /// Reset only this field, by fully-qualified name. Repeatable.
+        /// Omit to reset every eligible field.
+        #[arg(long = "field", value_name = "NAME")]
+        fields: Vec<String>,
+        /// Perform the reset and write `--output`. Without this, nothing is
+        /// written and the fields that would be cleared are listed.
+        #[arg(long)]
+        apply: bool,
+        /// Output path. Required with `--apply`.
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        /// Which save path to use.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Also verify that undoing the reset reproduces the input file byte
+        /// for byte.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+
     /// List every form-field script, classified (decision 009 posture B).
     ///
     /// One stable line per script: which field, which `/AA` trigger, what
@@ -4508,6 +4540,14 @@ fn run() -> ExitCode {
             comma.into(),
             verify_undo,
         ),
+        Command::ResetForm {
+            input,
+            fields,
+            apply,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_reset_form(&input, &fields, apply, output.as_deref(), mode, verify_undo),
         Command::ListScripts {
             input,
             reproducible_only,
@@ -8152,6 +8192,154 @@ JavaScript-running reader still recomputes independently.",
         plan.skipped.len(),
         plan.changes.len(),
     );
+    finish_edit(input, &outcome)
+}
+
+/// `reset-form`: restore form fields to their defaults (§12.7.5.3).
+///
+/// # Why this shows the damage before doing it
+///
+/// A reset DISCARDS what the operator typed, and unlike a fill it does so to
+/// many fields at once. `fill-field` writes one named value and the operator
+/// can see what they asked for; `reset-form` with no arguments touches
+/// everything, and "everything" is exactly the scope where a wrong guess is
+/// unrecoverable from the command line.
+///
+/// So the default lists the fields it would clear and writes nothing. That is
+/// the same shape as `recompute`, and for a stronger reason: recompute's
+/// mistake is a wrong number, this one's is lost data.
+///
+/// # Output contract
+///
+/// One line per field, then a summary, all locale-invariant:
+///
+/// ```text
+/// reset  field="Keep" from="typed" to="factory" source=default
+/// reset  field="Drop" from="typed" to=<removed> source=none
+/// skip   field="Push" reason=pushbutton
+/// reset-form <path> reset=2 defaulted=1 removed=1 skipped=1 applied=0
+/// ```
+///
+/// `to=<removed>` rather than `to=""` on purpose: the clause removes the key,
+/// and an operator reading `to=""` would reasonably expect an empty string in
+/// the file.
+fn cmd_reset_form(
+    input: &Path,
+    fields: &[String],
+    apply: bool,
+    output: Option<&Path>,
+    mode: SaveMode,
+    verify_undo: bool,
+) -> u8 {
+    if apply && output.is_none() {
+        eprintln!("pdfce-cli: --apply needs --output");
+        return exit::EDIT_REFUSED;
+    }
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let only = (!fields.is_empty()).then_some(fields);
+
+    // The preview comes from the CORE, not from a second copy of the
+    // eligibility rule written here. The GUI panel and this dry run were
+    // each deriving it independently until `reset_preview` existed, which is
+    // two implementations of one rule free to drift — R171's exact shape,
+    // and the drift would have shown only as the CLI and the GUI disagreeing
+    // about how many fields a reset touches.
+    let preview = session.reset_preview(only.map(<[String]>::as_ref));
+    if preview.is_empty() {
+        eprintln!(
+            "pdfce-cli: {}: the document has no interactive form",
+            input.display()
+        );
+        return exit::EDIT_REFUSED;
+    }
+    let mut clearing = 0usize;
+    for row in &preview {
+        if let Some(reason) = row.ineligible {
+            println!("skip   field={:?} reason={}", row.field, reason.token());
+            continue;
+        }
+        if !row.would_change {
+            println!("ok     field={:?} reason=already_default", row.field);
+            continue;
+        }
+        clearing += 1;
+        // `<removed>` rather than `""`: the clause removes the KEY, and an
+        // operator reading `to=""` would reasonably expect an empty string in
+        // the file.
+        let to = if row.would_remove {
+            "<removed>".to_owned()
+        } else {
+            format!("{:?}", row.target)
+        };
+        println!(
+            "reset  field={:?} from={:?} to={to} source={}",
+            row.field,
+            row.current,
+            if row.would_remove { "none" } else { "default" },
+        );
+    }
+
+    if !apply {
+        println!(
+            "reset-form {} reset={clearing} defaulted={} removed={} skipped={} applied=0",
+            input.display(),
+            preview
+                .iter()
+                .filter(|r| r.would_change && !r.would_remove)
+                .count(),
+            preview
+                .iter()
+                .filter(|r| r.would_change && r.would_remove)
+                .count(),
+            preview.iter().filter(|r| r.ineligible.is_some()).count(),
+        );
+        eprintln!(
+            "pdfce-cli: {}: nothing was written. The lines above are what a reset WOULD \
+clear. Re-run with --apply --output FILE to perform it.",
+            input.display()
+        );
+        return exit::SUCCESS;
+    }
+
+    let out = match session.reset_form(only.map(<[String]>::as_ref)) {
+        Ok(out) => out,
+        Err(err) => return report_edit_error(input, &err),
+    };
+    let Some(output) = output else {
+        eprintln!("pdfce-cli: --apply needs --output");
+        return exit::EDIT_REFUSED;
+    };
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    println!(
+        "reset-form {} reset={} defaulted={} removed={} skipped={} applied={}",
+        input.display(),
+        out.fields_reset,
+        out.values_defaulted,
+        out.values_removed,
+        out.skipped_pushbuttons + out.skipped_signatures + out.skipped_read_only,
+        out.fields_reset,
+    );
+    if out.skipped_signatures > 0 {
+        eprintln!(
+            "pdfce-cli: {}: {} signature field(s) were left alone — a signature's value IS \
+the signature, and removing it would destroy it.",
+            input.display(),
+            out.skipped_signatures,
+        );
+    }
     finish_edit(input, &outcome)
 }
 
