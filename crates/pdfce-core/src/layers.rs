@@ -300,21 +300,52 @@
 //!   editor is listed) and never under-reports, which is the right
 //!   direction for a panel.
 //!
-//! ## A contradiction inside the standard, and which side pdfce takes
+//! ## An apparent contradiction that RECONCILES — decision 038, ruled
 //!
 //! Table 101's `/BaseState` row says the base state is applied and then
-//! "the `ON` **and** `OFF` arrays shall be processed". §8.11.4.5 b) — the
-//! ordering rules for applying a configuration — says instead that
-//! **either** the `ON` or the `OFF` array is processed, "whichever is
-//! opposite to `BaseState`". Neither is defined for `BaseState
-//! /Unchanged` (`DA-A10`).
+//! "the `ON` **and** `OFF` arrays shall be processed". §8.11.4.5 b) says
+//! instead that **either** the `ON` or the `OFF` array is processed,
+//! "whichever is opposite to `BaseState`". Read as two procedures, those
+//! disagree for a group named in **both** arrays.
 //!
-//! The two readings coincide except for a group named in **both** arrays.
-//! [`crate::annot::optional_content_default_off`] implements §8.11.4.5
-//! b)'s single-array reading; this module inherits it, for decision 1's
-//! reason, rather than forking. The superset reading (process both) is
-//! the safer of the two — it cannot lose information — and if `annot.rs`
-//! is ever changed to it, this module follows for free. It is named here
+//! **They are not two procedures.** Table 101's own `ON` and `OFF` rows
+//! each add a sentence that settles it: *"If the `BaseState` entry is
+//! `ON`, this entry is redundant"*, and the mirror for `OFF`. Redundancy
+//! is a **testable** claim — delete the entry and compare — and it holds
+//! under exactly one processing order: **the matching array first, the
+//! opposite array last.** An array applied immediately after `BaseState`
+//! set every group to that same value is a no-op. So Table 101 read in
+//! full IS §8.11.4.5 b) with a redundant no-op prepended: same function
+//! on every input, for `BaseState` `ON` and `OFF` alike.
+//!
+//! So pdfce is not "taking a side". It implements what **both** loci
+//! require, and the doc comments cite both — citing only §8.11.4.5 b)
+//! made the code look like it had ignored the table.
+//!
+//! Honest weight: the redundancy sentences are descriptive, not `shall`s,
+//! so the argument is interpretive. It is the strongest available — an
+//! interpretation that falsifies the standard's own factual statement
+//! about its data model is the wrong interpretation — and the two
+//! alternatives were measured out of existence (`in case of conflict`
+//! occurs zero times in 756 pages; ISO/IEC Directives Part 2 states no
+//! precedence convention).
+//!
+//! **Cite the edition.** `Table 101` is ISO 32000-1 only; ISO 32000-2
+//! renumbers the configuration-dictionary table to **Table 99**.
+//!
+//! **A deployed reader disagrees.** Mozilla `pdf.js` applies `/ON` then
+//! `/OFF` unconditionally, with no `BaseState` dependence — the order
+//! Table 101's own redundancy sentence rules out. For a group in both
+//! arrays under `/BaseState /OFF`, pdf.js hides it and pdfce shows it.
+//! That divergence is real and shipped, so a "match other readers"
+//! tiebreak would push AWAY from the ruling; it is recorded rather than
+//! quietly followed, because agreement with an implementation is not
+//! evidence about the standard. Acrobat's behaviour in that cell has
+//! **not** been measured.
+//!
+//! The genuine residue is `/BaseState /Unchanged` with a both-listed
+//! group, which neither locus defines — unreachable in pdfce, since
+//! `Unchanged` is illegal in `/D`. It is named here
 //! so a later session does not rediscover the disagreement from a
 //! confusing file.
 //!
@@ -759,11 +790,30 @@ pub struct LayerDiagnostics {
     /// measured as two dark runs 180 pt apart on a scanline, not
     /// eyeballed. pdfce renders exactly the same three-way answer.
     ///
-    /// So the more literal reading is **falsified**, and this is no longer
-    /// "knowingly more permissive" — it is the behaviour a reader actually
-    /// has. The diagnostic stays: the configuration is still unusual
-    /// enough to be worth reporting, and a document relying on it is
-    /// relying on something Table 101 does not spell out.
+    /// # What is falsified, precisely — and it is not the standard
+    ///
+    /// An earlier version of this comment said "the more literal reading
+    /// is falsified". That overstated it in the direction that matters.
+    ///
+    /// The literal reading remains a **correct reading of the text**.
+    /// §8.11.2.1 says a group "shall be assigned a state"; Table 101 says
+    /// "all the optional content groups **in a document**"; §8.11.4.5 a)
+    /// says "applied to **all the groups**". **None of the three says
+    /// "all groups listed in `/OCGs`."** The registry-narrowed reading is
+    /// not what ISO wrote.
+    ///
+    /// What the measurement falsifies is that any reader implements the
+    /// literal one. Acrobat narrows the quantifier to the `/OCProperties
+    /// /OCGs` registry, and `pdf.js` narrows it identically — two
+    /// independent implementations agreeing on something the standard
+    /// nowhere states. pdfce matches both.
+    ///
+    /// So this is a deliberate, measured divergence from the literal text
+    /// toward what documents are actually authored against, not a
+    /// discovery that the text meant that all along. The diagnostic stays
+    /// and now earns its keep twice over: the configuration is unusual,
+    /// AND a document relying on it relies on reader convention rather
+    /// than on anything Table 101 spells out.
     pub base_state_off_with_unregistered: bool,
     /// Groups named in **both** `/D /ON` and `/D /OFF` — a
     /// self-contradictory configuration (decision 038).
