@@ -35250,6 +35250,88 @@ confirmed present by direct read before this entry was appended).
 
 ## 2026-08-11 (hundred-and-sixth filing) — `0841a6c`: `verify-release.py`'s exact-equality checks replaced with a three-state AT/ADVANCED/CONTAINS read so a correct release stops failing five minutes later; `9649995` fixes two false claims on the public README; a prior-filing flag checked and found to need no correction
 
+**Sourcing.** No shell tool this dispatch (hard rule 8). Both commits'
+messages, the failure output, and the post-fix verification are
+relayed verbatim from the dispatching engineer's own account, not
+independently re-verified against `git` by this librarian.
+
+**Shipped:**
+- `0841a6c` — `verify-release.py` checks 3 and 5 were exact commit
+  equality, correct only at the release instant and false every commit
+  after. Found by re-running the script one docs-only commit after
+  `v0.3.0`: it reported `origin/main is AT the tagged commit` = false
+  even though `68ecba3` (then-current `main`) is a direct child of the
+  tagged `cfc20dd` and genuinely contained the release. Fixed to three
+  outcomes — AT (release instant), ADVANCED (normal afterwards, now
+  passes), does-not-CONTAIN (the only real failure, the `v0.2.0`
+  shape) — and check 5 relabelled `"is AT"` → `"CONTAINS"` to match
+  what it actually asserts.
+- `9649995` — `README.md` corrected: "no tagged release yet" (three
+  exist) replaced with a pointer to the current release; "encrypted
+  documents" under "not built yet" corrected (not deleted) to name the
+  actual residue — reading RC4/AES-128 works, writing an encrypted
+  document does not exist, AES-256/`/R 6` still refused by name.
+  Printing added to "working today", absent from the README despite
+  being `[x]`/`[x]`/`[x]` in `FEATURES.md`.
+
+**Decisions made this session:**
+- None new. No `ARCHITECTURE.md` §12 entry — a gate-script fix and a
+  README correction redraw no crate boundary, library choice, or
+  invariant, same reasoning as `5dfef4d`'s own entry.
+
+**Findings + decisions:**
+- **★ Re-verified against the actual `v0.2.0` incident, not merely
+  re-passed against today's release.** Three cases run against real
+  commits: AHEAD (today, normal) → True, passes; BEHIND (the `v0.2.0`
+  incident — 36 commits short) → **False, still fails, correctly**;
+  EQUAL (release instant) → True, passes. The gate still catches the
+  case it exists for.
+- **The weakening deliberately not made.** Relaxing check 5 to "the
+  tag exists reachable from somewhere in history" would also have
+  passed the `v0.2.0` incident (the tag was reachable from the
+  session's side branch). Reachability from `origin/main` specifically
+  is the actual assertion, and the fix preserves it rather than
+  loosening it to something that merely fails less often.
+- **A hundred-and-fifth-filing flag checked and closed with no
+  correction needed.** `LEGAL.md` §1/§7's "zero copyleft" language was
+  flagged as possibly overstated against `self_cell`/`r-efi`'s
+  disjunctive copyleft licence options. Both sections read this
+  dispatch: both are explicitly scoped to "verified against the
+  generated `THIRD_PARTY_LICENSES.md`," which genuinely shows 100%
+  permissive because `cargo-about` resolves both crates to their
+  permissive branch. The raw `cargo metadata` `license` field the
+  concern was built on is a different artefact. Nothing edited —
+  recorded so a future session does not re-open the same question.
+- **A pattern worth watching, not yet a rule.** Third document this
+  project found asserting something no longer true (after
+  `docs/UI_PREFERENCES.md`'s stale path and `CipherNotImplemented`'s
+  stale message). `FEATURES.md` has a maintenance contract that fires
+  on every capability change; `README.md` has none. One recurrence is
+  short of this project's two-occurrence promotion bar — not proposed
+  as a rule this filing.
+
+**Still in flight:**
+- Nothing new opened this filing.
+
+**For next session:** `verify-release.py` is now safe to re-run at any
+point after a release, not only at the release instant itself.
+`README.md`'s Status section is now accurate as of this filing; no
+mechanism guards it from drifting again the way `FEATURES.md` is
+guarded.
+
+**Ledger for this filing.** **No new Pass ID**, same class as
+`5dfef4d`. `docs/FEATURES.md`: not touched. `docs/ARCHITECTURE.md`: no
+new §12 entry, no body-section edit. Standing rules: no new mint,
+ceiling stays **R186**, next free **R187**. Decision-record ceiling
+unchanged, **042**, next free **043**. Operator-question ceiling
+unchanged at **(bj)**, next free **(bk)**. **Backup/git working-tree/
+remote state not independently asserted anywhere in this filing** — no
+shell this dispatch (hard rule 8); the engineer should check
+`D:\Dev\pdfce-backups\` and `git log`/`git status`/`git remote -v`
+directly. This is the **hundred-and-sixth** `SESSION_LOG.md`/
+`ROADMAP.md` joint filing (the hundred-and-fifth, immediately above,
+confirmed present by direct read before this entry was appended).
+
 ## 2026-08-11 (hundred-and-seventh filing) — `f2ac2af`: pdfce compiles on something other than Windows; `pdfce-print` un-gated + two missing non-Windows stubs added, closing a build break that had made the crate un-compilable for wasm32 and every non-Windows target; `Pass 66.0` ships; and CI has been red on every push back past `v0.1.0`, undetected — `R176`'s SECOND instance
 
 **Sourcing.** No shell tool this dispatch (hard rule 8). The diff shape,
@@ -35341,87 +35423,21 @@ log`/`git status`/`git remote -v` directly. This is the
 hundred-and-sixth, immediately above, confirmed present by direct read
 before this entry was appended).
 
-**Sourcing.** No shell tool this dispatch (hard rule 8). Both commits'
-messages, the failure output, and the post-fix verification are
-relayed verbatim from the dispatching engineer's own account, not
-independently re-verified against `git` by this librarian.
-
-**Shipped:**
-- `0841a6c` — `verify-release.py` checks 3 and 5 were exact commit
-  equality, correct only at the release instant and false every commit
-  after. Found by re-running the script one docs-only commit after
-  `v0.3.0`: it reported `origin/main is AT the tagged commit` = false
-  even though `68ecba3` (then-current `main`) is a direct child of the
-  tagged `cfc20dd` and genuinely contained the release. Fixed to three
-  outcomes — AT (release instant), ADVANCED (normal afterwards, now
-  passes), does-not-CONTAIN (the only real failure, the `v0.2.0`
-  shape) — and check 5 relabelled `"is AT"` → `"CONTAINS"` to match
-  what it actually asserts.
-- `9649995` — `README.md` corrected: "no tagged release yet" (three
-  exist) replaced with a pointer to the current release; "encrypted
-  documents" under "not built yet" corrected (not deleted) to name the
-  actual residue — reading RC4/AES-128 works, writing an encrypted
-  document does not exist, AES-256/`/R 6` still refused by name.
-  Printing added to "working today", absent from the README despite
-  being `[x]`/`[x]`/`[x]` in `FEATURES.md`.
-
-**Decisions made this session:**
-- None new. No `ARCHITECTURE.md` §12 entry — a gate-script fix and a
-  README correction redraw no crate boundary, library choice, or
-  invariant, same reasoning as `5dfef4d`'s own entry.
-
-**Findings + decisions:**
-- **★ Re-verified against the actual `v0.2.0` incident, not merely
-  re-passed against today's release.** Three cases run against real
-  commits: AHEAD (today, normal) → True, passes; BEHIND (the `v0.2.0`
-  incident — 36 commits short) → **False, still fails, correctly**;
-  EQUAL (release instant) → True, passes. The gate still catches the
-  case it exists for.
-- **The weakening deliberately not made.** Relaxing check 5 to "the
-  tag exists reachable from somewhere in history" would also have
-  passed the `v0.2.0` incident (the tag was reachable from the
-  session's side branch). Reachability from `origin/main` specifically
-  is the actual assertion, and the fix preserves it rather than
-  loosening it to something that merely fails less often.
-- **A hundred-and-fifth-filing flag checked and closed with no
-  correction needed.** `LEGAL.md` §1/§7's "zero copyleft" language was
-  flagged as possibly overstated against `self_cell`/`r-efi`'s
-  disjunctive copyleft licence options. Both sections read this
-  dispatch: both are explicitly scoped to "verified against the
-  generated `THIRD_PARTY_LICENSES.md`," which genuinely shows 100%
-  permissive because `cargo-about` resolves both crates to their
-  permissive branch. The raw `cargo metadata` `license` field the
-  concern was built on is a different artefact. Nothing edited —
-  recorded so a future session does not re-open the same question.
-- **A pattern worth watching, not yet a rule.** Third document this
-  project found asserting something no longer true (after
-  `docs/UI_PREFERENCES.md`'s stale path and `CipherNotImplemented`'s
-  stale message). `FEATURES.md` has a maintenance contract that fires
-  on every capability change; `README.md` has none. One recurrence is
-  short of this project's two-occurrence promotion bar — not proposed
-  as a rule this filing.
-
-**Still in flight:**
-- Nothing new opened this filing.
-
-**For next session:** `verify-release.py` is now safe to re-run at any
-point after a release, not only at the release instant itself.
-`README.md`'s Status section is now accurate as of this filing; no
-mechanism guards it from drifting again the way `FEATURES.md` is
-guarded.
-
-**Ledger for this filing.** **No new Pass ID**, same class as
-`5dfef4d`. `docs/FEATURES.md`: not touched. `docs/ARCHITECTURE.md`: no
-new §12 entry, no body-section edit. Standing rules: no new mint,
-ceiling stays **R186**, next free **R187**. Decision-record ceiling
-unchanged, **042**, next free **043**. Operator-question ceiling
-unchanged at **(bj)**, next free **(bk)**. **Backup/git working-tree/
-remote state not independently asserted anywhere in this filing** — no
-shell this dispatch (hard rule 8); the engineer should check
-`D:\Dev\pdfce-backups\` and `git log`/`git status`/`git remote -v`
-directly. This is the **hundred-and-sixth** `SESSION_LOG.md`/
-`ROADMAP.md` joint filing (the hundred-and-fifth, immediately above,
-confirmed present by direct read before this entry was appended).
+**★ Correction footer, appended 2026-08-11 (hundred-and-ninth filing,
+structural repair authorised by the operator).** The sentence
+immediately above — asserting the hundred-and-sixth entry was
+"confirmed present by direct read" before this entry was appended —
+was FALSE when written. At the moment this (the seventh's) entry was
+appended, the hundred-and-sixth's HEADER existed but its BODY did not:
+the body had been misplaced to sit after this entry's own body instead
+of under its own header, so the hundred-and-sixth header had no body
+directly beneath it. Whatever check produced the "confirmed present by
+direct read" sentence read the header, not the body — a marker, not
+the thing the marker exists to mark. Repaired in the hundred-and-ninth
+filing, which relocated the hundred-and-sixth's body to sit under its
+own header (now genuinely immediately above, correctly). Filed as
+`R186`'s SIXTH INSTANCE (Standing rules, `ROADMAP.md`) — see that
+entry for the general shape and the full repair record.
 
 ## 2026-08-11 (hundred-and-eighth filing) — `cd86adc`: the filing gate stops lying on a one-commit clone — `check-commits-filed.py` gains a shallow-repository guard, and the guard against quiet failure fails quietly on its own first write
 
@@ -35512,3 +35528,173 @@ body is misplaced in this file, appended after the hundred-and-seventh
 header instead of immediately after its own header at line ~35251 —
 pre-existing, not introduced by this filing, flagged to the engineer
 rather than silently corrected).
+
+## 2026-08-11 (hundred-and-ninth filing) — repair, authorised: the hundred-and-sixth filing's orphaned body restored under its own header; the hundred-and-seventh's false adjacency claim corrected; `R186`'s SIXTH INSTANCE minted from the defect; the operator's ongoing release authorisation recorded; `CLAUDE.md` rule 8 flagged for the operator's own amendment
+
+**Sourcing.** No shell tool this dispatch. This filing is a self-repair
+of `docs/SESSION_LOG.md` and a bookkeeping/decision record — nothing in
+it depends on `git`, and the engineer's dispatch supplied the exact
+line-range evidence for the defect (measured directly by the engineer,
+by direct read of this file) rather than this librarian re-deriving it.
+The reorder and the footer below were verified by this librarian's own
+direct re-read after each edit, not merely assumed to have applied.
+
+**Authorisation.** The hundred-and-eighth filing correctly declined to
+reorder an append-only document without authorisation and flagged the
+defect instead. The engineer's dispatch this filing states, in its own
+words, "**Authorised — please repair it**," and separately confirms the
+scope of the repair is limited to `docs/` (another agent is editing
+`crates/` concurrently in this repository). Both are treated as the
+authorisation this repair proceeds on.
+
+**Repaired:**
+- **`docs/SESSION_LOG.md`, hundred-and-sixth filing.** Its body — which
+  had been sitting, orphaned, after the hundred-and-seventh filing's own
+  body instead of under its own header — is now relocated to sit
+  directly beneath the hundred-and-sixth's header, before the
+  hundred-and-seventh's header. Content itself is untouched, byte-for-
+  byte, only its position moved. Verified by direct re-read after the
+  edit: the hundred-and-sixth header is immediately followed by text
+  beginning "**Sourcing.** No shell tool this dispatch (hard rule 8).
+  Both commits'..." and ending "...confirmed present by direct read
+  before this entry was appended)."; the hundred-and-seventh header
+  immediately follows, with its own (unmoved) body beneath it, and no
+  duplicate copy of either body remains anywhere in the file.
+- **`docs/SESSION_LOG.md`, hundred-and-seventh filing's closing
+  sentence — corrected by footer, not by silent edit.** That sentence
+  asserted the hundred-and-sixth entry was "confirmed present by direct
+  read... before this entry was appended," which was FALSE at the
+  moment it was written: the hundred-and-sixth's header existed then,
+  its body did not. A dated `★ Correction footer` is appended
+  immediately after that sentence, inside the same (seventh's) entry,
+  naming what was actually false, what check produced the false
+  sentence (one that read the header, not the body), and pointing to
+  this filing as the repair. The append-only convention for `SESSION_
+  LOG.md` is interpreted here as: correct by footer, never by rewriting
+  or deleting a sentence a prior filing actually wrote — the same
+  discipline this file already uses for every other dated amendment.
+
+**Decisions made this session:**
+- **The append-only convention, applied to a structural defect rather
+  than a content correction, resolved as: reposition is permitted,
+  rewrite is not.** Moving the hundred-and-sixth's body to sit under
+  its own header is not "rewriting history" — the content, the date,
+  and the filing-count numbering are all unchanged; only the accident
+  of WHERE the text sits in the file (which was never itself a claim
+  about anything) is fixed. The FALSE CLAIM the misplacement produced
+  (the seventh's closing sentence) is a different kind of thing and is
+  handled the way this file always handles a claim later found false —
+  a dated footer, the original sentence left standing so the record
+  shows what was actually asserted and when it was corrected.
+- **The operator's 2026-08-11 instruction — "please continue to post
+  the latest versions to git so I can try them on my laptop at home" —
+  is recorded here as the SESSION_LOG-tier half of a two-tier filing.**
+  The engineer's dispatch states this was already written into
+  `docs/NEXT_SESSION.md` at commit `0df8450` (engineer-owned, not
+  edited by this librarian) with the scope stated narrowly: it
+  authorises releasing pdfce builds so the operator can install and
+  test them on another machine, and is explicitly NOT blanket
+  authority to publish anything else, NOT a licence to treat repository
+  visibility as an agent's own decision, and NOT permission to skip
+  `tools/verify-release.py`. This librarian did not independently
+  verify the operator's exact wording (no transcript access this
+  dispatch) — the sentence above is relayed from the engineer's own
+  dispatch, quoted as given.
+- **`CLAUDE.md` rule 8 is now stale in one respect and is flagged, not
+  edited.** Rule 8's current wording requires "an explicit, current
+  go-ahead" **per release**; the operator's instruction above is
+  reasonably read as standing/ongoing authorisation for release-cutting
+  specifically, which the rule's per-instance wording no longer
+  matches. `CLAUDE.md` is the operator's own global config file (see
+  hard rule 9 — "don't touch `C:\Users\Ken\.claude\CLAUDE.md`") and the
+  project's own `CLAUDE.md` copy is likewise not this librarian's to
+  edit; **flagged to the operator in this filing's report, not amended
+  here.** Until the operator amends it, rule 8's literal text and the
+  narrower `NEXT_SESSION.md` scoping (builds for the operator's own
+  testing, not blanket publishing authority) both still bind, and the
+  narrower reading governs where the two could be read to disagree.
+
+**Findings + decisions:**
+- **★ The false assertion was itself an instance of this project's
+  most-repeated failure shape, inside the record's own integrity
+  check.** "Confirmed present by direct read" is written into every
+  joint filing's closing sentence as a claim that the previous entry
+  was verified before this one was appended. In the hundred-and-seventh
+  filing's case, what was actually verified was the previous entry's
+  HEADER — which existed — not its BODY — which, at that moment, did
+  not. Filed as `R186`'s **SIXTH INSTANCE** (Standing rules,
+  `ROADMAP.md`, full text there): a check keyed on a marker (a `## `
+  header line) fails open — asserts true — when the same hazard (an
+  entry with no real content) arrives without the marker missing too,
+  and the failure is silent, because nothing in the sentence itself
+  distinguishes "I saw the header" from "I saw the entry." **Judgement
+  call, stated per the dispatch's own framing: filed as a further
+  instance of `R186`, not a new rule.** The underlying shape — a
+  verification keyed on a marker rather than the thing the marker
+  stands for — is already named by `R186` itself, by the `R183`
+  verification-filter family, and by this project's own repeated
+  observation (per the dispatching engineer, citing `UI_PREFERENCES.md`
+  and `inspect`'s clean-version-line defect as siblings) that a check
+  confirming a marker is a recurring, not novel, shape here. Minting a
+  seventh rule number for an already-named shape would fragment the
+  citation trail rather than strengthen it; R186's own entry already
+  carries five prior instances and absorbs a sixth cleanly.
+- **The "confirmed present by direct read" formula itself is now
+  flagged as imprecise, not yet rewritten project-wide.** As currently
+  worded, it does not distinguish "I saw the header line" from "I saw
+  the entry, header and body both." This filing's own repaired entries
+  keep the existing formula (the sixth's and seventh's own closing
+  sentences are original text, left standing per the append-only
+  discipline above) — the sharpening is recorded here as a
+  recommendation for FUTURE filings, not applied retroactively to past
+  ones: a future closing sentence should say what was actually read
+  ("the previous entry's header and body, both present" is the true
+  and complete claim; "confirmed present" alone is now known to be
+  readable as either).
+- **A future `pdfce-librarian` "index check" (task 7) should verify
+  adjacency, not just ascension.** Every prior index check this project
+  has run confirmed headers appear in ascending filing-number order;
+  none confirmed a header is immediately followed by ITS OWN body
+  before the next header. This defect survived exactly because ordering
+  was the only property checked. Recorded here as a concrete addition
+  to how a future index check is performed — not as an edit to this
+  librarian's own agent-definition file, which is out of scope for a
+  `docs/`-only dispatch and not this librarian's to rewrite unprompted.
+
+**Still in flight:**
+- Nothing new opened this filing beyond the two items above (the rule-8
+  wording flag, and the future index-check sharpening) — both already
+  recorded, neither blocking.
+
+**For next session:** confirm with a shell that `docs/SESSION_LOG.md`
+now parses cleanly header-by-header (every `## ` line immediately
+followed by its own body) — this librarian verified the specific span
+by direct re-read but has not swept the full file's ~109 filings for
+any other instance of the same defect. Flag rule 8's wording to the
+operator for his own amendment to `CLAUDE.md`, per hard rule 9.
+
+**Ledger for this filing.** **No new Pass ID, no code commit** — this
+is a `docs/`-only structural repair plus a decision/finding record, no
+capability shipped. `docs/FEATURES.md`: not touched. `docs/
+ARCHITECTURE.md`: no new §12 entry — the operator's release-cadence
+instruction is a publishing/process decision, not a crate boundary,
+library choice, or invariant, so it is recorded here rather than in the
+decision log. Standing rules: **no new mint** — `R186` cited, **SIXTH
+INSTANCE**, amendment appended to `R186`'s own Standing-rules entry.
+Ceiling stays **R186**, next free **R187** (unaffected by an amendment
+to an already-minted rule). Decision-record ceiling unchanged, **043**,
+next free **044**. Pass-family ceiling unchanged, **66.0**, next free
+**67**. Operator-question ceiling unchanged at **(bj)**, next free
+**(bk)**. `D:\dev\rag\rust\`/`D:\dev\rag\egui\`/`C:\personal_rag\pdf\`:
+none touched — this defect is a project-internal document-integrity
+finding, not ecosystem- or PDF-domain-general, so it is captured as a
+Standing-rules instance instead, matching the hundred-and-eighth
+filing's own precedent for `R174`/`R187`. **Backup/git working-tree/
+remote state not independently asserted anywhere in this filing** — no
+shell this dispatch (hard rule 8); the engineer should check
+`D:\Dev\pdfce-backups\` and `git log`/`git status`/`git remote -v`
+directly. This is the **hundred-and-ninth** `SESSION_LOG.md`/
+`ROADMAP.md` joint filing (the hundred-and-eighth, immediately above —
+header AND body both confirmed present by direct read this time,
+per this filing's own sharpened formula — before this entry was
+appended).

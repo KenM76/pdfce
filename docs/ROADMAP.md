@@ -53804,6 +53804,45 @@ and
   Not re-numbered, matching the third- and fourth-instance precedent
   immediately above. **Ceiling stays `R186`, next free `R187`.**
 
+  **★ SIXTH INSTANCE (2026-08-11, no commit — a `docs/SESSION_LOG.md`
+  self-defect, found by the operator and repaired in the hundred-and-
+  ninth filing) — the guard this time is a VERIFICATION SENTENCE, and
+  the marker it keyed on is a MARKDOWN HEADER, not a code artefact.**
+  Every joint filing's ledger paragraph closes with "confirmed present
+  by direct read" about the entry immediately above, and that check —
+  whatever check actually produced the sentence — looked for the
+  PREVIOUS ENTRY'S HEADER, not its body. The hundred-and-sixth filing's
+  body had been misplaced during editing to sit after the hundred-and-
+  seventh's own body instead of under its own header, leaving the
+  hundred-and-sixth header with no body directly beneath it for one
+  full filing's duration; the hundred-and-seventh's own closing
+  sentence nonetheless asserted the hundred-and-sixth was "confirmed
+  present by direct read... before this entry was appended" — true of
+  the header, false of the entry. Same shape as all five prior
+  instances: a check correct for the case it was built against (an
+  entry whose header and body are adjacent, which is every other entry
+  in this file) silently not reached by the adjacent case (a body
+  detached from its header) that arrives without the marker the check
+  actually keys on. **Distinct from R187** (which asks whether a guard
+  was ever proven to fire) **and from R174/R181** (which ask whether a
+  count or a disclosure is correct as WRITTEN) — this is a check whose
+  own PASSING is unfalsifiable from the artefact it inspects, because
+  the artefact it inspects (the header) is not the thing the sentence
+  claims to have verified (the entry). **Practical form, restated for
+  a document-integrity check rather than a code guard: before writing
+  "confirmed present by direct read," name what was actually read** —
+  "the previous entry's header is present" is a narrower and truthful
+  claim; "the previous entry is present" requires reading its body too.
+  A future `pdfce-librarian` **index check** (task 7) verifies every
+  `## ` header in `docs/SESSION_LOG.md` is followed by ITS OWN body
+  before the next header, not merely that headers ascend in order —
+  ordering was already checked by this project's own convention;
+  adjacency never was. Full record: `docs/SESSION_LOG.md`'s
+  hundred-and-sixth/hundred-and-seventh entries (repaired) and the
+  hundred-and-seventh's own correction footer (added this instance).
+  Not re-numbered, matching the third/fourth/fifth-instance precedent.
+  **Ceiling stays `R186`, next free `R187`.**
+
 - **R187 — A guard added specifically to catch a hazard is proven by
   making the hazard OCCUR and watching the guard fire, not by reading
   its comparison; and two functions sharing a name across files in the
