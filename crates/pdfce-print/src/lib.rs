@@ -576,8 +576,8 @@ pub fn place_page(page: (f64, f64), printable: (f64, f64), mode: ScaleMode) -> P
 )]
 mod tests {
     use super::{
-        Collate, DeviceGeometry, JobSpec, PageSubset, Placement, ScaleMode, job_resolution,
-        place_page, plan_job,
+        Collate, DeviceGeometry, JobSpec, Orientation, PageSubset, Placement, ScaleMode,
+        job_resolution, place_page, plan_job, sheet_orientation,
     };
 
     /// A4 in points.
@@ -679,6 +679,8 @@ mod tests {
         DeviceGeometry {
             dpi: (600, 600),
             printable_pt: (576.0, 756.0),
+            physical_pt: (612.0, 792.0),
+            offset_pt: (18.0, 18.0),
         }
     }
 
@@ -900,6 +902,236 @@ mod tests {
             vec![0, 1]
         );
     }
+
+    // ---- orientation and the sheet it turns --------------------------
+    //
+    // The device in these tests is `letter_600()`: a portrait-default
+    // Letter printer reporting a 576 × 756 pt printable area inside a
+    // 612 × 792 pt sheet. A landscape LETTER page is 792 × 612 pt.
+
+    /// A landscape Letter page, as a document reports it.
+    const LANDSCAPE_LETTER: (f64, f64) = (792.0, 612.0);
+    /// A portrait Letter page.
+    const PORTRAIT_LETTER: (f64, f64) = (612.0, 792.0);
+    /// The scale a landscape page gets when the sheet is CORRECTLY
+    /// turned: 576 / 612 — the turned sheet's SHORT side over the page's
+    /// short side, which is the axis that binds once the long axis has
+    /// room. (Not 756/792; the long axis stops being the constraint, which
+    /// is the whole reason turning helps.)
+    const SCALE_TURNED: f64 = 0.941_176_470_588_235_3;
+    /// The scale it got before the sheet was turned: 576 / 792. About 77%
+    /// of correct size, centred, with no clip to report it — which is why
+    /// this read as a scaling preference rather than a defect.
+    const SCALE_UNTURNED: f64 = 0.727_272_727_272_727_3;
+
+    /// ★ **The regression: a landscape page is planned against the
+    /// TURNED sheet.**
+    ///
+    /// `Auto` on a landscape page resolves to landscape, the driver turns
+    /// the sheet, and planning must turn with it. Before the fix this
+    /// planned 0.7273 against the un-turned 576 × 756 printable area
+    /// while the driver printed on 756 × 576 — the page came out at
+    /// 0.7273 / 0.9412 ≈ 77% of correct size with a wide empty margin.
+    ///
+    /// The exact scale is asserted, not merely "it changed": a fix that
+    /// rotated by the wrong amount, or rotated the physical sheet and not
+    /// the printable area, would also change it.
+    #[test]
+    fn a_landscape_page_is_planned_against_the_turned_sheet() {
+        let device = letter_600().for_orientation(Orientation::Auto, LANDSCAPE_LETTER);
+        let plans = plan_job(
+            &device,
+            &[LANDSCAPE_LETTER],
+            &spec(vec![0], ScaleMode::Fit, 600),
+        );
+        let p = plans.first().expect("one page planned");
+        // The SCALE is asserted before the geometry, deliberately: it is
+        // the operator-visible symptom, so an ablation of the rotation
+        // reports the number that was on paper (0.7273) rather than a
+        // pair of sheet dimensions that has to be re-derived into one.
+        assert!(
+            (p.placement.scale - SCALE_TURNED).abs() < 1e-12,
+            "expected {SCALE_TURNED} (576/612), got {}; \
+             {SCALE_UNTURNED} means the sheet was not turned",
+            p.placement.scale
+        );
+        assert_eq!(device.printable_pt, (756.0, 576.0), "the sheet turns");
+    }
+
+    /// **Portrait FORCED on a landscape page does not turn the sheet.**
+    ///
+    /// Without this, "always turn for a landscape page" would pass the
+    /// test above and be wrong: the operator who picks Portrait is asking
+    /// for a landscape drawing on an upright sheet, and gets the
+    /// under-scaled placement on purpose.
+    #[test]
+    fn forcing_portrait_on_a_landscape_page_leaves_the_sheet_upright() {
+        let device = letter_600().for_orientation(Orientation::Portrait, LANDSCAPE_LETTER);
+        assert_eq!(device, letter_600(), "nothing about the sheet may move");
+        let plans = plan_job(
+            &device,
+            &[LANDSCAPE_LETTER],
+            &spec(vec![0], ScaleMode::Fit, 600),
+        );
+        let p = plans.first().expect("one page planned");
+        assert!(
+            (p.placement.scale - SCALE_UNTURNED).abs() < 1e-12,
+            "expected {SCALE_UNTURNED} (576/792), got {}",
+            p.placement.scale
+        );
+    }
+
+    /// **The identity case: a portrait page on a portrait device is
+    /// untouched.**
+    ///
+    /// Without this a helper that swapped unconditionally would pass
+    /// every other test here — the two above only pin the cases where a
+    /// turn is or is not wanted, not the case where the answer is "do
+    /// nothing".
+    #[test]
+    fn a_portrait_page_on_a_portrait_device_changes_nothing() {
+        for requested in [Orientation::Auto, Orientation::Portrait] {
+            assert_eq!(
+                letter_600().for_orientation(requested, PORTRAIT_LETTER),
+                letter_600(),
+                "{requested:?} on an upright sheet must be the identity"
+            );
+        }
+    }
+
+    /// ★ **Rotation is relative to the DEVICE's default, not to
+    /// portrait.**
+    ///
+    /// Landscape-default devices are real — wide-format plotters and
+    /// label printers ship that way, and any driver's properties page can
+    /// set it. A helper that turned "whenever the job is landscape" would
+    /// turn a sheet that was already turned, producing a PORTRAIT
+    /// printable area for a landscape job: the original bug, with the
+    /// sign flipped, on exactly the hardware this project's operator uses.
+    #[test]
+    fn a_landscape_default_device_does_not_turn_for_a_landscape_job() {
+        let plotter = DeviceGeometry {
+            dpi: (600, 600),
+            printable_pt: (756.0, 576.0),
+            physical_pt: (792.0, 612.0),
+            offset_pt: (18.0, 18.0),
+        };
+        assert_eq!(plotter.default_orientation(), Orientation::Landscape);
+        assert_eq!(
+            plotter.for_orientation(Orientation::Landscape, LANDSCAPE_LETTER),
+            plotter,
+            "already landscape — nothing to turn"
+        );
+        assert_eq!(
+            plotter.for_orientation(Orientation::Auto, LANDSCAPE_LETTER),
+            plotter,
+            "and Auto resolves to the same thing"
+        );
+        // The other direction still turns, and turns the other way.
+        let upright = plotter.for_orientation(Orientation::Portrait, LANDSCAPE_LETTER);
+        assert_eq!(upright.printable_pt, (576.0, 756.0));
+        assert_eq!(upright.physical_pt, (612.0, 792.0));
+    }
+
+    /// ★ **An ASYMMETRIC margin turns with the sheet, and not by a plain
+    /// swap.**
+    ///
+    /// The margins belong to the paper path, so they stay on the same
+    /// physical edges while the coordinate system turns around them:
+    /// left→top, top→right, right→bottom, bottom→left. For a 612 × 792
+    /// sheet with a 576 × 700 printable area at offset (12, 36) the
+    /// bottom margin is 792 − 36 − 700 = 56, so the turned offset is
+    /// (56, 12).
+    ///
+    /// Asserted on an asymmetric offset because every wrong version of
+    /// this — a plain component swap `(36, 12)`, or leaving the offset
+    /// alone — is INVISIBLE on the symmetric margins every office printer
+    /// reports. A test written on a square margin cannot fail.
+    #[test]
+    fn an_asymmetric_margin_turns_with_the_sheet() {
+        let device = DeviceGeometry {
+            dpi: (600, 600),
+            printable_pt: (576.0, 700.0),
+            physical_pt: (612.0, 792.0),
+            offset_pt: (12.0, 36.0),
+        };
+        let turned = device.for_orientation(Orientation::Landscape, PORTRAIT_LETTER);
+        assert_eq!(turned.physical_pt, (792.0, 612.0));
+        assert_eq!(turned.printable_pt, (700.0, 576.0));
+        assert_eq!(
+            turned.offset_pt,
+            (56.0, 12.0),
+            "bottom margin becomes left, left margin becomes top — \
+             a plain swap would give (36, 12)"
+        );
+        // The margin ring is intact: what was the top margin (36) is now
+        // the right margin.
+        let right = turned.physical_pt.0 - turned.offset_pt.0 - turned.printable_pt.0;
+        assert!((right - 36.0).abs() < 1e-12, "top margin must become right");
+        // And turning back is the identity, which is what makes this one
+        // rotation rather than two independently-guessed ones.
+        assert_eq!(
+            turned.for_orientation(Orientation::Portrait, PORTRAIT_LETTER),
+            device,
+            "turning out and back must return the sheet it started on"
+        );
+    }
+
+    /// The DPI does NOT turn with the sheet.
+    ///
+    /// `LOGPIXELSX`/`LOGPIXELSY` describe the engine's dot pitch, not the
+    /// page. Swapping them on an asymmetric device (600 × 300 is real on
+    /// plotters) would mis-size every rasterisation, and the only symptom
+    /// would be a stretched print.
+    #[test]
+    fn the_resolution_does_not_turn_with_the_sheet() {
+        let device = DeviceGeometry {
+            dpi: (600, 300),
+            ..letter_600()
+        };
+        assert_eq!(
+            device
+                .for_orientation(Orientation::Landscape, LANDSCAPE_LETTER)
+                .dpi,
+            (600, 300)
+        );
+    }
+
+    /// A square sheet reads as portrait, matching `resolve_orientation`'s
+    /// reading of a square page — so a square page on a square sheet asks
+    /// for no turn.
+    #[test]
+    fn a_square_sheet_reads_as_portrait() {
+        assert_eq!(sheet_orientation((612.0, 612.0)), Orientation::Portrait);
+        assert_eq!(sheet_orientation((792.0, 612.0)), Orientation::Landscape);
+        assert_eq!(sheet_orientation((612.0, 792.0)), Orientation::Portrait);
+    }
+
+    /// ★ **The orientation page is the first page SENT, not `pages[0]`.**
+    ///
+    /// A reversed job sends its last page first. If the geometry rotation
+    /// resolved `Auto` from `pages[0]` while the `DEVMODE` resolved it
+    /// from the first page sent, the two would disagree on exactly the
+    /// jobs that mix page shapes — the driver turning a sheet pdfce
+    /// planned flat, which is this whole defect by a different route.
+    #[test]
+    fn the_orientation_page_is_the_first_page_sent() {
+        let sizes = [PORTRAIT_LETTER, LANDSCAPE_LETTER];
+        let mut s = spec(vec![0, 1], ScaleMode::Fit, 600);
+        assert_eq!(s.first_page_pt(&sizes), PORTRAIT_LETTER);
+        s.reverse = true;
+        assert_eq!(
+            s.first_page_pt(&sizes),
+            LANDSCAPE_LETTER,
+            "reversed, the landscape page is sent first and decides the sheet"
+        );
+        // An empty job falls back rather than forcing an Option on
+        // callers for a case that cannot reach paper.
+        assert_eq!(
+            spec(vec![], ScaleMode::Fit, 600).first_page_pt(&sizes),
+            super::US_LETTER_PORTRAIT_PT
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1037,7 +1269,68 @@ impl JobSpec {
                 .collect(),
         }
     }
+
+    /// The page whose shape decides the whole job's orientation.
+    ///
+    /// # Why this is a method and not "just index page 0"
+    ///
+    /// A `DEVMODE` applies to the entire job, so exactly one page can
+    /// decide [`Orientation::Auto`], and `build_devmode` has already
+    /// chosen which: the first page SENT. That is not `pages[0]` — the
+    /// sequence may be subset-filtered, reversed, or repeated for
+    /// copies, so the first page sent is `sequence()[0]`.
+    ///
+    /// Both shells call this rather than reaching for an index of their
+    /// own, because the geometry rotation ([`DeviceGeometry::for_orientation`])
+    /// and the `DEVMODE` must resolve `Auto` from the SAME page. If they
+    /// disagree — a reversed job of a portrait first page and a landscape
+    /// last one is enough — the driver turns a sheet pdfce planned flat,
+    /// which is the defect the rotation was added to fix, reintroduced by
+    /// a different route.
+    ///
+    /// `page_sizes` is in DOCUMENT order, indexed by the values in
+    /// [`Self::pages`].
+    ///
+    /// Falls back to US Letter portrait for a job with no pages, matching
+    /// `build_devmode`'s own fallback. Such a job spools nothing, so the
+    /// value is never printed against; it exists so neither caller has to
+    /// carry an `Option` for a case that cannot reach paper.
+    ///
+    /// ```
+    /// use pdfce_print::{Collate, JobSpec, PageSubset, ScaleMode};
+    ///
+    /// let sizes = [(612.0, 792.0), (792.0, 612.0)];
+    /// let mut spec = JobSpec {
+    ///     pages: vec![0, 1],
+    ///     mode: ScaleMode::Fit,
+    ///     max_dpi: 300,
+    ///     subset: PageSubset::All,
+    ///     reverse: false,
+    ///     copies: 1,
+    ///     collate: Collate::Collated,
+    /// };
+    /// assert_eq!(spec.first_page_pt(&sizes), (612.0, 792.0));
+    ///
+    /// // Reversed, the LAST page is sent first and decides the sheet.
+    /// spec.reverse = true;
+    /// assert_eq!(spec.first_page_pt(&sizes), (792.0, 612.0));
+    /// ```
+    #[must_use]
+    pub fn first_page_pt(&self, page_sizes: &[(f64, f64)]) -> (f64, f64) {
+        self.sequence()
+            .first()
+            .and_then(|&i| page_sizes.get(i).copied())
+            .unwrap_or(US_LETTER_PORTRAIT_PT)
+    }
 }
+
+/// The page size assumed when a job names none.
+///
+/// Shared by [`JobSpec::first_page_pt`] and `build_devmode` so the two
+/// cannot fall back differently — a divergence that would only ever
+/// appear on an empty job, i.e. never in a way anyone could observe, and
+/// would then be inherited by whatever asked next.
+pub const US_LETTER_PORTRAIT_PT: (f64, f64) = (612.0, 792.0);
 
 /// Where one page lands, and how big to render it.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -1102,6 +1395,36 @@ impl JobResolution {
 /// test-worthy code in the crate behind a `cfg` that CI does not build —
 /// the tests would still pass on Windows and simply stop existing
 /// elsewhere, which is the kind of coverage loss nothing reports.
+///
+/// # ★ It carries the WHOLE sheet, not only the printable area
+///
+/// `physical_pt` and `offset_pt` are here even though `plan_job` reads
+/// neither, and that is deliberate. They are what a preview needs to
+/// draw the sheet and the margin inside it, and — more importantly —
+/// they are what [`Self::for_orientation`] needs in order to turn the
+/// sheet correctly. A type holding only `printable_pt` cannot rotate
+/// itself: the unprintable margins are not recoverable from the
+/// printable size alone, so the rotation would have to be written a
+/// second time by whoever holds the rest, which is exactly the drift
+/// this type exists to prevent.
+///
+/// # ★ Orientation is not optional here, and that is the whole point
+///
+/// This used to be reachable through an infallible
+/// `From<&PrinterCaps>`, which copied `printable_pt` verbatim. That
+/// conversion was a trap: [`printer_caps`] reads the device's DEFAULT
+/// `DEVMODE`, so on a portrait-default printer it reports a PORTRAIT
+/// printable area — and a job whose `DEVMODE` sets landscape prints on a
+/// sheet that has been turned. Planning against the un-turned area
+/// under-scales every page (a Letter page on a Letter sheet planned at
+/// 0.727 instead of 0.941, about 77% of correct size, with a wide empty
+/// margin and no clip to report it).
+///
+/// The `From` impl is gone rather than documented, because a wrong
+/// answer that is one `.into()` away will be reached again. The only
+/// route from a `PrinterCaps` to a `DeviceGeometry` is
+/// [`Self::from_caps`], which cannot be called without stating the
+/// job's orientation and its first page.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DeviceGeometry {
     /// Resolution in dots per inch, horizontal and vertical.
@@ -1109,16 +1432,11 @@ pub struct DeviceGeometry {
     /// The printable area in points — smaller than the sheet by the
     /// unprintable margins the driver reports.
     pub printable_pt: (f64, f64),
-}
-
-#[cfg(windows)]
-impl From<&PrinterCaps> for DeviceGeometry {
-    fn from(caps: &PrinterCaps) -> Self {
-        Self {
-            dpi: (caps.dpi_x, caps.dpi_y),
-            printable_pt: caps.printable_pt,
-        }
-    }
+    /// The full sheet in points.
+    pub physical_pt: (f64, f64),
+    /// Where the printable area begins relative to the sheet corner, in
+    /// points — the top-left unprintable margin.
+    pub offset_pt: (f64, f64),
 }
 
 /// Resolve the rendering resolution for a job.
@@ -1257,6 +1575,200 @@ pub fn resolve_orientation(requested: Orientation, page_pt: (f64, f64)) -> Orien
             }
         }
         explicit => explicit,
+    }
+}
+
+/// The orientation a SHEET is already in, from its own proportions.
+///
+/// # Why the device's default is derived rather than assumed portrait
+///
+/// [`printer_caps`] reports whatever the driver's default `DEVMODE`
+/// says, and that default is not always portrait: wide-format plotters
+/// and label printers ship landscape-default, and an operator can set a
+/// landscape default on any printer from the driver's own properties
+/// page. Rotation is therefore RELATIVE — the sheet turns only when the
+/// job's orientation differs from the one the reported geometry is
+/// already in.
+///
+/// Hard-coding "portrait" here would be right on the common case and
+/// silently wrong on the machines whose owners notice, and it would fail
+/// in the worse direction: it would turn a sheet that was already turned.
+///
+/// A square sheet is reported [`Orientation::Portrait`], matching
+/// [`resolve_orientation`]'s reading of a square page. The two must
+/// agree, or a square page on a square sheet would ask for a rotation
+/// that changes nothing but shifts every asymmetric margin.
+///
+/// ```
+/// use pdfce_print::{Orientation, sheet_orientation};
+///
+/// assert_eq!(sheet_orientation((612.0, 792.0)), Orientation::Portrait);
+/// assert_eq!(sheet_orientation((792.0, 612.0)), Orientation::Landscape);
+/// // A square sheet reads upright, matching `resolve_orientation`.
+/// assert_eq!(sheet_orientation((612.0, 612.0)), Orientation::Portrait);
+/// ```
+#[must_use]
+pub fn sheet_orientation(physical_pt: (f64, f64)) -> Orientation {
+    if physical_pt.0 > physical_pt.1 {
+        Orientation::Landscape
+    } else {
+        Orientation::Portrait
+    }
+}
+
+impl DeviceGeometry {
+    /// The orientation this geometry was reported in.
+    ///
+    /// See [`sheet_orientation`] for why this is read off the sheet
+    /// rather than assumed.
+    #[must_use]
+    pub fn default_orientation(self) -> Orientation {
+        sheet_orientation(self.physical_pt)
+    }
+
+    /// This geometry as the DRIVER will present it for a job that
+    /// requests `requested` and whose first page is `first_page_pt`.
+    ///
+    /// # ★ The bug this exists to make unrepresentable
+    ///
+    /// Orientation reaches the device as `DEVMODE::dmOrientation`, which
+    /// turns the SHEET. Everything pdfce computes about where a page
+    /// lands — [`place_page`], [`plan_job`], every `imposition` layout,
+    /// and the GUI preview — is computed against a printable area that
+    /// [`printer_caps`] read from the device's DEFAULT `DEVMODE`. If the
+    /// job's orientation differs from that default and nobody turns the
+    /// geometry, the two halves describe different sheets: the driver
+    /// prints on 756 × 576 pt while pdfce planned for 576 × 756 pt. A
+    /// Letter page then fits at 0.727 rather than 0.941 — 77% of correct
+    /// size, centred, with no clip and nothing to report. It looks like a
+    /// scaling preference rather than a defect, which is why it survived.
+    ///
+    /// This is the ONE place that rotation is written. Every planning
+    /// site and the preview take their geometry from here, because two
+    /// independently-written rotations eventually disagree and the
+    /// disagreement is invisible until it reaches paper.
+    ///
+    /// # The job has ONE orientation, so it takes ONE page
+    ///
+    /// A `DEVMODE` applies to the whole job — per-page orientation would
+    /// need a `ResetDC` between pages and is not built (see
+    /// `build_devmode`). `first_page_pt` is therefore the FIRST page of
+    /// the job, the same page `build_devmode` resolves from. Passing a
+    /// different one would put the preview and the driver back into
+    /// disagreement, which is this bug again in a new place.
+    ///
+    /// # ★ Why `offset_pt` rotates too, and not by a plain swap
+    ///
+    /// `offset_pt` is the top-left unprintable margin. The unprintable
+    /// margins belong to the PAPER PATH — the gripper edge, the leading
+    /// edge — so they stay on the same physical edges of the sheet while
+    /// the driver turns the coordinate system around them.
+    ///
+    /// Win32 landscape puts the drawing origin at what was the sheet's
+    /// bottom-left corner, so a sheet point `(x, y)` is addressed as
+    /// `(H − y, x)` where `H` is the portrait sheet height. Mapping the
+    /// printable rectangle `[ox, ox+w] × [oy, oy+h]` through that gives
+    ///
+    /// ```text
+    /// offset' = (H − oy − h,  ox)      printable' = (h, w)
+    /// ```
+    ///
+    /// — the original BOTTOM margin becomes the new left margin, and the
+    /// original LEFT margin becomes the new top margin. The whole ring of
+    /// margins turns together (left→top, top→right, right→bottom,
+    /// bottom→left), which is the property to check this against.
+    ///
+    /// A plain component swap `(oy, ox)` is the tempting wrong answer and
+    /// is **invisible on a symmetric sheet** — every office printer has
+    /// equal margins, so it would pass every test written on one and
+    /// misplace every page by the margin difference on a plotter, which
+    /// is precisely the hardware this project's operator prints on.
+    ///
+    /// The inverse mapping is applied when a landscape-default device is
+    /// asked for portrait, so `for_orientation` is a true involution
+    /// between the two states rather than a one-way turn.
+    ///
+    /// ```
+    /// use pdfce_print::{DeviceGeometry, Orientation, ScaleMode, place_page};
+    ///
+    /// // A portrait-default Letter printer, quarter-inch margins.
+    /// let device = DeviceGeometry {
+    ///     dpi: (600, 600),
+    ///     printable_pt: (576.0, 756.0),
+    ///     physical_pt: (612.0, 792.0),
+    ///     offset_pt: (18.0, 18.0),
+    /// };
+    /// let landscape_page = (792.0, 612.0);
+    ///
+    /// // `Auto` on a landscape page turns the sheet. The page then fits
+    /// // at 576/612 — the turned sheet's short side over the page's short
+    /// // side, which is the binding axis — instead of 576/792, which is
+    /// // what the un-turned sheet forced.
+    /// let turned = device.for_orientation(Orientation::Auto, landscape_page);
+    /// assert_eq!(turned.printable_pt, (756.0, 576.0));
+    /// let fitted = place_page(landscape_page, turned.printable_pt, ScaleMode::Fit);
+    /// assert!((fitted.scale - 576.0 / 612.0).abs() < 1e-12);
+    /// let untouched = place_page(landscape_page, device.printable_pt, ScaleMode::Fit);
+    /// assert!((untouched.scale - 576.0 / 792.0).abs() < 1e-12);
+    ///
+    /// // Forcing portrait leaves the sheet alone, deliberately.
+    /// assert_eq!(device.for_orientation(Orientation::Portrait, landscape_page), device);
+    /// ```
+    #[must_use]
+    pub fn for_orientation(self, requested: Orientation, first_page_pt: (f64, f64)) -> Self {
+        let target = resolve_orientation(requested, first_page_pt);
+        let current = self.default_orientation();
+        if target == current {
+            return self;
+        }
+        let (pw, ph) = self.physical_pt;
+        let (aw, ah) = self.printable_pt;
+        let (ox, oy) = self.offset_pt;
+        // Which of the two quarter-turns depends on which way the sheet
+        // is going. Both are derived in the doc comment above; each is
+        // the other's inverse, so turning a sheet out and back returns
+        // the geometry it started with.
+        let offset_pt = match target {
+            // Portrait-reported sheet, landscape job: origin moves to the
+            // portrait bottom-left corner.
+            Orientation::Landscape => (ph - oy - ah, ox),
+            // Landscape-reported sheet, portrait job: the inverse turn.
+            Orientation::Auto | Orientation::Portrait => (oy, pw - ox - aw),
+        };
+        Self {
+            dpi: self.dpi,
+            // DPI does NOT swap with the sheet. `LOGPIXELSX`/`LOGPIXELSY`
+            // are the device's addressable dot pitch, which is a property
+            // of the engine and not of the page's orientation. Swapping
+            // them would mis-size every rasterisation on an asymmetric
+            // device (600×300 is real on plotters) in a way that only
+            // shows up as a stretched print.
+            printable_pt: (ah, aw),
+            physical_pt: (ph, pw),
+            offset_pt,
+        }
+    }
+
+    /// Build planning geometry from a Win32 device, turned for the job.
+    ///
+    /// The only route from [`PrinterCaps`] to a `DeviceGeometry`. It
+    /// takes the orientation and the job's first page because it must:
+    /// see the type docs for what the infallible conversion this replaced
+    /// got wrong.
+    #[cfg(windows)]
+    #[must_use]
+    pub fn from_caps(
+        caps: &PrinterCaps,
+        requested: Orientation,
+        first_page_pt: (f64, f64),
+    ) -> Self {
+        Self {
+            dpi: (caps.dpi_x, caps.dpi_y),
+            printable_pt: caps.printable_pt,
+            physical_pt: caps.physical_pt,
+            offset_pt: caps.offset_pt,
+        }
+        .for_orientation(requested, first_page_pt)
     }
 }
 
@@ -1425,6 +1937,7 @@ pub fn spool(
     dry_run: DryRun,
     output: Option<&std::path::Path>,
     settings: DeviceSettings,
+    first_page_pt: (f64, f64),
 ) -> Result<SpoolReport, PrintError> {
     use windows::Win32::Graphics::Gdi::{CreateDCW, DeleteDC};
     use windows::Win32::Storage::Xps::{AbortDoc, DOCINFOW, EndDoc, EndPage, StartDocW, StartPage};
@@ -1437,7 +1950,20 @@ pub fn spool(
     // `CreateDC`, not through anything pdfce computes. Built here so the
     // device context is created WITH them: changing orientation after
     // the DC exists means the printable area already read is wrong.
-    let devmode = build_devmode(&wide, settings, pages);
+    //
+    // ★ `caps` is the UN-TURNED geometry, and that is exactly what is
+    // wanted here. `build_devmode` needs to know which orientation the
+    // device is in BY DEFAULT so it can tell whether this job needs it
+    // turned; handing it an already-rotated view would make every job
+    // look like it needed no turn. The rotated view is the CALLER's
+    // concern — it is what the pages were planned against, and it
+    // reaches this function baked into `PageBitmap::placement`.
+    let devmode = build_devmode(
+        &wide,
+        settings,
+        first_page_pt,
+        sheet_orientation(caps.physical_pt),
+    );
 
     // SAFETY: `wide` is NUL-terminated and outlives the call, and
     // `devmode` (when present) outlives it too. A null DC is the
@@ -1572,27 +2098,63 @@ pub fn spool(
 /// default is fetched first and only the requested fields are
 /// overwritten, with `dmFields` naming exactly which.
 ///
-/// Returns `None` when the driver will not supply one, in which case the
-/// caller creates the device context with no override and the device's
-/// own defaults apply. That is a silent loss of the operator's
-/// orientation and duplex choice, and it is reported by the caller
-/// rather than hidden — see [`SpoolReport::settings_applied`].
+/// Returns `None` when there is nothing to say to the driver, in which
+/// case the caller creates the device context with no override and the
+/// device's own defaults apply.
 ///
-/// `pages` decides `Auto` orientation: the FIRST page's aspect sets the
-/// sheet, because a `DEVMODE` applies to the job. Per-page orientation
-/// within one job needs `ResetDC` between pages and is not built.
+/// `first_page_pt` decides `Auto` orientation, and it is a PARAMETER
+/// rather than `pages.first().page_pt` deliberately. A `DEVMODE` applies
+/// to the job, so exactly one page can decide it — and the caller has
+/// already resolved which, because it had to pass the same page to
+/// [`DeviceGeometry::for_orientation`] to plan against the right sheet.
+/// Re-deriving it from the bitmaps would let the two answers differ:
+/// the imposition paths hand the spooler one bitmap per SHEET whose
+/// `page_pt` is the printable area, not a source page, so an n-up or
+/// booklet job would resolve its `DEVMODE` from a different input than
+/// its layout. Taking it as an argument makes the two provably the same
+/// value. Per-page orientation within one job needs `ResetDC` between
+/// pages and is not built.
+///
+/// # ★ Why `device_default` is a parameter, and why `Auto` can now build
+/// # a `DEVMODE` on its own
+///
+/// This used to return `None` for any `settings == DeviceSettings::default()`,
+/// which reads as "the operator changed nothing, so disturb nothing".
+/// It had a consequence nobody had traced: [`Orientation::Auto`] is the
+/// DEFAULT, so at default settings a landscape page never turned the
+/// sheet at all — pdfce's headline auto-orientation behaviour did
+/// nothing unless the operator happened to also change the duplex or
+/// tray control, at which point it switched on as a side effect of an
+/// unrelated setting.
+///
+/// So the test is no longer "did the operator touch anything" but "will
+/// the device be in the orientation this job needs". `device_default` is
+/// what [`sheet_orientation`] read off the un-turned
+/// [`printer_caps`], and a `DEVMODE` is built whenever the resolved
+/// orientation differs from it.
+///
+/// `DM_DUPLEX` stays gated on the OLD condition, deliberately. A
+/// `DEVMODE` naming `DMDUP_SIMPLEX` overrides a driver whose own default
+/// is duplex, and an orientation-only turn must not quietly cancel a
+/// duplex default the operator never asked pdfce to touch. So an
+/// `Auto`-driven turn sets `DM_ORIENTATION` alone, and duplex is
+/// asserted only when some setting actually differs from the default.
 #[cfg(windows)]
 fn build_devmode(
     _printer_wide: &[u16],
     settings: DeviceSettings,
-    pages: &[PageBitmap],
+    first_page_pt: (f64, f64),
+    device_default: Orientation,
 ) -> Option<windows::Win32::Graphics::Gdi::DEVMODEW> {
     use windows::Win32::Graphics::Gdi::{
         DEVMODEW, DM_DUPLEX, DM_ORIENTATION, DMDUP_HORIZONTAL, DMDUP_SIMPLEX, DMDUP_VERTICAL,
         DMORIENT_LANDSCAPE, DMORIENT_PORTRAIT,
     };
-    // Nothing to say to the driver.
-    if settings == DeviceSettings::default() {
+    let orientation = resolve_orientation(settings.orientation, first_page_pt);
+    let explicit = settings != DeviceSettings::default();
+    // Nothing to say to the driver: no setting differs from the default
+    // AND the device is already in the orientation this job wants.
+    if !explicit && orientation == device_default {
         return None;
     }
     let mut dm = DEVMODEW {
@@ -1600,8 +2162,6 @@ fn build_devmode(
         ..Default::default()
     };
 
-    let first = pages.first().map_or((612.0, 792.0), |p| p.page_pt);
-    let orientation = resolve_orientation(settings.orientation, first);
     dm.Anonymous1.Anonymous1.dmOrientation = match orientation {
         Orientation::Landscape => DMORIENT_LANDSCAPE as i16,
         // `Auto` is already resolved above; portrait is the remaining
@@ -1610,18 +2170,20 @@ fn build_devmode(
     };
     dm.dmFields |= DM_ORIENTATION;
 
-    dm.dmDuplex = match settings.duplex {
-        Duplex::Simplex => DMDUP_SIMPLEX,
-        // Long-edge binding is `VERTICAL` in Win32's vocabulary and
-        // short-edge is `HORIZONTAL`, which reads backwards until you
-        // notice the name describes the FLIP AXIS rather than the edge
-        // the pages are bound on. Getting these the wrong way round
-        // produces a booklet whose alternate pages are upside down, and
-        // nothing catches it before the paper.
-        Duplex::LongEdge => DMDUP_VERTICAL,
-        Duplex::ShortEdge => DMDUP_HORIZONTAL,
-    };
-    dm.dmFields |= DM_DUPLEX;
+    if explicit {
+        dm.dmDuplex = match settings.duplex {
+            Duplex::Simplex => DMDUP_SIMPLEX,
+            // Long-edge binding is `VERTICAL` in Win32's vocabulary and
+            // short-edge is `HORIZONTAL`, which reads backwards until you
+            // notice the name describes the FLIP AXIS rather than the edge
+            // the pages are bound on. Getting these the wrong way round
+            // produces a booklet whose alternate pages are upside down, and
+            // nothing catches it before the paper.
+            Duplex::LongEdge => DMDUP_VERTICAL,
+            Duplex::ShortEdge => DMDUP_HORIZONTAL,
+        };
+        dm.dmFields |= DM_DUPLEX;
+    }
 
     Some(dm)
 }
@@ -1722,6 +2284,7 @@ pub fn spool(
     _dry_run: DryRun,
     _output: Option<&std::path::Path>,
     _settings: DeviceSettings,
+    _first_page_pt: (f64, f64),
 ) -> Result<SpoolReport, PrintError> {
     Err(PrintError::Unsupported)
 }
