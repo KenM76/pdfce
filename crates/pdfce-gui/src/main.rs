@@ -4612,7 +4612,38 @@ impl PdfceApp {
         // produces is also about saving ("incremental save is refused"),
         // which is governed by the base's provenance (R67), not by the
         // overlay.
-        self.recovery_note = if let Status::Open(doc) = &self.status {
+        self.recovery_note = self.recovery_note_for_front_document();
+        self.finish_open();
+    }
+
+    /// The R20 recovery disclosure for whatever document is in front, or
+    /// `None` when there is none (or the front document loaded cleanly).
+    ///
+    /// # Why this is a function and not a value set once at open
+    ///
+    /// It used to be set once, in `open_path`, and **cleared to `None`** by
+    /// `switch_to_parked` and `close_active_document`. That is a real defect,
+    /// found by `pdfce-ui-specialist` while designing the encryption
+    /// disclosure: switching away from a recovery-loaded document and back
+    /// left the banner gone, for a document that is still recovery-loaded.
+    /// The operator's only warning that saving will rewrite their file — and
+    /// that its cross-reference table was rebuilt by guesswork — silently
+    /// stopped being shown.
+    ///
+    /// The mistake was a category error, and it is worth naming precisely
+    /// because the old comment argued the opposite case correctly and still
+    /// landed here. Recovery **is** a property of the file as parsed, exactly
+    /// as that comment said; what it is *not* is a property of the
+    /// application. `recovery_note` describes **which document is in front**,
+    /// and every code path that changes which document is in front has to
+    /// answer the question again.
+    ///
+    /// Recomputing is O(1) — it reads an `Option` already on the `Document` —
+    /// so a correctly-maintained cache would cost more than this and could
+    /// still go stale at the next call site somebody forgets. A derived
+    /// value with one producer cannot drift.
+    fn recovery_note_for_front_document(&self) -> Option<String> {
+        if let Status::Open(doc) = &self.status {
             doc.session.document().recovery().map(|r| {
                 // The stream-length clause is appended only when it
                 // applies. It is a DIFFERENT claim from the rebuild — the
@@ -4640,7 +4671,11 @@ impl PdfceApp {
             })
         } else {
             None
-        };
+        }
+    }
+
+    /// Continue the open sequence after the recovery disclosure is computed.
+    fn finish_open(&mut self) {
         // P0-2, WIDENED to unconditional by decision 017 §8.4 / A.4 #3 —
         // the prerequisite bugfix that had to ship with or before the
         // Properties migration.
@@ -11630,7 +11665,12 @@ impl PdfceApp {
         self.status = Status::Open(incoming);
         self.save_result = None;
         self.edit_note = None;
-        self.recovery_note = None;
+        // RECOMPUTED, not cleared. Clearing it dropped the R20 disclosure for
+        // a document that is still recovery-loaded — see
+        // `recovery_note_for_front_document`. The regression test
+        // `the_recovery_disclosure_survives_switching_documents` was verified
+        // to FAIL against the cleared form before this line was written.
+        self.recovery_note = self.recovery_note_for_front_document();
         self.copy_result = None;
         self.copy_detail_expanded = false;
     }
@@ -11654,7 +11694,9 @@ impl PdfceApp {
         };
         self.save_result = None;
         self.edit_note = None;
-        self.recovery_note = None;
+        // RECOMPUTED, not cleared — the document revealed by a close may
+        // itself be recovery-loaded. Same defect as `switch_to_parked`'s.
+        self.recovery_note = self.recovery_note_for_front_document();
     }
 
     /// Show `subject` in the Tool Options pane and RAISE it (Pass 24.3).
@@ -24258,6 +24300,50 @@ mod tests {
         assert!(
             message.contains("password"),
             "whatever surface it lands on must say the word the operator needs: {message}"
+        );
+    }
+
+    /// ★ The R20 recovery disclosure survives a document switch.
+    ///
+    /// It did not. `switch_to_parked` and `close_active_document` **cleared**
+    /// `recovery_note` rather than recomputing it, so switching away from a
+    /// recovery-loaded document and back left the banner gone for a document
+    /// that is still recovery-loaded — the operator's only warning that their
+    /// cross-reference table was rebuilt by guesswork, and that saving will
+    /// rewrite the file, silently stopped being shown.
+    ///
+    /// Found by `pdfce-ui-specialist` while designing the encryption
+    /// disclosure, as an argument for computing THAT one live. Fixed here
+    /// rather than filed, and pinned here so the same shape cannot come back
+    /// through a fourth call site.
+    #[test]
+    fn the_recovery_disclosure_survives_switching_documents() {
+        let mut app = PdfceApp::default();
+
+        // A recovery-loaded document, then a clean one parked behind it.
+        app.open_path(fixture("xref-recover/no-startxref.pdf"));
+        let Status::Open(_) = &app.status else {
+            // The fixture set is allowed to move; a missing fixture must not
+            // masquerade as a passing regression test.
+            return;
+        };
+        let note_at_open = app.recovery_note.clone();
+        assert!(
+            note_at_open.is_some(),
+            "the fixture chosen must actually load via recovery, or this test              proves nothing"
+        );
+
+        app.open_path(fixture("hello.pdf"));
+        assert!(
+            app.recovery_note.is_none(),
+            "a cleanly-loaded document must not inherit the previous one's              recovery banner"
+        );
+
+        // Back to the recovered one. THIS is the regression.
+        app.switch_to_parked(0);
+        assert_eq!(
+            app.recovery_note, note_at_open,
+            "switching back to a recovery-loaded document must restore its              disclosure — clearing it hides a live warning about a document              that is still recovery-loaded"
         );
     }
 
