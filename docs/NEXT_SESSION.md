@@ -165,19 +165,63 @@ owner-vs-user password chooser (`authenticate()` tries both and reports
 Sourcing is done (`iso32000__ref__encryption_impl.md`). The plumbing
 exists and is proven. What is genuinely new:
 
-- **A dependency decision (rule 13).** `pdfce-core` still has **no**
-  crypto dependency. MD5 and RC4 were written in-crate because both are
-  frozen, tiny, and needed only to read files others made — and
-  `crypto/md5.rs`'s module docs say explicitly that **this reasoning does
-  not extend to AES**. Take a vetted permissive crate; classify it,
-  check `PRIOR_ART.md`, record it.
-- **★ AES breaks the property this increment leaned on.** RC4 preserves
-  length exactly, so plaintext was written back over ciphertext in the
-  retained buffer and every `ByteSpan`, `/Length` and provenance record
-  stayed true — which is why `Stream` needed no change. AES output is
-  IV + padding, so **plaintext is shorter than ciphertext**. Decide how
-  `Stream` carries decrypted bytes before writing any AES code; this is
-  the increment's real design problem, not the cipher.
+- **★ The dependency decision (rule 13) is RESEARCHED — read this before
+  running `cargo add`.** The candidates are RustCrypto's `aes` + `cbc`.
+  Measured 2026-08-11 by adding them, reading the resolved tree, and
+  reverting (nothing is in the manifest now — do not go looking for it):
+
+  | | |
+  |---|---|
+  | Versions | `aes 0.9.2`, `cbc 0.2.1` |
+  | Transitive | `cipher`, `crypto-common`, `inout`, `block-padding`, `typenum`, `hybrid-array`, `cpufeatures`, `cpubits`, `cfg-if` |
+  | Licences | **every one `MIT OR Apache-2.0`** — fully permissive, and note the contrast with `jpeg-encoder`'s `(MIT OR Apache-2.0) AND IJG`: there is **no** conjunctive attribution obligation here |
+  | Copyleft in the resulting tree | none introduced |
+
+  So rule 13's escalation trigger does **not** fire — but one thing
+  does, and it is the reason this is written down:
+
+  **★ R24's lever does not exist for `aes`.** Every codec dependency in
+  this project is compiler-enforced zero-unsafe by keeping
+  `default-features = false` (zune-jpeg, jpeg-encoder and
+  hayro-jpeg2000 all turn a `simd` *feature* off). `aes 0.9.2` has
+  exactly one feature, `hazmat`, and selects its x86/aarch64 intrinsic
+  backends — 26 `unsafe` sites in `lib.rs` alone — on a **`cfg`**
+  (`aes_backend = "soft"`), not a feature. A cfg cannot be set from
+  `Cargo.toml`'s dependency line; it needs `RUSTFLAGS` or
+  `.cargo/config.toml`, which is global and affects every crate in the
+  build.
+
+  That is a genuine departure from the project's established pattern
+  and it should be a deliberate, recorded choice rather than a
+  side-effect of `cargo add`. Three honest options: accept the
+  hardware backend (RustCrypto is the standard, heavily-audited choice
+  and the unsafe is confined to intrinsic dispatch); force soft
+  globally and pay for it everywhere; or write AES-128-CBC decrypt
+  in-crate — **which `crypto/md5.rs` explicitly argues against**, and
+  that argument still stands. Recommend the first, recorded in
+  `ARCHITECTURE.md` §12 with this paragraph as its rationale.
+- **★ AES breaks the property this increment leaned on — but there is a
+  clean answer, and it was verified.** RC4 preserves length exactly, so
+  plaintext was written back over ciphertext in the retained buffer and
+  every `ByteSpan`, `/Length` and provenance record stayed true. AES
+  output is IV + padding, so **plaintext is strictly SHORTER** — by at
+  least 17 bytes.
+
+  Shorter is the easy direction. The plaintext still **fits** at
+  `span.start`; what has to change is the recorded length. And
+  `data_span` is what every reader actually slices — `content.rs`,
+  `attachments.rs`, `document.rs`'s object-stream path, `edit.rs`
+  throughout — so writing plaintext at `span.start` and setting
+  `stream.data_span.len = plain.len()` makes AES work exactly as RC4
+  does, with no change to `Stream` at all.
+
+  Two things to check while doing it, neither yet verified: the
+  stream dictionary's `/Length` will then disagree with `data_span`
+  (harmless if nothing re-reads it after parse — confirm), and
+  `attachments.rs:1379` compares `data_span.len` against a declared
+  size, which under this scheme becomes a comparison against the
+  plaintext length. That is arguably *more* correct, but it is a
+  behaviour change and deserves a test.
 - `/R` 5 (AES-256) is next after that. **`/R` 6 stays blocked** — its
   Algorithm 2.B is unsourced past step (a), and deriving it from another
   implementation then testing against that same implementation could not
