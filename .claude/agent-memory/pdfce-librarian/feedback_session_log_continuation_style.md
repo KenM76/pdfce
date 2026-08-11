@@ -41,6 +41,24 @@ trailing text of the LAST header (by position, not by date-recency), (3)
 append the new `## YYYY-MM-DD ((N+1)th filing) — <title>` section after
 that trailing text, never before an existing header.
 
+**FOUND, NOT CAUSED, 2026-08-11 (hundred-and-eighth filing) — a THIRD
+instance of this exact corruption already sitting on disk, pre-existing.**
+The hundred-and-sixth filing's `## 2026-08-11 (hundred-and-sixth filing)`
+header (line ~35251) is immediately followed by a blank line and then the
+**hundred-and-seventh** filing's header — the hundred-and-sixth's own body
+(Sourcing/Shipped/.../Ledger, ending "This is the **hundred-and-sixth**...
+joint filing") is misplaced AFTER the hundred-and-seventh's full body,
+with no header of its own. Read on arrival, not fixed — hard rule 1
+(append-only) argues against silently reordering past content, and
+`SESSION_LOG.md`'s own review-checkable ledger lines mean the mistake is
+locatable rather than in need of guessing at. Flagged to the engineer in
+the hundred-and-eighth filing's own ledger line rather than corrected.
+**Practical addition: an "index check" pass over `SESSION_LOG.md` should
+verify every `## ` header is immediately followed by that SAME filing's
+own "Sourcing"/"Shipped" body, not just that headers appear in ascending
+order** — ascending header order alone does not catch a body displaced to
+the wrong header's neighborhood.
+
 **RECURRED 2026-08-10 (sixty-eighth filing) — same error, same shape,
 self-caught before it left the session.** Used an `Edit` `old_string`
 anchored to the sixty-seventh filing's header text to insert the new

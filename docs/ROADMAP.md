@@ -81,6 +81,117 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★★ tooling — the filing gate stops lying on a one-commit clone: `check-commits-filed.py` gains a shallow-repository guard, `ci.yml`'s filing job gains `fetch-depth: 0`, and two same-stream-different-audience omissions are found IN the fix itself — `cd86adc` — 2026-08-11, branch `post-v0.2.0` (hundred-and-eighth filing)
+
+**No Pass ID — same class as `5dfef4d`/`0841a6c`/`e293143`/
+`check-commits-filed.py`'s own founding filing: a gate-script +
+workflow fix, no crate source touched. No `ARCHITECTURE.md` §12 entry
+either, for the same reason those had none — no crate boundary,
+library choice, or invariant is redrawn here, only a checker's own
+coverage being repaired.**
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — `git show
+cd86adc` not run; everything below is relayed from the dispatching
+engineer's own account (stated as run and reproduced directly, not
+merely inferred), not independently re-verified against `git` by this
+librarian.
+
+**What broke, and why the gate itself never noticed.**
+`actions/checkout` defaults to `fetch-depth: 1`. `check-commits-
+filed.py` classifies a commit by the paths it touches, and a shallow
+clone's boundary commit has no parent to diff against — git reports it
+as adding every file in the tree. A docs-only filing commit therefore
+looked like unfiled CODE, on the one job whose entire purpose is
+filing correctness. **The gate did not error — it printed a confident,
+specific, WRONG list, and had done so for as long as the job existed**;
+every "unfiled commits" result this job has ever produced was
+unreliable until this fix. Reproduced before fixing, with `git clone
+--depth 1` against a local `file://` URL: byte-identical to the CI
+failure output.
+
+**The fix.** `fetch-depth: 0` on the filing job's checkout step, plus
+the script now checks `--is-shallow-repository` itself and **exits 2
+with an explanation** rather than guessing — a workflow line can
+regress independently of the script, and the failure mode when it does
+must not be a plausible lie.
+
+**★ TWO FINDINGS INSIDE THE FIX, EACH LOUDER THAN THE FIX ITSELF.**
+
+1. **The new guard against quiet failure failed quietly on its own
+   first write.** The shallow-repository check compares `git()`'s
+   stdout against the literal `'true'`; `check-commits-filed.py`'s own
+   `git()` helper returns raw stdout (`'true\n'`), while the
+   identically-named `git()` helper in `verify-release.py` strips it —
+   two functions, one name, two contracts, one `tools/` directory.
+   `'true\n' == 'true'` is False, so the guard never matched the case
+   it was written for and silently never fired; caught only by a debug
+   print during the same session that wrote it, not by review of the
+   comparison, which reads correctly at a glance. **Filed as a new
+   standing rule, `R187`** — see *Standing rules* below.
+2. **The same lesson recurred in the same file, one stream over.**
+   `check-commits-filed.py` already reconfigures stdout to UTF-8
+   (`R174`'s seventieth-filing amendment, cited by name in that
+   reconfigure's own comment); the new guard's explanation writes to
+   **stderr**, never reconfigured, so its em-dash printed as `?` on the
+   first run. The stdout-only fix had been applied where the earlier
+   defect was *seen*, not to every stream that could carry the same
+   defect. Both streams are now reconfigured. **Filed as a further
+   instance of `R174`**, not a new rule — see *Standing rules* below.
+
+**Structural consequence worth recording plainly.** Because the filing
+check runs IN CI, every CODE commit leaves CI red until its own filing
+lands — by design, not a defect: filing is part of "done" here. But it
+means "CI is green" is only observable AFTER the filing push, and a
+session that pushes code and stops always leaves a red build behind.
+Worth knowing before a future session "fixes" this by weakening the
+gate.
+
+**Verification.**
+- Full clone: `commits-filed: clean — 345 code commit(s) checked`, exit 0.
+- Shallow clone: refuses with the explanation, exit 2 — proved in both
+  directions, before AND after the strip fix (before: wrongly
+  proceeded; after: correctly refuses).
+- `ci.yml` re-parsed as valid YAML, 9 jobs.
+- **CI: 9 of 10 green**, the filing job the only red one, on `cd86adc`
+  itself — closed by this filing.
+
+**Not acted on, flagged as a known follow-up.** `tools/check-passes-
+filed.py` walks history the identical way and carries the identical
+latent shallow-clone flaw. It is **not run in CI today**, so the risk
+is theoretical, not live — deliberately left unfixed while this fix
+was unverified. Recorded in *Backlog* below so it is not rediscovered
+as a surprise later.
+
+**`docs/FEATURES.md`: no row touched — no capability moved.**
+
+**Ledger for this filing.** **No new Pass ID** — gate-script + workflow
+class, matching `5dfef4d`/`0841a6c`/`e293143`/`check-commits-filed.py`'s
+own founding filing; this librarian's own read, per the dispatching
+engineer's explicit "your call." No `ARCHITECTURE.md` §12 entry, same
+reasoning. Standing rules: **`R187` MINTED** (same-named-helper-
+different-contract silently defeats a guard); **`R174` further instance
+appended** (stderr left unreconfigured beside an already-fixed stdout,
+same file). Ceiling moves **R186 → R187**, next free **R188**.
+Decision-record ceiling unchanged, **043**, next free **044**.
+Pass-family ceiling unchanged, **66.0**, next free **67**.
+Operator-question ceiling unchanged at **(bj)**, next free **(bk)**.
+`D:\dev\rag\rust\`/`C:\personal_rag\pdf\`: not touched — the same-named-
+helper hazard and the stream-reconfiguration gap are project-internal
+tooling findings (this project's own `tools/` scripts), not
+generalizable Rust/egui-ecosystem or PDF-domain findings; captured
+instead as `R187` and the `R174` instance, where a future session will
+actually look. **Backlog: one entry added** — `check-passes-filed.py`'s
+identical latent shallow-clone flaw, not run in CI, theoretical today.
+**Backup/git working-tree/remote state not independently asserted
+anywhere in this filing** — no shell this dispatch (hard rule 8); the
+engineer should check `D:\Dev\pdfce-backups\` and `git
+log`/`git status`/`git remote -v` directly. This is the
+**hundred-and-eighth** `ROADMAP.md` filing (the hundred-and-seventh,
+immediately below, confirmed present by direct read before this entry
+was prepended).
+
+---
+
 ### ★★ `f2ac2af` — pdfce compiles on something other than Windows: `pdfce-print` un-gates four plain-data items and gains two missing non-Windows stubs, closing a build break that had made the crate un-compilable for EVERY non-Windows target, including `wasm32`; `Pass 66.0` ships — and CI has been red on every push back past `v0.1.0`, undetected because nobody was watching it (`R176`, SECOND instance) — 2026-08-11, branch `post-v0.2.0` (hundred-and-seventh filing)
 
 **Sourcing.** No shell tool this dispatch (hard rule 8) — `git show
@@ -41884,6 +41995,18 @@ Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
 
+- **Tooling debt, not a feature — `tools/check-passes-filed.py` carries
+  the identical latent shallow-clone flaw `check-commits-filed.py` had
+  (fixed `cd86adc`, hundred-and-eighth filing): it walks `git log` the
+  same way, and a `fetch-depth: 1` checkout would make it misclassify a
+  boundary commit exactly as `check-commits-filed.py` did. **Not run in
+  CI today**, so the risk is theoretical rather than live — deliberately
+  left unfixed while the sibling fix was unverified (flagged by the
+  dispatching engineer explicitly so it is not rediscovered as a
+  surprise). Fix, when picked up: the same `--is-shallow-repository`
+  guard `check-commits-filed.py` now carries, applied to this script
+  too, and `fetch-depth: 0` on any workflow job that ever runs it.
+
 - ~~**Audit every other `pdfce-core` mutating-loop verb for `R179`'s
   shape**~~ **[★ AUDIT RUN 2026-08-10 (`b2574f6`, sixty-seventh filing) —
   DONE, not merely proposed.** Eleven loops in `edit.rs` use
@@ -52990,6 +53113,30 @@ and
   `eac0853`/`b1d7858` *Shipped* entry (seventieth filing), Part 1.
   Ceiling **unaffected** — stays **R181**, next free **R182**.
 
+  **★ FURTHER INSTANCE (2026-08-11, `cd86adc`, hundred-and-eighth
+  filing) — THE SEVENTIETH-FILING FIX RECONFIGURED STDOUT; THE SAME
+  FILE'S NEW CODE WROTE TO STDERR.** `check-commits-filed.py` already
+  carries the seventieth-filing's `sys.stdout.reconfigure(encoding=
+  "utf-8", errors="replace")`. Its new shallow-repository guard (this
+  filing) prints its explanation to **stderr**, a stream the
+  seventieth-filing fix never touched, and the explanation's em-dash
+  rendered as `?` on the first run — the identical mechanism, on a
+  stream the earlier fix's own audience-widening did not reach because
+  nothing had written to it yet at the time the fix was made. **Not
+  the audience widening further** (the seventieth-filing amendment
+  already generalised the reader from "the operator" to "whoever runs
+  a gate and reads what it prints") — this is that same widened
+  audience meeting a stream the fix's own mechanism happened not to
+  cover, surfaced only because new code started writing to it. Fixed
+  by reconfiguring stderr the same way, same file, same session.
+  **Practical form, restated once more: a stream-encoding fix scoped to
+  the stream that showed the symptom does not cover a stream that had
+  not yet been written to when the fix landed — reconfigure every
+  stream a script writes to, not only the one that failed first.** Full
+  record: `ROADMAP.md`'s `cd86adc` *Shipped* entry (hundred-and-eighth
+  filing). No ceiling change from this amendment itself — see `R187`'s
+  own mint, this same filing, for the ceiling move.
+
 - **R175 — A document's claim about the state of the world (git remote,
   CI status, backup currency, "local only") is only as true as its
   last measurement, and goes stale the instant that state changes;
@@ -53656,6 +53803,36 @@ and
   `D:\dev\rag\rust\a_length_equality_guard_silently_skips_the_write_back_when_a_new_producer_shortens_the_output.md`.
   Not re-numbered, matching the third- and fourth-instance precedent
   immediately above. **Ceiling stays `R186`, next free `R187`.**
+
+- **R187 — A guard added specifically to catch a hazard is proven by
+  making the hazard OCCUR and watching the guard fire, not by reading
+  its comparison; and two functions sharing a name across files in the
+  same directory are trusted to share a contract precisely BECAUSE they
+  share a name, which is itself the hazard (2026-08-11, `cd86adc`;
+  librarian-minted).** `tools/check-commits-filed.py`'s new shallow-
+  repository guard compares its own `git()` helper's output against the
+  literal `'true'`; that helper returns raw stdout (`'true\n'`), while
+  the identically-named `git()` helper in `tools/verify-release.py`
+  strips it — two functions, one name, two contracts, one `tools/`
+  directory. `'true\n' == 'true'` is False, so the guard never matched
+  the case it was written for and silently never fired; caught only by
+  a debug print during the same session that wrote it, not by review
+  of the comparison, which reads correctly at a glance. **Distinct from
+  R171** (a value RESTATED at a second place instead of read from its
+  owner) — here nothing is restated; two independently correct
+  functions simply disagree on whether trailing whitespace belongs to
+  their return contract, and the failure is in the CALLER's assumption
+  that a shared name implies a shared contract. **Practical form:** (1)
+  a guard built to catch a specific hazard is not trusted until the
+  hazard has been made to occur and the guard observed firing — a
+  guard that silently never fires is indistinguishable, from the
+  outside, from a hazard that never occurs; (2) before reusing a
+  same-named helper from a sibling file in the same directory, check
+  its contract, not just its name — or give it a different name if the
+  contract differs, so a reader cannot assume an equivalence the name
+  implies but the code does not honour. Full record: `ROADMAP.md`'s
+  `cd86adc` *Shipped* entry (hundred-and-eighth filing). **Ceiling
+  moves `R186` → `R187`; next free `R188`.**
 
 ## Update protocol
 

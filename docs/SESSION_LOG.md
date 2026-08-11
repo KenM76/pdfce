@@ -35422,3 +35422,93 @@ shell this dispatch (hard rule 8); the engineer should check
 directly. This is the **hundred-and-sixth** `SESSION_LOG.md`/
 `ROADMAP.md` joint filing (the hundred-and-fifth, immediately above,
 confirmed present by direct read before this entry was appended).
+
+## 2026-08-11 (hundred-and-eighth filing) — `cd86adc`: the filing gate stops lying on a one-commit clone — `check-commits-filed.py` gains a shallow-repository guard, and the guard against quiet failure fails quietly on its own first write
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — `git show
+cd86adc` not run. The diff shape, the reproduction, the fix, and the
+before/after verification are relayed from the dispatching engineer's
+own account (stated as run and reproduced directly), not independently
+re-verified against `git` by this librarian.
+
+**Shipped:**
+- `cd86adc` — `actions/checkout` defaults to `fetch-depth: 1`;
+  `check-commits-filed.py` classifies a commit by the paths it
+  touches, and a shallow clone's boundary commit has no parent to diff
+  against, so git reports it as adding every file in the tree. A
+  docs-only filing commit looked like unfiled CODE on the job whose
+  entire purpose is filing correctness — the gate did not error, it
+  printed a confident, specific, WRONG list, and had done so for as
+  long as the job existed. Reproduced with `git clone --depth 1`
+  against a local `file://` URL: byte-identical to the CI failure.
+  Fixed with `fetch-depth: 0` on the filing job's checkout, plus the
+  script now checks `--is-shallow-repository` itself and exits 2 with
+  an explanation rather than guessing.
+
+**Decisions made this session:**
+- None new. No `ARCHITECTURE.md` §12 entry — a gate-script + workflow
+  fix redraws no crate boundary, library choice, or invariant, same
+  reasoning as `5dfef4d`/`0841a6c`/`e293143`.
+
+**Findings + decisions:**
+- **★ The guard against quiet failure failed quietly on its own first
+  write.** The new shallow-repository check compared `git()`'s stdout
+  against the literal `'true'`; `check-commits-filed.py`'s own `git()`
+  returns raw stdout (`'true\n'`), while the identically-named `git()`
+  in `verify-release.py` strips it — two functions, one name, two
+  contracts, one `tools/` directory. The comparison was always False,
+  so the guard never fired; found only by a debug print, not by
+  reading the comparison. Minted **`R187`** (Standing rules,
+  `ROADMAP.md`): a guard is proven by making its hazard occur and
+  watching it fire, not by review; a same-named helper across files is
+  trusted for its name, which is itself the hazard when the contract
+  differs.
+- **★ The same lesson recurred in the same file, one stream over.**
+  `check-commits-filed.py` already reconfigures stdout to UTF-8
+  (`R174`'s seventieth-filing amendment). The new guard's explanation
+  writes to stderr, never reconfigured, so its em-dash printed as `?`
+  on the first run — the stdout-only fix had been applied where the
+  earlier defect was *seen*, not to every stream that could carry it.
+  Filed as a further instance appended to `R174`'s own Standing-rules
+  entry, not a new rule. Both streams now reconfigured.
+- **Structural consequence worth recording.** Because the filing check
+  runs IN CI, every CODE commit leaves CI red until its own filing
+  lands — by design. "CI is green" is only observable after the filing
+  push; a session that pushes code and stops always leaves a red build
+  behind. Worth knowing before a future session "fixes" this by
+  weakening the gate.
+- **Not acted on, flagged as a known follow-up, filed to *Backlog*.**
+  `tools/check-passes-filed.py` carries the identical latent
+  shallow-clone flaw. Not run in CI today, so the risk is theoretical —
+  deliberately left unfixed while this fix was unverified.
+
+**Still in flight:**
+- Nothing new opened this filing.
+
+**For next session:** `check-commits-filed.py` should now name no
+unfiled commit and CI should read 10 of 10 green — worth confirming
+next session with a shell. `check-passes-filed.py`'s sibling flaw sits
+in *Backlog*, unfixed, theoretical until it ever runs in CI.
+
+**Ledger for this filing.** **No new Pass ID** — gate-script + workflow
+class, matching `5dfef4d`/`0841a6c`/`e293143`/`check-commits-filed.py`'s
+own founding filing. `docs/FEATURES.md`: not touched. `docs/
+ARCHITECTURE.md`: no new §12 entry, no body-section edit. Standing
+rules: **`R187` minted**; **`R174` further instance appended**. Ceiling
+moves **R186 → R187**, next free **R188**. Decision-record ceiling
+unchanged, **043**, next free **044**. Pass-family ceiling unchanged,
+**66.0**, next free **67**. Operator-question ceiling unchanged at
+**(bj)**, next free **(bk)**. `D:\dev\rag\rust\`/`C:\personal_rag\pdf\`:
+not touched — both findings are project-internal tooling, captured as
+Standing rules instead. **Backlog: one entry added**
+(`check-passes-filed.py`'s sibling shallow-clone flaw). **Backup/git
+working-tree/remote state not independently asserted anywhere in this
+filing** — no shell this dispatch (hard rule 8); the engineer should
+check `D:\Dev\pdfce-backups\` and `git log`/`git status`/`git remote
+-v` directly. This is the **hundred-and-eighth** `SESSION_LOG.md`/
+`ROADMAP.md` joint filing (the hundred-and-seventh — `f2ac2af`, `Pass
+66.0` — precedes it above; note the **hundred-and-sixth** filing's own
+body is misplaced in this file, appended after the hundred-and-seventh
+header instead of immediately after its own header at line ~35251 —
+pre-existing, not introduced by this filing, flagged to the engineer
+rather than silently corrected).
