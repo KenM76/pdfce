@@ -81,6 +81,135 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `04f8acd` — decision 037 ANSWERED BY MEASUREMENT: the literal "every OCG-shaped object" reading of `/BaseState /OFF` is falsified against the installed Acrobat; pdfce's shipped "registered only" reading is confirmed — 2026-08-11 (ninety-first filing)
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — `git log -1
+--format=%B 04f8acd` not run. Recorded from the engineer's dispatch
+text, which carried the fixture, the measurement method, and the
+result; the resulting source-doc-comment claim WAS independently
+confirmed by direct read of `crates/pdfce-core/src/layers.rs`.
+
+**No new Pass ID, no new decision number.** This closes decision 037
+(seventy-sixth filing) by measurement — it does not open a new one, and
+it is not a capability change (`docs/FEATURES.md` unaffected: OCG
+default-visibility behavior is unchanged; only the confidence behind it
+changed, from "pragmatic, unchecked" to "confirmed against a real
+reader").
+
+**The question, restated.** Does `/BaseState /OFF`'s "all groups" mean
+all groups **registered** in `/OCProperties /OCGs`, or literally every
+OCG-shaped object reachable, including ones never registered anywhere?
+`layers.rs`'s `optional_content_default_off` (shared by the renderer,
+the Layers panel, and — since `Pass 56.0` — the content-stream `/OC`
+path) has always answered "registered only," named at the seventy-sixth
+filing as a pragmatic keep-the-existing-answer choice made without
+checking, not ratified as doctrine.
+
+**What was run.** The falsifier fixture
+`fixtures/synthetic/layers/base-state-off-unregistered.pdf` — built at
+`24e07e3` on 2026-08-10 (eighty-first filing) specifically to make the
+two readings diverge visibly, and left un-run across every filing since
+— paints three squares: one OCG registered and named in `/D /ON`; one
+registered but named in neither `/ON` nor `/OFF`; one never registered
+anywhere. "Registered only" predicts the third VISIBLE; "every
+OCG-shaped object" predicts it HIDDEN. Opened in the installed Acrobat,
+it paints the **first and third** and hides the second — exactly what
+pdfce renders (`oc_hidden=1` on the second square only).
+
+**Method, stated because eyeballing two black squares would not have
+distinguished the right answer from a wrong one by luck.** The Acrobat
+screenshot was scanned for contiguous dark runs on one scanline: exactly
+two, **184 px wide, 550 px apart**. At the screenshot's 1.533 px/pt
+scale that is **359 pt measured** against the fixture's **180 pt
+designed spacing** — a **2.0× ratio**, only possible if the two painted
+squares are the first and third, not two adjacent ones.
+
+**Result: the literal "every OCG-shaped object" reading is FALSIFIED.
+pdfce's "registered only" reading is what an actual conforming reader
+does.** `layers.rs`'s `base_state_off_with_unregistered` diagnostic
+stays, its meaning corrected in the source doc comment (already updated
+by the engineer, confirmed by direct read): not "pdfce is knowingly more
+permissive than Table 101's wording" but "this configuration is
+unusual, and a document relying on it relies on something Table 101
+does not spell out."
+
+**Decision 038 is explicitly UNCHANGED — not swept along with this.**
+038 turns on a genuine contradiction within the standard's own text
+(Table 101 vs §8.11.4.5 b, for a group named in BOTH `/ON` and `/OFF`
+simultaneously), which no fixture built so far makes the two readings of
+diverge visibly, and none is claimed to here. It needs a spec read, not
+a screenshot. Stays CLAIMED, NOT YET AUTHORED.
+
+**Decision-record status.** No `docs/decisions/037-*.md` file has been
+authored, and per `docs/decisions/README.md`'s own protocol, none is
+strictly owed — a file is produced only when the `autonomous-builder`/
+KenAgent consultant is actually used, and this was settled by direct
+empirical measurement instead. Whether a formal record is still worth
+producing for its own sake, now that the substance is settled, is
+flagged as the engineer's/operator's call, not decided here.
+Decision-record ceiling **unchanged at 038**, next genuinely free
+**039** — 037 is now ANSWERED rather than merely CLAIMED, but that is a
+status change on an existing prose claim, not a new number.
+
+**A process finding worth naming.** The fixture and its pinning test
+existed on disk from `24e07e3` (eighty-first filing) through this
+filing — at least nine filings, spanning two of the librarian's own
+handoffs — each one able to note it as "cheap, remaining" without
+running it. **A falsifier that is never run is indistinguishable, from
+the record, from one that never existed — and its mere presence reads
+as diligence, which is worse.** Not minted as a new standing rule from
+one instance (see `ARCHITECTURE.md` §12's ninety-first-filing entry for
+the full reasoning and the `R186` precedent this would need to match).
+
+**Verified at `04f8acd`, per the engineer's own report — not
+independently re-run, no shell this dispatch (hard rule 8).** `cargo
+clippy -p pdfce-core --all-targets --all-features`: **0**. `cargo fmt
+--check`: clean. `cargo test -p pdfce-core --lib layers`: **18 passed /
+0 failed** — the `layers` module's own test file, not a full-crate or
+full-workspace figure. All four filing gates reported clean at the
+prior commit `5e4a602`, carried forward (no source change between the
+two besides this measurement/doc-comment commit). **Backup/git
+working-tree state not asserted anywhere in this filing** — the
+engineer should check `D:\Dev\pdfce-backups\` and `git log`/`git
+status` directly.
+
+**SESSION_LOG.md anomaly re-check.** The eighty-eighth/eighty-ninth
+filing "ledger appears twice" anomaly flagged at the ninetieth filing is
+**confirmed RESOLVED by direct read** — the eighty-eighth filing's own
+ledger paragraph now sits under its own header with a dated "Placement
+corrected 2026-08-11" footer explaining it was a misplacement (one copy,
+wrong location), not a duplicate. No further action needed; recorded
+here only because the ninetieth filing's flag was still open until this
+check.
+
+**Ledger for this filing.** **No new Pass ID.** Pass-family ceiling
+unchanged at **62.0**, next free **63**. One commit cited by hash
+(`04f8acd`). `docs/FEATURES.md`: **no change** — no capability shipped
+or altered, only a decision's confidence status. `docs/ARCHITECTURE.md`:
+**one new dated §12 entry** (2026-08-11, ninety-first filing — the
+measurement, method, and result) plus a forward-pointer footer on the
+seventy-sixth filing's original decision-037 claim, plus a body-section
+correction to the `interpret.rs` (`Pass 56.0`) §3 module note that had
+still listed 037 as unauthored. `docs/ROADMAP.md`: no *Backlog* change.
+**Standing rules: no new mint.** R184 and R186 cited by comparison
+(shape/bar-to-mint precedent), none minted. Decision-record ceiling
+**unchanged at 038**,
+next free **039** — 037 moves CLAIMED → ANSWERED BY MEASUREMENT, still
+not a numbered `docs/decisions/` file. **No `D:\dev\rag\rust\`/`egui\`
+finding** — nothing ecosystem-general surfaced; the scanline-dark-run
+measurement technique is a one-off verification method, not a
+generalizable Rust/egui finding. **No `C:\personal_rag\pdf\` finding**
+— this is pdfce's own spec-interpretation question, settled by direct
+measurement against a real reader, not an observation about how a
+real-world PDF *producer* diverges from spec (the fixture is synthetic,
+built by pdfce, not sourced from any real producer). Operator-question
+ceiling unchanged at **(bi)**, next free **(bj)**. This is the
+**ninety-first** `SESSION_LOG.md`/`ROADMAP.md` joint filing (the
+ninetieth confirmed present by direct read before this entry was
+written).
+
+---
+
 ### ★ `a64b5fd` + `23eee9b` — form data as CSV, and the cell that is not inert: a spreadsheet cell is a second route to the network R12 already refuses — 2026-08-11 (ninetieth filing)
 
 **Sourcing.** No shell tool this dispatch (hard rule 8) — `git log -1

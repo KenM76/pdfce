@@ -735,11 +735,20 @@ D:\Dev\pdfce\
                                    `oc_is_hidden` with the annotation-level path
                                    and the Layers panel (`layers.rs`) — one
                                    resolver, so all three cannot disagree about
-                                   which groups a `/D` array names. Decisions 037
+                                   which groups a `/D` array names. Decision 037
                                    (unregistered-OCG reading of `/BaseState /OFF`)
-                                   and 038 (Table 101 vs §8.11.4.5 b), both/ON vs.
-                                   opposite-array processing) remain CLAIMED, NOT
-                                   YET AUTHORED, and apply equally to this new
+                                   is **ANSWERED BY MEASUREMENT as of 2026-08-11
+                                   (ninety-first filing, `04f8acd`)** — the literal
+                                   "every OCG-shaped object" reading is falsified
+                                   against the installed Acrobat; pdfce's shipped
+                                   "registered only" reading is confirmed (this
+                                   content-stream path shares `annot.rs`'s
+                                   `optional_content_default_off`, so it was never
+                                   a second answer to reconcile — see §12's
+                                   ninety-first-filing entry). Decision 038 (Table
+                                   101 vs §8.11.4.5 b), both `/ON` vs.
+                                   opposite-array processing) remains CLAIMED, NOT
+                                   YET AUTHORED, and applies equally to this
                                    content-stream path — it consumes the same
                                    `oc_off_set()` the annotation path already did.
                                    **★ Two §8.11 defects in the above, found and
@@ -3671,7 +3680,11 @@ debug afterthought. Design points:
   it needs no crypto dependency at all. Every summary line states the
   coverage-only caveat unconditionally, not gated on a flag — see §3's
   `signature.rs` note and §12's decision-037/038 claims for the two
-  spec questions this slice surfaced but did not settle.
+  spec questions this slice surfaced but did not settle. **037 has since
+  been settled** — answered by measurement against the installed Acrobat
+  on 2026-08-11 (`04f8acd`); **038 remains genuinely open** and needs a
+  spec read rather than a fixture, since its two readings diverge only
+  for a group named in both `/ON` and `/OFF`.
 - **`pdfce-cli export-data --format csv` / `import-data` — a third
   form-data interchange format alongside FDF/XFDF (`Pass 62.0`,
   2026-08-11) — carries a security obligation the other two formats
@@ -15076,6 +15089,21 @@ records in this project are produced via the `autonomous-builder`/
 KenAgent protocol (`docs/decisions/README.md`), not authored by
 `pdfce-librarian` directly.
 
+**Status update (2026-08-11, ninety-first filing) — ANSWERED BY
+MEASUREMENT, not merely claimed.** The falsifier fixture named above
+(`base-state-off-unregistered.pdf`, built `24e07e3`, seventy-ninth-
+adjacent filing) was actually opened against the installed Acrobat:
+the literal "every OCG-shaped object" reading is falsified, and
+pdfce's shipped "registered only" reading is confirmed. Full method
+and evidence in the dated §12 entry below (`04f8acd`). No
+`docs/decisions/037-*.md` file has been authored — per this
+directory's own protocol, a file is produced only when
+`autonomous-builder`/KenAgent is actually consulted, and this was
+settled by direct empirical measurement instead, not a consultation.
+Whether a formal record is still wanted for its own sake, now that
+the substance is settled, is the engineer's/operator's call — flagged
+here, not decided.
+
 **Decision 2 — CLAIMED as decision number `038`, NOT YET AUTHORED —
 Table 101 vs §8.11.4.5 b): does `/BaseState` propagate by processing
 BOTH the `/ON` and `/OFF` arrays, or only the array OPPOSITE the base
@@ -16722,3 +16750,107 @@ the wide shape is a different unit of work rather than a bigger
 version of the same one — is exactly the kind of scoping reasoning a
 future session should not have to re-derive when the wide shape is
 eventually built.
+
+### 2026-08-11 (ninety-first filing, `04f8acd`) — decision 037 ANSWERED BY MEASUREMENT: the literal "every OCG-shaped object" reading of `/BaseState /OFF` is falsified against the installed Acrobat; pdfce's shipped "registered only" reading is confirmed
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — `git log -1
+--format=%B 04f8acd` not run. The engineer's dispatch text carried the
+fixture, the measurement method, and the result in enough detail to
+record without independent re-derivation from source; the resulting
+source-doc-comment claim WAS independently confirmed by direct read of
+`crates/pdfce-core/src/layers.rs` (below).
+
+**This is not a new decision — it is decision 037 (seventy-sixth
+filing, above) moving from CLAIMED/NOT-YET-AUTHORED to ANSWERED. No
+new decision number is claimed or consumed by this entry.**
+
+**What was measured.** The falsifier fixture
+`fixtures/synthetic/layers/base-state-off-unregistered.pdf` — built at
+`24e07e3` (eighty-first filing, 2026-08-10) specifically to make the
+two candidate readings of `/BaseState /OFF`'s "all groups" diverge
+visibly — paints three squares: one OCG registered in `/OCProperties
+/OCGs` and named in `/D /ON`; one registered but named in neither `/ON`
+nor `/OFF`; one never registered anywhere. The two readings disagree
+only on the third square: "registered only" (pdfce's shipped answer)
+predicts it VISIBLE (an unregistered object is outside `/BaseState`'s
+jurisdiction entirely); "every OCG-shaped object reachable" predicts it
+HIDDEN (it is still OCG-shaped, so `/BaseState /OFF` reaches it too).
+
+**Opened in the installed Acrobat, it paints the first and third
+squares and hides the second — the same three-way answer pdfce
+renders.** Method, because an eyeballed screenshot could not
+distinguish "first and third" from "first and second, shifted," and
+this fixture's whole point is a case where guessing wrong is easy: the
+Acrobat screenshot was scanned for contiguous dark runs on one
+scanline. Exactly two runs, 184 px wide, 550 px apart. At the
+screenshot's 1.533 px/pt scale, 550 px is 359 pt (measured) against the
+fixture's 180 pt square spacing (known/designed) — **that is twice the
+spacing, ratio 359 ÷ 180 = 2.0, which is only possible if the two
+painted squares are the FIRST and THIRD**, not adjacent ones. pdfce's
+own diagnostic output agrees independently: `oc_hidden=1` on exactly
+the second square, `base_state_off_with_unregistered = true` (the
+"registered only, and it mattered" flag), zero change to the other two
+diagnostics that don't depend on the answer.
+
+**Result: the literal "every OCG-shaped object" reading is FALSIFIED.
+pdfce's shipped "registered only" reading is what an actual conforming
+reader does**, not merely a pragmatic keep-the-existing-answer choice
+made without checking (as it was described at the seventy-sixth
+filing, when it was first named rather than silently assumed). The
+`base_state_off_with_unregistered` diagnostic **stays** — its meaning
+changes from "pdfce is knowingly more permissive than Table 101's
+wording" to "this configuration is unusual, and a document relying on
+it relies on something Table 101 does not spell out" — still worth
+disclosing, no longer worth doubting. Confirmed by direct read:
+`crates/pdfce-core/src/layers.rs`, the
+`LayerDiagnostics::base_state_off_with_unregistered` doc comment (a
+`# ★ MEASURED 2026-08-11: pdfce's reading matches Acrobat` section),
+already carries this account — filed here as ARCHITECTURE.md's own
+record of the same measurement, not a restatement asking to be taken
+on faith.
+
+**Decision 038 is explicitly UNCHANGED by this entry — do not read
+this as settling it too.** 038 turns on a genuine contradiction WITHIN
+the standard's own text (Table 101 vs §8.11.4.5 b) for a group named in
+BOTH `/D /ON` and `/D /OFF` simultaneously), not a case where an actual
+reader's behavior can adjudicate between one clear reading and a
+falsifiable alternative — no fixture built so far makes the two
+readings of 038 diverge visibly, and none is claimed to here. It stays
+CLAIMED, NOT YET AUTHORED, exactly as the seventy-sixth filing left it.
+
+**No `docs/ARCHITECTURE.md` §12 decision-record ceiling change** — 037
+remains an un-filed prose claim in this project's `autonomous-builder`/
+KenAgent sense (see the forward-pointer added to the seventy-sixth
+filing's own entry, above); ceiling stays **038**, next genuinely free
+**039**. Whether a formal `docs/decisions/037-*.md` artifact is still
+worth producing now that the substance is settled by measurement rather
+than by KenAgent consultation is flagged as an open call for the
+engineer/operator, not resolved here — the project's own protocol
+(`docs/decisions/README.md`) only requires a file when the consultant
+was actually used, and it was not, here.
+
+**A process finding worth naming, not worth a new standing rule yet.**
+This fixture was built and its exact falsifying test written at
+`24e07e3` on 2026-08-10 (eighty-first filing) and then listed as
+remaining, cheap, and un-run across at least two subsequent session
+handoffs before this filing actually opened it. **A falsifier that is
+never run is indistinguishable, from the record, from one that does not
+exist — and is worse than that, because its mere presence on disk reads
+as diligence.** This is adjacent to but distinct from `R184`'s shape (a
+reachability audit that stopped at "a caller exists" without excluding
+the harness's own caller) — here the check existed, was correctly
+scoped, and simply was not executed. Not minted as a new standing rule
+from one instance; recorded as a candidate shape if a second, unrelated
+instance of "a built falsifier sits unrun across handoffs" surfaces, the
+same bar `R186` used (two independent instances before minting).
+
+**Verified at `04f8acd`**, per the engineer's own report, not
+independently re-run (no shell this dispatch): `cargo clippy -p
+pdfce-core --all-targets --all-features` — **0**. `cargo fmt --check`
+— clean. `cargo test -p pdfce-core --lib layers` — **18 passed / 0
+failed**, the `layers` module's own test file only, not a full-crate
+or full-workspace figure. All four filing gates reported clean at the
+prior commit `5e4a602`, carried forward as still clean (no source
+change between the two besides this measurement/doc-comment commit).
+**Backup/git working-tree state not asserted anywhere in this entry**
+— check `D:\Dev\pdfce-backups\` and `git log`/`git status` directly.

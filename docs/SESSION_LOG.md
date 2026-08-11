@@ -33397,3 +33397,108 @@ unheaded, immediately after the eighty-ninth filing's entry (the block
 this new entry now follows). Flagged for the engineer; not corrected
 here, since resolving a duplicate append-only block is a judgement call
 outside this filing's scope.
+
+**Correction, 2026-08-11 (ninety-first filing) — the anomaly flagged
+immediately above was a MISPLACEMENT, not a duplication, and is now
+resolved.** Re-examined by direct read for this filing: the
+eighty-eighth filing's own ledger paragraph had NO ledger under its own
+header at all; what looked like a duplicate was that same paragraph,
+orphaned and unheaded, sitting after the eighty-ninth filing's entry.
+It has since been moved back under its own `## 2026-08-11 (eighty-eighth
+filing)` header, with a dated "Placement corrected 2026-08-11" footer
+explaining the move (see that footer, immediately below the
+eighty-eighth filing's own text, above). Naming this correction rather
+than silently accepting the fix: deleting what looked like a duplicate
+would have destroyed the eighty-eighth filing's ONLY ledger — the
+original flag (correctly) stopped at "noted, not fixed" rather than
+acting on an unverified diagnosis.
+
+## 2026-08-11 (ninety-first filing) — decision 037 ANSWERED BY MEASUREMENT (`04f8acd`): the literal "every OCG-shaped object" reading of `/BaseState /OFF` is falsified against the installed Acrobat; pdfce's shipped "registered only" reading is confirmed; a falsifier fixture that sat built-but-unrun across nine filings is finally run
+
+**Shipped:** no new capability. `04f8acd` runs an existing falsifier
+fixture against the installed Acrobat and updates one doc comment
+(`crates/pdfce-core/src/layers.rs`,
+`LayerDiagnostics::base_state_off_with_unregistered`) to record the
+result. `docs/FEATURES.md` unaffected.
+
+**Decisions made this session:**
+- **Decision 037 (seventy-sixth filing, 2026-08-10) moves from CLAIMED/
+  NOT-YET-AUTHORED to ANSWERED BY MEASUREMENT.** The question — does
+  `/BaseState /OFF`'s "all groups" mean all groups REGISTERED in
+  `/OCProperties /OCGs`, or literally every OCG-shaped object reachable
+  — is now settled empirically, not merely by pragmatic choice.
+  `fixtures/synthetic/layers/base-state-off-unregistered.pdf` (built
+  `24e07e3`, eighty-first filing) paints three squares designed so the
+  two readings diverge on the third (an unregistered OCG). Opened in
+  the installed Acrobat, it paints the first and third and hides the
+  second — pdfce's exact answer.
+- **Method: scanline dark-run measurement, not eyeballing.** The
+  Acrobat screenshot's single scanline has exactly two dark runs, 184 px
+  wide, 550 px apart — 359 pt at 1.533 px/pt against the fixture's known
+  180 pt spacing, a 2.0× ratio only possible for the first-and-third
+  squares. Chosen deliberately because "two black squares" alone cannot
+  distinguish first-and-third from first-and-second-shifted, which is
+  exactly the distinction the whole exercise turns on.
+- **Decision 038 explicitly NOT touched.** It turns on a genuine
+  spec-internal contradiction (Table 101 vs §8.11.4.5 b, a group named in
+  BOTH `/ON` and `/OFF`), not a case a screenshot can adjudicate. Stays
+  CLAIMED, NOT YET AUTHORED.
+- **No `docs/decisions/037-*.md` file authored, and none held to be
+  strictly owed.** Per `docs/decisions/README.md`'s protocol, a file
+  exists only when `autonomous-builder`/KenAgent is actually consulted;
+  this was settled by direct measurement instead. Flagged as the
+  engineer's/operator's open call whether a formal artifact is still
+  wanted for its own sake — not resolved by this librarian.
+
+**Findings + decisions:**
+- **A built falsifier that sits unrun is indistinguishable, from the
+  record, from one that never existed — and its mere presence reads as
+  diligence, which is worse.** The fixture and its pinning test existed
+  from `24e07e3` (eighty-first filing) through the ninetieth filing —
+  at least nine filings, across at least two of this librarian's own
+  handoffs — each one able to note it as cheap and remaining without
+  running it. Not minted as a new standing rule from one instance;
+  named as a candidate shape for a future rule if a second, unrelated
+  instance surfaces, matching the two-instances bar `R186` used.
+- The SESSION_LOG.md "ledger appears twice" anomaly (flagged, not
+  fixed, at the ninetieth filing) is confirmed RESOLVED by direct read
+  — see the correction footer appended to the ninetieth filing's own
+  ledger, immediately above. It was a misplacement, not a duplication.
+
+**Still in flight:** decision 038 unchanged, still open, needs a
+`pdfce-spec-librarian` read of §8.11.4.5 rather than a fixture. Whether
+a formal `docs/decisions/037-*.md` artifact should still be produced is
+an open call, not a blocker.
+
+**For next session:** if decision 038 is picked up, dispatch
+`pdfce-spec-librarian` on §8.11.4.5 first, per the seventy-sixth
+filing's own recommendation — it was never withdrawn.
+
+**Ledger for this filing.** **No new Pass ID.** Pass-family ceiling
+unchanged at **62.0**, next free **63**. One commit cited by hash
+(`04f8acd`). `docs/FEATURES.md`: **no change.** `docs/ARCHITECTURE.md`:
+**one new dated §12 entry** (2026-08-11, the measurement/method/
+result), plus a forward-pointer footer on the seventy-sixth filing's
+original decision-037 claim, plus a body-section correction to the
+`interpret.rs` (`Pass 56.0`) §3 note. `docs/ROADMAP.md` *Backlog*: no
+change. **Standing rules: no new mint.** R184 and R186 cited by
+comparison, none minted. Decision-record ceiling **unchanged at 038**,
+next free **039** — 037 moves CLAIMED → ANSWERED, still not a numbered
+`docs/decisions/` file. **No `D:\dev\rag\rust\`/`egui\` finding — the
+measurement technique is a one-off verification method, not a
+generalizable Rust/egui finding. No `C:\personal_rag\pdf\` finding** —
+this is pdfce's own spec-interpretation question settled against a real
+reader, not an observation about a real-world PDF *producer* diverging
+from spec (the fixture is synthetic). Operator-question ceiling
+unchanged at **(bi)**, next free **(bj)**. Gate figures relayed per the
+engineer's own report, measured at `04f8acd` — `cargo clippy -p
+pdfce-core --all-targets --all-features` **0**; `cargo fmt --check`
+clean; `cargo test -p pdfce-core --lib layers` **18 passed / 0
+failed** (module-scoped, not full-crate/workspace) — **none
+independently re-run, no shell this dispatch** (hard rule 8). All four
+filing gates reported clean at the prior commit `5e4a602`, carried
+forward. **Backup/git working-tree state not asserted anywhere in this
+filing** — check `D:\Dev\pdfce-backups\` and `git log`/`git status`
+directly. This is the **ninety-first** `SESSION_LOG.md`/`ROADMAP.md`
+joint filing (the ninetieth confirmed present by direct read before
+this entry was written).
