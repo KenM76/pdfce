@@ -36066,3 +36066,91 @@ log`/`git status`/`git remote -v` directly. This is the
 **hundred-and-twelfth** `SESSION_LOG.md`/`ROADMAP.md` joint filing (the
 hundred-and-eleventh, immediately above — header AND body both
 confirmed present by direct read before this entry was appended).
+
+## 2026-08-11 (hundred-and-thirteenth filing) — Android GUI port investigated and measured, not decided: `pdfce-core`/`-render`/`-print`/`-cli` compile untouched for `aarch64-linux-android`, `pdfce-gui`'s only blocker is `rfd`, and `eframe`'s own Android support forces a real accessibility trade-off
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — the four
+`cargo check --target aarch64-linux-android` runs and their exact error
+counts are RELAYED from the dispatching engineer, who ran them directly;
+not reproduced here. Independently confirmed by direct `Read`/`Grep`
+against live source (no shell needed): `crates/pdfce-gui/Cargo.toml:33`
+(`accesskit` feature + comment, exact); `eframe-0.35.0/src/lib.rs:146-153`
+(the `compile_error!`, exact); `eframe-0.35.0/src/epi.rs:391-396`
+(`android_app` field, exact); `crates/pdfce-core/src/document.rs:392`/
+`:404` (`from_bytes`/`from_bytes_with_password`, exact);
+`crates/pdfce-gui/src` line count (57,734, exact) and `rfd::` call-site
+count (15, exact). **One figure re-measured and found to disagree**:
+`PathBuf`/`&Path` sites measured 63 by this filing, not the relayed 51
+— flagged in `ROADMAP.md`'s own entry, not silently reconciled.
+
+**Shipped:** nothing — an investigation filing, no code touched, no Pass
+minted.
+
+**Decisions made this session:** **`ARCHITECTURE.md` §12 gains one
+dated entry, explicitly NOT a new decision number** — corroborating
+evidence for decision 043's own dependency-graph-vs-buildability
+distinction (first CLEAN cross-target result against a target outside
+the set decision 043 named), not a new architectural choice. §3 gains a
+matching addendum paragraph on the invariant itself.
+
+**Findings + decisions:**
+- The operator asked how difficult a GUI Android port would be; the
+  engineer offered to record the measurements while fresh; the operator
+  said yes. **No decision to target Android has been made** — this is
+  explicitly an investigation, not a commitment, and is filed as one.
+- `pdfce-core`, `pdfce-render`, `pdfce-print` and `pdfce-cli` all compile
+  for `aarch64-linux-android` with zero source changes.
+- `pdfce-gui` fails with 13 errors, all from `rfd` — zero from
+  `egui`/`eframe`/`winit`/`glow`. The one failure lands exactly at the
+  shell boundary `ARCHITECTURE.md` §3's GUI-core invariant draws, not
+  inside it — evidence FOR the invariant, not against it.
+- `eframe` already has first-class Android support
+  (`NativeOptions::android_app`, `android-game-activity`/
+  `android-native-activity` features) — not a gap the invariant
+  happened to dodge.
+- **One real, sourced constraint for any future attempt**:
+  `eframe`'s `accesskit` feature (which `pdfce-gui` enables for native
+  accessibility) is mutually exclusive with `android-native-activity`
+  under `target_os = "android"` (`eframe-0.35.0/src/lib.rs:146-153`,
+  citing AccessKit's own winit-integration limitation). Any Android
+  attempt must choose `android-game-activity` or drop accessibility for
+  that target.
+- Effort recorded in three genuinely different tiers: headless
+  (essentially free today), a launching GUI (days — swap `rfd` for the
+  Storage Access Framework, wire `android_main`, add cargo-ndk/Gradle/
+  APK packaging), and an app anyone would want to use (the UI redesign
+  dominates — ~57,700 lines of desktop ribbon/dock interaction; a tablet
+  is far more plausible than a phone; not scoped here).
+- Other obstacles recorded: no filesystem paths on Android (Storage
+  Access Framework returns content URIs, not paths — the GUI's 63
+  `PathBuf`/`&Path` sites are the real plumbing work); printing is
+  unrelated (Windows-only today); pdfce keeps the whole file in memory
+  by design (`ARCHITECTURE.md` §5), a tighter constraint on a phone.
+- **Reusable method, the transferable part**: the question was answered
+  by installing the target and running `cargo check`, not by reasoning
+  about it — roughly ten minutes (per the engineer's account, not timed
+  independently), producing a precise one-crate blocker list.
+
+**Still in flight:** nothing changed — `Pass 67.0` phase A (font
+reporting) remains the next real engineering work; this filing does not
+touch it.
+
+**For next session:** see `docs/NEXT_SESSION.md` — not edited by this
+librarian this filing (engineer-owned).
+
+**Ledger for this filing.** No new Pass ID — ceiling stays **67.0**,
+next free **68**. No new decision number — ceiling stays **045**, next
+free **046**. No standing-rule mint — ceiling stays **R187**, next free
+**R188**. `docs/FEATURES.md`: not touched, per explicit instruction.
+Operator-question ceiling unaffected at **(bj)**, next free **(bk)**.
+**Backlog: one new bucket added** ("Android GUI port"). **RAG: two
+touches** — `D:\dev\rag\rust\cross_target_cargo_check_portability_gate.md`
+dated addendum, and one new `D:\dev\rag\egui\` finding file, both
+indexed this filing. `C:\personal_rag\pdf\`: not touched.
+**Backup/git working-tree/remote state not independently asserted
+anywhere in this filing** — no shell this dispatch (hard rule 8); the
+engineer should check `D:\Dev\pdfce-backups\` and `git
+log`/`git status`/`git remote -v` directly. This is the
+**hundred-and-thirteenth** `SESSION_LOG.md`/`ROADMAP.md` joint filing
+(the hundred-and-twelfth, immediately above — header AND body both
+confirmed present by direct read before this entry was appended).

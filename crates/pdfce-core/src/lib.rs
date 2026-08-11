@@ -85,6 +85,7 @@ pub mod fdf;
 pub mod filters;
 pub mod font_embed;
 pub mod fontdata;
+pub mod fontinfo;
 pub mod form_script;
 pub mod formcsv;
 pub mod forms;

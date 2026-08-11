@@ -1110,6 +1110,36 @@ is checked, not just hoped for — `cargo tree -p pdfce-core` and
 single invariant that keeps the future web fork a "swap the shell
 crate" job instead of a rewrite.
 
+**Empirically checked against a mobile target for the first time,
+2026-08-11 (investigation only — no Android build committed, no
+decision to target Android made; full measurements and effort
+breakdown: `ROADMAP.md`'s Backlog entry, hundred-and-thirteenth
+filing).** `cargo check --target aarch64-linux-android` compiles
+`pdfce-core`, `pdfce-render`, `pdfce-print` and `pdfce-cli` with
+**zero errors and zero source changes** — the first time this
+invariant has been exercised against a target outside the {Windows,
+Linux, macOS, `wasm32-unknown-unknown`} set decision 043 already
+names. `pdfce-gui` fails with **13 errors, all from `rfd`** (the
+native file-dialog crate) — zero from `egui`, `eframe`, `winit` or
+`glow` — so the one failure that does occur lands exactly at the
+shell boundary this invariant draws, not inside it. Per decision 043's
+own distinction between a dependency-graph check and a buildability
+check, this is that second, stronger check's **first clean result
+against a genuinely new target class** (the `pdfce-print` incident
+decision 043 records was that same check's first RED one). `eframe`
+itself carries first-class Android support
+(`NativeOptions::android_app`, `android-game-activity`/
+`android-native-activity` features) — this is not a gap the invariant
+happened to dodge, it is the shell crate's own target list already
+including the platform being checked. One real constraint, not merely
+a gap: `eframe`'s `accesskit` feature (which `pdfce-gui` enables for
+native accessibility) and the `android-native-activity` feature are
+**mutually exclusive under `target_os = "android"`**
+(`eframe-0.35.0/src/lib.rs:148-153`, a `compile_error!` citing
+AccessKit's own winit-integration limitation) — any future Android
+attempt has to choose `android-game-activity` or drop the stated
+accessibility goal for that target, not both.
+
 ## 4. Core data model (target contract — implemented incrementally per ROADMAP)
 
 This is what `pdfce-core` will expose once Pass 1+ lands. Written now
@@ -17764,3 +17794,72 @@ surface.** No new dependency (stringprep is explicitly NOT taken, which
 is the substance of this decision); `DocError`'s existing shape gains
 one new variant. Full build record: `ROADMAP.md`'s `Pass 5` increment 3
 Shipped entry (hundred-and-tenth filing).
+
+### 2026-08-11 (hundred-and-thirteenth filing) — NOT a new decision: decision 043's dependency-graph-vs-buildability distinction gets its first CLEAN result against a target outside the set it names — Android investigated and measured, not committed to
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — the four
+`cargo check --target aarch64-linux-android` runs and their exact error
+counts are relayed from the dispatching engineer, who ran them
+directly (`rustup target add aarch64-linux-android` first); not
+reproduced by this librarian. Independently confirmed by direct `Read`
+against live source, no shell needed: `crates/pdfce-gui/Cargo.toml:33`
+(the `accesskit` feature, "native accessibility tree — a11y is a pdfce
+UI goal", verbatim); `eframe-0.35.0/src/lib.rs:146-153` at
+`C:\Users\Ken\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\
+eframe-0.35.0\` (the `compile_error!` and its three-way `cfg(target_os
+= "android", feature = "accesskit", feature =
+"android-native-activity")`, exact); `eframe-0.35.0/src/epi.rs:396`
+(`pub android_app: Option<winit::platform::android::activity::
+AndroidApp>`, exact, same field the dispatch cited);
+`crates/pdfce-core/src/document.rs:392`/`:404` (`from_bytes`/
+`from_bytes_with_password`, exact). Full measurement table, the effort
+breakdown, and one figure this librarian independently re-measured and
+found to disagree with the relayed number (`PathBuf`/`&Path` call
+sites: 63 measured here vs. 51 relayed, flagged not silently
+reconciled): `ROADMAP.md`'s Backlog entry, this filing.
+
+**Why this is not a decision — filed here anyway.** No library was
+picked, no invariant was redefined, no crate boundary moved. `pdfce-core`
+and `pdfce-render` are exactly as GUI-free after this filing as before
+it. This entry exists because decision 043 (hundred-and-seventh filing)
+named a real distinction — a `cargo tree` graph-cleanliness check proves
+a different, weaker property than a cross-target `cargo check` — and
+stated that "the GUI-core separation invariant... is the project's
+highest-stakes instance of this same distinction," verified until now
+only against the {Windows, Linux, macOS, `wasm32-unknown-unknown`}
+target set and, in `pdfce-print`'s case, verified by catching a RED
+result. **This is that same check's first CLEAN result against a target
+outside that set** — `pdfce-core`/`pdfce-render`/`pdfce-print`/
+`pdfce-cli` all compile for `aarch64-linux-android` untouched.
+`pdfce-gui` does fail (13 errors), but every one is `rfd`, never
+`egui`/`eframe`/`winit`/`glow` — the failure lands exactly at the shell
+boundary §3 draws, not inside it, which is itself evidence FOR the
+invariant rather than against it. Worth recording as a decision-log
+entry rather than only a `ROADMAP.md` Backlog bullet because it is
+corroborating evidence for the project's highest-stakes design rule, not
+merely a feature-scoping note.
+
+**The one concrete, sourced obstacle, recorded so a future attempt does
+not rediscover it by trial and error.** `eframe`'s `accesskit` feature
+(enabled by `pdfce-gui`, `crates/pdfce-gui/Cargo.toml:33`, specifically
+for native accessibility) and its `android-native-activity` feature are
+mutually exclusive under `target_os = "android"` —
+`eframe-0.35.0/src/lib.rs:146-153` fires a `compile_error!` citing
+AccessKit's own winit-integration limitation
+(`accesskit_winit`, `accesskit-v0.18.0`). A future Android attempt must
+choose `android-game-activity` or accept dropping accessibility for that
+build target; it cannot have both. This is a real, sourced constraint on
+a hypothetical future decision, not a decision itself — no choice is
+made here.
+
+**Explicitly NOT a commitment.** No Android Pass is minted (Pass-family
+ceiling stays **67.0**, next free **68**). No `docs/FEATURES.md` row is
+added — no capability exists, nothing shipped. This entry, like the
+`ROADMAP.md` Backlog entry it accompanies, records what was measured on
+2026-08-11 so the question is not re-derived from scratch if it comes up
+again; it decides nothing about whether pdfce ever targets Android.
+
+**Not a crate-boundary or GUI-core-separation change.** `cargo tree -p
+pdfce-core` / `-p pdfce-render` are unaffected by this filing — no
+dependency was added, removed, or reclassified. Full record:
+`ROADMAP.md`'s Backlog entry (hundred-and-thirteenth filing).

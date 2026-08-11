@@ -81,6 +81,169 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★ Backlog filing, no Pass ID: Android GUI port investigated and measured — `pdfce-core`/`-render`/`-print`/`-cli` already compile untouched for `aarch64-linux-android`, `pdfce-gui`'s only blocker is `rfd`, and `eframe`'s own Android support forces a real accessibility trade-off — feasibility only, no commitment, no Pass minted — 2026-08-11 (hundred-and-thirteenth filing)
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — the four
+`cargo check --target aarch64-linux-android` runs (`rustup target add
+aarch64-linux-android` first) and their exact error counts are RELAYED
+from the dispatching engineer, who ran them directly; not reproduced by
+this librarian. **Independently verified by direct `Read`/`Grep`
+against live source, no shell needed**, everything below marked
+"confirmed": `crates/pdfce-gui/Cargo.toml:33` (the `accesskit` feature
+and its comment, "native accessibility tree — a11y is a pdfce UI goal",
+confirmed verbatim); `eframe-0.35.0/src/lib.rs:146-153` at
+`C:\Users\Ken\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\
+eframe-0.35.0\` (the `compile_error!` and its three-way
+`cfg(target_os = "android", feature = "accesskit", feature =
+"android-native-activity")`, confirmed exact); `eframe-0.35.0/
+src/epi.rs:391-396` (`pub android_app: Option<winit::platform::
+android::activity::AndroidApp>`, confirmed exact — same field the
+dispatch cited, same line); `crates/pdfce-core/src/document.rs:392`/
+`:404` (`from_bytes`/`from_bytes_with_password`, confirmed exact
+lines); `pdfce-gui`'s line count via `grep '^'` on
+`crates/pdfce-gui/src/*.rs` — **57,734, confirmed exact**; `rfd::`
+call-site count via `grep 'rfd::'` — **15, confirmed exact**, all in
+`main.rs`.
+
+**One figure independently re-measured and found to DISAGREE with the
+relayed number — flagged, not silently reconciled, per hard rule 10.**
+`PathBuf`/`&Path` mentions across `crates/pdfce-gui/src` (pattern
+`PathBuf|&Path\b`) measured **63** by this filing's own grep — `main.rs`
+29, `ui_text.rs` 28, `diag.rs` 4, `object_summary.rs` 1,
+`settings_panel.rs` 1 — not the dispatch's relayed **51**. Narrower
+patterns tried (`PathBuf` alone: 27) do not reproduce 51 either. The
+cause is not established — a hand count, a different file subset, or a
+pattern excluding one of the modules above are all plausible — and is
+not chased further this filing. **63 is what this entry carries**,
+because it is the figure this filing could check against the world; the
+relayed 51 is recorded here only as the number that did not survive
+re-derivation.
+
+**No decision has been made to target Android. This is a measurement, not
+a plan.** The operator asked how difficult a GUI Android port would be;
+the engineer offered to record the measurements while fresh; the
+operator said yes. Nothing below commits pdfce to building anything —
+`docs/FEATURES.md` is **not touched** by this filing (no capability
+exists to row), and no Pass ID is minted (Pass-family ceiling stays
+**67.0**, next free **68**).
+
+**The measurements, one table.**
+
+| crate | `cargo check --target aarch64-linux-android` |
+|---|---|
+| `pdfce-core` | compiles, zero changes |
+| `pdfce-render` | compiles, zero changes |
+| `pdfce-print` | compiles (its Win32 surface is `cfg(windows)`-gated; the non-Windows stubs `Pass 66.0`/decision 043 added are what makes this clean rather than the crate simply having nothing Android-specific to trip on) |
+| `pdfce-cli` | compiles |
+| `pdfce-gui` | **13 errors, ALL from `rfd`** — zero from `egui`, `eframe`, `winit`, `glow` (checked by grepping the error output for each crate name: 38 mentions of `rfd`, none of the other four) |
+
+`Document::from_bytes`/`from_bytes_with_password` already exist with no
+path argument (`crates/pdfce-core/src/document.rs:392`,`:404`) — the
+engine layer needs nothing for a path-less platform; every finding below
+is about the GUI shell.
+
+**`eframe` has first-class Android support — not a gap the invariant
+happened to dodge.** `NativeOptions::android_app: Option<winit::
+platform::android::activity::AndroidApp>` (`eframe-0.35.0/src/
+epi.rs:396`) plus two declared Cargo features, `android-game-activity`
+and `android-native-activity` — the shell crate pdfce already depends on
+already lists this platform.
+
+**★ One concrete conflict, measured not predicted.**
+`eframe-0.35.0/src/lib.rs:146-153` carries:
+
+```
+// Limitation imposed by `accesskit_winit`:
+// https://github.com/AccessKit/accesskit/tree/accesskit-v0.18.0/platforms/winit#android-activity-compatibility
+#[cfg(all(
+    target_os = "android",
+    feature = "accesskit",
+    feature = "android-native-activity"
+))]
+compile_error!("`accesskit` feature is only available with `android-game-activity`");
+```
+
+`pdfce-gui` **deliberately enables `accesskit`**
+(`crates/pdfce-gui/Cargo.toml:33`, comment: "native accessibility tree —
+a11y is a pdfce UI goal"). So Android forces a choice between the two
+activity types, and `android-native-activity` would mean dropping a
+stated accessibility goal for that build target. Recorded as a real
+constraint on any future attempt, not a footnote — a future Android Pass
+would hit this on its first `cargo build`, this filing means it doesn't
+have to be rediscovered.
+
+**The effort breakdown — three tiers, recorded because they are very
+different sizes of work.**
+
+1. **Headless Android (engine + CLI): essentially free today.** Both
+   already compile.
+2. **A GUI that launches and renders a PDF: days, not weeks.** Swap
+   `rfd` for Android's Storage Access Framework, wire the `android_main`
+   entry point, add cargo-ndk/Gradle/APK packaging, accept a bad layout.
+3. **An app anyone would want to use: the UI redesign dominates, and is
+   a separate product question from this filing.** ~57,700 lines of
+   ribbon + docking + hover-driven desktop interaction. egui handles
+   touch input at the framework level, but a docking layout designed for
+   a mouse and a wide monitor is not usable on a phone. **A tablet is far
+   more plausible than a phone**, and "which of pdfce's tools even belong
+   on a touch screen" is a design question nobody has asked yet — not
+   answered here, not scoped here.
+
+**Other real obstacles, recorded rather than left implicit.** Android
+has no filesystem paths for user documents — the Storage Access
+Framework returns content URIs through Intents, so the GUI's `PathBuf`/
+`&Path` sites (63, measured above) are the genuine plumbing work, not
+the 15 `rfd::` call sites alone. Printing is Windows-only in pdfce today
+(`pdfce-print`) and Android's print API is unrelated — a future Android
+print path would be new work, not a port. And pdfce retains the entire
+file in memory by design (`docs/ARCHITECTURE.md` §5 — this is what makes
+minimal-diff incremental saving work), which is a much tighter
+constraint on a phone's memory budget than on a desktop; not measured
+this filing, flagged for whoever scopes this next.
+
+**The reusable method, because it is the transferable part.** The
+question was answered by installing the target and running `cargo
+check`, not by reasoning about it — `rustup target add
+aarch64-linux-android` plus five `cargo check --target` invocations,
+roughly ten minutes per the dispatching engineer's account (not
+independently timed by this librarian). It produced a precise,
+one-crate blocker list instead of an opinion. Same shape as this
+project's own `D:\dev\rag\rust\cross_target_cargo_check_portability_gate.md`
+finding, now extended to a new target class — see the dated addendum
+added to that file this filing, and the new
+`D:\dev\rag\egui\` finding for the `accesskit`/`android-native-activity`
+conflict specifically.
+
+**Not a crate-boundary or invariant change** — `cargo tree -p pdfce-core`
+/ `-p pdfce-render` are unaffected; no dependency added, removed, or
+reclassified.
+
+**Ledger for this filing.** **No new Pass ID minted** — Pass-family
+ceiling stays **67.0**, next free **68**. `ARCHITECTURE.md` §3 gains one
+addendum paragraph and §12 gains **one dated entry, explicitly NOT a new
+decision number** — decision-record ceiling stays **045**, next free
+**046**. No standing-rule mint — ceiling stays **R187**, next free
+**R188**. `docs/FEATURES.md`: **not touched**, per explicit instruction
+— no capability exists to row. Operator-question ceiling unaffected at
+**(bj)**, next free **(bk)** — no question posed by this filing.
+**Backlog: one new bucket added** ("Android GUI port," below), no
+existing bucket amended or withdrawn. **Two RAG touches**:
+`D:\dev\rag\rust\cross_target_cargo_check_portability_gate.md` gains a
+dated addendum (Android as a new target class), and
+`D:\dev\rag\egui\` gains one new finding file (the `accesskit`/
+`android-native-activity` conflict) — both indexed, this filing.
+`C:\personal_rag\pdf\`: not touched — no PDF-domain finding here.
+**Backup/git working-tree/remote state not independently asserted
+anywhere in this filing** — no shell this dispatch (hard rule 8); the
+engineer should check `D:\Dev\pdfce-backups\` and `git
+status`/`git log`/`git remote -v` directly. This is the
+**hundred-and-thirteenth** `ROADMAP.md` filing. The two immediately
+preceding filings (hundred-and-eleventh, hundred-and-twelfth) scoped and
+amended `Pass 67.0` entirely within the *Next up* section and created no
+*Shipped*-section header of their own; the entry immediately below is
+therefore the **hundred-and-tenth** filing's — confirmed present by
+direct read before this entry was prepended.
+
 ### ★★★ `f79f044..f79d9a2` (nine commits) — pdfce opens AES-256 encrypted PDFs at `/R` 5: `Pass 5` increment 3 ships Algorithms 3.2a/3.11/3.12/3.13 across core, CLI and GUI; decision 039 extended to `sha2`; `/Perms` handled by new decision 044, non-ASCII passwords by new decision 045; a padding-strip bug survived 71 tests + 20 decrypts + a byte-identical render + qpdf's own vector because every random test key happened to avoid its 1-in-16 trigger — 2026-08-11, branch `main` (hundred-and-tenth filing)
 
 **Sourcing.** No shell tool this dispatch (hard rule 8) — `git log
@@ -47011,6 +47174,26 @@ not a judgment call:**
   phase D for the live scoping, including why it is sequenced early
   despite being substantial (the only phase that answers the ~40%
   Identity-H/CID case phase B must refuse).
+- **Android GUI port — feasibility INVESTIGATED and MEASURED
+  2026-08-11 (hundred-and-thirteenth filing), NOT decided, NOT scoped, NO
+  Pass ID.** Full measurement table, the `accesskit`/
+  `android-native-activity` conflict, the effort breakdown and every
+  citation: this file's own `★ Backlog filing, no Pass ID` entry at the
+  top of *Shipped*, this filing; §3/§12 addenda in `ARCHITECTURE.md`,
+  same filing. **Headline, for anyone scanning this bucket without
+  reading the full entry:** `pdfce-core`/`-render`/`-print`/`-cli`
+  already compile untouched for `aarch64-linux-android`;
+  `pdfce-gui`'s only blocker is `rfd` (13 errors, zero from
+  `egui`/`eframe`/`winit`/`glow`); `eframe` has first-class Android
+  support but its `accesskit` feature (which `pdfce-gui` enables) is
+  incompatible with `android-native-activity`, forcing a stated
+  accessibility trade-off on any future attempt; the real work is an
+  entirely separate UI-design question (~57,700 lines of desktop
+  ribbon/dock interaction, a tablet is far more plausible than a phone)
+  that this filing explicitly does not answer. **If this bucket is ever
+  scoped into a real Pass, the operator's own framing should gate it:
+  headless/CLI is free, a launching GUI is days, a GUI worth using is a
+  separate product decision.**
 
 ## Standing rules
 
