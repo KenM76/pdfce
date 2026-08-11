@@ -84,12 +84,21 @@ pub struct SeparatorStyle {
 impl SeparatorStyle {
     /// Map a `sepStyle` code to its convention.
     ///
-    /// Returns `None` for **4 and above**. Code 4 is genuinely undocumented:
-    /// one reimplementation clamps the parameter to `[0, 4]`, which implies a
-    /// fifth mode exists, but no source of any tier says what it renders.
-    /// Inventing one would produce confidently-wrong output on the exact
-    /// files where pdfce had least idea what it was doing, so an unknown code
-    /// declines instead (see [`FormatOutcome::UnknownStyle`]).
+    /// # Code 4 was unsourced and is now MEASURED
+    ///
+    /// No source of any tier described mode 4 — one reimplementation clamps
+    /// the parameter to `[0, 4]`, which implied a fifth mode existed without
+    /// saying what it rendered, and pdfce declined it rather than guess.
+    ///
+    /// A probe form was opened in the installed Acrobat on 2026-08-11 with
+    /// `AFNumber_Format(2, 4, 0, 0, "", true)` over a stored `1234.56`, beside
+    /// a `sepStyle 0` control. Acrobat displayed **`1'234.56`** against the
+    /// control's `1,234.56`: an **apostrophe** thousands separator with a
+    /// period decimal — the Swiss convention. Recorded as measured
+    /// first-party behaviour, which is a stronger tier than anything else in
+    /// this table.
+    ///
+    /// Returns `None` for **5 and above**, still undescribed by anything.
     #[must_use]
     pub const fn from_code(code: i64) -> Option<Self> {
         match code {
@@ -108,6 +117,11 @@ impl SeparatorStyle {
             3 => Some(Self {
                 group: None,
                 decimal: ',',
+            }),
+            // Measured, not guessed — see this function's own doc comment.
+            4 => Some(Self {
+                group: Some('\''),
+                decimal: '.',
             }),
             _ => None,
         }
@@ -265,10 +279,12 @@ pub fn render(helper: &FormatHelper, stored_value: &str, policy: CommaPolicy) ->
             negative_style,
             currency,
             prepend_currency,
-            // `currStyle` is described by every available source as reserved
-            // and inert. pdfce accepts and ignores it, mirroring the
-            // apparent no-op rather than inventing a use for a parameter
-            // nobody has observed doing anything.
+            // `currStyle` is reserved and inert — described that way by
+            // every source, and now MEASURED: a probe opened in the
+            // installed Acrobat on 2026-08-11 rendered `currStyle` 1 and 0
+            // identically (`1,234.56` both) over the same stored value.
+            // pdfce accepts and ignores it, which is now a match rather than
+            // an assumption.
             currency_style: _,
         } => number(
             stored_value,
@@ -353,14 +369,23 @@ fn percent(stored: &str, decimals: i64, sep_code: i64, policy: CommaPolicy) -> F
             code: sep_code,
         };
     };
-    // Unlike `AFNumber_Format`'s fully-blank empty case, an empty percent
-    // field displays a bare `%`. Single-sourced and flagged as possibly a
-    // quirk of the reimplementation rather than of Acrobat — reproduced
-    // because it is what the only available evidence says, and because being
-    // wrong here costs one stray character rather than a wrong number.
-    let Some(value) = parse_number(stored, policy) else {
-        return FormatOutcome::Rendered(Formatted::plain("%".to_owned()));
-    };
+    // ★ MEASURED, and it falsified what pdfce had implemented.
+    //
+    // The single available source — one independent reimplementation — has
+    // an empty percent field display a bare `%`, and pdfce reproduced that,
+    // flagging it as possibly the clone's own quirk.
+    //
+    // A probe form opened in the installed Acrobat on 2026-08-11 with
+    // `AFPercent_Format(1, 0)` over an EMPTY value displayed **`0.0%`**, not
+    // `%`. So Acrobat coerces an unreadable percent value to **zero** and
+    // formats it, where `AFNumber_Format` leaves the field blank — a real
+    // asymmetry between the two helpers, and the opposite of what the clone
+    // does.
+    //
+    // Worth noting the shape: the wrong behaviour was reproduced faithfully
+    // FROM a source, disclosed as single-tier, and still wrong. Marking a
+    // fact as weakly-sourced is not the same as checking it.
+    let value = parse_number(stored, policy).unwrap_or(0.0);
     let neg = NegativeStyle {
         parenthesise: false,
         red: false,
@@ -575,37 +600,74 @@ mod tests {
         outcome.text().map_or("<declined>", String::as_str)
     }
 
-    /// The four documented separator conventions render as their table says.
+    /// The five separator conventions render as their table says.
+    ///
+    /// Modes 0–3 are corroborated across independent sources; mode 4 is
+    /// measured first-party behaviour, which is a stronger tier than
+    /// anything else in this table.
     #[test]
-    fn the_four_separator_styles_render_their_conventions() {
+    fn the_five_separator_styles_render_their_conventions() {
         for (code, want) in [
             (0, "1,234.56"),
             (1, "1234.56"),
             (2, "1.234,56"),
             (3, "1234,56"),
+            // ★ Mode 4 was UNSOURCED and is now measured: a probe opened in
+            // the installed Acrobat rendered `1'234.56` — an apostrophe
+            // thousands separator with a period decimal, the Swiss
+            // convention — beside a `sepStyle 0` control showing
+            // `1,234.56` in the same document.
+            (4, "1'234.56"),
         ] {
             let got = num("1234.56", 2, code, 0, "", false);
             assert_eq!(text_of(&got), want, "sepStyle {code}");
         }
     }
 
+    /// ★ **`currStyle` is inert, and that is now measured rather than
+    /// assumed.**
+    ///
+    /// Every source describes it as reserved. The same probe rendered
+    /// `currStyle` 1 and 0 identically over one stored value, so pdfce
+    /// ignoring the parameter is a match rather than a guess.
+    #[test]
+    fn currency_style_is_inert() {
+        let with_style = |style: i64| {
+            render(
+                &FormatHelper::Number {
+                    decimals: 2,
+                    separator_style: 0,
+                    negative_style: 0,
+                    currency_style: style,
+                    currency: Vec::new(),
+                    prepend_currency: true,
+                },
+                "1234.56",
+                CommaPolicy::default(),
+            )
+        };
+        assert_eq!(with_style(0), with_style(1));
+        assert_eq!(text_of(&with_style(1)), "1,234.56");
+    }
+
     /// ★ **An unsourced style code declines rather than guessing.**
     ///
-    /// `sepStyle` 4 is permitted by one reimplementation's clamp and
-    /// documented by nothing. Rendering a guess would be confidently wrong
-    /// on precisely the files pdfce understands least.
+    /// Mode 4 used to be the example here and is now MEASURED, so the
+    /// test moved up to 5 — the first code nothing describes. That the
+    /// boundary moved is the point: declining is a statement about the
+    /// evidence, not a permanent property of a number.
     #[test]
     fn an_unsourced_style_code_declines_and_says_why() {
-        let got = num("1234.56", 2, 4, 0, "", false);
+        let got = num("1234.56", 2, 5, 0, "", false);
         assert_eq!(
             got,
             FormatOutcome::UnknownStyle {
                 parameter: "sepStyle",
-                code: 4
+                code: 5
             }
         );
         let why = got.decline_reason().expect("a decline explains itself");
-        assert!(why.contains("sepStyle=4"), "{why}");
+        assert!(why.contains("sepStyle=5"), "{why}");
         assert!(
             why.contains("stored value"),
             "and says what is shown: {why}"
@@ -697,10 +759,18 @@ mod tests {
         assert_eq!(text_of(&pct("0.085", 1)), "8.5%");
         assert_eq!(text_of(&pct("0.5", 0)), "50%");
         assert_eq!(text_of(&pct("1", 2)), "100.00%");
+        // ★ MEASURED, and it overturned what pdfce had implemented. The one
+        // available source has an empty percent field show a bare `%`; the
+        // installed Acrobat showed `0.0%` for AFPercent_Format(1, 0) over an
+        // empty value. Percent coerces an unreadable value to ZERO and
+        // formats it, where AFNumber_Format leaves the field blank — a real
+        // asymmetry between the two helpers.
+        assert_eq!(text_of(&pct("", 1)), "0.0%");
+        assert_eq!(text_of(&pct("", 2)), "0.00%");
         assert_eq!(
-            text_of(&pct("", 2)),
-            "%",
-            "and an empty percent field shows a bare sign, unlike a number field"
+            text_of(&num("", 2, 0, 0, "", false)),
+            "",
+            "while a number field with the same empty value stays blank"
         );
     }
 
