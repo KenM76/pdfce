@@ -113,6 +113,33 @@ def main() -> int:
     ap.add_argument("--stats", action="store_true")
     args = ap.parse_args()
 
+    # ★ REFUSE TO RUN ON A SHALLOW CLONE — the same defect that made
+    # `check-commits-filed.py` lie in CI on 2026-08-11, fixed here BEFORE it
+    # could (that gate is in CI; this one is not, yet).
+    #
+    # This walks commits and reads their messages. On a shallow clone the
+    # history is truncated to the fetch depth, so the walk silently covers a
+    # fraction of what its own output claims — and "0 unfiled" from a
+    # one-commit history looks exactly like "0 unfiled" from a complete one.
+    #
+    # `.strip()` is load-bearing and is the reason this comment is long:
+    # `git()` above returns RAW stdout, so the naive `== "true"` compares
+    # against `'true\n'` and never fires. That exact mistake shipped in the
+    # sibling gate's first version of this guard — a guard against quiet
+    # failure that failed quietly (R187).
+    if git("rev-parse", "--is-shallow-repository").strip() == "true":
+        print(
+            "ERROR: this is a SHALLOW clone, so the commit walk is "
+            "incomplete and its result is meaningless.",
+            file=sys.stderr,
+        )
+        print(
+            "       Fix the checkout (`fetch-depth: 0`); do not interpret "
+            "any result below.",
+            file=sys.stderr,
+        )
+        return 2
+
     # EXHAUSTIVE BY DEFAULT since 2026-08-09, not a rolling window.
     #
     # This was `-60` — the last sixty commits — on the reasoning, stated in

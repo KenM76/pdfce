@@ -27,14 +27,19 @@ local `main` 36 commits behind and *reported success*. The check that
 would have caught that (`origin/main` is AT the tagged commit) is the one
 that matters; run the script before believing any future release.
 
-**Open with the operator, not resolved:** he reported *"my mouse
+**RESOLVED, but the lesson stands.** The operator reported *"my mouse
 navigation is getting screwy"* right after a session that drove
-`tools/gui-shot.ps1` about eight times. That harness moves the REAL
-cursor and synthesises Ctrl+scroll and click-drag. No harness process was
-running and nothing was held when checked, and all buttons/modifiers were
-defensively released — but the cause was never confirmed. **Treat the GUI
-harness as an input-hijacking tool and say so before running it while the
-operator is at the machine.**
+`tools/gui-shot.ps1` about eight times, and later confirmed *"mouse is
+working now"*. Nothing was ever proven to be the cause: no harness
+process was running and no button or modifier was held when checked,
+though all were defensively released.
+
+**Treat `gui-shot.ps1` / `gui-drive.ps1` as input-hijacking tools.** They
+move the REAL cursor and synthesise Ctrl+scroll and click-drag on the
+live desktop — an interrupted run can leave a modifier logically held,
+which makes scrolling zoom and clicks drag. **Say so before running one
+while the operator is at the machine**, and prefer headless verification
+(CLI, unit tests, `cargo test`) when it will do.
 
 ---
 
