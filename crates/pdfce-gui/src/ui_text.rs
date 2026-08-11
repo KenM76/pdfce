@@ -10156,3 +10156,100 @@ pub fn find_case_sensitive_tooltip() -> &'static str {
 pub fn find_close_tooltip() -> &'static str {
     "Close find (Escape)."
 }
+
+// ---------------------------------------------------------------------------
+// Calculated fields — decision 009 posture B
+// ---------------------------------------------------------------------------
+
+/// Heading for the recompute section of the Forms panel.
+#[must_use]
+pub const fn recompute_heading() -> &'static str {
+    "Calculated fields"
+}
+
+/// The standing explanation, shown whenever the section is open.
+///
+/// Says the two things an operator cannot infer from the numbers on screen:
+/// pdfce did not run the scripts, and the values shown are as last saved.
+#[must_use]
+pub const fn recompute_explainer() -> &'static str {
+    "pdfce never runs a document's JavaScript. Where a field is computed by a \
+recognised Acrobat built-in, pdfce can reproduce the arithmetic natively \
+instead. The source script stays in the file either way."
+}
+
+/// Summary line when a plan has pending changes.
+#[must_use]
+pub fn recompute_pending(changes: usize, coerced: usize) -> String {
+    let blanks = if coerced == 0 {
+        String::new()
+    } else {
+        format!(
+            " {coerced} operand(s) are blank or non-numeric and count as zero, \
+matching Acrobat."
+        )
+    };
+    format!("{changes} field(s) would change.{blanks}")
+}
+
+/// Summary line when everything already holds its computed value.
+#[must_use]
+pub const fn recompute_up_to_date() -> &'static str {
+    "Every recognised calculation already holds its computed value."
+}
+
+/// Shown when the document has no calculation pdfce recognises.
+#[must_use]
+pub const fn recompute_nothing_recognised() -> &'static str {
+    "No recognised Acrobat calculation in this form."
+}
+
+/// One proposed change, as a single reviewable line.
+#[must_use]
+pub fn recompute_change_row(field: &str, from: &str, to: &str) -> String {
+    format!("{field}: {from} -> {to}")
+}
+
+/// One skipped calculation and its reason.
+#[must_use]
+pub fn recompute_skip_row(field: &str, reason: &str) -> String {
+    format!("{field}: {reason}")
+}
+
+/// The button that commits the plan.
+#[must_use]
+pub const fn recompute_apply_button() -> &'static str {
+    "Recompute these fields"
+}
+
+/// Tooltip for that button.
+#[must_use]
+pub const fn recompute_apply_tooltip() -> &'static str {
+    "Writes the values listed above. One undo step. The source scripts are \
+left in place, so a JavaScript-running reader recomputes independently."
+}
+
+/// Note after a successful apply.
+#[must_use]
+pub fn recompute_applied(changes: usize) -> String {
+    format!("Recomputed {changes} field(s) natively — no script was run.")
+}
+
+/// Warning when pdfce had to invent part of the evaluation order.
+#[must_use]
+pub fn recompute_order_is_a_guess(unlisted: usize) -> String {
+    format!(
+        "This form does not list {unlisted} of its calculated field(s) in its \
+calculation order, which the PDF standard requires. pdfce ordered them by \
+their own dependencies; another reader may compute different values."
+    )
+}
+
+/// Note counting the scripts pdfce did not consider.
+#[must_use]
+pub fn recompute_not_considered(count: usize) -> String {
+    format!(
+        "{count} other script(s) were not considered — pdfce recognises no \
+built-in in them, so those fields keep the values last saved."
+    )
+}

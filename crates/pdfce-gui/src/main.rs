@@ -7492,6 +7492,114 @@ impl PdfceApp {
             );
         }
 
+        // -- Calculated fields (decision 009 posture B). --
+        //
+        // Above the field list and below the form-wide disclosures, because a
+        // recompute acts on the whole form and because its result changes what
+        // the rows below it show. An operator who scrolled past this and then
+        // read a stale total would have been misled by the layout.
+        //
+        // Collapsed by default and never auto-run. Decision 009 §5.1 makes a
+        // recompute an operator-invoked act: merely opening a form must not
+        // change a computed `/V`. The plan is computed on every frame the
+        // section is open — cheap on any real form, and always current with
+        // the fills the operator just made, which a cached plan would not be.
+        let mut apply_recompute: Option<Vec<(String, String)>> = None;
+        egui::CollapsingHeader::new(ui_text::recompute_heading())
+            .default_open(false)
+            .show(ui, |ui| {
+                ui.label(ui_text::recompute_explainer());
+                let plan = {
+                    let view = doc.session.view();
+                    pdfce_core::form_script::recompute::plan(
+                        &view,
+                        pdfce_core::form_script::calc::CommaPolicy::default(),
+                    )
+                };
+                if plan.not_reproducible > 0 {
+                    ui.label(ui_text::recompute_not_considered(plan.not_reproducible));
+                }
+                if plan.order_source.is_pdfce_choice() {
+                    ui.colored_label(
+                        ui.visuals().warn_fg_color,
+                        ui_text::recompute_order_is_a_guess(plan.unlisted_calculations),
+                    );
+                }
+                // Skips are listed BEFORE the changes, not after. A field
+                // pdfce declined to compute is the thing an operator most
+                // needs to notice, and a list of successful changes above it
+                // reads as completeness.
+                for skipped in &plan.skipped {
+                    if skipped.reason == pdfce_core::form_script::recompute::Skip::AlreadyCorrect {
+                        continue;
+                    }
+                    ui.colored_label(
+                        ui.visuals().warn_fg_color,
+                        ui_text::recompute_skip_row(&skipped.field, &skipped.reason.to_string()),
+                    );
+                }
+                if plan.is_empty() {
+                    let has_any = !plan.skipped.is_empty();
+                    ui.label(if has_any {
+                        ui_text::recompute_up_to_date()
+                    } else {
+                        ui_text::recompute_nothing_recognised()
+                    });
+                    return;
+                }
+                ui.label(ui_text::recompute_pending(
+                    plan.changes.len(),
+                    plan.coerced_operands(),
+                ));
+                // Every proposed value is on screen before the button that
+                // commits it — rule 4's disclosure obligation, satisfied by
+                // the values being visible and the commit being a deliberate
+                // click on a control at a fixed position, not by a confirm
+                // box anchored to the page.
+                for change in &plan.changes {
+                    ui.label(ui_text::recompute_change_row(
+                        &change.field,
+                        &change.previous,
+                        &change.proposed,
+                    ))
+                    .on_hover_text(change.disclosure.message());
+                }
+                let can_edit = doc.editing_enabled && fill_refusal_note.is_none();
+                let button = ui.add_enabled(
+                    can_edit,
+                    egui::Button::new(ui_text::recompute_apply_button()),
+                );
+                let button = match fill_refusal_note {
+                    Some(note) => button.on_disabled_hover_text(note),
+                    None => button.on_hover_text(ui_text::recompute_apply_tooltip()),
+                };
+                if button.clicked() {
+                    apply_recompute = Some(
+                        plan.changes
+                            .iter()
+                            .map(|c| (c.field.clone(), c.proposed.clone()))
+                            .collect(),
+                    );
+                }
+            });
+        // Applied outside the closure: `doc` is borrowed immutably for the
+        // plan inside it, and the fill needs it mutably.
+        if let Some(changes) = apply_recompute {
+            let count = changes.len();
+            let mut failure = None;
+            for (field, value) in changes {
+                if let Err(err) = doc.session_mut().fill_text_field(&field, &value) {
+                    failure = Some(err.to_string());
+                    break;
+                }
+            }
+            doc.refresh_pages();
+            // A partial apply is reported as the failure, not as a success
+            // with a footnote: the operator accepted a whole plan, and if
+            // only part of it landed the honest headline is what stopped it.
+            doc.pending_note = Some(failure.unwrap_or_else(|| ui_text::recompute_applied(count)));
+        }
+
         // -- Form-wide actions, ABOVE the list. --
         //
         // Placed here, not at the bottom, because they act on the WHOLE form:
