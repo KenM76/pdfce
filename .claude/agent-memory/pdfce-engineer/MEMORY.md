@@ -22,6 +22,7 @@
 - [Keep the error catching](feedback_keep_the_error_catching.md) — Ken rejects changes that trade error-detection for speed; declined splitting into per-crate sessions for that reason
 - [A refusal can guard more than it says](feedback_refusals_guard_their_callers.md) — re-verify a refusal's stated reason (R143); removing one can un-gate a caller relying on it (R144/R147)
 - [Windows paths need literal edits](feedback_windows_paths_need_literal_edits.md) — `\b`/`\t`/`\f` in `D:\builds`, `\temp`, `\fixtures` get eaten by sed/heredocs; use Edit/Write and verify with `cat -v`
+- [Two modes, one pattern, is one measurement](feedback_two_modes_one_pattern_is_one_measurement.md) — R188; same-pattern agreement isn't verification, and don't override an independently-derived result with a more confident one
 - [Absence needs an unscoped query](feedback_absence_needs_an_unscoped_query.md) — `git log --all -- path` feels exhaustive but is path-scoped; a wrong path reads exactly like a true negative
 - [Gates I owe myself](feedback_gates_i_owe_myself.md) — the cargo-fuzz gate is the one I skip; and a harness enumerating a module's entry points goes stale every Pass
 - [Rungs: click-out commits, and the three-rung ladder](project_rung_ladder_state.md) — 2026-08-05: Passes 34.0/36.0/36.1/36.2 shipped; what commits implicitly and what still doesn't
