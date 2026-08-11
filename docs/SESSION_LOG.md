@@ -34671,3 +34671,224 @@ asserted anywhere in this filing** — no shell this dispatch (hard rule
 the **hundredth** `SESSION_LOG.md`/`ROADMAP.md` joint filing (the
 ninety-ninth confirmed present by direct read before this entry was
 appended).
+
+## 2026-08-11 (hundred-and-first filing) — `74e54a5`: `Pass 5` increment 2 gains the fixture that actually exercises its hardest code path — an object-stream container as a shortened stream span, corroborated by a third independent AES-128 implementation (PDFium) after pdfce's own spec reading and pypdf's
+
+**Sourcing.** No shell tool this dispatch (hard rule 8). The dispatching
+engineer supplied the commit summary in full; independently confirmed by
+direct `Read` of `crates/pdfce-core/tests/encryption.rs:401-479`
+(`aes_128_decrypts_a_document_whose_objects_live_in_object_streams`),
+which matches the dispatch's account exactly — the pypdf-flattening
+measurement, T4/E5 coverage, the fixture's own `/V 4`/`/R 4`/
+`/CFM /AESV2`/5-ObjStm/2-xref-stream/password-`1234` provenance, and the
+stated skip-loudly weakness. The PDFBox-public-key-refusal claim was not
+found in this test file by `Grep` — relayed as an investigative note,
+not new committed code.
+
+**Shipped:**
+- `74e54a5` — one new test,
+  `aes_128_decrypts_a_document_whose_objects_live_in_object_streams`,
+  against PDFium's `testing/resources/encrypted.pdf`. Every committed
+  `enc-*.pdf` fixture derives from `demo-form.pdf` (PDF 1.3, classic
+  xref, zero object streams), and pypdf flattens object streams when it
+  clones (measured: a 7-`ObjStm` source came out with 0), so the
+  committed corpus structurally could not exercise increment 2's
+  highest-risk path: `f7aee60` shortens `Stream::data_span` after AES
+  decryption, and an object-stream CONTAINER is itself a stream whose
+  shortened span then gets parsed for the objects inside it. This test
+  also pins T4 (phase-1-before-phase-2 ordering) and E5 (xref streams
+  are never encrypted — this fixture has two). `fixtures/external/` is
+  gitignored, so the test skips loudly rather than failing a clean
+  checkout — a stated weakness, accepted because the alternative is zero
+  coverage of this path.
+
+**Decisions made this session:** none — a test-fixture addition, not an
+architectural decision.
+
+**Findings + decisions:**
+- **A gitignored, uncommittable fixture is the only thing in this corpus
+  that can exercise the object-stream-container decrypt path**, because
+  the corpus-generation tool (pypdf) silently flattens object streams on
+  clone. Recorded as a project-internal testing-tool limitation, not
+  graduated to `D:\dev\rag\rust\` (pypdf is Python, not part of pdfce's
+  own toolchain) or `C:\personal_rag\pdf\` (a corpus-generation
+  limitation, not a real-world producer's divergence from spec).
+- **Two previously-surveyed PDFBox AES-128 fixtures are `/Adobe.PubSec`
+  public-key-security documents, correctly refused by handler name** —
+  resolves what might otherwise have looked like an unexplained coverage
+  gap into "correctly out of scope."
+
+**Still in flight:**
+- `Pass 5`'s remaining scope unchanged: AES-256 (`/AESV3`, blocked on
+  `/R` 6's unsourced Algorithm 2.A), `/R` 6 generally, and any
+  encrypted-save path — all still refused by name, entirely unstarted.
+- If a committable synthetic AES + object-stream fixture is ever built,
+  the new test's own doc comment says it should become unconditional and
+  the skip should go — not yet done.
+
+**For next session:** `Pass 5` increment 2's AES-128 slice is now tested
+against three independent implementations (pdfce's own spec reading,
+pypdf's corpus, PDFium's `encrypted.pdf`). AES-256/`/R 6`/encrypted-save
+remain the next named piece of encryption work.
+
+**Ledger for this filing.** **No new Pass ID** — same `Pass 5` ID,
+increment 2 gains coverage, not scope. Pass-family ceiling **63.0**
+(moved by the hundred-and-second filing below, filed in the same
+dispatch, immediately after this one), next free **64**. One commit
+cited by hash (`74e54a5`). `docs/FEATURES.md`: **no row touched** — test
+coverage for an existing capability, not a new one. `docs/
+ARCHITECTURE.md`: no new entry. Standing rules: **no new mint** — not a
+new instance of `R186` (that guard was already fixed at `f7aee60`; this
+commit proves the fix on a harder fixture rather than finding a new
+bug). Ceiling stays **R186**, next free **R187**. Decision-record
+ceiling **040** (moved by the filing below), next free **041**.
+Operator-question ceiling **(bj)** (moved by the filing below), next
+free **(bk)**. `D:\dev\rag\rust\`/`D:\dev\rag\egui\`/
+`C:\personal_rag\pdf\`: **no new file** this filing — see the Findings
+paragraph above for why neither finding graduates. Test/gate figures:
+see the combined **3,338 / +14** figure in the hundred-and-second
+filing below — relayed, engineer-verified, not independently re-run by
+this librarian (no shell this dispatch). **Backup/git working-tree/
+remote state not independently asserted anywhere in this filing** — no
+shell this dispatch (hard rule 8); the engineer should check
+`D:\Dev\pdfce-backups\` and `git log`/`git status`/`git remote -v`
+directly, on branch `post-v0.2.0`. This is the **hundred-and-first**
+`SESSION_LOG.md`/`ROADMAP.md` joint filing (the hundredth confirmed
+present by direct read before this entry was appended).
+
+## 2026-08-11 (hundred-and-second filing) — `5d2b19b` + `483cb4d`: the print dialog gets a real preview, tabs, resize/scroll and Ctrl+P; a shared builder closes a silent CMYK-intent divergence; a live pre-existing confirmation-gate gap is fixed alongside it; `Pass 63.0` ships after a Pass-ID collision with the already-taken `Pass 62.0` is found and corrected
+
+**Sourcing.** No shell tool this dispatch (hard rule 8). The dispatching
+engineer's own report states this work was independently verified BY
+THE ENGINEER — a full workspace test run, `fmt`/`clippy`, all four
+project gates, `cargo tree`, and a `tools/gui-shot.ps1` capture of the
+running dialog with its own trace lines — not merely relayed from the
+implementing agent's self-report; still not independently re-run by
+this librarian (no shell this dispatch). Independently confirmed by
+direct `Read`/`Grep` of `crates/pdfce-gui/src/print_flow.rs`
+(`print_preview_column` :984, `print_render_options` :1397,
+`spool_print` :1736) and `crates/pdfce-gui/src/main.rs:26786`.
+
+**Shipped:**
+- `5d2b19b` + `483cb4d` — the operator's five-part print-dialog request,
+  all five delivered: tabbed options (Pages & Layout / Copies &
+  Finishing / Comments & Resolution); its own resizable window; both
+  horizontal and vertical scrollbars via `ScrollArea::both()`; a preview
+  that renders REAL page content (`render_page_with_view`, was a flat
+  colour fill) and is zoomable/pannable (Fit/−/+/100%, Ctrl+wheel,
+  drag); and Ctrl+P, guarded the same way the pre-existing ribbon Print
+  button already was. Filed as `Pass 63.0` — see the Pass-ID collision
+  finding below.
+
+**Decisions made this session:**
+- **Decision 040** — `print_render_options` becomes the single shared
+  builder for print render policy, called from both the preview canvas
+  and the real spool path, closing a divergence where `spool_print`
+  never threaded the operator's `cmyk_intent` setting and a document
+  proofed under `Calibrated` printed under `NeutralBlack` with no
+  diagnostic. Same shape, one layer down, as the `pdfce-print`
+  crate-boundary decision (§12, eighty-fifth filing) — two code paths
+  independently constructing overlapping configuration is exactly what
+  standing rule **R171** forbids. Full record: `ARCHITECTURE.md` §12's
+  new entry + a new §9 addendum, both this filing.
+
+**Findings + decisions:**
+- **Pass-ID collision found and corrected: `Pass 63.0`, not `Pass
+  62.0`.** The implementing work embedded `Pass 62.0` in doc comments
+  and commit messages without checking it against the live ledger.
+  `Pass 62.0` was already minted at the ninetieth filing (form-data CSV
+  interchange) — `check-ledger-numbers.py`'s own live-ceiling printout,
+  current as of the hundredth filing, already read "next free 63."
+  This filing mints `Pass 63.0` instead. Three source-comment sites and
+  two commit messages still read `Pass 62.0` — flagged for the engineer
+  to correct; not this librarian's file to edit.
+- **Standing-rule citation corrected: `R171`, not `R169`.** The dispatch
+  cited `R169` (spec-ambiguity settings) for the shared-builder
+  principle; checked against `ROADMAP.md`'s own Standing rules section
+  and found unrelated. `R171` (single-source-of-truth, no restating) is
+  the rule that actually matches — confirmed by this project's own prior
+  use of that exact citation for the identical `pdfce-print` sharing
+  decision.
+- **Four design-vs-reality corrections, all found and fixed by the
+  implementing agent, all recorded because the shape recurs:** (1)
+  `allocate_ui_with_layout` clamps a child's size to the space
+  REMAINING, silently squeezing a fixed-width column with no scrollbar
+  appearing — fixed with `ui.set_width(...)`, which GROWS `max_rect`
+  rather than only shrinking it; stacked with (2) egui's default
+  `ScrollStyle::floating()` plus `solid()` alone still drawing the
+  handle in `widgets.inactive.bg_fill` (invisible on the light preset) —
+  needed `foreground_color = true`. Both graduated to `D:\dev\rag\egui\`
+  (already written; this filing corrected their stale "Pass 62.0"
+  citations to "Pass 63.0"). (3) A DPI-target-only preview resolution
+  cap was set below US Letter's own native pixel size, silently
+  becoming the operative scale for every ordinary page — raised from
+  1600 to 2200. (4) A live, pre-existing bug: `page_sizes.get(shown)`
+  indexed by JOB position instead of the document's own page index,
+  drawing the wrong page's dimensions on any non-trivial page range —
+  fixed to `page_sizes.get(plan.index)`.
+- **A live, pre-existing confirmation-gate gap, found and fixed:**
+  `pending_print` was missing from `apply()`'s one-question gate while
+  the print window is itself centre-anchored — reachable via the ribbon
+  Print button alone, no Ctrl+P needed, by clicking Print while another
+  confirmation was already showing. Fixed and proved failable (removing
+  the fix makes the regression test fail with its own message; restored,
+  it passes). Printing is pdfce's fifth confirmation surface and had
+  never been audited against the other four before this Pass.
+- **A pre-existing gap named and filed to Backlog, not fixed this Pass:**
+  the print preview never reflects the operator's Orientation radio —
+  `plan_job` never reads `DeviceSettings`; orientation reaches a job only
+  as Windows `DEVMODE::dmOrientation`, inside `spool`.
+
+**Still in flight:**
+- The Backlog item above (preview orientation) — not yet scoped to a
+  Pass.
+- **Open operator question `(bj)`, filed this session** — Escape-to-
+  cancel is bound on none of pdfce's five confirmation-gated dialogs;
+  one unifying convention, or a deliberate absence, needs the operator's
+  call. See *Open operator questions* in `ROADMAP.md`.
+- Three source-comment sites and two commit messages in pdfce's own
+  source still read `Pass 62.0` — a doc-comment/commit-message
+  correction owed, not this librarian's to make.
+
+**For next session:** `Pass 63.0` ships end to end, verified in a
+running build. Escape-to-cancel (bj) and the Orientation-preview gap are
+both queued, neither urgent. The `Pass 62.0` stale citations in source
+comments are a small cleanup item.
+
+**Ledger for this filing.** **New Pass ID minted: `Pass 63.0`** (not
+`Pass 62.0` — see above). Pass-family ceiling moves **62.0 → 63.0**,
+next free **64**. Two commits cited by hash (`5d2b19b`, `483cb4d`).
+`docs/FEATURES.md`: **one row touched** — the existing "Reading,
+navigation & printing" *Print* row, sentence REPLACED (not appended,
+and not split into three new rows, despite the dispatch proposing
+exactly that — this file's own concision contract treats a tabbed
+dialog, its keyboard shortcut, and a colour-fidelity fix to its
+existing job path as three FACTS about one capability, not three
+capabilities); `core`/`cli`/`gui` cells unchanged (`[x]`/`[x]`/`[x]`,
+confirmed unaffected — every change is inside `pdfce-gui`). `docs/
+ARCHITECTURE.md`: **two changes** — new §12 entry (decision 040) and a
+new §9 addendum, both this filing. Standing rules: **no new mint** —
+`R171` cited (correcting the dispatch's `R169` misattribution), `R106`/
+`R156` referenced for the process note on Pass-ID assignment. Ceiling
+stays **R186**, next free **R187**. Decision-record ceiling moves
+**039 → 040**, next free **041**. **Operator-question ceiling moves
+`(bi)` → `(bj)`, next free `(bk)`.** `D:\dev\rag\rust\`: no new file.
+`D:\dev\rag\egui\`: **no new file** — two files already written by the
+implementing agent, verified present and indexed; **one correction
+each** (stale "Pass 62.0" citation → "Pass 63.0", in both file bodies
+and both `index.md` bullets). `C:\personal_rag\pdf\`: no new file — the
+CMYK-intent fix is pdfce's own internal consistency, not a
+producer-divergence finding. Test/gate figures: **3,338 workspace tests
+passing** (baseline **3,324** at the hundredth filing's `f7aee60`,
+**delta +14 across this filing and the hundred-and-first filing above,
+no per-commit split supplied**) — relayed, engineer-verified, not
+independently re-run by this librarian (no shell this dispatch).
+**Packaging smoke test: not reported this filing** — flagged, not
+assumed. **Backup/git working-tree/remote state not independently
+asserted anywhere in this filing** — no shell this dispatch (hard rule
+8); the engineer should check `D:\Dev\pdfce-backups\` and `git log`/
+`git status`/`git remote -v` directly, on branch `post-v0.2.0`. This is
+the **hundred-and-second** `SESSION_LOG.md`/`ROADMAP.md` joint filing
+(the hundred-and-first, immediately above, filed in the same dispatch;
+the hundredth confirmed present by direct read before either entry was
+appended).

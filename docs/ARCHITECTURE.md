@@ -13654,6 +13654,17 @@ started).
   unchanged. See `docs/ROADMAP.md`'s `Pass 51.3` Shipped entry for the
   full delivery record and the register-arithmetic update (9 of 18
   `SETTING` rows now built).
+  **★ AMENDED 2026-08-11 (`Pass 63.0`, decision 040, below) — bundling
+  the setting into `RenderPolicy` did not, by itself, guarantee every
+  caller populates it.** `spool_print` (`pdfce-gui`'s own real print-job
+  path, distinct from `pdfce-print` the crate) built its render options
+  independently of the live preview canvas and never threaded
+  `cmyk_intent` into them — a second construction site diverging from
+  the first, the same class of gap `RenderPolicy` exists to close at the
+  *interpreter* call sites, recurring at the *options-construction*
+  layer one step earlier. Fixed by extracting one shared builder,
+  `print_render_options`, called from both. See decision 040 below for
+  the full record and its R171 citation.
 - **2026-08-08 (`Pass 51.4`, `6d63d81`) — the operator settings surface
   is a File-tab WINDOW, not a dock panel, on a reasoned application of
   existing project precedent rather than a fresh judgment call.**
@@ -17211,3 +17222,53 @@ or §5's round-trip contract — the writer's `EncryptedSaveUnsupported`
 refusal (§5, decision from the `14a7400` entry above) is unchanged, and
 this increment remains read-only. Full build record: `ROADMAP.md`'s
 `f7aee60` Shipped entry (hundredth filing).
+
+### 2026-08-11 (hundred-and-second filing, `5d2b19b` + `483cb4d`) — decision 040: `print_render_options` is the single shared builder for print render policy; a second independent construction site is what let `cmyk_intent` go missing from one of two
+
+**Sourcing.** No shell tool this dispatch (hard rule 8). The dispatching
+engineer's summary cross-checked by direct `Read` of
+`crates/pdfce-gui/src/print_flow.rs` — `print_preview_column` (:984),
+`print_render_options` (:1397), `spool_print` (:1736) — confirming
+`print_render_options` is a single function called from both the
+preview path and the actual spool path, not two independent
+constructions.
+
+**Decision.** `spool_print` — the code path that actually sends bytes to
+a Windows spooler — never threaded the operator's `cmyk_intent` setting
+(`RenderPolicy`, §12's `Pass 51.3` entry above) into the render options
+it built for the job. The live print-preview canvas did thread it. The
+two paths had each grown their own construction of overlapping render
+options, and one silently omitted a field the other included: a
+document proofed under `Calibrated` printed under the shipped default
+`NeutralBlack`, with no diagnostic anywhere in the pipeline. Fixed by
+extracting `print_render_options` as the one function both call,
+deleting the second construction site rather than adding a test that
+merely asserts the two stayed in sync.
+
+**This is the `pdfce-print` crate-boundary decision (§12, eighty-fifth
+filing, above) applied one layer down.** That entry decided `pdfce-print`
+is shared by both `pdfce-cli` and `pdfce-gui` "so they cannot disagree
+about where a page lands," rather than each shell computing its own
+placement arithmetic, and cited standing rule **R171** ("a constant,
+default, or token that must agree with another place in the codebase is
+READ off the one place that owns it, never RESTATED") for the general
+shape. `print_render_options` is the identical fix at a smaller scope:
+two code paths *inside one shell* (`pdfce-gui`'s own preview and spool
+functions) independently constructing overlapping configuration is the
+same RESTATING R171 forbids, whether the two paths are two shells or two
+functions in one file. **Citation correction, recorded because it
+changes which rule a future reader should follow:** the dispatch that
+reported this fix cited `R169` ("where the PDF standard is genuinely
+ambiguous, pdfce's answer is a SETTING") — checked directly against
+`ROADMAP.md`'s Standing rules section and found unrelated to this bug's
+shape (R169 governs spec-ambiguity defaults, not code-duplication
+divergence). R171 is the rule that matches, confirmed by its own prior
+use in this file for the identical "shared by both, not reimplemented
+per-caller" reasoning.
+
+**Not a crate-boundary or invariant change.** Both functions already
+lived in `pdfce-gui`; nothing here redraws §3's GUI-core boundary. Not a
+new type or a new field on `RenderPolicy` — the bug was that one of two
+call sites never populated an existing field, not that the field was
+missing from the model. Full build record: `ROADMAP.md`'s `5d2b19b` +
+`483cb4d` Shipped entry (hundred-and-second filing).
