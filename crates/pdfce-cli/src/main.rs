@@ -1111,6 +1111,32 @@ enum Command {
         /// booklet with a blank leaf in the middle.
         #[arg(long)]
         booklet: bool,
+        /// Tile ONE oversized page across MANY sheets, to be taped
+        /// together. The inverse of N-up.
+        ///
+        /// Mutually exclusive with `--n-up` and `--booklet`: all three
+        /// change the shape of the job, and no two of them compose.
+        #[arg(long)]
+        poster: bool,
+        /// Magnification applied before tiling, where 1.0 is 100%. This
+        /// decides how big the assembled poster is, and therefore how many
+        /// sheets it takes.
+        #[arg(long, default_value_t = 1.0)]
+        poster_scale: f64,
+        /// Shared border in POINTS, duplicated onto adjacent tiles so the
+        /// sheets can be aligned and taped without a gap at the seam.
+        ///
+        /// No default is invented: no source gives Acrobat's, so pdfce
+        /// leaves it at zero and lets the operator choose.
+        #[arg(long, default_value_t = 0.0)]
+        poster_overlap: f64,
+        /// Tile only pages larger than the printable area; pages that
+        /// already fit print normally in the same job.
+        #[arg(long)]
+        poster_large_only: bool,
+        /// Refuse a poster needing more sheets than this.
+        #[arg(long, default_value_t = pdfce_print::imposition::DEFAULT_MAX_TILES)]
+        poster_max_tiles: u32,
         /// Which edge the booklet is bound on.
         #[arg(long, value_enum, default_value_t = BindingArg::Left)]
         binding: BindingArg,
@@ -4151,6 +4177,11 @@ fn run() -> ExitCode {
             n_up,
             n_up_border,
             booklet,
+            poster,
+            poster_scale,
+            poster_overlap,
+            poster_large_only,
+            poster_max_tiles,
             binding,
             booklet_subset,
         } => cmd_print(
@@ -4173,6 +4204,11 @@ fn run() -> ExitCode {
             n_up,
             n_up_border,
             booklet,
+            poster,
+            poster_scale,
+            poster_overlap,
+            poster_large_only,
+            poster_max_tiles,
             binding,
             booklet_subset,
         ),
@@ -6805,6 +6841,11 @@ fn cmd_print(
     n_up: Option<u32>,
     n_up_border: bool,
     booklet: bool,
+    poster: bool,
+    poster_scale: f64,
+    poster_overlap: f64,
+    poster_large_only: bool,
+    poster_max_tiles: u32,
     binding: BindingArg,
     booklet_subset: BookletSubsetArg,
 ) -> u8 {
@@ -6892,6 +6933,39 @@ fn cmd_print(
             pdfce_print::Collate::Collated
         },
     };
+    // ---- The three job-shape modes are mutually exclusive ----
+    //
+    // N-up, booklet and poster each REMAP the job rather than scale it,
+    // and no two of them compose. Before this guard existed the three
+    // branches ran in sequence and the last one to fire silently
+    // overwrote the others' work: `--poster --booklet` composed nine
+    // poster tiles, threw them away, and printed a booklet. The operator
+    // got a plausible job that was not the one they asked for, with no
+    // indication anything had been discarded.
+    //
+    // Refusing is right rather than picking a precedence. There is no
+    // reading of `--poster --booklet` that is obviously intended, so any
+    // precedence pdfce chose would be a guess presented as a result.
+    {
+        let modes = [
+            (n_up.is_some(), "--n-up"),
+            (booklet, "--booklet"),
+            (poster, "--poster"),
+        ];
+        let named: Vec<&str> = modes
+            .iter()
+            .filter(|(on, _)| *on)
+            .map(|(_, n)| *n)
+            .collect();
+        if named.len() > 1 {
+            eprintln!(
+                "pdfce-cli: {} cannot be combined — each one changes the shape of the job, and no two of them compose. Pick one.",
+                named.join(" and ")
+            );
+            return exit::EDIT_REFUSED;
+        }
+    }
+
     let resolution = pdfce_print::job_resolution(&device, &spec);
     let plans = pdfce_print::plan_job(&device, &page_sizes, &spec);
     let dpi = resolution.dpi;
@@ -6988,6 +7062,155 @@ fn cmd_print(
                 },
                 page_pt: device.printable_pt,
             });
+        }
+        bitmaps = sheets;
+    }
+
+    // ---- Poster: ONE page tiled across MANY sheets ----
+    //
+    // The inverse of N-up, and its own path for the same reason: it
+    // changes the SHAPE of the job. N-up puts many pages on one sheet by
+    // scaling them into cells; poster puts one page on many sheets by
+    // cropping it into tiles, and no `Placement` expresses a crop.
+    //
+    // Planned PER PAGE rather than once for the document, because
+    // `plan_poster` takes one page size: a document whose pages differ in
+    // size tiles each to its own grid, which is the only answer that does
+    // not silently letterbox the odd one out.
+    if poster {
+        let spec_p = pdfce_print::imposition::PosterSpec {
+            tile_scale: poster_scale,
+            overlap_pt: poster_overlap,
+            cut_marks: false,
+            labels: false,
+            tile_only_large_pages: poster_large_only,
+            max_tiles: poster_max_tiles,
+        };
+        let px = |pt: f64| (pt * f64::from(resolution.dpi) / 72.0).round().max(1.0) as u32;
+        let (sw, sh) = (px(device.printable_pt.0), px(device.printable_pt.1));
+        let mut sheets: Vec<pdfce_print::PageBitmap> = Vec::new();
+        let mut tiled_pages = 0usize;
+        let mut untiled_pages = 0usize;
+
+        for &index in &spec.sequence() {
+            let (Some(page), Some(&size)) = (page_list.get(index), page_sizes.get(index)) else {
+                continue;
+            };
+            // `tile_only_large_pages` asks the planner, not this loop: the
+            // predicate is the planner's to own so the CLI and the GUI
+            // cannot disagree about what counts as "large" (R123).
+            if !spec_p.tiles_page(device.printable_pt, size) {
+                untiled_pages += 1;
+                // Printed at its natural placement, in sequence, so a
+                // mixed document comes off the printer in reading order
+                // rather than with the small pages collected at the end.
+                let render_scale = f64::from(resolution.dpi) / 72.0;
+                let options = pdfce_render::RenderOptions::default()
+                    .with_annotation_scope(comments.to_scope());
+                let rendered = match pdfce_render::render_page_with_view(
+                    &session.view(),
+                    page,
+                    render_scale as f32,
+                    &options,
+                ) {
+                    Ok(r) => r,
+                    Err(err) => {
+                        eprintln!("pdfce-cli: page {}: {err}", index + 1);
+                        return exit::RUNTIME_ERROR;
+                    }
+                };
+                sheets.push(pdfce_print::PageBitmap {
+                    width: rendered.pixmap.width(),
+                    height: rendered.pixmap.height(),
+                    rgba: rendered.pixmap.data().to_vec(),
+                    placement: pdfce_print::Placement {
+                        scale: 1.0,
+                        offset_x_pt: 0.0,
+                        offset_y_pt: 0.0,
+                        clipped: false,
+                    },
+                    page_pt: size,
+                });
+                continue;
+            }
+            let layout =
+                match pdfce_print::imposition::plan_poster(device.printable_pt, size, &spec_p) {
+                    Ok(l) => l,
+                    Err(err) => {
+                        eprintln!("pdfce-cli: page {}: {err}", index + 1);
+                        return exit::RUNTIME_ERROR;
+                    }
+                };
+            tiled_pages += 1;
+            // The page is rendered ONCE at the tile scale and each tile
+            // copies its own window out of it. Rendering per tile would
+            // re-rasterise the whole page for every sheet — on a 4x5
+            // poster, twenty times the work for identical pixels.
+            let render_scale = (f64::from(resolution.dpi) / 72.0) * spec_p.tile_scale;
+            let options =
+                pdfce_render::RenderOptions::default().with_annotation_scope(comments.to_scope());
+            let rendered = match pdfce_render::render_page_with_view(
+                &session.view(),
+                page,
+                render_scale as f32,
+                &options,
+            ) {
+                Ok(r) => r,
+                Err(err) => {
+                    eprintln!("pdfce-cli: page {}: {err}", index + 1);
+                    return exit::RUNTIME_ERROR;
+                }
+            };
+            for tile in &layout.tiles {
+                let Some(mut sheet) = pdfce_render::tiny_skia::Pixmap::new(sw, sh) else {
+                    eprintln!("pdfce-cli: a sheet of {sw}x{sh} pixels is too large to compose");
+                    return exit::RUNTIME_ERROR;
+                };
+                sheet.fill(pdfce_render::tiny_skia::Color::WHITE);
+                // `source_pt` is in the page's own points; the rendered
+                // pixmap is at `render_scale`, so the window is scaled by
+                // exactly that. Dividing by `tile_scale` here would undo
+                // the magnification the operator asked for.
+                let sx = px(tile.source_pt.x * spec_p.tile_scale) as i32;
+                let sy = px(tile.source_pt.y * spec_p.tile_scale) as i32;
+                sheet.draw_pixmap(
+                    px(tile.sheet_pt.x) as i32 - sx,
+                    px(tile.sheet_pt.y) as i32 - sy,
+                    rendered.pixmap.as_ref(),
+                    &pdfce_render::tiny_skia::PixmapPaint::default(),
+                    pdfce_render::tiny_skia::Transform::identity(),
+                    None,
+                );
+                sheets.push(pdfce_print::PageBitmap {
+                    width: sheet.width(),
+                    height: sheet.height(),
+                    rgba: sheet.data().to_vec(),
+                    placement: pdfce_print::Placement {
+                        scale: 1.0,
+                        offset_x_pt: 0.0,
+                        offset_y_pt: 0.0,
+                        clipped: false,
+                    },
+                    page_pt: device.printable_pt,
+                });
+            }
+            eprintln!(
+                "pdfce-cli: page {}: poster of {} x {} tiles ({} sheet(s)), assembled size \
+{:.0} x {:.0} pt, {:.0} pt overlap.",
+                index + 1,
+                layout.columns,
+                layout.rows,
+                layout.tiles.len(),
+                layout.poster_pt.0,
+                layout.poster_pt.1,
+                layout.overlap_pt,
+            );
+        }
+        if untiled_pages > 0 {
+            eprintln!(
+                "pdfce-cli: {untiled_pages} page(s) already fit the paper and were printed \
+untiled; {tiled_pages} page(s) were tiled."
+            );
         }
         bitmaps = sheets;
     }
@@ -7107,7 +7330,7 @@ fn cmd_print(
         bitmaps = faces;
     }
 
-    if n_up.is_none() && !booklet {
+    if n_up.is_none() && !booklet && !poster {
         for plan in &plans {
             let (Some(page), Some(&size)) = (page_list.get(plan.index), page_sizes.get(plan.index))
             else {
