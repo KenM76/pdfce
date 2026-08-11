@@ -26,7 +26,7 @@
 //! | `/V` 4 at `/R` 4, `/CFM /AESV2` | Algorithm 2 + Algorithm 1 (with `sAlT`, **T1**) | AES-128-CBC |
 //! | `/V` 5 at `/R` 5, `/CFM /AESV3` | **Algorithm 3.2a** — SHA-256 + an unwrap of `/UE` or `/OE`; **no per-object step at all** (**T24**) | AES-256-CBC |
 //!
-//! The `/R` 5 row is a *different module* — [`r5`](super::r5) — and that split
+//! The `/R` 5 row is a *different module* — [`r5`] — and that split
 //! is the honest shape of the boundary. Adding AES-128 in increment 2 needed
 //! no change here beyond deleting a refusal, because the derivation was
 //! already right. Adding AES-256 in increment 3 changed almost nothing about
@@ -74,9 +74,10 @@
 //! file with an empty user password and a non-empty owner password — the
 //! "permissions-only" PDF, the common case — opens with no prompt in every
 //! conforming reader. Prompting for it would read to an operator as pdfce
-//! failing to open a file that every other viewer opens. [`Self::authenticate`]
-//! takes the password as `Option`, and `None` means "try the empty one",
-//! which is a different thing from the user typing an empty box.
+//! failing to open a file that every other viewer opens.
+//! [`EncryptionConfig::authenticate`] takes the password as `Option`, and
+//! `None` means "try the empty one", which is a different thing from the user
+//! typing an empty box.
 //!
 //! # Permissions are disclosed, never silently enforced
 //!

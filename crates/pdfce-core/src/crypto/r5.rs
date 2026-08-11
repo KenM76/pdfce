@@ -31,9 +31,9 @@
 //! condition are not in the corpus at all. Deriving them from another
 //! implementation and then testing against that implementation's output could
 //! not fail, which is why `enc-aes-256-r6.pdf` is a **refusal** fixture. The
-//! substitution point is [`hash`] below, and it is deliberately *not* factored
-//! into a pluggable seam: a seam would be an invitation to fill it from
-//! memory.
+//! substitution point is the private `hash` function below, and it is
+//! deliberately *not* factored into a pluggable seam: a seam would be an
+//! invitation to fill it from memory.
 //!
 //! # The layout everything depends on
 //!
@@ -284,7 +284,7 @@ pub fn authenticates_as_owner(
 ///
 /// Unwrap key = `SHA-256(password ‖ UserKeySalt)`; that key decrypts `/UE`
 /// with **AES-256-CBC, zero IV, no padding** (see
-/// [`unwrap_key_cbc_256`](super::aes::unwrap_key_cbc_256)) to give the 32-byte
+/// [`unwrap_key_cbc_256`]) to give the 32-byte
 /// file encryption key.
 ///
 /// **The Key Salt is a different eight bytes from the Validation Salt.**
