@@ -192,7 +192,7 @@ Unreachable today only because every pending state is set from inside
 
 ## What the operator can try
 
-`D:uilds\pdfce-20260811-1222-6ae476e\pdfce-gui.exe`:
+`D:\builds\pdfce-20260811-1247-19c86bd\pdfce-gui.exe`:
 
 - **`enc-aes-128.pdf`** — prompts; `userpw` or `ownerpw` open it.
 - **`enc-emptyuser.pdf`** — AES-128, opens with **no prompt at all**, and
