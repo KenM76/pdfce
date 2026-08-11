@@ -170,17 +170,31 @@ impl PdfceApp {
         // Hidden rather than disabled with no document open: there is nothing
         // to discover about saving when nothing is open. Same posture the
         // ribbon's File group used before this Pass moved the control here.
-        if matches!(self.status, Status::Open(_))
-            && ui
-                .add(Self::icon_text(
-                    ui,
-                    icons::Icon::Save,
-                    ui_text::save_button(),
-                ))
-                .on_hover_text(ui_text::save_tooltip())
-                .clicked()
-        {
-            actions.push(Action::Save);
+        // §7.6: an encrypted document cannot be written yet, so the control
+        // is DISABLED rather than left live to fail on click.
+        //
+        // The refusal in `writer::save_*` stays as the safety net — this is
+        // not a replacement for it. But a button that predictably produces a
+        // refusal is worse than a visibly-disabled one: it costs a click, it
+        // can carry the operator as far as a file-picker before the answer
+        // arrives, and "it let me try" reads as a bug rather than a scope.
+        let encrypted = matches!(&self.status, Status::Open(doc)
+            if doc.session.document().encryption().is_some());
+        if matches!(self.status, Status::Open(_)) {
+            let button = ui.add_enabled(
+                !encrypted,
+                Self::icon_text(ui, icons::Icon::Save, ui_text::save_button()),
+            );
+            let button = if encrypted {
+                // The tooltip states the reason. A disabled control with no
+                // explanation is the same dead end as a failing one.
+                button.on_disabled_hover_text(ui_text::save_disabled_encrypted_tooltip())
+            } else {
+                button.on_hover_text(ui_text::save_tooltip())
+            };
+            if button.clicked() {
+                actions.push(Action::Save);
+            }
         }
         if let Status::Open(doc) = &self.status {
             ui.separator();

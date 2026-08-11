@@ -1115,6 +1115,8 @@ struct PdfceApp {
     /// surface/wording is a `pdfce-ui-specialist` follow-up; this is the
     /// honest minimal banner. `None` for a cleanly-loaded file.
     recovery_note: Option<String>,
+    /// Password-prompt state; meaningful only while [`Status::NeedsPassword`].
+    password_prompt: PasswordPrompt,
     /// The "current pen" colour for authored markup (Pass 6.1). Session
     /// state, exactly like `rail_expanded` — changing it is not an edit
     /// (`docs/ui_specs/pass-6.1-markup-tools.md` §1.1), only *using* it to
@@ -1619,6 +1621,7 @@ impl Default for PdfceApp {
             form_rename_drafts: std::collections::HashMap::new(),
             edit_note,
             recovery_note: None,
+            password_prompt: PasswordPrompt::default(),
             // Pass 6.1: a visible red pen and a 2-point stroke — sensible
             // defaults an operator can change before authoring.
             // DOCUMENT COLOUR: written into the annotation's `/C` and its
@@ -1953,6 +1956,51 @@ enum Status {
     Failed { path: PathBuf, message: String },
     /// The file is valid and pdfce declines to read it *yet*.
     Unsupported { path: PathBuf, message: String },
+    /// The file is encrypted with a configuration pdfce **can** decrypt, and
+    /// is waiting for a password (ISO 32000-1 §7.6).
+    ///
+    /// # Why this is its own variant and not a flag on [`Status::Open`]
+    ///
+    /// There is no document. `Document::load_with_password` returns
+    /// `Err(DocError::PasswordRequired)` and no [`OpenDoc`] is ever built, so
+    /// there is nothing to hang a flag on.
+    ///
+    /// It is equally not [`Status::Failed`] (the file is not wrong) and not
+    /// [`Status::Unsupported`] (pdfce is not declining a capability — it can
+    /// open this and has not been told how). Reporting it as either teaches
+    /// the operator something untrue about a document they are one password
+    /// away from reading.
+    ///
+    /// Carries only the path. The typed-input state lives in
+    /// [`PasswordPrompt`] on the app, beside `pending_copy` rather than
+    /// inside the enum — a `String` nested in the `Status` being matched on
+    /// cannot be mutated through that match.
+    NeedsPassword { path: PathBuf },
+}
+
+/// Ephemeral state for the password prompt (ISO 32000-1 §7.6.3.1).
+///
+/// Never persisted, never written to disk, and reset at every point that
+/// changes which document is in front — see [`PdfceApp::open_path`] and
+/// [`PdfceApp::switch_to_parked`]. Without those resets a half-typed password
+/// for one file appears in the prompt for the next, which is the
+/// stale-cross-document-state defect this application has already been bitten
+/// by once.
+#[derive(Default)]
+struct PasswordPrompt {
+    /// What the operator has typed. Cleared on a rejected attempt so a known-
+    /// wrong value cannot be resubmitted by reflex.
+    input: String,
+    /// Whether to reveal the characters. Default masked.
+    show: bool,
+    /// Whether a **typed** attempt has been rejected.
+    ///
+    /// Never true on first arrival. §7.6.3.1's empty-password attempt has
+    /// already happened, silently, inside `pdfce-core` — but the operator did
+    /// not make it, so telling them a password "did not open this document"
+    /// before they have typed one is a statement about something they never
+    /// did.
+    rejected: bool,
 }
 
 /// An open document and everything the view needs to draw it.
@@ -4213,6 +4261,18 @@ impl OpenDoc {
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Action {
     Open,
+    /// Try the typed password against the document waiting in
+    /// [`Status::NeedsPassword`] (ISO 32000-1 §7.6.3.1).
+    SubmitPassword,
+    /// Abandon the password prompt and return to an empty canvas.
+    ///
+    /// Present as an explicit control even though the escape is already
+    /// structural — opening another file or clicking a parked document in the
+    /// switcher both discard `NeedsPassword` for free. Those work; they are
+    /// just not *discoverable* as "I do not want this file after all",
+    /// especially when this is the first file of the session and the switcher
+    /// is empty.
+    CancelPassword,
     /// Hide or show the chrome, keeping the window (Ctrl+H).
     ToggleReadMode,
     /// Take the OS window full-screen, or give it back (F11).
@@ -4585,6 +4645,9 @@ impl PdfceApp {
                     message: err.to_string(),
                 },
             },
+            // §7.6: pdfce CAN decrypt this one and has not been told how.
+            // Neither damaged nor unsupported — a third thing.
+            Err(DocError::PasswordRequired) => Status::NeedsPassword { path },
             Err(err) if is_unsupported_structure(&err) => Status::Unsupported {
                 path,
                 message: err.to_string(),
@@ -4594,6 +4657,11 @@ impl PdfceApp {
                 message: err.to_string(),
             },
         };
+        // Reset alongside the other per-document narration. Without this a
+        // half-typed password for the previous file appears in this one's
+        // prompt — the stale-cross-document-state defect this application has
+        // already been bitten by once.
+        self.password_prompt = PasswordPrompt::default();
         // Decision 013 disclosure: if the document opened via
         // cross-reference recovery, narrate it non-blockingly (R20). The
         // full RecoveryReport counts live on the Document for a richer
@@ -4614,6 +4682,70 @@ impl PdfceApp {
         // overlay.
         self.recovery_note = self.recovery_note_for_front_document();
         self.finish_open();
+    }
+
+    /// Retry the pending encrypted document with the typed password.
+    ///
+    /// Either password opens the document (§7.6.3.1: "correctly supplying
+    /// **either** password"), and which one it was is reported afterwards by
+    /// [`AuthKind`](pdfce_core::crypto::AuthKind) — the operator is never
+    /// asked to say which they are typing, because the algorithm does not
+    /// need to know and asking would invent a decision the standard does not
+    /// require.
+    ///
+    /// A rejected attempt stays on the same surface and **clears the input**:
+    /// leaving a known-wrong password in the field invites resubmitting it by
+    /// reflex. There is deliberately no attempt counter and no lockout —
+    /// negative result **N6** records that ISO 32000-1 states no error model
+    /// here at all, so a retry limit would be pdfce policy wearing the
+    /// costume of a security feature.
+    fn submit_password(&mut self) {
+        let Status::NeedsPassword { path } = &self.status else {
+            return;
+        };
+        let path = path.clone();
+        let password = std::mem::take(&mut self.password_prompt.input);
+
+        match Document::load_with_password(&path, Some(password.as_bytes())) {
+            Ok(doc) => match pdfce_core::page_tree::pages(&doc) {
+                Ok(pages) => {
+                    self.password_prompt = PasswordPrompt::default();
+                    self.status =
+                        Status::Open(Box::new(OpenDoc::new(path, EditSession::new(doc), pages)));
+                    self.recovery_note = self.recovery_note_for_front_document();
+                    self.finish_open();
+                }
+                Err(err) => {
+                    self.password_prompt = PasswordPrompt::default();
+                    self.status = Status::Failed {
+                        path,
+                        message: err.to_string(),
+                    };
+                }
+            },
+            Err(DocError::PasswordRequired) => {
+                // Same surface, same file, one more try. `input` was already
+                // taken above, so the field is empty.
+                self.password_prompt.rejected = true;
+            }
+            Err(err) if is_unsupported_structure(&err) => {
+                // Unlikely — a configuration that parsed a moment ago is now
+                // refused — but classified the same way `open_path` would
+                // rather than collapsed into a generic failure.
+                self.password_prompt = PasswordPrompt::default();
+                self.status = Status::Unsupported {
+                    path,
+                    message: err.to_string(),
+                };
+            }
+            Err(err) => {
+                self.password_prompt = PasswordPrompt::default();
+                self.status = Status::Failed {
+                    path,
+                    message: err.to_string(),
+                };
+            }
+        }
     }
 
     /// The R20 recovery disclosure for whatever document is in front, or
@@ -5575,6 +5707,21 @@ impl PdfceApp {
         let Status::Open(doc) = &self.status else {
             return;
         };
+        // §7.6: refuse BEFORE the file dialog, not after it.
+        //
+        // The ribbon's Save button is disabled for an encrypted document, but
+        // Ctrl+S does not go through the button — and without this guard it
+        // would open a Save-As dialog, let the operator choose a folder and a
+        // filename, and only then report that saving was never possible. The
+        // writer's `EncryptedSaveUnsupported` would have caught it, correctly
+        // and too late.
+        //
+        // Guarding here rather than at the two call sites covers every future
+        // caller as well.
+        if doc.session.document().encryption().is_some() {
+            self.set_edit_note(ui_text::encryption_save_unsupported_note().to_owned());
+            return;
+        }
         // Incremental: the GUI's only save mode, and the one that
         // preserves prior bytes.
         match doc.session.signature_impact_of_save(SaveMode::Incremental) {
@@ -10533,6 +10680,15 @@ impl PdfceApp {
                 self.open_dialog();
                 return;
             }
+            Action::SubmitPassword => {
+                self.submit_password();
+                return;
+            }
+            Action::CancelPassword => {
+                self.status = Status::Idle;
+                self.password_prompt = PasswordPrompt::default();
+                return;
+            }
             Action::ToggleRail => {
                 self.rail_expanded = !self.rail_expanded;
                 return;
@@ -11196,7 +11352,9 @@ impl PdfceApp {
             // open-document guard — these are the actions that are
             // meaningful with no document open, or that need `&mut self`
             // rather than `&mut OpenDoc`.
-            Action::OpenPrintDialog
+            Action::SubmitPassword
+            | Action::CancelPassword
+            | Action::OpenPrintDialog
             | Action::CancelPrint
             | Action::SpoolPrint
             | Action::ShowBookmarks
@@ -11671,6 +11829,7 @@ impl PdfceApp {
         // `the_recovery_disclosure_survives_switching_documents` was verified
         // to FAIL against the cleared form before this line was written.
         self.recovery_note = self.recovery_note_for_front_document();
+        self.password_prompt = PasswordPrompt::default();
         self.copy_result = None;
         self.copy_detail_expanded = false;
     }
@@ -12744,6 +12903,7 @@ impl eframe::App for PdfceApp {
                 delete_target: canvas_delete_target,
                 inside_object,
                 in_view_mode: self.full_screen || self.read_mode || self.find_open,
+                awaiting_password: matches!(self.status, Status::NeedsPassword { .. }),
             },
         );
 
@@ -13065,6 +13225,9 @@ struct CanvasKeys {
     /// Read mode or full screen is on, so Escape leaves it before the
     /// canvas ladder is consulted at all. See the Escape handler.
     in_view_mode: bool,
+    /// The password prompt is showing, so there is no document and Escape
+    /// can only mean "abandon this file". The TOP rung of the ladder.
+    awaiting_password: bool,
 }
 
 fn collect_keyboard_actions(ctx: &egui::Context, actions: &mut Vec<Action>, keys: CanvasKeys) {
@@ -13075,6 +13238,7 @@ fn collect_keyboard_actions(ctx: &egui::Context, actions: &mut Vec<Action>, keys
         delete_target: canvas_delete_target,
         inside_object,
         in_view_mode,
+        awaiting_password,
     } = keys;
     use egui::{Key, Modifiers};
 
@@ -13286,6 +13450,19 @@ fn collect_keyboard_actions(ctx: &egui::Context, actions: &mut Vec<Action>, keys
     // this state, and read mode is left before full screen so one press
     // does not drop both at once — leaving a mode should be one step,
     // the same way entering it was.
+    // ★ A NEW TOP RUNG on the Escape ladder, above the view-mode rung.
+    //
+    // Safe to put first, and it has to be: while the password prompt is
+    // showing there is NO document, so every rung below it — view mode, then
+    // `resolve_escape`'s tool/gesture/selection chain — is asking about state
+    // that cannot exist. Escape here can only mean "I do not want this file".
+    //
+    // Consumed before anything else looks, so the canvas never sees the key
+    // in this state.
+    if awaiting_password && ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape)) {
+        actions.push(Action::CancelPassword);
+        return;
+    }
     if in_view_mode && ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape)) {
         actions.push(Action::ExitViewMode);
         return;
@@ -14799,6 +14976,7 @@ impl PdfceApp {
             }
             Status::Failed { path, .. } => ui_text::status_failed(path),
             Status::Unsupported { path, .. } => ui_text::status_unsupported(path),
+            Status::NeedsPassword { path } => ui_text::status_needs_password(path),
         }
     }
 
@@ -14867,6 +15045,28 @@ impl PdfceApp {
         // a save behaves (forced full rewrite; incremental refused).
         if let Some(note) = &self.recovery_note {
             ui.colored_label(ui.visuals().warn_fg_color, note);
+        }
+        // §7.6 disclosure, computed LIVE from the front document — never
+        // cached. `recovery_note` sitting three lines above is a cache, and
+        // caching it is exactly how its disclosure came to vanish on a
+        // document switch (see `recovery_note_for_front_document`). This one
+        // is a read of an `Option` already on the `Document`, so there is
+        // nothing to keep in sync and nothing that can go stale.
+        if let Status::Open(doc) = &self.status
+            && let Some(enc) = doc.session.document().encryption()
+        {
+            // Factual, uncoloured: the document being encrypted is not a
+            // problem and must not be painted as one.
+            ui.label(ui_text::encryption_status_line(enc.auth));
+            // The save refusal, at OPEN. An operator who edits for an hour
+            // and learns at Ctrl+S that saving was never possible has been
+            // let down by a surface that knew the whole time. Warn-coloured
+            // because it IS an unfinished capability, matching the register
+            // `Status::Unsupported` already uses.
+            ui.colored_label(
+                ui.visuals().warn_fg_color,
+                ui_text::encryption_save_unsupported_note(),
+            );
         }
         if let Some(note) = &self.edit_note {
             ui.label(note);
@@ -15574,6 +15774,96 @@ impl PdfceApp {
                 ui.centered_and_justified(|ui| {
                     ui.colored_label(ui.visuals().warn_fg_color, text);
                 });
+                return;
+            }
+            Status::NeedsPassword { path } => {
+                // ★ INLINE, not a modal, and deliberately NOT part of
+                // `apply()`'s pending-gate.
+                //
+                // That gate exists to protect an already-open document's
+                // in-progress question. Here nothing is open — so gating would
+                // lock the operator away from the documents they DO have open
+                // in the switcher, to protect a document that does not exist.
+                // Everything stays live: Open, the switcher, the toolbar.
+                //
+                // Rendering as a fourth arm of the same match that draws
+                // Idle/Failed/Unsupported reuses the established inline-canvas
+                // pattern rather than adding a fourth dialog convention to the
+                // three this application already has.
+                let body = ui_text::password_prompt_body(path);
+                let rejected = self.password_prompt.rejected;
+                let mut submit = false;
+                let mut cancel = false;
+
+                ui.centered_and_justified(|ui| {
+                    ui.vertical_centered(|ui| {
+                        ui.heading(ui_text::password_prompt_heading());
+                        ui.add_space(8.0);
+                        ui.label(body);
+                        ui.add_space(12.0);
+
+                        if rejected {
+                            // Colour AND words — never colour alone.
+                            ui.colored_label(
+                                ui.visuals().error_fg_color,
+                                ui_text::password_prompt_rejected(),
+                            );
+                            ui.add_space(6.0);
+                        }
+
+                        let field = ui.add(
+                            egui::TextEdit::singleline(&mut self.password_prompt.input)
+                                .password(!self.password_prompt.show)
+                                .desired_width(260.0)
+                                .hint_text(ui_text::password_prompt_hint()),
+                        );
+                        ui.add_space(4.0);
+                        ui.checkbox(
+                            &mut self.password_prompt.show,
+                            ui_text::password_prompt_show_label(),
+                        )
+                        .on_hover_text(ui_text::password_prompt_show_tooltip());
+                        ui.add_space(10.0);
+
+                        // Enter submits. This is NOT the redaction-apply
+                        // no-Enter rule: that rule protects the application's
+                        // one irreversible action from a reflexive keypress. A
+                        // password guess is reversible, routine, and every
+                        // desktop password field on earth submits on Enter —
+                        // withholding it here would be friction, not safety.
+                        let can_submit = !self.password_prompt.input.is_empty();
+                        let entered =
+                            field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+
+                        ui.horizontal(|ui| {
+                            if ui
+                                .add_enabled(
+                                    can_submit,
+                                    egui::Button::new(ui_text::password_prompt_unlock_button()),
+                                )
+                                .clicked()
+                            {
+                                submit = true;
+                            }
+                            if ui
+                                .button(ui_text::password_prompt_cancel_button())
+                                .clicked()
+                            {
+                                cancel = true;
+                            }
+                        });
+                        if can_submit && entered {
+                            submit = true;
+                        }
+                    });
+                });
+
+                if submit {
+                    actions.push(Action::SubmitPassword);
+                }
+                if cancel {
+                    actions.push(Action::CancelPassword);
+                }
                 return;
             }
             Status::Open(_) => {}
@@ -24285,21 +24575,153 @@ mod tests {
             ),
         }
 
-        // (3) A document needing a password is NEITHER. It is not damaged and
-        // it is not unsupported — pdfce can decrypt it and has not been told
-        // how. It currently lands in `Status::Failed` carrying the honest
-        // "password-protected" message, which is not yet the right surface;
-        // the prompt is designed but unbuilt. Asserted anyway so the day it
-        // changes, this test says so instead of quietly agreeing.
+        // (3) A document needing a password is NEITHER damaged nor
+        // unsupported — pdfce can decrypt it and has not been told how.
+        //
+        // ★ This assertion was written when the prompt did not exist, as
+        // `Failed | Unsupported` with a note saying "the day it changes, this
+        // test says so instead of quietly agreeing". It said so. Now it pins
+        // the real state.
         let mut app = PdfceApp::default();
         app.open_path(fixture("encryption/enc-rc4-128.pdf"));
-        let (Status::Failed { message, .. } | Status::Unsupported { message, .. }) = &app.status
-        else {
-            panic!("a password-protected document must not silently open");
-        };
         assert!(
-            message.contains("password"),
-            "whatever surface it lands on must say the word the operator needs: {message}"
+            matches!(app.status, Status::NeedsPassword { .. }),
+            "a password-protected document must ask, not fail; got {:?}",
+            std::mem::discriminant(&app.status)
+        );
+    }
+
+    /// ★ The whole password flow, end to end, on a real encrypted file.
+    ///
+    /// Wrong password, right password, and Cancel — because each one is a
+    /// different bug if it breaks, and only the middle one is the happy path
+    /// anybody would try by hand.
+    #[test]
+    fn the_password_prompt_opens_rejects_and_cancels() {
+        let mut app = PdfceApp::default();
+        app.open_path(fixture("encryption/enc-rc4-128.pdf"));
+        assert!(matches!(app.status, Status::NeedsPassword { .. }));
+
+        // `rejected` must be FALSE on arrival. The empty password was already
+        // tried, silently, inside pdfce-core — but the operator did not try
+        // it, and telling them a password "did not open this document" before
+        // they have typed one is a claim about something they never did.
+        assert!(
+            !app.password_prompt.rejected,
+            "nothing has been typed yet, so nothing has been rejected"
+        );
+        assert!(!app.password_prompt.show, "characters start masked");
+
+        // A wrong password stays on the same surface, flags the rejection,
+        // and CLEARS the field — leaving a known-wrong value invites
+        // resubmitting it by reflex.
+        app.password_prompt.input = "definitely not it".to_owned();
+        app.submit_password();
+        assert!(
+            matches!(app.status, Status::NeedsPassword { .. }),
+            "a wrong password must not change which document is being asked about"
+        );
+        assert!(app.password_prompt.rejected);
+        assert!(
+            app.password_prompt.input.is_empty(),
+            "the rejected password must not be left sitting in the field"
+        );
+
+        // The right one opens it, and the prompt state is fully reset —
+        // including `rejected`, which would otherwise be waiting to mislead
+        // on the next encrypted file.
+        app.password_prompt.input = "userpw".to_owned();
+        app.submit_password();
+        assert!(
+            matches!(app.status, Status::Open(_)),
+            "the correct user password must open the document"
+        );
+        assert!(app.password_prompt.input.is_empty());
+        assert!(!app.password_prompt.rejected);
+
+        // The OWNER password opens it too (§7.6.3.1 — either password), and
+        // the operator is never asked which kind they are typing.
+        let mut app = PdfceApp::default();
+        app.open_path(fixture("encryption/enc-rc4-128.pdf"));
+        app.password_prompt.input = "ownerpw".to_owned();
+        app.submit_password();
+        assert!(
+            matches!(app.status, Status::Open(_)),
+            "the owner password must open it through the same one field"
+        );
+
+        // Cancel abandons the file without leaving the app stuck.
+        let mut app = PdfceApp::default();
+        app.open_path(fixture("encryption/enc-rc4-128.pdf"));
+        app.password_prompt.input = "half typed".to_owned();
+        app.apply_for_test(Action::CancelPassword);
+        assert!(
+            matches!(app.status, Status::Idle),
+            "Cancel must return to an empty canvas, not strand the operator"
+        );
+        assert!(
+            app.password_prompt.input.is_empty(),
+            "an abandoned password must not survive the cancel"
+        );
+    }
+
+    /// ★ Ctrl+S on an encrypted document must not open a file dialog first.
+    ///
+    /// The ribbon's Save button is disabled for an encrypted document, but
+    /// Ctrl+S does not go through the button. Without the guard in
+    /// `begin_save`, it opens a Save-As dialog, lets the operator choose a
+    /// folder and a filename, and only then reports that saving was never
+    /// possible — the writer's refusal arriving correctly and far too late.
+    ///
+    /// Asserted through the disclosure rather than through the dialog,
+    /// because a test cannot open a native file picker: if `begin_save`
+    /// returned early it left the note and nothing else, and if it did not,
+    /// it fell through to `save_dialog` and the note is absent.
+    #[test]
+    fn ctrl_s_on_an_encrypted_document_refuses_before_the_file_dialog() {
+        let mut app = PdfceApp::default();
+        app.open_path(fixture("encryption/enc-emptyuser-rc4-128.pdf"));
+        assert!(
+            matches!(app.status, Status::Open(_)),
+            "the permissions-only fixture must open"
+        );
+
+        app.begin_save();
+        assert_eq!(
+            app.edit_note.as_deref(),
+            Some(ui_text::encryption_save_unsupported_note()),
+            "the refusal must be disclosed, and must happen before any dialog"
+        );
+        assert!(
+            app.save_result.is_none(),
+            "nothing must have been attempted"
+        );
+    }
+
+    /// A half-typed password for one file must never appear in another's
+    /// prompt — the stale-cross-document-state defect this application has
+    /// already been bitten by once.
+    #[test]
+    fn a_half_typed_password_does_not_follow_you_to_the_next_file() {
+        let mut app = PdfceApp::default();
+        app.open_path(fixture("encryption/enc-rc4-128.pdf"));
+        app.password_prompt.input = "secret for file A".to_owned();
+        app.password_prompt.rejected = true;
+        app.password_prompt.show = true;
+
+        app.open_path(fixture("encryption/enc-rc4-40.pdf"));
+        assert!(matches!(app.status, Status::NeedsPassword { .. }));
+        assert!(
+            app.password_prompt.input.is_empty(),
+            "file A's password must not be sitting in file B's prompt"
+        );
+        assert!(
+            !app.password_prompt.rejected,
+            "file A's rejection must not accuse file B"
+        );
+        assert!(
+            !app.password_prompt.show,
+            "reveal state resets with the file"
         );
     }
 

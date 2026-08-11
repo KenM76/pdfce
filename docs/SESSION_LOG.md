@@ -34088,3 +34088,161 @@ engineer should check `D:\Dev\pdfce-backups\` and `git log`/
 `git status`/`git remote -v` directly, on branch `post-v0.2.0`. This is
 the **ninety-sixth** `SESSION_LOG.md` filing (the ninety-fifth
 confirmed present by direct read before this entry was appended).
+
+## 2026-08-11 (ninety-seventh filing) — `Pass 5` increment 1 reaches every shell: CLI `--open-password`/`--open-password-file`, the GUI stops calling an encrypted document damaged (`R186`'s fourth instance), a byte-identical render proves the RC4 decryption is right — plus a stale R20 recovery disclosure fixed, found while designing `Pass 5`'s own GUI password prompt
+
+**Sourcing.** No shell tool this dispatch (hard rule 8). The dispatching
+engineer supplied all four commit messages (`0a79da4`, `e4b6533`,
+`2db435c`, `149fd03`) in full, verbatim, via scratchpad files — the
+fourth relayed mid-dispatch, after the other three were already being
+filed — reported as quoted, not independently git-verified.
+Independently confirmed by direct filesystem read (within hard rule 8's
+boundary): the CLI's global password flags, `OnceLock` and fixed
+`inspect` load site; `pdfce-gui`'s `is_unsupported_structure` now
+matching `DocError::Encryption(_)`; the three-fixture GUI end-to-end
+test; `crates/pdfce-cli/tests/render_page.rs` holding exactly 11
+`#[test]` functions including the byte-identical-render fidelity test;
+and `recovery_note_for_front_document` plus
+`the_recovery_disclosure_survives_switching_documents` — all exactly as
+the commit messages describe. `docs/NEXT_SESSION.md` (`89291ce`)
+confirmed to exist at HEAD; **not read or filed**, per the operator's
+own instruction that it is engineer-owned this session.
+
+**Shipped:**
+- `0a79da4` — global `--open-password`/`--open-password-file` CLI flags,
+  reaching all 26 document-load sites (including one that was a bare
+  function reference, not a call, and had been missed by the first
+  sweep). Named `--open-password` rather than `--password` because the
+  latter already exists as a Table 228 form-field flag, and `clap`
+  panics at run time (not build time) on that kind of name collision.
+- `e4b6533` — the GUI's encryption-refusal classifier
+  (`is_unsupported_structure`) now matches `DocError::Encryption(_)`
+  alongside the pre-existing xref-keyed marker, so an AES-encrypted
+  document reads as a named capability gap rather than file damage.
+  `DocError::PasswordRequired` stays deliberately unclassified as a
+  gap. Adds a three-fixture end-to-end test through `open_path`.
+- `2db435c` — a fidelity test rendering the plaintext fixture source and
+  all three RC4 encryptions of it, asserting byte-identical PNG output
+  across all four. Surfaced that `extract-text` reports `chars=0` on
+  this fixture set, which would have made a text-comparison oracle
+  vacuously pass.
+- `149fd03` — `recovery_note` (the R20 rebuilt-cross-reference-table
+  disclosure) was computed once at open and then cleared, not
+  recomputed, by two of three document-switch paths; fixed by deriving
+  it live from the `Document` on every read instead of caching it at
+  all. Found by `pdfce-ui-specialist` while tracing this disclosure as
+  the precedent for the new password prompt's own design.
+- `89291ce` — `docs/NEXT_SESSION.md` rewritten (engineer-owned; carries
+  the GUI-password-prompt design in full). A portable build cut to
+  `D:\builds\pdfce-20260811-0820-89291ce`, smoke-tested against the
+  encrypted fixtures.
+
+**Decisions made this session:** none — `0a79da4`/`e4b6533`/`2db435c`
+are a wiring/verification follow-up to `14a7400`'s own decision
+(in-crate MD5/RC4); `149fd03` is a bug fix to already-shipped
+infrastructure. `ARCHITECTURE.md` §7 gains a body-section bullet
+documenting the new global CLI flags; no new §12 entry from any of the
+four commits.
+
+**Findings + decisions:**
+- **`R186`, a fourth instance**, and the first of the four where nothing
+  broke — no failing test, no build warning; a guard's marker simply
+  stopped covering a hazard that had grown a second spelling. Standing
+  rules amended in place (no new number), matching the third-instance
+  precedent from the ninety-second filing.
+- **Two new Rust-ecosystem findings.** `clap`'s flag-name collision
+  between a global option and a subcommand-local option of the same
+  name is a **run-time** panic, not a compile-time or `--help`-time
+  error — `D:\dev\rag\rust\clap_global_flag_name_collision_with_a_subcommand_flag_panics_at_run_time_not_compile_time.md`.
+  A textual call-site sweep for `Function::call(...)` misses a bare
+  function reference passed as a higher-order callback (`.and_then(Foo::bar)`)
+  — `D:\dev\rag\rust\grep_based_call_site_sweep_misses_a_bare_function_reference_passed_as_a_callback.md`.
+- **Third instance of an existing finding**, filed as an amendment
+  rather than a new file: an "obvious" verification oracle (extracted
+  text) can be vacuous on a specific fixture's content (zero text) even
+  when the fixture itself has the right shape — a stronger oracle
+  (pixel render) caught what the weaker one structurally could not.
+  `existing_fixture_of_the_right_shape_can_be_vacuous_for_a_new_measurement.md`
+  gains this as its 3rd instance.
+- **A new egui/immediate-mode-GUI finding, from `149fd03`.** A cached
+  copy of a value with more than one producer (here: three code paths
+  that can each change "which document is in front") drifts the moment
+  any one producer forgets to update it, or a new producer is added; a
+  value with exactly one producer — read live, never cached — cannot
+  drift by construction. The old comment on the cache argued the right
+  principle (recovery is a file property, not a session property) on
+  the wrong axis (the CACHE is a front-document property), which reads
+  as more settled than an unexamined bug, not less. New file:
+  `D:\dev\rag\egui\a_derived_value_with_one_producer_cannot_drift_a_cached_copy_with_n_producers_will.md`.
+- **Two items carried forward, unresolved, at the dispatching engineer's
+  own explicit request** (could not action them this session): the
+  stale `(bh)`/`(bi)` operator-question-ceiling footers across the
+  ninety-second through ninety-fifth filings (still owed to a future
+  "index check" dispatch); and the eight-item never-encrypted list,
+  still flagged for `pdfce-spec-librarian` to confirm against the §7.6
+  spec-RAG corpus, not yet dispatched.
+
+**Still in flight:**
+- `Pass 5`'s remaining scope, unchanged in order: the GUI password
+  prompt (design now written up in `docs/NEXT_SESSION.md`, not yet
+  built); the AES-128/256 decrypt path (needs the `Stream` schema
+  change increment 1's RC4-only scope avoided); eventual encrypt-on-save.
+- The `/R 6` AES-256 sourcing open sub-decision — unchanged, untouched.
+- Both carried-forward items above (stale ceiling footers, never-
+  encrypted-list spec confirmation) — still open.
+- The 9–11 undescribed commits from the earlier 14-hash citation
+  backlog — unchanged, untouched by this dispatch.
+
+**For next session:** the GUI password prompt is now the single largest
+remaining gap in `Pass 5` — CLI reading is at parity with core for RC4;
+GUI cannot reach it at all, and its design is already written up in
+`docs/NEXT_SESSION.md`. A shell grant would let this librarian
+independently verify the git-history claims (all five commits this
+filing names) it could only relay from verbatim-quoted messages.
+
+**Ledger for this filing.** **No new Pass ID** — `Pass 5` reused for the
+first three commits, same increment; `149fd03` carries no Pass ID
+(fixes already-shipped R20 infrastructure). Pass-family ceiling
+unchanged at **62.0**, next free **63**. `docs/FEATURES.md`: **one row
+touched** — the Planned-section Encryption row's CLI cell `◐` → `[x]`,
+sentence rewritten; core `[x]` and gui `[ ]` unchanged; the *Implemented*
+recovery row is unaffected (`149fd03` fixes a disclosure bug, not the
+capability). `docs/ARCHITECTURE.md`: **§7 body-section bullet added**
+(new global CLI flags); **no new §12 decision-log entry** — nothing here
+redraws a crate boundary, picks a library, or redefines an invariant.
+Standing rules: **`R186` cited and AMENDED with a fourth instance, no
+new number** — ceiling stays **R186**, next free **R187**.
+Decision-record ceiling **unchanged at 038**, next free **039**.
+**Operator-question ceiling: `(bi)`, next free `(bj)`** — the TRUE
+current value, not the stale figure named above as still uncorrected.
+`D:\dev\rag\rust\`: **two new files**
+(`clap_global_flag_name_collision_with_a_subcommand_flag_panics_at_run_time_not_compile_time.md`,
+`grep_based_call_site_sweep_misses_a_bare_function_reference_passed_as_a_callback.md`),
+**one amended** (`existing_fixture_of_the_right_shape_can_be_vacuous_for_a_new_measurement.md`,
+3rd instance). `D:\dev\rag\egui\`: **one new file**
+(`a_derived_value_with_one_producer_cannot_drift_a_cached_copy_with_n_producers_will.md`).
+Both `index.md` files updated. **No `C:\personal_rag\pdf\` finding this
+filing** — nothing in these commits is producer-empirical PDF behavior.
+Test/gate figures: **3,306 tests measured full-workspace green at
+`89291ce`** — this **replaces** an earlier "3,302 plus two
+individually-confirmed additions, no full-workspace re-run"
+formulation this librarian had already started writing into the
+`ROADMAP.md` entry when the engineer re-ran the full suite and supplied
+the measured figure instead (baseline **3,301** at `14a7400`; delta
+**+5** across all four commits, not itemized per-commit by this
+filing). `crates/pdfce-gui`'s own suite separately reported **343**
+tests passing after `149fd03` (crate-level, not independently
+recomputed). `cargo fmt --check` and `cargo clippy --workspace
+--all-targets --all-features` reported clean for all four commits —
+relayed, not independently re-run, no shell this dispatch. **Packaging
+smoke test**: a portable build cut at `89291ce`
+(`D:\builds\pdfce-20260811-0820-89291ce`) was smoke-tested against the
+encrypted fixtures (empty-password opens with no flag, `--open-password`
+opens, AES refused by name) — relayed, not independently re-run.
+**Backup/git working-tree/remote state not independently asserted
+anywhere in this filing** — no shell this dispatch (hard rule 8); the
+engineer should check `D:\Dev\pdfce-backups\` and `git log`/
+`git status`/`git remote -v` directly, on branch `post-v0.2.0`. This is
+the **ninety-seventh** `SESSION_LOG.md`/`ROADMAP.md` joint filing (the
+ninety-sixth confirmed present by direct read before this entry was
+appended).

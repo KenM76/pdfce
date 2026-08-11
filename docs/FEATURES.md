@@ -194,7 +194,7 @@ the model or verb exists and only the named shell is missing. The
 
 | core | cli | gui | Acrobat | Feature |
 |:----:|:---:|:---:|:-------:|---------|
-| [x] | ◐ | [ ] | [x] | **Encryption** — RC4 (40–128 bit) decrypts read-only, including the empty-user-password case every other reader opens silently. No CLI `--password` flag yet (empty-password documents only); no GUI password prompt at all. AES-128/256, `/R 6` and any encrypted save are still refused by name. |
+| [x] | [x] | [ ] | [x] | **Encryption** — RC4 (40–128 bit) decrypts read-only, including the empty-user-password case every other reader opens silently; CLI can now supply a password for any RC4 document (`--open-password`/`--open-password-file`). No GUI password prompt at all — a non-empty-password document is CLI-only. AES-128/256, `/R 6` and any encrypted save are still refused by name. |
 | — | — | [ ] | [x] | Imposition in the GUI — needs the sheet composition extracted into `pdfce-print` so both shells share one implementation. |
 | [ ] | [ ] | [ ] | [x] | Move and resize anything carrying a `/Rect` — widgets, markup, redaction marks, links, ce dimensions. |
 | [ ] | [ ] | [ ] | ? | Resize a vector object. |

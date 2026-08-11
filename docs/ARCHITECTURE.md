@@ -3707,6 +3707,20 @@ debug afterthought. Design points:
   documented meaning per non-zero code where it's useful for a calling
   script to distinguish failure modes (e.g. "input not found" vs
   "encrypted, no password given" vs "PDF/A validation failed").
+- **`--open-password <PW>` / `--open-password-file <PATH|->` — global
+  flags** (`Pass 5` increment 1's CLI follow-up, 2026-08-11,
+  `0a79da4`), so every subcommand that opens a document honours them
+  without threading `Option<&[u8]>` through each one. Stored in a
+  process-lifetime `OnceLock<Option<Vec<u8>>>`, written once in `run`
+  before dispatch. Named `--open-password`, deliberately not
+  `--password` — `add-text-field --password` already exists as the
+  Table 228 field-flag, and `clap` does not refuse the collision at
+  build time; it panics at run time on the first `add-*` subcommand
+  parsed. `--open-password-file` is preferred (avoids process-list and
+  shell-history exposure), reads `-` from stdin, and strips exactly one
+  trailing newline. An unreadable password file fails immediately,
+  naming the file, rather than proceeding password-less and surfacing
+  later as an opaque "password-protected" refusal.
 - **Same round-trip / redaction / fuzzy-never-sneaky invariants apply.**
   A CLI redact command must truly remove content, same as the GUI
   path (§5); a CLI OCR command's output is still a hint the caller

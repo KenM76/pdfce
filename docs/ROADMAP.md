@@ -81,6 +81,354 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★ `0a79da4` + `e4b6533` + `2db435c` + `149fd03` — `Pass 5` increment 1 reaches every shell: CLI `--open-password`/`--open-password-file` (with a call site the sweep almost missed), the GUI stops calling an encrypted document damaged (`R186`'s FOURTH instance), a byte-identical render proves the decryption is right, not merely parseable — plus a stale R20 recovery disclosure fixed, found while designing `Pass 5`'s own GUI password prompt — 2026-08-11, branch `post-v0.2.0` (ninety-seventh filing)
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — `git log`/`git
+show` not run, none of the four diffs read. The dispatching engineer
+supplied all four commit messages **in full, verbatim**, via four
+scratchpad files (the fourth, `149fd03`, relayed mid-dispatch, after the
+other three were already being filed) — a stronger source than the
+usual paraphrase-relay, but "verbatim message" is not "independently
+confirmed": this librarian did not check that `0a79da4`/`e4b6533`/
+`2db435c`/`149fd03` on disk actually carry this text. **Independently
+confirmed by direct file read, which IS available without a shell:**
+`crates/pdfce-cli/src/main.rs` carries the `open_password`/
+`open_password_file` clap fields, the `CLI_PASSWORD` `OnceLock`,
+`resolve_cli_password`, and the `inspect` load site now reading
+`Document::from_bytes_with_password(bytes, cli_password())` (no longer a
+bare function reference); `crates/pdfce-gui/src/main.rs`'s
+`is_unsupported_structure` now matches `DocError::Encryption(_)`
+alongside the pre-existing `XrefErrorKind::EncryptionUnsupported` arm,
+with `PasswordRequired` asserted excluded by its own test; and
+`crates/pdfce-gui/src/main.rs` carries the three-fixture end-to-end test
+`encrypted_documents_reach_the_right_status_through_open_path` exactly
+as described (empty-password RC4 → `Status::Open`, AES-128 →
+`Status::Unsupported` naming the cipher, password-protected RC4 →
+neither, message naming "password"). `crates/pdfce-cli/tests/render_page.rs`
+now contains **exactly 11** `#[test]` functions (directly counted),
+matching `2db435c`'s own "11 render tests pass" figure, and its
+`decrypting_reproduces_the_plaintext_document_exactly` test asserts
+byte-for-byte PNG equality across the plaintext source and all three RC4
+encryptions, exactly as described. `149fd03`'s own claims are also
+confirmed by direct read: `recovery_note_for_front_document` exists and
+is called from both `switch_to_parked` and (via its own header comment)
+`close_active_document`'s reset path, and
+`the_recovery_disclosure_survives_switching_documents` exists exactly as
+described — a recovery-loaded fixture opened, a clean document opened
+over it, `switch_to_parked(0)` back, asserting the disclosure equals
+what it was at first open. `docs/NEXT_SESSION.md` (`89291ce`) confirmed
+to exist on disk — **its content not read or filed**, per the operator's
+own instruction that this document is engineer-owned this session.
+
+**The story in one line, per the dispatching engineer's own framing:**
+`14a7400` gave `pdfce-core` a working RC4 security handler; the first
+three of these four commits are what makes that capability reachable
+from a shell and prove it is reachable *correctly*, not merely reachable.
+The fourth, `149fd03`, is a side-finding from the same design work — GUI
+disclosure was being designed for the password prompt, which surfaced
+that an *existing* disclosure (the recovery-rebuild warning) had already
+gone stale the same way the new one was being designed to avoid.
+
+**1 of 3 — `0a79da4`: the CLI can supply the password core has been
+asking for.** `--open-password` / `--open-password-file` are **global**
+`clap` flags (`OnceLock<Option<Vec<u8>>>`, written once in `run` before
+dispatch), so every subcommand that opens a document honours them
+without threading `Option<&[u8]>` through twenty-six call sites and
+every future one — the `OnceLock` makes ordering a type-level fact: a
+read before the write is `None`, the same answer as "no password
+supplied," so the worst case is a `PasswordRequired` the operator
+understands rather than a wrong key silently accepted.
+
+**Not named `--password`, and `clap` found out the hard way why that
+matters.** `add-text-field --password` already exists — the Table 228
+field flag that makes a *form field* mask its input, an unrelated
+meaning of the same word. `clap` does not refuse a name collision at
+build time; it **panics at run time**, on the first `add-*` subcommand
+that parses its arguments: `"Mismatch between definition and access of
+` + "`" + `password` + "`" + `. Could not downcast to alloc::string::String,
+need to downcast to bool"`. It compiles clean and passes `--help` — ten
+existing tests went red at once with nothing before that panic to say
+why. Renaming the shipped field flag would break scripts already using
+it, so the newcomer takes the qualified name; "open" reads better
+anyway (this password opens a document, it does not set one). **New
+finding, Rust/clap ecosystem-wide, not pdfce-specific:**
+`D:\dev\rag\rust\clap_global_flag_name_collision_with_a_subcommand_flag_panics_at_run_time_not_compile_time.md`.
+
+**The sweep missed a load site that was not a call.** Twenty-five of
+twenty-six load sites are `Document::load(...)` or
+`Document::from_bytes(...)` — a textual sweep for those catches them.
+The twenty-sixth, `inspect`, passed `Document::from_bytes` to
+`.and_then()` as a **function reference**, no parentheses, so a
+call-site search walks straight past it. `--open-password` would have
+been accepted, reported success, and silently ignored by the
+subcommand an operator is most likely to try first — worse than not
+having the flag at all, since an accepted-and-dropped flag teaches the
+operator the file is unopenable. Fixed; a dedicated test now exercises
+`inspect` specifically, and states why in its own comment (confirmed by
+direct read, above). **New finding, generalizes past this one call
+site:**
+`D:\dev\rag\rust\grep_based_call_site_sweep_misses_a_bare_function_reference_passed_as_a_callback.md`.
+
+**Why a file is preferred over the flag, and why the newline strip
+matters.** A command-line password is visible to every other process on
+the machine and lands in shell history; `--open-password-file` avoids
+both, and reads `-` from stdin. Only the first line is used, trailing
+newline stripped — the newline every editor appends would otherwise
+become part of the password and fail indistinguishably from a wrong
+one. An unreadable password file is exit 3 immediately, **naming the
+file** — proceeding password-less would surface later as "this document
+is password-protected" and send the operator hunting the wrong problem.
+
+**Exit codes, verified individually rather than by reading output**,
+because `| tail` had been masking status behind the pipeline's own:
+no password on a protected file → 1; correct user password → 0; owner
+password → 0 (either opens it, §7.6.3.1); `--open-password-file` → 0;
+`--open-password-file -` (stdin) → 0; unreadable password file → 3
+(names the file); both flags at once → 2 (clap conflict); empty-user
+document, no flags → 0 (still needs nothing); AES-128, any password →
+1 (still refused BY NAME).
+
+**2 of 3 — `e4b6533`: the GUI stops calling an encrypted document
+damaged.** `is_unsupported_structure` matched only
+`DocError::Xref(x) if x.kind == XrefErrorKind::EncryptionUnsupported` —
+correct while every encrypted document produced exactly that error, and
+wrong from the moment `14a7400` **re-scoped** that variant to mean
+"encrypted AND the xref machinery is broken" rather than "any encrypted
+file." An AES document raises `DocError::Encryption(..)` instead, which
+the classifier did not match, so it fell to `Status::Failed` and told
+the operator their valid file was damaged — the wrong sentence in the
+wrong direction: one sends someone hunting for a corrupt download, the
+other tells them to wait for a version.
+
+**`R186`, a FOURTH instance — Standing rules entry amended below, not
+re-numbered, matching this project's own precedent for a same-shape
+recurrence (the THIRD instance, `b3ba63b`, ninety-second filing, was
+handled the identical way).** A guard keyed on a marker — here,
+`XrefErrorKind::EncryptionUnsupported` — fails OPEN, silently, the
+moment the same hazard (an encrypted document) arrives without that
+marker (a `DocError::Encryption(..)` instead). Worse than the first
+three instances in one specific way: **nothing broke.** No test failed,
+no build warned; the classifier simply stopped covering the case it was
+written for, because the case grew a second spelling and the guard knew
+only the first.
+
+**Deliberately NOT classified as a gap: `DocError::PasswordRequired`.**
+That is not a capability gap — pdfce *can* decrypt the document and is
+waiting to be told how. Calling it "unsupported" would be the same
+untruth as calling it damaged, pointing the other way. Confirmed
+excluded by its own test (above).
+
+**The end-to-end test, because a passing classifier is not the same as
+an operator seeing the right thing.** Three real fixtures through
+`open_path`, three distinct outcomes (confirmed by direct read, above):
+`enc-emptyuser-rc4-128.pdf` → `Status::Open`, needing **no GUI feature
+at all** — §7.6.3.1's silent empty-password attempt happens inside core
+for every document, and it is the case an operator hits most and is
+most likely to assume rather than check; `enc-aes-128.pdf` →
+`Status::Unsupported` naming AES-128 — the regression this test pins;
+`enc-rc4-128.pdf` → asserted loosely on purpose (`Status::Failed` or
+`Status::Unsupported`, message must name "password") — it currently
+lands in `Status::Failed`, which is **not the right surface** (a
+password prompt is designed, not built), and the loose assertion means
+the day it moves, the test says so instead of quietly agreeing with
+whatever it finds.
+
+**3 of 3 — `2db435c`: proving the decryption is RIGHT, not merely
+parseable.** Every test through `0a79da4` and `e4b6533` proves a
+document *loads*; none proves it loads **correctly**, and those are not
+the same claim. RC4 with a wrong key does not fail — it yields bytes a
+lenient parser can still walk, so a transposed round or a reversed
+counter direction produces a document that opens and is subtly wrong,
+which is exactly the failure mode a load test cannot see.
+
+**Fix: render the plaintext source and all three RC4 encryptions of it,
+require the four PNGs byte-identical.** `demo-form.pdf` (plaintext),
+`enc-rc4-40.pdf` (`/R` 2, 40-bit, owner password), `enc-rc4-128.pdf`
+(`/R` 3, 128-bit, user password), `enc-emptyuser-rc4-128.pdf` (`/R` 3,
+128-bit, no password at all) — three different key derivations, one
+required image. This exercises both halves of decryption at once:
+content streams are decrypted in the retained buffer and travel all the
+way to pixels; the resources those streams reference are reached
+through dictionaries whose strings are decrypted separately, at the
+object layer. A failure in either half moves the image. Confirmed by
+direct read (above): the assertion is byte-for-byte PNG equality, not a
+hash comparison — the `bc2dfede94ef290e7c7a7f7e509fea98` figure the
+commit message cites is a hash the engineer computed manually over the
+four output files when running the test, not a value baked into the
+test itself, and is reported here as **relayed**, not independently
+recomputed (no shell this dispatch).
+
+**Third instance of an existing finding, found by USING the corpus
+rather than reading it.** `extract-text` on this fixture set reports
+`chars=0` — the document has no text, so a text-extraction oracle would
+have produced four identical *empty* results across all four files and
+**looked like a pass** without exercising anything. The form-field
+listing (`FullName`, `Subscribe`, flags, widget counts) does match
+across all four — that is the strings path — but the pixels are the
+claim worth pinning, which is why the render comparison was built
+instead of trusted as redundant. **Third instance filed as an amendment
+to** `D:\dev\rag\rust\existing_fixture_of_the_right_shape_can_be_vacuous_for_a_new_measurement.md`
+(1st: `Pass 10.0` signature byte-range; 2nd: `14a7400`'s own
+empty-password/AES-cipher mismatch) — this instance is a variant of the
+family: not the fixture lacking the feature, but an **obvious
+verification method** (text-extraction as an oracle) being vacuous on
+this specific fixture's content, caught only because a stronger oracle
+(pixel render) was chosen instead of assumed redundant.
+
+**Separately — `149fd03`: a stale R20 disclosure, found while designing a
+new one.** `pdfce-ui-specialist`, tracing `recovery_note` as the
+precedent for "how does this app disclose a fact about the loaded
+file" while designing `Pass 5`'s own GUI password prompt, found the
+precedent itself was broken. `recovery_note` — the R20 warning that a
+document's cross-reference table was rebuilt by guesswork and that
+saving will rewrite the file — was computed once in `open_path` and
+then **cleared, not recomputed**, by `switch_to_parked` and
+`close_active_document`. Switch away from a recovery-loaded document
+and back: the banner is gone, the document is still recovery-loaded,
+the warning is still true, and it is simply no longer shown.
+
+**The old comment argued the right principle on the wrong axis, and
+that is a larger error than no comment, not a smaller one.** It said,
+correctly: recovery is a property of the file as parsed, not of the
+session — don't make it session-aware. True, and beside the point:
+`recovery_note` is a property of **which document is in front**, and
+every code path that changes which document is in front has to answer
+that question again. Two of three did not. A carefully-reasoned
+argument about the wrong axis reads as though the question were already
+settled, which is worse than an unexamined bug.
+
+**Fixed by deleting the cache, not by adding a third reset.**
+`recovery_note_for_front_document()` derives the value live from an
+`Option` already sitting on `Document` — an O(1) read, so a
+correctly-maintained cache would have cost *more* than recomputing, and
+could still go stale at whichever call site is added next. A derived
+value with exactly one producer cannot drift; a cached copy with N
+producers needs N correct resets and drifts the moment any one of them
+is wrong or a new one is added. **Verified by making it fail**: the bug
+was temporarily reinstated and the regression test's assertion recorded
+`left: None, right: Some("This document had a damaged cross-reference
+table…")` before the fix was restored — a regression test never seen to
+fail is a regression test nobody has tested. The test also confirms its
+fixture genuinely loads via recovery before asserting anything else,
+and returns early rather than passing if the fixture has moved.
+Confirmed by direct read (above). **Plausibly a `D:\dev\rag\egui\`
+finding** — immediate-mode-GUI state management, not PDF-specific — see
+the new RAG file named in the ledger below.
+
+**Test/gate figures — total beside the per-item count, per hard rule
+10.** **3,306 tests measured full-workspace green at `89291ce`**
+(`149fd03`'s own immediately-following commit) — **this replaces an
+earlier "3,302 plus two individually-confirmed additions, no
+full-workspace re-run" formulation this librarian was given mid-filing
+and had already started writing into this entry**; the engineer then
+re-ran the full suite and supplied the measured figure, which is used
+here instead, per hard rule 10's own instruction to file a figure that
+can disagree with something rather than the unreconciled interim one.
+(Previous recorded baseline **3,301** at `14a7400`, this file's own
+immediately-prior *Shipped* entry — delta of **+5** across all four
+commits, not itemized per-commit by this filing; `crates/pdfce-gui`'s
+own suite separately reported **343 tests passing** after `149fd03`,
+crate-level, not independently recomputed here.) `cargo fmt --check`
+and `cargo clippy --workspace --all-targets --all-features` reported
+clean for all four commits — **relayed, not independently re-run, no
+shell this dispatch.**
+
+**Packaging smoke test — run, per the packaging-affecting-Pass
+discipline, even though no packaging code itself changed.** A portable
+build was cut at `89291ce` to `D:\builds\pdfce-20260811-0820-89291ce`
+and smoke-tested against the encrypted fixtures: empty-password RC4
+opens with no flag, `--open-password` opens a real-password document,
+AES-128 is refused by name. **Relayed, not independently re-run, no
+shell this dispatch** — but named here because it is exactly the
+disclosure this entry's own capabilities are about, exercised against a
+built artifact rather than a `cargo test` run.
+
+**`docs/FEATURES.md` — the Encryption row's CLI cell moves from `◐` to
+`[x]`.** Core still `[x]` (unchanged), CLI now `[x]` — the CLI can
+supply a password for **any** RC4 document, not only empty-password
+ones, closing the gap `14a7400`'s own filing named as "the very next
+commit." GUI stays `[ ]` — it still cannot prompt for one; a
+non-empty-password document remains CLI-only. Row stays under
+*Planned* (not promoted to *Implemented*) because the GUI cell is still
+a real gap, not a shape mismatch. Full row text: see the `FEATURES.md`
+diff this filing makes.
+
+**`docs/ARCHITECTURE.md` — §7 gains a short body-section bullet**
+naming the new global `--open-password`/`--open-password-file` flags
+and the `OnceLock` mechanism, dated 2026-08-11. **No new §12 decision-
+log entry** — nothing here redraws a crate boundary, picks a library,
+or redefines an invariant; the public surface these commits wire
+through (`DocumentEncryption`, `Document::load_with_password`,
+`Document::from_bytes_with_password`, `DocError::Encryption`/
+`PasswordRequired`) was already logged at `14a7400`'s own §12 entry.
+**§4.1's API-surface sync remains owed**, unchanged from that entry's
+own flag — not newly introduced by this filing.
+
+**Two items the dispatching engineer explicitly could not action this
+session and asked to be carried forward as named open items — carried,
+not resolved:**
+
+1. **The stale `(bh)`/`(bi)` operator-question-ceiling footers** across
+   at least the ninety-second through ninety-fifth filings (`(bi)` was
+   correctly minted at the eighty-eighth filing and correctly cited at
+   the ninety-first, then reverted to the stale figure for four
+   consecutive filings before the ninety-sixth filing caught and named
+   it). **Still not fixed.** A dedicated "index check" dispatch to add
+   dated correction footers to the affected historical entries remains
+   the recommended remedy — see the ninety-sixth filing's own footer
+   for the full account. This filing's own footer, below, cites the
+   TRUE current ceiling.
+2. **The eight-item never-encrypted list** (xref streams; external `/F`
+   data; `/Metadata` under `/EncryptMetadata false`; `/Crypt`+
+   `/Identity`; the indirect `/Encrypt` dict matched by object number)
+   — spec-derived content flagged, not written to any RAG this
+   librarian owns. **Still not dispatched to `pdfce-spec-librarian`** to
+   confirm it is already captured in the §7.6 spec-RAG corpus, per hard
+   rule 6's spec-vs-empirical boundary.
+
+**`D:\dev\rag\rust\`: two new findings, one existing file amended, one
+existing entry's blurb updated to match. `D:\dev\rag\egui\`: one new
+finding.**
+`clap_global_flag_name_collision_with_a_subcommand_flag_panics_at_run_time_not_compile_time.md`
+and
+`grep_based_call_site_sweep_misses_a_bare_function_reference_passed_as_a_callback.md`
+(both new, Rust);
+`existing_fixture_of_the_right_shape_can_be_vacuous_for_a_new_measurement.md`
+gains a 3rd-instance section (Rust). `a_derived_value_with_one_producer_cannot_drift_a_cached_copy_with_n_producers_will.md`
+(new, egui — from `149fd03`'s recovery-disclosure fix). Both `index.md`
+files updated. **No `C:\personal_rag\pdf\` finding this filing** —
+nothing in these four commits is producer-empirical PDF behavior; the
+extract-text/pixel-oracle finding above is testing methodology, filed to
+the Rust RAG accordingly.
+
+**Ledger for this filing.** **No new Pass ID** — same `Pass 5` ID for
+the first three commits, continuing increment 1; `149fd03` fixes
+already-shipped recovery-disclosure infrastructure (R20) and carries no
+Pass ID of its own. Pass-family ceiling **unchanged at 62.0**, next free
+**63**. `docs/FEATURES.md`: **one row touched** — the Planned-section
+Encryption row's CLI cell `◐` → `[x]`, sentence rewritten; the
+"Recover a damaged cross-reference table…" *Implemented* row is
+unaffected (`149fd03` fixes a disclosure bug, not the recovery
+capability itself, which was already all-`[x]`). `docs/ARCHITECTURE.md`:
+**§7 body-section bullet added** (CLI global flags); **no new §12
+decision-log entry** (see above). **Standing rules: `R186` cited and
+AMENDED with a fourth instance, no new number** — ceiling stays
+**R186**, next free **R187**. Decision-record ceiling **unchanged at
+038**, next free **039**. **Operator-question ceiling reported at its
+TRUE current value, `(bi)`, next free `(bj)`** — not the stale
+`(bh)`/`(bi)` figure named as still-uncorrected above. `docs/NEXT_SESSION.md`
+(`89291ce`) confirmed to exist at HEAD, **not filed by this librarian**
+— engineer-owned this session, per the operator's own instruction.
+**Backup/git working-tree/remote state not independently asserted
+anywhere in this filing** — no shell this dispatch (hard rule 8); the
+engineer should check `D:\Dev\pdfce-backups\` and `git log`/`git
+status`/`git remote -v` directly, on branch `post-v0.2.0`. This is the
+**ninety-seventh** `SESSION_LOG.md`/`ROADMAP.md` joint filing (the
+ninety-sixth confirmed present by direct read before this entry was
+written).
+
+---
+
 ### ★★ `14a7400` — `Pass 5` (Encryption) ACTIVATES: increment 1 ships RC4 decryption, and the refusal narrows from "no encrypted file at all" to exactly what pdfce still cannot open — 2026-08-11, branch `post-v0.2.0` (ninety-sixth filing)
 
 **Sourcing.** No shell tool this dispatch (hard rule 8) — `git log`/
@@ -34080,6 +34428,19 @@ this file's own `14a7400` *Shipped* entry, top of *Shipped*. The `/R 6`
 open sub-decision named above is UNCHANGED and still gates any AES-256
 write path — increment 1 does not touch it (RC4-only, read-only).
 
+**★ FURTHER AMENDED 2026-08-11 (ninety-seventh filing, `0a79da4`+
+`e4b6533`+`2db435c`) — increment 1 now reaches every shell.** The CLI can
+supply a password for any RC4 document (`--open-password`/
+`--open-password-file`, all 26 load sites including a call-site the
+first sweep missed); the GUI no longer misreports an AES-encrypted
+document as damaged (`R186`'s fourth instance); and a byte-identical
+render across the plaintext source and all three RC4 encryptions proves
+the decryption is correct, not merely parseable. Still open: the GUI
+password prompt (no surface at all) and the AES-128/256 decrypt path
+(needs the `Stream` schema change increment 1's RC4-only scope avoided).
+Full build record: this file's own `0a79da4`+`e4b6533`+`2db435c`
+*Shipped* entry, top of *Shipped*.
+
 ## Next up
 
 ### Pass 52.0–52.3 — PDF → DXF export, so SOLIDWORKS can import pdfce output without an Acrobat Pro licence at all — operator request 2026-08-09, redirected from "make pdfce satisfy SOLIDWORKS' Acrobat gate" to "make the gate irrelevant"
@@ -51097,6 +51458,26 @@ and
   as an amendment, not a new rule, matching this project's own R174
   precedent. Full record: `ROADMAP.md`'s `b3ba63b` Shipped entry
   (ninety-second filing).
+
+  **★ FOURTH INSTANCE (2026-08-11, `e4b6533`, ninety-seventh filing).**
+  The GUI's `is_unsupported_structure` keyed on
+  `XrefErrorKind::EncryptionUnsupported`, correctly, for as long as every
+  encrypted document produced exactly that error variant. `14a7400`
+  re-scoped that variant to mean "encrypted AND the xref machinery is
+  broken" — a narrower marker for the same underlying hazard (an
+  encrypted document) — and an AES document now raises
+  `DocError::Encryption(..)` instead, which the classifier did not
+  match, so it fell through to `Status::Failed` and told the operator
+  their valid file was **damaged**. Same shape as all three prior
+  instances (a guard correct for the case it was built against, silently
+  not reached by the adjacent case that arrives without its marker), and
+  worse in one specific way this project's own record had not yet seen:
+  **nothing broke.** No test failed, no build warned — the classifier
+  simply stopped covering the case it was written for, because that case
+  grew a second spelling and the guard knew only the first. Not
+  re-numbered, matching the third-instance precedent immediately above.
+  Full record: `ROADMAP.md`'s `0a79da4`+`e4b6533`+`2db435c` Shipped entry
+  (ninety-seventh filing).
 
 ## Update protocol
 

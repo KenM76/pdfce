@@ -45,6 +45,7 @@
 use std::path::Path;
 
 use pdfce_core::PdfVersion;
+use pdfce_core::crypto::AuthKind;
 use pdfce_core::dimension::Unit;
 use pdfce_core::edit::{CommandKind, InfoField};
 use pdfce_core::vector::{AxisConstraint, FillRule, PaintStyle, Rgb, SnapKind, TextBoundsBasis};
@@ -171,6 +172,15 @@ pub fn status_failed(path: &Path) -> String {
 /// [`canvas_unsupported`] for the full reasoning.
 pub fn status_unsupported(path: &Path) -> String {
     format!("Not supported yet: {}", file_name(path))
+}
+
+/// Status-bar line while a document is waiting for its password.
+///
+/// Says "password needed", never "could not open" — pdfce can open it and is
+/// waiting to be told how.
+#[must_use]
+pub fn status_needs_password(path: &Path) -> String {
+    format!("Password needed: {}", file_name(path))
 }
 
 // ---------------------------------------------------------------------------
@@ -1242,13 +1252,123 @@ truncated, or is not a PDF at all.\n\nTechnical detail: {message}",
 /// bug report needs and exactly what a non-technical reader should not
 /// have to parse first.
 pub fn canvas_unsupported(path: &Path, message: &str) -> String {
+    // The naming of the gap is left entirely to `message`, which comes from
+    // the core error and is specific ("AES-128 encryption is not implemented
+    // yet", "/R 6 ... cannot be implemented: its key-derivation algorithm is
+    // not available"). This wrapper used to assert the gap was "a
+    // cross-reference structure this version of pdfce does not read yet" —
+    // true when cross-reference streams were the live gap, and FALSE from the
+    // moment encryption took their place, which is where it was still sitting
+    // when a reader would have been told an AES file had a bad xref table.
+    // A wrapper that names the cause competes with the error that knows it.
     format!(
-        "pdfce cannot open this file yet:\n{}\n\nThe document uses a cross-reference \
-structure this version of pdfce does not read yet. Your file is almost certainly fine — \
+        "pdfce cannot open this file yet:\n{}\n\nYour file is almost certainly fine — \
 this is a gap in pdfce, not damage to the document, and pdfce stopped rather than risk \
-misreading it.\n\nTechnical detail: {message}",
+misreading it.\n\n{message}",
         path.display()
     )
+}
+
+/// Heading for the password prompt shown when an encrypted document needs one.
+#[must_use]
+pub fn password_prompt_heading() -> &'static str {
+    "This document is password-protected"
+}
+
+/// Body of the password prompt — names the file, as the other canvas states do.
+///
+/// Says explicitly that pdfce ALREADY TRIED without a password. ISO 32000-1
+/// §7.6.3.1 requires a reader to attempt the empty user password silently
+/// before prompting, so by the time this is on screen that attempt has been
+/// made and failed. Without that sentence the operator has no way to know
+/// whether pdfce is asking because it must or because it did not try.
+#[must_use]
+pub fn password_prompt_body(path: &Path) -> String {
+    format!(
+        "{}
+
+pdfce tried to open it without a password first, as PDF readers do, and the file declined. Enter the password to continue — either the user password or the owner password will open it.",
+        path.display()
+    )
+}
+
+/// Placeholder inside the password field.
+#[must_use]
+pub fn password_prompt_hint() -> &'static str {
+    "Password"
+}
+
+/// Shown after a typed password fails.
+///
+/// Factual, not scolding, and deliberately does not speculate about which
+/// password was meant — §7.6.3.1 accepts either, so "wrong user password" is
+/// a guess pdfce is not entitled to make.
+#[must_use]
+pub fn password_prompt_rejected() -> &'static str {
+    "That password did not open this document. Try again, or Cancel."
+}
+
+/// Label on the reveal-characters checkbox.
+#[must_use]
+pub fn password_prompt_show_label() -> &'static str {
+    "Show password"
+}
+
+/// Tooltip on the reveal-characters checkbox.
+///
+/// Carries the retention disclosure, because nothing else in the application
+/// says it and an operator opening a confidential document has every reason
+/// to wonder. It is true: the password is passed to
+/// `Document::load_with_password`, used to derive a key, and dropped — the
+/// `Document` deliberately does not retain the file encryption key either.
+#[must_use]
+pub fn password_prompt_show_tooltip() -> &'static str {
+    "Shows the characters as you type. pdfce does not save this password anywhere — it is used once, to open the file, and then discarded."
+}
+
+/// The submit button. Names the action rather than saying OK.
+#[must_use]
+pub fn password_prompt_unlock_button() -> &'static str {
+    "Unlock"
+}
+
+/// The abandon button.
+#[must_use]
+pub fn password_prompt_cancel_button() -> &'static str {
+    "Cancel"
+}
+
+/// The always-on disclosure for an encrypted document that opened.
+///
+/// One line, factual, no alarm. The `EmptyUser` wording is the one that
+/// earns its place: that document opened with no prompt at all, so this line
+/// is the operator's *only* indication the file is encrypted or that it
+/// carries declared permissions.
+#[must_use]
+pub fn encryption_status_line(auth: AuthKind) -> String {
+    let how = match auth {
+        AuthKind::EmptyUser => "it has no user password, so no password was needed to open it",
+        AuthKind::User => "opened with the user password",
+        AuthKind::Owner => "opened with the owner password, which grants full access",
+    };
+    format!("This document is encrypted — {how}.")
+}
+
+/// The save-refusal disclosure, shown when an encrypted document OPENS.
+///
+/// At open, not at save. An operator who edits for an hour and discovers at
+/// Ctrl+S that saving was never possible has been let down by a surface that
+/// knew the whole time.
+#[must_use]
+pub fn encryption_save_unsupported_note() -> &'static str {
+    "Saving is not available for this document: pdfce can decrypt an encrypted PDF to read and edit, but cannot write one back out yet."
+}
+
+/// Hover text on the Save / Save As controls while an encrypted document is
+/// open and they are consequently disabled.
+#[must_use]
+pub fn save_disabled_encrypted_tooltip() -> &'static str {
+    "pdfce cannot write an encrypted PDF yet, so this document cannot be saved."
 }
 
 /// Centered canvas message when the document loaded but a page failed
