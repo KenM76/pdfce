@@ -3282,6 +3282,17 @@ enum Command {
         /// dimensions off the geometry so the extension lines are visible.
         #[arg(long, default_value_t = 0.0, allow_hyphen_values = true)]
         offset: f64,
+        /// **Treat the two lines as parallel**, whatever the measured angle.
+        ///
+        /// Only meaningful with `--kind two-lines`. The CLI form of the
+        /// checkbox the operator asked for: for a pair that is nominally
+        /// parallel and arrived a fraction off from an exporter's rounding,
+        /// a scan, or a slightly-off original.
+        ///
+        /// The measured angle is still REPORTED — this overrides the
+        /// decision, not the measurement.
+        #[arg(long)]
+        treat_as_parallel: bool,
         /// Where the value text sits along the dimension line, in points from
         /// its midpoint (Pass 27.1). 0 is centred.
         #[arg(long, default_value_t = 0.0, allow_hyphen_values = true)]
@@ -4236,6 +4247,23 @@ enum DimKindArg {
     Radius,
     /// A diameter dimension over a best-fit circle (2×radius).
     Diameter,
+    /// ★ TWO LINES — pdfce decides which dimension they call for.
+    ///
+    /// Takes FOUR points: the first two are one line's endpoints, the second
+    /// two are the other's. What gets authored depends on the geometry, which
+    /// is the whole point of the mode:
+    ///
+    /// - **parallel** (within the `parallel_epsilon_degrees` setting) → a
+    ///   LINEAR ce dimension of the perpendicular distance between them.
+    /// - **at an angle** → an ANGULAR ce dimension of the angle between them.
+    /// - **collinear** → refused by name, because a zero-distance dimension
+    ///   is not a drawing anyone wanted.
+    ///
+    /// `--treat-as-parallel` forces the first reading regardless of the
+    /// measured angle — the CLI form of the checkbox the operator asked for,
+    /// for a pair he knows is nominally parallel and that arrived a fraction
+    /// off from an exporter's rounding.
+    TwoLines,
 }
 
 impl DimKindArg {
@@ -4245,6 +4273,12 @@ impl DimKindArg {
             DimKindArg::Linear => "linear",
             DimKindArg::Radius => "radius",
             DimKindArg::Diameter => "diameter",
+            // The token reports what was ASKED for. What was AUTHORED is
+            // reported separately by the handler, because for this mode they
+            // legitimately differ — that is the feature, not a discrepancy,
+            // and a report that showed only one of them would hide the
+            // decision pdfce made.
+            DimKindArg::TwoLines => "two-lines",
         }
     }
 }
@@ -5384,6 +5418,7 @@ fn run() -> ExitCode {
             group,
             constraint,
             offset,
+            treat_as_parallel,
             text_along,
             output,
             mode,
@@ -5396,6 +5431,7 @@ fn run() -> ExitCode {
             group,
             constraint,
             offset,
+            treat_as_parallel,
             text_along,
             output: &output,
             mode,
@@ -15197,6 +15233,8 @@ struct DimensionAddArgs<'a> {
     group: u32,
     constraint: ConstraintArg,
     offset: f64,
+    /// Force the parallel reading for `--kind two-lines` (operator override).
+    treat_as_parallel: bool,
     text_along: f64,
     output: &'a Path,
     mode: SaveMode,
@@ -15214,11 +15252,19 @@ fn cmd_dimension_add(args: &DimensionAddArgs<'_>) -> u8 {
         group,
         constraint,
         offset,
+        treat_as_parallel,
         text_along,
         output,
         mode,
         verify_undo,
     } = args;
+
+    // The operator's own near-parallel threshold. Read from the store rather
+    // than defaulted here, so the CLI and the GUI slider cannot disagree
+    // about when two lines count as parallel.
+    let (settings, settings_report) =
+        pdfce_core::settings::Settings::load(pdfce_core::settings::resolve_store());
+    report_settings(&settings_report);
 
     let Some(pts) = parse_dim_points(points) else {
         eprintln!(
@@ -15260,6 +15306,143 @@ fn cmd_dimension_add(args: &DimensionAddArgs<'_>) -> u8 {
             DimensionKind::Circular {
                 fit,
                 show_diameter: matches!(kind, DimKindArg::Diameter),
+            }
+        }
+        // ★ The two-line mode: pdfce reads the geometry and decides.
+        DimKindArg::TwoLines => {
+            use pdfce_core::vector::linepick::{
+                ParallelPolicy, PickedLine, TwoLineRelation, classify_two_lines,
+                measured_angle_degrees,
+            };
+            let [a1, a2, b1, b2, ..] = pts.as_slice() else {
+                eprintln!(
+                    "pdfce-cli: {}: --kind two-lines needs FOUR points — two for each \
+                     line: `x,y x,y  x,y x,y`",
+                    input.display()
+                );
+                return exit::EDIT_REFUSED;
+            };
+            // The pick point defaults to each segment's MIDPOINT.
+            //
+            // It is not decorative: two crossing lines bound four angles and
+            // the pick chooses which one. The midpoint means "the angle on
+            // the side the segments actually lie", which is the reading
+            // someone typing coordinates intends. A GUI operator picks it by
+            // clicking; there is no click here, so the choice is stated
+            // rather than left implicit.
+            let mk = |s: &pdfce_core::vector::Point, e: &pdfce_core::vector::Point| PickedLine {
+                object_index: 0,
+                subpath: 0,
+                segment: 0,
+                start: *s,
+                end: *e,
+                pick: pdfce_core::vector::Point::new(
+                    f64::midpoint(s.x, e.x),
+                    f64::midpoint(s.y, e.y),
+                ),
+            };
+            let (la, lb) = (mk(a1, a2), mk(b1, b2));
+            let mut policy = ParallelPolicy::from_setting(settings.parallel_epsilon_degrees);
+            if treat_as_parallel {
+                policy = policy.forcing_parallel();
+            }
+            let Some(relation) = classify_two_lines(&la, &lb, policy) else {
+                eprintln!(
+                    "pdfce-cli: {}: one of those lines has zero length — two distinct \
+                     points are needed per line",
+                    input.display()
+                );
+                return exit::EDIT_REFUSED;
+            };
+            // Disclose the measurement AND the decision taken from it, always.
+            // The operator gave four numbers; what pdfce did with them is an
+            // inference, and rule 4 says an inference is stated rather than
+            // silently applied.
+            if let Some(measured) = measured_angle_degrees(&la, &lb) {
+                println!(
+                    "  two_lines measured_angle={measured:.3} epsilon={} forced={}",
+                    settings.parallel_epsilon_degrees,
+                    u32::from(treat_as_parallel)
+                );
+            }
+            match relation {
+                TwoLineRelation::Collinear => {
+                    eprintln!(
+                        "pdfce-cli: {}: those two lines are COLLINEAR — they lie on the \
+                         same line, so the distance between them is zero and there is no \
+                         angle. Nothing was authored.",
+                        input.display()
+                    );
+                    return exit::EDIT_REFUSED;
+                }
+                TwoLineRelation::Parallel { distance } => {
+                    println!("  two_lines authored=linear distance={distance:.4}");
+                    // The dimension runs perpendicular between the two lines,
+                    // anchored at the first line's pick and reaching the
+                    // second — which is the measurement just reported, drawn.
+                    let (ux, uy) = la.direction().unwrap_or((1.0, 0.0));
+                    let (nx, ny) = (-uy, ux);
+                    // Sign the normal toward the OTHER line, so the dimension
+                    // spans the gap instead of pointing away from it.
+                    let toward = (lb.pick.x - la.pick.x).mul_add(nx, (lb.pick.y - la.pick.y) * ny);
+                    let sign = if toward < 0.0 { -1.0 } else { 1.0 };
+                    DimensionKind::Linear {
+                        a: la.pick,
+                        b: pdfce_core::vector::Point::new(
+                            (nx * sign).mul_add(distance, la.pick.x),
+                            (ny * sign).mul_add(distance, la.pick.y),
+                        ),
+                        constraint: constraint.to_core(),
+                        offset,
+                        text_along,
+                    }
+                }
+                TwoLineRelation::Angled {
+                    degrees,
+                    apex,
+                    apex_is_real,
+                } => {
+                    println!(
+                        "  two_lines authored=angular degrees={degrees:.3} \
+                         apex={:.2},{:.2} apex_is_real={}",
+                        apex.x,
+                        apex.y,
+                        u32::from(apex_is_real)
+                    );
+                    if !apex_is_real {
+                        // Not a refusal — CAD drawings dimension a virtual
+                        // apex routinely. But it is a fact about the drawing
+                        // the operator may not have realised, so it is said.
+                        eprintln!(
+                            "pdfce-cli: {}: the two lines do not actually meet — the angle \
+                             is measured at where they WOULD cross if extended.",
+                            input.display()
+                        );
+                    }
+                    let dir = |p: &PickedLine| {
+                        let (dx, dy) = (p.pick.x - apex.x, p.pick.y - apex.y);
+                        let len = dx.hypot(dy);
+                        if len <= f64::EPSILON {
+                            pdfce_core::vector::Point::new(1.0, 0.0)
+                        } else {
+                            pdfce_core::vector::Point::new(dx / len, dy / len)
+                        }
+                    };
+                    DimensionKind::Angular {
+                        apex,
+                        dir_a: dir(&la),
+                        dir_b: dir(&lb),
+                        // The arc radius defaults to a readable fraction of
+                        // the shorter arm, so the mark sits ON the geometry
+                        // rather than at an arbitrary distance from it.
+                        radius: if offset.abs() > f64::EPSILON {
+                            offset.abs()
+                        } else {
+                            (la.length().min(lb.length()) * 0.5).max(20.0)
+                        },
+                        text_along,
+                    }
+                }
             }
         }
     };
