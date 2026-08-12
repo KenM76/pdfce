@@ -979,6 +979,80 @@ enum Command {
         output: PathBuf,
     },
 
+    /// **Remove embedded font programs** — a DRY RUN unless `--apply`.
+    ///
+    /// The first destructive font operation. It strikes `/FontFile`,
+    /// `/FontFile2` or `/FontFile3` from the `/FontDescriptor` (§9.9
+    /// Table 126), leaving a font reference the reader satisfies by
+    /// substitution, and frees the program's object.
+    ///
+    /// ★ ONLY a font whose `list-fonts` verdict is `removable` may go.
+    /// Every other font is refused **by name, with its reason printed** —
+    /// never silently, never merely missing from the output. That is a
+    /// deliberate divergence from Acrobat, which refuses the same fonts by
+    /// leaving them out of its list with no explanation anywhere. Measured
+    /// across 400 real files, refusal is the majority case: of 117 embedded
+    /// fonts, 48 % removable, 34 % blocked by glyph-index encoding, 13 %
+    /// symbolic-with-built-in-encoding, 3 % Type 3, 2 % unreadable.
+    ///
+    /// ★ APPEARANCE CHANGES. `/Widths` is preserved, so every glyph keeps
+    /// its exact advance, but the substituted face's own shapes and widths
+    /// are not those numbers. Text sits in the same places and looks
+    /// different. This is a certainty, not a risk.
+    ///
+    /// ★ BYTES ARE RECLAIMED BY `--mode full`, NOT by the default
+    /// incremental save. An incremental update appends a revision; the
+    /// freed program's bytes stay in the prior revision and the file gets
+    /// LARGER. Both numbers are printed so the difference cannot be missed.
+    ///
+    /// By default the six-letter §9.6.4 subset tag is stripped from
+    /// `/BaseFont` and `/FontName` together (Table 122 makes them equal by
+    /// `shall`), because `ABCDEF+Arial` matches no installed font once the
+    /// program is gone. `--keep-subset-tag` leaves both alone.
+    ///
+    /// A PDF/A-identified document is refused unless `--acknowledge-pdfa`:
+    /// every part of ISO 19005 requires embedded fonts, so unembedding
+    /// breaks the conformance the file claims about itself.
+    UnembedFont {
+        /// Input PDF.
+        input: PathBuf,
+        /// A font to unembed, by `/BaseFont` or by its family name — both
+        /// `ABCDEF+Arial` and `Arial` work. Repeatable. A name that matches
+        /// nothing is reported and exits non-zero.
+        #[arg(long, group = "which")]
+        font: Vec<String>,
+        /// Unembed every font whose verdict is `removable`.
+        #[arg(long, group = "which")]
+        all_removable: bool,
+        /// Actually write the output. Without it this is a DRY RUN: the
+        /// full report is printed and no file is written.
+        ///
+        /// Inverted from most tools on purpose, the same way `print`
+        /// requires `--send`: this removes something the file cannot get
+        /// back, so the default has to be the one that cannot surprise
+        /// anybody.
+        #[arg(long)]
+        apply: bool,
+        /// Output path. Required with `--apply`.
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        /// Which save path to use. `full` is the one that actually
+        /// reclaims the bytes — see the command description.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Verify that undoing the operation reproduces the input byte for
+        /// byte.
+        #[arg(long)]
+        verify_undo: bool,
+        /// Leave the §9.6.4 subset tag on `/BaseFont` and `/FontName`.
+        #[arg(long)]
+        keep_subset_tag: bool,
+        /// Proceed on a document that identifies itself as PDF/A.
+        /// Unembedding breaks that conformance; this says you know.
+        #[arg(long)]
+        acknowledge_pdfa: bool,
+    },
+
     /// Apply redactions: TRULY REMOVE the marked content (§12.5.6.23).
     ///
     /// The one destructive, irreversible operation in pdfce (R35). It
@@ -5464,6 +5538,27 @@ fn run() -> ExitCode {
             fill: fill.as_deref(),
             overlay_text: overlay_text.as_deref(),
             output: &output,
+        }),
+        Command::UnembedFont {
+            input,
+            font,
+            all_removable,
+            apply,
+            output,
+            mode,
+            verify_undo,
+            keep_subset_tag,
+            acknowledge_pdfa,
+        } => cmd_unembed_font(&UnembedArgs {
+            input: &input,
+            fonts: &font,
+            all_removable,
+            apply,
+            output: output.as_deref(),
+            mode,
+            verify_undo,
+            keep_subset_tag,
+            acknowledge_pdfa,
         }),
         Command::RedactApply {
             input,
@@ -11904,6 +11999,313 @@ fn cmd_format_text(args: &FormatTextArgs<'_>) -> u8 {
         println!("    - {d}");
     }
     exit::SUCCESS
+}
+
+/// `unembed-font` — remove embedded font programs, dry-run by default.
+///
+/// # Why the dry run is the default
+///
+/// `print` requires `--send` before paper moves; this requires `--apply`
+/// before bytes move, for the same reason and one more. Unembedding is not
+/// reversible from the output file: the program is gone from it, and the
+/// only copy of the original is the input the operator still has. A default
+/// that writes would make "I wanted to see what it would do" and "do it"
+/// the same command.
+///
+/// The dry run runs the **whole** operation — the inventory, the plan, the
+/// sharing census, the PDF/A detection — and prints exactly what `--apply`
+/// would print, minus the save. Nothing is estimated.
+///
+/// # Why every refusal is printed, and Acrobat prints none
+///
+/// Acrobat refuses a font whose character codes are glyph indices into its
+/// own embedded program by leaving it out of the unembed list, with no
+/// reason shown anywhere (sourced to a former Adobe Principal Scientist in
+/// `Acrobat_Features/optimize__font_unembedding.md`). A shorter list is not
+/// actionable. Refusal is also the *majority* path here — 52 % of embedded
+/// fonts across a 400-file corpus — so a command that quietly did less than
+/// asked would be the normal experience of using it.
+///
+/// # Why two byte figures are printed and not one
+///
+/// `reclaim_on_full` is what a full rewrite drops. `reclaim_now` is what
+/// this save actually drops, which for the default incremental mode is
+/// **zero** — §7.5.6's update section is appended, so the freed program's
+/// bytes are still in the prior revision and the output is larger than the
+/// input. An operator whose whole goal is a smaller file is exactly the
+/// operator most likely to read one number and stop, so both are on the
+/// line and the difference is stated on stderr when it bites.
+fn cmd_unembed_font(args: &UnembedArgs<'_>) -> u8 {
+    use pdfce_core::edit::EditError;
+    use pdfce_core::font_unembed::{PdfaClaim, UnembedRequest, UnembedSelection};
+
+    if args.apply && args.output.is_none() {
+        eprintln!("pdfce-cli: --apply needs --output <PATH>; a dry run needs neither");
+        return exit::EDIT_REFUSED;
+    }
+
+    let (source, mut session) = match open_for_edit(args.input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    let selection = if args.all_removable {
+        UnembedSelection::AllRemovable
+    } else {
+        UnembedSelection::Named(args.fonts.to_vec())
+    };
+    // Built through the constructors rather than a struct literal:
+    // `UnembedRequest` is `#[non_exhaustive]`, which is the API-guidelines
+    // posture for a request type that will grow options.
+    let request = match selection {
+        UnembedSelection::AllRemovable => UnembedRequest::all_removable(),
+        UnembedSelection::Named(names) => UnembedRequest::named(names),
+        _ => UnembedRequest::all_removable(),
+    };
+    let request = if args.keep_subset_tag {
+        request.keeping_subset_tag()
+    } else {
+        request
+    };
+
+    // The plan is computed ONCE and printed before anything is decided, so
+    // the dry run and the apply are looking at the same evidence.
+    let plan = session.unembed_preview(&request);
+
+    println!("unembed-font {}", args.input.display());
+    for t in &plan.targets {
+        let name = t.base_font.as_deref().unwrap_or("-");
+        let rename = t
+            .rename
+            .as_deref()
+            .map_or_else(|| "unchanged".to_owned(), |n| format!("{n:?}"));
+        let shared = if t.program_shared_with.is_empty() {
+            String::new()
+        } else {
+            let ids: Vec<String> = t
+                .program_shared_with
+                .iter()
+                .map(|id| format!("{}", id.num))
+                .collect();
+            format!(" program_shared_with={}", ids.join(","))
+        };
+        println!(
+            "  unembed name={name:?} obj={} key={} bytes={} freed={} rename={rename} \
+charset_removed={} cidset_removed={} pages={}{shared}",
+            t.id.num,
+            t.program_key.label(),
+            t.stored_bytes,
+            u32::from(t.program_freed),
+            u32::from(t.char_set_removed),
+            u32::from(t.cid_set_removed),
+            pdfce_core::fontinfo::format_page_ranges(&t.pages),
+        );
+    }
+    // ★ The disclosure Acrobat does not make. Every refused font, by name,
+    // on stdout with the rest of the report — not hidden on stderr and not
+    // omitted, because a font that is missing from both lists is the exact
+    // silence this command exists to break.
+    for b in &plan.blocked {
+        let name = b.base_font.as_deref().unwrap_or("-");
+        let obj =
+            b.id.map_or_else(|| "direct".to_owned(), |id| format!("{}", id.num));
+        println!(
+            "  refused name={name:?} obj={obj} bytes={} verdict={}",
+            b.stored_bytes,
+            b.blocker.token(),
+        );
+        println!("    reason: {}", b.blocker.reason());
+    }
+    for name in &plan.unmatched {
+        println!("  unmatched {name:?}");
+    }
+
+    let reclaim_on_full = plan.bytes_reclaimable();
+    let reclaim_now = if matches!(args.mode, SaveMode::Full) {
+        reclaim_on_full
+    } else {
+        0
+    };
+    println!(
+        "  fonts={} refused={} unmatched={} reclaim_on_full={reclaim_on_full} \
+reclaim_now={reclaim_now} pdfa={} mode={} applied={}",
+        plan.targets.len(),
+        plan.blocked.len(),
+        plan.unmatched.len(),
+        plan.pdfa.token(),
+        args.mode.name(),
+        u32::from(args.apply),
+    );
+
+    // ★ Appearance change, stated as a fact and not a risk, whether or not
+    // this run writes anything. It is the consequence an operator is least
+    // likely to have thought about and the one they cannot see in a report.
+    if !plan.targets.is_empty() {
+        eprintln!(
+            "pdfce-cli: {}: the pages using these fonts WILL LOOK DIFFERENT. Each glyph keeps its \
+exact advance (/Widths is preserved), but the substituted face's own shapes and widths are not \
+those numbers, so letters sit differently inside correctly-placed cells.",
+            args.input.display()
+        );
+    }
+    if plan.renames_any() {
+        eprintln!(
+            "pdfce-cli: {}: the six-letter subset tag is being removed from /BaseFont and \
+/FontName (ISO 32000-1 §9.6.4, Table 122), because a name like ABCDEF+Arial matches no installed \
+font once the program is gone. Pass --keep-subset-tag to leave both alone.",
+            args.input.display()
+        );
+    }
+    if !matches!(args.mode, SaveMode::Full) && reclaim_on_full > 0 {
+        eprintln!(
+            "pdfce-cli: {}: an incremental save RECLAIMS NOTHING — ISO 32000-1 §7.5.6's update \
+section is appended, so the removed program's {reclaim_on_full} byte(s) stay in the prior \
+revision and the output is LARGER than the input. Use --mode full to drop them.",
+            args.input.display()
+        );
+    }
+    for t in &plan.targets {
+        if t.program_freed {
+            continue;
+        }
+        eprintln!(
+            "pdfce-cli: {}: {:?}'s font program is also reached by {} other font(s) that are NOT \
+being unembedded, so the program object stays in the file. This font is unembedded; its bytes \
+are not recovered.",
+            args.input.display(),
+            t.base_font.as_deref().unwrap_or("-"),
+            t.program_shared_with.len(),
+        );
+    }
+
+    // PDF/A: refused before anything is written unless acknowledged. Unlike
+    // redaction's residuals — which are only knowable after the removal —
+    // this is knowable in advance, so the operator gets the choice rather
+    // than the news.
+    if let PdfaClaim::Identified { part, conformance } = &plan.pdfa {
+        let level = format!(
+            "PDF/A-{}{}",
+            part.as_deref().unwrap_or("?"),
+            conformance.as_deref().unwrap_or("")
+        );
+        eprintln!(
+            "pdfce-cli: {}: this document identifies itself as {level} (XMP pdfaid). EVERY part \
+of ISO 19005 requires fonts to be embedded, so unembedding breaks that conformance, and pdfce \
+does not remove or correct the claim for you.",
+            args.input.display()
+        );
+        if args.apply && !args.acknowledge_pdfa {
+            eprintln!(
+                "pdfce-cli: refusing to write: pass --acknowledge-pdfa to proceed anyway. \
+Nothing has been changed."
+            );
+            return exit::EDIT_REFUSED;
+        }
+    } else if matches!(plan.pdfa, PdfaClaim::MetadataUnreadable) {
+        eprintln!(
+            "pdfce-cli: {}: this document's XMP metadata could not be read, so pdfce could NOT \
+check whether it claims PDF/A conformance. That is not the same as finding no claim.",
+            args.input.display()
+        );
+    }
+
+    if !plan.unmatched.is_empty() {
+        eprintln!(
+            "pdfce-cli: {}: {} --font name(s) matched no font in this document. Run `list-fonts` \
+to see the names it actually carries.",
+            args.input.display(),
+            plan.unmatched.len()
+        );
+        return exit::EDIT_REFUSED;
+    }
+
+    if !args.apply {
+        if plan.targets.is_empty() {
+            eprintln!(
+                "pdfce-cli: {}: DRY RUN — nothing would be unembedded. Every refusal is printed \
+above with its reason.",
+                args.input.display()
+            );
+            return exit::EDIT_REFUSED;
+        }
+        eprintln!(
+            "pdfce-cli: {}: DRY RUN — no file was written. Re-run with --apply --output <PATH> \
+to perform this.",
+            args.input.display()
+        );
+        return exit::SUCCESS;
+    }
+
+    let applied = match session.unembed_fonts(&request) {
+        Ok(applied) => applied,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", args.input.display());
+            return match err {
+                EditError::PageTree(_) => exit::RUNTIME_ERROR,
+                _ => exit::EDIT_REFUSED,
+            };
+        }
+    };
+    // The plan the operator read and the plan that ran are the same value,
+    // produced by the same function. Saying so costs one comparison and
+    // makes a future divergence a test failure rather than a surprise.
+    debug_assert_eq!(applied.targets.len(), plan.targets.len());
+
+    // A signed document: disclosed, never silently broken. `impact_of` is
+    // asked AFTER the edit and immediately before the save, because §11.1
+    // makes the dirty set a save-time diff — the answer is not knowable at
+    // edit time.
+    let impact = session.signature_impact_of_save(match args.mode {
+        SaveMode::Incremental => CoreSaveMode::Incremental,
+        SaveMode::Full => CoreSaveMode::FullRewrite,
+    });
+    println!("  signature_impact={impact:?}");
+
+    let Some(output) = args.output else {
+        eprintln!("pdfce-cli: --apply needs --output <PATH>");
+        return exit::EDIT_REFUSED;
+    };
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        output,
+        args.mode,
+        ProducerArg::Preserve,
+        args.verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "  wrote {} objects={} verbatim={} reserialized={} appended={} out_bytes={} \
+in_bytes={} undo_verified={} undo_identical={}",
+        output.display(),
+        r.objects_written,
+        r.objects_verbatim,
+        r.objects_reserialized,
+        r.bytes_appended,
+        r.bytes_written,
+        source.len(),
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    finish_edit(args.input, &outcome)
+}
+
+/// The parsed `unembed-font` flags, gathered so the implementation takes one
+/// parameter rather than nine — `clippy::too_many_arguments` is a real
+/// readability signal here and not a formality.
+struct UnembedArgs<'a> {
+    input: &'a Path,
+    fonts: &'a [String],
+    all_removable: bool,
+    apply: bool,
+    output: Option<&'a Path>,
+    mode: SaveMode,
+    verify_undo: bool,
+    keep_subset_tag: bool,
+    acknowledge_pdfa: bool,
 }
 
 fn cmd_redact_apply(input: &Path, output: &Path, acknowledge_residuals: bool) -> u8 {
