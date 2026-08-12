@@ -84,6 +84,7 @@ pub mod export;
 pub mod fdf;
 pub mod filters;
 pub mod font_embed;
+pub mod font_unembed;
 pub mod fontdata;
 pub mod fontinfo;
 pub mod form_script;

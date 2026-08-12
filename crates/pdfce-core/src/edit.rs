@@ -132,6 +132,7 @@ use crate::dimension::{
     author_dimension, build_ocg, build_ocproperties, deserialize_model, serialize_model,
 };
 use crate::document::Document;
+use crate::font_unembed::{self, UnembedPlan, UnembedRequest};
 use crate::fontdata::Std14;
 use crate::forms::{self, ButtonKind, Field, FieldType};
 use crate::forms_author::{self, FieldPath, FieldShape, FormAuthorError};
@@ -546,6 +547,25 @@ pub enum CommandKind {
     /// re-serialized. A NEW stream is appended to the `/Contents` array
     /// (§7.8.2) and the originals stay byte-verbatim.
     AddImage,
+    /// Embedded font programs were REMOVED (`Pass 67.0` phase B): the
+    /// `/FontFile*` entry struck from each descriptor, `/CIDSet` and
+    /// `/CharSet` struck with it, the §9.6.4 subset tag dropped from
+    /// `/BaseFont` and `/FontName` together, and the program streams freed
+    /// — all as ONE undo entry. See [`EditSession::unembed_fonts`].
+    ///
+    /// SUBTRACTIVE, and the first destructive operation pdfce performs on a
+    /// font. One entry however many fonts, for the same reason
+    /// [`Self::FlattenFields`] is one: "unembed every removable font" is a
+    /// single gesture, and a partial undo of it would leave a document the
+    /// operator never asked for and could not describe.
+    ///
+    /// Carries a count so a front end can label its Undo control with the
+    /// magnitude. It cannot carry names: `CommandKind` is `Copy`, and a
+    /// `Vec<String>` would cost that for a label's sake.
+    UnembedFonts {
+        /// How many fonts lost their embedded program.
+        count: usize,
+    },
 }
 
 /// Which geometric-markup subtype [`EditSession::add_markup`] authored,
@@ -2613,6 +2633,22 @@ pub enum EditError {
     /// would be an invisible annotation the operator could not find.
     #[error("the annotation has no geometry to draw")]
     EmptyGeometry,
+    /// [`EditSession::unembed_fonts`] selected no font it could act on.
+    ///
+    /// An error rather than a successful no-op, because "nothing happened"
+    /// and "it worked" must not share an exit path: a caller that asked to
+    /// unembed a font and got `Ok` would report success over a document it
+    /// did not change. The count of refused candidates travels with it so
+    /// the caller can still explain *why* — the refusals themselves are in
+    /// the plan, and this error means only that none of them could proceed.
+    #[error(
+        "no font could be unembedded: {blocked} candidate font(s) were refused, each for a \
+         stated reason"
+    )]
+    NoFontsToUnembed {
+        /// How many fonts were examined and refused.
+        blocked: usize,
+    },
     /// A text-bearing annotation's variable-text appearance could not be
     /// generated (Pass 6.2, §12.7.3.3) — e.g. a symbolic font was chosen
     /// for a Latin text body. Named, never a silent blank appearance.
@@ -15504,6 +15540,257 @@ impl EditSession {
             trailer: None,
         });
         Ok(())
+    }
+
+    // -- font unembedding (Pass 67.0 phase B) -------------------------
+
+    /// What [`Self::unembed_fonts`] would do, computed without changing
+    /// anything.
+    ///
+    /// A **pure query** — it builds the font inventory, resolves object
+    /// identities and reads the XMP packet, and mutates nothing, so a front
+    /// end may call it to decide whether to *offer* a control (R83: ask
+    /// before offering) and to render the pre-commit disclosure.
+    ///
+    /// The returned [`UnembedPlan`] is the same value
+    /// [`Self::unembed_fonts`] returns, produced by the same function, so a
+    /// preview and a commit cannot disagree about what happened.
+    ///
+    /// ⚠️ Not free. The inventory sweep decodes every embedded font program
+    /// (it must, to read the `OS/2` table), so this is a
+    /// once-per-interaction call, never a per-frame one. The GUI caches the
+    /// inventory on the open document for exactly this reason.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use pdfce_core::{document::Document, edit::EditSession};
+    /// # use pdfce_core::font_unembed::UnembedRequest;
+    /// # fn demo(doc: Document) {
+    /// let session = EditSession::new(doc);
+    /// let plan = session.unembed_preview(&UnembedRequest::all_removable());
+    /// for blocked in &plan.blocked {
+    ///     // Every refusal is named, with its reason — never silently absent.
+    ///     eprintln!("{:?}: {}", blocked.base_font, blocked.blocker.reason());
+    /// }
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn unembed_preview(&self, request: &UnembedRequest) -> UnembedPlan {
+        let view = self.view();
+        let inventory = crate::fontinfo::inventory(&view);
+        font_unembed::plan(&view, &inventory, request)
+    }
+
+    /// Why [`Self::unembed_fonts`] would refuse this document outright, or
+    /// `None`.
+    ///
+    /// Document-level refusals only — the per-font ones are data in the
+    /// plan, not errors, because a document with one blocked font and nine
+    /// removable ones is a document where the operation should still run.
+    ///
+    /// A **pure query**, safe to call every frame (R83).
+    ///
+    /// # ★ PDF/A is deliberately NOT here
+    ///
+    /// A PDF/A-identified document is not refused by the core. Unembedding
+    /// genuinely breaks that conformance — every part of ISO 19005 requires
+    /// embedded fonts — but it is a consequence the operator may knowingly
+    /// accept, not a structural impossibility. The core *reports* it
+    /// ([`UnembedPlan::pdfa`]) and the shells gate on it; putting the gate
+    /// here would make a library refuse an operation its caller had already
+    /// disclosed and confirmed.
+    #[must_use]
+    pub fn unembed_refusal(&self) -> Option<EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Some(EditError::DocumentEncrypted);
+        }
+        self.check_certification().err()
+    }
+
+    /// **Remove embedded font programs**, as ONE undoable command.
+    ///
+    /// The first destructive operation on a document's fonts. Everything it
+    /// does is described in [`crate::font_unembed`]'s module docs; this is
+    /// the committing half.
+    ///
+    /// # What one call writes
+    ///
+    /// Per target font: the `/FontDescriptor` loses its `/FontFile`,
+    /// `/FontFile2` or `/FontFile3` entry (§9.9 Table 126), plus `/CIDSet`
+    /// and `/CharSet` if present; the font dictionary's `/BaseFont` and the
+    /// descriptor's `/FontName` lose their §9.6.4 subset tag together
+    /// (Table 122 makes the two equal by `shall`); and the font-program
+    /// object — and any `/CIDSet` stream — is freed.
+    ///
+    /// **No content stream is touched.** Not one text-showing operator
+    /// changes, and `/Widths` is left exactly as it was, so every glyph
+    /// keeps its advance. What changes is which face draws inside those
+    /// advances.
+    ///
+    /// # ONE undo entry, however many fonts
+    ///
+    /// §11.3's rule: one operator gesture is one undo entry. "Unembed every
+    /// removable font" is one gesture, and a partial undo of it — three
+    /// fonts restored, four not — is a document state the operator never
+    /// asked for and could not describe.
+    ///
+    /// # ★ Bytes are reclaimed by a FULL REWRITE, not by this call
+    ///
+    /// [`UnembedPlan::bytes_reclaimable`] is what a full rewrite drops. An
+    /// incremental save (the default) *appends* an update section, so the
+    /// freed objects' bytes stay in the prior revision and the file gets
+    /// **larger**. The operation is still correct — a conforming reader
+    /// follows the newest cross-reference section and sees no font program —
+    /// but an operator whose goal is a smaller file needs
+    /// [`Self::to_full_bytes`]. Every shell that reports the byte figure
+    /// must report the mode that delivers it.
+    ///
+    /// # Errors
+    ///
+    /// - [`EditError::DocumentEncrypted`] — pdfce does not yet write
+    ///   encrypted files, so a mutation would corrupt the per-object
+    ///   encryption. Checked **before any mutation**.
+    /// - [`EditError::CertificationForbidsChange`] — §12.8.2.2 Table 254.
+    ///   Unembedding is not annotation work, so the strict gate applies:
+    ///   `P = 1` and `P = 2` both refuse.
+    /// - [`EditError::NoFontsToUnembed`] — the plan selected nothing. Its
+    ///   payload carries the plan, so a caller can still show *why* every
+    ///   candidate refused rather than reporting a bare failure.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use pdfce_core::{document::Document, edit::EditSession};
+    /// # use pdfce_core::font_unembed::UnembedRequest;
+    /// # fn demo(doc: Document) -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut session = EditSession::new(doc);
+    /// let plan = session.unembed_fonts(&UnembedRequest::all_removable())?;
+    /// println!("{} font(s), {} bytes on a full rewrite", plan.targets.len(), plan.bytes_reclaimable());
+    /// session.undo();
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn unembed_fonts(&mut self, request: &UnembedRequest) -> Result<UnembedPlan, EditError> {
+        // Every refusal fires BEFORE any mutation (rule 4).
+        if let Some(err) = self.unembed_refusal() {
+            return Err(err);
+        }
+
+        let plan = self.unembed_preview(request);
+        if plan.targets.is_empty() {
+            return Err(EditError::NoFontsToUnembed {
+                blocked: plan.blocked.len(),
+            });
+        }
+
+        // Dictionary edits are accumulated by object id rather than pushed
+        // as they are computed. Two target fonts may legitimately share one
+        // `/FontDescriptor` (both are targets, or the plan would have
+        // blocked them), and two `ObjectWrite`s for one id would each carry
+        // a `before` taken from the same unmodified value — so the second
+        // would discard the first's edit. Keying by id makes the second
+        // edit land on the first's result, which is also what keeps the
+        // update section carrying each object once (§7.5.6).
+        let mut edits: BTreeMap<ObjId, Dict> = BTreeMap::new();
+        let mut removals: Vec<Removal> = Vec::new();
+
+        for target in &plan.targets {
+            // The font dictionary — `/BaseFont`, and the descriptor itself
+            // when it is written inline.
+            let font_dict = match edits.get(&target.id) {
+                Some(d) => d.clone(),
+                None => match self.value(target.id).and_then(Object::as_dict) {
+                    Some(d) => d.clone(),
+                    // The plan resolved this id from the same session state,
+                    // so this cannot normally fire; skipping is the
+                    // fail-clean answer and the target simply contributes
+                    // nothing rather than the whole operation failing.
+                    None => continue,
+                },
+            };
+            let mut updated_font = font_dict;
+            let mut font_changed = false;
+
+            if let Some(new_name) = &target.rename {
+                updated_font.insert(
+                    Name::from(b"BaseFont"),
+                    Object::Name(Name(new_name.as_bytes().to_vec())),
+                );
+                font_changed = true;
+            }
+
+            match target.descriptor_id {
+                Some(descriptor_id) => {
+                    let descriptor = match edits.get(&descriptor_id) {
+                        Some(d) => d.clone(),
+                        None => match self.value(descriptor_id).and_then(Object::as_dict) {
+                            Some(d) => d.clone(),
+                            None => continue,
+                        },
+                    };
+                    let mut updated = descriptor;
+                    if font_unembed::strip_descriptor(&mut updated, target) {
+                        edits.insert(descriptor_id, updated);
+                    }
+                }
+                None => {
+                    // A direct descriptor: the plan only reaches here when
+                    // it sits in the font dictionary itself, so writing the
+                    // font dictionary writes it.
+                    if let Some(Object::Dict(inline)) = updated_font.get(b"FontDescriptor") {
+                        let mut updated = inline.clone();
+                        if font_unembed::strip_descriptor(&mut updated, target) {
+                            updated_font
+                                .insert(Name::from(b"FontDescriptor"), Object::Dict(updated));
+                            font_changed = true;
+                        }
+                    }
+                }
+            }
+
+            if font_changed {
+                edits.insert(target.id, updated_font);
+            }
+
+            // Freed objects. `program_freed` is false when another font
+            // that is NOT in this operation still reaches the stream — the
+            // key comes out of this descriptor either way, but the bytes
+            // stay, because freeing them would blank that font.
+            let freed = target
+                .program_id
+                .filter(|_| target.program_freed)
+                .into_iter()
+                .chain(target.cid_set_id);
+            for id in freed {
+                if self.base.get(id).is_some() || self.state.contains_key(&id) {
+                    removals.push(Removal {
+                        id,
+                        was_deleted: self.deleted.contains(&id),
+                        is_deleted: true,
+                    });
+                }
+            }
+        }
+
+        let objects: Vec<ObjectWrite> = edits
+            .into_iter()
+            .map(|(id, dict)| ObjectWrite {
+                id,
+                before: self.state.get(&id).cloned(),
+                after: Some(Object::Dict(dict)),
+            })
+            .collect();
+
+        self.commit(Command {
+            kind: CommandKind::UnembedFonts {
+                count: plan.targets.len(),
+            },
+            objects,
+            removals,
+            trailer: None,
+        });
+        Ok(plan)
     }
 
     /// **Move a ce dimension** by a page-space `(dx, dy)`, as one undoable
