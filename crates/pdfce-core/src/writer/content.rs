@@ -460,6 +460,33 @@ impl ContentBuilder {
         self.op1(size, b"Tf");
     }
 
+    /// `mode Tr` — set the text rendering mode (§9.3.6, Table 106).
+    ///
+    /// The value pdfce cares about most is **3, "neither fill nor stroke text
+    /// (invisible)"** — the mechanism an OCR text layer uses to sit over a
+    /// scanned image without painting anything. The page keeps the appearance
+    /// of the original scan while the text becomes selectable, searchable and
+    /// extractable.
+    ///
+    /// Two Table 106 rules a caller has to respect, neither of which this
+    /// method can enforce:
+    ///
+    /// - Modes 4–7 accumulate a CLIPPING path, and §9.3.6 requires that the
+    ///   mode "shall not be changed back to a nonclipping mode" before the
+    ///   `ET` that ends the text object.
+    /// - Text state is NOT reset by `BT` (§9.4.1 — only `Tm`/`Tlm` are), so a
+    ///   mode set in one text object persists into the next one in the same
+    ///   content stream. A caller that sets 3 and does not set it back has
+    ///   made everything after it invisible too.
+    ///
+    /// Takes `u8` rather than an enum deliberately: Table 106 defines exactly
+    /// eight values, but the operand is an integer and a malformed document
+    /// may carry anything. This is the WRITER, so callers pass a literal from
+    /// the table; the reader is where an out-of-range value gets a policy.
+    pub fn set_render_mode(&mut self, mode: u8) {
+        self.op1(f64::from(mode), b"Tr");
+    }
+
     /// `l TL` — set the text leading (line spacing) in unscaled text
     /// units (§9.3.5). Consumed by `T*` and `'`; the variable-text
     /// generator uses explicit `Td` moves instead, but sets `TL` for

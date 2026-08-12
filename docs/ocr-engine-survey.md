@@ -1784,7 +1784,7 @@ here — it is copying that raises the question.
 | Code licence | MIT OR Apache-2.0 | Apache-2.0 + BSD-2 + MIT | Apache-2.0 | MIT OR Apache-2.0 |
 | **Model licence** | **⚠ CC-BY-SA-4.0** | Apache-2.0 | Apache-2.0 repo, **weights unconfirmed** | n/a (OS) |
 | Shipped size | **12.24 MB** | ~28 MB (MSVC, projected) – ~54 MB (MinGW, measured) | **3.2–21 MB** | **0 MB** |
-| Files added to folder | 2 | 20 files + 2 traineddata | 0 | 0 |
+| Files added to folder | 2 models | 20 binaries + 2 traineddata | 2 models, **0 DLLs** | 0 |
 | Build toolchain | **none — cargo only** | none (subprocess) / CMake+MSVC (FFI) | MSVC (static link) | none |
 | **wasm32 CI gate (§2.2)** | **✅ PASSES — measured** | ❌ impossible | ❌ impossible | ❌ impossible |
 | **Per-word confidence** | **❌ none** | **✅ yes** | ✅ yes | ❌ none |
