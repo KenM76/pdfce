@@ -351,7 +351,38 @@ become a ce dimension because pdfce can see it.
   to accept that narrowing, or retire the item outright, is question
   (p) for Ken. See `ROADMAP.md`'s XFA backlog entry for the full
   amendment chain.
-- OCR engine binding — not yet decided. `PRIOR_ART.md` notes KillerPDF
+- OCR engine binding — **★ THE ENGINE HALF IS ANSWERED 2026-08-12; THE
+  LICENCE HALF IS NOT, AND THE TWO MUST NOT BE COLLAPSED.** This bullet
+  read *"not yet decided"* and that is now half wrong, which is the more
+  dangerous state for an item like this — a reader who sees "undecided"
+  re-opens a settled question, and a reader who sees "decided" ships a
+  file nobody agreed to redistribute.
+  - **ANSWERED (operator, 2026-08-12, verbatim):** *"use whichever one is
+    best for everyone including other languages, or heck, just build for
+    both."* → **BOTH engines, behind Cargo features**, with
+    **multi-language coverage** as the stated ranking criterion. The
+    feature mechanism that makes "both" affordable shipped as `Pass 70.0`
+    (`fbcb946`) **one commit before** the decision that needs it.
+  - **STILL OPEN — `ROADMAP.md` open operator question `(bl)`:** whether
+    a **CC-BY-SA-4.0 model file** may ship inside pdfce's **MIT** portable
+    folder. The pure-Rust engine (`ocrs`/`rten`) is **the only OCR route
+    that passes pdfce's wasm32 CI gate** — every alternative makes OCR the
+    first feature that cannot cross into the web fork — and its **weights
+    are copyleft**. The Apache-2.0 alternative (PaddleOCR via `ocr-rs`)
+    covers **50+ languages** but has **no WASM**. This is a legal reading,
+    therefore Ken's. *Default if unanswered: ship neither model set.*
+  - **Shipped meanwhile:** the engine-**independent** substrate
+    (`9f2af1d`, `pdfce-core::ocr`, ISO 32000-1 §9.3.6 Table 106 mode 3),
+    and `tools/check-shipped-assets.py` (`e3fb7e0`), which **enforces**
+    that every redistributed asset states its licence — **enforcement is
+    not acceptance.**
+  - **Sourcing record:** `docs/ocr-engine-survey.md` (2026-08-12).
+    **Surya is recorded there as a trap** — Apache-2.0 code, **modified
+    Open RAIL-M weights with a $5 M revenue cap**; field-of-use
+    restrictions cannot be bundled in an MIT app, so do not re-evaluate it
+    on its accuracy numbers. **Tesseract's default Windows build ships
+    LGPL binaries**, so the KillerPDF precedent below is not the free
+    default it looks like. `PRIOR_ART.md` notes KillerPDF
   bundles Tesseract natively as a working precedent; OCRmyPDF's
   "sandwich" text-layer approach is the behavioral reference.
 - Poppler's exact license (GPL vs LGPL) — unresolved in `PRIOR_ART.md`,

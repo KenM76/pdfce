@@ -81,6 +81,578 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★★★★ `e931836` + `905791f` + `fbcb946` + `9f2af1d` + `e3fb7e0` — `Pass 68.0` **HALF BUILT, NOT SHIPPED** (a two-line pick model and a THIRD `DimensionKind`, both core-only), `Pass 70.0` **SHIPPED** (a capability can now actually be stripped from the build — it could not before, and the first measurement of the fix LIED), `Pass 71.0` slice 1 **SHIPPED** (the half of OCR that does not depend on which engine wins), and a licence gate for the files `cargo-about` is STRUCTURALLY UNABLE TO SEE — 2026-08-12 (hundred-and-twenty-sixth filing)
+
+**Sourcing, stated before any figure (hard rule 8).** This librarian **had a
+shell this dispatch.** Items marked **measured** were produced by a command
+run here and the command is named; **relayed** means it came from the
+dispatching engineer's brief and was not re-run. **All five short hashes were
+resolved here by `git rev-parse`** — the dispatch declined to supply full
+hashes and said why: *"I gave a fabricated full hash in an earlier dispatch
+today and will not repeat it."* That is the hundred-and-twenty-fourth
+filing's `b902ea0e13ff…` non-object, and the practice of resolving every hash
+locally is now two filings old. Full forms, **measured**:
+
+| short | full (by `git rev-parse`) | subject |
+|---|---|---|
+| `e931836` | `e931836ab58cdf7a01ef075bb6086db6044d56f0` | pick a LINE, not a point, and let the operator overrule the guess |
+| `905791f` | `905791f89c496864b01a1464a819adf69006fe83` | an angle is a third kind of ce dimension, and it does not scale |
+| `fbcb946` | `fbcb9465facd5b6f17f62bd10901dfdaff2e418e` | prove the "strip a module for a lighter build" claim, because it was not true |
+| `9f2af1d` | `9f2af1da379a37481a8ab87e99d612b4db3401cc` | build the half of OCR that does not depend on which engine wins |
+| `e3fb7e0` | `e3fb7e0be527f9f52aafb1de1ce818b26dd063b8` | the licence on a model file exists nowhere unless something checks for it |
+
+**The gate agreed with the dispatch this time.** `python
+tools/check-commits-filed.py`, **measured** at the start of this filing,
+reported ***"commits-filed: 5 code commit(s) are in no filing"*** and named
+exactly these five, in this order. Recorded because the previous filing found
+the opposite (a fourth commit the dispatch had not named) — the gate is worth
+running whether or not it disagrees, and a clean agreement is the evidence
+that the previous disagreement was the tool working rather than the tool
+being noisy.
+
+**★ TERMINOLOGY (project rule 15), binding on everything below and on every
+dispatch this entry generates.** Items 1 and 2 concern **ce dimensions** —
+the dimension objects **pdfce authors** (`/Line` + `/IT /LineDimension` +
+`/Measure` + the `/PieceInfo` sidecar, everything under
+`crates/pdfce-core/src/dimension/`). **pdf dimensions** — ones already in the
+file from CAD — enter **only as pickable page geometry**, and pdfce still
+must not alter them. Never the bare word.
+
+#### Pass IDs in this entry were LIBRARIAN-MINTED, from the live ceiling, and the engineer may renumber
+
+The dispatch named `Pass 68.0` and gave no ID for the other three commits.
+**`Pass 70.0` and `Pass 71.0` are minted here**, read from
+`python tools/check-ledger-numbers.py` (**measured**: *"Pass families with
+headings: up to 69 … next free"*, standing rules `R191` → next free `R192`,
+decision records `054` → next free `055`, SESSION_LOG filings `125` → next
+free `126`). **`e3fb7e0` is deliberately given NO Pass ID** — it is a CI
+gate, and the precedent is the hundred-and-twenty-fourth filing's
+`b902ea0` + `b1ee1cf`, which shipped as a hash-headed *Shipped* entry with no
+Pass number. Minting is stated rather than performed silently because the
+update protocol says the **engineer** assigns IDs; if he wants different
+numbers, these two are the ones to move and nothing else references them yet.
+
+#### GUI-core separation — VERIFIED BY COMMAND, not by construction, because `fbcb946` touches FIVE `Cargo.toml` files
+
+This is the first entry in a long while where the invariant could not be
+discharged by "no manifest was touched". `fbcb946` changes the workspace root
+`Cargo.toml` **and all four crate manifests**, which is exactly the trigger
+condition in `CLAUDE.md` rule 2. **Measured, here:**
+
+```
+cargo tree -p pdfce-core   --edges normal | grep -iE "egui|eframe|winit|wgpu|glow|glutin"   -> 0 hits (43 lines total)
+cargo tree -p pdfce-render --edges normal | grep -icE "egui|eframe|winit|wgpu|glow"          -> 0
+```
+
+**Invariant intact.** Per-commit file counts, **measured** by `git show
+--stat`:
+
+| commit | files | insertions / deletions | manifests touched |
+|---|---|---|---|
+| `e931836` | 10 | 2,497 / 353 | none |
+| `905791f` | 8 | 531 / 17 | none |
+| `fbcb946` | 8 | 2,216 / 4 | **root + all four crates** |
+| `9f2af1d` | 4 | 399 / 1 | none |
+| `e3fb7e0` | 2 | 201 / 0 | none |
+
+**Verification totals (relayed from the dispatch, not re-run here):**
+`cargo test --workspace` **3,582 passing, 0 failing**, against a baseline of
+**3,568** — **+14 over the five commits**, which is +12 (`e931836`, 3,556 →
+3,568) then +7 (`905791f`, 3,568 → 3,575) then +7 (`9f2af1d`, 3,575 → 3,582)
+with `fbcb946` and `e3fb7e0` adding none to the default suite. **The
+denominators disagree by construction and that is not an error**: the
+dispatch's "baseline 3,568" is the state at the *start of this dispatch*,
+i.e. after `e931836` had already landed, while `e931836`'s own message counts
+from 3,556. Both are stated so neither has to be inferred (hard rule 10(a)).
+`cargo test -p pdfce-core --no-default-features` green across **44 suites**
+(**2,502** tests — the lite figure, and it is *supposed* to be smaller than
+3,582: the stripped codec's tests are compiled out). `cargo fmt --all
+--check` clean; `cargo clippy --workspace --all-targets --all-features`
+**zero**. `check-ui-strings`, `check-theme-colors`, `check-ledger-numbers`,
+`check-fmt-excluded` and the brand-new `check-shipped-assets` all clean.
+
+---
+
+#### 1. `e931836` — `Pass 68.0` foundation: pick a LINE, not a point, and let the operator overrule the guess
+
+**Operator request (i), verbatim:** *"dimensioning tool should allow the
+selection of two lines. if those lines are parallel it makes a linear
+dimension between them like SolidWorks would, if they are at an angle it
+makes an angle dimension."*
+
+**The survey finding this Pass was scoped on is confirmed by the code that
+closed it.** Nothing in the codebase could answer *"which LINE did the
+operator click"* as a pair of endpoints. `snap_candidates` returns single
+points; `hit_test_subpaths` returns subpath indices; `centerline` returns two
+endpoints but only for a filled thin quad. **`crates/pdfce-core/src/vector/
+linepick.rs` is a new module** that composes the missing piece.
+
+**★ `PickedLine` records WHERE ON THE LINE the operator clicked, and that
+field is load-bearing rather than diagnostic.** Two crossing lines bound
+**four** angles. SolidWorks' own API documentation says so directly for
+`AddDimension2` — *"creating an angular dimension between two lines gets
+different results based on which line endpoints are selected"*, with an
+explicit warning that selecting by name rather than by coordinate *"causes
+unpredictable results"*. **A model storing only "line A, line B" cannot
+reproduce that and would have to guess.** The test proves it: **the same two
+lines yield 60° or its supplement 120°, decided purely by which arms were
+clicked.**
+
+**Curves are skipped, not chorded.** Dimensioning "the line" of a Bézier
+would measure something the drawing does not contain. A chord is a plausible
+number with no referent on the page — the failure mode rule 4 exists to
+prevent, one level below the UI.
+
+**Two things the operator asked for mid-build, both shipped in the same
+commit:**
+
+1. **A SETTING for the near-parallel threshold** —
+   `Settings::parallel_epsilon_degrees`, default **0.5°**, accepted range
+   **0–45**, with a GUI slider. **Nothing defines this value**: the
+   SolidWorks corpus (`D:\Dev\Rag-Specialized\SolidWorks_Dimensions\`) has
+   no epsilon, no snap rule, no threshold anywhere, and its catalog marks
+   the whole question **unverified**. **`R169` — a choice no standard makes
+   is a setting** — applies exactly. The default is documented as a
+   *judgement with a stated reason*, not as a fact: exported CAD geometry
+   is usually exact, so a hair off parallel is more likely an exporter
+   artefact than a deliberate taper.
+2. **A PER-CE-DIMENSION OVERRIDE** — `ParallelPolicy::force_parallel`,
+   **checked BEFORE the threshold is read.** Ordering is the whole point and
+   it has its own test: a build that ANDed the two conditions would pass
+   every ordinary case and fail only for a forced pair at, say, 30°, where
+   the global epsilon must be irrelevant. **The override does not fake the
+   measurement** — `measured_angle_degrees` still reports the truth, so a
+   shell can disclose *"these are 0.8° apart"* while honouring the tick.
+   **A checkbox that hid the number it overrides would be asking for a
+   decision while withholding the fact that makes it one** — rule 4's
+   disclosure half, applied to an operator override rather than to an
+   inference.
+
+**★ A GUI GATE THE ENGINEER DID NOT KNOW EXISTED CAUGHT THE SETTING BEFORE HE
+DID.** `every_setting_the_store_carries_can_be_reached_from_this_window`
+failed with *"an operator can only change it by hand-editing settings.txt"*.
+**That is precisely the operator's own standing complaint, already enforced
+as a test.** Recorded as a gate that did its job — this project's ledger is
+heavy with gates that measured the wrong thing (`b902ea0`, `b1ee1cf`,
+`R191`), and a gate catching a real omission on its first contact with new
+code is the counter-instance. **The slider spans the store's own accepted
+range rather than a narrower "usable" band**, deliberately: a narrower widget
+cannot represent a legal value already sitting in someone's `settings.txt`,
+so merely OPENING the window would drag it into range and Save would write
+the change back — a settings dialog that silently edits the file by being
+looked at.
+
+**The settings round-trip test also did its job**: it demands a *non-default*
+value, so a field the writer forgot cannot pass by coincidentally matching
+the default on the way back in.
+
+**Files:** `crates/pdfce-core/src/vector/linepick.rs` (new, 734 lines),
+`crates/pdfce-core/src/vector/mod.rs`, `crates/pdfce-core/src/settings/
+mod.rs` (+84), `crates/pdfce-gui/src/settings_panel.rs` (+47),
+`crates/pdfce-gui/src/ui_text.rs` (+37), plus the hundred-and-twenty-fifth
+filing's doc changes, which were committed here. **3,556 → 3,568 tests.**
+
+---
+
+#### 2. `905791f` — an angle is a THIRD kind of ce dimension, and it does not scale
+
+**`DimensionKind::Angular` joins `Linear` and `Circular`**, carrying an apex,
+a **unit direction along each arm pointing INTO the measured wedge**, an arc
+radius, and a position along the arc.
+
+**The arms are stored RESOLVED, not as the two source lines.** Which of the
+four angles the operator meant was decided **at pick time**, by where they
+clicked (item 1). Storing the lines instead would throw that decision away
+and force every later regeneration to re-derive it — **which is how a ce
+dimension silently becomes a different ce dimension after a scale change.**
+
+**★★ THE LOAD-BEARING FINDING — WHAT WOULD HAVE BEEN A SILENT WRONG NUMBER.**
+**An angle is invariant under uniform scaling.** `measured_points()` for
+every other kind returns a **page length**, which the group scale multiplies.
+Feeding **30°** through that path in a **1:50** group yields **1500** — with
+**no unit**, and with **`raw_page_units: false`**, so *nothing anywhere
+discloses that something is odd.* **A wrong number wearing the appearance of
+a measurement.** So:
+
+- `DimensionModel::display` branches on a new **`is_angular()` BEFORE it
+  applies scale**.
+- A separate **`format_angle_degrees`** consults the group's `NumberFormat`
+  for the **decimal marker ONLY** — never the unit, never the fraction mode.
+  **Sourced:** ISO 129-1 cl. 4.1.1 mandates a comma as the decimal marker
+  and **exempts nothing**, so an angle in an ISO-standard group takes the
+  comma even though it takes neither millimetres nor a carpenter's fraction.
+- **Two tests pin both halves**: 30° stays **30** in a 1:50 group, and an
+  **unscaled angle does NOT claim raw page units** — because an angle is
+  meaningful *without* a scale, so that disclosure would be a **false
+  warning**, and a disclosure that fires when nothing is wrong trains the
+  operator to ignore it.
+
+**`translated()` moves the apex only.** The arm directions are unit vectors;
+translating them would rotate the ce dimension and change the angle it
+measures — **the one thing a move must never do.**
+
+**★ `SIDECAR_VERSION` 1 → 2, and this one genuinely needed a bump where
+`/Offset` and `/TextAlong` did not.** Recorded with the distinction, because
+"we bumped the version" is not a reusable rule and the distinction is:
+
+> **Optional-with-default fields do not need a bump. A new KIND does.** An
+> old build meeting an unknown `/Offset` reads it as absent and draws what it
+> always drew. An old build meeting `Angular` hits **`_ => return None`**,
+> **drops the record entirely**, and is then **free to save the file back
+> without it** — permanent loss, invisible until after it has happened.
+
+**With the bump, reading stays safe and only the destructive half is
+blocked**: an older build still READS what it understands, while
+`sidecar_version` makes the session **refuse to WRITE**. **Both directions
+tested**, including that a **v1 sidecar still loads**.
+
+**Fixed on discovery** (user memory *fix bugs on discovery*): a comment
+claiming the version gate was an **exact equality**. **It is a range**, and
+has been since that gate was rewritten. A comment that misdescribes a
+compatibility gate is worse than no comment — it is the thing the next author
+reasons from.
+
+**The arc is drawn as SEGMENTS, not as one cubic.** `draw_circular`'s
+four-kappa construction is exact **only because it always draws a full circle
+in quadrants**; a single cubic's error grows with sweep, and a **170° arc
+drawn that way visibly bulges**. **3° steps** bound the error regardless of
+sweep — **≈0.07 pt sagitta at a 200 pt radius** (filed with its radius, per
+hard rule 10(a): the sagitta alone is meaningless without the denominator it
+was measured at).
+
+**`dimension_kind_label` took a `(circular, show_diameter)` bool pair.** Two
+bools cannot express a third kind, so it **quietly answered "Linear" for an
+angle** — a wrong label with no failure. It now takes the kind. **The
+generalisable shape: a boolean pair is a closed enumeration that does not
+announce it is closed.**
+
+**Files:** `crates/pdfce-core/src/dimension/{author,group,mod,sidecar,units}.rs`,
+`crates/pdfce-cli/src/main.rs`, `crates/pdfce-gui/src/{main,ui_text}.rs`.
+**3,568 → 3,575 tests.**
+
+#### ★ `Pass 68.0` IS **NOT** SHIPPED. What is missing, stated so nobody rounds it up
+
+**Core has the pick model and the angular kind. No operator can author an
+angular ce dimension.** Specifically:
+
+- **No GUI gesture.** The canvas cannot select two lines and produce a ce
+  dimension from them. This is the operator's actual request; the two
+  commits above are its substrate.
+- **No CLI surface.** `dimension-add` has **no angular kind**.
+- Consequently `FEATURES.md` carries this as **core `[x]` · cli `[ ]` · gui
+  `[ ]`**, which is `R151`'s exact shape — a core capability no shell
+  reaches — and is **filed as a signal, not rounded up.**
+
+**The Pass entry stays under *Next up*** with its heading amended to say so,
+following `Pass 67.0`'s precedent (a multi-phase Pass annotated in place
+rather than split), because the remaining work is the same request, not a new
+one.
+
+---
+
+#### 3. `fbcb946` — `Pass 70.0`: the "strip a module for a lighter build" claim, ANSWERED BY MEASUREMENT, and the answer was NO
+
+**Operator's question, 2026-08-12:** whether modules such as OCR could be
+stripped to make lighter builds — asked on the assumption that **the crate
+layout already allowed it**.
+
+**★ THE HONEST ANSWER, AND IT IS THE ENTRY'S POINT: the layout allowed it;
+NOTHING IMPLEMENTED IT.** `pdfce-core` declared **ZERO features** and
+contained **not one `cfg(feature)`**. *"Architecturally yes, in practice no."*
+So the mechanism was built **and measured** before OCR arrives, so that the
+first genuinely strippable capability lands in a proven convention instead of
+inventing one under deadline pressure.
+
+**`jpx` (JPEG 2000) is the proof capability** — the heaviest single codec,
+used in exactly one corpus file. **Default ON**, so a normal build is
+unchanged. The manifest carries the convention's rules in a comment block for
+the next capability that wants one (rule 1: *default ON — a capability that
+silently disappears from a default build is a regression wearing a feature
+flag*).
+
+**★★ THE FIRST MEASUREMENT LIED, and it would have been REPORTED AS WORKING.**
+`cargo build -p pdfce-cli --no-default-features` produced a binary
+**byte-identical** to the full one — **10,438,656 bytes both times.** The
+flag did nothing. **Cause: Cargo unifies features across the dependency
+graph.** `pdfce-render` still took `pdfce-core` with default features and
+**re-enabled `jpx` behind the CLI's back**; **one enabling consumer wins, no
+matter what the others ask for.** **The fix must live at the WORKSPACE ROOT,
+because Cargo refuses to let an inheriting member override
+`default-features` at all.** After that: **310 KB smaller — real.**
+
+**The engineer caught this only by diffing the two binary sizes.** A build
+that succeeds and produces a working binary is not evidence that a feature
+flag did anything.
+
+**★★ AND THE FIX INTRODUCED ITS OWN REGRESSION, which is the more useful
+half.** Setting `default-features = false` at the root **silently stripped
+JPEG 2000 out of `pdfce-gui`** — the CLI and `pdfce-render` got forwarding
+blocks and **the GUI was forgotten**. **Nothing failed to compile.**
+`cargo tree -p pdfce-gui -i hayro-jpeg2000` came back **EMPTY**: a shipped
+capability gone, discoverable only by a dependency query or by opening a real
+JPX document.
+
+> **THE FAILURE MODE WORTH CARRYING: forgetting to forward a feature does not
+> break the build — it removes a capability.** There is no compile error, no
+> test failure, and no runtime error until a document arrives that needs the
+> stripped thing.
+
+**So there are now TWO CI gates, not one:**
+
+1. a **lite build** that must compile **and test** (`--no-default-features`);
+2. an assertion that **each shell's DEFAULT build still CONTAINS the codec.**
+
+**The second gate is the one that matters, and the reason is general: it
+checks a CAPABILITY rather than a MANIFEST.** A manifest check would have
+passed the regression (the root manifest was exactly as intended); only
+asking *"can this binary still decode JPEG 2000"* catches a forwarding block
+that was never written. **Re-measured by this librarian just now**, for all
+four crates:
+
+```
+cargo tree -p pdfce-cli    -i hayro-jpeg2000  -> hayro-jpeg2000 v0.4.0
+cargo tree -p pdfce-gui    -i hayro-jpeg2000  -> hayro-jpeg2000 v0.4.0
+cargo tree -p pdfce-render -i hayro-jpeg2000  -> hayro-jpeg2000 v0.4.0
+cargo tree -p pdfce-core   -i hayro-jpeg2000  -> hayro-jpeg2000 v0.4.0
+```
+
+**Stripped behaviour, verified on the SAME file both ways** (relayed):
+
+| build | result |
+|---|---|
+| full | `images=1  images_unsupported=0  codec_features=0` |
+| lite | `images=0  images_unsupported=1  codec_features=1` |
+
+**The lite build refuses BY NAME (`R27`), never rendering a blank where a
+picture belongs.** A silently missing image is a document that looks subtly
+wrong with no explanation anywhere — the same class of harm as a wrong
+number with no disclosure (item 2).
+
+**Test counts, both denominators stated:** **3,575 full · 2,502 lite** —
+the lite figure is smaller *by design*, because the stripped codec's tests
+compile out with it, and a lite suite that matched the full count would mean
+the gate was testing the full build.
+
+---
+
+#### 4. `9f2af1d` — `Pass 71.0` slice 1: the half of OCR that does not depend on which engine wins
+
+**The engine choice carries a real licence question, and that question is the
+operator's, not the engineer's** (project rule 13; `LEGAL.md` §6.2 step 4).
+So what shipped is **the part that is identical whichever way he answers**:
+taking recognised words with page positions and writing them into a PDF as an
+**invisible, selectable text layer over an untouched scan**. New module
+**`crates/pdfce-core/src/ocr/`**.
+
+**Building it first is not stalling — it is what lets the engine be chosen on
+its merits** instead of under pressure from an API already committed to one
+of them.
+
+**Sourced, not recalled** (project rule 1): **ISO 32000-1 §9.3.6 Table 106
+mode 3** — *"neither fill nor stroke text (invisible)"*. **The spec corpus
+names it as the OCR mechanism by name**, so no part of this is training-data
+memory. `ContentBuilder::set_render_mode` is added, documenting **the two
+Table 106 rules it cannot enforce**: clipping modes 4–7 must not be switched
+back before `ET`, and **text state is NOT reset by `BT`**, so a mode set once
+persists into the next text object.
+
+**★ THE Y-FLIP HAS EXACTLY ONE HOME.** Engines report **y-DOWN image
+pixels**; PDF is **y-UP**. Get it backwards and **every word lands mirrored,
+the page still looks perfect, and nobody notices until someone selects a line
+and gets a different one.** `words_to_page_space` does it once, so no engine
+implementor can get it wrong, and **both directions are tested** — a
+transform that negated without offsetting would pass a top-only test.
+
+**★★ `confidence: Option<f32>`, AND THE `None` CASE IS LOAD-BEARING.** Some
+engines expose no per-word confidence at all — **the leading pure-Rust
+candidate computes log-probabilities and DISCARDS them.** Rule 4 requires
+that an *inherently uncertain* inference **state** its uncertainty, and OCR is
+uncertain on every word, so **an absent score and a high score must never
+look the same.** Two consequences are **tested rather than trusted**:
+
+1. **An UNSCORED word counts as needing review, exactly like a low-scored
+   one.** Excluding it would let an engine that reports nothing produce an
+   **EMPTY needs-review list** and thereby look **more** trustworthy than one
+   that reports honestly. **That is precisely backwards, and it would read as
+   a feature.**
+2. **No confidence anywhere yields `None`, never `0.0`.** Zero renders as
+   *"0% confident"* — a **specific, alarming, false claim** about text nobody
+   scored. The absence of a measurement is not a measurement of zero.
+
+**The layer is additive and never re-encodes the scan.** Rule 3 (round-trip)
+is one reason; **the better one is that a scanned document is often the
+RECORD of something**, and running its JPEG through a decode/re-encode cycle
+"to help" costs generation loss on an image the operator may need to defend
+the provenance of.
+
+**3,575 → 3,582 tests. Lite build still green.**
+
+##### `Pass 71.0` is NOT complete — no engine is wired
+
+**Nothing here is operator-reachable.** There is a trait and a substrate and
+no implementation behind it. **`FEATURES.md` therefore keeps OCR at core
+`[ ]` · cli `[ ]` · gui `[ ]`** — **`R151`'s shape, refused deliberately**:
+ticking `core` for a trait with no implementation would claim a capability
+that cannot run.
+
+---
+
+#### 5. `e3fb7e0` — the licence on a shipped file exists NOWHERE unless something checks for it (no Pass ID; a CI gate)
+
+**`THIRD_PARTY_LICENSES.md` is generated by `cargo-about` from `Cargo.lock`.
+It is complete and correct for what it covers and STRUCTURALLY INCAPABLE of
+covering anything that is not a Cargo dependency.** Fonts, icons and —
+imminently — **OCR model weights** are files **pdfce REDISTRIBUTES** inside
+its portable folder, carrying whatever their licence imposes. **`cargo-about`
+cannot see one, and neither could any other gate in this repository.**
+
+**That is not a flaw in `cargo-about`. It is a gap BETWEEN two tools.**
+
+> **★★ THIS IS THE THIRD RECORDED INSTANCE OF THE SAME SHAPE IN THIS
+> PROJECT** — an obligation lost in the gap between two tools, each of which
+> is correct about its own territory:
+>
+> 1. a **RAG deliverable filed but never handed off**
+>    (`comparison__pdfce_feature_column.md` went untracked because no pdfce
+>    doc named it);
+> 2. a **formatting rule that applied to twelve crates no command could
+>    reach** (`b902ea0`; `cargo fmt --all` cannot see them, so
+>    `tools/check-fmt-excluded.py` had to be written);
+> 3. **this** — a licence obligation on files no licence tool inspects.
+>
+> **The promotion question is raised, not answered, at the end of *Standing
+> rules* as a PROPOSAL claiming `R192`.** The dispatch asked for a proposal
+> rather than an assignment, and that is what is filed.
+
+**The convention already existed and was simply unenforced**: both shipped
+asset directories already carried a `PROVENANCE.md`. **Nothing required the
+next one to.**
+
+**`tools/check-shipped-assets.py` requires, for every directory under
+`crates/*/assets/` holding shipped files:**
+
+1. a `PROVENANCE.md` exists;
+2. **it NAMES A LICENCE**;
+3. it **mentions the files actually present**.
+
+**Requirement 2 is the one that matters. Saying where a file came from does
+not say what may be done with it** — and origin-without-terms is exactly what
+a hurried note records.
+
+**Proved by MAKING ALL THREE HAZARDS OCCUR, not by reading the code:**
+
+| hazard staged | result |
+|---|---|
+| a `models/` directory with no `PROVENANCE.md` | **caught** |
+| a `PROVENANCE.md` describing origin but stating no terms | **caught** |
+| the same note with `"CC-BY-SA-4.0 (weights)"` added | **passes** |
+
+The scratch directory was then removed. **The gate passes clean on today's
+two asset directories and 60 files.**
+
+**Licence matching is deliberately BROAD** — SPDX ids **plus** the phrasings
+this project's own notes already use, including *"drawn from scratch"* and
+*"project licence"*. **The question the gate asks is "did somebody state the
+terms", not "did they pick from an approved list"**: the icon set is the
+operator's own work under a bespoke grant, and that is a real answer that
+must pass. A gate that demanded SPDX would have failed the one asset whose
+provenance is least in doubt.
+
+**Wired into CI's `fmt` job**, which already hosts the other coverage-gap
+gate (`check-fmt-excluded.py`) — the two belong together because they are the
+same kind of check.
+
+---
+
+#### ★★ THE OPERATOR DECISION THIS SESSION RECORDS
+
+**Ken, 2026-08-12, verbatim:**
+
+> *"use whichever one is best for everyone including other languages, or
+> heck, just build for both."*
+
+**What this ANSWERS:** the long-standing *"OCR engine binding — not yet
+decided"* open item (`docs/PRIOR_ART.md`; `CLAUDE.md`'s outstanding-items
+list). The answer is **BOTH, behind Cargo features** — which is exactly why
+`Pass 70.0` (`fbcb946`) had to exist first, and it is now recorded that the
+strippability mechanism was built **one commit before** the decision that
+needs it.
+
+**What it implicitly prioritises: MULTI-LANGUAGE COVERAGE.** *"best for
+everyone including other languages"* is a ranking criterion, and it cuts
+against the candidate that is otherwise strongest on every engineering axis
+(see the survey below). Recorded as the operator's stated priority, not as
+the engineer's inference from it.
+
+**★ WHAT IT DOES NOT ANSWER, AND MUST NOT BE READ AS ANSWERING:** whether a
+**CC-BY-SA-4.0 model file may ship inside pdfce's MIT portable folder.**
+"Build for both" selects engines; it does not accept share-alike terms on a
+bundled asset. **That obligation is now at least ENFORCED** (`e3fb7e0` will
+refuse a model directory whose `PROVENANCE.md` states no terms) — **but
+enforcement is not acceptance.** **Filed as new open operator question
+`(bl)`**; see *Open operator questions*.
+
+#### The survey that grounds `Pass 71.0` — `docs/ocr-engine-survey.md`
+
+**NAMED HERE DELIBERATELY, per `pdfce-engineer.md`'s standing instruction
+that a research deliverable is NOT handed off until a pdfce doc names it.**
+The precedent is `comparison__pdfce_feature_column.md`, which went untracked
+for exactly this reason and is instance 1 of the three-instance shape in item
+5 above. **Measured:** `docs/ocr-engine-survey.md` exists, 116,991 bytes,
+written 2026-08-12 by a dispatched agent, and its own header states it
+deliberately does not touch `ROADMAP.md`/`FEATURES.md`/`PRIOR_ART.md` because
+those are this librarian's — **this entry is the pointer that discharges
+that.**
+
+**Findings that bear on the decision (relayed from the dispatch; the survey
+is the sourcing record):**
+
+- **The pure-Rust candidate (`ocrs`/`rten`) is the ONLY one that passes
+  pdfce's own wasm32 CI gate.** Every other route makes OCR **the first
+  feature that cannot cross into the web fork** — which is the exact
+  property `ARCHITECTURE.md` §3's GUI-core separation exists to protect.
+  ~12 MB, two files, no C++ toolchain. **But**: weights are
+  **CC-BY-SA-4.0**, it is **Latin-alphabet-only**, and it exposes **no
+  confidence at any level** (verified at source — this is the engine behind
+  item 4's `Option<f32>`).
+- **The multi-language candidate (`ocr-rs`, PaddleOCR on statically-linked
+  MNN)** ships **zero DLLs on Windows MSVC**, **50+ languages**, **3.2 MB
+  models**, and PaddleOCR weights are **Apache-2.0** (verified at the
+  publisher's model cards). **No WASM.**
+- **★ Surya is a TRAP and is recorded as one**: code Apache-2.0, **weights
+  under a modified Open RAIL-M with a $5 M revenue cap.** **Field-of-use
+  restrictions cannot be bundled in an MIT app** — this is not a "flag it to
+  the operator" case, it is `LEGAL.md` §6.1's categorical one, and it is
+  written down so a future session does not re-evaluate it on its
+  (genuinely good) accuracy numbers.
+- **Tesseract's default Windows build ships LGPL binaries** (`libunistring`,
+  `libiconv`, `libintl`) via the libcurl branch — i.e. the "obvious" choice
+  is weak-copyleft in its shipped form, which is the operator's call under
+  rule 13, not a free default.
+
+**★ A FOURTH `oxidize-pdf` CLAIM THAT DID NOT SURVIVE INSPECTION**, for
+decision 001's §3.2 list: **`convert_to_searchable_pdf()` is a stub that
+DISCARDS the scan** at HEAD of **v4.3.0**. Decision 001 is append-only, so
+per the *Same-filing propagation duty* this is filed **here and in
+`PRIOR_ART.md`'s `oxidize-pdf` row**, and **this entry plus that row are
+canonical over the decision record's un-amended §3.2.** The pattern decision
+001 named — a public API whose name promises a capability its body does not
+deliver — now has a fourth instance, **found two audits apart from the first
+three**, which is itself the finding: the claim rate did not fall between
+v4.2.1 and v4.3.0.
+
+**Owed RAG deliverable, when `Pass 71.0` ships an engine:** a
+`C:\personal_rag\pdf\` lesson recording that **OCRmyPDF emits one `BT…ET`
+per LINE, not per word**, as a **documented poppler workaround** — `Tz` is
+not carried across `BT`/`ET` in poppler, though **the spec says text state
+persists** (the same §9.3 rule item 4's `set_render_mode` documents). **This
+is written now rather than deferred** — see
+`C:\personal_rag\pdf\lesson_20260812_ocr_text_layer_bt_et_per_line_poppler_tz.md`
+— because a finding held until a Pass ships is a finding held across a
+compaction.
+
+---
+
 ### ★★★★★ `7825424` + `ee4e1e4` + `74582ca` + `95c3416` — `Pass 46` SLICE 1 (markup is drawn where you point, and a real geometry bug found by DRIVING the GUI), the screen harness stops leaking an invisible process onto the operator's live desktop, open operator question **`(bk)` is ANSWERED** (options **A and B** together — bundled-font licence now travels inside the document), and the **attachments capability finishes** (`extract` / `attach` / `detach`, core + CLI, **no GUI surface and not claimed**) — 2026-08-12 (hundred-and-twenty-fifth filing)
 
 **Sourcing, stated before any figure (hard rule 8).** This librarian
@@ -39372,7 +39944,43 @@ in the "still open" list. Full build record: this file's own
 
 ## Next up
 
-### Pass 68.0 — ★★ OPERATOR REQUEST 2026-08-12 — **PICK TWO LINES, GET A DIMENSION**: a two-line pick model plus a THIRD `DimensionKind` (angular) — filed 2026-08-12 (hundred-and-twenty-fifth filing), **STARTED IN THE WORKING TREE WHILE THIS ENTRY WAS BEING WRITTEN**
+### Pass 68.0 — ★★ OPERATOR REQUEST 2026-08-12 — **PICK TWO LINES, GET A DIMENSION**: a two-line pick model plus a THIRD `DimensionKind` (angular) — filed 2026-08-12 (hundred-and-twenty-fifth filing), **STARTED IN THE WORKING TREE WHILE THIS ENTRY WAS BEING WRITTEN** — **★★★ HALF BUILT 2026-08-12 (`e931836` + `905791f`): the CORE is in (`vector::linepick` + `DimensionKind::Angular` + sidecar v2); the GUI GESTURE AND THE CLI ARE NOT, so NO OPERATOR CAN AUTHOR AN ANGULAR ce DIMENSION YET. NOT SHIPPED. See the top-of-*Shipped* entry (hundred-and-twenty-sixth filing) for the delivery record**
+
+> **★★ STATUS BLOCK, ADDED 2026-08-12 (hundred-and-twenty-sixth filing).
+> `Pass 68.0` IS DELIBERATELY NOT MOVED TO *Shipped*.**
+>
+> **What LANDED, in two commits** — full record in the top-of-*Shipped*
+> entry, items 1 and 2:
+> - **`e931836`** — `crates/pdfce-core/src/vector/linepick.rs` (new). A
+>   `PickedLine` that records **where on the line the operator clicked**,
+>   because two crossing lines bound **four** angles and SolidWorks' own
+>   `AddDimension2` docs say the result depends on which endpoints were
+>   selected. Curves skipped, not chorded. Plus the two things the
+>   operator asked for mid-build: **`Settings::parallel_epsilon_degrees`**
+>   (default 0.5°, range 0–45, GUI slider — `R169`, a choice no standard
+>   makes is a setting) and **`ParallelPolicy::force_parallel`**, checked
+>   **before** the threshold so a forced pair never depends on the global
+>   value, and **without faking the measurement**
+>   (`measured_angle_degrees` still reports the truth).
+> - **`905791f`** — **`DimensionKind::Angular`**, the third variant.
+>   `display()` branches on **`is_angular()` BEFORE applying scale**,
+>   because **an angle is invariant under uniform scaling** and feeding
+>   30° through the length formatter in a 1:50 group yields **1500 with no
+>   unit and no disclosure**. `SIDECAR_VERSION` **1 → 2**.
+>
+> **What is MISSING, and it is the operator's actual request:**
+> 1. **The GUI gesture.** The canvas cannot select two lines and author a
+>    ce dimension from them. Everything above is substrate.
+> 2. **The CLI.** `dimension-add` has **no angular kind**.
+> 3. Acceptance criteria below are therefore **partially met at best**;
+>    re-read them against the shipped core before building the shell.
+>
+> **`FEATURES.md` carries this as core `[x]` · cli `[ ]` · gui `[ ]`** —
+> **`R151`'s exact shape, filed as a signal and not rounded up.**
+>
+> **The entry stays here, in *Next up*, rather than moving**, following
+> `Pass 67.0`'s precedent for a multi-part Pass annotated in place. The
+> remaining work is the same operator request, not a new one.
 
 **★ STATUS CORRECTION, MADE BEFORE THIS ENTRY WAS EVEN SAVED, AND
 MEASURED RATHER THAN RELAYED.** This entry was drafted as *UNSTARTED*.
@@ -39661,6 +40269,72 @@ spec already waiting**, `68.0` is the one whose data model has a hole
 model first, tolerance second — **is reasonable if the acceptance
 criteria read better that way**; the Pass IDs are assigned per family, so
 `69.1` is available without disturbing anything.
+
+---
+
+### Pass 71.0 — **OCR**, promoted from the Backlog bucket 2026-08-12 (hundred-and-twenty-sixth filing) on the operator's engine decision — **SLICE 1 SHIPPED (`9f2af1d`, the engine-independent text-layer substrate); NO ENGINE IS WIRED, so NOTHING IS OPERATOR-REACHABLE**
+
+**Operator's decision, verbatim, and it is what promoted the bucket:**
+
+> *"use whichever one is best for everyone including other languages, or
+> heck, just build for both."*
+
+**Read as: BOTH engines, behind Cargo features, with multi-language coverage
+as the stated priority.** The features mechanism that makes "both" affordable
+shipped **one commit earlier** as `Pass 70.0` (`fbcb946`) — see the
+top-of-*Shipped* entry.
+
+**Bucket history.** Created at project bootstrap as *"OCR —
+recognize-text-in-scanned-page. Needs a decision on OCR engine binding"*.
+**That decision is now made** for the *engine* half. **The LICENCE half is
+not** — see open operator question **`(bl)`**. The bucket text is retained
+below in *Backlog* as the scoping record, per append-only discipline.
+
+#### Slice 1 — SHIPPED (`9f2af1d`)
+
+`crates/pdfce-core/src/ocr/` — recognised words with page positions become an
+**invisible, selectable text layer over an untouched scan**. Sourced to
+**ISO 32000-1 §9.3.6 Table 106 mode 3** (*"neither fill nor stroke text
+(invisible)"*), which the spec corpus names as the OCR mechanism **by name**.
+`ContentBuilder::set_render_mode` added. The **y-flip has exactly one home**
+(`words_to_page_space`). **`confidence: Option<f32>`, with `None` load-
+bearing**: an unscored word counts as needing review exactly like a
+low-scored one, and no confidence yields `None`, never `0.0`. Full record:
+top-of-*Shipped*, item 4.
+
+#### Slices NOT built — this is the whole rest of the capability
+
+1. **Bind an engine.** Both, per the operator: `ocrs`/`rten` (pure Rust,
+   **the only wasm32-passing route**, Latin-only, **CC-BY-SA-4.0 weights**,
+   **no confidence at any level**) and `ocr-rs`/PaddleOCR-on-MNN
+   (**50+ languages**, **Apache-2.0 weights**, 3.2 MB models, zero DLLs on
+   Windows MSVC, **no WASM**). Each behind its own default-OFF Cargo
+   feature, following `Pass 70.0`'s convention — **including a forwarding
+   block in EVERY shell**, because forgetting one removes a capability
+   without breaking the build.
+2. **Ship the model files** — **BLOCKED on `(bl)`** for the CC-BY-SA-4.0
+   set. `tools/check-shipped-assets.py` (`e3fb7e0`) will refuse a model
+   directory whose `PROVENANCE.md` states no terms; **that is enforcement,
+   not permission.**
+3. **The review surface (rule 4).** OCR output is an inference on **every
+   word**. The needs-review set must be visible and rejectable before it
+   becomes document state, and **the uncertainty must be STATED where the
+   engine cannot score** — a Latin-only engine with no confidence is the
+   hardest case rule 4 has met so far.
+4. **`pdfce-cli ocr`** (rule 11, same Pass as the GUI flow).
+5. **Language selection**, which is the operator's stated priority and is a
+   property of the engine chosen at build time, not only at run time.
+
+**Read `docs/ocr-engine-survey.md` FIRST** — 116,991 bytes, written
+2026-08-12, the sourcing record for every claim above, and **named here
+because a research deliverable is not handed off until a pdfce doc names
+it.** **`Surya` is recorded there as a trap** (modified Open RAIL-M weights,
+$5 M revenue cap — field-of-use restrictions cannot be bundled in an MIT
+app); do not re-evaluate it on its accuracy numbers.
+
+**Behavioural reference:** OCRmyPDF's "sandwich" approach (MPL-2.0,
+study-only — `PRIOR_ART.md`). **Empirical finding already captured:**
+`C:\personal_rag\pdf\lesson_20260812_ocr_text_layer_bt_et_per_line_poppler_tz.md`.
 
 ---
 
@@ -47922,7 +48596,20 @@ nothing gets forgotten, not as a commitment to build in this order.
   (writer-independent by construction). Also the interleave candidate
   if the operator wants a visible-value break between Pass 3.1
   and 3.2.
-- **OCR** — recognize-text-in-scanned-page. Needs a decision on OCR
+- **OCR** — **★★ PROMOTED to *Next up* as `Pass 71.0` on 2026-08-12
+  (hundred-and-twenty-sixth filing)**, on the operator's engine decision
+  (*"use whichever one is best for everyone including other languages, or
+  heck, just build for both"*). **Slice 1 SHIPPED** (`9f2af1d`, the
+  engine-independent invisible-text-layer substrate); **no engine is
+  wired.** Bucket text retained below as the scoping record. **★ The
+  bucket's own instruction — *"check current state, don't assume 2026-era
+  training data is current"* — was FOLLOWED**: `docs/ocr-engine-survey.md`
+  (2026-08-12) is the measurement, and it found the bucket's two named
+  candidates both wanting for reasons the bucket could not have known
+  (Tesseract's default Windows build ships **LGPL** binaries; the leading
+  pure-Rust crate's **weights** are CC-BY-SA-4.0 and it exposes **no
+  confidence**). Original bucket text: recognize-text-in-scanned-page.
+  Needs a decision on OCR
   engine binding (candidate: `tesseract` via a Rust binding, or a
   pure-Rust OCR crate if one is production-quality by the time this
   is scoped — check current state, don't assume 2026-era training
@@ -48576,9 +49263,46 @@ nothing gets forgotten, not as a commitment to build in this order.
 
 ## Open operator questions (as of 2026-08-02 — answer any, all default to the stated fallback if not answered)
 
-**NEW this filing (hundred-and-twentieth filing, 2026-08-12) — filed
-OPEN, not yet answered. Operator-question ceiling moves (bj) → (bk),
-next free (bl):**
+**NEW this filing (hundred-and-twenty-sixth filing, 2026-08-12) — filed
+OPEN, not yet answered. Operator-question ceiling moves (bk) → (bl),
+next free (bm):**
+
+- **(bl) May a CC-BY-SA-4.0 model file ship inside pdfce's MIT portable
+  folder?** **This is NOT answered by the 2026-08-12 engine decision**
+  (*"use whichever one is best for everyone including other languages, or
+  heck, just build for both"*), and must not be read as such. **"Build for
+  both" selects ENGINES; it does not accept SHARE-ALIKE TERMS on a bundled
+  asset.** The concrete case: the pure-Rust candidate (`ocrs`/`rten`) is
+  **the only OCR route that passes pdfce's own wasm32 CI gate** — every
+  alternative makes OCR the first feature that cannot cross into the web
+  fork — and its **weights are CC-BY-SA-4.0**, a **copyleft licence on a
+  file pdfce would REDISTRIBUTE**, not on code it links. **The distinction
+  that makes this a genuine question rather than an obvious no:**
+  `LEGAL.md` §6.1's categorical GPL/AGPL bar is about **linking**;
+  CC-BY-SA-4.0 attaches to a **data file**, and whether its share-alike
+  obligation reaches the surrounding MIT application, reaches only
+  derivatives of the weights, or reaches nothing at all is **a legal
+  reading, and therefore Ken's** — per `pdfce-engineer.md`'s
+  *"legal decisions — surface them, don't resolve them"* rule and project
+  rule 13. **The alternative is not equivalent**: PaddleOCR's weights are
+  **Apache-2.0** and cover **50+ languages** (which is the operator's own
+  stated priority), but that route has **no WASM**. So the honest framing
+  is *"copyleft weights and a web future"* versus *"permissive weights,
+  more languages, no web future"* — **not** *"one is clean and one is
+  not"*. **What shipped in the meantime, deliberately not a resolution:**
+  `tools/check-shipped-assets.py` (`e3fb7e0`) now **refuses** any shipped
+  asset directory whose `PROVENANCE.md` states no licence — so the
+  obligation is **ENFORCED**, which is a different thing from **ACCEPTED**.
+  *Default if unanswered:* **ship neither model set.** `Pass 71.0` slice 2
+  stays blocked; the substrate (`9f2af1d`) is engine-agnostic and loses
+  nothing by waiting. **Do not resolve this by picking the permissive
+  engine and calling the question moot** — that silently forfeits the WASM
+  route, which is an architectural commitment (`ARCHITECTURE.md` §3), not a
+  detail. Full evidence: `docs/ocr-engine-survey.md` §3.3.
+
+**NEW in the hundred-and-twentieth filing (2026-08-12) — filed
+OPEN, not yet answered. Operator-question ceiling moved (bj) → (bk),
+next free was (bl):**
 - **(bk) May pdfce's own bundled Base-14 substitute faces be embedded
   into an operator's document, or is that a distinct act from drawing
   with them on-screen and off by default?** `Pass 67.0` phase E's
@@ -57712,6 +58436,79 @@ and
   `D:\dev\rag\rust\a_token_omitted_to_mean_zero_makes_a_harness_regexs_failure_indistinguishable_from_success.md`.
   Full record: `ROADMAP.md`'s hundred-and-twenty-third filing.
   **Ceiling moves `R190` → `R191`; next free `R192`.**
+
+### PROPOSAL (2026-08-12, hundred-and-twenty-sixth filing) — claiming `R192`, **NOT MINTED, NOT IN FORCE, AMENDS NOTHING**
+
+**Status: a librarian PROPOSAL. No number is assigned; the ceiling stays
+`R191` and `R192` remains free until the engineer rules.** The dispatching
+engineer asked for exactly this — *"If you judge that meets the promotion
+bar, propose a standing-rule number rather than assigning one"* — and the
+form follows the precedent of the `R159`/`R164`/`R165` proposals earlier in
+this section: proposal text first, ruling appended later, original text left
+unedited.
+
+**Why it is proposed at all: the project has now recorded the SAME SHAPE
+THREE TIMES, which is this section's own stated promotion bar** (a shape
+minted on its second instance is a guess; on its third it is a pattern).
+
+> **PROPOSED `R192` — AN OBLIGATION THAT FALLS BETWEEN TWO CORRECT TOOLS IS
+> ENFORCED BY NEITHER, AND NEITHER TOOL IS AT FAULT. When a rule's scope is
+> defined by what a tool can SEE rather than by what the rule COVERS, name
+> the gap and write the gate that spans it.**
+>
+> **The three instances, all in this project, all with the same anatomy —
+> two tools, each complete and correct within its own territory, and an
+> obligation living in the space neither territory contains:**
+>
+> | # | tool A (correct) | tool B (correct) | the obligation nobody held | closed by |
+> |---|---|---|---|---|
+> | 1 | the RAG that produced `comparison__pdfce_feature_column.md` | the pdfce docs that consume RAG deliverables | *a deliverable is handed off only when a pdfce doc NAMES it* | the standing "name the RAG file in the Pass entry" instruction |
+> | 2 | `cargo fmt --all` | the twelve crates it cannot see | *every crate's formatting is checked* | `tools/check-fmt-excluded.py` (`b902ea0`) |
+> | 3 | `cargo-about` over `Cargo.lock` | the files pdfce redistributes that are not Cargo deps | *every REDISTRIBUTED file states its licence* | `tools/check-shipped-assets.py` (`e3fb7e0`) |
+>
+> **The diagnostic question, which is the practical form:** *"what is the
+> tool's INPUT SET, and is it the same as the obligation's SUBJECT SET?"*
+> `cargo-about`'s input is `Cargo.lock`; the obligation's subject is
+> *everything pdfce ships*. `cargo fmt --all`'s input is the workspace
+> members it can resolve; the obligation's subject is *every crate*. **The
+> gap is visible in one sentence and invisible in a green CI run**, because
+> **a tool run over a subset reports success over the subset**, and a green
+> check reads as coverage.
+>
+> **Why this is NOT already covered by an existing rule.** `R151` is a
+> capability with no caller — a thing built and unreached. **This is a thing
+> never built, because two correct tools each had a reason to think the
+> other covered it.** `R186` is a guard keyed on a hazard's MARKER failing
+> open when the hazard arrives markerless — **one** guard, wrong predicate.
+> **This is TWO guards, each with the RIGHT predicate for its own domain,
+> and a domain neither claims.** `R191` is an instrument failing open — the
+> instrument here does not fail; it succeeds, honestly, over less than the
+> whole.
+>
+> **Proposed practical form, three parts.** (1) **When adding any
+> obligation that is discharged by a tool, write down the tool's input set
+> beside the obligation's subject set.** If they differ, the difference is
+> the gate you still owe. (2) **A generated artefact's own scope statement
+> is the place to say what it CANNOT cover** —
+> `THIRD_PARTY_LICENSES.md` should say in its header that it covers Cargo
+> dependencies and nothing else, so a reader cannot mistake it for a
+> complete redistribution manifest. (3) **The spanning gate checks the
+> obligation's subject set directly**, not the first tool's output — the
+> same reason `fbcb946`'s second CI gate asserts *"the built binary still
+> decodes JPEG 2000"* rather than *"the manifest says jpx"*.
+>
+> **Anticipated objection, stated against the proposal because that is this
+> project's bar:** three instances closed by three purpose-built gates may
+> be all there is, and a numbered rule would then be a label on completed
+> work rather than a guard against future work. **The counter is the fourth
+> case already visible**: OCR model weights are about to be shipped, and the
+> gap that would have swallowed them was found by an engineer who noticed
+> the shape, not by any tool. **If the shape is what is doing the finding,
+> the shape is what should be written down.**
+>
+> **— END OF THE PROPOSAL AS FILED. Nothing above is in force. Any
+> subsequently minted rule and any renumbering keep their claim on `R192`
+> unless and until the engineer rules otherwise.**
 
 ## Update protocol
 

@@ -182,6 +182,7 @@ provisional; re-verify before any acceptance criterion leans on them.
 | — | — | [x] | — | Nothing floats over the canvas. |
 | [x] | [x] | [x] | — | SVG icon set covering every GUI feature. |
 | [x] | [x] | [x] | ? | Persisted user settings. |
+| [x] | [x] | [x] | — | Strip an optional capability at build time — `--no-default-features` drops it from every shell and the lighter binary refuses it **by name**, never rendering a blank. JPEG 2000 is the only gated capability today. |
 | [x] | — | [x] | ? | Theming — three presets with a live picker. |
 
 ### Export
@@ -208,7 +209,7 @@ the model or verb exists and only the named shell is missing. The
 | [ ] | [ ] | [ ] | ? | Resize a vector object. |
 | ◐ | ◐ | [ ] | **[ ]** | Node-editing remainder — Tab cycling and arrow-key nudge. |
 | [ ] | [ ] | [ ] | [x] | Make ce dimensions and foreign annotations selectable and deletable from the canvas; also gates click-a-comment-to-select. |
-| [ ] | [ ] | [ ] | **[ ]** | Pick two lines to dimension them — parallel gives a linear ce dimension, angled gives an angular one. Needs a new two-endpoint pick primitive and a third `DimensionKind`. |
+| [x] | [ ] | [ ] | **[ ]** | Pick two lines to dimension them — parallel gives a linear ce dimension, angled gives an angular one. Core has the two-endpoint pick, an angular `DimensionKind` and a settable near-parallel threshold with a per-ce-dimension override; **no canvas gesture and no CLI kind, so nobody can author one yet.** |
 | [ ] | [ ] | [ ] | **[ ]** | ce-dimension style and tolerance at SolidWorks option breadth — a per-group default plus a per-ce-dimension override checkbox. Neither a style object nor any tolerance exists today. |
 | [ ] | [ ] | [ ] | ? | Drag a ce dimension's extension lines. |
 | [ ] | [ ] | [ ] | [x] | Re-measure a placed ce dimension — change what it measures without losing its id, group and placement. |
@@ -222,7 +223,7 @@ the model or verb exists and only the named shell is missing. The
 | [ ] | [ ] | [ ] | [x] | Digital signatures — PKCS#7/PAdES signing and verification. |
 | [ ] | [ ] | [ ] | [x] | Bates numbering. |
 | [ ] | [ ] | [ ] | [x] | PDF/A conformance and validation. |
-| [ ] | [ ] | [ ] | [x] | OCR. |
+| [ ] | [ ] | [ ] | [x] | OCR — core carries the engine-independent invisible-text-layer substrate (§9.3.6 mode 3, one y-flip site, per-word confidence that may be absent); **no engine is wired, so nothing is reachable from any shell.** |
 | [ ] | [ ] | [ ] | [x] | Accessibility (PDF/UA) tagging. |
 | [ ] | [ ] | [ ] | [x] | Document comparison. |
 | [ ] | [ ] | [ ] | [x] | Portfolios (PDF Package). |

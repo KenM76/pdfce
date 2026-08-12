@@ -2587,6 +2587,154 @@ fully sourced (Tables 44–47). **A sourcing boundary chose the mechanism.**
 NO attachments surface at all** — `core [x] cli [x] gui [ ]`, recorded
 rather than rounded up.
 
+### (R) `e931836` + `905791f` + `9f2af1d` — three new `pdfce-core` surfaces in one session: `vector::linepick`, `DimensionKind::Angular` (+ `SIDECAR_VERSION` 2), and the `ocr` module — 2026-08-12
+
+**All three are core-only. NO shell reaches any of them** — this is
+`R151`'s shape three times over in one entry, and it is recorded as a
+signal rather than smoothed. `FEATURES.md` carries the first as
+`core [x] cli [ ] gui [ ]` and the third as `core [ ] cli [ ] gui [ ]`
+(the OCR trait has **no implementation**, so even `core` is not ticked).
+
+#### `vector::linepick` — a pick primitive that returns a LINE, not a point
+
+**New module `crates/pdfce-core/src/vector/linepick.rs`.** The gap it
+fills, stated as a property of the pre-existing API rather than as a
+complaint: **every pick surface in `pdfce-core` returned either a POINT
+or an INDEX.** `snap_candidates` → single points. `hit_test_subpaths` →
+subpath indices. `centerline` → two endpoints, but only for a filled thin
+quad. **Nothing could answer *"which line did the operator click"* as a
+pair of endpoints**, which is the input an angular measurement requires.
+
+**★ The public shape carries the click position, and that is an API
+decision, not a debugging convenience.** `PickedLine` stores **where on
+the line the operator clicked**. **Two crossing lines bound FOUR angles**;
+SolidWorks' `AddDimension2` documentation states directly that the result
+depends on which endpoints were selected, and warns that selecting by
+name rather than coordinate *"causes unpredictable results"*. **A
+`(line_a, line_b)` type is therefore under-determined by construction** —
+it cannot represent the operator's choice, so every consumer would have
+to re-guess it, and two consumers would guess differently. The test pins
+the consequence: **the same two lines give 60° or 120° purely from which
+arms were clicked.**
+
+**Curves are skipped, not chorded.** Returning a chord would hand back a
+line the drawing does not contain — a plausible number with no referent,
+which is the `fuzzy-never-sneaky` failure mode expressed at the API layer
+rather than at the UI.
+
+**Two policy surfaces, and their ORDER is part of the contract:**
+
+| item | shape | contract |
+|---|---|---|
+| `Settings::parallel_epsilon_degrees` | `f32`, default **0.5**, accepted **0–45** | the global near-parallel threshold. **`R169`** — no standard defines this value (the SolidWorks corpus has no epsilon anywhere and marks the question unverified), so it is a **setting**, not a constant. |
+| `ParallelPolicy::force_parallel` | per-ce-dimension `bool` | **read BEFORE the threshold.** A forced pair must not depend on the global value. |
+
+**The ordering has its own test**, because a build that ANDed the two
+conditions would pass every ordinary case and fail only for a forced pair
+whose real angle exceeds the epsilon. **`measured_angle_degrees` keeps
+reporting the truth under a force**, so a shell can disclose *"these are
+0.8° apart"* while honouring the override — **an override that hid the
+number it overrides would ask for a decision while withholding the fact
+that makes it one.**
+
+#### `DimensionKind::Angular` — a third variant, and the scale contract splits
+
+**`DimensionKind` gains `Angular`** beside `Linear` and `Circular`,
+carrying an **apex**, a **unit direction per arm pointing INTO the
+measured wedge**, an **arc radius** and a **position along the arc**.
+
+**The arms are stored RESOLVED, not as the two source lines.** Which of
+the four angles was meant is decided at **pick time**; storing the lines
+would discard that and force every regeneration to re-derive it — **the
+mechanism by which a ce dimension silently becomes a different ce
+dimension after a scale change.**
+
+**★★ THE CONTRACT CHANGE: `measured_points()` no longer returns a single
+kind of quantity.** For `Linear`/`Circular` it returns a **page length**,
+which the group scale multiplies. For `Angular` it returns **DEGREES**,
+which **no scale may touch** — an angle is invariant under uniform
+scaling. `DimensionModel::display` therefore branches on a new
+**`is_angular()` BEFORE it applies scale.** Without that branch, **30° in
+a 1:50 group renders as `1500`, with no unit and `raw_page_units: false`**
+— **a wrong number carrying no disclosure at all.**
+
+**`format_angle_degrees` consults the group's `NumberFormat` for the
+DECIMAL MARKER ONLY** — never the unit, never the fraction mode.
+**Sourced: ISO 129-1 cl. 4.1.1 mandates a comma as the decimal marker and
+exempts nothing**, so an ISO-standard group's angle takes the comma while
+taking neither millimetres nor a carpenter's fraction. **An unscaled angle
+does NOT set `raw_page_units`** — an angle is meaningful without a scale,
+so that disclosure would be a **false warning**, and a warning that fires
+when nothing is wrong is trained away.
+
+**`translated()` moves the apex only.** Arm directions are unit vectors;
+translating them rotates the ce dimension and changes what it measures.
+
+**`SIDECAR_VERSION` 1 → 2, and the rule for WHEN a bump is owed is now
+stated on this file rather than left as precedent:**
+
+> **An optional-with-default field does NOT require a bump. A new VARIANT
+> does.** An old build meeting an unknown `/Offset` reads it as absent and
+> draws what it always drew. An old build meeting `Angular` hits
+> **`_ => return None`**, **drops the record**, and **is then free to save
+> the file back without it** — permanent, silent, and discovered only
+> after. **The bump keeps READING safe and blocks only WRITING**:
+> `sidecar_version` makes the session refuse to write while the old build
+> still reads what it understands. **Both directions tested; a v1 sidecar
+> still loads.**
+
+**Rendering note that is a correctness matter, not a cosmetic one:** the
+arc is emitted as **3° segments**, not one cubic. `draw_circular`'s
+four-kappa construction is exact **only because it always draws a full
+circle in quadrants**; a single cubic's error grows with sweep and a
+**170° arc visibly bulges**. Segments bound the error regardless of sweep
+— **≈0.07 pt sagitta at a 200 pt radius.**
+
+**`dimension_kind_label` now takes the kind** instead of a
+`(circular, show_diameter)` bool pair. **Two bools are a closed
+enumeration that does not announce it is closed**, and it answered
+*"Linear"* for an angle — a wrong label with no failure anywhere.
+
+#### `pdfce-core::ocr` — the engine-independent half
+
+**New module `crates/pdfce-core/src/ocr/`**, plus
+**`ContentBuilder::set_render_mode`** in `writer/content.rs`. Turns
+recognised words with page positions into an **invisible, selectable text
+layer over an untouched scan**.
+
+**Sourced, not recalled (rule 1): ISO 32000-1 §9.3.6 Table 106 mode 3** —
+*"neither fill nor stroke text (invisible)"*. **The spec corpus names it
+as the OCR mechanism by name.** `set_render_mode` documents **the two
+Table 106 rules it cannot enforce**: clipping modes 4–7 must not be
+switched back before `ET`, and **text state is NOT reset by `BT`**, so a
+mode set once persists into the next text object.
+
+**★ The y-flip has exactly one home.** Engines report **y-DOWN image
+pixels**; PDF is **y-UP**. `words_to_page_space` performs the conversion
+once so no engine implementor can get it wrong. **Both directions are
+tested** — a transform that negated without offsetting passes a top-only
+test, and the resulting document **looks perfect** while every selection
+returns a different line than the one clicked.
+
+**★★ `confidence: Option<f32>` — the `None` case is part of the
+contract.** Some engines expose **no per-word confidence at all**; the
+leading pure-Rust candidate computes log-probabilities and **discards**
+them. Rule 4 requires an inherently uncertain inference to **state** its
+uncertainty, and OCR is uncertain on every word. Two behaviours are
+**tested rather than trusted**:
+
+1. **An UNSCORED word needs review exactly like a low-scored one.**
+   Excluding it lets an engine that reports nothing produce an **empty
+   needs-review list** and look **more** trustworthy than an honest one.
+2. **No confidence yields `None`, never `0.0`.** Zero renders as *"0%
+   confident"* — a specific, alarming, false claim about text nobody
+   scored. **The absence of a measurement is not a measurement of zero.**
+
+**The layer is additive and never re-encodes the scan** — rule 3 is one
+reason; the stronger one is that **a scanned document is often the RECORD
+of something**, and a decode/re-encode cycle costs generation loss on an
+image whose provenance the operator may have to defend.
+
 ### (I) What this sync did NOT cover — stated so the edges are honest
 
 **A partial sync that names its edges is worth more than a
@@ -18455,3 +18603,107 @@ string constant, not a crate), so §3's GUI-core separation is untouched
 **by construction rather than by audit** — measured, no `Cargo.toml`
 appears in either commit's `git show --stat`. Full build record:
 `ROADMAP.md`'s hundred-and-twenty-fifth filing.
+
+### 2026-08-12 (hundred-and-twenty-sixth filing, `fbcb946`) — decision 055: an optional capability is stripped by a Cargo feature whose OFF switch lives at the WORKSPACE ROOT, every shell forwards it explicitly, and CI asserts the CAPABILITY rather than the manifest
+
+**The question, from the operator, 2026-08-12:** could modules such as OCR
+be stripped to make lighter builds? He asked it **assuming the crate
+layout already allowed it.**
+
+**The measured answer, and it is the decision's premise: the layout
+allowed it; NOTHING IMPLEMENTED IT.** `pdfce-core` declared **zero**
+features and contained **not one `cfg(feature)`**. *Architecturally yes,
+in practice no.* The mechanism was therefore built **and measured before
+OCR arrives**, so that the first genuinely strippable capability lands in
+a proven convention rather than one invented under deadline pressure.
+**`jpx` (JPEG 2000) is the proof capability** — heaviest single codec,
+one corpus file, **default ON**.
+
+#### The three parts of the decision, each forced by a measurement
+
+**1. The OFF switch lives at the WORKSPACE ROOT, because Cargo leaves no
+alternative.** The first attempt — `cargo build -p pdfce-cli
+--no-default-features` — produced a binary **byte-identical** to the full
+one, **10,438,656 bytes both times**. **Cargo unifies features across the
+dependency graph**: `pdfce-render` still took `pdfce-core` with default
+features and **re-enabled `jpx` behind the CLI's back**. **One enabling
+consumer wins regardless of what the others ask for.** And **an
+inheriting workspace member cannot override `default-features` at all** —
+Cargo refuses — so the root manifest is the only site where the switch
+can exist. **After the fix: 310 KB smaller, real.**
+
+> **★ The generalisable half, and it is the reason this is a decision
+> rather than a config note: a build that SUCCEEDS and produces a WORKING
+> binary is not evidence that a feature flag did anything.** The only
+> evidence is a difference — in size, in a dependency query, or in
+> behaviour. **The first measurement here would have been reported as a
+> success.**
+
+**2. EVERY shell forwards the feature explicitly, and omitting one is
+INVISIBLE.** Setting `default-features = false` at the root **silently
+stripped JPEG 2000 out of `pdfce-gui`** — `pdfce-cli` and `pdfce-render`
+received forwarding blocks and the GUI was forgotten. **Nothing failed to
+compile. No test failed.** `cargo tree -p pdfce-gui -i hayro-jpeg2000`
+came back **empty**.
+
+> **★★ THE FAILURE MODE THIS DECISION EXISTS TO PREVENT: forgetting to
+> forward a feature does not BREAK the build — it REMOVES a capability.**
+> There is no compile error and no runtime error until a document arrives
+> that needs the stripped thing, at which point the product is simply
+> less able than it was, with nothing anywhere recording when it stopped.
+
+**3. CI gates the CAPABILITY, not the manifest — TWO gates, and the
+second is the load-bearing one.** (a) a **lite build** that must compile
+**and test** (`--no-default-features`); (b) an assertion that **each
+shell's DEFAULT build still CONTAINS the codec**. **A manifest check
+would have PASSED the regression above** — the root manifest was exactly
+as intended; the defect was an absent forwarding block, which is not a
+wrong statement but a missing one. **Only asking *"can this binary still
+decode JPEG 2000"* catches it.** This is the same principle as `R191`
+(assert on positive per-item evidence, never on an absence a failure can
+also produce), applied to a build graph rather than to a test harness.
+
+#### The behaviour contract for a stripped build
+
+**A lite build REFUSES BY NAME (`R27`); it never renders a blank where a
+picture belongs.** Verified on the same file both ways:
+
+| build | result |
+|---|---|
+| full | `images=1  images_unsupported=0  codec_features=0` |
+| lite | `images=0  images_unsupported=1  codec_features=1` |
+
+**A silently missing image is a document that looks subtly wrong with no
+explanation anywhere** — the same class of harm as an unlabelled wrong
+number, and the reason `R27` is applied to a *build-time* absence and not
+only to a *runtime* one.
+
+#### Convention for the next strippable capability
+
+Recorded in `crates/pdfce-core/Cargo.toml`'s own `[features]` header so
+it is read at the point of use, and repeated here because a manifest
+comment is not a decision record:
+
+1. **Default ON.** A build that omits nothing behaves exactly as it did
+   before the feature existed. **A capability that silently disappears
+   from a default build is a regression wearing a feature flag.**
+2. **Forward it from every shell** — `pdfce-cli`, `pdfce-gui`,
+   `pdfce-render`. Missing one removes the capability without breaking
+   anything.
+3. **Add both CI gates**, not just the lite build.
+4. **Refuse by name when stripped.**
+
+**Test denominators, both stated (hard rule 10(a)): 3,575 full · 2,502
+lite.** The lite figure is smaller **by design** — the stripped codec's
+tests compile out with it — and **a lite suite that matched the full
+count would be evidence the gate was testing the full build.**
+
+**Body sections updated in the same filing:** §4.1 gains **(R)** —
+`vector::linepick`, `DimensionKind::Angular` (+ `SIDECAR_VERSION` 2) and
+the `ocr` module. **§3's GUI-core separation invariant was VERIFIED BY
+COMMAND, not by construction**, because `fbcb946` is the first commit in
+a long while to touch `Cargo.toml` files: `cargo tree -p pdfce-core
+--edges normal` grepped for `egui|eframe|winit|wgpu|glow|glutin` returns
+**0 hits over 43 lines**, and `pdfce-render` returns **0**. **No crate
+boundary moved.** Full build record: `ROADMAP.md`'s
+hundred-and-twenty-sixth filing.

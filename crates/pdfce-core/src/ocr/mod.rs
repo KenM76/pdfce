@@ -52,6 +52,11 @@
 //! rather than silently presenting unscored guesses as though they had been
 //! checked. An absent score and a high score must never look the same.
 
+/// Where OCR model files come from — operator-supplied or beside the binary,
+/// never downloaded. See the module's own docs for why a downloader was
+/// proposed and withdrawn.
+pub mod models;
+
 use crate::page_tree::Rect;
 
 /// One recognised word, positioned in PDF default user space.
