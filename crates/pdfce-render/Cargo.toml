@@ -16,6 +16,25 @@ license.workspace = true
 # rather than throwaway.
 profile = []
 
+# ---------------------------------------------------------------------------
+# FORWARDED STRIPPABLE CAPABILITIES — and why forwarding is MANDATORY, not
+# tidiness.
+#
+# Cargo unifies features across the whole graph: if ANY crate depends on
+# `pdfce-core` with default features on, the feature is enabled for every
+# consumer, no matter what the others ask for. Measured on 2026-08-12 —
+# `cargo build -p pdfce-cli --no-default-features` produced a binary
+# BYTE-IDENTICAL to the full one, because this crate was still pulling
+# `pdfce-core` with defaults and re-enabling `jpx` behind the CLI's back.
+#
+# So every intermediate crate must (a) take `pdfce-core` with
+# `default-features = false` and (b) re-export each capability it wants to
+# forward. A crate that forgets silently defeats stripping for the entire
+# workspace, and the symptom is a flag that appears to work and changes
+# nothing.
+default = ["jpx"]
+jpx = ["pdfce-core/jpx"]
+
 [dependencies]
 # Depends on pdfce-core plus the CPU rasterizer. NOTHING here may pull a
 # GUI/windowing crate — see docs/ARCHITECTURE.md §3.

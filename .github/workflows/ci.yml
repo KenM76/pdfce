@@ -70,6 +70,40 @@ jobs:
         with:
           toolchain: "1.97.1"
       - run: cargo test --workspace --all-features
+      # THE STRIPPABLE-CAPABILITY GATE.
+      #
+      # `pdfce-core` declares default-ON features for capabilities that can be
+      # compiled out to make lighter builds (see its Cargo.toml). Nothing else
+      # exercises the switched-OFF path, so without this step a `cfg` rots the
+      # moment someone adds code inside a gated module that a lite build cannot
+      # compile — and nobody finds out until they try to make one.
+      #
+      # Measured 2026-08-12: dropping `jpx` takes ~310 KB off pdfce-cli. The
+      # gate has to keep working for that to stay true.
+      - run: cargo test -p pdfce-core --no-default-features
+      # THE FORWARDING GUARD — the other half of the gate above.
+      #
+      # Cargo will not let a member override an inherited `default-features`,
+      # so the workspace root sets `default-features = false` on pdfce-core
+      # and every consumer re-enables what it wants. A crate that forgets its
+      # forwarding block does NOT fail to build — it silently loses the
+      # capability. That happened to pdfce-gui for the length of one commit on
+      # 2026-08-12: `cargo tree -p pdfce-gui -i hayro-jpeg2000` came back
+      # empty and nothing else complained.
+      #
+      # So the DEFAULT build of each shell is asserted to still contain the
+      # codec. This checks a capability, not a manifest, which is why it would
+      # have caught that regression.
+      - name: default shell builds still carry the optional codecs
+        shell: bash
+        run: |
+          set -e
+          for p in pdfce-cli pdfce-gui pdfce-render; do
+            if ! cargo tree -p $p -i hayro-jpeg2000 2>/dev/null | grep -q hayro-jpeg2000; then
+              echo "::error::$p's DEFAULT build no longer contains hayro-jpeg2000 — it is missing a forwarding [features] block, so a capability was dropped silently (see pdfce-core/Cargo.toml)"
+              exit 1
+            fi
+          done
 
   gui-core-separation:
     name: verify pdfce-core / pdfce-render have zero GUI deps

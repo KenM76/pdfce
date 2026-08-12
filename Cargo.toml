@@ -101,6 +101,15 @@ license = "MIT"
 # Internal path dependencies, declared once here and referenced by members
 # with `pdfce-core.workspace = true` etc. External crates (thiserror, eframe,
 # rfd, clap) are declared in the individual member manifests that use them.
-pdfce-core = { path = "crates/pdfce-core" }
-pdfce-render = { path = "crates/pdfce-render" }
+# `default-features = false` HERE, at the root, and not on the members.
+#
+# Cargo refuses to let an inheriting member override `default-features`
+# ("`default-features = false` cannot override workspace's
+# `default-features`"), so the only place this can be said is once, here.
+# Each member then re-enables what it wants through its own `[features]`
+# block — see `pdfce-core`'s for the strippable-capability convention and
+# why forwarding through every intermediate crate is mandatory rather than
+# tidy.
+pdfce-core = { path = "crates/pdfce-core", default-features = false }
+pdfce-render = { path = "crates/pdfce-render", default-features = false }
 pdfce-print = { path = "crates/pdfce-print" }

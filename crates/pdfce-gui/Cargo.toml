@@ -12,6 +12,24 @@ license.workspace = true
 name = "pdfce-gui"
 path = "src/main.rs"
 
+[features]
+# Forwarded strippable capabilities — see `pdfce-core`'s Cargo.toml for the
+# convention and why forwarding through EVERY crate is mandatory.
+#
+# This block exists because its absence was a live regression for the length
+# of one commit: the workspace root sets `default-features = false` on
+# `pdfce-core` (Cargo refuses to let a member override it, so it can only be
+# said there), and without a forwarding block here the GUI silently lost
+# JPEG 2000 decoding entirely. `cargo tree -p pdfce-gui -i hayro-jpeg2000`
+# came back EMPTY. Nothing failed to compile; the shell simply stopped being
+# able to decode a codec it had shipped with all along.
+#
+# That is the failure mode to remember: forgetting to forward does not break
+# the build, it removes a capability, and only a dependency query or a real
+# JPX document reveals it.
+default = ["jpx"]
+jpx = ["pdfce-core/jpx", "pdfce-render/jpx"]
+
 [dependencies]
 # eframe = egui's application shell. GUI dependencies live HERE and only
 # here (plus pdfce-cli's clap) — never in pdfce-core/pdfce-render

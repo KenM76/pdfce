@@ -101,6 +101,7 @@
 pub mod ccitt;
 pub mod dct;
 pub mod jbig2;
+#[cfg(feature = "jpx")]
 pub mod jpx;
 
 /// Shared 1-bit sample packing for the two fax codecs. Private: it is an
@@ -114,7 +115,10 @@ mod fixtures;
 #[cfg(test)]
 mod fixtures_bilevel;
 
-#[cfg(test)]
+// Gated with the feature as well as on `test`: these fixtures decode JPX, so
+// without the codec they would not compile, and a `--no-default-features
+// --tests` build is exactly what CI runs to prove the gate is real.
+#[cfg(all(test, feature = "jpx"))]
 mod fixtures_jpx;
 
 use crate::document::Document;
@@ -614,7 +618,17 @@ pub fn decode_image_view_with(
         // passing one would imply a configurability this filter does not
         // have. Everything configurable lives in the codestream or in
         // the image dictionary.
+        #[cfg(feature = "jpx")]
         Codec::Jpx => jpx::decode(doc, &data, dict, &mut notes),
+        // A build compiled without the `jpx` feature says so BY NAME rather
+        // than returning a blank or a grey box (rule R27). The distinction
+        // matters: "this build cannot decode JPEG 2000" is actionable — get
+        // the full build — where a silently missing image is a document that
+        // looks subtly wrong with no explanation anywhere.
+        #[cfg(not(feature = "jpx"))]
+        Codec::Jpx => Err(ImageCodecError::FeatureUnsupported {
+            feature: "JPX/not-built",
+        }),
     }
 }
 
@@ -1120,6 +1134,7 @@ mod tests {
     /// filter, so the *bare* dictionary is the conformant baseline and
     /// every entry beyond `/Width`//`/Height` is something a specific
     /// test chose to say.
+    #[cfg(feature = "jpx")]
     fn jpx_dict(entries: Vec<(&[u8], Object)>) -> Dict {
         let mut all: Vec<(&[u8], Object)> = vec![(b"Filter", name(b"JPXDecode"))];
         all.extend(entries);
@@ -1128,6 +1143,7 @@ mod tests {
 
     /// The bare 16 x 4 grayscale dictionary the two container-shape
     /// fixtures share.
+    #[cfg(feature = "jpx")]
     fn jpx_gray_dict() -> Dict {
         jpx_dict(vec![
             (b"Width", Object::Integer(16)),
@@ -1135,6 +1151,8 @@ mod tests {
         ])
     }
 
+    // Needs the `jpx` codec compiled in; see the feature block in Cargo.toml.
+    #[cfg(feature = "jpx")]
     #[test]
     fn jpx_decodes_a_jp2_container_to_the_expected_samples() {
         let img = decode_fixture(fixtures_jpx::JPX_GRAY_8_JP2, &jpx_gray_dict()).unwrap();
@@ -1148,6 +1166,8 @@ mod tests {
         assert_eq!(img.icc_profile, None);
     }
 
+    // Needs the `jpx` codec compiled in; see the feature block in Cargo.toml.
+    #[cfg(feature = "jpx")]
     #[test]
     fn jpx_decodes_a_raw_codestream_identically_to_its_jp2_container() {
         // §7.4.9 says the filter "shall expect to read a full JPX file
@@ -1164,6 +1184,8 @@ mod tests {
         assert_eq!(bare.color_model, boxed.color_model);
     }
 
+    // Needs the `jpx` codec compiled in; see the feature block in Cargo.toml.
+    #[cfg(feature = "jpx")]
     #[test]
     fn jpx_interleaves_rgb_components_in_order() {
         let dict = jpx_dict(vec![
@@ -1176,6 +1198,8 @@ mod tests {
         assert_eq!(img.samples, fixtures_jpx::JPX_RGB_8_SAMPLES);
     }
 
+    // Needs the `jpx` codec compiled in; see the feature block in Cargo.toml.
+    #[cfg(feature = "jpx")]
     #[test]
     fn jpx_reports_cmyk_from_enumerated_colour_space_twelve() {
         // §7.4.9 singles this value out: enumerated colour space 12
@@ -1191,6 +1215,8 @@ mod tests {
         assert_eq!(img.samples, fixtures_jpx::JPX_CMYK_8_SAMPLES);
     }
 
+    // Needs the `jpx` codec compiled in; see the feature block in Cargo.toml.
+    #[cfg(feature = "jpx")]
     #[test]
     fn jpx_absent_colour_space_is_conformant_and_the_codestream_supplies_it() {
         // THE Table 89 inversion, from the side that a conventional
@@ -1210,6 +1236,8 @@ mod tests {
         );
     }
 
+    // Needs the `jpx` codec compiled in; see the feature block in Cargo.toml.
+    #[cfg(feature = "jpx")]
     #[test]
     fn jpx_bits_per_component_is_ignored_and_a_stated_value_is_counted() {
         // Table 89: "this entry is optional and shall be ignored if
@@ -1229,6 +1257,8 @@ mod tests {
         assert!(img.notes.geometry_mismatch);
     }
 
+    // Needs the `jpx` codec compiled in; see the feature block in Cargo.toml.
+    #[cfg(feature = "jpx")]
     #[test]
     fn jpx_scales_high_bit_depths_full_range_not_by_high_byte() {
         // The discriminator pixel is 0x00FF: full-range scaling gives 1,
@@ -1252,6 +1282,8 @@ mod tests {
         );
     }
 
+    // Needs the `jpx` codec compiled in; see the feature block in Cargo.toml.
+    #[cfg(feature = "jpx")]
     #[test]
     fn jpx_dictionary_geometry_disagreement_is_counted_and_the_codestream_reported() {
         // §7.4.9 requires `/Width`//`/Height` to match the codestream
@@ -1267,6 +1299,8 @@ mod tests {
         assert!(img.notes.geometry_mismatch);
     }
 
+    // Needs the `jpx` codec compiled in; see the feature block in Cargo.toml.
+    #[cfg(feature = "jpx")]
     #[test]
     fn jpx_colour_space_channel_count_disagreement_is_counted() {
         // §7.4.9: "The number of colour channels in the JPEG2000 data
@@ -1285,6 +1319,8 @@ mod tests {
         assert!(img.notes.geometry_mismatch);
     }
 
+    // Needs the `jpx` codec compiled in; see the feature block in Cargo.toml.
+    #[cfg(feature = "jpx")]
     #[test]
     fn jpx_matching_colour_space_is_not_a_disagreement() {
         let dict = jpx_dict(vec![
@@ -1297,6 +1333,8 @@ mod tests {
         assert_eq!(img.samples, fixtures_jpx::JPX_RGB_8_SAMPLES);
     }
 
+    // Needs the `jpx` codec compiled in; see the feature block in Cargo.toml.
+    #[cfg(feature = "jpx")]
     #[test]
     fn jpx_smask_in_data_defaults_to_ignoring_the_opacity_channel() {
         // Table 89's default is 0: "If present, encoded soft-mask image
@@ -1318,6 +1356,8 @@ mod tests {
         assert!(!img.notes.jpx_smask_in_data_preblended);
     }
 
+    // Needs the `jpx` codec compiled in; see the feature block in Cargo.toml.
+    #[cfg(feature = "jpx")]
     #[test]
     fn jpx_smask_in_data_one_exposes_the_opacity_channel() {
         let dict = jpx_dict(vec![
@@ -1335,6 +1375,8 @@ mod tests {
         assert!(!img.notes.jpx_smask_in_data_preblended);
     }
 
+    // Needs the `jpx` codec compiled in; see the feature block in Cargo.toml.
+    #[cfg(feature = "jpx")]
     #[test]
     fn jpx_smask_in_data_two_is_deferred_by_name_and_never_applied() {
         // Value 2 means the colour channels were preblended with a
@@ -1354,6 +1396,8 @@ mod tests {
         assert_eq!(img.samples, fixtures_jpx::JPX_RGBA_8_SAMPLES);
     }
 
+    // Needs the `jpx` codec compiled in; see the feature block in Cargo.toml.
+    #[cfg(feature = "jpx")]
     #[test]
     fn jpx_smask_in_data_out_of_range_falls_back_to_the_default() {
         // 3 is undefined. Ignoring the codestream's alpha is the outcome
@@ -1374,6 +1418,8 @@ mod tests {
         }
     }
 
+    // Needs the `jpx` codec compiled in; see the feature block in Cargo.toml.
+    #[cfg(feature = "jpx")]
     #[test]
     fn jpx_smask_in_data_without_an_opacity_channel_is_a_disagreement() {
         // "If SMaskInData is nonzero, there shall be only one opacity
@@ -1391,6 +1437,8 @@ mod tests {
         assert_eq!(img.samples, fixtures_jpx::JPX_GRAY_8_SAMPLES);
     }
 
+    // Needs the `jpx` codec compiled in; see the feature block in Cargo.toml.
+    #[cfg(feature = "jpx")]
     #[test]
     fn jpx_ignores_the_decode_array_entirely_at_this_layer() {
         // Table 89: "If the image uses the JPXDecode filter and
@@ -1415,6 +1463,8 @@ mod tests {
         assert_eq!(a.samples, b.samples);
     }
 
+    // Needs the `jpx` codec compiled in; see the feature block in Cargo.toml.
+    #[cfg(feature = "jpx")]
     #[test]
     fn jpx_corrupt_data_errs_and_never_returns_plausible_samples() {
         // Fail-clean (decision 001 §6.1.4): corrupt in, `Err` out. A
@@ -1437,6 +1487,8 @@ mod tests {
         }
     }
 
+    // Needs the `jpx` codec compiled in; see the feature block in Cargo.toml.
+    #[cfg(feature = "jpx")]
     #[test]
     fn jpx_refuses_an_absurd_tile_grid_that_no_pixel_ceiling_can_see() {
         // A CPU-exhaustion vector the `image_codec_jpx` fuzz target
@@ -1468,6 +1520,8 @@ mod tests {
         );
     }
 
+    // Needs the `jpx` codec compiled in; see the feature block in Cargo.toml.
+    #[cfg(feature = "jpx")]
     #[test]
     fn jpx_accepts_a_tile_grid_within_the_ceiling() {
         // The other side of the guard, which is the half that catches an
@@ -1479,6 +1533,8 @@ mod tests {
         assert_eq!(img.samples, fixtures_jpx::JPX_GRAY_8_SAMPLES);
     }
 
+    // Needs the `jpx` codec compiled in; see the feature block in Cargo.toml.
+    #[cfg(feature = "jpx")]
     #[test]
     fn jpx_unsupported_enumerated_colour_space_is_a_named_diagnostic() {
         // §7.4.9 permits enumerated colour space **19 (CIEJab)**
@@ -1519,6 +1575,8 @@ mod tests {
         );
     }
 
+    // Needs the `jpx` codec compiled in; see the feature block in Cargo.toml.
+    #[cfg(feature = "jpx")]
     #[test]
     fn jpx_refuses_a_geometry_past_the_pdfce_ceiling_before_decoding() {
         // A SIZ marker claiming 60000 x 60000 (3.6 Gpx) is inside

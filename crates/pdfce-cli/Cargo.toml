@@ -12,6 +12,13 @@ license.workspace = true
 name = "pdfce-cli"
 path = "src/main.rs"
 
+[features]
+# Mirrors `pdfce-core`'s strippable-capability features so a lighter CLI is
+# one flag rather than a manifest edit. Default ON: `--no-default-features`
+# is the deliberate act, never the accident.
+default = ["jpx"]
+jpx = ["pdfce-core/jpx", "pdfce-render/jpx"]
+
 [dependencies]
 # clap (derive API): the de facto standard argument parser
 # (docs/PRIOR_ART.md). License: MIT OR Apache-2.0 (permissive). Zero GUI

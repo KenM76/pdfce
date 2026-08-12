@@ -8,6 +8,44 @@ authors.workspace = true
 publish.workspace = true
 license.workspace = true
 
+[features]
+# ---------------------------------------------------------------------------
+# STRIPPABLE CAPABILITIES
+#
+# The operator asked (2026-08-12) whether modules could be stripped to make
+# lighter builds. The crate layout allows it; nothing enforced it, and before
+# this block `pdfce-core` declared ZERO features — so the answer was
+# "architecturally yes, in practice not yet." This is the mechanism, and the
+# convention every future strippable capability follows.
+#
+# RULES FOR ADDING ONE:
+#
+# 1. Default ON. A build that omits nothing must behave exactly as it did
+#    before the feature existed. A capability that silently disappears from a
+#    default build is a regression wearing a feature flag.
+# 2. The gated-out path REFUSES BY NAME. Never a silent wrong answer, never a
+#    grey box — `ImageCodecError::FeatureUnsupported` and its siblings exist
+#    so a build that cannot do something says which thing (rule R27). A lite
+#    build that quietly rendered a blank where a JPEG 2000 image belongs would
+#    be worse than one that will not open the file.
+# 3. The dependency is `optional = true` and named by the feature, so
+#    disabling it actually removes the code rather than merely branching
+#    around it. `THIRD_PARTY_LICENSES.md` is generated from the SHIPPING
+#    graph, so a build that drops a dependency should drop its attribution
+#    too.
+# 4. CI builds `--no-default-features` (see .github/workflows/ci.yml), which
+#    is what stops a `cfg` from rotting into something that no longer
+#    compiles when switched off.
+default = ["jpx"]
+
+# JPEG 2000 image decoding (`JPXDecode`, ISO 32000-1 §7.4.9 / ITU-T T.800).
+#
+# The heaviest single codec in the crate and the most rarely needed: JPX
+# appears mainly in scanned archival material and in some PDF/A-2 output.
+# Without it, a JPX image is refused by name and everything else in the
+# document still works.
+jpx = ["dep:hayro-jpeg2000"]
+
 [dependencies]
 # thiserror: the ecosystem-standard derive for well-behaved error types
 # (Rust API Guidelines C-GOOD-ERR — errors implement std::error::Error and
@@ -116,7 +154,7 @@ hayro-jbig2 = { version = "0.3", default-features = false, features = ["std"] }
 # colour samples (which /SMaskInData requires us to keep separate) and
 # its scaling path shifts by a bit depth a JP2 palette box may declare
 # as large as 128.
-hayro-jpeg2000 = { version = "0.4", default-features = false, features = ["std"] }
+hayro-jpeg2000 = { version = "0.4", default-features = false, features = ["std"], optional = true }
 
 # --- Pass 46.x: the JPEG ENCODER (image_import's ImageCompression::Jpeg) ----
 #
