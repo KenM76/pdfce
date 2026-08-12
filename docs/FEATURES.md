@@ -174,6 +174,8 @@ provisional; re-verify before any acceptance criterion leans on them.
 | [x] | [x] | [x] | — | Live-edit canvas — renders the edited revision, not a static image. |
 | — | — | [x] | — | Pan, zoom-to-cursor, marquee select. **Marquee is full-enclosure only.** |
 | — | — | [x] | — | Dockable panel shell, ribbon, fixed Quick Access Toolbar, density convention. |
+| — | — | [x] | ? | Arming a tool raises its options in the side pane, from wherever the ribbon last sent it. |
+| — | — | [x] | ? | The GUI binary answers `--help`/`--version` on the terminal without opening a window; an unknown flag exits 2. |
 | — | — | [x] | ? | Independent edit toggles plus one master edit switch. |
 | — | — | [x] | ? | Multi-target verbs act on the whole selection or refuse — never a silent subset. |
 | — | — | [x] | — | Implicit gesture commit — clicking away accepts an in-progress edit; Enter commits a typing draft. |

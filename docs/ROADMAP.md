@@ -81,6 +81,300 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★★★★ `0947cab` + `c3a4d2e` + `9ea0c88` + `aad48c7`, released as **`v0.5.1`** — a shipped feature's CLI shell DID NOT WORK for two days while its core did, and the previous filing said otherwise; the GUI's Tool Options pane stops latching on the first ribbon visit; `pdfce-gui --version` stops opening a window and hanging; decision 054; `R191` minted from a verification harness that fabricated its own pass — 2026-08-12 (hundred-and-twenty-third filing)
+
+**★ Read this first: the previous filing recorded `Pass 67.0` phase E
+as Shipped across core/CLI/GUI, and the CLI half did not function.**
+The hundred-and-twentieth filing ticked `[x] cli` on *Embed missing
+font programs*; the hundred-and-twenty-first filing re-checked that
+same box against live source and concluded no edit was owed. Both were
+reading a command that existed, compiled, was tested, and **produced
+nothing for the invocation its own help text implies**. The fix is
+`c3a4d2e`; the box is now honest for the first time. **This is the
+substance of the filing** — the rest is smaller.
+
+**Sourcing, stated before any figure.** This librarian **had a shell
+this dispatch** (hard rule 8). Everything below marked *measured* was
+produced by a command run here and the command is named; everything
+marked *relayed* comes from the dispatching engineer's report and was
+not re-run. `git show` was run on all four hashes and the entry's
+narrative comes from those messages, not from prose summary.
+
+---
+
+#### 1. `c3a4d2e` — `embed-font`/`unembed-font` selected nothing, and said so in three misleading ways
+
+**Defect 1 — the empty plan. Root cause was `clap`, not font logic.**
+`pdfce-cli embed-font <file> --font-dir <dir> --apply` printed
+`resolved=1` then `fonts=0 exact=0 substitute=0 refused=0 unmatched=0`
+on **every** file tried, and `--apply` wrote nothing. The
+`--font`/`--all-missing` `ArgGroup` was not marked `required`, so a
+command naming neither member **parsed successfully and requested
+nothing**. Zero refusals is what made it read like a dropped donor: a
+rejected donor would have been counted. `unembed-font` carried the
+identical group with the identical hole. Both are now `.required(true)`
+— **measured on disk this filing** at
+`crates/pdfce-cli/src/main.rs:1110` (`which-embed`) and `:1022`
+(`which`), by `grep`.
+
+**Defect 2 — a completeness claim printed over an empty list.** The run
+printed *"Every one is listed above with its reason"* above nothing, in
+**three** instances. Under an explicit `--font <name>` selection the
+document-wide missing count and the operation's own blocked list are
+different sets, and the sentence sent the operator hunting for reasons
+that were never printed.
+
+**Defect 3 — a refusal message naming a function nobody can type.** A
+save refused on a recovered-base document ended with `(save_full)` — a
+`pdfce-core` library symbol, correct for the core's Rust-caller
+audience, and **absent from every `--help` output in the product**. The
+CLI now translates it once at the shared save boundary into `--mode
+full` **and states the cost** — drops superseded revisions, invalidates
+any existing digital signature (ISO 32000-1 §12.8.1 NOTE 1). This is
+standing rule **R174** (read a gate's output as its audience reads it);
+the cost half is **project rule 4** — offering the destructive path
+because it is the one that makes the error stop, without naming what it
+destroys, is precisely the sneaky half. **Measured on disk this
+filing:** `fn hint_recovered_base` at
+`crates/pdfce-cli/src/main.rs:14554`, with the wording and the
+`WriteError::RecoveredBaseForbidsIncremental`-only match read verbatim.
+
+**The shape, for the record — `R151` one level lower, and it survived a
+full green gate.** A core API that works while its shell produces
+nothing. The 3,535-test suite was green throughout, because **no test
+drove the CLI's own argument surface** for this shape. Two CLI-level
+integration tests were added; `crates/pdfce-cli/tests/save_refusal_hints.rs`
+is new (**measured: 2 tests on disk**,
+`a_recovered_base_refusal_names_the_flag_not_the_api_function` at line
+100 and `following_the_hint_actually_produces_a_file` at line 134). The
+second one **follows the hint** and requires a reloadable file out the
+other side across three damage shapes, per **R187** — prove a guard by
+making the hazard occur. A hint naming a flag that does not work is
+worse than no hint, and a string assertion could not catch that.
+
+**★ THE SWEEP FIGURES STAND AND NEED NO AMENDMENT.** The phase E sweep's
+**1,330 of 1,507** missing fonts embedded and **726 of 4,023** files
+reaching `not-embedded=0` were **re-verified as reproducible today**
+(relayed). They were never a false number: `tools/embed-sweep` calls the
+core API directly and hard-codes `EmbedRequest::all_missing()`, so it
+**never went through the broken argument group**. The previous filing's
+numbers are correct; what it lacked was the caveat, which the
+hundred-and-twenty-first filing supplied and this one now closes with a
+working shell. Per-item form (hard rule 10): 1,330 / 1,507 = **88.3% of
+missing fonts embedded**; 726 / 4,023 = **18.0% of files fully closed**.
+
+**Five real-world PDFs verified end to end** (relayed), each going from
+missing font(s) to zero with the output reopening and rendering:
+`document.pdf` 1→0, `data-000001.pdf` 2→0, `eu-001.pdf` 1→0 (needs
+`--mode full`; recovered base — the refusal is doing its job, and is now
+the refusal that names a typeable flag), `FC60_Times.pdf` 1→0,
+`PDFBOX-2984-rotations.pdf` 1→0. **6 of 6 missing fonts across 5 of 5
+files.**
+
+---
+
+#### 2. `0947cab` — the Tool Options pane latched on the first ribbon visit, and two doc comments already claimed it did not
+
+**Filed here because `tools/check-commits-filed.py` flagged it as
+present in NO filing.** It is **not** added to
+`tools/commits-filed-baseline.txt` — a baseline entry suppresses the
+gate; this is a filing, which satisfies it.
+
+**The operator reported two things and they are one bug seen from both
+ends:** *"when I click any tool button I'd expect its options to pop up
+in the side bar"* and *"page properties is still showing permanently in
+one of the windows"*. `tool_options_panel` returns early unless
+`pane_subject == ArmedTool`; `pane_subject` is set by the ribbon and
+**nothing ever set it back**. One visit to Properties — or Redact,
+Forms, Comments, Layers, Signatures, Fonts, Batch Tools — latched the
+pane for the rest of the session and every later tool-arm was swallowed
+silently. `enabled_tools` and `active_tool()` updated correctly
+throughout, so **nothing was wrong from the model's side; only the
+operator could see it.**
+
+**★ AND BOTH DOC COMMENTS ALREADY ASSERTED THE BEHAVIOUR.**
+`PaneSubject::ArmedTool`'s own doc said *"Arming a tool comes back
+here."* `Action::SelectCanvasTool`'s said *"Pass 34.1: arming a tool
+raises Tool Options"*. Neither was true. **That is the shape nobody
+goes looking for, because reading the comment IS the check a reader
+would run — and it agreed with itself.** The engineer records this as
+the session's **fourth** instance of a claim-without-an-implementation:
+a recovery note reasoning correctly on the wrong axis; a filing that
+"confirmed present by direct read" a body that was not there; a module
+doc enumerating three panels when there were four; and now a guarantee
+stated twice and implemented nowhere. Both comments are now corrected
+to say the code enforces it rather than to assert it again — **measured
+on disk this filing** at `crates/pdfce-gui/src/ribbon.rs:571–577`, which
+now reads *"That last sentence was PROSE ONLY until 2026-08-12"* and
+names the pinning test.
+
+**The test drives the real dispatcher on a real document** — ribbon
+route to Properties, then arm — rather than reading the handler, and it
+asserts the **one-way half** too: disarming must leave the pane alone,
+or a future "fix" that resets on disarm would look equally correct and
+would move the panel out from under the operator. Proved failable
+(**R187**): removing the one line fails
+`arming_a_tool_returns_the_pane_from_properties` by name with a message
+explaining what the operator would see. Verified in a running release
+build — Properties, then arm Measure, and the pane shows Linear
+Dimension with its group, snap, alignment and Accept/Reject controls.
+365 `pdfce-gui` tests pass (relayed), clippy clean.
+
+**This is the pane latch only. It is NOT the interaction-model work**
+(`Pass 46.0`/`46.1` — annotations joining the `CanvasTool` gesture
+framework, selection-driven Tool Options, drag/resize), which remains
+the operator's most recent GUI request and remains **unstarted**. Said
+explicitly because a filing that reports "tool options fixed" is
+readable as "the GUI request is done", and it is not.
+
+---
+
+#### 3. `9ea0c88` — a windowed binary still owes a terminal three answers
+
+`pdfce-gui --version` **opened a window and never returned.** Not slow,
+not wrong — it did not return. `main()` takes `argv[1]` as a document
+to open, correct for a double-click and for a file association, and
+treated every other invocation the same way, so `--version` became a
+filename. **A script or installer probing the binary hangs indefinitely
+with no output** — worse than unhelpful, because there is nothing to
+read. Found in a release smoke test that timed out after two minutes on
+a window that then had to be killed.
+
+`--help`/`-h` and `--version`/`-V` now answer **before `eframe`
+initialises anything**; an unrecognised leading-dash argument exits **2**
+rather than being opened as a file (`--verison` producing "window opens,
+file not found" is the same confusion in a different costume). **Hand-
+rolled, not `clap`** — four string comparisons do not justify an
+argument-parser dependency in the GUI crate (**project rule 13**); **no
+dependency was added at all**. The help text points at `pdfce-cli` for
+batch work so this does not become a second, competing CLI. **Measured
+on disk this filing:** `crates/pdfce-gui/src/main.rs:526` (`"--version"
+| "-V"`), `:531` (`"--help" | "-h"`), `:559` (the *"Try `pdfce-gui
+--help`, or `pdfce-cli --help` for batch operations"* line), `:567`
+(answered before `eframe` initialises). All four paths verified on the
+release binary (relayed): `--version` and `--help` print and exit 0, a
+bad flag exits 2, a real file still reaches the app
+(`argv1=Some("fixtures/synthetic/minimal.pdf")`), a bare launch still
+opens empty.
+
+**This closes the known pending item "`pdfce-gui --help` launches the
+window instead of printing help."** Recorded as closed on the
+engineer's report. **Not found anywhere in the tracked docs** by a
+repo-wide `grep` run this filing (`--include=*.md --include=*.py
+--include=*.rs`), so no document edit was owed to retire it — it lived
+outside `ROADMAP.md`/`SESSION_LOG.md`. Stated rather than left silent,
+because "closed a pending item" with no locatable pending item is the
+kind of claim this project has had to correct before.
+
+---
+
+#### 4. `aad48c7` + release **`v0.5.1`**
+
+**Version bumped 0.5.0 → 0.5.1 BEFORE tagging, deliberately.** The new
+`--version` output prints `CARGO_PKG_VERSION`, so tagging `v0.5.1` on a
+binary answering "0.5.0" **would have shipped a false claim in the one
+place a user checks it.** `v0.5.0` had been released at 10:17 the same
+day, before both fixes.
+
+**Released under the operator's standing authorisation** — *"please
+continue to post the latest versions to git so I can try them on my
+laptop at home"* (2026-08-11), already recorded in the
+hundred-and-ninth filing and in `NEXT_SESSION.md`. Not a fresh
+permission and not read as blanket publishing authority.
+
+**Measured this filing, not relayed** — `git ls-remote --tags origin`
+and `gh release view v0.5.1`:
+
+| Checked | Command | Result |
+|---|---|---|
+| Tag on origin | `git ls-remote --tags origin` | `v0.5.1^{}` → `aad48c73ff453ab7f633406329a3ca002ae24e4e` — **equals `HEAD`** |
+| Workspace version | `grep '^version' Cargo.toml` | `version = "0.5.1"` (line 69) |
+| Release exists | `gh release view v0.5.1` | *"pdfce v0.5.1 — embed-font works from the CLI"*, created **2026-08-12T14:41:54Z** |
+| Asset | same | `pdfce-v0.5.1-portable-win64.zip`, **10,244,728 B** (= 9.77 MiB), uploaded 14:43:36Z, sha256 `dfd262c0…46c7b22` |
+| Working tree | `git status --short` | **clean** |
+| Remote | `git remote -v` | `origin https://github.com/KenM76/pdfce.git` (fetch + push) |
+
+`tools/verify-release.py v0.5.1` reports **clean** — tag, `HEAD`,
+`origin/main` and the release all agree (relayed; the four constituent
+facts above were measured here independently and agree with it). Release
+notes lead with the print-service missing-font recipe.
+
+**Backup currency, measured not inferred** (hard rule 8): `ls -la
+D:\Dev\pdfce-backups\` — newest artefact is
+`pdfce-full-20260808-0956.zip` (183,439,240 B, **2026-08-08 10:01**);
+newest bundle is `pdfce-20260807-2039.bundle` (**2026-08-07 20:39**).
+**Both predate every commit in this filing**, and predate the whole of
+`Pass 67.0`. The engineer should take a fresh bundle. This figure is
+`stat`-sourced, not read from any document.
+
+---
+
+**Gates (relayed — this librarian did not run `cargo`).**
+
+| Gate | Result |
+|---|---|
+| `cargo test --workspace` | **3,544 passing / 0 failing** (baseline **3,542**; +2, the two new `save_refusal_hints.rs` tests — measured on disk here, 2 `#[test]` in that file) |
+| `cargo fmt --all --check` | clean |
+| `cargo clippy --workspace --all-targets --all-features -- -D warnings` | zero |
+| `check-ui-strings.sh` / `check-theme-colors.sh` / `check-bypass-paths.sh` | OK |
+| `check-ledger-numbers.py` | OK |
+
+**GUI-core separation invariant (§3): unaffected, and by construction
+rather than by audit.** No `Cargo.toml` for `pdfce-core` or
+`pdfce-render` was touched by any of the four commits (`git show --stat`
+on all four, measured here — the only manifest changes are `Cargo.toml`
++ `Cargo.lock` in `aad48c7`, a version-string bump), and the GUI fix
+added **no dependency at all**, so `cargo tree` cannot have moved.
+
+**Packaging smoke test: RUN AND PASSED** (relayed). The portable folder
+was copied to a fresh path (`D:\builds\smoke-fresh-*`) and `embed-font`
+driven **from the copied binary** took `FC60_Times.pdf` from one missing
+font to zero (`not_embedded_after=0`); the output reopened and listed
+three embedded fonts.
+
+---
+
+**`docs/FEATURES.md` this filing — two rows added, no box rounded up.**
+
+- *Fonts & rendering* — **Embed missing font programs** and **Remove
+  embedded font programs**: **no box changed.** Both already read `[x]
+  core / [x] cli / [x] gui`, and the `cli` box is now **true for the
+  first time**. Left as-is deliberately rather than un-ticked-and-
+  re-ticked: the row is a scan of what pdfce can do, and it can now do
+  this. The history of the box being ahead of the shell lives here and
+  in `R190`, not in the scan.
+- *Shell & UX* — **new row**: arming a tool raises its options in the
+  side pane and the pane returns from any ribbon destination (`— / — /
+  [x]`).
+- *Shell & UX* — **new row**: the GUI binary answers `--help`/
+  `--version` on the terminal without opening a window; an unknown flag
+  exits 2 (`— / — / [x]`).
+
+**Ledger for this filing.** **No new Pass ID** — three defect fixes
+against already-shipped work (`Pass 67.0` phase E; the `Pass 34.1`/
+decision-031 Tool Options pane; the GUI binary's own entry point) plus a
+release. Hard rule 2 applies: none of these is new scope. **Pass-family
+ceiling stays `Pass 67.0`, next free `Pass 68`** (grepped before
+writing). **One new `ARCHITECTURE.md` §12 entry — decision 054**
+(`pdfce-gui`'s hand-parsed, deliberately capped command-line surface);
+**decision ceiling moves `053` → `054`, next free `055`**; §7's own body
+gains the matching bullet in this same filing, per the same-filing
+propagation duty. **One standing rule minted, `R191`** — a verification
+harness that cannot distinguish a command's failure from its success;
+**ceiling moves `R190` → `R191`, next free `R192`** (grepped: no prior
+`R191` anywhere in `docs/`). **Operator-question ceiling unaffected at
+`(bk)`, next free `(bl)`.** **One new `D:\dev\rag\rust\` file** —
+`a_token_omitted_to_mean_zero_makes_a_harness_regexs_failure_indistinguishable_from_success.md`,
+with its `index.md` bullet added the same filing. **No
+`C:\personal_rag\pdf\` lesson** — nothing here concerns real-world PDF
+producer behaviour; the findings are about pdfce's own shells and about
+verification-harness discipline, both outside that subject's scope. The
+hundred-and-twenty-first filing's entry gets an amendment footer naming
+its now-existing commit hash (below). This is the
+**hundred-and-twenty-third** `ROADMAP.md`/`SESSION_LOG.md` joint filing.
+
+---
+
 ### ★★★★★ uncommitted at HEAD `c44d833` (working-tree fix, not yet committed) — `Pass 67.0` phase E's CLI shell was UNREACHABLE by the invocation its own help text implies: `embed-font`/`unembed-font`'s selection `ArgGroup` silently accepted zero fonts, and the plan's own disclosure claimed reasons that were never printed — both fixed, six falsified tests, `R190` minted — 2026-08-12 (hundred-and-twenty-first filing)
 
 **★ The record-correction question, settled first because it was asked
@@ -342,6 +636,33 @@ uncommitted before doing so. This is the **hundred-and-twenty-first**
 > turned out to be exactly right; the discipline that keeps a filing
 > short is telling "measure and confirm" apart from "measure and
 > correct" quickly, not avoiding either one.]**
+
+> **[★ AMENDED 2026-08-12 (hundred-and-twenty-third filing) — THIS
+> ENTRY'S HEADER NAMES A TREE STATE BECAUSE NO COMMIT EXISTED YET. IT
+> DOES NOW: the fix is `c3a4d2e`**, *"the flag that fixes it was never
+> the one the message named"*, committed 2026-08-12 10:27:33 -0400,
+> parent `c44d833` — **measured by `git show c3a4d2e` this filing, not
+> inferred.** Read the header's *"uncommitted at HEAD `c44d833`"* as
+> what it was: an accurate statement of where the work sat at that
+> dispatch, not an omission. `git show --stat` on it confirms the
+> commit carries the source halves this entry describes
+> (`crates/pdfce-cli/src/main.rs` +144, `crates/pdfce-core/src/font_embed_missing.rs`
+> +130, the three test files) **plus two further defects this entry does
+> not cover**, because they were found after it was written: the
+> "listed above" claim had a **third** instance, and a save refused on a
+> recovered base ended its message with `(save_full)`, a library symbol
+> that appears in no `--help` output. Full record of both, and of the
+> released binary that finally carries all of it: the
+> hundred-and-twenty-third filing at the top of *Shipped*. **The one
+> thing worth carrying forward from the pairing:** this entry concluded
+> *"`docs/FEATURES.md`: no row moves, no checkbox changes"* after
+> checking the `[x] cli` box against live source — and the box was
+> ticked on a command that produced nothing for the operator's own
+> invocation. The check was performed correctly and the conclusion was
+> right on the question asked (*does the code exist?*); the question
+> that mattered was *does it work when driven?*, and no checkbox can
+> distinguish the two. That is `R190`'s generalizable half, restated
+> here where a reader of this entry meets it.]**
 
 ---
 
@@ -56252,6 +56573,51 @@ and
   generalizable clap-only half is also written to
   `D:\dev\rag\rust\clap_arggroup_default_not_required_permits_zero_of_mutually_exclusive_selection.md`.
   **Ceiling moves `R189` → `R190`; next free `R191`.**
+
+- **R191 — When a CLI omits a token to mean zero, the token's absence
+  and the command's total failure are INDISTINGUISHABLE to a regex.
+  Assert on positive per-item evidence, and never let a verification
+  harness default a missing match to a passing value (2026-08-12,
+  `c3a4d2e`; librarian-minted at the engineer's own request, from his
+  own error).** The engineer's first verification of the `embed-font`
+  fix **reported all five test files fixed. It had tested nothing.**
+  The harness read `not-embedded=N` off `list-fonts`' summary line —
+  but that token is **omitted entirely when the count is zero**, so the
+  regex missed, and the script's fallback printed `0`, which was read as
+  *"zero fonts missing"*. **A pass fabricated by the harness itself.**
+  In some cases the output file did not exist at all, because the
+  command had errored on the very argument group being fixed: the two
+  states the harness had to tell apart — *repaired* and *never ran* —
+  produce the **same** regex miss, and the fallback resolved that
+  ambiguity in favour of success. Re-done correctly by counting
+  per-font `embedded=` fields on each font line, which is positive
+  evidence per item and cannot be produced by a command that did not
+  run. **★ SECOND INSTANCE THIS SESSION OF THE SAME SHAPE**, which is
+  why it is minted rather than filed as a one-off: the first was a bare
+  `except` swallowing `WinError 2` (executable not found) and reporting
+  **400 product "crashes" when the product had never run** — a failure
+  path that silently produced a success-looking *number*, exactly as
+  here. **Practical form, three parts.** (1) **Assert on presence, not
+  on absence.** Sum or count per-item positive fields (`embedded=` per
+  font, one line per item); a summary token you expect to be *missing*
+  in the good case is unusable as evidence, because "missing" is also
+  what a crash looks like. (2) **A harness's failure path must FAIL, not
+  default.** No `or 0`, no `if not m: value = 0`, no bare `except` —
+  every unmatched parse and every non-zero exit status raises and stops
+  the run. A default is a value the harness invented; the whole point
+  of the harness is to not invent values. (3) **Check the command
+  actually ran before believing anything it printed** — exit status,
+  and the existence of the artefact it was supposed to write. **Related
+  but distinct:** `R186` is a *product* guard failing open on a
+  markerless hazard; this is the *instrument* failing open on a
+  markerless success, and it is worse, because a product bug is found by
+  a working instrument while a broken instrument reports that everything
+  is fine. **Distinct from `R190`**, which the same commit minted:
+  `R190` is why the shell was broken, `R191` is why the first attempt to
+  prove it fixed did not notice. Ecosystem-wide half written to
+  `D:\dev\rag\rust\a_token_omitted_to_mean_zero_makes_a_harness_regexs_failure_indistinguishable_from_success.md`.
+  Full record: `ROADMAP.md`'s hundred-and-twenty-third filing.
+  **Ceiling moves `R190` → `R191`; next free `R192`.**
 
 ## Update protocol
 

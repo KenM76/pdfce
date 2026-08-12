@@ -3893,6 +3893,21 @@ debug afterthought. Design points:
   folder as `pdfce-gui`'s executable — one portable folder, two
   entry-point binaries, both zero-install. The packaging smoke test
   (§6) covers both.
+- **`pdfce-gui`'s own command-line surface is exactly three answers,
+  and that boundary is deliberate** (2026-08-12, `9ea0c88`; §12
+  decision 054). `pdfce-gui` accepts one positional argument — a
+  document to open, which is what a double-click and a file
+  association supply — and additionally answers `--help`, `-h`,
+  `--version` and `-V` on the terminal **before `eframe` initialises
+  anything**, exiting 0. An unrecognised leading-dash argument exits 2
+  rather than being opened as a filename. Before this, `pdfce-gui
+  --version` opened a window and never returned: a script or installer
+  probing the binary hung indefinitely with no output. The help text
+  points at `pdfce-cli` for batch work **so this stays a courtesy to a
+  terminal and does not grow into a second, competing CLI** — that is
+  the boundary this bullet exists to state. Parsed by hand, not by
+  `clap`: four string comparisons do not justify an argument-parser
+  dependency in the GUI crate (rule 13).
 
 ## 8. Code style & public API design
 
@@ -18272,3 +18287,42 @@ would be easiest to defend as spec-compliant.
 **Not a crate-boundary or invariant change.** Full build record:
 `ROADMAP.md`'s `Pass 67.0` phase E Shipped entry (hundred-and-
 twentieth filing).
+
+### 2026-08-12 (hundred-and-twenty-third filing, `9ea0c88`) — decision 054: `pdfce-gui` answers `--help`/`--version` itself, hand-parsed rather than via `clap`, and that surface is capped at three answers on purpose
+
+**The defect that forced the decision.** `pdfce-gui --version` opened a
+window and never returned. `main()` takes `argv[1]` as a document to
+open — correct for a double-click and for a file association — and
+treated **every** invocation that way, so `--version` became a
+filename. The failure mode is worse than unhelpful: a script or
+installer probing the binary for its version **hangs indefinitely with
+no output**, rather than failing. Found in a release smoke test that
+timed out after two minutes on a window that then had to be killed.
+
+**Decision, part 1 — the GUI binary owes a terminal three answers.**
+`--help`/`-h`, `--version`/`-V` print and exit 0 **before `eframe`
+initialises anything**; an unrecognised leading-dash argument exits 2
+rather than being opened as a filename (`--verison` producing "window
+opens, file not found" is the same confusion in a different costume; a
+path genuinely starting with `-` is rarer than a typo). A bare launch
+still opens empty and a real path still reaches the app, unchanged.
+
+**Decision, part 2 — hand-rolled, not `clap`.** The GUI has no other
+flags. Pulling an argument parser into `pdfce-gui`'s `Cargo.toml` to
+answer three strings would add a dependency (project rule 13) for four
+string comparisons. **No dependency was added by this change at all**,
+so the GUI-core separation invariant (§3) is untouched by construction
+rather than by audit.
+
+**Decision, part 3 — the surface is capped, and the help text enforces
+the cap by pointing elsewhere.** The printed help names `pdfce-cli` for
+batch operations. `pdfce-cli` is the project's scriptable shell (§7,
+project rule 11); the GUI's argument handling is a courtesy to a
+terminal, and it must not accrete verbs until it is a second, competing
+CLI with its own divergent surface. Stated here rather than left to
+taste, because the natural next request ("could the GUI also take
+`--page`…") is the one that would start the accretion.
+
+**Not a crate-boundary or invariant change; no new dependency.** Body
+section updated in the same filing: §7's last bullet. Full build
+record: `ROADMAP.md`'s hundred-and-twenty-third filing.
