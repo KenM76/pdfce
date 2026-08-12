@@ -71,6 +71,183 @@ pub fn by_name(base_font: &str) -> Option<FallbackKey> {
     })
 }
 
+/// Real face names that satisfy each standard-14 slot, most-specific
+/// first — the **reverse** of [`by_name`].
+///
+/// # Why the reverse map is a separate table rather than an inversion
+///
+/// [`by_name`] answers *"which slot does this document font mean?"* by
+/// pattern-matching a name a producer wrote. It is deliberately loose
+/// (prefix matches, `contains("bold")`), which is right for a lookup and
+/// useless as an inversion: you cannot enumerate the names that would
+/// match a prefix test.
+///
+/// Font **embedding** needs exactly that enumeration. A document says
+/// `Helvetica`; an operator's font folder holds `arial.ttf`, registered
+/// under the names it advertises (`Arial`, `ArialMT`, `Arial Regular`) and
+/// its filename stem. Nothing connects the two without a table saying that
+/// those names are the ones a Helvetica slot accepts.
+///
+/// # What is in here, and what is deliberately not
+///
+/// The families listed are the ones designed as **metric-compatible**
+/// substitutes for the standard 14: Monotype's Arial / Times New Roman /
+/// Courier New (the Windows set), Red Hat's Liberation set, and URW's
+/// Nimbus set. DejaVu is included as a widely-installed last resort even
+/// though it is not metric-compatible — which costs nothing here, because
+/// the advances come from `/Widths` either way (decision 004 §3.6) and only
+/// the letterforms change.
+///
+/// **`Symbol` and `ZapfDingbats` have no entries beyond their own names.**
+/// A symbolic font's codes mean whatever its program says they mean, so a
+/// family-resemblance stand-in draws a different repertoire rather than a
+/// different style. Windows' `SymbolMT` is the one plausible candidate and
+/// there is no way to verify from inside pdfce that a given `SymbolMT` is
+/// Adobe-Symbol-encoded, so it is left out. `pdfce_core::font_embed_missing`
+/// refuses an inferred donor for a symbolic font independently; this table
+/// simply does not offer one.
+///
+/// PostScript-style names come first on purpose: they are unique per face,
+/// whereas a `name`-table FAMILY string is shared by every weight (both
+/// `arial.ttf` and `arialbd.ttf` advertise the family `Arial`, and a
+/// `FontEnvironment` registration is last-wins). Matching `Arial-BoldMT`
+/// before `Arial` is what keeps `Helvetica-Bold` from resolving to whatever
+/// happened to be registered last.
+///
+/// # Examples
+///
+/// ```
+/// use pdfce_render::font::{FallbackKey, select};
+///
+/// assert!(select::candidate_names(FallbackKey::Sans).contains(&"ArialMT"));
+/// assert!(select::candidate_names(FallbackKey::SansBold).contains(&"Arial-BoldMT"));
+/// // A symbolic slot offers only its own name.
+/// assert_eq!(select::candidate_names(FallbackKey::Symbol), ["Symbol"]);
+/// ```
+#[must_use]
+pub const fn candidate_names(key: FallbackKey) -> &'static [&'static str] {
+    use FallbackKey as K;
+    match key {
+        K::Sans => &[
+            "Helvetica",
+            "ArialMT",
+            "Arial",
+            "LiberationSans",
+            "LiberationSans-Regular",
+            "Liberation Sans",
+            "NimbusSans-Regular",
+            "DejaVuSans",
+            "DejaVu Sans",
+        ],
+        K::SansBold => &[
+            "Helvetica-Bold",
+            "Arial-BoldMT",
+            "Arial Bold",
+            "LiberationSans-Bold",
+            "Liberation Sans Bold",
+            "NimbusSans-Bold",
+            "DejaVuSans-Bold",
+            "DejaVu Sans Bold",
+        ],
+        K::SansItalic => &[
+            "Helvetica-Oblique",
+            "Arial-ItalicMT",
+            "Arial Italic",
+            "LiberationSans-Italic",
+            "Liberation Sans Italic",
+            "NimbusSans-Italic",
+            "DejaVuSans-Oblique",
+        ],
+        K::SansBoldItalic => &[
+            "Helvetica-BoldOblique",
+            "Arial-BoldItalicMT",
+            "Arial Bold Italic",
+            "LiberationSans-BoldItalic",
+            "Liberation Sans Bold Italic",
+            "NimbusSans-BoldItalic",
+            "DejaVuSans-BoldOblique",
+        ],
+        K::Serif => &[
+            "Times-Roman",
+            "TimesNewRomanPSMT",
+            "Times New Roman",
+            "LiberationSerif",
+            "LiberationSerif-Regular",
+            "Liberation Serif",
+            "NimbusRoman-Regular",
+            "DejaVuSerif",
+        ],
+        K::SerifBold => &[
+            "Times-Bold",
+            "TimesNewRomanPS-BoldMT",
+            "Times New Roman Bold",
+            "LiberationSerif-Bold",
+            "Liberation Serif Bold",
+            "NimbusRoman-Bold",
+            "DejaVuSerif-Bold",
+        ],
+        K::SerifItalic => &[
+            "Times-Italic",
+            "TimesNewRomanPS-ItalicMT",
+            "Times New Roman Italic",
+            "LiberationSerif-Italic",
+            "Liberation Serif Italic",
+            "NimbusRoman-Italic",
+            "DejaVuSerif-Italic",
+        ],
+        K::SerifBoldItalic => &[
+            "Times-BoldItalic",
+            "TimesNewRomanPS-BoldItalicMT",
+            "Times New Roman Bold Italic",
+            "LiberationSerif-BoldItalic",
+            "Liberation Serif Bold Italic",
+            "NimbusRoman-BoldItalic",
+            "DejaVuSerif-BoldItalic",
+        ],
+        K::Fixed => &[
+            "Courier",
+            "CourierNewPSMT",
+            "Courier New",
+            "LiberationMono",
+            "LiberationMono-Regular",
+            "Liberation Mono",
+            "NimbusMonoPS-Regular",
+            "DejaVuSansMono",
+        ],
+        K::FixedBold => &[
+            "Courier-Bold",
+            "CourierNewPS-BoldMT",
+            "Courier New Bold",
+            "LiberationMono-Bold",
+            "Liberation Mono Bold",
+            "NimbusMonoPS-Bold",
+            "DejaVuSansMono-Bold",
+        ],
+        K::FixedItalic => &[
+            "Courier-Oblique",
+            "CourierNewPS-ItalicMT",
+            "Courier New Italic",
+            "LiberationMono-Italic",
+            "Liberation Mono Italic",
+            "NimbusMonoPS-Italic",
+            "DejaVuSansMono-Oblique",
+        ],
+        K::FixedBoldItalic => &[
+            "Courier-BoldOblique",
+            "CourierNewPS-BoldItalicMT",
+            "Courier New Bold Italic",
+            "LiberationMono-BoldItalic",
+            "Liberation Mono Bold Italic",
+            "NimbusMonoPS-BoldItalic",
+            "DejaVuSansMono-BoldOblique",
+        ],
+        // See this function's docs: no stand-in is offered for either
+        // symbolic face.
+        K::Symbol => &["Symbol"],
+        K::Dingbats => &["ZapfDingbats"],
+    }
+}
+
 /// Classify from `FontDescriptor` signals when the name matched
 /// nothing (Table 123: Flags bit 1 = FixedPitch, bit 2 = Serif,
 /// bit 7 = Italic; `ItalicAngle` non-zero ⇒ italic; StemV ≥ 140 or a

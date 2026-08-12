@@ -260,6 +260,149 @@ impl FontEnvironment {
             GlyphSource::Bundled
         }
     }
+
+    /// Resolve a document's `/BaseFont` to a face that could be **embedded**
+    /// into the file for it (Pass 67.0 phase E).
+    ///
+    /// # Why this lives here and not in either shell
+    ///
+    /// `pdfce-core` decides what may lawfully be written into a font
+    /// dictionary; it must never learn what fonts a machine has (project
+    /// rule 2 — the GUI-core separation is what keeps the WASM fork a
+    /// shell-crate swap). So the name→bytes step is the shell's. But BOTH
+    /// shells need it and they must not disagree, so it lives on the type
+    /// that already owns the registry — the same argument that put
+    /// [`Self::subset_stem`] and [`Self::classify_nonembedded`] here rather
+    /// than in `pdfce-gui`.
+    ///
+    /// # The ladder, in order, and why each rung is where it is
+    ///
+    /// | Rung | Match | Reported as |
+    /// |---|---|---|
+    /// | 1 | a registered face whose name is the `/BaseFont` verbatim | `Exact` |
+    /// | 2 | a registered face whose name is the `/BaseFont` with its §9.6.4 subset tag stripped | `Exact` |
+    /// | 3 | a registered face named by [`select::candidate_names`] for the standard-14 slot the name denotes | `Alias` |
+    /// | 4 | pdfce's own bundled substitute for that slot, if `allow_bundled` | `Bundled` |
+    ///
+    /// Rungs 1 and 2 are both `Exact` because a subset tag is a statement
+    /// about the *program that used to be here*, not about the face: after
+    /// [`Self::subset_stem`], `ABCDEF+Arial` and `Arial` name the same face,
+    /// and calling the match inexact would misreport it.
+    ///
+    /// Rung 4 is opt-in rather than automatic. The bundled faces are
+    /// BSD-3-Clause (pdfium's Foxit-origin set, see
+    /// `THIRD_PARTY_LICENSES.md`), and **embedding one puts it inside a
+    /// document the operator then distributes** — a different act from using
+    /// it to draw pixels on their own screen, and one that carries the
+    /// licence's attribution condition with it. Whether to accept that is
+    /// the operator's decision, so the shells expose it as a flag and never
+    /// take it silently.
+    ///
+    /// # What this does NOT do
+    ///
+    /// It does not read a `/FontDescriptor`. [`select::by_descriptor`]
+    /// classifies an unrecognised name by its Table 123 flags, which is
+    /// exactly right for *rendering* — any plausible face beats a blank —
+    /// and wrong for embedding, where the result is written into the
+    /// document permanently. A font pdfce cannot name is a font pdfce
+    /// reports as unresolved.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pdfce_render::{FontData, FontEnvironment};
+    /// use pdfce_render::font::EmbedMatch;
+    ///
+    /// let mut env = FontEnvironment::bundled();
+    /// env.insert_named("ArialMT", FontData::new(vec![0u8; 4]));
+    ///
+    /// // The document says `Helvetica`; the folder has Arial.
+    /// let hit = env.resolve_for_embedding("Helvetica", false).expect("alias");
+    /// assert_eq!(hit.quality, EmbedMatch::Alias);
+    /// assert_eq!(hit.face_name, "ArialMT");
+    ///
+    /// // A subset tag does not make the match inexact.
+    /// let hit = env.resolve_for_embedding("ABCDEF+ArialMT", false).expect("exact");
+    /// assert_eq!(hit.quality, EmbedMatch::Exact);
+    ///
+    /// // Nothing answers to this, and the bundled faces are not offered.
+    /// assert!(env.resolve_for_embedding("Wingdings", false).is_none());
+    /// ```
+    #[must_use]
+    pub fn resolve_for_embedding(
+        &self,
+        base_font: &str,
+        allow_bundled: bool,
+    ) -> Option<EmbedDonor<'_>> {
+        if let Some(data) = self.named(base_font) {
+            return Some(EmbedDonor {
+                data,
+                face_name: base_font.to_owned(),
+                quality: EmbedMatch::Exact,
+            });
+        }
+        let stem = Self::subset_stem(base_font);
+        if let Some(data) = self.named(stem) {
+            return Some(EmbedDonor {
+                data,
+                face_name: stem.to_owned(),
+                quality: EmbedMatch::Exact,
+            });
+        }
+        let key = select::by_name(base_font)?;
+        for candidate in select::candidate_names(key) {
+            if let Some(data) = self.named(candidate) {
+                return Some(EmbedDonor {
+                    data,
+                    face_name: (*candidate).to_owned(),
+                    quality: EmbedMatch::Alias,
+                });
+            }
+        }
+        if !allow_bundled {
+            return None;
+        }
+        let data = self.fallback(key)?;
+        Some(EmbedDonor {
+            data,
+            face_name: bundled::face_name(key).to_owned(),
+            quality: EmbedMatch::Bundled,
+        })
+    }
+}
+
+/// How [`FontEnvironment::resolve_for_embedding`] reached a donor.
+///
+/// The provenance `pdfce_core::font_embed_missing::FontMatch` mirrors. Two
+/// enums rather than one because the crate boundary is load-bearing:
+/// `pdfce-core` must not depend on `pdfce-render`, so neither can name the
+/// other's type, and a shell converts between them in one line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum EmbedMatch {
+    /// The face answers to the name the document spells (with or without a
+    /// §9.6.4 subset tag).
+    Exact,
+    /// The face was reached through a standard-14 family equivalence.
+    Alias,
+    /// One of pdfce's own bundled substitute faces.
+    Bundled,
+}
+
+/// A face a shell may embed for a document font, with the provenance of the
+/// match.
+#[derive(Debug, Clone)]
+pub struct EmbedDonor<'a> {
+    /// The program bytes.
+    pub data: &'a FontData,
+    /// The name the face was matched under — what an operator recognises.
+    ///
+    /// Owned rather than borrowed: three of the four rungs produce a name
+    /// that is not a sub-slice of the input (the registry key, a candidate
+    /// from a static table, a bundled face's own label), so a borrow would
+    /// have to be `'static` on some rungs and input-lifetimed on others.
+    pub face_name: String,
+    /// How it was reached.
+    pub quality: EmbedMatch,
 }
 
 impl Default for FontEnvironment {

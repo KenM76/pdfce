@@ -45,3 +45,34 @@ pub fn faces() -> HashMap<FallbackKey, FontData> {
         (K::Dingbats, face!("FoxitDingbats.cff")),
     ])
 }
+
+/// The operator-facing name of the bundled face filling `key`.
+///
+/// Exists so [`super::FontEnvironment::resolve_for_embedding`] can DISCLOSE
+/// which face it chose. Rule 4 turns on the operator seeing what pdfce
+/// picked, and "the bundled substitute" is not an answer they can check —
+/// `FoxitSans` is, and it is greppable against
+/// `assets/fonts/PROVENANCE.md` and `THIRD_PARTY_LICENSES.md`.
+///
+/// The strings match the asset filenames exactly (minus the extension), so
+/// a name in a report leads straight to the bytes it names.
+#[must_use]
+pub const fn face_name(key: FallbackKey) -> &'static str {
+    use FallbackKey as K;
+    match key {
+        K::Sans => "FoxitSans",
+        K::SansBold => "FoxitSansBold",
+        K::SansItalic => "FoxitSansItalic",
+        K::SansBoldItalic => "FoxitSansBoldItalic",
+        K::Serif => "FoxitSerif",
+        K::SerifBold => "FoxitSerifBold",
+        K::SerifItalic => "FoxitSerifItalic",
+        K::SerifBoldItalic => "FoxitSerifBoldItalic",
+        K::Fixed => "FoxitFixed",
+        K::FixedBold => "FoxitFixedBold",
+        K::FixedItalic => "FoxitFixedItalic",
+        K::FixedBoldItalic => "FoxitFixedBoldItalic",
+        K::Symbol => "FoxitSymbol",
+        K::Dingbats => "FoxitDingbats",
+    }
+}
