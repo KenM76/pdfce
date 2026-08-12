@@ -36,6 +36,26 @@ shipped (non-documentation) file:
 3. Every shipped file in the directory is accounted for: the count in the
    directory must not exceed what `PROVENANCE.md` mentions, unless the file
    explicitly states it covers the whole directory.
+4. ★ The directory is cited in **`about.hbs`**, the `cargo-about` template.
+
+Check 4 is the one that reaches the OPERATOR rather than the repository.
+`PROVENANCE.md` records terms for whoever reads the source tree; it does NOT
+ship. The portable package carries `LICENSE`, `THIRD_PARTY_LICENSES.md` and
+`README.md` and nothing else — so an asset whose licence is recorded only in
+`PROVENANCE.md` is redistributed to end users with no notice attached at all.
+
+`about.hbs` is where that is fixed: it is the handlebars template
+`cargo-about` renders, so a hand-written section in it flows into the
+generated `THIRD_PARTY_LICENSES.md` and therefore into every release. The
+bundled Foxit faces already do this correctly, and that section is the
+worked example to copy.
+
+**Own work is exempt.** An asset whose `PROVENANCE.md` says it is pdfce's own
+art under the project licence needs no `about.hbs` entry — the shipped
+`LICENSE` already covers it and there is no third-party grant to reproduce.
+The GUI icon set is exactly this case, and check 4 flagged it on its first run
+before the exemption existed. That was a false positive, and a gate that fires
+on a correct state is one people learn to ignore.
 
 Check 3 is deliberately loose — the goal is to catch a directory that quietly
 gained twenty model files under a provenance note describing three fonts, not
@@ -92,10 +112,33 @@ _LICENCE_SIGNALS = [
 ]
 _LICENCE_RE = re.compile("|".join(_LICENCE_SIGNALS), re.IGNORECASE)
 
+#: The cargo-about template. A hand-written section here is the ONLY route by
+#: which a non-Cargo asset's licence reaches the shipped
+#: `THIRD_PARTY_LICENSES.md`, and therefore the only route by which it reaches
+#: anyone who was given a binary rather than the source.
+_ABOUT_TEMPLATE = "about.hbs"
+
 # A provenance note may declare that it covers everything beside it, which
 # exempts it from the per-file accounting in check 3.
 _COVERS_ALL_RE = re.compile(
     r"covers (every|all) (file|asset)|all files in this (directory|folder)",
+    re.IGNORECASE,
+)
+
+#: Provenance phrasings meaning "this is OUR work, under pdfce's own licence".
+#:
+#: Such assets need no entry in `about.hbs`, because the `LICENSE` file that
+#: already ships with every release covers them — there is no third-party
+#: grant to reproduce. Check 4 exempts them.
+#:
+#: Added after the first run of check 4 flagged the GUI icon set, which the
+#: operator confirmed on 2026-08-02 is his own art carried over from another of
+#: his projects. That flag was a FALSE POSITIVE, and a gate that cries wolf on
+#: a correct state is one people learn to skip — which would have cost more
+#: than the check is worth.
+_OWN_WORK_RE = re.compile(
+    r"operator's own work|own art|drawn from scratch|no third-party licen[cs]e"
+    r"|project licen[cs]e|covered by pdfce's",
     re.IGNORECASE,
 )
 
@@ -126,6 +169,18 @@ def main() -> int:
     if not asset_dirs:
         print("shipped-assets: no shipped asset directories found.")
         return 0
+
+    about_path = ROOT / _ABOUT_TEMPLATE
+    about = (
+        about_path.read_text(encoding="utf-8", errors="replace")
+        if about_path.is_file()
+        else ""
+    )
+    if not about:
+        print(
+            f"shipped-assets: WARNING — {_ABOUT_TEMPLATE} not found; cannot verify that "
+            "asset licences reach the shipped attribution file."
+        )
 
     problems: list[str] = []
     for directory in asset_dirs:
@@ -165,6 +220,29 @@ def main() -> int:
                     f"      actually in this directory. Either the files changed and the\n"
                     f"      note did not, or the note covers something else."
                 )
+
+        # ★ Check 4 — does the licence reach the people who get a BINARY?
+        #
+        # PROVENANCE.md does not ship. The portable package carries LICENSE,
+        # THIRD_PARTY_LICENSES.md and README.md and nothing else, so an asset
+        # documented only in the source tree is redistributed with no notice
+        # attached to it at all.
+        #
+        # about.hbs is the cargo-about TEMPLATE, so a hand-written section in
+        # it renders into the generated THIRD_PARTY_LICENSES.md and therefore
+        # into every release. Citing the directory path is the convention the
+        # bundled Foxit faces already follow.
+        if about and rel not in about and not _OWN_WORK_RE.search(text):
+            problems.append(
+                f"  {rel}\n"
+                f"      Has a PROVENANCE.md, but {_ABOUT_TEMPLATE} never cites this\n"
+                f"      directory — so its licence does NOT reach the generated\n"
+                f"      THIRD_PARTY_LICENSES.md, and therefore never reaches anyone\n"
+                f"      who was given a binary rather than the source.\n"
+                f"      PROVENANCE.md is for readers of the repository;\n"
+                f"      {_ABOUT_TEMPLATE} is for the people you ship to.\n"
+                f"      Copy the 'Bundled Foxit substitute faces' section as a model."
+            )
 
     if problems:
         print("shipped-assets: redistributed files with no recorded licensing.\n")
