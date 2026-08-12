@@ -28,6 +28,42 @@ and `pdfminer` installed. Extraction recipe that works:
    five cases the reconstruction had been correct, which is worth knowing but is
    *not* a licence to skip the re-extraction.
 
+3-ISO2. **★ ISO 32000-2:2020 IS NOW STAGED — `_sources\ISO_32000-2_sponsored_EC3.pdf`
+   (19 203 156 B, **1023 pp**, SHA-256 `c94caf9f…cb3a2`), acquired by the OPERATOR
+   2026-08-12 via the PDF Association's sponsored access. Cached dump:
+   `C:\tmp\iso32000_2_dump.txt` (2 695 377 B; verify `grep -c "=== PDFPAGE"` → **1023**).**
+   `license_basis: **licensed_primary_private_rag**` — a NEW value; free of charge
+   but licensed to a **named individual**, footer on every page reads *"Single
+   user only, copying and networking prohibited."* **Paraphrase + short
+   quotation only; the PDF never leaves `_sources\`; a RAG file built on it is
+   never published.** Read `LEGAL_NOTE.md`'s 2026-08-12 note first.
+
+   **★ 3-ISO2-bis. THE ERRATA ARE ANNOTATIONS, NOT TEXT — and this inverts the
+   usual reading.** `extract_text()` returns **ISO 32000-2:2020 EXACTLY AS
+   PRINTED** and silently drops every Errata-Collection-3 correction, because
+   they are laid over the page as `/StrikeOut` + `/Caret` + `/Text` sticky
+   notes. **A naive dump is the UNCORRECTED standard.** This is *better* than any
+   secondary source (the published-vs-erratum split is directly observable
+   instead of inferred from `[INS]`/`[DEL]`), but only if you read the annots.
+   - Each markup annot carries `/T` = `Issue #NNN` →
+     `github.com/pdf-association/pdf-issues/issues/NNN`.
+   - A reply sticky note's `/State` is **`Completed`** (approved by ISO TC 171
+     SC 2 WG 8) or **`Accepted`** (PDF Association TWG only). **Different
+     authority levels — record which.** Algorithm 2.B's step-(a) correction is
+     `Accepted`, i.e. not yet ISO-ratified.
+   - A few resolutions could not be marked up inline and are **appended as new
+     pages at the end** (first at dump line 47889). Check them; none concerned
+     §7.6.
+   - **A `/StrikeOut` says WHERE, not WHAT.** Recover the struck text from
+     `/QuadPoints`: for each 8-number quad take `x0..x1`/`y0..y1`, select the
+     `pdfminer` `LTChar`s inside (±1 x, ±2 y), sort by `(-round(y/3)*3, x0)`.
+     Working script kept as `scratchpad/errata.py` (~45 lines, takes a 1-based
+     page range); `scratchpad/lines.py` prints a page's lines with y
+     coordinates, which is how you confirm *which* line a strikeout hit (e.g.
+     the same phrase *"with an initialization vector of zero"* occurs on both a
+     CBC line and an ECB line one line apart — only the ECB one is struck).
+   - Skip `/Link`, `/Widget`, `/Popup` subtypes or the output drowns.
+
 3a. **CHECK `C:\tmp\iso32000_dump.txt` BEFORE RE-DUMPING.** The full 756-page
    `pypdf` dump persists across sessions (2 124 253 B, 37 491 lines, written
    2026-07-31; still present and correct 2026-08-07). Verify with
@@ -238,12 +274,16 @@ and `pdfminer` installed. Extraction recipe that works:
     grade it MEDIUM — a slide deck by a standards participant is not a
     standard**, and a 2017 deck describes ISO 32000-2:**2017**, not 2020.
     Retire the old note that PDF Association material is "not machine-reachable".
-  - **`https://www.pdfa-inc.org/product/iso-32000-2-pdf-2-0-bundle-sponsored-access/`**
-    — states ISO 32000-2:2020 + ISO/TS 32001–32005 are **$0.00 since 2023-04-05**
-    under sponsored access. **Acquisition needs an account + a $0 cart checkout =
-    a side effect outside the working tree ⇒ escalate to the operator, do not
-    perform it.** And **zero cost ≠ redistributable** — an acquired copy is
-    `user_provided_paywalled_copy`, never `free_primary`.
+  - ~~**`https://www.pdfa-inc.org/product/iso-32000-2-pdf-2-0-bundle-sponsored-access/`**~~
+    **★ RESOLVED 2026-08-12 — THE ESCALATION WORKED AND THE OPERATOR ACTED.**
+    Surfacing the $0 sponsored bundle to the operator (rather than performing an
+    account+checkout, which is a side effect outside the working tree) is what
+    got ISO 32000-2:2020 into the corpus. **Keep escalating acquisitions; they
+    land.** The live index is now `https://pdfa.org/sponsored-standards/`. The
+    acquired copy is `licensed_primary_private_rag` (see item 3-ISO2), **not**
+    `user_provided_paywalled_copy` (which stays reserved for a *purchased* copy)
+    and never `free_primary`. **ISO/TS 32001–32005 are in the same bundle and
+    are still NOT acquired** — if one is ever needed, escalate the same way.
 - **Dead/blocked, 2026-07-31:** `www.adobe.com/content/dam/...` PDF paths **hang**
   (no response in 120 s; `curl` exit 92 on HTTP/2, then a 2-minute timeout on
   `--http1.1`) · `opensource.adobe.com/dc-acrobat-sdk-docs/standards/pdfstandards/pdf/adobe_supplement_iso32000*.pdf`

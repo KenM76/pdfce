@@ -55,6 +55,7 @@ heading (`**<N>. `).**
 | 42 | ★ **THE NULL-DELTA DISPATCH — relayed findings ALREADY recorded.** Re-verify from the source anyway and say so · **grep artifact: annex headings are `Annex<2 SPACES><LETTER>`, so `grep "Annex B"` = 0 hits in 756 pp; a 0-hit on something visible in the TOC is an artifact, not absence** · the residue is the CONSEQUENCE not the fact (an erratum without its FAILURE MODE is a curiosity; a definition-shaped sentence can be the non-normative source while an attribute column is normative) · promote a "corpus-wide" rule out of the session audit log into `index.md`'s reading-discipline block |
 | 43 | ★ **THE EDITION-AXIS RESIDUE** — when a `free_primary` clause family is complete, the gap left is "is this clause NUMBER still valid in the next edition?" (build a renumbering map as §1) · **★ in an errata source `[INS]` is a CORRECTION, not the standard as printed — tag every delta, because files in the wild follow the PRINTED text; an erratum can close a corpus ambiguity AND create a read-tolerance requirement at once** · an errata page prints only what CHANGED, so its silence is not evidence · OPEN → PARTIALLY CLOSED by acquiring an algorithm's HARNESS without its KERNEL (restate the refusal as UNCHANGED) · a later edition can WITHDRAW an option the previous session offered · the best find can be an ABSENCE in the edition already held (1.7 lacks 2.0's signature-`/Contents` exception ⇒ pdfce invariant citing 2.0, never §7.6.1) · a new-in-edition-N FEATURE can make a shipped guard fail OPEN (an unencrypted wrapper has no `/Encrypt`) · grade all three sources in a §0 table and mark the slide-only claims "do not act on this" |
 | 44 | ★ **THE SECOND NULL-DELTA — a dispatch RE-ASKS an already-RULED question.** The residue is your own EVIDENCE, not the answer: re-extract the quotes anyway and say so · **re-run term-frequency counts (a clause span bounded by a non-existent next heading silently runs to EOF ⇒ 6 vs the true 4); and ask whether the TERM was right — search the MODALITY (`shall not` = 11, none on point) not the noun** · **separate what a source PROVES from what you claimed (an ERRATA record's silence ≠ "the edition did not change it") ⇒ restate PERMANENT on the weaker basis** · **an edition map stranded in a sibling `ref` file is a GAP — duplicate it into the section a decision will cite; split self-inconsistent VERIFIED rows** · **reader behaviour from permissive source is 2 curls and can land on the OTHER SIDE of your ruling (pdf.js = naive order) ⇒ fence it as BEHAVIOUR NOT SPEC and warn that a "match other readers" tiebreak pushes away** · **a MEASURED behaviour can contradict a claim you graded SOURCED — file both, retract neither, and register the ambiguity on the DOMAIN of the quantifier** |
+| 45 | ★ **THE PAYWALL-FALLS DISPATCH — a licensed PRIMARY arrives.** A new source tier needs a NEW `license_basis`, not a stretched one · **state the ALGORITHM-vs-EXPRESSION distinction explicitly because the consumer writes PUBLIC code** · quote the licence terms and REFUSE to interpret them (escalate) · **the errata may be ANNOTATIONS ⇒ `extract_text()` yields the UNCORRECTED standard, and an erratum's review `/State` is provenance** · **expect the primary to correct YOUR OWN file — a file that warns about a trap is not immune to it** · discharge `NEEDS VERIFICATION` and record the outcome · **"verify what shipped" is a distinct deliverable and the honest answer may be "this source cannot verify that"** · **one trap did not survive: check the MODAL VERB separately from the mechanics** · close the gap and open the RIGHT residue (derived resolution + an empirical settling route) · a "cheap" item closes SHALLOWLY only with an explicit DEFERRED section — and **a uniform table-number off-by-one between structurally identical tables is the worst cross-edition trap there is** |
 | 37 | ADJUDICATING A CLAUSE-NUMBER CONFLICT: rule from the source's own enumeration, never from your heading (headings are RECONSTRUCTED); "the sub-clause does not exist" beats "the other one is right"; status leaks to anywhere the PRODUCT NAME appears, not just to headings and the index |
 
 ---
@@ -2390,3 +2391,106 @@ a section that was correct**. Six sub-rules:
   unregistered OCGs?") stays `personal_rag\pdf`'s. Tag the measurement
   ⚠ **MEASURED BEHAVIOUR, NOT SPEC TEXT** at every site, including `index.md`,
   because the whole reason it is interesting is that ISO's wording says otherwise.
+
+---
+
+**45. ★ THE PAYWALL-FALLS DISPATCH — a licensed PRIMARY arrives and retroactively
+audits four of your own files.** Established 2026-08-12: the operator acquired
+**ISO 32000-2:2020** (PDF Association sponsored, $0, Errata Collection 3) and the
+dispatch asked for Algorithm 2.B plus a verification of what pdfce had already
+**shipped publicly** from a secondary source. Nine findings, several of which
+generalise to any "the source you could not get is now on disk" session.
+
+- **A NEW SOURCE TIER NEEDS A NEW `license_basis`, NOT A STRETCHED ONE.**
+  `licensed_primary_private_rag` was added rather than reusing `free_primary`
+  (wrong — ISO 32000-1 earns that because Adobe republished *identical text*
+  unconditionally, to anyone) or `user_provided_paywalled_copy` (kept, but for a
+  *purchased* copy). The distinguishing fact is **the copy is personalised**:
+  every page footer reads *"Sold by the PDF Association to <name> … Single user
+  only, copying and networking prohibited."* Tabulate the new value against
+  every existing one on the same axes (authority · cost · quotable · bulk ·
+  may-leave-the-RAG · stageable) so the difference cannot be lost.
+- **★ STATE THE ALGORITHM/EXPRESSION DISTINCTION EXPLICITLY, BECAUSE THE
+  CONSUMER WRITES PUBLIC CODE.** pdfce's repo is public. Copyright protects
+  **expression**, not methods — so **implementing** Algorithm 2.B is not a
+  copyright question at all, and **citing** `ISO 32000-2:2020 §7.6.4.3.4 step
+  (b)` in a public doc comment is a citation, not reproduction. **Pasting ISO's
+  prose into a public comment is the one thing to forbid.** Give the engineer a
+  usable test: *if a reader of the public repo could reconstruct ISO's sentences
+  from your comment you copied expression; if only the behaviour, you copied a
+  fact.* Put it in §0 of the file AND in `LEGAL_NOTE.md` — an engineer working
+  from your notes will not read the legal file.
+- **★ QUOTE THE LICENCE TERMS AND REFUSE TO INTERPRET THEM.** Neither the
+  librarian nor the dispatching agent agreed to the licence; only the operator
+  did, and only he knows what he accepted. Quote the footer, the ISO copyright
+  page (incl. its *"or required in the context of its implementation"* carve-out)
+  and the ANSI/PDF-Association agreement line **verbatim**, then enumerate the
+  open questions as an **ESCALATED** section — is `_sources\` storage permitted;
+  is paraphrase "reproduction"; does the licence travel with the machine or the
+  person (⇒ can a second contributor ever use this RAG); is implementing a
+  not-yet-ISO-ratified erratum acceptable. **State the conservative posture you
+  applied meanwhile.** Also worth checking and reporting: where else the file
+  exists on disk (a Dropbox `subst` alias would be "networking").
+- **★ THE ERRATA MAY BE ANNOTATIONS ⇒ `extract_text()` GIVES YOU THE
+  *UNCORRECTED* STANDARD.** See [[spec-source-extraction-toolchain]] item
+  3-ISO2-bis for the recovery recipe. The corpus consequence is the important
+  half: the published-vs-erratum split becomes **directly observable** instead of
+  inferred, and **that is what caught four wrong rows** in a file whose own
+  preamble warned about exactly this trap. Also: an erratum's review `/State`
+  (`Completed` = ISO WG vs `Accepted` = industry body only) is a provenance fact
+  no secondary source carries — record it.
+- **★ EXPECT THE PRIMARY TO CORRECT *YOUR OWN* FILE, AND LEAD WITH THAT.** Four
+  claims in `iso32000__delta__pdf20_encryption.md` were wrong, and the worst was
+  that its clause-renumbering map **printed an ERRATUM's numbering as published
+  text** (2.0 as printed has §7.6.5.3 = "Public-key encryption algorithms" and
+  **no §7.6.5.4**). Open the file with a correction table, worst first, and do
+  **not** rewrite the body — correct in place, tag the new source, retain
+  superseded text in blockquotes. **A file that warns about a trap is not immune
+  to it; check the file against its own warning.**
+- **DISCHARGE `NEEDS VERIFICATION` MARKERS AND RECORD THE OUTCOME EITHER WAY.**
+  NV1 (a heading inferred from a numbering shift) and NV2 (six interpolated
+  sub-clause numbers) both discharged, and **NV2's arithmetic interpolation was
+  entirely correct** — worth writing down precisely because it is not licence to
+  skip the next check (same discipline as item 4's `VERIFICATION CLOSED`).
+- **★ "VERIFY WHAT SHIPPED" IS A DISTINCT DELIVERABLE — AND THE HONEST ANSWER
+  MAY BE "THIS CANNOT VERIFY THAT".** pdfce shipped `/R 5` publicly from a
+  secondary source; the dispatch asked to check it against the primary.
+  **ISO 32000-2 contains no `/R 5` algorithm at all** (every algorithm is titled
+  *"(Security handlers of revision 6)"*). So the audit corroborates the shared
+  **harness**, not `/R 5` — say so in a §0 "what this audit CAN and CANNOT do"
+  before the result table, keep the secondary's `license_basis` unchanged, and
+  read the *actual shipped code* (not the corpus's description of it) so the
+  table compares reality to the clause. Verdict shape: a per-claim table +
+  **NO DIVERGENCE FOUND** + the qualifications.
+- **★ ONE TRAP DID NOT SURVIVE THE CROSSING — modality does not generalise
+  across editions.** Trap T27 (`/Perms` mismatch is `should`) is correct for
+  `/R 5`/Adobe-EL3 and **must not be carried to `/R 6`**: ISO 32000-2 says
+  `shall` in Algorithm 2.A(f) and `should` in Algorithm 13(a), two sibling
+  statements of the same check, neither erratum'd. **When a secondary-sourced
+  trap is re-verified against a primary, check the MODAL VERB separately from
+  the mechanics** — the mechanics matched perfectly and the modality did not.
+- **★ CLOSE A GAP AND OPEN THE RIGHT KIND OF RESIDUE.** Algorithm 2.B's exit
+  test is internally inconsistent between steps (e) and (f), worth one round of
+  the hash ⇒ new ambiguity **A13**, resolved only *derivably* by the standard's
+  own informative NOTE ("between **65** and 80 rounds" — a lower bound that
+  matches exactly one of the two readings). **Two moves that made this solid:**
+  (i) the arithmetic cross-check — `|K1| = 64×|K0|` is always a multiple of 16,
+  so the erratum's reading is the **only implementable** one and the printed
+  alternative is not merely wrong (item 4a-ter applied to an algorithm, not a
+  formula); (ii) naming the settling evidence as **empirical** (one real `/R 6`
+  file) ⇒ routed to `personal_rag\pdf`, not scheduled as more ingestion. Also
+  flip every downstream refusal row (`refuse /R 6` → `implementable, ship behind
+  A13`) and make the *diagnostic* name the ambiguity rather than say "wrong
+  password".
+- **A "PRIORITY 3 IF CHEAP" ITEM CAN BE CLOSED SHALLOWLY IF YOU LABEL THE
+  DEPTH.** `color__cie_based.md`'s "how 2.0 alters these clauses is UNVERIFIED"
+  became **PARTIALLY CLOSED** by checking only: clause numbers (unchanged),
+  sub-clause list (one addition), errata presence (**zero annotations on those
+  pages**), and **the table renumbering — a silent uniform −1 across 1.7 Tables
+  59–70**, so a bare *"Table 63"* means **CalGray in 1.7 and CalRGB in 2.0**,
+  two tables with the same shape and the same `WhitePoint`/`BlackPoint` rows.
+  **A uniform off-by-one between two structurally identical tables is the worst
+  cross-edition trap there is** and is worth a session on its own. Then write an
+  explicit **WHAT WAS DEFERRED** section — "do not read this as '2.0 is
+  unchanged'" — because a partial close that looks total is worse than an open
+  gap.
