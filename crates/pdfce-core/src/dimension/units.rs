@@ -533,6 +533,36 @@ pub fn format_measurement(
 /// unit abbreviation containing a point (none today, but the unit table is not
 /// frozen) and a trailing sentence period out of it — the substitution has to
 /// be about the number, not about the string.
+/// Format an ANGLE, in degrees, for a ce-dimension label.
+///
+/// # Why this is separate from [`format_measurement`]
+///
+/// [`format_measurement`] multiplies by the group's scale, because that is
+/// what turns a page length into a real-world length. An angle is invariant
+/// under uniform scaling — 30 degrees on a drawing at 1:50 is still 30
+/// degrees — so routing an angle through that function would produce a
+/// plausible, WRONG number carrying no indication that anything was odd.
+///
+/// The group's [`NumberFormat`] is still consulted for ONE thing: the decimal
+/// marker. ISO 129-1:2018 cl. 4.1.1 mandates a comma decimal marker and says
+/// nothing exempting angles, so an ISO group's angle reads `30,5` where an
+/// ANSI group's reads `30.5`. The unit and fraction mode are deliberately NOT
+/// consulted — an angle is not in millimetres and is not written as a
+/// carpenter's fraction.
+///
+/// Precision is fixed at one decimal place, and that is a KNOWN GAP rather
+/// than a decision: SolidWorks offers angular precision and alternative
+/// angular units (degrees, deg-min, deg-min-sec), which belong with the wider
+/// tolerance-and-precision work rather than being guessed at here.
+#[must_use]
+pub fn format_angle_degrees(degrees: f64, format: NumberFormat) -> String {
+    let text = format!("{degrees:.1}");
+    format!(
+        "{}\u{b0}",
+        apply_decimal_marker(text, format.decimal_marker)
+    )
+}
+
 fn apply_decimal_marker(text: String, marker: DecimalMarker) -> String {
     if matches!(marker, DecimalMarker::Point) {
         return text;

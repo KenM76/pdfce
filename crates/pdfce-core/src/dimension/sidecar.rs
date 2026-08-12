@@ -38,7 +38,7 @@ use super::units::{DecimalMarker, FractionMode, NumberFormat, ScaleState, Unit};
 
 /// The sidecar schema version pdfce writes (bumped only on a breaking layout
 /// change; readers ignore unknown extra keys, §14.5 forward-compat).
-pub const SIDECAR_VERSION: i64 = 1;
+pub const SIDECAR_VERSION: i64 = 2;
 
 /// Serialise the whole [`DimensionModel`] to the `Object` pdfce stores as the
 /// `/PieceInfo /pdfce /Private` value (§14.5). Deterministic — the same model
@@ -262,13 +262,16 @@ fn serialize_dimension(dim: &DimensionRecord) -> Object {
             );
             // OPTIONAL, and deliberately NOT a schema-version bump.
             //
-            // `deserialize_model` gates on `Version` with exact equality and
-            // answers `None` on a mismatch — which the caller turns into a
-            // FRESH model. Bumping the version for this key would therefore
-            // make every older file silently lose every group, every
-            // calibrated scale and every membership, while its `/Line`
-            // annotations kept rendering perfectly — so nothing would look
-            // wrong until the next save made the loss permanent.
+            // NOTE, corrected 2026-08-12: this comment used to say the gate
+            // was an exact equality. It is a RANGE and has been since that
+            // gate was rewritten — see `deserialize_model`, which reads older
+            // AND newer sidecars and leans on `sidecar_version` to refuse the
+            // WRITE. The reasoning below still holds for why this key needed
+            // no bump; only the description of the gate was stale.
+            //
+            // The original argument, still valid: bumping the version for a
+            // key that is optional-with-default buys nothing and costs
+            // compatibility.
             //
             // An absent key reads back as the 0.0 default, which draws exactly
             // what the pre-27.0 build drew. Written only when non-zero, so a
@@ -279,6 +282,36 @@ fn serialize_dimension(dim: &DimensionRecord) -> Object {
             }
             // Same optional-key discipline as /Offset: absent means centred,
             // which is where every pre-27.1 label sits.
+            if text_along != 0.0 {
+                d.insert(Name::from(b"TextAlong"), Object::Real(text_along));
+            }
+        }
+        DimensionKind::Angular {
+            apex,
+            dir_a,
+            dir_b,
+            radius,
+            text_along,
+        } => {
+            // ★ THIS key is why SIDECAR_VERSION went to 2, unlike /Offset and
+            // /TextAlong which were optional-with-default and needed no bump.
+            //
+            // A new KIND is not a defaultable key. A build that does not know
+            // the token `angular` hits `_ => return None` below and drops the
+            // record entirely — so without a version bump an older pdfce would
+            // read the file, silently lose every angular ce dimension, and be
+            // free to save it back that way. Permanent loss, invisible until
+            // afterwards.
+            //
+            // With the bump, an older build still reads what it understands
+            // but `sidecar_version` makes the session REFUSE to write
+            // (`EditError::SidecarWrittenByNewerBuild`). Reading stays safe;
+            // the destructive half is the one that is blocked.
+            d.insert(Name::from(b"Kind"), Object::Name(Name::from(b"angular")));
+            d.insert(Name::from(b"Apex"), point_array(apex));
+            d.insert(Name::from(b"DirA"), point_array(dir_a));
+            d.insert(Name::from(b"DirB"), point_array(dir_b));
+            d.insert(Name::from(b"ArcRadius"), Object::Real(radius));
             if text_along != 0.0 {
                 d.insert(Name::from(b"TextAlong"), Object::Real(text_along));
             }
@@ -312,6 +345,13 @@ fn deserialize_dimension(obj: &Object) -> Option<DimensionRecord> {
             // Absent in every sidecar written before Pass 27.0. The 0.0
             // default is what makes that migration free rather than lossy.
             offset: placement_of(d.get(b"Offset")),
+            text_along: placement_of(d.get(b"TextAlong")),
+        },
+        b"angular" => DimensionKind::Angular {
+            apex: point_of(d.get(b"Apex")?)?,
+            dir_a: point_of(d.get(b"DirA")?)?,
+            dir_b: point_of(d.get(b"DirB")?)?,
+            radius: d.get(b"ArcRadius").and_then(Object::as_number)?,
             text_along: placement_of(d.get(b"TextAlong")),
         },
         b"circular" => DimensionKind::Circular {
@@ -524,5 +564,94 @@ mod tests {
             .unwrap();
         assert_eq!(fp.ocg, Some(ObjId::new(30, 0)));
         assert!(!fp.visible);
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
+mod angular_sidecar_tests {
+    use super::*;
+    use crate::dimension::group::{DEFAULT_GROUP_ID, DimensionKind, DimensionModel};
+    use crate::vector::Point;
+
+    fn wedge() -> DimensionKind {
+        let r = 42.5f64.to_radians();
+        DimensionKind::Angular {
+            apex: Point::new(120.0, 90.0),
+            dir_a: Point::new(1.0, 0.0),
+            dir_b: Point::new(r.cos(), r.sin()),
+            radius: 55.0,
+            text_along: 7.5,
+        }
+    }
+
+    /// An angular ce dimension survives serialise → deserialise unchanged.
+    #[test]
+    fn an_angular_dimension_round_trips() {
+        let mut model = DimensionModel::new();
+        let id = model.add_dimension(DEFAULT_GROUP_ID, wedge());
+        let back = deserialize_model(&serialize_model(&model)).expect("must deserialise");
+        let d = back.dimension(id).expect("the record must survive");
+        assert_eq!(d.kind, wedge(), "the geometry must round-trip exactly");
+    }
+
+    /// ★ The version bump is REAL, and this is why it had to happen.
+    ///
+    /// A new kind is not a defaultable key. An older build hits the
+    /// `_ => return None` arm for the unknown token and drops the record —
+    /// so without the bump it would read the file, silently lose every
+    /// angular ce dimension, and be free to save it back that way.
+    ///
+    /// Asserting the number directly rather than the mechanism, because the
+    /// mechanism (`sidecar_version` gating the write) already has its own
+    /// test; what this pins is that somebody did not later "tidy" the version
+    /// back down while the `angular` token stayed.
+    #[test]
+    fn writing_an_angular_dimension_declares_a_version_old_builds_will_refuse() {
+        let mut model = DimensionModel::new();
+        model.add_dimension(DEFAULT_GROUP_ID, wedge());
+        let obj = serialize_model(&model);
+        let v = sidecar_version(&obj).expect("a version must be written");
+        assert!(
+            v >= 2,
+            "a sidecar containing an `angular` kind must declare version 2 or \
+             later, or an older pdfce will drop those dimensions and then be \
+             allowed to overwrite the file without them; got {v}"
+        );
+    }
+
+    /// A version-1 sidecar (no angular dimensions) still loads.
+    ///
+    /// The other half of the migration: bumping the version must not orphan
+    /// every file written before it.
+    #[test]
+    fn a_version_one_sidecar_still_loads() {
+        let mut model = DimensionModel::new();
+        model.add_dimension(
+            DEFAULT_GROUP_ID,
+            DimensionKind::Circular {
+                fit: crate::dimension::fit::FitCircle {
+                    center: Point::new(10.0, 10.0),
+                    radius: 5.0,
+                    residual: 0.0,
+                },
+                show_diameter: false,
+            },
+        );
+        let Object::Dict(mut d) = serialize_model(&model) else {
+            panic!("the sidecar is a dictionary");
+        };
+        d.insert(Name::from(b"Version"), Object::Integer(1));
+        let back = deserialize_model(&Object::Dict(d)).expect("a v1 sidecar must still load");
+        assert_eq!(
+            back.dimensions().len(),
+            1,
+            "and must keep its dimensions rather than coming back empty"
+        );
     }
 }

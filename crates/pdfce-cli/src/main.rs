@@ -17365,6 +17365,7 @@ fn cmd_dimension_list(input: &Path) -> u8 {
                 ..
             } => "diameter",
             DimensionKind::Circular { .. } => "radius",
+            DimensionKind::Angular { .. } => "angular",
         };
         // The placement, for a linear dimension. Printed because it is
         // otherwise invisible from the CLI — an operator scripting
@@ -17376,6 +17377,15 @@ fn cmd_dimension_list(input: &Path) -> u8 {
                 offset, text_along, ..
             } => format!(" offset={offset} text_along={text_along}"),
             DimensionKind::Circular { .. } => String::new(),
+            // An angular ce dimension's placement is a radius and a position
+            // along the arc — the same one-drag pair as a linear one, in the
+            // geometry an arc has. Reported under its own names rather than
+            // reusing `offset=`, because a script reading `offset` from a
+            // linear dimension and an angular one would be reading two
+            // different quantities under one label.
+            DimensionKind::Angular {
+                radius, text_along, ..
+            } => format!(" arc_radius={radius} text_along={text_along}"),
         };
         println!(
             "  dim {} group={} kind={kind} value=\"{value}\"{placement}",

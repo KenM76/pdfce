@@ -275,6 +275,15 @@ pub fn author_dimension(kind: &DimensionKind, style: DimensionStyle) -> Authored
         DimensionKind::Circular { fit, .. } => {
             draw_circular(&mut b, &mut bounds, fit.center, fit.radius, l1);
         }
+        DimensionKind::Angular {
+            apex,
+            dir_a,
+            dir_b,
+            radius,
+            ..
+        } => {
+            draw_angular(&mut b, &mut bounds, apex, dir_a, dir_b, radius);
+        }
     }
 
     // The value label. Anchored where the operator DROPPED it along the
@@ -397,6 +406,27 @@ fn leader_endpoints(kind: &DimensionKind) -> (Point, Point) {
         DimensionKind::Circular { fit, .. } => (
             fit.center,
             Point::new(fit.center.x + fit.radius, fit.center.y),
+        ),
+        // The two points where the arc meets the arms. `/L` is a two-point
+        // leader and an arc has no two-point form, so these are the closest
+        // honest answer: the ends of the thing actually drawn. A reader that
+        // understands only `/L` sees the chord of the angle rather than a
+        // line unrelated to the dimension.
+        DimensionKind::Angular {
+            apex,
+            dir_a,
+            dir_b,
+            radius,
+            ..
+        } => (
+            Point::new(
+                dir_a.x.mul_add(radius, apex.x),
+                dir_a.y.mul_add(radius, apex.y),
+            ),
+            Point::new(
+                dir_b.x.mul_add(radius, apex.x),
+                dir_b.y.mul_add(radius, apex.y),
+            ),
         ),
     }
 }
@@ -533,6 +563,95 @@ fn draw_circular(
     // Arrowhead at the rim pointing outward.
     let (ux, uy) = unit_vector(center, rim);
     arrowhead(b, bounds, rim, (ux, uy));
+}
+
+/// Draw an ANGULAR ce dimension: two extension lines out along the arms, an
+/// arc between them at `radius`, and an arrowhead at each end of the arc
+/// pointing along the arc (`Pass 68.0`).
+///
+/// # Why the arc is emitted as line segments rather than Bézier cubics
+///
+/// `draw_circular` uses the four-kappa-cubic construction because it always
+/// draws a FULL circle, where the four quadrant arcs are exact and the error
+/// is a known constant. An angular dimension draws an arbitrary sweep, and a
+/// single cubic's error grows with the swept angle — a 170-degree sweep drawn
+/// as one cubic visibly bulges. Segmenting at a fixed angular step keeps the
+/// error bounded by the step regardless of sweep, and a dimension arc is a
+/// thin stroked line where a fraction of a point of chord error is invisible.
+///
+/// The step is 3 degrees: at a 200-point radius that is a chord sagitta of
+/// about 0.07 pt, well under a stroke width, and it costs at most 60 segments
+/// for a half turn.
+fn draw_angular(
+    b: &mut ContentBuilder,
+    bounds: &mut BoundsAcc,
+    apex: Point,
+    dir_a: Point,
+    dir_b: Point,
+    radius: f64,
+) {
+    if !(radius.is_finite() && radius > 0.0) {
+        return;
+    }
+    let a0 = dir_a.y.atan2(dir_a.x);
+    let a1 = dir_b.y.atan2(dir_b.x);
+    // Sweep the SHORT way between the two arms. The arms already point into
+    // the wedge the operator chose, so the angle between them is the one to
+    // draw; normalising into (-pi, pi] picks that sweep without needing to
+    // know which arm was clicked first.
+    let mut sweep = a1 - a0;
+    while sweep > std::f64::consts::PI {
+        sweep -= std::f64::consts::TAU;
+    }
+    while sweep <= -std::f64::consts::PI {
+        sweep += std::f64::consts::TAU;
+    }
+
+    // Extension lines: from the apex out past the arc, so the arc visibly
+    // spans between two drawn arms rather than floating.
+    let ext = radius + ARROW_LEN;
+    for d in [dir_a, dir_b] {
+        b.move_to(apex.x, apex.y);
+        let (ex, ey) = (d.x.mul_add(ext, apex.x), d.y.mul_add(ext, apex.y));
+        b.line_to(ex, ey);
+        bounds.add(apex);
+        bounds.add(Point::new(ex, ey));
+    }
+    b.paint(Paint::Stroke);
+
+    // The arc.
+    let step = 3f64.to_radians().copysign(sweep);
+    let steps = (sweep / step).abs().ceil().max(1.0) as usize;
+    let at = |t: f64| -> Point {
+        let ang = t.mul_add(sweep, a0);
+        Point::new(
+            ang.cos().mul_add(radius, apex.x),
+            ang.sin().mul_add(radius, apex.y),
+        )
+    };
+    let start = at(0.0);
+    b.move_to(start.x, start.y);
+    bounds.add(start);
+    for i in 1..=steps {
+        #[allow(clippy::cast_precision_loss)]
+        let p = at(i as f64 / steps as f64);
+        b.line_to(p.x, p.y);
+        bounds.add(p);
+    }
+    b.paint(Paint::Stroke);
+
+    // Arrowheads at each end, pointing ALONG the arc (tangentially) and
+    // outward — which is what makes the mark read as "this much sweep"
+    // rather than as two unrelated ticks. The tangent at the start points
+    // backwards along the sweep, and at the end forwards.
+    let tangent = |ang: f64, sign: f64| -> (f64, f64) {
+        let (tx, ty) = (-ang.sin(), ang.cos());
+        (tx * sign, ty * sign)
+    };
+    let sign = if sweep >= 0.0 { 1.0 } else { -1.0 };
+    arrowhead(b, bounds, start, tangent(a0, -sign));
+    let end = at(1.0);
+    arrowhead(b, bounds, end, tangent(a0 + sweep, sign));
 }
 
 /// Emit a filled arrowhead at `tip`, pointing along the unit direction `dir`.

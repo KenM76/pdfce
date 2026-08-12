@@ -28,7 +28,9 @@ use crate::object::ObjId;
 use crate::vector::{AxisConstraint, Point, measured_length};
 
 use super::fit::FitCircle;
-use super::units::{MeasurementDisplay, NumberFormat, ScaleState, Unit, format_measurement};
+use super::units::{
+    MeasurementDisplay, NumberFormat, ScaleState, Unit, format_angle_degrees, format_measurement,
+};
 
 /// A stable dimension-group identifier (index-independent, so the sidecar can
 /// reference a group across a save/reload without depending on Vec order).
@@ -196,6 +198,54 @@ pub enum DimensionKind {
         fit: FitCircle,
         /// `true` ⇒ display the diameter; `false` ⇒ the radius.
         show_diameter: bool,
+    },
+    /// An ANGLE between two lines the operator picked (`Pass 68.0`).
+    ///
+    /// # Why the rays are stored, not the two source lines
+    ///
+    /// The two picked lines bound four angles, and which one the operator
+    /// meant was decided at pick time by where they clicked
+    /// ([`crate::vector::linepick`]). Storing the lines would throw that
+    /// decision away and force every later regeneration to re-derive it —
+    /// re-deriving a choice the operator already made is how a dimension
+    /// silently becomes a different dimension after a scale change.
+    ///
+    /// So the resolved answer is stored: the apex, and a unit direction along
+    /// each arm pointing INTO the measured wedge. The angle is the one
+    /// between those two rays, always, with no further interpretation.
+    ///
+    /// # ★ An angle does NOT scale
+    ///
+    /// This is the one place the ce-dimension value model genuinely differs.
+    /// [`Self::measured_points`] returns a length that the group's scale
+    /// multiplies — 100 points at 1:50 is 5000 units. An angle is invariant
+    /// under uniform scaling: 30° on a drawing at 1:50 is 30°, not 1500 of
+    /// anything. [`DimensionModel::display`] therefore branches here and never
+    /// applies scale, and [`Self::measured_points`] returns the DEGREES so no
+    /// caller can silently feed an angle into the length formatter and get a
+    /// plausible, wrong number out.
+    Angular {
+        /// Where the two lines cross, page space. May be virtual — outside
+        /// both picked segments — which is normal in CAD drawings.
+        apex: Point,
+        /// Unit direction of the first arm, from `apex` into the wedge.
+        dir_a: Point,
+        /// Unit direction of the second arm, from `apex` into the wedge.
+        dir_b: Point,
+        /// Radius of the dimension ARC from the apex, in points.
+        ///
+        /// The angular analogue of [`Self::Linear`]'s `offset`: how far the
+        /// drawn arc stands off from the vertex. Same role, same one-drag
+        /// placement model, different geometry — an arc has a radius where a
+        /// linear dimension has a perpendicular standoff.
+        radius: f64,
+        /// Signed position of the value text ALONG the arc, in degrees from
+        /// the arc's midpoint.
+        ///
+        /// Degrees rather than points so the label keeps its position on the
+        /// arc when the radius changes, which is what an operator expects
+        /// when they drag the arc further out.
+        text_along: f64,
     },
 }
 
@@ -371,6 +421,23 @@ impl DimensionKind {
                 },
                 show_diameter,
             },
+            // Only the apex moves. The arm DIRECTIONS are unit vectors, not
+            // points — translating them would rotate the dimension, which is
+            // not what a move is. Radius and text position are relative to
+            // the apex and travel with it.
+            Self::Angular {
+                apex,
+                dir_a,
+                dir_b,
+                radius,
+                text_along,
+            } => Self::Angular {
+                apex: Point::new(apex.x + dx, apex.y + dy),
+                dir_a,
+                dir_b,
+                radius,
+                text_along,
+            },
         }
     }
 
@@ -390,7 +457,30 @@ impl DimensionKind {
                     fit.radius
                 }
             }
+            // ★ DEGREES, not points, and deliberately so. An angle is
+            // invariant under uniform scaling, so there is no "length in page
+            // points" that a group scale could legitimately multiply. Every
+            // caller that formats a length must therefore ask
+            // `is_angular()` first — see `DimensionModel::display`, which
+            // does. Returning a plausible length here instead would let an
+            // angle be silently scaled into a wrong number that still looked
+            // like a measurement.
+            DimensionKind::Angular { dir_a, dir_b, .. } => {
+                let dot = dir_a.x.mul_add(dir_b.x, dir_a.y * dir_b.y).clamp(-1.0, 1.0);
+                dot.acos().to_degrees()
+            }
         }
+    }
+
+    /// Whether this ce dimension measures an ANGLE rather than a length.
+    ///
+    /// The predicate every display and formatting path must consult before
+    /// applying a group scale. Provided as a named question rather than
+    /// leaving callers to match on the variant, so adding a future angular
+    /// kind cannot quietly miss one of them.
+    #[must_use]
+    pub const fn is_angular(&self) -> bool {
+        matches!(self, Self::Angular { .. })
     }
 
     /// A short label prefix a circular dimension's caption carries (`R`/`⌀`);
@@ -400,6 +490,9 @@ impl DimensionKind {
     pub const fn caption_prefix(&self) -> &'static str {
         match self {
             DimensionKind::Linear { .. } => "",
+            // No prefix: the caption carries a trailing degree sign instead,
+            // which is where a reader expects to find it on an angle.
+            DimensionKind::Angular { .. } => "",
             DimensionKind::Circular { show_diameter, .. } => {
                 if *show_diameter {
                     "DIA "
@@ -601,6 +694,16 @@ impl DimensionModel {
     pub fn display(&self, id: DimensionId) -> Option<MeasurementDisplay> {
         let d = self.dimension(id)?;
         let g = self.group(d.group)?;
+        // ★ An angle bypasses the scale entirely. 30 degrees on a drawing at
+        // 1:50 is 30 degrees; multiplying it by the scale would produce 1500
+        // of nothing, and `raw_page_units` would be false, so the wrong
+        // number would arrive carrying no disclosure that anything was odd.
+        if d.kind.is_angular() {
+            return Some(MeasurementDisplay {
+                text: format_angle_degrees(d.kind.measured_points(), g.format),
+                raw_page_units: false,
+            });
+        }
         Some(format_measurement(
             d.kind.measured_points(),
             g.scale,
@@ -771,5 +874,113 @@ mod tests {
             linear((0.0, 0.0), (1.0, 0.0), AxisConstraint::Aligned),
         );
         assert_eq!(m.dimension(d).unwrap().group, DEFAULT_GROUP_ID);
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
+mod angular_tests {
+    use super::*;
+    use crate::dimension::units::ScaleState;
+
+    fn wedge(degrees: f64) -> DimensionKind {
+        let r = degrees.to_radians();
+        DimensionKind::Angular {
+            apex: Point::new(100.0, 100.0),
+            dir_a: Point::new(1.0, 0.0),
+            dir_b: Point::new(r.cos(), r.sin()),
+            radius: 40.0,
+            text_along: 0.0,
+        }
+    }
+
+    #[test]
+    fn the_measured_value_is_the_angle_between_the_arms() {
+        for expected in [15.0, 30.0, 45.0, 90.0, 135.0] {
+            let got = wedge(expected).measured_points();
+            assert!(
+                (got - expected).abs() < 1e-9,
+                "expected {expected} degrees, got {got}"
+            );
+        }
+    }
+
+    /// ★ An angle must NOT be multiplied by the group's scale.
+    ///
+    /// This is the one place the ce-dimension value model genuinely differs
+    /// from every other kind, and getting it wrong is not a visible crash: a
+    /// 30-degree angle in a 1:50 group would render as 1500 with no unit and
+    /// no disclosure that anything was odd. It would simply be a wrong number
+    /// that looked like a measurement.
+    #[test]
+    fn an_angle_is_not_scaled_by_the_group() {
+        let mut model = DimensionModel::new();
+        let g = model.add_group("Plan", Unit::Millimeter);
+        model.set_group_scale(
+            g,
+            ScaleState::Calibrated { scale: 50.0 },
+            Unit::Millimeter.default_format(),
+        );
+        let id = model.add_dimension(g, wedge(30.0));
+
+        let shown = model.display(id).expect("a display value");
+        assert!(
+            shown.text.starts_with("30"),
+            "a 30-degree angle in a 1:50 group must still read 30, got {:?}",
+            shown.text
+        );
+        assert!(
+            shown.text.contains('\u{b0}'),
+            "and must carry a degree sign, got {:?}",
+            shown.text
+        );
+        assert!(
+            !shown.text.contains("mm"),
+            "an angle is not in millimetres, got {:?}",
+            shown.text
+        );
+    }
+
+    /// The same wedge under a NEVER-SET scale still reads as an angle.
+    ///
+    /// The raw-page-units disclosure exists because an unscaled LENGTH is
+    /// meaningless to an operator. An angle is meaningful without a scale, so
+    /// claiming raw page units would be a false warning.
+    #[test]
+    fn an_angle_needs_no_scale_disclosure() {
+        let mut model = DimensionModel::new();
+        let id = model.add_dimension(DEFAULT_GROUP_ID, wedge(45.0));
+        let shown = model.display(id).expect("a display value");
+        assert!(
+            !shown.raw_page_units,
+            "an angle is not raw page units; it is the same 45 degrees at any scale"
+        );
+        assert!(shown.text.starts_with("45"), "got {:?}", shown.text);
+    }
+
+    /// Moving an angular ce dimension moves its apex and nothing else.
+    ///
+    /// The arm directions are UNIT VECTORS. Translating them would rotate the
+    /// dimension — silently changing the angle it measures, which is the one
+    /// thing a move must never do.
+    #[test]
+    fn moving_an_angle_does_not_change_it() {
+        let before = wedge(37.5);
+        let after = before.translated(250.0, -80.0);
+        assert!(
+            (after.measured_points() - before.measured_points()).abs() < 1e-12,
+            "a translation must preserve the measured angle"
+        );
+        match after {
+            DimensionKind::Angular { apex, .. } => {
+                assert!((apex.x - 350.0).abs() < 1e-9 && (apex.y - 20.0).abs() < 1e-9);
+            }
+            other => panic!("expected Angular, got {other:?}"),
+        }
     }
 }

@@ -666,11 +666,16 @@ pub fn dimension_display_applied(show_diameter: bool) -> String {
 }
 
 /// The ce dimension's reading, for [`dimension_props_summary`]'s middle field.
-pub fn dimension_kind_label(circular: bool, show_diameter: bool) -> &'static str {
-    match (circular, show_diameter) {
-        (false, _) => "Linear",
-        (true, false) => "Radius",
-        (true, true) => "Diameter",
+pub fn dimension_kind_label(kind: &pdfce_core::dimension::DimensionKind) -> &'static str {
+    use pdfce_core::dimension::DimensionKind as K;
+    match kind {
+        K::Linear { .. } => "Linear",
+        K::Circular {
+            show_diameter: false,
+            ..
+        } => "Radius",
+        K::Circular { .. } => "Diameter",
+        K::Angular { .. } => "Angle",
     }
 }
 

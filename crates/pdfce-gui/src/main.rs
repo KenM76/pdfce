@@ -24051,11 +24051,14 @@ fn selected_dimension_section(doc: &mut OpenDoc, ui: &mut egui::Ui) {
         .map_or_else(String::new, |g| g.name.clone());
     let (circular, show_diameter) = match record.kind {
         DimensionKind::Circular { show_diameter, .. } => (true, show_diameter),
-        DimensionKind::Linear { .. } => (false, false),
+        // An angular ce dimension is neither: it has no radius/diameter
+        // toggle, so it reports as not-circular and the summary label names
+        // it from its own kind rather than from this pair.
+        DimensionKind::Linear { .. } | DimensionKind::Angular { .. } => (false, false),
     };
     ui.label(ui_text::dimension_props_summary(
         id.0,
-        ui_text::dimension_kind_label(circular, show_diameter),
+        ui_text::dimension_kind_label(&record.kind),
         &group_name,
     ));
     // Permanent instrumentation, not a temporary probe (see `diag`'s own
@@ -24079,6 +24082,13 @@ fn selected_dimension_section(doc: &mut OpenDoc, ui: &mut egui::Ui) {
     let mut commit_place: Option<(f64, f64)> = None;
 
     match record.kind {
+        // No per-dimension controls yet for an angular ce dimension. The
+        // "treat these two lines as parallel" checkbox the operator asked for
+        // belongs HERE, on the selected dimension, and lands with the rest of
+        // the two-line authoring surface — an empty arm now is honest about
+        // that rather than showing a linear dimension's controls on something
+        // they do not apply to.
+        DimensionKind::Angular { .. } => {}
         DimensionKind::Circular { .. } => {
             // THE bullet the ROADMAP names as the concrete gap: this control
             // existed only in the tool-armed property bar, at draw time.
