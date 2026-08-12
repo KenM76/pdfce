@@ -280,6 +280,9 @@ pub enum CommandKind {
     /// across the whole command log to improve one label. If a label ever
     /// needs the name, the right move is an interned id, not `String`.
     AttachFile,
+    /// A document-level attachment was removed: the name-tree entry, the file
+    /// specification and the embedded stream, as ONE undo entry.
+    DetachFile,
     /// A NEW form field was authored onto a page: the merged field/widget
     /// dictionary, its baked `/AP`, the page's `/Annots` patch and the
     /// `/AcroForm` `/Fields` registration, all as ONE undo entry.
@@ -2333,6 +2336,18 @@ pub enum EditError {
          cannot yet add to without risking the attachments already in it"
     )]
     AttachmentTreeUnsupported,
+    /// No document-level attachment is filed under that name-tree key.
+    ///
+    /// Also the answer when the name belongs to a page-level file-attachment
+    /// ANNOTATION (§12.5.6.15): those are not in the `/EmbeddedFiles` tree at
+    /// all and are removed with `delete_annotation`. Named rather than folded
+    /// into a generic not-found so a shell can say which of the two kinds the
+    /// operator is looking at — `list_attachments` reports both, which is
+    /// exactly why the distinction is easy to lose.
+    #[error(
+        "no document-level attachment is filed under that name (a page-level file          attachment annotation is deleted as an annotation, not as an attachment)"
+    )]
+    AttachmentNotFound,
     /// A ce-dimension operation named a dimension the sidecar model does not
     /// contain (Pass 25.5).
     ///
@@ -10223,6 +10238,153 @@ impl EditSession {
             trailer: None,
         });
         Ok(spec_id)
+    }
+
+    /// Remove a document-level attachment, by its `/EmbeddedFiles` name-tree
+    /// key (ISO 32000-1 §7.11.4.1 route 2).
+    ///
+    /// # What is removed
+    ///
+    /// The name-tree entry, the file specification dictionary, and the
+    /// embedded file stream — all three, as ONE undo entry. Removing only the
+    /// tree entry would leave the bytes in the file with nothing pointing at
+    /// them: invisible to every reader, still fully present on disk. That is
+    /// the worst outcome for the operator whose reason for deleting was that
+    /// the attachment should not be there.
+    ///
+    /// # ⚠️ What "removed" means under an incremental save
+    ///
+    /// This frees the objects; it does not rewrite history. Under the default
+    /// incremental save (§7.5.6) every prior revision is still in the file by
+    /// design — that is what makes existing signatures survive — so the
+    /// attachment's bytes remain recoverable from the earlier revision. Only
+    /// a full rewrite drops superseded revisions.
+    ///
+    /// This is NOT a redaction verb and must not be described as one. If the
+    /// attachment was sensitive, the operator needs a full rewrite (and, for
+    /// page content, [`crate::redact`]). Shells are expected to say so rather
+    /// than let "delete" imply erasure — the same disclosure obligation every
+    /// other deletion in this type carries.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::AttachmentNotFound`] when no entry has that key — which
+    /// includes the case of a page-level file-attachment ANNOTATION, since
+    /// those live on a page's `/Annots` and are removed with
+    /// [`EditSession::delete_annotation`] instead.
+    pub fn detach_file(&mut self, key: &[u8]) -> Result<(), EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification_for_annotation()?;
+
+        let catalog_id = self.graph().catalog_id().ok_or(EditError::NotADictionary {
+            id: ObjId::new(0, 0),
+            key: "Root",
+        })?;
+        let catalog = match self.value(catalog_id) {
+            Some(Object::Dict(d)) => d.clone(),
+            _ => {
+                return Err(EditError::NotADictionary {
+                    id: catalog_id,
+                    key: "Root",
+                });
+            }
+        };
+        let names_dict = self.deref_dict(catalog.get(b"Names")).unwrap_or_default();
+        let tree_obj = names_dict
+            .get(b"EmbeddedFiles")
+            .cloned()
+            .ok_or(EditError::AttachmentNotFound)?;
+        let node = self
+            .deref_dict(Some(&tree_obj))
+            .ok_or(EditError::AttachmentTreeUnsupported)?;
+        if node.contains_key(b"Kids") {
+            return Err(EditError::AttachmentTreeUnsupported);
+        }
+        let Some(Object::Array(arr)) = self.deref_value(node.get(b"Names")) else {
+            return Err(EditError::AttachmentNotFound);
+        };
+
+        // Split the flat [key value key value ...] array, keeping everything
+        // that is not the target and capturing the target's filespec so its
+        // objects can be freed.
+        let mut kept: Vec<Object> = Vec::with_capacity(arr.len());
+        let mut victim: Option<Object> = None;
+        for pair in arr.chunks_exact(2) {
+            if let [Object::String(k), value] = pair {
+                if k.as_slice() == key {
+                    victim = Some(value.clone());
+                    continue;
+                }
+                kept.push(Object::String(k.clone()));
+                kept.push(value.clone());
+            }
+        }
+        let victim = victim.ok_or(EditError::AttachmentNotFound)?;
+
+        // Collect the objects the entry owned. Only ones that actually
+        // resolve are freed — a dangling reference is a malformed document
+        // pdfce reports rather than repairs, and freeing an id it never had
+        // would be inventing a change.
+        let mut doomed: Vec<ObjId> = Vec::new();
+        if let Object::Reference(spec_id) = victim {
+            doomed.push(spec_id);
+            if let Some(spec) = self.deref_dict(Some(&Object::Reference(spec_id)))
+                && let Some(ef) = self.deref_dict(spec.get(b"EF"))
+            {
+                // /F and /UF routinely point at the SAME stream (that is what
+                // this crate's own writer emits), so dedup before freeing —
+                // deleting one id twice would produce two removal entries for
+                // one object and make the undo record disagree with reality.
+                for k in [&b"F"[..], &b"UF"[..]] {
+                    if let Some(Object::Reference(id)) = ef.get(k)
+                        && !doomed.contains(id)
+                    {
+                        doomed.push(*id);
+                    }
+                }
+            }
+        }
+
+        let mut new_node = node.clone();
+        new_node.insert(Name::from(b"Names"), Object::Array(kept));
+        let mut objects = Vec::new();
+        let mut new_names = names_dict.clone();
+        if let Object::Reference(node_id) = tree_obj {
+            objects.push(ObjectWrite {
+                id: node_id,
+                before: self.value(node_id).cloned(),
+                after: Some(Object::Dict(new_node)),
+            });
+        } else {
+            new_names.insert(Name::from(b"EmbeddedFiles"), Object::Dict(new_node));
+            let mut new_catalog = catalog.clone();
+            new_catalog.insert(Name::from(b"Names"), Object::Dict(new_names));
+            objects.push(ObjectWrite {
+                id: catalog_id,
+                before: Some(Object::Dict(catalog)),
+                after: Some(Object::Dict(new_catalog)),
+            });
+        }
+
+        let removals: Vec<Removal> = doomed
+            .into_iter()
+            .filter(|id| self.base.get(*id).is_some() || self.state.contains_key(id))
+            .map(|id| Removal {
+                id,
+                was_deleted: self.deleted.contains(&id),
+                is_deleted: true,
+            })
+            .collect();
+
+        self.commit(Command {
+            kind: CommandKind::DetachFile,
+            objects,
+            removals,
+            trailer: None,
+        });
+        Ok(())
     }
 
     /// Author a `/Redact` redaction **mark** onto a page (Pass 8,

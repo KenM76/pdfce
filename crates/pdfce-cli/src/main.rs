@@ -1361,6 +1361,94 @@ enum Command {
         input: PathBuf,
     },
 
+    /// **Extract an embedded file** out of a PDF (§7.11.4).
+    ///
+    /// The counterpart to `list-attachments`, which could name an
+    /// attachment but never get it out — `pdfce_core` has been able to do
+    /// this since attachments were first read; there was simply no way to
+    /// ask for it from a shell.
+    ///
+    /// ★ THE OUTPUT PATH IS YOURS, NOT THE DOCUMENT'S. An attachment's name
+    /// is attacker-controlled and unconstrained by ISO 32000-1: it may be
+    /// `..\..\Windows\System32\evil.exe`, may contain a NUL, or may use a
+    /// right-to-left override so `gnp.exe` renders as `exe.png`. This command
+    /// therefore takes an explicit `--output` and NEVER derives a path from
+    /// the name in the file.
+    ExtractAttachment {
+        /// Input PDF.
+        input: PathBuf,
+        /// Which attachment, by the name `list-attachments` reports.
+        #[arg(long)]
+        name: String,
+        /// Where to write the extracted bytes. Required, deliberately — see
+        /// the command's own help for why the name in the document is not
+        /// used.
+        #[arg(long, short)]
+        output: PathBuf,
+    },
+
+    /// **Attach a file to a PDF** as a document-level embedded file
+    /// (§7.11.4.1, `/Names /EmbeddedFiles`).
+    ///
+    /// A DRY RUN unless `--apply`, matching every other mutating command
+    /// here.
+    ///
+    /// ⚠️ Attaching does not encrypt or protect the file. It travels with
+    /// the PDF and anyone who can open the PDF can extract it.
+    AttachFile {
+        /// Input PDF.
+        input: PathBuf,
+        /// The file to embed.
+        #[arg(long)]
+        file: PathBuf,
+        /// The name to file it under. Defaults to the source file's own
+        /// name.
+        #[arg(long)]
+        name: Option<String>,
+        /// Optional description, shown beside the name in a reader's
+        /// attachments pane (`/Desc`, Table 44).
+        #[arg(long)]
+        desc: Option<String>,
+        /// Actually write the output. Without it this is a DRY RUN.
+        #[arg(long)]
+        apply: bool,
+        /// Output path. Required with `--apply`.
+        #[arg(long, short)]
+        output: Option<PathBuf>,
+        /// Which save path to use.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+    },
+
+    /// **Remove a document-level attachment** from a PDF (§7.11.4.1).
+    ///
+    /// Removes the name-tree entry, the file specification AND the embedded
+    /// stream — not merely the entry, which would hide the attachment from
+    /// every reader while leaving its bytes fully present.
+    ///
+    /// ⚠️ NOT a redaction. Under the default incremental save every prior
+    /// revision remains in the file by design (§7.5.6) — that is what keeps
+    /// existing signatures valid — so the bytes stay recoverable from the
+    /// earlier revision. Use `--mode full` when the point of removing it was
+    /// that it should not be in the file at all.
+    DetachFile {
+        /// Input PDF.
+        input: PathBuf,
+        /// Which attachment, by the name `list-attachments` reports.
+        #[arg(long)]
+        name: String,
+        /// Actually write the output. Without it this is a DRY RUN.
+        #[arg(long)]
+        apply: bool,
+        /// Output path. Required with `--apply`.
+        #[arg(long, short)]
+        output: Option<PathBuf>,
+        /// Which save path to use. `full` is the one that does not leave the
+        /// removed bytes in a prior revision.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+    },
+
     /// **Report what printing this document WOULD do**, without printing.
     ///
     /// Resolves the printer, reads its resolution and printable area,
@@ -4692,6 +4780,35 @@ fn run() -> ExitCode {
         Command::Sign { .. } => unimplemented_stub("sign"),
         Command::ListOutline { input, flat } => cmd_list_outline(&input, flat),
         Command::ListAttachments { input } => cmd_list_attachments(&input),
+        Command::ExtractAttachment {
+            input,
+            name,
+            output,
+        } => cmd_extract_attachment(&input, &name, &output),
+        Command::AttachFile {
+            input,
+            file,
+            name,
+            desc,
+            apply,
+            output,
+            mode,
+        } => cmd_attach_file(
+            &input,
+            &file,
+            name.as_deref(),
+            desc.as_deref(),
+            apply,
+            output.as_deref(),
+            mode,
+        ),
+        Command::DetachFile {
+            input,
+            name,
+            apply,
+            output,
+            mode,
+        } => cmd_detach_file(&input, &name, apply, output.as_deref(), mode),
         Command::ListLayers { input } => cmd_list_layers(&input),
         Command::ListFonts {
             input,
@@ -7513,6 +7630,235 @@ listing. An empty or short list here is not a statement about the document's fon
 /// embedded file to appear in `/EmbeddedFiles`. So this reports what is
 /// reachable by the two standard paths, and the summary line says so
 /// rather than implying exhaustiveness.
+/// `extract-attachment` — get an embedded file OUT of a PDF.
+///
+/// Closes a gap that had existed since attachments first became readable:
+/// `pdfce_core::attachments::extract_attachment` could always do this and no
+/// shell could ask for it — standing rule R151's exact shape, a core API with
+/// no caller.
+///
+/// ★ The output path is REQUIRED and never derived from the attachment's own
+/// name. That name is attacker-controlled and ISO 32000-1 constrains nothing
+/// about it: it may carry `..`, a NUL, a reserved device name like `CON`, or
+/// a right-to-left override making `gnp.exe` render as `exe.png`. A tool that
+/// wrote to a path taken from inside the document would be a path-traversal
+/// primitive, so this one cannot be asked to.
+fn cmd_extract_attachment(input: &Path, name: &str, output: &Path) -> u8 {
+    let doc = match open_document(input) {
+        Ok(doc) => doc,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit_code_for_doc(&err);
+        }
+    };
+    let view = doc.view();
+    let items = pdfce_core::attachments::list_attachments(&doc);
+    let Some(found) = items.iter().find(|a| a.name == name) else {
+        eprintln!(
+            "pdfce-cli: {}: no attachment named {name:?}. Run `pdfce-cli list-attachments` to \
+             see the names this document actually uses.",
+            input.display()
+        );
+        return exit::EDIT_REFUSED;
+    };
+    match pdfce_core::attachments::extract_attachment(&view, found) {
+        Ok(extracted) => {
+            if let Err(err) = std::fs::write(output, &extracted.data) {
+                eprintln!("pdfce-cli: {}: {err}", output.display());
+                return exit::IO_ERROR;
+            }
+            println!(
+                "extracted name={:?} bytes={} -> {}",
+                found.name,
+                extracted.data.len(),
+                output.display()
+            );
+            // `/Size` is Optional and nothing requires it to match the real
+            // length (§7.11.4.1 Table 46). A mismatch is REPORTED, not treated
+            // as corruption — the bytes are still the bytes.
+            println!("  size_check={:?}", extracted.size_check);
+            exit::SUCCESS
+        }
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {name:?}: {err}", input.display());
+            exit::EDIT_REFUSED
+        }
+    }
+}
+
+/// `attach-file` — embed a file into a PDF as a document-level attachment.
+#[allow(clippy::too_many_arguments)]
+fn cmd_attach_file(
+    input: &Path,
+    file: &Path,
+    name: Option<&str>,
+    desc: Option<&str>,
+    apply: bool,
+    output: Option<&Path>,
+    mode: SaveMode,
+) -> u8 {
+    let bytes = match std::fs::read(file) {
+        Ok(b) => b,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", file.display());
+            return exit::IO_ERROR;
+        }
+    };
+    // The stored name defaults to the source file's own NAME, never its full
+    // path: embedding `C:\Users\Ken\...` would put the operator's directory
+    // layout inside a document they hand to someone else.
+    let stored = match name {
+        Some(n) => n.to_string(),
+        None => match file.file_name().and_then(|n| n.to_str()) {
+            Some(n) => n.to_string(),
+            None => {
+                eprintln!(
+                    "pdfce-cli: {}: cannot derive a name from this path; pass --name",
+                    file.display()
+                );
+                return exit::EDIT_REFUSED;
+            }
+        },
+    };
+    let doc = match open_document(input) {
+        Ok(doc) => doc,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit_code_for_doc(&err);
+        }
+    };
+    let mut session = pdfce_core::edit::EditSession::new(doc);
+    if let Err(err) = session.attach_file(&stored, &bytes, desc) {
+        eprintln!("pdfce-cli: {}: {err}", input.display());
+        return exit::EDIT_REFUSED;
+    }
+    println!(
+        "attach-file {} name={stored:?} bytes={} mode={} applied={}",
+        input.display(),
+        bytes.len(),
+        mode_token(mode),
+        u32::from(apply)
+    );
+    eprintln!(
+        "pdfce-cli: the attachment is NOT protected — it travels with the PDF, and anyone who \
+         can open the PDF can extract it."
+    );
+    if !apply {
+        eprintln!("pdfce-cli: dry run — pass --apply with --output to write the file.");
+        return exit::SUCCESS;
+    }
+    finish_attachment_save(input, &mut session, output, mode)
+}
+
+/// `detach-file` — remove a document-level attachment.
+fn cmd_detach_file(
+    input: &Path,
+    name: &str,
+    apply: bool,
+    output: Option<&Path>,
+    mode: SaveMode,
+) -> u8 {
+    let doc = match open_document(input) {
+        Ok(doc) => doc,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit_code_for_doc(&err);
+        }
+    };
+    // Resolve the operator's name to the name-tree KEY. The key and the
+    // filespec's `/F`/`/UF` are independently-authored strings a real document
+    // is free to disagree on, so deleting by the DISPLAYED name would miss
+    // exactly the documents where they differ.
+    let items = pdfce_core::attachments::list_attachments(&doc);
+    let Some(found) = items.iter().find(|a| a.name == name) else {
+        eprintln!(
+            "pdfce-cli: {}: no attachment named {name:?}. Run `pdfce-cli list-attachments` to \
+             see the names this document actually uses.",
+            input.display()
+        );
+        return exit::EDIT_REFUSED;
+    };
+    let key = match &found.kind {
+        pdfce_core::attachments::AttachmentKind::DocumentLevel { tree_key } => tree_key.clone(),
+        other => {
+            eprintln!(
+                "pdfce-cli: {}: {name:?} is {other:?} — it lives on a page as an annotation, \
+                 not in the document's embedded-file tree, and is removed as an annotation.",
+                input.display()
+            );
+            return exit::EDIT_REFUSED;
+        }
+    };
+    let mut session = pdfce_core::edit::EditSession::new(doc);
+    if let Err(err) = session.detach_file(&key) {
+        eprintln!("pdfce-cli: {}: {err}", input.display());
+        return exit::EDIT_REFUSED;
+    }
+    println!(
+        "detach-file {} name={name:?} mode={} applied={}",
+        input.display(),
+        mode_token(mode),
+        u32::from(apply)
+    );
+    if matches!(mode, SaveMode::Incremental) {
+        eprintln!(
+            "pdfce-cli: NOT a redaction. An incremental save keeps every prior revision by \
+             design (§7.5.6), so these bytes stay recoverable from the earlier revision. Use \
+             --mode full if the point was that they should not be in the file at all."
+        );
+    }
+    if !apply {
+        eprintln!("pdfce-cli: dry run — pass --apply with --output to write the file.");
+        return exit::SUCCESS;
+    }
+    finish_attachment_save(input, &mut session, output, mode)
+}
+
+/// The save-mode token both attachment commands print.
+const fn mode_token(mode: SaveMode) -> &'static str {
+    match mode {
+        SaveMode::Incremental => "incremental",
+        SaveMode::Full => "full",
+    }
+}
+
+/// Shared save tail for `attach-file` and `detach-file`.
+///
+/// One function rather than two copies: the recovered-base hint, the
+/// output-required check and the exit codes must not drift apart between two
+/// commands an operator will reasonably expect to behave identically.
+fn finish_attachment_save(
+    input: &Path,
+    session: &mut pdfce_core::edit::EditSession,
+    output: Option<&Path>,
+    mode: SaveMode,
+) -> u8 {
+    let Some(out) = output else {
+        eprintln!("pdfce-cli: --apply needs --output <PATH>");
+        return exit::RUNTIME_ERROR;
+    };
+    let saved = match mode {
+        SaveMode::Incremental => {
+            session.to_incremental_bytes(&pdfce_core::writer::SaveOptions::identity())
+        }
+        SaveMode::Full => session.to_full_bytes(&pdfce_core::writer::SaveOptions::default()),
+    };
+    let (bytes, _report) = match saved {
+        Ok(pair) => pair,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: save refused: {err}", input.display());
+            hint_recovered_base(&err);
+            return exit::SAVE_REFUSED;
+        }
+    };
+    if let Err(err) = std::fs::write(out, &bytes) {
+        eprintln!("pdfce-cli: {}: {err}", out.display());
+        return exit::IO_ERROR;
+    }
+    println!("  wrote {} bytes={}", out.display(), bytes.len());
+    exit::SUCCESS
+}
+
 fn cmd_list_attachments(input: &Path) -> u8 {
     let doc = match open_document(input) {
         Ok(doc) => doc,

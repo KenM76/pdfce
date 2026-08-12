@@ -552,3 +552,71 @@ fn a_multi_node_name_tree_is_refused_rather_than_damaged() {
         "a refused attach must leave the session untouched"
     );
 }
+
+/// Detaching removes the ENTRY and the bytes it owned, not just the entry.
+///
+/// The failure this guards is specific and nasty: dropping the name-tree key
+/// while leaving the embedded stream in the file. Every reader would then
+/// show no attachment, and the content would still be sitting there in full.
+/// An operator who deleted an attachment BECAUSE it should not be in the file
+/// would have been told it was gone while it was not — so the assertion is on
+/// the object count, not merely on `list_attachments`.
+#[test]
+fn detaching_frees_the_stream_and_not_only_the_name_tree_entry() {
+    use pdfce_core::edit::EditSession;
+    use pdfce_core::writer::{SaveOptions, save_full};
+
+    let doc = load("doc-level-simple.pdf");
+    let listed = list_attachments(&doc);
+    let target = listed.first().expect("fixture must have one").clone();
+    let key = match &target.kind {
+        AttachmentKind::DocumentLevel { tree_key } => tree_key.clone(),
+        other => panic!("expected a document-level attachment, got {other:?}"),
+    };
+    let objects_before = doc.object_count();
+
+    let mut session = EditSession::new(doc);
+    session.detach_file(&key).expect("detach must succeed");
+    let (bytes, _) = save_full(
+        session.document(),
+        &session.dirty_set(),
+        &SaveOptions::identity(),
+    )
+    .expect("save");
+    let back = Document::from_bytes(bytes).expect("reload");
+
+    assert!(
+        list_attachments(&back).is_empty(),
+        "the attachment must be gone from the listing"
+    );
+    assert!(
+        back.object_count() < objects_before,
+        "the filespec and stream objects must be gone too, not orphaned in place: \
+         before={objects_before} after={}",
+        back.object_count()
+    );
+}
+
+/// Detaching a name that is not there is refused by name, not ignored.
+///
+/// A silent no-op would let a batch script believe it had removed something
+/// it never touched — the failure mode is a file shipped with an attachment
+/// the operator is certain they deleted.
+#[test]
+fn detaching_an_unknown_name_is_refused() {
+    use pdfce_core::edit::{EditError, EditSession};
+
+    let doc = load("doc-level-simple.pdf");
+    let mut session = EditSession::new(doc);
+    let err = session
+        .detach_file(b"no-such-attachment.bin")
+        .expect_err("an unknown key must be refused");
+    assert!(
+        matches!(err, EditError::AttachmentNotFound),
+        "refused for the right reason: got {err:?}"
+    );
+    assert!(
+        session.dirty_set().is_empty(),
+        "a refused detach must change nothing"
+    );
+}
