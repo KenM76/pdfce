@@ -1053,6 +1053,85 @@ enum Command {
         acknowledge_pdfa: bool,
     },
 
+    /// **Add the font programs a document is missing** — a DRY RUN unless
+    /// `--apply`.
+    ///
+    /// The constructive mirror of `unembed-font`, and the fix for the one
+    /// thing every print-on-demand service rejects a book for: a font the
+    /// PDF names but does not carry. `list-fonts` reports it as
+    /// `not-embedded=N`; this drives that number down and prints what is
+    /// left.
+    ///
+    /// ★ THE SOURCE FONTS COME FROM `--font-dir`. pdfce never goes looking
+    /// on its own. Point it at a folder holding the faces — on Windows,
+    /// `--font-dir C:\Windows\Fonts` — and every face there is matched
+    /// against the document's font names. A font nothing answers to is
+    /// reported BY NAME, with what would satisfy it.
+    ///
+    /// ★ CHARACTER POSITIONS DO NOT MOVE. A PDF spaces text from its own
+    /// `/Widths` array, never from the font program (§9.6.2.1 Table 111),
+    /// and this command either leaves that array untouched or writes it from
+    /// the Adobe Core-14 metrics a reader was already applying. What changes
+    /// is the letterforms. That is a certainty in both directions: the
+    /// layout is safe, and the shapes WILL differ where the face is not the
+    /// original.
+    ///
+    /// ★ EXACT vs SUBSTITUTE is printed per font. `exact` means the folder
+    /// held the face the document names. `alias` means a metric-compatible
+    /// stand-in was used (`Helvetica` → `Arial`). `bundled` means one of
+    /// pdfce's own substitute faces, which is off unless
+    /// `--use-bundled-fonts` is passed.
+    ///
+    /// A font whose own licensing field says it may not be embedded is
+    /// refused by name (§9.9). So are composite (CID) fonts, whose character
+    /// codes are positions inside the specific program that is missing —
+    /// no other face can stand in for one without drawing the wrong
+    /// characters.
+    ///
+    /// The file gets BIGGER. Programs are compressed on the way in, and both
+    /// save modes keep them.
+    EmbedFont {
+        /// Input PDF.
+        input: PathBuf,
+        /// A font to embed into, by `/BaseFont` or family name — both
+        /// `ABCDEF+Arial` and `Arial` work. Repeatable. A name that matches
+        /// nothing is reported and exits non-zero.
+        #[arg(long, group = "which-embed")]
+        font: Vec<String>,
+        /// Embed into every font the document does not carry a program for.
+        #[arg(long, group = "which-embed")]
+        all_missing: bool,
+        /// A folder of font files to resolve the document's font names
+        /// against. Repeatable; later folders win a duplicate name.
+        #[arg(long = "font-dir", value_name = "DIR")]
+        font_dirs: Vec<PathBuf>,
+        /// Also offer pdfce's own bundled standard-14 substitute faces when
+        /// no supplied folder answers to a name.
+        ///
+        /// OFF by default, and not for a technical reason: the bundled
+        /// faces are BSD-3-Clause (see `THIRD_PARTY_LICENSES.md`), and
+        /// embedding one puts it inside a document you then distribute —
+        /// which carries that licence's attribution condition with it.
+        /// That is your decision to make, so pdfce does not make it for you.
+        #[arg(long)]
+        use_bundled_fonts: bool,
+        /// Actually write the output. Without it this is a DRY RUN: the full
+        /// report is printed and no file is written.
+        #[arg(long)]
+        apply: bool,
+        /// Output path. Required with `--apply`.
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        /// Which save path to use. Both keep the embedded programs;
+        /// `incremental` leaves the input revision byte-identical.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Verify that undoing the operation reproduces the input byte for
+        /// byte.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+
     /// Apply redactions: TRULY REMOVE the marked content (§12.5.6.23).
     ///
     /// The one destructive, irreversible operation in pdfce (R35). It
@@ -5559,6 +5638,27 @@ fn run() -> ExitCode {
             verify_undo,
             keep_subset_tag,
             acknowledge_pdfa,
+        }),
+        Command::EmbedFont {
+            input,
+            font,
+            all_missing,
+            font_dirs,
+            use_bundled_fonts,
+            apply,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_embed_font(&EmbedArgs {
+            input: &input,
+            fonts: &font,
+            all_missing,
+            font_dirs: &font_dirs,
+            use_bundled_fonts,
+            apply,
+            output: output.as_deref(),
+            mode,
+            verify_undo,
         }),
         Command::RedactApply {
             input,
@@ -12291,6 +12391,321 @@ in_bytes={} undo_verified={} undo_identical={}",
         u32::from(outcome.undo_identical),
     );
     finish_edit(args.input, &outcome)
+}
+
+/// `embed-font` — add the font programs a document is missing, dry-run by
+/// default.
+///
+/// # Why a dry run is the default here too, when nothing is destroyed
+///
+/// `unembed-font` defaults to a dry run because it removes something the
+/// output cannot get back. This command removes nothing, so that argument
+/// does not transfer — and the default is the same anyway, for a different
+/// reason.
+///
+/// **Embedding is an inference.** pdfce is choosing font programs the
+/// document did not carry, and on a typical run some of those choices are
+/// stand-ins rather than the face the file names. The operator has to be
+/// able to see WHICH before it becomes document state (project rule 4), and
+/// a command that wrote on the first invocation would make "show me what you
+/// would pick" and "pick it" the same act. It is also the shape `print`
+/// (`--send`) and `unembed-font` (`--apply`) already established, and a
+/// third font command with a different default would be the surprise.
+///
+/// # What the report says, and why each column is on it
+///
+/// Per resolved font: the face chosen, the file it came from, and
+/// `match=exact|alias|bundled` — the disclosure rule 4 requires. Per refused
+/// font: its name and a reason that says what would satisfy it. Then, on the
+/// summary line, **`not_embedded_after`** — the number the operator is
+/// actually trying to drive to zero. A report that showed only what pdfce
+/// managed to do would read as success over a file a print service will
+/// still reject.
+fn cmd_embed_font(args: &EmbedArgs<'_>) -> u8 {
+    use pdfce_core::edit::EditError;
+    use pdfce_core::font_embed_missing::{EmbedRequest, EmbedSelection, FontMatch, SuppliedFont};
+    use pdfce_core::fontinfo::Program;
+    use pdfce_render::font::EmbedMatch;
+
+    if args.apply && args.output.is_none() {
+        eprintln!("pdfce-cli: --apply needs --output <PATH>; a dry run needs neither");
+        return exit::EDIT_REFUSED;
+    }
+
+    // The SHELL owns the filesystem: the environment is built here and
+    // `pdfce-core` is handed bytes (project rule 2). Reuses `--font-dir`'s
+    // one walker rather than a second one (R171).
+    let (font_env, supplied_registered, font_notes) = build_font_environment(args.font_dirs);
+    for note in &font_notes {
+        eprintln!("pdfce-cli: font-dir: {note}");
+    }
+    if supplied_registered == 0 && !args.use_bundled_fonts {
+        eprintln!(
+            "pdfce-cli: no font folder supplied any usable face. Pass --font-dir <DIR> pointing \
+at a folder of font files (on Windows, C:\\Windows\\Fonts), or --use-bundled-fonts to offer \
+pdfce's own standard-14 substitutes."
+        );
+    }
+
+    let (source, mut session) = match open_for_edit(args.input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    // Resolve a donor for every font the document is missing. The inventory
+    // is phase A's, consumed rather than re-derived.
+    let inventory = pdfce_core::fontinfo::inventory(&session.view());
+    let selection = if args.all_missing {
+        EmbedSelection::AllMissing
+    } else {
+        EmbedSelection::Named(args.fonts.to_vec())
+    };
+    let mut request = match &selection {
+        EmbedSelection::Named(names) => EmbedRequest::named(names.clone()),
+        _ => EmbedRequest::all_missing(),
+    };
+    let mut resolutions: Vec<(String, String, String, FontMatch)> = Vec::new();
+    for record in &inventory.fonts {
+        if !matches!(record.program, Program::NotEmbedded) {
+            continue;
+        }
+        let Some(base_font) = record.base_font.as_deref() else {
+            continue;
+        };
+        let Some(donor) = font_env.resolve_for_embedding(base_font, args.use_bundled_fonts) else {
+            continue;
+        };
+        let matched = match donor.quality {
+            EmbedMatch::Exact => FontMatch::Exact,
+            EmbedMatch::Alias => FontMatch::Alias,
+            EmbedMatch::Bundled => FontMatch::Bundled,
+        };
+        // A bundled face has no path; the source string says so in words
+        // rather than printing an empty field.
+        let source_label = if matches!(matched, FontMatch::Bundled) {
+            format!("bundled: {}", donor.face_name)
+        } else {
+            format!("--font-dir face {:?}", donor.face_name)
+        };
+        resolutions.push((
+            base_font.to_owned(),
+            donor.face_name.clone(),
+            source_label.clone(),
+            matched,
+        ));
+        request = request.with_font(
+            base_font,
+            SuppliedFont::new(
+                donor.data.bytes().to_vec(),
+                donor.face_name.clone(),
+                source_label,
+                matched,
+            ),
+        );
+    }
+
+    // Computed ONCE and printed before anything is decided, so the dry run
+    // and the apply are looking at the same evidence.
+    let plan = session.embed_preview(&request);
+
+    println!("embed-font {}", args.input.display());
+    println!(
+        "  supplied_registered={supplied_registered} resolved={} bundled_allowed={}",
+        resolutions.len(),
+        u32::from(args.use_bundled_fonts),
+    );
+    for t in &plan.targets {
+        let name = t.base_font.as_deref().unwrap_or("-");
+        println!(
+            "  embed name={name:?} obj={} shape={} key={} subtype={} format={} face={:?} \
+match={} bytes={} redeclared={} widths={} encoding={} descriptor={} rename={} pages={}",
+            t.id.num,
+            t.shape.token(),
+            t.program_key.label(),
+            t.stream_subtype.unwrap_or("-"),
+            t.format.token(),
+            t.face_name,
+            t.matched.token(),
+            t.program_bytes,
+            u32::from(t.redeclared_truetype),
+            t.widths_written,
+            u32::from(t.encoding_written),
+            u32::from(t.descriptor_written),
+            t.rename.as_deref().unwrap_or("unchanged"),
+            pdfce_core::fontinfo::format_page_ranges(&t.pages),
+        );
+        println!("    source: {}", t.source);
+    }
+    // Every refused font, by name, on stdout with the rest of the report —
+    // the same disclosure posture `unembed-font` takes, and for the same
+    // reason: a font missing from both lists is a silence the operator
+    // cannot act on.
+    for b in &plan.blocked {
+        // "Already embedded" is not a refusal an operator needs a paragraph
+        // about; it is the answer to "why is this row not in the list".
+        let name = b.base_font.as_deref().unwrap_or("-");
+        let obj =
+            b.id.map_or_else(|| "direct".to_owned(), |id| format!("{}", id.num));
+        println!(
+            "  refused name={name:?} obj={obj} reason={}",
+            b.blocker.token()
+        );
+        if b.blocker.token() != "already-embedded" {
+            println!("    reason: {}", b.blocker.reason());
+        }
+    }
+    for name in &plan.unmatched {
+        println!("  unmatched {name:?}");
+    }
+
+    let substitutes = plan
+        .targets
+        .iter()
+        .filter(|t| t.matched.is_substitute())
+        .count();
+    println!(
+        "  fonts={} exact={} substitute={} refused={} unmatched={} bytes_added_max={} \
+not_embedded_before={} not_embedded_after={} pdfa={} mode={} applied={}",
+        plan.targets.len(),
+        plan.targets.len() - substitutes,
+        substitutes,
+        plan.blocked.len(),
+        plan.unmatched.len(),
+        plan.bytes_added_uncompressed(),
+        plan.missing_before,
+        plan.missing_after(),
+        plan.pdfa.token(),
+        args.mode.name(),
+        u32::from(args.apply),
+    );
+
+    // ★ The two disclosures rule 4 requires, stated as facts rather than
+    // implied by the report's shape.
+    if !plan.targets.is_empty() {
+        eprintln!(
+            "pdfce-cli: {}: character POSITIONS do not change — a PDF spaces text from its own \
+/Widths array, which is preserved or written from the standard metrics a reader was already \
+using. The LETTERFORMS will differ wherever the face embedded is not the one the document \
+names.",
+            args.input.display()
+        );
+    }
+    if substitutes > 0 {
+        eprintln!(
+            "pdfce-cli: {}: {substitutes} of these use a STAND-IN face, not the one the document \
+names. Each is printed above with match=alias or match=bundled and the face actually used.",
+            args.input.display()
+        );
+    }
+    if plan.redeclares_any() {
+        eprintln!(
+            "pdfce-cli: {}: one or more fonts are being re-declared from a PostScript font to a \
+TrueType font, because the face supplied for them carries TrueType outlines and ISO 32000-1 \
+§9.9 Table 126 admits no other way to attach one. The character mapping is written out \
+explicitly at the same time, so the text is unchanged.",
+            args.input.display()
+        );
+    }
+    if plan.missing_after() > 0 {
+        eprintln!(
+            "pdfce-cli: {}: {} font(s) will STILL have no embedded program. Every one is listed \
+above with its reason. A service that requires embedded fonts will still reject this file.",
+            args.input.display(),
+            plan.missing_after()
+        );
+    }
+
+    if !plan.unmatched.is_empty() {
+        eprintln!(
+            "pdfce-cli: {}: {} --font name(s) matched no font in this document. Run `list-fonts` \
+to see the names it actually carries.",
+            args.input.display(),
+            plan.unmatched.len()
+        );
+        return exit::EDIT_REFUSED;
+    }
+
+    if !args.apply {
+        if plan.targets.is_empty() {
+            eprintln!(
+                "pdfce-cli: {}: DRY RUN — nothing would be embedded. Every refusal is printed \
+above with its reason.",
+                args.input.display()
+            );
+            return exit::EDIT_REFUSED;
+        }
+        eprintln!(
+            "pdfce-cli: {}: DRY RUN — no file was written. Re-run with --apply --output <PATH> \
+to perform this.",
+            args.input.display()
+        );
+        return exit::SUCCESS;
+    }
+
+    let applied = match session.embed_fonts(&request) {
+        Ok(applied) => applied,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", args.input.display());
+            return match err {
+                EditError::PageTree(_) => exit::RUNTIME_ERROR,
+                _ => exit::EDIT_REFUSED,
+            };
+        }
+    };
+    // The plan the operator read and the plan that ran are the same value,
+    // produced by the same function.
+    debug_assert_eq!(applied.targets.len(), plan.targets.len());
+
+    let impact = session.signature_impact_of_save(match args.mode {
+        SaveMode::Incremental => CoreSaveMode::Incremental,
+        SaveMode::Full => CoreSaveMode::FullRewrite,
+    });
+    println!("  signature_impact={impact:?}");
+
+    let Some(output) = args.output else {
+        eprintln!("pdfce-cli: --apply needs --output <PATH>");
+        return exit::EDIT_REFUSED;
+    };
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        output,
+        args.mode,
+        ProducerArg::Preserve,
+        args.verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "  wrote {} objects={} verbatim={} reserialized={} appended={} out_bytes={} \
+in_bytes={} undo_verified={} undo_identical={}",
+        output.display(),
+        r.objects_written,
+        r.objects_verbatim,
+        r.objects_reserialized,
+        r.bytes_appended,
+        r.bytes_written,
+        source.len(),
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    finish_edit(args.input, &outcome)
+}
+
+/// The parsed `embed-font` flags, gathered for the same reason
+/// [`UnembedArgs`] is.
+struct EmbedArgs<'a> {
+    input: &'a Path,
+    fonts: &'a [String],
+    all_missing: bool,
+    font_dirs: &'a [PathBuf],
+    use_bundled_fonts: bool,
+    apply: bool,
+    output: Option<&'a Path>,
+    mode: SaveMode,
+    verify_undo: bool,
 }
 
 /// The parsed `unembed-font` flags, gathered so the implementation takes one
