@@ -81,6 +81,388 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★★★ `1496e13` + `0d7c1bd` + `bc13a86` — `Pass 68.0`'s **CLI HALF IS REAL** (`dimension-add --kind two-lines`: parallel → a LINEAR ce dimension, angled → an ANGULAR one, collinear → refused by name — the operator's request reachable from a script for the first time, and **still NOT SHIPPED because the canvas cannot pick two lines**); a licence gate that DOCUMENTED a check it never performed now performs it, and its first true run was a **FALSE POSITIVE**; and `af5580e`'s mis-scoping is **measured rather than alleged** — 2026-08-12 (hundred-and-twenty-seventh filing)
+
+**Sourcing, stated before any figure (hard rule 8).** This librarian **had a
+shell this dispatch**. **measured** = a command was run here and is named;
+**relayed** = it came from the dispatching engineer's brief and was not
+re-run. **All three short hashes were resolved here by `git rev-parse`**, and
+the dispatch again declined to supply full ones, saying so in as many words:
+*"Do not accept a relayed full hash — I supplied a fabricated one earlier
+today."* That practice is now three filings old and has yet to cost anything.
+Full forms, **measured**:
+
+| short | full (by `git rev-parse`) | subject |
+|---|---|---|
+| `1496e13` | `1496e135fd51a4a5cbde5e7539eaa7b7230bb01c` | finish the filing, and record that I contaminated the commit before it |
+| `0d7c1bd` | `0d7c1bd6fedb301eafaffc9da4b2a0fca4e5e40b` | the gate claimed a check it did not perform, then cried wolf when it did |
+| `bc13a86` | `bc13a86b39fba80bfa3815acb47515293b879c10` | two lines in, and pdfce decides which dimension they call for |
+
+**CI IS RED ON `main` AND THIS FILING IS THE FIX — measured, not relayed.**
+`python tools/check-commits-filed.py`, run at the start of this filing,
+reported ***"commits-filed: 3 code commit(s) are in no filing"*** and named
+exactly these three, in this order, agreeing with the dispatch. **Four
+consecutive CI runs have failed on `check-commits-filed` and on nothing
+else** (relayed) — **no code failure is implicated**, which is the whole
+reason the gate is worth having: it went red for a bookkeeping debt and named
+it precisely rather than burying it in a build log. **Every other gate this
+librarian could run was green** (see *Verification* below).
+
+**★ Note the shape of `1496e13` appearing on that list at all.** It touches
+`docs/` **and** `crates/pdfce-core/src/ocr/models.rs`, and the gate's
+exclusion is **docs-ONLY**, not docs-touching — so a commit that mixes a
+filing with a source change is visible to the gate exactly as it should be.
+That is the same mixing `af5580e` did accidentally, done deliberately and
+declared in the commit message; the gate does not distinguish intent and does
+not need to.
+
+**★ TERMINOLOGY (project rule 15), binding on everything below and on every
+dispatch this entry generates.** Item 3 concerns **ce dimensions** — the
+dimension objects **pdfce authors** (`/Line` + `/IT /LineDimension` +
+`/Measure` + the `/PieceInfo` sidecar, everything under
+`crates/pdfce-core/src/dimension/`). The *lines the operator picks* may
+perfectly well be **pdf dimensions** or CAD geometry already in the file;
+they enter **only as pickable page geometry** and pdfce still must not alter
+them. Never the bare word.
+
+#### No Pass ID is minted in this entry, and the reason is worth stating
+
+`bc13a86` is `Pass 68.0`'s CLI half — an existing Pass, not a new one.
+`0d7c1bd` is a **fix to a CI gate that shipped 40 minutes earlier**
+(`e3fb7e0`, hundred-and-twenty-sixth filing) and follows that gate's own
+precedent of carrying **no Pass number**. `1496e13` is a filing plus a doc
+correction. **Live ceilings, measured** by `python
+tools/check-ledger-numbers.py`: Pass families **up to 71** → the next free
+family is **seventy-two, unclaimed** (spelled out deliberately: writing it
+in the project's `Pass NN` form would make the ledger checker read this
+sentence as a claim on the number); standing rules **R191** → next free
+**R192** (still claimed by
+an unruled PROPOSAL); decision records **055** → next free **056**;
+SESSION_LOG filings **126** → next free **127**, which is this one.
+
+#### GUI-core separation — discharged by "no manifest was touched", and that is CHECKED, not assumed
+
+**Measured** by `git diff --numstat` across all three commits: the changed
+paths are `crates/pdfce-core/src/ocr/models.rs`,
+`crates/pdfce-cli/src/main.rs`, `crates/pdfce-cli/tests/two_line_dimension.rs`,
+`tools/check-shipped-assets.py` and four `docs/` files. **No `Cargo.toml`
+anywhere**, so `CLAUDE.md` rule 2's trigger condition is not met and
+`cargo tree` was not re-run — stated so that a reader can tell "the invariant
+was verified by command" (the previous filing, which did touch five
+manifests) from "the invariant could not be disturbed by this diff" (this
+one). **Relayed and consistent:** the dispatch reports no `pdfce-core` /
+`pdfce-render` manifest touched.
+
+| commit | files | insertions / deletions | manifests touched |
+|---|---|---|---|
+| `1496e13` | 4 (3 docs + 1 source) | 943 / 360 | none |
+| `0d7c1bd` | 1 (tooling) | 78 / 0 | none |
+| `bc13a86` | 2 (CLI + its tests) | 394 / 0 | none |
+
+#### Verification
+
+**Relayed from the dispatch, not re-run here** (a workspace `cargo test` is
+minutes of wall clock and this filing is unblocking a red `main`):
+`cargo test --workspace` **3,593 passing, 0 failing** against a baseline of
+**3,587** — **+6, all of them `bc13a86`'s** (`0d7c1bd` adds no test to the
+default suite; it is a Python gate). The 3,587 denominator is the state after
+`af5580e`, which the hundred-and-twenty-sixth filing recorded as *"3,582 →
+3,587"*, so **the two records join** — filed with both halves per hard rule
+10(a) rather than leaving the reader to find the earlier number.
+`cargo fmt --all --check` clean; `cargo clippy --workspace --all-targets
+--all-features` **zero**.
+
+**Measured here, by running them:**
+
+```
+python tools/check-shipped-assets.py  -> clean: 2 asset directories, 60 redistributed files
+python tools/check-fmt-excluded.py    -> clean: 12 out-of-workspace crates
+bash   tools/check-ui-strings.sh      -> clean: no operator-visible literals outside ui_text.rs
+python tools/check-ledger-numbers.py  -> clean: no duplicate Pass, rule or decision number
+git status --short                    -> EMPTY (working tree clean at bc13a86, branch main)
+```
+
+**`check-shipped-assets` being green is not a formality this time** — it is
+`0d7c1bd`'s own subject, and item 2 below is why a green from it now means
+more than a green from it did yesterday.
+
+---
+
+#### 1. `1496e13` — two corrections, BOTH found by the librarian rather than by the engineer
+
+**(a) `af5580e` IS MIS-SCOPED, AND THIS IS MEASURED, NOT ALLEGED.** The
+hundred-and-twenty-sixth filing recorded the sweep from the engineer's brief;
+this entry records the arithmetic. **Measured** by `git diff --numstat
+af5580e^ af5580e`:
+
+| path | insertions | whose work |
+|---|---|---|
+| `crates/pdfce-core/src/ocr/models.rs` | 276 | **the engineer's — the withdrawal** |
+| `crates/pdfce-core/src/ocr/mod.rs` | 5 | **the engineer's — the withdrawal** |
+| `docs/ROADMAP.md` | 802 | a librarian filing about five OTHER commits |
+| `docs/ARCHITECTURE.md` | 252 | same filing |
+| `CLAUDE.md` | 32 | same filing |
+| `docs/FEATURES.md` | 3 | same filing |
+| `docs/PRIOR_ART.md` | 1 | same filing |
+| **total** | **1,371** | **281 withdrawal · 1,090 filing** |
+
+**So the commit titled *"withdraw the downloader I proposed"* is 20% about
+the downloader.** Two further **measured** facts pin it beyond
+interpretation: `git diff af5580e^ af5580e -- docs/ROADMAP.md` contains
+***zero*** occurrences of *"downloader"* and **seven** of
+*"hundred-and-twenty-sixth"*. (A naive `git show af5580e -- docs/ROADMAP.md
+| grep -i downloader` returns **four** hits and would have refuted the claim
+— **they are all in the commit-message header `git show` prints above the
+diff, not in the diff.** Recorded because it is the exact shape of a
+measurement that looks like a refutation and is not: *restrict the diff, do
+not filter the show.*)
+
+**Cause, stated by the engineer in his own commit message:** he ran
+`git add -A` while a librarian agent was actively writing docs — **after
+being warned by a librarian, earlier the same day and in as many words, to
+stage `docs/` explicitly for exactly this reason.**
+
+**History stands.** It is on the public remote; `git commit --amend` after
+the fact is the operator's call and not a tidy-up an agent performs
+unilaterally. **What is recorded is that the commit's title describes 20% of
+its contents.**
+
+**★★ AND IT REMAINS EVIDENCE *FOR* THE OPEN `iccce` ESCALATION, NOT ITS
+RESOLUTION.** Escalation 2 — *"agents' in-progress files swept into a public
+repo"* — has been carried for three filings with no supporting detail and no
+written record findable anywhere in `docs/`. **It now has one measured
+instance from this project, caused by the engineer.** The escalation as
+relayed may concern something broader (agent worktrees, scratch files,
+`.claude/` state), and **only the operator can say what he meant. Do not
+close it on the strength of this instance.** The distinction matters because
+an escalation closed by a single confirming instance is an escalation whose
+remaining cases go unlooked-for.
+
+**(b) `ocr::models`' own header understated what SHIPS, and the understatement
+had a real cost.** The header said only *"the operator supplies the files"*,
+which reads as though **nothing ships and OCR does nothing until someone goes
+and finds a model set**. That is not the design. **Corrected:** the
+multi-language engine's weights are **permissively licensed and BUNDLED**,
+found by **`ModelSource::BesideExecutable`** in the portable layout, so **OCR
+works out of the box**. **Only the CC-BY-SA engine is operator-supplied**,
+because *redistribution* is what triggers that licence and pdfce declines to
+trigger it.
+
+**The generalisable shape, and it is the reason this correction is filed
+rather than just made:** an escape hatch documented as if it were the normal
+path makes a working capability read as an unbuilt one. A header describing
+the *exception* while omitting the *rule* is how a shipped feature acquires a
+reputation for not existing. Open question **`(bl)`** is **unchanged by
+this** — it asks whether a **CC-BY-SA-4.0** file may ship inside an MIT
+portable folder, and the answer here is that pdfce does not ship one.
+
+---
+
+#### 2. `0d7c1bd` — TWO defects in `tools/check-shipped-assets.py`, both the engineer's, both found by RUNNING the tool rather than reading it
+
+**★ FIRST: THE DOCSTRING DOCUMENTED A CHECK 4 AND THE CODE FOR IT WAS NEVER
+INSERTED.** The tool advertised *"the asset is cited in `about.hbs`"* and did
+not perform it. The string replacement meant to add the code **did not
+match**; the docstring landed anyway. **A tool that describes a guarantee it
+does not provide is worse than one that claims nothing** — a reader trusts
+it, and the trust is the whole product.
+
+**Found by making the hazard occur, not by re-reading the source.** A models
+directory carrying a valid `PROVENANCE.md` and no `about.hbs` entry returned
+**clean**. The check now exists and that case **fails**. This is
+`prove_test_suite_non_vacuous_by_deliberately_breaking_the_thing_it_tests.md`
+applied to a **gate** rather than to a test suite, and the failure mode it
+caught is the more embarrassing one: not a test that would not fail, but a
+check that was **not there at all** while its own documentation said it was.
+
+**★★ WHY CHECK 4 MATTERS AT ALL — `PROVENANCE.md` DOES NOT SHIP.** The
+portable package carries **`LICENSE`, `THIRD_PARTY_LICENSES.md` and
+`README.md`, and nothing else.** So an asset whose terms are recorded **only
+in the source tree** is redistributed to end users **with no notice
+attached** — the licence exists for whoever reads the repository, which is
+not who received the binary. **`about.hbs` is the `cargo-about` TEMPLATE**, so
+a hand-written section in it renders into the generated
+`THIRD_PARTY_LICENSES.md` and **travels with every release**. **The bundled
+Foxit faces already do this correctly and are the worked example to copy;
+nothing required the next asset to.** That "nothing required it" is the gap
+check 4 closes.
+
+**★★ SECOND: CHECK 4'S FIRST REAL RUN FLAGGED THE GUI ICON SET — A FALSE
+POSITIVE, AND IT NEARLY SHIPPED AS A CORRECT FINDING.** Those icons are **the
+operator's own art**, confirmed by him **2026-08-02**, carried over from
+another of his projects. **There is no third-party grant to reproduce**, and
+**the `LICENSE` file that already ships covers them.** Own work is now
+exempt.
+
+**The reasoning is worth more than the exemption, and it is why this is filed
+as a finding rather than a one-line fix: a gate that fires on a CORRECT state
+is one people learn to skip, and a skipped gate is worse than no gate because
+it still looks like coverage.** A missing gate is visibly missing; a
+distrusted gate is invisibly missing while its green tick keeps appearing in
+CI. This is `ci_gate_red_at_baseline_enforces_nothing.md`'s sibling — that
+file covers a gate red *at baseline*, this covers a gate red *on a correct
+state*, and **both spend down the same trust the true positive depends on.**
+
+**Verified in three states rather than one** (relayed from the dispatch; the
+first state re-measured here as part of *Verification* above):
+
+| state | expected | result |
+|---|---|---|
+| today's two asset directories | clean | **clean** |
+| a third-party asset with `PROVENANCE.md`, absent from `about.hbs` | FAIL | **FAILS** |
+| own-work art absent from `about.hbs` | exempt | **clean** |
+
+**Three states is the point.** A gate proven only on its passing case has
+demonstrated that it can return zero, which is also what a gate with no code
+in it does — which is precisely defect one.
+
+**This gate is what open question `(bl)` will land on.** If the operator ever
+accepts bundling **CC-BY-SA-4.0** model weights, those weights are
+**third-party**, so check 4 is the mechanism that forces their notice to
+**travel with the binaries** instead of sitting in a repository no recipient
+of a release will read. **The gate now exists before the decision, not
+after it** — which is the order that makes the decision cheap.
+
+---
+
+#### 3. `bc13a86` — `Pass 68.0`'s CLI half: TWO LINES IN, AND pdfce DECIDES WHICH ce DIMENSION THEY CALL FOR
+
+**Operator request (i), verbatim, unchanged since it was filed:**
+
+> *"dimensioning tool should allow the selection of two lines. if those lines
+> are parallel it makes a linear dimension between them like SolidWorks
+> would, if they are at an angle it makes an angle dimension."*
+
+**`dimension-add --kind two-lines` takes FOUR points — two per line — and
+reads the geometry:**
+
+| relation | authored |
+|---|---|
+| **parallel** | a **LINEAR** ce dimension of the **perpendicular** distance |
+| **angled** | an **ANGULAR** ce dimension of the angle between them |
+| **collinear** | **refused by name** |
+
+**Collinear is refused rather than authored** because a zero-length ce
+dimension is not a drawing anyone wanted, and the operator would spend a
+while hunting for a mark that is **present and invisible**. Refusing by name
+costs one error message; the alternative costs an afternoon.
+
+**Measured on the release binary, all three** (relayed from the dispatch as
+run there; the CLI surface itself re-checked here by `Grep` on
+`crates/pdfce-cli/src/main.rs` — `DimKindArg::TwoLines`, `treat_as_parallel`,
+`TwoLineRelation::Collinear`, `apex_is_real` and `measured_angle` all
+present):
+
+```
+100,100 300,100 100,140 300,140  ->  two_lines authored=linear  distance=40.0000
+100,100 300,100 100,100 273,200  ->  two_lines authored=angular degrees=30.029
+0,0 100,0 200,0 300,0            ->  refused, "COLLINEAR"
+```
+
+**`--treat-as-parallel` is the CLI form of the operator's checkbox, and it
+STILL PRINTS THE ANGLE IT OVERRODE.** On a pair **5.001°** apart it reports
+**`measured_angle=5.001 forced=1 authored=linear`**. **A control that hid the
+number it overrides would be asking for a decision while withholding the fact
+that makes it one** — rule 4's *disclosure* half, applied to an operator
+override rather than to an inference. The core half of this
+(`ParallelPolicy::force_parallel` checked **before** the threshold) shipped in
+`e931836`; **this is the first shell that can reach it.**
+
+**The threshold comes from `Settings::parallel_epsilon_degrees`, not a
+literal**, so **the CLI and the GUI slider cannot come to disagree about when
+two lines count as parallel.** Recorded because the alternative is the
+cheapest bug in the world to write and among the most expensive to
+diagnose: two shells that classify the same geometry differently, each
+correct against its own constant.
+
+**★ THE PICK POINT DEFAULTS TO EACH SEGMENT'S MIDPOINT, AND THAT IS STATED
+RATHER THAN LEFT IMPLICIT.** **Two crossing lines bound FOUR angles** and the
+pick chooses which one — the finding `e931836`'s `PickedLine` exists for. A
+GUI operator picks by clicking; **someone typing coordinates has no click**,
+so a default is unavoidable and the only question is whether it is written
+down. The midpoint is *"the angle on the side the segments actually lie"*.
+**A default that is documented is a decision; a default that is not is a
+surprise wearing the appearance of a decision.**
+
+**★ A VIRTUAL APEX IS DIMENSIONED *AND* DISCLOSED — both halves, deliberately.**
+CAD drawings dimension a virtual intersection routinely, so **refusing would
+be wrong**; but the operator may not have realised the two edges never touch,
+so **staying quiet would be wrong too.** It reports **`apex_is_real=0`** and
+says so **in a sentence**, not only as a flag. This is rule 4 at its narrowest
+reading: the inference is *"these lines meet, off the page, here"*, it is
+visible before it becomes document state, and the disclosure states the
+uncertainty rather than implying it by the presence of a control.
+
+**★★ THE TESTS READ THE RESULT BACK THROUGH `dimension-list` RATHER THAN
+TRUSTING THE AUTHORING COMMAND'S OWN REPORT.** Those are **different claims**:
+one is what pdfce **decided**, the other is what is **in the file**, and
+**only the second is what the operator ends up with.** Verified from the
+saved document: **`kind=angular value="30.0°"`** and **`kind=linear
+value="40.00 pt"`**. The generalisable shape — *a command's stdout is a claim
+about its intent; the artifact is the claim about its effect, and a test that
+reads only the first cannot fail on a write that never happened.*
+
+**Six tests, named** (**measured** by `Grep` on
+`crates/pdfce-cli/tests/two_line_dimension.rs`):
+`two_parallel_lines_produce_a_linear_dimension` ·
+`two_angled_lines_produce_an_angular_dimension` ·
+`treat_as_parallel_overrides_the_measurement_and_discloses_it` ·
+`collinear_lines_are_refused_by_name` · `fewer_than_four_points_is_refused` ·
+`a_virtual_apex_is_dimensioned_and_disclosed`. **3,587 → 3,593.**
+
+**Files:** `crates/pdfce-cli/src/main.rs` (+183),
+`crates/pdfce-cli/tests/two_line_dimension.rs` (new, +211).
+
+#### ★★ `Pass 68.0` IS STILL **NOT** SHIPPED. The GUI half is unbuilt, and it is the operator's actual request
+
+**What exists now:** core (`e931836` + `905791f`) **and** CLI (`bc13a86`).
+**What does not:** **the canvas cannot pick two lines.** No operator working
+in the GUI — which is how the request was phrased, *"dimensioning tool
+should allow the selection of two lines"* — can author an angular ce
+dimension by pointing at anything.
+
+- **`FEATURES.md` therefore reads core `[x]` · cli `[x]` · gui `[ ]`.** That
+  is **`R151`'s shape one rung up** from where it was: a core capability that
+  now has *one* shell and not the one the request named. **Filed as a signal.
+  Do not round it up.**
+- **The Pass entry stays under *Next up*** with its status block amended,
+  following `Pass 67.0`'s precedent for a multi-phase Pass annotated in
+  place. **The remaining work is the same operator request, not a new one.**
+- **Dispatch `pdfce-ui-specialist` before building the gesture.** The
+  inference needing disclosure is the **parallel-vs-angled classification**,
+  not the operator's own click — so rule 4 as narrowed by decision 024 §4.4
+  binds, and it explicitly does **not** call for a floating confirm box
+  positioned relative to the page. That placement is the exact thing the
+  operator complained about.
+
+**One thing the CLI half has already settled for the GUI half, so it is not
+re-litigated at the canvas:** the classification, the override, the threshold
+source, the four-angle disambiguation and the virtual-apex disclosure are
+**decided and tested**. The GUI owes a **gesture** and a **disclosure
+surface**, not a second reading of the geometry.
+
+---
+
+#### ★ Backup currency — MEASURED, and it is 2, not 5
+
+Hard rule 8 exists because this ledger has carried a wrong backup figure
+twice. **Measured here**, by `ls -t` on the directory and
+`git bundle list-heads` on the bundle, not by reading any document:
+
+- Newest bundle: **`pdfce-20260812-1552.bundle`**, whose `refs/heads/main` is
+  **`1496e135fd51a4a5cbde5e7539eaa7b7230bb01c`**.
+- `git rev-list --count 1496e13..HEAD` = **2**.
+- `HEAD` = **`bc13a86b39fba80bfa3815acb47515293b879c10`**, branch **`main`**,
+  remote **`https://github.com/KenM76/pdfce.git`** (all by command).
+- **The hundred-and-twenty-sixth filing's figure of 5 was correct when
+  measured**, at `af5580e`, against the `1356` bundle. A newer bundle was
+  taken at 15:52 and the number is now 2. **Both are stated rather than one
+  silently replacing the other**, which is the whole reason this section
+  exists. **Re-run the two commands; do not quote this number, including
+  when this number is the one you would quote.**
+
+---
+
 ### ★★★★★ `e931836` + `905791f` + `fbcb946` + `9f2af1d` + `e3fb7e0` + `af5580e` — `Pass 68.0` **HALF BUILT, NOT SHIPPED** (a two-line pick model and a THIRD `DimensionKind`, both core-only), `Pass 70.0` **SHIPPED** (a capability can now actually be stripped from the build — it could not before, and the first measurement of the fix LIED), `Pass 71.0` slice 1 **SHIPPED** (the half of OCR that does not depend on which engine wins), and a licence gate for the files `cargo-about` is STRUCTURALLY UNABLE TO SEE — 2026-08-12 (hundred-and-twenty-sixth filing)
 
 **Sourcing, stated before any figure (hard rule 8).** This librarian **had a
@@ -40083,7 +40465,54 @@ in the "still open" list. Full build record: this file's own
 
 ## Next up
 
-### Pass 68.0 — ★★ OPERATOR REQUEST 2026-08-12 — **PICK TWO LINES, GET A DIMENSION**: a two-line pick model plus a THIRD `DimensionKind` (angular) — filed 2026-08-12 (hundred-and-twenty-fifth filing), **STARTED IN THE WORKING TREE WHILE THIS ENTRY WAS BEING WRITTEN** — **★★★ HALF BUILT 2026-08-12 (`e931836` + `905791f`): the CORE is in (`vector::linepick` + `DimensionKind::Angular` + sidecar v2); the GUI GESTURE AND THE CLI ARE NOT, so NO OPERATOR CAN AUTHOR AN ANGULAR ce DIMENSION YET. NOT SHIPPED. See the top-of-*Shipped* entry (hundred-and-twenty-sixth filing) for the delivery record**
+### Pass 68.0 — ★★ OPERATOR REQUEST 2026-08-12 — **PICK TWO LINES, GET A DIMENSION**: a two-line pick model plus a THIRD `DimensionKind` (angular) — filed 2026-08-12 (hundred-and-twenty-fifth filing), **STARTED IN THE WORKING TREE WHILE THIS ENTRY WAS BEING WRITTEN** — **★★★ CORE + CLI BUILT 2026-08-12 (`e931836` + `905791f` + `bc13a86`); THE GUI GESTURE IS NOT, so no operator can author an angular ce dimension BY POINTING AT ANYTHING, which is how the request was phrased. STILL NOT SHIPPED. See the top-of-*Shipped* entries (hundred-and-twenty-sixth and hundred-and-twenty-seventh filings) for the delivery record**
+
+> **★★★ STATUS BLOCK UPDATE, 2026-08-12 (hundred-and-twenty-seventh
+> filing). THE CLI HALF IS NOW REAL; `Pass 68.0` IS STILL NOT MOVED TO
+> *Shipped*.**
+>
+> **`bc13a86` — `dimension-add --kind two-lines`.** Four points, two per
+> line, and the geometry decides: **parallel → a LINEAR ce dimension of
+> the perpendicular distance; angled → an ANGULAR ce dimension;
+> collinear → REFUSED BY NAME**, because a zero-length ce dimension is a
+> mark that is present and invisible. **Measured on the release binary:**
+> `100,100 300,100 100,140 300,140` → `authored=linear distance=40.0000`;
+> `100,100 300,100 100,100 273,200` → `authored=angular degrees=30.029`;
+> `0,0 100,0 200,0 300,0` → refused, `"COLLINEAR"`.
+> - **`--treat-as-parallel` is the CLI form of the operator's checkbox and
+>   STILL PRINTS THE ANGLE IT OVERRODE** (`measured_angle=5.001 forced=1
+>   authored=linear`).
+> - **The threshold reads `Settings::parallel_epsilon_degrees`, never a
+>   literal**, so the CLI and the GUI slider cannot come to disagree.
+> - **The pick point defaults to each segment's MIDPOINT, stated rather
+>   than implicit** — two crossing lines bound FOUR angles and the pick
+>   chooses which; someone typing coordinates has no click, so the default
+>   is unavoidable and the only question is whether it is written down.
+> - **A virtual apex is dimensioned AND disclosed** (`apex_is_real=0` plus
+>   a sentence). Refusing would be wrong — CAD dimensions virtual
+>   intersections routinely — and staying quiet would be too.
+> - **The tests read results back through `dimension-list`**, not from the
+>   authoring command's own report: *what pdfce decided* and *what is in
+>   the file* are different claims and only the second is what the
+>   operator ends up with. **3,587 → 3,593 tests.**
+>
+> **WHAT IS STILL MISSING — and it is the request itself: THE GUI
+> GESTURE.** The canvas cannot select two lines. **Acceptance criterion 1
+> is untouched**; criteria 2, 3 and 5 are met in the CLI and unmet in the
+> GUI; criterion 4's disclosure exists as printed text and has **no
+> canvas form**.
+>
+> **`FEATURES.md` now reads core `[x]` · cli `[x]` · gui `[ ]`** —
+> `R151`'s shape one rung up. **Filed as a signal; do not round it up.**
+>
+> **Already settled by the CLI half, so the GUI does not re-litigate it:**
+> the classification, the override, the threshold source, the four-angle
+> disambiguation and the virtual-apex disclosure are decided and tested.
+> **The GUI owes a gesture and a disclosure surface, not a second reading
+> of the geometry.** Dispatch `pdfce-ui-specialist` first — the inference
+> needing disclosure is the parallel-vs-angled **classification**, not the
+> operator's own click, so decision 024 §4.4 governs and explicitly does
+> **not** call for a page-relative floating confirm box.
 
 > **★★ STATUS BLOCK, ADDED 2026-08-12 (hundred-and-twenty-sixth filing).
 > `Pass 68.0` IS DELIBERATELY NOT MOVED TO *Shipped*.**

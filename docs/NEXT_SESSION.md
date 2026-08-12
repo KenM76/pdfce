@@ -6,32 +6,50 @@ Read this **before** the librarian's record — `ROADMAP.md` says what
 shipped, this says what is in flight and what the next hour should be.
 Overwrite it once acted on.
 
-**Written 2026-08-12 (hundred-and-twenty-sixth filing), branch `main`,
-finishing at `af5580e55ebd05a67be5d043cf9db8a5ec82da02`**, after **six**
-commits `e931836` · `905791f` · `fbcb946` · `9f2af1d` · `e3fb7e0` ·
-`af5580e`. The previous version of this file was written at `95c3416`;
-**this is a full overwrite, not an amendment.**
+**Written 2026-08-12 (hundred-and-twenty-seventh filing), branch `main`,
+finishing at `bc13a86b39fba80bfa3815acb47515293b879c10`**, after **three**
+further commits `1496e13` · `0d7c1bd` · `bc13a86`. The previous version of
+this file was written at `af5580e`; **this is an amendment of that
+version, not a full overwrite** — §§2–6 and 8 are carried forward
+substantively unchanged, §1 and §7 are rewritten, and the file's own
+header, ceilings and tooling notes are refreshed. **Working tree measured
+CLEAN at `bc13a86` (`git status --short` empty).**
 
-> **★★ READ THIS BEFORE ANYTHING ELSE — A COMMIT DISCIPLINE ITEM, AND IT
-> IS EVIDENCE FOR ESCALATION 2 (§6).** `af5580e` was committed **at
-> 15:41:08, while this filing was being written**, and it **swept this
-> filing's uncommitted doc edits into itself**. **Measured:** `af5580e`
-> touches 7 files; **two are the engineer's** (`ocr/mod.rs`,
-> `ocr/models.rs`) and **five are this filing** — `docs/ROADMAP.md`
-> (+802/−5), `docs/ARCHITECTURE.md` (+252), `docs/FEATURES.md` (+5/−3),
-> `docs/PRIOR_ART.md` (+1/−1), `CLAUDE.md` (+33/−3). Its ROADMAP diff
-> contains *"hundred-and-twenty-sixth"* seven times and **zero** lines
-> about the downloader or `ocr::models`. **So the commit message does not
-> describe most of its own diff: 1,093 of its 1,371 inserted lines are a
-> librarian filing about five other commits, under the title *"withdraw
-> the downloader I proposed"*.**
+> **★★ CI WAS RED ON `main` AND THE HUNDRED-AND-TWENTY-SEVENTH FILING WAS
+> THE FIX.** Four consecutive runs failed, **all on `check-commits-filed`
+> and nothing else** — **no code failure**. `1496e13`, `0d7c1bd` and
+> `bc13a86` were in no filing; they are now. **Re-run the gate before
+> assuming the branch is green**, and note that `1496e13` was flagged
+> despite touching `docs/`: the exclusion is **docs-ONLY**, not
+> docs-touching, so a commit mixing a filing with a source change is
+> visible to the gate exactly as it should be.
+
+> **★★ READ THIS TOO — A COMMIT DISCIPLINE ITEM, AND IT IS EVIDENCE FOR
+> ESCALATION 2 (§6).** `af5580e` was committed **while the previous filing
+> was being written** and **swept that filing's uncommitted doc edits into
+> itself**. **Measured by `git diff --numstat af5580e^ af5580e`: 1,371
+> insertions, of which 281 are the withdrawal** (`ocr/models.rs` 276 +
+> `ocr/mod.rs` 5) **and 1,090 are a librarian filing about five OTHER
+> commits** (`ROADMAP.md` 802, `ARCHITECTURE.md` 252, `CLAUDE.md` 32,
+> `FEATURES.md` 3, `PRIOR_ART.md` 1). **So the commit titled *"withdraw
+> the downloader I proposed"* is 20% about the downloader.** The
+> restricted diff contains **zero** *"downloader"* and **seven**
+> *"hundred-and-twenty-sixth"*.
+>
+> **A measurement trap, because it looks like a refutation:** `git show
+> af5580e -- docs/ROADMAP.md | grep -i downloader` returns **four** hits
+> and **all four are in the commit-message header `git show` prints above
+> the diff.** *Restrict the diff (`git diff A^ A -- path`), do not filter
+> the show.*
 >
 > **Nothing is undone** — it is on a public remote and amending after the
 > fact is worse than the disorder. **The convention owed is cheap: `git
 > status --short` before `git commit -a`, and a librarian filing gets its
 > own commit.** The hundred-and-twenty-fifth filing's *"this filing
 > touched nothing outside `docs/`"* is the positive instance, and it said
-> that **because it checked.**
+> that **because it checked.** The hundred-and-twenty-seventh filing was
+> told explicitly by the engineer that he would stage `docs/` by name —
+> **that is the convention taking hold, and it should keep holding.**
 
 **★ TERMINOLOGY, binding on every dispatch this file generates (project
 rule 15):** items 1 and 3 are about **ce dimensions** — the ones **pdfce
@@ -43,7 +61,7 @@ handed the unqualified word writes an entire analysis in it.**
 
 ---
 
-## 1. ★★★ `Pass 68.0` IS HALF BUILT. THE OPERATOR'S REQUEST IS NOT YET MET. THIS IS THE TOP OF THE QUEUE.
+## 1. ★★★ `Pass 68.0` HAS CORE **AND CLI**. THE GUI GESTURE IS THE REMAINING HALF, AND IT IS THE OPERATOR'S ACTUAL REQUEST. TOP OF THE QUEUE.
 
 **Operator request (i), verbatim:**
 
@@ -51,7 +69,46 @@ handed the unqualified word writes an entire analysis in it.**
 > lines are parallel it makes a linear dimension between them like
 > SolidWorks would, if they are at an angle it makes an angle dimension."*
 
-**WHAT IS BUILT (core only, two commits, both shipped):**
+**★ WHAT LANDED SINCE THE LAST HANDOFF — THE CLI HALF IS REAL
+(`bc13a86`).** `dimension-add --kind two-lines` takes **four points, two
+per line**, and reads the geometry:
+
+| relation | authored |
+|---|---|
+| **parallel** | a **LINEAR** ce dimension of the **perpendicular** distance |
+| **angled** | an **ANGULAR** ce dimension of the angle between them |
+| **collinear** | **REFUSED BY NAME** — a zero-length ce dimension is a mark that is present and invisible, and the operator would hunt for it |
+
+**Measured on the release binary, all three:**
+
+```
+100,100 300,100 100,140 300,140  ->  two_lines authored=linear  distance=40.0000
+100,100 300,100 100,100 273,200  ->  two_lines authored=angular degrees=30.029
+0,0 100,0 200,0 300,0            ->  refused, "COLLINEAR"
+```
+
+- **`--treat-as-parallel` is the CLI form of the operator's checkbox and
+  STILL PRINTS THE ANGLE IT OVERRODE** — `measured_angle=5.001 forced=1
+  authored=linear`. A control hiding the number it overrides asks for a
+  decision while withholding the fact that makes it one.
+- **The threshold reads `Settings::parallel_epsilon_degrees`, never a
+  literal**, so the CLI and the GUI slider **cannot come to disagree**
+  about when two lines count as parallel.
+- **The pick point defaults to each segment's MIDPOINT, and says so.**
+  Two crossing lines bound **four** angles; a GUI operator picks by
+  clicking, **someone typing coordinates has no click**, so the default is
+  unavoidable and the only question is whether it is written down.
+- **A virtual apex is dimensioned AND disclosed** — `apex_is_real=0` plus
+  a sentence. Refusing would be wrong (CAD dimensions virtual
+  intersections routinely); staying quiet would be too.
+- **The tests read results back through `dimension-list`**, not from the
+  authoring command's own stdout: *what pdfce decided* and *what is in the
+  file* are different claims and **only the second is what the operator
+  ends up with.** `kind=angular value="30.0°"` and `kind=linear
+  value="40.00 pt"` both verified from the saved document. **3,587 → 3,593
+  tests.**
+
+**WHAT IS BUILT (core, two commits, both shipped):**
 
 - **`e931836`** — **`crates/pdfce-core/src/vector/linepick.rs`** (new).
   Returns a **line as two endpoints**, which nothing in the codebase could
@@ -79,20 +136,29 @@ handed the unqualified word writes an entire analysis in it.**
   group's `NumberFormat` (**ISO 129-1 cl. 4.1.1**). **`SIDECAR_VERSION`
   1 → 2**; old builds still READ, the session refuses to WRITE.
 
-**WHAT IS NOT BUILT — and it is the request itself:**
+**WHAT IS NOT BUILT — one item, and it is the request itself:**
 
 1. **THE GUI GESTURE.** The canvas cannot select two lines and author a ce
-   dimension. Everything above is substrate. **This is the work.**
-2. **THE CLI.** `dimension-add` has **no angular kind** (rule 11 wants it
-   in the same Pass as the GUI flow).
+   dimension. **This is the whole remaining Pass.** The request was phrased
+   as a *dimensioning tool* gesture — *"should allow the selection of two
+   lines"* — so a scriptable subcommand does not discharge it.
 
-**`FEATURES.md` carries this as core `[x]` · cli `[ ]` · gui `[ ]`** —
-`R151`'s exact shape, filed as a signal. **Do not round it up.**
+**★ ALREADY SETTLED BY THE CLI HALF, SO THE GUI DOES NOT RE-LITIGATE IT:**
+the classification, the override, the threshold source, the four-angle
+disambiguation and the virtual-apex disclosure are **decided and tested**.
+**The GUI owes a gesture and a disclosure surface, not a second reading of
+the geometry.** Building a second classifier at the canvas is how the two
+shells acquire the disagreement `Settings::parallel_epsilon_degrees` was
+introduced to prevent.
+
+**`FEATURES.md` carries this as core `[x]` · cli `[x]` · gui `[ ]`** —
+`R151`'s shape one rung up, filed as a signal. **Do not round it up.**
 
 **Where to read:** `ROADMAP.md` *Next up* → `Pass 68.0`, which now leads
-with a status block; and the top-of-*Shipped* entry
-(hundred-and-twenty-sixth filing) items 1 and 2 for the full delivery
-record. **`ARCHITECTURE.md` §4.1 (R)** carries the API contract, including
+with **two** status blocks (hundred-and-twenty-sixth, then
+hundred-and-twenty-seventh); the top-of-*Shipped* entry
+(hundred-and-twenty-sixth filing) items 1 and 2 for the core delivery
+record, and the hundred-and-twenty-seventh filing item 3 for the CLI. **`ARCHITECTURE.md` §4.1 (R)** carries the API contract, including
 **the rule for when a `SIDECAR_VERSION` bump is owed** (optional-with-
 default field: no. New variant: yes, because an old build **drops the
 record and then saves without it**).
@@ -272,19 +338,21 @@ directory** (verified by `ls`), so whatever the claim is, it is **not**
 
 ---
 
-## 7. ★ TAKE A BACKUP — 5 commits owed, and this figure was MEASURED, not inherited
+## 7. ★ TAKE A BACKUP — 2 commits owed, and this figure was MEASURED, not inherited
 
 **Measured at filing time**, by `ls -t`, `git bundle list-heads` and
 `git rev-list --count`, not by reading any document:
 
-- Newest bundle: **`pdfce-20260812-1356.bundle`**, whose `refs/heads/main`
-  is **`e931836ab58cdf7a01ef075bb6086db6044d56f0`**.
-- `git rev-list --count e931836..HEAD` = **5**.
-- `HEAD` = **`af5580e55ebd05a67be5d043cf9db8a5ec82da02`**.
+- Newest bundle: **`pdfce-20260812-1552.bundle`**, whose `refs/heads/main`
+  is **`1496e135fd51a4a5cbde5e7539eaa7b7230bb01c`**.
+- `git rev-list --count 1496e13..HEAD` = **2**.
+- `HEAD` = **`bc13a86b39fba80bfa3815acb47515293b879c10`**, branch `main`.
+- `git status --short` = **empty** (clean working tree).
 - `git remote -v` = `https://github.com/KenM76/pdfce.git`.
-- **It was 4 an hour earlier, at `e3fb7e0`, and that figure was correct
-  when measured.** Both are stated rather than one silently replacing the
-  other — which is the whole reason this section exists.
+- **It was 5 earlier the same afternoon, at `af5580e` against the `1356`
+  bundle, and that figure was correct when measured** — a newer bundle was
+  taken at 15:52. **Both are stated rather than one silently replacing the
+  other**, which is the whole reason this section exists.
 
 **This ledger has carried a WRONG backup figure twice.** `ls` and
 `git bundle list-heads` cost nothing. **Re-run them; do not quote the
@@ -303,11 +371,29 @@ this one.**
   in `ARCHITECTURE.md` §12 has the full reasoning; the ecosystem-wide half
   is at
   `D:\dev\rag\rust\workspace_feature_strip_needs_root_default_features_and_every_shell_forwards_or_the_capability_vanishes_silently.md`.
-- **★ NEW, from `e3fb7e0` — `tools/check-shipped-assets.py` now gates
-  every directory under `crates/*/assets/`.** It requires a
-  `PROVENANCE.md`, that it **NAMES A LICENCE**, and that it mentions the
-  files present. **If you add a shipped asset directory, write the
-  provenance note first**; the gate is wired into CI's `fmt` job.
+- **★ from `e3fb7e0`, COMPLETED BY `0d7c1bd` —
+  `tools/check-shipped-assets.py` now gates every directory under
+  `crates/*/assets/`.** It requires a `PROVENANCE.md`, that it **NAMES A
+  LICENCE**, that it mentions the files present, **and (check 4) that the
+  directory is cited in `about.hbs`.** **If you add a shipped asset
+  directory, write the provenance note AND the `about.hbs` section
+  first**; the gate is wired into CI's `fmt` job.
+  - **★ WHY CHECK 4 EXISTS: `PROVENANCE.md` DOES NOT SHIP.** The portable
+    package carries `LICENSE`, `THIRD_PARTY_LICENSES.md` and `README.md`
+    and nothing else, so an asset documented only in the source tree
+    reaches end users **with no notice attached**. **`about.hbs` is the
+    `cargo-about` TEMPLATE**, so a hand-written section there renders into
+    the generated file and travels with every release. **The bundled Foxit
+    faces are the worked example to copy.**
+  - **Own work is EXEMPT** — art under pdfce's own licence needs no
+    `about.hbs` entry, because the shipped `LICENSE` already covers it and
+    there is no third-party grant to reproduce. Check 4 flagged the GUI
+    icon set on its first run, before the exemption existed; **that was a
+    false positive, and a gate that fires on a correct state is one people
+    learn to skip.**
+  - **This is where `(bl)` lands.** Bundled CC-BY-SA-4.0 weights would be
+    third-party, so check 4 is what forces their notice to travel with the
+    binaries. **The gate exists before the decision, deliberately.**
 - **`R192` is PROPOSED, NOT MINTED** (end of *Standing rules*) — *an
   obligation that falls between two correct tools is enforced by neither*.
   **Third instance recorded.** The engineer's ruling is owed.
@@ -369,6 +455,13 @@ only** — three commits were tagged and released before the librarian filed
 them. **The released CODE is fine and that is proven:** `git diff
 --name-only aad48c7 68408f1` returns **only `docs/` paths**, and `68408f1`
 passed CI fully. **Binaries fine, ordering wrong.**
+
+**★ AND `main` ITSELF WAS RED FOR FOUR CONSECUTIVE RUNS ON THE SAME GATE,
+CLEARED BY THE HUNDRED-AND-TWENTY-SEVENTH FILING.** `1496e13`, `0d7c1bd`
+and `bc13a86` were in no filing; **no code failure was ever implicated.**
+**Do not tag until the gate is green** — this is the second distinct
+occurrence of the same ordering error in two days, and the rule below is
+the fix.
 
 **★ THE ORDERING RULE, now enforced by the tool: FILE, LET CI GO GREEN,
 THEN TAG.** Run `tools/verify-release.py <tag>` **before** tagging.
@@ -433,13 +526,27 @@ decision, **NOT** permission to skip verification.
   error.** **Always pass a full 40-character SHA** (`git rev-parse <ref>`).
 - **Resolve every short hash yourself with `git rev-parse`.** A fabricated
   full hash reached a filing once already and had to be corrected.
-- **★ NEW — `git status --short` BEFORE `git commit -a`, and give a
-  librarian filing its own commit.** `af5580e` swept five files of an
-  in-progress filing into a commit about an unrelated withdrawal; its
-  message now does not describe most of its own diff. **Run
-  `tools/check-commits-filed.py` at the END of a filing as well as at the
-  start** — twice in a row now it has named a commit that landed while the
-  filing was being written.
+- **★ `git status --short` BEFORE `git commit -a`, and give a librarian
+  filing its own commit.** `af5580e` swept five files of an in-progress
+  filing into a commit about an unrelated withdrawal; its message does not
+  describe most of its own diff (**281 withdrawal lines vs 1,090 filing
+  lines, measured**). **Run `tools/check-commits-filed.py` at the END of a
+  filing as well as at the start** — three filings running, it has named a
+  commit that landed while the filing was being written.
+- **★ NEW — `git show <sha> -- <path> | grep …` SEARCHES THE COMMIT
+  MESSAGE TOO.** `git show` prints the message header above the restricted
+  diff, so a grep for a term that appears in the subject line returns hits
+  that are **not in the diff at all** — which reads exactly like a
+  refutation of a claim about the diff's contents. **Use `git diff A^ A --
+  <path>` when the question is "what does this diff contain".** Cost the
+  hundred-and-twenty-seventh filing a near-miss on a measured claim.
+- **★ NEW — a gate's DOCSTRING is not the gate.** `check-shipped-assets.py`
+  documented a check 4 whose code was never inserted (the string
+  replacement did not match; the docstring landed anyway). **Verify a gate
+  by making the hazard occur, not by reading its source** — and verify it
+  in **three** states (passing, genuinely-failing, and correctly-exempt),
+  because a gate proven only on its passing case has demonstrated that it
+  can return zero, which is also what a gate with no code in it does.
 
 `tools/splice.py` — anchored substitution, all-or-nothing ·
 `tools/check-fmt-excluded.py` (no arguments; the fmt gate for the 12 crates
@@ -456,5 +563,9 @@ live ceilings · `tools/gen-embed-fixtures.py` /
 **Live ceilings at this filing** (by `check-ledger-numbers.py`, measured):
 standing rules **R191** → next free **R192** (**claimed by an unruled
 PROPOSAL**) · decision records **055** → next free **056** · SESSION_LOG
-filings **126** → next free **127** · **Pass families up to 71** → next
+filings **127** → next free **128** · **Pass families up to 71** → next
 free **`Pass 72`** · operator questions **(bl)** → next free **(bm)**.
+**The hundred-and-twenty-seventh filing minted no Pass ID, no rule and no
+decision** — `bc13a86` is an existing Pass's CLI half, `0d7c1bd` is a gate
+fix (no-ID precedent: `e3fb7e0`, `b902ea0`+`b1ee1cf`), `1496e13` is a
+filing plus a doc correction.

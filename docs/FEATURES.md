@@ -209,7 +209,7 @@ the model or verb exists and only the named shell is missing. The
 | [ ] | [ ] | [ ] | ? | Resize a vector object. |
 | ◐ | ◐ | [ ] | **[ ]** | Node-editing remainder — Tab cycling and arrow-key nudge. |
 | [ ] | [ ] | [ ] | [x] | Make ce dimensions and foreign annotations selectable and deletable from the canvas; also gates click-a-comment-to-select. |
-| [x] | [ ] | [ ] | **[ ]** | Pick two lines to dimension them — parallel gives a linear ce dimension, angled gives an angular one. Core has the two-endpoint pick, an angular `DimensionKind` and a settable near-parallel threshold with a per-ce-dimension override; **no canvas gesture and no CLI kind, so nobody can author one yet.** |
+| [x] | [x] | [ ] | **[ ]** | Pick two lines to dimension them — parallel gives a linear ce dimension, angled gives an angular one, collinear is refused by name. `dimension-add --kind two-lines` takes four points and decides, with a settable near-parallel threshold, an override that still prints the angle it overrode, and a virtual apex dimensioned and disclosed; **no canvas gesture, so it cannot be done by pointing at anything.** |
 | [ ] | [ ] | [ ] | **[ ]** | ce-dimension style and tolerance at SolidWorks option breadth — a per-group default plus a per-ce-dimension override checkbox. Neither a style object nor any tolerance exists today. |
 | [ ] | [ ] | [ ] | ? | Drag a ce dimension's extension lines. |
 | [ ] | [ ] | [ ] | [x] | Re-measure a placed ce dimension — change what it measures without losing its id, group and placement. |

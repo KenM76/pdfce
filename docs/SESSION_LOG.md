@@ -38021,3 +38021,227 @@ is, it is not *"that project has no repository."*
 > 4 was correct when measured, at `e3fb7e0`. **Re-run
 > `git bundle list-heads` + `git rev-list --count`; do not quote either
 > figure.**
+
+## 2026-08-12 (hundred-and-twenty-seventh filing) — `1496e13`+`0d7c1bd`+`bc13a86`: CI was RED on `main` and this filing is the fix; `Pass 68.0`'s CLI half lands (`dimension-add --kind two-lines` — parallel/angled/collinear decided from four points) and the Pass STAYS OPEN because the canvas still cannot pick two lines; a licence gate that DOCUMENTED a check it never performed now performs it, and its first true run was a FALSE POSITIVE; `af5580e`'s mis-scoping measured at 281 withdrawal lines vs 1,090 filing lines
+
+**Sourcing.** This librarian **had a shell.** Items marked **measured**
+were produced by a command run here and the command is named; everything
+else is **relayed** from the dispatching engineer's brief. **All three
+short hashes were resolved locally by `git rev-parse`**, again at the
+dispatch's own instruction — *"Do not accept a relayed full hash — I
+supplied a fabricated one earlier today."* Three filings of that practice
+now.
+
+**★ TERMINOLOGY (project rule 15):** the dimension work below is **ce
+dimensions** — the ones pdfce authors. The *lines the operator picks* may
+well be **pdf dimensions** or CAD geometry already in the file; they enter
+only as **pickable page geometry**, and pdfce must not alter them.
+
+**★★ WHY THIS FILING EXISTED — CI WAS RED AND NO CODE WAS BROKEN.** Four
+consecutive runs on `main` failed, **all of them on `check-commits-filed`
+and on nothing else** (relayed). **Measured here** at the start of the
+filing: `python tools/check-commits-filed.py` → ***"commits-filed: 3 code
+commit(s) are in no filing"***, naming exactly these three in this order —
+**agreeing with the dispatch.** The debt was bookkeeping, the gate said so
+precisely, and filing it green-lights the branch. Recorded because a red
+CI whose cause is a *record* rather than a *build* is the case people
+learn to skip past, and this gate exists so it cannot be skipped past
+silently.
+
+**Shipped:**
+- **`Pass 68.0` CLI half** (`bc13a86`) — `dimension-add --kind two-lines`.
+  **NOT a Pass ship**; see below.
+- **A gate fix with no Pass ID** (`0d7c1bd`) —
+  `tools/check-shipped-assets.py` gains the **check 4 its own docstring had
+  already claimed**, plus an own-work exemption. Precedent for the no-ID
+  form: `e3fb7e0`, `b902ea0`+`b1ee1cf`.
+- **A filing plus a doc correction** (`1496e13`) — the
+  hundred-and-twenty-sixth filing's own remainder, and `ocr::models`'
+  header.
+
+**★★ `Pass 68.0` IS STILL NOT SHIPPED, AND THIS IS AGAIN THE ENTRY'S MOST
+MISREADABLE FACT.** Core (`e931836`+`905791f`) **and now CLI**
+(`bc13a86`) exist. **The canvas cannot select two lines**, and the request
+was phrased as a *dimensioning tool* gesture, so no operator can author an
+angular ce dimension by pointing at anything. `FEATURES.md` moves from
+**core `[x]` · cli `[ ]` · gui `[ ]`** to **core `[x]` · cli `[x]` · gui
+`[ ]`** — `R151`'s shape one rung up, **filed as a signal and not rounded
+up**. The `ROADMAP.md` entry stays in *Next up* with its status block
+amended, following `Pass 67.0`'s in-place precedent.
+
+**Findings + decisions:**
+
+- **★★ A GATE DOCUMENTED A CHECK IT DID NOT PERFORM.**
+  `check-shipped-assets.py`'s docstring described a **check 4** — *"the
+  asset is cited in `about.hbs`"* — and **the code for it was never
+  inserted**: the string replacement meant to add it **did not match**,
+  and the docstring landed anyway. **A tool describing a guarantee it does
+  not provide is worse than one claiming nothing**, because the claim is
+  what a reader acts on. **Found by making the hazard occur, not by
+  re-reading the source** — a models directory with a valid
+  `PROVENANCE.md` and no `about.hbs` entry returned **clean**. This is
+  `prove_test_suite_non_vacuous_by_deliberately_breaking_the_thing_it_tests.md`
+  applied to a **gate**, and the failure it caught is the worse kind: not
+  a check that would not fail, but one that **was not there.**
+- **★★ `PROVENANCE.md` DOES NOT SHIP — which is the entire reason check 4
+  matters.** The portable package carries **`LICENSE`,
+  `THIRD_PARTY_LICENSES.md` and `README.md`, nothing else**, so an asset
+  whose terms live only in the source tree is redistributed **with no
+  notice attached**: the record exists for whoever reads the repository,
+  who is not who received the binary. **`about.hbs` is the `cargo-about`
+  TEMPLATE**, so a hand-written section there renders into the generated
+  file and **travels with every release**. The bundled Foxit faces already
+  do this and are the worked example; **nothing required the next asset
+  to.**
+- **★★ CHECK 4'S FIRST TRUE RUN WAS A FALSE POSITIVE, AND IT NEARLY
+  SHIPPED AS A FINDING.** It flagged the GUI icon set — **the operator's
+  own art**, confirmed by him **2026-08-02**, with **no third-party grant
+  to reproduce** and already covered by the shipped `LICENSE`. Own work is
+  now exempt. **The reasoning outlives the exemption: a gate that fires on
+  a CORRECT state is one people learn to skip, and a skipped gate is worse
+  than no gate because it still looks like coverage.** A missing gate is
+  visibly missing; a distrusted one is invisibly missing while its green
+  tick keeps appearing. Sibling to
+  `ci_gate_red_at_baseline_enforces_nothing.md` — that one is red *at
+  baseline*, this one red *on a correct state*, and both spend down the
+  same trust the true positive depends on.
+- **Verified in three states, not one** (relayed; state 1 re-measured
+  here): today's two asset directories **clean**; a third-party asset with
+  provenance but absent from `about.hbs` **FAILS**; own-work art
+  **exempt**. **Three states is the point** — a gate proven only on its
+  passing case has demonstrated that it can return zero, which is also
+  what a gate with no code in it does.
+- **This gate is where open question `(bl)` will land.** If CC-BY-SA-4.0
+  weights are ever bundled they are **third-party**, so check 4 forces
+  their notice to travel with the binaries. **The gate exists before the
+  decision, which is the order that makes the decision cheap.**
+- **★★ `af5580e` IS MIS-SCOPED — MEASURED, NOT ALLEGED.** By
+  `git diff --numstat af5580e^ af5580e`: **1,371 insertions total**, of
+  which **281 are the withdrawal** (`ocr/models.rs` 276 + `ocr/mod.rs` 5)
+  and **1,090 are a librarian filing about five OTHER commits**
+  (`ROADMAP.md` 802, `ARCHITECTURE.md` 252, `CLAUDE.md` 32,
+  `FEATURES.md` 3, `PRIOR_ART.md` 1). **The commit titled *"withdraw the
+  downloader I proposed"* is 20% about the downloader.** Pinned further:
+  the restricted diff contains **zero** occurrences of *"downloader"* and
+  **seven** of *"hundred-and-twenty-sixth"*.
+  - **A measurement trap worth recording, because it looks like a
+    refutation:** `git show af5580e -- docs/ROADMAP.md | grep -i
+    downloader` returns **four** hits, and **all four are in the
+    commit-message header `git show` prints above the diff.** *Restrict
+    the diff (`git diff A^ A -- path`), do not filter the show.*
+  - **Cause, in the engineer's own words:** `git add -A` while a librarian
+    agent was writing docs — **after a librarian had warned him, in as
+    many words, earlier the same day.**
+  - **History stands.** It is on the public remote; amending is the
+    operator's call, not an agent's tidy-up.
+  - **★ IT REMAINS EVIDENCE *FOR* THE OPEN `iccce` ESCALATION, NOT ITS
+    RESOLUTION.** Escalation 2 (*agents' in-progress files swept into a
+    public repo*) has been carried three filings with no supporting detail
+    and no written record findable in `docs/`. It now has **one** measured
+    instance. The escalation as relayed may concern something broader —
+    agent worktrees, scratch files, `.claude/` state. **Only the operator
+    can say what he meant; do not close it on this instance.** An
+    escalation closed by a single confirming instance is one whose
+    remaining cases go unlooked-for.
+- **`ocr::models`' header understated what SHIPS.** It said only *"the
+  operator supplies the files"*, which reads as **nothing ships and OCR
+  does nothing until someone finds a model set**. **Corrected:** the
+  multi-language engine's **permissively-licensed weights are BUNDLED**,
+  found by **`ModelSource::BesideExecutable`**, so **OCR works out of the
+  box**; **only the CC-BY-SA engine is operator-supplied**, because
+  redistribution is what triggers that licence. **Generalisable shape: an
+  escape hatch documented as if it were the normal path makes a working
+  capability read as an unbuilt one.** Open question `(bl)` is unchanged —
+  it asks about shipping a CC-BY-SA file, and pdfce ships none.
+- **★ The two-line CLI's design decisions, all now tested rather than
+  argued** (`bc13a86`): the threshold reads
+  **`Settings::parallel_epsilon_degrees`, never a literal**, so CLI and
+  GUI **cannot come to disagree**; **`--treat-as-parallel` still prints
+  the angle it overrode** (`measured_angle=5.001 forced=1
+  authored=linear`) because a control hiding the number it overrides asks
+  for a decision while withholding the fact that makes it one; the pick
+  point **defaults to each segment's MIDPOINT and says so**, since two
+  crossing lines bound **four** angles and someone typing coordinates has
+  no click; a **virtual apex is dimensioned AND disclosed**
+  (`apex_is_real=0` plus a sentence) — refusing would be wrong because CAD
+  dimensions virtual intersections routinely, and staying quiet would be
+  too; **collinear is refused by name**, because a zero-length ce
+  dimension is a mark that is present and invisible.
+- **★★ THE TESTS READ RESULTS BACK THROUGH `dimension-list`**, not from
+  the authoring command's own stdout. **Those are different claims** — one
+  is what pdfce *decided*, the other is what is *in the file*, and **only
+  the second is what the operator ends up with.** Verified from the saved
+  document: `kind=angular value="30.0°"`, `kind=linear value="40.00 pt"`.
+  **Generalisable: a command's stdout is a claim about intent; the
+  artifact is the claim about effect, and a test reading only the first
+  cannot fail on a write that never happened.**
+
+**Verification:**
+- **Relayed** (a workspace `cargo test` is minutes of wall clock and this
+  filing was unblocking a red `main`): `cargo test --workspace` **3,593
+  passing, 0 failing**, baseline **3,587** → **+6, all `bc13a86`'s**
+  (`0d7c1bd` is a Python gate and adds none to the default suite). **The
+  3,587 denominator is the post-`af5580e` figure the
+  hundred-and-twenty-sixth filing recorded as "3,582 → 3,587", so the two
+  records join** (hard rule 10(a)). `cargo fmt --all --check` clean;
+  `cargo clippy --workspace --all-targets --all-features` **zero**.
+- **Measured here, by running them:** `check-shipped-assets` clean (2
+  asset directories, 60 redistributed files) · `check-fmt-excluded` clean
+  (12 out-of-workspace crates) · `check-ui-strings` clean ·
+  `check-ledger-numbers` clean · `git status --short` **empty**.
+- **GUI-core separation:** **no `Cargo.toml` in any of the three commits**
+  (**measured** by `git diff --numstat`), so `CLAUDE.md` rule 2's trigger
+  is not met and `cargo tree` was not re-run. Stated so a reader can tell
+  *verified by command* (the previous filing, five manifests) from *could
+  not be disturbed by this diff* (this one).
+
+**Ledger ceilings** (**measured**, `python tools/check-ledger-numbers.py`):
+Pass families **up to 71** → next free is **seventy-two, unclaimed**
+(spelled out so the ledger checker does not read this line as a claim on
+the number) · standing rules
+**R191** → next free **R192** (still claimed by an **unruled PROPOSAL**) ·
+decision records **055** → next free **056** · SESSION_LOG filings **127**
+after this entry → next free **128** · operator questions **(bl)** → next
+free **(bm)**. **No Pass ID, rule or decision was minted this filing.**
+
+**Backup currency — MEASURED, and it is 2, not 5.** By `ls -t` on
+`D:\Dev\pdfce-backups\` and `git bundle list-heads` on the bundle, not by
+reading any document: newest bundle **`pdfce-20260812-1552.bundle`**, its
+`refs/heads/main` = **`1496e135fd51a4a5cbde5e7539eaa7b7230bb01c`**;
+`git rev-list --count 1496e13..HEAD` = **2**; `HEAD` =
+**`bc13a86b39fba80bfa3815acb47515293b879c10`** on **`main`**, remote
+**`https://github.com/KenM76/pdfce.git`**. **The previous entry's figure of
+5 was correct when measured**, at `af5580e` against the `1356` bundle; a
+newer bundle was taken at 15:52. **Both stated rather than one silently
+replacing the other. Re-run the commands; do not quote this number.**
+
+**Still in flight:**
+- **`Pass 68.0`'s GUI gesture** — the top of the queue, and the operator's
+  actual request. **Already settled by the CLI half so the GUI does not
+  re-litigate it:** classification, override, threshold source, four-angle
+  disambiguation, virtual-apex disclosure. **The GUI owes a gesture and a
+  disclosure surface, not a second reading of the geometry.**
+- **`Pass 71.0` slice 2** — no OCR engine is wired; blocked on `(bl)`.
+- **`Pass 69.0`** (ce-dimension style + tolerance) — unstarted.
+- **`Pass 46` slices 2–4** — post-hoc select/move/resize of a placed
+  markup is still unbuilt.
+- **The GUI has no attachments surface.**
+- **`R192` remains PROPOSED, not minted**; the engineer's ruling is owed.
+- **Both `iccce` escalations still await the operator.**
+
+**For next session:**
+- **Dispatch `pdfce-ui-specialist` before building the two-line canvas
+  gesture.** Decision 024 §4.4 governs the disclosure and explicitly does
+  **not** call for a page-relative floating confirm box — that placement is
+  the exact thing the operator complained about.
+- **Confirm the `af5580e` withdrawal with the operator** (carried from the
+  previous entry, still open): he had agreed to the download path on an
+  estimate that turned out to be wrong, so the agreement was uninformed and
+  only he can say whether he still wants it.
+- **Ask him about `(bl)`** — it is what blocks OCR from reaching anybody.
+- **`git status --short` before `git commit -a`, and a librarian filing
+  gets its own commit.** This filing was told, explicitly, that the
+  engineer will stage `docs/` by name rather than `git add -A`.
+- **Run `tools/check-commits-filed.py` at the END of a filing as well as
+  the start.** Three filings running it has named a commit that landed
+  while the filing was being written.
