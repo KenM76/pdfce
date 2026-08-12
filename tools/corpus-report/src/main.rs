@@ -242,7 +242,10 @@ impl Outcome {
 
 /// Census every page's `/Annots` with pdfce's own model (Pass 6.0
 /// acceptance criterion 1).
-fn census_annotations(doc: &pdfce_core::document::Document, pages: &[page_tree::Page]) -> AnnotCensus {
+fn census_annotations(
+    doc: &pdfce_core::document::Document,
+    pages: &[page_tree::Page],
+) -> AnnotCensus {
     use pdfce_core::annot::{Appearance, need_appearances, page_annotations};
     let mut c = AnnotCensus {
         has_acroform: doc

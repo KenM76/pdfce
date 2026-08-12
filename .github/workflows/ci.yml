@@ -37,6 +37,14 @@ jobs:
           toolchain: "1.97.1"
           components: rustfmt
       - run: cargo fmt --all --check
+      # `cargo fmt --all` formats WORKSPACE MEMBERS only, so every crate in
+      # Cargo.toml's `exclude` list (the difftest oracle, the corpus sweep
+      # tools, the fuzz harness) is unreachable by the step above — not
+      # exempt from project rule 10, just invisible to the command that
+      # enforces it. On 2026-08-12 that gap held unformatted code in eight
+      # crates, and one crate that was in neither `members` nor `exclude` and
+      # so was invisible to every workspace-wide gate at once.
+      - run: python3 tools/check-fmt-excluded.py
 
   clippy:
     name: cargo clippy -D warnings

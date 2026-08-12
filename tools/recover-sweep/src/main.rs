@@ -107,9 +107,8 @@ impl Tally {
 /// recording the path of a recovered file (for the `*-fail-*`
 /// reconciliation enumeration) when `path` is `Some`.
 fn classify_path(bytes: Vec<u8>, tally: &mut Tally, path: Option<&Path>) {
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        Document::from_bytes(bytes)
-    }));
+    let result =
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| Document::from_bytes(bytes)));
     if let Ok(Ok(doc)) = &result
         && let Some(report) = doc.recovery()
         && let Some(p) = path
@@ -148,7 +147,10 @@ fn classify_error(e: &DocError, tally: &mut Tally) {
             *tally.recovery_refused.entry(k.to_string()).or_default() += 1;
         }
         other => {
-            *tally.still_failing.entry(doc_error_kind(other)).or_default() += 1;
+            *tally
+                .still_failing
+                .entry(doc_error_kind(other))
+                .or_default() += 1;
         }
     }
 }

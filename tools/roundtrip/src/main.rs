@@ -676,11 +676,7 @@ fn check_mutation(doc: &Document, source: &[u8], stats: &mut Stats) -> Option<Ou
     let pages = session.pages().unwrap_or_default();
     let (edit, edited_id, expected_rotation) = if let Some(page) = pages.first() {
         let expected = (page.rotate + 90) % 360;
-        (
-            session.rotate_page_by(0, 90),
-            Some(page.id),
-            Some(expected),
-        )
+        (session.rotate_page_by(0, 90), Some(page.id), Some(expected))
     } else {
         (
             session.set_info_field(InfoField::Title, Some("pdfce round-trip probe")),
@@ -1093,7 +1089,10 @@ fn print_summary(dir: &Path, rows: &[(String, Outcome)], mutate_limit: usize) ->
     let scope = if mutate_limit == 0 {
         "SKIPPED (--no-mutate)".to_owned()
     } else if mutate_limit == usize::MAX {
-        format!("every loadable file; {} had nothing editable", s.mutation_skipped)
+        format!(
+            "every loadable file; {} had nothing editable",
+            s.mutation_skipped
+        )
     } else {
         format!(
             "capped at the first {mutate_limit} files (sorted order); {} had nothing editable",

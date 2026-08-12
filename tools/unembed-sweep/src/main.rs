@@ -479,9 +479,15 @@ fn report(rows: &[Row]) {
         pct(shrank, (done - fell_back).max(1)),
         done - fell_back
     );
-    println!("  full rewrite refused, saved incrementally instead: {fell_back} (hybrid-reference files, §7.5.8.4 — not a defect)");
-    println!("  still have an embedded font afterwards: {still_embedded_files} (expected — a blocked font keeps its program)");
-    println!("  ★ TARGETED fonts still embedded after the round trip: {targets_survived} (must be 0)");
+    println!(
+        "  full rewrite refused, saved incrementally instead: {fell_back} (hybrid-reference files, §7.5.8.4 — not a defect)"
+    );
+    println!(
+        "  still have an embedded font afterwards: {still_embedded_files} (expected — a blocked font keeps its program)"
+    );
+    println!(
+        "  ★ TARGETED fonts still embedded after the round trip: {targets_survived} (must be 0)"
+    );
     println!();
     // ★ BOTH denominators, spelled out, because one of them was mislabelled
     // once and the mislabelling reached a commit message and a librarian's
@@ -498,12 +504,18 @@ fn report(rows: &[Row]) {
     let embedded_total = blocked_total + fonts_unembedded
         - blockers.get("not-embedded").copied().unwrap_or(0)
         - blockers.get("blocked-type3").copied().unwrap_or(0)
-        - blockers.get("unknown-program-unreadable").copied().unwrap_or(0);
+        - blockers
+            .get("unknown-program-unreadable")
+            .copied()
+            .unwrap_or(0);
     println!(
         "verdicts: {} fonts examined, {blocked_total} refused, {embedded_total} carrying a readable embedded program",
         blocked_total + fonts_unembedded
     );
-    println!("  {:<28} {:>6}  {:>8}  {:>8}", "verdict", "n", "of-ref", "of-emb");
+    println!(
+        "  {:<28} {:>6}  {:>8}  {:>8}",
+        "verdict", "n", "of-ref", "of-emb"
+    );
     for (token, n) in &blockers {
         // The three verdicts that are BY DEFINITION not in the embedded set
         // print `-` in that column rather than a number. A percentage of a
@@ -599,7 +611,11 @@ fn write_tsv(path: &Path, rows: &[Row]) {
                         (None, _) => ("no-pages", String::new()),
                     };
                     (
-                        if *incremental { "done-incremental" } else { "done" },
+                        if *incremental {
+                            "done-incremental"
+                        } else {
+                            "done"
+                        },
                         *targets,
                         blocked.values().sum::<usize>(),
                         *reclaim,
@@ -627,8 +643,7 @@ fn collect_pdfs(root: &Path) -> Result<Vec<(String, PathBuf)>, String> {
     let mut out = Vec::new();
     let mut stack = vec![root.to_path_buf()];
     while let Some(d) = stack.pop() {
-        let entries =
-            fs::read_dir(&d).map_err(|e| format!("read_dir {}: {e}", d.display()))?;
+        let entries = fs::read_dir(&d).map_err(|e| format!("read_dir {}: {e}", d.display()))?;
         for entry in entries {
             let entry = entry.map_err(|e| format!("read_dir entry in {}: {e}", d.display()))?;
             let path = entry.path();

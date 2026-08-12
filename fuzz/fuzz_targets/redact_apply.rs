@@ -81,7 +81,8 @@ fn template(content: &[u8]) -> Vec<u8> {
         buf.extend_from_slice(format!("{off:010} 00000 n \n").as_bytes());
     }
     buf.extend_from_slice(
-        format!("trailer\n<< /Size {size} /Root 1 0 R >>\nstartxref\n{xref_at}\n%%EOF\n").as_bytes(),
+        format!("trailer\n<< /Size {size} /Root 1 0 R >>\nstartxref\n{xref_at}\n%%EOF\n")
+            .as_bytes(),
     );
     buf
 }
@@ -89,7 +90,11 @@ fn template(content: &[u8]) -> Vec<u8> {
 fuzz_target!(|data: &[u8]| {
     // Cap the content size so the fuzzer spends its time on shapes, not on
     // one enormous stream.
-    let content = if data.len() > 4096 { &data[..4096] } else { data };
+    let content = if data.len() > 4096 {
+        &data[..4096]
+    } else {
+        data
+    };
 
     let pdf = template(content);
     let Ok(doc) = Document::from_bytes(pdf) else {

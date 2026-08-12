@@ -338,8 +338,12 @@ fn measure(
             .map(|first| render_page_with(&doc, first, 0.5, &options).map_err(|e| e.to_string())),
         Err(e) => Some(Err(format!("page tree: {e}"))),
     };
-    let baseline_render = baseline.as_ref().map(|r| r.as_ref().map(|_| ()).map_err(Clone::clone));
-    let baseline_pixels = baseline.as_ref().and_then(|r| r.as_ref().ok().map(hash_page));
+    let baseline_render = baseline
+        .as_ref()
+        .map(|r| r.as_ref().map(|_| ()).map_err(Clone::clone));
+    let baseline_pixels = baseline
+        .as_ref()
+        .and_then(|r| r.as_ref().ok().map(hash_page));
 
     // Resolve a donor for every missing font.
     let mut request = EmbedRequest::all_missing();
@@ -443,12 +447,17 @@ fn measure(
         }),
         Err(e) => Some(Err(format!("page tree: {e}"))),
     };
-    let render = after.as_ref().map(|r| r.as_ref().map(|_| ()).map_err(Clone::clone));
+    let render = after
+        .as_ref()
+        .map(|r| r.as_ref().map(|_| ()).map_err(Clone::clone));
     // The oracle applies only when every donor was bundled: with a supplied
     // face, a DIFFERENT face is now drawing than the renderer was
     // substituting, so a pixel difference is the expected outcome.
     let identical = if all_bundled {
-        match (&baseline_pixels, after.as_ref().and_then(|r| r.as_ref().ok())) {
+        match (
+            &baseline_pixels,
+            after.as_ref().and_then(|r| r.as_ref().ok()),
+        ) {
             (Some(before), Some(page)) => Some(*before == hash_page(page)),
             _ => None,
         }
@@ -627,8 +636,10 @@ fn report(rows: &[Row]) {
     println!("★ files reaching not-embedded=0   {files_reaching_zero}");
     println!("  files still missing something   {files_still_missing}");
     println!();
-    println!("render after embedding      ok={render_ok} broken={render_failed} \
-already-broken={render_failed_already}   (broken must be 0)");
+    println!(
+        "render after embedding      ok={render_ok} broken={render_failed} \
+already-broken={render_failed_already}   (broken must be 0)"
+    );
     println!(
         "★ pixel-identical raster    yes={identical_yes} no={identical_no}   (bundled-donor rows \
 only; `no` must be 0)"

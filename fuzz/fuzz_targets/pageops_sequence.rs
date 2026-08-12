@@ -204,17 +204,16 @@ fn exercise_producers(doc: &Document) {
         let got = pdfce_core::page_tree::pages(&reloaded)
             .expect("extract produced an unwalkable page tree")
             .len();
-        assert_eq!(got, report.pages, "extract's page count is not what it wrote");
+        assert_eq!(
+            got, report.pages,
+            "extract's page count is not what it wrote"
+        );
     }
     // Split, which is repeated extract and additionally exercises the
     // naming/collision path.
     if pages.len() > 1
-        && let Ok(parts) = pdfce_core::pageops::split(
-            &view,
-            &SplitCriterion::EveryN(1),
-            "{stem}_{n}.pdf",
-            "fuzz",
-        )
+        && let Ok(parts) =
+            pdfce_core::pageops::split(&view, &SplitCriterion::EveryN(1), "{stem}_{n}.pdf", "fuzz")
     {
         for (_, bytes, _) in parts {
             Document::from_bytes(bytes).expect("split produced an unloadable part");

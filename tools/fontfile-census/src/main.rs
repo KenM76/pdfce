@@ -156,12 +156,18 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
 /// renderer would reach".
 fn collect(doc: &Document, file: &str, out: &mut Vec<Sample>) {
     for io_ in doc.objects() {
-        let Object::Dict(d) = &io_.value else { continue };
+        let Object::Dict(d) = &io_.value else {
+            continue;
+        };
         for key in ["FontFile", "FontFile2", "FontFile3"] {
-            let Some(v) = d.get(key.as_bytes()) else { continue };
+            let Some(v) = d.get(key.as_bytes()) else {
+                continue;
+            };
             let Object::Reference(id) = v else { continue };
             let Some(target) = doc.get(*id) else { continue };
-            let Object::Stream(st) = &target.value else { continue };
+            let Object::Stream(st) = &target.value else {
+                continue;
+            };
             let (raw_len, decoded_len) = measure(doc, st);
             out.push(Sample {
                 file: file.to_owned(),
@@ -230,7 +236,10 @@ fn report(samples: &[Sample], files: usize, unreadable: usize, with_embedded: us
     // max — it is how many real files each candidate would break, because
     // that is the cost side of the tradeoff and the part an argument from
     // intuition always omits.
-    println!("\nwhat a candidate ceiling would refuse (of {} programs):", decoded.len());
+    println!(
+        "\nwhat a candidate ceiling would refuse (of {} programs):",
+        decoded.len()
+    );
     for mb in [1u64, 2, 4, 8, 16, 32, 64] {
         let limit = (mb * 1024 * 1024) as usize;
         let over = decoded.iter().filter(|d| **d > limit).count();

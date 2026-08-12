@@ -213,7 +213,10 @@ fn main() -> std::process::ExitCode {
     println!("file      : {path}");
     println!("bytes     : {input_len}");
     println!("pages     : {}, profiling page {page_index}", pages.len());
-    println!("load      : {:.3} ms  (object graph + xref only)", load.as_secs_f64() * 1e3);
+    println!(
+        "load      : {:.3} ms  (object graph + xref only)",
+        load.as_secs_f64() * 1e3
+    );
 
     // A single --ablate applies to the scale table below. Say so before
     // the numbers, not after: a reader who scrolls to the table must not
@@ -221,9 +224,14 @@ fn main() -> std::process::ExitCode {
     if let Some(a) = ablate {
         profile::set_ablation(a);
         println!();
-        println!("ABLATED   : {}  <-- THE NUMBERS BELOW ARE NOT A REAL RENDER", a.label());
+        println!(
+            "ABLATED   : {}  <-- THE NUMBERS BELOW ARE NOT A REAL RENDER",
+            a.label()
+        );
         if a.output_is_wrong() {
-            println!("            the rendered picture is WRONG by construction; do not screenshot it");
+            println!(
+                "            the rendered picture is WRONG by construction; do not screenshot it"
+            );
         }
         let confounds = a.confounds();
         if confounds.is_empty() {
@@ -443,12 +451,8 @@ fn run_ablation_sweep(
 
     // --- The floor, and what its flatness means -------------------------
     if let (Some(&lo), Some(&hi)) = (
-        floor_times
-            .iter()
-            .min_by(|a, b| a.total_cmp(b)),
-        floor_times
-            .iter()
-            .max_by(|a, b| a.total_cmp(b)),
+        floor_times.iter().min_by(|a, b| a.total_cmp(b)),
+        floor_times.iter().max_by(|a, b| a.total_cmp(b)),
     ) && lo > 0.0
     {
         let spread = hi / lo;
@@ -600,17 +604,18 @@ fn report_clip_reuse(c: &pdfce_render::profile::Counters) {
 
     // How concentrated the reuse is decides how SMALL a bounded cache
     // can be, which the histogram's unbounded last bucket cannot say.
-    let top: Vec<u64> = c.clip_top_counts.iter().copied().filter(|&n| n > 0).collect();
+    let top: Vec<u64> = c
+        .clip_top_counts
+        .iter()
+        .copied()
+        .filter(|&n| n > 0)
+        .collect();
     if !top.is_empty() && c.clips > 0 {
         let mut cum = 0u64;
         print!("  concentration     :");
         for (i, &n) in top.iter().enumerate() {
             cum += n;
-            print!(
-                " top-{}={:.1}%",
-                i + 1,
-                cum as f64 * 100.0 / c.clips as f64
-            );
+            print!(" top-{}={:.1}%", i + 1, cum as f64 * 100.0 / c.clips as f64);
         }
         println!();
     }
@@ -679,8 +684,14 @@ fn report_clip_phases(c: &pdfce_render::profile::Counters) {
     };
 
     println!();
-    println!("clip construction, timed per phase (one render, {} clips):", c.clips);
-    println!("    {:<14} {:>9} {:>9} {:>8}", "phase", "total", "per clip", "share");
+    println!(
+        "clip construction, timed per phase (one render, {} clips):",
+        c.clips
+    );
+    println!(
+        "    {:<14} {:>9} {:>9} {:>8}",
+        "phase", "total", "per clip", "share"
+    );
     for (name, v) in [
         ("Mask::new", c.clip_new_ns),
         ("fill_path", c.clip_fill_ns),
@@ -699,9 +710,7 @@ fn report_clip_phases(c: &pdfce_render::profile::Counters) {
         ns(total),
         per(total)
     );
-    println!(
-        "    (timed directly, not ablated: nothing is removed, so nothing is confounded)"
-    );
+    println!("    (timed directly, not ablated: nothing is removed, so nothing is confounded)");
 
     println!();
     println!("per-clip distribution:");
@@ -716,9 +725,17 @@ fn report_clip_phases(c: &pdfce_render::profile::Counters) {
         } else if i == CLIP_BUCKETS - 1 {
             format!(">={}us", CLIP_BUCKET_EDGES_US[CLIP_BUCKETS - 2])
         } else {
-            format!("{}-{}us", CLIP_BUCKET_EDGES_US[i - 1], CLIP_BUCKET_EDGES_US[i])
+            format!(
+                "{}-{}us",
+                CLIP_BUCKET_EDGES_US[i - 1],
+                CLIP_BUCKET_EDGES_US[i]
+            )
         };
-        let share = if n == 0 { 0.0 } else { count as f64 * 100.0 / n as f64 };
+        let share = if n == 0 {
+            0.0
+        } else {
+            count as f64 * 100.0 / n as f64
+        };
         let bar = "#".repeat(((share / 2.0).round() as usize).min(50));
         println!("    {label:>12}  {count:>7}  {share:>5.1}%  {bar}");
     }

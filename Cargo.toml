@@ -57,6 +57,13 @@ exclude = [
     "tools/font-parity",
     "tools/recover-sweep",
     "tools/tw-census",
+    # Added 2026-08-12 by `tools/check-fmt-excluded.py` on its first run: this
+    # crate was in NEITHER `members` nor `exclude`, which made it invisible to
+    # `cargo fmt --all`, to `cargo test`, and to every workspace-wide gate
+    # simultaneously. Excluded rather than made a member, for the same reason
+    # as its sibling census tools above — it is a corpus-analysis tool, not
+    # shipping code, and must stay out of THIRD_PARTY_LICENSES.md.
+    "tools/fontfile-census",
     "tools/render-profile",
     "tools/unembed-sweep",
     "tools/embed-sweep",

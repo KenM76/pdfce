@@ -82,7 +82,10 @@ const REENCODE_PIXEL_BUDGET: u64 = 1 << 18; // 262 144 px, e.g. 512 × 512
 
 /// Assert the internal agreement an `ImportedImage` promises its consumer.
 fn check(img: &image_import::ImportedImage) {
-    assert!(img.width > 0 && img.height > 0, "an imported image has pixels");
+    assert!(
+        img.width > 0 && img.height > 0,
+        "an imported image has pixels"
+    );
     if img.filter == ImportFilter::DctDecode {
         // §7.4.8 / Table 89: DCTDecode "shall always deliver 8-bit samples".
         assert_eq!(img.bits_per_component, 8, "DCT is 8-bit, always");
@@ -99,7 +102,10 @@ fn check(img: &image_import::ImportedImage) {
     // what is actually there rather than a stale figure from a branch that
     // rewrote `data`.
     let expect = img.data.len() + img.soft_mask.as_ref().map_or(0, |m| m.data.len());
-    assert_eq!(img.notes.stored_bytes, expect, "the reported size is the real one");
+    assert_eq!(
+        img.notes.stored_bytes, expect,
+        "the reported size is the real one"
+    );
 }
 
 fuzz_target!(|data: &[u8]| {
@@ -142,7 +148,11 @@ fuzz_target!(|data: &[u8]| {
             &ImportOptions::new().with_compression(ImageCompression::Jpeg { quality }),
         ) {
             check(&img);
-            assert_eq!(img.filter, ImportFilter::DctDecode, "the jpeg policy writes DCT");
+            assert_eq!(
+                img.filter,
+                ImportFilter::DctDecode,
+                "the jpeg policy writes DCT"
+            );
             assert_eq!(img.notes.jpeg_quality, Some(quality));
         }
     }

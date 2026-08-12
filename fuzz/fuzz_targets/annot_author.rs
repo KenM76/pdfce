@@ -34,8 +34,8 @@ use pdfce_core::edit::EditSession;
 use pdfce_core::fontdata::Std14;
 use pdfce_core::page_tree::{self, Rect};
 use pdfce_core::vartext::{self, FontResource, Quadding, TextColor};
-use pdfce_core::writer::content::reemit_canonical;
 use pdfce_core::writer::SaveOptions;
+use pdfce_core::writer::content::reemit_canonical;
 
 /// A minimal one-page document the authoring path can target.
 const BLANK: &[u8] = b"%PDF-1.7\n%\xE2\xE3\xCF\xD3\n\
@@ -108,13 +108,21 @@ fn spec(c: &mut Cursor<'_>) -> MarkupSpec {
         0 => MarkupSpec::Square {
             rect: c.rect(),
             border: Some(c.color()),
-            interior: if c.byte() % 2 == 0 { Some(c.color()) } else { None },
+            interior: if c.byte() % 2 == 0 {
+                Some(c.color())
+            } else {
+                None
+            },
             border_width: width,
         },
         1 => MarkupSpec::Circle {
             rect: c.rect(),
             border: Some(c.color()),
-            interior: if c.byte() % 2 == 0 { Some(c.color()) } else { None },
+            interior: if c.byte() % 2 == 0 {
+                Some(c.color())
+            } else {
+                None
+            },
             border_width: width,
         },
         2 => MarkupSpec::Line {
@@ -207,7 +215,11 @@ fn text_spec(c: &mut Cursor<'_>, data: &[u8]) -> TextAnnotSpec {
             rect,
             text: text_of(data),
             font: face(c),
-            font_size: if c.byte() % 2 == 0 { 0.0 } else { f64::from(c.byte() % 40) },
+            font_size: if c.byte() % 2 == 0 {
+                0.0
+            } else {
+                f64::from(c.byte() % 40)
+            },
             color: TextColor::from(color),
             quadding: match c.byte() % 3 {
                 0 => Quadding::Left,
@@ -215,7 +227,11 @@ fn text_spec(c: &mut Cursor<'_>, data: &[u8]) -> TextAnnotSpec {
                 _ => Quadding::Right,
             },
             multiline: c.byte() % 2 == 0,
-            border: if c.byte() % 2 == 0 { Some(c.color()) } else { None },
+            border: if c.byte() % 2 == 0 {
+                Some(c.color())
+            } else {
+                None
+            },
             border_width: f64::from(c.byte() % 6),
         },
         1 => TextAnnotSpec::Sticky {
@@ -228,7 +244,11 @@ fn text_spec(c: &mut Cursor<'_>, data: &[u8]) -> TextAnnotSpec {
         _ => TextAnnotSpec::Stamp {
             rect,
             name: StampName::Draft,
-            label: if c.byte() % 2 == 0 { Some(text_of(data)) } else { None },
+            label: if c.byte() % 2 == 0 {
+                Some(text_of(data))
+            } else {
+                None
+            },
             color,
         },
     }
@@ -252,8 +272,8 @@ fuzz_target!(|data: &[u8]| {
         let mut c = Cursor::new(data);
         let bbox = c.rect();
         let name: Vec<u8> = match c.byte() % 3 {
-            0 => b"Helv".to_vec(),  // resolvable
-            1 => b"F1".to_vec(),    // unresolvable ⇒ named refusal
+            0 => b"Helv".to_vec(), // resolvable
+            1 => b"F1".to_vec(),   // unresolvable ⇒ named refusal
             _ => vec![c.byte().max(b'A')],
         };
         let da = vartext::default_appearance_string(
@@ -270,7 +290,14 @@ fuzz_target!(|data: &[u8]| {
             1 => Quadding::Center,
             _ => Quadding::Right,
         };
-        let _ = vartext::build_variable_text(bbox, &text_of(data), &da, quad, c.byte() % 2 == 0, &resources);
+        let _ = vartext::build_variable_text(
+            bbox,
+            &text_of(data),
+            &da,
+            quad,
+            c.byte() % 2 == 0,
+            &resources,
+        );
     }
 
     // (2) Authoring round-trip (X5/X7). Cap the number of authorings so a

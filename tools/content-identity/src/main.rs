@@ -141,7 +141,9 @@ fn measure_stream(rel: &str, cs: &ContentStream, totals: &mut Totals) {
         if !semantically_equal(cs, &back) {
             totals.streams_corrupted += 1;
             if totals.corruptions.len() < 200 {
-                totals.corruptions.push(format!("{rel}: token stream changed"));
+                totals
+                    .corruptions
+                    .push(format!("{rel}: token stream changed"));
             }
         }
     } else {
@@ -251,7 +253,10 @@ fn print_summary(t: &Totals) {
     );
     println!("CORRUPTED (gate):     {}", t.streams_corrupted);
     if !t.reason_samples.is_empty() {
-        println!("\n-- non-identity samples (first {}) --", t.reason_samples.len());
+        println!(
+            "\n-- non-identity samples (first {}) --",
+            t.reason_samples.len()
+        );
         for r in &t.reason_samples {
             println!("  {r}");
         }

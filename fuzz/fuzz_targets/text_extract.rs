@@ -73,8 +73,8 @@
 
 use libfuzzer_sys::fuzz_target;
 use pdfce_core::document::Document;
-use pdfce_core::text_extract::{self, ExtractOptions};
 use pdfce_core::text_extract::cmap::ToUnicodeCMap;
+use pdfce_core::text_extract::{self, ExtractOptions};
 use pdfce_core::textstring::{decode_text_string, decode_utf16be_bytes, encode_text_string};
 
 fuzz_target!(|data: &[u8]| {

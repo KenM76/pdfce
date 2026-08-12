@@ -121,12 +121,20 @@ const MAX_SCRIPT_LEN: usize = 12;
 enum Step {
     /// Turn a page by a quarter turn. The page index and the direction
     /// come from the mixer.
-    Rotate { page: usize, clockwise: bool },
+    Rotate {
+        page: usize,
+        clockwise: bool,
+    },
     /// Set one metadata field to one of a few fixed strings, chosen so
     /// both the ASCII and the UTF-16BE encoding paths are reachable.
-    SetInfo { field: InfoField, value: u8 },
+    SetInfo {
+        field: InfoField,
+        value: u8,
+    },
     /// Remove one metadata field.
-    ClearInfo { field: InfoField },
+    ClearInfo {
+        field: InfoField,
+    },
     Undo,
     Redo,
 }
