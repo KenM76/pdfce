@@ -1116,6 +1116,51 @@ enum Command {
         input: PathBuf,
     },
 
+    /// **List a document's fonts** — what they are, what they cost, and
+    /// which of them could safely have their embedded program removed
+    /// (§9.5–9.10).
+    ///
+    /// One stable line per DISTINCT font object — a font referenced from
+    /// forty pages is one row naming forty pages, not forty rows —
+    /// followed by a document summary. Read-only; nothing is modified.
+    ///
+    /// Reports `/BaseFont` (and the family name when it carries a §9.6.4
+    /// subset tag), the `/Subtype` and a composite font's descendant
+    /// subtype, `/Encoding`, whether a program is embedded and under which
+    /// descriptor key, **the program's byte size in this file**, whether
+    /// `/ToUnicode` is present, the OpenType `fsType` permission bits where
+    /// they can be read, and a removability verdict.
+    ///
+    /// The verdict is the point. For a `Type0` font on `Identity-H` the
+    /// character codes in the content stream are glyph indices into that
+    /// exact embedded program (§9.9 directs conforming writers to do
+    /// this), so deleting the program leaves text no substitute font can
+    /// draw. Each such font is named, with its reason, rather than being
+    /// quietly left off a list.
+    ///
+    /// The summary line also states which font-bearing surfaces were
+    /// searched and which were not.
+    ListFonts {
+        /// Input PDF.
+        input: PathBuf,
+        /// After each font, print the sentence explaining its verdict.
+        ///
+        /// Off by default so the one-line-per-font listing stays easy to
+        /// parse and to scan. The distinct reasons present in the document
+        /// are written to stderr regardless, so nothing is hidden by
+        /// leaving this off — this flag only puts them next to the row
+        /// they belong to.
+        #[arg(long)]
+        reasons: bool,
+        /// Sort by embedded program size, largest first.
+        ///
+        /// The default order is first discovery, which is stable and
+        /// diff-friendly. This is the order an operator asking "what is
+        /// costing me the most" wants, and it is a separate question.
+        #[arg(long)]
+        by_size: bool,
+    },
+
     /// **List a document's embedded files** (§7.11.4, §12.5.6.15).
     ///
     /// Reports BOTH kinds — document-level `/Names /EmbeddedFiles` and
@@ -4467,6 +4512,11 @@ fn run() -> ExitCode {
         Command::ListOutline { input, flat } => cmd_list_outline(&input, flat),
         Command::ListAttachments { input } => cmd_list_attachments(&input),
         Command::ListLayers { input } => cmd_list_layers(&input),
+        Command::ListFonts {
+            input,
+            reasons,
+            by_size,
+        } => cmd_list_fonts(&input, reasons, by_size),
         Command::ListSignatures { input } => cmd_list_signatures(&input),
         Command::ListPrinters => cmd_list_printers(),
         Command::Print {
@@ -6890,6 +6940,325 @@ fn cmd_list_layers(input: &Path) -> u8 {
         read.layers.len(),
         read.radio_groups.len(),
     );
+    exit::SUCCESS
+}
+
+/// Render one font's `fsType` state as a single stable token.
+///
+/// ★ The four states must never collapse into each other, and in particular
+/// none of them may look like `0`.
+///
+/// `fsType == 0` genuinely **means** Installable — the most permissive value
+/// the field can express — so "we could not read it" and "this format has no
+/// such field" have to be visibly different from it and from one another. A
+/// report that printed a blank, a dash, or a zero for all three would be
+/// asserting the broadest embedding right there is on the strength of bytes
+/// nobody read (`PDF_Spec/fonts/font__opentype_os2_fstype.md` N1).
+///
+/// The raw value is printed alongside the word so the reading can be checked
+/// against the specification's own table without re-deriving it.
+fn format_fs_type(fs: &pdfce_core::fontinfo::FsType) -> String {
+    use pdfce_core::fontinfo::{FsType, FsTypeError};
+    match fs {
+        FsType::NotApplicable => "n/a-no-field".to_owned(),
+        FsType::ProgramNotDecoded => "unknown-not-decoded".to_owned(),
+        // The CAUSE, not just "unknown". A sweep of 3,901 corpus documents
+        // found 998 of 1,560 embedded programs reading unknown here, and one
+        // token could not say whether that was a subsetter stripping `OS/2`
+        // (the common, benign case -- the tool that made the subset simply
+        // did not carry the table forward) or a damaged font. Those are
+        // different facts about the file, and an operator triaging a corpus
+        // needs to bucket them apart.
+        FsType::Unreadable(why) => match why {
+            FsTypeError::NotSfnt => "unknown-not-sfnt",
+            FsTypeError::Collection => "unknown-collection",
+            FsTypeError::BadTableDirectory => "unknown-bad-directory",
+            FsTypeError::NoOs2Table => "unknown-no-os2",
+            FsTypeError::Os2Truncated => "unknown-os2-truncated",
+            _ => "unknown-unrecognised-cause",
+        }
+        .to_owned(),
+        // `FsType` is `#[non_exhaustive]`, so a future state compiles here
+        // rather than breaking the CLI — but it must not silently render as
+        // one of the existing ones, least of all as a permission. An
+        // unrecognised state prints as unrecognised.
+        FsType::Known(bits) => {
+            let mut s = format!("{}/0x{:04X}", bits.permission.label(), bits.raw);
+            if bits.no_subsetting {
+                s.push_str("+nosubset");
+            }
+            if bits.bitmap_only {
+                s.push_str("+bitmaponly");
+            }
+            if bits.version_gated_bits_ignored {
+                s.push_str("+v0v1-bits-ignored");
+            }
+            if bits.reserved_bit0 {
+                s.push_str("+reserved-bit0");
+            }
+            s
+        }
+        _ => "unknown-unrecognised-state".to_owned(),
+    }
+}
+
+/// `list-fonts` — the document's fonts, what they cost, and what could be
+/// removed.
+///
+/// # Why the byte size is here and nowhere else
+///
+/// ★ Acrobat exposes a per-font byte size **nowhere**: Document Properties →
+/// Fonts gives type, encoding and embedded status with no size at all, and
+/// Audit Space Usage gives one aggregate "Fonts" bucket for the whole
+/// document with no per-font attribution
+/// (`Acrobat_Features/optimize__font_reporting.md`, recorded as a GAP with no
+/// source found either way). An operator asking "which font is costing me the
+/// most" has to infer it there by toggling fonts through the Optimizer one at
+/// a time and diffing output sizes.
+///
+/// pdfce computes it directly from data already parsed. This is a deliberate
+/// exceed rather than a parity target — there is no Acrobat behaviour to
+/// match, only a gap it leaves open.
+///
+/// The number is the program's **stored** size: the bytes it occupies in the
+/// file, which is what removing it recovers. The decoded size is printed
+/// beside it because it answers the different question of how large the font
+/// actually is.
+///
+/// # Why the verdict is a word and not a flag
+///
+/// Acrobat refuses to unembed a font whose text is glyph-index-keyed, and
+/// refuses **silently** — the font simply does not appear in its unembed
+/// list, with no reason shown anywhere (sourced to Dov Isaacs, former Adobe
+/// Principal Scientist, in `optimize__font_unembedding.md`; independently
+/// corroborated by a user whose largest font was absent from the list with no
+/// explanation). A shorter list is not actionable. "This font's text is
+/// stored as glyph indices into this exact program" is.
+///
+/// So every font appears, every verdict is named, and the reasons present in
+/// the document go to stderr whether or not `--reasons` was passed. That is
+/// project rule 4 applied to a refusal: the inference pdfce made is visible
+/// before anyone acts on it.
+///
+/// # Why coverage is on the summary line
+///
+/// A font inventory that quietly misses a surface and prints a confident list
+/// is this project's most-repeated defect (R186). The summary states which
+/// surfaces were walked **and which were not**, so the listing carries the
+/// shape of its own evidence. Acrobat's coverage here is an unconfirmed GAP,
+/// so pdfce states its own scope rather than assuming parity with a behaviour
+/// nobody has measured.
+fn cmd_list_fonts(input: &Path, reasons: bool, by_size: bool) -> u8 {
+    use pdfce_core::fontinfo::{self, Program, Removability};
+
+    let doc = match open_document(input) {
+        Ok(doc) => doc,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit_code_for_doc(&err);
+        }
+    };
+    let inv = fontinfo::inventory(&doc.view());
+
+    // Borrowed, so the default order stays first-discovery — stable across
+    // runs and diff-friendly — and `--by-size` is a view over it rather than
+    // a different inventory.
+    let mut rows: Vec<&fontinfo::FontRecord> = inv.fonts.iter().collect();
+    if by_size {
+        // Descending by stored bytes, ties broken by discovery order, which
+        // `sort_by_key` preserves (it is stable).
+        rows.sort_by_key(|f| std::cmp::Reverse(f.stored_bytes()));
+    }
+
+    for f in &rows {
+        let name = f.base_font.as_deref().unwrap_or("-");
+        // Printed only when it differs, because on the ~13% of embedded
+        // fonts that are not subsets it would repeat the name field exactly
+        // — and a token that is always present and usually redundant is a
+        // token nobody reads (the lesson `list-layers` records).
+        let family = match f.family_name() {
+            Some(fam) if fam != name => format!(" family={fam:?}"),
+            _ => String::new(),
+        };
+        let ty = match &f.descendant_subtype {
+            Some(d) => format!("{}/{}", f.subtype.label(), d.label()),
+            None => f.subtype.label().to_owned(),
+        };
+        let (embedded, bytes, decoded, fstype) = match &f.program {
+            Program::NotEmbedded => (
+                "no".to_owned(),
+                "0".to_owned(),
+                "-".to_owned(),
+                "n/a-not-embedded".to_owned(),
+            ),
+            // "Declared but unreadable" is not "not embedded": the first is
+            // damage, the second is a document relying on substitution.
+            Program::Unreadable { key, .. } => (
+                format!("{}!unreadable", key.label()),
+                "0".to_owned(),
+                "-".to_owned(),
+                "n/a-program-unreadable".to_owned(),
+            ),
+            Program::Embedded(p) => (
+                match &p.subtype {
+                    Some(s) => format!("{}/{s}", p.key.label()),
+                    None => p.key.label().to_owned(),
+                },
+                p.stored_bytes.to_string(),
+                p.decoded_bytes
+                    .map_or_else(|| "-".to_owned(), |n| n.to_string()),
+                format_fs_type(&p.fs_type),
+            ),
+            // `Program` is `#[non_exhaustive]`. A state this build does not
+            // know must not be rendered as "no" — that would report a font
+            // as unembedded on the strength of not recognising it.
+            _ => (
+                "unrecognised".to_owned(),
+                "-".to_owned(),
+                "-".to_owned(),
+                "unknown-unrecognised-state".to_owned(),
+            ),
+        };
+        let surfaces = f
+            .surfaces
+            .iter()
+            .map(|s| s.token())
+            .collect::<Vec<_>>()
+            .join(",");
+        let names = if f.resource_names.is_empty() {
+            "-".to_owned()
+        } else {
+            let mut joined = f.resource_names.join(",");
+            if f.resource_names_truncated {
+                joined.push_str(",…");
+            }
+            joined
+        };
+        let obj =
+            f.id.map_or_else(|| "direct".to_owned(), |id| format!("{}", id.num));
+        println!(
+            "font name={name:?}{family} type={ty:?} encoding={:?} embedded={embedded} \
+bytes={bytes} decoded={decoded} fstype={fstype} tounicode={} std14={} verdict={} \
+pages={} surfaces={surfaces} resources={names} obj={obj}",
+            f.encoding.label(),
+            u32::from(f.has_to_unicode),
+            u32::from(f.standard_14),
+            f.removability.token(),
+            pdfce_core::fontinfo::format_page_ranges(&f.pages),
+        );
+        if reasons {
+            println!("  reason: {}", f.removability.reason());
+        }
+    }
+
+    // The document total, computed from the same per-font numbers the rows
+    // above show — so the total and the listing cannot disagree. Acrobat's
+    // equivalent (Audit Space Usage's aggregate "Fonts" bucket) is
+    // Pro-exclusive; this ships in every build.
+    let counts = inv.verdict_counts();
+    let verdicts = if counts.is_empty() {
+        "-".to_owned()
+    } else {
+        counts
+            .iter()
+            .map(|(token, n)| format!("{token}={n}"))
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+
+    let d = &inv.diagnostics;
+    let mut notes: Vec<String> = Vec::new();
+    for (on, name) in [
+        (d.resource_scan_truncated, "RESOURCE_SCAN_TRUNCATED"),
+        (d.font_limit_reached, "FONT_LIMIT_REACHED"),
+        (d.page_scan_failed, "PAGE_SCAN_FAILED"),
+    ] {
+        if on {
+            notes.push(name.to_owned());
+        }
+    }
+    for (c, name) in [
+        (d.direct_font_dicts, "direct_font_dicts"),
+        (d.dangling_font_references, "dangling_font_references"),
+        (d.descriptors_missing, "descriptors_missing"),
+        (d.programs_unreadable, "programs_unreadable"),
+        (d.programs_undecodable, "programs_undecodable"),
+        (d.descendants_missing, "descendants_missing"),
+    ] {
+        if c > 0 {
+            notes.push(format!("{name}={c}"));
+        }
+    }
+    let warnings = if notes.is_empty() {
+        "clean".to_owned()
+    } else {
+        notes.join(" ")
+    };
+
+    let walked = inv
+        .coverage
+        .walked()
+        .iter()
+        .map(|s| s.token())
+        .collect::<Vec<_>>()
+        .join(",");
+    let not_walked = inv.coverage.not_walked();
+    let not_walked_token = if not_walked.is_empty() {
+        "-".to_owned()
+    } else {
+        not_walked
+            .iter()
+            .map(|s| s.token())
+            .collect::<Vec<_>>()
+            .join(",")
+    };
+
+    println!(
+        "list-fonts {} fonts={} embedded={} bytes={} {verdicts} walked={walked} \
+not_walked={not_walked_token} {warnings}",
+        input.display(),
+        inv.fonts.len(),
+        inv.embedded_count(),
+        inv.embedded_bytes(),
+    );
+
+    // ★ The disclosure Acrobat does not make. One sentence per DISTINCT
+    // non-removable verdict present, on stderr so stdout stays a clean
+    // machine-readable listing. Deduplicated because a document with forty
+    // Identity-H fonts needs the mechanism explained once, not forty times —
+    // repetition is how a real warning gets skimmed past.
+    let mut seen: std::collections::BTreeSet<&'static str> = std::collections::BTreeSet::new();
+    for f in &rows {
+        if matches!(f.removability, Removability::Removable) {
+            continue;
+        }
+        if seen.insert(f.removability.token()) {
+            eprintln!(
+                "pdfce-cli: {}: verdict {} — {}",
+                input.display(),
+                f.removability.token(),
+                f.removability.reason()
+            );
+        }
+    }
+    // Said unconditionally, not only when it bites. An operator reading a
+    // font inventory to decide what to delete needs the shape of the
+    // evidence, and "there is one place pdfce did not look" is part of the
+    // answer rather than a caveat on it.
+    if !not_walked.is_empty() {
+        eprintln!(
+            "pdfce-cli: {}: NOT searched: {not_walked_token}. Font dictionaries reachable from \
+none of the walked surfaces still occupy bytes in the file but do not appear above.",
+            input.display(),
+        );
+    }
+    if d.page_scan_failed {
+        eprintln!(
+            "pdfce-cli: {}: the page tree would not walk, so NO page-reachable font is in this \
+listing. An empty or short list here is not a statement about the document's fonts.",
+            input.display(),
+        );
+    }
     exit::SUCCESS
 }
 

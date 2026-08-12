@@ -100,4 +100,34 @@ fuzz_target!(|data: &[u8]| {
     // unit test, and spending fuzz cycles on a parameter pdfce derives itself
     // would test the harness rather than the code.
     let _ = plan_subset(font_bytes, face_index, &chars, "FuzzDonor", "ABCDEF");
+
+    // ★ The SECOND `fsType` reader, on the same bytes (Pass 67.0 phase A).
+    //
+    // `pdfce_core::fontinfo::read_fs_type` walks an sfnt table directory by
+    // hand — magic, `numTables`, 16-byte records, then a `uint16` at offset 8
+    // inside `OS/2` — because `pdfce-core` may not take a font-parsing
+    // dependency (project rule 2; `skrifa` lives in `pdfce-render` and the
+    // crate boundary is load-bearing). Hand-written offset arithmetic over
+    // attacker-controlled `uint32` offsets and lengths is exactly the code
+    // that needs this target, and it needs it on the SAME inputs: a font that
+    // reaches the subsetter is a font the inventory will also read, and the
+    // interesting corpus is shared.
+    //
+    // The contract is the same shape as `plan_subset`'s: for ANY byte string,
+    // `Ok` or a NAMED `Err`. Never a panic, never an out-of-bounds slice,
+    // never an unbounded read from a 65,535-entry `numTables` claim. And —
+    // the property that actually matters — never a fabricated permission: a
+    // failure must surface as an error, because `fsType == 0` means
+    // *Installable*, the most permissive value the field can express, so a
+    // guess in the failure path would silently grant the broadest embedding
+    // right there is.
+    if let Ok(bits) = pdfce_core::fontinfo::read_fs_type(font_bytes) {
+        // The version gate is a real branch over attacker-controlled data:
+        // OpenType says bits 4-15 MUST be ignored for an `OS/2` version 0 or
+        // 1 table, so a v0/v1 font must never come back claiming them.
+        assert!(
+            bits.os2_version > 1 || (!bits.no_subsetting && !bits.bitmap_only),
+            "bits 8/9 must be suppressed for OS/2 v0 and v1"
+        );
+    }
 });

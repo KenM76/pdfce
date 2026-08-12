@@ -2299,8 +2299,16 @@ pub fn ribbon_group_batch() -> &'static str {
     "Across files"
 }
 /// See [`ribbon_group_document_properties`].
+///
+/// ★ Renamed from the bare word "Fonts" 2026-08-11. This group holds
+/// OPERATOR-SUPPLIED FONT FOLDERS — the directories pdfce searches for
+/// substitute faces — and its button already says "Font folders…". The bare
+/// noun now belongs to the Fonts *inventory* panel (View → Panels), which is
+/// an unrelated feature about the fonts a DOCUMENT declares. Two ribbon
+/// captions reading "Fonts" with different meanings is the ambiguity project
+/// rule 15 exists to prevent, for a word pair the rule does not yet name.
 pub fn ribbon_group_fonts() -> &'static str {
-    "Fonts"
+    "Font folders"
 }
 /// See [`ribbon_group_document_properties`].
 pub fn ribbon_group_protect() -> &'static str {
@@ -7244,6 +7252,462 @@ still there. Marking does not remove anything; nothing is removed until you appl
     )
 }
 
+// ---------------------------------------------------------------------------
+// Fonts panel (Pass 67.0 phase A) — a read-only font inventory.
+//
+// ★ NAMING, deliberately settled here rather than left to collide.
+//
+// `ribbon_group_fonts()` above used to read "Fonts". It captions the Tools-tab
+// group holding OPERATOR-SUPPLIED FONT FOLDERS — a completely unrelated
+// feature — and its own doc comment in `ribbon.rs` says so. Two ribbon
+// captions reading the bare word "Fonts" with different meanings is the exact
+// ambiguity project rule 15 exists to prevent, just for a word pair the rule
+// does not yet name. That group is now captioned "Font folders", which also
+// matches the button inside it, and the bare noun "Fonts" belongs to this
+// panel — matching the single-noun convention Bookmarks / Layers / Signatures
+// already use.
+// ---------------------------------------------------------------------------
+
+/// Label of the Fonts activity.
+pub fn activities_fonts_label() -> &'static str {
+    "Fonts"
+}
+
+/// Tooltip on the Fonts ribbon toggle.
+///
+/// Says when to reach for it, not what it is called. The byte size is named
+/// because it is the field an operator opening this panel is usually after
+/// and the one no other tool shows them.
+pub fn fonts_open_tooltip() -> &'static str {
+    "Show every font this document declares — type, encoding, embedded size, and whether its embedded program could be removed."
+}
+
+/// Summary line above the list.
+pub fn fonts_count(total: usize) -> String {
+    if total == 1 {
+        "1 font.".to_owned()
+    } else {
+        format!("{total} fonts.")
+    }
+}
+
+/// Shown when the document declares no fonts at all.
+pub fn fonts_none() -> &'static str {
+    "This document declares no fonts."
+}
+
+/// The document-wide embedded-font total.
+///
+/// The equivalent of the parity reference's Audit Space Usage "Fonts"
+/// bucket, which is a paid-tier feature there. Summed over DISTINCT font
+/// objects, so a font used on four hundred pages is counted once.
+pub fn fonts_total_size(total: &str) -> String {
+    format!("Embedded font data in this document: {total}.")
+}
+
+/// ★ The coverage disclosure, shown unconditionally above the list.
+///
+/// Not a caveat and not a footnote. An operator reading a font inventory to
+/// decide what to delete needs the shape of the evidence, and "there is one
+/// place pdfce did not look" is part of the answer rather than a hedge on it.
+/// A list that quietly missed a surface and looked complete is this project's
+/// most-repeated defect shape.
+pub fn fonts_coverage_note() -> &'static str {
+    "Covers fonts on each page (including inherited page resources, nested form objects, patterns and soft-mask groups), inside Type 3 fonts, in the interactive form's shared resources, and in every annotation's own appearance stream. It does NOT cover font objects that nothing in the document refers to — those still take up space in the file but do not appear here."
+}
+
+/// Shown when pdfce could not walk the page tree at all.
+///
+/// Without this, "this document has no fonts" and "pdfce could not look"
+/// render identically, and an operator would read the second as the first.
+pub fn fonts_page_scan_failed() -> &'static str {
+    "pdfce could not read this document's page tree, so no page's fonts are listed below. A short list here is not a statement about the document."
+}
+
+/// Shown when the resource sweep hit its ceiling.
+pub fn fonts_scan_truncated() -> &'static str {
+    "This document nests resources more deeply than pdfce follows, so some fonts may be missing from the list."
+}
+
+// -- Verdict summary words (row-level, always visible) ----------------------
+//
+// All five are rendered at the SAME visual weight, as plain labels, never as
+// buttons and never in an error colour. Two reasons, and both are
+// requirements rather than taste:
+//
+//   * A blocked verdict is a fact about the FILE, not a pdfce failure, so it
+//     must not carry error styling.
+//   * Phase A has no removal control. A "Safe" verdict rendered as a
+//     checkmark or an accent colour reads as an invitation to click something
+//     that does not exist, which is worse than saying nothing.
+//
+// The wording is non-agentive throughout — no "cannot", no "failed" — for the
+// same reason.
+
+// ★ SHORT — and the measurement that made them short.
+//
+// These were sentences ("No blocking condition found.", "Locked to this
+// embedded program.") until a screenshot of the running panel showed the row
+// CLIPPED at the dock's edge: the byte size, the field an operator opens this
+// panel for, was cut to "59". egui lays an over-wide row out anyway, off the
+// edge of its parent, and hands back a perfectly ordinary `Response` — so
+// every headless assertion was green while the row was unreadable. That is
+// the failure mode `D:/dev/rag/egui/headless_trace_asserts_reached_not_visible
+// _a_clipped_widget_needs_a_pixel_oracle.md` records, reproduced exactly.
+//
+// The full sentences survive as the `font_reason_*` copy inside the disclosed
+// row, where there is width for them. Nothing was cut, only moved.
+//
+// Field order on the row is verdict, size, NAME LAST — deliberately, so that
+// if a very long `/BaseFont` overflows anyway, what clips is the one field
+// recoverable from somewhere else (the tooltip carries the full name).
+
+/// Verdict: nothing blocks removing this font's embedded program.
+pub fn font_verdict_removable() -> &'static str {
+    "No blocker"
+}
+
+/// Verdict: the text is keyed to this exact embedded program.
+pub fn font_verdict_blocked_identity() -> &'static str {
+    "Locked to program"
+}
+
+/// Verdict: a Type 3 font has no external equivalent.
+pub fn font_verdict_blocked_type3() -> &'static str {
+    "No substitute"
+}
+
+/// Verdict: there is no embedded program at all.
+///
+/// A statement about the file rather than a verdict about removability —
+/// there is nothing here to remove, so "safe" would be a misleading yes.
+pub fn font_verdict_not_embedded() -> &'static str {
+    "Not embedded"
+}
+
+/// Verdict: pdfce did not establish enough to classify this font.
+///
+/// "Unclassified" rather than the bare word "Unknown", because the `fsType`
+/// line inside the same row independently reads as unknown for an unrelated
+/// reason. Two bare "Unknown"s in one row look like one fact stated twice.
+pub fn font_verdict_unknown() -> &'static str {
+    "Unclassified"
+}
+
+// -- Verdict reason sentences (disclosed row) -------------------------------
+
+/// Reason for [`font_verdict_removable`].
+pub fn font_reason_removable() -> &'static str {
+    "This font's character codes are standard, so another font could draw the same text."
+}
+
+/// ★ Reason for [`font_verdict_blocked_identity`] — the sentence this whole
+/// panel exists to say.
+///
+/// Two tiers, because two independently-bad outcomes stack here and a
+/// 64-file survey found them stacking on most real files: without the
+/// embedded program the text cannot be DRAWN, and without a `/ToUnicode` map
+/// it cannot be RECOVERED either. The parity reference refuses these fonts
+/// too and shows no reason at all — it simply leaves them off its list.
+pub fn font_reason_blocked_identity(has_to_unicode: bool) -> String {
+    let base = "This font uses Identity encoding: its character codes are positions inside this specific embedded program, not standard character codes. Removing the program would leave this text undrawable by any other font.";
+    if has_to_unicode {
+        format!(
+            "{base} The font does carry a /ToUnicode map, so the underlying characters could still be extracted."
+        )
+    } else {
+        format!(
+            "{base} There is also no /ToUnicode map, so the characters themselves could not be recovered."
+        )
+    }
+}
+
+/// Reason for [`font_verdict_blocked_type3`].
+pub fn font_reason_blocked_type3() -> &'static str {
+    "Type 3 glyphs are small drawing programs this document defines itself. There is no embedded font program to remove, and no installed font could stand in for them."
+}
+
+/// Reason for [`font_verdict_not_embedded`].
+pub fn font_reason_not_embedded() -> &'static str {
+    "This font has no embedded program; the document already relies on the reader's own copy of it."
+}
+
+/// Reason: a symbolic font whose encoding lives inside its own program.
+pub fn font_reason_unknown_symbolic() -> &'static str {
+    "This font declares no standard encoding and is marked symbolic, so what its character codes mean is defined inside the embedded program itself."
+}
+
+/// Reason: a composite font on a predefined, non-Identity CMap.
+pub fn font_reason_unknown_predefined_cmap() -> &'static str {
+    "This font uses a predefined CMap for a named character collection. A font built for the same collection would work in its place; whether one is installed is not something this document can say."
+}
+
+/// Reason: a composite font whose CMap is an embedded stream.
+pub fn font_reason_unknown_embedded_cmap() -> &'static str {
+    "This font's encoding is an embedded CMap that pdfce does not interpret here, so what its character codes mean has not been established."
+}
+
+/// Reason: the declared program's bytes could not be read.
+pub fn font_reason_unknown_program_unreadable() -> &'static str {
+    "This font declares an embedded program, but its bytes could not be read. The document is damaged in this respect."
+}
+
+/// Reason: a composite font with no usable descendant.
+pub fn font_reason_unknown_no_descendant() -> &'static str {
+    "This is a composite font whose descendant font is missing or malformed, so it has no glyph source to classify."
+}
+
+/// Reason: no `/Subtype`, or one pdfce does not model.
+pub fn font_reason_unknown_subtype() -> &'static str {
+    "This font dictionary declares no type, or one pdfce does not model, so how its character codes reach glyphs has not been established."
+}
+
+// -- fsType -----------------------------------------------------------------
+//
+// ★ CLAIM-BEARING COPY. Every sentence below says what the FONT VENDOR'S BITS
+// ASSERT — never what "the licence permits". The OpenType specification is
+// explicit that `fsType` is the vendor's machine-readable assertion of intent
+// and not the licence itself, and that a face may permit more or less than
+// its bits say. Saying "the licence permits" would be pdfce making a legal
+// claim about a document it has only read four bits of.
+
+/// `fsType` usage value 0.
+pub fn font_fstype_installable(raw: u16) -> String {
+    format!("Installable (0x{raw:04X}) — the font vendor's bits assert no embedding restriction.")
+}
+
+/// `fsType` usage value 2.
+pub fn font_fstype_restricted(raw: u16) -> String {
+    format!(
+        "Restricted License (0x{raw:04X}) — the font vendor's bits assert that embedding needs the legal owner's explicit permission."
+    )
+}
+
+/// `fsType` usage value 4.
+pub fn font_fstype_preview_print(raw: u16) -> String {
+    format!(
+        "Preview & Print (0x{raw:04X}) — the font vendor's bits assert this program may be loaded for viewing or printing, not for editing."
+    )
+}
+
+/// `fsType` usage value 8.
+pub fn font_fstype_editable(raw: u16) -> String {
+    format!(
+        "Editable (0x{raw:04X}) — the font vendor's bits assert this program may be loaded and its text edited."
+    )
+}
+
+/// More than one usage bit set — a non-conforming combination from `OS/2`
+/// version 3 onward, and pdfce reports the ambiguity rather than resolving it.
+pub fn font_fstype_ambiguous(raw: u16) -> String {
+    format!(
+        "Ambiguous (0x{raw:04X}) — more than one permission bit is set, which the font format does not allow. pdfce does not pick one."
+    )
+}
+
+/// Only the deprecated reserved bit 0 is set.
+pub fn font_fstype_unspecified(raw: u16) -> String {
+    format!(
+        "Unspecified (0x{raw:04X}) — only a bit the font format reserves is set. The format states no meaning for this, so pdfce reads none."
+    )
+}
+
+/// Bit 8, appended to the value sentence.
+pub fn font_fstype_no_subsetting() -> &'static str {
+    "The bits also assert this font must not be subsetted before embedding."
+}
+
+/// Bit 9, appended to the value sentence.
+pub fn font_fstype_bitmap_only() -> &'static str {
+    "The bits also assert only bitmap glyphs, not outlines, may be embedded."
+}
+
+/// Bits 8 and 9 were suppressed because the `OS/2` table predates them.
+pub fn font_fstype_version_gated() -> &'static str {
+    "This font's OS/2 table is too old for the subsetting and bitmap bits to have had a meaning, so pdfce ignores them as the format requires."
+}
+
+/// ★ `fsType` could not be read.
+///
+/// Must never be mistaken for value 0 — which genuinely means Installable,
+/// the most permissive value the field can express. The word "unknown" is in
+/// the sentence itself, not carried by styling, and the sentence says pdfce
+/// read nothing rather than implying it read a permissive value.
+pub fn font_fstype_unknown() -> &'static str {
+    "Unknown — pdfce could not read this font's embedding-permission bits. That is not the same as no restriction."
+}
+
+/// The program format has no `fsType` field at all.
+///
+/// Structurally different from "unknown": nothing failed, and there is
+/// nothing to read. Type 1 and bare-CFF programs have no OS/2 table.
+pub fn font_fstype_no_field() -> &'static str {
+    "This font program's format has no embedding-permission field."
+}
+
+/// There is no embedded program, so there are no bits.
+pub fn font_fstype_not_embedded() -> &'static str {
+    "No embedded program, so there are no embedding-permission bits."
+}
+
+// -- Row fields --------------------------------------------------------------
+
+/// A composite font's type, parent and descendant together.
+///
+/// `Type0 / CIDFontType2`. Both halves are shown because the parent alone
+/// says nothing about the glyph source — the descendant is where the outlines
+/// and the font descriptor actually live (§9.8.1).
+pub fn font_composite_type(parent: &str, descendant: &str) -> String {
+    format!("{parent} / {descendant}")
+}
+
+/// A `/FontFile3` program's descriptor key together with its own `/Subtype`.
+///
+/// `FontFile3 (Type1C)`. The subtype is the part that says which format the
+/// bytes are in, and for `/FontFile3` the key alone does not.
+pub fn font_program_key_with_subtype(key: &str, subtype: &str) -> String {
+    format!("{key} ({subtype})")
+}
+
+/// The `/Subtype` line.
+pub fn font_type_line(kind: &str) -> String {
+    format!("Type: {kind}")
+}
+
+/// The `/Encoding` line.
+pub fn font_encoding_line(encoding: &str) -> String {
+    format!("Encoding: {encoding}")
+}
+
+/// How the program is embedded, and under which descriptor key.
+pub fn font_embedded_line(key: &str) -> String {
+    format!("Embedded via {key}")
+}
+
+/// The program's byte size, rounded — and exact whenever rounding lost
+/// anything.
+///
+/// The rounded figure is for ranking two hundred rows at a glance; the exact
+/// figure is the measurement, and this project shows the measurement. Below
+/// 1024 the two are the same number, and printing `474 B (474 bytes)` is
+/// noise that teaches an operator to stop reading the parenthesis on the rows
+/// where it carries information.
+pub fn font_size_line(rounded: &str, exact: usize) -> String {
+    if exact < 1024 {
+        format!("Size in file: {rounded}")
+    } else {
+        format!("Size in file: {rounded} ({exact} bytes)")
+    }
+}
+
+/// The decoded program size, when it differs from the stored size.
+///
+/// Shown only when the two differ, which is when the program is compressed.
+/// A line repeating the number above would be noise.
+pub fn font_decoded_size_line(rounded: &str) -> String {
+    format!("Uncompressed program: {rounded}")
+}
+
+/// `/ToUnicode` present.
+pub fn font_to_unicode_present() -> &'static str {
+    "Has a /ToUnicode map (text can be extracted)."
+}
+
+/// `/ToUnicode` absent.
+pub fn font_to_unicode_absent() -> &'static str {
+    "No /ToUnicode map."
+}
+
+/// Where the font is used, with the page list already range-collapsed.
+pub fn font_pages_line(ranges: &str, total: usize) -> String {
+    if total == 1 {
+        format!("Page {ranges}.")
+    } else {
+        format!("Pages {ranges} — {total} pages.")
+    }
+}
+
+/// The font is reached from the interactive form's shared resources.
+pub fn font_found_in_form_resources() -> &'static str {
+    "Also used by the interactive form's shared resources."
+}
+
+/// The font is reached from an annotation's appearance stream.
+pub fn font_found_in_annotation() -> &'static str {
+    "Also used inside an annotation's appearance."
+}
+
+/// The font is reached from inside a Type 3 font's own resources.
+pub fn font_found_in_type3() -> &'static str {
+    "Used inside a Type 3 font's glyph procedures."
+}
+
+/// Tooltip on the display name, carrying the full `/BaseFont`.
+///
+/// The row shows the family name with the six-letter subset tag stripped,
+/// because the tag reads as noise when scanning. But two independent subsets
+/// of one face de-prefix to the SAME name, so back-to-back identical-looking
+/// rows would read as a rendering fault rather than as the real and useful
+/// fact that the document subsetted the face twice. The tag has to resurface
+/// somewhere, and this is where.
+pub fn font_full_name_tooltip(full_base_font: &str) -> String {
+    format!("Full name in the file: {full_base_font}")
+}
+
+/// A font dictionary with no `/BaseFont` at all.
+pub fn font_unnamed() -> &'static str {
+    "(no name)"
+}
+
+/// The collapsed row: verdict, name, size.
+///
+/// Field order is the scanning order, and it is deliberate. The verdict
+/// leads because it is the field an operator sweeping two hundred rows is
+/// looking for and the one no other tool shows them; the name identifies the
+/// row; the size ranks it. Putting the name first would read better in
+/// isolation and scan worse in bulk, which is the case that matters here.
+///
+/// The name is the DE-PREFIXED family name — the six-letter subset tag reads
+/// as noise at a glance. It resurfaces in [`font_full_name_tooltip`], which
+/// is what keeps two subsets of one face from looking like a duplicated row.
+///
+/// **The name is LAST, and that is the overflow decision.** A dock pane is
+/// ~370 pt and a `/BaseFont` can be arbitrarily long; something has to be
+/// allowed to clip. Putting the name last means what clips is the one field
+/// an operator can recover from elsewhere (the tooltip), rather than the byte
+/// size — which is what actually clipped when this row was first laid out
+/// verdict-name-size.
+pub fn font_row_header(name: &str, size: &str, verdict: &str) -> String {
+    format!("{verdict} · {size} · {name}")
+}
+
+/// Format a byte count for a listing.
+///
+/// Base-1024 arithmetic with the colloquial "KB"/"MB" labels rather than the
+/// pedantically correct "KiB"/"MiB": this is read by operators comparing the
+/// figure against what their file manager tells them, and matching that is
+/// worth more here than matching IEC. The exact count is always shown beside
+/// it (see [`font_size_line`]), so nothing is lost to the rounding.
+///
+/// Deliberately different from the byte counts in the Signatures panel, which
+/// are printed raw. Those exist to be compared against a file's own length —
+/// an exactness task. These exist to be ranked across up to a couple of
+/// hundred rows — a magnitude task. Different purpose, different format.
+pub fn byte_size(bytes: usize) -> String {
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "a display rounding to one or two decimals; the exact count is printed alongside" // ui-text-exempt: clippy lint justification, never displayed
+    )]
+    let n = bytes as f64;
+    if bytes < 1024 {
+        format!("{bytes} B")
+    } else if bytes < 1024 * 1024 {
+        format!("{:.1} KB", n / 1024.0)
+    } else {
+        format!("{:.2} MB", n / (1024.0 * 1024.0))
+    }
+}
+
 // ============================================================================
 // GLYPH-COVERAGE GATE
 // ============================================================================
@@ -9246,6 +9710,7 @@ pub fn tool_pane_subject_name(subject: crate::ribbon::PaneSubject) -> &'static s
         S::Bookmarks => activities_bookmarks_label(),
         S::Layers => activities_layers_label(),
         S::Signatures => activities_signatures_label(),
+        S::Fonts => activities_fonts_label(),
     }
 }
 

@@ -181,6 +181,8 @@ pub enum Step {
     Layers,
     /// Show the Signatures activity.
     Signatures,
+    /// Show the Fonts activity — the read-only font inventory.
+    Fonts,
     /// Toggle read mode (chrome hidden, window kept).
     ///
     /// Full screen is deliberately NOT drivable: it would take over the
@@ -642,6 +644,7 @@ fn parse_step(s: &str) -> Option<Step> {
         "panel" if rest.trim() == "bookmarks" => Some(Step::Bookmarks),
         "panel" if rest.trim() == "layers" => Some(Step::Layers),
         "panel" if rest.trim() == "signatures" => Some(Step::Signatures),
+        "panel" if rest.trim() == "fonts" => Some(Step::Fonts),
         "view" if rest.trim() == "read" => Some(Step::ReadMode),
         "view" if rest.trim() == "escape" => Some(Step::ExitViewMode),
         "panel" if rest.trim() == "comments" => Some(Step::Comments),

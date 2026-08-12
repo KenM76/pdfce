@@ -194,6 +194,19 @@ deviates only with a recorded reason. Three deviations:
    (see `redact.svg`'s fill) already establishes that a glyph can carry
    semantics the label does not repeat.
 
+5. **`fonts.svg` is a fourth addition of the same kind** (Pass 67.0 phase
+   A, 2026-08-11), authored in the §1 contract for the Fonts inventory
+   panel. A capital A on a baseline rule: the letterform reads as "type",
+   and the rule under it is what stops it reading as a text *tool*.
+
+   That distinction is the same class of constraint `signatures.svg`
+   carries. The Fonts panel is strictly read-only — it reports what fonts
+   a document declares and changes nothing — so borrowing
+   `add-text.svg`'s I-beam-plus or `edit.svg`'s pencil would have had the
+   glyph promise an editing capability the panel does not have, before
+   the panel was open. Generic letterform geometry; no typeface is
+   reproduced and there is no trademark exposure.
+
 ## 6. Rendering, and why no new dependency appears here
 
 These SVGs are **not** rasterized by any SVG library. `icons.rs` parses

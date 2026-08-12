@@ -618,6 +618,21 @@ pub enum PaneSubject {
     /// What each digital signature COVERS (§12.8.1) — never whether it
     /// is valid, which pdfce cannot determine and does not claim.
     Signatures,
+    /// The document's fonts (§9.5–9.10): what they are, what their embedded
+    /// programs cost in bytes, and which of those could be removed without
+    /// destroying the text they draw.
+    ///
+    /// Read-only, and a subject rather than a section of [`Self::Properties`]
+    /// for the same reason [`Self::Layers`] and [`Self::Signatures`] are:
+    /// that pane is about "the selected thing", and a font inventory shares
+    /// no state with a canvas selection.
+    ///
+    /// **Phase A carries no removal control**, and none is stubbed here. The
+    /// removal action is a whole-document, irreversible-once-saved operation
+    /// — the same shape as [`Self::Redact`], which is deliberately kept apart
+    /// from the surfaces that merely report. When it lands it re-reads this
+    /// same inventory rather than growing an action column here.
+    Fonts,
 }
 
 impl PaneSubject {
@@ -637,6 +652,7 @@ impl PaneSubject {
         PaneSubject::Bookmarks,
         PaneSubject::Layers,
         PaneSubject::Signatures,
+        PaneSubject::Fonts,
     ];
 }
 

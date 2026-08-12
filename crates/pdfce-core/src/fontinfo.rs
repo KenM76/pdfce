@@ -1384,6 +1384,69 @@ pub fn is_standard_14(base_font: &str) -> bool {
     )
 }
 
+/// Collapse a sorted, unique page list into `1-4,9,12-14`.
+///
+/// A font in a real document is used on *every* page, and four hundred
+/// comma-separated numbers on one line is not a report — it buries every
+/// field beside it. Ranges keep the answer complete (nothing is elided)
+/// while staying scannable.
+///
+/// Lives here rather than in either shell so `pdfce-cli`'s listing and
+/// `pdfce-gui`'s panel cannot come to disagree about what "pages 1-4" means.
+/// The output is locale-invariant and stable, which is what a batch sweep
+/// parsing the CLI's lines depends on.
+///
+/// Input is assumed sorted and deduplicated — which is what
+/// [`FontRecord::pages`] guarantees. An unsorted input is not an error and
+/// does not panic; it simply produces more groups.
+///
+/// # Examples
+///
+/// ```
+/// use pdfce_core::fontinfo::format_page_ranges;
+///
+/// assert_eq!(format_page_ranges(&[1, 2, 3, 4, 9, 12, 13, 14]), "1-4,9,12-14");
+/// assert_eq!(format_page_ranges(&[7]), "7");
+/// assert_eq!(format_page_ranges(&[]), "-");
+/// ```
+#[must_use]
+pub fn format_page_ranges(pages: &[u32]) -> String {
+    let Some(first) = pages.first() else {
+        return "-".to_owned();
+    };
+    let mut out = String::new();
+    let mut start = *first;
+    let mut end = *first;
+    // Zipped against its own tail rather than indexed: every access is
+    // proven in bounds by the iterators, which is the crate's standing
+    // preference on a path fed by document data. (`windows(2)` would need
+    // `pair[0]`/`pair[1]`, which clippy's `indexing_slicing` denies here for
+    // exactly that reason, even though the slice length is known.)
+    for (prev, next) in pages.iter().zip(pages.iter().skip(1)) {
+        if *next == prev.saturating_add(1) {
+            end = *next;
+            continue;
+        }
+        push_range(&mut out, start, end);
+        start = *next;
+        end = *next;
+    }
+    push_range(&mut out, start, end);
+    out
+}
+
+/// Append one `n` or `n-m` group to a comma-separated list.
+fn push_range(out: &mut String, start: u32, end: u32) {
+    if !out.is_empty() {
+        out.push(',');
+    }
+    if start == end {
+        out.push_str(&start.to_string());
+    } else {
+        out.push_str(&format!("{start}-{end}"));
+    }
+}
+
 /// Things that went wrong, or were cut short, while building an inventory.
 ///
 /// Every field is a fact about the *document* or about a pdfce ceiling that
@@ -1518,7 +1581,7 @@ struct Node {
 ///
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let doc = Document::from_bytes(
-///     include_bytes!("../../../fixtures/synthetic/text/identity-h-no-tounicode.pdf")
+///     include_bytes!("../../../fixtures/synthetic/text/cidfonttype2-nocmap-embedded.pdf")
 ///         .to_vec(),
 /// )?;
 /// let inv = inventory(&doc.view());
@@ -2942,6 +3005,27 @@ mod tests {
             Surface::ALL.len()
         );
         assert!(inv.diagnostics.is_clean());
+    }
+
+    /// Page-range collapsing is exact in both directions: nothing is
+    /// elided and nothing is invented.
+    #[test]
+    fn page_ranges_collapse_without_losing_a_page() {
+        assert_eq!(format_page_ranges(&[]), "-");
+        assert_eq!(format_page_ranges(&[1]), "1");
+        assert_eq!(format_page_ranges(&[1, 2]), "1-2");
+        assert_eq!(format_page_ranges(&[1, 3]), "1,3");
+        assert_eq!(
+            format_page_ranges(&[1, 2, 3, 4, 9, 12, 13, 14]),
+            "1-4,9,12-14"
+        );
+        // A long run is one group, which is the whole point on a document
+        // where one font is used on every page.
+        let all: Vec<u32> = (1..=400).collect();
+        assert_eq!(format_page_ranges(&all), "1-400");
+        // Saturating arithmetic keeps the last page total even at the top of
+        // the range, where `prev + 1` would overflow.
+        assert_eq!(format_page_ranges(&[u32::MAX]), u32::MAX.to_string());
     }
 
     /// Surface tokens are stable and distinct — a listing buckets on them.

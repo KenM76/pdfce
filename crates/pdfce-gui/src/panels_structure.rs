@@ -530,4 +530,321 @@ impl PdfceApp {
             }
         }
     }
+
+    /// The Fonts panel — what fonts the document declares, what their
+    /// embedded programs cost, and which of those could be removed.
+    ///
+    /// # Read-only, and there is deliberately nothing to click
+    ///
+    /// Phase A ships the report and not the removal. No control here
+    /// changes a byte, and none is stubbed: a greyed-out "Remove" button, or
+    /// a "coming soon" note, would be an affordance for something that
+    /// cannot work (R83), and a `Safe` verdict rendered as an accent colour
+    /// or a checkmark would read as an invitation to press it.
+    ///
+    /// Every verdict is therefore drawn at the **same visual weight**, as a
+    /// plain label. That is not restraint for its own sake — a blocked
+    /// verdict is a fact about the *file*, and error styling would make it
+    /// read as a pdfce failure.
+    ///
+    /// # ★ Why the panel says *why*, when the parity reference does not
+    ///
+    /// Acrobat refuses to unembed a font whose character codes are glyph
+    /// indices into its own embedded program, and it refuses **silently** —
+    /// the font simply is not in its unembed list, with no reason shown
+    /// anywhere (`Acrobat_Features/optimize__font_unembedding.md`, sourced
+    /// to a former Adobe Principal Scientist; independently corroborated by
+    /// a user whose largest, most size-costly font was absent from the list
+    /// with no explanation offered).
+    ///
+    /// A shorter list is not actionable. "This font's character codes are
+    /// positions inside this specific embedded program" is. That is project
+    /// rule 4 applied to a refusal rather than to a suggestion, and it is
+    /// this panel's main reason to exist.
+    ///
+    /// The measured stakes, from a 64-file survey of the PDFBox corpus: of
+    /// the 30 files that embed fonts, 87 % embed subsets, 40 % use
+    /// `Identity-H`, and only 50 % carry `/ToUnicode`. So the common case
+    /// for "just remove the embedded fonts" is a case where removal
+    /// destroys the document, and the operator has no way to know that from
+    /// a font list alone.
+    ///
+    /// # ★ The coverage note is above the list, not beneath it
+    ///
+    /// A font inventory that quietly misses a surface and prints a
+    /// confident list is this project's most-repeated defect shape (R186 —
+    /// a check that confirms the marker rather than the thing). So the
+    /// panel states which font-bearing surfaces were searched **and the one
+    /// that was not**, unconditionally, before the list. Acrobat's own
+    /// coverage here is recorded as an unconfirmed GAP, so pdfce states its
+    /// own scope rather than assuming parity with a behaviour nobody has
+    /// measured.
+    ///
+    /// # Why the inventory is cached on the document
+    ///
+    /// The sweep decodes every embedded font program — it has to, to read
+    /// the `OS/2` table — and on a document carrying a megabyte of CJK
+    /// outlines that is not a per-frame cost. It is computed once and
+    /// dropped by `OpenDoc::refresh_pages`, which already runs after every
+    /// edit, undo and redo, so an `add-text` that embeds a new subset shows
+    /// up without a second invalidation path to keep in step.
+    pub(crate) fn fonts_panel(&mut self, ui: &mut egui::Ui, _actions: &mut [Action]) {
+        use pdfce_core::fontinfo::{Program, Removability, RemovabilityUnknown, Surface};
+
+        let Status::Open(doc) = &mut self.status else {
+            return;
+        };
+        if doc.fonts.is_none() {
+            let inv = pdfce_core::fontinfo::inventory(&doc.session.view());
+            doc.fonts = Some(inv);
+        }
+        let Some(inv) = doc.fonts.as_ref() else {
+            return;
+        };
+
+        // The page scan failing FIRST, above everything, because it changes
+        // what an empty list beneath it means. Without this an operator
+        // reads "0 fonts" as an answer about the document.
+        if inv.diagnostics.page_scan_failed {
+            ui.label(ui_text::fonts_page_scan_failed());
+            ui.separator();
+        }
+        if inv.diagnostics.resource_scan_truncated {
+            ui.label(ui_text::fonts_scan_truncated());
+            ui.separator();
+        }
+
+        if inv.fonts.is_empty() {
+            ui.label(ui_text::fonts_none());
+            ui.label(
+                egui::RichText::new(ui_text::fonts_coverage_note())
+                    .small()
+                    .weak(),
+            );
+            return;
+        }
+
+        ui.label(ui_text::fonts_count(inv.fonts.len()));
+        // The document total, from the same per-font numbers the rows below
+        // show, so the two cannot disagree. Acrobat's nearest equivalent
+        // (Audit Space Usage's aggregate Fonts bucket) is a paid-tier
+        // feature and gives no per-font breakdown at all.
+        let total = usize::try_from(inv.embedded_bytes()).unwrap_or(usize::MAX);
+        ui.label(ui_text::fonts_total_size(&ui_text::byte_size(total)));
+        ui.label(
+            egui::RichText::new(ui_text::fonts_coverage_note())
+                .small()
+                .weak(),
+        );
+        ui.separator();
+
+        // Largest first. The operator opening this panel is usually asking
+        // "which font is costing me the most", and that ordering answers it
+        // with no control to find. Ties keep discovery order, which
+        // `sort_by_key` preserves.
+        let mut rows: Vec<&pdfce_core::fontinfo::FontRecord> = inv.fonts.iter().collect();
+        rows.sort_by_key(|f| std::cmp::Reverse(f.stored_bytes()));
+
+        for (row_index, f) in rows.iter().enumerate() {
+            // Keyed by object identity, not by row index: two independent
+            // subsets of one face de-prefix to the SAME display name, and an
+            // index-keyed header would swap its expanded state under the
+            // operator when the sort order moved.
+            let key =
+                f.id.map_or_else(|| format!("direct-{row_index}"), |id| format!("{}", id.num));
+            let verdict = match &f.removability {
+                Removability::Removable => ui_text::font_verdict_removable(),
+                Removability::BlockedIdentityEncoded { .. } => {
+                    ui_text::font_verdict_blocked_identity()
+                }
+                Removability::BlockedType3 => ui_text::font_verdict_blocked_type3(),
+                Removability::NotEmbedded => ui_text::font_verdict_not_embedded(),
+                _ => ui_text::font_verdict_unknown(),
+            };
+            let display = f.family_name().unwrap_or_else(|| ui_text::font_unnamed());
+            let size = ui_text::byte_size(f.stored_bytes());
+            let header = ui_text::font_row_header(display, &size, verdict);
+
+            let response = egui::CollapsingHeader::new(header)
+                .id_salt(format!("font-{key}"))
+                .default_open(false)
+                .show(ui, |ui| {
+                    // The verdict's REASON first, because it is the reason
+                    // the row was opened.
+                    let reason = match &f.removability {
+                        Removability::Removable => ui_text::font_reason_removable().to_owned(),
+                        Removability::BlockedIdentityEncoded { to_unicode, .. } => {
+                            ui_text::font_reason_blocked_identity(*to_unicode)
+                        }
+                        Removability::BlockedType3 => {
+                            ui_text::font_reason_blocked_type3().to_owned()
+                        }
+                        Removability::NotEmbedded => ui_text::font_reason_not_embedded().to_owned(),
+                        Removability::Unknown(why) => match why {
+                            RemovabilityUnknown::SymbolicBuiltinEncoding => {
+                                ui_text::font_reason_unknown_symbolic().to_owned()
+                            }
+                            RemovabilityUnknown::PredefinedCMap => {
+                                ui_text::font_reason_unknown_predefined_cmap().to_owned()
+                            }
+                            RemovabilityUnknown::EmbeddedCMap => {
+                                ui_text::font_reason_unknown_embedded_cmap().to_owned()
+                            }
+                            RemovabilityUnknown::ProgramUnreadable => {
+                                ui_text::font_reason_unknown_program_unreadable().to_owned()
+                            }
+                            RemovabilityUnknown::NoDescendant => {
+                                ui_text::font_reason_unknown_no_descendant().to_owned()
+                            }
+                            _ => ui_text::font_reason_unknown_subtype().to_owned(),
+                        },
+                        _ => ui_text::font_reason_unknown_subtype().to_owned(),
+                    };
+                    ui.label(reason);
+                    ui.separator();
+
+                    let kind = match &f.descendant_subtype {
+                        Some(d) => ui_text::font_composite_type(f.subtype.label(), d.label()),
+                        None => f.subtype.label().to_owned(),
+                    };
+                    ui.label(ui_text::font_type_line(&kind));
+                    ui.label(ui_text::font_encoding_line(&f.encoding.label()));
+
+                    match &f.program {
+                        Program::Embedded(p) => {
+                            let key_label = match &p.subtype {
+                                Some(s) => ui_text::font_program_key_with_subtype(p.key.label(), s),
+                                None => p.key.label().to_owned(),
+                            };
+                            ui.label(ui_text::font_embedded_line(&key_label));
+                            ui.label(ui_text::font_size_line(
+                                &ui_text::byte_size(p.stored_bytes),
+                                p.stored_bytes,
+                            ));
+                            // Only when it differs — a line repeating the
+                            // number above is noise, and noise is how the
+                            // lines that matter get skimmed past.
+                            if let Some(decoded) = p.decoded_bytes
+                                && decoded != p.stored_bytes
+                            {
+                                ui.label(ui_text::font_decoded_size_line(&ui_text::byte_size(
+                                    decoded,
+                                )));
+                            }
+                            fonts_panel_fs_type(ui, &p.fs_type);
+                        }
+                        // "Declared but unreadable" is damage; the reason
+                        // sentence above already said so, and repeating a
+                        // size of zero here would suggest a measurement was
+                        // taken.
+                        Program::Unreadable { .. } | Program::NotEmbedded => {
+                            ui.label(ui_text::font_fstype_not_embedded());
+                        }
+                        _ => {}
+                    }
+
+                    ui.label(if f.has_to_unicode {
+                        ui_text::font_to_unicode_present()
+                    } else {
+                        ui_text::font_to_unicode_absent()
+                    });
+
+                    ui.separator();
+                    if !f.pages.is_empty() {
+                        ui.label(ui_text::font_pages_line(
+                            &pdfce_core::fontinfo::format_page_ranges(&f.pages),
+                            f.pages.len(),
+                        ));
+                    }
+                    for (surface, text) in [
+                        (
+                            Surface::AcroFormDefaultResources,
+                            ui_text::font_found_in_form_resources(),
+                        ),
+                        (
+                            Surface::AnnotationAppearance,
+                            ui_text::font_found_in_annotation(),
+                        ),
+                        (Surface::Type3CharProcs, ui_text::font_found_in_type3()),
+                    ] {
+                        if f.surfaces.contains(&surface) {
+                            ui.label(text);
+                        }
+                    }
+                });
+
+            // The subset tag lives here rather than in the row, because the
+            // row shows the DE-PREFIXED name and two independent subsets of
+            // one face therefore render identically. Without somewhere for
+            // the tag to resurface, two adjacent identical rows read as a
+            // rendering fault instead of as the real fact that the document
+            // subsetted the face twice.
+            if let Some(full) = f.base_font.as_deref() {
+                response
+                    .header_response
+                    .on_hover_text(ui_text::font_full_name_tooltip(full));
+            }
+        }
+
+        diag::trace(|| {
+            format!(
+                "fonts-panel rows={} embedded={} bytes={} verdicts={:?}",
+                inv.fonts.len(),
+                inv.embedded_count(),
+                inv.embedded_bytes(),
+                inv.verdict_counts()
+            )
+        });
+    }
+}
+
+/// Render one font's `fsType` state.
+///
+/// ★ Four states, and **none of them may look like `0`.** `fsType == 0`
+/// genuinely *means* Installable — the most permissive value the field can
+/// express — so a blank, a dash, or an empty line for "we could not read it"
+/// would assert the broadest embedding right there is on the strength of
+/// bytes nobody read. The OpenType specification defines no default for the
+/// absent case (`font__opentype_os2_fstype.md` N1), so pdfce defines none
+/// either: unknown says the word "Unknown" in its own sentence, and
+/// "this format has no such field" says that instead.
+///
+/// A free function rather than a method because it needs nothing from
+/// `PdfceApp` — only the bits and a `Ui`.
+fn fonts_panel_fs_type(ui: &mut egui::Ui, fs: &pdfce_core::fontinfo::FsType) {
+    use pdfce_core::fontinfo::{EmbeddingPermission, FsType};
+    match fs {
+        FsType::NotApplicable => {
+            ui.label(ui_text::font_fstype_no_field());
+        }
+        // Both failure states say "unknown" in words. They differ in cause
+        // and not in what an operator can conclude, which is nothing.
+        FsType::ProgramNotDecoded | FsType::Unreadable(_) => {
+            ui.label(ui_text::font_fstype_unknown());
+        }
+        FsType::Known(bits) => {
+            ui.label(match bits.permission {
+                EmbeddingPermission::Installable => ui_text::font_fstype_installable(bits.raw),
+                EmbeddingPermission::Restricted => ui_text::font_fstype_restricted(bits.raw),
+                EmbeddingPermission::PreviewPrint => ui_text::font_fstype_preview_print(bits.raw),
+                EmbeddingPermission::Editable => ui_text::font_fstype_editable(bits.raw),
+                EmbeddingPermission::Ambiguous => ui_text::font_fstype_ambiguous(bits.raw),
+                _ => ui_text::font_fstype_unspecified(bits.raw),
+            });
+            if bits.no_subsetting {
+                ui.label(ui_text::font_fstype_no_subsetting());
+            }
+            if bits.bitmap_only {
+                ui.label(ui_text::font_fstype_bitmap_only());
+            }
+            if bits.version_gated_bits_ignored {
+                ui.label(ui_text::font_fstype_version_gated());
+            }
+        }
+        // `FsType` is `#[non_exhaustive]`. A state this build does not know
+        // must render as unknown, never as a permission.
+        _ => {
+            ui.label(ui_text::font_fstype_unknown());
+        }
+    }
 }

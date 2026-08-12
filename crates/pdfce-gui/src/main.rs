@@ -2887,6 +2887,17 @@ struct OpenDoc {
     /// is what makes the cancel-before-mutate invariant checkable by
     /// reading one file.
     render_worker: render_worker::RenderWorker,
+    /// The document's font inventory, or `None` when it must be rebuilt.
+    ///
+    /// Cached because the sweep decodes every embedded font program — it
+    /// has to, to reach the `OS/2` table — and on a document carrying a
+    /// megabyte of CJK outlines that is not a per-frame cost. Dropped by
+    /// [`OpenDoc::refresh_pages`], which already runs after every edit,
+    /// undo and redo, so a text edit that embeds a new subset shows up
+    /// without a second invalidation path to keep in step with the first.
+    ///
+    /// Read-only data. Nothing derived from it is ever written back.
+    fonts: Option<pdfce_core::fontinfo::FontInventory>,
     /// The flattened page list, in document order, inheritance resolved,
     /// **with unsaved `/Rotate` edits applied**.
     ///
@@ -3425,6 +3436,7 @@ impl OpenDoc {
             path,
             session: Arc::new(session),
             render_worker: render_worker::RenderWorker::default(),
+            fonts: None,
             pages,
             properties_draft: Vec::new(),
             properties_lossy: false,
@@ -3662,6 +3674,11 @@ impl OpenDoc {
         self.page_texture = None;
         self.render_error = None;
         self.thumbnails = ThumbnailCache::default();
+        // An edit can add a font (an `add-text` that embeds a subset) or
+        // remove the last reference to one, so the inventory is dropped
+        // here rather than given an invalidation rule of its own that
+        // would have to be kept in step with this one.
+        self.fonts = None;
         // Pass 9a: an edit (rotate/delete/reorder, and later move/delete of
         // vector objects) can change the current page's object set, so the
         // provider is stale — force a rebuild on the next `canvas` frame and
@@ -4301,6 +4318,8 @@ enum Action {
     ShowLayers,
     /// Open the Signatures activity.
     ShowSignatures,
+    /// Open the Fonts activity — the document's read-only font inventory.
+    ShowFonts,
     /// Show or hide the Find bar (Ctrl+F).
     ToggleFind,
     /// Run the current Find query and cache its hits.
@@ -11375,6 +11394,10 @@ impl PdfceApp {
                 self.show_pane_subject(ribbon::PaneSubject::Signatures);
                 return;
             }
+            Action::ShowFonts => {
+                self.show_pane_subject(ribbon::PaneSubject::Fonts);
+                return;
+            }
             Action::ToggleFind => {
                 self.find_open = !self.find_open;
                 return;
@@ -11459,6 +11482,7 @@ impl PdfceApp {
             | Action::ShowBookmarks
             | Action::ShowLayers
             | Action::ShowSignatures
+            | Action::ShowFonts
             | Action::ToggleFind
             | Action::ToggleReadMode
             | Action::ToggleFullScreen
@@ -12540,6 +12564,9 @@ impl eframe::App for PdfceApp {
             }
             diag::Step::Signatures => {
                 self.show_pane_subject(ribbon::PaneSubject::Signatures);
+            }
+            diag::Step::Fonts => {
+                self.show_pane_subject(ribbon::PaneSubject::Fonts);
             }
             diag::Step::Layers => {
                 self.show_pane_subject(ribbon::PaneSubject::Layers);
@@ -14163,6 +14190,7 @@ impl PdfceApp {
             ribbon::PaneSubject::Bookmarks => self.bookmarks_panel(ui, actions),
             ribbon::PaneSubject::Layers => self.layers_panel(ui, actions),
             ribbon::PaneSubject::Signatures => self.signatures_panel(ui, actions),
+            ribbon::PaneSubject::Fonts => self.fonts_panel(ui, actions),
             ribbon::PaneSubject::Comments => self.comments_panel(ui, actions),
             // Never reached from `tool_options_panel`'s dispatch, which sends
             // these two elsewhere; an arm rather than a catch-all so a future

@@ -434,6 +434,17 @@ impl PdfceApp {
                     {
                         actions.push(Action::ShowSignatures);
                     }
+                    if Self::icon_text_toggle(
+                        ui,
+                        icons::Icon::Fonts,
+                        self.pane_subject == ribbon::PaneSubject::Fonts,
+                        ui_text::activities_fonts_label(),
+                        ui_text::fonts_open_tooltip(),
+                    )
+                    .clicked()
+                    {
+                        actions.push(Action::ShowFonts);
+                    }
                 });
                 // Traced because the compile-time gate proves the CALL exists,
                 // and only a running frame proves the CONTROL was drawn. Those
@@ -441,7 +452,7 @@ impl PdfceApp {
                 // reported working on the strength of the weaker one.
                 diag::trace(|| {
                     format!(
-                        "ribbon-panel-toggles drawn=3 enabled={has_doc} subject={:?}",
+                        "ribbon-panel-toggles drawn=4 enabled={has_doc} subject={:?}",
                         self.pane_subject
                     )
                 });

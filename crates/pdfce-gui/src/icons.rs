@@ -360,6 +360,14 @@ pub enum Icon {
     /// line says so; the glyph must not contradict it before the panel is
     /// open. An icon is a claim too.
     Signatures,
+    /// Fonts panel toggle (View → Panels) — the document's font inventory.
+    ///
+    /// A capital A on a baseline rule. The letterform reads as "type"; the
+    /// rule under it is what stops it reading as "a text tool", which matters
+    /// because this panel writes nothing and an icon borrowed from an editing
+    /// tool would suggest otherwise. Deliberately not [`Icon::AddText`]'s
+    /// I-beam-plus or [`Icon::Edit`]'s pencil for that reason.
+    Fonts,
     /// Markup → Rectangle (§3.3).
     ShapeRect,
     /// Markup → Ellipse (§3.3).
@@ -446,6 +454,7 @@ impl Icon {
         Icon::Bookmarks,
         Icon::Layers,
         Icon::Signatures,
+        Icon::Fonts,
         Icon::ShapeRect,
         Icon::ShapeEllipse,
         Icon::ShapeArrow,
@@ -497,6 +506,7 @@ impl Icon {
             Icon::Bookmarks => include_str!("../assets/icons/bookmarks.svg"),
             Icon::Layers => include_str!("../assets/icons/layers.svg"),
             Icon::Signatures => include_str!("../assets/icons/signatures.svg"),
+            Icon::Fonts => include_str!("../assets/icons/fonts.svg"),
             Icon::Measure => include_str!("../assets/icons/ruler.svg"),
             Icon::Undo => include_str!("../assets/icons/undo.svg"),
             Icon::Redo => include_str!("../assets/icons/redo.svg"),
@@ -553,6 +563,7 @@ impl Icon {
             Icon::Bookmarks => "bookmarks",
             Icon::Layers => "layers",
             Icon::Signatures => "signatures",
+            Icon::Fonts => "fonts",
             Icon::Measure => "measure",
             Icon::Undo => "undo",
             Icon::Redo => "redo",
