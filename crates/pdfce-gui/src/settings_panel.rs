@@ -241,6 +241,7 @@ pub fn show(
                     });
                     group(ui, ui_text::settings_group_text(), false, |ui| {
                         word_gap_setting(ui, draft);
+                        parallel_epsilon_setting(ui, draft);
                         ui.add_space(10.0);
                         unmappable_setting(ui, draft);
                         ui.add_space(10.0);
@@ -554,6 +555,52 @@ fn word_gap_setting(ui: &mut egui::Ui, draft: &mut Draft) {
             .weak(),
     );
 }
+
+/// How close to parallel two lines must be to be dimensioned as a distance
+/// rather than as an angle (`Pass 68.0`).
+///
+/// Operator-requested, 2026-08-12: *"We should have an option in our settings
+/// and allow the user to set the tolerance for nearly parallel lines."*
+///
+/// A slider over the STORE'S OWN accepted range, for the reason spelled out
+/// at `word_gap_setting`: a narrower "usable band" cannot represent a legal
+/// value already in the operator's file, so merely opening this window would
+/// drag a hand-edited value into range and Save would write the change back —
+/// an unrequested edit the operator never touched a control to make.
+///
+/// NOT logarithmic, unlike the word-gap slider. The useful resolution here is
+/// even across the range: the difference between 0.5 and 1.0 degrees matters
+/// exactly as much as the difference between 5 and 10, because both answer
+/// "how wrong may this drawing be before I stop calling it parallel."
+fn parallel_epsilon_setting(ui: &mut egui::Ui, draft: &mut Draft) {
+    header(
+        ui,
+        ui_text::setting_parallel_title(),
+        ui_text::setting_parallel_silence(),
+        ui_text::setting_parallel_radius(),
+    );
+    ui.add(
+        egui::Slider::new(
+            &mut draft.working.parallel_epsilon_degrees,
+            pdfce_core::settings::MIN_PARALLEL_EPSILON_DEGREES
+                ..=pdfce_core::settings::MAX_PARALLEL_EPSILON_DEGREES,
+        )
+        .suffix(DEGREE_SUFFIX)
+        .text(ui_text::setting_parallel_slider_label()),
+    );
+    ui.label(
+        egui::RichText::new(ui_text::setting_parallel_note())
+            .small()
+            .weak(),
+    );
+}
+
+/// The degree sign the near-parallel slider appends.
+///
+/// A named constant because `check-ui-strings.sh` requires operator-visible
+/// text to come from `ui_text`, and a bare literal in a widget call is
+/// exactly what that gate looks for. One character, same rule.
+const DEGREE_SUFFIX: &str = "\u{b0}";
 
 fn unmappable_setting(ui: &mut egui::Ui, draft: &mut Draft) {
     header(

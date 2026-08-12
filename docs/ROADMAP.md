@@ -81,6 +81,375 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★★★★ `7825424` + `ee4e1e4` + `74582ca` + `95c3416` — `Pass 46` SLICE 1 (markup is drawn where you point, and a real geometry bug found by DRIVING the GUI), the screen harness stops leaking an invisible process onto the operator's live desktop, open operator question **`(bk)` is ANSWERED** (options **A and B** together — bundled-font licence now travels inside the document), and the **attachments capability finishes** (`extract` / `attach` / `detach`, core + CLI, **no GUI surface and not claimed**) — 2026-08-12 (hundred-and-twenty-fifth filing)
+
+**Sourcing, stated before any figure (hard rule 8).** This librarian
+**had a shell this dispatch.** Every item marked **measured** was
+produced by a command run here and the command is named; **relayed**
+means it came from the dispatching engineer's brief and was not re-run.
+**All four short hashes were resolved here by `git rev-parse`** — the
+dispatch declined to supply full hashes, explicitly because a fabricated
+one was supplied in an earlier dispatch and corrected by the
+hundred-and-twenty-fourth filing. Full forms, measured:
+
+| short | full (by `git rev-parse`) | subject |
+|---|---|---|
+| `7825424` | `7825424e07857dc86fd76054775e68c264384441` | markup is drawn where you point |
+| `ee4e1e4` | `ee4e1e425bbe6deff6dcd7def00010ac790985e9` | the screen harness cleans up on every path |
+| `74582ca` | `74582ca1c25acfc01cdad4ed6e82e1c556e0e5a8` | attach the font licence to the document |
+| `95c3416` | `95c34165d8fdd7642ddde1b265aac9681cc63275` | finish the attachments capability |
+
+**★ FOUR commits, not the three the dispatch named — and the fourth was
+found by running the gate rather than by reading the dispatch.**
+`python tools/check-commits-filed.py`, **measured** at the start of this
+filing, reported ***"commits-filed: 4 code commit(s) are in no
+filing"*** and listed `7825424` alongside the three. `7825424` (`Pass 46`
+slice 1) shipped at 11:39 and the hundred-and-twenty-fourth filing —
+which ran after it — did not cover it, because that filing was dispatched
+for the two gate commits specifically. **A dispatch names what the
+engineer remembers; the gate names what the repository contains.** This
+is precisely the case `b1ee1cf` was written to stop being invisible:
+leaving `7825424` unfiled would have kept CI red on `check-commits-filed`
+for a commit nobody was tracking. **It is filed here, not added to
+`tools/commits-filed-baseline.txt`** — a baseline entry suppresses the
+gate; a filing satisfies it.
+
+**GUI-core separation — the invariant CANNOT have moved, by
+construction rather than by audit.** **Measured** via `git show --stat`
+on all four: no `Cargo.toml` anywhere in the four diffs, and no
+`pdfce-core`/`pdfce-render` manifest touched. **No dependency was added
+anywhere in the workspace** — the BSD-3-Clause licence notice of
+`74582ca` is a **string constant compiled into the binary**, not a crate.
+Per-commit file lists, measured:
+
+| commit | files | insertions |
+|---|---|---|
+| `7825424` | 9 (`pdfce-gui` ×5, `docs/ui_specs/` ×1, agent-memory ×3) | 1,625 / −90 |
+| `ee4e1e4` | 2 (`tools/gui-shot.ps1`, `tools/gui-drive.ps1`) | 102 / −1 |
+| `74582ca` | 4 (`pdfce-core/src/edit.rs`, `pdfce-cli/src/main.rs`, 2 test files) | 700 |
+| `95c3416` | 3 (`pdfce-core/src/edit.rs`, `pdfce-cli/src/main.rs`, 1 test file) | 576 |
+
+---
+
+#### 1. `7825424` — `Pass 46` slice 1: markup is DRAWN where you point, not dropped in the middle of the page
+
+**The operator's report, verbatim:** *"I tried adding the review tools
+and they just drop things into the center of the pdf window. I can't drag
+or resize them. I'd expect when I click any tool button that its options
+pop up in the side bar, then I draw the shape where I want it, just like
+every program out there."*
+
+**He was describing the code accurately.** `add_markup_shape` computed a
+rect from the page's own media box centre **plus a jitter counter** and
+inserted it. It never touched `active_tool`, so it was invisible to every
+rule the other seven canvas tools obey — **Escape did not cancel it, it
+did not suppress the `ScrollArea`'s pan-by-drag, and it had no place on
+`TOOL_PRECEDENCE`.** There was no drawing gesture to speak of.
+
+**★ The ui-specialist corrected the engineer's framing ON THE WAY IN, and
+the correction is the part worth carrying.** The engineer assumed this
+might be **systemic**. It is not. **Six of the seven existing tools
+already meet the *arm → options in the pane → gesture targets the
+pointer* contract.** Markup was the **single** non-compliant tool in the
+app, and `run_place_field_tool` was already a working template to copy.
+A systemic diagnosis would have commissioned a framework rebuild for a
+one-tool defect.
+
+**The design, from `docs/ui_specs/pass-46-canvas-interaction-model.md`
+slice 1:** `CanvasTool` gains `Markup`, **carrying its kind rather than
+becoming four variants** — the same shape `PlaceField` and
+`MeasureCircular` already use. `GuiMarkupKind` and
+`Action::AddMarkupShape` are **deleted** rather than left beside the new
+path: there is no case where centre-drop is still right, and keeping it
+would be two ways to do one thing with one of them worse.
+
+**★★ A REAL GEOMETRY BUG, FOUND BY DRIVING THE GUI RATHER THAN BY
+REASONING ABOUT IT.** A scripted drag from `(600,300)` to `(900,600)` at
+zoom **5.94** should span **50.5 PDF points**. It produced **42.0** — a
+**8.5 pt / 16.8% shortfall**. Cause: **`drag_started()` does not fire on
+the frame of the press.** It fires once the pointer has moved far enough
+to count as a drag, so `interact_pointer_pos()` reports a position
+**already travelled to**, and the rectangle started short of the pressed
+corner **by exactly the first frame's motion**. `press_origin()` is the
+press itself. After the fix: **50.5 × 50.5, measured.**
+
+**`run_place_field_tool` shipped with the identical pattern and therefore
+the identical offset. Fixed too.** It was never reported because **a form
+field's exact corner is less scrutinised than a drawn shape's**, not
+because it worked. That is the generalisable half: a defect's report rate
+tracks how closely the output is inspected, not how broken it is.
+
+**Stale-and-now-false text removed:** the ribbon tooltip read *"Adds the
+shape at the centre of the current page. Drawing-on-canvas tools are
+coming."* It **described a defect and promised a fix**; both had to go.
+
+**Harness:** `tool:markup` added to the diag script vocabulary. **A
+harness whose vocabulary lags the feature set cannot verify the newest
+feature, which is the one that most needs it.**
+
+**Test design, and it is the reason the defect survived:** the placement
+test asserts **COORDINATES** across two widely separated shapes, because
+**a count-only test passed for the whole life of this defect** — one
+shape was added and one shape existed; the bug was entirely *where*. It
+also reads its baseline **from the fixture** rather than hard-coding a
+count, since that fixture already carries an annotation. **3,544 → 3,548
+tests** (relayed).
+
+**Verified in the running app** (relayed): shape drawn under the pointer,
+options pane showing Shape/Colour/Width, status line *"Added: Rectangle.
+Use Undo to reverse this until you save."*
+
+**⚠ STILL OPEN FROM THE SAME REPORT, AND IT IS THE OPERATOR'S OTHER
+HALF:** *"I can't drag or resize them."* **Selecting, dragging and
+resizing an annotation already on the page is SLICE 2 and is NOT BUILT.**
+Slices 2–4 (post-hoc select/move/resize; the remaining six markup kinds;
+Family B reshape) are all unstarted. **Do not read "markup is drawn where
+you point" as "the markup request is done."**
+
+---
+
+#### 2. `ee4e1e4` — the screen harness cleans up on EVERY path, not just the happy one
+
+**The operator asked TWICE in one session whether leftover GUI processes
+were interfering with his mouse. Both times the answer was yes.** The
+second time is what makes it **a defect in the tool rather than an
+operating mistake** — the fix *"remember to check afterwards"* had
+already been tried and had already failed.
+
+**The mechanism.** `tools/gui-shot.ps1` killed its child on its **LAST
+line**, with `$ErrorActionPreference = 'Stop'` set at the top. **So any
+throw between launch and there — a failed `Save`, a bad crop rect,
+Ctrl-C — skipped the kill entirely.** The leaked process is parked
+**off-screen at the caller's viewport**, so nothing appears to reveal it,
+**and it goes on taking pointer input on the real desktop. Invisible by
+construction.**
+
+**What changed:**
+
+- Both scripts wrap everything after `Start-Process` in **`try/finally`**.
+  `gui-drive.ps1` was *less* exposed — it kills only on timeout, since a
+  script that runs dry closes its own window — **but "less exposed" is not
+  safe: its two `throw`s fire precisely on the runs where the process may
+  NOT have exited cleanly, so the leak is likeliest exactly where the
+  cover was thinnest.**
+- **Cleanup snapshots existing `pdfce-gui` PIDs BEFORE launching, and
+  excludes them.** A harness that killed *"all `pdfce-gui` processes"* to
+  tidy up after itself **would close the operator's own document** — and
+  this script drives the **real desktop**, which is the situation where he
+  is most likely to have one open.
+- **The kill is verified rather than assumed**, with a **5 s poll**, and
+  if a process will not die the script **prints the `taskkill` line**. The
+  whole symptom is a process the operator cannot see, so **silence there
+  is the one unacceptable outcome.**
+
+**★ THE ENGINEER DID NOT IDENTIFY WHICH RUN LEAKED AND DELIBERATELY DID
+NOT INVENT ONE.** `gui-shot.ps1` **already carries a long `CORRECTION`
+comment about a plausible cause attached to an unexamined symptom**;
+repeating that shape in the fix for it would have been uncomfortably on
+the nose. **Every exit path is covered, which is true whichever run it
+was** — the fix is sound without the attribution, and the attribution
+would have been a guess dressed as a finding.
+
+**Proved by MAKING THE HAZARD OCCUR, not by reading the code:** a run
+with an **unwritable `-Shot` path** throws inside `Save` — the exact
+failure class that used to leak — and leaves **zero** processes. The
+normal path still captures and still leaves **zero**. Before the fix,
+that path leaked.
+
+**★ `observe-gui.ps1` already had `try/finally` — but only around bitmap
+disposal, not the process.** **Same one-sibling-hardened shape as the
+`fmt` gate in the previous filing**: a protection exists, is visibly
+present, and covers the wrong resource. That is now twice in two filings,
+which makes it a pattern rather than a coincidence — **when you find a
+guard on one sibling, check what the guard actually wraps before crediting
+the others with it.**
+
+---
+
+#### 3. `74582ca` — the bundled-font licence now travels INSIDE the document that carries the fonts (★ answers `(bk)`)
+
+**★★ OPEN OPERATOR QUESTION `(bk)` IS ANSWERED — by operator decision on
+2026-08-12, and the answer was *both* options, not one of them.** The
+operator asked for **A and B**, and both are now shipped. See the *Open
+operator questions* section below for the closing record; **the ceiling
+stays `(bk)`, next free `(bl)` — closed, not retired.**
+
+- **A stands, unchanged and deliberately so.** `--use-bundled-fonts`
+  remains **opt-in and off by default**, and **the GUI still does not
+  offer it.** Nothing there changed: the operator choosing to embed
+  pdfce's own faces is still a decision pdfce declines to make for him.
+- **B is the new part.** When a bundled face is **ACTUALLY embedded**,
+  pdfce attaches the BSD-3-Clause notice to the output PDF as
+  **`FONT-LICENSE-NOTICE.txt`**, so it travels with the file. **A run
+  answered entirely from `--font-dir` attaches NOTHING** — a licence for
+  fonts the document does not contain is noise that would make the
+  attachment meaningless as a signal.
+
+**The legal reasoning, sourced rather than assumed.** BSD-3-Clause places
+**no restriction on embedding** — it is permissive, unlike most
+commercial font EULAs — but it does attach one condition to
+redistribution **in binary form**: the copyright notice, the conditions
+and the disclaimer must be **REPRODUCED** *"in the documentation and/or
+other materials provided with the distribution."* **A font program copied
+into a PDF that then goes to a printer, a client or a store is exactly
+that.** Leaving it entirely to the operator was defensible, and it meant
+the condition was discharged **only if he remembered, every time, for
+every file.** pdfce now discharges it itself **at the one moment it knows
+for certain a bundled face was embedded, and not otherwise.**
+
+**★★ AN ATTACHMENT RATHER THAN XMP, AND THE REASON IS RULE 1, NOT
+PREFERENCE.** XMP was the other candidate. **The spec corpus records
+`xmp__* = 0 files`** — writing a metadata format from training-data
+recall is exactly what project rule 1 forbids, while **§7.11 embedded
+files is fully sourced, Table 44 through Table 47.** An embedded file is
+also **the more literal reading of *"materials provided with the
+distribution"***: a named, extractable file that travels inside the PDF.
+**A capability boundary decided the mechanism, and it decided it
+correctly** — this is the good case of "we cannot source it, so we do not
+write it."
+
+**New in core: `EditSession::attach_file` — ISO 32000-1 §7.11.4.1
+route 2.** Three objects **in the indirection order the standard
+mandates**:
+
+1. an `/EmbeddedFile` **stream** whose `/Params /Size` is the
+   **UNCOMPRESSED** length per **Table 46**;
+2. an **indirectly referenced** `/Filespec` — **Table 44 requires the
+   indirection by name**;
+3. a patch to the catalog's `/Names /EmbeddedFiles` **name tree**, whose
+   values are **file specifications rather than streams** — **the stream
+   is one `/EF` hop further down, which §7.11.4.1 flags precisely because
+   it is easy to get wrong.**
+
+**`/CheckSum` is omitted ON PURPOSE, and the reasoning generalises.** It
+is **Optional** and **defined as MD5**, and **pdfce has no MD5.** Adding
+a hash dependency to write an optional field is **a licence and
+supply-chain decision taken for no functional gain** — see project
+rule 13. This is the correct default for every future *Optional* field
+whose only implementation route is a new dependency.
+
+**A multi-node (`/Kids`) `/EmbeddedFiles` name tree is REFUSED BY NAME
+rather than attempted.** §7.9.6 requires each `Names` entry to hold a
+**single contiguous non-overlapping key range**; **a subtly wrong
+`/Limits` repair breaks the attachments ALREADY in the document** — new
+damage to existing content, caused by *adding* something. **Proved
+against `fixtures/synthetic/attachments/doc-level-kids-tree.pdf`**, which
+has such a tree, and **the test also asserts the session is left
+untouched** (a refusal that had already mutated state would be worse than
+no refusal).
+
+**★ THE LICENCE TEXT IS A VERBATIM REPRODUCTION, AND THREE TESTS KEEP IT
+THAT WAY.** **A summary does not satisfy a reproduction requirement, and
+a plausible rewording of a licence is a claim about legal terms nobody
+checked** — the global *claim-bearing copy* rule, landing on a licence
+instead of marketing text. The tests **diff the shipped notice against
+`crates/pdfce-render/assets/fonts/PROVENANCE.md` in BOTH directions**, so
+**trimming the record is as much a failure as editing the notice.** They
+**normalise whitespace**, because the two copies are legitimately wrapped
+differently — PROVENANCE keeps pdfium's `//` prefixes, and a licence file
+inside someone's PDF should not look like C source — **and that trade is
+stated rather than silent.**
+
+**Verified on the release binary, both branches** (relayed): bundled face
+used → notice attached and readable via `list-attachments`; resolved from
+`--font-dir` instead → nothing attached. **3,548 → 3,554 tests.**
+
+---
+
+#### 4. `95c3416` — the attachments capability finishes: extract, attach, detach
+
+**The capability was ONE-THIRD built.** Core could **list** and
+**extract**; the CLI could **only list**. **`extract_attachment` has
+existed since attachments first became readable and no shell could call
+it — `R151`'s exact shape, a working core API nobody can reach.** That is
+the fourth or fifth recurrence of `R151` in this project's history and
+the reason the rule exists at all.
+
+**New in core: `EditSession::detach_file`.** It removes **the name-tree
+entry, the file specification AND the embedded stream.** **★ Removing
+only the entry is the trap worth naming:** every reader would show **no
+attachment** while **the bytes sat in the file in full**, so an operator
+who deleted something **BECAUSE it should not be there** would have been
+told it was gone when it was not. **The test asserts the object count
+drops, not merely that the listing is empty** — an emptiness assertion
+would have passed on the broken implementation.
+
+**New in the CLI: `extract-attachment`, `attach-file`, `detach-file`.**
+Each carries a safety property that is a finding in its own right:
+
+- **`extract-attachment` REQUIRES `--output` and NEVER derives a path
+  from the attachment's own name.** That name is
+  **attacker-controlled** and **ISO 32000-1 constrains nothing about
+  it** — it can carry `..`, a NUL, a reserved device name, or a
+  **right-to-left override making `gnp.exe` render as `exe.png`.** **A
+  tool that wrote to a path taken from inside the document would be a
+  path-traversal primitive.**
+- **`detach-file` resolves the operator's name to the name-tree KEY
+  before deleting.** The key and the filespec's `/F`//`UF` are
+  **independently-authored strings a real document may disagree on**, so
+  **deleting by the displayed name would miss exactly the documents where
+  they differ.** It also **says plainly that it is NOT a redaction**: an
+  incremental save keeps every prior revision *by design*, so the bytes
+  stay recoverable, and **`--mode full` is named as the answer** (rule 4
+  — the cost is stated inline, not implied).
+- **`attach-file` defaults the stored name to the source file's NAME,
+  never its PATH** — embedding `C:\Users\Ken\...` **would put the
+  operator's directory layout inside a document they hand to someone
+  else.** It also states that **an attachment is not protected in any
+  way.**
+
+**A `/Kids` name tree is still refused by both verbs**, proved against
+`doc-level-kids-tree.pdf`.
+
+**Verified end to end on the RELEASE binary** (relayed): **attach → list
+→ extract → detach**, with **the extracted bytes diffed byte-identical
+against the source** and **the listing empty afterwards**. **3,554 →
+3,556 tests.**
+
+**⚠ STILL NOT DONE, AND NOT CLAIMED: the GUI has NO attachments surface
+at all.** **`core [x] cli [x] gui [ ]`** — confirmed by grep, and **the
+`gui` box is deliberately NOT rounded up in `FEATURES.md`.** Per the
+librarian's own contract: *"a row reading `[x]` core / `[ ]` cli / `[ ]`
+gui is a genuinely valuable signal, not an embarrassment to round up."*
+
+---
+
+#### Verification — all four commits (relayed from the engineer unless marked measured)
+
+- **`cargo test --workspace`: 3,556 passing / 0 failing** (baseline
+  3,548 at the start of this batch; **+8 over four commits** — `7825424`
+  3,544→3,548 (+4), `74582ca` 3,548→3,554 (+6), `95c3416` 3,554→3,556
+  (+2), `ee4e1e4` +0, being PowerShell harness scripts with no Rust
+  test surface). **The three deltas sum to +12 against a stated net of
+  +8 measured from 3,548 → 3,556; the dispatch's own baseline for the
+  batch is 3,548, which is `7825424`'s FINAL count, so `7825424`'s +4 is
+  inside the baseline and not part of the net.** Filed in both forms per
+  hard rule 10(a) so the arithmetic is checkable from this entry alone:
+  **3,544 (pre-`7825424`) + 4 + 6 + 2 = 3,556.**
+- `cargo fmt --all --check` **clean** · `cargo clippy --workspace
+  --all-targets --all-features -- -D warnings` **ZERO**.
+- `check-ui-strings.sh` · `check-theme-colors.sh` ·
+  `check-bypass-paths.sh` · `check-ledger-numbers.py` ·
+  `check-fmt-excluded.py` — **all clean.**
+- **GUI-core separation: no `pdfce-core`/`pdfce-render` manifest touched
+  and no dependency added anywhere** — **measured** by `git show --stat`
+  across all four (no `Cargo.toml` in any diff). The licence notice is a
+  **string constant**, not a crate.
+- **`tools/check-ledger-numbers.py` — measured here**, output quoted:
+  *"standing rules: R191 → next free is R192; decision records: 054 →
+  next free is 055; SESSION_LOG filings: 124 → next free is 125"*, and
+  *"ledger-numbers: clean — no duplicate Pass, rule, or decision
+  numbers."* **This filing mints NO standing rule and NO decision
+  record** — ceilings stay **R191** / **054**. **Pass ceiling moves 67 →
+  69** (see *Next up*).
+- **Backup currency — MEASURED here, not inherited from any document**
+  (hard rule 8): newest bundle is **`pdfce-20260812-1100.bundle`**, whose
+  `refs/heads/main` is **`68408f18980fa2bfd61d81f4627b59a173d8c0a9`** (by
+  `git bundle list-heads`). `git rev-list --count 68408f1..HEAD` = **7**.
+  **The bundle is 7 commits behind `HEAD` (`95c3416`). A fresh bundle is
+  owed.** `git remote -v` = `https://github.com/KenM76/pdfce.git`
+  (measured).
+
 ### ★★★★★ `b902ea0` + `b1ee1cf` — TWO GATES WERE MEASURING SOMETHING OTHER THAN WHAT THEY CLAIMED: `cargo fmt --all` could not see twelve crates, and `verify-release.py` never consulted CI; a tagged, published release (**`v0.3.0`**) is now on record as having had FAILING TESTS; `R191` judged to genuinely cover the new check's "no run found" half and a third instance measured — 2026-08-12 (hundred-and-twenty-fourth filing)
 
 **Filed IMMEDIATELY rather than batched, at the operator's explicit
@@ -39003,6 +39372,298 @@ in the "still open" list. Full build record: this file's own
 
 ## Next up
 
+### Pass 68.0 — ★★ OPERATOR REQUEST 2026-08-12 — **PICK TWO LINES, GET A DIMENSION**: a two-line pick model plus a THIRD `DimensionKind` (angular) — filed 2026-08-12 (hundred-and-twenty-fifth filing), **STARTED IN THE WORKING TREE WHILE THIS ENTRY WAS BEING WRITTEN**
+
+**★ STATUS CORRECTION, MADE BEFORE THIS ENTRY WAS EVEN SAVED, AND
+MEASURED RATHER THAN RELAYED.** This entry was drafted as *UNSTARTED*.
+`git status --short`, run at the end of the same filing, shows the
+engineer has **already begun**: **untracked
+`crates/pdfce-core/src/vector/linepick.rs`** plus modified
+`crates/pdfce-core/src/vector/mod.rs` (+4) and
+`crates/pdfce-core/src/settings/mod.rs` (+84), **none of it committed.**
+The new module's own header states the problem in the same terms this
+entry does — *"something has to be able to answer 'which LINE did the
+operator click', as a pair of endpoints, rather than 'which point'"* —
+and independently names the same three near-misses (`snap_candidates`,
+`hit_test_subpaths`, `centerline`). **So the survey below is corroborated
+by a second author working from the code, not merely repeated.** The
+`settings/mod.rs` growth is consistent with the parallel-vs-angled
+threshold becoming a **setting** rather than a hard-coded constant, which
+is the standing instruction (*fix bugs on discovery; make spec ambiguity
+a setting*) — **stated as a reading of a diff, not as a fact about
+intent.** **Nothing in the working tree was touched by this filing.**
+
+**Operator's words, verbatim, so acceptance criteria stay faithful:**
+
+> *"dimensioning tool should allow the selection of two lines. if those
+> lines are parallel it makes a linear dimension between them like
+> SolidWorks would, if they are at an angle it makes an angle
+> dimension."*
+
+**Terminology (project rule 15), binding on every dispatch this Pass
+generates:** everything below concerns **ce dimensions** — the dimension
+objects **pdfce authors** (`/Line` + `/IT /LineDimension` + `/Measure` +
+the `/PieceInfo` sidecar, everything under
+`crates/pdfce-core/src/dimension/`). It concerns **pdf dimensions** (ones
+already in the file from CAD) **only as pickable page geometry** — the
+*lines* the operator selects may well be part of a CAD-exported drawing,
+and **pdfce still must not alter them.** A subagent handed the
+unqualified word writes an entire analysis in it; say which kind, every
+time.
+
+#### Why this is a NEW pick model and not a tweak — the survey finding that sizes the work
+
+**Nothing in the codebase returns "the line the operator clicked on" as
+two endpoints.** Established by a survey completed 2026-08-12 and
+**independently re-checked by this librarian** on live source (`Grep`/
+`Read`, marked **measured** below):
+
+- `snap_candidates` returns single `Point`s.
+- `hit_test_subpaths` (`crates/pdfce-core/src/vector/hit.rs:340`) returns
+  **subpath INDICES**; the endpoints live on `Subpath`/`Segment`, one
+  dereference away — so the data exists but no function hands back the
+  pair.
+- `CenterlineCandidate` (`crates/pdfce-core/src/vector/centerline.rs:42`)
+  is **the one existing two-endpoint result**, and it is narrow: filled
+  thin quads with **aspect ratio ≥ 8.0** only.
+- **`MeasureLinear` and `MeasureScale` are strictly POINT-based** — three
+  clicks and two clicks respectively.
+- **`MeasureCircular` picks whole OBJECTS but immediately reduces them to
+  an unordered anchor cloud** for a Taubin fit, so it is not a precedent
+  for "this object, as a line".
+
+**So the deliverable is a genuinely new pick primitive** — *give me the
+segment under the pointer as (p0, p1), with its provenance* — plus the
+disambiguation rules that go with it (which segment of a multi-segment
+subpath; a `re` rectangle's four edges; a curve, which is **not** a line
+and must be refused or projected, decided rather than defaulted).
+
+#### The angular ce dimension does not exist as a TYPE
+
+**Measured on disk:** `DimensionKind`
+(`crates/pdfce-core/src/dimension/group.rs`, the enum beginning at
+line 137) has **exactly two variants** — `Linear { a, b, constraint,
+offset, text_along }` and `Circular { fit, show_diameter }`. **An
+ANGULAR ce dimension is a THIRD variant that does not exist**, and it
+brings its own:
+
+1. **geometry** — vertex + two rays + a sweep, not two points and an axis
+   constraint;
+2. **`/AP` authoring** — an arc with two arrowheads, extension lines that
+   *extend the picked lines* rather than drop perpendicular from points,
+   and a value in degrees (or deg-min-sec — **an authoring option, not a
+   default to hard-code**; see the memory rule *fix bugs on discovery;
+   make spec ambiguity a setting*);
+3. **`/Measure` dict semantics** — the existing dict describes a linear
+   scale; an angular measurement is dimensionless and the correct
+   `/Measure` shape for it must be **sourced from the spec corpus, not
+   assumed** (rule 1 — dispatch `pdfce-spec-librarian`);
+4. **a sidecar migration** — see below.
+
+#### Acceptance criteria (draft — to be firmed once the SolidWorks RAG lands)
+
+1. Arming the ce-dimension tool offers a **two-line pick** mode
+   (whether that is a mode or an automatic consequence of clicking a
+   line rather than a point is a `pdfce-ui-specialist` question, not an
+   engineering default).
+2. **Two PARALLEL lines → a linear ce dimension between them**, measuring
+   the perpendicular separation, *"like SolidWorks would"*. The
+   parallel-vs-angled test needs a **stated tolerance** — two CAD lines
+   that differ by 0.02° are parallel in intent and angled in arithmetic.
+   **That tolerance is disclosed, not silent** (rule 4): the operator is
+   told which of the two he got and can flip it without redoing the pick.
+3. **Two ANGLED lines → an angular ce dimension** at their intersection,
+   including the case where **the intersection is off the picked
+   segments** (extended intersection) and the case where **it is off the
+   page**.
+4. The classification is an **inference**, so rule 4 binds: the chosen
+   kind is **visible before it becomes document state**, and rejecting it
+   costs one gesture and undoes nothing else.
+5. **CLI parity in the same Pass** (rule 11): the same two-line selection
+   expressed as a scriptable subcommand surface.
+6. `SIDECAR_VERSION` migration per the established path — see below.
+
+#### The sidecar migration path is already documented; follow it, do not reinvent it
+
+**Measured:** `crates/pdfce-core/src/dimension/sidecar.rs:41`
+`pub const SIDECAR_VERSION: i64 = 1`, with a **RANGE version gate** at
+line 100 and `EditError::SidecarWrittenByNewerBuild` protecting the write
+side. **Every added key is optional-with-default.** A third
+`DimensionKind` variant is exactly the case that path was built for: an
+older build must read a newer sidecar's linear and circular ce dimensions
+without choking on the angular ones, and must not silently drop them on
+rewrite.
+
+#### Dependencies and prior art
+
+- **`docs/ui_specs/tool-options-dock-and-ce-dimension-properties.md`** —
+  read **before** designing anything; §C.11 is titled *"What already
+  exists — read before designing anything new"*.
+- **`D:\Dev\Rag-Specialized\SolidWorks_Dimensions\`** — the SolidWorks
+  dimension/tolerance option catalog (see `Pass 69.0` below, where it is
+  load-bearing). Relevant here for **how SolidWorks resolves the
+  two-line pick specifically**.
+- **`pdfce-spec-librarian`** for the `/Measure` question in (3) above.
+
+---
+
+### Pass 69.0 — ★★ OPERATOR REQUEST 2026-08-12 — **ce-dimension STYLE + TOLERANCE, with a group default and a per-ce-dimension override checkbox, at SolidWorks option breadth** — filed 2026-08-12 (hundred-and-twenty-fifth filing), UNSTARTED
+
+**Operator's words, verbatim, both requests, so acceptance criteria stay
+faithful:**
+
+> *"groups of dimensions should have a default dimensioning and tolerance
+> style that can be set for the group, but these should have a checkbox
+> to override and set differently."*
+
+> *"they should have the same options as SolidWorks does for
+> dimensions."*
+
+**Terminology (project rule 15):** **ce dimensions** throughout — the
+ones pdfce authors. This Pass does not touch **pdf dimensions**; a
+CAD-exported dimension's tolerance text is page content pdfce reads and
+must not alter.
+
+#### The survey finding that sizes the work: THERE IS NO STYLE MODEL AND NO TOLERANCE AT ALL
+
+Each item below was **re-checked by this librarian on live source**
+(marked **measured**) rather than accepted from the dispatch:
+
+1. **★ NO TOLERANCE EXISTS ANYWHERE.** Not in `pdfce-core`, not the GUI,
+   not the CLI, not the `/PieceInfo` sidecar. **Measured:** a
+   case-insensitive grep for `tolerance` across
+   `crates/pdfce-core/src/dimension/` returns **ZERO hits**. The hits
+   elsewhere in the tree are `SnapConfig::tolerance` — **an unrelated
+   hit-test radius**, and a name collision worth knowing about before
+   someone greps and believes the feature is half-built.
+2. **★ NO PER-ce-dimension STYLE EXISTS.** **Measured:**
+   `DimensionRecord` (`dimension/group.rs:419`) is exactly
+   **`{ id, group, kind, annot, ap }`** — five fields, none of them
+   presentational.
+3. **The only style type is TRANSIENT.** `DimensionStyle`
+   (`dimension/author.rs`, the struct following the module constants) is
+   a **projection of the group, rebuilt at every regeneration**, and
+   carries **`{ scale, format, standard }` and nothing else** —
+   **measured**, including its `impl From<&Group>` whose doc comment
+   states the intent outright: *"the group is the authority."* **Line
+   weight, text height and arrow length are hard-coded module
+   constants** — **measured**: `LABEL_SIZE = 10.0`, `LINE_WIDTH = 0.75`,
+   `ARROW_LEN = 7.0`, `TEXT_BREAK_PAD = 3.0`, `TEXT_ABOVE_GAP = 3.0`
+   (the last two already flagged in-source as *"Convention, not
+   mandated"* — i.e. **the code already knows these are choices**).
+4. **NO PER-GROUP STYLE OBJECT EITHER.** **Measured:** `Group`
+   (`dimension/group.rs:48`) carries **flat fields** —
+   `{ id, name, scale, format, ocg, visible, standard }`. **No colour, no
+   arrowhead, no text height.** So the operator's *"default … style that
+   can be set for the group"* has **no field to set today**, and the
+   group is the authority for only three of the things a style consists
+   of.
+5. **★ THERE IS NO RE-MEASURE VERB.** **No `EditSession` method changes a
+   ce dimension's picked points after authoring.** Editing what a ce
+   dimension measures today means **delete + re-add — losing the id, the
+   group and the placement.** **Decision 023's *"dimension re-measure"*
+   is UNIMPLEMENTED.** This is not strictly in the operator's three
+   requests, but it is adjacent enough that it will be discovered
+   mid-Pass; it is recorded here so it is discovered from a document
+   rather than from a surprise.
+
+#### A spec already exists and is PARTLY UNBUILT — build on it, do not re-derive it
+
+**`docs/ui_specs/tool-options-dock-and-ce-dimension-properties.md`.**
+**Measured** (`Grep` on the live file):
+
+- **§C.11** — *"What already exists — read before designing anything
+  new"*.
+- **§C.11.1** — panel design: **group-level vs per-dimension, and the
+  inheritance disclosure** — i.e. **the operator's override-checkbox
+  request is already designed**, and the spec already argues the
+  inheritance must be *disclosed*, not merely implemented.
+- The spec **already sketches
+  `enum ToleranceType { None, Symmetric, Deviation, Limit }`** and
+  **argues it belongs on `DimensionRecord` rather than on
+  `DimensionKind`** — the right call, since `DimensionKind` is documented
+  in-source as *"the immutable geometry"* and a tolerance is
+  presentation, not geometry.
+- **§C.12** — where the panel lives (`DockPanel::Properties`,
+  contextually), plus its own premise correction.
+- Its numbered work list already carries **item 9 "Tolerance + tolerance
+  type"** and **item 14 "Per-dimension unit/format override toggle"**.
+
+**Build status of that spec's three items, stated exactly:**
+
+| spec item | status |
+|---|---|
+| **1 — tolerance** | **UNIMPLEMENTED** |
+| **2 — selection-driven per-ce-dimension surface** | **SHIPPED** as `selected_dimension_section` |
+| **3 — extension-line drag** | **UNIMPLEMENTED** |
+
+**So this Pass is items 1 and 3 of an existing spec plus a style model
+the spec assumes, not a greenfield design.** Re-deriving it would produce
+a second, divergent design for a surface that already has one.
+
+#### The SolidWorks option catalog — NAMED HERE SO THE MERGE CANNOT GO UNTRACKED
+
+**`D:\Dev\Rag-Specialized\SolidWorks_Dimensions\`** — the SolidWorks
+dimension/tolerance option catalog that grounds request **(iii)**
+(*"the same options as SolidWorks does"*), **built concurrently with this
+filing by a separate agent.** **Measured:** the directory exists and
+carries an `index.md`.
+
+**It is named in this Pass entry deliberately, per `pdfce-engineer.md`'s
+standing instruction that a RAG deliverable is NOT handed off until a
+pdfce doc names it.** The precedent is
+`comparison__pdfce_feature_column.md`, which went untracked for exactly
+this reason. **Whoever works this Pass reads that RAG first**, the same
+way `Acrobat_Features` is read before scoping an Acrobat-parity bucket
+(standing rule *Feature-fidelity discipline*) — and for the same reason:
+acceptance criteria grounded in what the reference tool **actually does**
+rather than in what an agent remembers it doing.
+
+**Note the parity posture** (user memory *exceed the parity reference
+when you can*): SolidWorks is the **floor** for the option set, not the
+ceiling, and any deliberate divergence is **recorded**, not silently
+taken.
+
+#### Acceptance criteria (draft — firm them against the SolidWorks RAG)
+
+1. **A style object exists** — per **group** (the default) and per **ce
+   dimension** (the override), carrying at minimum the things currently
+   hard-coded: **text height, line weight, arrow length/form, colour**,
+   plus the existing `{ scale, format, standard }`.
+2. **The override is an explicit checkbox per ce dimension**, exactly as
+   the operator asked, and **the inherited-vs-overridden state is
+   VISIBLE** (§C.11.1's inheritance disclosure — an operator who cannot
+   see which values are inherited will change a group default and be
+   surprised by which ce dimensions moved).
+3. **Tolerance lands on `DimensionRecord`, not `DimensionKind`**, per the
+   spec's own argument, with **at least** `None / Symmetric / Deviation /
+   Limit` and whatever the SolidWorks RAG shows beyond those (bilateral,
+   min/max, fit-with-tolerance, basic, and the display forms).
+4. **Every new field is optional-with-default and version-gated** per
+   `SIDECAR_VERSION`'s documented migration path (see `Pass 68.0`) —
+   a ce dimension authored before this Pass must reopen looking
+   **identical**.
+5. **Nothing pdfce infers is committed silently** (rule 4). A tolerance
+   pdfce *derives* (e.g. from a fit class) is disclosed before it becomes
+   document state; a tolerance the operator *typed* is not gated behind a
+   confirm button (decision 024 §4.4's narrowing — the complaint was
+   placement, not the confirm step).
+6. **CLI parity in the same Pass** (rule 11).
+7. `docs/ui_specs/tool-options-dock-and-ce-dimension-properties.md` is
+   **updated, not shadowed by a second spec.**
+
+#### Sequencing note (engineer's call, recorded not decided)
+
+`Pass 68.0` and `Pass 69.0` are **independent** — the pick model does not
+need the style model and vice versa. **`69.0` is the one with a written
+spec already waiting**, `68.0` is the one whose data model has a hole
+(`DimensionKind` third variant). **Splitting `69.0` further** — style
+model first, tolerance second — **is reasonable if the acceptance
+criteria read better that way**; the Pass IDs are assigned per family, so
+`69.1` is available without disturbing anything.
+
+---
+
 ### Pass 67.0 — font reporting (phase A) + embedded-font removal (phase B) — operator request 2026-08-11, verbatim: *"someone needs embedded fonts removed from a pdf, so work on support and the related parts for that next"*, encryption explicitly parked: *"put the encryption aside for now to work on later"* — **★★★ phases A, B AND E SHIPPED 2026-08-12 (A: `7aa5c2c`+`fa2414e`; B: `f3acd24`+`2473602`+`d3baae5`+`f78c9d7`+`8f2b7a9`; E: `b358657..d8a8948`, six commits — core+CLI+GUI across all three). See the three top-of-*Shipped* entries for the delivery records. Phase E is the one that answers the request that actually opened this family (Barnes & Noble Press requires embedding, not removal); phases C, D and F remain queued below, unstarted.**
 
 **Sourcing.** No shell tool this dispatch (hard rule 8). The corpus
@@ -47942,6 +48603,41 @@ next free (bl):**
   `Symbol`/`ZapfDingbats` (248 of 1,534 missing fonts, 16% — no
   operator's own font folder plausibly carries a substitute for either,
   since both are effectively defined by their own binary cmap).
+
+  > **★★ ANSWERED 2026-08-12 (hundred-and-twenty-fifth filing) — CLOSED.
+  > The operator asked for BOTH options, `A` AND `B`, and both shipped in
+  > `74582ca`.** Do **not** re-surface this question.
+  >
+  > - **A — the status-quo half, kept deliberately.** `--use-bundled-fonts`
+  >   remains **opt-in and off by default**, and **the GUI still does not
+  >   offer the bundled rung at all.** The operator choosing to embed
+  >   pdfce's own faces stays a decision pdfce declines to make for him.
+  > - **B — the new half.** When a bundled face is **ACTUALLY embedded**,
+  >   pdfce attaches the BSD-3-Clause notice to the output PDF as
+  >   **`FONT-LICENSE-NOTICE.txt`**, so the licence **travels inside the
+  >   document that carries the fonts**. **A run answered entirely from
+  >   `--font-dir` attaches nothing** — a licence for fonts the document
+  >   does not contain is noise that would destroy the attachment's value
+  >   as a signal.
+  >
+  > **Why an attachment and not XMP, since the mechanism was a real
+  > choice:** **the spec corpus records `xmp__* = 0 files`**, so writing
+  > XMP would have meant writing a metadata format from training-data
+  > recall — **project rule 1 forbids that outright** — while **§7.11
+  > embedded files is fully sourced (Tables 44–47)**. An embedded file is
+  > also the more literal reading of BSD-3-Clause's *"materials provided
+  > with the distribution"*. **A sourcing boundary picked the mechanism,
+  > and picked it correctly.**
+  >
+  > **The reproduction condition is enforced by test, not by care:** three
+  > tests diff the shipped notice against
+  > `crates/pdfce-render/assets/fonts/PROVENANCE.md` **in both
+  > directions**, so trimming the record fails as loudly as editing the
+  > notice. A summary does not satisfy a reproduction requirement.
+  >
+  > **Operator-question ceiling stays `(bk)`** — closed, not retired; next
+  > free remains **`(bl)`**. Full delivery record: the top-of-*Shipped*
+  > entry for `7825424`+`ee4e1e4`+`74582ca`+`95c3416`, §3.
 
 **NEW this filing (hundred-and-second filing, 2026-08-11) — filed OPEN,
 not yet answered. Operator-question ceiling moves (bi) → (bj), next

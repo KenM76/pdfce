@@ -105,7 +105,7 @@ provisional; re-verify before any acceptance criterion leans on them.
 | core | cli | gui | Acrobat | Feature |
 |:----:|:---:|:---:|:-------:|---------|
 | [x] | [x] | [x] | [x] | Render and count annotations, honouring the annotation-flag set. |
-| [x] | [x] | [x] | [x] | Author geometric markup — Ink, Square, Circle, Line, Polygon. **Cannot set note text** (`/Contents`), so the Comments panel shows "No note text" on pdfce's own. |
+| [x] | [x] | [x] | [x] | Author geometric markup — Ink, Square, Circle, Line, Polygon. The GUI draws under the pointer as a canvas tool with options in the side pane. **Cannot set note text** (`/Contents`), so the Comments panel shows "No note text" on pdfce's own; **a placed markup cannot be selected, moved or resized.** |
 | [x] | [x] | [x] | [x] | Author text-bearing annotations — FreeText and Stamp with variable-text appearance. |
 | [x] | [x] | [x] | [x] | Read an annotation's note text, author and modification date. |
 | [x] | [x] | [x] | [x] | Delete an annotation. |
@@ -151,7 +151,7 @@ provisional; re-verify before any acceptance criterion leans on them.
 | [x] | [x] | [x] | — | Glyph-coverage gate on the app's own UI chrome. |
 | [x] | [x] | [x] | ◐ | Report a document's fonts — `/BaseFont`, subtype, encoding, embedded/subset status, byte size (raw+decoded), `fsType`, `/ToUnicode`, a stated-reason removability verdict, and named surface-coverage. Acrobat exposes none of the first three and refuses unembed candidates silently. |
 | [x] | [x] | [x] | ◐ | Remove an embedded font's program, refusing by name (reason shown) where content-stream codes are positions into that program (`Identity-H`/CID) or otherwise unsafe (8 of 9 verdicts refuse). Strips the subset tag and `/CIDSet`/`/CharSet` by default; a full rewrite is required to reclaim the freed bytes. |
-| [x] | [x] | [x] | ◐ | Embed a font that's referenced but missing — attach a program to an existing descriptor, or synthesise a Base-14 descriptor/widths/encoding from pdfce's own metrics; resolves `/BaseFont` via exact match, subset-stripped name, standard-14 alias or (opt-in only) pdfce's own bundled face, disclosing which; glyph positions cannot move, only shapes change. |
+| [x] | [x] | [x] | ◐ | Embed a font that's referenced but missing — attach a program to an existing descriptor, or synthesise a Base-14 descriptor/widths/encoding from pdfce's own metrics; resolves `/BaseFont` via exact match, subset-stripped name, standard-14 alias or (opt-in only) pdfce's own bundled face, disclosing which; glyph positions cannot move, only shapes change. When a bundled face is actually embedded, the BSD-3-Clause notice is attached to the output as `FONT-LICENSE-NOTICE.txt`; a run answered from `--font-dir` attaches nothing. |
 
 ### Reading, navigation & printing
 
@@ -159,7 +159,7 @@ provisional; re-verify before any acceptance criterion leans on them.
 |:----:|:---:|:---:|:-------:|---------|
 | [x] | [x] | [x] | [x] | Find text on the page. |
 | — | [x] | [x] | [x] | Read and navigate an existing bookmark tree. **No authoring.** |
-| [x] | [x] | [ ] | [x] | List embedded attachments. **Cannot extract their bytes**, and no GUI surface. |
+| [x] | [x] | [ ] | [x] | List, extract, attach and detach embedded attachments — detach removes the stream too, not just the name-tree entry; extract refuses to derive a path from the document-supplied name. A multi-node (`/Kids`) name tree is refused by name. **No GUI surface at all.** |
 | [x] | [x] | [x] | ◐ | Print — enumerate printers, spool a real job honouring the operator's CMYK intent and the sheet orientation it's planned against (the GUI preview turns with it), with duplex, copies, page subsets and a four-way comments-and-forms filter; GUI dialog is tabbed, resizable with both scrollbars, previews real page content zoomable/pannable, and opens on Ctrl+P. |
 | — | [x] | [ ] | [x] | Imposition — N-up, booklet, poster; mutually exclusive, refused in combination. **No GUI surface at all.** |
 | [x] | [x] | [x] | [x] | View and toggle a foreign producer's `/OCProperties` layer tree. |
@@ -208,13 +208,15 @@ the model or verb exists and only the named shell is missing. The
 | [ ] | [ ] | [ ] | ? | Resize a vector object. |
 | ◐ | ◐ | [ ] | **[ ]** | Node-editing remainder — Tab cycling and arrow-key nudge. |
 | [ ] | [ ] | [ ] | [x] | Make ce dimensions and foreign annotations selectable and deletable from the canvas; also gates click-a-comment-to-select. |
-| [ ] | [ ] | [ ] | **[ ]** | ce-dimension tolerances, SolidWorks-style (bilateral, symmetric, limit, min/max). |
+| [ ] | [ ] | [ ] | **[ ]** | Pick two lines to dimension them — parallel gives a linear ce dimension, angled gives an angular one. Needs a new two-endpoint pick primitive and a third `DimensionKind`. |
+| [ ] | [ ] | [ ] | **[ ]** | ce-dimension style and tolerance at SolidWorks option breadth — a per-group default plus a per-ce-dimension override checkbox. Neither a style object nor any tolerance exists today. |
 | [ ] | [ ] | [ ] | ? | Drag a ce dimension's extension lines. |
+| [ ] | [ ] | [ ] | [x] | Re-measure a placed ce dimension — change what it measures without losing its id, group and placement. |
+| [ ] | [ ] | [ ] | [x] | Select, move and resize a placed markup annotation on the canvas. |
 | [ ] | [ ] | [ ] | ? | Note-text authoring for geometric markup. |
 | [ ] | [ ] | [ ] | [x] | True in-place page insertion, so Insert edits the open document. |
 | [ ] | [ ] | [ ] | ? | Wide/batch CSV — one row per document, for filling many copies of one form. |
 | [ ] | [ ] | [ ] | ? | Static-XFA hybrid — read and fill the XFA half in step with AcroForm. |
-| [x] | [ ] | [ ] | [x] | Extract an embedded attachment's bytes to disk. |
 | [ ] | [ ] | [ ] | [x] | Links and bookmarks authoring — create, edit, reorder, named destinations. |
 | [ ] | [ ] | [ ] | [x] | Redaction: mark by dragging on the canvas; Sanitize / Remove Hidden Information. |
 | [ ] | [ ] | [ ] | [x] | Digital signatures — PKCS#7/PAdES signing and verification. |

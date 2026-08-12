@@ -2637,6 +2637,43 @@ default of 0.2 is a considered guess rather than a rule from anywhere — no \
 standard or reference program defines this."
 }
 
+// --- Near-parallel tolerance for two-line ce dimensions -------------------
+
+/// Heading for the near-parallel setting.
+pub fn setting_parallel_title() -> &'static str {
+    "When two lines count as parallel"
+}
+
+/// What no standard settles here.
+pub fn setting_parallel_silence() -> &'static str {
+    "Dimensioning between two lines has to decide whether they are parallel — \
+giving a distance — or at an angle. Nothing defines how close to parallel is \
+close enough, and CAD programs do not document a threshold either."
+}
+
+/// What changing it affects.
+pub fn setting_parallel_radius() -> &'static str {
+    "Affects new dimensions you draw between two lines. Does not change \
+dimensions you have already placed, and does not change the file."
+}
+
+/// The slider's own label.
+pub fn setting_parallel_slider_label() -> &'static str {
+    "Within"
+}
+
+/// The explanation, including the escape hatch.
+///
+/// States that the per-dimension override exists, because an operator reading
+/// this control needs to know a wrong global value is a one-click fix rather
+/// than something they must keep coming back here to adjust.
+pub fn setting_parallel_note() -> &'static str {
+    "Exported CAD geometry is usually exact, so a small value keeps a rounding \
+artefact from being read as a taper. Zero means exactly parallel only. \
+Whatever you set here, you can still tick \"treat as parallel\" on any single \
+dimension without changing this."
+}
+
 // --- Mask resampling ------------------------------------------------------
 
 /// Heading for the soft-mask resampling setting.

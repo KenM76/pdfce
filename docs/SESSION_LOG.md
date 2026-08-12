@@ -37286,3 +37286,362 @@ entire scope.
    cause.
 5. **Run `tools/verify-release.py` BEFORE tagging, not after** — and
    keep the ordering it now enforces: file, let CI go green, then tag.
+
+## 2026-08-12 (hundred-and-twenty-fifth filing) — `7825424`+`ee4e1e4`+`74582ca`+`95c3416`: `Pass 46` slice 1 (markup drawn where you point, plus a geometry bug found by DRIVING the GUI), the screen harness stops leaking an invisible process onto the live desktop, operator question `(bk)` ANSWERED (both options), the attachments capability finishes core+CLI; **THREE new operator requests filed as `Pass 68.0` and `Pass 69.0`**; also a PRE-COMPACTION CAPTURE
+
+**Dual-purpose dispatch:** a completion filing **and** a pre-compaction
+capture — the engineer's context was deep and the survey findings below
+were expensive to establish, so they are on disk now rather than after a
+summarization pass.
+
+**Sourcing (hard rule 8).** This librarian **had a shell.** Items marked
+**measured** were produced by a command run here and the command is
+named; **relayed** came from the engineer's brief and was not re-run.
+**All four short hashes resolved here by `git rev-parse`** — the dispatch
+declined to supply full hashes, explicitly because a fabricated one was
+supplied in an earlier dispatch and corrected by the previous filing.
+**That is the right correction to have made**: the cheap habit
+(`git rev-parse`) replaced the expensive one (trusting a relayed hash).
+
+**Shipped:**
+- **`7825424`** — `Pass 46` slice 1: markup is **drawn where you point**.
+  `CanvasTool` gains `Markup` carrying its kind; `GuiMarkupKind` and
+  `Action::AddMarkupShape` **deleted**, not left beside the new path.
+- **`ee4e1e4`** — `tools/gui-shot.ps1` / `tools/gui-drive.ps1` now clean
+  up on **every** exit path.
+- **`74582ca`** — the bundled-font BSD-3-Clause notice is attached to the
+  output as `FONT-LICENSE-NOTICE.txt` when a bundled face is **actually**
+  embedded. New core verb `EditSession::attach_file` (§7.11.4.1 route 2).
+- **`95c3416`** — attachments finish: `EditSession::detach_file` plus CLI
+  `extract-attachment` / `attach-file` / `detach-file`.
+
+**★ FOUR commits, not the three the dispatch named — and the fourth was
+found by RUNNING THE GATE, not by reading the dispatch.**
+`python tools/check-commits-filed.py` (**measured**, at the start of this
+filing) reported *"4 code commit(s) are in no filing"* and named
+`7825424` alongside the three. `7825424` shipped at 11:39 and the
+**previous filing ran after it** without covering it, because that
+dispatch was scoped to the two gate commits. **A dispatch names what the
+engineer remembers; the gate names what the repository contains.** Filed
+here, **not** added to `tools/commits-filed-baseline.txt` — a baseline
+entry suppresses the gate, a filing satisfies it.
+
+**Decisions made this session:**
+- **★★ Open operator question `(bk)` — ANSWERED and CLOSED by operator
+  decision, 2026-08-12. The operator chose BOTH options, A and B.**
+  **A:** `--use-bundled-fonts` stays opt-in, off by default; the GUI
+  still does not offer it. **B:** when a bundled face is actually
+  embedded, the licence notice travels inside the document. **Ceiling
+  stays `(bk)`, next free `(bl)` — closed, not retired. Do not
+  re-surface it.**
+- **An attachment rather than XMP, and the reason is rule 1, not
+  preference.** The spec corpus records **`xmp__* = 0 files`**, so
+  writing XMP meant writing a metadata format from training-data
+  recall. §7.11 is fully sourced (Tables 44–47). **A sourcing boundary
+  chose the mechanism, and chose it correctly** — the good case of "we
+  cannot source it, so we do not write it."
+- **`/CheckSum` omitted on purpose.** Optional, defined as MD5, pdfce has
+  no MD5. **A hash dependency to write an optional field is a licence and
+  supply-chain decision for no functional gain** (rule 13). Now the
+  default answer for any Optional key in that position.
+- **A `/Kids` `/EmbeddedFiles` name tree is refused BY NAME by both
+  verbs**, because a subtly wrong `/Limits` repair **breaks the
+  attachments already in the document** — new damage caused by *adding*.
+- **No decision NUMBER minted** (ceiling stays **054**), and the omission
+  is deliberate: each ruling constrains one API, is stated in that API's
+  doc comments and in `ARCHITECTURE.md` §4.1 **(Q)**, and a record whose
+  only content is a pointer makes the ledger longer without making
+  anything findable. **No standing rule minted** — ceiling stays
+  **R191**.
+
+**Findings + decisions:**
+- **★★ A real geometry bug, found by DRIVING the GUI rather than
+  reasoning about it.** A scripted drag `(600,300)` to `(900,600)` at zoom
+  **5.94** should span **50.5 pt**; it produced **42.0** — an **8.5 pt /
+  16.8% shortfall**. Cause: **`drag_started()` does not fire on the frame
+  of the press.** `interact_pointer_pos()` therefore reports a position
+  **already travelled to**, so the rect started short of the pressed
+  corner **by exactly the first frame's motion**. `press_origin()` is the
+  press itself. After the fix: **50.5 x 50.5, measured.**
+- **`run_place_field_tool` had the IDENTICAL pattern and therefore the
+  identical offset.** Fixed too. **It was never reported because a form
+  field's exact corner is less scrutinised than a drawn shape's, not
+  because it worked.** Generalisable: **a defect's report rate tracks how
+  closely the output is inspected, not how broken it is.**
+- **A count-only test passed for the whole life of the markup defect** —
+  one shape was added, one shape existed; the bug was entirely *where*.
+  The new test asserts **coordinates across two widely separated shapes**
+  and reads its baseline **from the fixture** rather than hard-coding a
+  count.
+- **★ The ui-specialist corrected the engineer's framing on the way in,
+  and that correction saved a framework rebuild.** The engineer assumed
+  the markup defect might be **systemic**. It is not: **six of seven
+  tools already met the arm-to-options-to-gesture contract**, and
+  `run_place_field_tool` was a working template. Markup was the **single**
+  non-compliant tool in the app.
+- **★★ The harness leak was invisible BY CONSTRUCTION.** `gui-shot.ps1`
+  killed its child on its **last line** under
+  `$ErrorActionPreference='Stop'`, so any throw between launch and there
+  skipped the kill — **and the leaked window is parked OFF-SCREEN at the
+  caller's viewport, so it consumes pointer input on the real desktop
+  while showing nothing.** The operator asked **twice in one session**
+  whether leftover GUI processes were fighting his mouse; **both times
+  yes.** The second time is what makes it a **tool defect rather than an
+  operating mistake** — *"remember to check afterwards"* had already been
+  tried and had already failed.
+- **Cleanup snapshots pre-existing `pdfce-gui` PIDs BEFORE launch and
+  excludes them.** A harness that killed *all* `pdfce-gui` processes to
+  tidy up **would close the operator's own document** — and this script
+  drives the **real desktop**, the exact situation where he is most
+  likely to have one open. The kill is **verified** with a 5 s poll and
+  **prints the `taskkill` line** if a process will not die: the symptom
+  is a process the operator cannot see, so silence is the one
+  unacceptable outcome.
+- **Proved by MAKING THE HAZARD OCCUR**, not by reading the code: an
+  unwritable `-Shot` path throws inside `Save` — the exact failure class
+  that used to leak — and now leaves **zero** processes; **before the fix
+  that path leaked.**
+- **★ The engineer did NOT identify which run leaked and deliberately did
+  not invent one.** `gui-shot.ps1` **already carries a `CORRECTION`
+  comment about a plausible cause attached to an unexamined symptom**;
+  repeating that shape in the fix for it would have been on the nose.
+  **Every exit path is covered, which is true whichever run it was.**
+- **`observe-gui.ps1` already had `try/finally` — but only around bitmap
+  disposal, not the process.** **Same one-sibling-hardened shape as the
+  `fmt` gate in the previous filing.** Twice in two filings makes it a
+  pattern: **when you find a guard on one sibling, check what the guard
+  actually WRAPS before crediting the others with it.**
+- **Removing only a name-tree entry would have been the silent-damage
+  case:** every reader shows no attachment while the bytes sit in the
+  file in full, so an operator who deleted something *because it should
+  not be there* is told it is gone when it is not. **The test asserts the
+  object count drops**, not merely that the listing is empty.
+- **`extract-attachment` REQUIRES `--output` and never derives a path
+  from the attachment's own name.** That name is **attacker-controlled**
+  and **ISO 32000-1 constrains nothing about it** — `..`, a NUL, a
+  reserved device name, or an RTL override rendering `gnp.exe` as
+  `exe.png`. **A tool that wrote to a path taken from inside the document
+  would be a path-traversal primitive.**
+- **`detach-file` resolves the operator's name to the name-tree KEY
+  before deleting** — key and `/F`//`UF` are independently-authored
+  strings a real document may disagree on, so deleting by displayed name
+  **misses exactly the documents where they differ.** It also states it
+  is **not a redaction** (incremental save keeps prior revisions by
+  design) and names `--mode full` as the answer.
+- **`attach-file` stores the source file's NAME, never its PATH** —
+  embedding `C:\Users\Ken\...` would put the operator's directory layout
+  inside a document handed to someone else.
+- **`R151` again** — `extract_attachment` had existed in core since
+  attachments became readable with **no shell able to call it**. This is
+  the fourth-or-fifth recurrence and the reason the rule exists.
+
+**★★ SURVEY OF THE ce-dimension IMPLEMENTATION — the pre-compaction half, and the part that sizes `Pass 68.0`/`69.0`**
+
+Every item **re-checked on live source by this librarian** (marked
+**measured**) rather than accepted from the dispatch:
+
+1. **NO TOLERANCE EXISTS ANYWHERE** — **measured**, a case-insensitive
+   grep for `tolerance` across `crates/pdfce-core/src/dimension/` returns
+   **ZERO hits**. The hits elsewhere are **`SnapConfig::tolerance`, an
+   unrelated hit-test radius** — a name collision worth knowing about
+   before someone greps and believes the feature is half-built.
+2. **NO PER-ce-dimension STYLE** — **measured**, `DimensionRecord`
+   (`dimension/group.rs:419`) is exactly **`{ id, group, kind, annot, ap }`**.
+3. **The only style type is TRANSIENT** — `DimensionStyle`
+   (`dimension/author.rs`) is a **projection of the group rebuilt at
+   every regeneration**, carrying **`{ scale, format, standard }`** and
+   nothing else; its `impl From<&Group>` doc says outright *"the group is
+   the authority."* **Line weight, text height, arrow length are
+   hard-coded module constants** — **measured**: `LABEL_SIZE = 10.0`,
+   `LINE_WIDTH = 0.75`, `ARROW_LEN = 7.0`, `TEXT_BREAK_PAD = 3.0`,
+   `TEXT_ABOVE_GAP = 3.0`, **the last two already annotated in-source as
+   *"Convention, not mandated"*** — the code already knows they are
+   choices.
+4. **NO PER-GROUP STYLE OBJECT EITHER** — **measured**, `Group`
+   (`dimension/group.rs:48`) carries flat fields
+   `{ id, name, scale, format, ocg, visible, standard }`. **No colour, no
+   arrowhead, no text height.** The operator's *"default style set for
+   the group"* has **no field to set today.**
+5. **NOTHING RETURNS "THE LINE THE OPERATOR CLICKED ON" AS TWO
+   ENDPOINTS.** `snap_candidates` returns single `Point`s;
+   `hit_test_subpaths` (`vector/hit.rs:340`) returns subpath **indices**
+   (endpoints live on `Subpath`/`Segment`); **`CenterlineCandidate`
+   (`vector/centerline.rs:42`) is the one existing two-endpoint result**
+   and only for filled thin quads with **aspect ratio >= 8.0**.
+   **`MeasureLinear`/`MeasureScale` are strictly POINT-based** (three /
+   two clicks); **`MeasureCircular` picks whole OBJECTS but reduces them
+   to an unordered anchor cloud for a Taubin fit.** **So request (i)
+   needs a genuinely new pick model, not a tweak.**
+6. **`DimensionKind` has exactly TWO variants** — **measured**, `Linear`
+   and `Circular` (`dimension/group.rs`, enum at line 137). **An ANGULAR
+   ce dimension is a third variant that does not exist**, bringing its
+   own geometry, its own `/AP` authoring, its own `/Measure` semantics
+   (**which must be SOURCED, not assumed** — rule 1) and a sidecar
+   migration.
+7. **THERE IS NO RE-MEASURE VERB.** No `EditSession` method changes a ce
+   dimension's picked points after authoring; editing what one measures
+   today means **delete + re-add, losing the id, the group and the
+   placement.** **Decision 023's *"dimension re-measure"* is
+   UNIMPLEMENTED.**
+8. **A SPEC ALREADY EXISTS AND IS PARTLY UNBUILT** —
+   `docs/ui_specs/tool-options-dock-and-ce-dimension-properties.md`.
+   **Measured** by grep: **§C.11** is literally titled *"What already
+   exists — read before designing anything new"*; **§C.11.1** covers
+   group-level-vs-per-dimension **and the inheritance disclosure** — i.e.
+   **the override-checkbox request is already designed**; it already
+   sketches **`enum ToleranceType { None, Symmetric, Deviation, Limit }`**
+   and argues it belongs on **`DimensionRecord` rather than
+   `DimensionKind`** (right, since `DimensionKind` is documented in-source
+   as *"the immutable geometry"*); **§C.12** places the panel. **Item 2
+   (selection-driven per-ce-dimension surface) HAS shipped as
+   `selected_dimension_section`; items 1 (tolerance) and 3
+   (extension-line drag) remain entirely unimplemented.** **Build on that
+   spec — a second, divergent design for a surface that already has one
+   is the failure to avoid.**
+9. **The sidecar has a documented migration path** — **measured**,
+   `SIDECAR_VERSION = 1` (`dimension/sidecar.rs:41`), a **RANGE** version
+   gate at line 100, every added key optional-with-default, and
+   `EditError::SidecarWrittenByNewerBuild` protecting the write side.
+   **Any new per-ce-dimension field follows it.**
+
+**Terminology note (project rule 15), stated because this filing is the
+one a future session will grep:** every item above is about **ce
+dimensions** — the ones **pdfce authors**. **pdf dimensions** (CAD-
+exported, already in the file) appear only as **pickable page geometry**
+for `Pass 68.0`'s two-line pick, and pdfce still must not alter them.
+
+**Roadmap changes:**
+- **`Pass 68.0` filed under *Next up*** — the two-line pick model plus an
+  **angular** third `DimensionKind`. Operator request (i).
+- **`Pass 69.0` filed under *Next up*** — the ce-dimension style +
+  tolerance model, **per-group default with a per-ce-dimension override
+  checkbox**, at SolidWorks option breadth. Operator requests (ii)+(iii).
+- **Pass ceiling moves 67 to 69**, next free **`Pass 70`**. `69.1` is
+  available if the style half and the tolerance half read better split.
+- **`D:\Dev\Rag-Specialized\SolidWorks_Dimensions\` is NAMED in
+  `Pass 69.0`'s entry** — **measured**, the directory exists and carries
+  an `index.md`. Named deliberately, per `pdfce-engineer.md`'s standing
+  instruction that **a RAG deliverable is not handed off until a pdfce
+  doc names it**; the precedent is
+  `comparison__pdfce_feature_column.md`, which went untracked for exactly
+  this reason.
+
+**`FEATURES.md` rows changed (same filing, per the maintenance
+contract):**
+- **Attachments** — was *"List embedded attachments. Cannot extract their
+  bytes."* Now list/extract/attach/detach, **`core [x] cli [x] gui [ ]`**.
+  **The `gui` box was NOT rounded up** — there is no attachments surface
+  in the GUI at all, confirmed by grep.
+- **Extract an attachment's bytes** — **removed from *Planned***; it is
+  implemented.
+- **Embed missing font programs** — now notes the automatic
+  `FONT-LICENSE-NOTICE.txt` attachment and that a `--font-dir` run
+  attaches nothing.
+- **Author geometric markup** — now says the GUI draws under the pointer
+  with options in the side pane, **and that a placed markup cannot be
+  selected, moved or resized.**
+- **Four *Planned* rows added** — two-line/angular ce dimension;
+  ce-dimension style+tolerance with group default and override;
+  re-measure a placed ce dimension; select/move/resize a placed markup.
+- **No harness/dev-tooling row was invented.** `FEATURES.md` has no row
+  covering `tools/gui-shot.ps1` / `gui-drive.ps1` / `observe-gui.ps1`,
+  and the dispatch said not to create one that does not exist.
+
+**`ARCHITECTURE.md` changes:** §4.1 gains **(Q)** — the attachments write
+surface (`attach_file`, `detach_file`, `CommandKind::DetachFile`, the
+three-object §7.11.4.1 route-2 layout, the guard order, the `/Kids`
+refusal, the `/CheckSum` omission). §12 gains a dated entry recording the
+three rulings **and the deliberate decision not to mint a number for
+them.**
+
+**Verification (relayed unless marked measured):**
+- `cargo test --workspace` **3,556 passing / 0 failing.** Filed in both
+  forms per hard rule 10(a) so the arithmetic is checkable here:
+  **3,544 (pre-`7825424`) + 4 (`7825424`) + 6 (`74582ca`) + 2
+  (`95c3416`) + 0 (`ee4e1e4`, PowerShell only) = 3,556.** The dispatch's
+  stated batch baseline of **3,548** is `7825424`'s FINAL count, which is
+  why the three deltas sum to +12 against a net of +8 — **stated rather
+  than left as an apparent contradiction between two true figures.**
+- `cargo fmt --all --check` clean · `cargo clippy --workspace
+  --all-targets --all-features -- -D warnings` **ZERO** ·
+  `check-ui-strings` / `check-theme-colors` / `check-bypass-paths` /
+  `check-ledger-numbers` / `check-fmt-excluded` all clean.
+- **`check-ledger-numbers.py` — measured here:** *"standing rules: R191 →
+  next free R192; decision records: 054 → next free 055; SESSION_LOG
+  filings: 124 → next free 125"*, and *"clean — no duplicate Pass, rule,
+  or decision numbers."*
+- **GUI-core separation — measured**, `git show --stat` on all four:
+  **no `Cargo.toml` in any diff**, no `pdfce-core`/`pdfce-render`
+  manifest touched, **no dependency added anywhere**. The licence notice
+  is a **string constant**, not a crate. The invariant cannot have moved,
+  by construction.
+
+**Backup / git state — MEASURED here, never inherited from a document
+(hard rule 8):**
+- Newest bundle **`pdfce-20260812-1100.bundle`**; its `refs/heads/main` is
+  **`68408f18980fa2bfd61d81f4627b59a173d8c0a9`** (`git bundle
+  list-heads`).
+- `git rev-list --count 68408f1..HEAD` = **7**. **The bundle is 7 commits
+  behind `HEAD` (`95c3416`). A fresh bundle is owed.**
+- `git remote -v` = `https://github.com/KenM76/pdfce.git`.
+
+**Still in flight:**
+- **`Pass 46` slices 2–4 are NOT built.** Slice 2 — **post-hoc select,
+  move and resize of a placed annotation** — is **the operator's other
+  half**: *"I can't drag or resize them."* Slice 3 is the remaining six
+  markup kinds; slice 4 is Family B reshape.
+- **The GUI has no attachments surface at all.**
+- **`/R` 6 encryption still parked at operator instruction.** The
+  sourcing blocker is gone — ISO 32000-2 is at
+  `D:\Dev\Rag-Specialized\PDF_Spec\_sources\ISO_32000-2_sponsored_EC3.pdf`,
+  **SINGLE USER ONLY, watermarked to the operator by name: never
+  committed, never shipped, never a release asset — paraphrase and cite
+  only.** The repository is public, so this is not hypothetical.
+- **`Pass 67.0` phases C, D and F** — unstarted, none blocking.
+
+**★ Two escalations owed to the operator — RELAYED ONLY, and this
+librarian could not corroborate either from disk:**
+1. **The broken no-git convention** (`iccce`).
+2. **Agents' in-progress files swept into a public repo.**
+
+**Both are relayed from the engineer with no further detail supplied, and
+a repo-wide grep of `docs/` found NO written record of either** —
+measured, which is precisely why they are captured here rather than left
+in a context about to compact. One check that bears on the first:
+**`D:\Dev\iccce\` DOES contain a `.git` directory** (measured by `ls`),
+so whatever the "no-git convention" claim is, it is **not** "the
+directory has no repository." **The exact content of both escalations
+must come from the operator or the engineer, not from this entry** —
+recorded as owed, not as established.
+
+**For next session:**
+- **`docs/NEXT_SESSION.md` was overwritten by this filing**, at the
+  engineer's explicit request, and leads with the three new operator
+  requests. Read it first.
+- **Do not re-surface `(bk)`. It is answered.**
+- Take a bundle — **7 commits owed, measured.**
+
+> **★ AMENDMENT TO THIS ENTRY, MADE WITHIN THE SAME FILING (2026-08-12,
+> hundred-and-twenty-fifth) — `Pass 68.0` was filed as UNSTARTED and was
+> ALREADY UNDERWAY.** `git status --short`, run at the end of the filing
+> to confirm only `docs/` had been touched, instead reported **untracked
+> `crates/pdfce-core/src/vector/linepick.rs`** plus modified
+> `crates/pdfce-core/src/vector/mod.rs` (+4) and
+> `crates/pdfce-core/src/settings/mod.rs` (+84), **none of it
+> committed** — the engineer had begun `Pass 68.0`'s pick primitive while
+> the entry describing it as unstarted was being written. The `ROADMAP.md`
+> entry and `NEXT_SESSION.md` were both corrected before this filing
+> closed.
+>
+> **Two things worth carrying.** First, **the new module's own header
+> states the problem in the same terms the survey does** — *"something has
+> to be able to answer 'which LINE did the operator click', as a pair of
+> endpoints, rather than 'which point'"* — and independently names the
+> same three near-misses (`snap_candidates`, `hit_test_subpaths`,
+> `centerline`). **The survey is corroborated by a second author reading
+> the code, not merely repeated from the dispatch.** Second, and this is
+> the reusable half: **the status was caught only because `git status` was
+> run for an unrelated reason.** A Pass status written from a dispatch is a
+> claim about the working tree, and the working tree is one command away —
+> **hard rule 8's exact shape, landed on Pass status instead of on backup
+> currency.** This filing touched nothing outside `docs/`.

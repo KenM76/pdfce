@@ -878,6 +878,29 @@ pub struct Settings {
     /// callers, which is what made it the register's cheapest win: the
     /// setting was built, just unreachable.
     pub word_gap_ratio: f32,
+    /// How many degrees apart two lines may be and still be dimensioned as
+    /// PARALLEL rather than as an angle (ce dimensions, two-line pick).
+    ///
+    /// # Why this is a setting and not a constant
+    ///
+    /// Nothing defines it. A search of the SolidWorks dimension/tolerance
+    /// corpus at `D:\Dev\Rag-Specialized\SolidWorks_Dimensions\` for an
+    /// epsilon, a threshold or a near-parallel snap rule found none — the
+    /// catalog records the whole question as unverified. Standing rule R169
+    /// says a choice no standard makes is a setting rather than a number
+    /// buried in the geometry, and this is exactly that case.
+    ///
+    /// The default of half a degree is a judgement and is documented as one:
+    /// CAD-exported geometry is usually exact, so a pair a hair off parallel
+    /// is far more likely to be an exporter's rounding artefact than a
+    /// deliberate shallow taper. An operator who genuinely dimensions
+    /// shallow tapers should lower it.
+    ///
+    /// This governs only the AUTOMATIC classification. The operator can
+    /// always force the parallel reading for one specific ce dimension —
+    /// see the two-line authoring surface — so a wrong global default costs
+    /// a checkbox, never the ability to get the dimension they want.
+    pub parallel_epsilon_degrees: f64,
     /// Which filter resamples a size-mismatched `/SMask` or `/Mask`
     /// (`SM-A1`, §8.9.6.3 / Table 145). RENDER radius.
     pub mask_resample: MaskResample,
@@ -935,6 +958,12 @@ impl Default for Settings {
             // `pdfce-gui` is what checks that it does.
             theme: "quiet".to_owned(),
             word_gap_ratio: crate::text_extract::ExtractOptions::default().word_gap_ratio,
+            // Taken from the geometry module's own policy default rather than
+            // restated, so the settings file and the classifier cannot come to
+            // disagree about the same number — the failure this module's
+            // `word_gap_ratio` default already demonstrated once.
+            parallel_epsilon_degrees: crate::vector::linepick::ParallelPolicy::default()
+                .epsilon_degrees,
             // The ambiguity-register enums declare their own default on
             // the variant, the same way `CmykIntent` does, because the
             // *choice* is the thing they exist to model — there is no
@@ -968,6 +997,21 @@ pub const MIN_WORD_GAP_RATIO: f32 = 0.01;
 /// into words at all. Public for the same reason as
 /// [`MIN_WORD_GAP_RATIO`].
 pub const MAX_WORD_GAP_RATIO: f32 = 5.0;
+
+/// Lowest accepted `parallel_epsilon_degrees`.
+///
+/// Zero is allowed and means "exactly parallel only" — a legitimate strict
+/// choice for someone working with exact CAD output, not a degenerate value,
+/// so it is the floor rather than being rejected.
+pub const MIN_PARALLEL_EPSILON_DEGREES: f64 = 0.0;
+/// Highest accepted `parallel_epsilon_degrees`.
+///
+/// Above 45 degrees the classification inverts in spirit: more pairs would be
+/// called parallel than angled, which is no longer a tolerance on "parallel"
+/// but a different feature. Public for the same reason as
+/// [`MIN_WORD_GAP_RATIO`] — a front end bounds its control by THIS number
+/// rather than a restated literal.
+pub const MAX_PARALLEL_EPSILON_DEGREES: f64 = 45.0;
 
 /// The settings-file token for a separation policy.
 ///
@@ -1178,6 +1222,27 @@ impl Settings {
             },
             // Unvalidated on purpose — see the field docs.
             "theme" => self.theme = value.to_owned(),
+            "parallel_epsilon_degrees" => match value.parse::<f64>() {
+                Ok(parsed) if parsed.is_finite() => {
+                    let clamped =
+                        parsed.clamp(MIN_PARALLEL_EPSILON_DEGREES, MAX_PARALLEL_EPSILON_DEGREES);
+                    if (clamped - parsed).abs() > f64::EPSILON {
+                        notes.push(SettingNote::Clamped {
+                            key: key.to_owned(),
+                            value: value.to_owned(),
+                            line,
+                            using: clamped.to_string(),
+                        });
+                    }
+                    self.parallel_epsilon_degrees = clamped;
+                }
+                _ => notes.push(SettingNote::BadValue {
+                    key: key.to_owned(),
+                    value: value.to_owned(),
+                    line,
+                    using: Self::default().parallel_epsilon_degrees.to_string(),
+                }),
+            },
             "word_gap_ratio" => match value.parse::<f32>() {
                 Ok(parsed) if parsed.is_finite() => {
                     let clamped = parsed.clamp(MIN_WORD_GAP_RATIO, MAX_WORD_GAP_RATIO);
@@ -1365,6 +1430,21 @@ impl Settings {
              # together. Accepted range 0.01 to 5.0.\n",
         );
         let _ = writeln!(out, "word_gap_ratio = {}\n", self.word_gap_ratio);
+
+        out.push_str(
+            "# When you dimension between two lines, how many degrees apart they may\n\
+             # be and still be treated as parallel (giving a distance) rather than\n\
+             # as an angle. Nothing in any standard fixes this, so it is yours to\n\
+             # set: exported CAD geometry is usually exact, so a small value avoids\n\
+             # calling a rounding artefact a taper. 0 means exactly parallel only.\n\
+             # You can always force the parallel reading on one dimension without\n\
+             # changing this. Accepted range 0 to 45.\n",
+        );
+        let _ = writeln!(
+            out,
+            "parallel_epsilon_degrees = {}\n",
+            self.parallel_epsilon_degrees
+        );
 
         out.push_str(
             "# When a picture carries a separate transparency image at a different\n\
@@ -1822,6 +1902,10 @@ mod tests {
             separations: SeparationPolicy::Discard,
             cmyk_intent: CmykIntent::Calibrated,
             word_gap_ratio: 0.35,
+            // Deliberately NOT the default (0.5): this test exists to catch a
+            // field `write_to_string` forgot, and a value equal to the default
+            // would pass by accident on the way back in.
+            parallel_epsilon_degrees: 1.25,
             mask_resample: MaskResample::BoxAverage,
             image_minify: MinifyFilter::Smooth,
             cmyk_jpeg_polarity: CmykJpegPolarity::InvertOnApp14,

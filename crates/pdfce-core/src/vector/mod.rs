@@ -54,6 +54,10 @@ pub mod decompose;
 pub mod edit;
 pub mod geometry;
 pub mod hit;
+/// Picking a straight LINE (two endpoints) rather than a point, and deciding
+/// whether two of them are parallel or meet at an angle — the pick model a
+/// CAD-style "dimension between these two edges" workflow needs.
+pub mod linepick;
 pub mod snap;
 
 // Re-export the primary surface at `crate::vector::…` so callers do not

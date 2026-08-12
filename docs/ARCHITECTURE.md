@@ -2514,6 +2514,79 @@ above). Verified directly in `main.rs`:
 **Breaking? No** — `pdfce-gui`-internal only; `edit_note`'s public shape
 (`Option<String>`) is unchanged, only how it may be written changed.
 
+### (Q) `74582ca` + `95c3416` — the attachments write surface: `EditSession::attach_file` / `detach_file`, `CommandKind::DetachFile`, and a name-tree shape pdfce REFUSES — 2026-08-12
+
+**Closes the `R151` gap that had been open since attachments first became
+readable:** `extract_attachment` existed in core with **no shell able to
+call it**, and there was **no write surface at all** — pdfce could read
+an attachment and could not create or remove one.
+
+**New public surface, `crates/pdfce-core/src/edit.rs`:**
+
+- `EditSession::attach_file(name: &str, bytes: &[u8], description: Option<&str>) -> Result<ObjId, EditError>`
+  — **ISO 32000-1 §7.11.4.1 route 2.** Allocates **three** objects in
+  the indirection order the standard mandates: (1) an `/EmbeddedFile`
+  **stream** whose `/Params /Size` is the **UNCOMPRESSED** byte length
+  per **Table 46**; (2) an **indirectly referenced** `/Filespec` —
+  **Table 44 requires the indirection by name**; (3) a patch to the
+  catalog's `/Names /EmbeddedFiles` name tree. **The name tree's values
+  are file SPECIFICATIONS, not streams** — the stream is one `/EF` hop
+  further down, which §7.11.4.1 flags precisely because it is the easy
+  thing to get wrong.
+- `EditSession::detach_file(key: &[u8]) -> Result<(), EditError>` —
+  removes **the name-tree entry, the file specification AND the embedded
+  stream**. **Removing only the entry is the trap:** every reader would
+  report no attachment while the bytes sat in the file in full, so an
+  operator who deleted something *because it should not be there* would
+  have been told it was gone when it was not. **The test asserts the
+  object count drops**, not merely that the listing is empty — an
+  emptiness assertion passes on the broken implementation.
+- `CommandKind::DetachFile` — a new undo-log kind, so the Undo control
+  names the operation.
+
+**Guard order on `attach_file` is the SAME three guards, in the same
+order, that every object-creating verb on this type already applies** —
+`EditError::DocumentEncrypted` (pdfce can decrypt but cannot yet write
+encryption), the certification refusal
+(`check_certification_for_annotation`), and
+`EditError::ObjectCreationWouldExposeHiddenObjects` when a filtering
+`/Size` would be raised. Stated here because a fourth verb applying them
+in a different order would be a silent divergence.
+
+**★ A REFUSAL THAT IS PART OF THE CONTRACT, NOT A TODO: a multi-node
+(`/Kids`) `/EmbeddedFiles` name tree is refused BY NAME by both verbs.**
+§7.9.6 requires each `Names` entry to hold a **single contiguous
+non-overlapping key range**. Choosing a leaf in a multi-node tree means
+**repairing every `/Limits` range up the chain**, and getting that subtly
+wrong produces **a document whose EXISTING attachments stop resolving** —
+new damage to existing content, caused by adding something. **Refusing is
+the honest outcome until that is built and tested**, and the refusal is
+proved against `fixtures/synthetic/attachments/doc-level-kids-tree.pdf`,
+with the test also asserting **the session is left untouched** (a refusal
+that had already mutated state would be worse than no refusal).
+
+**`/CheckSum` is deliberately NOT written, and the reasoning is a
+precedent for every future Optional field.** It is **Optional** and
+**defined as MD5**; pdfce has no MD5. **Adding a hash dependency to write
+an optional field is a licence and supply-chain decision taken for no
+functional gain** — §9 and project rule 13. The default for an *Optional*
+key whose only implementation route is a new crate is: **omit it, and say
+so.**
+
+**One behaviour is enforced from OUTSIDE this surface and belongs in the
+record:** when `embed-font` actually embeds one of pdfce's own bundled
+BSD-3-Clause faces, `attach_file` is used to attach the licence notice as
+`FONT-LICENSE-NOTICE.txt`. **XMP was the other candidate mechanism and
+was rejected on sourcing grounds, not preference** — the spec corpus
+records `xmp__* = 0 files`, so writing XMP would have meant writing a
+metadata format from training-data recall (**rule 1**), while §7.11 is
+fully sourced (Tables 44–47). **A sourcing boundary chose the mechanism.**
+
+**Shell coverage as of this entry:** `pdfce-cli` gains
+`extract-attachment`, `attach-file` and `detach-file`. **`pdfce-gui` has
+NO attachments surface at all** — `core [x] cli [x] gui [ ]`, recorded
+rather than rounded up.
+
 ### (I) What this sync did NOT cover — stated so the edges are honest
 
 **A partial sync that names its edges is worth more than a
@@ -18326,3 +18399,59 @@ taste, because the natural next request ("could the GUI also take
 **Not a crate-boundary or invariant change; no new dependency.** Body
 section updated in the same filing: §7's last bullet. Full build
 record: `ROADMAP.md`'s hundred-and-twenty-third filing.
+
+### 2026-08-12 (hundred-and-twenty-fifth filing, `74582ca` + `95c3416`) — no decision NUMBER minted; three rulings recorded against §4.1 (Q) instead, because each is a property of one API rather than an architectural choice
+
+**Ceiling check, measured by `tools/check-ledger-numbers.py` this
+filing:** *"decision records: 054 → next free is 055."* **This filing
+mints nothing; the ceiling stays 054.** Said explicitly because the three
+rulings below are the shape that usually earns a number, and a reader
+should know the omission was decided rather than forgotten.
+
+**Why no number.** A decision record is for a choice that constrains
+future work across the crate — a crate boundary, a library, an invariant.
+These three constrain exactly one API each, are fully stated in that
+API's own doc comments and in §4.1 (Q) above, and would be read there
+first by anyone they bind. Minting a record whose only content is a
+pointer to §4.1 makes the ledger longer without making anything more
+findable.
+
+1. **An Optional spec field whose only implementation route is a new
+   dependency is OMITTED, and the omission is stated.** `/CheckSum` on
+   an embedded-file stream is Optional and defined as MD5; pdfce has no
+   MD5. **Adding a hash crate to write an optional field is a licence and
+   supply-chain decision taken for no functional gain** (§9, project
+   rule 13). Generalises beyond attachments: this is now the default
+   answer for any Optional key in that position.
+2. **A document shape pdfce cannot repair SAFELY is refused by name, not
+   attempted.** A multi-node (`/Kids`) `/EmbeddedFiles` name tree needs
+   every `/Limits` range up the chain repaired (§7.9.6's single
+   contiguous non-overlapping range `shall`), and **a subtly wrong repair
+   breaks the attachments ALREADY in the document.** The refusal is
+   tested against a fixture that has such a tree, **and the test asserts
+   the session is left untouched** — a refusal that had already mutated
+   state would be worse than no refusal. Same family as the
+   `Identity-H`/CID unembed refusals: **pdfce refuses loudly with a
+   stated reason rather than doing damage quietly** (rule 4 / `R124`).
+3. **A licence obligation pdfce triggers, pdfce discharges — at the one
+   moment it knows the obligation exists, and not otherwise.**
+   BSD-3-Clause's binary-redistribution condition attaches when a bundled
+   face is **actually embedded** into a document the operator then
+   distributes, so the notice is attached **then**, and a run answered
+   entirely from `--font-dir` attaches nothing. **The mechanism was
+   chosen by a sourcing boundary, not by preference:** XMP was the other
+   candidate and the spec corpus records `xmp__* = 0 files`, so writing
+   it would have meant writing a metadata format from training-data
+   recall (**project rule 1**), while §7.11 is fully sourced (Tables
+   44–47). **The licence text is a verbatim reproduction pinned by three
+   tests that diff it against `assets/fonts/PROVENANCE.md` in BOTH
+   directions** — a summary does not satisfy a reproduction requirement,
+   and trimming the record fails as loudly as editing the notice.
+
+**Body sections updated in the same filing:** §4.1 gains **(Q)** — the
+attachments write surface. **No crate boundary moved, no invariant
+changed, and no dependency was added anywhere** (the licence notice is a
+string constant, not a crate), so §3's GUI-core separation is untouched
+**by construction rather than by audit** — measured, no `Cargo.toml`
+appears in either commit's `git show --stat`. Full build record:
+`ROADMAP.md`'s hundred-and-twenty-fifth filing.

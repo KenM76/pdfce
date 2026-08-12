@@ -3,368 +3,416 @@
 Engineer-owned handoff (this filing written by `pdfce-librarian` at the
 engineer's explicit request, same as every prior overwrite of this
 file). Read this **before** the librarian's record — `ROADMAP.md` says
-what shipped, this says what is in flight and what the next hour
-should be. Overwrite it once acted on.
+what shipped, this says what is in flight and what the next hour should
+be. Overwrite it once acted on.
 
-Written 2026-08-12, branch **`main`**, at `aad48c7`, after four commits
-`0947cab` · `c3a4d2e` · `9ea0c88` · `aad48c7` and the **`v0.5.1`**
-release.
-
-**★ AMENDED 2026-08-12 (hundred-and-twenty-fourth filing) at
-`b1ee1cfa93541a081eb01286607a11e88a7839b2`**, after two further commits
-`b902ea0` (formatting-coverage gate) and `b1ee1cf` (release verifier now
-consults CI). **`HEAD` = `origin/main` = `b1ee1cf`, tree clean, 0 ahead /
-0 behind — measured.** Sections **5**, **5b** and the backup section are
-amended below; the release-state section carries a correction. The rest
-stands.
+**Written 2026-08-12 (hundred-and-twenty-fifth filing), branch `main`, at
+`95c34165d8fdd7642ddde1b265aac9681cc63275`**, after four commits
+`7825424` · `ee4e1e4` · `74582ca` · `95c3416`. The previous version of
+this file was written at `aad48c7` and amended at `b1ee1cf`; **this is a
+full overwrite, not an amendment.**
 
 ---
 
-## ★★★ CORRECTION TO THE PREVIOUS HANDOFF, READ THIS FIRST
+## 1. ★★★ THREE NEW OPERATOR REQUESTS (2026-08-12). HE IS WAITING ON THEM. THIS IS THE TOP OF THE QUEUE.
 
-The prior version of this file said `Pass 67.0` phase E's problem — a
-Barnes & Noble Press upload requiring embedded fonts — *"is now
-solvable end to end"*. **That was true of the core and FALSE of the CLI
-until today.**
+Filed as **`Pass 68.0`** and **`Pass 69.0`**, both under `ROADMAP.md`'s
+***Next up***, both **UNSTARTED**. Verbatim, so acceptance criteria stay
+faithful:
 
-`pdfce-cli embed-font <file> --font-dir <dir> --apply` produced an
-**empty plan on every file**: `resolved=1`, then `fonts=0 exact=0
-substitute=0 refused=0 unmatched=0`, and `--apply` wrote nothing. The
-cause was `clap`, not font logic — the `--font`/`--all-missing`
-`ArgGroup` was never marked `required`, so a command naming neither
-member parsed happily and requested nothing. `unembed-font` had the
-identical hole. Both are now `.required(true)` (`c3a4d2e`).
+> **(i)** *"dimensioning tool should allow the selection of two lines. if
+> those lines are parallel it makes a linear dimension between them like
+> SolidWorks would, if they are at an angle it makes an angle
+> dimension."*
 
-Three things to carry forward from that, because they are the reusable
-part:
+> **(ii)** *"groups of dimensions should have a default dimensioning and
+> tolerance style that can be set for the group, but these should have a
+> checkbox to override and set differently."*
 
-1. **The sweep numbers were never wrong.** 1,330 of 1,507 missing fonts
-   embedded (88.3%) and 726 of 4,023 files closed to `not-embedded=0`
-   (18.0%) **stand and were re-verified reproducible today.**
-   `tools/embed-sweep` calls the core API directly and hard-codes
-   `EmbedRequest::all_missing()`, so it never went through the broken
-   argument group. Do not re-measure them; they are correct.
-2. **It survived a full green gate** (3,535 tests at the time) because
-   **no test drove the CLI's own argument surface.** `R151`'s shape one
-   level lower: not a capability with no caller, a capability whose
-   caller has one untested invocation shape that silently no-ops. Two
-   CLI-level integration tests now exist.
-3. **`R191` was minted from the engineer's own verification error.** The
-   first harness reported all five files fixed and had tested nothing —
-   it read `not-embedded=N` off a summary line that **omits that token
-   when the count is zero**, and defaulted the regex miss to `0`. When a
-   CLI omits a token to mean zero, absence of the token and failure of
-   the command are indistinguishable. **Assert on positive per-item
-   evidence** (count `embedded=` per font line), never on a summary
-   token's absence, and never let a harness default a missing match to a
-   passing value.
+> **(iii)** *"they should have the same options as SolidWorks does for
+> dimensions."*
 
-**As of `v0.5.1` the end-to-end claim is now true, and was checked from
-a fresh copy of the portable folder**, not from the build tree:
-`FC60_Times.pdf` 1 missing font → 0, output reopened and listed three
-embedded fonts. Five real-world PDFs verified overall — `document.pdf`
-1→0, `data-000001.pdf` 2→0, `eu-001.pdf` 1→0 (needs `--mode full`,
-recovered base), `FC60_Times.pdf` 1→0, `PDFBOX-2984-rotations.pdf` 1→0.
+**★ TERMINOLOGY, binding on every dispatch these generate (project
+rule 15):** this is all about **ce dimensions** — the ones **pdfce
+authors** (`/Line` + `/IT /LineDimension` + `/Measure` + the
+`/PieceInfo` sidecar, everything under
+`crates/pdfce-core/src/dimension/`). **pdf dimensions** — CAD-exported
+ones already in the file — enter only as **pickable page geometry** for
+(i), and pdfce still must not alter them. **A subagent handed the
+unqualified word writes an entire analysis in it; that is how the
+ambiguity reached the operator last time.**
+
+- **`Pass 68.0`** = request (i): a two-line pick model + an **angular**
+  third `DimensionKind`.
+- **`Pass 69.0`** = requests (ii)+(iii): the ce-dimension **style +
+  tolerance** model, per-group default with a per-ce-dimension
+  **override checkbox**, at SolidWorks option breadth.
+- **They are independent.** `69.0` is the one with a written spec already
+  waiting; `68.0` is the one with a hole in the data model. Splitting
+  `69.0` into `69.0` (style) + `69.1` (tolerance) is fine.
+
+**★ `Pass 68.0` IS ALREADY UNDERWAY IN THE WORKING TREE — MEASURED, NOT
+RELAYED.** `git status --short` at the end of this filing shows
+**untracked `crates/pdfce-core/src/vector/linepick.rs`**, plus modified
+`crates/pdfce-core/src/vector/mod.rs` (+4) and
+`crates/pdfce-core/src/settings/mod.rs` (+84) — **all uncommitted.** The
+new module's header states the problem in the same terms the survey below
+does and names the same three near-misses independently. **If you are
+resuming this session: that work is in flight, not lost. If you are a
+fresh session: `git status` before you write a line of it.** This filing
+touched **nothing** outside `docs/`.
+
+### The survey that sizes this work — READ IT BEFORE ESTIMATING ANYTHING
+
+Full detail lives in the `Pass 68.0` / `Pass 69.0` entries and in the
+hundred-and-twenty-fifth `SESSION_LOG.md` entry. The headlines, all
+**re-verified on live source** by the filing librarian:
+
+1. **NO TOLERANCE EXISTS ANYWHERE** — core, GUI, CLI, sidecar. A
+   case-insensitive grep for `tolerance` across
+   `crates/pdfce-core/src/dimension/` returns **zero hits**. The hits
+   elsewhere are **`SnapConfig::tolerance`, an unrelated hit-test
+   radius** — do not mistake that for a half-built feature.
+2. **NO PER-ce-dimension STYLE.** `DimensionRecord`
+   (`dimension/group.rs:419`) is exactly `{ id, group, kind, annot, ap }`.
+3. **The only style type is TRANSIENT.** `DimensionStyle`
+   (`dimension/author.rs`) is a projection of the group rebuilt at every
+   regeneration and carries `{ scale, format, standard }` only. **Line
+   weight, text height and arrow length are hard-coded module
+   constants** (`LABEL_SIZE 10.0`, `LINE_WIDTH 0.75`, `ARROW_LEN 7.0`,
+   `TEXT_BREAK_PAD 3.0`, `TEXT_ABOVE_GAP 3.0` — the last two already
+   annotated in-source as *"Convention, not mandated"*).
+4. **NO PER-GROUP STYLE OBJECT EITHER.** `Group` (`dimension/group.rs:48`)
+   is flat: `{ id, name, scale, format, ocg, visible, standard }`. **No
+   colour, no arrowhead, no text height.** The operator's *"default style
+   set for the group"* has **no field to set today.**
+5. **NOTHING RETURNS "THE LINE YOU CLICKED" AS TWO ENDPOINTS.**
+   `snap_candidates` returns single `Point`s. `hit_test_subpaths`
+   (`vector/hit.rs:340`) returns subpath **indices**.
+   `CenterlineCandidate` (`vector/centerline.rs:42`) is the one existing
+   two-endpoint result and only for filled thin quads with **aspect
+   ratio ≥ 8.0**. **`MeasureLinear`/`MeasureScale` are strictly
+   POINT-based**; `MeasureCircular` picks objects but reduces them to an
+   unordered anchor cloud for a Taubin fit. **Request (i) needs a new
+   pick primitive, not a tweak.**
+6. **`DimensionKind` has exactly two variants** — `Linear`, `Circular`
+   (`dimension/group.rs`, enum at line 137). **An angular ce dimension is
+   a third variant that does not exist**, with its own geometry, `/AP`
+   authoring, `/Measure` semantics (**source it — rule 1, dispatch
+   `pdfce-spec-librarian`**) and a sidecar migration.
+7. **THERE IS NO RE-MEASURE VERB.** Editing what a placed ce dimension
+   measures today means **delete + re-add, losing the id, group and
+   placement**. **Decision 023's "dimension re-measure" is
+   unimplemented.** You will hit this mid-Pass.
+8. **A SPEC ALREADY EXISTS AND IS PARTLY UNBUILT —
+   `docs/ui_specs/tool-options-dock-and-ce-dimension-properties.md`.**
+   **Build on it; do not re-derive it.** §C.11 is titled *"What already
+   exists — read before designing anything new"*. §C.11.1 covers
+   group-level-vs-per-dimension **and the inheritance disclosure** —
+   the override-checkbox request is **already designed**. It already
+   sketches `enum ToleranceType { None, Symmetric, Deviation, Limit }`
+   and argues it belongs on **`DimensionRecord`, not `DimensionKind`**
+   (right — `DimensionKind` is documented in-source as *"the immutable
+   geometry"*). **Item 2 (selection-driven per-ce-dimension surface) HAS
+   shipped as `selected_dimension_section`; items 1 (tolerance) and 3
+   (extension-line drag) are entirely unimplemented.**
+9. **Sidecar migration path is documented — follow it.**
+   `SIDECAR_VERSION = 1` (`dimension/sidecar.rs:41`), a **RANGE** version
+   gate at line 100, every added key **optional-with-default**, and
+   `EditError::SidecarWrittenByNewerBuild` guarding the write side. **A
+   ce dimension authored before these Passes must reopen identical.**
+
+### The SolidWorks RAG — named here AND in `Pass 69.0`, so the merge cannot go untracked
+
+**`D:\Dev\Rag-Specialized\SolidWorks_Dimensions\`** — the SolidWorks
+dimension/tolerance option catalog grounding request (iii), built
+concurrently by a separate agent. **The directory exists and carries an
+`index.md`** (verified at filing time).
+
+**Read it before firming `Pass 69.0`'s acceptance criteria**, the same
+way `Acrobat_Features` is read before scoping an Acrobat-parity bucket.
+It is named in a pdfce doc **deliberately**, per the engineer file's
+standing instruction that a RAG deliverable is not handed off until a
+pdfce doc names it — the precedent being
+`comparison__pdfce_feature_column.md`, which went untracked for exactly
+this reason.
+
+**Parity posture:** SolidWorks is the **floor** for the option set, not
+the ceiling (user memory *exceed the parity reference when you can*).
+Record any deliberate divergence; do not take one silently.
 
 ---
 
-## Open items, in the order they're likely to matter
+## 2. ✅ Open operator question `(bk)` is ANSWERED. DO NOT RE-SURFACE IT.
 
-### 1. ★ Open operator question `(bk)` — bundled-font embedding licensing. Ken's call, still open, and now MORE load-bearing
+**The operator answered on 2026-08-12 and chose BOTH options, A and B.**
+Both shipped in `74582ca`.
 
-**May pdfce's own bundled Base-14 substitute faces (BSD-3-Clause,
-pdfium's Foxit-origin set) be embedded into an operator's document?**
-Embedding puts the face inside a document the operator then
-distributes — a different act from pdfce merely drawing with it on the
-operator's own screen — and carries the licence's binary-redistribution
-attribution condition once it travels inside someone else's PDF. **This
-is a legal call, and therefore Ken's** — surface it, don't resolve it.
+- **A** — `--use-bundled-fonts` stays **opt-in, off by default**; **the
+  GUI still does not offer it.** Unchanged, deliberately.
+- **B** — when a bundled face is **actually embedded**, pdfce attaches
+  the BSD-3-Clause notice to the output as **`FONT-LICENSE-NOTICE.txt`**,
+  so the licence travels inside the document. **A run answered entirely
+  from `--font-dir` attaches nothing.**
 
-**Why it weighs more this session than last.** `embed-font` now
-actually works from the shell, so the bundled rung is no longer a
-theoretical donor: **on a machine without a suitable system font folder,
-bundled faces are the only donor there is.** Bundled faces alone embed
-1,250 of 1,507 corpus missing fonts (83.0%) and are the **only** donor
-for `Symbol`/`ZapfDingbats` (16% of missing fonts). The difference
-between an answer of yes and no is closing ~83% versus ~11% of the
-real-world gap.
+**Ceiling stays `(bk)`, next free `(bl)` — closed, not retired.** The
+previous version of this file led with `(bk)` as an open item; that slot
+is now closed and this is its replacement.
 
-Shipped in the meantime, deliberately not a resolution: `pdfce-cli
-embed-font --use-bundled-fonts`, **off by default**, help text states
-the obligation. **The GUI does not offer the bundled rung at all.** Full
-text: `docs/ROADMAP.md`, *Open operator questions*, `(bk)`.
+**Two things worth carrying from how it was built:**
 
-### 2. `Pass 67.0` phases C, D and F — all unstarted, none blocking
+- **An attachment rather than XMP, and the reason was RULE 1, not
+  preference.** The spec corpus records **`xmp__* = 0 files`** — writing
+  XMP would have meant writing a metadata format from training-data
+  recall. **§7.11 is fully sourced (Tables 44–47).** A sourcing boundary
+  chose the mechanism, and chose it correctly.
+- **The licence text is a verbatim REPRODUCTION, pinned by three tests**
+  that diff the shipped notice against
+  `crates/pdfce-render/assets/fonts/PROVENANCE.md` **in both
+  directions** — trimming the record fails as loudly as editing the
+  notice. **A summary does not satisfy a reproduction requirement.**
 
-Three of six phases have shipped (A reporting, B unembed, E embed-
-missing). The request that opened the family is answered. This is now
-open-ended Pass work, not urgent-fix work — **ask the operator which (if
-any) he wants next rather than guessing an order.**
+---
 
-- **C — Re-subset.** Shrink an already-embedded font's program to only
-  the glyphs the document actually uses. Lowest risk of the three: no
-  visual change, no text loss, works on *every* embedded font including
-  the ~13–48% (method-dependent — see `Pass 67.0`'s own Shipped entries
-  for both measurements) that phase B must refuse. The right answer when
-  the motivation is file size.
-- **D — Convert text to outlines.** The universal escape hatch — the
-  only phase that works where phase B is refused outright, because
-  glyphs become vector paths and no font program needs to sit at those
-  positions at all. Substantial to build; irreversible in effect
-  (search/copy/reflow all stop working on the converted text) —
-  disclose the cost inline, not merely via a confirm button (rule 4).
-- **F — Replace font X with Y.** The hardest of the six — not just
-  swapping a program name, but remapping encodings and widths so text
-  does not reflow wrongly. Acrobat has **no equivalent** (searched
-  across three sessions by `pdfce-acrobat-librarian`, recorded as a
-  genuine absence) — parity-plus, not parity.
+## 3. ★★ `Pass 46` slice 1 SHIPPED today (`7825424`) — SLICES 2–4 ARE NOT BUILT, and slice 2 is the operator's OTHER HALF
 
-**Reusable substrate for all three, already built:**
-`FontEnvironment::resolve_for_embedding`'s four-rung donor ladder,
-`fontinfo::Removability`'s nine-verdict classifier, and
-`font_embed_missing.rs`/`font_unembed.rs`'s shared-descriptor/shared-
-program reachability code.
+**What shipped:** markup is **drawn where you point**, as a real canvas
+tool with its options in the side pane. `CanvasTool` gains `Markup`
+carrying its kind; `GuiMarkupKind` and `Action::AddMarkupShape` are
+**deleted**, not left beside the new path.
 
-### 3. ★ `/R` 6 encryption — still parked at the operator's explicit instruction, but the sourcing blocker is GONE
+**⚠ WHAT DID NOT SHIP — the operator's report had two halves and only one
+is answered:**
 
-Encryption stayed parked all session (*"put the encryption aside for now
-to work on later"*). `/R` 6 remains the **only** read-side gap, and it
-is exactly one function: `crates/pdfce-core/src/crypto/r5.rs`, private
-`fn hash` — Algorithm 2.B's substitution point. Everything around it
-(`/O`/`/U` layout, `/UE`/`/OE` unwrap, `/Perms` check, the calling
-harness) is implemented and tested. **That is precisely the situation
-where filling it from memory is most tempting and least detectable** —
-the refusal fixture (`enc-aes-256-r6.pdf`) and the refusal tests exist
-to make that hard. Do not remove or weaken either to "make progress."
+> *"I tried adding the review tools and they just drop things into the
+> center of the pdf window. **I can't drag or resize them.** …"*
 
-**★ NEW, AND IT CHANGES THE ROUTE: the operator supplied ISO 32000-2 on
-2026-08-12.** The prior handoff listed "acquire sponsored access" as
-step 1 and the operator's own act. **He did it.** Algorithm 2.B is now
-sourceable from the primary standard whenever encryption is un-parked.
+- **Slice 2 — post-hoc SELECT / MOVE / RESIZE of an annotation already on
+  the page. NOT BUILT.** This is the sentence above, and it is the next
+  thing to do on this request.
+- **Slice 3 — the remaining six markup kinds. NOT BUILT.**
+- **Slice 4 — Family B reshape. NOT BUILT.**
 
-**The file, path corrected — verified by `ls` on the directory this
-filing, because the path relayed to the librarian was one level off:**
+**Do not read "markup is drawn where you point" as "the markup request is
+done."** Spec: `docs/ui_specs/pass-46-canvas-interaction-model.md`.
+
+**Two findings from slice 1 worth keeping in hand:**
+
+1. **`drag_started()` does not fire on the frame of the press.** It fires
+   once the pointer has moved far enough to count as a drag, so
+   `interact_pointer_pos()` reports a position **already travelled to**.
+   A drag that should have spanned **50.5 pt** produced **42.0**.
+   **`press_origin()` is the press itself.** `run_place_field_tool` had
+   the identical pattern and the identical offset — **fixed too, and it
+   was never reported only because a form field's exact corner is less
+   scrutinised than a drawn shape's.**
+2. **A count-only test passed for the whole life of that defect.** One
+   shape was added, one shape existed; the bug was entirely *where*.
+   **Assert coordinates, and read the baseline from the fixture.**
+
+---
+
+## 4. The GUI has NO attachments surface at all
+
+`95c3416` finished the capability in **core and CLI only**:
+`EditSession::attach_file` / `detach_file`, and CLI
+`extract-attachment` / `attach-file` / `detach-file`. Verified end to end
+on the release binary (attach → list → extract → detach, bytes
+byte-identical).
+
+**`core [x] cli [x] gui [ ]` — and the `gui` box is deliberately not
+rounded up in `FEATURES.md`.** There is no attachments panel, no menu
+entry, nothing.
+
+Three properties of that surface a GUI slice must preserve:
+
+- **`extract-attachment` REQUIRES an explicit output path and never
+  derives one from the attachment's own name.** That name is
+  **attacker-controlled** and ISO 32000-1 constrains nothing about it —
+  `..`, NUL, reserved device names, RTL overrides rendering `gnp.exe` as
+  `exe.png`. **A GUI that defaulted the save name to the stored name
+  would reintroduce the path-traversal primitive the CLI refuses to be.**
+- **`detach-file` is NOT a redaction.** Incremental save keeps every
+  prior revision **by design**, so the bytes stay recoverable; `--mode
+  full` is the answer, and the GUI must say so too (rule 4).
+- **A multi-node (`/Kids`) `/EmbeddedFiles` name tree is refused by name**
+  by both verbs, because a wrong `/Limits` repair breaks the attachments
+  **already in the document**. Surface the refusal with its reason; do
+  not hide the file.
+
+---
+
+## 5. `/R` 6 encryption — still parked at the operator's explicit instruction
+
+Encryption stays parked (*"put the encryption aside for now to work on
+later"*). `/R` 6 remains the **only read-side gap**, and it is exactly
+one function: `crates/pdfce-core/src/crypto/r5.rs`, private `fn hash` —
+Algorithm 2.B's substitution point. Everything around it (`/O`//`U`
+layout, `/UE`//`OE` unwrap, `/Perms` check, the calling harness) is
+implemented and tested.
+
+**That is precisely the situation where filling it from memory is most
+tempting and least detectable.** The refusal fixture
+(`enc-aes-256-r6.pdf`) and the refusal tests exist to make that hard —
+**do not remove or weaken either to "make progress."**
+
+**The sourcing blocker is gone.** ISO 32000-2, supplied by the operator
+2026-08-12:
 
 ```
 D:\Dev\Rag-Specialized\PDF_Spec\_sources\ISO_32000-2_sponsored_EC3.pdf
 ```
 
-— **not** the top level of `PDF_Spec\`. 19,203,156 B, 1,023 pages, PDF
-Association sponsored release, Errata Collection 3 (2026-06-01),
-acquired via `https://pdfa.org/sponsored-standards/`. Registered in
-`D:\Dev\Rag-Specialized\PDF_Spec\LEGAL_NOTE.md` (rows at lines 36 and
-124–160) with `license_basis: licensed_primary_private_rag`.
+19,203,156 B, 1,023 pages, PDF Association sponsored release, Errata
+Collection 3 (2026-06-01). Registered in that corpus's `LEGAL_NOTE.md`
+with `license_basis: licensed_primary_private_rag`.
 
 **⚠ LICENCE, BINDING.** The copy is **watermarked to the operator by
 name** and states **"Single user only, copying and networking
 prohibited."** It must **never** be committed to pdfce, **never**
-shipped, **never** a release asset, and never copied out of
-`_sources\`. **Paraphrase and cite only** — a clause number and a
-restatement, never the clause text. The repository is public
-(`CLAUDE.md` rule 8): anything committed here is published by default,
-so this is not a hypothetical exposure. Route spec questions through
-`pdfce-spec-librarian`, which owns that corpus; do not lift from the PDF
-into pdfce's own docs or code comments.
+shipped, **never** a release asset, and never copied out of `_sources\`.
+**Paraphrase and cite only** — a clause number and a restatement, never
+the clause text. **The repository is public** (`CLAUDE.md` rule 8):
+anything committed here is published by default, so this is not a
+hypothetical exposure. Route spec questions through
+`pdfce-spec-librarian`, which owns that corpus.
 
-### 4. ★ GUI interaction model (`Pass 46.0`/`46.1`) — the operator's most recent GUI request, and it is NOT done
+**Also still unstarted:** **writing** an encrypted document, in every
+configuration and every shell.
 
-`0947cab` fixed the **pane latch only**: `pane_subject` was set by the
-ribbon and nothing ever set it back, so one visit to Properties (or
-Redact, Forms, Comments, Layers, Signatures, Fonts, Batch Tools) latched
-the Tool Options pane for the session and every later tool-arm was
-swallowed silently. That answers the operator's two reports — *"when I
-click any tool button I'd expect its options to pop up in the side bar"*
-and *"page properties is still showing permanently in one of the
-windows"* — and **nothing more**.
+---
 
-**Still unstarted:** annotations joining the `CanvasTool` gesture
-framework, selection-driven Tool Options, drag/resize of anything
-carrying a `/Rect`. Do not read "tool options fixed" as "the GUI request
-is done."
+## 6. ★ TWO ESCALATIONS STILL AWAITING THE OPERATOR — raise them, don't resolve them
 
-**Worth carrying from `0947cab`:** both doc comments already asserted
-the behaviour — `PaneSubject::ArmedTool` said *"Arming a tool comes back
-here"* and `Action::SelectCanvasTool` said *"Pass 34.1: arming a tool
-raises Tool Options"*. Neither was true. **Reading the comment IS the
-check a reader would run, and it agreed with itself.** Fourth instance
-this session of a claim with no implementation. When a doc comment
-states a guarantee, the pinning test is what makes it a guarantee.
+1. **The broken no-git convention** (`iccce`).
+2. **Agents' in-progress files swept into a public repo.**
 
-### 5. ✅ RESOLVED by `b902ea0` — and the item that sat here was WRONG IN BOTH HALVES
+**Both are carried from the engineer's context with no supporting detail,
+and the filing librarian could find NO written record of either anywhere
+in `docs/`.** They are recorded here so a compaction does not lose them —
+**not** as established findings. **The exact content of both must come
+from the operator or the engineer.**
 
-**This slot previously read:** *"`cargo fmt --check` fails in
-`tools/difftest` — 109 diffs, never covered."* **Do not act on that; it
-was false in both of its stated facts, and it sat here for several
-sessions.**
+One check that bears on the first: **`D:\Dev\iccce\` DOES contain a
+`.git` directory** (verified by `ls` at filing time), so whatever the
+claim is, it is **not** "that project has no repository." Get the actual
+statement before acting.
 
-- **`tools/difftest` is CLEAN**, and appears to have been for some time —
-  **0 diffs**. Measured by its total absence from `git show --stat
-  b902ea0`: the commit that formatted every unformatted excluded crate
-  did not change one byte of it.
-- **The unformatted code was in nine OTHER crates** — 41 diffs over 8
-  (corpus-report 1, roundtrip 2, content-identity 2, recover-sweep 2,
-  render-profile 8, unembed-sweep 5, embed-sweep 4, fuzz 17), plus
-  `tools/fontfile-census`, which was in **neither `members` nor
-  `exclude`** and so was invisible to `cargo fmt --all`, to `cargo
-  test`, and to every workspace-wide gate at once. **9 of 12 excluded
-  crates (75%) carried unformatted code; this item named one of the 3
-  that were already clean.**
+---
 
-**Why it could persist, which is the part to carry forward.** `cargo fmt
---all` formats **workspace MEMBERS**; every crate in `Cargo.toml`'s
-`exclude` array is unreachable by it. **A coverage hole does not merely
-permit drift — it lets WRONG BELIEFS about the drift survive, because no
-command exists that would contradict them.** Nobody was careless; the
-project had no instrument that could disagree with the figure.
+## 7. ★ TAKE A BACKUP — 7 commits owed, and this figure was MEASURED, not inherited
 
-**RUN THE COMMAND, DO NOT INHERIT A FIGURE FROM THIS FILE:**
+**Measured at filing time**, by `git bundle list-heads` +
+`git rev-list --count`, not by reading any document:
 
-```
-python tools/check-fmt-excluded.py
-```
+- Newest bundle: **`pdfce-20260812-1100.bundle`**, whose `refs/heads/main`
+  is **`68408f18980fa2bfd61d81f4627b59a173d8c0a9`**.
+- `git rev-list --count 68408f1..HEAD` = **7**.
+- `HEAD` = **`95c34165d8fdd7642ddde1b265aac9681cc63275`**.
+- `git remote -v` = `https://github.com/KenM76/pdfce.git`.
 
-It derives its target list from `Cargo.toml` at run time (a hard-coded
-list would go stale the first time someone adds a sweep tool — this same
-failure one level up), checks all **12** out-of-workspace crates, and
-also flags any crate under `tools/` or `fuzz/` that is in neither
-`members` nor `exclude`. It is wired into CI's `fmt` job and is **proven
-to run on Linux CI**, not merely locally on Windows. Current state:
-**clean, 12 crates** — coverage went **0 of 12 → 12 of 12**.
+**This ledger has carried a WRONG backup figure twice.** `ls` and
+`git bundle list-heads` cost nothing. **Re-run them; do not quote the
+number above without re-running it, including when the number above is
+this one.**
 
-### 5b. ★ NEW, small and actionable — the CI job's name does not name the gate that failed
+---
 
-Every red X on a release commit renders in GitHub's checks list as
-**`verify pdfce-gui strings live in ui_text.rs`**. That job
-(`.github/workflows/ci.yml:257–322`) has accumulated **three unrelated
-gate steps** under a name describing only the first:
-`check-ui-strings.sh`, `check-disclosure-channel.sh`, and
-`check-commits-filed.py`. **In all five red runs examined (`v0.5.1`,
-`v0.5.0`, `v0.3.0`, `b902ea0`, `b1ee1cf`) the failing step was the
-THIRD** — the filing gate — **and the job name said the first.** Anyone
-reading the checks list is told a UI-strings violation blocked the
-release. It did not, in any of the five.
+## 8. Carried forward, unchanged in substance
 
-Fix: rename the job to something honest (it is now a general
-"project gates" job) or split the three steps into three jobs, so a red
-X names its own cause. `R174`'s shape aimed at a job label rather than a
-message.
-
-### 6. Everything below is carried forward, unchanged in substance
-
-- **Encrypted-save**, any cipher, every shell — entirely unstarted.
-  `/R` 6 is the last *read*-side gap; writing an encrypted document is
-  unimplemented in every configuration.
+- **`Pass 67.0` phases C, D and F** — all unstarted, none blocking.
+  Three of six shipped (A reporting, B unembed, E embed-missing); the
+  request that opened the family is answered. **Ask the operator which
+  (if any) he wants next rather than guessing an order.** C = re-subset
+  (lowest risk, no visual change, works where B must refuse). D = convert
+  text to outlines (the universal escape hatch; irreversible — disclose
+  the cost inline, not merely via a confirm button). F = replace font X
+  with Y (hardest; Acrobat has **no equivalent** — parity-plus).
+  Reusable substrate already built:
+  `FontEnvironment::resolve_for_embedding`'s four-rung donor ladder,
+  `fontinfo::Removability`'s nine-verdict classifier, and
+  `font_embed_missing.rs`/`font_unembed.rs`'s shared-descriptor
+  reachability code.
+- **The CI job's NAME does not name the gate that fails.** Every red X
+  renders as **`verify pdfce-gui strings live in ui_text.rs`**, but that
+  job (`.github/workflows/ci.yml:257–322`) runs **three** unrelated gate
+  steps and **in all five red runs examined the failing step was the
+  THIRD** (`check-commits-filed.py`). Rename or split it so a red X names
+  its own cause. Small and actionable.
 - Two dead/stale printing items, filed to Backlog, deliberately not
-  fixed: `DeviceSettings::pick_tray_by_page_size` sets no `DEVMODE`
-  field at all; `build_devmode`'s doc claims a driver-default start the
-  code doesn't do.
+  fixed: `DeviceSettings::pick_tray_by_page_size` sets no `DEVMODE` field
+  at all; `build_devmode`'s doc claims a driver-default start the code
+  does not do.
 - **Imposition has no GUI** — extract sheet composition into
   `pdfce-print` first so both shells share one implementation.
 - Static hybrid XFA read/fill · wide-shape CSV · colour management
   (`D:\Dev\iccce\`, planned, no code).
-- **Ledger-accuracy defect, still not fixed:** filings ninety-two
-  through ninety-five cite `(bh)`/`(bi)` as if `(bi)` had not been
-  minted.
+- **Ledger-accuracy defect, still not fixed:** filings ninety-two through
+  ninety-five cite `(bh)`/`(bi)` as if `(bi)` had not been minted.
 - **Spec-librarian flag, still open:** confirm the eight-item
   never-encrypted list (E1–E9) is in the §7.6 corpus rather than only in
   pdfce's code.
+- **`CLAUDE.md` rule 8's literal per-release wording is stale** against
+  the operator's 2026-08-11 standing release authorisation — flagged
+  across several filings, not yet amended by him; **not the librarian's
+  or the engineer's file to edit.**
 
 ---
 
-## ★ Take a backup — but the figure this file carried was WRONG, and the gap is minutes, not days
+## Release state — `v0.5.1`
 
-**★ CORRECTED 2026-08-12 (hundred-and-twenty-fourth filing), by `ls -la
-D:\Dev\pdfce-backups\` run at correction time — not by re-reading this
-file.** The paragraph here previously said the newest bundle was
-`pdfce-20260807-2039.bundle` (2026-08-07 20:39) and that it predated
-"the whole of `Pass 67.0`". **A fresh bundle had in fact been taken
-today and neither this file nor the previous filing knew it.**
+Tag `v0.5.1` → `aad48c73…`. **Its CI run is RED on
+`check-commits-filed` only** — three commits were tagged and released
+before the librarian filed them. **The released CODE is fine and that is
+proven:** `git diff --name-only aad48c7 68408f1` returns **only `docs/`
+paths**, and `68408f1` passed CI fully. **Binaries fine, ordering wrong.**
 
-**Measured:**
+**★ THE ORDERING RULE, now enforced by the tool: FILE, LET CI GO GREEN,
+THEN TAG.** Run `tools/verify-release.py <tag>` **before** tagging.
+History: **3 of the last 4 releases (75%) were tagged at a commit CI had
+rejected** — `v0.5.1` and `v0.5.0` on the filing gate only, `v0.4.0`
+green, and **`v0.3.0` on `cargo test` + `cargo clippy` + the
+`aarch64-apple-darwin` cross-check simultaneously — a published release
+whose tests did not pass.** Those jobs run on Linux/macOS/wasm while
+local verification happens on Windows: **cross-platform breakage is
+invisible to local gate runs by construction.**
 
-- Newest bundle: **`pdfce-20260812-1100.bundle`**, 12,530,418 B,
-  **2026-08-12 11:00**.
-- Newest full artefact: `pdfce-full-20260808-0956.zip`, 183,439,240 B,
-  **2026-08-08 10:01** (unchanged, and this half was correct).
+**The version bump comes BEFORE the tag, deliberately** — `--version`
+prints `CARGO_PKG_VERSION`, so tagging a version the binary does not
+report would ship a false claim in the one place a user checks it.
 
-**A bundle is still owed, but the gap is 2 commits over 8–11 minutes**
-(`b902ea0` 11:08, `b1ee1cf` 11:11), **not the five days this file
-implied.**
-
-**This is the exact failure the librarian's hard rule 8 was amended to
-prevent — a backup figure inherited from a document rather than read off
-the disk — and it is the SECOND time this ledger has carried a wrong
-one.** `ls` costs nothing. Run it; do not quote the number above without
-re-running it, including when the number above is this one.
-
----
-
-## Release state — `v0.5.1`, verified
-
-**Measured this filing** (`git ls-remote --tags origin`,
-`gh release view v0.5.1`, `git status --short`):
-
-- Tag `v0.5.1` → `aad48c73…`, **equal to `HEAD`**; working tree
-  **clean**; `origin` = `https://github.com/KenM76/pdfce.git`.
-- Release *"pdfce v0.5.1 — embed-font works from the CLI"*, created
-  2026-08-12T14:41:54Z; asset `pdfce-v0.5.1-portable-win64.zip`,
-  **10,244,728 B**. ~~`tools/verify-release.py v0.5.1` reports clean.~~
-
-  **★ CORRECTED 2026-08-12 (hundred-and-twenty-fourth filing) — that
-  "clean" was the whole problem, and `b1ee1cf` is the fix.**
-  `verify-release.py` reported clean **while the tagged commit's CI run
-  was RED**. Every check it made was true — tag exists, at `HEAD`,
-  pushed, `origin/main` contains it, asset present — **because not one
-  of those facts is about whether the code passes.** It was verifying
-  that the bookkeeping was self-consistent. The tool now consults CI and
-  **`v0.5.1` FAILS the new check.**
-
-  **The released CODE is fine and that is proven, not argued:** `git
-  diff --name-only aad48c7 68408f1` returns **only `docs/` paths**, and
-  `68408f1` passed CI fully. The red X on the tag is purely
-  `check-commits-filed` — three commits were tagged and released before
-  the librarian filed them. **Binaries fine, ordering wrong.**
-
-  **★ THE ORDERING RULE, and it is now enforced by the tool: FILE, LET
-  CI GO GREEN, THEN TAG.** Run `tools/verify-release.py <tag>` **before**
-  tagging, not after. History measured this filing: **3 of the last 4
-  releases (75%) were tagged at a commit CI had rejected** — `v0.5.1`
-  and `v0.5.0` on the filing gate only, `v0.4.0` green, and **`v0.3.0`
-  on `cargo test` + `cargo clippy` + the `aarch64-apple-darwin`
-  cross-check simultaneously — a published release whose tests did not
-  pass.**
-
-  **Why `v0.3.0` was invisible, and why it will be again without CI:**
-  those jobs run on `ubuntu-latest`, macOS and `wasm32` while
-  verification happens locally on **Windows**. **Cross-platform breakage
-  is invisible to local gate runs by construction.** No amount of local
-  diligence closes that; consulting CI does.
-- **The version bump came BEFORE the tag, deliberately.** `--version`
-  now prints `CARGO_PKG_VERSION`, so tagging `v0.5.1` on a binary
-  answering `0.5.0` would have shipped a false claim in the one place a
-  user checks it. Keep that order on every future release.
-
-**Standing release authorisation is still in force.** The operator's
-2026-08-11 instruction — *"please continue to post the latest versions
-to git so I can try them on my laptop at home"* — means rule 8's
-per-release ask does not apply to cutting a pdfce release: build, tag,
-publish the asset, run `tools/verify-release.py`, report what went out.
-Scope is narrow: pdfce builds for the operator's own testing. **NOT**
-blanket publishing authority, **NOT** licence to treat repository
-visibility as an agent's decision, **NOT** permission to skip
-verification. `CLAUDE.md` rule 8's literal per-release wording is still
-stale against this — flagged to the operator across several filings, not
-yet amended by him; not this librarian's or the engineer's file to edit.
+**Standing release authorisation is in force** (operator, 2026-08-11:
+*"please continue to post the latest versions to git so I can try them on
+my laptop at home"*): build, tag, publish the asset, run
+`tools/verify-release.py`, report what went out. **Scope is narrow** —
+pdfce builds for the operator's own testing. **NOT** blanket publishing
+authority, **NOT** licence to treat repository visibility as an agent's
+decision, **NOT** permission to skip verification.
 
 ---
 
-## Tooling — corrections that cost time in prior sessions, still true
+## Tooling — corrections that cost time in prior sessions
 
+- **★ NEW, and it was costing the operator his mouse:** `gui-shot.ps1`
+  and `gui-drive.ps1` **used to leak a live `pdfce-gui` process** on any
+  non-happy path — the kill was on the last line under
+  `ErrorActionPreference='Stop'`. **The leaked window parks OFF-SCREEN at
+  the caller's viewport, so it takes pointer input while showing
+  nothing.** Fixed in `ee4e1e4`: `try/finally`, pre-launch PID snapshot
+  so it can never kill an instance the operator opened himself, a
+  **verified** kill with a 5 s poll, and a printed `taskkill` line if a
+  process will not die. **If the operator ever reports a fighting mouse
+  again, this is no longer the explanation — go looking elsewhere.**
+- **`observe-gui.ps1` had `try/finally` around bitmap disposal only, not
+  the process** — the same one-sibling-hardened shape as the `fmt` gate.
+  **When you find a guard on one sibling, check what it actually wraps
+  before crediting the others with it.**
 - **`PDFCE_DIAG_VIEWPORT`**, not `PDFCE_VIEWPORT`. Four comma-separated
   numbers: `x,y,w,h`.
-- **The diag script separator is `;`, not `,`.** A comma-separated
-  script parses as ONE unparseable step and is silently skipped — the
-  trace says `script-step-UNPARSEABLE`, read it.
+- **The diag script separator is `;`, not `,`.** A comma-separated script
+  parses as ONE unparseable step and is silently skipped — the trace says
+  `script-step-UNPARSEABLE`, read it. **`tool:markup` is now in the
+  vocabulary** (added by `7825424`).
 - **`gui-shot.ps1` and `gui-drive.ps1` default to different window
   sizes.** Read the trace's own `rect=`, never a screenshot's pixels.
 - **Both scripts move the REAL cursor** and synthesise Ctrl+scroll and
@@ -372,29 +420,33 @@ yet amended by him; not this librarian's or the engineer's file to edit.
   operator is at the machine; prefer headless verification when it will
   do.
 - **A GUI control's traced rect describes the layout *request*, not what
-  survived clipping.** The embed batch button shipped unclickable for
-  one build with every headless trace assertion passing. A control whose
-  traced rect is wider than a sibling's in the same dock is the one to
-  click-test first.
-
-- **★ `gh run list --commit <SHORT-SHA>` returns an EMPTY LIST, not an
-  error.** Hit directly this filing: three commits queried by short SHA
-  returned nothing and were briefly read as "never pushed." They were
-  pushed. **Always pass a full 40-character SHA** (`git rev-parse
+  survived clipping.** A control whose traced rect is wider than a
+  sibling's in the same dock is the one to click-test first.
+- **`gh run list --commit <SHORT-SHA>` returns an EMPTY LIST, not an
+  error.** **Always pass a full 40-character SHA** (`git rev-parse
   <ref>`). An empty result from a query that silently rejects the input
-  *form* is indistinguishable from "no runs exist" — `R191`'s shape,
-  landed on `gh`. `verify-release.py` is safe (it uses `git rev-parse
-  <tag>^{commit}`), but the hazard is one careless argument away.
+  *form* is indistinguishable from "no runs exist" — `R191`'s shape.
+- **Resolve every short hash yourself with `git rev-parse`.** A
+  fabricated full hash reached a filing once already and had to be
+  corrected. The command costs nothing.
 
-`tools/splice.py` — anchored substitution, all-or-nothing.
+`tools/splice.py` — anchored substitution, all-or-nothing ·
 `tools/check-fmt-excluded.py` (no arguments; the fmt gate for the 12
-crates `cargo fmt --all` cannot see — run it beside `cargo fmt --all
+crates `cargo fmt --all` cannot see — run it **beside** `cargo fmt --all
 --check`, never instead of) ·
-`tools/verify-release.py <tag>` — **run it BEFORE tagging; it now
-consults CI** · `tools/gen-embed-fixtures.py` /
+`tools/verify-release.py <tag>` — **run it BEFORE tagging; it consults
+CI** · `tools/check-commits-filed.py` — **run it before assuming a
+dispatch listed every unfiled commit; it found one this session that a
+dispatch did not name.** File the commit, **do not** add it to
+`tools/commits-filed-baseline.txt` (a baseline entry suppresses the gate,
+a filing satisfies it) · `tools/check-ledger-numbers.py` — the live
+ceilings for Pass IDs, standing rules, decision records and filing
+ordinals · `tools/gen-embed-fixtures.py` /
 `tools/gen-unembed-fixtures.py` (no arguments needed) ·
-`tools/package-portable.py --note "..."` ·
-`tools/check-commits-filed.py` (every code commit must be named in the
-record; **file the commit, don't add it to
-`commits-filed-baseline.txt`** — a baseline entry suppresses the gate,
-a filing satisfies it).
+`tools/package-portable.py --note "..."`.
+
+**Live ceilings at this filing** (by `check-ledger-numbers.py`): standing
+rules **R191** → next free **R192** · decision records **054** → next free
+**055** · SESSION_LOG filings **125** → next free **126** · **Pass
+families up to 69** → next free **`Pass 70`** · operator questions
+**(bk)** → next free **(bl)**.
