@@ -267,6 +267,19 @@ pub enum CommandKind {
         /// Which markup subtype was added, for an undo-control label.
         kind: AnnotKind,
     },
+    /// A file was embedded into the document as an attachment
+    /// (ISO 32000-1 §7.11.4, route 2 — the `/EmbeddedFiles` name tree).
+    ///
+    /// One attachment is one undo entry: the embedded-file stream, the file
+    /// specification dictionary, and the catalog's name-tree patch all undo
+    /// together, exactly as [`CommandKind::AddAnnotation`]'s three writes do.
+    ///
+    /// Carries NO payload, deliberately. The attachment's name would make a
+    /// better undo label, but [`CommandKind`] is `Copy` and a `String` field
+    /// would remove that from every variant in the enum — a real cost paid
+    /// across the whole command log to improve one label. If a label ever
+    /// needs the name, the right move is an interned id, not `String`.
+    AttachFile,
     /// A NEW form field was authored onto a page: the merged field/widget
     /// dictionary, its baked `/AP`, the page's `/Annots` patch and the
     /// `/AcroForm` `/Fields` registration, all as ONE undo entry.
@@ -2304,6 +2317,22 @@ pub enum EditError {
         /// How many entries would be exposed.
         count: usize,
     },
+    /// The document's `/EmbeddedFiles` name tree is a MULTI-NODE tree (its
+    /// root holds `/Kids`), which [`EditSession::attach_file`] does not yet
+    /// write into (ISO 32000-1 §7.9.6).
+    ///
+    /// Refused rather than attempted because inserting into a multi-node tree
+    /// means picking the correct leaf and repairing every `/Limits` range on
+    /// the path back to the root. §7.9.6 requires each `Names` entry to hold
+    /// *"a single contiguous range"* of keys and requires ranges not to
+    /// overlap; a subtly wrong repair produces a document whose EXISTING
+    /// attachments stop resolving — damage to what was already there, caused
+    /// by adding something new.
+    #[error(
+        "this document's embedded-file name tree has multiple nodes, which pdfce \
+         cannot yet add to without risking the attachments already in it"
+    )]
+    AttachmentTreeUnsupported,
     /// A ce-dimension operation named a dimension the sidecar model does not
     /// contain (Pass 25.5).
     ///
@@ -9972,6 +10001,228 @@ impl EditSession {
             trailer: None,
         });
         Ok(annot_id)
+    }
+
+    /// Embed a file into the document as a document-level attachment
+    /// (ISO 32000-1 §7.11.4.1, inclusion **route 2**).
+    ///
+    /// # What gets written, and why each piece is required
+    ///
+    /// Three objects, in the indirection order the standard mandates:
+    ///
+    /// 1. An **embedded file stream** — `/Type /EmbeddedFile` (Table 45,
+    ///    Optional but written), the bytes `FlateDecode`-compressed, and a
+    ///    `/Params` dictionary carrying `/Size` (Table 46). §7.11.4.1 is
+    ///    explicit that `/Size` is *"the size of the **uncompressed**
+    ///    embedded file"*, so it is the plain length, never the encoded one.
+    /// 2. A **file specification dictionary** — `/Type /Filespec`, `/F` and
+    ///    `/UF` naming the file, `/EF << /F … /UF … >>` pointing at the
+    ///    stream. Table 44 is emphatic here: *"If this entry is present, the
+    ///    `Type` entry is required and the file specification dictionary
+    ///    **shall be indirectly referenced**"* — hence its own object number
+    ///    rather than an inline dictionary.
+    /// 3. A patch to the catalog's `/Names /EmbeddedFiles` **name tree**,
+    ///    whose values are file specifications, *not* streams — the stream is
+    ///    one `/EF` hop further down (§7.11.4.1's note on route 2).
+    ///
+    /// `/CheckSum` (Table 46) is deliberately **omitted**. It is Optional, it
+    /// is defined as MD5, and pdfce has no MD5 implementation — adding a
+    /// hash dependency to write an optional field would be a licence and
+    /// supply-chain decision taken for no functional gain (project rule 13).
+    ///
+    /// # Name-tree handling, including the case this refuses
+    ///
+    /// §7.9.6: the root *"shall contain a single entry: either `Kids` or
+    /// `Names` but not both"*, and *"if the root node has a `Names` entry, it
+    /// shall be the only node in the tree"*. Keys in a `Names` array *"shall
+    /// be sorted lexically in ascending order"*.
+    ///
+    /// - No tree yet → a root node holding only `/Names` is created.
+    /// - A root holding `/Names` → the new key is inserted at its sorted
+    ///   position, preserving every existing entry.
+    /// - A root holding `/Kids` → **refused by name**
+    ///   ([`EditError::AttachmentTreeUnsupported`]). Inserting into a
+    ///   multi-node tree means choosing a leaf and repairing every `/Limits`
+    ///   range up the chain, and getting that subtly wrong produces a
+    ///   document whose *existing* attachments stop resolving. Refusing is
+    ///   the honest outcome until that is built and tested; silently writing
+    ///   a tree that violates the "single contiguous range" `shall` would be
+    ///   worse than declining.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::DocumentEncrypted`] for an encrypted document (pdfce can
+    /// decrypt but not yet write encryption), the certification refusal when
+    /// a signature forbids the change, and
+    /// [`EditError::ObjectCreationWouldExposeHiddenObjects`] when a filtering
+    /// `/Size` would be raised — the same three guards every object-creating
+    /// verb in this type applies, in the same order.
+    pub fn attach_file(
+        &mut self,
+        name: &str,
+        bytes: &[u8],
+        description: Option<&str>,
+    ) -> Result<ObjId, EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification_for_annotation()?;
+        let suppressed = self.base.suppressed_object_count();
+        if suppressed > 0 {
+            return Err(EditError::ObjectCreationWouldExposeHiddenObjects { count: suppressed });
+        }
+
+        let catalog_id = self.graph().catalog_id().ok_or(EditError::NotADictionary {
+            id: ObjId::new(0, 0),
+            key: "Root",
+        })?;
+        let catalog = match self.value(catalog_id) {
+            Some(Object::Dict(d)) => d.clone(),
+            _ => {
+                return Err(EditError::NotADictionary {
+                    id: catalog_id,
+                    key: "Root",
+                });
+            }
+        };
+
+        // Resolve the existing tree FIRST, so a refusal happens before any
+        // object number is allocated. An allocation followed by a refusal
+        // would leave the session's counter advanced for a command that never
+        // committed — harmless today, but exactly the kind of drift that
+        // makes a later "why is this number missing" investigation expensive.
+        let names_dict = self.deref_dict(catalog.get(b"Names")).unwrap_or_default();
+        let existing_tree = names_dict.get(b"EmbeddedFiles").cloned();
+        let mut entries: Vec<(Vec<u8>, Object)> = Vec::new();
+        if let Some(obj) = &existing_tree {
+            let node = self
+                .deref_dict(Some(obj))
+                .ok_or(EditError::AttachmentTreeUnsupported)?;
+            if node.contains_key(b"Kids") {
+                return Err(EditError::AttachmentTreeUnsupported);
+            }
+            if let Some(Object::Array(arr)) = self.deref_value(node.get(b"Names")) {
+                // Pairs, per §7.9.6: [key1 value1 key2 value2 ...].
+                // Destructured rather than indexed. `chunks_exact(2)` does
+                // guarantee the length, so `pair[0]` could not actually
+                // panic — but a slice pattern says that to the compiler
+                // instead of to a reader, and clippy is right that the
+                // guarantee should not have to be reconstructed by whoever
+                // reads this next.
+                for pair in arr.chunks_exact(2) {
+                    if let [Object::String(k), value] = pair {
+                        entries.push((k.clone(), value.clone()));
+                    }
+                }
+            }
+        }
+
+        let file_id = ObjId::new(self.alloc_number()?, 0);
+        let spec_id = ObjId::new(self.alloc_number()?, 0);
+
+        // -- 1. The embedded file stream.
+        let encoded = crate::filters::flate::encode(bytes);
+        let mut params = Dict::new();
+        params.insert(
+            Name::from(b"Size"),
+            // The UNCOMPRESSED length (Table 46), not `encoded.len()`.
+            Object::Integer(i64::try_from(bytes.len()).unwrap_or(i64::MAX)),
+        );
+        let mut file_dict = Dict::new();
+        file_dict.insert(
+            Name::from(b"Type"),
+            Object::Name(Name::from(b"EmbeddedFile")),
+        );
+        file_dict.insert(
+            Name::from(b"Filter"),
+            Object::Name(Name::from(b"FlateDecode")),
+        );
+        file_dict.insert(Name::from(b"Params"), Object::Dict(params));
+        file_dict.insert(
+            Name::from(b"Length"),
+            Object::Integer(i64::try_from(encoded.len()).unwrap_or(i64::MAX)),
+        );
+        let file_span = self.stage_bytes(&encoded);
+        let file_stream = Object::Stream(Stream {
+            dict: file_dict,
+            data_span: file_span,
+        });
+
+        // -- 2. The file specification dictionary.
+        let name_bytes = name.as_bytes().to_vec();
+        let mut ef = Dict::new();
+        ef.insert(Name::from(b"F"), Object::Reference(file_id));
+        ef.insert(Name::from(b"UF"), Object::Reference(file_id));
+        let mut spec = Dict::new();
+        spec.insert(Name::from(b"Type"), Object::Name(Name::from(b"Filespec")));
+        spec.insert(Name::from(b"F"), Object::String(name_bytes.clone()));
+        spec.insert(Name::from(b"UF"), Object::String(name_bytes.clone()));
+        spec.insert(Name::from(b"EF"), Object::Dict(ef));
+        if let Some(desc) = description {
+            // Table 44: /Desc "shall be used for files in the EmbeddedFiles
+            // name tree" — this is precisely that case, so it is written.
+            spec.insert(
+                Name::from(b"Desc"),
+                Object::String(desc.as_bytes().to_vec()),
+            );
+        }
+
+        // -- 3. The name-tree patch, sorted per §7.9.6.
+        entries.retain(|(k, _)| k != &name_bytes);
+        entries.push((name_bytes.clone(), Object::Reference(spec_id)));
+        // "sorted lexically in ascending order by key. Shorter keys shall
+        // appear before longer ones" — which is what a plain byte-slice sort
+        // gives, since a prefix compares less than the string extending it.
+        entries.sort_by(|a, b| a.0.cmp(&b.0));
+        let mut flat: Vec<Object> = Vec::with_capacity(entries.len() * 2);
+        for (k, v) in entries {
+            flat.push(Object::String(k));
+            flat.push(v);
+        }
+        let mut tree_node = Dict::new();
+        tree_node.insert(Name::from(b"Names"), Object::Array(flat));
+
+        let mut objects = vec![
+            ObjectWrite {
+                id: file_id,
+                before: None,
+                after: Some(file_stream),
+            },
+            ObjectWrite {
+                id: spec_id,
+                before: None,
+                after: Some(Object::Dict(spec)),
+            },
+        ];
+
+        // The tree node may be an object of its own (the usual shape) or
+        // inline in /Names. Both are written back the way they were found, so
+        // this never restructures a document to suit itself (rule 3).
+        let mut new_names = names_dict.clone();
+        if let Some(Object::Reference(node_id)) = existing_tree {
+            objects.push(ObjectWrite {
+                id: node_id,
+                before: self.value(node_id).cloned(),
+                after: Some(Object::Dict(tree_node)),
+            });
+        } else {
+            new_names.insert(Name::from(b"EmbeddedFiles"), Object::Dict(tree_node));
+        }
+        let mut new_catalog = catalog.clone();
+        new_catalog.insert(Name::from(b"Names"), Object::Dict(new_names));
+        objects.push(ObjectWrite {
+            id: catalog_id,
+            before: Some(Object::Dict(catalog)),
+            after: Some(Object::Dict(new_catalog)),
+        });
+
+        self.commit(Command {
+            kind: CommandKind::AttachFile,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(spec_id)
     }
 
     /// Author a `/Redact` redaction **mark** onto a page (Pass 8,

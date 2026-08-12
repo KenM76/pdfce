@@ -402,3 +402,153 @@ fn a_caller_can_answer_which_attachments_a_page_delete_would_destroy() {
     assert_eq!(doomed, ["on-page-two.txt"]);
     assert_eq!(survivors, ["whole-document.txt"]);
 }
+
+// -- Writing attachments (Pass 47, §7.11.4.1 route 2) ------------------
+
+/// An attached file must survive a save and be readable by the SAME reader
+/// that reads foreign documents' attachments.
+///
+/// # Why the read-back goes through `list_attachments`
+///
+/// Asserting on the objects this session just wrote would only prove the
+/// writer agrees with itself. `list_attachments` is the code path that reads
+/// every OTHER producer's attachments, and it was written long before this
+/// writer existed — so routing the assertion through it tests the thing that
+/// actually matters: that what pdfce writes is what a reader expects to find,
+/// including the `/EF` indirection §7.11.4.1 warns is one hop deeper than it
+/// looks.
+#[test]
+fn an_attached_file_survives_a_save_and_reads_back() {
+    use pdfce_core::edit::EditSession;
+    use pdfce_core::writer::{SaveOptions, save_full};
+
+    // A document with NO existing name tree — the create-from-nothing path.
+    let doc = Document::from_bytes(
+        std::fs::read(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../fixtures/synthetic/minimal.pdf"),
+        )
+        .expect("read minimal.pdf"),
+    )
+    .expect("parse minimal.pdf");
+    let before = list_attachments(&doc).len();
+
+    let mut session = EditSession::new(doc);
+    const BODY: &[u8] = b"NOTICE\nThis file was attached by a test.\n";
+    session
+        .attach_file("notice.txt", BODY, Some("A test attachment"))
+        .expect("attach must succeed on a document with no existing tree");
+
+    let (bytes, _) = save_full(
+        session.document(),
+        &session.dirty_set(),
+        &SaveOptions::identity(),
+    )
+    .expect("save");
+    let back = Document::from_bytes(bytes).expect("the saved file must reload");
+
+    let found = list_attachments(&back);
+    assert_eq!(
+        found.len(),
+        before + 1,
+        "exactly one attachment must have been added"
+    );
+    let ours = found
+        .iter()
+        .find(|a| a.name == "notice.txt")
+        .expect("the attachment must be findable by the name it was filed under");
+    assert_eq!(
+        ours.description.as_deref(),
+        Some("A test attachment"),
+        "/Desc is what a reader shows beside the name (Table 44)"
+    );
+
+    // And the BYTES must come back, not merely the entry. An attachment whose
+    // stream is unreadable is worse than none: it looks present and is not.
+    let view = back.view();
+    let data = attachment_bytes(&view, ours).expect("the embedded stream must decode");
+    assert_eq!(
+        data, BODY,
+        "the decompressed attachment must be byte-identical to what went in"
+    );
+}
+
+/// Adding an attachment must not disturb the ones already there.
+///
+/// The name tree is a single sorted array (§7.9.6), so an insert rewrites the
+/// whole node — which is exactly the operation that can silently drop a
+/// neighbour. Pinned on a fixture that already has attachments, because a
+/// test on an empty document could never catch it.
+#[test]
+fn attaching_preserves_the_attachments_already_present() {
+    use pdfce_core::edit::EditSession;
+    use pdfce_core::writer::{SaveOptions, save_full};
+
+    let doc = load("both-kinds.pdf");
+    let before: Vec<String> = list_attachments(&doc).into_iter().map(|a| a.name).collect();
+    assert!(
+        before.len() >= 2,
+        "this test is only meaningful on a document that already has some"
+    );
+
+    let mut session = EditSession::new(doc);
+    session
+        .attach_file("zzz-added.txt", b"x", None)
+        .expect("attach");
+    let (bytes, _) = save_full(
+        session.document(),
+        &session.dirty_set(),
+        &SaveOptions::identity(),
+    )
+    .expect("save");
+    let back = Document::from_bytes(bytes).expect("reload");
+
+    let after: Vec<String> = list_attachments(&back)
+        .into_iter()
+        .map(|a| a.name)
+        .collect();
+    for name in &before {
+        assert!(
+            after.contains(name),
+            "pre-existing attachment {name:?} was lost by the insert; after = {after:?}"
+        );
+    }
+    assert!(after.contains(&"zzz-added.txt".to_string()));
+}
+
+/// A multi-node (`/Kids`) name tree is REFUSED by name, not corrupted.
+///
+/// §7.9.6 requires each `Names` entry to carry a single contiguous,
+/// non-overlapping key range. Inserting into a `/Kids` tree means choosing a
+/// leaf and repairing every `/Limits` up the chain; a subtly wrong repair
+/// breaks the attachments that were ALREADY in the document — new damage to
+/// existing content, which is the outcome this codebase refuses hardest.
+///
+/// Asserted on the fixture that actually has such a tree, so the refusal is
+/// proved by making the condition occur rather than by reading the branch.
+#[test]
+fn a_multi_node_name_tree_is_refused_rather_than_damaged() {
+    use pdfce_core::edit::{EditError, EditSession};
+
+    let doc = load("doc-level-kids-tree.pdf");
+    let before = list_attachments(&doc).len();
+    assert!(
+        before > 0,
+        "the fixture must actually carry attachments for this to mean anything"
+    );
+
+    let mut session = EditSession::new(doc);
+    let err = session
+        .attach_file("new.txt", b"x", None)
+        .expect_err("a /Kids tree must be refused");
+    assert!(
+        matches!(err, EditError::AttachmentTreeUnsupported),
+        "refused for the RIGHT reason, not incidentally: got {err:?}"
+    );
+    // And nothing may have been staged: a refusal that half-wrote is worse
+    // than one that wrote nothing.
+    assert!(
+        session.dirty_set().is_empty(),
+        "a refused attach must leave the session untouched"
+    );
+}
