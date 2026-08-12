@@ -1,0 +1,50 @@
+# unembed-sweep — runs Pass 67.0 phase B's font unembedding over the real
+# corpus and measures what actually happens.
+#
+# WHY THIS EXISTS. Every other check on this feature is a fixture: a document
+# whose exact shape pdfce chose. That proves each branch works; it cannot
+# prove the branches cover what real producers emit, and it cannot answer the
+# one question that matters most for a destructive operation —
+#
+#     does the file still open, and does page 1 still render, afterwards?
+#
+# A file that unembeds and then fails to load is the failure mode that would
+# be discovered by an operator rather than by a test. So this sweep does the
+# whole round trip on every corpus file: plan, apply, save as a FULL REWRITE
+# (the only mode that reclaims anything), re-open the written bytes with a
+# fresh `Document`, re-run the font inventory, and rasterise page 1.
+#
+# It measures. It does not decide, and it does not gate: an unopenable input
+# is data about the corpus, not a failure of this feature.
+#
+# WHY OUT-OF-TREE (workspace-excluded, same as tools/corpus-report,
+# font-parity, roundtrip, tw-census, difftest): keeps `cargo test --workspace`
+# fast, keeps the GUI-core-separation `cargo tree` checks unambiguous, and
+# keeps cargo-about's THIRD_PARTY_LICENSES.md a picture of the SHIPPING graph
+# only (LEGAL.md §6.3).
+#
+# ZERO NEW DEPENDENCIES — pdfce-core and pdfce-render by path, everything
+# else std. A harness whose numbers back a claim about a destructive feature
+# should not be able to blame a third-party crate for them.
+#
+# FIXTURE RULE (LEGAL.md §5): reads rights-cleared corpora in place from
+# gitignored scratch space, writes its output to a temp directory, and emits
+# only aggregates and a per-file TSV. It never modifies a corpus file — the
+# input is opened read-only and the result is written elsewhere.
+
+[package]
+name = "unembed-sweep"
+version = "0.0.0"
+edition = "2024"
+publish = false
+# license intentionally unset — internal tool, never shipped or published
+# (same posture as the workspace, docs/LEGAL.md §1).
+
+[workspace]
+
+[dependencies]
+pdfce-core = { path = "../../crates/pdfce-core" }
+pdfce-render = { path = "../../crates/pdfce-render" }
+
+[profile.release]
+opt-level = 3
