@@ -11237,6 +11237,35 @@ impl PdfceApp {
                 // response to picking a tool.
                 if tool.is_some() {
                     self.rail_expanded = true;
+                    // ★ AND RAISE THE TOOL COMPARTMENT ITSELF. Without this
+                    // line the rail opens onto whatever the operator last
+                    // reached from the ribbon, and the tool they just armed is
+                    // invisible.
+                    //
+                    // `tool_options_panel` returns early unless
+                    // `pane_subject == ArmedTool`. `pane_subject` was set by
+                    // the ribbon and nothing ever set it back, so ONE visit to
+                    // Properties (or Redact, Forms, Comments, Layers,
+                    // Signatures, Fonts, Batch Tools) latched the pane for the
+                    // rest of the session and every later tool-arm was
+                    // swallowed silently — `enabled_tools` and `active_tool()`
+                    // updated correctly, the pane just never reached the code
+                    // that reads them.
+                    //
+                    // Reported by the operator as two separate complaints —
+                    // "when I click any tool button I'd expect its options to
+                    // pop up in the side bar" and "page properties is still
+                    // showing permanently" — which are one bug from both ends.
+                    //
+                    // Both this function's own comment above and
+                    // `PaneSubject::ArmedTool`'s doc ("Arming a tool comes back
+                    // here") already ASSERTED this behaviour. The claim was
+                    // written and the line was not, which is why no reader of
+                    // either comment would have gone looking.
+                    //
+                    // Still ONE-WAY: disarming does not push the pane
+                    // anywhere, for the reason the comment above already gives.
+                    self.pane_subject = ribbon::PaneSubject::ArmedTool;
                 }
                 // Pass 16.2 §5.1: the default add-text font is read BEFORE
                 // borrowing `doc` (it lives on `self`), so tool entry can seed
@@ -24497,6 +24526,64 @@ mod tests {
     /// it would satisfy this — and that is the right way to be wrong. The
     /// failure guarded here is *nothing but the harness reaches it*, which is
     /// what actually happened.
+    /// ★ Arming a tool RETURNS the Tool Options pane to the armed tool.
+    ///
+    /// `tool_options_panel` returns early unless `pane_subject ==
+    /// ArmedTool`. `pane_subject` is set by the ribbon and, until this test
+    /// existed, nothing ever set it back — so a single visit to Properties
+    /// latched the pane for the whole session and every later tool-arm was
+    /// swallowed. `enabled_tools` and `active_tool()` updated correctly, so
+    /// nothing looked wrong from the model's side; only the operator saw it.
+    ///
+    /// The operator reported it as two complaints — "when I click any tool
+    /// button I'd expect its options to pop up in the side bar" and "page
+    /// properties is still showing permanently" — which are one bug seen
+    /// from both ends.
+    ///
+    /// **Both `PaneSubject::ArmedTool`'s doc comment ("Arming a tool comes
+    /// back here") and `Action::SelectCanvasTool`'s own comment already
+    /// ASSERTED this.** The assertion was in prose and not in code, which is
+    /// exactly the shape no reader goes looking for — and is why this is a
+    /// test rather than a third comment saying the same thing.
+    ///
+    /// Asserted through the dispatcher on a real document, not by reading
+    /// the handler: the pane is put on Properties the way the ribbon puts it
+    /// there, then a tool is armed the way the toolbar arms it.
+    #[test]
+    fn arming_a_tool_returns_the_pane_from_properties() {
+        let mut app = PdfceApp::default();
+        app.open_path(fixture("pageops/four-pages.pdf"));
+        assert!(
+            matches!(app.status, Status::Open(_)),
+            "the fixture must open"
+        );
+
+        app.show_pane_subject(ribbon::PaneSubject::Properties);
+        assert_eq!(
+            app.pane_subject,
+            ribbon::PaneSubject::Properties,
+            "the ribbon route must actually reach Properties, or this test              proves nothing about returning from it"
+        );
+
+        app.apply_for_test(Action::SelectCanvasTool(Some(CanvasTool::TextEdit)));
+        assert_eq!(
+            app.pane_subject,
+            ribbon::PaneSubject::ArmedTool,
+            "arming a tool must return the pane to the tool compartment —              otherwise the tool is armed and its options are invisible, and              Properties appears to be stuck on screen permanently"
+        );
+
+        // Disarming stays ONE-WAY on purpose: it must NOT drag the pane
+        // somewhere the operator did not ask to go. Without this half, a
+        // future "fix" that resets the pane on disarm would look equally
+        // correct and would move the panel out from under them.
+        app.apply_for_test(Action::SelectCanvasTool(None));
+        assert_eq!(
+            app.pane_subject,
+            ribbon::PaneSubject::ArmedTool,
+            "disarming must leave the pane where it is"
+        );
+    }
+
     #[test]
     fn every_pane_subject_is_reachable_without_the_harness() {
         let src = include_str!("main.rs");

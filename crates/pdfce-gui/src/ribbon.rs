@@ -568,6 +568,14 @@ pub enum PaneSubject {
     /// destination reached from the ribbon, and each is finished with. Arming
     /// a tool comes back here.
     ///
+    /// ★ That last sentence was PROSE ONLY until 2026-08-12 — nothing set
+    /// `pane_subject` back, so one visit to any other subject latched the
+    /// pane for the session and every later tool-arm was swallowed. It is
+    /// now enforced in `Action::SelectCanvasTool` and pinned by
+    /// `arming_a_tool_returns_the_pane_from_properties`. A guarantee stated
+    /// in a doc comment and implemented nowhere is the shape no reader goes
+    /// looking for, because reading the comment IS the check they would run.
+    ///
     /// **Amended 2026-08-06 (operator instruction).** This variant is
     /// reinstated after the shell redesign removed it, and the earlier
     /// `BatchTools` default is retired. That default was written when
