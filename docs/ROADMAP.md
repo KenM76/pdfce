@@ -81,6 +81,173 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★ `7aa5c2c` + `fa2414e` — `Pass 67.0` phase A ships: pdfce can finally answer "what fonts does this document contain" — core (`fontinfo.rs`), CLI (`list-fonts`) and GUI (Fonts panel), a stated-reason removability verdict per font, and a 400-file corpus sweep that CORROBORATES the original 40%-Identity-H grep estimate at 34% via a genuinely independent method — 2026-08-12 (hundred-and-sixteenth filing)
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — `git show` was
+not run, and the two commits' full bodies are not reproduced here.
+**What IS confirmed:** both subject lines (`7aa5c2c` "inventory the
+fonts before anyone is asked to delete one", `fa2414e` "say why the
+font cannot go, where the parity reference says nothing at all") match
+this session's own `git status` recent-commit list exactly — that list
+is provided as environment context, not fetched by this librarian, and
+is treated here as given rather than independently re-derived.
+Everything else below — the corpus sweep numbers, the `cargo test`/
+`fmt`/`clippy` results — is **relayed from the dispatching engineer**,
+who ran them directly and reports being interrupted before it could
+relay them itself; **not re-run by this librarian.** Independently
+verified by direct `Read`/`Grep` against live source, no shell needed:
+`crates/pdfce-core/src/fontinfo.rs` exists (module doc confirmed
+verbatim-consistent with the dispatch's framing — "Read-only. Nothing
+in this module mutates a document"; the 40%/87%/50% corpus figures;
+the R186 coverage-honesty citation); `crates/pdfce-cli/src/main.rs`
+carries the `list-fonts` summary-line format string
+(`walked={walked} not_walked={not_walked_token}`, confirmed exact) and
+`crates/pdfce-cli/tests/list_fonts.rs` asserts
+`not_walked=unreferenced` (confirmed, line 181); `crates/pdfce-gui/src/
+panels_structure.rs` carries `fonts_panel` (confirmed, line 591) wired
+through `ui_text::font_verdict_*` helpers; the `Removability`/
+`RemovabilityUnknown` enum in `fontinfo.rs` carries exactly the
+`"removable"`, `"blocked-identity"`, `"blocked-type3"`,
+`"unknown-symbolic-builtin"`, `"unknown-program-unreadable"` tokens the
+dispatch's verdict table names (plus three more —
+`unknown-predefined-cmap`, `unknown-embedded-cmap`,
+`unknown-no-descendant`, `unknown-subtype` — that the 400-file corpus
+this filing happened not to exercise; recorded here so a future census
+against a larger corpus isn't surprised by their absence from today's
+table).
+
+**What shipped.** Per distinct font object (deduplicated by object ID —
+a font used on forty pages is one row, not forty): `/BaseFont`
+verbatim, the de-prefixed family name where a subset tag is present,
+`/Subtype` (including `Type0`/`CIDFontType2`), `/Encoding`, whether the
+program is embedded, raw and **decoded** byte size, `fsType`
+permission bits, `/ToUnicode` presence, standard-14 status, a
+removability verdict that **carries its reason**, and the pages/
+surfaces/resource name/object ID it was found at. Three new surfaces:
+`pdfce-core::fontinfo`, `pdfce-cli list-fonts`, and the GUI's Fonts
+panel.
+
+**★ Two deliberate divergences from Acrobat, both delivered this
+filing (recorded at Pass 67.0's original scoping, now shipped rather
+than only planned).**
+
+1. **Per-font byte size** (raw + decoded). Acrobat exposes this
+   nowhere — not Document Properties, not Audit Space Usage (which
+   gives one aggregate Fonts bucket for the whole document, no
+   per-font attribution). Live example from the shipped tool:
+   `bytes=3695 decoded=6364`.
+2. **The refusal states its reason.** Acrobat silently omits an
+   un-unembeddable font from its list (former Adobe Principal
+   Scientist Dov Isaacs's own account, already sourced at this Pass's
+   scoping). pdfce prints, verbatim, e.g. *"verdict blocked-identity —
+   This font's text is stored as glyph indices into this exact
+   embedded program."* Project rule 4 (fuzzy, never sneaky) applied to
+   a refusal rather than a suggestion: a shorter list is not
+   actionable, a stated reason is.
+
+**★ A third property, worth recording as its own finding — coverage
+honesty.** The `list-fonts` summary line names what was walked and
+what was not: `walked=page,form-xobject,pattern,softmask,
+type3-charprocs,acroform-dr,annotation-ap not_walked=unreferenced`,
+plus a disclosure that unreferenced font dictionaries still occupy
+file bytes but do not appear in the list. This is the direct answer to
+this project's most-repeated defect shape — `R186`, a check that
+confirms the marker rather than the thing, six prior instances — aimed
+at a font inventory specifically: a report that quietly misses a
+surface and prints a confident list has the exact same failure shape
+`R186` names, and disclosure rather than silent coverage is what
+avoids it.
+
+**Verification — relayed by the dispatching engineer, not reproduced
+by this librarian (no shell this dispatch).**
+
+- `cargo test --workspace`: **3,449 passing / 0 failing**, up from
+  3,393 at `v0.4.0` (**+56**).
+- `cargo fmt --all --check` clean; `cargo clippy --workspace
+  --all-targets --all-features -D warnings`: **zero**.
+- **Corpus sweep — 400 real PDFs from `fixtures/external/` (PDFBox,
+  qpdf, pdfium, veraPDF), the release binary:** 393 completed, 7 exited
+  4 (`not a PDF` — legitimate for a corpus that deliberately includes
+  malformed test files). **466 distinct fonts, 5,822,672 bytes of
+  embedded programs, in this corpus, across all completed files.** No
+  panics, no hangs.
+
+**Verdict distribution — 466 fonts total, of which 117 are embedded, in
+this 400-file corpus:**
+
+| verdict | count | share of embedded (117) |
+|---|---|---|
+| not-embedded | 349 | — |
+| removable | 56 | 48% |
+| **blocked-identity** | **40** | **34%** |
+| unknown-symbolic-builtin | 15 | 13% |
+| blocked-type3 | 4 | 3% |
+| unknown-program-unreadable | 2 | 2% |
+
+**★ Record this comparison explicitly, because it is corroboration in
+the sense `R188` requires, not a repeat of the same measurement.**
+Pass 67.0's original scoping filing predicted **~40%** Identity-H-
+blocked, from a **64-file grep survey**. The shipped parser, run over a
+**400-file corpus** — an independent method, a real parser rather than
+a pattern match, capable of landing somewhere else and largely
+agreeing rather than merely reproducing the same number — measures
+**34%**. Per hard rule 10 (a figure is filed beside its per-item form
+and its denominator): 40 of 117 embedded fonts, 34.2%, not a bare "34%"
+with the population left implicit. The parser also surfaced **three
+verdict classes the grep survey structurally could not see at all** —
+`unknown-symbolic-builtin`, `blocked-type3`, `unknown-program-
+unreadable` — so the original estimate was directionally right and
+structurally incomplete, which is exactly the outcome `R188` predicts
+for a coarser method checked against a finer one.
+
+**`docs/FEATURES.md`: the font-reporting row moves from *Planned* to
+*Implemented*, `[x] core / [x] cli / [x] gui`.** Nothing else moves —
+unembed, re-subset, outlines, embed-missing and replace-font (Pass
+67.0's phases B–F) are all still unbuilt, and phase A deliberately
+removes nothing from any document, so none of their rows round up.
+
+**Not verified by this librarian, flagged rather than assumed either
+way.** The GUI Fonts panel was not visually reviewed — no screenshot,
+no harness run reported this filing. `cargo test`/`fmt`/`clippy` and
+the corpus sweep are relayed, not re-run (no shell this dispatch).
+Whether `pdfce-ui-specialist` was dispatched for the panel is unknown —
+the implementing agent was interrupted before it could report, so this
+is a genuine gap in the record, not a "presumably yes."
+
+**Ledger for this filing.** **No new Pass ID** — this is phase A of the
+existing `Pass 67.0` family (hard rule 2: IDs are stable and never
+reused; a phase completion inside an already-minted six-phase family
+is not a new Pass). Pass-family ceiling stays **67.0**, next free
+**68**. **No new `ARCHITECTURE.md` §12 entry** — `fontinfo.rs` is
+read-only and additive to `pdfce-core`; no crate boundary, dependency,
+or invariant changed, and no `cargo tree -p pdfce-core`/`-p
+pdfce-render` result was reported this dispatch to check against the
+GUI-core-separation invariant — **flagged as an open verification item
+for the engineer**, not asserted either way. Decision-record ceiling
+unaffected, **045**, next free **046**. Standing-rule ceiling
+unaffected, **R188**, next free **R189** — R188 is satisfied by this
+filing's own grep-vs-parser corroboration, not extended by it.
+Operator-question ceiling unaffected, **(bj)**, next free **(bk)**.
+**`docs/FEATURES.md`: one row moved** *Planned* → *Implemented* (see
+above). **One new `C:\personal_rag\pdf\` lesson filed** — the
+400-file verdict-distribution census and its grep-vs-parser
+corroboration is a PDF-domain empirical finding (real-world embedded-
+font removability shape), not project-internal scoping.
+`D:\dev\rag\rust\`/`D:\dev\rag\egui\`: **not touched** — the
+grep-vs-parser corroboration instantiates `R188`'s existing framing
+rather than adding a new generalizable finding a future Rust/egui
+project doesn't already get from that rule; a near-duplicate file
+would violate hard rule 4 (don't duplicate). **Backup/git
+working-tree/remote state not independently asserted anywhere in this
+filing** — no shell this dispatch (hard rule 8); the engineer should
+check `D:\Dev\pdfce-backups\` and `git log`/`git status`/`git
+remote -v` directly, on the current branch. `Pass 67.0`'s *Next up*
+entry gets a matching header annotation and footer amendment, this
+same filing. This is the **hundred-and-sixteenth** `ROADMAP.md`/
+`SESSION_LOG.md` joint filing.
+
+---
+
 ### ★ Backlog filing, no Pass ID: Android GUI port investigated and measured — `pdfce-core`/`-render`/`-print`/`-cli` already compile untouched for `aarch64-linux-android`, `pdfce-gui`'s only blocker is `rfd`, and `eframe`'s own Android support forces a real accessibility trade-off — feasibility only, no commitment, no Pass minted — 2026-08-11 (hundred-and-thirteenth filing)
 
 **Sourcing.** No shell tool this dispatch (hard rule 8) — the four
@@ -37183,7 +37350,7 @@ in the "still open" list. Full build record: this file's own
 
 ## Next up
 
-### Pass 67.0 — font reporting (phase A) + embedded-font removal (phase B) — operator request 2026-08-11, verbatim: *"someone needs embedded fonts removed from a pdf, so work on support and the related parts for that next"*, encryption explicitly parked: *"put the encryption aside for now to work on later"*
+### Pass 67.0 — font reporting (phase A) + embedded-font removal (phase B) — operator request 2026-08-11, verbatim: *"someone needs embedded fonts removed from a pdf, so work on support and the related parts for that next"*, encryption explicitly parked: *"put the encryption aside for now to work on later"* — **★ phase A SHIPPED 2026-08-12 (`7aa5c2c`+`fa2414e`, core+CLI+GUI). See the new top-of-*Shipped* entry for the delivery record; phases B–F remain queued below, unstarted.**
 
 **Sourcing.** No shell tool this dispatch (hard rule 8). The corpus
 statistics and the Acrobat-behaviour findings below are **relayed** from
@@ -37452,6 +37619,55 @@ dispatch (hard rule 8); the engineer should check
 `D:\Dev\pdfce-backups\` and `git log`/`git status`/`git remote -v`
 directly, on the current branch. This is the **hundred-and-twelfth**
 `ROADMAP.md` filing.
+
+**★★★ AMENDED 2026-08-12 (hundred-and-sixteenth filing) — phase A
+(reporting) SHIPS. `7aa5c2c` + `fa2414e`, core+CLI+GUI.** Full delivery
+record at the new top-of-*Shipped* entry, this filing — not restated
+here per append-only discipline. In one line: `pdfce-core` gains
+`fontinfo.rs` (a read-only, dedicated-by-object-id font inventory),
+`pdfce-cli` gains `list-fonts`, `pdfce-gui` gains a read-only Fonts
+panel (`panels_structure.rs`), and a 400-file corpus sweep of real
+PDFs corroborates this entry's own original 40%-Identity-H estimate
+(64-file grep survey) at **34%** via an independent method (a real
+parser, not a pattern match) — the kind of corroboration `R188`
+itself names as the only kind that counts. **This filing's own
+sourcing note applies unchanged**: this librarian has no shell this
+dispatch; commit existence for `7aa5c2c`/`fa2414e` is confirmed against
+this session's own `git status` commit list (exact subject-line match
+for both), not against `git show` output, which was not available.
+Phases B (unembed), C (re-subset), D (outlines), E (embed-missing) and
+F (replace-font) are **unstarted** — none of their five `FEATURES.md`
+*Planned* rows move this filing; only the reporting row does. **Ledger
+for this footer.** No new Pass ID — `Pass 67.0`'s family ceiling stays
+**67.0**, next free **68** (phase A is not a new Pass, per hard rule 2
+and this family's own "kept as one Pass" ruling above). No new
+`ARCHITECTURE.md` §12 entry — nothing about `pdfce-core`'s dependency
+graph, a crate boundary, or an invariant changed; `fontinfo.rs` is
+read-only and additive. Decision-record ceiling unaffected, **045**,
+next free **046**. Standing-rule ceiling unaffected, **R188**, next
+free **R189** — R188 is cited, not extended (this instance satisfies
+it rather than testing it further). Operator-question ceiling
+unaffected, **(bj)**, next free **(bk)**. `docs/FEATURES.md`: **one
+row moves from *Planned* to *Implemented*** (Fonts & rendering — font
+reporting), `[x] core / [x] cli / [x] gui`; the five sibling rows
+(unembed/re-subset/outlines/embed-missing/replace-font) are unchanged
+in *Planned*. **One new `C:\personal_rag\pdf\` lesson filed** — the
+400-file verdict-distribution census and its grep-vs-parser
+corroboration, a PDF-domain empirical finding, not project-internal
+scoping (unlike this footer's own content). `D:\dev\rag\rust\`/
+`D:\dev\rag\egui\`: not touched — the grep-vs-parser corroboration
+instantiates `R188`'s existing framing rather than adding anything a
+future Rust/egui project doesn't already get from that rule; writing a
+near-duplicate file would violate hard rule 4. **Backup/git
+working-tree/remote state not independently asserted anywhere in this
+filing** — no shell this dispatch (hard rule 8); the engineer should
+check `D:\Dev\pdfce-backups\` and `git log`/`git status`/`git
+remote -v` directly. **Not independently verified by this librarian
+this filing, flagged rather than assumed either way:** the GUI Fonts
+panel's visual usability (no screenshot, no harness run reported) and
+whether `pdfce-ui-specialist` was dispatched for it (the implementing
+agent was interrupted before it could report). This is the
+**hundred-and-sixteenth** `ROADMAP.md`/`SESSION_LOG.md` joint filing.
 
 ---
 

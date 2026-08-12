@@ -1,13 +1,20 @@
-//! The document-structure panels: Signatures, Layers and Bookmarks.
+//! The document-structure panels: Signatures, Layers, Bookmarks and Fonts.
 //!
-//! # What these three have in common
+//! # What these four have in common
 //!
 //! Each answers a question about the document's STRUCTURE rather than
 //! its page content — what a signature covers, which layers a reader
-//! would draw, where the outline points. All three are read-mostly:
-//! Bookmarks navigates, Layers changes what is drawn for this session
-//! only, and Signatures cannot change anything at all. None of them
+//! would draw, where the outline points, which fonts the file carries
+//! and what they cost. All four are read-only or read-mostly: Bookmarks
+//! navigates, Layers changes what is drawn for this session only, and
+//! Signatures and Fonts cannot change anything at all. None of them
 //! edits a document.
+//!
+//! Fonts joined them in `Pass 67.0` phase A and is the newest, which is
+//! why this sentence exists: the header said "these three" for one
+//! commit after there were four. A module doc that enumerates its own
+//! contents has to be re-read whenever something is added to the file,
+//! and nothing enforces that.
 //!
 //! They also share the posture that took the longest to get right in
 //! this project: **each says what it cannot tell you, first.** The

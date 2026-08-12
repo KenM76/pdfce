@@ -36202,3 +36202,81 @@ backwards too); index bullet updated. **Ledger.** No new Pass
 **R187 → R188**, next free **R189**. `FEATURES.md` not touched;
 `personal_rag/pdf` not touched. Full accounting: `ROADMAP.md`'s
 matching footer, same location, this filing.
+
+## 2026-08-12 (hundred-and-sixteenth filing) — `7aa5c2c`+`fa2414e`: `Pass 67.0` phase A (font reporting) ships across core/CLI/GUI; a 400-file corpus sweep corroborates the original 40%-Identity-H grep estimate at 34% via a genuinely independent method, and surfaces three verdict classes grep could not see at all
+
+**Shipped:**
+- `Pass 67.0` phase A — font inventory. `pdfce-core` gains
+  `fontinfo.rs` (read-only, per-distinct-font-object, dedup by object
+  ID); `pdfce-cli` gains `list-fonts`; `pdfce-gui` gains a read-only
+  Fonts panel (`panels_structure.rs`). Per font: `/BaseFont`,
+  de-prefixed family, subtype (incl. `Type0`/`CIDFontType2`),
+  encoding, embedded status, raw+decoded byte size, `fsType`,
+  `/ToUnicode`, standard-14 status, a **stated-reason** removability
+  verdict, and named surface-coverage (`walked=…
+  not_walked=unreferenced`). Phases B (unembed) through F
+  (replace-font) remain unstarted.
+
+**Decisions made this session:** none — no crate boundary, dependency,
+or invariant changed; `fontinfo.rs` is additive and read-only. No
+`ARCHITECTURE.md` §12 entry this filing.
+
+**Findings + decisions:**
+- **Two deliberate Acrobat divergences, both delivered**: per-font
+  byte size (raw+decoded — Acrobat exposes this nowhere, not even in
+  Audit Space Usage's one aggregate bucket), and a refusal that states
+  its reason (Acrobat silently omits un-unembeddable fonts from its
+  list; pdfce prints e.g. *"verdict blocked-identity — This font's
+  text is stored as glyph indices into this exact embedded program"*).
+- **Coverage honesty as a third property, not a footnote** — the
+  summary line names what was walked and what was not, directly
+  answering this project's most-repeated defect shape (`R186`, six
+  prior instances: a check that confirms the marker rather than the
+  thing).
+- **★ The corroboration is the headline finding, not the shipment
+  itself.** Pass 67.0's original scoping predicted ~40% Identity-H-
+  blocked from a 64-file grep survey. The shipped parser, run over 400
+  real files, measures **34%** (40 of 117 embedded fonts). Two
+  independent methods — grep vs. a real parser — landing close but not
+  identical is exactly the corroboration `R188` (minted two filings
+  ago) requires; reproducing the same pattern under a different
+  counting mode would not have been. The parser also found **three
+  verdict classes the grep survey structurally could not see**:
+  `unknown-symbolic-builtin`, `blocked-type3`,
+  `unknown-program-unreadable`. Filed as a new `C:\personal_rag\pdf\`
+  lesson (PDF-domain empirical finding, real-world font-removability
+  shape) — **not** a new `D:\dev\rag\rust\` file, since the
+  grep-vs-parser corroboration instantiates `R188`'s existing framing
+  rather than adding a generalizable finding beyond it (hard rule 4).
+- **Sourcing note, carried forward per hard rule 8.** No shell this
+  dispatch. Both commit subject lines are confirmed against this
+  session's own `git status` recent-commit list (exact match), not
+  against `git show`. `cargo test` (3,449/0, +56 over `v0.4.0`),
+  `cargo fmt`/`clippy` (clean), and the 400-file corpus sweep are
+  **relayed** from the dispatching engineer, who was interrupted
+  before it could report — not reproduced here. Module existence,
+  doc-comment content, verdict-token names, and the summary-line format
+  string were independently confirmed by direct `Read`/`Grep` against
+  live source.
+
+**Still in flight:**
+- `Pass 67.0` phases B (unembed), C (re-subset), D (outlines), E
+  (embed-missing), F (replace-font) — all unstarted.
+- **`cargo tree -p pdfce-core`/`-p pdfce-render` GUI-core-separation
+  check** — not reported this dispatch; open verification item, not
+  asserted either way.
+- **GUI Fonts panel usability** — no screenshot, no harness run
+  reported. Whether `pdfce-ui-specialist` was dispatched for it is
+  unknown (the implementing agent never reported).
+- A small doc-drift noticed while verifying, not this librarian's to
+  fix: `panels_structure.rs`'s own module doc still opens "The
+  document-structure panels: Signatures, Layers and Bookmarks" —
+  no mention of the Fonts panel that now lives in the same file.
+
+**For next session:**
+- Confirm the `cargo tree` invariant and get eyes (or a harness run)
+  on the Fonts panel before calling phase A fully closed operationally,
+  even though it is correctly filed as Shipped here.
+- Decide phase-B build order among C/D/E/F per the family's own
+  recorded sequencing (D pulled forward ahead of E/F because it is the
+  only phase that answers the ~40%/34% Identity-H-blocked case).
