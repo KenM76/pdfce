@@ -11486,3 +11486,190 @@ pub fn font_unembed_refused(reason: &str) -> String {
 pub fn font_unembed_done_this_session() -> &'static str {
     "You removed this font's embedded program in this session."
 }
+
+// ---------------------------------------------------------------------------
+// Font EMBEDDING — the constructive half of the Fonts panel (Pass 67.0 E)
+// ---------------------------------------------------------------------------
+//
+// ★ NO CONFIRMATION WINDOW, and that is a decision rather than an omission.
+//
+// Phase B's unembed question exists because three of its four consequences
+// are invisible on the canvas: it breaks a PDF/A claim, it invalidates a
+// signature, and it renames the font. Its own doc comment ranks the fourth —
+// the appearance shift — as the weak leg that would not justify a modal
+// alone.
+//
+// Embedding has none of the first three. It moves a file TOWARD ISO 19005
+// conformance rather than away; it renames nothing that a font arriving
+// without a subset tag would notice; and it is non-destructive and reversible
+// in one undo. What is left is exactly the leg phase B says is insufficient
+// on its own, so decision 024 §4.4's narrowing applies and the disclosure is
+// carried inline instead — which is what that clause asks for in words: "the
+// uncertainty is stated in the disclosure, not merely implied by the presence
+// of a confirm button."
+//
+// The exact-vs-substitute disclosure is therefore MANDATORY in the strings
+// below rather than optional, because nothing else carries it.
+
+/// The fixed-position summary above the embed batch button.
+///
+/// The exact/substitute split is stated unconditionally, before the button —
+/// not implied by the button existing. That split is the inference rule 4
+/// governs, and a count is the smallest honest form of it.
+pub fn font_embed_batch_summary(exact: usize, substitute: usize, size: &str) -> String {
+    let total = exact + substitute;
+    let noun = if total == 1 { "font" } else { "fonts" };
+    if substitute == 0 {
+        format!("{total} {noun} can be embedded from your font folders · adds {size}")
+    } else if exact == 0 {
+        format!("{total} {noun} can be embedded, using a substitute typeface · adds {size}")
+    } else {
+        format!(
+            "{total} {noun} can be embedded from your font folders ({exact} exact match, \
+             {substitute} substitute) · adds {size}"
+        )
+    }
+}
+
+/// Warn-coloured, shown only when at least one match is a stand-in.
+///
+/// Always showing it would make it a line operators skim past, which is the
+/// same as not having it.
+pub fn font_embed_batch_substitute_note(substitute: usize) -> String {
+    if substitute == 1 {
+        "1 of these uses a substitute typeface, not the one this document names — open its row \
+         to see which."
+            .to_owned()
+    } else {
+        format!(
+            "{substitute} of these use a substitute typeface, not the one this document names — \
+             open a font's row to see which."
+        )
+    }
+}
+
+/// The batch button.
+///
+/// **No ellipsis**, unlike [`font_unembed_batch_button`]: this commits
+/// directly rather than opening a question, and the ellipsis convention that
+/// file documents means "this opens something". Breaking it would promise a
+/// review step that is not there.
+pub fn font_embed_batch_button() -> &'static str {
+    "Embed missing fonts"
+}
+
+/// Tooltip on the batch button.
+pub fn font_embed_batch_tooltip() -> &'static str {
+    "Add the embedded program for every font your font folders can resolve. What will be used \
+     for each is stated above and in each font's row."
+}
+
+/// The per-font button, at the foot of an expanded row.
+pub fn font_embed_row_button() -> &'static str {
+    "Embed this font"
+}
+
+/// Tooltip on the per-font button: says WHY it is offered.
+pub fn font_embed_row_tooltip() -> &'static str {
+    "Add this font's program from the file named above. Offered because a matching face was \
+     found — which face, and whether it is an exact match, is stated directly above this button."
+}
+
+/// The certainty, stated plainly rather than as a warning.
+///
+/// The fear this exists to remove is real and specific: an operator asked to
+/// embed a near-match font expects their book to reflow. It cannot. A PDF
+/// spaces text from its own `/Widths` array (§9.6.2.1 Table 111), which this
+/// operation preserves or writes from the standard metrics a reader was
+/// already applying.
+pub fn font_embed_layout_note() -> &'static str {
+    "Character positions do not move — they come from this document's own spacing numbers, not \
+     from the new font. The letter shapes are what change."
+}
+
+/// An exact-name match: the folder held the face this document names.
+pub fn font_embed_resolved_exact(face: &str, source: &str) -> String {
+    format!(
+        "An exact match for this font was found: {face}, from {source}. Other readers will show \
+         these letterforms instead of choosing their own."
+    )
+}
+
+/// Warn-coloured. A stand-in was used — the genuinely uncertain leg, and the
+/// one rule 4 requires the operator to see before it becomes document state.
+pub fn font_embed_resolved_substitute(requested: &str, face: &str, source: &str) -> String {
+    format!(
+        "No font named {requested} was found. {face}, from {source}, stands in for it — its \
+         letter shapes are not the ones this document was made with."
+    )
+}
+
+/// Shown for a standard-14 font, where the spacing pdfce writes is the
+/// spacing readers were already using.
+pub fn font_embed_resolved_standard14() -> &'static str {
+    "This is one of the 14 fonts every reader already knows. pdfce writes its spacing table in \
+     from its own built-in copy of the original metrics, so the text keeps the exact positions \
+     it already had."
+}
+
+/// No face in any configured folder answers to this font's name.
+pub fn font_embed_unresolved() -> &'static str {
+    "No matching font file was found in your font folders."
+}
+
+/// Paired with a button that opens the Font Folders tool.
+pub fn font_embed_no_folders_hint() -> &'static str {
+    "Add a font folder containing this typeface, then come back here."
+}
+
+/// A refusal, in the same plain (never error-styled) register the verdict
+/// lines use: a refusal is a fact about the FILE, not a pdfce failure.
+///
+/// The `reason` sentence comes from `pdfce-core`'s
+/// `font_embed_missing::EmbedBlocker::reason`, so the panel and the CLI
+/// refuse in the same words.
+pub fn font_embed_refused_row(reason: &str) -> String {
+    format!("pdfce will not embed this font: {reason}")
+}
+
+/// The end state, in the embed block's fixed slot.
+///
+/// ★ Deliberately NOT "ready to submit", "passes embedding checks", or
+/// anything naming PDF/A or a print service. Those are claims about a third
+/// party's acceptance that pdfce has not verified. This states only what
+/// pdfce measured.
+pub fn fonts_all_embedded() -> &'static str {
+    "Every font this document declares now has an embedded program."
+}
+
+/// The status-bar line after embedding one font.
+pub fn font_embed_done_one(name: &str, size: &str) -> String {
+    format!("Embedded {name}'s font program — {size} added.")
+}
+
+/// The status-bar line after a batch.
+pub fn font_embed_done_many(count: usize, substitute: usize, size: &str) -> String {
+    if substitute == 0 {
+        format!("Embedded {count} font programs — {size} added.")
+    } else {
+        format!(
+            "Embedded {count} font programs ({substitute} using a substitute typeface) — \
+             {size} added."
+        )
+    }
+}
+
+/// The status-bar line when the operation refused.
+pub fn font_embed_refused(reason: &str) -> String {
+    format!("Nothing was embedded: {reason}")
+}
+
+/// Appended to a row after it gained its program in THIS session.
+///
+/// Same reason [`font_unembed_done_this_session`] exists: after the edit the
+/// row's verdict is one an already-embedded font would carry, so without this
+/// the panel erases the operator's own action from the place they would look
+/// to confirm it.
+pub fn font_embed_done_this_session() -> &'static str {
+    "You embedded this font's program in this session."
+}

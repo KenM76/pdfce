@@ -624,7 +624,10 @@ impl PdfceApp {
     /// dropped by `OpenDoc::refresh_pages`, which already runs after every
     /// edit, undo and redo, so an `add-text` that embeds a new subset shows
     /// up without a second invalidation path to keep in step.
-    pub(crate) fn fonts_panel(&mut self, ui: &mut egui::Ui, actions: &mut [Action]) {
+    pub(crate) fn fonts_panel(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        // The embed plan is refreshed BEFORE the list is drawn, outside the
+        // document borrow, and only when something it depends on changed.
+        self.refresh_embed_plan();
         // What the operator clicked, if anything. Collected inside the
         // document borrow and acted on after it ends: opening the unembed
         // question needs `&mut self` for `pending_unembed`, and the panel
@@ -638,6 +641,53 @@ impl PdfceApp {
         }
     }
 
+    /// Rebuild the cached embed plan when the inventory or the operator's
+    /// font folders have changed, and not otherwise.
+    ///
+    /// # Why this is cached at all
+    ///
+    /// Building the plan resolves every non-embedded font against
+    /// [`PdfceApp::font_env`] and **copies each donor's bytes** — on a
+    /// document naming five faces out of a system font folder, several
+    /// megabytes. egui redraws continuously, so the obvious immediate-mode
+    /// shape (resolve inside each row's closure) would do that work sixty
+    /// times a second. `page_texture` already keys off
+    /// `font_env_generation` for exactly this reason; this follows it.
+    ///
+    /// # Why the plan and not just the resolutions
+    ///
+    /// The panel needs three things per row — which face was chosen, whether
+    /// the match was exact, and, for a font that will NOT be embedded, the
+    /// reason. All three are in the plan, which the core computes in one
+    /// pass and which holds no donor bytes, so caching the plan is both
+    /// smaller and closer to what the commit will actually do.
+    fn refresh_embed_plan(&mut self) {
+        let generation = self.font_env_generation;
+        // Disjoint field borrows: the environment is read while the document
+        // is borrowed mutably, which the borrow checker permits because they
+        // are different fields of `self`.
+        let env = &self.font_env;
+        let Status::Open(doc) = &mut self.status else {
+            return;
+        };
+        if doc.fonts.is_none() {
+            doc.fonts = Some(pdfce_core::fontinfo::inventory(&doc.session.view()));
+        }
+        if doc.embed_plan.is_some() && doc.embed_plan_generation == generation {
+            return;
+        }
+        let Some(inventory) = doc.fonts.as_ref() else {
+            return;
+        };
+        let request = build_embed_request(
+            env,
+            inventory,
+            pdfce_core::font_embed_missing::EmbedSelection::AllMissing,
+        );
+        doc.embed_plan = Some(doc.session.embed_preview(&request));
+        doc.embed_plan_generation = generation;
+    }
+
     /// The Fonts panel's body — everything that reads the inventory.
     ///
     /// Split from [`Self::fonts_panel`] only to bound the `&mut self.status`
@@ -645,7 +695,7 @@ impl PdfceApp {
     fn fonts_panel_body(
         &mut self,
         ui: &mut egui::Ui,
-        _actions: &mut [Action],
+        actions: &mut Vec<Action>,
         requested: &mut Option<UnembedAsk>,
     ) {
         use pdfce_core::fontinfo::{Program, Removability, RemovabilityUnknown, Surface};
@@ -662,6 +712,8 @@ impl PdfceApp {
         // fonts one session unembeds is smaller than the borrow gymnastics
         // that would avoid the copy.
         let unembedded_here = doc.unembedded_this_session.clone();
+        let embedded_here = doc.embedded_this_session.clone();
+        let embed_plan = doc.embed_plan.clone();
         let Some(inv) = doc.fonts.as_ref() else {
             return;
         };
@@ -701,16 +753,28 @@ impl PdfceApp {
                 .weak(),
         );
 
-        // ★ The batch control, at a FIXED position: directly under the
-        // document summary and above the list, computed from the whole
-        // inventory rather than from any row's geometry. Rule 4 as narrowed
-        // (decision 024 §4.4) requires a confirm control an operator can
-        // find without hunting; a control whose position is derived from the
-        // document is exactly what that narrowing rejected.
+        // ★ TWO batch blocks, STACKED, each with its own summary line and
+        // its own button, embed above remove.
         //
-        // Offered only when there is something to offer. A greyed-out
-        // "Remove" over a document with nothing removable is an affordance
-        // for something that cannot work (R83).
+        // Not one `ui.horizontal` carrying both. This panel already has an
+        // incident for that shape: a summary-plus-button row overflowed the
+        // dock's right edge and clipped the one field an operator opens the
+        // panel for, with every headless assertion still green
+        // (`D:\dev\rag\egui\headless_trace_asserts_reached_not_visible_a_clipped_widget_needs_a_pixel_oracle.md`).
+        // Two such pairs on one line in a side dock reproduces it, and makes
+        // two opposite-valence actions read as peers competing for a line.
+        //
+        // Embed goes FIRST for two independent reasons. It is the lower-stakes,
+        // constructive action, and safe-first is the convention. And it is the
+        // action an operator opens this panel for today — the driver for the
+        // whole Pass was a book rejected by a print-on-demand service for a
+        // missing font, not a file that was too large.
+        //
+        // Both blocks are offered only when there is something to offer: a
+        // greyed-out control over a document it cannot act on is an
+        // affordance for something that cannot work (R83).
+        fonts_panel_embed_block(ui, actions, embed_plan.as_ref());
+
         let removable: Vec<pdfce_core::object::ObjId> = inv
             .fonts
             .iter()
@@ -827,6 +891,15 @@ impl PdfceApp {
                     {
                         ui.label(ui_text::font_unembed_done_this_session());
                     }
+                    // The constructive twin, for the same reason: after an
+                    // embed the row's verdict is one an already-embedded font
+                    // would carry, so without this the panel erases the
+                    // operator's own action from the place they would look.
+                    if f.id.is_some_and(|id| embedded_here.contains(&id))
+                        && !matches!(f.program, Program::NotEmbedded)
+                    {
+                        ui.label(ui_text::font_embed_done_this_session());
+                    }
                     ui.separator();
 
                     let kind = match &f.descendant_subtype {
@@ -910,6 +983,15 @@ impl PdfceApp {
                     // COLLAPSED header already carries the verdict word, so
                     // "which of these can go" is answerable without opening
                     // a single row.
+                    //
+                    // ★ That argument does NOT transfer to the embed control
+                    // below it, and saying so is the point. The collapsed
+                    // header reads "Not embedded" whether or not a face was
+                    // found for it, so "which of these can be FIXED" is not
+                    // answerable from the collapsed list at all. The batch
+                    // block above answers it in aggregate instead — which is
+                    // why that block states its counts unconditionally rather
+                    // than only offering a button.
                     if let Some(id) = f.id
                         && f.removability.is_removable()
                     {
@@ -923,6 +1005,15 @@ impl PdfceApp {
                         if resp.clicked() {
                             *requested = Some(UnembedAsk::One(id));
                         }
+                    }
+
+                    // The EMBED half of the row, in the same last position
+                    // and the same read-the-facts-then-act ordering. The two
+                    // are mutually exclusive per row: a font is either
+                    // embedded (and possibly removable) or not embedded, so
+                    // the two blocks can never stack in one body.
+                    if matches!(f.program, Program::NotEmbedded) {
+                        fonts_panel_embed_row(ui, actions, embed_plan.as_ref(), f);
                     }
                 });
 
@@ -999,6 +1090,283 @@ fn fonts_panel_fs_type(ui: &mut egui::Ui, fs: &pdfce_core::fontinfo::FsType) {
         _ => {
             ui.label(ui_text::font_fstype_unknown());
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Font embedding — the constructive half of the Fonts panel (Pass 67.0 E)
+// ---------------------------------------------------------------------------
+
+/// What the operator asked the Fonts panel to embed into.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum EmbedAsk {
+    /// Every font the document does not carry a program for.
+    AllMissing,
+    /// One font, by its dictionary's object identity.
+    One(pdfce_core::object::ObjId),
+}
+
+/// Build the core request for `selection`, resolving each missing font's
+/// `/BaseFont` against the operator's registered faces.
+///
+/// # The crate boundary, in one function
+///
+/// `pdfce-render`'s [`FontEnvironment`](pdfce_render::FontEnvironment) knows
+/// what faces exist; `pdfce-core` knows what may lawfully be written into a
+/// font dictionary and must never depend on the renderer (project rule 2).
+/// So the shell resolves a NAME to BYTES here and hands the bytes across. The
+/// CLI's `embed-font` does the same thing with the same ladder — the ladder
+/// itself lives in `FontEnvironment::resolve_for_embedding` so the two shells
+/// cannot come to disagree about which face answers to which name (R171).
+fn build_embed_request(
+    env: &pdfce_render::FontEnvironment,
+    inventory: &pdfce_core::fontinfo::FontInventory,
+    selection: pdfce_core::font_embed_missing::EmbedSelection,
+) -> pdfce_core::font_embed_missing::EmbedRequest {
+    use pdfce_core::font_embed_missing::{EmbedRequest, EmbedSelection, FontMatch, SuppliedFont};
+    use pdfce_core::fontinfo::Program;
+    use pdfce_render::font::EmbedMatch;
+
+    let mut request = match selection {
+        EmbedSelection::Objects(ids) => EmbedRequest::objects(ids),
+        EmbedSelection::Named(names) => EmbedRequest::named(names),
+        _ => EmbedRequest::all_missing(),
+    };
+    for record in &inventory.fonts {
+        if !matches!(record.program, Program::NotEmbedded) {
+            continue;
+        }
+        let Some(base_font) = record.base_font.as_deref() else {
+            continue;
+        };
+        // ★ The bundled faces are NOT offered from the GUI. They are
+        // BSD-3-Clause (pdfium's Foxit-origin set), and embedding one puts it
+        // inside a document the operator then distributes — a different act
+        // from drawing with it on their own screen, and one that carries the
+        // licence's attribution condition. That is the operator's decision,
+        // and pdfce has no place to have taken it here; `pdfce-cli` exposes
+        // it behind an explicit `--use-bundled-fonts` whose help text states
+        // the obligation.
+        let Some(donor) = env.resolve_for_embedding(base_font, false) else {
+            continue;
+        };
+        let matched = match donor.quality {
+            EmbedMatch::Exact => FontMatch::Exact,
+            EmbedMatch::Alias => FontMatch::Alias,
+            EmbedMatch::Bundled => FontMatch::Bundled,
+        };
+        request = request.with_font(
+            base_font,
+            SuppliedFont::new(
+                donor.data.bytes().to_vec(),
+                donor.face_name.clone(),
+                donor.face_name.clone(),
+                matched,
+            ),
+        );
+    }
+    request
+}
+
+/// One row's embed target in the cached plan, if it has one.
+fn embed_target_for(
+    plan: Option<&pdfce_core::font_embed_missing::EmbedPlan>,
+    id: Option<pdfce_core::object::ObjId>,
+) -> Option<&pdfce_core::font_embed_missing::EmbedTarget> {
+    let (plan, id) = (plan?, id?);
+    plan.targets.iter().find(|t| t.id == id)
+}
+
+/// The batch block: a summary line stating the exact/substitute split, then
+/// the button — or, when nothing is missing, the end-state sentence.
+///
+/// A free function because it needs nothing from `PdfceApp` beyond the plan
+/// the caller already cloned out of the document borrow.
+fn fonts_panel_embed_block(
+    ui: &mut egui::Ui,
+    actions: &mut Vec<Action>,
+    plan: Option<&pdfce_core::font_embed_missing::EmbedPlan>,
+) {
+    let Some(plan) = plan else {
+        return;
+    };
+    // ★ The end state, in the same fixed slot the offer occupies. The
+    // operator's real question is whether a print service will accept the
+    // file; this answers only what pdfce measured, and deliberately says
+    // nothing about PDF/A or any vendor's check.
+    if plan.missing_before == 0 {
+        ui.label(ui_text::fonts_all_embedded());
+        ui.separator();
+        return;
+    }
+    if plan.targets.is_empty() {
+        // Nothing resolves. Not silence: the per-row reasons say why, and
+        // the route out of it is the Font Folders tool.
+        ui.label(ui_text::font_embed_unresolved());
+        let resp = ui.button(ui_text::font_folders_add_button());
+        diag::trace(|| format!("font-embed-none rect={:?}", resp.rect));
+        if resp.clicked() {
+            actions.push(Action::OpenFontFolders);
+        }
+        ui.separator();
+        return;
+    }
+
+    let substitute = plan
+        .targets
+        .iter()
+        .filter(|t| t.matched.is_substitute())
+        .count();
+    let exact = plan.targets.len() - substitute;
+    let bytes = usize::try_from(plan.bytes_added_uncompressed()).unwrap_or(usize::MAX);
+    // ★ The summary is on its own line and the button BELOW it, not beside
+    // it — and that is a measured decision, not a style preference.
+    //
+    // Written first as `ui.horizontal(summary, button)`, mirroring the
+    // unembed block. Under `tools/gui-drive.ps1` the button traced a rect of
+    // `[413.8 475.0] - [542.2 499.0]` in a dock whose content ends before
+    // that, and **a scripted click at the centre of its own reported rect did
+    // nothing**. The unembed button, whose summary is short enough to leave
+    // room, took the same click and opened its dialog — which is how the
+    // difference was isolated to the layout rather than to the harness.
+    //
+    // This is the incident
+    // `D:\dev\rag\egui\headless_trace_asserts_reached_not_visible_a_clipped_widget_needs_a_pixel_oracle.md`
+    // records, arriving through a new door: the widget was reached, it traced
+    // its rect, every headless assertion about it passed, and it was not
+    // clickable. Embed's summary carries three numbers and a size where
+    // unembed's carries two, so a side-by-side layout that fits one does not
+    // fit the other — and a *dock* is narrower than the centred windows this
+    // panel's other controls live in.
+    ui.label(ui_text::font_embed_batch_summary(
+        exact,
+        substitute,
+        &ui_text::byte_size(bytes),
+    ));
+    let resp = ui
+        .button(ui_text::font_embed_batch_button())
+        .on_hover_text(ui_text::font_embed_batch_tooltip());
+    // Traced with its RECT so the harness drives the REAL control rather
+    // than a step that calls the same function (R184).
+    diag::trace(|| {
+        format!(
+            "font-embed-batch rect={:?} fonts={} exact={exact} substitute={substitute} \
+bytes={bytes}",
+            resp.rect,
+            plan.targets.len(),
+        )
+    });
+    if resp.clicked() {
+        actions.push(Action::EmbedAllFonts);
+    }
+    // Warn-coloured and only when true. A line shown every time is a line
+    // operators stop reading, which is the same as not having it.
+    if substitute > 0 {
+        ui.colored_label(
+            ui.visuals().warn_fg_color,
+            ui_text::font_embed_batch_substitute_note(substitute),
+        );
+    }
+    ui.label(
+        egui::RichText::new(ui_text::font_embed_layout_note())
+            .small()
+            .weak(),
+    );
+    ui.separator();
+}
+
+/// The per-row embed block: what was resolved, or why nothing was, then the
+/// button.
+///
+/// Facts first, control last — the same ordering the unembed row and the
+/// redaction report use. The exact-vs-substitute sentence sits DIRECTLY above
+/// the button, which is what makes the click a deliberate act over a
+/// disclosure already on screen, and therefore what makes the absence of a
+/// confirmation window correct rather than a shortcut (decision 024 §4.4).
+fn fonts_panel_embed_row(
+    ui: &mut egui::Ui,
+    actions: &mut Vec<Action>,
+    plan: Option<&pdfce_core::font_embed_missing::EmbedPlan>,
+    record: &pdfce_core::fontinfo::FontRecord,
+) {
+    ui.separator();
+    let Some(target) = embed_target_for(plan, record.id) else {
+        // Not embeddable. Either nothing answers to the name, or the core
+        // refused it — and a refusal is a fact about the FILE, so it is
+        // rendered plainly, never error-styled (this panel's phase A rule).
+        let refusal = plan.and_then(|p| {
+            p.blocked
+                .iter()
+                .find(|b| b.id == record.id && b.blocker.token() != "no-source-font")
+        });
+        match refusal {
+            Some(b) => {
+                ui.label(ui_text::font_embed_refused_row(b.blocker.reason()));
+            }
+            None => {
+                ui.label(ui_text::font_embed_unresolved());
+                ui.label(
+                    egui::RichText::new(ui_text::font_embed_no_folders_hint())
+                        .small()
+                        .weak(),
+                );
+                let resp = ui.button(ui_text::font_folders_add_button());
+                diag::trace(|| {
+                    format!(
+                        "font-embed-row-unresolved obj={:?} rect={:?}",
+                        record.id.map(|i| i.num),
+                        resp.rect
+                    )
+                });
+                if resp.clicked() {
+                    actions.push(Action::OpenFontFolders);
+                }
+            }
+        }
+        return;
+    };
+
+    let requested = record
+        .base_font
+        .as_deref()
+        .unwrap_or(ui_text::font_unnamed());
+    if target.matched.is_substitute() {
+        ui.colored_label(
+            ui.visuals().warn_fg_color,
+            ui_text::font_embed_resolved_substitute(requested, &target.face_name, &target.source),
+        );
+    } else {
+        ui.label(ui_text::font_embed_resolved_exact(
+            &target.face_name,
+            &target.source,
+        ));
+    }
+    if record.standard_14 {
+        ui.label(
+            egui::RichText::new(ui_text::font_embed_resolved_standard14())
+                .small()
+                .weak(),
+        );
+    }
+    ui.label(
+        egui::RichText::new(ui_text::font_embed_layout_note())
+            .small()
+            .weak(),
+    );
+    let resp = ui
+        .button(ui_text::font_embed_row_button())
+        .on_hover_text(ui_text::font_embed_row_tooltip());
+    diag::trace(|| {
+        format!(
+            "font-embed-row obj={} rect={:?} match={} face={:?}",
+            target.id.num,
+            resp.rect,
+            target.matched.token(),
+            target.face_name,
+        )
+    });
+    if resp.clicked() {
+        actions.push(Action::EmbedOneFont(target.id));
     }
 }
 
@@ -1288,6 +1656,104 @@ impl PdfceApp {
                     });
                 });
             });
+    }
+
+    /// **Add the font programs** for `ask`, directly.
+    ///
+    /// # Why there is no confirmation window, and why that is not a shortcut
+    ///
+    /// [`Self::unembed_confirmation`] exists because three of unembedding's
+    /// four consequences are invisible on the canvas — it breaks a PDF/A
+    /// claim, invalidates a signature, and renames the font — and its own
+    /// doc comment ranks the fourth, the appearance shift, as the weak leg
+    /// that would not justify a modal alone.
+    ///
+    /// Embedding has none of the first three: it moves a file **toward** ISO
+    /// 19005 conformance, it renames only a subset tag that no longer
+    /// describes anything, and it is non-destructive and reversible in one
+    /// undo. What is left is exactly the leg phase B calls insufficient on
+    /// its own — so decision 024 §4.4 applies, and what that clause asks for
+    /// is a *disclosure*, not a gate: "the uncertainty is stated in the
+    /// disclosure, not merely implied by the presence of a confirm button."
+    ///
+    /// The disclosure is therefore load-bearing rather than decorative. The
+    /// exact-vs-substitute sentence sits directly above each row's button and
+    /// the split is counted above the batch button, so every click happens
+    /// over a statement of what pdfce chose.
+    ///
+    /// If a substitute turns out wrong, the recovery path already exists and
+    /// needs no new machinery: the newly-embedded row now offers the
+    /// unembed control, which removes exactly that one font's program
+    /// without touching the rest of a batch. Ctrl+Z, by contrast, is
+    /// all-or-nothing — `embed_fonts` commits one command however many fonts
+    /// it embedded, which is §11.3's one-gesture-one-entry rule and is
+    /// stated here as a deliberate property rather than left as an accident
+    /// of what the core happens to do.
+    pub(crate) fn embed_fonts(&mut self, ask: EmbedAsk) {
+        use pdfce_core::font_embed_missing::EmbedSelection;
+
+        let env = &self.font_env;
+        let Status::Open(doc) = &mut self.status else {
+            return;
+        };
+        // R83: ask before offering. A document-level refusal (encrypted,
+        // certification-locked) is reported through the status bar rather
+        // than by drawing a control that cannot work.
+        if let Some(refusal) = doc.session.embed_refusal() {
+            let note = ui_text::font_embed_refused(&refusal.to_string());
+            self.set_edit_note(note);
+            return;
+        }
+        let Some(inventory) = doc.fonts.as_ref() else {
+            return;
+        };
+        let selection = match ask {
+            EmbedAsk::AllMissing => EmbedSelection::AllMissing,
+            EmbedAsk::One(id) => EmbedSelection::Objects(vec![id]),
+        };
+        // Rebuilt rather than taken from the cached plan: the plan holds no
+        // donor bytes (deliberately — it is redrawn every frame), and the
+        // core recomputes its own plan inside `embed_fonts` anyway, so the
+        // report the operator read and the operation that runs come from the
+        // same function over the same request.
+        let request = build_embed_request(env, inventory, selection);
+        let outcome = doc.session_mut().embed_fonts(&request);
+        match outcome {
+            Ok(plan) => {
+                for t in &plan.targets {
+                    doc.embedded_this_session.insert(t.id);
+                }
+                let count = plan.targets.len();
+                let substitute = plan
+                    .targets
+                    .iter()
+                    .filter(|t| t.matched.is_substitute())
+                    .count();
+                let bytes = usize::try_from(plan.bytes_added_uncompressed()).unwrap_or(usize::MAX);
+                let name = plan.targets.first().and_then(|t| t.base_font.clone());
+                // Drops the cached inventory AND the cached embed plan, so
+                // the rows redraw from the edited session.
+                doc.refresh_pages();
+                doc.ensure_object_provider();
+                let note = match (count, name) {
+                    (1, Some(name)) => {
+                        ui_text::font_embed_done_one(&name, &ui_text::byte_size(bytes))
+                    }
+                    _ => {
+                        ui_text::font_embed_done_many(count, substitute, &ui_text::byte_size(bytes))
+                    }
+                };
+                self.set_edit_note(note);
+                diag::trace(|| {
+                    format!("embed-committed fonts={count} substitute={substitute} bytes={bytes}")
+                });
+            }
+            Err(ref err) => {
+                let note = ui_text::font_embed_refused(&err.to_string());
+                self.set_edit_note(note);
+                diag::trace(|| format!("embed-refused {err}"));
+            }
+        }
     }
 
     /// Perform the unembed the operator confirmed.

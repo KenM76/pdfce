@@ -2917,6 +2917,38 @@ struct OpenDoc {
     /// undo does not un-happen the operator's memory of the click; the row's
     /// verdict returning to `Removable` is what tells them it was undone.
     unembedded_this_session: std::collections::BTreeSet<pdfce_core::object::ObjId>,
+    /// Font dictionaries this session EMBEDDED a program into (`Pass 67.0`
+    /// phase E) — the constructive twin of [`Self::unembedded_this_session`],
+    /// and kept for the same reason: after the edit the row's verdict is one
+    /// an already-embedded font would carry, so without this the panel erases
+    /// the operator's own action from the place they would look to confirm it.
+    ///
+    /// ★ A font can end up in BOTH sets — embedded, then removed again in the
+    /// same session — and the pair then says only that both things happened,
+    /// not in which order. That imprecision is deliberate and bounded: the
+    /// round trip is rare, the row's own verdict stays true either way, and
+    /// the alternative (an ordered per-font history) is a model this panel
+    /// does not otherwise need. Recorded here rather than left to be
+    /// rediscovered.
+    embedded_this_session: std::collections::BTreeSet<pdfce_core::object::ObjId>,
+    /// The embed plan for this document against the CURRENT font folders,
+    /// cached (`Pass 67.0` phase E).
+    ///
+    /// Building it resolves every missing font against
+    /// [`PdfceApp::font_env`] and copies each donor's bytes, which on a
+    /// document referencing five faces from `C:\Windows\Fonts` is megabytes
+    /// — a once-per-change cost, never a per-frame one. egui's immediate mode
+    /// invites exactly the mistake of calling a resolver inside a row's
+    /// closure; the same cache-key discipline `page_texture` already uses
+    /// against `font_env_generation` applies here.
+    ///
+    /// Dropped by [`OpenDoc::refresh_pages`] alongside [`Self::fonts`], and
+    /// rebuilt when [`Self::embed_plan_generation`] no longer matches
+    /// [`PdfceApp::font_env_generation`].
+    embed_plan: Option<pdfce_core::font_embed_missing::EmbedPlan>,
+    /// The [`PdfceApp::font_env_generation`] [`Self::embed_plan`] was built
+    /// against.
+    embed_plan_generation: u64,
     /// The flattened page list, in document order, inheritance resolved,
     /// **with unsaved `/Rotate` edits applied**.
     ///
@@ -3457,6 +3489,9 @@ impl OpenDoc {
             render_worker: render_worker::RenderWorker::default(),
             fonts: None,
             unembedded_this_session: std::collections::BTreeSet::new(),
+            embedded_this_session: std::collections::BTreeSet::new(),
+            embed_plan: None,
+            embed_plan_generation: u64::MAX,
             pages,
             properties_draft: Vec::new(),
             properties_lossy: false,
@@ -3699,6 +3734,10 @@ impl OpenDoc {
         // here rather than given an invalidation rule of its own that
         // would have to be kept in step with this one.
         self.fonts = None;
+        // The embed plan is derived from the inventory AND from the operator's
+        // font folders, so it cannot outlive either. Dropped here rather than
+        // given an invalidation rule of its own, for the reason above.
+        self.embed_plan = None;
         // Pass 9a: an edit (rotate/delete/reorder, and later move/delete of
         // vector objects) can change the current page's object set, so the
         // provider is stale — force a rebuild on the next `canvas` frame and
@@ -4311,6 +4350,17 @@ enum Action {
     ConfirmUnembed,
     /// Close the unembed question without removing anything.
     CancelUnembed,
+    /// **Add the font programs** for every missing font the operator's font
+    /// folders can resolve (`Pass 67.0` phase E).
+    ///
+    /// No confirmation step, unlike [`Self::ConfirmUnembed`]. Embedding is
+    /// non-destructive, one-undo reversible, and moves a file toward PDF/A
+    /// conformance rather than away — so decision 024 §4.4's narrowing
+    /// applies and the exact-vs-substitute disclosure is carried inline in
+    /// the panel instead of behind a gate.
+    EmbedAllFonts,
+    /// Add the font program for ONE font, by its dictionary's identity.
+    EmbedOneFont(pdfce_core::object::ObjId),
     /// Abandon the password prompt and return to an empty canvas.
     ///
     /// Present as an explicit control even though the escape is already
@@ -11495,6 +11545,14 @@ impl PdfceApp {
                 self.confirm_unembed();
                 return;
             }
+            Action::EmbedAllFonts => {
+                self.embed_fonts(panels_structure::EmbedAsk::AllMissing);
+                return;
+            }
+            Action::EmbedOneFont(id) => {
+                self.embed_fonts(panels_structure::EmbedAsk::One(id));
+                return;
+            }
             Action::CancelUnembed => {
                 // Costs nothing: the plan is dropped and the document was
                 // never touched, so every font is still exactly where it was.
@@ -11556,6 +11614,8 @@ impl PdfceApp {
             | Action::CancelResetLayout
             | Action::ConfirmUnembed
             | Action::CancelUnembed
+            | Action::EmbedAllFonts
+            | Action::EmbedOneFont(_)
             // The settings actions belong in THIS arm, not a new one: they
             // are meaningful with no document open (every setting is
             // document-independent) and they need `&mut self` rather than
