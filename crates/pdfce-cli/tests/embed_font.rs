@@ -422,3 +422,151 @@ fn the_dry_run_and_the_apply_report_the_same_plan() {
     };
     assert_eq!(row(&dry), row(&applied), "dry:\n{dry}\napplied:\n{applied}");
 }
+
+// ---------------------------------------------------------------------------
+// Selecting nothing, and describing what was not selected
+// ---------------------------------------------------------------------------
+//
+// ★ WHY THESE TWO TESTS EXIST, AND WHY EVERY TEST ABOVE MISSED WHAT THEY
+// CATCH. Every case above passes `--all-missing`. That is the mode the sweep
+// harness runs and the mode the feature was developed in, and under it both
+// bugs below are invisible: the selection is never empty, and
+// `unexplained_missing()` is zero by construction. The operator found both
+// within minutes of running the command the way the help text reads —
+// `embed-font <file> --font-dir C:\Windows\Fonts` — and got
+// `fonts=0 exact=0 substitute=0 refused=0 unmatched=0` on a document with a
+// missing font and a folder that could resolve it. It looked exactly like a
+// feature that does not work, on the very Pass that had just reported a
+// 4,023-file sweep embedding 1,330 fonts. The sweep's numbers were real; the
+// shell in front of them was not reachable by that invocation.
+//
+// R151's shape again — a core path that works, with a shell that cannot get
+// to it — and, as in R151, a green unit suite said nothing, because the suite
+// only ever exercised the shell the way its author already knew to.
+
+/// `clap`'s usage-error exit. Spelled out for the same reason
+/// `EDIT_REFUSED` is.
+const USAGE_ERROR: i32 = 2;
+
+/// ★ An invocation that names NO fonts is REFUSED, not answered with a
+/// report of zeros.
+///
+/// The regression this pins: `--font` and `--all-missing` share a `clap`
+/// group, but the group was not `required`, so passing neither parsed
+/// cleanly into `EmbedSelection::Named(vec![])`. That selects nothing; an
+/// empty name list produces no `unmatched` rows (there are no names to fail
+/// to match); and under a non-`AllMissing` selection an unselected font is
+/// deliberately NOT reported as a refusal, because under an explicit
+/// selection a font the operator never named is not one. Every branch was
+/// individually correct and the composition was a silent no-op.
+///
+/// The assertion is deliberately two-sided. Exit 2 alone would still pass if
+/// someone later "helpfully" defaulted the selection to all-missing; the
+/// second half pins that no plan was printed, which is what makes this a test
+/// of the refusal rather than of the exit code.
+#[test]
+fn naming_no_fonts_is_refused_rather_than_reported_as_zero() {
+    let (code, stdout, stderr) = run("embed/embed-mixed.pdf", &["--use-bundled-fonts"]);
+    assert_eq!(
+        code, USAGE_ERROR,
+        "an invocation that selects nothing must not be accepted.\n\
+         stdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+    assert!(
+        !stdout.contains("fonts=0"),
+        "the old bug: a zero-report instead of a refusal.\nstdout:\n{stdout}"
+    );
+    // The refusal has to teach the flag, or it just moves the confusion.
+    assert!(
+        stderr.contains("--all-missing") && stderr.contains("--font"),
+        "the refusal names both ways to satisfy it:\n{stderr}"
+    );
+}
+
+/// ★ The report never claims a reason it did not print.
+///
+/// With `--font` naming one of three missing fonts, two remain missing and
+/// this run says nothing about either — correctly, because they were not part
+/// of the operation. The bug was the *sentence*: `not_embedded_after` was
+/// followed by "Every one is listed above with its reason" when nothing was
+/// listed at all, sending the operator to look for output that does not
+/// exist. Project rule 4 is about pdfce disclosing what it inferred; a tool
+/// that misdescribes its own output fails it just as squarely as one that
+/// hides an inference.
+#[test]
+fn fonts_left_missing_by_an_explicit_selection_are_not_claimed_to_be_explained() {
+    let (code, stdout, stderr) = run(
+        "embed/embed-mixed.pdf",
+        &["--use-bundled-fonts", "--font", "Helvetica"],
+    );
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    // The hazard has to actually occur, or the guard is untested (R187):
+    // one font embedded, more than one still missing, and no `refused` row.
+    assert!(
+        stdout.contains("not_embedded_after=") && !stdout.contains("not_embedded_after=0"),
+        "the hazard must occur for this test to mean anything:\nstdout:\n{stdout}"
+    );
+    assert!(
+        !stdout.contains("  refused "),
+        "and nothing may be listed, or the claim would be true:\nstdout:\n{stdout}"
+    );
+    assert!(
+        !stderr.contains("listed above with its reason"),
+        "the false claim, verbatim — nothing was listed above:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("NOT part of this operation"),
+        "the honest replacement says why there is no reason to read:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("--all-missing"),
+        "and points at what would consider them:\n{stderr}"
+    );
+}
+
+/// The other half of the same message: when the fonts left missing DID get a
+/// refusal row, the report says so and points at it.
+///
+/// Guards against "fixing" the test above by simply deleting the claim — the
+/// wording is still owed to the operator in the case where it is true.
+#[test]
+fn fonts_left_missing_with_a_printed_reason_are_pointed_at() {
+    let (_, stdout, stderr) = run("embed/embed-mixed.pdf", &["--all-missing"]);
+    assert!(
+        stdout.contains("  refused "),
+        "no donors supplied, so every missing font is refused:\nstdout:\n{stdout}"
+    );
+    assert!(
+        stderr.contains("listed above as `refused`"),
+        "the claim is owed when it is true:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("NOT part of this operation"),
+        "under --all-missing nothing is left unexplained:\n{stderr}"
+    );
+}
+
+/// The dry-run summary does not claim reasons over an empty list either.
+///
+/// A document with no fonts at all produces no targets AND no refusals. The
+/// old wording said "Every refusal is printed above with its reason" — true
+/// only vacuously, and it reads as though the operator missed some output.
+/// Third instance of the same claim-vs-behaviour smell in one command, which
+/// is why it is pinned rather than left as wording.
+#[test]
+fn a_document_with_nothing_to_embed_is_told_that_rather_than_pointed_at_reasons() {
+    let (code, stdout, stderr) = run("minimal.pdf", &["--all-missing", "--use-bundled-fonts"]);
+    assert_eq!(code, EDIT_REFUSED, "stdout:\n{stdout}");
+    assert!(
+        !stdout.contains("  refused "),
+        "the hazard: nothing is listed:\nstdout:\n{stdout}"
+    );
+    assert!(
+        !stderr.contains("Every refusal is printed above"),
+        "so the claim must not be made:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("no font that is missing its program"),
+        "the honest answer names the actual situation:\n{stderr}"
+    );
+}

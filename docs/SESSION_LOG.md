@@ -36588,3 +36588,152 @@ Full text of all six: `docs/ARCHITECTURE.md` §12 (entries dated
 read it before this log. In one line: phase E is done; the next
 candidates are the `/R` 6 sourcing gap, encrypted-save, and whichever
 of `Pass 67.0`'s remaining phases (C/D/F) the operator wants next.
+
+## 2026-08-12 (hundred-and-twenty-first filing) — `Pass 67.0` phase E's CLI shell was unreachable by its own documented invocation: `embed-font`/`unembed-font` silently selected zero fonts, and the plan's disclosure claimed reasons that were never printed; both fixed, `R190` minted; the sweep's own numbers stand and are reproducible today
+
+**Shipped:**
+- A working-tree fix, uncommitted at HEAD `c44d833` (no commit hash
+  exists yet), against `Pass 67.0` phase E. Two independent defects in
+  `crates/pdfce-cli/src/main.rs`: (1) `embed-font`'s `--font`/
+  `--all-missing` and `unembed-font`'s `--font`/`--all-removable`
+  shared a clap `ArgGroup` never marked `.required(true)`, so
+  `embed-font <file> --font-dir DIR` — the operator's own invocation,
+  matching the command's own help text — parsed cleanly and silently
+  selected zero fonts; (2) `embed-font`'s "every one is listed above
+  with its reason" claim was false whenever an explicit `--font`
+  selection left fonts missing that the operation never considered.
+  Core gains `EmbedBlocked::missing_program` and
+  `EmbedPlan::explained_missing()`/`unexplained_missing()` (always
+  summing to `missing_after()`); CLI states the total and the
+  explained subset separately. Six new tests, each individually
+  falsified by reverting its fix. Tests **3,541 passing / 0 failing**
+  per the engineer's relay (+6 over a reported pre-fix baseline of
+  3,535 — phase E's own entry recorded 3,534 at its ship; a one-test
+  discrepancy between the two filings, flagged, not reconciled, no
+  shell this dispatch to re-derive it). All standing gates green
+  (relayed). Release binary rebuilt and independently walked through
+  on the operator's original five files: all five reach
+  `not_embedded_after=0` on reopen (`eu-001.pdf` needs `--mode full`,
+  correctly — its base xref was invalid, so incremental save is
+  correctly refused on a recovered document, not a defect).
+
+**Decisions made this session:** none — a defect fix, not new scope
+or a design decision. No new `ARCHITECTURE.md` §12 entry.
+
+**Findings + decisions:**
+- **★ The record-correction question the operator opened this filing
+  with, settled first.** Phase E's sweep numbers (1,330/1,507 missing
+  fonts embedded, 726/4,023 files reaching `not-embedded=0`) are
+  correct and reproducible today — rebuilding `tools/embed-sweep`
+  against the operator's exact five files reproduces the identical
+  shape. **The sweep measured the core planner only** — it hard-codes
+  `EmbedRequest::all_missing()`, the one selection mode under which
+  neither defect below is visible. Both facts — a correct sweep and an
+  unusable default CLI invocation — shipped in the same six commits
+  and neither contradicts the other. `ROADMAP.md`'s phase E entry gets
+  an amendment footer recording exactly this, not a rewrite (hard rule
+  1).
+- **Standing rule `R190` minted** — a mutually-exclusive `ArgGroup`
+  with no default member must be `.required(true)`, and a test suite
+  that only ever exercises the group's "select everything" branch has
+  not tested the shell's per-item selection path at all. Distinct from
+  `R151` (no caller reaches the code at all) — here the CLI is
+  reached, parses, and runs; the gap is one specific, plausible flag
+  combination the suite never tried. The disclosure half is related to
+  `R174`/`R181`/`R186` without being a clean instance of any one of
+  them (see `R190`'s own text for the exact relation).
+- **New `D:\dev\rag\rust\` file** —
+  `clap_arggroup_default_not_required_permits_zero_of_mutually_exclusive_selection.md`,
+  the generalizable clap-derive half (`.required(true)` on the
+  `ArgGroup`, not on a member; the test-shape blind spot), joining
+  three existing clap-specific findings in that RAG. `index.md`
+  updated same filing.
+- No `C:\personal_rag\pdf\` lesson — nothing here concerns real-world
+  PDF producer behavior; entirely a pdfce CLI argument-parsing defect.
+- Sourcing: no shell this dispatch. The test-count delta, gate
+  outputs, and release-binary walkthrough are relayed from the
+  dispatching engineer's report; the clap-group fix, the new
+  `pdfce-core` fields/methods, and all six new tests were
+  independently confirmed on disk by direct `Read`/`Grep` before being
+  recorded.
+
+**Still in flight:** unchanged from the hundred-and-twentieth entry —
+phases C (re-subset), D (outlines) and F (replace font) of `Pass 67.0`
+remain unstarted; `/R` 6 sourcing and encrypted-save remain open;
+operator question `(bk)` (bundled-font-embedding licensing) unresolved.
+
+**For next session:** the fix above is uncommitted — committing it
+(and updating `commits-filed-baseline.txt`/`tools/
+check-commits-filed.py`'s bookkeeping once it has a hash) is the
+first order of business before anything else in this family. After
+that, the same fork in the road phase E's own entry left open: `/R` 6
+sourcing, encrypted-save, or whichever of phases C/D/F the operator
+wants next.
+
+## 2026-08-12 (hundred-and-twenty-second filing) — the 3,535-vs-3,534 test-count discrepancy flagged in the previous entry is RESOLVED: 3,535 is right, measured not relayed, and resolving it surfaced a second error in that entry's own "+6 new tests" gate line
+
+**Shipped:** nothing new — this filing is a correction to the
+hundred-and-twenty-first entry's own Gates line and to phase E's Gates
+line, both left as-written per `ROADMAP.md`'s append-only convention
+(amendment footers added instead).
+
+**Decisions made this session:** none.
+
+**Findings + decisions:**
+- **The operator measured `cargo test --workspace` directly on the
+  fixed working tree, twice, identically: 3,542 passing, 0 failing.**
+  `git diff` over `crates/` for the fix shows exactly 7 `#[test]`
+  functions added and 0 removed — `embed_font.rs` +4, `unembed_font.rs`
+  +1, `font_embed_missing.rs` +2. **3,542 − 7 = 3,535**, confirming the
+  pre-fix baseline the hundred-and-twenty-first entry reported (and
+  had flagged as disagreeing with phase E's own recorded 3,534).
+- **Resolving the flag surfaced a second, independent error.** The
+  hundred-and-twenty-first entry's own "Six new tests" list actually
+  named only three of `embed_font.rs`'s four new tests — it omitted
+  `a_document_with_nothing_to_embed_is_told_that_rather_than_pointed_at_reasons`
+  (confirmed on disk, line 556 of that file). Its "+6" arithmetic
+  (3,535 + 6 = 3,541) was therefore internally consistent with an
+  incomplete list, not with the suite actually on disk; the real
+  post-fix total is **3,542**, not 3,541. Found by this librarian
+  independently `Grep`-counting `#[test]` occurrences in all three
+  touched files (no shell available) — the same 4/1/2 split the
+  operator's `git diff` reported, reached by a different method.
+- **Why phase E's own entry says 3,534: a one-off recording slip, not
+  a real suite change.** `git show --stat c44d833` (this librarian's
+  own phase-E-plus-fix filing commit) touches only `docs/*.md`, no
+  source file — so nothing in `crates/` changed between phase E's code
+  commit `d8a8948` and the fix's pre-state, and the two ships' baselines
+  should have been identical. `ROADMAP.md` gets two amendment footers
+  this filing: one on the hundred-and-twenty-first entry (full
+  reconciliation, both errors) and one on phase E's own entry (points
+  at the first, per the append-only rule that an entry's own text is
+  never rewritten).
+- **Second-order finding, worth stating plainly and not worth a gate.**
+  A test count recorded by hand in a ledger entry is a *measurement* of
+  the suite, not a fact about it — this project runs
+  `check-ledger-numbers.py` against its own ledger arithmetic (Pass
+  IDs, decision numbers, standing-rule numbers) but has nothing that
+  re-derives a `cargo test` count from the tree, and shouldn't: the "no
+  checker was built" reasoning already on file in `ROADMAP.md`'s
+  *Update protocol* → *How a figure is filed* applies here without
+  modification. What kept this correction to one short exchange rather
+  than a re-litigation is that the *other* headline numbers challenged
+  in the same breath — phase E's sweep figures, 1,330/1,507 and
+  726/4,023 — were checked and confirmed correct; telling "measure and
+  confirm" apart from "measure and correct" quickly is the skill, not
+  avoiding either outcome.
+- Sourcing: the 3,542/7-new-tests figures are relayed directly from the
+  operator this filing (method stated: `cargo test --workspace` run
+  twice, `git diff` over `crates/`) — no shell for this librarian.
+  Independently corroborated on disk via `Grep`-counted `#[test]`
+  occurrences in `embed_font.rs`, `unembed_font.rs`, and
+  `font_embed_missing.rs` before being recorded.
+
+**Still in flight:** unchanged from the hundred-and-twenty-first entry
+— the fix remains uncommitted; phases C/D/F of `Pass 67.0` remain
+unstarted; `/R` 6 sourcing and encrypted-save remain open; operator
+question `(bk)` unresolved.
+
+**For next session:** unchanged — commit the working-tree fix first
+(with its `commits-filed-baseline.txt` bookkeeping), then continue
+down the same fork the hundred-and-twenty-first entry left open.

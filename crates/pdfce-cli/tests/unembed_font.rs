@@ -369,3 +369,41 @@ fn the_result_still_opens_and_reports_the_new_name() {
     assert!(stdout.contains("verdict=not-embedded"), "stdout:\n{stdout}");
     assert!(stdout.contains("embedded=0 bytes=0"), "stdout:\n{stdout}");
 }
+
+/// ★ An invocation that names NO fonts is REFUSED, not answered with a
+/// report of zeros.
+///
+/// The same defect `embed-font` carried, in its sibling and shipped in the
+/// same Pass: `--font` and `--all-removable` shared a `clap` group that was
+/// not `required`, so `unembed-font <file>` parsed cleanly, selected nothing,
+/// and printed `fonts=0 refused=0 unmatched=0` followed by "Every refusal is
+/// printed above with its reason" — with no refusals printed. Found by
+/// checking whether the bug reported against `embed-font` was a one-off; it
+/// was not.
+///
+/// See `embed_font.rs`'s `naming_no_fonts_is_refused_rather_than_reported_as_zero`
+/// for the full reasoning; this pins the identical contract here so the two
+/// commands cannot drift apart on it.
+#[test]
+fn naming_no_fonts_is_refused_rather_than_reported_as_zero() {
+    let out = Command::new(BIN)
+        .arg("unembed-font")
+        .arg(fixture("unembed/unembed-many-pages.pdf"))
+        .output()
+        .expect("pdfce-cli runs");
+    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+    let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+    assert_eq!(
+        out.status.code().unwrap_or(-1),
+        2,
+        "clap usage error.\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+    assert!(
+        !stdout.contains("fonts=0"),
+        "the old bug: a zero-report instead of a refusal.\nstdout:\n{stdout}"
+    );
+    assert!(
+        stderr.contains("--all-removable") && stderr.contains("--font"),
+        "the refusal names both ways to satisfy it:\n{stderr}"
+    );
+}

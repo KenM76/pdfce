@@ -880,6 +880,24 @@ pub struct EmbedBlocked {
     pub base_font: Option<String>,
     /// Why.
     pub blocker: EmbedBlocker,
+    /// Whether this font is one of the ones [`EmbedPlan::missing_before`]
+    /// counts — i.e. it carries no program *and still will not*.
+    ///
+    /// # Why a field rather than a test on [`Self::blocker`]
+    ///
+    /// The two are not the same question and a shell that conflates them
+    /// reports a false number. A row blocked as
+    /// [`EmbedBlocker::AlreadyEmbedded`] is not missing anything, and a row
+    /// blocked as [`EmbedBlocker::ProgramDeclaredButUnreadable`] declares a
+    /// program that merely could not be decoded — neither is counted by
+    /// `missing_before`, so neither is part of the number the operator is
+    /// driving to zero. Every *other* blocker names a font that has no
+    /// program and is not getting one.
+    ///
+    /// This is what lets [`EmbedPlan::unexplained_missing`] be computed at
+    /// all, and therefore what lets a report say "every one is listed above"
+    /// only when that is true.
+    pub missing_program: bool,
 }
 
 /// A font that will gain a program, and everything that changes about it.
@@ -1006,6 +1024,45 @@ impl EmbedPlan {
     #[must_use]
     pub fn missing_after(&self) -> usize {
         self.missing_before.saturating_sub(self.targets.len())
+    }
+
+    /// How many of [`Self::missing_after`]'s fonts appear in
+    /// [`Self::blocked`] with a reason attached.
+    ///
+    /// Pairs with [`Self::unexplained_missing`]; the two always sum to
+    /// `missing_after()`.
+    #[must_use]
+    pub fn explained_missing(&self) -> usize {
+        self.blocked.iter().filter(|b| b.missing_program).count()
+    }
+
+    /// How many of [`Self::missing_after`]'s fonts this plan says **nothing**
+    /// about.
+    ///
+    /// # ★ Why this exists, and what it is guarding against
+    ///
+    /// A report that prints `missing_after` and then asserts *"every one is
+    /// listed above with its reason"* is making a claim it cannot keep under
+    /// [`EmbedSelection::Named`]. A font the operator did not name is neither
+    /// a target nor a refusal — `plan` deliberately does not list it, because
+    /// under an explicit selection a font nobody asked about is not a
+    /// refusal, and listing it as one would bury the fonts that are. So the
+    /// count is right and the sentence is wrong: the operator is told to look
+    /// for reasons that were never printed.
+    ///
+    /// That is exactly the failure project rule 4 exists to prevent — the
+    /// tool describing its own output inaccurately — and it is invisible to
+    /// any test that only ever passes `--all-missing`, where this number is
+    /// always zero. A shell must gate the "listed above" wording on this
+    /// being zero and account for the remainder separately.
+    ///
+    /// Zero under [`EmbedSelection::AllMissing`], by construction: every
+    /// `NotEmbedded` font is selected, so it becomes a target or a blocked
+    /// row.
+    #[must_use]
+    pub fn unexplained_missing(&self) -> usize {
+        self.missing_after()
+            .saturating_sub(self.explained_missing())
     }
 
     /// How many blocked fonts carry each reason, keyed by
@@ -1249,6 +1306,11 @@ pub fn plan(
                     id: record.id,
                     base_font: record.base_font.clone(),
                     blocker: blocker_for_unselected(record),
+                    // Unreachable in practice — under `AllMissing` every
+                    // `NotEmbedded` font IS selected — but derived from the
+                    // record rather than hard-coded `false`, so the field
+                    // stays correct if the selection rule ever changes.
+                    missing_program: matches!(record.program, Program::NotEmbedded),
                 });
             }
             continue;
@@ -1262,6 +1324,7 @@ pub fn plan(
                 id: record.id,
                 base_font: record.base_font.clone(),
                 blocker,
+                missing_program: matches!(record.program, Program::NotEmbedded),
             }),
         }
     }
@@ -1296,6 +1359,9 @@ pub fn plan(
             id: Some(t.id),
             base_font: t.base_font,
             blocker: EmbedBlocker::DescriptorShared { with: outsiders },
+            // It was a target a moment ago, and `classify` only ever
+            // produces one from a `NotEmbedded` font.
+            missing_program: true,
         });
     }
 
@@ -2788,5 +2854,69 @@ mod tests {
         let plan = s.embed_preview(&req);
         assert_eq!(plan.targets.len(), 1);
         assert_eq!(plan.unmatched, vec!["NoSuchFont".to_owned()]);
+    }
+
+    /// ★ A font left missing by an explicit selection is counted and
+    /// **not** explained, and the plan says which of the two it is.
+    ///
+    /// `missing_after()` counts the whole document; `blocked` lists only what
+    /// the operation considered. Under [`EmbedSelection::Named`] those two
+    /// diverge, and a shell that assumed they agreed printed
+    /// "every one is listed above with its reason" over an empty list. The
+    /// hazard is made to occur here rather than asserted about in the
+    /// abstract (R187): three fonts missing, one named and embedded, and the
+    /// other two reported by NEITHER list.
+    #[test]
+    fn fonts_outside_an_explicit_selection_are_counted_but_unexplained() {
+        let s = session(include_bytes!(
+            "../../../fixtures/synthetic/embed/embed-mixed.pdf"
+        ));
+        let req =
+            EmbedRequest::named(["pdfceAttach"]).with_font("pdfceAttach", donor(FontMatch::Exact));
+        let plan = s.embed_preview(&req);
+
+        assert_eq!(plan.targets.len(), 1, "the one font named is embedded");
+        assert!(
+            plan.blocked.is_empty(),
+            "an unnamed font is not a refusal, so nothing is listed: {:?}",
+            plan.blocked
+        );
+        assert!(
+            plan.missing_after() > 0,
+            "the hazard has to occur or the guard is untested"
+        );
+        assert_eq!(
+            plan.explained_missing(),
+            0,
+            "nothing was listed, so nothing is explained"
+        );
+        assert_eq!(
+            plan.unexplained_missing(),
+            plan.missing_after(),
+            "every still-missing font here is one the report says nothing about"
+        );
+    }
+
+    /// The counterpart: under `AllMissing` every still-missing font DOES get
+    /// a row, so `unexplained_missing()` is zero and the "listed above"
+    /// wording is owed.
+    ///
+    /// Pins the invariant the shell branches on, in the mode the sweep
+    /// harness runs — the mode in which the bug above was invisible.
+    #[test]
+    fn all_missing_leaves_nothing_unexplained() {
+        let s = session(include_bytes!(
+            "../../../fixtures/synthetic/embed/embed-mixed.pdf"
+        ));
+        // No donors at all: every missing font is refused, which is the
+        // strongest form of "each one got a reason".
+        let plan = s.embed_preview(&EmbedRequest::all_missing());
+        assert!(plan.missing_after() > 0, "nothing can be embedded");
+        assert_eq!(plan.unexplained_missing(), 0);
+        assert_eq!(plan.explained_missing(), plan.missing_after());
+        assert!(
+            plan.blocked.iter().any(|b| b.missing_program),
+            "and the rows carrying that count are marked as such"
+        );
     }
 }

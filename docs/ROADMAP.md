@@ -81,6 +81,270 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★★★★ uncommitted at HEAD `c44d833` (working-tree fix, not yet committed) — `Pass 67.0` phase E's CLI shell was UNREACHABLE by the invocation its own help text implies: `embed-font`/`unembed-font`'s selection `ArgGroup` silently accepted zero fonts, and the plan's own disclosure claimed reasons that were never printed — both fixed, six falsified tests, `R190` minted — 2026-08-12 (hundred-and-twenty-first filing)
+
+**★ The record-correction question, settled first because it was asked
+first.** The phase E sweep's own numbers — **1,330 of 1,507** missing
+fonts embedded, **726 of 4,023** files reaching `not-embedded=0` —
+**stand, are correct, and are reproducible today.** Rebuilding
+`tools/embed-sweep` and running it against the exact five files the
+operator hit reproduces the identical shape: **6 of 6** missing fonts
+embedded, "still missing after" **0**, **5 of 5** files reaching
+`not-embedded=0`, reopen failed **0**, render broken **0**. **The
+sweep was never able to see the defect below** — it hard-codes
+`EmbedRequest::all_missing()` (`tools/embed-sweep/src/main.rs:345`),
+the one selection mode under which both defects are invisible by
+construction. The existing filing is not missing a correct number; it
+is missing the caveat that **the number measured the core planner
+only, and the CLI shell in front of it was not reachable by the
+invocation its own help text implies.** Both are true at once — see
+the amendment footer on the phase E entry below.
+
+**Defect 1 (root cause of the empty plan) —
+`crates/pdfce-cli/src/main.rs`, `embed-font` AND `unembed-font`.**
+`--font`/`--all-missing` (and `--font`/`--all-removable` on
+`unembed-font`) shared a clap `ArgGroup` that was never marked
+`.required(true)`. `pdfce-cli embed-font <file> --font-dir
+C:/Windows/Fonts` — the operator's own invocation, and the shape the
+command's own help text reads like — parsed cleanly and produced
+`EmbedSelection::Named(vec![])`: no fonts selected, no `unmatched`
+names (there were none to fail to match), no refusal (under a
+non-`AllMissing` selection an un-named font is deliberately NOT
+reported as blocked — a font the operator never named was never
+considered, not refused). Every counter in the tool's own summary
+printed zero; nothing to act on; exit 0. `unembed-font` carried the
+identical defect, found by checking whether `embed-font`'s bug was a
+one-off; it was not.
+
+**Fix.** `#[command(group = clap::ArgGroup::new("which-embed")
+.required(true))]` on `EmbedFont`'s variant, and the equivalent
+`which` group on `UnembedFont`. The invocation now exits 2 naming both
+flags (`error: the following required arguments were not provided:
+<--font <FONT>|--all-missing>`); the empty-selection state is
+unrepresentable rather than merely unlikely. Two sibling clap groups
+were audited and are fine as shipped: `split`'s `criterion` group
+carries a `default_value_t` member; `redact-mark`'s `how` group has an
+explicit runtime "give exactly one of --rect, --search, or --pattern"
+check.
+
+**Defect 2 (independent — the disclosure bug) — same file.**
+`embed-font` printed, whenever `missing_after() > 0`: *"N font(s) will
+STILL have no embedded program. Every one is listed above with its
+reason."* **False under an explicit `--font <name>` selection.**
+`missing_after()` counts the whole document; `plan.blocked` lists only
+what the operation actually considered — a font the operator did not
+name is neither embedded nor refused, counted and explained nowhere,
+and the sentence sends the operator looking for reasons that were
+never printed. Verified independently of Defect 1
+(`embed-font ... --font Times-Roman` on a file with more than one
+missing font: `refused=0`, `not_embedded_after=1`, and the "every one
+is listed above" claim printed over an empty list). This is rule 4's
+shape (fuzzy-never-sneaky) turned on the tool's own OUTPUT rather than
+on an inference — related to, but distinct from, `R174`/`R181`/`R186`
+(see the new `R190` entry in *Standing rules* for the exact relation).
+
+**Fix, split core + CLI.** `pdfce-core::font_embed_missing`: new `pub
+missing_program: bool` on `EmbedBlocked` — deliberately NOT the same
+question as `blocker.token() == "already-embedded"`, since
+`ProgramDeclaredButUnreadable` is also not a missing font; new
+`EmbedPlan::explained_missing()`/`unexplained_missing()`, which always
+sum to `missing_after()` by construction (`unexplained_missing()` is
+zero under `AllMissing`). `pdfce-cli`: the total and the two groups
+are now stated separately, and the "listed above" sentence prints only
+for the fonts that actually got a row; the remainder gets "NOT part of
+this operation and carry no reason above — re-run with --all-missing
+to see every blocker."
+
+**GUI audited, needs no change.** `panels_structure.rs` only ever
+builds `EmbedSelection::AllMissing` or `Objects(vec![id])` — never
+empty — and never makes the "listed above" claim.
+
+**Why the existing suite missed both — this project's `R151` shape one
+level lower.** Every pre-existing test in
+`crates/pdfce-cli/tests/embed_font.rs` passes `--all-missing`; under
+that mode both defects are invisible (`unexplained_missing()` is
+always zero, the selection is never empty). Same blind spot the sweep
+has, same root cause: the suite only ever exercised the shell the way
+its own author already knew to drive it. `R151` is a capability with
+NO caller; this is a capability WITH a caller whose one untested
+invocation shape silently no-ops — narrow and testable enough to earn
+its own mint (`R190`, below) rather than being filed as another `R151`
+instance.
+
+**Six new tests, each individually falsified (R187) — not merely
+added.**
+- `crates/pdfce-cli/tests/embed_font.rs`:
+  `naming_no_fonts_is_refused_rather_than_reported_as_zero`
+  (two-sided — asserts exit 2 AND that no zero-report was printed, so
+  it still fails if a future change defaults the selection to
+  all-missing instead of refusing);
+  `fonts_left_missing_by_an_explicit_selection_are_not_claimed_to_be_explained`;
+  `fonts_left_missing_with_a_printed_reason_are_pointed_at` (guards
+  against "fixing" the previous test by deleting the claim outright —
+  the wording is still owed when it is true).
+- `crates/pdfce-cli/tests/unembed_font.rs`:
+  `naming_no_fonts_is_refused_rather_than_reported_as_zero`.
+- `pdfce-core::font_embed_missing` unit tests:
+  `fonts_outside_an_explicit_selection_are_counted_but_unexplained`;
+  `all_missing_leaves_nothing_unexplained`.
+
+Reverted separately, each confirmed to fail on its own: removing the
+clap groups fails both `naming_no_fonts_…` tests; restoring the old
+disclosure wording fails both `fonts_left_missing_…` tests, printing
+the false claim verbatim over nothing listed; degrading
+`explained_missing()` to the naive `self.blocked.len()` fails
+`all_missing_leaves_nothing_unexplained`. No test weakened or deleted;
+none had asserted the broken behavior.
+
+**Gates.** `cargo fmt --all` clean; `cargo clippy --workspace
+--all-targets --all-features -- -D warnings` zero; `cargo test
+--workspace` **3,541 passing / 0 failing** (+6 new tests; relayed
+against a pre-fix baseline reported as **3,535** — note phase E's own
+Shipped entry above recorded **3,534** at its own ship, a one-test
+discrepancy between the two filings, unresolved and not independently
+re-derived this dispatch, no shell — flagged rather than silently
+reconciled); `check-ui-strings.sh`/`check-theme-colors.sh`/
+`check-bypass-paths.sh`/`check-ledger-numbers.py` all OK; `cargo check
+--workspace --target aarch64-apple-darwin` OK; `cargo check -p
+pdfce-core -p pdfce-render --target wasm32-unknown-unknown` OK.
+
+**Release-binary verification, not just the code and not just
+debug.** Rebuilt `--release`; confirmed in the running binary that the
+operator's original invocation now refuses with a usage error naming
+both flags, and all five files reach `not_embedded_after=0` on the
+REOPENED output — `FC60_Times.pdf`, `document.pdf`, `data-000001.pdf`,
+`PDFBOX-2984-rotations.pdf` on the default incremental save;
+`eu-001.pdf` needs `--mode full`.
+
+**`eu-001.pdf`'s `--mode full` requirement is NOT a defect — recorded
+as expected behavior.** Its base cross-reference was invalid, so the
+document was recovered on open; incremental save of a recovered
+document is correctly refused with the remedy named in the message
+("its save must be a full rewrite (save_full)"), exit 8
+`SAVE_REFUSED`. The refusal is doing its job.
+
+**`docs/FEATURES.md`: no row moves, no checkbox changes.** Both
+affected rows (*Fonts & rendering* — unembedding, embed missing fonts)
+already read `[x] core / [x] cli / [x] gui`, checked directly against
+`crates/pdfce-cli/src/main.rs` before concluding no edit was owed. The
+`[x] cli` mark was true of code that existed and ran; it was not true
+of the *usable* command a plain reading of the row implies, for the
+one invocation shape (naming neither group member) the row's own
+checkbox cannot distinguish from every other. Not retroactively
+flagged as having been wrong — left as the generalizable half of
+`R190` rather than resolved by rewording the row.
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — this
+librarian did not run `cargo test`/`cargo clippy`/the release build
+itself; the test-count delta, the gate outputs, and the release-binary
+walkthrough above are **relayed** from the dispatching engineer's
+report. **Independently confirmed by direct `Read`/`Grep` on live
+source, no shell needed:** `#[command(group =
+clap::ArgGroup::new("which-embed").required(true))]` at
+`crates/pdfce-cli/src/main.rs:1110` and the equivalent `"which"` group
+at line 1022; `pub missing_program: bool` (line 900),
+`explained_missing`/`unexplained_missing` (lines 1035/1063) and their
+sum-invariant test (lines 2915–2918) in
+`crates/pdfce-core/src/font_embed_missing.rs`; all six named tests
+exist on disk in `crates/pdfce-cli/tests/embed_font.rs`,
+`crates/pdfce-cli/tests/unembed_font.rs`, and
+`crates/pdfce-core/src/font_embed_missing.rs`. **The working tree is
+uncommitted at dispatch time** (HEAD `c44d833`) — no commit hash
+exists for this fix yet; the header above names the tree state instead
+of a hash for that reason, not by omission.
+
+**Ledger for this filing.** **No new Pass ID** — a defect fix against
+already-shipped `Pass 67.0` phase E, not new scope (hard rule 2).
+Pass-family ceiling stays **67.0**, next free **68**. **No new
+`ARCHITECTURE.md` §12 entry** — additive fields/methods on an existing
+type, no crate boundary, library choice or invariant redefinition.
+Decision-record ceiling stays **053**, next free **054**. **One
+standing rule minted, `R190`** — ceiling moves **R189 → R190**, next
+free **R191**. Operator-question ceiling unaffected, **(bk)**, next
+free **(bl)**. **One new `D:\dev\rag\rust\` file** —
+`clap_arggroup_default_not_required_permits_zero_of_mutually_exclusive_selection.md`
+(a clap-derive gotcha generalizing past pdfce, joining three existing
+clap-specific findings in that RAG); `index.md` bullet added this same
+filing. **No `C:\personal_rag\pdf\` lesson** — nothing here concerns
+real-world PDF producer behavior; the finding is entirely about
+pdfce's own CLI argument-parsing shell, outside that subject's scope.
+`Pass 67.0` phase E's own *Shipped* entry gets a matching amendment
+footer, this same filing (see immediately below), per the append-only
+discipline (hard rule 1) — its own text is not rewritten. **Backup/git
+working-tree/remote state not independently asserted anywhere in this
+filing** — no shell this dispatch (hard rule 8); the engineer should
+check `D:\Dev\pdfce-backups\` and `git log`/`git status`/`git
+remote -v` directly, on the current branch, noting the tree is
+uncommitted before doing so. This is the **hundred-and-twenty-first**
+`ROADMAP.md`/`SESSION_LOG.md` joint filing.
+
+> **[★ AMENDED 2026-08-12 (hundred-and-twenty-second filing) — THE
+> 3,535-VS-3,534 DISCREPANCY FLAGGED ABOVE IS RESOLVED (3,535 IS
+> RIGHT), AND RESOLVING IT SURFACED A SECOND, RELATED ERROR IN THIS
+> ENTRY'S OWN GATES LINE.** The operator ran `cargo test --workspace`
+> on the current working tree twice, identically: **3,542 passing, 0
+> failing** — not the **3,541** stated in this entry's Gates paragraph
+> above. `git diff` over `crates/` for this fix shows exactly **7**
+> new `#[test]` functions added and none removed, not the **six** this
+> entry names above: `crates/pdfce-cli/tests/embed_font.rs` gained
+> **4**, not three — this entry's own "Six new tests" list omits
+> `a_document_with_nothing_to_embed_is_told_that_rather_than_pointed_at_reasons`
+> (confirmed on disk at line 556 of that file: exercises `--all-missing
+> --use-bundled-fonts` on a file with nothing left to embed; a real,
+> distinct test, not a duplicate of the three already named).
+> `crates/pdfce-cli/tests/unembed_font.rs` gained **1** and
+> `crates/pdfce-core/src/font_embed_missing.rs` gained **2**, both
+> exactly as already stated above. **3,535 + 7 = 3,542** is now the
+> correct, self-consistent figure on both sides of the addition — the
+> original "3,541 (+6)" was arithmetically consistent with an
+> incomplete test list, not with the suite actually on disk.
+>
+> **The 3,534-vs-3,535 question itself: 3,535 is right, and phase E's
+> 3,534 is a one-off recording slip, not a real change in the suite.**
+> `git show --stat c44d833` — this librarian's own phase-E-plus-fix
+> filing commit, named as HEAD in this entry's own header — touches
+> only `docs/ARCHITECTURE.md`, `docs/FEATURES.md`,
+> `docs/NEXT_SESSION.md`, `docs/ROADMAP.md`, `docs/SESSION_LOG.md`; no
+> source file. No test was added or removed between phase E's own code
+> commit `d8a8948` and this fix's pre-state, so the two ships'
+> baselines should have been identical, and **3,535** — self-consistent
+> against the now-measured **3,542** — is the one to trust. See the
+> phase E entry's own footer, below, for the matching correction; its
+> original Gates line stays unedited, per hard rule 1.
+>
+> **Sourcing.** The 3,542-and-7-new-tests figures are relayed directly
+> from the operator this dispatch (method stated: `cargo test
+> --workspace` run twice; `git diff` over `crates/`) — still no shell
+> for this librarian. **Independently corroborated on disk, no shell
+> needed:** `Grep`-counted `#[test]` occurrences confirm exactly 4 new
+> functions in `embed_font.rs` (16 total; the first 12, at lines
+> 124–401, match phase E's own "12 tests" ship figure exactly; the 4
+> new ones run lines 467–572), 1 new in `unembed_font.rs` (16 total,
+> the new one at line 388), and 2 new in `font_embed_missing.rs` (both
+> at the file's tail, lines 2870 and 2907) — the same 4/1/2 split the
+> operator reported, reached by an independent method (counting test
+> functions on disk, not diffing commits).
+>
+> **Why this earned a full paragraph rather than a one-line fix.** A
+> test count recorded by hand in a ledger entry is a measurement of the
+> suite, not a fact about it — the same distinction hard rule 10 exists
+> to make checkable for performance figures applies here. This project
+> already runs `check-ledger-numbers.py` against its own ledger
+> arithmetic (Pass IDs, decision numbers, standing-rule numbers) but has
+> nothing that re-derives a `cargo test` count from the tree — nor
+> should it; the "no checker was built" reasoning in *Update protocol*
+> → *How a figure is filed* applies without modification (extraction is
+> the job, cross-configuration comparison manufactures contradictions,
+> the identity set is not enumerable in advance). What made this
+> correction fast rather than a re-litigation is that the *other*
+> headline numbers in this same filing pair — phase E's sweep figures,
+> 1,330/1,507 and 726/4,023 — were challenged in the same breath and
+> turned out to be exactly right; the discipline that keeps a filing
+> short is telling "measure and confirm" apart from "measure and
+> correct" quickly, not avoiding either one.]**
+
+---
+
 ### ★★★★ `b358657..d8a8948` (six commits) — `Pass 67.0` phase E ships: pdfce can EMBED a font that is referenced but not carried, the operation the request that opened this whole family actually needed — core (`font_embed_missing.rs`), CLI (`embed-font`), GUI (Fonts panel constructive action), a 4,023-file sweep closing 726 of 4,023 files' `not-embedded` count to zero, and a bug fix that had nothing to do with fonts — 2026-08-12 (hundred-and-twentieth filing)
 
 **Sourcing.** No shell tool this dispatch (hard rule 8) — `git show`/
@@ -335,7 +599,41 @@ directly, on the current branch. Six commits: `b358657`, `931481e`,
 matching footer amendment, this same filing. This is the
 **hundred-and-twentieth** `ROADMAP.md`/`SESSION_LOG.md` joint filing.
 
----
+> **[★ AMENDED 2026-08-12 (hundred-and-twenty-first filing) — the sweep
+> numbers above are UNCHANGED and reproducible today; what this entry
+> is missing is a caveat, not a correction.** The operator ran
+> `embed-font` through `pdfce-cli` on five real corpus files
+> `list-fonts` reports as having missing fonts and got an EMPTY PLAN —
+> the CLI shell shipped in this entry was not reachable by the
+> invocation its own `--help` text implies (`embed-font <file>
+> --font-dir DIR`, with neither `--font` nor `--all-missing` named).
+> **The 1,330/1,507 and 726/4,023 figures above measured the core
+> planner only** — `tools/embed-sweep` hard-codes
+> `EmbedRequest::all_missing()` and was never able to see the defect.
+> Rebuilding that harness and running it against the operator's exact
+> five files reproduces the identical shape today: 6 of 6 missing
+> fonts embedded, 5 of 5 files reaching `not-embedded=0`. **Both facts
+> are true at once and neither contradicts the other** — see the new
+> top-of-*Shipped* entry, this same filing, for the two defects (an
+> `ArgGroup` not marked required; a disclosure claiming completeness
+> it did not have), their fix, and standing rule `R190`.]**
+
+> **[★★ FURTHER AMENDED 2026-08-12 (hundred-and-twenty-second filing) —
+> THE `3,534` GATE FIGURE ABOVE IS A ONE-OFF RECORDING SLIP, NOT A REAL
+> SUITE CHANGE; THE CORRECT PRE-FIX BASELINE IS `3,535`, NOW MEASURED
+> RATHER THAN RELAYED.** `git show --stat c44d833` (the fix's own
+> filing commit, doc-only — touches `docs/*.md` and no source file)
+> confirms nothing in `crates/` changed between this entry's own ship
+> (`d8a8948`) and the fix's pre-state, so the suite's size did not move
+> between the two ships and both entries should have recorded the same
+> number. **The `3,534` figure above stays as written** (hard rule 1 —
+> this entry's own text is not rewritten); the correct figure,
+> confirmed by the operator running `cargo test --workspace` twice
+> (identically) plus an independent on-disk `#[test]`-count check, is
+> **3,535**. Full reconciliation, including a second error the same
+> check found in the fix entry's own "+6 new tests" gate line (the real
+> number is 7), is in the top-of-*Shipped* fix entry's own footer, this
+> same filing.]**
 
 ### ★★★ `f3acd24`+`2473602`+`d3baae5`+`f78c9d7`+`8f2b7a9` — `Pass 67.0` phase B ships: pdfce can UNEMBED a font, core (`font_unembed.rs`) + CLI (`unembed-font`) + GUI (Fonts panel destructive controls), refusing eight of nine verdicts by name; two new decisions (046 subset-tag strip, 047 `/CIDSet`/`/CharSet` removal); a 4,023-file sweep finds the dominant real-world blocker is NOT the case the scoping brief pointed at — but phase B does not serve the request that started this Pass, phase E does — 2026-08-12 (hundred-and-seventeenth filing)
 
@@ -38384,6 +38682,28 @@ dispatch (hard rule 8); the engineer should check
 directly. This is the **hundred-and-twentieth**
 `ROADMAP.md`/`SESSION_LOG.md` joint filing.
 
+**★ AMENDED 2026-08-12 (hundred-and-twenty-first filing) — phase E's
+CLI shell defect found and fixed, uncommitted at HEAD `c44d833`.** The
+operator could not reproduce phase E's own sweep result through
+`pdfce-cli` at all: `embed-font <file> --font-dir DIR` — the
+invocation the command's help text implies — silently selected zero
+fonts (a mutually-exclusive `ArgGroup` never marked required), and a
+second, independent defect made the tool's own disclosure claim
+reasons were "listed above" for fonts that were never explained.
+**The sweep's own numbers are unaffected and reproducible today** —
+they measured the core planner via a hard-coded `--all-missing`
+equivalent, which never exercised either defect. Both fixed, six new
+falsified tests, standing rule `R190` minted. Full record: the new
+top-of-*Shipped* entry (hundred-and-twenty-first filing) and its
+amendment footer on phase E's own *Shipped* entry. **Ledger for this
+footer.** No new Pass ID — a defect fix, not new scope; family ceiling
+stays **67.0**, next free **68**. No new `ARCHITECTURE.md` §12 entry.
+Standing-rule ceiling moves **R189 → R190**, next free **R191**.
+`docs/FEATURES.md`: no row/checkbox change — both affected rows
+already read `[x] core / [x] cli / [x] gui`; see the new *Shipped*
+entry for why no edit was owed. This is the **hundred-and-twenty-first**
+`ROADMAP.md`/`SESSION_LOG.md` joint filing.
+
 ---
 
 ### Pass 52.0–52.3 — PDF → DXF export, so SOLIDWORKS can import pdfce output without an Acrobat Pro licence at all — operator request 2026-08-09, redirected from "make pdfce satisfy SOLIDWORKS' Acrobat gate" to "make the gate irrelevant"
@@ -55885,6 +56205,53 @@ and
   Full record: `ARCHITECTURE.md` §5.7 and `ROADMAP.md`'s `Pass 67.0`
   phase E Shipped entry (hundred-and-twentieth filing). **Ceiling
   moves `R188` → `R189`; next free `R190`.**
+
+- **R190 — A mutually-exclusive selection `ArgGroup` with no default
+  member must be `.required(true)`, or a valid parse can select
+  nothing; a test suite that only ever exercises the group's "select
+  everything" branch has not tested the shell's per-item selection
+  path at all (2026-08-12, uncommitted fix at HEAD `c44d833`;
+  librarian-minted).** `pdfce-cli embed-font`/`unembed-font` shared a
+  clap `ArgGroup` between `--font`/`--all-missing` (and
+  `--font`/`--all-removable`) that was never marked required.
+  `pdfce-cli embed-font <file> --font-dir C:/Windows/Fonts` — the
+  operator's own invocation, and the shape the command's help text
+  reads like — parsed cleanly, selected zero fonts, and the operation
+  silently did nothing: no refusal (an un-named font under an explicit
+  selection is not "blocked," it was never considered), no
+  unmatched-name report (there were no names to fail to match), every
+  counter printed zero, exit 0. Every pre-existing test for both
+  commands passed `--all-missing`/`--all-removable`, under which the
+  group is never empty — so the defect was invisible to the whole
+  suite regardless of its size, the same shape R151 names for a
+  capability with no caller at all, here one level lower: a capability
+  WITH a caller, whose one untested invocation shape reaches a
+  semantically empty state. **Distinct from R151** (no caller reaches
+  the code at all) — here the CLI *is* reached, parses, and runs; the
+  gap is a specific flag combination the suite never tried. **Distinct
+  from, but adjacent to, R186** (a guard keyed on a hazard's MARKER
+  fails open when the hazard arrives markerless) — the "listed above"
+  disclosure this same fix corrected failed on exactly that shape: a
+  refusal list keyed on "a supplied name that failed to match" is
+  correctly empty when there are zero supplied names, and the
+  surrounding sentence claimed completeness anyway. Also related to
+  **R181** (a disclosure's claim must use the same predicate/coverage
+  as the write path it describes) — the corrected wording now states
+  the total and the explained subset separately rather than implying
+  one covers the other. **Practical form, two parts:** (1) for every
+  `group = "…"` found by grepping a clap-derive crate, if the group has
+  no `default_value_t` member and no explicit post-parse "give exactly
+  one of" check, ask whether the command has a sane behavior when NONE
+  of the group's members are supplied — if the honest answer is "no,
+  that's a no-op," the group is missing `.required(true)`; (2) a
+  disclosure that claims completeness ("every one is listed above")
+  must be scoped to exactly the same set the count beside it counts,
+  and printed conditionally on that set being the whole set, not
+  merely on the total being nonzero. Fix + full record: `ROADMAP.md`'s
+  new top-of-*Shipped* entry (hundred-and-twenty-first filing); the
+  generalizable clap-only half is also written to
+  `D:\dev\rag\rust\clap_arggroup_default_not_required_permits_zero_of_mutually_exclusive_selection.md`.
+  **Ceiling moves `R189` → `R190`; next free `R191`.**
 
 ## Update protocol
 

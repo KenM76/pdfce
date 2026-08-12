@@ -1013,6 +1013,17 @@ enum Command {
     /// A PDF/A-identified document is refused unless `--acknowledge-pdfa`:
     /// every part of ISO 19005 requires embedded fonts, so unembedding
     /// breaks the conformance the file claims about itself.
+    ///
+    /// ★ WHICH FONTS IS REQUIRED — pass `--all-removable` to take every font
+    /// whose verdict is `removable`, or name them individually with
+    /// `--font`. There is no default: pdfce does not guess at the scope of
+    /// an edit, least of all a destructive one.
+    // Same `required(true)` hazard as `embed-font` above, shipped in the same
+    // Pass and found by checking whether that bug was a one-off. It was not:
+    // `unembed-font <file>` parsed cleanly, selected nothing, and printed
+    // `fonts=0 refused=0 unmatched=0` followed by "Every refusal is printed
+    // above with its reason" — with nothing printed.
+    #[command(group = clap::ArgGroup::new("which").required(true))]
     UnembedFont {
         /// Input PDF.
         input: PathBuf,
@@ -1090,6 +1101,23 @@ enum Command {
     ///
     /// The file gets BIGGER. Programs are compressed on the way in, and both
     /// save modes keep them.
+    ///
+    /// ★ WHICH FONTS IS REQUIRED — pass `--all-missing` to take every font
+    /// the document is missing, or name them individually with `--font`.
+    /// There is no default: pdfce does not guess at the scope of an edit.
+    // ★ `required(true)` IS LOAD-BEARING, not tidiness. `#[arg(group = "x")]`
+    // makes a group that enforces mutual exclusion but is NOT required by
+    // default, so "exactly one of these" silently means "zero or one of
+    // these". With neither flag the selection parsed as an empty NAME LIST,
+    // and the resulting no-op was invisible in every direction: an empty
+    // name list selects no fonts, produces no `unmatched` rows (no name
+    // failed to match), and under a non-`AllMissing` selection an unselected
+    // font is deliberately not reported as a refusal. The operator got
+    // `fonts=0 refused=0 unmatched=0` over a document with missing fonts and
+    // a font folder that could resolve them — a shipped feature that read as
+    // completely broken. Every pre-existing test passed `--all-missing` and
+    // so could not see it (R151's shape). `unembed-font` had it too.
+    #[command(group = clap::ArgGroup::new("which-embed").required(true))]
     EmbedFont {
         /// Input PDF.
         input: PathBuf,
@@ -10124,6 +10152,7 @@ fn cmd_round_trip(
         Ok(pair) => pair,
         Err(err) => {
             eprintln!("pdfce-cli: {}: save refused: {err}", input.display());
+            hint_recovered_base(&err);
             return exit::SAVE_REFUSED;
         }
     };
@@ -10551,6 +10580,7 @@ fn save_edited(
     };
     let (bytes, report) = saved.map_err(|err| {
         eprintln!("pdfce-cli: save refused: {err}");
+        hint_recovered_base(&err);
         exit::SAVE_REFUSED
     })?;
 
@@ -12321,11 +12351,22 @@ to see the names it actually carries.",
 
     if !args.apply {
         if plan.targets.is_empty() {
-            eprintln!(
-                "pdfce-cli: {}: DRY RUN — nothing would be unembedded. Every refusal is printed \
-above with its reason.",
-                args.input.display()
-            );
+            // Mirrors `embed-font`'s dry-run wording, and for the same
+            // reason: the "printed above" half is a claim about this
+            // report, so it is made only when something was printed.
+            if plan.blocked.is_empty() {
+                eprintln!(
+                    "pdfce-cli: {}: DRY RUN — nothing would be unembedded, and nothing was \
+refused: this document carries no font program that can be removed.",
+                    args.input.display()
+                );
+            } else {
+                eprintln!(
+                    "pdfce-cli: {}: DRY RUN — nothing would be unembedded. Every refusal is \
+printed above with its reason.",
+                    args.input.display()
+                );
+            }
             return exit::EDIT_REFUSED;
         }
         eprintln!(
@@ -12606,13 +12647,38 @@ explicitly at the same time, so the text is unchanged.",
             args.input.display()
         );
     }
+    // ★ The "listed above" half of this is a CLAIM ABOUT THIS REPORT, and it
+    // is only true for the fonts that actually got a `refused` row. Under
+    // `--font <name>` a font the operator did not name is neither embedded
+    // nor refused — `plan` omits it on purpose — so it is counted here and
+    // explained nowhere. Saying "every one is listed above" then sends the
+    // operator looking for reasons that were never printed, which is the
+    // tool misdescribing its own output (project rule 4). The two groups are
+    // therefore stated separately, and the "listed above" sentence is
+    // printed only for the group it is true of.
     if plan.missing_after() > 0 {
         eprintln!(
-            "pdfce-cli: {}: {} font(s) will STILL have no embedded program. Every one is listed \
-above with its reason. A service that requires embedded fonts will still reject this file.",
+            "pdfce-cli: {}: {} font(s) will STILL have no embedded program. A service that \
+requires embedded fonts will still reject this file.",
             args.input.display(),
             plan.missing_after()
         );
+        if plan.explained_missing() > 0 {
+            eprintln!(
+                "pdfce-cli: {}: {} of those are listed above as `refused`, each with its reason.",
+                args.input.display(),
+                plan.explained_missing()
+            );
+        }
+        if plan.unexplained_missing() > 0 {
+            eprintln!(
+                "pdfce-cli: {}: {} of those were NOT part of this operation and carry no reason \
+above — this run only considered the font name(s) you passed with --font. Re-run with \
+--all-missing to have every missing font considered and reported.",
+                args.input.display(),
+                plan.unexplained_missing()
+            );
+        }
     }
 
     if !plan.unmatched.is_empty() {
@@ -12627,11 +12693,24 @@ to see the names it actually carries.",
 
     if !args.apply {
         if plan.targets.is_empty() {
-            eprintln!(
-                "pdfce-cli: {}: DRY RUN — nothing would be embedded. Every refusal is printed \
-above with its reason.",
-                args.input.display()
-            );
+            // Same discipline as the `missing_after` disclosure above: point
+            // at the reasons only when there ARE reasons. "Every refusal is
+            // printed above" over an empty list is vacuously true and reads
+            // as though the operator missed something, when the real answer
+            // is that this document had nothing to embed into.
+            if plan.blocked.is_empty() {
+                eprintln!(
+                    "pdfce-cli: {}: DRY RUN — nothing would be embedded, and nothing was \
+refused: this document has no font that is missing its program.",
+                    args.input.display()
+                );
+            } else {
+                eprintln!(
+                    "pdfce-cli: {}: DRY RUN — nothing would be embedded. Every refusal is \
+printed above with its reason.",
+                    args.input.display()
+                );
+            }
             return exit::EDIT_REFUSED;
         }
         eprintln!(
@@ -14444,6 +14523,47 @@ would leave dangling references and a file that claims to be tagged but is not."
 /// work — but a typo at a known line number is exactly the thing a
 /// command-line operator can fix in ten seconds if told, and never notices
 /// if not.
+/// Translate the one save refusal that has a **typeable remedy** into that
+/// remedy, at the shell boundary.
+///
+/// WHY this exists at all, and why it lives in the CLI rather than the core:
+/// [`WriteError::RecoveredBaseForbidsIncremental`]'s own message ends with
+/// "(save_full)". That is the correct name for the core's audience — a Rust
+/// caller reaching for [`pdfce_core::writer::save_full`] — and it must stay
+/// that way, because the core is a library first and its errors are read by
+/// API consumers, not only by this binary.
+///
+/// But an operator at a shell prompt cannot type `save_full`. They were told
+/// what was refused and given a symbol that appears in no `--help` output,
+/// which is the failure mode standing rule **R174** names: a diagnostic is
+/// only finished when it is read as its actual audience would read it. The
+/// same refusal reaches the operator here through `embed-font`, `redact`,
+/// `unembed-font` and every other mutating subcommand, so the translation
+/// belongs once at the shell's save boundary rather than in each of them.
+///
+/// The hint deliberately states the COST as well as the flag. `--mode full`
+/// is not a free retry: it rewrites the file as a single revision and so
+/// destroys any existing digital signature (ISO 32000-1 §12.8.1 NOTE 1).
+/// Offering the flag without that consequence would be exactly the "sneaky"
+/// half of project rule 4 — pdfce steering the operator into a destructive
+/// path because it was the one that made the command succeed.
+///
+/// Every other [`WriteError`] variant is left alone: they describe conditions
+/// with no single-flag remedy, and inventing a suggestion for them would be
+/// worse than silence.
+fn hint_recovered_base(err: &pdfce_core::writer::WriteError) {
+    if matches!(
+        err,
+        pdfce_core::writer::WriteError::RecoveredBaseForbidsIncremental
+    ) {
+        eprintln!(
+            "pdfce-cli: retry with `--mode full` to write this file. That rewrites it as a \
+             single revision, which is what a recovered base requires — and note it drops \
+             superseded revisions and invalidates any existing digital signature."
+        );
+    }
+}
+
 fn report_settings(report: &pdfce_core::settings::LoadReport) {
     use pdfce_core::settings::{SettingNote, StoreKind};
 
