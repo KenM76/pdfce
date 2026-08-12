@@ -73,6 +73,7 @@ USAGE
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 
@@ -208,11 +209,68 @@ def main(tag: str) -> int:
             "nobody can use",
         )
 
+    # * Is CI actually GREEN at the commit this tag points at?
+    #
+    # Added 2026-08-12, after this script reported v0.5.1 "clean" while the
+    # tagged commit's CI run was RED. Everything it checked was true -- tag,
+    # HEAD, origin/main and the asset all agreed -- because none of those
+    # facts is about whether the code passes. The red gate was
+    # `check-commits-filed.py`: three commits had been tagged and released
+    # before the librarian filed them, so the tag permanently points at a
+    # commit whose CI failed. The binaries were fine; the bookkeeping was not,
+    # and anyone opening that commit on GitHub sees a red X against a shipped
+    # release.
+    #
+    # The lesson is an ORDERING one and the check encodes it: file, let CI go
+    # green, THEN tag. A release verifier that never consults CI is verifying
+    # that the paperwork is self-consistent, not that the thing works.
+    #
+    # `in_progress` is reported distinctly from `failure`. A run still going
+    # is not a pass, and silently treating "not yet failed" as "succeeded" is
+    # the same absence-means-success mistake standing rule R191 names.
+    gh_ci = subprocess.run(
+        ["gh", "run", "list", "--commit", tagged, "--limit", "20",
+         "--json", "status,conclusion,name"],
+        capture_output=True, text=True,
+    )
+    if gh_ci.returncode != 0:
+        print("  skip  CI status -- `gh` unavailable or not authenticated")
+    else:
+        try:
+            runs = json.loads(gh_ci.stdout or "[]")
+        except json.JSONDecodeError:
+            runs = []
+        if not runs:
+            # No run at all is reported, not passed. A tagged commit that CI
+            # never saw has been verified by nobody.
+            check(False, "CI ran at the tagged commit",
+                  "no workflow run found for this commit -- it has never been "
+                  "checked by CI at all")
+        else:
+            failed = [r for r in runs
+                      if r.get("conclusion") not in (None, "success", "skipped")]
+            pending = [r for r in runs if r.get("status") != "completed"]
+            if pending:
+                check(False, "CI is finished at the tagged commit",
+                      f"{len(pending)} run(s) still in progress -- a run that "
+                      "has not failed yet is not a run that passed")
+            check(
+                not failed,
+                "CI is GREEN at the tagged commit",
+                "failing run(s): "
+                + ", ".join(f"{r.get('name', '?')}={r.get('conclusion')}"
+                            for r in failed)
+                + " -- the tag points at a commit CI rejected. If the failure "
+                  "is a filing/bookkeeping gate, the fix is ordering: file "
+                  "first, let CI go green, then tag.",
+            )
+
     if problems:
         print(f"\nverify-release: {len(problems)} problem(s): "
               f"{', '.join(problems)}")
         return 1
-    print("\nverify-release: clean -- tag, HEAD, origin/main and the release agree")
+    print("\nverify-release: clean -- tag, HEAD, origin/main, CI and the "
+          "release agree")
     return 0
 
 
