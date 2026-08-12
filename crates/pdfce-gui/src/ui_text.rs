@@ -11298,3 +11298,191 @@ pub const fn draft_visibility_option(v: pdfce_core::edit::Visibility) -> &'stati
 pub fn reset_already_default(count: usize) -> String {
     format!("{count} field(s) already hold their default.")
 }
+
+// ---------------------------------------------------------------------------
+// Font unembedding (Pass 67.0 phase B)
+//
+// The register is phase A's: operator language, statements about the FILE,
+// never about pdfce's abilities. "Locked to program" and "No blocker" are
+// already on screen; these sit beside them and must sound like the same
+// application wrote them.
+// ---------------------------------------------------------------------------
+
+/// The batch control's summary line, above the list at a fixed position.
+///
+/// Says "no blocker" rather than "removable" so it matches the verdict word
+/// the rows already show. An operator who has read the list should recognise
+/// the same phrase, not have to map one vocabulary onto another.
+pub fn font_unembed_batch_summary(count: usize, size: &str) -> String {
+    if count == 1 {
+        format!("1 font has no blocker · {size}")
+    } else {
+        format!("{count} fonts have no blocker · {size}")
+    }
+}
+
+/// The batch button.
+///
+/// Not "Unembed all" — "all" overclaims a completeness the panel itself
+/// disclaims two lines above, where the coverage note says there is one
+/// place pdfce did not look. The ellipsis says it opens a question rather
+/// than acting.
+pub fn font_unembed_batch_button() -> &'static str {
+    "Remove embedded programs…"
+}
+
+/// The per-font button, at the foot of an expanded row.
+pub fn font_unembed_row_button() -> &'static str {
+    "Remove this embedded program…"
+}
+
+/// Tooltip on the per-font button: says WHY it is offered.
+pub fn font_unembed_row_tooltip() -> &'static str {
+    "Remove this font's embedded program. Offered because nothing in this document blocks it — \
+     the reason is at the top of this row."
+}
+
+/// Tooltip on the batch button.
+pub fn font_unembed_batch_tooltip() -> &'static str {
+    "Review every font nothing is blocking, and remove their embedded programs together."
+}
+
+/// The confirmation window's title, for one font.
+pub fn font_unembed_confirm_title_one(name: &str) -> String {
+    format!("Remove the embedded program for {name}?")
+}
+
+/// The confirmation window's title, for a batch.
+pub fn font_unembed_confirm_title_many(count: usize) -> String {
+    format!("Remove {count} embedded font programs?")
+}
+
+/// ★ The appearance statement. First in the body, warn-coloured, and phrased
+/// as a certainty — "will", never "may". It is what the operation does.
+pub fn font_unembed_appearance_note() -> &'static str {
+    "The pages using these fonts will look different. Each letter keeps the exact space it \
+     occupies now, but a font supplied by the reader draws it, and that font's own shapes and \
+     widths are not the ones this document recorded."
+}
+
+/// The rename disclosure, shown only when a subset tag is coming off.
+pub fn font_unembed_rename_note(full: &str, stripped: &str) -> String {
+    format!(
+        "The stored name changes from {full} to {stripped}. The six-letter prefix names a subset \
+         of the program being removed, and no installed font is called {full}."
+    )
+}
+
+/// ★ The reclaim line. Says WHEN, not only how much — an incremental save
+/// appends, so nothing is recovered until the file is written out whole.
+pub fn font_unembed_reclaim_note(size: &str) -> String {
+    format!(
+        "This frees {size} the next time the file is written out whole (Save As). An ordinary \
+         save appends a revision instead, which keeps the removed program in the file and makes \
+         it slightly larger."
+    )
+}
+
+/// Shown per font whose program is shared with a font that is staying.
+pub fn font_unembed_shared_program_note(name: &str, others: usize) -> String {
+    if others == 1 {
+        format!(
+            "{name} shares its program with one other font that is not being changed, so the \
+             program stays in the file. This font is unembedded; its bytes are not recovered."
+        )
+    } else {
+        format!(
+            "{name} shares its program with {others} other fonts that are not being changed, so \
+             the program stays in the file. This font is unembedded; its bytes are not recovered."
+        )
+    }
+}
+
+/// The PDF/A disclosure, when the document identifies itself.
+pub fn font_unembed_pdfa_note(level: &str) -> String {
+    format!(
+        "This document says it conforms to {level}. That standard requires every font to be \
+         embedded, so removing one ends the conformance — and pdfce does not remove or correct \
+         the claim the file makes about itself."
+    )
+}
+
+/// The PDF/A disclosure when the metadata could not be read at all.
+///
+/// Said out loud rather than omitted, for the same reason the panel's
+/// coverage note is unconditional: "we could not look" and "there is nothing
+/// there" are different facts, and only one of them is reassuring.
+pub fn font_unembed_pdfa_unreadable_note() -> &'static str {
+    "This document's metadata could not be read, so pdfce could not check whether it claims \
+     PDF/A conformance. That is not the same as finding no claim."
+}
+
+/// The signature forward-pointer. Deliberately does not duplicate the
+/// save-time computation — it points at the question that gets asked there.
+pub fn font_unembed_signature_pointer() -> &'static str {
+    "If this document is signed, saving after this change may invalidate the signature — pdfce \
+     asks again at save time."
+}
+
+/// The undo/permanence statement.
+pub fn font_unembed_undo_note() -> &'static str {
+    "Ctrl+Z undoes this before you save. Once saved, the removed program is not in that file to \
+     recover."
+}
+
+/// The batch confirmation checkbox. Mandatory for a batch, because the blast
+/// radius is every page that uses any of the listed fonts.
+pub fn font_unembed_confirm_checkbox() -> &'static str {
+    "I understand this changes how text looks wherever these fonts are used."
+}
+
+/// The scan-gap acknowledgement, shown only when the inventory was cut short.
+pub fn font_unembed_scan_gap_checkbox() -> &'static str {
+    "I understand pdfce could not search every place a font can be used in this document."
+}
+
+/// One row in the confirmation window's list.
+pub fn font_unembed_list_row(name: &str, size: &str) -> String {
+    format!("{name} · {size}")
+}
+
+/// The confirm button, for one font.
+pub fn font_unembed_confirm_button_one() -> &'static str {
+    "Remove It"
+}
+
+/// The confirm button for a batch — it names its own scope.
+pub fn font_unembed_confirm_button_many(count: usize) -> String {
+    format!("Remove {count} Programs")
+}
+
+/// The cancel button. Matches the deferral phrasing the other dialogs use.
+pub fn font_unembed_cancel_button() -> &'static str {
+    "Don't remove them"
+}
+
+/// The status-bar line after one font.
+pub fn font_unembed_done_one(name: &str, size: &str) -> String {
+    format!("Removed {name}'s embedded program — {size} recovered when the file is written whole.")
+}
+
+/// The status-bar line after a batch.
+pub fn font_unembed_done_many(count: usize, size: &str) -> String {
+    format!(
+        "Removed {count} embedded font programs — {size} recovered when the file is written whole."
+    )
+}
+
+/// The status-bar line when the operation refused.
+pub fn font_unembed_refused(reason: &str) -> String {
+    format!("Nothing was removed: {reason}")
+}
+
+/// Appended to a row's reason after it was unembedded in THIS session.
+///
+/// Without it the row reads identically to a font that arrived non-embedded,
+/// which erases the operator's own action from the one place they would look
+/// to confirm it happened.
+pub fn font_unembed_done_this_session() -> &'static str {
+    "You removed this font's embedded program in this session."
+}

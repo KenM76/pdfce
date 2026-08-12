@@ -930,6 +930,10 @@ struct PdfceApp {
     ///   and it is why cancelling costs nothing: the bytes are simply
     ///   dropped, and the open document was never touched.
     pending_redaction_apply: Option<PendingRedactionApply>,
+    /// The font-unembed question (`Pass 67.0` phase B) — the FIFTH
+    /// independent pending state, on the same `apply()` gate as the other
+    /// four. See [`panels_structure::PendingUnembed`].
+    pending_unembed: Option<panels_structure::PendingUnembed>,
     /// The literal-text query in the redaction panel's Find-&-mark box.
     ///
     /// Application state rather than per-document state, matching
@@ -1604,6 +1608,7 @@ impl Default for PdfceApp {
             dxf_export_result: None,
             pending_copy: None,
             pending_redaction_apply: None,
+            pending_unembed: None,
             redact_search_query: String::new(),
             read_mode: false,
             full_screen: false,
@@ -2898,6 +2903,20 @@ struct OpenDoc {
     ///
     /// Read-only data. Nothing derived from it is ever written back.
     fonts: Option<pdfce_core::fontinfo::FontInventory>,
+    /// Font dictionaries this session unembedded (`Pass 67.0` phase B).
+    ///
+    /// After an unembed, a row's verdict becomes `NotEmbedded` and its reason
+    /// sentence becomes the one a font that ARRIVED non-embedded carries — so
+    /// the panel would erase the operator's own action from the one place
+    /// they would look to confirm it happened. This set lets the row say
+    /// which it is.
+    ///
+    /// Session-scoped and never written to the document: it is a fact about
+    /// what the operator did here, not about the file. Survives
+    /// [`OpenDoc::refresh_pages`] (which drops the inventory cache) because
+    /// undo does not un-happen the operator's memory of the click; the row's
+    /// verdict returning to `Removable` is what tells them it was undone.
+    unembedded_this_session: std::collections::BTreeSet<pdfce_core::object::ObjId>,
     /// The flattened page list, in document order, inheritance resolved,
     /// **with unsaved `/Rotate` edits applied**.
     ///
@@ -3437,6 +3456,7 @@ impl OpenDoc {
             session: Arc::new(session),
             render_worker: render_worker::RenderWorker::default(),
             fonts: None,
+            unembedded_this_session: std::collections::BTreeSet::new(),
             pages,
             properties_draft: Vec::new(),
             properties_lossy: false,
@@ -4281,6 +4301,16 @@ enum Action {
     /// Try the typed password against the document waiting in
     /// [`Status::NeedsPassword`] (ISO 32000-1 §7.6.3.1).
     SubmitPassword,
+    /// **Remove the embedded font programs** the unembed question lists.
+    ///
+    /// Carries nothing: what will be removed lives in `pending_unembed`,
+    /// which the dialog built once and does not recompute. `Action` is
+    /// `Copy` and a plan is a `Vec`, and that constraint produced the better
+    /// arrangement — one home for the description of the work, so the
+    /// question and the action cannot come to describe different operations.
+    ConfirmUnembed,
+    /// Close the unembed question without removing anything.
+    CancelUnembed,
     /// Abandon the password prompt and return to an empty canvas.
     ///
     /// Present as an explicit control even though the escape is already
@@ -10698,6 +10728,12 @@ impl PdfceApp {
         if self.pending_redaction_apply.is_some() {
             return Some(Action::CancelRedactionApply);
         }
+        // Pass 67.0 phase B — a Cancel, like every other arm. An Escape that
+        // could remove a font program would bind a destructive act to the key
+        // operators press to back out.
+        if self.pending_unembed.is_some() {
+            return Some(Action::CancelUnembed);
+        }
         if self.pending_print.is_some() {
             return Some(Action::CancelPrint);
         }
@@ -10737,6 +10773,14 @@ impl PdfceApp {
                 action,
                 Action::ConfirmRedactionApply | Action::CancelRedactionApply
             )
+        {
+            return;
+        }
+        // Pass 67.0 phase B — the FIFTH, added to the same gate for the same
+        // reason: a centre-anchored destructive question that must not be
+        // answerable from underneath another window.
+        if self.pending_unembed.is_some()
+            && !matches!(action, Action::ConfirmUnembed | Action::CancelUnembed)
         {
             return;
         }
@@ -11447,6 +11491,16 @@ impl PdfceApp {
                 self.confirm_redaction_apply();
                 return;
             }
+            Action::ConfirmUnembed => {
+                self.confirm_unembed();
+                return;
+            }
+            Action::CancelUnembed => {
+                // Costs nothing: the plan is dropped and the document was
+                // never touched, so every font is still exactly where it was.
+                self.pending_unembed = None;
+                return;
+            }
             Action::CancelRedactionApply => {
                 // Costs nothing: the prepared bytes are dropped and the open
                 // document was never touched, so the marks are all still
@@ -11500,6 +11554,8 @@ impl PdfceApp {
             | Action::CancelDxfExport
             | Action::CommitDxfExport
             | Action::CancelResetLayout
+            | Action::ConfirmUnembed
+            | Action::CancelUnembed
             // The settings actions belong in THIS arm, not a new one: they
             // are meaningful with no document open (every setting is
             // document-independent) and they need `&mut self` rather than
@@ -13295,6 +13351,10 @@ impl eframe::App for PdfceApp {
         // only decides what is on top if two ever coexist, which the gate
         // makes impossible.
         self.redaction_apply_confirmation(&ctx, &mut actions);
+        // Pass 67.0 phase B: the font-unembed question. Same treatment as
+        // the redaction report — blocking via the `apply()` gate, drawn here
+        // so it paints over every panel.
+        self.unembed_confirmation(&ctx, &mut actions);
         self.close_confirmation(&ctx, &mut actions);
         // The Pass 6.2 text-entry popup: a small non-blocking window that
         // collects the text before authoring.

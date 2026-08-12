@@ -595,7 +595,30 @@ impl PdfceApp {
     /// dropped by `OpenDoc::refresh_pages`, which already runs after every
     /// edit, undo and redo, so an `add-text` that embeds a new subset shows
     /// up without a second invalidation path to keep in step.
-    pub(crate) fn fonts_panel(&mut self, ui: &mut egui::Ui, _actions: &mut [Action]) {
+    pub(crate) fn fonts_panel(&mut self, ui: &mut egui::Ui, actions: &mut [Action]) {
+        // What the operator clicked, if anything. Collected inside the
+        // document borrow and acted on after it ends: opening the unembed
+        // question needs `&mut self` for `pending_unembed`, and the panel
+        // body already holds `&mut self.status`. Rust makes the sequencing
+        // explicit here, and the explicit sequencing is also the honest one
+        // — nothing is decided while the list is still being drawn.
+        let mut requested: Option<UnembedAsk> = None;
+        self.fonts_panel_body(ui, actions, &mut requested);
+        if let Some(ask) = requested {
+            self.begin_unembed(&ask);
+        }
+    }
+
+    /// The Fonts panel's body — everything that reads the inventory.
+    ///
+    /// Split from [`Self::fonts_panel`] only to bound the `&mut self.status`
+    /// borrow; there is no second concept here.
+    fn fonts_panel_body(
+        &mut self,
+        ui: &mut egui::Ui,
+        _actions: &mut [Action],
+        requested: &mut Option<UnembedAsk>,
+    ) {
         use pdfce_core::fontinfo::{Program, Removability, RemovabilityUnknown, Surface};
 
         let Status::Open(doc) = &mut self.status else {
@@ -605,6 +628,11 @@ impl PdfceApp {
             let inv = pdfce_core::fontinfo::inventory(&doc.session.view());
             doc.fonts = Some(inv);
         }
+        // Cloned rather than borrowed: `inv` borrows `doc.fonts` for the
+        // rest of the function, and a set of object ids for the handful of
+        // fonts one session unembeds is smaller than the borrow gymnastics
+        // that would avoid the copy.
+        let unembedded_here = doc.unembedded_this_session.clone();
         let Some(inv) = doc.fonts.as_ref() else {
             return;
         };
@@ -643,6 +671,55 @@ impl PdfceApp {
                 .small()
                 .weak(),
         );
+
+        // ★ The batch control, at a FIXED position: directly under the
+        // document summary and above the list, computed from the whole
+        // inventory rather than from any row's geometry. Rule 4 as narrowed
+        // (decision 024 §4.4) requires a confirm control an operator can
+        // find without hunting; a control whose position is derived from the
+        // document is exactly what that narrowing rejected.
+        //
+        // Offered only when there is something to offer. A greyed-out
+        // "Remove" over a document with nothing removable is an affordance
+        // for something that cannot work (R83).
+        let removable: Vec<pdfce_core::object::ObjId> = inv
+            .fonts
+            .iter()
+            .filter(|f| f.removability.is_removable())
+            .filter_map(|f| f.id)
+            .collect();
+        if !removable.is_empty() {
+            let bytes: usize = inv
+                .fonts
+                .iter()
+                .filter(|f| f.removability.is_removable())
+                .map(pdfce_core::fontinfo::FontRecord::stored_bytes)
+                .sum();
+            ui.horizontal(|ui| {
+                ui.label(ui_text::font_unembed_batch_summary(
+                    removable.len(),
+                    &ui_text::byte_size(bytes),
+                ));
+                let resp = ui
+                    .button(ui_text::font_unembed_batch_button())
+                    .on_hover_text(ui_text::font_unembed_batch_tooltip());
+                // Traced with its RECT so the harness can drive the REAL
+                // button rather than a step that calls the same function.
+                // R184: three panels once shipped with no control an operator
+                // could click, and every verification passed because the only
+                // callers were harness step handlers.
+                diag::trace(|| {
+                    format!(
+                        "font-unembed-batch rect={:?} fonts={} bytes={bytes}",
+                        resp.rect,
+                        removable.len()
+                    )
+                });
+                if resp.clicked() {
+                    *requested = Some(UnembedAsk::AllRemovable);
+                }
+            });
+        }
         ui.separator();
 
         // Largest first. The operator opening this panel is usually asking
@@ -708,6 +785,19 @@ impl PdfceApp {
                         _ => ui_text::font_reason_unknown_subtype().to_owned(),
                     };
                     ui.label(reason);
+                    // ★ Whose doing it was. After an unembed the row's
+                    // verdict is `NotEmbedded` and its reason is the sentence
+                    // a font that ARRIVED non-embedded carries — identical
+                    // text, so the panel would erase the operator's own
+                    // action from the one place they would look to confirm
+                    // it. Said only when it is this session's doing; the
+                    // status line already announced it once, and this is what
+                    // survives the announcement scrolling away.
+                    if f.id.is_some_and(|id| unembedded_here.contains(&id))
+                        && matches!(f.removability, Removability::NotEmbedded)
+                    {
+                        ui.label(ui_text::font_unembed_done_this_session());
+                    }
                     ui.separator();
 
                     let kind = match &f.descendant_subtype {
@@ -776,6 +866,33 @@ impl PdfceApp {
                     ] {
                         if f.surfaces.contains(&surface) {
                             ui.label(text);
+                        }
+                    }
+
+                    // The per-font control, LAST in the body — the same
+                    // read-the-facts-then-act ordering the redaction Apply
+                    // report uses. Its presence is the only difference
+                    // between a removable row and a refused one, which is
+                    // what keeps every verdict at the same visual weight
+                    // (phase A's rule, and the reason a blocked verdict is
+                    // not error-styled: it is a fact about the FILE).
+                    //
+                    // Discoverability does not depend on this control: the
+                    // COLLAPSED header already carries the verdict word, so
+                    // "which of these can go" is answerable without opening
+                    // a single row.
+                    if let Some(id) = f.id
+                        && f.removability.is_removable()
+                    {
+                        ui.separator();
+                        let resp = ui
+                            .button(ui_text::font_unembed_row_button())
+                            .on_hover_text(ui_text::font_unembed_row_tooltip());
+                        diag::trace(|| {
+                            format!("font-unembed-row obj={} rect={:?}", id.num, resp.rect)
+                        });
+                        if resp.clicked() {
+                            *requested = Some(UnembedAsk::One(id));
                         }
                     }
                 });
@@ -852,6 +969,344 @@ fn fonts_panel_fs_type(ui: &mut egui::Ui, fs: &pdfce_core::fontinfo::FsType) {
         // must render as unknown, never as a permission.
         _ => {
             ui.label(ui_text::font_fstype_unknown());
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Font unembedding — the destructive half of the Fonts panel (Pass 67.0 B)
+// ---------------------------------------------------------------------------
+
+/// What the operator asked the Fonts panel to unembed.
+///
+/// A tiny `Copy` enum rather than a request value, because it travels out of
+/// the panel body across the end of a `&mut self.status` borrow. The real
+/// [`UnembedRequest`](pdfce_core::font_unembed::UnembedRequest) is built from
+/// it one line later, in one place.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum UnembedAsk {
+    /// Every font the report says nothing blocks.
+    AllRemovable,
+    /// One font, by its dictionary's object identity.
+    One(pdfce_core::object::ObjId),
+}
+
+/// A font-unembed question waiting for the operator.
+///
+/// The FIFTH independent pending state in `PdfceApp`, and it joins the same
+/// `apply()` gate the other four use rather than getting one of its own.
+/// The reason is the one already written down there: these are all
+/// centre-anchored windows, so two on screen at once means one is
+/// unclickable underneath the other — and this one is a **destructive**
+/// question, which an operator must never be able to answer unseen.
+pub(crate) struct PendingUnembed {
+    /// What the operator asked for. Carried so the confirm path rebuilds the
+    /// *same* request rather than re-deriving one from the plan.
+    ask: UnembedAsk,
+    /// The plan, computed once when the question opened.
+    ///
+    /// Not recomputed per frame: it walks the whole font inventory and
+    /// decodes every embedded program. It cannot go stale while the dialog
+    /// is up, because the `apply()` gate blocks every other action — and the
+    /// commit recomputes it anyway, so the worst case is a report that
+    /// matched what happened.
+    plan: pdfce_core::font_unembed::UnembedPlan,
+    /// The mandatory "the text will look different" acknowledgement.
+    acknowledged: bool,
+    /// The conditional "pdfce could not search everywhere" acknowledgement.
+    acknowledged_scan_gap: bool,
+    /// Whether the inventory sweep was cut short, captured WITH the plan so
+    /// the gate and the checkbox cannot come to disagree about whether the
+    /// tick is required.
+    scan_gap: bool,
+}
+
+impl PendingUnembed {
+    /// Whether every required acknowledgement has been given.
+    fn ready_to_confirm(&self) -> bool {
+        self.acknowledged && (!self.scan_gap || self.acknowledged_scan_gap)
+    }
+}
+
+/// Build the core request for an ask.
+///
+/// One function, called by both the question and the commit, so the plan the
+/// operator read and the operation that runs cannot describe different work.
+fn request_for(ask: &UnembedAsk) -> pdfce_core::font_unembed::UnembedRequest {
+    use pdfce_core::font_unembed::UnembedRequest;
+    match ask {
+        UnembedAsk::AllRemovable => UnembedRequest::all_removable(),
+        UnembedAsk::One(id) => UnembedRequest::objects([*id]),
+    }
+}
+
+impl PdfceApp {
+    /// Open the unembed question for `ask`.
+    ///
+    /// Computes the plan and puts it on screen. **Nothing is changed here** —
+    /// this is the disclosure half of rule 4, and the whole reason the core
+    /// exposes a preview that runs the same function the commit does.
+    pub(crate) fn begin_unembed(&mut self, ask: &UnembedAsk) {
+        let Status::Open(doc) = &self.status else {
+            return;
+        };
+        // R83: ask before offering. A document-level refusal (encrypted,
+        // certification-locked) is reported through the status bar rather
+        // than by opening a question the operator cannot answer.
+        if let Some(refusal) = doc.session.unembed_refusal() {
+            let note = ui_text::font_unembed_refused(&refusal.to_string());
+            self.set_edit_note(note);
+            return;
+        }
+        let plan = doc.session.unembed_preview(&request_for(ask));
+        if plan.targets.is_empty() {
+            // Nothing to ask about. The reasons are already on the rows, so
+            // the status line points at them rather than repeating one.
+            let note = plan.blocked.first().map_or_else(
+                || ui_text::font_unembed_refused(ui_text::fonts_none()),
+                |b| ui_text::font_unembed_refused(b.blocker.reason()),
+            );
+            self.set_edit_note(note);
+            return;
+        }
+        let scan_gap = doc.fonts.as_ref().is_some_and(|inv| {
+            inv.diagnostics.resource_scan_truncated || inv.diagnostics.page_scan_failed
+        });
+        diag::trace(|| {
+            format!(
+                "unembed-ask targets={} blocked={} pdfa={} scan_gap={scan_gap}",
+                plan.targets.len(),
+                plan.blocked.len(),
+                plan.pdfa.token(),
+            )
+        });
+        self.pending_unembed = Some(PendingUnembed {
+            ask: *ask,
+            plan,
+            acknowledged: false,
+            acknowledged_scan_gap: false,
+            scan_gap,
+        });
+    }
+
+    /// Draw the unembed confirmation.
+    ///
+    /// # Why a confirm step at all, when the click was deliberate
+    ///
+    /// Rule 4 as narrowed (decision 024 §4.4) drops the confirm step for a
+    /// direct manipulation whose result is fully visible and reversible in
+    /// one undo. This is not that. `Removability::Removable` is something
+    /// pdfce **inferred** — the same family as the font-trust downgrade the
+    /// rule names by example — and three of the four consequences are not
+    /// visible on the canvas at all: the PDF/A break, the signature
+    /// invalidation, and the name change. The fourth (the appearance shift)
+    /// is only visible if the operator happens to be looking at an affected
+    /// page, which they need not be to reach a side panel.
+    ///
+    /// The control's position is fixed: a centre-anchored window, not
+    /// something anchored to a row or to page geometry — which is precisely
+    /// the placement the narrowing was written to stop.
+    pub(crate) fn unembed_confirmation(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
+        use pdfce_core::font_unembed::PdfaClaim;
+
+        let Some(pending) = &mut self.pending_unembed else {
+            return;
+        };
+        let plan = &pending.plan;
+        // Read BEFORE the checkboxes are drawn, exactly as the redaction
+        // dialog does and for the same reason: the one-frame lag makes it
+        // impossible for the tick that enables the button and the click that
+        // presses it to land in the same frame.
+        let ready = pending.ready_to_confirm();
+        let one = plan.targets.len() == 1;
+        // Bound once, outside the closure: `ui_text::font_unnamed` is a
+        // function and calling it inside would make the borrow checker read
+        // the closure as capturing more than it does.
+        let unnamed = ui_text::font_unnamed();
+        let title = if one {
+            let name = plan.targets.first().and_then(|t| t.base_font.as_deref());
+            ui_text::font_unembed_confirm_title_one(name.unwrap_or(unnamed))
+        } else {
+            ui_text::font_unembed_confirm_title_many(plan.targets.len())
+        };
+
+        egui::Window::new(title)
+            .collapsible(false)
+            // Resizable, like the redaction report and unlike the two fixed
+            // dialogs: the body carries a variable-length list.
+            .resizable(true)
+            .default_size([600.0, 480.0])
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .show(ctx, |ui| {
+                // Warn-coloured and FIRST: the appearance change is not fine
+                // print, and nothing below it makes sense without it.
+                ui.colored_label(
+                    ui.visuals().warn_fg_color,
+                    ui_text::font_unembed_appearance_note(),
+                );
+                ui.separator();
+
+                egui::ScrollArea::vertical()
+                    .id_salt("unembed-report")
+                    .max_height(260.0)
+                    .show(ui, |ui| {
+                        for t in &plan.targets {
+                            let name = t.base_font.as_deref().unwrap_or(unnamed);
+                            ui.label(ui_text::font_unembed_list_row(
+                                name,
+                                &ui_text::byte_size(t.stored_bytes),
+                            ));
+                            if let Some(new_name) = &t.rename {
+                                ui.label(
+                                    egui::RichText::new(ui_text::font_unembed_rename_note(
+                                        name, new_name,
+                                    ))
+                                    .small()
+                                    .weak(),
+                                );
+                            }
+                            // Shown only when it is true. A saving that does
+                            // not happen is the one number in this dialog an
+                            // operator would act on and be wrong about.
+                            if !t.program_freed {
+                                ui.colored_label(
+                                    ui.visuals().warn_fg_color,
+                                    ui_text::font_unembed_shared_program_note(
+                                        name,
+                                        t.program_shared_with.len(),
+                                    ),
+                                );
+                            }
+                        }
+                    });
+
+                ui.separator();
+                let reclaim = usize::try_from(plan.bytes_reclaimable()).unwrap_or(usize::MAX);
+                ui.label(ui_text::font_unembed_reclaim_note(&ui_text::byte_size(
+                    reclaim,
+                )));
+                match &plan.pdfa {
+                    PdfaClaim::Identified { part, conformance } => {
+                        let level = format!(
+                            "PDF/A-{}{}",
+                            part.as_deref().unwrap_or("?"),
+                            conformance.as_deref().unwrap_or("")
+                        );
+                        ui.colored_label(
+                            ui.visuals().warn_fg_color,
+                            ui_text::font_unembed_pdfa_note(&level),
+                        );
+                    }
+                    // Said out loud rather than omitted: "we could not look"
+                    // and "there is nothing there" are different facts, and
+                    // only one of them is reassuring.
+                    PdfaClaim::MetadataUnreadable => {
+                        ui.label(ui_text::font_unembed_pdfa_unreadable_note());
+                    }
+                    _ => {}
+                }
+                ui.label(ui_text::font_unembed_signature_pointer());
+                ui.label(ui_text::font_unembed_undo_note());
+
+                ui.separator();
+                let ack_rect = ui
+                    .checkbox(
+                        &mut pending.acknowledged,
+                        ui_text::font_unembed_confirm_checkbox(),
+                    )
+                    .rect;
+                // Exists ONLY when there is something to acknowledge. Always
+                // showing it would make it a box operators tick without
+                // reading, which is the same as not having it.
+                if pending.scan_gap {
+                    ui.checkbox(
+                        &mut pending.acknowledged_scan_gap,
+                        ui_text::font_unembed_scan_gap_checkbox(),
+                    );
+                }
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    let cancel = ui.button(ui_text::font_unembed_cancel_button());
+                    if cancel.clicked() {
+                        actions.push(Action::CancelUnembed);
+                    }
+                    // R83: the affordance appears exactly when the capability
+                    // does.
+                    let confirm = ui
+                        .add_enabled_ui(ready, |ui| {
+                            let label = if one {
+                                ui_text::font_unembed_confirm_button_one().to_owned()
+                            } else {
+                                ui_text::font_unembed_confirm_button_many(plan.targets.len())
+                            };
+                            ui.button(label)
+                        })
+                        .inner;
+                    if confirm.clicked() {
+                        actions.push(Action::ConfirmUnembed);
+                    }
+                    // Every clickable rect in this window, traced, so the
+                    // harness drives the real controls (R184) and so the
+                    // acknowledgement gate can be shown to actually gate.
+                    diag::trace(|| {
+                        format!(
+                            "unembed-dialog targets={} ready={ready} confirm_rect={:?} cancel_rect={:?} ack_rect={:?}",
+                            plan.targets.len(),
+                            confirm.rect,
+                            cancel.rect,
+                            ack_rect,
+                        )
+                    });
+                });
+            });
+    }
+
+    /// Perform the unembed the operator confirmed.
+    ///
+    /// The request is rebuilt from the same [`UnembedAsk`] the question was
+    /// opened with, so the core recomputes its own plan and the two cannot
+    /// have drifted. A failure is reported through the status bar rather
+    /// than swallowed: the refusals reachable here — an encrypted document,
+    /// a certification that forbids the change — are the reason the
+    /// operation is safe, and an operator who is refused needs to know why.
+    pub(crate) fn confirm_unembed(&mut self) {
+        let Some(pending) = self.pending_unembed.take() else {
+            return;
+        };
+        let request = request_for(&pending.ask);
+        let Status::Open(doc) = &mut self.status else {
+            return;
+        };
+        let outcome = doc.session_mut().unembed_fonts(&request);
+        match outcome {
+            Ok(plan) => {
+                for t in &plan.targets {
+                    doc.unembedded_this_session.insert(t.id);
+                }
+                let count = plan.targets.len();
+                let bytes = usize::try_from(plan.bytes_reclaimable()).unwrap_or(usize::MAX);
+                let name = plan
+                    .targets
+                    .first()
+                    .and_then(|t| t.rename.clone().or_else(|| t.base_font.clone()));
+                // Drops the cached inventory, so the rows redraw from the
+                // edited session rather than from the pre-edit sweep.
+                doc.refresh_pages();
+                doc.ensure_object_provider();
+                let note = match (count, name) {
+                    (1, Some(name)) => {
+                        ui_text::font_unembed_done_one(&name, &ui_text::byte_size(bytes))
+                    }
+                    _ => ui_text::font_unembed_done_many(count, &ui_text::byte_size(bytes)),
+                };
+                self.set_edit_note(note);
+                diag::trace(|| format!("unembed-committed fonts={count} bytes={bytes}"));
+            }
+            Err(ref err) => {
+                let note = ui_text::font_unembed_refused(&err.to_string());
+                self.set_edit_note(note);
+                diag::trace(|| format!("unembed-refused {err}"));
+            }
         }
     }
 }
