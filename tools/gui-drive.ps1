@@ -188,8 +188,22 @@ $env:PDFCE_DIAG = "1"
 $env:PDFCE_DIAG_VIEWPORT = "$X,$Y,$W,$H"
 $env:PDFCE_DIAG_SCRIPT = $Script
 
+# Snapshotted BEFORE launch so cleanup can never touch an instance the
+# operator opened for their own work. See gui-shot.ps1's `finally` for the
+# full reasoning; the hazard is identical here.
+$preexisting = @(Get-Process -Name 'pdfce-gui' -ErrorAction SilentlyContinue |
+    Select-Object -ExpandProperty Id)
+
 $proc = Start-Process -FilePath $Exe -ArgumentList $Pdf -PassThru `
     -RedirectStandardError $Log -WindowStyle Hidden
+
+# try/finally for the same reason gui-shot.ps1 has one. This script was
+# LESS exposed than that one -- it kills only on timeout, because a script
+# that runs dry closes its own window -- but "less exposed" is not "safe":
+# every `throw` below this point (no trace, no start line) fires on exactly
+# the runs where the process may not have exited cleanly, which is when a
+# leak is most likely rather than least.
+try {
 if (-not $proc.WaitForExit($TimeoutSeconds * 1000)) {
     Write-Warning "script did not run dry within ${TimeoutSeconds}s -- killing"
     $proc | Stop-Process -Force
@@ -222,3 +236,18 @@ if ($rejects) {
 }
 
 $trace | Select-String -Pattern $Filter
+}
+finally {
+    # Cleanup on every path, including the two `throw`s above and Ctrl-C.
+    # Only ever this run's own process, never one the operator started.
+    if ($proc -and -not $proc.HasExited) {
+        $proc | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Milliseconds 200
+    }
+    $strays = @(Get-Process -Name 'pdfce-gui' -ErrorAction SilentlyContinue |
+        Where-Object { $preexisting -notcontains $_.Id })
+    if ($strays.Count -gt 0) {
+        Write-Warning "gui-drive: killing $($strays.Count) leftover pdfce-gui process(es): $($strays.Id -join ', ')"
+        $strays | Stop-Process -Force -ErrorAction SilentlyContinue
+    }
+}

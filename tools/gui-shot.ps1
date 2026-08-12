@@ -68,7 +68,24 @@ $env:PDFCE_DIAG_VIEWPORT = "$X,$Y,$W,$H"
 # steps run -- a script that ends closes the window (see diag::Script).
 $env:PDFCE_DIAG_SCRIPT = $Script + (";wait" * 4000)
 
+# PROCESSES THIS HARNESS MUST NEVER KILL.
+#
+# Snapshotted BEFORE launching ours, so the cleanup below can be certain it is
+# only ending the instance it started. The operator may well have pdfce open
+# for their own work — this script drives the real desktop, which is precisely
+# the situation where it is most likely — and a harness that killed "all
+# pdfce-gui processes" would close their document to tidy up after itself.
+$preexisting = @(Get-Process -Name 'pdfce-gui' -ErrorAction SilentlyContinue |
+    Select-Object -ExpandProperty Id)
+
 $proc = Start-Process -FilePath $Exe -ArgumentList $Pdf -PassThru -RedirectStandardError $Log
+
+# EVERYTHING FROM HERE IS INSIDE try/finally. See the note at the `finally`
+# for why — in short, this script previously killed its child on the LAST
+# line, which meant any throw before that line leaked a live window onto the
+# operator's desktop, invisible because it is parked off-screen and still
+# taking their mouse.
+try {
 Start-Sleep -Seconds $CaptureAfterSeconds
 
 # RAISE THE WINDOW BEFORE CAPTURING. Added 2026-08-05 (Pass 34.2) after a
@@ -177,6 +194,61 @@ it, which is what happened the first time.
 "@
 }
 
-$proc | Stop-Process -Force
 Write-Host "shot=$Shot"
 Get-Content $Log -ErrorAction SilentlyContinue | Select-String "vector-click|plain-click|commit-" | Select-Object -Last 5
+}
+finally {
+    # THE CLEANUP THAT MUST HAPPEN ON EVERY PATH.
+    #
+    # WHY THIS IS A `finally` AND NOT THE LAST STATEMENT. It used to be the
+    # last statement, with `$ErrorActionPreference = 'Stop'` set at the top —
+    # so ANY throw between launch and there (a failed Save, a bad crop
+    # rectangle, a disposed bitmap, Ctrl-C) skipped it and left pdfce-gui
+    # running. That process is parked off-screen at the caller's chosen
+    # viewport, so nothing appears on screen to reveal it, and it goes on
+    # synthesising and consuming pointer input on the operator's real desktop.
+    #
+    # The operator reported exactly this: "do you have some gui processes
+    # leftover that are interfering with my mouse?" — twice in one session.
+    # It is the second occurrence that makes this a defect in the tool rather
+    # than an operating mistake, because "remember to check afterwards" had
+    # already been tried and had already failed.
+    #
+    # NOT INVENTING A CAUSE, deliberately, in keeping with the CORRECTION
+    # above: the specific run that leaked was never identified. Rather than
+    # attach a plausible story to it, every exit path is now covered, which is
+    # true regardless of which one it was.
+    if ($proc -and -not $proc.HasExited) {
+        $proc | Stop-Process -Force -ErrorAction SilentlyContinue
+    }
+
+    # VERIFY THE KILL, rather than assume it. `Stop-Process` is asynchronous
+    # enough that a process can still be present immediately after; and if it
+    # genuinely will not die, the operator needs to be TOLD, because the whole
+    # symptom is a process they cannot see.
+    $deadline = (Get-Date).AddSeconds(5)
+    while ((Get-Date) -lt $deadline) {
+        $alive = @(Get-Process -Name 'pdfce-gui' -ErrorAction SilentlyContinue |
+            Where-Object { $preexisting -notcontains $_.Id })
+        if ($alive.Count -eq 0) { break }
+        Start-Sleep -Milliseconds 200
+    }
+
+    # A SWEEP FOR ORPHANS THIS RUN IS RESPONSIBLE FOR, but never for the
+    # operator's own instances — those were snapshotted before launch and are
+    # excluded by Id. This catches a child that outlived its parent handle, or
+    # a leak from an EARLIER harness run in the same session, which is the
+    # case that actually reached the operator.
+    $strays = @(Get-Process -Name 'pdfce-gui' -ErrorAction SilentlyContinue |
+        Where-Object { $preexisting -notcontains $_.Id })
+    if ($strays.Count -gt 0) {
+        Write-Warning "gui-shot: $($strays.Count) pdfce-gui process(es) still running after cleanup; killing: $($strays.Id -join ', ')"
+        $strays | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Milliseconds 300
+        $left = @(Get-Process -Name 'pdfce-gui' -ErrorAction SilentlyContinue |
+            Where-Object { $preexisting -notcontains $_.Id })
+        if ($left.Count -gt 0) {
+            Write-Warning "gui-shot: COULD NOT KILL pdfce-gui PID(s) $($left.Id -join ', '). It is parked OFF-SCREEN and will keep taking pointer input. Kill it manually: taskkill /F /PID $($left.Id -join ' /PID ')"
+        }
+    }
+}
