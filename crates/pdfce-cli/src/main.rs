@@ -991,9 +991,9 @@ enum Command {
     /// never silently, never merely missing from the output. That is a
     /// deliberate divergence from Acrobat, which refuses the same fonts by
     /// leaving them out of its list with no explanation anywhere. Measured
-    /// across 400 real files, refusal is the majority case: of 117 embedded
-    /// fonts, 48 % removable, 34 % blocked by glyph-index encoding, 13 %
-    /// symbolic-with-built-in-encoding, 3 % Type 3, 2 % unreadable.
+    /// over 4,023 real files, refusal is the majority case by a wide margin:
+    /// of 1,560 embedded fonts, 28.8 % removable, 53.6 % symbolic with a
+    /// built-in encoding, 12.9 % glyph-index encoded, 4.4 % embedded CMap.
     ///
     /// ★ APPEARANCE CHANGES. `/Widths` is preserved, so every glyph keeps
     /// its exact advance, but the substituted face's own shapes and widths

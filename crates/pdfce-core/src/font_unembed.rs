@@ -53,20 +53,32 @@
 //! corroborated by a user whose largest font was absent from the list with
 //! no explanation).
 //!
-//! Refusal is not the edge case. Measured over 400 real-world files
-//! carrying 466 distinct fonts, 117 of them embedded:
+//! Refusal is not the edge case, and the shape of it was measured rather
+//! than assumed. `tools/unembed-sweep` over **4,023 real-world files**
+//! (pdfbox, pdfium, qpdf, pdf20examples, veraPDF-corpus) examined 3,097
+//! distinct fonts, of which 1,560 carried a readable embedded program:
 //!
-//! | Verdict | Share of embedded fonts |
+//! | Verdict | Share of the 1,560 embedded |
 //! |---|---|
-//! | `removable` | 48 % |
-//! | `blocked-identity` | 34 % |
-//! | `unknown-symbolic-builtin` | 13 % |
-//! | `blocked-type3` | 3 % |
-//! | `unknown-program-unreadable` | 2 % |
+//! | `unknown-symbolic-builtin` | 53.6 % |
+//! | `removable` | 28.8 % |
+//! | `blocked-identity` | 12.9 % |
+//! | `unknown-embedded-cmap` | 4.4 % |
+//! | `unknown-predefined-cmap` | 0.4 % |
 //!
-//! **More than half of every embedded font in the corpus refuses.** A
-//! refusal path that was an afterthought would therefore be the path most
-//! operators actually take.
+//! **Seven embedded fonts in ten refuse.** A refusal path that was an
+//! afterthought would therefore be the path most operators actually take.
+//!
+//! ★ **This differs from the smaller measurement the Pass brief carried**,
+//! and both are kept because they are different measurements rather than a
+//! correction. A 400-file sample recorded 466 fonts / 117 embedded and put
+//! `removable` at 48 % with `blocked-identity` at 34 %. Over ten times the
+//! corpus the dominant blocker is not glyph-index encoding at all — it is a
+//! **symbolic font with no `/Encoding`**, where §9.6.6.1 sends the codes
+//! through the program's own `cmap` and the answer is genuinely unknown
+//! rather than knowably unsafe. The design consequence is the same either
+//! way (refuse, and say why), but anyone sizing the *value* of a future
+//! re-encoding Pass should size it against `unknown-symbolic-builtin`.
 //!
 //! # ★ Two decisions this module makes, and Acrobat does not answer
 //!
