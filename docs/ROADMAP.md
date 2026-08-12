@@ -81,7 +81,7 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
-### ★★★★★ `e931836` + `905791f` + `fbcb946` + `9f2af1d` + `e3fb7e0` — `Pass 68.0` **HALF BUILT, NOT SHIPPED** (a two-line pick model and a THIRD `DimensionKind`, both core-only), `Pass 70.0` **SHIPPED** (a capability can now actually be stripped from the build — it could not before, and the first measurement of the fix LIED), `Pass 71.0` slice 1 **SHIPPED** (the half of OCR that does not depend on which engine wins), and a licence gate for the files `cargo-about` is STRUCTURALLY UNABLE TO SEE — 2026-08-12 (hundred-and-twenty-sixth filing)
+### ★★★★★ `e931836` + `905791f` + `fbcb946` + `9f2af1d` + `e3fb7e0` + `af5580e` — `Pass 68.0` **HALF BUILT, NOT SHIPPED** (a two-line pick model and a THIRD `DimensionKind`, both core-only), `Pass 70.0` **SHIPPED** (a capability can now actually be stripped from the build — it could not before, and the first measurement of the fix LIED), `Pass 71.0` slice 1 **SHIPPED** (the half of OCR that does not depend on which engine wins), and a licence gate for the files `cargo-about` is STRUCTURALLY UNABLE TO SEE — 2026-08-12 (hundred-and-twenty-sixth filing)
 
 **Sourcing, stated before any figure (hard rule 8).** This librarian **had a
 shell this dispatch.** Items marked **measured** were produced by a command
@@ -563,6 +563,145 @@ gate (`check-fmt-excluded.py`) — the two belong together because they are the
 same kind of check.
 
 ---
+
+---
+
+#### 6. `af5580e` — **A SIXTH COMMIT LANDED WHILE THIS ENTRY WAS BEING WRITTEN**, and it withdraws a proposal the operator had already agreed to — plus **THIS FILING'S OWN DOC EDITS WERE SWEPT INTO IT**
+
+**★ AMENDMENT MADE WITHIN THIS SAME FILING (2026-08-12,
+hundred-and-twenty-sixth).** The entry above was written against five
+commits, which is what the dispatch named **and** what
+`tools/check-commits-filed.py` reported when this filing began
+(*"5 code commit(s) are in no filing"*, **measured**). **Re-run at the end
+of the filing, the same gate reported a SIXTH**: `af5580e`,
+**`af5580e55ebd05a67be5d043cf9db8a5ec82da02`** by `git rev-parse`,
+committed **15:41:08** — i.e. **during this filing**. **This is the second
+consecutive filing in which the gate named a commit the dispatch could
+not have**, and the reason is now demonstrably not forgetfulness: **the
+engineer keeps working while the librarian files.** *A dispatch names what
+the engineer remembers at dispatch time; the gate names what the
+repository contains at filing time, and those are different moments.*
+
+##### What `af5580e` actually does — a withdrawal, not a feature
+
+**The engineer withdrew a proposal the operator had ALREADY AGREED TO,
+because the estimate the agreement rested on was wrong.** In his own
+words: he had described an optional-download path for OCR model files as
+*"a download prompt and a bit of plumbing"*, **the operator agreed on that
+basis**, and **the estimate was wrong — so the agreement was uninformed.**
+He corrected it rather than building what was approved.
+
+**What it would actually have cost, read out of `ARCHITECTURE.md` §1.1
+after the fact:**
+
+- **pdfce contains NO HTTP CLIENT AND NO TLS STACK**, and §1.1 states that
+  as a claim *"verifiable by any reader of the generated
+  `THIRD_PARTY_LICENSES.md`"*. **A downloader ends a claim the project
+  makes in writing.**
+- **A FAIL-CLOSED CI job (no-network, `R12`)** refuses any HTTP/TLS/socket
+  client entering any crate without a **new decision record**. **It would
+  have stopped him** — the job working — **but discovering an
+  architectural boundary by tripping over its guard is not the same as
+  deciding to cross it.**
+- §1.1 puts this posture at **the same weight as the GUI-core-separation
+  and round-trip invariants.** **Trading it for convenience inside a
+  feature Pass is taking a load-bearing decision sideways.**
+
+**The replacement costs nothing and was already in the codebase:
+`--font-dir`'s shape.** **`ocr::models`** (`crates/pdfce-core/src/ocr/
+models.rs`, new, 276 lines) resolves an engine's model directory —
+**operator-named path first**, then **`models/<engine>` beside the
+executable** (the single-folder portable case), then user data. **It
+delivers everything the downloader would have** — multi-language OCR, no
+CC-BY-SA redistribution, the WASM path intact — **plus models on a share
+or a stick, which a downloader could not have offered.** Building a
+second, heavier mechanism for a problem already solved is the *"two ways
+to do one thing, one of them worse"* defect this project keeps refusing.
+
+**Two behaviours tested rather than trusted:**
+
+1. **A named path that does NOT exist is an ERROR, never a silent
+   fallback to a bundled copy.** Falling back would **run a different
+   model from the one the operator pointed at while reporting success**,
+   and **the output is text either way, so they could not tell.** Same
+   family as the silent-filter-fallback antipattern this project refuses
+   in the decode path — the harm is a plausible result from the wrong
+   input.
+2. **When nothing is found, EVERY searched path is reported.** *"Models
+   not found"* is unactionable; **the list is what tells the operator
+   where to put the files**, and it often reveals that they put them
+   somewhere pdfce never looks — **a different problem from not having
+   them.**
+
+**Per-engine directories, not one shared `models/` folder** — the files
+carry **different licences**, and a merged folder would make the
+`PROVENANCE.md` that `check-shipped-assets.py` (item 5) requires describe
+**a mixture**. **Note the sequencing: the gate shipped 15 minutes earlier
+and immediately constrained a design decision.** That is the gate doing
+the job item 5 claims for it, on its first contact with new work.
+
+**3,582 → 3,587 tests. No network crate added anywhere — verified, not
+assumed.**
+
+##### ★★ AND: THIS FILING'S OWN DOC EDITS WERE SWEPT INTO `af5580e`
+
+**Measured, by `git show af5580e --stat` and by grepping its diff.**
+`af5580e` touches **7 files**. **Two are the engineer's work**
+(`crates/pdfce-core/src/ocr/mod.rs`, `crates/pdfce-core/src/ocr/models.rs`).
+**FIVE ARE THIS LIBRARIAN'S IN-PROGRESS FILING**, uncommitted at the time
+he ran `git commit`:
+
+| file in `af5580e` | whose work | evidence |
+|---|---|---|
+| `crates/pdfce-core/src/ocr/models.rs` (+276) | engineer | new module, described by the message |
+| `crates/pdfce-core/src/ocr/mod.rs` (+5) | engineer | wiring |
+| `docs/ROADMAP.md` (+802/−5) | **this filing** | contains *"hundred-and-twenty-sixth"* **7 times**; contains the `R192` proposal; **contains ZERO lines mentioning the downloader, `--font-dir` or `ocr::models`** |
+| `docs/ARCHITECTURE.md` (+252) | **this filing** | first added line is `### (R) …`, this filing's §4.1 sync |
+| `docs/FEATURES.md` (+5/−3) | **this filing** | the three rows this filing rewrote |
+| `docs/PRIOR_ART.md` (+1/−1) | **this filing** | the `oxidize-pdf` fourth-claim amendment |
+| `CLAUDE.md` (+33/−3) | **this filing** | the OCR-engine-binding bullet rewrite |
+
+**The consequence worth stating plainly, because it is a record-integrity
+problem and not a tidiness one: `af5580e`'s COMMIT MESSAGE DOES NOT
+DESCRIBE MOST OF ITS OWN DIFF.** The message is a careful, complete
+account of a withdrawal and a 276-line module; **1,093 of its 1,371
+inserted lines are a librarian filing about five entirely different
+commits.** Anyone later running `git log -p -- docs/ROADMAP.md` will find
+this filing attributed to a commit titled *"withdraw the downloader I
+proposed"*.
+
+**★ THIS IS A CONCRETE, MEASURED INSTANCE OF ESCALATION 2** — *"agents'
+in-progress files swept into a public repo"* — which has been carried in
+`NEXT_SESSION.md` and `SESSION_LOG.md` for two filings as **relayed with
+no supporting detail and no written record findable anywhere in
+`docs/`**. **It now has one.** It is recorded here as **evidence for the
+escalation, not as a resolution of it**: the escalation as relayed may
+concern something broader (agent worktrees, scratch files, `.claude/`
+state), and **only the operator or the engineer can say what he meant.**
+**Do not close the escalation on the strength of this instance.**
+
+**Nothing is undone or rewritten.** The commit is in history on a public
+remote; `git commit --amend` after the fact would be worse than the
+disorder it fixed. **What is owed instead is a convention**, and it is a
+cheap one: **`git status --short` before `git commit -a`, and a librarian
+filing gets its own commit.** The project already has the matching
+positive instance — the hundred-and-twenty-fifth filing states *"this
+filing touched nothing outside `docs/`"* precisely because it checked.
+
+##### Filing status of `af5580e`
+
+**Filed here, not baselined.** `tools/commits-filed-baseline.txt` is the
+pre-existing debt the gate was written around; **a baseline entry
+suppresses the gate, a filing satisfies it.** Verified: the gate is clean
+against this entry.
+
+**No Pass ID minted for `af5580e`.** `ocr::models` is `Pass 71.0` slice
+substrate (the model-resolution half of *"build for both"*), and the
+withdrawal is a scope correction, not a Pass. **`Pass 71.0`'s *Next up*
+entry is amended** to record that slice 2's *"ship the model files"*
+framing has **changed shape**: pdfce now **looks for** operator-supplied
+models rather than **shipping** them, which **narrows but does not close
+`(bl)`** — see that question's text.
 
 #### ★★ THE OPERATOR DECISION THIS SESSION RECORDS
 
@@ -40312,8 +40451,29 @@ top-of-*Shipped*, item 4.
    feature, following `Pass 70.0`'s convention — **including a forwarding
    block in EVERY shell**, because forgetting one removes a capability
    without breaking the build.
-2. **Ship the model files** — **BLOCKED on `(bl)`** for the CC-BY-SA-4.0
-   set. `tools/check-shipped-assets.py` (`e3fb7e0`) will refuse a model
+2. **Model FILES — ★ RESHAPED BY `af5580e`, SAME FILING.** This slice was
+   written as *"ship the model files, BLOCKED on `(bl)`"*. **`af5580e`
+   changed the shape of the problem rather than solving it:
+   `ocr::models` (`crates/pdfce-core/src/ocr/models.rs`) makes pdfce
+   **LOOK FOR** operator-supplied models — a named path first, then
+   `models/<engine>` beside the executable, then user data — **exactly
+   the `--font-dir` pattern already in the codebase**, instead of pdfce
+   **SHIPPING** them or downloading them.
+   - **A named path that does not exist is an ERROR, never a silent
+     fallback** — a fallback would run a *different* model while
+     reporting success, and **the output is text either way, so nobody
+     could tell.**
+   - **When nothing is found, every searched path is printed.** *"Models
+     not found"* is unactionable.
+   - **Per-engine directories**, because the two engines' weights carry
+     **different licences** and a merged folder would force the
+     `PROVENANCE.md` that `check-shipped-assets.py` requires to describe
+     a mixture.
+   - **This NARROWS `(bl)` but does not close it.** An operator who
+     supplies his own CC-BY-SA-4.0 weights is not pdfce redistributing
+     them; **the question remains live for any build that BUNDLES a model
+     set**, which is still the only way OCR works out of the box.
+   `tools/check-shipped-assets.py` (`e3fb7e0`) will refuse a model
    directory whose `PROVENANCE.md` states no terms; **that is enforcement,
    not permission.**
 3. **The review surface (rule 4).** OCR output is an inference on **every
@@ -49299,6 +49459,23 @@ next free (bm):**
   engine and calling the question moot** — that silently forfeits the WASM
   route, which is an architectural commitment (`ARCHITECTURE.md` §3), not a
   detail. Full evidence: `docs/ocr-engine-survey.md` §3.3.
+  **★ NARROWED WITHIN THE SAME FILING by `af5580e`, and narrowed is not
+  closed.** `ocr::models` makes pdfce **LOOK FOR** operator-supplied model
+  files (named path → `models/<engine>` beside the executable → user
+  data), the `--font-dir` pattern, instead of shipping or downloading
+  them. **An operator supplying his own weights is not pdfce
+  redistributing them**, so the copyleft question does not arise on that
+  path — **and that path requires the operator to go and fetch a model set
+  before OCR does anything at all.** **The question stays open for exactly
+  the case that makes OCR work out of the box: a BUNDLED model set.**
+  **Do not treat the resolver as the answer** — it removes the obligation
+  by removing the feature's out-of-the-box behaviour, which is a trade
+  Ken has not been asked about. **Also note what `af5580e` withdrew**: an
+  optional **downloader**, which the operator HAD already agreed to on a
+  wrong estimate, and which would have ended `ARCHITECTURE.md` §1.1's
+  written no-HTTP-client/no-TLS-stack claim and tripped the fail-closed
+  `R12` no-network CI job. **That withdrawal is itself worth confirming
+  with him**, since he agreed to the thing that was withdrawn.
 
 **NEW in the hundred-and-twentieth filing (2026-08-12) — filed
 OPEN, not yet answered. Operator-question ceiling moved (bj) → (bk),

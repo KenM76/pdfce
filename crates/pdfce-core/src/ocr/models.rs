@@ -26,10 +26,32 @@
 //! # What this module does instead
 //!
 //! The same thing `--font-dir` already does for fonts, and for the same
-//! reason: **the operator supplies the files, and pdfce looks in
-//! predictable places.** No network client, no decision record, no weakened
-//! claim — and the operator can put a model anywhere, including on a share or
-//! a stick, which a downloader could not have offered anyway.
+//! reason: pdfce looks in **predictable places** rather than fetching
+//! anything. No network client, no decision record, no weakened claim — and a
+//! model can live on a share or a stick, which a downloader could not have
+//! offered anyway.
+//!
+//! ## ⚠️ This does NOT mean OCR arrives empty-handed
+//!
+//! Stated explicitly because an earlier draft of this comment said only "the
+//! operator supplies the files", which reads as though nothing ships and OCR
+//! does nothing until they go and find a model. That would be a real cost and
+//! it is not the design.
+//!
+//! The intended arrangement is:
+//!
+//! - The **multi-language engine's models are BUNDLED.** Its weights are
+//!   permissively licensed, so shipping them costs nothing but disk, and
+//!   [`ModelSource::BesideExecutable`] is exactly how they are found in the
+//!   single-folder portable layout. OCR works out of the box.
+//! - Only the **second, WASM-capable engine** — whose weights are
+//!   CC-BY-SA-4.0 — is operator-supplied, because *redistribution* is what
+//!   triggers that licence's obligations and pdfce declines to trigger them.
+//!
+//! So the operator-supplied path is the escape hatch for one specific licence
+//! problem, not the normal way OCR is obtained. Whether to bundle
+//! share-alike weights at all remains the operator's open question; this
+//! module is what makes "no" cost him nothing.
 //!
 //! The precedent matters. `embed-font --font-dir` solved an identical shape
 //! (pdfce needs a large licensed asset it should not necessarily ship) and it

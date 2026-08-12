@@ -37645,3 +37645,379 @@ recorded as owed, not as established.
 > claim about the working tree, and the working tree is one command away —
 > **hard rule 8's exact shape, landed on Pass status instead of on backup
 > currency.** This filing touched nothing outside `docs/`.
+
+## 2026-08-12 (hundred-and-twenty-sixth filing) — `e931836`+`905791f`+`fbcb946`+`9f2af1d`+`e3fb7e0`: `Pass 68.0` is HALF BUILT (core-only, deliberately not shipped), `Pass 70.0` proves a capability can actually be stripped from the build — it could not before, and the first measurement of the fix LIED — `Pass 71.0` slice 1 lands the engine-independent half of OCR on the operator's *"just build for both"*, and a licence gate now covers the shipped files `cargo-about` is STRUCTURALLY UNABLE TO SEE; also a PRE-COMPACTION CAPTURE
+
+**Sourcing.** This librarian **had a shell.** Items below marked
+**measured** were produced by a command run here and the command is named;
+everything else is **relayed** from the dispatching engineer's brief.
+**All five short hashes were resolved locally by `git rev-parse`** at the
+dispatch's own instruction — *"I gave a fabricated full hash in an earlier
+dispatch today and will not repeat it"* — which is the
+hundred-and-twenty-fourth filing's `b902ea0e13ff…` non-object, now two
+filings old as a practice.
+
+**★ TERMINOLOGY (project rule 15):** the dimension work below is **ce
+dimensions** — the ones pdfce authors. **pdf dimensions** (CAD-exported,
+already in the file) enter only as **pickable page geometry**, and pdfce
+must not alter them.
+
+**Shipped:**
+- **`Pass 70.0`** (`fbcb946`) — **strippable capabilities**, the operator's
+  own question answered by measurement. `jpx` (JPEG 2000) is the proof
+  capability, default ON; the OFF switch lives at the **workspace root**;
+  every shell forwards explicitly; **two** CI gates.
+- **`Pass 71.0` slice 1** (`9f2af1d`) — `pdfce-core::ocr`, the
+  engine-independent invisible-text-layer substrate. **No engine wired.**
+- **A CI gate with no Pass ID** (`e3fb7e0`) — `tools/check-shipped-assets.py`,
+  requiring a `PROVENANCE.md` that **names a licence** for every shipped
+  asset directory. Precedent for the no-ID form: `b902ea0`+`b1ee1cf`.
+- **`Pass 68.0` progress, NOT a ship** (`e931836` + `905791f`) — see below.
+
+**★★ `Pass 68.0` IS NOT SHIPPED, AND THIS IS THE ENTRY'S MOST
+MISREADABLE FACT.** Core has the two-line pick model
+(`crates/pdfce-core/src/vector/linepick.rs`, new) and the third
+`DimensionKind::Angular` with `SIDECAR_VERSION` 2. **The GUI gesture does
+not exist and `dimension-add` has no angular kind, so NO OPERATOR CAN
+AUTHOR AN ANGULAR ce DIMENSION.** `FEATURES.md` carries it as
+**core `[x]` · cli `[ ]` · gui `[ ]`** — `R151`'s exact shape, filed as a
+signal and **not rounded up**. The `ROADMAP.md` entry stays in *Next up*
+with an amended heading, following `Pass 67.0`'s in-place precedent.
+
+**Decisions made this session:**
+- **★ OPERATOR DECISION — the OCR engine question is ANSWERED. Verbatim:**
+  *"use whichever one is best for everyone including other languages, or
+  heck, just build for both."* → **both engines, behind Cargo features**,
+  with **multi-language coverage** as the stated ranking criterion. Filed
+  against `docs/PRIOR_ART.md`'s long-standing *"OCR engine binding — not
+  yet decided"* item and against the project `CLAUDE.md` bullet that
+  carried it.
+  - **★ WHAT IT DOES NOT ANSWER, and must never be read as answering:**
+    whether a **CC-BY-SA-4.0 model file** may ship inside pdfce's **MIT**
+    portable folder. **"Build for both" selects engines; it does not accept
+    share-alike terms on a bundled asset.** Filed as **new open operator
+    question `(bl)`** (ceiling `(bk)` → `(bl)`, next free `(bm)`).
+    *Default if unanswered: ship neither model set.*
+- **decision 055** (`ARCHITECTURE.md` §12) — an optional capability is
+  stripped by a Cargo feature whose OFF switch lives at the **workspace
+  root**, every shell **forwards it explicitly**, and CI asserts the
+  **capability** rather than the manifest. Convention for the next one
+  recorded in `crates/pdfce-core/Cargo.toml`'s own `[features]` header.
+- **Pass IDs `70.0` and `71.0` were LIBRARIAN-MINTED**, from the live
+  ceiling (**measured**: `python tools/check-ledger-numbers.py`), and said
+  so in the entry — the update protocol gives ID assignment to the
+  engineer, so if he wants different numbers these two are the only ones
+  to move and nothing else references them.
+- **`R192` is PROPOSED, NOT MINTED** — *an obligation that falls between
+  two correct tools is enforced by neither*. Filed at the end of *Standing
+  rules* in the established proposal form (text first, ruling appended
+  later, original left unedited). **The ceiling stays `R191`.** The
+  dispatch asked for a proposal rather than an assignment.
+
+**Findings + decisions:**
+- **★★ `pdfce-core` declared ZERO features and contained not one
+  `cfg(feature)`.** The operator asked whether modules could be stripped
+  for lighter builds, **assuming the layout already allowed it**. **The
+  layout allowed it; nothing implemented it.** Honest answer:
+  *architecturally yes, in practice no* — until `fbcb946`.
+- **★★ THE FIRST MEASUREMENT LIED, and would have been reported as a
+  success.** `cargo build -p pdfce-cli --no-default-features` produced a
+  **byte-identical** binary — **10,438,656 B both times**. Cargo unifies
+  features across the graph; `pdfce-render` re-enabled `jpx` behind the
+  CLI's back. **One enabling consumer wins.** The fix must live at the
+  **workspace root** because Cargo refuses to let an inheriting member
+  override `default-features` at all. After: **310 KB smaller, real.**
+  **A build that succeeds and produces a working binary is not evidence a
+  feature flag did anything.**
+- **★★ THE FIX INTRODUCED ITS OWN REGRESSION, and that is the more useful
+  half.** Setting the root flag **silently stripped JPEG 2000 from
+  `pdfce-gui`** — its forwarding block was forgotten. **Nothing failed to
+  compile; no test failed.** `cargo tree -p pdfce-gui -i hayro-jpeg2000`
+  came back **EMPTY**. **The failure mode to carry: forgetting to forward
+  does not break the build, it REMOVES a capability.** Hence **two** CI
+  gates — a lite build that must compile and test, **and** an assertion
+  that each shell's **default** build still **contains** the codec. **The
+  second checks a CAPABILITY rather than a MANIFEST, which is the only
+  reason it would have caught this** (the root manifest was exactly as
+  intended; the defect was a *missing* statement, not a wrong one).
+- **★★ An angle is invariant under uniform scaling, and the length path
+  would have produced a SILENT WRONG NUMBER.** `measured_points()` returns
+  **degrees** for `Angular`; `DimensionModel::display` branches on a new
+  **`is_angular()` BEFORE applying scale**. Without it, **30° in a 1:50
+  group renders as `1500`, with no unit and `raw_page_units: false`** — a
+  wrong number carrying **no disclosure at all**. New
+  `format_angle_degrees` consults the group's `NumberFormat` for the
+  **decimal marker only** (**ISO 129-1 cl. 4.1.1** mandates a comma and
+  **exempts nothing**), never unit or fraction mode. An **unscaled** angle
+  deliberately does **not** claim raw page units — that would be a false
+  warning, and false warnings get trained away.
+- **★ `PickedLine` stores WHERE the operator clicked, and that is
+  load-bearing.** **Two crossing lines bound FOUR angles**; SolidWorks'
+  `AddDimension2` docs say results differ *"based on which line endpoints
+  are selected"*. A model storing only *line A, line B* is
+  **under-determined by construction** and every consumer would re-guess
+  it differently. Test: **the same two lines give 60° or 120°**, decided
+  only by which arms were clicked. Curves are **skipped, not chorded** — a
+  chord is a plausible number with no referent on the page.
+- **★ WHEN A SIDECAR VERSION BUMP IS OWED, stated as a rule rather than
+  left as precedent.** `/Offset` and `/TextAlong` were
+  **optional-with-default**: an old build reads them as absent and draws
+  what it always drew. **A new KIND is not defaultable** — an older build
+  hits `_ => return None`, **drops the record**, and is then **free to
+  save the file back without it**: permanent loss, invisible until after.
+  With `SIDECAR_VERSION` **1 → 2** the old build still **READS** what it
+  understands while `sidecar_version` makes the session **refuse to
+  WRITE**. **Both directions tested; a v1 sidecar still loads.**
+- **★ A GUI GATE THE ENGINEER DID NOT KNOW EXISTED CAUGHT THE NEW
+  SETTING.** `every_setting_the_store_carries_can_be_reached_from_this_window`
+  failed with *"an operator can only change it by hand-editing
+  settings.txt"* — **which is the operator's own standing complaint,
+  already enforced as a test.** Recorded as a **counter-instance** to this
+  ledger's long run of gates that measured the wrong thing (`b902ea0`,
+  `b1ee1cf`, `R191`). Related detail worth keeping: **the slider spans the
+  store's own accepted range, not a narrower "usable" band** — a narrower
+  widget cannot represent a legal value already in someone's
+  `settings.txt`, so merely **opening** the window would drag it into
+  range and Save would write the change back.
+- **★ `confidence: Option<f32>` and the `None` case is load-bearing.** The
+  leading pure-Rust OCR engine **computes log-probabilities and discards
+  them**. Rule 4 needs an inherently uncertain inference to state its
+  uncertainty. Two behaviours **tested rather than trusted**: an
+  **unscored** word needs review **exactly like a low-scored one**
+  (otherwise an engine reporting nothing produces an **empty**
+  needs-review list and looks **more** trustworthy), and no confidence
+  yields **`None`, never `0.0`** (zero renders as *"0% confident"*, a
+  specific false claim). **The absence of a measurement is not a
+  measurement of zero.**
+- **★ The OCR y-flip has exactly one home** (`words_to_page_space`).
+  Engines report **y-DOWN pixels**; PDF is **y-UP**. Backwards, **every
+  word lands mirrored, the page still looks perfect**, and nobody notices
+  until a selection returns a different line. Both directions tested — a
+  transform that negated without offsetting passes a top-only test.
+- **★★ THIRD RECORDED INSTANCE OF THE SAME SHAPE: an obligation lost in
+  the gap between two correct tools.** (1) a RAG deliverable filed but
+  never handed off; (2) a formatting rule applying to twelve crates no
+  command could reach (`b902ea0` → `check-fmt-excluded.py`); (3) **this** —
+  `THIRD_PARTY_LICENSES.md` is generated by `cargo-about` from
+  `Cargo.lock` and is **structurally incapable** of covering fonts, icons
+  or OCR model weights, which pdfce **redistributes**. Proposed as `R192`;
+  **not minted.**
+- **`check-shipped-assets.py` was proved by MAKING ALL THREE HAZARDS
+  OCCUR**, not by reading the code: a `models/` dir with no
+  `PROVENANCE.md` → caught; a note stating **origin but no terms** →
+  caught; the same note with `"CC-BY-SA-4.0 (weights)"` → passes. Licence
+  matching is **deliberately broad** (SPDX ids **plus** this project's own
+  phrasings, incl. *"drawn from scratch"*): the question is *did somebody
+  state the terms*, not *did they pick from an approved list* — the icons
+  are the operator's own work under a bespoke grant and must pass.
+- **★ A FOURTH `oxidize-pdf` claim that did not survive inspection**, for
+  decision 001 §3.2: **`convert_to_searchable_pdf()` is a stub that
+  DISCARDS the scan** at HEAD of **v4.3.0**. Decision records are
+  append-only, so per the *Same-filing propagation duty* it is filed in
+  `PRIOR_ART.md`'s `oxidize-pdf` row and in `ROADMAP.md`, **both canonical
+  over the un-amended §3.2**. The carrying finding is the **date**: found
+  two audits and one minor version later than the first three, so **the
+  claim rate did not fall between v4.2.1 and v4.3.0.**
+- **Engine survey facts** (from `docs/ocr-engine-survey.md`, **measured**
+  to exist at 116,991 bytes and **named in `ROADMAP.md`** so it cannot go
+  untracked — the `comparison__pdfce_feature_column.md` failure): the
+  pure-Rust candidate (`ocrs`/`rten`) is **the only route that passes
+  pdfce's wasm32 CI gate**, ~12 MB, but **CC-BY-SA-4.0 weights**,
+  **Latin-only**, **no confidence at any level**; the multi-language
+  candidate (`ocr-rs`/PaddleOCR on static MNN) ships **zero DLLs on
+  Windows MSVC**, **50+ languages**, **3.2 MB models**, **Apache-2.0
+  weights**, **no WASM**. **Surya is a TRAP** — Apache-2.0 code, **modified
+  Open RAIL-M weights with a $5 M revenue cap**; field-of-use restrictions
+  **cannot** be bundled in an MIT app, recorded so nobody re-evaluates it
+  on its accuracy numbers. **Tesseract's default Windows build ships LGPL
+  binaries** (`libunistring`/`libiconv`/`libintl`, libcurl branch).
+- **Fixed on discovery:** a comment claiming the sidecar version gate was
+  an **exact equality**. **It is a range**, and has been since that gate
+  was rewritten.
+- **`dimension_kind_label` took a `(circular, show_diameter)` bool pair**
+  that could not express a third kind and **quietly answered "Linear" for
+  an angle**. Now takes the kind. **A boolean pair is a closed enumeration
+  that does not announce it is closed.**
+- **The angular arc is drawn as 3° SEGMENTS, not one cubic.**
+  `draw_circular`'s four-kappa construction is exact **only** because it
+  always draws a full circle in quadrants; a single cubic's error grows
+  with sweep and a **170° arc visibly bulges**. **≈0.07 pt sagitta at a
+  200 pt radius** (radius stated, per hard rule 10(a)).
+
+**Verification — figures with their denominators (hard rule 10(a)):**
+- `cargo test --workspace`: **3,582 passing, 0 failing**, from a **3,568**
+  baseline = **+14 over the five commits** (+12 `e931836` from 3,556, +7
+  `905791f`, +7 `9f2af1d`; `fbcb946` and `e3fb7e0` add none to the default
+  suite). **The two baselines (3,556 and 3,568) disagree by construction,
+  not by error** — the dispatch counts from the start of the dispatch,
+  after `e931836` had landed. Both stated so neither is inferred.
+- `cargo test -p pdfce-core --no-default-features`: green, **44 suites,
+  2,502 tests**. **Smaller than 3,582 by design** — the stripped codec's
+  tests compile out. **A lite suite matching the full count would be
+  evidence the gate was testing the full build.**
+- `cargo fmt --all --check` clean · `cargo clippy --workspace
+  --all-targets --all-features` **zero** · `check-ui-strings` /
+  `check-theme-colors` / `check-ledger-numbers` / `check-fmt-excluded` /
+  **`check-shipped-assets`** all clean (the last on **2 asset directories,
+  60 files**).
+- **GUI-core separation — VERIFIED BY COMMAND here, not by construction**,
+  because `fbcb946` is the first commit in a long while to touch
+  `Cargo.toml` (root **plus all four crates**), which is `CLAUDE.md`
+  rule 2's trigger. **Measured:** `cargo tree -p pdfce-core --edges
+  normal | grep -iE "egui|eframe|winit|wgpu|glow|glutin"` → **0 hits over
+  43 lines**; `pdfce-render` → **0**. **Invariant intact.**
+- **Codec forwarding re-measured here**, all four crates:
+  `cargo tree -p {pdfce-cli,pdfce-gui,pdfce-render,pdfce-core} -i
+  hayro-jpeg2000` → **`hayro-jpeg2000 v0.4.0` in every one.** The
+  regression is fixed and the gate's premise is confirmed independently.
+- **`tools/check-commits-filed.py` AGREED with the dispatch this time** —
+  **measured**: *"5 code commit(s) are in no filing"*, naming exactly these
+  five. Recorded because the **previous** filing found the opposite (a
+  fourth commit the dispatch had not named); a clean agreement is the
+  evidence that the earlier disagreement was the tool working rather than
+  the tool being noisy.
+
+**Backup / git state — MEASURED here, never inherited from a document
+(hard rule 8):**
+- Newest bundle **`pdfce-20260812-1356.bundle`** (`ls -t`); its
+  `refs/heads/main` is **`e931836ab58cdf7a01ef075bb6086db6044d56f0`**
+  (`git bundle list-heads`).
+- `git rev-list --count e931836..HEAD` = **4**. **The bundle is 4 commits
+  behind `HEAD` (`e3fb7e0be527f9f52aafb1de1ce818b26dd063b8`). A fresh
+  bundle is owed.**
+- `git remote -v` = `https://github.com/KenM76/pdfce.git`.
+- **Note the improvement and do not read it as a rule:** the previous
+  filing measured 7 commits owed and a bundle was taken at `e931836`
+  during this session. **Re-run the two commands; do not quote the number
+  above, including when the number above is this one.**
+
+**Still in flight:**
+- **`Pass 68.0` is HALF BUILT** — GUI gesture and CLI `--kind angular` not
+  written. **The operator's request (i) is not yet met.**
+- **`Pass 71.0` — the operator said BUILD FOR BOTH.** No engine is wired;
+  the model-shipping slice is **blocked on `(bl)`**.
+- **`Pass 69.0`** (ce-dimension style + tolerance) unstarted; the
+  SolidWorks catalog is at
+  `D:\Dev\Rag-Specialized\SolidWorks_Dimensions\` (**measured**: exists,
+  carries `index.md` and
+  `solidworks__dimension_and_tolerance_options.md`).
+- **`Pass 46` slices 2–4 unbuilt** — the operator's *"I can't drag or
+  resize them"* is still **half** unanswered.
+- **The GUI has no attachments surface at all.**
+- **`Pass 67.0` phases C, D and F** — unstarted, none blocking.
+- **`/R` 6 encryption still parked** at operator instruction.
+
+**★ Two escalations STILL owed to the operator — RELAYED ONLY, carried
+forward unchanged from the hundred-and-twenty-fifth filing, and this
+librarian again could not corroborate either from disk:**
+1. **The broken no-git convention** (`iccce`).
+2. **Agents' in-progress files swept into a public repo.**
+
+**No further detail was supplied by this dispatch either.** They are
+carried because a compaction must not lose them, **not** because they are
+established. **The exact content of both must come from the operator or
+the engineer.** The one check that bears on the first still stands:
+`D:\Dev\iccce\` **does** contain a `.git` directory, so whatever the claim
+is, it is not *"that project has no repository."*
+
+**For next session:**
+- **`docs/NEXT_SESSION.md` was OVERWRITTEN by this filing**, at the
+  engineer's explicit request. Read it first.
+- **Do not re-surface `(bk)`. It is answered.** **`(bl)` is NEW and is
+  open** — and it is the one blocking OCR from shipping anything an
+  operator can use.
+- **Take a bundle — 4 commits owed, measured.**
+- **RAG deliverables written this filing:**
+  `D:\dev\rag\rust\workspace_feature_strip_needs_root_default_features_and_every_shell_forwards_or_the_capability_vanishes_silently.md`
+  (+ `index.md` entry) and
+  `C:\personal_rag\pdf\lesson_20260812_ocr_text_layer_bt_et_per_line_poppler_tz.md`
+  (+ subject index + master index). The second was written **now rather
+  than when the OCR Pass ships**, as the dispatch had scheduled it,
+  because **a finding held until a Pass ships is a finding held across a
+  compaction.**
+
+> **★★ AMENDMENT TO THIS ENTRY, MADE WITHIN THE SAME FILING (2026-08-12,
+> hundred-and-twenty-sixth) — A SIXTH COMMIT LANDED MID-FILING, AND THIS
+> FILING'S OWN DOC EDITS WERE SWEPT INTO IT.**
+>
+> **`af5580e`** (`af5580e55ebd05a67be5d043cf9db8a5ec82da02`, **15:41:08**)
+> was committed **while this entry was being written**. It was found by
+> re-running `python tools/check-commits-filed.py` at the end of the
+> filing — **measured**, and the second consecutive filing in which that
+> gate named a commit the dispatch could not have. **The reason is not
+> forgetfulness: the engineer keeps working while the librarian files.** A
+> dispatch names what he remembers at dispatch time; the gate names what
+> the repository contains at filing time.
+>
+> **What `af5580e` does — a WITHDRAWAL, not a feature.** The engineer had
+> described an optional-download path for OCR model files as *"a download
+> prompt and a bit of plumbing"*; **the operator agreed on that basis**;
+> **the estimate was wrong, so the agreement was uninformed**, and he
+> corrected it rather than building what was approved. The real cost, read
+> out of `ARCHITECTURE.md` §1.1 after the fact: **pdfce contains no HTTP
+> client and no TLS stack, and §1.1 states that as a claim verifiable by
+> any reader of `THIRD_PARTY_LICENSES.md`** — a downloader **ends a claim
+> the project makes in writing**; the **fail-closed no-network CI job
+> (`R12`)** would have blocked it, and **discovering an architectural
+> boundary by tripping over its guard is not the same as deciding to
+> cross it**; §1.1 rates that posture **level with GUI-core separation and
+> round-trip**. The replacement was already in the codebase as a shape:
+> **`ocr::models`** resolves an operator-named path → `models/<engine>`
+> beside the executable → user data, i.e. **`--font-dir` again**. **A
+> named path that does not exist is an ERROR, never a silent fallback** —
+> a fallback runs a *different* model while reporting success and **the
+> output is text either way, so nobody could tell**. **When nothing is
+> found, every searched path is printed**, because *"models not found"* is
+> unactionable and the list often reveals the files are somewhere pdfce
+> never looks. **Per-engine directories**, because the two engines' weights
+> carry **different licences** and a merged folder would force one
+> `PROVENANCE.md` to describe a mixture — **`check-shipped-assets.py`
+> shipped 15 minutes earlier and immediately constrained a design
+> decision.** **3,582 → 3,587 tests; no network crate added anywhere.**
+>
+> **★★ THE RECORD-INTEGRITY HALF, MEASURED.** `af5580e` touches **7
+> files**. **Two are the engineer's** (`ocr/mod.rs`, `ocr/models.rs`).
+> **FIVE ARE THIS FILING**, uncommitted when he ran `git commit`:
+> `docs/ROADMAP.md` (+802/−5), `docs/ARCHITECTURE.md` (+252),
+> `docs/FEATURES.md` (+5/−3), `docs/PRIOR_ART.md` (+1/−1), `CLAUDE.md`
+> (+33/−3). **Evidence, not inference:** the ROADMAP diff contains
+> *"hundred-and-twenty-sixth"* **seven times** and the `R192` proposal, and
+> contains **zero** lines mentioning the downloader, `--font-dir` or
+> `ocr::models`. **So `af5580e`'s commit message does not describe most of
+> its own diff** — **1,093 of its 1,371 inserted lines are a librarian
+> filing about five entirely different commits**, under a title reading
+> *"withdraw the downloader I proposed"*.
+>
+> **★ THIS IS A CONCRETE, MEASURED INSTANCE OF ESCALATION 2** — *"agents'
+> in-progress files swept into a public repo"* — which this entry, and the
+> one before it, records as **relayed with no supporting detail and no
+> written record findable anywhere in `docs/`**. **It now has one.**
+> **Recorded as EVIDENCE FOR the escalation, not as its resolution**: the
+> escalation as relayed may concern something broader (agent worktrees,
+> scratch files, `.claude/` state), and **only the operator or the engineer
+> can say what he meant. Do not close it on the strength of this
+> instance.**
+>
+> **Nothing is undone.** The commit is in history on a public remote and
+> `git commit --amend` after the fact would be worse than the disorder it
+> fixes. **What is owed is a convention, and it is cheap: `git status
+> --short` before `git commit -a`, and a librarian filing gets its own
+> commit.** The project already has the matching positive instance — the
+> hundred-and-twenty-fifth filing states *"this filing touched nothing
+> outside `docs/`"* **because it checked.**
+>
+> **Consequences filed in the same amendment:** `Pass 71.0` slice 2 is
+> **reshaped** (pdfce **looks for** operator-supplied models rather than
+> **shipping** them) and open question **`(bl)` is NARROWED, NOT CLOSED** —
+> an operator supplying his own weights is not pdfce redistributing them,
+> **but that path means OCR does nothing out of the box until he goes and
+> fetches a model set**, which is a trade he has not been asked about.
+> **And the withdrawal itself is worth confirming with him, because he had
+> already agreed to the thing that was withdrawn.**
+>
+> **Backup figure in this entry is now one commit staler than measured:**
+> the bundle at `e931836` is **5** commits behind `af5580e`, not 4. **Both
+> numbers are stated rather than the earlier one silently edited** — the
+> 4 was correct when measured, at `e3fb7e0`. **Re-run
+> `git bundle list-heads` + `git rev-list --count`; do not quote either
+> figure.**
