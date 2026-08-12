@@ -36487,3 +36487,104 @@ denominator.
 **For next session:** none outstanding from this filing specifically —
 `Pass 67.0` phase E remains the live next step, per the 117th filing's
 own handoff (`docs/NEXT_SESSION.md`).
+
+## 2026-08-12 (hundred-and-twentieth filing) — `b358657..d8a8948` (six commits): `Pass 67.0` phase E ships — pdfce can EMBED a font that is referenced but not carried, the operation the request that opened this whole family actually needed; six new decisions (048–053); `R189` minted from a bug that had nothing to do with fonts
+
+**Shipped:**
+- `Pass 67.0` phase E — embed a font that is referenced but not
+  embedded. Core (`font_embed_missing.rs`, two structural shapes:
+  Attach onto an existing `/FontDescriptor`, Synthesise a Base-14
+  descriptor/widths/encoding from pdfce's own compiled metrics), CLI
+  (`embed-font`), GUI (a constructive Fonts-panel action alongside
+  unembed's destructive ones). Corpus harness `tools/embed-sweep`.
+  Tests **3,534 passing / 0 failing** (+40 over phase B's 3,494). All
+  standing gates green (relayed, no shell this dispatch — see the
+  `ROADMAP.md` entry's own sourcing note for what was independently
+  confirmed by direct `Read`/`Grep`/`Glob` on live source).
+
+**Decisions made this session:**
+- **048** — `/Subtype` may be re-declared `/Type1` → `/TrueType` on
+  embed, ONLY inside Synthesise, only under three named conditions
+  (nonsymbolic, AGL-spellable encoding, `Nonsymbolic` flag set).
+  Refused under Attach.
+- **049** — `/Encoding` is pinned as a full `/Differences` array
+  whenever Synthesise authors a dictionary that carried none —
+  `/StandardEncoding` is not itself an admissible `/Encoding` value,
+  and the nameable `/WinAnsiEncoding` disagrees with true Standard
+  Encoding at a dozen-odd codes.
+- **050** — embedding blocks on ANY shared `/FontDescriptor`, the
+  mirror image of `font_unembed.rs`'s own (correctly different)
+  sharing rule — removal through a shared descriptor is idempotent, a
+  second WRITE through one silently overwrites the first.
+- **051** — the symbolic-font guard targets the §9.6.6.4 Branch B
+  MAPPING, not symbolic fonts as a class — narrowed from a first draft
+  that refused 214 corpus fonts unnecessarily. `Symbol`/`ZapfDingbats`
+  (16% of missing fonts) still refuse correctly.
+- **052** — composite/CID (`Identity-H`) and Type 3 refused by name,
+  for two unrelated reasons (glyph-index identity vs. nothing missing).
+- **053** — §9.9's `fsType` embedding-permission paragraph is enforced
+  even though it is an ISO 32000 `should`, not a `shall` — pdfce's own
+  posture, named as such.
+
+Full text of all six: `docs/ARCHITECTURE.md` §12 (entries dated
+2026-08-12, hundred-and-twentieth filing).
+
+**Findings + decisions:**
+- **★★★★ A bug fixed on discovery, unrelated to fonts —
+  `Document::next_object_number` missed a fourth source: the newest
+  cross-reference STREAM's own object number.** The writer already
+  REUSES that number (R33) for the section it re-emits, but the
+  parser never files the stream as a body object, so nothing requires
+  it to sit inside its own `/Index`/`/Size`. On a real pdfium fixture,
+  the allocator handed out the same number the writer's own
+  re-emitted xref stream then silently overwrote — a created object
+  simply vanishes, the file still opens and renders. **Affects every
+  object-creating command, not just font embedding.** Found by
+  `tools/embed-sweep`'s pixel-identity oracle. Standing rule `R189`
+  minted; full architectural record `ARCHITECTURE.md` §5.7.
+- **The pixel-identity oracle is the sharpest measurement in the
+  sweep**: in bundled mode the embedded face is the SAME face the
+  renderer was already substituting, so the raster must be
+  byte-identical before/after; 739/740 on the first run, and the one
+  differing file is exactly how the `next_object_number` bug was
+  found.
+- **A GUI defect found only by a real scripted click** — the embed
+  batch button shipped unclickable for one build; every headless
+  trace assertion passed, including a trace of the button's own
+  reported rect, because the rect describes the layout REQUEST, not
+  what survived the dock's clipping. Second instance of
+  `D:\dev\rag\egui\headless_trace_asserts_reached_not_visible_a_clipped_widget_needs_a_pixel_oracle.md`
+  (amended in place, not duplicated) — the first instance was a
+  clipped field, this one a clipped CONTROL.
+- **Corpus sweep** (4,023 files, 3,912 loadable): bundled-only mode
+  embeds 1,250 of 1,507 missing fonts across 676 files reaching
+  `not-embedded=0`; adding `--font-dir` raises that to 1,330/726,
+  leaving 177 residual refusals (dominated by `no-source-font` 95 and
+  `type3` 49). Zero reopen failures, zero render regressions across
+  both modes.
+- Two `C:\personal_rag\pdf\` lessons filed: the missing-font-shape
+  corpus census (82.9% bare standard-14, 11.7% simple font with
+  descriptor+`/Widths`, 3.2% Type 3, 0.7% composite), and the
+  cross-reference-stream-outside-its-own-`/Size` file shape that led
+  to `R189`.
+- Sourcing: no shell this dispatch. Six commit hashes and their
+  contents relayed from the dispatching engineer's brief; every
+  module/symbol/fixture-existence claim independently confirmed by
+  direct `Read`/`Grep`/`Glob` on live source before being recorded
+  (see `ROADMAP.md`'s own sourcing paragraph for the full list); test
+  counts and gate outputs are relayed, not re-run.
+
+**Still in flight:**
+- Phases C (re-subset), D (outlines) and F (replace font) of
+  `Pass 67.0` remain unstarted.
+- Open operator question `(bk)` — may pdfce's own bundled Base-14
+  faces be embedded into a distributed document? Ken's call, not
+  resolved this filing; CLI ships the capability opt-in and disclosed,
+  GUI does not offer it at all.
+- `/R` 6 sourcing (encryption) — unrelated to fonts, still open.
+- Encrypted-save, any cipher — entirely unstarted.
+
+**For next session:** `docs/NEXT_SESSION.md` overwritten this filing —
+read it before this log. In one line: phase E is done; the next
+candidates are the `/R` 6 sourcing gap, encrypted-save, and whichever
+of `Pass 67.0`'s remaining phases (C/D/F) the operator wants next.

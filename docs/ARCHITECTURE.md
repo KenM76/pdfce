@@ -163,6 +163,47 @@ D:\Dev\pdfce\
                                    Only a **full rewrite** reclaims the freed bytes
                                    — an incremental save appends, so it cannot
                                    shrink the file (§7.5.6).
+                                   **`font_embed_missing.rs` (`Pass 67.0` phase
+                                   E, 2026-08-12; §12 decisions 048–053):** the
+                                   REVERSE of `font_unembed.rs` — a font
+                                   `/BaseFont` names but no `/FontFile*` stream
+                                   carries. Two structural shapes, chosen per
+                                   font: **Attach** adds one `/FontFile2`/
+                                   `/FontFile3` key to an EXISTING
+                                   `/FontDescriptor`, changing nothing else;
+                                   **Synthesise** writes the `/FontDescriptor`,
+                                   `/Widths`, `/FirstChar`/`/LastChar` and
+                                   `/Encoding` §9.6.2.2 permits a standard-14
+                                   font to omit, from pdfce's own compiled
+                                   Adobe Core-14 metric tables — the SAME
+                                   metrics a reader was already substituting
+                                   with, so **glyph positions cannot move**;
+                                   only letterforms change. Never derives its
+                                   own donor-resolution policy — the shell
+                                   (`FontEnvironment::resolve_for_embedding`,
+                                   `pdfce-render`) resolves a name to bytes and
+                                   hands core the bytes; `pdfce-core` sniffs the
+                                   program's own framing itself, unchanged
+                                   crate-boundary discipline from `font_embed.rs`.
+                                   `EditSession::embed_preview`/`embed_refusal`/
+                                   `embed_fonts` (`edit.rs`) plan-then-commit,
+                                   mirroring `unembed_*`'s three-function shape.
+                                   Refuses composite/CID (`Identity-H` codes ARE
+                                   glyph indices — decision 052) and Type 3
+                                   (`/CharProcs` already in the document) by
+                                   name; refuses a donor whose `OS/2 fsType`
+                                   reads Restricted/Ambiguous (decision 053);
+                                   refuses ANY font reached through a shared
+                                   `/FontDescriptor` (decision 050, asymmetric
+                                   with `font_unembed.rs`'s own sharing rule —
+                                   see §12). **Font programs are deflated on
+                                   the way in** (`filters::flate::encode`, new
+                                   this Pass) — ≈46% of original size.
+                                   **`Document::next_object_number` gained a
+                                   fourth source this Pass** — see §5.7 below
+                                   and standing rule `R189`; not specific to
+                                   font embedding, found by this Pass's own
+                                   pixel-identity sweep oracle.
                                    **`export/dxf.rs` (`Pass 52.0`/`52.3`,
                                    2026-08-09, `3c4aca4`→`1f4839d`; §12
                                    decision 035, claimed by citation):**
@@ -2901,6 +2942,36 @@ refused by name when `/Size` suppresses entries
 (`EditError::ObjectCreationWouldExposeHiddenObjects`, CLI exit 9);
 editing existing objects still works on such files. Lesson:
 `C:\personal_rag\pdf\lesson_20260731_xref_size_suppresses_trailing_entries_raising_resurrects.md`.
+
+**A fourth source, found `Pass 67.0` phase E (2026-08-12, `d87fb58`) —
+the newest cross-reference STREAM's own object number.** The three
+sources above (`objects` map maximum, `/Size`-derived maximum, the
+`highest_object_number` running counter) all miss it. §7.5.8 makes the
+newest xref stream an indirect object like any other, and §5.7's own
+promotion rule above already establishes that pdfce's writer **reuses**
+that object's number for the section it re-emits — but the object is
+never filed in `objects` by the parser (it IS the section, not a body
+object inside it), and nothing in the standard requires it to appear
+in its own `/Index` or be covered by its own `/Size`. A file can
+legally read `75 0 obj << /Type /XRef /Size 75 /Index [9 1 29 45] >>`
+— object 75 exists, and all three prior sources answer 74.
+`next_object_number` now also takes the current xref stream's own
+object number (`SectionShape::Stream { id, .. } => id.num`, else `0`
+for a classic table, which spends no number) as a fourth candidate in
+the `max()` chain. Found on a real pdfium fixture
+(`testing/resources/annotation_stamp_with_ap.pdf`) by `tools/embed-sweep`'s
+pixel-identity oracle — an embedded font program came back as a 44-byte
+cross-reference stream, because the session's newly created object was
+allocated number 75, written there, and then silently overwritten by
+the writer's own re-emitted xref stream at the same number. **Not
+specific to font embedding** — every object-creating command
+(add-text, add-image, annotations, form fields) was exposed on any
+file shaped this way; it survived because no producer any existing
+pdfce fixture came from emits a newest xref stream outside its own
+`/Size`. Fixture: `fixtures/synthetic/embed/embed-xrefstream-outside-size.pdf`.
+Regression test: `a_created_object_never_collides_with_the_cross_reference_stream`.
+Standing rule: **R189** (`ROADMAP.md`, *Standing rules*) — full record
+at `ROADMAP.md`'s `Pass 67.0` phase E Shipped entry.
 
 ### 5.8 Flatten burns in by overlay-APPEND, not content-stream surgery
 
@@ -18009,3 +18080,195 @@ silently inherit an unwritten code path.
 `pdfce-core`/`pdfce-render` graph change. Full build record:
 `ROADMAP.md`'s `Pass 67.0` phase B Shipped entry (hundred-and-
 seventeenth filing).
+
+### 2026-08-12 (hundred-and-twentieth filing, `Pass 67.0` phase E, commits `b358657..d8a8948`) — decision 048: a font dictionary's `/Subtype` may be RE-DECLARED from `/Type1` to `/TrueType` on embed, but only inside Synthesise and only under three named conditions
+
+**The gap named precisely.** §9.9 Table 126 binds each `/FontFile*` key
+to the font dictionary's declared `/Subtype` — `/FontFile` (Type 1)
+needs `/Type1`, `/FontFile2` (TrueType) needs `/TrueType`. The
+commonest real pairing this Pass exists to close — a document naming
+`Helvetica` (a Type 1 standard-14 name, §9.6.2.2) with a Windows font
+folder supplying `arial.ttf` (`glyf` TrueType, no Type 1 outlines
+anywhere on the system) — has **no admissible key at all** under a
+literal reading: the dictionary says `/Type1`, the donor is TrueType,
+and Table 126 admits neither `/FontFile` (wrong format) nor
+`/FontFile2` (wrong declared subtype).
+
+**Decision — re-declare `/Subtype /TrueType`, but ONLY inside
+Synthesise, and only when all three hold: (1) the font is
+nonsymbolic; (2) the effective encoding is spellable in AGL-resolvable
+glyph names (Standard/WinAnsi/MacRoman — Symbol and ZapfDingbats are
+explicitly NOT, per decision 049/051 below); (3) the synthesised
+`/FontDescriptor` carries Table 123's `Nonsymbolic` flag.** Synthesise
+is already authoring the descriptor, `/Widths`, `/FirstChar`/
+`/LastChar` and `/Encoding` from nothing — the subtype line is one
+more field in a dictionary this Pass already owns end to end, not a
+mutation of something the operator or another producer wrote. **Under
+Attach, the re-declaration is refused outright**, because Attach's
+entire promise (see the `font_embed_missing.rs` §3 entry above) is
+"one key added to an EXISTING descriptor, nothing else changed" — a
+`/Subtype` flip there would silently rewrite a dictionary this Pass
+was supposed to leave alone in every other respect.
+
+**Why the three conditions, not fewer.** A symbolic font's codes route
+through the donor program's own `(3,0)` cmap (§9.6.6.4 Branch B,
+decision 051) — reclassifying it as `/TrueType`/Nonsymbolic would
+change which cmap subtable a reader consults, silently altering which
+glyph a code draws. An encoding that cannot be spelled in glyph names
+cannot be re-expressed as the `/Encoding /Differences` array decision
+049 requires for a Synthesise-authored dictionary, so the
+`/TrueType`+Nonsymbolic combination would be internally inconsistent.
+
+**Not a crate-boundary or invariant change.** Entirely within
+`font_embed_missing.rs`'s planning logic. Full build record:
+`ROADMAP.md`'s `Pass 67.0` phase E Shipped entry (hundred-and-
+twentieth filing).
+
+### 2026-08-12 (hundred-and-twentieth filing, same commits) — decision 049: `/Encoding` is PINNED as a full `/Differences` array whenever Synthesise authors a dictionary that carried none
+
+**The gap named precisely.** §9.6.6.2 sends a reader with no
+`/Encoding` entry to the embedded (or, absent that, substitute) font
+program's OWN built-in encoding. Leaving `/Encoding` unset after
+Synthesise attaches a program would therefore make the document's
+**visible text** depend on which donor pdfce happened to resolve — two
+operators embedding the same missing standard-14 font from two
+different installed TrueType faces would get two different mappings
+from code to glyph, silently, on the identical PDF.
+
+**Decision — always write a full `/Differences` array, never a bare
+encoding name, when Synthesise is authoring the `/Encoding` from
+nothing.** `/StandardEncoding` is not itself a legal `/Encoding`
+dictionary/name value — Table 114 admits only `WinAnsiEncoding`,
+`MacRomanEncoding` and `MacExpertEncoding` as base names — so a
+standard-14 font's true baseline (Annex D.5/D.6's Standard Encoding
+column) can only be expressed as an explicit per-code `/Differences`
+run, never named directly. Written in compact run form (consecutive
+codes sharing a glyph-name run collapse to one array segment), not one
+entry per code.
+
+**Why not substitute `/WinAnsiEncoding` instead, since it IS
+nameable.** WinAnsi and Standard disagree on a dozen or so code
+points in the upper range (curly quotes, dashes, and several
+accented/symbol positions land differently). Substituting the nameable
+encoding because it is convenient to write would silently change which
+glyph a document draws at those codes — exactly the fuzzy-never-sneaky
+violation (`CLAUDE.md` rule 4) this decision exists to avoid.
+
+**Interaction with decision 048.** The glyph-name spellability
+condition decision 048 requires before a `/TrueType` re-declaration is
+this decision's own output — the `/Differences` array Synthesise
+writes must resolve through the Adobe Glyph List, or there is no
+well-formed encoding to pin in the first place. Not a crate-boundary
+or invariant change. Full build record: `ROADMAP.md`'s `Pass 67.0`
+phase E Shipped entry (hundred-and-twentieth filing).
+
+### 2026-08-12 (hundred-and-twentieth filing, same commits) — decision 050: embedding blocks on ANY shared `/FontDescriptor` — an asymmetry with `font_unembed.rs`'s own sharing rule, deliberate and named as such
+
+**The asymmetry, stated first because it looks like an inconsistency
+until the reasoning is read.** `font_unembed.rs` (decision-adjacent,
+`Pass 67.0` phase B) permits unembedding two fonts that happen to
+share one `/FontDescriptor` — removing a program is idempotent; doing
+it twice through the same descriptor changes nothing the second time.
+`font_embed_missing.rs` refuses the mirror-image case outright: **two
+fonts sharing one `/FontDescriptor`, only one of which is missing a
+program, is refused before any write.** Embedding two different
+donors through the same descriptor is a silent OVERWRITE — the second
+`/FontFile*` write replaces the first, and whichever font dictionary
+is evaluated second in a reader's own object graph gets the OTHER
+font's letterforms.
+
+**Decision — any font dictionary reached through a `/FontDescriptor`
+that is ALSO reached by another font dictionary is refused, named,
+with the descriptor's shared status stated in the refusal.** This is
+not a narrower version of `font_unembed.rs`'s rule; it is the correct
+rule for a fundamentally different operation. Removal is safe to
+repeat because it converges to the same empty state; a write is not
+safe to repeat because two writes to the same key overwrite each
+other.
+
+**Verified deliberately, not inherited.** A fixture
+(`fixtures/synthetic/embed/embed-shared-descriptor.pdf`) exists
+specifically to exercise this refusal — built to prove the rule was
+examined for this Pass rather than silently carried over from
+`font_unembed.rs`'s (correctly different) sharing posture. Not a
+crate-boundary or invariant change. Full build record: `ROADMAP.md`'s
+`Pass 67.0` phase E Shipped entry (hundred-and-twentieth filing).
+
+### 2026-08-12 (hundred-and-twentieth filing, same commits) — decision 051: the symbolic-font guard is against the MAPPING (§9.6.6.4 Branch B), not against symbolic fonts as a class — narrowed from a first draft that refused 214 of the corpus's fonts
+
+**The over-broad first reading, and why it was wrong.** A first draft
+refused any symbolic font outright, reasoning that a symbolic font's
+codes have no name-based encoding to check a substitute donor against.
+Measured against the corpus, that draft refused **214** of the fonts
+this Pass exists to close — a large fraction of them safely.
+
+**The actual hazard, narrower than "symbolic."** §9.6.6.4 Branch B is
+where the risk lives: when a reader routes character codes through the
+font PROGRAM's own `(3,0)` (symbol) cmap subtable, a substitute
+donor's `(3,0)` table maps the same codes to DIFFERENT glyphs — a
+silently wrong but plausible-looking symbol, not a visible hole. That
+hazard requires the code-to-glyph mapping to run through the
+program's own binary cmap.
+
+**Decision — the guard fires on the MAPPING PATH, not on the
+`Symbolic` flag alone.** Where the mapping instead runs through GLYPH
+NAMES — a Type 1-flavoured dictionary carrying an explicit
+`/Encoding`, which this Pass itself writes from Annex D.5/D.6 for a
+bare standard-14 face (decision 049) — a wrong donor produces
+`.notdef` at the mismatched codes: a visible hole, not a plausible
+wrong symbol. A visible hole is a Synthesise-quality problem the
+operator can see and reject (rule 4); a silently wrong symbol is not.
+`Symbol` and `ZapfDingbats` together are **248 of the corpus's 1,534
+missing fonts (16%)** — the two faces this narrower guard still
+refuses correctly, because their whole purpose IS the `(3,0)` cmap
+Branch B routes through.
+
+**Not a crate-boundary or invariant change.** Entirely within
+`font_embed_missing.rs`'s classifier. Full build record:
+`ROADMAP.md`'s `Pass 67.0` phase E Shipped entry (hundred-and-
+twentieth filing).
+
+### 2026-08-12 (hundred-and-twentieth filing, same commits) — decision 052: composite/CID (`Identity-H`) fonts and Type 3 fonts are refused by name, for two different and unrelated reasons
+
+**Composite/CID under `Identity-H`.** §9.7.4.2: the character codes
+ARE glyph indices into the absent program — there is no character
+identity independent of that specific file's own glyph-index table for
+a substitute to preserve. The only thing that would satisfy the
+substitution is the ORIGINAL font file; a different donor, however
+close a match by name, draws wrong characters, not merely
+different-looking ones. Refused unconditionally — this is the same
+`Identity-H`/CID hazard `font_unembed.rs` (`Pass 67.0` phase B) already
+refuses in the removal direction, for the mirror-image reason.
+
+**Type 3.** A Type 3 font's glyphs are already `/CharProcs` content
+streams present in the document — there is nothing "missing" for this
+Pass to embed; Type 3 fonts are refused by name as out of scope rather
+than silently ignored.
+
+**Not a crate-boundary or invariant change.** Full build record:
+`ROADMAP.md`'s `Pass 67.0` phase E Shipped entry (hundred-and-
+twentieth filing).
+
+### 2026-08-12 (hundred-and-twentieth filing, same commits) — decision 053: §9.9's embedding-permission paragraph (`fsType`) is enforced against every candidate donor, even though the clause it comes from is a `should`, not a `shall`
+
+**The clause read, modality noted deliberately.** §9.9 states a
+conforming *writer* **should** respect a font program's embedding
+permission bits — a `should`, not the harder `shall` ISO 32000
+reserves for mandatory conformance. The binding prohibition, where one
+exists, comes from the font's own licence, not from the PDF standard
+itself.
+
+**Decision — refuse anyway.** A donor whose OpenType `OS/2` `fsType`
+field reads `Restricted` or `Ambiguous`
+(`fontinfo::read_fs_type`/`crate::fontinfo::read_fs_type`, the same
+classifier `font_unembed.rs`'s own module doc already cites) is
+refused by name before any write, regardless of the `should`/`shall`
+distinction — pdfce treats the licence signal as binding on its own
+output even though ISO 32000 itself does not require a writer to. Not
+a parity claim; pdfce's own posture, stated explicitly because the
+weaker modality is exactly the situation where skipping the check
+would be easiest to defend as spec-compliant.
+
+**Not a crate-boundary or invariant change.** Full build record:
+`ROADMAP.md`'s `Pass 67.0` phase E Shipped entry (hundred-and-
+twentieth filing).

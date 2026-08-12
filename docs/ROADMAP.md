@@ -81,6 +81,262 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★★★ `b358657..d8a8948` (six commits) — `Pass 67.0` phase E ships: pdfce can EMBED a font that is referenced but not carried, the operation the request that opened this whole family actually needed — core (`font_embed_missing.rs`), CLI (`embed-font`), GUI (Fonts panel constructive action), a 4,023-file sweep closing 726 of 4,023 files' `not-embedded` count to zero, and a bug fix that had nothing to do with fonts — 2026-08-12 (hundred-and-twentieth filing)
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — `git show`/
+`git log` were not run; the six commit hashes and their contents are
+**relayed** from the dispatching engineer's own brief. **Independently
+confirmed by direct `Read`/`Grep`/`Glob` on live source, no shell
+needed:** `crates/pdfce-core/src/font_embed_missing.rs` exists;
+`EditSession::embed_preview`/`embed_refusal`/`embed_fonts` in
+`crates/pdfce-core/src/edit.rs` (confirmed at lines 15871/15838 area);
+`CommandKind::EmbedFonts` (line 585) and `EditError::NoFontsToEmbed`
+(line 2688); `pdfce-render`'s `FontEnvironment::resolve_for_embedding`,
+`select::candidate_names`, `bundled::face_name`, `EmbedMatch`/
+`EmbedDonor` (`crates/pdfce-render/src/font/mod.rs`,
+`crates/pdfce-render/src/font/bundled.rs`); `pdfce-cli`'s
+`Command::EmbedFont` variant, its `--embed-font`/`--use-bundled-fonts`
+flags and the `embed-font`/`unembed-font` doc-comment pair
+(`crates/pdfce-cli/src/main.rs`, confirmed at lines 1059/1093/3128/
+5642/12396–12540); `crates/pdfce-cli/tests/embed_font.rs` (12 tests, on
+disk); `fixtures/synthetic/embed/` (`PROVENANCE.md` + 9 fixtures,
+including `embed-shared-descriptor.pdf` and
+`embed-xrefstream-outside-size.pdf`, confirmed on disk); `tools/
+embed-sweep/` (registered in the workspace root `Cargo.toml` `exclude`
+list, confirmed line 62, alongside the existing `unembed-sweep` entry);
+`Document::next_object_number`'s fourth source (`document.rs`, lines
+1216–1241, confirmed verbatim including the `SectionShape::Stream { id,
+.. } => id.num` arm and its doc comment naming the pdfium fixture and
+the failure mode). **What is relayed and NOT independently re-run:**
+the test-count delta (3,534 vs 3,494), every gate result, and the full
+sweep table below — no shell this dispatch to execute `cargo test` or
+`tools/embed-sweep` itself.
+
+**What shipped, by shell.**
+
+- **Core** — `pdfce-core::font_embed_missing` (new module), consuming
+  the SAME `fontinfo::Removability`-adjacent classification substrate
+  phase A/B already built, plus `filters::flate::encode` (new — font
+  programs are deflated on the way in, ≈46% of original size).
+  `EditSession::embed_preview`/`embed_refusal`/`embed_fonts` mirror
+  `font_unembed.rs`'s own three-function shape exactly, one undoable
+  command. Two structural shapes chosen per font: **Attach** (one
+  `/FontFile2`/`/FontFile3` key added to an existing
+  `/FontDescriptor`, nothing else touched) and **Synthesise** (writes
+  the `/FontDescriptor`, `/Widths`, `/FirstChar`/`/LastChar` and
+  `/Encoding` §9.6.2.2 permits a standard-14 font to omit, from
+  pdfce's own compiled Adobe Core-14 metric tables — the same metrics
+  a reader was already substituting with, so **character positions
+  cannot move**, only letterforms change).
+- **CLI** — `pdfce-cli embed-font <input> [--embed-font
+  NAME=FONT-FILE]... | --font-dir DIR [--use-bundled-fonts]
+  [--apply -o OUT] [--mode incremental|full] [--verify-undo]`, dry-run
+  by default (the same disclosure posture `unembed-font` established),
+  12 new integration tests.
+- **GUI** — a constructive action alongside `unembed-font`'s
+  destructive controls in the Fonts panel, sharing the same
+  `pending_*` confirmation-gate chokepoint every other destructive/
+  constructive Fonts action already uses.
+- **Corpus harness** — `tools/embed-sweep/` (workspace-excluded, own
+  `Cargo.toml`/`Cargo.lock`), plus `tools/gen-embed-fixtures.py`
+  generating the 9 synthetic fixtures + `PROVENANCE.md`.
+
+**Resolution ladder — four rungs, exact/alias/bundled, always
+disclosed which rung matched.** `FontEnvironment::resolve_for_embedding`
+tries, in order: (1) an exact `/BaseFont` match among operator-supplied
+faces; (2) a match after stripping a §9.6.4 subset prefix
+(`ABCDEF+Arial` → `Arial`); (3) a standard-14 family alias
+(`select::candidate_names`); (4) — **opt-in only**
+(`--use-bundled-fonts`) — pdfce's own bundled Base-14 substitute face
+(`bundled::face_name`). `EmbedMatch::{Exact, Alias, Bundled}` names
+which rung matched; the CLI and GUI both surface it — never a silent
+substitution.
+
+**Six decisions filed in `ARCHITECTURE.md` §12 this filing (048–053),
+pdfce's own reading in every case, not an Acrobat-parity claim** — see
+§12 for the full text of each. Summarised here for the roadmap record:
+
+048. A font dictionary's `/Subtype` may be re-declared `/Type1` →
+     `/TrueType` on embed, but ONLY inside Synthesise and only when the
+     font is nonsymbolic, its encoding is AGL-spellable, and the
+     synthesised descriptor carries the `Nonsymbolic` flag. Refused
+     under Attach — Attach's whole promise is "one key added, nothing
+     else changed."
+049. `/Encoding` is pinned as a full `/Differences` array (never a bare
+     name) whenever Synthesise authors a dictionary that carried none —
+     `/StandardEncoding` is not itself an admissible `/Encoding` value
+     (Table 114), and substituting the nameable `/WinAnsiEncoding`
+     would silently change a dozen-odd glyphs.
+050. Embedding blocks on ANY shared `/FontDescriptor` — the mirror
+     image of `font_unembed.rs`'s own sharing rule, and deliberately
+     asymmetric: removal is idempotent through a shared descriptor,
+     a second WRITE through one silently overwrites the first.
+051. The symbolic-font guard is against the §9.6.6.4 Branch B MAPPING,
+     not against symbolic fonts as a class — narrowed from a first
+     draft that refused 214 corpus fonts unnecessarily. `Symbol`/
+     `ZapfDingbats` (248 of 1,534 missing fonts, 16%) still refuse,
+     correctly, because their whole purpose is the cmap path the guard
+     targets.
+052. Composite/CID (`Identity-H`) and Type 3 fonts refused by name, for
+     two unrelated reasons: CID codes ARE glyph indices into the
+     absent program (no substitute preserves them); a Type 3 glyph is
+     already a `/CharProcs` stream in the document (nothing missing).
+053. §9.9's `fsType`-permission paragraph is enforced against every
+     donor, even though it is an ISO 32000 **`should`**, not a
+     `shall` — pdfce's own posture, stated explicitly because the
+     weaker modality is exactly where skipping the check would be
+     easiest to defend as spec-compliant.
+
+**★★★★ A bug fixed on discovery, and it was never about fonts —
+`R189` MINTED.** `Document::next_object_number` consulted three
+sources and missed a fourth: the newest cross-reference STREAM's own
+object number. §7.5.8 makes that stream an indirect object like any
+other, and pdfce's writer already **reuses its number** (R33) for the
+section it re-emits — but the parser never files it in `objects` (it
+IS the section, not a body object inside it), and nothing requires it
+to appear in its own `/Index` or be covered by its own `/Size`. On a
+real pdfium fixture (`75 0 obj << /Type /XRef /Size 75 /Index [9 1 29
+45] >>`), all three prior sources answered 74; the allocator handed
+out 75 for a session's new object, the object was written there, and
+the writer silently overwrote it with its own re-emitted xref stream —
+**the created object simply vanishes.** The file still parses, still
+opens, still renders; only the one thing the edit added is missing.
+**Affects every object-creating command** — add-text, add-image,
+annotations, form fields, not merely font embedding — and had gone
+uncaught because a collision needs a file whose newest xref stream
+sits outside its own `/Size`, which no producer any prior pdfce
+fixture came from emits. Found by `tools/embed-sweep`'s pixel-identity
+oracle: a 16 KB font program came back as a 44-byte cross-reference
+stream. Fixture: `embed-xrefstream-outside-size.pdf`. Regression test:
+`a_created_object_never_collides_with_the_cross_reference_stream`.
+Full architectural record: `ARCHITECTURE.md` §5.7. **Standing rule
+`R189`** — the generalisable form: an allocator that must not collide
+with anything indirect in a file must enumerate every indirect-object
+source the WRITER ITSELF is capable of re-emitting under its own
+number, not just the sources a naive reading of the file's declared
+coverage (`/Size`, `/Index`, the parsed object table) would suggest.
+
+**The sweep numbers — `fixtures/external/`, 4,023 files, 3,912
+loadable, two modes.**
+
+| | bundled only | `--font-dir C:\Windows\Fonts` + bundled |
+|---|---|---|
+| missing fonts across all files | 1,507 | 1,507 |
+| embedded | 1,250 | **1,330** (81 exact-name, 1,249 substitute) |
+| still missing after | 257 | **177** |
+| files reaching `not-embedded=0` | 676 | **726** |
+| reopen failed | **0** | **0** |
+| render broken (that were not already) | **0** | **0** |
+| **pixel-identical raster** (bundled-donor rows) | **740 / 740** | 41 / 41 |
+| bytes added (uncompressed) | 23.2 MB | 1.14 GB |
+
+**Residual-refusal distribution over the 177 still missing** (font-dir
++ bundled mode): `no-source-font` 95, `type3` 49, `composite` 11,
+`no-metric-source` 10, `format-not-admissible` 7, `font-not-indirect`
+4, `symbolic-substitute` 1. Also 17 apply-refusals (13 encrypted, 4
+certification-enforced) and 1 save refusal (an object number beyond
+Annex C's table limit) — all **pre-existing, correct refusals**, not
+new defects.
+
+**★ The pixel-identity oracle is the sharpest result in this sweep.**
+In bundled mode the face embedded is the SAME face pdfce's renderer
+was already substituting at render time, so the raster must be
+byte-identical before and after; any difference would be wrong
+synthesised widths, a wrong `/Differences` mapping, or a wrong
+`/FontFile*` key. It was 739/740 on the first run — the one differing
+file is exactly how the `next_object_number` collision above was
+found.
+
+**★ A GUI defect found only by a real scripted click — extends
+`D:\dev\rag\egui\headless_trace_asserts_reached_not_visible_a_clipped_widget_needs_a_pixel_oracle.md`
+with a second instance.** The embed batch button shipped unclickable
+for one build. Written first summary-beside-button (mirroring
+unembed's layout), every headless trace assertion about it passed —
+including a trace of the button's own reported rect
+(`[413.8 475.0]–[542.2 499.0]`) — and a scripted click at the CENTRE of
+that exact rect did nothing, because the dock's right edge clipped it:
+embed's summary carries three numbers and a size where unembed's
+carries two, and the dock is narrower than the centred windows this
+panel's other controls live in. Isolated by clicking the unembed
+button the same way and watching it correctly open its dialog. Fixed
+by stacking the summary above the button. **New generalisation over
+the RAG file's first instance** (a clipped FIELD): a widget's own
+TRACED RECT is not evidence it is reachable, because the rect is
+computed from the layout REQUEST, not from what survived clipping —
+the first instance was a clipped field, this is a clipped CONTROL, and
+the tell worth naming is that a control whose traced rect is wider
+than a sibling's in the same dock is the one to click-test first. RAG
+file amended in place this filing, not duplicated (hard rule 4).
+
+**★ Open operator question minted: `(bk)` — may pdfce's own bundled
+Base-14 faces be embedded into an operator's document?** See *Open
+operator questions* below for the full text. Not resolved this
+filing — the CLI ships `--use-bundled-fonts`, off by default, with
+help text stating the licence obligation; the GUI does not offer the
+bundled rung at all. Nothing decided; the capability exists behind an
+explicit, documented opt-in pending Ken's own ruling.
+
+**Gates.** `cargo fmt --all --check` clean; `cargo clippy --workspace
+--all-targets --all-features -- -D warnings` **zero**; `cargo test
+--workspace` **3,534 passing / 0 failing** (+40 over the 3,494 at
+phase B's ship); `check-ui-strings.sh`/`check-theme-colors.sh`/
+`check-bypass-paths.sh`/`check-disclosure-channel.sh`/
+`check-ledger-numbers.py`/`check-one-commit-per-command.py`/
+`check-settings-consumed.py` all clean; `cargo tree -p pdfce-core`/
+`-p pdfce-render` — **no GUI crate**; `cargo check --workspace --target
+aarch64-apple-darwin` clean; `cargo check -p pdfce-core -p pdfce-render
+--target wasm32-unknown-unknown` clean. All relayed (no shell this
+dispatch); the module/symbol/fixture existence claims above are
+independently confirmed by direct `Read`/`Grep`/`Glob`, the numeric
+gate outputs are not.
+
+**`docs/FEATURES.md`: one row moves *Planned* → *Implemented*
+(Fonts & rendering — embed missing fonts), `[x] core / [x] cli / [x]
+gui`, moved up into the *Fonts & rendering* block beside its two
+shipped siblings (reporting, unembedding). Description rewritten to
+name both structural shapes, the layout-cannot-move fact, the four-rung
+resolution ladder, and that a print service's `not-embedded=0` check
+is satisfied per file.** Re-subset, outlines and replace-font
+(phases C, D, F) are **unaffected**, still `[ ] [ ] [ ]`, unbuilt.
+
+**`docs/NEXT_SESSION.md`: overwritten this filing** — phase E is done;
+the live open items are the `/R` 6 sourcing gap, encrypted-save, and
+whichever of phases C/D/F of `Pass 67.0` remain unbuilt.
+
+**Two new `C:\personal_rag\pdf\` lessons filed** (both PDF-domain
+empirical findings, not project-internal scoping): the corpus census
+of missing-font shapes (82.9% bare standard-14, 11.7% simple font with
+descriptor+`/Widths`, 3.2% Type 3, 0.7% composite, across 1,534
+non-embedded fonts in 3,912 real files), and the cross-reference-
+stream-outside-its-own-`/Size` shape found in the pdfium fixture that
+led to `R189`. **No new `D:\dev\rag\rust\` file** — nothing this
+filing generalises to Rust/Cargo/toolchain scope beyond what is
+already captured; the allocator bug is recorded as `R189` (project-
+specific ledger) and as the personal_rag/pdf lesson (the real-file
+shape that exposes it), which together already cover the finding
+without a third, near-duplicate write (hard rule 4).
+
+**Ledger for this filing.** **No new Pass ID** — phase E of the
+existing `Pass 67.0` family (hard rule 2). Pass-family ceiling stays
+**67.0**, next free **68**. **Six new `ARCHITECTURE.md` §12 entries —
+decisions 048 through 053** (all above). Decision-record ceiling moves
+**047 → 053**, next free **054**. **One standing rule minted, `R189`**
+(the `next_object_number` finding above) — ceiling moves **R188 →
+R189**, next free **R190**. **One open operator question minted,
+`(bk)`** (bundled-font-embedding licensing) — ceiling moves **(bj) →
+(bk)**, next free **(bl)**. **Backup/git working-tree/remote state not
+independently asserted anywhere in this filing** — no shell this
+dispatch (hard rule 8); the engineer should check
+`D:\Dev\pdfce-backups\` and `git log`/`git status`/`git remote -v`
+directly, on the current branch. Six commits: `b358657`, `931481e`,
+`d87fb58`, `1210549`, `c22923b`, `d8a8948` — none added to
+`commits-filed-baseline.txt`, all six now discharge-able by
+`tools/check-commits-filed.py`. `Pass 67.0`'s *Next up* entry gets a
+matching footer amendment, this same filing. This is the
+**hundred-and-twentieth** `ROADMAP.md`/`SESSION_LOG.md` joint filing.
+
+---
+
 ### ★★★ `f3acd24`+`2473602`+`d3baae5`+`f78c9d7`+`8f2b7a9` — `Pass 67.0` phase B ships: pdfce can UNEMBED a font, core (`font_unembed.rs`) + CLI (`unembed-font`) + GUI (Fonts panel destructive controls), refusing eight of nine verdicts by name; two new decisions (046 subset-tag strip, 047 `/CIDSet`/`/CharSet` removal); a 4,023-file sweep finds the dominant real-world blocker is NOT the case the scoping brief pointed at — but phase B does not serve the request that started this Pass, phase E does — 2026-08-12 (hundred-and-seventeenth filing)
 
 **Sourcing.** No shell tool this dispatch (hard rule 8) — `git show`/
@@ -37730,7 +37986,7 @@ in the "still open" list. Full build record: this file's own
 
 ## Next up
 
-### Pass 67.0 — font reporting (phase A) + embedded-font removal (phase B) — operator request 2026-08-11, verbatim: *"someone needs embedded fonts removed from a pdf, so work on support and the related parts for that next"*, encryption explicitly parked: *"put the encryption aside for now to work on later"* — **★★ phases A AND B SHIPPED 2026-08-12 (A: `7aa5c2c`+`fa2414e`; B: `f3acd24`+`2473602`+`d3baae5`+`f78c9d7`+`8f2b7a9`, core+CLI+GUI). See the two new top-of-*Shipped* entries for the delivery records; phases C–F remain queued below, unstarted — and phase E, not B, is the one that answers the request that actually opened this family (Barnes & Noble Press requires embedding; see phase B's own *Shipped* entry).**
+### Pass 67.0 — font reporting (phase A) + embedded-font removal (phase B) — operator request 2026-08-11, verbatim: *"someone needs embedded fonts removed from a pdf, so work on support and the related parts for that next"*, encryption explicitly parked: *"put the encryption aside for now to work on later"* — **★★★ phases A, B AND E SHIPPED 2026-08-12 (A: `7aa5c2c`+`fa2414e`; B: `f3acd24`+`2473602`+`d3baae5`+`f78c9d7`+`8f2b7a9`; E: `b358657..d8a8948`, six commits — core+CLI+GUI across all three). See the three top-of-*Shipped* entries for the delivery records. Phase E is the one that answers the request that actually opened this family (Barnes & Noble Press requires embedding, not removal); phases C, D and F remain queued below, unstarted.**
 
 **Sourcing.** No shell tool this dispatch (hard rule 8). The corpus
 statistics and the Acrobat-behaviour findings below are **relayed** from
@@ -38088,6 +38344,45 @@ asserted anywhere in this filing** — no shell this dispatch (hard rule
 8); the engineer should check `D:\Dev\pdfce-backups\` and `git
 log`/`git status`/`git remote -v` directly. This is the
 **hundred-and-seventeenth** `ROADMAP.md`/`SESSION_LOG.md` joint filing.
+
+**★★★★★ AMENDED AGAIN 2026-08-12 (hundred-and-twentieth filing) — phase
+E (embed missing fonts) SHIPS, six commits `b358657..d8a8948`, core +
+CLI + GUI + corpus harness.** Full delivery record at the new
+top-of-*Shipped* entry, this filing — not restated here per append-only
+discipline. In one line: `pdfce-core` gains `font_embed_missing.rs`
+(two structural shapes — Attach onto an existing descriptor, Synthesise
+a Base-14 descriptor/widths/encoding from compiled metrics), `pdfce-cli`
+gains `embed-font`, `pdfce-gui` gains a constructive Fonts-panel action;
+six new decisions (048–053); `Document::next_object_number` gains a
+fourth source, closing a silent object-loss bug that predates this Pass
+and touches every object-creating command (`R189` minted); a 4,023-file
+sweep closes 726 of 4,023 files to `not-embedded=0`. **★ This is the
+phase that answers the request that opened this Pass family** — see the
+Shipped entry's own reference back to phase B's "context that outranks
+all of the above" paragraph. Phases C (re-subset), D (outlines) and F
+(replace-font) remain **unstarted**; only the embed-missing row moves
+this filing. **Ledger for this footer.** No new Pass ID — `Pass 67.0`'s
+family ceiling stays **67.0**, next free **68**. Six new
+`ARCHITECTURE.md` §12 entries — decisions 048–053. Decision-record
+ceiling moves **047 → 053**, next free **054**. **One standing rule
+minted, `R189`** — ceiling moves **R188 → R189**, next free **R190**.
+**One open operator question minted, `(bk)`** — ceiling moves **(bj) →
+(bk)**, next free **(bl)**. `docs/FEATURES.md`: **one row moves from
+*Planned* to *Implemented*, and up into the *Fonts & rendering*
+block** (embed missing fonts), `[x] core / [x] cli / [x] gui`; the
+three sibling rows (re-subset/outlines/replace-font) are unchanged in
+*Planned*. **Two new `C:\personal_rag\pdf\` lessons filed** — the
+missing-font-shape corpus census, and the xref-stream-outside-its-own-
+`/Size` file shape. `D:\dev\rag\rust\`: not touched (the allocator
+finding is `R189` plus the personal_rag lesson, no third near-duplicate
+write). `D:\dev\rag\egui\`: **one existing file amended in place**
+(clipped-widget finding, second instance — a clipped CONTROL, not a
+clipped field), not duplicated. **Backup/git working-tree/remote state
+not independently asserted anywhere in this filing** — no shell this
+dispatch (hard rule 8); the engineer should check
+`D:\Dev\pdfce-backups\` and `git log`/`git status`/`git remote -v`
+directly. This is the **hundred-and-twentieth**
+`ROADMAP.md`/`SESSION_LOG.md` joint filing.
 
 ---
 
@@ -46580,6 +46875,34 @@ nothing gets forgotten, not as a commitment to build in this order.
   `UNESTABLISHED` above is an invitation to check, not a finding.
 
 ## Open operator questions (as of 2026-08-02 — answer any, all default to the stated fallback if not answered)
+
+**NEW this filing (hundred-and-twentieth filing, 2026-08-12) — filed
+OPEN, not yet answered. Operator-question ceiling moves (bj) → (bk),
+next free (bl):**
+- **(bk) May pdfce's own bundled Base-14 substitute faces be embedded
+  into an operator's document, or is that a distinct act from drawing
+  with them on-screen and off by default?** `Pass 67.0` phase E's
+  resolution ladder can, as its last-resort rung, embed one of pdfce's
+  own bundled Base-14 faces (pdfium's Foxit-origin set, BSD-3-Clause —
+  `assets/fonts/PROVENANCE.md`, `THIRD_PARTY_LICENSES.md` §"Bundled
+  Foxit substitute faces") when no operator-supplied source matches.
+  **Embedding puts the face inside a document the operator then
+  distributes** — a different act from pdfce merely drawing with it on
+  the operator's own screen, and it carries the licence's binary-
+  redistribution attribution condition with it once it travels inside
+  someone else's PDF. **This is a legal call, and therefore Ken's, not
+  the engineer's or this librarian's** — per `pdfce-engineer.md`'s own
+  "legal decisions — surface them, don't resolve them" rule. **What
+  shipped in the meantime, deliberately not a resolution:**
+  `pdfce-cli embed-font --use-bundled-fonts`, off by default, with help
+  text stating the obligation explicitly; **the GUI does not offer the
+  bundled rung at all.** *Default if unanswered:* status quo — CLI
+  opt-in only, disclosed; no GUI surface for it. **The practical
+  weight, so the question is not academic:** bundled faces alone embed
+  1,250 of 1,507 corpus missing fonts, and are the ONLY donor for
+  `Symbol`/`ZapfDingbats` (248 of 1,534 missing fonts, 16% — no
+  operator's own font folder plausibly carries a substitute for either,
+  since both are effectively defined by their own binary cmap).
 
 **NEW this filing (hundred-and-second filing, 2026-08-11) — filed OPEN,
 not yet answered. Operator-question ceiling moves (bi) → (bj), next
@@ -55524,6 +55847,44 @@ and
   thirteenth filing) and its two amendment footers (hundred-and-
   fourteenth, hundred-and-fifteenth). **Ceiling moves `R187` →
   `R188`; next free `R189`.**
+
+- **R189 — An object-number allocator must enumerate every INDIRECT
+  OBJECT SOURCE the writer itself can re-emit under its own number,
+  not just the sources a naive reading of the file's declared coverage
+  would suggest (2026-08-12, hundred-and-twentieth filing;
+  librarian-minted).** `Document::next_object_number` consulted three
+  sources — the `objects` map maximum, the `/Size`-derived maximum,
+  and the running `highest_object_number` counter — and missed a
+  fourth: the newest cross-reference STREAM's own object number. §7.5.8
+  makes that stream an indirect object like any other, and pdfce's
+  writer already **reuses its number** (R33) for the section it
+  re-emits — but the parser never files it in `objects` (it IS the
+  section, not a body object inside it), and nothing requires it to
+  appear in its own `/Index` or be covered by its own `/Size`. A file
+  can legally read `75 0 obj << /Type /XRef /Size 75 /Index [9 1 29
+  45] >>`: all three prior sources answer 74, the allocator hands out
+  **75**, a session's new object is written there, and the writer's
+  own re-emitted cross-reference stream silently overwrites it at the
+  same number — the created object simply vanishes. The file still
+  parses, opens and renders; only the thing the edit added is missing.
+  **Not specific to font embedding** — every object-creating command
+  (add-text, add-image, annotations, form fields) hits it on any file
+  shaped this way; it survived because a collision needs a newest xref
+  stream sitting outside its own `/Size`, which no producer any prior
+  pdfce fixture came from emits. Found by `tools/embed-sweep`'s
+  pixel-identity oracle on a real pdfium fixture
+  (`testing/resources/annotation_stamp_with_ap.pdf`) — a 16 KB font
+  program came back as a 44-byte cross-reference stream. **Practical
+  form:** before trusting an allocator that must not collide with
+  anything indirect in a file, ask not "what does the xref table/
+  stream declare it covers" but "what can the WRITER itself put a
+  number on, including things the writer re-emits under an existing
+  number rather than allocating fresh." Fixture:
+  `embed-xrefstream-outside-size.pdf`. Regression test:
+  `a_created_object_never_collides_with_the_cross_reference_stream`.
+  Full record: `ARCHITECTURE.md` §5.7 and `ROADMAP.md`'s `Pass 67.0`
+  phase E Shipped entry (hundred-and-twentieth filing). **Ceiling
+  moves `R188` → `R189`; next free `R190`.**
 
 ## Update protocol
 

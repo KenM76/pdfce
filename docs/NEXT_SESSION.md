@@ -1,119 +1,96 @@
 # NEXT SESSION — start here
 
 Engineer-owned handoff (this filing written by `pdfce-librarian` at the
-engineer's explicit request). Read this **before** the librarian's
-record — `ROADMAP.md` says what shipped, this says what is in flight and
-what the next hour should be. Overwrite it once acted on.
+engineer's explicit request, same as every prior overwrite of this
+file). Read this **before** the librarian's record — `ROADMAP.md` says
+what shipped, this says what is in flight and what the next hour
+should be. Overwrite it once acted on.
 
-Written 2026-08-12, branch **`main`**, after commits `f3acd24`,
-`2473602`, `d3baae5`, `f78c9d7`, `8f2b7a9` (`Pass 67.0` phase B —
-font unembedding — now SHIPPED, core+CLI+GUI).
-
----
-
-## ★★★ PHASE E (embed missing fonts) IS NOW UNBLOCKED AND URGENT — start here
-
-**The operator's real problem, unchanged since 2026-08-12.** The request
-that started `Pass 67.0` was *"someone needs embedded fonts removed."* It
-was **backwards**. The end user is uploading a book to **Barnes & Noble
-Press**, which — like every print-on-demand service — **requires** fonts
-to be embedded and rejects files with missing ones. Removing fonts would
-have guaranteed rejection.
-
-`list-fonts` diagnoses it: `not-embedded=N` in the summary, `embedded=no`
-on the row. **Phase E is the fix.** Phase B (unembed) shipped this
-session — it is a legitimate, independently useful Acrobat-parity
-capability and was the explicitly scoped brief, but it is **not** what
-this end user needs. The "phase E must follow rather than run alongside
-phase B" constraint that motivated writing this file in the first place
-is now **discharged**: `edit.rs`/`lib.rs` are free.
-
-**★ The design is mostly ALREADY BUILT — do not start from scratch. Four
-pieces exist, three from before this session, one new from phase B
-itself:**
-
-- **`--font-dir` (decision 012) solves source-font resolution entirely.**
-  It walks directories, registers each face under its advertised name AND
-  its filename stem, and matches `/BaseFont` **including subset prefixes**
-  (`Calibri.ttf` covers a document referencing `ABCDEF+Calibri`). Reuse
-  it; do not write a second resolver (R171).
-- **`pdfce-render`'s `FontEnvironment`** already has `named()`,
-  `insert_named()`, `bundled()` and **`is_substitute()`** — match-quality
-  disclosure is already modelled.
-- **`pdfce-core`'s `font_embed.rs`** already builds font objects
-  (`build_objects`, `FontEmbedPlan`, `DescriptorMetrics`).
-- **★ NEW this session — `font_unembed.rs`'s descriptor/program
-  object-identity locator code.** Phase B had to solve, precisely, "which
-  `/FontDescriptor` and which `/FontFile*` stream does this font
-  dictionary actually reach, and is either one shared with another font
-  dictionary that is staying?" — the exact reachability question phase E
-  needs answered in reverse (does a `/FontDescriptor` that will gain a
-  new `/FontFile*` already have one from elsewhere; would attaching a
-  program collide with a font this same descriptor already serves). Read
-  `font_unembed.rs`'s reachability/sharing code before writing anything
-  new — the two sharing hazards it found (a program shared across
-  descriptors; a descriptor shared across font dictionaries) are the same
-  shapes phase E's own attach step must not create by accident.
-
-**★ The correctness question is already answered, and it is the good
-news.** `--font-dir`'s own doc: *"Supplied fonts improve glyph SHAPES
-only: positions still come from the PDF's own `/Widths` (decision 004
-§3.6), so layout is identical with or without."* So **embedding a matched
-font cannot shift layout** — positions come from `/Widths` already in the
-file. Embedding changes how letters look, never where they sit. The fear
-that a near-match would reflow a book is unfounded.
-
-**Crate boundary**: `FontEnvironment` lives in `pdfce-render`, and
-`pdfce-core` must never depend on it. So the **shell** resolves a name to
-bytes and hands the bytes to core. Do not invert that.
-
-**Likely simplest correct path**: for a non-embedded simple font the
-`/FontDescriptor` already exists, so attaching `/FontFile2` to it is
-close to a drop-in — keep the existing `/Encoding` and `/Widths`, let the
-font's own cmap do the mapping. Start there; subsetting is a refinement,
-and for print-on-demand acceptance size matters far less than presence.
-
-**Disclose**: which face was used, whether it was an exact name match or
-a substitute (`is_substitute()`), and that glyph shapes are then
-machine-dependent (R63 already frames this).
+Written 2026-08-12, branch **`main`**, after six commits
+`b358657..d8a8948` (`Pass 67.0` phase E — embed missing fonts — now
+SHIPPED, core+CLI+GUI+corpus harness).
 
 ---
 
-## Phase B (unembed) shipped this session — what it left behind
+## ★★★ PHASE E IS DONE. It was the phase that answered the original request
 
-`font_unembed.rs` + `unembed-font` + Fonts-panel destructive controls,
-core+CLI+GUI, full record in `ROADMAP.md`'s new top-of-*Shipped* entry
-(hundred-and-seventeenth filing). Two things worth carrying forward
-without re-reading the whole entry:
+The end-user problem that opened `Pass 67.0` — a Barnes & Noble Press
+upload requiring embedded fonts — is now solvable end to end:
+`list-fonts` diagnoses `not-embedded=N`, `embed-font` closes it. The
+4,023-file sweep reaches `not-embedded=0` on 726 of 4,023 files with
+`--font-dir` + `--use-bundled-fonts`; the 177 residuals left in
+`--font-dir` mode are genuine refusals (no source font, Type 3,
+composite/CID, etc.), not gaps in the feature.
 
-- **An incremental save reclaims NOTHING** — only a full rewrite shrinks
-  the file. If phase E's own build touches file-size messaging, this is
-  the same asymmetry in reverse (embedding always GROWS the file, on
-  every save mode, with no incremental-vs-full distinction to disclose).
-- **An unreconciled corpus-distribution discrepancy, flagged not
-  resolved.** `font_unembed.rs`'s own module doc gives one verdict-share
-  table for the 4,023-file sweep (`unknown-symbolic-builtin` 53.6% of
-  1,560 embedded fonts); the same filing's `ROADMAP.md` Shipped entry
-  separately relays a differently-shaped table for the same sweep
-  (`unknown-symbolic-builtin` 31.6% of all fonts examined) that does not
-  obviously arithmetic-reconcile with the first. Neither table was
-  independently re-run — reconcile before either is used to size phase
-  C/D/F's build order.
+**`Pass 67.0` now has three of six phases shipped (A, B, E) and three
+unstarted (C, D, F).** None of the three remaining are blocking the
+request that started the family — this is now genuinely open-ended
+Pass work, not urgent-fix work, and probably worth asking the operator
+which (if any) he wants next rather than guessing.
+
+- **C — Re-subset.** Shrink an already-embedded font's program to only
+  the glyphs the document actually uses. Lowest risk of the three: no
+  visual change, no text loss, works on *every* embedded font
+  including the ~13–48% (method-dependent, see `Pass 67.0`'s own
+  Shipped entries for both measurements) phase B must refuse. The
+  right answer when the motivation is file size.
+- **D — Convert text to outlines.** The universal escape hatch — the
+  only phase that works where phase B is refused outright, because
+  glyphs become vector paths and no font program needs to sit at those
+  positions at all. Substantial to build; irreversible in effect
+  (search/copy/reflow all stop working on the converted text) —
+  disclose the cost inline, not merely via a confirm button (rule 4).
+- **F — Replace font X with Y.** The hardest of the six — not just
+  swapping a program name, but remapping encodings and widths so text
+  does not reflow wrongly. Acrobat has **no equivalent** (searched
+  across three sessions by `pdfce-acrobat-librarian`, recorded as a
+  genuine absence) — this phase is parity-plus, not parity.
+
+**Reusable substrate for all three, already built this Pass:**
+`FontEnvironment::resolve_for_embedding`'s four-rung donor ladder,
+`fontinfo::Removability`'s nine-verdict classifier, and
+`font_embed_missing.rs`/`font_unembed.rs`'s shared-descriptor/shared-
+program reachability code (the exact "which `/FontDescriptor` and
+`/FontFile*` does this font dictionary actually reach, and is it
+shared" question phase C's re-subset-in-place and phase F's swap-the-
+program both need answered the same way phase E's Attach shape already
+needed it).
 
 ---
 
-## ★ Read this first: AES-256 now opens; `/R` 6 is the one gap left
+## ★ Open operator question `(bk)` — needs Ken's ruling, not engineering judgment
 
-`/V` 5, `/R` 5, `/CFM /AESV3` (AES-256) now decrypts across core, CLI and
-GUI, at parity with RC4's and AES-128's own shell coverage — no new
-shell-facing UI was needed, both already generalize over cipher.
-Algorithms 3.2a/3.11/3.12/3.13 (Adobe Supplement ExtensionLevel 3 §3.5),
-new module `crates/pdfce-core/src/crypto/r5.rs`.
+**May pdfce's own bundled Base-14 substitute faces (BSD-3-Clause,
+pdfium's Foxit-origin set) be embedded into an operator's document?**
+Embedding puts the face inside a document the operator then
+distributes — a different act from pdfce merely drawing with it on the
+operator's own screen — and carries the licence's binary-
+redistribution attribution condition once it travels inside someone
+else's PDF. **This is a legal call, and therefore Ken's** — surface it,
+don't resolve it (`pdfce-engineer.md`'s own standing rule).
 
-**`/R` 6 is now the ONLY thing between pdfce and the common AES-256
-case** — `/R` 6 is the default Acrobat X+ "AES-256" setting actually
-produces, so it is plausibly the *common* real-world shape, not the
-exotic one. The gap is exactly one function:
+**What shipped in the meantime, deliberately not a resolution:**
+`pdfce-cli embed-font --use-bundled-fonts`, off by default, help text
+states the obligation. **The GUI does not offer the bundled rung at
+all.** Practical weight: bundled faces alone embed 1,250 of 1,507
+corpus missing fonts, and are the ONLY donor for `Symbol`/
+`ZapfDingbats` (16% of missing fonts) — so this is not an academic
+question, it is the difference between closing 83% and closing ~11% of
+the real-world gap. Full text: `docs/ROADMAP.md`'s *Open operator
+questions* section, `(bk)`.
+
+---
+
+## ★ Read this next: `/R` 6 is still the only encryption gap, unrelated to fonts
+
+Nothing changed here this session — encryption stayed explicitly
+parked while font work ran. Carried forward verbatim in substance from
+the prior handoff, since it is still exactly true.
+
+`/R` 6 is the **only** thing between pdfce and the common AES-256
+case — `/R` 6 is the default Acrobat X+ "AES-256" setting actually
+produces, plausibly the *common* real-world shape, not the exotic one.
+The gap is exactly one function:
 
 ```
 crates/pdfce-core/src/crypto/r5.rs — private fn hash
@@ -122,122 +99,51 @@ crates/pdfce-core/src/crypto/r5.rs — private fn hash
 Its own doc comment names it as Algorithm 2.B's substitution point and
 states everything AROUND it — the `/O`/`/U` layout, the `/UE`/`/OE`
 unwrap, the `/Perms` check, the harness that calls it — is already
-implemented and tested. **That is precisely the situation where filling
-it from memory is most tempting and least detectable.** The refusal
-fixture (`enc-aes-256-r6.pdf`) and the refusal tests exist specifically
-to make that hard — do not remove or weaken either to "make progress."
+implemented and tested. **That is precisely the situation where
+filling it from memory is most tempting and least detectable.** The
+refusal fixture (`enc-aes-256-r6.pdf`) and the refusal tests exist
+specifically to make that hard — do not remove or weaken either to
+"make progress."
 
-**Routes to close it, unchanged from before this session, now the only
-remaining item in this bucket:**
-1. **ISO 32000-2 is $0.00 under PDF Association sponsored access** — but
-   needs an account and a checkout. **This is the operator's act, not an
-   agent's** — surface it to Ken rather than attempting a workaround.
-2. Any other primary, citeable source for Algorithm 2.B (its inner
-   AES-128-CBC step, SHA-256/384/512 selector, round count, termination
-   condition) that isn't itself a derivation from another
-   implementation's output — deriving from another implementation's
-   *output* and then testing against that same implementation would be
-   circular, which is exactly why `enc-aes-256-r6.pdf` is a
-   refusal-only fixture today.
+**Routes to close it, unchanged:**
+1. **ISO 32000-2 is $0.00 under PDF Association sponsored access** —
+   needs an account and a checkout. **This is the operator's act, not
+   an agent's** — surface it to Ken rather than attempting a
+   workaround.
+2. Any other primary, citeable source for Algorithm 2.B that isn't
+   itself a derivation from another implementation's output.
 
 Once `/R` 6 is sourced, the remaining Encryption scope is: encrypt-on-
-save (every cipher, every shell — entirely unstarted), and nothing else
-new — `/R` 6 is genuinely the last read-side gap.
+save (every cipher, every shell — entirely unstarted), and nothing
+else new — `/R` 6 is genuinely the last read-side gap.
 
 ---
 
-## Two new decisions this session, worth knowing before touching this code again
+## New standing rule this session — `R189`, worth carrying into any future object-allocation code
 
-- **Decision 044 — a `/Perms` mismatch is REPORTED, never refused on,
-  never silently substituted for.** `/R` 5 decoupled the file encryption
-  key from `/P` entirely (Algorithm 3.2a has no `/P` dependency, unlike
-  every earlier revision's Algorithm 2), so `/P` is editable in a hex
-  editor without breaking a document's passwords, and `/Perms` — the
-  only remaining integrity signal — is itself optional-in-effect
-  (nothing re-derives it from `/P` at open time). `DocumentEncryption::
-  perms` exposes `PermsCheck::{NotApplicable, MarkerMissing, Match,
-  Mismatch}`; the GUI shows one conditional line only when the check
-  ran and disagreed. **Never describe this as "security"** — `/P` is
-  reader-convention enforcement, not cryptographic; this decision only
-  narrows how a disagreement is surfaced, it does not change what `/P`
-  ever actually protected.
-- **Decision 045 — a non-ASCII `/R` 5 password is ATTEMPTED, never
-  refused.** SASLprep (RFC 4013) is not implemented (no stringprep
-  dependency taken); UTF-8 encoding and 127-byte truncation are exact.
-  New `DocError::PasswordRequiresNormalisation`, raised only on an
-  authentication FAILURE with a non-ASCII password at `/R` 5 — never on
-  an all-ASCII password (SASLprep is the identity there) and never at
-  `/R` ≤ 4 (SASLprep is `/R` 5-specific). The reasoning that makes
-  "attempt, don't refuse" correct here is specific to `/R` 5's
-  self-verifying authentication (SHA-256 either matches or it doesn't) —
-  **do not generalize this "attempt then diagnose on failure" pattern to
-  a context where a missing preprocessing step could produce a silently
-  WRONG result instead of only a false failure.**
-
-Full text, both: `docs/ARCHITECTURE.md` §12, hundred-and-tenth filing.
+`Document::next_object_number` gained a fourth source
+(`SectionShape::Stream { id, .. } => id.num`) after a real pdfium
+fixture proved the first three insufficient: a created object silently
+collided with the writer's own re-emitted cross-reference stream and
+vanished, on any file whose newest xref stream sits outside its own
+`/Size`. **Practical form for any future allocator in this codebase:**
+ask not "what does the xref table/stream declare it covers" but "what
+can the WRITER itself put a number on, including things it re-emits
+under an existing number rather than allocating fresh." Full record:
+`docs/ARCHITECTURE.md` §5.7, `docs/ROADMAP.md` Standing rules `R189`.
 
 ---
 
-## The habit that caught this session's sharpest bug
+## A GUI finding worth remembering before shipping the next Fonts-panel control
 
-A `strip_pkcs7` added to the `/UE`/`/OE` key unwrap passed **71 unit
-tests, 20 end-to-end decrypts, a byte-identical render comparison, AND
-qpdf's own published-key vector** — all of it, clean — because every
-32-byte random key already in the corpus happened to end above the
-valid-pad-length range (`1..=16`), which a uniformly random byte does
-about 15 times out of 16. **A bigger corpus of real random keys would
-not have caught this; only a DELIBERATELY CONSTRUCTED edge-case key
-would.** Full finding:
-`D:\dev\rag\rust\existing_fixture_of_the_right_shape_can_be_vacuous_for_a_new_measurement.md`
-(4th instance). Worth carrying into `/R` 6 work and any future crypto
-code in this project: when a branch's execution depends on a property
-of RANDOM data crossing a threshold, build at least one fixture
-deliberately on each side of that threshold — don't rely on a "realistic"
-corpus to happen to hit it.
-
----
-
-## What the operator can try
-
-Latest portable build should be re-packaged before this is meaningful —
-check `D:\builds\` for a build at or after `f79d9a2` before pointing Ken
-at anything below; if none exists, `tools/package-portable.py` first.
-
-- **`enc-aes-256-r5.pdf`** — now opens (previously refused by cipher
-  name). `enc-emptyuser-aes-256-r5.pdf` — opens with no prompt at all,
-  same as the RC4/AES-128 empty-user-password cases.
-- **`enc-aes-256-r6.pdf`** — still refused, by cipher name, on purpose.
-- Properties > Security — the permission bits section now shows a
-  `/Perms`-mismatch line on any `/R` 5 file whose `/P` and `/Perms`
-  disagree (none of the shipped fixtures currently exercise this; would
-  need a hand-edited `/P` on an `/R` 5 file to see it fire).
-
-CLI: `pdfce-cli --open-password userpw <cmd> enc-aes-256-r5.pdf` —
-unchanged flag surface, now also reaches AES-256.
-
----
-
-## Live decisions worth not re-litigating (carried from prior sessions, still current)
-
-- **`R186` — SIX instances now recorded** (Standing rules, `ROADMAP.md`
-  — full text there). Newest: a verification keyed on a marker (a `## `
-  header) failing open when the same hazard arrives without the marker
-  (`SESSION_LOG.md`'s hundred-and-ninth filing).
-- **A limit set before there is a case to argue is worth more than one
-  set during the argument.** `crypto/md5.rs` recorded in increment 1 why
-  MD5/RC4 are hand-rolled AND that the reasoning does not extend to
-  AES; increments 2 and 3 both honoured it without re-opening it — `aes`
-  and `sha2` are both dependencies, decided once (decision 039),
-  extended rather than re-litigated.
-- **`DocError::PasswordRequired` is not a capability gap.**
-- **A derived value with one producer cannot drift** (`149fd03`).
-- **Decision 037** — `/BaseState /OFF` applies to registered groups only.
-- **Decision 038** — cite **both** loci; `Table 101` is 1.7-only
-  (ISO 32000-2 renumbers it to **Table 99**).
-- **`EncryptionUnsupported::CipherNotImplemented` is UNREACHABLE** as of
-  this session — pdfce implements all four of Table 25's `/CFM` values.
-  Kept deliberately, documented in place, for whatever the standard
-  adds next.
+The embed batch button shipped unclickable for one build — every
+headless trace assertion passed, including a trace of the button's own
+reported rect, because the dock clipped it and a traced rect describes
+the layout *request*, not what survived clipping. Second instance of
+`D:\dev\rag\egui\headless_trace_asserts_reached_not_visible_a_clipped_widget_needs_a_pixel_oracle.md`.
+**Tell worth remembering**: a control whose traced rect is wider than
+a sibling's in the same dock is the one to click-test first, before
+trusting the trace.
 
 ---
 
@@ -256,8 +162,9 @@ unchanged flag surface, now also reaches AES-256.
   unit tests, `cargo test`) when it will do.
 
 `tools/splice.py` — anchored substitution, all-or-nothing.
-`tools/verify-release.py <tag>` · `tools/gen-encryption-fixtures.py`
-(no arguments needed) · `tools/package-portable.py --note "..."`.
+`tools/verify-release.py <tag>` · `tools/gen-embed-fixtures.py` /
+`tools/gen-unembed-fixtures.py` (no arguments needed) ·
+`tools/package-portable.py --note "..."`.
 
 ---
 
@@ -265,48 +172,41 @@ unchanged flag surface, now also reaches AES-256.
 
 The operator's 2026-08-11 instruction — *"please continue to post the
 latest versions to git so I can try them on my laptop at home"* — is
-ongoing. Rule 8's per-release ask does not apply to cutting a release of
-THIS project: build it, tag it, publish the asset, run
+ongoing. Rule 8's per-release ask does not apply to cutting a release
+of THIS project: build it, tag it, publish the asset, run
 `tools/verify-release.py`, report what went out. Scope is narrow:
 authorises releasing pdfce builds for the operator's own testing, NOT
 blanket publishing authority, NOT a licence to treat repository
 visibility as an agent's own decision, NOT permission to skip
-verification. `CLAUDE.md` rule 8's literal per-release wording is still
-technically stale against this — flagged to the operator across two
-prior filings, not yet amended by him; not this librarian's or the
-engineer's file to edit.
+verification. `CLAUDE.md` rule 8's literal per-release wording is
+still technically stale against this — flagged to the operator across
+several prior filings, not yet amended by him; not this librarian's or
+the engineer's file to edit.
 
 ---
 
 ## Open items, in the order they're likely to matter
 
-1. **`Pass 67.0` phase E (embed missing fonts)** — see above. This is
-   what the request that opened the whole family actually needs.
-2. **Reconcile the two 4,023-file verdict-distribution tables** — see
-   above. Blocks sizing phase C/D/F's build order with confidence.
-3. **`Pass 67.0` phases C (re-subset), D (outlines), F (replace-font)**
-   — all unstarted; sequencing recorded at the family's own `ROADMAP.md`
-   *Next up* entry (D pulled ahead of E/F for the Identity-H/CID case;
-   that reasoning is now secondary to phase E's own new urgency).
-4. **`/R` 6 sourcing** — the only encryption read-side gap, unrelated to
-   fonts, still open from two sessions ago. Needs a citeable primary
-   source for Algorithm 2.B; PDF Association sponsored ISO 32000-2
-   access is the operator's own act, not an agent's — surface it, don't
-   attempt a workaround.
-5. **Encrypted-save**, any cipher — entirely unstarted.
-6. Two dead/stale printing items, filed to Backlog, deliberately not
+1. **`(bk)` — bundled-font embedding licensing.** Ken's call. Surface
+   it directly rather than waiting for it to come up.
+2. **`Pass 67.0` phases C, D, F** — all unstarted, none blocking, ask
+   the operator which (if any) he wants next rather than guessing an
+   order.
+3. **`/R` 6 sourcing** — the only encryption read-side gap, unrelated
+   to fonts. PDF Association sponsored ISO 32000-2 access is the
+   operator's own act — surface it, don't attempt a workaround.
+4. **Encrypted-save**, any cipher — entirely unstarted.
+5. Two dead/stale printing items, filed to Backlog, deliberately not
    fixed: `DeviceSettings::pick_tray_by_page_size` sets no `DEVMODE`
    field at all; `build_devmode`'s doc claims a driver-default start
    the code doesn't actually do.
-7. **Imposition has no GUI** — extract sheet composition into
+6. **Imposition has no GUI** — extract sheet composition into
    `pdfce-print` first so both shells share one implementation.
-8. **No open operator questions** as of this filing — `(bj)` was
-   answered and closed 2026-08-11; next free is `(bk)`.
-9. Static hybrid XFA read/fill · wide-shape CSV · colour management
+7. Static hybrid XFA read/fill · wide-shape CSV · colour management
    (`D:\Dev\iccce\`, planned, no code).
-10. **Ledger-accuracy defect, still not fixed** (carried from several
-    sessions ago): filings ninety-two through ninety-five cite `(bh)`/
-    `(bi)` as if `(bi)` had not been minted.
-11. **Spec-librarian flag, still open**: confirm the eight-item
-    never-encrypted list (E1–E9) is in the §7.6 corpus rather than only
-    in pdfce's code.
+8. **Ledger-accuracy defect, still not fixed** (carried from several
+   sessions ago): filings ninety-two through ninety-five cite `(bh)`/
+   `(bi)` as if `(bi)` had not been minted.
+9. **Spec-librarian flag, still open**: confirm the eight-item
+   never-encrypted list (E1–E9) is in the §7.6 corpus rather than only
+   in pdfce's code.

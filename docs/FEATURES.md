@@ -151,6 +151,7 @@ provisional; re-verify before any acceptance criterion leans on them.
 | [x] | [x] | [x] | — | Glyph-coverage gate on the app's own UI chrome. |
 | [x] | [x] | [x] | ◐ | Report a document's fonts — `/BaseFont`, subtype, encoding, embedded/subset status, byte size (raw+decoded), `fsType`, `/ToUnicode`, a stated-reason removability verdict, and named surface-coverage. Acrobat exposes none of the first three and refuses unembed candidates silently. |
 | [x] | [x] | [x] | ◐ | Remove an embedded font's program, refusing by name (reason shown) where content-stream codes are positions into that program (`Identity-H`/CID) or otherwise unsafe (8 of 9 verdicts refuse). Strips the subset tag and `/CIDSet`/`/CharSet` by default; a full rewrite is required to reclaim the freed bytes. |
+| [x] | [x] | [x] | ◐ | Embed a font that's referenced but missing — attach a program to an existing descriptor, or synthesise a Base-14 descriptor/widths/encoding from pdfce's own metrics; resolves `/BaseFont` via exact match, subset-stripped name, standard-14 alias or (opt-in only) pdfce's own bundled face, disclosing which; glyph positions cannot move, only shapes change. |
 
 ### Reading, navigation & printing
 
@@ -199,7 +200,6 @@ the model or verb exists and only the named shell is missing. The
 | [x] | [x] | [x] | [x] | **Encryption** — RC4 (40–128 bit), AES-128 (`/AESV2`) and AES-256 at `/R` 5 (`/AESV3`) decrypt read-only, including the empty-user-password case every other reader opens silently; CLI (`--open-password`/`--open-password-file`) and GUI (inline canvas prompt) can supply a password for any of the three. All eight Table 22 permission bits shown read-only in Properties > Security, captioned declared-by-the-author and unenforced; a `/Perms` mismatch (possible only at `/R` 5) is reported, never refused on. `/R` 6 is still refused by name — its Algorithm 2.B is unsourced. **Writing an encrypted document is still unimplemented in every configuration.** |
 | [ ] | [ ] | [ ] | ◐ | Re-subset an embedded font down to only the glyphs used — no removal, no visual change, works even where unembedding is refused. |
 | [ ] | [ ] | [ ] | ◐ | Convert text to vector paths — the only one of the font operations that works where unembedding is refused; irreversible, and the text stops being text. |
-| [ ] | [ ] | [ ] | ◐ | Embed a font that is referenced but missing, from an operator-supplied source. |
 | [ ] | [ ] | [ ] | **[ ]** | Replace one font with another across a document, remapping encodings and widths — Acrobat has no equivalent. |
 | — | — | [ ] | [x] | Imposition in the GUI — needs the sheet composition extracted into `pdfce-print` so both shells share one implementation. |
 | [ ] | [ ] | [ ] | [x] | Move and resize anything carrying a `/Rect` — widgets, markup, redaction marks, links, ce dimensions. |
