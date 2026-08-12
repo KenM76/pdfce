@@ -1943,49 +1943,38 @@ fn has_font_extension(path: &Path) -> bool {
         .is_some_and(|e| FONT_FILE_EXTENSIONS.contains(&e.as_str()))
 }
 
-/// Which geometric-markup shape the toolbar's Markup menu authors
-/// (Pass 6.1 minimal affordance). A representative subset of
-/// [`pdfce_core::annot_author::MarkupSpec`]'s ten subtypes — one filled
-/// shape, one ellipse, one line, one text-markup — placed at a default
-/// rectangle on the current page. The full ten-tool canvas state machine
-/// of `docs/ui_specs/pass-6.1-markup-tools.md` §1 is a named follow-up
-/// slice (see the Pass 6.1 GUI status in the session log).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum GuiMarkupKind {
-    /// `/Square` at a centred rectangle.
-    Square,
-    /// `/Circle` inscribed in a centred rectangle.
-    Circle,
-    /// `/Line` across the page centre, open arrowheads.
-    Line,
-    /// `/Highlight` over a centred band.
-    Highlight,
+/// The operator-facing label for a markup kind (via `ui_text`, R1).
+///
+/// A free function rather than an inherent method because
+/// [`canvas::MarkupKind`] lives in `canvas.rs`, which is deliberately free of
+/// presentation concerns — it models what the canvas is DOING, and the words
+/// and glyphs for it belong with the rest of the shell's chrome.
+///
+/// Replaces `GuiMarkupKind::label`, retired with its enum in Pass 46: that
+/// type existed only to carry the payload of the centre-drop
+/// `Action::AddMarkupShape`, and once markup became a real drawn tool there
+/// were two enums naming the same four shapes.
+fn markup_kind_label(kind: canvas::MarkupKind) -> &'static str {
+    match kind {
+        canvas::MarkupKind::Square => ui_text::markup_square_item(),
+        canvas::MarkupKind::Circle => ui_text::markup_circle_item(),
+        canvas::MarkupKind::Line => ui_text::markup_line_item(),
+        canvas::MarkupKind::Highlight => ui_text::markup_highlight_item(),
+    }
 }
 
-impl GuiMarkupKind {
-    /// The menu-item label (via `ui_text`, R1).
-    fn label(self) -> &'static str {
-        match self {
-            Self::Square => ui_text::markup_square_item(),
-            Self::Circle => ui_text::markup_circle_item(),
-            Self::Line => ui_text::markup_line_item(),
-            Self::Highlight => ui_text::markup_highlight_item(),
-        }
-    }
-
-    /// The menu-row glyph (ui-spec §3.3).
-    ///
-    /// Kept beside [`Self::label`] rather than in the toolbar so the row's
-    /// two halves cannot drift apart — adding a fifth markup kind is a
-    /// non-exhaustive-match error in BOTH, which is exactly the reminder
-    /// a new kind needs.
-    fn icon(self) -> icons::Icon {
-        match self {
-            Self::Square => icons::Icon::ShapeRect,
-            Self::Circle => icons::Icon::ShapeEllipse,
-            Self::Line => icons::Icon::ShapeArrow,
-            Self::Highlight => icons::Icon::ShapeHighlight,
-        }
+/// The ribbon glyph for a markup kind (ui-spec §3.3).
+///
+/// Kept immediately beside [`markup_kind_label`] for the reason the retired
+/// enum's own comment gave, which is still exactly right: adding a fifth kind
+/// must be a non-exhaustive-match error in BOTH, which is the reminder a new
+/// kind needs.
+fn markup_kind_icon(kind: canvas::MarkupKind) -> icons::Icon {
+    match kind {
+        canvas::MarkupKind::Square => icons::Icon::ShapeRect,
+        canvas::MarkupKind::Circle => icons::Icon::ShapeEllipse,
+        canvas::MarkupKind::Line => icons::Icon::ShapeArrow,
+        canvas::MarkupKind::Highlight => icons::Icon::ShapeHighlight,
     }
 }
 
@@ -3343,6 +3332,21 @@ struct OpenDoc {
     field_notes: Vec<String>,
     /// The Create-Field tool's own settings, independent of any draft.
     field_tool: FieldToolState,
+    /// Which markup kind [`CanvasTool::Markup`] currently draws.
+    ///
+    /// Per-document rather than per-app, matching `field_tool`: the operator's
+    /// choice belongs to the thing they are marking up, and carrying it across
+    /// a document switch would arm a tool the new document's ribbon may not
+    /// even be showing as selected.
+    markup_kind: canvas::MarkupKind,
+    /// Where a markup drag began, in PDF user space.
+    ///
+    /// Same cross-frame reason as `field_drag_anchor`, and cleared the same
+    /// way (`.take()` on release) so an interrupted drag cannot seed the next
+    /// one. Deliberately a SECOND field rather than a shared "current drag
+    /// anchor": two tools cannot be armed at once, but sharing the slot would
+    /// make that an assumption the type no longer states.
+    markup_drag_anchor: Option<egui::Pos2>,
     /// The current page's concrete object-model provider (Pass 9a's
     /// [`ObjectModelProvider`]), or `None` when the page could not be
     /// decomposed (a degenerate/undecodable page — selection then finds
@@ -3463,9 +3467,17 @@ impl OpenDoc {
     /// simply not the one that answered THIS click. The Tool compartment
     /// states which tool is answering, so the ladder is visible rather than
     /// inferred.
-    const TOOL_PRECEDENCE: [CanvasTool; 7] = [
+    const TOOL_PRECEDENCE: [CanvasTool; 8] = [
         CanvasTool::TextEdit,
         CanvasTool::AddText,
+        // Markup sits with PlaceField and for the same reason stated below: a
+        // click while it is armed ALWAYS means "draw a mark here", so it must
+        // outrank the measure and vector tools, where the same click would be
+        // re-read as a snap pick or a selection. Below AddText on the
+        // mid-composition argument. Its order relative to PlaceField is
+        // arbitrary — the two cannot be armed simultaneously — and no
+        // operator-visible behaviour depends on it.
+        CanvasTool::Markup,
         // Immediately after AddText, and above the measure/vector tools, for
         // the reason the two share: a click while either is on ALWAYS means
         // "create something here." Below AddText because that tool can be
@@ -3619,6 +3631,8 @@ impl OpenDoc {
             field_drag_anchor: None,
             field_notes: Vec::new(),
             field_tool: FieldToolState::default(),
+            markup_kind: canvas::MarkupKind::default(),
+            markup_drag_anchor: None,
             // Pass 9a/12.M1: the concrete object-model provider is built lazily
             // for the current page on the first `canvas` frame (and rebuilt on
             // page change / edit) — `None` here (and after every edit) forces
@@ -4521,10 +4535,29 @@ enum Action {
     RotateLeft,
     /// Turn the current page a quarter turn clockwise.
     RotateRight,
-    /// Author a geometric-markup annotation on the current page (Pass 6.1
-    /// minimal affordance). One `EditSession::add_markup` command; Undo
-    /// reverses it, exactly like every other edit.
-    AddMarkupShape(GuiMarkupKind),
+    /// Commit a markup annotation the operator DREW, between two corners in
+    /// PDF user space (Pass 46 slice 1). One `EditSession::add_markup`
+    /// command; Undo reverses it, exactly like every other edit.
+    ///
+    /// Replaces `AddMarkupShape`, which carried only a kind because the
+    /// geometry was not the operator's to choose — it was derived from the
+    /// page's centre. Carrying the corners is the whole fix: the annotation
+    /// now lands where they pointed.
+    CommitMarkup {
+        /// Which markup subtype to author.
+        kind: canvas::MarkupKind,
+        /// Where the drag began, PDF user space.
+        start: (f64, f64),
+        /// Where it ended, PDF user space. For `Line` this is the arrow's
+        /// head, so the pair is NOT normalised before it reaches the writer.
+        end: (f64, f64),
+    },
+    /// Change which markup kind the armed Markup tool draws.
+    ///
+    /// Separate from `SelectCanvasTool` because the two are independent: the
+    /// operator can switch kind while the tool is already armed, and arming
+    /// the tool must not silently reset their chosen kind.
+    SetMarkupKind(canvas::MarkupKind),
     /// Open the text-entry popup for a text-bearing annotation (Pass 6.2).
     OpenTextEntry(GuiTextKind),
     /// Author the pending text-bearing annotation from the popup's buffer
@@ -5545,7 +5578,7 @@ impl PdfceApp {
     /// same `save_result` channel `delete_pages`/`rotate_pages` use (the
     /// coordinator's "hard refusal at draw-commit" pattern), so no new
     /// dialog is introduced.
-    fn add_markup_shape(&mut self, kind: GuiMarkupKind) {
+    fn commit_markup(&mut self, kind: canvas::MarkupKind, start: (f64, f64), end: (f64, f64)) {
         use pdfce_core::annot_author::{Color, LineEnding, MarkupSpec, Quad, TextMarkupKind};
         use pdfce_core::page_tree::Rect;
 
@@ -5563,48 +5596,62 @@ impl PdfceApp {
                 return;
             };
             let page_index = doc.view.page_index;
-            let Some(page) = doc.pages.get(page_index) else {
+            if doc.pages.get(page_index).is_none() {
                 return;
-            };
-            let mb = page.media_box;
-            // P1-3c: nudge each successive shape by a small, deterministic
-            // step so repeated adds do not land exactly on top of one
-            // another. Modulo a short cycle keeps the nudge on the page.
-            let jitter = f64::from(doc.author_jitter % 6) * 12.0;
-            let cx = f64::midpoint(mb.llx, mb.urx) + jitter;
-            let cy = f64::midpoint(mb.lly, mb.ury) - jitter;
-            let hw = (mb.urx - mb.llx) * 0.30;
-            let hh = (mb.ury - mb.lly) * 0.12;
-            let rect = Rect::from_corners(cx - hw, cy - hh, cx + hw, cy + hh);
+            }
+            // Normalise the drag into a proper rectangle: the operator may
+            // have dragged in any of the four directions, and a `Rect` with
+            // llx > urx is not a rectangle any reader will draw.
+            let rect = Rect::from_corners(
+                start.0.min(end.0),
+                start.1.min(end.1),
+                start.0.max(end.0),
+                start.1.max(end.1),
+            );
             let spec = match kind {
-                GuiMarkupKind::Square => MarkupSpec::Square {
+                canvas::MarkupKind::Square => MarkupSpec::Square {
                     rect,
                     border: Some(color),
                     interior: None,
                     border_width: width,
                 },
-                GuiMarkupKind::Circle => MarkupSpec::Circle {
+                canvas::MarkupKind::Circle => MarkupSpec::Circle {
                     rect,
                     border: Some(color),
                     interior: None,
                     border_width: width,
                 },
-                GuiMarkupKind::Line => MarkupSpec::Line {
-                    start: (cx - hw, cy),
-                    end: (cx + hw, cy),
+                // Line keeps the RAW endpoints, not the normalised rect: the
+                // direction the operator dragged is the direction the line
+                // points, and its arrowheads make that visible. Normalising
+                // here would silently flip half of all drawn arrows.
+                canvas::MarkupKind::Line => MarkupSpec::Line {
+                    start,
+                    end,
                     color,
                     width,
                     endings: (LineEnding::OpenArrow, LineEnding::OpenArrow),
                 },
-                GuiMarkupKind::Highlight => MarkupSpec::TextMarkup {
+                canvas::MarkupKind::Highlight => MarkupSpec::TextMarkup {
                     kind: TextMarkupKind::Highlight,
                     quads: vec![Quad::from_rect(rect)],
                     color: Color::Rgb(1.0, 1.0, 0.0), // highlight default: yellow
                 },
             };
+            // Traced with its RECT, not just a success flag: the whole defect
+            // this Pass fixes was a shape landing somewhere the operator did
+            // not choose, and a trace saying only "committed" would have been
+            // equally true before and after the fix. The coordinates are the
+            // part worth being able to read back headlessly.
+            diag::trace(|| {
+                format!(
+                    "markup-committed kind={kind:?} page={page_index} \
+                     llx={:.1} lly={:.1} urx={:.1} ury={:.1}",
+                    rect.llx, rect.lly, rect.urx, rect.ury
+                )
+            });
             match doc.session_mut().add_markup(page_index, &spec) {
                 Ok(_) => {
-                    doc.author_jitter = doc.author_jitter.wrapping_add(1);
                     doc.refresh_pages();
                     Ok(())
                 }
@@ -5612,7 +5659,7 @@ impl PdfceApp {
             }
         };
         match outcome {
-            Ok(()) => self.set_edit_note(ui_text::markup_added(kind.label())),
+            Ok(()) => self.set_edit_note(ui_text::markup_added(markup_kind_label(kind))),
             Err(msg) => self.save_result = Some(SaveOutcome::Failed(msg)),
         }
     }
@@ -11247,8 +11294,19 @@ impl PdfceApp {
                 self.rotate_selection(delta);
                 return;
             }
-            Action::AddMarkupShape(kind) => {
-                self.add_markup_shape(kind);
+            Action::CommitMarkup { kind, start, end } => {
+                self.commit_markup(kind, start, end);
+                return;
+            }
+            Action::SetMarkupKind(kind) => {
+                if let Status::Open(doc) = &mut self.status {
+                    // Changing kind changes what a click MEANS, so any
+                    // in-progress drag is discarded rather than reinterpreted
+                    // as the new shape (spec §1.2). Free — nothing has
+                    // committed yet.
+                    doc.markup_drag_anchor = None;
+                    doc.markup_kind = kind;
+                }
                 return;
             }
             Action::OpenTextEntry(kind) => {
@@ -11744,7 +11802,8 @@ impl PdfceApp {
             | Action::ToggleObjectsSidebar
             | Action::DeleteSelection
             | Action::RotateSelection(_)
-            | Action::AddMarkupShape(_)
+            | Action::CommitMarkup { .. }
+            | Action::SetMarkupKind(_)
             | Action::OpenTextEntry(_)
             | Action::AddPendingText
             | Action::CancelTextEntry
@@ -13048,6 +13107,7 @@ impl eframe::App for PdfceApp {
                     diag::ScriptTool::Text => Some(CanvasTool::TextEdit),
                     diag::ScriptTool::AddText => Some(CanvasTool::AddText),
                     diag::ScriptTool::PlaceField => Some(CanvasTool::PlaceField),
+                    diag::ScriptTool::Markup => Some(CanvasTool::Markup),
                 };
                 self.apply(Action::SelectCanvasTool(tool), ctx, ctx.pixels_per_point());
             }
@@ -14609,6 +14669,53 @@ impl PdfceApp {
         // control floating over the page. That is decision 024 §4.4, and it
         // comes from the operator's own report that confirm controls moved
         // with the document on every zoom and scroll.
+        // Pass 46 slice 1: the Markup tool's pen. The kind selector lives here
+        // rather than only in the ribbon because the tool is ONE tool carrying
+        // a kind — an operator who armed Square and now wants Circle should
+        // not have to reach back to the ribbon to say so, and the pane is
+        // where "the options for the thing I am doing" belongs.
+        if canvas::tool_builds_markup(Some(tool)) {
+            let current = doc.markup_kind;
+            ui.label(ui_text::markup_kind_label_heading());
+            ui.horizontal_wrapped(|ui| {
+                for kind in [
+                    canvas::MarkupKind::Square,
+                    canvas::MarkupKind::Circle,
+                    canvas::MarkupKind::Line,
+                    canvas::MarkupKind::Highlight,
+                ] {
+                    if ui
+                        .selectable_label(current == kind, markup_kind_label(kind))
+                        .clicked()
+                    {
+                        actions.push(Action::SetMarkupKind(kind));
+                    }
+                }
+            });
+            ui.separator();
+            ui.horizontal(|ui| {
+                ui.label(ui_text::markup_color_label());
+                ui.color_edit_button_srgba(&mut self.markup_color);
+            });
+            // Width is meaningless for a Highlight, whose appearance is a
+            // filled quad with no stroke — showing a control that changes
+            // nothing is the kind of small lie that teaches an operator to
+            // distrust the whole pane.
+            if current != canvas::MarkupKind::Highlight {
+                ui.horizontal(|ui| {
+                    ui.label(ui_text::markup_width_label());
+                    ui.add(egui::Slider::new(&mut self.markup_width, 0.5..=12.0));
+                });
+            }
+            ui.separator();
+            ui.label(
+                egui::RichText::new(ui_text::markup_draw_hint())
+                    .small()
+                    .weak(),
+            );
+            return;
+        }
+
         if tool == CanvasTool::PlaceField {
             let mut commit = false;
             let mut discard = false;
@@ -16189,6 +16296,9 @@ impl PdfceApp {
         // cannot be reached through the same borrow.
         let form_pane_subject = self.pane_subject;
         let form_highlight = self.highlighted_field;
+        // The markup pen, read here for the same reason: the draw gesture runs
+        // inside the `Status::Open(doc)` borrow and cannot reach `self`.
+        let markup_pen = (self.markup_color, self.markup_width);
         match &self.status {
             Status::Idle => {
                 // P0-5: a real empty state — the app name, an inline Open
@@ -16838,6 +16948,23 @@ impl PdfceApp {
             // BEFORE the selection fallback so a placement is never re-read as
             // a selection click.
             run_place_field_tool(doc, ui, &image_response, image_rect, extent, zoom);
+        } else if canvas::tool_builds_markup(doc.active_tool()) {
+            // Pass 46 slice 1: the markup tool owns the canvas — a drag draws
+            // the current kind between its two corners, a click places a
+            // default-sized one at the point. Like Add Text and Place Field,
+            // its gesture ALWAYS means "create here", so it needs no
+            // hit-vs-miss branch and must run before the selection fallback,
+            // or a draw would be re-read as a selection click.
+            run_markup_tool(
+                doc,
+                ui,
+                &image_response,
+                image_rect,
+                extent,
+                zoom,
+                markup_pen,
+                actions,
+            );
         } else if canvas::tool_builds_measure(doc.active_tool()) {
             // Pass 12.M2: a measure tool is selected. The on-canvas snap-pick
             // authoring gesture is the documented follow-up UI slice; this build
@@ -19411,8 +19538,18 @@ fn run_place_field_tool(
         );
     }
 
+    // `press_origin`, not `interact_pointer_pos` — see the identical comment
+    // in `run_markup_tool`. Fixed here in Pass 46 having been measured there:
+    // `drag_started()` fires after the drag threshold is crossed, so
+    // `interact_pointer_pos()` reports a position the pointer has already
+    // moved to and the placed rectangle starts short of the pressed corner.
+    // This tool shipped with the same pattern and therefore the same offset;
+    // it was never reported because a form field's exact top-left is less
+    // scrutinised than a drawn shape's, not because it was correct.
     if image_response.drag_started()
-        && let Some(sp) = image_response.interact_pointer_pos()
+        && let Some(sp) = ui
+            .input(|i| i.pointer.press_origin())
+            .or_else(|| image_response.interact_pointer_pos())
         && let Some(pdf) = to_pdf(sp)
     {
         doc.field_drag_anchor = Some(pdf);
@@ -19457,6 +19594,181 @@ fn run_place_field_tool(
             def_w,
             def_h,
         );
+    }
+}
+
+/// The markup draw gesture — Pass 46 slice 1, spec §5.2.
+///
+/// # What it does
+///
+/// While [`CanvasTool::Markup`] is armed, a drag rubber-bands the current
+/// [`canvas::MarkupKind`] between its two corners and, on release, emits one
+/// [`Action::CommitMarkup`] carrying those corners in PDF user space. A plain
+/// click (a drag shorter than `MIN_DRAG` on either axis) places a
+/// default-sized mark at the point instead, so a slipped click still produces
+/// something the operator can see and undo rather than an invisible
+/// zero-area annotation.
+///
+/// # Why it emits an Action instead of committing directly
+///
+/// The commit needs `&mut PdfceApp` — it writes the edit note and routes a
+/// refusal through `save_result` — but this function runs inside `canvas`'s
+/// `Status::Open(doc)` borrow, where `self` is unreachable. Pushing onto
+/// `actions` is the same deferral every other in-borrow gesture in this file
+/// already uses; it is not a workaround, it is the established shape.
+///
+/// # Why the preview is not a rule-4 confirm surface
+///
+/// The rubber-band is direct-manipulation feedback on geometry under the
+/// operator's own pointer: it is not a control, it commits nothing, and it
+/// vanishes on release. Decision 024 §4.4 narrowed rule 4 specifically so
+/// that a manipulation the operator performs and can see does not also
+/// require a confirm click positioned relative to the page. Undo is the
+/// correction mechanism here, exactly as it is for Place Field.
+#[allow(clippy::too_many_arguments)]
+fn run_markup_tool(
+    doc: &mut OpenDoc,
+    ui: &mut egui::Ui,
+    image_response: &egui::Response,
+    image_rect: egui::Rect,
+    extent: (f32, f32),
+    zoom: f32,
+    pen: (egui::Color32, f32),
+    actions: &mut Vec<Action>,
+) {
+    let page_index = doc.view.page_index;
+    let Some(page) = doc.pages.get(page_index) else {
+        return;
+    };
+    let kind = doc.markup_kind;
+
+    let to_pdf = |sp: egui::Pos2| -> Option<egui::Pos2> {
+        viewer::canvas_to_pdf_space(viewer::screen_to_page(sp, image_rect, extent, zoom), page)
+    };
+    let to_screen = |pdf: egui::Pos2| -> Option<egui::Pos2> {
+        viewer::pdf_space_to_canvas(pdf, page)
+            .map(|c| viewer::page_to_screen(c, image_rect, extent, zoom))
+    };
+
+    // -- Live preview. Drawn in the SHAPE being authored, not always a
+    //    rectangle: a Line previewed as a box would misdescribe what the
+    //    release is about to commit, which is the kind of small dishonesty
+    //    rule 4 exists to prevent even when nothing is being inferred.
+    if image_response.dragged()
+        && let Some(current) = image_response.interact_pointer_pos()
+        && let Some(anchor) = doc.markup_drag_anchor
+        && let Some(a) = to_screen(anchor)
+    {
+        let painter = ui.painter_at(image_rect);
+        let stroke = egui::Stroke::new(
+            pen.1.max(1.0),
+            // The pen's own colour, so the preview shows what will be drawn
+            // rather than a generic preview tint. Canvas overlay colours are
+            // theme-INVARIANT (UI_PREFERENCES.md) — this one is the
+            // operator's explicit choice, which is more invariant still.
+            pen.0,
+        );
+        match kind {
+            canvas::MarkupKind::Line => {
+                painter.line_segment([a, current], stroke);
+            }
+            canvas::MarkupKind::Circle => {
+                let r = egui::Rect::from_two_pos(a, current);
+                painter.circle_stroke(r.center(), r.width().min(r.height()) / 2.0, stroke);
+            }
+            canvas::MarkupKind::Square | canvas::MarkupKind::Highlight => {
+                painter.rect_stroke(
+                    egui::Rect::from_two_pos(a, current),
+                    0.0,
+                    stroke,
+                    egui::StrokeKind::Middle,
+                );
+            }
+        }
+    }
+
+    // ★ `press_origin`, NOT `interact_pointer_pos`.
+    //
+    // `drag_started()` does not fire on the frame of the press — it fires once
+    // the pointer has moved far enough to be a drag rather than a click. By
+    // then `interact_pointer_pos()` reports where the pointer has ALREADY
+    // travelled to, so the rectangle starts short of where the operator
+    // actually pressed, by however far they moved in that first interval.
+    //
+    // Measured through the real GUI, not reasoned about: a scripted drag from
+    // (600,300) to (900,600) at zoom 5.94 should span ~50.5 PDF points and
+    // produced 42.0 — the missing 8.5 points being exactly the first frame's
+    // motion. A fast human drag loses more, and the faster they drag the more
+    // the shape misses the corner they started at.
+    //
+    // `press_origin()` is the position of the press itself, which is the
+    // corner the operator chose.
+    if image_response.drag_started()
+        && let Some(sp) = ui
+            .input(|i| i.pointer.press_origin())
+            .or_else(|| image_response.interact_pointer_pos())
+        && let Some(pdf) = to_pdf(sp)
+    {
+        doc.markup_drag_anchor = Some(pdf);
+    }
+
+    if image_response.drag_stopped()
+        && let Some(sp) = image_response.interact_pointer_pos()
+        && let Some(end) = to_pdf(sp)
+        && let Some(start) = doc.markup_drag_anchor.take()
+    {
+        // MIN_DRAG guards a slip, not a preference: below it on BOTH axes the
+        // operator meant to click, and the click branch below gives them a
+        // visible default-sized mark rather than a degenerate one.
+        const MIN_DRAG: f32 = 4.0;
+        let (dx, dy) = ((end.x - start.x).abs(), (end.y - start.y).abs());
+        if dx >= MIN_DRAG || dy >= MIN_DRAG {
+            actions.push(Action::CommitMarkup {
+                kind,
+                start: (f64::from(start.x), f64::from(start.y)),
+                end: (f64::from(end.x), f64::from(end.y)),
+            });
+        } else {
+            actions.push(default_markup_at(kind, start));
+        }
+        return;
+    }
+
+    if image_response.clicked()
+        && let Some(sp) = image_response.interact_pointer_pos()
+        && let Some(pdf) = to_pdf(sp)
+    {
+        actions.push(default_markup_at(kind, pdf));
+    }
+}
+
+/// The mark a plain CLICK produces: a default-sized one centred on the point.
+///
+/// Sized in PDF user-space points and deliberately modest — large enough to
+/// see and grab, small enough that it is obviously a placeholder the operator
+/// will resize (which slice 2 makes possible). A click is a weaker statement
+/// of intent than a drag, so it produces something correspondingly provisional
+/// rather than guessing at a size from the page.
+fn default_markup_at(kind: canvas::MarkupKind, at: egui::Pos2) -> Action {
+    const DEF_W: f64 = 120.0;
+    const DEF_H: f64 = 60.0;
+    let (x, y) = (f64::from(at.x), f64::from(at.y));
+    if !kind.is_rect() {
+        // A non-rect kind (today: Line) has no meaningful "box", so a click
+        // draws a horizontal segment of the default width centred on the
+        // point. Asking the kind rather than naming Line keeps this correct
+        // when slice 3 adds Polygon/PolyLine/Ink.
+        Action::CommitMarkup {
+            kind,
+            start: (x - DEF_W / 2.0, y),
+            end: (x + DEF_W / 2.0, y),
+        }
+    } else {
+        Action::CommitMarkup {
+            kind,
+            start: (x - DEF_W / 2.0, y - DEF_H / 2.0),
+            end: (x + DEF_W / 2.0, y + DEF_H / 2.0),
+        }
     }
 }
 
@@ -27748,5 +28060,194 @@ mod tests {
             pending.preview_zoom
         );
         assert_eq!(pending.preview_pan, egui::Vec2::ZERO, "and centred");
+    }
+
+    // -- Pass 46 slice 1: markup is DRAWN, not dropped in the middle ------
+
+    /// ★ The regression test for the operator's actual report: *"I tried
+    /// adding the review tools and they just drop things into the center of
+    /// the pdf window."*
+    ///
+    /// # Why this asserts coordinates rather than a count
+    ///
+    /// A test that only counted annotations passed for the entire life of the
+    /// defect — one shape was added, and one shape existed. The whole bug was
+    /// *where*. So this drives the real dispatcher with two different
+    /// geometries and requires the committed `/Rect` to match each, which is
+    /// a claim the centre-drop implementation could not have satisfied for
+    /// even one of them: it derived its rectangle from the page's own media
+    /// box and ignored any operator input entirely.
+    ///
+    /// The second shape is placed deliberately far from both the page centre
+    /// and the first shape, so a regression that reintroduced ANY
+    /// page-derived placement — centre, jittered centre, or a fixed offset —
+    /// fails on at least one of the two.
+    #[test]
+    fn a_drawn_markup_lands_where_it_was_drawn_not_at_the_page_centre() {
+        use pdfce_core::annot::page_annotations;
+
+        let mut app = PdfceApp::default();
+        app.open_path(fixture("pageops/four-pages.pdf"));
+        assert!(
+            matches!(app.status, Status::Open(_)),
+            "the fixture must open"
+        );
+
+        // Measured, not assumed: this fixture already carries an annotation,
+        // and a test that hard-coded "2" would be asserting a fact about the
+        // fixture rather than about the feature. Baseline-relative keeps it
+        // true if the fixture gains or loses one.
+        let (page_id, before) = {
+            let Status::Open(doc) = &app.status else {
+                panic!("open");
+            };
+            let id = doc.pages[doc.view.page_index].id;
+            (id, page_annotations(&doc.session.graph(), id).len())
+        };
+
+        // Two rectangles, neither centred, well apart from each other.
+        let drawn = [
+            (
+                canvas::MarkupKind::Square,
+                (40.0_f64, 60.0_f64),
+                (150.0_f64, 130.0_f64),
+            ),
+            (
+                canvas::MarkupKind::Circle,
+                (300.0_f64, 500.0_f64),
+                (420.0_f64, 620.0_f64),
+            ),
+        ];
+        for (kind, start, end) in drawn {
+            app.apply_for_test(Action::CommitMarkup { kind, start, end });
+        }
+
+        let Status::Open(doc) = &app.status else {
+            panic!("document must still be open");
+        };
+        let annots = page_annotations(&doc.session.graph(), page_id);
+        assert_eq!(
+            annots.len(),
+            before + drawn.len(),
+            "each drawn shape must produce exactly one new annotation"
+        );
+        // The newly-added ones are the tail; the pre-existing annotation is
+        // not ours to make claims about.
+        let added = &annots[before..];
+
+        for ((_, start, end), annot) in drawn.iter().zip(added.iter()) {
+            let rect = annot.rect.expect("a drawn markup must carry a /Rect");
+            // Generous tolerance: the point of the assertion is WHERE, and a
+            // sub-point difference from appearance-stream padding is not the
+            // defect under test. A centre-drop would miss by hundreds.
+            const TOL: f64 = 2.0;
+            assert!(
+                (rect.llx - start.0).abs() < TOL
+                    && (rect.lly - start.1).abs() < TOL
+                    && (rect.urx - end.0).abs() < TOL
+                    && (rect.ury - end.1).abs() < TOL,
+                "the annotation must sit where it was drawn: expected                  ({:.1},{:.1})-({:.1},{:.1}), got ({:.1},{:.1})-({:.1},{:.1})",
+                start.0,
+                start.1,
+                end.0,
+                end.1,
+                rect.llx,
+                rect.lly,
+                rect.urx,
+                rect.ury
+            );
+        }
+    }
+
+    /// A drag in ANY direction produces the same rectangle.
+    ///
+    /// An operator dragging up-and-left is not making a different request
+    /// from one dragging down-and-right, but the raw corners arrive reversed
+    /// and an un-normalised `/Rect` with `llx > urx` is one many readers
+    /// simply decline to draw. Pinned because the failure is invisible in
+    /// pdfce's own renderer if it normalises on read.
+    #[test]
+    fn dragging_backwards_draws_the_same_rectangle() {
+        use pdfce_core::annot::page_annotations;
+
+        let mut app = PdfceApp::default();
+        app.open_path(fixture("pageops/four-pages.pdf"));
+
+        app.apply_for_test(Action::CommitMarkup {
+            kind: canvas::MarkupKind::Square,
+            start: (200.0, 300.0),
+            end: (100.0, 150.0),
+        });
+
+        let Status::Open(doc) = &app.status else {
+            panic!("open");
+        };
+        let page_id = doc.pages[doc.view.page_index].id;
+        let annots = page_annotations(&doc.session.graph(), page_id);
+        let rect = annots
+            .last()
+            .expect("the drawn annotation must exist")
+            .rect
+            .expect("/Rect");
+        assert!(
+            rect.llx < rect.urx && rect.lly < rect.ury,
+            "a backwards drag must still yield a normalised rect, got              ({:.1},{:.1})-({:.1},{:.1})",
+            rect.llx,
+            rect.lly,
+            rect.urx,
+            rect.ury
+        );
+    }
+
+    /// Changing the markup kind discards an in-progress drag (spec §1.2).
+    ///
+    /// Reinterpreting a half-finished gesture as a different shape would
+    /// commit geometry the operator never drew for that kind. Nothing has
+    /// committed at that point, so discarding costs them nothing.
+    #[test]
+    fn changing_markup_kind_discards_an_in_progress_drag() {
+        let mut app = PdfceApp::default();
+        app.open_path(fixture("pageops/four-pages.pdf"));
+        app.apply_for_test(Action::SelectCanvasTool(Some(CanvasTool::Markup)));
+
+        if let Status::Open(doc) = &mut app.status {
+            doc.markup_drag_anchor = Some(egui::pos2(10.0, 10.0));
+        }
+        app.apply_for_test(Action::SetMarkupKind(canvas::MarkupKind::Circle));
+
+        let Status::Open(doc) = &app.status else {
+            panic!("open");
+        };
+        assert!(
+            doc.markup_drag_anchor.is_none(),
+            "switching kind must abandon the in-flight drag, not re-read it"
+        );
+        assert_eq!(doc.markup_kind, canvas::MarkupKind::Circle);
+    }
+
+    /// Arming Markup puts it on the precedence ladder, which is what makes
+    /// Escape, pan-suppression and the Tool Options pane apply to it.
+    ///
+    /// The pre-Pass-46 implementation's defining property was that it was
+    /// invisible to all three; this asserts the tool is genuinely a member of
+    /// the framework rather than merely having an enum variant.
+    #[test]
+    fn arming_markup_makes_it_the_active_tool() {
+        let mut app = PdfceApp::default();
+        app.open_path(fixture("pageops/four-pages.pdf"));
+        app.apply_for_test(Action::SelectCanvasTool(Some(CanvasTool::Markup)));
+
+        let Status::Open(doc) = &app.status else {
+            panic!("open");
+        };
+        assert_eq!(
+            doc.active_tool(),
+            Some(CanvasTool::Markup),
+            "Markup must win the precedence ladder when it is the only tool on"
+        );
+        assert!(
+            canvas::tool_builds_markup(doc.active_tool()),
+            "and the predicate that gates both the gesture and the property              bar must agree, or one of the two silently does not appear"
+        );
     }
 }

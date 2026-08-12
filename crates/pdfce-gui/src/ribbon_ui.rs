@@ -38,7 +38,7 @@
 use crate::{
     Action, FitMode, PdfceApp, RIBBON_CAPTION_GAP, Status, canvas, diag, icons, ribbon, ui_text,
 };
-use crate::{CopyScope, GuiMarkupKind, GuiTextKind};
+use crate::{CopyScope, GuiTextKind, markup_kind_icon, markup_kind_label};
 use canvas::CanvasTool;
 use eframe::egui;
 use ribbon::RibbonGroup as RG;
@@ -595,22 +595,43 @@ impl PdfceApp {
                         // outline glyphs (square, circle, line, band) are
                         // genuinely hard to tell apart at 16 px, so the word is
                         // still doing the identifying work here.
+                        // Pass 46 slice 1: these are now TOOL ARMS, not
+                        // immediate authoring. Each button selects the Markup
+                        // tool and sets its kind; the operator then draws the
+                        // shape where they point. Selectable-looking, because
+                        // an armed tool is a MODE — the same reason Find and
+                        // the fit modes render as toggles — and because the
+                        // previous build gave no indication that a click had
+                        // done anything except drop a shape in the middle of
+                        // the page.
+                        let armed = doc.tool_enabled(CanvasTool::Markup);
                         for kind in [
-                            GuiMarkupKind::Square,
-                            GuiMarkupKind::Circle,
-                            GuiMarkupKind::Line,
-                            GuiMarkupKind::Highlight,
+                            canvas::MarkupKind::Square,
+                            canvas::MarkupKind::Circle,
+                            canvas::MarkupKind::Line,
+                            canvas::MarkupKind::Highlight,
                         ] {
-                            let row = (
-                                icons::image(ui, kind.icon()),
-                                egui::RichText::new(kind.label()),
-                            );
-                            if ui
-                                .add(egui::Button::new(row))
-                                .on_hover_text(ui_text::markup_menu_hint())
-                                .clicked()
+                            let selected = armed && doc.markup_kind == kind;
+                            if Self::icon_text_toggle(
+                                ui,
+                                markup_kind_icon(kind),
+                                selected,
+                                markup_kind_label(kind),
+                                ui_text::markup_menu_hint(),
+                            )
+                            .clicked()
                             {
-                                actions.push(Action::AddMarkupShape(kind));
+                                // Clicking the ALREADY-ARMED kind disarms, so
+                                // the button is a real toggle and the operator
+                                // has an obvious way back to plain navigation
+                                // without hunting for Escape.
+                                if selected {
+                                    actions.push(Action::SelectCanvasTool(None));
+                                } else {
+                                    actions.push(Action::SetMarkupKind(kind));
+                                    actions
+                                        .push(Action::SelectCanvasTool(Some(CanvasTool::Markup)));
+                                }
                             }
                         }
                         // The pen colour. Changing it is NOT an edit (ui-spec

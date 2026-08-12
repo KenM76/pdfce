@@ -396,11 +396,36 @@ pub fn properties_tooltip() -> &'static str {
     "The properties of whatever is selected on the page, the dimension groups, and the document's own title, author, subject and keywords"
 }
 
-// -- Pass 6.1 markup authoring (minimal affordance) -------------------
+// -- Pass 6.1 markup authoring, Pass 46 draw gesture ------------------
 
-/// A one-line hint at the top of the markup menu.
+/// The ribbon tooltip on each markup shape button.
+///
+/// REWRITTEN in Pass 46. It previously read "Adds the shape at the centre of
+/// the current page. Drawing-on-canvas tools are coming." — an accurate
+/// description of a defect, and a promise. Both are now stale: the shape is
+/// drawn where the operator points, so a tooltip still saying "centre of the
+/// page" would describe behaviour the build no longer has.
 pub fn markup_menu_hint() -> &'static str {
-    "Adds the shape at the centre of the current page. Drawing-on-canvas tools are coming."
+    "Draw this shape on the page. Click the button, then drag on the page where you want it."
+}
+
+/// Heading above the Tool Options kind selector.
+pub fn markup_kind_label_heading() -> &'static str {
+    "Shape:"
+}
+
+/// The hint under the markup pen controls, stating the gesture.
+///
+/// Says what a plain click does as well as a drag, because a click producing
+/// a default-sized shape is the one behaviour an operator would otherwise
+/// have to discover by accident.
+pub fn markup_draw_hint() -> &'static str {
+    "Drag on the page to draw. A single click places a default-sized shape you can undo."
+}
+
+/// Label beside the markup line-width slider.
+pub fn markup_width_label() -> &'static str {
+    "Width:"
 }
 
 /// Label beside the markup colour picker.
@@ -3607,6 +3632,11 @@ pub fn tool_options_heading(tool: crate::canvas::CanvasTool) -> &'static str {
         CanvasTool::MeasureScale => "Measure — set scale",
         CanvasTool::VectorEdit => "Obj — edit objects",
         CanvasTool::PlaceField => "Create Field",
+        // Deliberately the generic tool name rather than the current kind's:
+        // the kind selector sits inside this pane, so a heading that changed
+        // with it would describe the pane's own contents back at the operator
+        // instead of naming the tool they armed.
+        CanvasTool::Markup => "Markup",
     }
 }
 

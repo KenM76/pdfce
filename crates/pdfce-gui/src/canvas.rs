@@ -163,6 +163,80 @@ pub enum CanvasTool {
     /// `delete_object`), snapped via the 12.M1 engine, previewed before
     /// commit (fuzzy-never-sneaky).
     VectorEdit,
+    /// Author a new markup annotation by DRAWING it where the operator
+    /// points (Pass 46 slice 1, `docs/ui_specs/pass-46-canvas-interaction-model.md`
+    /// §1.2 — superseding the never-implemented `MarkupTool` of
+    /// `pass-6.1-markup-tools.md`, which was designed one day before this
+    /// framework existed and could not join it).
+    ///
+    /// # What this replaces, and why it is a defect fix rather than a feature
+    ///
+    /// Until this variant existed, markup annotations did not go through the
+    /// canvas at all: `Action::AddMarkupShape` called a function that derived
+    /// a rectangle from the PAGE's own media box centre plus a per-author
+    /// jitter, and inserted it. The shape therefore appeared in the middle of
+    /// the page no matter where the operator had been pointing, and — because
+    /// it never touched `active_tool` — it was invisible to every rule the
+    /// other seven tools obey: Escape did not cancel it, it did not suppress
+    /// the `ScrollArea`'s pan-by-drag, and it took no place in
+    /// [`OpenDoc::TOOL_PRECEDENCE`]. The operator's report was exact: "they
+    /// just drop things into the center of the pdf window."
+    ///
+    /// # One variant carrying a kind, not one variant per shape
+    ///
+    /// All markup kinds live in `MarkupToolState::kind` rather than becoming
+    /// separate `CanvasTool` entries, exactly as `PlaceField` already carries
+    /// its four field types and `MeasureCircular` its radius/diameter mode.
+    /// Separate entries would put mutually-exclusive states into a type that
+    /// can express all their combinations — `PlaceField`'s own doc comment
+    /// names that as the wrong shape for this exact situation.
+    ///
+    /// Unlike `MeasureCircular`'s toggle (one geometry, two displays),
+    /// changing `kind` mid-tool is a real change in what a click MEANS, so it
+    /// discards any in-progress gesture first. That is free, because nothing
+    /// has committed yet.
+    Markup,
+}
+
+/// Which markup annotation the [`CanvasTool::Markup`] tool is currently
+/// drawing (spec §1.2).
+///
+/// # Why only four kinds here
+///
+/// A **named deviation** from the spec, which lists ten. Slice 1 ships the
+/// four kinds that `pdfce-core` already authors and that already have
+/// operator-reachable UI and icons (Square, Circle, Line, Highlight); the
+/// remaining six (Ink, Polygon, PolyLine, Underline, StrikeOut, Squiggly)
+/// arrive in slice 3, which the spec itself scopes as a mechanical extension
+/// needing six newly-authored icons. Declaring all ten now would add six
+/// variants that no control can select and no gesture can draw — dead states
+/// in a type whose whole purpose is to say what the tool is currently doing.
+/// The spec's ten-kind design is not being rejected, only sequenced.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MarkupKind {
+    /// `/Square` — a rectangle bounded by the drag.
+    #[default]
+    Square,
+    /// `/Circle` — an ellipse inscribed in the drag rectangle.
+    Circle,
+    /// `/Line` — a straight line from drag start to drag end.
+    Line,
+    /// `/Highlight` — a text-markup quad over the drag rectangle.
+    Highlight,
+}
+
+impl MarkupKind {
+    /// Whether this kind is drawn by dragging a bounding RECTANGLE (as
+    /// opposed to a pair of endpoints).
+    ///
+    /// The distinction drives both the live preview shape and how a
+    /// too-small drag is interpreted: a rectangle kind falls back to a
+    /// default-sized box at the click, while [`Self::Line`] has no meaningful
+    /// zero-length form and is simply not committed.
+    #[must_use]
+    pub fn is_rect(self) -> bool {
+        matches!(self, Self::Square | Self::Circle | Self::Highlight)
+    }
 }
 
 impl CanvasTool {
@@ -647,6 +721,16 @@ pub fn tool_builds_measure(tool: Option<CanvasTool>) -> bool {
 #[must_use]
 pub fn tool_builds_vector_edit(tool: Option<CanvasTool>) -> bool {
     matches!(tool, Some(CanvasTool::VectorEdit))
+}
+
+/// Whether `tool` builds a markup annotation by drawing it (Pass 46 §5.3).
+///
+/// Gates the Tool Options property bar and the canvas gesture together, so a
+/// build where the pen controls appear without the gesture running — or the
+/// reverse — is a test failure rather than something only the operator finds.
+#[must_use]
+pub fn tool_builds_markup(tool: Option<CanvasTool>) -> bool {
+    matches!(tool, Some(CanvasTool::Markup))
 }
 
 /// Whether `tool` specifically builds the linear-dimension pick (ui-spec §2.1).

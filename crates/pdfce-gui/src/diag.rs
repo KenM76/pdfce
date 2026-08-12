@@ -73,6 +73,11 @@ pub enum ScriptTool {
     AddText,
     /// The Create-Field tool (decision 020 F5) — placing a new form field.
     PlaceField,
+    /// The Markup tool (Pass 46) — drawing an annotation where the pointer
+    /// goes. Added with the tool itself: a harness whose vocabulary lags the
+    /// feature set cannot be used to verify the newest feature, which is
+    /// exactly the one most needing verification.
+    Markup,
 }
 
 /// Which print-dialog tab a [`Step::PrintTab`] selects.
@@ -711,6 +716,7 @@ fn parse_step(s: &str) -> Option<Step> {
             "text" => Some(Step::Tool(ScriptTool::Text)),
             "addtext" => Some(Step::Tool(ScriptTool::AddText)),
             "placefield" => Some(Step::Tool(ScriptTool::PlaceField)),
+            "markup" => Some(Step::Tool(ScriptTool::Markup)),
             _ => None,
         },
         _ => None,

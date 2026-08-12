@@ -69,7 +69,22 @@ Spec delivered: `D:\Dev\pdfce\docs\ui_specs\shell-redesign.md` (2026-08-06).
    `/Contents`, `/T` (author), or `/M` (mod date) at all — confirmed by
    reading the struct definition directly, not assumed; recommended
    extending it with three `Option<...>` fields, read-only, additive,
-   small enough to ship same-session as the panel. (b) No general
+   small enough to ship same-session as the panel. **CORRECTED
+   2026-08-12 (Pass 46 spec session): this gap is CLOSED.** Re-reading
+   `crates/pdfce-core/src/annot.rs` directly on 2026-08-12 found
+   `contents: Option<String>` (`/Contents`, dual-purpose per §12.5.2),
+   `title: Option<String>` (`/T`), and `M` all present on the struct —
+   evidently added by a Pass between 2026-08-06 and 2026-08-12 with no
+   memory update recorded at the time. **The gap that IS still open,
+   confirmed the same session:** the struct still does NOT model
+   per-subtype geometry (`/L`, `/Vertices`, `/InkList`, `/QuadPoints`)
+   — only `/Rect` — a separate, larger finding, see
+   [[project_pass_46_canvas_interaction_model_spec]]. Lesson: a memory
+   recording "field X is missing from struct Y" is a snapshot, not a
+   standing fact — re-grep the struct before citing this kind of gap
+   as still-open in any future spec, the same discipline the memory
+   system's own guidance already states but is easy to skip when the
+   finding still "sounds right" from recall. (b) No general
    `delete_annotation` verb exists — `edit.rs` L3663's own doc comment on
    `remove_redaction_mark` explicitly names WHY it is scoped narrowly
    (Popup companion cleanup, `/IRT` reply chains, must refuse Widget) and
