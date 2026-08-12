@@ -11,6 +11,58 @@ Written 2026-08-11, branch **`main`**, after commits `f79f044..f79d9a2`
 
 ---
 
+## ★ PHASE E (embed missing fonts) IS THE URGENT ONE — design already done
+
+**The operator's real problem, corrected 2026-08-12.** The request that
+started `Pass 67.0` was *"someone needs embedded fonts removed."* It was
+**backwards**. The end user is uploading a book to **Barnes & Noble
+Press**, which — like every print-on-demand service — **requires** fonts
+to be embedded and rejects files with missing ones. A second commenter
+confirmed the font is *missing*, not unwanted. Removing fonts would have
+guaranteed rejection.
+
+`v0.5.0`'s `list-fonts` diagnoses it: `not-embedded=N` in the summary,
+`embedded=no` on the row. **Phase E is the fix, and phase B (unembed) is
+not what they need** — though it is still one of the six the operator
+asked for and is being built.
+
+**★ The design is mostly ALREADY BUILT — do not start from scratch.**
+
+- **`--font-dir` (decision 012) solves source-font resolution entirely.**
+  It walks directories, registers each face under its advertised name AND
+  its filename stem, and matches `/BaseFont` **including subset prefixes**
+  (`Calibri.ttf` covers a document referencing `ABCDEF+Calibri`). Reuse
+  it; do not write a second resolver (R171).
+- **`pdfce-render`'s `FontEnvironment`** already has `named()`,
+  `insert_named()`, `bundled()` and **`is_substitute()`** — match-quality
+  disclosure is already modelled.
+- **`pdfce-core`'s `font_embed.rs`** already builds font objects
+  (`build_objects`, `FontEmbedPlan`, `DescriptorMetrics`).
+
+**★ The correctness question is already answered, and it is the good
+news.** `--font-dir`'s own doc: *"Supplied fonts improve glyph SHAPES
+only: positions still come from the PDF's own `/Widths` (decision 004
+§3.6), so layout is identical with or without."* So **embedding a matched
+font cannot shift layout** — positions come from `/Widths` already in the
+file. Embedding changes how letters look, never where they sit. The fear
+that a near-match would reflow a book is unfounded.
+
+**Crate boundary**: `FontEnvironment` lives in `pdfce-render`, and
+`pdfce-core` must never depend on it. So the **shell** resolves a name to
+bytes and hands the bytes to core. Do not invert that.
+
+**Likely simplest correct path**: for a non-embedded simple font the
+`/FontDescriptor` already exists, so attaching `/FontFile2` to it is
+close to a drop-in — keep the existing `/Encoding` and `/Widths`, let the
+font's own cmap do the mapping. Start there; subsetting is a refinement,
+and for print-on-demand acceptance size matters far less than presence.
+
+**Disclose**: which face was used, whether it was an exact name match or
+a substitute (`is_substitute()`), and that glyph shapes are then
+machine-dependent (R63 already frames this).
+
+---
+
 ## ★ Read this first: AES-256 now opens; `/R` 6 is the one gap left
 
 `/V` 5, `/R` 5, `/CFM /AESV3` (AES-256) now decrypts across core, CLI and
