@@ -483,11 +483,47 @@ fn report(rows: &[Row]) {
     println!("  still have an embedded font afterwards: {still_embedded_files} (expected — a blocked font keeps its program)");
     println!("  ★ TARGETED fonts still embedded after the round trip: {targets_survived} (must be 0)");
     println!();
-    println!("refusal reasons, over every font examined:");
+    // ★ BOTH denominators, spelled out, because one of them was mislabelled
+    // once and the mislabelling reached a commit message and a librarian's
+    // filing before anyone re-derived it. "Share of refusals" and "share of
+    // embedded fonts" are different questions with different answers — 31.6%
+    // and 53.6% for the same 836 fonts — and a table headed only "refusal
+    // reasons" invites the reader to supply whichever denominator they had
+    // in mind.
     let blocked_total: usize = blockers.values().sum();
+    // Fonts that actually carry a readable program: everything examined,
+    // less the ones with nothing to remove (not embedded, Type 3 — whose
+    // glyphs are content streams) and the ones whose program could not be
+    // read at all.
+    let embedded_total = blocked_total + fonts_unembedded
+        - blockers.get("not-embedded").copied().unwrap_or(0)
+        - blockers.get("blocked-type3").copied().unwrap_or(0)
+        - blockers.get("unknown-program-unreadable").copied().unwrap_or(0);
+    println!(
+        "verdicts: {} fonts examined, {blocked_total} refused, {embedded_total} carrying a readable embedded program",
+        blocked_total + fonts_unembedded
+    );
+    println!("  {:<28} {:>6}  {:>8}  {:>8}", "verdict", "n", "of-ref", "of-emb");
     for (token, n) in &blockers {
-        println!("  {token:<28} {n:>6} ({})", pct(*n, blocked_total));
+        // The three verdicts that are BY DEFINITION not in the embedded set
+        // print `-` in that column rather than a number. A percentage of a
+        // denominator the row is excluded from is not a small inaccuracy —
+        // it is a figure that reads as meaningful and is not.
+        let of_embedded = match token.as_str() {
+            "not-embedded" | "blocked-type3" | "unknown-program-unreadable" => "-".to_owned(),
+            _ => pct(*n, embedded_total),
+        };
+        println!(
+            "  {token:<28} {n:>6}  {:>8}  {of_embedded:>8}",
+            pct(*n, blocked_total),
+        );
     }
+    println!(
+        "  {:<28} {fonts_unembedded:>6}  {:>8}  {:>8}",
+        "removable",
+        "-",
+        pct(fonts_unembedded, embedded_total)
+    );
     if !reopen_reasons.is_empty() {
         println!();
         println!("★ REOPEN FAILURES (the failure mode that matters):");

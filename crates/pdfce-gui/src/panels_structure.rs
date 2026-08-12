@@ -5,16 +5,31 @@
 //! Each answers a question about the document's STRUCTURE rather than
 //! its page content — what a signature covers, which layers a reader
 //! would draw, where the outline points, which fonts the file carries
-//! and what they cost. All four are read-only or read-mostly: Bookmarks
-//! navigates, Layers changes what is drawn for this session only, and
-//! Signatures and Fonts cannot change anything at all. None of them
-//! edits a document.
+//! and what they cost.
 //!
-//! Fonts joined them in `Pass 67.0` phase A and is the newest, which is
-//! why this sentence exists: the header said "these three" for one
-//! commit after there were four. A module doc that enumerates its own
+//! Three of them still change nothing: Bookmarks navigates, Layers
+//! changes what is drawn for this session only, and Signatures cannot
+//! change anything at all. **Fonts is no longer one of them.** `Pass
+//! 67.0` phase B gave it the unembed controls, so this module now
+//! contains a destructive operation, and it is the only panel here that
+//! opens a confirmation and writes to the [`EditSession`] command log.
+//!
+//! ★ **That sentence was wrong for one commit, in the paragraph directly
+//! above the one warning about exactly this.** Phase A's version read
+//! "Signatures and Fonts cannot change anything at all"; phase B made it
+//! false and did not come back for it. It was caught by `pdfce-librarian`
+//! reading the two Passes side by side, not by any gate — and the
+//! paragraph below already said, in as many words, that a module doc
+//! enumerating its own contents has to be re-read whenever the file
+//! changes and that **nothing enforces that**. The warning was accurate,
+//! sitting inches away, and did not fire. R186's shape again: a note that
+//! describes the hazard is not a check for it.
+//!
+//! Fonts joined this module in `Pass 67.0` phase A and is the newest,
+//! which is why that sentence exists: the header said "these three" for
+//! one commit after there were four. A module doc that enumerates its own
 //! contents has to be re-read whenever something is added to the file,
-//! and nothing enforces that.
+//! and nothing enforces that — twice now.
 //!
 //! They also share the posture that took the longest to get right in
 //! this project: **each says what it cannot tell you, first.** The
@@ -541,18 +556,32 @@ impl PdfceApp {
     /// The Fonts panel — what fonts the document declares, what their
     /// embedded programs cost, and which of those could be removed.
     ///
-    /// # Read-only, and there is deliberately nothing to click
+    /// # Two controls, and why there were none until phase B
     ///
-    /// Phase A ships the report and not the removal. No control here
-    /// changes a byte, and none is stubbed: a greyed-out "Remove" button, or
-    /// a "coming soon" note, would be an affordance for something that
-    /// cannot work (R83), and a `Safe` verdict rendered as an accent colour
-    /// or a checkmark would read as an invitation to press it.
+    /// Phase A shipped the report with **nothing to click**, and nothing
+    /// stubbed either: a greyed-out "Remove" button, or a "coming soon"
+    /// note, would have been an affordance for something that could not
+    /// work (R83). Phase B added the removal, so the controls arrived with
+    /// the capability rather than ahead of it.
     ///
-    /// Every verdict is therefore drawn at the **same visual weight**, as a
-    /// plain label. That is not restraint for its own sake — a blocked
-    /// verdict is a fact about the *file*, and error styling would make it
-    /// read as a pdfce failure.
+    /// There are exactly two. A **batch** control at a fixed position under
+    /// the document summary, computed from the whole inventory and never
+    /// from a row's geometry — decision 024 §4.4 narrowed rule 4 precisely
+    /// to reject a confirm control whose position is derived from the
+    /// document. And a **per-font** control at the foot of an expanded row,
+    /// shown only where the verdict is `Removable`.
+    ///
+    /// The per-font control is in the body rather than the header, and the
+    /// usual cost of that — "you cannot see which rows are actionable
+    /// without opening them" — is not paid here, because the **collapsed
+    /// header already carries the verdict word**. "No blocker" against
+    /// "Locked to program" answers the question at a glance.
+    ///
+    /// Every verdict is still drawn at the **same visual weight**, as a
+    /// plain label, and the presence of the control is the only difference
+    /// between a removable row and a refused one. That is not restraint for
+    /// its own sake — a blocked verdict is a fact about the *file*, and
+    /// error styling would make it read as a pdfce failure.
     ///
     /// # ★ Why the panel says *why*, when the parity reference does not
     ///

@@ -69,6 +69,16 @@
 //! **Seven embedded fonts in ten refuse.** A refusal path that was an
 //! afterthought would therefore be the path most operators actually take.
 //!
+//! The other two denominators the same sweep reports, because a table
+//! headed "refusal reasons" invites a reader to supply whichever one they
+//! had in mind — and one of them was mislabelled once, in a commit message,
+//! before anyone re-derived it. Of the **2,648 fonts that refused**,
+//! `not-embedded` is 56.1 % and `unknown-symbolic-builtin` is 31.6 %; the
+//! same 836 symbolic fonts are 53.6 % of the *embedded* set above. Both
+//! figures are correct and they answer different questions. The 1,560
+//! denominator is `3,097 − 1,485 not-embedded − 49 Type 3 − 3 unreadable`:
+//! every font that actually carries a readable program.
+//!
 //! ★ **This differs from the smaller measurement the Pass brief carried**,
 //! and both are kept because they are different measurements rather than a
 //! correction. A 400-file sample recorded 466 fonts / 117 embedded and put

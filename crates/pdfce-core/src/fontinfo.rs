@@ -4,9 +4,12 @@
 //!
 //! Read-only. Nothing in this module mutates a document, stages a byte, or
 //! decides anything on the operator's behalf. It is the *report* half of
-//! the font-cleanup story; the removal half (unembedding) is a separate,
-//! later Pass and deliberately shares this module's classification rather
-//! than re-deriving one.
+//! the font-cleanup story; the removal half is
+//! [`crate::font_unembed`], which **shipped in `Pass 67.0` phase B** and
+//! consumes [`Removability`] as given rather than deriving a second
+//! classifier. That is what makes "the report and the action cannot
+//! disagree" a structural fact rather than a promise: there is one
+//! classifier, and if a verdict is wrong it is wrong in one place.
 //!
 //! # Why the report exists at all, and why it ships before removal
 //!
