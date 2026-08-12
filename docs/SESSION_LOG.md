@@ -36990,3 +36990,299 @@ the two defects found after it was written. `docs/NEXT_SESSION.md`
 2. **Take a backup** — see the measured figures above.
 3. Ask which of phases C/D/F he wants, if any.
 4. `tools/difftest` fmt coverage — decide it rather than leave it.
+
+## 2026-08-12 (hundred-and-twenty-fourth filing) — `b902ea0`+`b1ee1cf`: two gates were measuring something other than what they claimed — `cargo fmt --all` could not see twelve crates, and `verify-release.py` never consulted CI; `v0.3.0` goes on record as a published release whose tests did not pass; `R191` judged to cover the new check's "no run found" half, with a third instance measured
+
+**Shipped:**
+- `b902ea0` — `tools/check-fmt-excluded.py`, wired into CI's `fmt` job.
+  Formatting coverage over out-of-workspace crates goes **0 of 12 → 12
+  of 12 (0% → 100%)**.
+- `b1ee1cf` — `tools/verify-release.py` now asks whether CI is green at
+  the tagged commit, reporting `in_progress` distinctly from `failure`
+  and "no run found" as a **failure**.
+- **No Pass ID.** Tooling and gate work against shipped infrastructure,
+  not a feature Pass. No product code touched by either commit.
+
+**Filed immediately rather than batched, at the operator's explicit
+instruction** — `b1ee1cf` exists *because* tagging `v0.5.1` before
+filing left the release tag at a commit CI had rejected, and batching
+would have reproduced that failure while the diagnosing commit was the
+newest thing in the tree. **Measured: both commits were red on
+`check-commits-filed` and on nothing else when this filing began.** This
+filing is what turns them green.
+
+**Sourcing (hard rule 8):** this librarian **had a shell**. *Measured* =
+a command run here, named at the point of use. *Relayed* = from the
+dispatching engineer, not re-run.
+
+**★ The dispatch's full hash for `b902ea0` was a bad object.**
+`b902ea0e13ff…` does not resolve. The real hash is
+`b902ea0868e65fa36aefe820b39001116614d3b4` (`git rev-parse`); the short
+form was correct. `b1ee1cf` →
+`b1ee1cfa93541a081eb01286607a11e88a7839b2`, resolved here as instructed.
+
+**Findings + decisions:**
+
+- **`cargo fmt --all` formats workspace MEMBERS.** Every crate in
+  `Cargo.toml`'s `exclude` array is unreachable by it — 12 crates here.
+  The exclusions are correct and load-bearing (test speed, unambiguous
+  `cargo tree` invariant checks, `THIRD_PARTY_LICENSES.md` as a picture
+  of the **shipping** graph only). **Nobody ever decided those crates
+  were exempt from project rule 10; they were invisible to the command
+  that enforces it.**
+- **★ The record's account of that hole was wrong in BOTH halves, and
+  the reason generalises.** `NEXT_SESSION.md` carried *"`cargo fmt
+  --check` still fails in `tools/difftest` (109 diffs)"* across several
+  sessions. **`difftest` is clean** — measured by its total absence from
+  `git show --stat b902ea0`, i.e. the commit that formatted every
+  unformatted excluded crate did not touch one byte of it. The
+  unformatted code was in **nine other crates**: 41 diffs over 8
+  (corpus-report 1, roundtrip 2, content-identity 2, recover-sweep 2,
+  render-profile 8, unembed-sweep 5, embed-sweep 4, fuzz 17 — *relayed*;
+  crate identities *measured* from the stat), plus `fontfile-census`.
+  **9 of 12 excluded crates (75%) carried unformatted code; the record
+  named one of the 3 that were already clean.**
+  **A coverage hole does not merely permit drift — it lets WRONG BELIEFS
+  about the drift survive, because no command exists that would
+  contradict them.** The figure was not carried through carelessness;
+  the project had no instrument that could disagree with it. Hard rule
+  10's thesis arriving from the opposite direction.
+- **The gate derives its target list from the manifest at run time.** A
+  hard-coded list would go stale the first time someone adds a sweep
+  tool — **this exact failure reproduced one level up.**
+- **★ Its second category paid for itself on the first run:** crates
+  under `tools/` or `fuzz/` in **neither `members` nor `exclude`**.
+  `tools/fontfile-census` was one — invisible to `cargo fmt --all`, to
+  `cargo test`, and to every workspace-wide gate **simultaneously**. Not
+  excluded, just never listed. Now formatted and declared in `exclude`
+  **with a dated comment saying how it was found** (measured,
+  `Cargo.toml:60–66`).
+- **`verify-release.py` reported `v0.5.1` "clean" while the tagged
+  commit's CI was RED.** Every check it made was true — tag exists, at
+  `HEAD`, pushed, `origin/main` contains it, release has an asset —
+  **because not one of those facts is about whether the code passes.**
+- **★ Three of the last four releases were tagged at a commit CI had
+  rejected (75%); one of four (25%) was green.** Measured independently
+  here per tag via `git rev-list -n1` → `gh run list --commit <FULL-sha>`
+  → `gh run view --json jobs`, agreeing with the relayed table at both
+  run **and step** level:
+  - `v0.5.1` `aad48c73…` **red** — step *check that every code commit is
+    filed* only.
+  - `v0.5.0` `451372a7…` **red** — same single step.
+  - `v0.4.0` `2a372fcf…` **green**.
+  - `v0.3.0` `cfc20dd4…` **red** — *check that every code commit is
+    filed*, **plus `cargo test --workspace --all-features`
+    (ubuntu-latest), `cargo check --workspace --target
+    aarch64-apple-darwin`, and `cargo clippy --workspace --all-targets
+    --all-features -- -D warnings`.**
+- **★★ `v0.3.0` IS THE SERIOUS ONE AND IS NOW ON RECORD: a tagged,
+  published release whose tests did not pass.** History; cannot be
+  un-shipped. What the record can do is say so rather than let it sit
+  undiscovered. **Precision the relayed summary lacked, measured here:**
+  the cross-target failure was the **`aarch64-apple-darwin`** check
+  specifically — the job's name covers macOS *and* wasm32 and only macOS
+  failed.
+- **★ Why it was invisible, and this is the durable half.** Those jobs
+  run on `ubuntu-latest`, macOS and `wasm32`; the engineer verifies
+  locally on **Windows**. **Cross-platform breakage is invisible to
+  local gate runs BY CONSTRUCTION** — no amount of local diligence
+  closes it, because the failing configuration is not on the machine
+  doing the verifying. Strongest available argument for **consulting CI
+  rather than re-deriving confidence locally**. Exact complement to the
+  `b902ea0` finding: there a gate could not see certain **crates**, here
+  a local run cannot see certain **platforms**. Both read as green.
+- **`v0.5.1`'s released CODE is CI-verified green — proven, not argued.**
+  `git diff --name-only aad48c7 68408f1` returns **only `docs/` paths**
+  (exactly five: `ARCHITECTURE.md`, `FEATURES.md`, `NEXT_SESSION.md`,
+  `ROADMAP.md`, `SESSION_LOG.md`), and `68408f1` **passed CI fully**
+  (`conclusion=success`, 2026-08-12T15:00:26Z). The red X on the tag is
+  **purely the filing gate**. Binaries fine, ordering wrong. **File, let
+  CI go green, then tag.**
+
+**Decisions made this session:**
+
+- **★ THE `R191` JUDGMENT THE DISPATCH ASKED FOR — SPLIT, and the split
+  is the point.** The dispatch declined to assert this and asked for a
+  ruling; treating it as one question is what made it look marginal.
+  - **"No run found" → failure IS a genuine instance of `R191`**,
+    specifically its **practical form part (2)**: *"A harness's failure
+    path must FAIL, not default… A default is a value the harness
+    invented."* An empty result set resolved in favour of success is a
+    missing match defaulted to a passing value. `R191`'s own canonical
+    incident states the same shape in the same words — the two states
+    that had to be told apart produced the same miss, and the fallback
+    resolved it in favour of success. Here they are **green** and
+    **never ran**. The dispatch's hesitation (*"`R191` is specifically
+    about a token omitted to mean zero"*) reads only part (1); **part
+    (2) is not about tokens at all.**
+  - **`in_progress` ≠ `failure` is NOT `R191`.** That distinguishes an
+    **incomplete** measurement from a **completed** one, not absence
+    from success. Good design, recorded, but a different discipline —
+    folding it in would blur the rule.
+- **No standing rule minted.** The `R191` question is answered by
+  judging the existing rule to cover it; the CI-job-naming defect below
+  is an `R174` instance, not a new class.
+- **No `ARCHITECTURE.md` §12 decision record.** Neither commit redraws a
+  crate boundary, picks a library, or defines an invariant.
+
+**★ A THIRD `R191` INSTANCE, MEASURED DURING THIS FILING, ON THE VERY
+TOOL THE NEW CHECK DEPENDS ON:**
+`gh run list --commit <SHORT-SHA>` **returns an empty list rather than an
+error.** This librarian hit it directly — querying `68408f1`, `b902ea0`
+and `b1ee1cf` by short SHA returned nothing, read briefly and wrongly as
+*"these commits were never pushed."* They were: `git rev-parse HEAD
+origin/main` returns the same hash and `git rev-list --left-right --count
+origin/main...HEAD` returns `0 0`. Re-run with full 40-character SHAs,
+all three runs appear. **An empty result from a query that silently
+rejects the input FORM is indistinguishable from "no runs exist"** —
+`R191`'s shape landed on `gh` rather than on a regex, and it is precisely
+the state the new check converts into a hard failure. **The check itself
+is safe, verified:** `tools/verify-release.py:153` uses `git rev-parse
+<tag>^{commit}` → full SHA. **But the hazard is one careless argument
+away**, and a future caller passing a short SHA would be told *"no
+workflow run found — it has never been checked by CI at all"* about a
+green commit.
+
+**★ A DEFECT FOUND WHILE VERIFYING THIS FILING, reported in neither
+commit — the CI job's display name does not name the gate that failed.**
+Every red X above renders in GitHub's checks list as **`verify pdfce-gui
+strings live in ui_text.rs`**. That job (`ci.yml:257–322`, measured) has
+accumulated **three unrelated gate steps** under a name describing only
+the first: `check-ui-strings.sh`, `check-disclosure-channel.sh`, and
+`check-commits-filed.py`. **The failing step in all five red runs
+examined (`v0.5.1`, `v0.5.0`, `v0.3.0`, `b902ea0`, `b1ee1cf`) is the
+THIRD**, and the job name says the first. **This cost real time in this
+filing** — the dispatch said `check-commits-filed`, the job-level query
+said UI strings, and they only reconciled after descending to
+`--json jobs → .steps[]`. **The dispatch was right; the CI display was
+misleading.** `R174`'s shape pointed at a **job label** rather than a
+message. Filed as an actionable item in `NEXT_SESSION.md`: rename the
+job honestly or split it into three.
+
+**Verification — MEASURED VIA CI**, which is stronger than the relayed
+local figures and covers the platform blind spot commit 2 identified.
+`gh run view --json jobs` on `b902ea0` (run `31610677171`) and `b1ee1cf`
+(run `31610918299`): **10 of 10 jobs green on both, across Windows +
+Linux + macOS + wasm32, except `verify pdfce-gui strings live in
+ui_text.rs`** — whose failing step is *check that every code commit is
+filed*, the gate this filing discharges. Green on both: `cargo fmt
+--check` (**including the new `Run python3 tools/check-fmt-excluded.py`
+step — proven to run on Linux CI, not merely on the engineer's Windows
+box**), `cargo clippy -D warnings`, `cargo test (ubuntu-latest)`,
+`cargo test (windows-latest)`, `cross-target compile check (macOS /
+wasm32)`, `verify pdfce-core / pdfce-render have zero GUI deps`, `verify
+no HTTP/TLS client in any pdfce crate`, `fuzz targets build (nightly)`,
+`third-party license audit`.
+
+Also:
+- `cargo test --workspace` **3,544 passing / 0 failing** — *relayed*;
+  corroborated by CI green on both platforms at both hashes (CI does not
+  print the count). Unchanged from the previous filing, as expected —
+  neither commit adds or removes a test.
+- `python tools/check-fmt-excluded.py` → *clean, 12 crates* — measured
+  locally **and** via CI at both hashes. The `exclude` array parsed
+  independently here holds exactly 12 entries.
+- `tools/verify-release.py` parses (`ast.parse`); `.github/workflows/ci.yml`
+  parses (`yaml.safe_load`) — both measured here.
+- **GUI-core separation unaffected by construction, not by audit** —
+  measured via `git show --stat`: no `pdfce-core`/`pdfce-render` manifest
+  touched. The only manifest change is the workspace `Cargo.toml`
+  `exclude` array gaining **one** entry (`tools/fontfile-census`), which
+  cannot move a dependency graph. The dedicated CI job agrees.
+- Working tree and remote, measured: `HEAD` = `origin/main` =
+  `b1ee1cfa93541a081eb01286607a11e88a7839b2`; tree **clean**; **0 ahead,
+  0 behind**. Both commits pushed.
+  **★ That "clean" is TIMESTAMPED, not current — re-measured at the end
+  of this filing and no longer true.** A concurrent session started
+  editing the tree mid-filing:
+  `crates/pdfce-gui/src/{canvas,main,ribbon_ui,ui_text}.rs` modified,
+  `docs/ui_specs/pass-46-canvas-interaction-model.md` and two
+  `.claude/agent-memory/pdfce-ui-specialist/` files new — evidently the
+  `Pass 46.0`/`46.1` GUI-interaction work this entry lists as unstarted.
+  **Not this filing's, deliberately untouched.** Noted because a bare
+  "tree clean" in an append-only record reads as current forever, and
+  **whoever commits these docs must stage `docs/` explicitly, not
+  `git add -A`**, or another session's in-progress source lands in the
+  filing commit.
+- **★ BACKUP CURRENCY — the carried figure was STALE and is corrected
+  here, `ls`-sourced not inferred (hard rule 8).** `ls -la
+  D:\Dev\pdfce-backups\`: newest bundle is
+  **`pdfce-20260812-1100.bundle`** (12,530,418 B, **2026-08-12 11:00**),
+  **not** `pdfce-20260807-2039.bundle` as `NEXT_SESSION.md` and the
+  previous filing both stated. A fresh bundle **was** taken today. It
+  still predates both commits — by **8 and 11 minutes** (`b902ea0`
+  11:08, `b1ee1cf` 11:11) — so a bundle is owed, but the gap is
+  **minutes over 2 commits**, not the five days the record implied.
+  Newest full artefact unchanged: `pdfce-full-20260808-0956.zip`
+  (183,439,240 B, 2026-08-08 10:01). **This is exactly the failure hard
+  rule 8 was amended to prevent — a backup figure inherited from a
+  document rather than read off disk — and it is the second time this
+  ledger has carried a wrong one.**
+
+**`docs/FEATURES.md` this filing: NOT TOUCHED, and CHECKED rather than
+assumed**, as the dispatch asked. Measured: its complete section list is
+*Legend · Implemented (Document & pages, Text, Vector objects, ce
+dimensions, Annotations & markup, Forms, Redaction & security, Fonts &
+rendering, Reading/navigation/printing, Shell & UX, Export) · Planned ·
+Cannot · Will not.* **Every section is an operator-facing capability
+area; there is no tooling, CI or development-gate section and no
+existing row covers a build gate.** Both commits deliver development
+gates and zero operator-facing capability — no row owed, **none
+invented**, per the dispatch's instruction and the file's own "a scan,
+not a record" charter.
+
+**Ledger for this filing.** **No new Pass ID** (hard rule 2);
+Pass-family ceiling stays **67.0**, next free **68**. **No decision
+record**; ceiling stays **054**, next free **055**. **No standing rule
+minted**; ceiling stays **R191**, next free **R192**.
+Operator-question ceiling unaffected at **(bk)**, next free **(bl)**.
+**FOUR new `D:\dev\rag\rust\` files** + their `index.md` bullets:
+`cargo_fmt_all_cannot_reach_any_workspace_exclude_member.md`,
+`a_release_verifier_that_never_consults_ci_verifies_only_that_the_bookkeeping_agrees.md`,
+`gh_run_list_commit_returns_an_empty_list_for_a_short_sha.md`,
+`a_ci_job_name_describes_its_first_step_not_the_gate_that_failed.md`.
+(**Counted from the directory, not from the draft.** This line said
+"three" while being written — the short-SHA finding was folded into the
+release-verifier file, then split out when that file needed to
+cross-reference it by name. Hard rule 10's corollary, *a correction is a
+claim*: corrected by `ls` on `D:\dev\rag\rust\`, four files, four
+bullets.) **No `C:\personal_rag\pdf\` lesson** — all four findings
+concern build gates, verification instruments and CI display; none
+concerns real-world PDF producer behaviour, which is that subject's
+entire scope.
+
+**Still in flight:**
+- **`v0.3.0` remains a published release whose tests did not pass.**
+  Nothing to do about the tag; the record now says so. Worth a decision
+  from the operator on whether the release notes should say so too.
+- **CI job `ui-strings` misnames itself** — three unrelated gates under
+  one stale label. Actionable, small, not yet done.
+- `Pass 67.0` phases **C** (re-subset), **D** (outlines), **F**
+  (replace-font) — all unstarted, none blocking. Ask the operator which
+  he wants rather than guessing.
+- **GUI interaction model (`Pass 46.0`/`46.1`)** — annotations joining
+  the `CanvasTool` gesture framework, selection-driven Tool Options,
+  drag/resize of anything with a `/Rect`. **The operator's most recent
+  GUI request and NOT done.**
+- **`/R` 6 encryption, parked at the operator's explicit instruction** —
+  sourcing blocker gone now ISO 32000-2 is on disk. Encrypted-save, any
+  cipher, entirely unstarted.
+- Carried unchanged: two dead/stale printing items; imposition has no
+  GUI; static hybrid XFA read/fill; wide-shape CSV; colour management;
+  the ninety-two-through-ninety-five `(bh)`/`(bi)` ledger defect; the
+  eight-item never-encrypted list (E1–E9) still owed to
+  `pdfce-spec-librarian`.
+- **RETIRED from this list:** *"`cargo fmt --check` fails in
+  `tools/difftest` — 109 diffs."* Resolved by `b902ea0`, and **both of
+  its stated facts were wrong** — see above.
+
+**For next session:**
+1. **Take a backup** — measured figures above; the newest bundle is 8–11
+   minutes shy of `HEAD`, not five days as the record said.
+2. **Operator question `(bk)` — bundled-font embedding licensing.**
+   Ken's call, still open, more load-bearing now `embed-font` works.
+3. Ask which of `Pass 67.0` phases C/D/F he wants, if any.
+4. **Rename or split the `ui-strings` CI job** so a red X names its own
+   cause.
+5. **Run `tools/verify-release.py` BEFORE tagging, not after** — and
+   keep the ordering it now enforces: file, let CI go green, then tag.

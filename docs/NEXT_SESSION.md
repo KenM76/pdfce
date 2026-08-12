@@ -10,6 +10,14 @@ Written 2026-08-12, branch **`main`**, at `aad48c7`, after four commits
 `0947cab` · `c3a4d2e` · `9ea0c88` · `aad48c7` and the **`v0.5.1`**
 release.
 
+**★ AMENDED 2026-08-12 (hundred-and-twenty-fourth filing) at
+`b1ee1cfa93541a081eb01286607a11e88a7839b2`**, after two further commits
+`b902ea0` (formatting-coverage gate) and `b1ee1cf` (release verifier now
+consults CI). **`HEAD` = `origin/main` = `b1ee1cf`, tree clean, 0 ahead /
+0 behind — measured.** Sections **5**, **5b** and the backup section are
+amended below; the release-state section carries a correction. The rest
+stands.
+
 ---
 
 ## ★★★ CORRECTION TO THE PREVIOUS HANDOFF, READ THIS FIRST
@@ -182,13 +190,64 @@ check a reader would run, and it agreed with itself.** Fourth instance
 this session of a claim with no implementation. When a doc comment
 states a guarantee, the pinning test is what makes it a guarantee.
 
-### 5. `cargo fmt --check` fails in `tools/difftest` — 109 diffs, never covered
+### 5. ✅ RESOLVED by `b902ea0` — and the item that sat here was WRONG IN BOTH HALVES
 
-`tools/difftest` is **not a workspace member**, so `cargo fmt --all
---check` has never reached it and the gate has been green over code it
-does not see. Either add it to the fmt sweep and fix the 109 diffs, or
-record deliberately why it stays excluded — but the current state is a
-gate with a blind spot nobody chose.
+**This slot previously read:** *"`cargo fmt --check` fails in
+`tools/difftest` — 109 diffs, never covered."* **Do not act on that; it
+was false in both of its stated facts, and it sat here for several
+sessions.**
+
+- **`tools/difftest` is CLEAN**, and appears to have been for some time —
+  **0 diffs**. Measured by its total absence from `git show --stat
+  b902ea0`: the commit that formatted every unformatted excluded crate
+  did not change one byte of it.
+- **The unformatted code was in nine OTHER crates** — 41 diffs over 8
+  (corpus-report 1, roundtrip 2, content-identity 2, recover-sweep 2,
+  render-profile 8, unembed-sweep 5, embed-sweep 4, fuzz 17), plus
+  `tools/fontfile-census`, which was in **neither `members` nor
+  `exclude`** and so was invisible to `cargo fmt --all`, to `cargo
+  test`, and to every workspace-wide gate at once. **9 of 12 excluded
+  crates (75%) carried unformatted code; this item named one of the 3
+  that were already clean.**
+
+**Why it could persist, which is the part to carry forward.** `cargo fmt
+--all` formats **workspace MEMBERS**; every crate in `Cargo.toml`'s
+`exclude` array is unreachable by it. **A coverage hole does not merely
+permit drift — it lets WRONG BELIEFS about the drift survive, because no
+command exists that would contradict them.** Nobody was careless; the
+project had no instrument that could disagree with the figure.
+
+**RUN THE COMMAND, DO NOT INHERIT A FIGURE FROM THIS FILE:**
+
+```
+python tools/check-fmt-excluded.py
+```
+
+It derives its target list from `Cargo.toml` at run time (a hard-coded
+list would go stale the first time someone adds a sweep tool — this same
+failure one level up), checks all **12** out-of-workspace crates, and
+also flags any crate under `tools/` or `fuzz/` that is in neither
+`members` nor `exclude`. It is wired into CI's `fmt` job and is **proven
+to run on Linux CI**, not merely locally on Windows. Current state:
+**clean, 12 crates** — coverage went **0 of 12 → 12 of 12**.
+
+### 5b. ★ NEW, small and actionable — the CI job's name does not name the gate that failed
+
+Every red X on a release commit renders in GitHub's checks list as
+**`verify pdfce-gui strings live in ui_text.rs`**. That job
+(`.github/workflows/ci.yml:257–322`) has accumulated **three unrelated
+gate steps** under a name describing only the first:
+`check-ui-strings.sh`, `check-disclosure-channel.sh`, and
+`check-commits-filed.py`. **In all five red runs examined (`v0.5.1`,
+`v0.5.0`, `v0.3.0`, `b902ea0`, `b1ee1cf`) the failing step was the
+THIRD** — the filing gate — **and the job name said the first.** Anyone
+reading the checks list is told a UI-strings violation blocked the
+release. It did not, in any of the five.
+
+Fix: rename the job to something honest (it is now a general
+"project gates" job) or split the three steps into three jobs, so a red
+X names its own cause. `R174`'s shape aimed at a job label rather than a
+message.
 
 ### 6. Everything below is carried forward, unchanged in substance
 
@@ -212,14 +271,31 @@ gate with a blind spot nobody chose.
 
 ---
 
-## ★ Take a backup — the newest one predates all of `Pass 67.0`
+## ★ Take a backup — but the figure this file carried was WRONG, and the gap is minutes, not days
 
-**Measured this filing by `ls -la D:\Dev\pdfce-backups\`, not inferred
-from any document:** newest artefact is
-`pdfce-full-20260808-0956.zip` (183,439,240 B, **2026-08-08 10:01**);
-newest bundle is `pdfce-20260807-2039.bundle` (**2026-08-07 20:39**).
-Both predate every commit in this filing **and the whole of `Pass
-67.0`**. A fresh bundle is owed.
+**★ CORRECTED 2026-08-12 (hundred-and-twenty-fourth filing), by `ls -la
+D:\Dev\pdfce-backups\` run at correction time — not by re-reading this
+file.** The paragraph here previously said the newest bundle was
+`pdfce-20260807-2039.bundle` (2026-08-07 20:39) and that it predated
+"the whole of `Pass 67.0`". **A fresh bundle had in fact been taken
+today and neither this file nor the previous filing knew it.**
+
+**Measured:**
+
+- Newest bundle: **`pdfce-20260812-1100.bundle`**, 12,530,418 B,
+  **2026-08-12 11:00**.
+- Newest full artefact: `pdfce-full-20260808-0956.zip`, 183,439,240 B,
+  **2026-08-08 10:01** (unchanged, and this half was correct).
+
+**A bundle is still owed, but the gap is 2 commits over 8–11 minutes**
+(`b902ea0` 11:08, `b1ee1cf` 11:11), **not the five days this file
+implied.**
+
+**This is the exact failure the librarian's hard rule 8 was amended to
+prevent — a backup figure inherited from a document rather than read off
+the disk — and it is the SECOND time this ledger has carried a wrong
+one.** `ls` costs nothing. Run it; do not quote the number above without
+re-running it, including when the number above is this one.
 
 ---
 
@@ -232,7 +308,37 @@ Both predate every commit in this filing **and the whole of `Pass
   **clean**; `origin` = `https://github.com/KenM76/pdfce.git`.
 - Release *"pdfce v0.5.1 — embed-font works from the CLI"*, created
   2026-08-12T14:41:54Z; asset `pdfce-v0.5.1-portable-win64.zip`,
-  **10,244,728 B**. `tools/verify-release.py v0.5.1` reports clean.
+  **10,244,728 B**. ~~`tools/verify-release.py v0.5.1` reports clean.~~
+
+  **★ CORRECTED 2026-08-12 (hundred-and-twenty-fourth filing) — that
+  "clean" was the whole problem, and `b1ee1cf` is the fix.**
+  `verify-release.py` reported clean **while the tagged commit's CI run
+  was RED**. Every check it made was true — tag exists, at `HEAD`,
+  pushed, `origin/main` contains it, asset present — **because not one
+  of those facts is about whether the code passes.** It was verifying
+  that the bookkeeping was self-consistent. The tool now consults CI and
+  **`v0.5.1` FAILS the new check.**
+
+  **The released CODE is fine and that is proven, not argued:** `git
+  diff --name-only aad48c7 68408f1` returns **only `docs/` paths**, and
+  `68408f1` passed CI fully. The red X on the tag is purely
+  `check-commits-filed` — three commits were tagged and released before
+  the librarian filed them. **Binaries fine, ordering wrong.**
+
+  **★ THE ORDERING RULE, and it is now enforced by the tool: FILE, LET
+  CI GO GREEN, THEN TAG.** Run `tools/verify-release.py <tag>` **before**
+  tagging, not after. History measured this filing: **3 of the last 4
+  releases (75%) were tagged at a commit CI had rejected** — `v0.5.1`
+  and `v0.5.0` on the filing gate only, `v0.4.0` green, and **`v0.3.0`
+  on `cargo test` + `cargo clippy` + the `aarch64-apple-darwin`
+  cross-check simultaneously — a published release whose tests did not
+  pass.**
+
+  **Why `v0.3.0` was invisible, and why it will be again without CI:**
+  those jobs run on `ubuntu-latest`, macOS and `wasm32` while
+  verification happens locally on **Windows**. **Cross-platform breakage
+  is invisible to local gate runs by construction.** No amount of local
+  diligence closes that; consulting CI does.
 - **The version bump came BEFORE the tag, deliberately.** `--version`
   now prints `CARGO_PKG_VERSION`, so tagging `v0.5.1` on a binary
   answering `0.5.0` would have shipped a false claim in the one place a
@@ -271,8 +377,21 @@ yet amended by him; not this librarian's or the engineer's file to edit.
   traced rect is wider than a sibling's in the same dock is the one to
   click-test first.
 
+- **★ `gh run list --commit <SHORT-SHA>` returns an EMPTY LIST, not an
+  error.** Hit directly this filing: three commits queried by short SHA
+  returned nothing and were briefly read as "never pushed." They were
+  pushed. **Always pass a full 40-character SHA** (`git rev-parse
+  <ref>`). An empty result from a query that silently rejects the input
+  *form* is indistinguishable from "no runs exist" — `R191`'s shape,
+  landed on `gh`. `verify-release.py` is safe (it uses `git rev-parse
+  <tag>^{commit}`), but the hazard is one careless argument away.
+
 `tools/splice.py` — anchored substitution, all-or-nothing.
-`tools/verify-release.py <tag>` · `tools/gen-embed-fixtures.py` /
+`tools/check-fmt-excluded.py` (no arguments; the fmt gate for the 12
+crates `cargo fmt --all` cannot see — run it beside `cargo fmt --all
+--check`, never instead of) ·
+`tools/verify-release.py <tag>` — **run it BEFORE tagging; it now
+consults CI** · `tools/gen-embed-fixtures.py` /
 `tools/gen-unembed-fixtures.py` (no arguments needed) ·
 `tools/package-portable.py --note "..."` ·
 `tools/check-commits-filed.py` (every code commit must be named in the
