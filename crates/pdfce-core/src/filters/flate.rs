@@ -25,7 +25,7 @@
 //! is a documented candidate for a *labeled* tolerance later,
 //! `filter__flate.md` gotchas → `C:\personal_rag\pdf\`).
 
-use flate2::{Decompress, FlushDecompress, Status};
+use flate2::{Compress, Compression, Decompress, FlushCompress, FlushDecompress, Status};
 
 use super::{FilterError, MAX_DECODED_LEN, predictor};
 use crate::object::Dict;
@@ -101,6 +101,78 @@ fn inflate_bounded(data: &[u8]) -> Result<Vec<u8>, FilterError> {
             }
         }
     }
+}
+
+/// Deflate `data` into a zlib stream suitable for a `/Filter /FlateDecode`
+/// entry (§7.4.4.1: RFC 1950, i.e. **zlib-framed**, not raw deflate).
+///
+/// # Why pdfce compresses what it authors
+///
+/// This is the encode half of §7.4.4, and it exists for exactly one caller
+/// family: objects pdfce **creates**. It is never applied to an object the
+/// document already carried — re-compressing one of those would rewrite
+/// bytes pdfce did not logically touch, which is the round-trip invariant
+/// (`ARCHITECTURE.md` §5) rather than a size preference.
+///
+/// The concrete driver is font embedding
+/// ([`crate::font_embed_missing`]): a full Latin face is 0.1–1 MB and a CJK
+/// face 15–20 MB, and an operator embedding fonts so a print service will
+/// accept a book is the operator least able to absorb a file that doubled.
+/// Font programs are sfnt containers of tables, which deflate well —
+/// typically to a little under half.
+///
+/// # Determinism
+///
+/// [`Compression::default`] (level 6) with no dictionary and no tuning, so
+/// one input always produces one output. That matters beyond tidiness: two
+/// runs of the same command over the same document must produce
+/// byte-identical files, or every round-trip and diff test in this project
+/// becomes non-reproducible (R19).
+///
+/// # Never fails
+///
+/// Deflate cannot fail on well-formed input, and the output buffer grows to
+/// fit. A compressor that somehow made no progress and consumed nothing
+/// would loop, so the loop breaks on that condition and returns the bytes
+/// produced so far — a truncated zlib stream would be caught by the
+/// round-trip assertion in this module's tests rather than shipped, and the
+/// alternative (an `unreachable!`) is a panic in a crate that must not
+/// panic.
+pub(crate) fn encode(data: &[u8]) -> Vec<u8> {
+    // A modest headroom guess. Deflate output for font data runs ~40-60% of
+    // input; the buffer grows if that is wrong, so the guess costs nothing
+    // when it is.
+    let mut out: Vec<u8> = Vec::with_capacity(data.len() / 2 + 64);
+    let mut enc = Compress::new(Compression::default(), true);
+    let mut buf = [0u8; 32 * 1024];
+    let mut consumed = 0usize;
+    loop {
+        let before_in = enc.total_in();
+        let before_out = enc.total_out();
+        let flush = if consumed >= data.len() {
+            FlushCompress::Finish
+        } else {
+            FlushCompress::None
+        };
+        let input = data.get(consumed..).unwrap_or(&[]);
+        let status = enc.compress(input, &mut buf, flush);
+        let produced = usize::try_from(enc.total_out().saturating_sub(before_out)).unwrap_or(0);
+        out.extend_from_slice(buf.get(..produced).unwrap_or(&[]));
+        consumed = consumed
+            .saturating_add(usize::try_from(enc.total_in().saturating_sub(before_in)).unwrap_or(0));
+        match status {
+            Ok(Status::StreamEnd) => break,
+            Ok(_) => {
+                if produced == 0 && enc.total_in() == before_in && consumed >= data.len() {
+                    // No progress and nothing left to feed: stop rather than
+                    // spin. See the "never fails" note above.
+                    break;
+                }
+            }
+            Err(_) => break,
+        }
+    }
+    out
 }
 
 #[cfg(test)]

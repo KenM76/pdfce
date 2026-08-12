@@ -132,6 +132,7 @@ use crate::dimension::{
     author_dimension, build_ocg, build_ocproperties, deserialize_model, serialize_model,
 };
 use crate::document::Document;
+use crate::font_embed_missing::{self, EmbedPlan, EmbedRequest};
 use crate::font_unembed::{self, UnembedPlan, UnembedRequest};
 use crate::fontdata::Std14;
 use crate::forms::{self, ButtonKind, Field, FieldType};
@@ -564,6 +565,25 @@ pub enum CommandKind {
     /// `Vec<String>` would cost that for a label's sake.
     UnembedFonts {
         /// How many fonts lost their embedded program.
+        count: usize,
+    },
+    /// Font programs were ADDED for fonts the document referenced but did
+    /// not carry (`Pass 67.0` phase E): a `/FontFile2` or `/FontFile3`
+    /// stream created and named from each `/FontDescriptor`, plus — for a
+    /// standard-14 font that §9.6.2.2 let omit them — a synthesised
+    /// `/FontDescriptor`, `/Widths`, `/FirstChar`, `/LastChar` and
+    /// `/Encoding`, all as ONE undo entry. See
+    /// [`EditSession::embed_fonts`].
+    ///
+    /// ADDITIVE, and the constructive mirror of [`Self::UnembedFonts`]. One
+    /// entry however many fonts, for the same reason: "embed every font that
+    /// can be resolved" is a single gesture, and a partial undo of it would
+    /// leave a document the operator never asked for.
+    ///
+    /// Carries a count for an Undo label's magnitude; it cannot carry names
+    /// because `CommandKind` is `Copy`.
+    EmbedFonts {
+        /// How many fonts gained an embedded program.
         count: usize,
     },
 }
@@ -2646,6 +2666,26 @@ pub enum EditError {
          stated reason"
     )]
     NoFontsToUnembed {
+        /// How many fonts were examined and refused.
+        blocked: usize,
+    },
+    /// [`EditSession::embed_fonts`] selected no font it could act on.
+    ///
+    /// The mirror of [`Self::NoFontsToUnembed`] and an error for the same
+    /// reason: "nothing happened" and "it worked" must not share an exit
+    /// path. A caller that asked to embed a font, got `Ok`, and shipped the
+    /// unchanged file to a print service would learn about it from the
+    /// rejection rather than from pdfce.
+    ///
+    /// **The commonest cause by far is that no font file was found** for any
+    /// of the missing faces, which is why the per-font reasons live in the
+    /// plan rather than in this message: they are what tells the operator
+    /// which folder to point pdfce at.
+    #[error(
+        "no font could be embedded: {blocked} candidate font(s) were refused, each for a stated \
+         reason"
+    )]
+    NoFontsToEmbed {
         /// How many fonts were examined and refused.
         blocked: usize,
     },
@@ -15788,6 +15828,258 @@ impl EditSession {
             },
             objects,
             removals,
+            trailer: None,
+        });
+        Ok(plan)
+    }
+
+    // -- font embedding (Pass 67.0 phase E) ----------------------------
+
+    /// What [`Self::embed_fonts`] would do, computed without changing
+    /// anything.
+    ///
+    /// A **pure query** — it builds the font inventory, resolves object
+    /// identities, sniffs each donor's framing and reads its embedding
+    /// permission, and mutates nothing. A front end may call it to decide
+    /// whether to *offer* a control (R83) and to render the pre-commit
+    /// disclosure.
+    ///
+    /// The returned [`EmbedPlan`] is the same value [`Self::embed_fonts`]
+    /// returns, produced by the same function, so a preview and a commit
+    /// cannot disagree about what happened.
+    ///
+    /// ⚠️ Not free. The inventory sweep decodes every embedded font program,
+    /// so this is a once-per-interaction call and never a per-frame one. A
+    /// GUI should recompute it only when the document changes or the set of
+    /// available faces does.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use pdfce_core::{document::Document, edit::EditSession};
+    /// # use pdfce_core::font_embed_missing::EmbedRequest;
+    /// # fn demo(doc: Document) {
+    /// let session = EditSession::new(doc);
+    /// let plan = session.embed_preview(&EmbedRequest::all_missing());
+    /// // With no donors supplied, every missing font reports what it needs.
+    /// for blocked in &plan.blocked {
+    ///     eprintln!("{:?}: {}", blocked.base_font, blocked.blocker.reason());
+    /// }
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn embed_preview(&self, request: &EmbedRequest) -> EmbedPlan {
+        let view = self.view();
+        let inventory = crate::fontinfo::inventory(&view);
+        font_embed_missing::plan(&view, &inventory, request)
+    }
+
+    /// Why [`Self::embed_fonts`] would refuse this document outright, or
+    /// `None`.
+    ///
+    /// Document-level refusals only — the per-font ones are data in the
+    /// plan, because a document with one refused font and nine embeddable
+    /// ones is a document where the operation should still run.
+    ///
+    /// A **pure query**, safe to call every frame (R83).
+    ///
+    /// # ★ PDF/A is deliberately NOT here, for the opposite reason
+    ///
+    /// [`Self::unembed_refusal`] leaves PDF/A out because unembedding breaks
+    /// a conformance claim and that is the operator's to accept. Embedding
+    /// leaves it out because it moves a file **toward** ISO 19005
+    /// conformance — there is nothing to gate. [`EmbedPlan::pdfa`] reports
+    /// the claim for context and pdfce validates none of it.
+    #[must_use]
+    pub fn embed_refusal(&self) -> Option<EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Some(EditError::DocumentEncrypted);
+        }
+        self.check_certification().err()
+    }
+
+    /// **Add the font programs** a document references but does not carry,
+    /// as ONE undoable command.
+    ///
+    /// The constructive mirror of [`Self::unembed_fonts`]. Everything it
+    /// does is described in [`crate::font_embed_missing`]'s module docs;
+    /// this is the committing half.
+    ///
+    /// # What one call writes
+    ///
+    /// Per target font, at most four objects and never more:
+    ///
+    /// | Object | When |
+    /// |---|---|
+    /// | a new `/FontFile2` or `/FontFile3` stream, deflated | always |
+    /// | the existing `/FontDescriptor`, gaining that one key | [`EmbedShape::Attach`](crate::font_embed_missing::EmbedShape::Attach) |
+    /// | a new `/FontDescriptor` from pdfce's compiled Core-14 data | [`EmbedShape::Synthesise`](crate::font_embed_missing::EmbedShape::Synthesise) |
+    /// | the font dictionary — `/Widths`, `/FirstChar`, `/LastChar`, `/Encoding`, a dropped subset tag, or a `/Subtype` re-declaration | only when one of those applies |
+    ///
+    /// **No content stream is touched**, and no glyph moves: positions come
+    /// from `/Widths`, which is either preserved untouched or written from
+    /// the very Adobe Core-14 metrics a reader was already applying. What
+    /// changes is which face draws inside those advances.
+    ///
+    /// # ONE undo entry, however many fonts
+    ///
+    /// §11.3's rule: one operator gesture is one undo entry. A partial undo
+    /// — three fonts embedded, four reverted — is a state the operator never
+    /// asked for and could not describe. A front end that needs finer
+    /// control offers the per-font operation instead of splitting this one.
+    ///
+    /// # ★ The file gets BIGGER, and that is the point
+    ///
+    /// The exact mirror of [`Self::unembed_fonts`]'s counter-intuitive note.
+    /// Embedding adds font programs; [`EmbedPlan::bytes_added_uncompressed`]
+    /// is the ceiling before deflate. Unlike unembedding, **the save mode
+    /// does not change the outcome** — an incremental update appends the new
+    /// objects and a full rewrite writes them once, and either way the
+    /// programs are in the file.
+    ///
+    /// # Errors
+    ///
+    /// - [`EditError::DocumentEncrypted`] — pdfce does not yet write
+    ///   encrypted files. Checked **before any mutation**.
+    /// - [`EditError::CertificationForbidsChange`] — §12.8.2.2 Table 254.
+    /// - [`EditError::NoFontsToEmbed`] — the plan selected nothing. The
+    ///   per-font reasons are in the plan, which the caller still has.
+    /// - [`EditError::ObjectNumbersExhausted`] — no free object numbers.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use pdfce_core::{document::Document, edit::EditSession};
+    /// # use pdfce_core::font_embed_missing::{EmbedRequest, FontMatch, SuppliedFont};
+    /// # fn demo(doc: Document, arial: Vec<u8>) -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut session = EditSession::new(doc);
+    /// let request = EmbedRequest::all_missing().with_font(
+    ///     "Helvetica",
+    ///     SuppliedFont::new(arial, "ArialMT", "C:/Windows/Fonts/arial.ttf", FontMatch::Alias),
+    /// );
+    /// let plan = session.embed_fonts(&request)?;
+    /// println!("{} embedded, {} still missing", plan.targets.len(), plan.missing_after());
+    /// session.undo();
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn embed_fonts(&mut self, request: &EmbedRequest) -> Result<EmbedPlan, EditError> {
+        // Every refusal fires BEFORE any mutation (rule 4).
+        if let Some(err) = self.embed_refusal() {
+            return Err(err);
+        }
+
+        let plan = self.embed_preview(request);
+        if plan.targets.is_empty() {
+            return Err(EditError::NoFontsToEmbed {
+                blocked: plan.blocked.len(),
+            });
+        }
+
+        // Dictionary edits are accumulated by object id, not pushed as they
+        // are computed, for the reason `unembed_fonts` records: two
+        // `ObjectWrite`s for one id would each carry a `before` taken from
+        // the same unmodified value, so the second would discard the first.
+        // Two targets cannot share a `/FontDescriptor` here — the plan
+        // blocks that outright — but they can share nothing else either, and
+        // keying by id is what keeps §7.5.6's update section carrying each
+        // object once.
+        let mut edits: BTreeMap<ObjId, Object> = BTreeMap::new();
+
+        for target in &plan.targets {
+            let Some(donor) = target
+                .base_font
+                .as_deref()
+                .and_then(|name| request.supplied.get(name))
+            else {
+                // The plan resolved this target from the same request, so
+                // this cannot normally fire. Skipping is the fail-clean
+                // answer: the target contributes nothing rather than the
+                // whole operation failing.
+                continue;
+            };
+            let Some(font_dict) = self.value(target.id).and_then(Object::as_dict).cloned() else {
+                continue;
+            };
+            // The existing descriptor, by reference or inline. `None` means
+            // one is being authored.
+            let current_descriptor = match target.descriptor_id {
+                Some(id) => self.value(id).and_then(Object::as_dict).cloned(),
+                None => font_dict
+                    .get(b"FontDescriptor")
+                    .and_then(Object::as_dict)
+                    .cloned(),
+            };
+
+            // §7.4.4: the program is deflated. `/Length1` is the DECODED
+            // length (Table 127) and is taken from the donor, never from the
+            // compressed buffer — the single easiest thing to get wrong here
+            // and the one that produces a font no reader can load.
+            let compressed = crate::filters::flate::encode(&donor.program);
+            let program_id = ObjId::new(self.alloc_number()?, 0);
+            let new_descriptor_id = if target.descriptor_written {
+                ObjId::new(self.alloc_number()?, 0)
+            } else {
+                program_id
+            };
+
+            // The view is scoped to this block: `target_edits` reads the
+            // session's current state (it resolves the encoding table to
+            // compute `/Widths`), and `stage_bytes` below needs `&mut self`.
+            // A block rather than a `drop` — `DocumentView` implements no
+            // `Drop`, so dropping it explicitly only extends its lifetimes
+            // and clippy says so.
+            let built = {
+                let view = self.view();
+                font_embed_missing::target_edits(
+                    &view,
+                    &font_dict,
+                    current_descriptor.as_ref(),
+                    target,
+                    program_id,
+                    new_descriptor_id,
+                    compressed.len(),
+                )
+            };
+            let Some(built) = built else {
+                continue;
+            };
+            let font_dict_after = built.font_dict;
+            let descriptor_after = built.descriptor;
+            let stream_dict = built.stream_dict;
+
+            let span = self.stage_bytes(&compressed);
+            edits.insert(
+                program_id,
+                Object::Stream(Stream {
+                    dict: stream_dict,
+                    data_span: span,
+                }),
+            );
+            if let Some(descriptor) = descriptor_after {
+                let id = target.descriptor_id.unwrap_or(new_descriptor_id);
+                edits.insert(id, Object::Dict(descriptor));
+            }
+            if let Some(dict) = font_dict_after {
+                edits.insert(target.id, Object::Dict(dict));
+            }
+        }
+
+        let objects: Vec<ObjectWrite> = edits
+            .into_iter()
+            .map(|(id, value)| ObjectWrite {
+                id,
+                before: self.state.get(&id).cloned(),
+                after: Some(value),
+            })
+            .collect();
+
+        self.commit(Command {
+            kind: CommandKind::EmbedFonts {
+                count: plan.targets.len(),
+            },
+            objects,
+            removals: Vec::new(),
             trailer: None,
         });
         Ok(plan)

@@ -1146,7 +1146,7 @@ impl Document {
     /// The lowest object number this document does **not** already
     /// account for — where a newly created object goes.
     ///
-    /// Three sources are consulted, and taking the maximum of all three
+    /// Four sources are consulted, and taking the maximum of all four
     /// is the point:
     ///
     /// 1. **the highest number the cross-reference chain mentions before
@@ -1171,6 +1171,38 @@ impl Document {
     /// 3. the trailer's `/Size`, so a *stale, oversized* `/Size` cannot
     ///    hand out a number that a `/Prev` revision defines and this
     ///    merged view dropped.
+    /// 4. **★ the newest cross-reference STREAM's own object number**, when
+    ///    the file has one ([`Document::section_shape`]).
+    ///
+    /// ## ★ Why source 4 exists, and the bug it closes
+    ///
+    /// A cross-reference stream is an indirect object, and the writer
+    /// **reuses its number** for the update section it emits (`R33`: match
+    /// the base's section shape). But it is *the section*, not a body
+    /// object — the parser never files it in `objects`, and there is no
+    /// requirement anywhere that it appear in its own `/Index` or be
+    /// covered by its own `/Size`.
+    ///
+    /// So a file can carry `75 0 obj << /Type /XRef /Size 75 /Index [9 1 29
+    /// 45] >>`: object 75 exists, and every one of sources 1–3 answers 74.
+    /// This function then handed out **75**, the session wrote its new
+    /// object there, and the writer wrote *its own cross-reference stream*
+    /// over the top of it — same object number, later in the file, so the
+    /// session's object simply vanished and the reader resolved the
+    /// reference to the xref stream.
+    ///
+    /// The failure is silent in the worst way: the file parses, opens, and
+    /// renders. Only the one thing the edit added is missing. Found by
+    /// `tools/embed-sweep` over the pdfium corpus
+    /// (`testing/resources/annotation_stamp_with_ap.pdf`), where an embedded
+    /// font program came back as a 44-byte cross-reference stream and the
+    /// text it should have drawn was silently skipped.
+    ///
+    /// **This was never specific to font embedding.** Any command that
+    /// creates an object — adding text, an image, an annotation, a form
+    /// field — hits it on any file shaped this way. It survived because a
+    /// collision needs a file whose xref stream is outside its own `/Size`,
+    /// which no producer pdfce's fixtures came from emits.
     ///
     /// Returns `None` only if the document already reaches
     /// [`u32::MAX`], which Annex C's implementation limits put far out
@@ -1189,9 +1221,21 @@ impl Document {
             .and_then(Object::as_int)
             .and_then(|s| u32::try_from(s.saturating_sub(1)).ok())
             .unwrap_or(0);
+        // Source 4 — see this function's docs. The writer reuses this number
+        // for the section it emits, so handing it out would guarantee a
+        // collision rather than merely risk one.
+        let from_section = match self.section_shape {
+            SectionShape::Stream { id, .. } => id.num,
+            // A classic table is not an object and spends no number. The
+            // `_` arm is deliberate: `SectionShape` is `#[non_exhaustive]`,
+            // and a shape this build does not know must not silently be
+            // treated as spending a number it might.
+            _ => 0,
+        };
         self.highest_object_number
             .max(from_objects)
             .max(from_size)
+            .max(from_section)
             .checked_add(1)
             .filter(|n| *n != 0)
     }

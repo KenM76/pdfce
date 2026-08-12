@@ -59,6 +59,7 @@ exclude = [
     "tools/tw-census",
     "tools/render-profile",
     "tools/unembed-sweep",
+    "tools/embed-sweep",
     "fuzz",
 ]
 
