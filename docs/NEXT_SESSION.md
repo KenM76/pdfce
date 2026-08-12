@@ -1,32 +1,36 @@
 # NEXT SESSION — start here
 
 Engineer-owned handoff (this filing written by `pdfce-librarian` at the
-engineer's explicit request, per the dispatch brief for `Pass 5`
-increment 3). Read this **before** the librarian's record — `ROADMAP.md`
-says what shipped, this says what is in flight and what the next hour
-should be. Overwrite it once acted on.
+engineer's explicit request). Read this **before** the librarian's
+record — `ROADMAP.md` says what shipped, this says what is in flight and
+what the next hour should be. Overwrite it once acted on.
 
-Written 2026-08-11, branch **`main`**, after commits `f79f044..f79d9a2`
-(nine commits, `Pass 5` increment 3 — AES-256 read at `/R` 5).
+Written 2026-08-12, branch **`main`**, after commits `f3acd24`,
+`2473602`, `d3baae5`, `f78c9d7`, `8f2b7a9` (`Pass 67.0` phase B —
+font unembedding — now SHIPPED, core+CLI+GUI).
 
 ---
 
-## ★ PHASE E (embed missing fonts) IS THE URGENT ONE — design already done
+## ★★★ PHASE E (embed missing fonts) IS NOW UNBLOCKED AND URGENT — start here
 
-**The operator's real problem, corrected 2026-08-12.** The request that
-started `Pass 67.0` was *"someone needs embedded fonts removed."* It was
-**backwards**. The end user is uploading a book to **Barnes & Noble
+**The operator's real problem, unchanged since 2026-08-12.** The request
+that started `Pass 67.0` was *"someone needs embedded fonts removed."* It
+was **backwards**. The end user is uploading a book to **Barnes & Noble
 Press**, which — like every print-on-demand service — **requires** fonts
-to be embedded and rejects files with missing ones. A second commenter
-confirmed the font is *missing*, not unwanted. Removing fonts would have
-guaranteed rejection.
+to be embedded and rejects files with missing ones. Removing fonts would
+have guaranteed rejection.
 
-`v0.5.0`'s `list-fonts` diagnoses it: `not-embedded=N` in the summary,
-`embedded=no` on the row. **Phase E is the fix, and phase B (unembed) is
-not what they need** — though it is still one of the six the operator
-asked for and is being built.
+`list-fonts` diagnoses it: `not-embedded=N` in the summary, `embedded=no`
+on the row. **Phase E is the fix.** Phase B (unembed) shipped this
+session — it is a legitimate, independently useful Acrobat-parity
+capability and was the explicitly scoped brief, but it is **not** what
+this end user needs. The "phase E must follow rather than run alongside
+phase B" constraint that motivated writing this file in the first place
+is now **discharged**: `edit.rs`/`lib.rs` are free.
 
-**★ The design is mostly ALREADY BUILT — do not start from scratch.**
+**★ The design is mostly ALREADY BUILT — do not start from scratch. Four
+pieces exist, three from before this session, one new from phase B
+itself:**
 
 - **`--font-dir` (decision 012) solves source-font resolution entirely.**
   It walks directories, registers each face under its advertised name AND
@@ -38,6 +42,18 @@ asked for and is being built.
   disclosure is already modelled.
 - **`pdfce-core`'s `font_embed.rs`** already builds font objects
   (`build_objects`, `FontEmbedPlan`, `DescriptorMetrics`).
+- **★ NEW this session — `font_unembed.rs`'s descriptor/program
+  object-identity locator code.** Phase B had to solve, precisely, "which
+  `/FontDescriptor` and which `/FontFile*` stream does this font
+  dictionary actually reach, and is either one shared with another font
+  dictionary that is staying?" — the exact reachability question phase E
+  needs answered in reverse (does a `/FontDescriptor` that will gain a
+  new `/FontFile*` already have one from elsewhere; would attaching a
+  program collide with a font this same descriptor already serves). Read
+  `font_unembed.rs`'s reachability/sharing code before writing anything
+  new — the two sharing hazards it found (a program shared across
+  descriptors; a descriptor shared across font dictionaries) are the same
+  shapes phase E's own attach step must not create by accident.
 
 **★ The correctness question is already answered, and it is the good
 news.** `--font-dir`'s own doc: *"Supplied fonts improve glyph SHAPES
@@ -60,6 +76,29 @@ and for print-on-demand acceptance size matters far less than presence.
 **Disclose**: which face was used, whether it was an exact name match or
 a substitute (`is_substitute()`), and that glyph shapes are then
 machine-dependent (R63 already frames this).
+
+---
+
+## Phase B (unembed) shipped this session — what it left behind
+
+`font_unembed.rs` + `unembed-font` + Fonts-panel destructive controls,
+core+CLI+GUI, full record in `ROADMAP.md`'s new top-of-*Shipped* entry
+(hundred-and-seventeenth filing). Two things worth carrying forward
+without re-reading the whole entry:
+
+- **An incremental save reclaims NOTHING** — only a full rewrite shrinks
+  the file. If phase E's own build touches file-size messaging, this is
+  the same asymmetry in reverse (embedding always GROWS the file, on
+  every save mode, with no incremental-vs-full distinction to disclose).
+- **An unreconciled corpus-distribution discrepancy, flagged not
+  resolved.** `font_unembed.rs`'s own module doc gives one verdict-share
+  table for the 4,023-file sweep (`unknown-symbolic-builtin` 53.6% of
+  1,560 embedded fonts); the same filing's `ROADMAP.md` Shipped entry
+  separately relays a differently-shaped table for the same sweep
+  (`unknown-symbolic-builtin` 31.6% of all fonts examined) that does not
+  obviously arithmetic-reconcile with the first. Neither table was
+  independently re-run — reconcile before either is used to size phase
+  C/D/F's build order.
 
 ---
 
@@ -241,21 +280,33 @@ engineer's file to edit.
 
 ## Open items, in the order they're likely to matter
 
-1. **`/R` 6 sourcing** — see above. The only encryption read-side gap.
-2. **Encrypted-save**, any cipher — entirely unstarted.
-3. Two dead/stale printing items, filed to Backlog, deliberately not
+1. **`Pass 67.0` phase E (embed missing fonts)** — see above. This is
+   what the request that opened the whole family actually needs.
+2. **Reconcile the two 4,023-file verdict-distribution tables** — see
+   above. Blocks sizing phase C/D/F's build order with confidence.
+3. **`Pass 67.0` phases C (re-subset), D (outlines), F (replace-font)**
+   — all unstarted; sequencing recorded at the family's own `ROADMAP.md`
+   *Next up* entry (D pulled ahead of E/F for the Identity-H/CID case;
+   that reasoning is now secondary to phase E's own new urgency).
+4. **`/R` 6 sourcing** — the only encryption read-side gap, unrelated to
+   fonts, still open from two sessions ago. Needs a citeable primary
+   source for Algorithm 2.B; PDF Association sponsored ISO 32000-2
+   access is the operator's own act, not an agent's — surface it, don't
+   attempt a workaround.
+5. **Encrypted-save**, any cipher — entirely unstarted.
+6. Two dead/stale printing items, filed to Backlog, deliberately not
    fixed: `DeviceSettings::pick_tray_by_page_size` sets no `DEVMODE`
    field at all; `build_devmode`'s doc claims a driver-default start
    the code doesn't actually do.
-4. **Imposition has no GUI** — extract sheet composition into
+7. **Imposition has no GUI** — extract sheet composition into
    `pdfce-print` first so both shells share one implementation.
-5. **No open operator questions** as of this filing — `(bj)` was
+8. **No open operator questions** as of this filing — `(bj)` was
    answered and closed 2026-08-11; next free is `(bk)`.
-6. Static hybrid XFA read/fill · wide-shape CSV · colour management
+9. Static hybrid XFA read/fill · wide-shape CSV · colour management
    (`D:\Dev\iccce\`, planned, no code).
-7. **Ledger-accuracy defect, still not fixed** (carried from two
-   sessions ago): filings ninety-two through ninety-five cite `(bh)`/
-   `(bi)` as if `(bi)` had not been minted.
-8. **Spec-librarian flag, still open**: confirm the eight-item
-   never-encrypted list (E1–E9) is in the §7.6 corpus rather than only
-   in pdfce's code.
+10. **Ledger-accuracy defect, still not fixed** (carried from several
+    sessions ago): filings ninety-two through ninety-five cite `(bh)`/
+    `(bi)` as if `(bi)` had not been minted.
+11. **Spec-librarian flag, still open**: confirm the eight-item
+    never-encrypted list (E1–E9) is in the §7.6 corpus rather than only
+    in pdfce's code.

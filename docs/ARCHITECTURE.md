@@ -128,6 +128,41 @@ D:\Dev\pdfce\
                                    lives here — `fontdata/` stays metrics-only, even
                                    after this Pass. See §4 for the full contract and
                                    why the split runs this way.
+                                   **`fontinfo.rs` (`Pass 67.0` phase A, 2026-08-12,
+                                   `7aa5c2c`+`fa2414e`; read-only, no §12 entry —
+                                   additive, no crate boundary or invariant change):**
+                                   the font-INVENTORY half — per distinct font object
+                                   (dedup by object id), `/BaseFont`, subtype,
+                                   encoding, embedded/subset status, raw+decoded
+                                   `/FontFile*` byte size, `fsType`, `/ToUnicode`
+                                   presence, and a **stated-reason**
+                                   `Removability` verdict (nine variants: one
+                                   `Removable`, eight named refusals). Nothing here
+                                   mutates a document.
+                                   **`font_unembed.rs` (`Pass 67.0` phase B,
+                                   2026-08-12; §12 decisions 046/047):** the font-
+                                   REMOVAL half — consumes `fontinfo::Removability`
+                                   rather than deriving its own verdict (one
+                                   classifier only, so the report and the action
+                                   cannot disagree). `EditSession::unembed_fonts`/
+                                   `unembed_preview`/`unembed_refusal` (`edit.rs`)
+                                   plan-then-commit the removal of
+                                   `/FontFile`/`/FontFile2`/`/FontFile3` from a
+                                   `/FontDescriptor` for `Removable` fonts only;
+                                   every other verdict refuses by name with its
+                                   reason shown (R124). Strips the §9.6.4 subset
+                                   tag from `/BaseFont`+`/FontName` together by
+                                   default (decision 046; overridable,
+                                   `SubsetTagPolicy::Keep`) and removes `/CIDSet`/
+                                   `/CharSet` (decision 047). Two sharing hazards
+                                   handled explicitly: a `/FontFile*` reached by a
+                                   second, non-removed font's descriptor is not
+                                   freed; a `/FontDescriptor` reached by a second
+                                   font DICTIONARY blocks the removable font
+                                   outright rather than editing a shared object.
+                                   Only a **full rewrite** reclaims the freed bytes
+                                   — an incremental save appends, so it cannot
+                                   shrink the file (§7.5.6).
                                    **`export/dxf.rs` (`Pass 52.0`/`52.3`,
                                    2026-08-09, `3c4aca4`→`1f4839d`; §12
                                    decision 035, claimed by citation):**
@@ -17869,3 +17904,108 @@ again; it decides nothing about whether pdfce ever targets Android.
 pdfce-core` / `-p pdfce-render` are unaffected by this filing — no
 dependency was added, removed, or reclassified. Full record:
 `ROADMAP.md`'s Backlog entry (hundred-and-thirteenth filing).
+
+### 2026-08-12 (hundred-and-seventeenth filing, `Pass 67.0` phase B, commits `f3acd24`+`2473602`+`d3baae5`+`f78c9d7`) — decision 046: the §9.6.4 subset tag is STRIPPED from `/BaseFont`+`/FontName` together on unembed, by default — pdfce's own reading of what the tag's one stated job implies once the program it recognised is gone, not a parity claim
+
+**Sourcing.** No shell tool this dispatch (hard rule 8). Cross-checked
+by direct `Read` of `crates/pdfce-core/src/font_unembed.rs`'s module
+doc (§"Two decisions this module makes, and Acrobat does not answer",
+part 1) — confirmed present and worded consistently with the
+dispatch's account, including the corpus figure (87% of embedded fonts
+in the 400-file corpus are subsets) and the §9.8.1 Table 122 `shall`
+citation.
+
+**The gap named precisely.** Whether Acrobat strips the `ABCDEF+`
+subset prefix from `/BaseFont` in its own unembedded output is an
+explicit, unsourced GAP in `Acrobat_Features/optimize__font_unembedding.md`
+— only Acrobat's internal *matching* tolerance of the tag (its
+Optimizer batch syntax accepts `+Helvetica` to mean "any subset of
+Helvetica") is known, and that is evidence about matching, not about
+what a finished file contains. **pdfce cannot inherit a parity answer
+here — there isn't one to inherit — so this is pdfce's own decision,
+derived from the standard rather than a product.**
+
+**Decision — strip the tag from `/BaseFont`, and rename `/FontName` to
+match, by default; overridable via `SubsetTagPolicy::Keep` /
+`--keep-subset-tag`, and the rename is always disclosed.** §9.6.4 gives
+the tag exactly one job: letting a reader *"recognize font subsets and
+merge documents containing different subsets of the same font."* After
+the embedded program is removed there is no subset left in the file for
+the tag to identify — the name's role has silently changed to a
+**substitution key**, the string a reader matches against installed
+faces, and `ABCDEF+Arial` is not a name any system will have installed.
+No clause of ISO 32000 requires a reader to strip the tag before
+matching a substitute, so leaving it in place is not neutral — it is a
+name that will not resolve, on a document that now depends entirely on
+substitution succeeding.
+
+**Why `/FontName` moves with it, not independently.** §9.8.1 Table 122
+is explicit: *"`FontName` … shall be the same as the value of
+`BaseFont`… that refers to this font descriptor."* Renaming one and not
+the other would introduce a fresh conformance defect the unembed
+operation did not need to create, so the two are renamed together or
+not at all — there is no partial-rename state.
+
+**Not a crate-boundary or invariant change.** No new dependency, no
+`pdfce-core`/`pdfce-render` graph change. The decision is entirely
+within `font_unembed.rs`'s planning logic (`rename_for`) and is
+exercised by the `unembed-shortest-subset-tag.pdf` fixture (the
+shortest name `fontinfo::split_subset_tag`'s `len() > 7` guard can
+split, `ABCDEF+X`). Full build record: `ROADMAP.md`'s `Pass 67.0`
+phase B Shipped entry (hundred-and-seventeenth filing).
+
+### 2026-08-12 (hundred-and-seventeenth filing, same commits) — decision 047: `/CIDSet` and `/CharSet` are removed together with the embedded program, because both describe coverage of the specific file being deleted and neither is substitution input under §9.8.1
+
+**Sourcing.** Same as decision 046 above — confirmed by direct `Read`
+of `font_unembed.rs`'s module doc, part 2.
+
+**The clause read.** §9.9 states a `CharSet`/`CIDSet` entry on a font
+descriptor *"may be indicated"* by the presence of subsetting, and —
+this is the operative word — describes it as an entry *"that refers to
+the font file."* Table 124 (CIDFont-specific) makes it a `shall`: *"if
+this entry is present, the CIDFont shall contain only a subset"* of the
+named collection. Once `/FontFile2` (or `/FontFile`/`/FontFile3`) is
+removed, there is no font PROGRAM in the file for either statement to
+describe — a CIDFont with zero glyphs cannot "contain only a subset" of
+anything, so Table 124's `shall` becomes unsatisfiable by the very
+dictionary that still carries it, not merely stale.
+
+**Decision — remove both, unconditionally, whenever the program they
+describe is removed.** Distinguished deliberately from decision 046's
+keep-or-strip choice: §9.8.1's substitution-input list (`/Flags`,
+`/FontBBox`, `/ItalicAngle`, `/StemV`, `/Ascent`, `/Descent`,
+`/CapHeight`, `/MissingWidth`) does not name `/CIDSet` or `/CharSet` —
+neither is read by a reader synthesizing or selecting a substitute
+font, so there is no substitution-fidelity argument for keeping either
+one, and removing both costs the operation nothing while removing two
+assertions that have gone false. `/CIDSet` is a stream object and is
+therefore also freed as part of the removal (subject to decision 045's
+sibling finding that only a full rewrite reclaims the bytes — an
+incremental save cannot shrink the file, §7.5.6).
+
+**What is explicitly NOT touched, and why the two decisions are not one
+decision.** Every entry §9.8.1 DOES name as substitution input is kept
+unconditionally, and so is `/Widths` (font-dictionary level, not
+descriptor level) — removing either would break the substitution the
+whole operation exists to enable. `/CIDSet`/`/CharSet` sit on the other
+side of that same line: not substitution input, and no longer
+satisfiable once the program is gone, so they are removed rather than
+kept-but-orphaned.
+
+**Reachability note, since it matters for what this decision actually
+exercises.** `fontinfo::Removability::Removable` — the only verdict
+`font_unembed.rs` will act on — is produced only for a simple font
+(`Type1`/`MMType1`/`TrueType`), never for a `Type0`/CIDFont, so the
+`/CIDSet` removal branch is defensive under today's refusal rules
+rather than reachable via any file this Pass can currently unembed. It
+is implemented and tested anyway (a deliberately malformed fixture
+carries a `/CIDSet` entry so the branch executes), because the
+classifier and the removal logic are independent modules by this same
+Pass's own design (font_unembed.rs consumes fontinfo's verdict rather
+than re-deriving it) and a future widening of `Removable` must not
+silently inherit an unwritten code path.
+
+**Not a crate-boundary or invariant change.** No new dependency, no
+`pdfce-core`/`pdfce-render` graph change. Full build record:
+`ROADMAP.md`'s `Pass 67.0` phase B Shipped entry (hundred-and-
+seventeenth filing).

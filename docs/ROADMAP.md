@@ -81,6 +81,324 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★★ `f3acd24`+`2473602`+`d3baae5`+`f78c9d7`+`8f2b7a9` — `Pass 67.0` phase B ships: pdfce can UNEMBED a font, core (`font_unembed.rs`) + CLI (`unembed-font`) + GUI (Fonts panel destructive controls), refusing eight of nine verdicts by name; two new decisions (046 subset-tag strip, 047 `/CIDSet`/`/CharSet` removal); a 4,023-file sweep finds the dominant real-world blocker is NOT the case the scoping brief pointed at — but phase B does not serve the request that started this Pass, phase E does — 2026-08-12 (hundred-and-seventeenth filing)
+
+**Sourcing.** No shell tool this dispatch (hard rule 8) — `git show`/
+`git log` were not run; the five commit hashes and their contents are
+**relayed**, four from the dispatching engineer's own brief and a
+fifth (`8f2b7a9`) from a peer session's mid-task addendum message
+(received while this filing was in progress; not a message from the
+operator — treated as a teammate report per this project's standing
+subagent-coordination norm, and independently checked before being
+believed, same as any other relayed claim). **What is independently
+confirmed by direct `Read`/`Grep` against live source, no shell
+needed:** `crates/pdfce-core/src/font_unembed.rs` exists (~1,300 lines,
+module doc verbatim-consistent with both dispatches' framing, including
+the §9.6.4/§9.8.1/§9.9 citations and the exact verdict-distribution
+tables quoted below); `EditSession::unembed_fonts`/`unembed_preview`/
+`unembed_refusal` in `crates/pdfce-core/src/edit.rs` (confirmed at
+lines 15579/15604/15674); `CommandKind::UnembedFonts { count }` (line
+565) and `EditError::NoFontsToUnembed { blocked }` (line 2648);
+`pdfce-cli`'s `Command::UnembedFont` variant and its five flags
+(`crates/pdfce-cli/src/main.rs`, confirmed at lines 1016/5542/12004–
+12296); the GUI's `pending_unembed`/`unembedded_this_session` symbols
+present in both `panels_structure.rs` and `main.rs`; the
+`fixtures/synthetic/unembed/` directory (9 fixtures + `PROVENANCE.md`,
+confirmed on disk, including `unembed-shortest-subset-tag.pdf`, the
+fixture built to reach an otherwise-unreachable guard); `tools/
+unembed-sweep/` (registered in the workspace root `Cargo.toml`
+`exclude` list, confirmed line 61). **The addendum's own substance is
+independently confirmed, not merely relayed**: `font_unembed.rs`'s
+module doc (lines 56–81) and `pdfce-cli`'s `unembed-font` doc comment
+(`main.rs` lines 989–996) both carry, verbatim, the 4,023-file/3,097-
+distinct-font/1,560-readable-embedded numbers and the
+`unknown-symbolic-builtin 53.6% / removable 28.8% / blocked-identity
+12.9% / unknown-embedded-cmap 4.4% / unknown-predefined-cmap 0.4%`
+table the addendum describes — this is the table that actually ships
+in the product's own disclosure surface, not merely a report claim.
+
+**What shipped, by shell.**
+
+- **Core** — `pdfce-core::font_unembed` (new module) plus
+  `EditSession::unembed_fonts`/`unembed_preview`/`unembed_refusal`.
+  Consumes `fontinfo::Removability` (phase A's verdict) rather than
+  deriving its own — one classifier in pdfce, so the report that says
+  "this font can go" and the command that makes it go cannot disagree.
+  Only `Removability::Removable` proceeds; every one of the other eight
+  verdicts refuses **by name, with `Removability::reason()` shown
+  verbatim** (R124) — never a silently shorter list.
+- **CLI** — `pdfce-cli unembed-font <input> [--font NAME]... |
+  --all-removable [--apply -o OUT] [--mode incremental|full]
+  [--verify-undo] [--keep-subset-tag] [--acknowledge-pdfa]`, dry-run by
+  default, 15 new integration tests.
+- **GUI** — a batch control fixed above the Fonts list, a per-font
+  control at the foot of an expanded row, and one centre-anchored
+  confirmation dialog — `pending_unembed` is the FIFTH pending state on
+  the same `apply()` confirmation gate every other destructive GUI
+  action already shares. `pdfce-ui-specialist` was dispatched for this
+  Pass and its change list was applied (independently confirmed
+  dispatched, unlike phase A's filing, which flagged this as unknown).
+- **Corpus harness** — `tools/unembed-sweep/` (workspace-excluded, its
+  own `Cargo.toml`/`Cargo.lock`), plus `tools/gen-unembed-fixtures.py`
+  generating the 9 synthetic fixtures.
+
+**Decisions 046 + 047 — both filed in `ARCHITECTURE.md` §12 this
+filing, both pdfce's own reading rather than an Acrobat-parity claim,
+because Acrobat's own behavior here is an explicit, unsourced GAP in
+`Acrobat_Features/optimize__font_unembedding.md`.**
+
+- **046 — the §9.6.4 subset tag is STRIPPED from `/BaseFont` AND
+  `/FontName` together, by default** (`SubsetTagPolicy::Keep`/
+  `--keep-subset-tag` overrides; the rename is always disclosed).
+  §9.6.4 gives the tag exactly one job — letting a reader "recognize
+  font subsets and merge documents containing different subsets of the
+  same font" — and that job has no referent once the subset it named is
+  gone; the name has silently become a substitution key instead, which
+  `ABCDEF+Arial` cannot serve. §9.8.1 Table 122 makes `/FontName` a
+  `shall`-equal `/BaseFont`, so the two rename together or not at all.
+- **047 — `/CIDSet` and `/CharSet` are removed with the program.** Both
+  describe glyph coverage of the file being deleted (§9.9: "may be
+  indicated by the presence of a `CharSet` or `CIDSet` entry… that
+  refers to the font file"); Table 124's `shall` — "the CIDFont shall
+  contain only a subset" — cannot be satisfied by a CIDFont with no
+  glyphs at all. Neither is named in §9.8.1's substitution-input list,
+  so removing both costs the operation nothing. `/CIDSet` is a stream
+  and is freed with it. Everything §9.8.1 DOES name as substitution
+  input (`/Flags`, `/FontBBox`, `/ItalicAngle`, `/StemV`, `/Ascent`,
+  `/Descent`, `/CapHeight`) is kept, and so is `/Widths` — that's what
+  keeps every glyph's advance identical post-unembed.
+
+**Findings worth carrying beyond this Pass.**
+
+1. **★ An incremental save reclaims NOTHING.** §7.5.6's update section
+   is appended, not rewritten, so the freed font program stays present
+   in the prior revision and the file gets **larger**, not smaller.
+   Only a full rewrite drops it. Both figures are reported everywhere
+   an operator can see them (`reclaim_on_full`/`reclaim_now` in the
+   CLI; "the next time the file is written out whole" in the GUI). This
+   is the single most counter-intuitive fact the feature exposes to
+   exactly the operator who has it — someone unembedding fonts to
+   shrink a file, on the save mode (incremental) that is pdfce's own
+   default.
+2. **★ Two sharing hazards a naive implementation hits silently, one
+   independently caught by `pdfce-ui-specialist` during review.** A
+   `/FontFile*` reached by two descriptors is not freed while a font
+   that is staying still needs it (the removed font's key stops
+   pointing at it; the bytes and the surviving font's reference both
+   stay). A `/FontDescriptor` reached by two font DICTIONARIES blocks
+   the removable font outright — editing the shared descriptor would
+   silently unembed a font whose own verdict said no.
+3. **An unreachable guard, found only by trying to build a fixture for
+   it.** `rename_for`'s empty-family-name guard cannot fire —
+   `fontinfo::split_subset_tag` requires `len() > 7`, so the shortest
+   splittable name is `ABCDEF+X` and a bare `ABCDEF+` never reaches the
+   renamer at all. The fixture built to exercise the branch classified
+   the other way and was kept anyway, renamed
+   `unembed-shortest-subset-tag.pdf` — the fourth-or-later instance of
+   this project's "a fixture of the right shape can be vacuous for a
+   new measurement" pattern, in a new direction: this fixture wasn't
+   vacuous, it was **impossible**, and only writing it revealed that.
+4. **`Removability::Removable` is only ever produced for a SIMPLE font**
+   (`Type1`/`MMType1`/`TrueType`) — never `Type0`. The descendant-
+   descriptor path and the `/CIDSet` branch (decision 047) are
+   therefore defensive under today's refusal rules, not reachable via
+   any file this Pass can currently unembed. Implemented and tested
+   anyway (`/CIDSet` has a deliberately malformed fixture), because the
+   classifier and the removal logic are independent modules by design.
+5. **A hybrid-reference file refuses a full rewrite (§7.5.8.4)** — not
+   a defect of this feature, but it silently distorted the corpus
+   sweep's first numbers until the harness distinguished it (5 files of
+   4,023).
+6. **★ A "still renders" claim needs a BEFORE baseline, or it measures
+   the corpus, not the change.** Three veraPDF files in the sweep fail
+   to render identically **before and after** unembedding (an invalid
+   hexadecimal string stops the lexer at byte 85, independent of this
+   Pass). The sweep's first version, lacking a before-baseline, would
+   have reported three render regressions this Pass did not cause.
+   Filed as a `personal_rag/pdf` lesson, below — generalizes to any
+   "the change didn't break rendering" corpus claim.
+
+**Falsifications — R187 cited (guard proven by making the hazard occur,
+not by reading the comparison), three new instances, no new mint.**
+
+- `Removability::is_removable` widened to also accept
+  `BlockedIdentityEncoded`: **4 tests went red**
+  (`font_unembed::exactly_one_of_the_nine_verdicts_proceeds`,
+  `a_blocked_font_is_named_with_its_reason`,
+  `a_plan_with_no_target_is_an_error_not_a_silent_success`,
+  `fontinfo::identity_h_without_tounicode_is_blocked_and_says_why`).
+  Restored: green.
+- Shared-program guard removed: `a_shared_program_is_not_freed` red.
+  Restored: green.
+- Shared-descriptor block removed: `a_shared_descriptor_blocks_the_
+  removable_font` red. Restored: green.
+- GUI, in the running application: clicking confirm without ticking the
+  acknowledgement produced no `unembed-committed` trace at all; ticking
+  then confirming produced `unembed-committed fonts=1 bytes=720`, and
+  the panel redrew at `embedded=0`.
+
+**Corpus evidence — three measurements, three different denominators,
+filed separately per hard rule 10 rather than silently reconciled, and
+one unreconciled gap flagged rather than papered over.**
+
+1. **The original Pass-67.0 scoping estimate** (64-file grep survey,
+   already Shipped at this family's own filing): **~40%**
+   Identity-H-blocked.
+2. **The phase-B scoping brief's 400-file sample** (`fixtures/
+   external/`, confirmed still present verbatim in `font_unembed.rs`'s
+   own module doc as the retained comparison point): 466 distinct
+   fonts, **117 embedded** — `removable` 48% (56), `blocked-identity`
+   34% (40), `unknown-symbolic-builtin` 13% (15), `blocked-type3` 3%
+   (4), `unknown-program-unreadable` 2% (2).
+3. **`tools/unembed-sweep` over 4,023 real-world files** (pdfbox,
+   pdfium, qpdf, pdf20examples, veraPDF-corpus) — **the authoritative
+   figure for this filing**, because it is the one the shipped product
+   itself discloses (`font_unembed.rs`'s module doc, `unembed-font
+   --help`), not merely a report claim: **3,097 distinct fonts
+   examined, 1,560 carrying a readable embedded program.** Share of the
+   1,560: `unknown-symbolic-builtin` **53.6%** (≈836), `removable`
+   **28.8%** (≈449 — matches the "fonts unembedded" count below
+   exactly), `blocked-identity` **12.9%** (≈201), `unknown-embedded-
+   cmap` **4.4%** (≈69), `unknown-predefined-cmap` **0.4%** (≈6).
+   **★ The headline consequence, in the module's own words: seven
+   embedded fonts in ten refuse, and the dominant blocker across the
+   full corpus is NOT the Identity-H/CID case the original scoping
+   brief pointed at — it is a symbolic font with no `/Encoding`, where
+   §9.6.6.1 routes codes through the program's own `cmap` and the
+   honest verdict is "unknown," not "known-unsafe."** The refusal
+   DESIGN is unaffected either way (refuse, and say why) — but sizing
+   the value of any future re-encoding Pass against `blocked-identity`
+   rather than `unknown-symbolic-builtin` would size it against a
+   blocker four times smaller than the one that actually dominates.
+   **Both measurement 2 and measurement 3 are kept, per the module doc's
+   own instruction, because they are different-sized measurements, not
+   a correction of an error** — same discipline as `R188`.
+   **★ Flagged, not silently resolved:** this Shipped entry's own
+   sweep-scale summary further below reports a *"refusal distribution
+   over every font examined"* with different percentages
+   (`unknown-symbolic-builtin` 31.6%, `blocked-identity` 7.6%, etc., as
+   a share of ALL 3,097 fonts including the 56.1% that are not embedded
+   at all). Recomputed as a share of embedded-only fonts, that table
+   does not obviously reconcile with the 53.6%/12.9% figures above —
+   the arithmetic implied (≈72% vs 53.6% for `unknown-symbolic-
+   builtin`) does not match, and this librarian has no shell to re-run
+   either measurement. **The 53.6%/28.8%/12.9%/4.4%/0.4% table is
+   treated as authoritative here because it is independently verified
+   present in shipped, committed source** (`font_unembed.rs`,
+   `main.rs`) — the *"every font examined"* table below is relayed
+   prose only, not found written into any committed file. **Engineer
+   should reconcile or explain the two before either is used to size
+   further work.**
+   **★★ RECONCILED 2026-08-12 (hundred-and-nineteenth filing, `d2f1ed3`)
+   — both tables were correct; the DENOMINATOR LABEL was wrong, and the
+   wrong label is what reached the commit message and then this
+   filing.** `3,097` examined = `2,648` refused + `449` removable.
+   `1,560` embedded = `3,097 − 1,485` not-embedded `− 49` Type 3 `− 3`
+   unreadable. The same 836 `unknown-symbolic-builtin` fonts are
+   **31.6% of the 2,648 REFUSALS** and **53.6% of the 1,560 EMBEDDED**
+   — both figures correct, answering different questions; the "31.6%"
+   table's own header read *"refusal reasons, over every font
+   examined"* while actually dividing by the refused count, and that
+   mislabel is the entire discrepancy. `tools/unembed-sweep` now prints
+   both denominators side by side with each stated explicitly, and
+   marks the verdicts structurally absent from the refused set with
+   `-` rather than a number, so a share of a denominator a row is
+   excluded from cannot be read as meaningful. `font_unembed.rs`'s
+   module doc now carries this arithmetic explicitly (confirmed by
+   direct `Read`, no shell needed) so it needn't be re-derived again.
+   **Standing-rule note: a THIRD instance of hard rule 10's second
+   convention** ("put the qualifier in the table label, because the
+   label is what gets quoted") — a console tool's own output header
+   was the mislabelled artifact, and it propagated through a commit
+   message into a permanent filing before anyone re-derived it. Cited,
+   not filed as a new `D:\dev\rag\rust\` finding — the pattern is
+   already the convention's own founding framing, not a new shape
+   (hard rule 4).
+
+**Sweep summary statistics (relayed, not independently re-run — no
+committed file states these, so treated as prose, not verified fact),
+over the same 4,023-file corpus:** load failed 111 (2.8%); nothing to
+unembed 3,528 (87.7%); reopen failures **0**; render regressions **0**;
+already-unrenderable-before **3** (the veraPDF files named in finding
+6); completed 384; page 1 rendered 381 of those that rendered before
+(100%); fonts unembedded **449**; planned reclaim **21,155,117 bytes**;
+actual size delta **−21,712,539 bytes**; **379 of 379** full rewrites
+got smaller; **targeted fonts still embedded after the round trip: 0**.
+*Refusal distribution over every font examined* (relayed; see the
+unreconciled-gap flag above): not-embedded 56.1%, unknown-symbolic-
+builtin 31.6%, blocked-identity 7.6%, unknown-embedded-cmap 2.6%,
+blocked-type3 1.9%, unknown-predefined-cmap 0.2%, unknown-program-
+unreadable 0.1%.
+
+**★★★ Context that outranks all of the above: phase B does not serve
+the request that started `Pass 67.0`.** A separate, earlier filing
+today (`docs/NEXT_SESSION.md`-only, `c14ddba`) records that the
+originating end-user request was inverted — the user is uploading to
+Barnes & Noble Press, which **requires** embedded fonts, so what they
+actually need is phase E (embed-missing), not phase B. Phase B remains
+a legitimate, independently useful Acrobat-parity capability and was
+the explicitly scoped brief for this session, so it is recorded here as
+shipped and real — but it is not the fix for the request that opened
+this Pass family, and the "E must follow rather than run alongside B"
+constraint `c14ddba` recorded is now **discharged**: `edit.rs`/`lib.rs`
+are free for phase E to begin.
+
+**Gates.** `cargo fmt --all --check` clean; `cargo clippy --workspace
+--all-targets --all-features -- -D warnings` **zero**; `cargo test
+--workspace` **3,494 passing / 0 failing** (+45 over the 3,449 at
+phase A's ship — 27 core unit tests, 15 CLI integration tests, 3
+doc-tests); `check-ui-strings.sh`/`check-theme-colors.sh`/
+`check-bypass-paths.sh`/`check-disclosure-channel.sh`/
+`check-ledger-numbers.py`/`check-one-commit-per-command.py`/
+`check-settings-consumed.py`/`check-passes-filed.py` all clean;
+`cargo tree -p pdfce-core`/`-p pdfce-render` — **no GUI crate**,
+resolving the open verification item phase A's own filing flagged;
+`cargo check --workspace --target aarch64-apple-darwin` clean; `cargo
+check -p pdfce-core -p pdfce-render --target wasm32-unknown-unknown`
+clean. All relayed (four commits from the dispatching engineer, the
+fifth's substance independently confirmed as above); none re-run by
+this librarian (no shell).
+
+**`docs/FEATURES.md`: one row moves *Planned* → *Implemented*
+(Fonts & rendering — unembedding), `[x] core / [x] cli / [x] gui`.**
+Nothing else rounds up — re-subset, outlines, embed-missing and
+replace-font (phases C/D/E/F) remain `[ ] [ ] [ ]`, unbuilt, no core
+API and no shell caller for any of them.
+
+**`docs/NEXT_SESSION.md`: overwritten this filing** with a phase-E-
+focused handoff (phase B done; `edit.rs`/`lib.rs` free; the three
+existing pieces `c14ddba` named — `--font-dir` resolution including
+subset-prefix handling, `FontEnvironment::is_substitute`,
+`font_embed.rs` — plus `font_unembed.rs`'s own descriptor/program
+object-identity locator code, directly reusable by an embed path).
+
+**Two new `C:\personal_rag\pdf\` lessons filed** — see below. **No new
+`D:\dev\rag\rust\`/`D:\dev\rag\egui\` file** — nothing this filing
+generalizes to Rust/egui ecosystem scope beyond what's already
+captured.
+
+**Ledger for this filing.** **No new Pass ID** — phase B of the
+existing `Pass 67.0` family (hard rule 2). Pass-family ceiling stays
+**67.0**, next free **68**. **Two new `ARCHITECTURE.md` §12 entries —
+decisions 046 and 047** (both above). Decision-record ceiling moves
+**045 → 047**, next free **048**. **Standing-rule ceiling unaffected,
+`R188`, next free `R189`** — R187 cited for three new falsification
+instances (not a new mint; no per-instance amendment footer added to
+R187's own Standing-rules entry, consistent with citing rather than
+re-minting). Operator-question ceiling unaffected, **(bj)**, next free
+**(bk)**. **Backup/git working-tree/remote state not independently
+asserted anywhere in this filing** — no shell this dispatch (hard rule
+8); the engineer should check `D:\Dev\pdfce-backups\` and `git
+log`/`git status`/`git remote -v` directly, on the current branch. Five
+commits: `f3acd24`, `2473602`, `d3baae5`, `f78c9d7`, `8f2b7a9` — none
+added to `commits-filed-baseline.txt`, all five now discharge-able by
+`tools/check-commits-filed.py`. `Pass 67.0`'s *Next up* entry gets a
+matching header annotation and footer amendment, this same filing.
+This is the **hundred-and-seventeenth** `ROADMAP.md`/`SESSION_LOG.md`
+joint filing.
+
+---
+
 ### ★★ `7aa5c2c` + `fa2414e` — `Pass 67.0` phase A ships: pdfce can finally answer "what fonts does this document contain" — core (`fontinfo.rs`), CLI (`list-fonts`) and GUI (Fonts panel), a stated-reason removability verdict per font, and a 400-file corpus sweep that CORROBORATES the original 40%-Identity-H grep estimate at 34% via a genuinely independent method — 2026-08-12 (hundred-and-sixteenth filing)
 
 **Sourcing.** No shell tool this dispatch (hard rule 8) — `git show` was
@@ -245,6 +563,68 @@ remote -v` directly, on the current branch. `Pass 67.0`'s *Next up*
 entry gets a matching header annotation and footer amendment, this
 same filing. This is the **hundred-and-sixteenth** `ROADMAP.md`/
 `SESSION_LOG.md` joint filing.
+
+**★ AMENDED 2026-08-12 (hundred-and-eighteenth filing, `7cc5cbd`) — the
+doc-drift this filing's own `SESSION_LOG.md` entry flagged is CLOSED.**
+That entry's "Still in flight" section noted `panels_structure.rs`'s
+module doc still opened *"The document-structure panels: Signatures,
+Layers and Bookmarks"* with no mention of the Fonts panel this Pass had
+just added. `7cc5cbd` — a phase-A follow-up commit that predates the
+`8f2b7a9` phase-B session and was not authored by it — fixes exactly
+this: the header now reads *"Signatures, Layers, Bookmarks and Fonts"*,
+and a new paragraph in the module doc names the fix itself as the
+reason the sentence exists (confirmed by direct `Read` of
+`crates/pdfce-gui/src/panels_structure.rs` lines 1–17; no shell this
+dispatch, hard rule 8 — the commit hash and its provenance are
+**relayed**, via a peer session's message, from the engineer). **A
+second, NEW doc-drift is flagged in the same paragraph this commit
+did not touch, not this librarian's to fix:** line 10's *"Signatures and
+Fonts cannot change anything at all"* is now stale as of this same
+session's own `Pass 67.0` phase B (`f3acd24` et al.) — the Fonts panel
+gained destructive unembed controls in the filing immediately above
+this amendment, in the same `ROADMAP.md` file. No `docs/FEATURES.md`
+row, no decision, no crate-boundary change — a documentation-only fix.
+Ledger: no new Pass ID, no new `ARCHITECTURE.md` §12 entry, all
+ceilings unaffected. `7cc5cbd` is now filed (cited by hash, satisfying
+`tools/check-commits-filed.py`); not added to
+`tools/commits-filed-baseline.txt`.
+
+**★★ AMENDED AGAIN 2026-08-12 (hundred-and-nineteenth filing, `d2f1ed3`)
+— the second doc-drift flagged immediately above is now CLOSED, plus
+two more of the same defect found by the same method, plus the
+denominator-label reconciliation this file's own phase-B *Shipped*
+entry flagged as unresolved.** Three module-doc fixes:
+
+1. `panels_structure.rs`'s *"Signatures and Fonts cannot change
+   anything at all"* is fixed to say Fonts is no longer one of them,
+   **and the miss is recorded in the doc itself rather than silently
+   patched** — the paragraph immediately below it already warned, in as
+   many words, that a module doc enumerating its own contents has to be
+   re-read on every change and that nothing enforces that; the warning
+   sat inches away and did not fire. `R186`'s shape again, on the same
+   header, the second time it has gone stale one commit after a change.
+   Confirmed by direct `Read` of `crates/pdfce-gui/src/
+   panels_structure.rs` lines 1–32.
+2. The Fonts panel's own doc header, *"Read-only, and there is
+   deliberately nothing to click,"* is fixed — confirmed absent, replaced
+   by a header naming the phase-B controls (`Two controls, and why there
+   were none until phase B`).
+3. `fontinfo.rs`'s module doc no longer calls the unembedding half *"a
+   separate, later Pass"* — confirmed: the current doc opens by naming
+   `crate::font_unembed` as **shipped in `Pass 67.0` phase B**, past
+   tense.
+
+**The denominator reconciliation — this file's own flagged discrepancy,
+resolved in place, above** (see the `★★ RECONCILED` footer on
+measurement 3 in this same *Shipped* entry). No `docs/FEATURES.md` row,
+no decision, no crate-boundary change — documentation-only. Ledger: no
+new Pass ID, no new `ARCHITECTURE.md` §12 entry, all ceilings
+unaffected. `d2f1ed3` is now filed (cited by hash); not added to
+`tools/commits-filed-baseline.txt`. Sourcing: no shell this dispatch
+(hard rule 8) — commit hash and provenance relayed via a peer session's
+message; every substantive claim independently confirmed by direct
+`Read` of the three files named above before being recorded here.
+**One new `C:\personal_rag\pdf\` lesson filed** — see below.
 
 ---
 
@@ -37350,7 +37730,7 @@ in the "still open" list. Full build record: this file's own
 
 ## Next up
 
-### Pass 67.0 — font reporting (phase A) + embedded-font removal (phase B) — operator request 2026-08-11, verbatim: *"someone needs embedded fonts removed from a pdf, so work on support and the related parts for that next"*, encryption explicitly parked: *"put the encryption aside for now to work on later"* — **★ phase A SHIPPED 2026-08-12 (`7aa5c2c`+`fa2414e`, core+CLI+GUI). See the new top-of-*Shipped* entry for the delivery record; phases B–F remain queued below, unstarted.**
+### Pass 67.0 — font reporting (phase A) + embedded-font removal (phase B) — operator request 2026-08-11, verbatim: *"someone needs embedded fonts removed from a pdf, so work on support and the related parts for that next"*, encryption explicitly parked: *"put the encryption aside for now to work on later"* — **★★ phases A AND B SHIPPED 2026-08-12 (A: `7aa5c2c`+`fa2414e`; B: `f3acd24`+`2473602`+`d3baae5`+`f78c9d7`+`8f2b7a9`, core+CLI+GUI). See the two new top-of-*Shipped* entries for the delivery records; phases C–F remain queued below, unstarted — and phase E, not B, is the one that answers the request that actually opened this family (Barnes & Noble Press requires embedding; see phase B's own *Shipped* entry).**
 
 **Sourcing.** No shell tool this dispatch (hard rule 8). The corpus
 statistics and the Acrobat-behaviour findings below are **relayed** from
@@ -37668,6 +38048,46 @@ panel's visual usability (no screenshot, no harness run reported) and
 whether `pdfce-ui-specialist` was dispatched for it (the implementing
 agent was interrupted before it could report). This is the
 **hundred-and-sixteenth** `ROADMAP.md`/`SESSION_LOG.md` joint filing.
+
+**★★★★ AMENDED AGAIN 2026-08-12 (hundred-and-seventeenth filing) — phase
+B (unembed) SHIPS. `f3acd24`+`2473602`+`d3baae5`+`f78c9d7`+`8f2b7a9`,
+core+CLI+GUI+corpus harness.** Full delivery record at the new
+top-of-*Shipped* entry, this filing — not restated here per append-only
+discipline. In one line: `pdfce-core` gains `font_unembed.rs` (consumes
+phase A's `Removability` verdict, never derives its own), `pdfce-cli`
+gains `unembed-font`, `pdfce-gui` gains destructive Fonts-panel
+controls behind a fifth `pending_*` confirmation state; two new
+decisions (046 subset-tag strip, 047 `/CIDSet`/`/CharSet` removal); a
+4,023-file sweep finds the dominant real-world blocker is
+`unknown-symbolic-builtin` (53.6% of embedded fonts), not
+`blocked-identity` (12.9%) — the case this family's own original
+scoping brief was sized against. **★ Also recorded here because it
+outranks the shipment itself: phase B does not serve the request that
+opened this Pass family** — the operator's actual end use (Barnes &
+Noble Press) requires embedding, not removal, so phase E is the phase
+that answers the original request; see the new *Shipped* entry's own
+"Context that outranks all of the above" paragraph. Phases C
+(re-subset), D (outlines), E (embed-missing), F (replace-font) remain
+**unstarted**; only the unembed row moves this filing. **Ledger for
+this footer.** No new Pass ID — `Pass 67.0`'s family ceiling stays
+**67.0**, next free **68**. **Two new `ARCHITECTURE.md` §12 entries —
+decisions 046 and 047.** Decision-record ceiling moves **045 → 047**,
+next free **048**. Standing-rule ceiling unaffected, **R188**, next
+free **R189** — R187 cited for three falsification instances, not
+extended by a new mint. Operator-question ceiling unaffected, **(bj)**,
+next free **(bk)**. `docs/FEATURES.md`: **one row moves from *Planned*
+to *Implemented*** (Fonts & rendering — unembedding), `[x] core / [x]
+cli / [x] gui`; the four sibling rows (re-subset/outlines/embed-
+missing/replace-font) are unchanged in *Planned*. **Two new
+`C:\personal_rag\pdf\` lessons filed** — an incremental save cannot
+reclaim unembedded bytes (mode-dependent "bytes saved" claim), and a
+"still renders" corpus claim needs a before-baseline or it measures the
+corpus rather than the change. `D:\dev\rag\rust\`/`D:\dev\rag\egui\`:
+not touched. **Backup/git working-tree/remote state not independently
+asserted anywhere in this filing** — no shell this dispatch (hard rule
+8); the engineer should check `D:\Dev\pdfce-backups\` and `git
+log`/`git status`/`git remote -v` directly. This is the
+**hundred-and-seventeenth** `ROADMAP.md`/`SESSION_LOG.md` joint filing.
 
 ---
 
