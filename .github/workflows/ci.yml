@@ -45,6 +45,14 @@ jobs:
       # crates, and one crate that was in neither `members` nor `exclude` and
       # so was invisible to every workspace-wide gate at once.
       - run: python3 tools/check-fmt-excluded.py
+      # Non-Cargo files pdfce REDISTRIBUTES (fonts, icons, and — once the
+      # engine choice lands — OCR model weights) carry licence obligations
+      # that `cargo-about` is structurally incapable of seeing, because it
+      # reads Cargo.lock and nothing else. This is the only thing that checks
+      # them. See tools/check-shipped-assets.py for why a gap between two
+      # tools is where an obligation goes missing without anyone deciding to
+      # drop it.
+      - run: python3 tools/check-shipped-assets.py
 
   clippy:
     name: cargo clippy -D warnings
