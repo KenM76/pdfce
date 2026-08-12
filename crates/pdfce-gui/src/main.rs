@@ -493,7 +493,89 @@ const RIBBON_CAPTION_GAP: f32 = 2.0;
 /// path: the window opens and says why, rather than the process exiting
 /// before the operator sees anything. A GUI that dies silently on a bad
 /// double-click is indistinguishable from one that did not launch.
+/// The three flags a windowed binary still owes a terminal, answered before
+/// any window exists.
+///
+/// WHY this is here at all: [`main`] treats `argv[1]` as a document to open,
+/// which is right for a double-click or a "Open with" association and wrong
+/// for every other way a binary gets invoked. `pdfce-gui --version` therefore
+/// opened a window and sat there — the caller got no version, no error, and a
+/// process that never exits. That is not merely unhelpful: a script or an
+/// installer probing the binary hangs forever rather than failing, which is
+/// the worst of the available behaviours. Found by doing exactly that during
+/// a release smoke test.
+///
+/// WHY it is hand-rolled rather than `clap`: the GUI has no other flags, and
+/// pulling an argument parser into the GUI crate to answer three strings
+/// would add a dependency (project rule 13) to solve a problem that is four
+/// comparisons wide. `pdfce-cli` remains the scriptable surface — this is the
+/// minimum a windowed program owes a terminal, not the start of a second CLI.
+///
+/// An unrecognised leading-dash argument is rejected rather than opened as a
+/// file: a path that begins with `-` is vanishingly rare next to a mistyped
+/// flag, and silently treating `--verison` as a filename produces the same
+/// "window opens, says file not found" confusion this function exists to end.
+/// Returns `true` when the caller should exit immediately.
+fn handled_terminal_flags() -> Option<std::process::ExitCode> {
+    let arg = std::env::args_os().nth(1)?;
+    let arg = arg.to_string_lossy();
+    if !arg.starts_with('-') {
+        return None;
+    }
+    match arg.as_ref() {
+        "--version" | "-V" => {
+            // ui-text-exempt: terminal output, not window chrome
+            println!("pdfce-gui {}", env!("CARGO_PKG_VERSION"));
+            Some(std::process::ExitCode::SUCCESS)
+        }
+        "--help" | "-h" => {
+            // ui-text-exempt: terminal output, not window chrome
+            println!(
+                "pdfce-gui {} — the pdfce desktop application.\n\
+                 \n\
+                 Usage: pdfce-gui [FILE]\n\
+                 \n\
+                 Arguments:\n  \
+                   [FILE]  A PDF to open on launch. Optional; without it the\n          \
+                           application starts with no document.\n\
+                 \n\
+                 Options:\n  \
+                   -h, --help     Print this help\n  \
+                   -V, --version  Print the version\n\
+                 \n\
+                 This binary is the graphical application and takes no other\n\
+                 options. For scriptable and batch operations — merging,\n\
+                 splitting, stamping, font embedding, redaction, signing —\n\
+                 use `pdfce-cli`, which exposes them as subcommands.",
+                env!("CARGO_PKG_VERSION")
+            );
+            Some(std::process::ExitCode::SUCCESS)
+        }
+        other => {
+            // ui-text-exempt: terminal output, not window chrome
+            eprintln!(
+                "pdfce-gui: unrecognised option `{other}`\n\
+                 pdfce-gui takes an optional file to open and no other options.\n\
+                 Try `pdfce-gui --help`, or `pdfce-cli --help` for batch operations."
+            );
+            Some(std::process::ExitCode::from(2))
+        }
+    }
+}
+
 fn main() -> eframe::Result {
+    // Answer --help/--version/bad-flag before eframe initialises anything:
+    // a terminal invocation must not open a window it then has to be told to
+    // close. See `handled_terminal_flags` for why this is not `clap`.
+    if let Some(code) = handled_terminal_flags() {
+        // `main` returns `eframe::Result`, so exit directly rather than
+        // threading a second return type through the windowed path.
+        std::process::exit(match code {
+            c if c == std::process::ExitCode::SUCCESS => 0,
+            _ => 2,
+        });
+    }
+
     let initial = std::env::args_os().nth(1).map(PathBuf::from);
 
     let mut viewport = egui::ViewportBuilder::default()
