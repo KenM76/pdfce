@@ -14745,6 +14745,11 @@ impl PdfceApp {
         // value, so its read borrow of `doc.session` ends before the mutable
         // one begins.
         if tool.is_measure() {
+            // Read before the mutable borrow of `self.status`. The two-line
+            // verdict consults the operator's own near-parallel threshold
+            // rather than a literal, so the canvas and `pdfce-cli` cannot come
+            // to disagree about when two lines count as parallel.
+            let epsilon_degrees = self.settings.parallel_epsilon_degrees;
             if let Status::Open(doc) = &mut self.status {
                 let model = doc.session.dimension_model();
                 if let Some(st) = doc.measure.as_mut() {
@@ -14752,7 +14757,8 @@ impl PdfceApp {
                     // The status strip — live readout, disclosures, and the
                     // Accept/Reject pair — directly under the options.
                     ui.separator();
-                    let (accept, reject) = measure_status_ui(st, &model, Some(tool), ui);
+                    let (accept, reject) =
+                        measure_status_ui(st, &model, Some(tool), epsilon_degrees, ui);
                     st.queued_accept |= accept;
                     st.queued_reject |= reject;
                     // Handed to the canvas pass rather than acted on here: it
@@ -16299,6 +16305,10 @@ impl PdfceApp {
         // The markup pen, read here for the same reason: the draw gesture runs
         // inside the `Status::Open(doc)` borrow and cannot reach `self`.
         let markup_pen = (self.markup_color, self.markup_width);
+        // The operator's near-parallel threshold, read here for the same
+        // reason. Carried into the two-line gesture rather than defaulted at
+        // the call site, so the canvas and `pdfce-cli` read the same setting.
+        let parallel_epsilon = self.settings.parallel_epsilon_degrees;
         match &self.status {
             Status::Idle => {
                 // P0-5: a real empty state — the app name, an inline Open
@@ -16972,7 +16982,15 @@ impl PdfceApp {
             // full authoring path is available today via pdfce-cli. The tool
             // suppresses the object-selection click so a measure-mode click is
             // not silently repurposed as a selection (ui-spec §1.1).
-            run_measure_tool(doc, ui, &image_response, image_rect, extent, zoom);
+            run_measure_tool(
+                doc,
+                ui,
+                &image_response,
+                image_rect,
+                extent,
+                zoom,
+                parallel_epsilon,
+            );
         } else if canvas::tool_builds_vector_edit(doc.active_tool()) {
             // Pass 9c-min (decision 011 §2.5): the object-edit tool owns the
             // canvas — click selects, drag moves the selected object (or a
@@ -23005,12 +23023,14 @@ fn run_dimension_drag(
 /// Accept for all three tools, so an Enter binding added here could not have
 /// reached Linear without also reaching Circular and Scale.
 fn measure_status_ui(
-    st: &measure_tool::MeasureState,
+    st: &mut measure_tool::MeasureState,
     model: &pdfce_core::dimension::DimensionModel,
     active: Option<CanvasTool>,
+    epsilon_degrees: f64,
     ui: &mut egui::Ui,
 ) -> (bool, bool) {
-    use pdfce_core::dimension::{ScaleState, Unit, format_measurement};
+    use pdfce_core::dimension::{ScaleState, TwoLinePlacement, Unit, format_measurement};
+    use pdfce_core::vector::linepick::TwoLineRelation;
     let mut do_accept = false;
     let mut do_reject = false;
     // Derived HERE rather than passed in: all four are pure functions of
@@ -23031,7 +23051,68 @@ fn measure_status_ui(
     let active_is_derived = st.derived_is_derived;
     let mut can_accept = false;
 
-    if canvas::tool_builds_measure_linear(active) {
+    if canvas::tool_builds_measure_linear(active)
+        && st.linear_pick_mode == measure_tool::LinearPickMode::TwoLines
+    {
+        // ★ The two-line verdict (`Pass 68.0`, ui-spec §6/§9).
+        //
+        // Derived here, every frame, from the two stored lines — never read
+        // from a cached field. The checkbox below can flip it, and so can the
+        // epsilon slider in Settings, and a cache would have to chase both.
+        // See `TwoLinePick`'s own docs.
+        match st
+            .two_lines
+            .authoring(epsilon_degrees, TwoLinePlacement::default())
+        {
+            Some(Ok(authored)) => {
+                match authored.relation {
+                    TwoLineRelation::Parallel { .. } => {
+                        let raw = authored.kind.measured_points();
+                        let d = format_measurement(raw, gscale, gformat);
+                        ui.label(ui_text::two_line_verdict_linear(
+                            authored.measured_angle_degrees,
+                            authored.forced_parallel,
+                            &d.text,
+                        ));
+                        if d.raw_page_units {
+                            ui.label(pdfce_core::dimension::NO_SCALE_DISCLOSURE);
+                        }
+                    }
+                    TwoLineRelation::Angled { degrees, .. } => {
+                        // An angle is invariant under uniform scaling, so it
+                        // never goes through `format_measurement` — 30° in a
+                        // 1:50 group is 30°, not 1500 of anything.
+                        let text = pdfce_core::dimension::format_angle_degrees(degrees, gformat);
+                        ui.label(ui_text::two_line_verdict_angular(&text));
+                    }
+                    // Refused before an authoring is ever produced.
+                    TwoLineRelation::Collinear => {}
+                }
+                if authored.apex_is_real() == Some(false) {
+                    ui.colored_label(warn_color, ui_text::two_line_virtual_apex_note());
+                }
+                can_accept = true;
+            }
+            Some(Err(refusal)) => {
+                // The wording is the core error type's own, so the GUI and the
+                // CLI say the same thing about the same geometry.
+                ui.colored_label(warn_color, ui_text::refusal_line(&refusal.to_string()));
+            }
+            // Fewer than two lines picked — the standing hint in Tool Options
+            // already says what to do, so nothing is added here.
+            None => {}
+        }
+        // The override sits with the measurement it overrides, and appears
+        // only once there IS a measurement to override (ui-spec §9.1). A
+        // checkbox offering to override a number not yet on screen would be
+        // the same withholding failure in reverse.
+        if st.two_lines.is_complete() {
+            ui.checkbox(
+                &mut st.two_lines.force_parallel,
+                ui_text::two_line_force_parallel_checkbox(),
+            );
+        }
+    } else if canvas::tool_builds_measure_linear(active) {
         let raw = st
             .pending
             .map(|k| k.measured_points())
@@ -23152,7 +23233,39 @@ fn measure_options_ui(
     });
     if canvas::tool_builds_measure_linear(active) {
         ui.label(ui_text::measure_linear_menu_item());
-        ui.label(ui_text::measure_linear_hint());
+        // The pick-mode control (`Pass 68.0`, ui-spec §1/§3). It sits ABOVE the
+        // hint because it decides which hint is true, and it is visible the
+        // whole time the tool is armed — that visibility is precisely what
+        // makes a mode legitimate here rather than a click whose meaning turns
+        // on invisible state (see `CanvasTool::MeasureLinear`'s docs).
+        ui.horizontal(|ui| {
+            ui.label(ui_text::two_line_pick_mode_label());
+            for (mode, label) in [
+                (
+                    measure_tool::LinearPickMode::Points,
+                    ui_text::two_line_pick_mode_points_option(),
+                ),
+                (
+                    measure_tool::LinearPickMode::TwoLines,
+                    ui_text::two_line_pick_mode_lines_option(),
+                ),
+            ] {
+                if ui
+                    .selectable_label(st.linear_pick_mode == mode, label)
+                    .clicked()
+                {
+                    // Discards any in-progress pick when the mode actually
+                    // changes — see `set_linear_pick_mode`, which owns that
+                    // rule so it can be tested.
+                    st.set_linear_pick_mode(mode);
+                }
+            }
+        });
+        if st.linear_pick_mode == measure_tool::LinearPickMode::TwoLines {
+            ui.label(ui_text::two_line_hint());
+        } else {
+            ui.label(ui_text::measure_linear_hint());
+        }
     } else if canvas::tool_builds_measure_circular(active) {
         ui.label(ui_text::measure_circular_menu_item());
         ui.label(ui_text::measure_circular_hint());
@@ -23178,10 +23291,28 @@ fn measure_options_ui(
             open_groups = true;
         }
     });
-    ui.checkbox(&mut st.snap_master, ui_text::snap_toggle_label())
-        .on_hover_text(ui_text::snap_toggle_tooltip());
-    // H/V/aligned constraint (linear + scale, ui-spec §2.5).
-    if canvas::tool_builds_measure_linear(active) || canvas::tool_builds_measure_scale(active) {
+    // Whether the linear tool is currently picking LINES rather than points.
+    // Read after the mode control above, so a switch takes effect this frame.
+    let two_line_mode = canvas::tool_builds_measure_linear(active)
+        && st.linear_pick_mode == measure_tool::LinearPickMode::TwoLines;
+
+    // Snap is a POINT-pick affordance. In two-line mode a click resolves to a
+    // whole segment, so the toggle (and the Tab/Alt affordances its tooltip
+    // advertises) would be offering control over a mechanism this gesture does
+    // not use — a control that does nothing is worse than an absent one,
+    // because the operator spends time deciding how to set it.
+    if !two_line_mode {
+        ui.checkbox(&mut st.snap_master, ui_text::snap_toggle_label())
+            .on_hover_text(ui_text::snap_toggle_tooltip());
+    }
+    // H/V/aligned constraint (linear + scale, ui-spec §2.5). Hidden in
+    // two-line mode: the constraint projects a freely-picked second POINT onto
+    // an axis, and neither authored kind here has a second point to project —
+    // the linear result runs perpendicular between the two lines by
+    // construction, and an angle has no horizontal reading at all.
+    if (canvas::tool_builds_measure_linear(active) && !two_line_mode)
+        || canvas::tool_builds_measure_scale(active)
+    {
         ui.horizontal(|ui| {
             ui.label(ui_text::measure_alignment_label());
             for c in [
@@ -23234,8 +23365,10 @@ fn run_measure_tool(
     image_rect: egui::Rect,
     extent: (f32, f32),
     zoom: f32,
+    parallel_epsilon: f64,
 ) {
-    use pdfce_core::dimension::{DEFAULT_GROUP_ID, DimensionKind};
+    use pdfce_core::dimension::{DEFAULT_GROUP_ID, DimensionKind, TwoLinePlacement};
+    use pdfce_core::vector::linepick::pick_line_in_page;
     use pdfce_core::vector::{Point, SnapConfig, SnapKind, snap_candidates};
 
     let active = doc.active_tool();
@@ -23314,7 +23447,14 @@ fn run_measure_tool(
         // Pass 34.1 slice 4: publish it for the Tool Options pane's readout,
         // which draws before this pass runs.
         st.derived_pointer = pointer_pdf;
-        let snap_on = canvas::snap_query_enabled(st.snap_master, alt);
+        // ★ `Pass 68.0`: the linear tool's two pick modes. In `TwoLines` a
+        // click resolves to a LINE rather than a point, so the whole snap
+        // apparatus is skipped — leaving it running would paint vertex markers
+        // advertising a pick model this gesture does not use.
+        let two_line_mode = canvas::tool_builds_measure_linear(active)
+            && st.linear_pick_mode == measure_tool::LinearPickMode::TwoLines;
+
+        let snap_on = !two_line_mode && canvas::snap_query_enabled(st.snap_master, alt);
         let cands = match (snap_on, pointer_pdf, objects) {
             (true, Some(q), Some(objs)) => {
                 let tol = canvas::screen_tolerance_to_page(canvas::SNAP_SCREEN_TOLERANCE_PX, zoom);
@@ -23346,9 +23486,134 @@ fn run_measure_tool(
             );
         }
 
+        // ★ Two-line mode's own gesture (`Pass 68.0`, ui-spec §4/§5).
+        //
+        // Kept entirely separate from the point-pick path below rather than
+        // folded into it: the two resolve a click against different things
+        // (a segment vs a snap candidate), and interleaving them is how one
+        // mode's rules would start leaking into the other.
+        if two_line_mode {
+            let tol = canvas::screen_tolerance_to_page(canvas::SNAP_SCREEN_TOLERANCE_PX, zoom);
+            let hovered = match (pointer_pdf, objects) {
+                (Some(q), Some(objs)) => pick_line_in_page(objs, q, tol),
+                _ => None,
+            };
+
+            // Hover feedback BEFORE any click: the whole pickable segment, so
+            // the operator sees which line they would get rather than
+            // discovering it after picking. A miss draws nothing and says
+            // nothing — the standing hint in Tool Options carries "curves and
+            // blank space are not pickable" once, instead of firing a message
+            // on every ordinary sweep across the drawing.
+            if let Some(h) = hovered {
+                if let (Some(sa), Some(sb)) = (to_screen(h.start), to_screen(h.end)) {
+                    painter.line_segment([sa, sb], egui::Stroke::new(2.0, snap_color));
+                }
+                if let Some(sp) = to_screen(h.pick) {
+                    painter.text(
+                        sp + egui::vec2(9.0, -2.0),
+                        egui::Align2::LEFT_CENTER,
+                        ui_text::two_line_hover_label(),
+                        egui::FontId::proportional(11.0),
+                        text_color,
+                    );
+                }
+            }
+
+            if image_response.clicked()
+                && let Some(h) = hovered
+            {
+                st.two_lines.offer_line(h, parallel_epsilon);
+            }
+
+            // The picked lines stay drawn in the in-progress colour, so the
+            // pair under review is visible while the verdict is read.
+            for line in [st.two_lines.first, st.two_lines.second]
+                .into_iter()
+                .flatten()
+            {
+                if let (Some(sa), Some(sb)) = (to_screen(line.start), to_screen(line.end)) {
+                    painter.line_segment([sa, sb], egui::Stroke::new(2.0, preview_color));
+                }
+            }
+
+            // Preview exactly what Accept would author (R85: what the operator
+            // sees IS what commits — both come from the same derivation).
+            if let Some(Ok(authored)) = st
+                .two_lines
+                .authoring(parallel_epsilon, TwoLinePlacement::default())
+            {
+                match authored.kind {
+                    DimensionKind::Linear { .. } => {
+                        if let Some((dim_a, dim_b, ext_a, ext_b)) = authored.kind.linear_geometry()
+                        {
+                            for (a, b) in [(dim_a, dim_b), (ext_a, dim_a), (ext_b, dim_b)] {
+                                if let (Some(sa), Some(sb)) = (to_screen(a), to_screen(b)) {
+                                    painter.line_segment(
+                                        [sa, sb],
+                                        egui::Stroke::new(1.5, preview_color),
+                                    );
+                                }
+                            }
+                        }
+                    }
+                    DimensionKind::Angular {
+                        apex,
+                        dir_a,
+                        dir_b,
+                        radius,
+                        ..
+                    } => {
+                        // The arc, as a short polyline between the two arms,
+                        // plus a leg out along each arm to the arc. Drawing the
+                        // legs matters most when the apex is VIRTUAL — they are
+                        // what shows the operator where pdfce decided the lines
+                        // would meet.
+                        let start = dir_a.y.atan2(dir_a.x);
+                        let mut sweep = dir_b.y.atan2(dir_b.x) - start;
+                        while sweep > std::f64::consts::PI {
+                            sweep -= std::f64::consts::TAU;
+                        }
+                        while sweep < -std::f64::consts::PI {
+                            sweep += std::f64::consts::TAU;
+                        }
+                        const ARC_STEPS: usize = 24;
+                        let mut prev: Option<Point> = None;
+                        for step in 0..=ARC_STEPS {
+                            #[allow(clippy::cast_precision_loss)]
+                            let t = step as f64 / ARC_STEPS as f64;
+                            let ang = sweep.mul_add(t, start);
+                            let pt = Point::new(
+                                radius.mul_add(ang.cos(), apex.x),
+                                radius.mul_add(ang.sin(), apex.y),
+                            );
+                            if let Some(p0) = prev
+                                && let (Some(sa), Some(sb)) = (to_screen(p0), to_screen(pt))
+                            {
+                                painter
+                                    .line_segment([sa, sb], egui::Stroke::new(1.5, preview_color));
+                            }
+                            prev = Some(pt);
+                        }
+                        for dir in [dir_a, dir_b] {
+                            let tip = Point::new(
+                                radius.mul_add(dir.x, apex.x),
+                                radius.mul_add(dir.y, apex.y),
+                            );
+                            if let (Some(sa), Some(sb)) = (to_screen(apex), to_screen(tip)) {
+                                painter.line_segment([sa, sb], egui::Stroke::new(1.0, snap_color));
+                            }
+                        }
+                    }
+                    DimensionKind::Circular { .. } => {}
+                }
+            }
+        }
+
         // A click resolves against the active candidate (derived ⇒ two-click
         // confirm, ui-spec §2.3) → advance the active tool's state machine.
-        if image_response.clicked()
+        if !two_line_mode
+            && image_response.clicked()
             && let Some(pick) = effective
             && let measure_tool::ClickOutcome::Commit(point) =
                 st.resolve_click(pick, active_is_derived)
@@ -23545,7 +23810,53 @@ fn run_measure_tool(
         .group(group)
         .map_or_else(String::new, |g| g.name.clone());
 
-    if canvas::tool_builds_measure_linear(active) {
+    let two_line_accept = canvas::tool_builds_measure_linear(active)
+        && doc
+            .measure
+            .as_ref()
+            .is_some_and(|s| s.linear_pick_mode == measure_tool::LinearPickMode::TwoLines);
+
+    if two_line_accept {
+        // ★ `Pass 68.0`. Explicit Accept ONLY — deliberately not routed
+        // through `commit_measure_linear_draft`, and deliberately not on the
+        // click-out/interrupt path the ordinary two-point pick uses.
+        //
+        // The reason is decision 031's own rule, applied to a new case: an
+        // ordinary two-point pick is exactly what the operator clicked, so
+        // committing it when something interrupts loses nothing. A two-line
+        // verdict is INFERRED — parallel-vs-angled, which of four angles,
+        // whether the apex is virtual — which is the same property that keeps
+        // the circular best-fit off that path. An inference must not commit
+        // itself because the operator happened to switch tools.
+        //
+        // Keeping the state out of `pending` is what makes that true for free:
+        // `committable_gesture` asks whether `pending.is_some()`, and it never
+        // is here.
+        let authored = doc.measure.as_ref().and_then(|s| {
+            s.two_lines
+                .authoring(parallel_epsilon, TwoLinePlacement::default())
+        });
+        if let Some(Ok(authored)) = authored {
+            match doc
+                .session_mut()
+                .add_dimension(page_index, group, authored.kind)
+            {
+                Ok(_) => {
+                    doc.refresh_pages(); // the page's `/Annots` changed
+                    if let Some(st) = doc.measure.as_mut() {
+                        st.two_lines.clear();
+                        st.last_disclosures =
+                            vec![ui_text::measure_dimension_authored(&group_name)];
+                    }
+                }
+                Err(err) => {
+                    if let Some(st) = doc.measure.as_mut() {
+                        st.last_disclosures = vec![ui_text::refusal_line(&err.to_string())];
+                    }
+                }
+            }
+        }
+    } else if canvas::tool_builds_measure_linear(active) {
         // Pass 34.0: the linear arm delegates to `commit_measure_linear_draft`,
         // the same function the click-out/interrupt path calls, so a linear ce
         // dimension authored by clicking away and one authored by pressing

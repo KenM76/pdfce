@@ -140,7 +140,54 @@ pub enum CanvasTool {
     PlaceField,
     /// Linear dimension (Pass 12.M2, ui-spec §1.1): two snapped point picks
     /// author a scaled measurement. A plain click while this tool is active is
-    /// always a point-pick, never an object-selection click.
+    /// never an object-selection click.
+    ///
+    /// # Two pick MODES, one tool (`Pass 68.0`)
+    ///
+    /// This is the entry point for the whole linear-dimension family, and it
+    /// now has two ways of deciding what a click picks
+    /// ([`crate::measure_tool::LinearPickMode`]):
+    ///
+    /// - **`Points`** — the original: a click resolves to a snapped POINT
+    ///   anywhere on the page, and two of them author the measurement.
+    /// - **`TwoLines`** — a click resolves to a LINE, as a pair of endpoints,
+    ///   via [`pdfce_core::vector::linepick::pick_line_in_page`]. Two of them
+    ///   author whatever the geometry calls for: a linear ce dimension between
+    ///   two parallel lines, an ANGULAR one between two that meet.
+    ///
+    /// ★ The old doc comment ended with *"a plain click while this tool is
+    /// active is always a point-pick"*, and that sentence became false the
+    /// moment the second mode shipped — the invariant is now **per-mode, not
+    /// per-tool**. It is corrected here rather than left standing because a
+    /// stale comment is exactly what a future reader reasons from incorrectly.
+    ///
+    /// A `TwoLines` click can also MISS in a way a raw point-pick never does:
+    /// empty space, or a curve (a Bézier is deliberately never chorded — see
+    /// `pick_line`). A miss is a silent no-op, not a refusal message; the
+    /// standing hint line in Tool Options carries that fact once instead of
+    /// once per click.
+    ///
+    /// # Why a mode rather than a fourth `CanvasTool`
+    ///
+    /// The operator asked for *"the dimensioning tool should allow the
+    /// selection of two lines"* — the definite article, naming the tool that
+    /// already exists. More substantively, the test this codebase already
+    /// applies (pass-46 §1.2, `MarkupKind`'s ten kinds under one tool) is
+    /// whether the operator **explicitly declares** the mode before it changes
+    /// what a click does, or whether the click's meaning turns on state they
+    /// cannot see. A segmented mode control, visible in Tool Options the whole
+    /// time the tool is armed, is that explicit declaration — so nothing is
+    /// silently repurposed, which is what made `AddText` a separate tool from
+    /// `TextEdit` and does not apply here.
+    ///
+    /// Everything else is genuinely shared rather than coincidentally similar:
+    /// the active ce-dimension group, the Accept/Reject strip, the disclosure
+    /// area, and the Tool Options pane itself. Splitting them across two
+    /// variants would duplicate all of it or make the two tools reach into
+    /// each other's state.
+    ///
+    /// Switching mode DISCARDS any in-progress pick first — free, because
+    /// nothing has committed (the same rule `MarkupKind` follows).
     MeasureLinear,
     /// Radius/diameter dimension from a best-fit (Taubin) circle (Pass 12.M2):
     /// object/node picks build the fit set; a display toggle picks radius vs

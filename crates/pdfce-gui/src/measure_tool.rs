@@ -55,9 +55,10 @@
 
 use pdfce_core::dimension::{
     DimStandard, DimensionKind, FitCircle, FractionMode, GroupId, LengthParseError, NumberFormat,
-    ScaleEntry, ScalePreview, ScaleState, Unit, fit_circle_taubin, parse_length,
-    preview_group_scale,
+    ScaleEntry, ScalePreview, ScaleState, TwoLineAuthoring, TwoLinePlacement, TwoLineRefusal, Unit,
+    author_from_two_lines, fit_circle_taubin, parse_length, preview_group_scale,
 };
+use pdfce_core::vector::linepick::{ParallelPolicy, PickedLine};
 use pdfce_core::vector::{AxisConstraint, Point, constrained_second_point, measured_length};
 
 // ---------------------------------------------------------------------------
@@ -249,6 +250,246 @@ impl LinearPick {
     #[must_use]
     pub fn measured(&self, raw: Point) -> Option<f64> {
         self.first.map(|a| measured_length(a, raw, self.constraint))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Two-line pick — select two lines, pdfce reads what they mean (`Pass 68.0`)
+// ---------------------------------------------------------------------------
+
+/// Which geometry [`crate::canvas::CanvasTool::MeasureLinear`]'s next pick
+/// targets (ui-spec `pass-68.0` §1/§2.2).
+///
+/// A real change in what a click MEANS: [`Self::Points`] resolves any snap
+/// candidate anywhere on the page, while [`Self::TwoLines`] calls
+/// [`pdfce_core::vector::linepick::pick_line_in_page`] and requires landing on
+/// straight, already-drawn geometry — refusing curves and misses rather than
+/// inventing a point.
+///
+/// # Why this is a mode and not a fourth tool
+///
+/// Because the operator declares it explicitly, in a control that is visible
+/// the whole time the tool is armed. That is the test pass-46 §1.2 already
+/// applied to `MarkupKind`'s ten kinds: a click's meaning may vary by mode, so
+/// long as it never turns on state the operator cannot see. The full argument,
+/// including why the `AddText`-vs-sub-mode precedent does NOT apply, is on
+/// [`crate::canvas::CanvasTool::MeasureLinear`].
+///
+/// Switching mode discards any in-progress pick first — free, because nothing
+/// has committed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LinearPickMode {
+    /// The original: two snapped POINT picks author the measurement.
+    #[default]
+    Points,
+    /// Two LINE picks; pdfce reads what they mean and authors accordingly.
+    TwoLines,
+}
+
+/// The two-line ce-dimension pick: click one line, click another, and pdfce
+/// authors the ce dimension the geometry calls for — a LINEAR one between two
+/// parallel lines, an ANGULAR one between two that meet.
+///
+/// The operator's request, verbatim (2026-08-12): *"dimensioning tool should
+/// allow the selection of two lines. if those lines are parallel it makes a
+/// linear dimension between them like SolidWorks would, if they are at an
+/// angle it makes an angle dimension."*
+///
+/// # ★ Nothing here classifies anything
+///
+/// This struct holds two picks and a checkbox. Every geometric question — are
+/// these parallel, which of the four angles did the operator mean, is the apex
+/// virtual, is the pair collinear — is answered by
+/// [`pdfce_core::dimension::author_from_two_lines`], which is the same
+/// function `pdfce-cli`'s `dimension-add --kind two-lines` calls.
+///
+/// That is deliberate and load-bearing. A second classifier living at the
+/// canvas is exactly how the two shells acquire the disagreement
+/// `Settings::parallel_epsilon_degrees` was introduced to prevent: the setting
+/// centralises the *threshold*, and duplicating the code that consumes it
+/// would reintroduce the divergence one level above the value that stops it.
+/// The GUI owes a gesture and a disclosure surface, not a second reading of
+/// the geometry.
+///
+/// # ★ Why this is NOT stored in `MeasureState::pending`
+///
+/// `pending` looks like the obvious home — it is already documented as "the
+/// linear tool's completed-but-not-yet-authored dimension". It is the wrong
+/// home, and the reason is a shipped piece of machinery that would break
+/// silently. `PdfceApp::committable_gesture` reads:
+///
+/// ```text
+/// let measure = doc.active_tool() == Some(CanvasTool::MeasureLinear)
+///     && doc.measure.as_ref().is_some_and(|s| s.pending.is_some());
+/// ```
+///
+/// That is decision 031's commit-on-interrupt path: a completed *two-point*
+/// pick is safe to auto-commit when something else interrupts the gesture,
+/// because nothing about it is inferred — it is exactly what the operator
+/// clicked. The same function deliberately EXCLUDES the circular tool, whose
+/// best fit is inferred.
+///
+/// A two-line verdict is inferred in precisely the circular sense:
+/// parallel-vs-angled, which of four angles, whether the apex is virtual. Put
+/// it in `pending` and that `is_some()` check — which cannot tell an ordinary
+/// pick from an inference, having only ever asked whether the field was
+/// populated — would quietly make it interrupt-committable, reopening for this
+/// gesture exactly the hazard decision 031 closed. A sibling field keeps the
+/// existing, already-tested rule correct without teaching it a new distinction.
+///
+/// # ★ Why the verdict is DERIVED on every read instead of cached
+///
+/// The ui-spec proposed a `verdict` field recomputed "whenever `second` or
+/// `force_parallel` changes". This implementation deliberately has no such
+/// field, and the reason is not a preference — it is that the proposed write
+/// list was already incomplete by one when it was written. **The epsilon can
+/// change too**: `Settings::parallel_epsilon_degrees` has a slider in the
+/// settings panel, and moving it re-reads the same two lines into a different
+/// answer (pinned by
+/// [`tests::changing_the_epsilon_setting_re_reads_the_same_pair`]). A cache
+/// listing two of its three producers is the failure mode already recorded in
+/// `D:\dev\rag\egui\a_derived_value_with_one_producer_cannot_drift_a_cached_copy_with_n_producers_will.md`
+/// — found in this very codebase on `recovery_note`, and fixed in `149fd03` by
+/// deleting the cache rather than adding the missing reset site.
+///
+/// The recomputation is a few dozen floating-point operations on two stored
+/// segments, so the cache buys nothing and costs a synchronisation obligation.
+/// [`Self::authoring`] re-derives on every call: there is nothing to keep in
+/// sync, and the verdict the operator reads is definitionally the one that
+/// will commit (R85).
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct TwoLinePick {
+    /// The first picked line; `None` while awaiting it.
+    pub first: Option<PickedLine>,
+    /// The second picked line; `None` until the pair is complete.
+    pub second: Option<PickedLine>,
+    /// The operator's **"treat these two lines as parallel"** override.
+    ///
+    /// Requested directly (2026-08-12): *"When making or editing a dimension
+    /// of this type, there should be a checkbox option to treat the two lines
+    /// as parallel."* It exists because the automatic reading is a GUESS and a
+    /// global threshold cannot be right for every pair in a drawing — two
+    /// nominally-parallel edges can arrive 0.8° apart from an exporter's
+    /// rounding, and the operator, looking at the part, knows which.
+    ///
+    /// Ticking it never fakes the measurement: the true angle survives in
+    /// [`pdfce_core::dimension::TwoLineAuthoring::measured_angle_degrees`] so
+    /// the disclosure can state what was overridden.
+    ///
+    /// **Survives [`Self::clear`]**, like `snap_master` and the active group.
+    /// The first instinct is the opposite — it is an assertion about two
+    /// specific lines, so carrying it to the next pair looks like applying a
+    /// claim the operator never made about them. What settles it is the
+    /// failure the override was invented to avoid, stated in `linepick.rs`'s
+    /// own docs: without it, the only remedy would be *"to change a global
+    /// setting to author one dimension and change it back, which is how a
+    /// setting becomes a thing people fight."* Resetting per pair recreates
+    /// exactly that friction at smaller scale, for the operator dimensioning a
+    /// whole drawing out of a sloppy exporter. It is safe to persist because
+    /// the verdict — including the word "forced" and the true angle — is on
+    /// screen before any Accept.
+    pub force_parallel: bool,
+}
+
+impl TwoLinePick {
+    /// A fresh pick, awaiting the first line, with the override off.
+    ///
+    /// Off is the honest default: the override is the operator asserting
+    /// something about the drawing that pdfce's own reading disagrees with, so
+    /// it cannot be on until they say so.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Offer a picked line to the gesture. Returns `true` if it was taken.
+    ///
+    /// The three cases, and why each is what it is:
+    ///
+    /// - **Awaiting line A** — take it.
+    /// - **Awaiting line B** — take it; the pair is now complete and the
+    ///   verdict is on screen for review.
+    /// - **Pair complete** — depends on the verdict, which is why this needs
+    ///   `epsilon_degrees`:
+    ///   - a valid verdict ⇒ **ignored**, matching `pending`'s own documented
+    ///     "further picks are ignored, the operator is reviewing" rule. An
+    ///     inference under review must not be replaced by a stray click.
+    ///   - a REFUSED pair (collinear, or a degenerate line) ⇒ the new line
+    ///     **replaces line B**. That is the natural "try a different second
+    ///     line" recovery, and it needs no special case beyond reassigning
+    ///     `second`. Line A is kept, so recovering costs one click rather
+    ///     than two.
+    ///
+    /// Returning `false` for the ignored case lets the caller leave the
+    /// disclosure untouched rather than re-announcing an unchanged verdict.
+    pub fn offer_line(&mut self, line: PickedLine, epsilon_degrees: f64) -> bool {
+        match (self.first, self.second) {
+            (None, _) => {
+                self.first = Some(line);
+                true
+            }
+            (Some(_), None) => {
+                self.second = Some(line);
+                true
+            }
+            (Some(_), Some(_)) => {
+                // Only a refused pair yields to a new pick.
+                let refused = matches!(
+                    self.authoring(epsilon_degrees, TwoLinePlacement::default()),
+                    Some(Err(_))
+                );
+                if refused {
+                    self.second = Some(line);
+                }
+                refused
+            }
+        }
+    }
+
+    /// What the current pair authors, re-derived from scratch.
+    ///
+    /// `None` while the pair is incomplete. `Some(Err(..))` when the pair
+    /// cannot yield a ce dimension — collinear, or a zero-length line — which
+    /// the caller is expected to disclose by name rather than swallow.
+    ///
+    /// `epsilon_degrees` comes from `Settings::parallel_epsilon_degrees` and is
+    /// never a literal at the call site, so this tool and the CLI cannot
+    /// disagree about when two lines count as parallel.
+    #[must_use]
+    pub fn authoring(
+        &self,
+        epsilon_degrees: f64,
+        placement: TwoLinePlacement,
+    ) -> Option<Result<TwoLineAuthoring, TwoLineRefusal>> {
+        let (a, b) = (self.first?, self.second?);
+        let mut policy = ParallelPolicy::from_setting(epsilon_degrees);
+        if self.force_parallel {
+            policy = policy.forcing_parallel();
+        }
+        Some(author_from_two_lines(&a, &b, policy, placement))
+    }
+
+    /// Discard the in-progress pair (Escape stage 1 / Reject), staying in the
+    /// tool.
+    ///
+    /// [`Self::force_parallel`] deliberately SURVIVES, mirroring how
+    /// `snap_master` and the active group survive
+    /// [`MeasureState::clear_gesture`] — see that field's own docs for why.
+    pub fn clear(&mut self) {
+        self.first = None;
+        self.second = None;
+    }
+
+    /// Whether any part of a pair is picked — a discardable gesture.
+    #[must_use]
+    pub fn in_progress(&self) -> bool {
+        self.first.is_some() || self.second.is_some()
+    }
+
+    /// Whether both lines are picked and a verdict is on screen for review.
+    #[must_use]
+    pub fn is_complete(&self) -> bool {
+        self.first.is_some() && self.second.is_some()
     }
 }
 
@@ -751,6 +992,18 @@ pub struct MeasureState {
     pub circular: CircularPick,
     /// The scale-dimension pick + dialog (`MeasureScale`).
     pub scale: ScalePick,
+    /// Which geometry `MeasureLinear`'s picks target (`Pass 68.0`).
+    ///
+    /// A Tool Options setting rather than part of the gesture, so clearing a
+    /// gesture never silently reverts it — the same status `snap_master` and
+    /// [`Self::group`] have.
+    pub linear_pick_mode: LinearPickMode,
+    /// The two-line pick (`MeasureLinear` in [`LinearPickMode::TwoLines`]).
+    ///
+    /// A sibling field rather than a use of [`Self::pending`], deliberately —
+    /// see [`TwoLinePick`]'s own docs for the `committable_gesture` hazard
+    /// that choice avoids.
+    pub two_lines: TwoLinePick,
     /// The linear tool's completed-but-not-yet-authored dimension (ui-spec
     /// §2.1: the second click "commits point B and opens the value/group
     /// property bar" — authoring happens only on the explicit Accept, never on
@@ -811,6 +1064,8 @@ impl MeasureState {
             linear: LinearPick::new(),
             circular: CircularPick::new(),
             scale: ScalePick::new(),
+            linear_pick_mode: LinearPickMode::default(),
+            two_lines: TwoLinePick::new(),
             pending: None,
             last_disclosures: Vec::new(),
             queued_close_tool: false,
@@ -822,6 +1077,34 @@ impl MeasureState {
         }
     }
 
+    /// Switch which geometry the linear tool picks, discarding any in-progress
+    /// gesture if the mode actually changed (`Pass 68.0`).
+    ///
+    /// # Why this is a method and not two lines at the call site
+    ///
+    /// Because the discard is the load-bearing half and it is easy to omit. A
+    /// half-finished point pick means nothing to the line gesture and vice
+    /// versa, so carrying one across the switch would leave the tool holding
+    /// state its current mode cannot interpret — and the failure would be
+    /// invisible until the operator's next click produced something strange.
+    /// Living here, it is unit-testable; living in `main.rs` it would not be
+    /// (that file is a compile-and-launch shell by design).
+    ///
+    /// Discarding is free, because nothing has committed. The same rule
+    /// `MarkupKind` follows on a kind change.
+    ///
+    /// A no-op when `mode` is already current — re-clicking the armed mode
+    /// button must not silently throw away a pick in progress.
+    pub fn set_linear_pick_mode(&mut self, mode: LinearPickMode) {
+        if self.linear_pick_mode == mode {
+            return;
+        }
+        self.linear_pick_mode = mode;
+        self.linear.clear();
+        self.two_lines.clear();
+        self.pending = None;
+    }
+
     /// Discard every in-progress gesture across the three tools (Escape stage 1
     /// / page navigation, ui-spec §1.3) and reset the snap cycle. Keeps the
     /// active group, snap toggle, and last disclosures.
@@ -829,6 +1112,7 @@ impl MeasureState {
         self.linear.clear();
         self.circular.clear();
         self.scale.clear();
+        self.two_lines.clear();
         self.pending = None;
         self.snap_cycle = 0;
         self.derived_promoted = None;
@@ -860,6 +1144,7 @@ impl MeasureState {
         self.linear.in_progress()
             || self.circular.in_progress()
             || self.scale.in_progress()
+            || self.two_lines.in_progress()
             || self.pending.is_some()
     }
 }
@@ -1331,5 +1616,252 @@ mod tests {
         st.clear_gesture();
         assert!(!st.gesture_in_progress());
         assert_eq!(st.snap_cycle, 0);
+    }
+
+    // ---- Two-line pick (`Pass 68.0`) ------------------------------------
+
+    /// A picked line with its pick point at the midpoint.
+    fn picked(sx: f64, sy: f64, ex: f64, ey: f64) -> PickedLine {
+        PickedLine {
+            object_index: 0,
+            subpath: 0,
+            segment: 0,
+            start: p(sx, sy),
+            end: p(ex, ey),
+            pick: p(f64::midpoint(sx, ex), f64::midpoint(sy, ey)),
+        }
+    }
+
+    const EPS: f64 = 0.5;
+
+    #[test]
+    fn two_line_pick_needs_both_lines_before_it_authors_anything() {
+        let mut pick = TwoLinePick::new();
+        assert!(!pick.in_progress());
+        assert!(
+            pick.authoring(EPS, TwoLinePlacement::default()).is_none(),
+            "an empty pick authors nothing"
+        );
+
+        assert!(pick.offer_line(picked(100.0, 100.0, 300.0, 100.0), EPS));
+        assert!(pick.in_progress() && !pick.is_complete());
+        assert!(
+            pick.authoring(EPS, TwoLinePlacement::default()).is_none(),
+            "one line is not a pair"
+        );
+
+        assert!(pick.offer_line(picked(100.0, 140.0, 300.0, 140.0), EPS));
+        assert!(pick.is_complete());
+        assert!(pick.authoring(EPS, TwoLinePlacement::default()).is_some());
+    }
+
+    /// Two parallel edges author a LINEAR ce dimension of the gap.
+    #[test]
+    fn two_parallel_picks_author_a_linear_ce_dimension() {
+        let mut pick = TwoLinePick::new();
+        pick.offer_line(picked(100.0, 100.0, 300.0, 100.0), EPS);
+        pick.offer_line(picked(100.0, 140.0, 300.0, 140.0), EPS);
+
+        let authored = pick
+            .authoring(EPS, TwoLinePlacement::default())
+            .expect("complete")
+            .expect("dimensionable");
+        assert!(authored.is_linear());
+        assert!(matches!(authored.kind, DimensionKind::Linear { .. }));
+    }
+
+    /// Two edges that meet author an ANGULAR ce dimension.
+    #[test]
+    fn two_angled_picks_author_an_angular_ce_dimension() {
+        let mut pick = TwoLinePick::new();
+        pick.offer_line(picked(100.0, 100.0, 300.0, 100.0), EPS);
+        pick.offer_line(picked(100.0, 100.0, 100.0, 300.0), EPS);
+
+        let authored = pick
+            .authoring(EPS, TwoLinePlacement::default())
+            .expect("complete")
+            .expect("dimensionable");
+        assert!(!authored.is_linear());
+        assert!(matches!(authored.kind, DimensionKind::Angular { .. }));
+    }
+
+    /// A collinear pair surfaces the refusal rather than authoring a
+    /// zero-length ce dimension the operator would go hunting for.
+    #[test]
+    fn a_collinear_pair_surfaces_the_refusal() {
+        let mut pick = TwoLinePick::new();
+        pick.offer_line(picked(0.0, 0.0, 100.0, 0.0), EPS);
+        pick.offer_line(picked(200.0, 0.0, 300.0, 0.0), EPS);
+
+        let result = pick
+            .authoring(EPS, TwoLinePlacement::default())
+            .expect("the pair is complete");
+        assert_eq!(result, Err(TwoLineRefusal::Collinear));
+    }
+
+    /// ★ The whole reason the verdict is derived rather than cached: ticking
+    /// the override AFTER both picks must change the answer immediately, with
+    /// no re-pick and no cache to invalidate.
+    #[test]
+    fn ticking_the_override_after_both_picks_changes_the_verdict_immediately() {
+        let t = 5f64.to_radians().tan();
+        let mut pick = TwoLinePick::new();
+        pick.offer_line(picked(0.0, 0.0, 100.0, 0.0), EPS);
+        pick.offer_line(picked(0.0, 40.0, 100.0, 100.0f64.mul_add(t, 40.0)), EPS);
+
+        let before = pick
+            .authoring(EPS, TwoLinePlacement::default())
+            .expect("complete")
+            .expect("dimensionable");
+        assert!(!before.is_linear(), "5 degrees apart reads as angled");
+
+        // The operator ticks the box while looking at that verdict.
+        pick.force_parallel = true;
+
+        let after = pick
+            .authoring(EPS, TwoLinePlacement::default())
+            .expect("complete")
+            .expect("dimensionable");
+        assert!(after.is_linear(), "the override must take effect at once");
+        assert!(after.forced_parallel);
+        // ...and the overridden angle is still available to disclose.
+        let measured = after
+            .measured_angle_degrees
+            .expect("the true angle survives the override");
+        assert!((measured - 5.0).abs() < 0.01, "got {measured}");
+    }
+
+    /// ★ Changing the epsilon SETTING re-reads the same two lines too — the
+    /// second state transition a cached verdict would have had to chase.
+    #[test]
+    fn changing_the_epsilon_setting_re_reads_the_same_pair() {
+        let t = 0.2f64.to_radians().tan();
+        let mut pick = TwoLinePick::new();
+        pick.offer_line(picked(0.0, 0.0, 100.0, 0.0), EPS);
+        pick.offer_line(picked(0.0, 20.0, 100.0, 100.0f64.mul_add(t, 20.0)), EPS);
+
+        let loose = pick
+            .authoring(0.5, TwoLinePlacement::default())
+            .expect("complete")
+            .expect("dimensionable");
+        assert!(loose.is_linear(), "0.2 degrees is parallel under 0.5");
+
+        let strict = pick
+            .authoring(0.1, TwoLinePlacement::default())
+            .expect("complete")
+            .expect("dimensionable");
+        assert!(!strict.is_linear(), "the same pair is angled under 0.1");
+    }
+
+    /// ★ A third pick is IGNORED while a valid verdict is under review — an
+    /// inference awaiting Accept must not be swapped out by a stray click.
+    /// Mirrors `pending`'s own documented "further picks are ignored" rule.
+    #[test]
+    fn a_third_pick_is_ignored_while_a_valid_verdict_is_under_review() {
+        let mut pick = TwoLinePick::new();
+        pick.offer_line(picked(0.0, 0.0, 100.0, 0.0), EPS);
+        pick.offer_line(picked(0.0, 40.0, 100.0, 40.0), EPS);
+        assert!(pick.is_complete());
+
+        assert!(
+            !pick.offer_line(picked(0.0, 80.0, 100.0, 80.0), EPS),
+            "the pick must be refused while the operator is reviewing"
+        );
+        assert_eq!(
+            pick.second.map(|l| l.start.y),
+            Some(40.0),
+            "line B must be untouched"
+        );
+    }
+
+    /// ★ A REFUSED pair does yield: the new line replaces line B, so "try a
+    /// different second line" costs one click and keeps line A.
+    #[test]
+    fn a_new_pick_replaces_line_b_when_the_pair_was_refused() {
+        let mut pick = TwoLinePick::new();
+        pick.offer_line(picked(0.0, 0.0, 100.0, 0.0), EPS);
+        // Collinear with A — refused.
+        pick.offer_line(picked(200.0, 0.0, 300.0, 0.0), EPS);
+        assert_eq!(
+            pick.authoring(EPS, TwoLinePlacement::default()),
+            Some(Err(TwoLineRefusal::Collinear))
+        );
+
+        assert!(
+            pick.offer_line(picked(0.0, 40.0, 100.0, 40.0), EPS),
+            "a refused pair must accept a replacement line B"
+        );
+        assert_eq!(
+            pick.first.map(|l| l.start.y),
+            Some(0.0),
+            "line A is kept through the recovery"
+        );
+        let authored = pick
+            .authoring(EPS, TwoLinePlacement::default())
+            .expect("complete")
+            .expect("the replacement pair is dimensionable");
+        assert!(authored.is_linear());
+    }
+
+    /// ★ Switching pick mode discards whatever pick was in progress — the
+    /// other mode cannot interpret it, and carrying it over would surface as
+    /// a strange result on the operator's NEXT click rather than as an error.
+    #[test]
+    fn switching_pick_mode_discards_the_in_progress_gesture() {
+        let mut st = MeasureState::new(0);
+        st.linear.commit_point(p(10.0, 10.0));
+        assert!(st.gesture_in_progress());
+
+        st.set_linear_pick_mode(LinearPickMode::TwoLines);
+        assert_eq!(st.linear_pick_mode, LinearPickMode::TwoLines);
+        assert!(
+            !st.gesture_in_progress(),
+            "the half-finished point pick must not survive into line mode"
+        );
+
+        // ...and the same in the other direction.
+        st.two_lines.offer_line(picked(0.0, 0.0, 100.0, 0.0), EPS);
+        assert!(st.gesture_in_progress());
+        st.set_linear_pick_mode(LinearPickMode::Points);
+        assert!(!st.gesture_in_progress());
+    }
+
+    /// Re-selecting the mode already armed is a no-op, not a silent discard.
+    /// An operator clicking the button that is already lit has asked for
+    /// nothing, and must not lose a pick for it.
+    #[test]
+    fn re_selecting_the_current_pick_mode_keeps_the_gesture() {
+        let mut st = MeasureState::new(0);
+        st.set_linear_pick_mode(LinearPickMode::TwoLines);
+        st.two_lines.offer_line(picked(0.0, 0.0, 100.0, 0.0), EPS);
+
+        st.set_linear_pick_mode(LinearPickMode::TwoLines);
+        assert!(
+            st.two_lines.in_progress(),
+            "re-clicking the armed mode must not discard the pick"
+        );
+    }
+
+    /// ★ The override SURVIVES a clear, like `snap_master` and the group.
+    ///
+    /// The instinct is the opposite — it is an assertion about two specific
+    /// lines. What settles it is the friction the override exists to remove:
+    /// `linepick.rs` documents that without it the remedy would be changing a
+    /// global setting per dimension, *"which is how a setting becomes a thing
+    /// people fight"*. Resetting per pair recreates that at smaller scale for
+    /// anyone dimensioning a whole drawing out of a sloppy exporter, and it is
+    /// safe to persist because the verdict says "forced" before any Accept.
+    #[test]
+    fn the_override_survives_a_clear_like_the_other_tool_preferences() {
+        let mut pick = TwoLinePick::new();
+        pick.offer_line(picked(0.0, 0.0, 100.0, 0.0), EPS);
+        pick.force_parallel = true;
+
+        pick.clear();
+        assert!(!pick.in_progress(), "the picks are discarded");
+        assert!(
+            pick.force_parallel,
+            "the operator's override is a standing preference, not part of the gesture"
+        );
     }
 }

@@ -6218,6 +6218,84 @@ pub fn measure_linear_hint() -> &'static str {
 cycle candidates, hold Alt to skip snapping. Then Accept."
 }
 
+// --- Two-line ce dimensioning (`Pass 68.0`, ui-spec pass-68.0) -------------
+
+/// Label for the linear tool's pick-mode segmented control (ui-spec §3).
+pub fn two_line_pick_mode_label() -> &'static str {
+    "Pick:"
+}
+
+/// The original point-pick mode's option label.
+pub fn two_line_pick_mode_points_option() -> &'static str {
+    "Two points"
+}
+
+/// The two-line pick mode's option label.
+pub fn two_line_pick_mode_lines_option() -> &'static str {
+    "Two lines"
+}
+
+/// The standing hint shown the whole time two-line mode is armed (ui-spec §4.1).
+///
+/// Carries the "curves and empty space are not pickable" fact ONCE, standing,
+/// rather than as a message fired on every ordinary miss while the pointer
+/// crosses a drawing — which is the difference between a hint and a nag.
+///
+/// It also states what pdfce will DECIDE, because that decision is the whole
+/// feature and an operator should not have to discover it by trying.
+pub fn two_line_hint() -> &'static str {
+    "Click two straight lines. Parallel lines give a distance; lines at an angle give an \
+angle. Curves and blank space are not pickable. Then Accept."
+}
+
+/// The caption drawn beside a pickable line under the pointer (ui-spec §5).
+pub fn two_line_hover_label() -> &'static str {
+    "line"
+}
+
+/// The verdict when two lines are read as PARALLEL (ui-spec §6.2).
+///
+/// `measured` is the true angle between them, always stated — including, and
+/// especially, when `forced` is true. `two_lines.rs` puts the rule plainly: a
+/// shell that shows the result and hides the measurement is asking the
+/// operator to accept a decision while withholding the fact that makes it one.
+pub fn two_line_verdict_linear(measured: Option<f64>, forced: bool, distance_text: &str) -> String {
+    let angle = measured.map_or_else(
+        || "an angle pdfce could not measure".to_owned(),
+        |d| format!("{d:.2}° apart"),
+    );
+    if forced {
+        format!(
+            "These two lines are {angle} — treating them as PARALLEL because you asked. \
+Distance: {distance_text}."
+        )
+    } else {
+        format!(
+            "These two lines are {angle} — reading them as PARALLEL. Distance: {distance_text}."
+        )
+    }
+}
+
+/// The verdict when two lines are read as meeting at an ANGLE (ui-spec §6.2).
+pub fn two_line_verdict_angular(angle_text: &str) -> String {
+    format!("These two lines meet at an angle — measuring {angle_text}.")
+}
+
+/// The virtual-apex note (ui-spec §8).
+///
+/// Not a refusal: CAD drawings dimension virtual intersections routinely. It
+/// is said because it is a fact about the drawing the operator may not have
+/// noticed, and staying quiet about it would be the sneaky half of rule 4.
+pub fn two_line_virtual_apex_note() -> &'static str {
+    "These two lines do not actually meet — the angle is measured where they WOULD cross if \
+extended."
+}
+
+/// The operator's per-pair parallel override (ui-spec §9).
+pub fn two_line_force_parallel_checkbox() -> &'static str {
+    "Treat these two lines as parallel"
+}
+
 /// Circular-tool hint (ui-spec §3).
 pub fn measure_circular_hint() -> &'static str {
     "Click a circle, or several line segments forming an arc, to best-fit a circle. Click again \
