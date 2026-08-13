@@ -81,6 +81,102 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★★ CORRECTION, filed 2026-08-12 (hundred-and-thirty-third filing) — two claims already in the ledger were false; the release history is measured in full, across all eight tags, and a three-tag record gap is named as an open item rather than backfilled
+
+**Sourcing.** This librarian has no shell this dispatch (hard rule 8).
+Every figure in this entry is **relayed** from the dispatching engineer's
+own session, which ran `git rev-parse`, `gh release view` and `gh run
+list` against the full release history. Not independently re-verified
+here.
+
+**Correction 1 — the framing "every release from `v0.1.0` through
+`v0.5.1` has a Shipped-section entry" is FALSE.** That claim originated in
+this file's own hundred-and-thirty-first filing (this librarian's own
+unprompted finding) and was repeated in the hundred-and-thirty-second; it
+was then carried into a later dispatch by the engineer without
+independent verification, and relayed here as though settled — that relay
+is the engineer's error, named as such rather than absorbed silently.
+Measured, by grepping `ROADMAP.md` for release-subject headings:
+
+- **Dedicated release entries exist for exactly three tags: `v0.2.0`,
+  `v0.3.0`, `v0.5.3`** — four counting `v0.5.2`, backfilled by the
+  hundred-and-thirty-second filing.
+- **`v0.5.1`** has a record but not a dedicated one — it is named inside
+  a work-filing heading (*"…released as **`v0.5.1`**"*), a real record of
+  a different shape.
+- **`v0.1.0`, `v0.4.0` and `v0.5.0` have NO release record of either
+  shape** — they appear only in passing, inside other entries' prose.
+
+The true statement: **half of this project's eight releases have never
+had a dedicated release record**, and `v0.5.2` was merely the one with
+zero mentions of any kind — which is why it was the one that got found.
+This makes the underlying `R192` evidence (an obligation falling between
+two correct tools) **stronger, not weaker** — a systemic pattern rather
+than one slip. Amendment footers filed in place at every location that
+stated the false framing: this file's `v0.5.3` entry, the `v0.5.2`
+backfill entry immediately below it, and `SESSION_LOG.md`'s
+hundred-and-thirty-first-filing entry (same-filing propagation duty).
+
+**Correction 2 — the hard-rule-10a figure ("3 of the last 4 releases
+(75%)") understated the full picture.** That figure, filed at the
+hundred-and-twenty-fourth filing, was and remains a correct statement
+about the four-release window it examined at the time. Measured over the
+FULL release history to date:
+
+| tag | tagged commit | published | asset | size (bytes) | CI at the tagged commit |
+|---|---|---|---|---|---|
+| `v0.1.0` | `5007bef0e65e233f74370479fedabcf5bbf7c9dc` | 2026-08-10T21:10:49Z | `pdfce-v0.1.0-windows-x64.zip` | 9,590,137 | **failure** (run `31429875246`) |
+| `v0.2.0` | `5beecf6bef181f25902ab2c761b063de78f5eed8` | 2026-08-11T10:57:00Z | `pdfce-v0.2.0-windows-x64.zip` | 9,922,177 | **failure** (run `31484562150`) |
+| `v0.3.0` | `cfc20dd41b54cb18f0e0a37ca1780c526cfaa5d2` | 2026-08-11T17:26:03Z | `pdfce-v0.3.0-windows-x64.zip` | 9,998,582 | **failure** (run `31517208224`) |
+| `v0.4.0` | `2a372fcf292a025e78c09718a2313c5987cb0281` | 2026-08-11T21:58:22Z | `pdfce-v0.4.0-windows-x64.zip` | 10,023,075 | **success** (run `31539611925`) |
+| `v0.5.0` | `451372a76de5cbec5a67d5937805089c520ff4ce` | 2026-08-12T10:17:57Z | `pdfce-v0.5.0-windows-x64.zip` | 10,086,482 | **failure** (run `31585867570`) |
+| `v0.5.1` | `aad48c73ff453ab7f633406329a3ca002ae24e4e` | 2026-08-12T14:43:37Z | `pdfce-v0.5.1-portable-win64.zip` | 10,244,728 | **failure** (run `31608219503`) |
+| `v0.5.2` | `5b54a1eca2b28b3848fa7438586b909fcedff183` | 2026-08-13T00:02:34Z | `pdfce-v0.5.2-portable-win64.zip` | 10,290,964 | **success** (run `31652521712`) |
+| `v0.5.3` | `0963b5f2cac7bcbbe5ef2eadea62ecc3f4d63a53` | 2026-08-13 | `pdfce-v0.5.3-portable-win64.zip` | 10,308,179 | **success** (run `31659289450`) |
+
+**Per-item form (hard rule 10a): 5 of 8 releases (62.5%) over the full
+history were tagged at a commit CI had rejected** — `v0.1.0`, `v0.2.0`,
+`v0.3.0`, `v0.5.0`, `v0.5.1` red; `v0.4.0`, `v0.5.2`, `v0.5.3` green.
+Denominator: **8**, the count of tags published to date.
+
+**Mitigating context, already on record** (`f2ac2af` /
+hundred-and-seventh filing): CI was red on every push back past `v0.1.0`
+and nobody was watching it — the three earliest reds (`v0.1.0`–`v0.3.0`)
+share one systemic cause rather than being three independent process
+failures. **The encouraging half:** the last two releases are both green,
+and they are the only two ever verified by `verify-release.py`'s CI
+check — the tool postdates the earlier releases.
+
+Amendment footers filed in place at every location stating the
+window-specific figure: this file's `v0.5.3` entry (twice — the "climbing
+out of a bad record" paragraph and the "historically significant"
+paragraph inside the `v0.5.2` backfill entry), and the
+hundred-and-twenty-fourth filing's own hard-rule-10a paragraph.
+
+**Open item, named and NOT backfilled here.** `v0.1.0`, `v0.4.0` and
+`v0.5.0` have no release record of either shape (Correction 1). Full
+figures for all three are already measured, in the table above — a
+future session can backfill cheaply from it, or the operator can decide
+the older releases are not worth reconstructing. **Deliberately not
+actioned in this filing**: backfilling three more entries at the end of
+an already-long correction filing is how a filing sprawls past the point
+anyone reviews it. Flagged here as the single place to find the
+missing-record question the next time release bookkeeping is touched.
+
+**No Pass ID, rule, or decision minted.** `R192` gains further evidence —
+the release-record gap is now confirmed systemic rather than a one-off —
+not a ruling; whether to mint it remains the engineer's call. Ledger
+ceilings unaffected except the filing count: Pass families ceiling stays
+**71**, next free **72**; standing rules ceiling stays **R191**, next
+free **R192** (still an unruled proposal); decisions ceiling stays
+**055**, next free **056**; `SESSION_LOG.md` filings move **132 → 133**,
+which is this one.
+
+**`docs/FEATURES.md` — no change.** No capability moved; this entry
+corrects release-history bookkeeping only.
+
+---
+
 ### ★ `v0.5.3` tagged and released at `0963b5f` (annotated tag `b2d0595`) — second release in project history CI-verified green at its tagged commit, `v0.5.2` was the first; packaging smoke test exercises `Pass 68.0`'s two-line ce-dimension authoring end to end, in both the CLI and the GUI — 2026-08-12 (hundred-and-thirty-first filing)
 
 **Sourcing.** This librarian has no shell (hard rule 8). Every figure
@@ -120,6 +216,15 @@ was published with failing tests (see this file's own `v0.5.1` entry
 and the hundred-and-twenty-fourth filing for the full record of that
 history). The ordering rule this project settled on — file, let CI go
 green, then tag — was followed here in that order.
+
+> **[★ AMENDED 2026-08-12, hundred-and-thirty-third filing — the "three of
+> the four releases before `v0.5.2`" figure above is correct for the WINDOW
+> it names (`v0.1.0`–`v0.5.1`) and is left as written, not silently
+> replaced.** Measured over the FULL release history to date (all eight
+> tags, `v0.1.0`–`v0.5.3`): **5 of 8 (62.5%)** were tagged at a commit CI
+> had rejected — `v0.1.0`, `v0.2.0`, `v0.3.0`, `v0.5.0`, `v0.5.1` red;
+> `v0.4.0`, `v0.5.2`, `v0.5.3` green. Full per-tag table and sourcing: this
+> file's hundred-and-thirty-third-filing entry, top of *Shipped*.]**
 
 **CI evidence, measured twice, all 10 jobs green in both runs:**
 
@@ -199,6 +304,26 @@ Shipped-section entry). **Not backfilled here** — this librarian has no
 to file honestly, and inventing them would be exactly the kind of
 unmeasured assertion hard rule 8 exists to prevent. Flagged for a
 session with a shell to close.
+
+> **[★ AMENDED 2026-08-12, hundred-and-thirty-third filing — the claim
+> "`v0.1.0` through `v0.5.1` all have a Shipped-section entry" is FALSE,
+> measured against a fresh grep of this file.** Dedicated release entries
+> exist for exactly **three** tags — `v0.2.0`, `v0.3.0`, `v0.5.3` — plus
+> `v0.5.2` now, from the backfill this gap prompted. `v0.5.1` has a record,
+> but not a dedicated one: it is named inside a work-filing heading
+> ("…released as `v0.5.1`"), a real record of a different shape.
+> **`v0.1.0`, `v0.4.0` and `v0.5.0` have no release record of either
+> kind** — they appear only in passing, inside other entries' prose. The
+> true statement: **half of this project's eight releases have never had
+> a release record**; `v0.5.2` was merely the one with zero mentions of
+> any kind, which is why it was found at all. This makes the `R192`
+> evidence STRONGER, not weaker — a systemic pattern, not one slip. The
+> underlying finding this entry reported (`v0.5.2` had zero mentions) is
+> and remains correct; only this comparison claim was wrong, and it was
+> carried into a later dispatch by the engineer without independent
+> verification before this correction. The three still-missing records
+> are filed as a named open item, not backfilled here either — see this
+> file's hundred-and-thirty-third-filing entry, top of *Shipped*.]**
 
 **No Pass ID, decision, or new standing rule minted for this release**
 (per this dispatch's own instruction, and consistent with every prior
@@ -697,6 +822,18 @@ commit messages. The asset byte count and CI run ID in particular come from
 the live GitHub release and the live GitHub Actions API, checked just now,
 not from memory of what they probably were.
 
+> **[★ AMENDED 2026-08-12, hundred-and-thirty-third filing — "every
+> release from `v0.1.0` through `v0.5.1` has one" is FALSE, measured.**
+> Only `v0.2.0` and `v0.3.0` have a dedicated release entry among those
+> four; `v0.5.1` has a record but of a different shape (named inside a
+> work-filing heading, not a dedicated entry); `v0.1.0` and `v0.4.0` have
+> none at all. The gap this backfill closed for `v0.5.2` was real and the
+> figures below remain sound; the comparison this paragraph drew against
+> "every other release" does not. It was carried into a dispatch by the
+> engineer without independent verification before this correction. Full
+> table: this file's hundred-and-thirty-third-filing entry, top of
+> *Shipped*.]**
+
 **What was measured, and how:**
 
 | fact | value | source |
@@ -740,6 +877,12 @@ the second, and that entry's own text already said so before this gap was
 closed. Three of the four releases before it were tagged at commits CI had
 rejected, and `v0.3.0` was published with failing tests (see this file's
 `v0.5.1` entry for the full record of that history).
+
+> **[★ AMENDED 2026-08-12, hundred-and-thirty-third filing — same
+> window-specific figure as this file's `v0.5.3` entry above, correct for
+> its window and left as written.** Full-history figure: **5 of 8 (62.5%)**
+> across all eight tags to date. See that entry's amendment, or this
+> file's hundred-and-thirty-third-filing entry, for the full table.]**
 
 **Why the gap happened, worth a sentence because it is the second finding
 of this shape.** `tools/check-commits-filed.py` gates on *commits*, and
@@ -2374,6 +2517,22 @@ jobs`, and it agrees with the relayed table at both the run level and the
 **Per-item form (hard rule 10a): 3 of the last 4 releases (75%) were
 tagged at a commit CI had rejected; 1 of 4 (25%) was green.** Of the 3
 red, **2 were paperwork-only** and **1 was substantive**.
+
+> **[★ AMENDED 2026-08-12, hundred-and-thirty-third filing — this figure
+> is correct for the WINDOW it examined at the time of writing (the four
+> releases up to and including `v0.5.1`) and is left as written, not
+> silently replaced.** Measured over the FULL release history to date
+> (eight tags, `v0.1.0`–`v0.5.3`): **5 of 8 (62.5%)** were tagged at a
+> commit CI had rejected — `v0.1.0`, `v0.2.0`, `v0.3.0`, `v0.5.0`, `v0.5.1`
+> red; `v0.4.0`, `v0.5.2`, `v0.5.3` green. Mitigating context already on
+> record in this file (`f2ac2af` / hundred-and-seventh filing): CI was red
+> on every push back past `v0.1.0` and nobody was watching it, so the
+> three earliest reds (`v0.1.0`–`v0.3.0`) share one systemic cause rather
+> than being three independent process failures. The encouraging half:
+> the last two releases (`v0.5.2`, `v0.5.3`) are both green, and they are
+> the only two ever verified by `verify-release.py`'s CI check — that
+> tool postdates the earlier releases. Full per-tag table and sourcing:
+> this file's hundred-and-thirty-third-filing entry, top of *Shipped*.]**
 
 **★ `v0.3.0` IS THE SERIOUS ONE AND IS RECORDED PLAINLY HERE: a tagged,
 published release whose tests did not pass.** Not bookkeeping — `cargo

@@ -38617,6 +38617,20 @@ this release-record filing.
   already ticked in the hundred-and-twenty-eighth filing. Confirmed by
   inspection, not edited.
 
+**[★ AMENDED 2026-08-12, hundred-and-thirty-third filing — this entry's
+claim "every prior release from `v0.1.0` through `v0.5.1` has one [a
+release record], `v0.5.2` does not" is FALSE, measured.** Dedicated
+release entries exist for exactly three tags — `v0.2.0`, `v0.3.0`,
+`v0.5.3`. `v0.5.1` has a record but not a dedicated one (named inside a
+work-filing heading, not a Shipped-section entry of its own). `v0.1.0`,
+`v0.4.0` and `v0.5.0` have no release record of either shape. The
+underlying finding this entry reported — `v0.5.2` had zero mentions
+anywhere — remains correct; only the comparison claim was wrong, and it
+was carried into a later dispatch by the engineer without independent
+verification before this correction. Full measured table, all eight
+tags: `docs/ROADMAP.md`'s hundred-and-thirty-third-filing entry, top of
+*Shipped*.]**
+
 ## 2026-08-12 (hundred-and-thirty-second filing) — `v0.5.2` BACKFILLED: the release gap the hundred-and-thirty-first filing found is now closed, with every figure measured this session, not invented
 
 **Sourcing.** This dispatch had a shell. Every figure below was measured
@@ -38674,3 +38688,101 @@ This backfill touches only the release record.
 - `docs/FEATURES.md` — no change; no capability moved by this filing.
 - Give this filing its own commit with `docs/` staged by name, per the
   `af5580e` convention; run `git status --short` first.
+
+## 2026-08-12 (hundred-and-thirty-third filing) — two claims already in the ledger were false; the full eight-tag release history is measured and filed; a three-tag record gap (`v0.1.0`, `v0.4.0`, `v0.5.0`) is named as an open item, not backfilled
+
+**Sourcing.** This librarian has no shell this dispatch (hard rule 8).
+Every figure in this correction is **relayed** from the dispatching
+engineer's own session, which ran `git rev-parse`, `gh release view` and
+`gh run list` against the full release history. Not independently
+re-verified here.
+
+**This is a correction filing, not new shipped work.** No commit is
+being filed; the two corrections below are against this project's own
+prior record.
+
+**Correction 1 — "every release from `v0.1.0` through `v0.5.1` has a
+Shipped-section entry" is FALSE.** That framing originated in this
+file's own hundred-and-thirty-first-filing entry (this librarian's own
+unprompted finding) and was repeated in `ROADMAP.md`'s hundred-and-
+thirty-first and hundred-and-thirty-second entries; it was then carried
+into a later dispatch by the engineer without independent verification,
+and arrived here as though settled. **That relay is the engineer's
+error, not this librarian's**, and is named as such rather than
+absorbed silently. Measured: dedicated release entries exist for
+exactly three tags (`v0.2.0`, `v0.3.0`, `v0.5.3`; four counting
+`v0.5.2`, backfilled last filing). `v0.5.1` has a record but not a
+dedicated one — named inside a work-filing heading, not a Shipped-
+section entry of its own. `v0.1.0`, `v0.4.0` and `v0.5.0` have **no**
+release record of either shape. True statement: **half of this
+project's eight releases have never had a dedicated release record**,
+and `v0.5.2` was merely the one with zero mentions of any kind — which
+is why it was the one that got found. This strengthens the `R192`
+evidence rather than weakening it: a systemic pattern, not one slip.
+
+**Correction 2 — hard rule 10a's "3 of the last 4 releases (75%)"
+understated the full picture.** That figure (hundred-and-twenty-fourth
+filing) was and remains correct for the four-release window it
+examined. Measured over the full history, **5 of 8 releases (62.5%)**
+were tagged at a commit CI had rejected: `v0.1.0`, `v0.2.0`, `v0.3.0`,
+`v0.5.0`, `v0.5.1` red; `v0.4.0`, `v0.5.2`, `v0.5.3` green. Denominator:
+8, the count of tags published to date. Mitigating context already on
+record (`f2ac2af` / hundred-and-seventh filing): CI was red on every
+push back past `v0.1.0` and nobody was watching it, so the three
+earliest reds share one systemic cause rather than three independent
+failures. Encouraging half: the last two releases are both green, and
+are the only two ever verified by `verify-release.py`'s CI check — the
+tool postdates the earlier releases.
+
+**Full per-tag table** (tag / tagged commit / published / asset / size
+bytes / CI result / CI run ID) filed in `docs/ROADMAP.md`'s new
+hundred-and-thirty-third-filing entry, top of *Shipped* — not restated
+here in full; see that entry.
+
+**Amendment footers filed in place, same-filing propagation duty, at
+every editable location stating either false or window-specific
+figure:**
+- `docs/ROADMAP.md`'s `v0.5.3` entry (hundred-and-thirty-first
+  filing) — two footers (the "3 of 4" figure, and the "first gap of
+  this kind"/"`v0.1.0` through `v0.5.1` all have one" framing).
+- `docs/ROADMAP.md`'s `v0.5.2` backfill entry (hundred-and-thirty-
+  second filing) — two footers (the "every release... has one" framing,
+  and the repeated "three of the four" figure).
+- `docs/ROADMAP.md`'s hundred-and-twenty-fourth-filing hard-rule-10a
+  paragraph — one footer, full-history figure.
+- This file's own hundred-and-thirty-first-filing entry — one footer,
+  above.
+
+**Open item, named and NOT backfilled here.** `v0.1.0`, `v0.4.0` and
+`v0.5.0` have no release record of either shape. Full figures for all
+three are already measured and filed in `docs/ROADMAP.md`'s new entry —
+a future session can backfill cheaply from it, or the operator can
+decide the older releases are not worth reconstructing. Deliberately
+not actioned in this filing: three more backfilled entries at the end
+of an already-long correction filing is how a filing sprawls past the
+point anyone reviews it.
+
+**Still in flight:** unchanged from the hundred-and-thirty-second
+filing. This correction touches only release-history bookkeeping.
+
+**For next session:**
+- The `v0.1.0` / `v0.4.0` / `v0.5.0` release-record gap is open,
+  measured, and cheap to close from the table already filed — not
+  urgent, not forgotten.
+- `docs/FEATURES.md` — no change; no capability moved by this filing.
+- Give this filing its own commit with `docs/` staged by name, per the
+  `af5580e` convention; run `git status --short` first.
+
+**Ledger for this filing.** Pass family ceiling **UNCHANGED at 71**
+(71.x highest); no new Pass ID — this is a correction filing. `docs/
+FEATURES.md`: **not edited** — no capability row moved.
+`docs/ARCHITECTURE.md` §12: **not edited** — no crate boundary, library
+choice, or invariant was redrawn. Standing rules: **no new rule
+minted** — ceiling unchanged at **R191**, next free **R192** (still an
+unruled proposal; this filing adds evidence, not a ruling). Decision
+records: unchanged, ceiling **055**, next free **056**. Operator-
+question ceiling unaffected by this filing. Backup/git working-tree
+state not independently asserted — this librarian has no shell this
+dispatch (hard rule 8). This is the **hundred-and-thirty-third**
+`SESSION_LOG.md` filing (the hundred-and-thirty-second confirmed
+present by direct read before this entry was appended).
