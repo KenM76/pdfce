@@ -81,22 +81,36 @@ Anything pdfce **inferred** — a value, a boundary, a classification, a
 correction the operator did not directly specify (OCR text,
 auto-detected form fields, recognised text blocks, snapped points,
 best-fit geometry, derived centrelines, reflow results, suggested Bates
-ranges, substituted or synthesised fonts) — is **visible before it
-becomes document state**, and the operator can reject it without undoing
-anything else.
+ranges, substituted or synthesised fonts) — is **disclosed, never
+silent**.
 
-This is a requirement on **disclosure**, not on any particular widget.
-It is satisfied by the inferred value being on screen and the commit
-being a deliberate act — a key press, or a click on a control at a
-fixed, predictable position. It is **not** satisfied by a control whose
-position is derived from the document. And it does **not** require a
-two-click confirmation for a direct manipulation whose result is fully
-visible on the canvas and reversible in one undo.
+**The commit point is SAVE** (`ARCHITECTURE.md` §11.1): Undo rejects,
+Save commits, and **nothing in an open edit session is document state**.
+So the inference **renders exactly as saved content will render** —
+normally, live, reflowing normally, **with no badge, tint, red flag,
+dashed outline or "provisional" layer drawn into the page view** — and
+the disclosure of *what pdfce guessed* lives **off-canvas**: a status
+line, a results panel, a post-command report, a properties field. It
+never blocks, never requires acknowledgement, and is never positioned
+relative to the document. **There is no accept/reject gate in front of
+anything.**
+
+In `pdfce-cli` the invocation **is** the commit — no session, no undo —
+so the CLI **prints** what it inferred on the way past instead. **What
+this rule forbids is SILENCE**, in both shells; only the vehicle
+differs.
+
+This is a requirement on **disclosure**, not on any particular widget,
+and it bites hardest on inferences the operator **cannot see by
+definition** — OCR text at render mode 3 (invisible, under the image), a
+font substitution that renders plausibly, a best-fit residual, an
+over-eager snap, a near-parallel classification. **Render normally;
+report separately. Both.**
 
 Where an inference is *inherently* uncertain (a best-fit residual, a
 font-trust downgrade, a reflow that overflows), the uncertainty is
-stated in the disclosure, not merely implied by the presence of a
-confirm button.
+**stated in the disclosure** rather than implied by the presence of a
+confirm button — there is no longer a confirm button to imply it.
 
 Inherited from the user's MatExtractor project; same principle, new
 domain.
@@ -115,6 +129,70 @@ screen to click — I've never seen any other software operate that way."*
 The complaint was placement, not the confirm step. The narrowing keeps
 the obligation exactly where it was meant to be — on things pdfce
 GUESSED — and takes it off things the operator did.
+
+**★★ NARROWED AGAIN 2026-08-13** (decision **059**, `ARCHITECTURE.md`
+§12). The first narrowing took the burden off things the operator *did*;
+this one takes it off the **rendering** of things pdfce *guessed*. The
+prior wording is kept legible rather than silently rewritten — **the head
+of this rule said**:
+
+> ~~"…is **visible before it becomes document state**, and the operator
+> can reject it without undoing anything else."~~ and ~~"It is satisfied
+> by the inferred value being on screen and the commit being a deliberate
+> act — a key press, or a click on a control at a fixed, predictable
+> position."~~
+
+**The operator rejected that phrase by name**, having read it restated as
+non-negotiable #1 in the outbound briefing at
+`D:\Dev\FeatureRequests\pdfce_FeatureRequests\README.md`. Verbatim and in
+full:
+
+> *"I had you write a handoff to D:\Dev\FeatureRequests\pdfce_FeatureRequests
+> and noticed under the non-negotiables, item 1 - must be visible before
+> it becomes a document state: I think this has consequenses for
+> usability. As a user I just want to type in an existing gui text box
+> and have it look normal and reflow normal. I want OCRed stuff to look
+> normal when the command is executed too. I only expect things to be
+> committed when I hit save, and not commited if I hit undo. The nagging
+> and red flagging in the original GUI made for a lot of extra bugs in
+> the visibility when editing."*
+
+**Four clauses**, all folded into the rule's text above: (1) **the commit
+point is SAVE** — the session *is* the preview, so an inference that
+lands in it has not "become document state"; (2) **inferred content
+renders exactly as saved content will render**, with no provisional
+marking on the page; (3) **disclosure moves off-canvas and stays there**;
+(4) **no accept/reject gate in front of anything** — already true for
+direct manipulations since 024 §4.4, now true for inferences too.
+
+**★ This is a CORRECTNESS rule, not only a usability preference**, and
+that is the half a future session will be tempted to trade away. His last
+sentence is the argument: **every provisional-state marking is a SECOND
+RENDERING PATH for the same content, and two paths drift.** Content drawn
+as *pending* and the same content drawn as *committed* are different
+code, exercised at different times — the divergence surfaces as content
+that looks wrong, vanishes, double-draws or fails to reflow. **Deleting
+the marking machinery removes a BUG CLASS.** A shell that re-introduces a
+"helpful" highlight re-introduces the class.
+
+**Unchanged, so this is not over-read:** invisible inferences still owe
+their off-canvas disclosure (that is *why* the rule exists); `pdfce-cli`
+still prints (rule 11 untouched); §11.2's **redaction confirmation
+survives** — it warns about a destructive *save*, not about an inference;
+and **R167's editor chrome survives** — a dashed outline for a widget
+with no paintable `/AP`, a selection highlight, a resize handle disclose
+**editability**, not pdfce's uncertainty about content.
+
+**The one-line test:** *would a screenshot of the editing canvas differ
+from a screenshot of the same document saved and reopened?* If yes, **and
+the difference is pdfce marking its own uncertainty**, that is the
+defect. The second half of that sentence is load-bearing.
+
+**Note the shape, because it has now happened twice:** two narrowings
+against this one rule, both prompted by the operator noticing shipped
+friction rather than by review. **Rule 4 has been consistently read as a
+mandate for VISIBLE MACHINERY when it was only ever a mandate for
+NON-SILENCE.**
 
 ### 5. Roadmap discipline
 

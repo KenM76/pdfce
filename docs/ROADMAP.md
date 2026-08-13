@@ -40,6 +40,21 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
   other projects (MatExtractor): algorithmic suggestions (OCR text,
   auto-detected form fields, suggested Bates ranges) are always
   reviewable hints, never silent auto-applies.
+  **★ AMENDED 2026-08-13 (decision 059) — "reviewable hint" must NOT be
+  read as "gated hint", and the glossary line above is kept only for its
+  history.** The rule has been narrowed **twice**, both times toward
+  *less* machinery: **024 §4.4** took the confirm step off direct
+  manipulations, and **059** took provisional *rendering* off inferences.
+  Current text: **the commit point is SAVE** (`ARCHITECTURE.md` §11.1) —
+  Undo rejects, Save commits, nothing in an open session is document
+  state — so an inference **renders exactly as saved content will
+  render** (no badge, tint, red flag, dashed outline or "provisional"
+  layer on the page), **no accept/reject gate stands in front of
+  anything**, and the surviving obligation is an **off-canvas**
+  disclosure that never blocks and is never positioned relative to the
+  document. `pdfce-cli` **prints** instead, because a CLI invocation *is*
+  the commit. **What the rule forbids is SILENCE**, not auto-application.
+  Authoritative text: `CLAUDE.md` **rule 4**; reasoning: decision **059**.
 - **pdf dimension** — a dimension already present in the PDF, exported
   by CAD or another authoring tool: existing page content, or a
   foreign (non-pdfce) annotation. pdfce reads it and may measure
@@ -53551,6 +53566,18 @@ not a judgment call:**
   with redaction as the sole deliberate, explicit exception.
 - **Fuzzy, never sneaky** for every algorithmic suggestion (OCR,
   auto-detected fields, suggested Bates ranges, etc.).
+  **★ AMENDED 2026-08-13 (decision 059):** the obligation is
+  **DISCLOSURE, not a gate and not a marking**. Inferred content
+  **renders exactly as saved content will render**; the disclosure lives
+  **off-canvas** (status line / results panel / post-command report /
+  properties field), never blocking and never positioned relative to the
+  document; **no accept/reject step in front of anything**; the CLI
+  **prints** what it inferred because its invocation *is* the commit.
+  **A provisional marking drawn into the page view is now a DEFECT**, not
+  a compliance measure — it is a second rendering path for the same
+  content, and the operator reported the resulting drift as *"a lot of
+  extra bugs in the visibility when editing"*. See `CLAUDE.md` rule 4
+  (amended text) and `ARCHITECTURE.md` §12 decision **059**.
 - **Test-corpus sourcing discipline** per `LEGAL.md` — no
   unknown-provenance real-world PDFs in the repo.
 - **Rust Style Guide + API Guidelines compliance.** `cargo fmt --check`
@@ -56763,7 +56790,10 @@ not a judgment call:**
   (**circles vs. squares**, **R84**), which is the cheapest available
   carrier for the distinction.
   Cross-references CLAUDE.md **rule 4** (fuzzy, never sneaky — as
-  narrowed by decision 024 §4.4), **R148** (name the provenance of any
+  narrowed by decision 024 §4.4 **and again by decision 059, 2026-08-13:
+  the unsnapped handle is still a rule-4 matter, but the remedy is an
+  OFF-CANVAS disclosure of what pdfce derived, never a provisional
+  marking painted onto the curve**), **R148** (name the provenance of any
   value pdfce derived rather than received), **R84** and **R83**.
 
   **Ceiling is now R149** (was R148 at continuation 86's filing; R147 at

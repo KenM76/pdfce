@@ -4753,6 +4753,21 @@ promise.
   base" would silently violate the minimal-diff promise the moment
   undo is involved — this is exactly the subtle bug this section
   exists to prevent someone from introducing.
+  **★ CROSS-REFERENCE ADDED 2026-08-13 (decision 059) — a USER-FACING
+  guarantee now rests on this bullet.** Project rule 4's first clause,
+  as amended that day, says **the commit point is SAVE**: nothing in an
+  open edit session is document state, **Undo rejects and Save commits**,
+  and therefore an inference that lands in the session and draws on the
+  canvas needs **no accept/reject gate and no provisional marking** in
+  front of it — *the session IS the preview*. **That clause is true only
+  because of the save-time-diff rule stated immediately above.** If the
+  dirty set were ever changed to "every object any command touched",
+  **an undone inference could reach the saved bytes**, and rule 4's
+  clause 1 would become false in the same edit that made the change.
+  So: **this bullet is not merely an internal correctness rule about
+  incremental save — it is the mechanism a user-visible promise is
+  built on**, and any future proposal to track a touched-set instead
+  must be read against decision 059 as well as against §5.
 - Redo stack is invalidated (cleared) the instant a new edit is made
   after an undo — standard editor behavior, stated here for
   documentation-first completeness, not because it's subtle.
@@ -19698,3 +19713,261 @@ dependency was added, no `cargo-about` regeneration is owed, and no test,
 fmt, clippy or `cargo tree` figure is claimed** — none was run *for* this
 filing. Full record: `ROADMAP.md`'s **`Pass 72.0`** entry at the head of
 *Next up*, and `SESSION_LOG.md`'s hundred-and-thirty-eighth filing.
+
+---
+
+### 2026-08-13 (hundred-and-fortieth filing) — decision 059: THE COMMIT POINT IS **SAVE**, so an inference that lands in the open session has not "become document state" — inferred content renders **exactly as saved content will render**, no provisional marking is drawn into the page view, and rule 4's surviving obligation moves **off-canvas**. Rule 4's **second** narrowing, and the first one that is a **correctness** rule rather than a usability one
+
+**Ledger, measured by `python tools/check-ledger-numbers.py` at the head
+of this dispatch, not carried from any prior entry:** *"standing rules
+R191 → next free R192; decision records 058 → next free 059;
+SESSION_LOG filings 139 → next free 140; Pass families with headings up
+to 73."* **This filing mints decision `059`** — the next free number —
+**and nothing else.**
+
+- **No standing rule.** **R192 remains a PROPOSED, unruled number**
+  (claimed by the *"an obligation that falls between two correct tools is
+  enforced by neither"* proposal) and this filing adds nothing to that
+  proposal. **This amendment needs no R-number: it amends project rule 4
+  in `D:\Dev\pdfce\CLAUDE.md`, which already exists**, and minting a
+  standing rule beside an amended project rule would create two texts
+  that can disagree.
+- **No Pass.** **No code changed in this filing at all.** Family ceiling
+  stays **73**, next free **`Pass 74`**. Consequently **no test, `fmt`,
+  `clippy`, `cargo tree` or packaging figure is claimed here** — none was
+  run *for* this filing.
+- **No operator question.** Nothing is being asked; ceiling stays
+  **`(bm)`**, next free **`(bn)`**.
+- **No `FEATURES.md` row moves, and the omission is deliberate rather
+  than drift.** No capability changed and no **core / cli / gui** box
+  moves — this decision changes how a capability must *present* itself,
+  not whether it exists. Stated explicitly because that file's
+  maintenance contract (same filing as every roadmap change) makes a
+  silent no-op indistinguishable from a forgotten one.
+
+#### The operator's statement, verbatim and in full — this is the whole of what is known
+
+> *"I had you write a handoff to `D:\Dev\FeatureRequests\pdfce_FeatureRequests`
+> and noticed under the non-negotiables, item 1 - must be visible before
+> it becomes a document state: I think this has consequenses for
+> usability. As a user I just want to type in an existing gui text box
+> and have it look normal and reflow normal. I want OCRed stuff to look
+> normal when the command is executed too. I only expect things to be
+> committed when I hit save, and not commited if I hit undo. The nagging
+> and red flagging in the original GUI made for a lot of extra bugs in
+> the visibility when editing."*
+
+**What he was reading when he wrote it:** the outbound briefing at
+`D:\Dev\FeatureRequests\pdfce_FeatureRequests\README.md`, *"Two
+non-negotiables the shell inherits"*, **item 1** — which stated rule 4 to
+the `pdfceGUI` project in the phrase *"visible before it becomes document
+state"*. **He rejected the central phrase**, not the rule around it.
+
+#### The amendment, in four clauses
+
+**1. THE COMMIT POINT IS SAVE.** Nothing in an open edit session is
+document state. **Undo rejects; Save commits.** Therefore an inference
+that lands in the session and draws on the canvas **has not "become
+document state"** — **the session IS the preview** — and needs no gate in
+front of it.
+
+**This is not a concession, and that matters for how the clause is read
+later.** §11.1 has required since 2026-07-23 that the dirty set be a
+**structural diff against the base revision computed at save time**,
+never an accumulation of every object a command touched — *"if a user
+edits an object and then undoes that specific edit before saving, that
+object must not appear in the incremental update."* **The architecture
+already put the commit point at Save.** What the old wording did was
+place a *second*, earlier, UI-level commit point in front of the real
+one, and then defend it as though it were protecting the file. It was
+not: §11.1 protects the file. **Rule 4 now depends on §11.1 rather than
+duplicating it**, and the two are cross-referenced in both directions —
+if §11.1's save-time-diff rule were ever weakened to touched-set
+tracking, **clause 1 would become false in the same edit**, and the
+cross-reference exists so that consequence is visible from either end.
+
+**2. INFERRED CONTENT RENDERS EXACTLY AS SAVED CONTENT WILL RENDER.**
+Typing into an existing text box looks normal and **reflows normally,
+live**. OCR output looks normal **the instant the command completes**.
+**No badge, no tint, no red flag, no dashed outline, no "provisional"
+layer** drawn into the page view to mark something as not-yet-accepted.
+
+**3. DISCLOSURE MOVES OFF-CANVAS AND STAYS THERE.** The surviving
+obligation is that the operator can **find out** what pdfce guessed and
+how uncertain it was — a status line, a results panel, a post-command
+report, a properties field. It **never blocks**, **never requires
+acknowledgement**, and **never sits at a position derived from the
+document**. (That last clause is decision 024 §4.4's finding, unchanged
+and now applied to the report rather than to a confirm button.)
+
+**4. NO ACCEPT/REJECT GATE IN FRONT OF ANYTHING.** Already true for
+direct manipulations since decision 024 §4.4; **now true for inferences
+as well**, which is the half 024 deliberately left in place.
+
+#### ★★ Why this is a CORRECTNESS decision and not only a usability preference — the load-bearing part
+
+The operator's closing sentence is the whole argument: *"the nagging and
+red flagging in the original GUI made for a lot of extra bugs in the
+visibility when editing."*
+
+**Every provisional-state marking is a SECOND RENDERING PATH for the same
+content, and two paths drift.** Content drawn as *pending* and the same
+content drawn as *committed* are **different code, exercised at different
+times**, on different state, under different invalidation rules. The
+divergence surfaces as exactly what he reported: content that looks
+wrong, vanishes, double-draws, or fails to reflow — intermittent,
+timing-dependent, hard to reproduce, and attributed to the editing
+feature rather than to the marking machinery that actually produced it.
+
+**Deleting the marking machinery REMOVES A BUG CLASS.** It does not
+merely reduce friction. **Record this explicitly and do not let a future
+session trade it away**: a reader who files this decision under
+*friction-reduction* will reintroduce a "helpful" highlight the first
+time a surface feels ambiguous, and will then rediscover the same
+intermittent visual defects the old shell had, without any reason to
+connect the two. **A shell that re-introduces provisional styling
+re-introduces the bug class.**
+
+The general form, worth carrying past this project: **a UI affordance
+that renders the same content a second way is not free even when it is
+correct on the day it is written** — it is a duplicate implementation of
+the renderer's contract, maintained by nobody, exercised only in states
+the test suite does not construct.
+
+#### ★ The shape of the failure, recorded because it has now recurred
+
+**This is the SECOND narrowing of rule 4, and both were prompted the same
+way.**
+
+| | first narrowing | second narrowing |
+|---|---|---|
+| **date / record** | 2026-08-05, decision **024 §4.4** | 2026-08-13, decision **059** (this entry) |
+| **what it took the burden OFF** | things the operator **DID** — direct manipulations (placing a ce dimension, typing a replacement) | the **RENDERING** of things pdfce **GUESSED** |
+| **operator's reported symptom** | *"there is a separate accept / reject box somewhere on the screen to click — I've never seen any other software operate that way"* | *"the nagging and red flagging … made for a lot of extra bugs in the visibility when editing"* |
+| **what was actually wrong** | the confirm control's **placement** (positioned relative to the PAGE, so it moved on every zoom, scroll and page change) | the existence of a **second rendering path** for uncertain content |
+| **how it surfaced** | operator noticing shipped friction | operator reading an outbound **briefing** and recognising the phrase |
+
+**Two narrowings against one rule, neither found by review, is itself the
+finding: rule 4 has been consistently read as a mandate for VISIBLE
+MACHINERY when it was only ever a mandate for NON-SILENCE.** Both
+readings satisfy the words *"visible before it becomes document state"*;
+only one of them is what the rule is for. **The words were the defect**,
+which is why this filing amends the rule's text rather than adding a
+gloss beside it.
+
+**Note the last row of the table in particular.** The second narrowing
+was caught **in a briefing to another project**, before that project
+built anything from it — the cheapest possible moment. That is an
+argument for writing outbound briefings at all: **restating a rule to an
+audience that has not absorbed its history is the only review step this
+project has that reads the rule's actual words.**
+
+#### What is UNCHANGED — the record must say so, or the next session over-reads this
+
+- **★ INVISIBLE INFERENCES STILL OWE AN OFF-CANVAS DISCLOSURE. They are
+  why rule 4 exists**, because the operator **cannot see them by
+  definition**: OCR text written at **render mode 3** (invisible, under
+  the image — ISO 32000-1 §9.3.6 Table 106), a **font substitution that
+  renders plausibly**, a **best-fit residual**, an **over-eager snap**, a
+  **near-parallel classification**. **Render normally; report separately.
+  BOTH.** Clause 2 removes the marking, not the report — a shell that
+  ships neither has moved from one rule-4 violation to another.
+- **THE CLI's OBLIGATION IS THE MIRROR IMAGE AND IS UNTOUCHED.** A
+  `pdfce-cli` invocation **IS** the commit — it writes a file, there is
+  no session, there is no undo — so it must **PRINT** what it inferred on
+  the way past. **What rule 4 forbids is SILENCE, in both shells; only
+  the vehicle differs.** Project rule 11 (every feature Pass ships its
+  CLI subcommand) is unaffected. This asymmetry is not an inconsistency:
+  clause 1 holds *because* the GUI has a save point, and the CLI has
+  none.
+- **RULE 4 STILL NAMES THE INFERENCES.**
+  `docs/core-api/03-capabilities.md` marks, per capability, exactly which
+  returned values are inferred. A shell that does not know which values
+  those are still ships a rule-4 violation — it now ships it **by having
+  no report** rather than **by having no gate**.
+- **DECISION 024 §4.4 IS NOT SUPERSEDED**, it is extended. Its finding
+  (a control positioned relative to the document is the defect) is
+  carried into clause 3 and is the reason disclosure must be off-canvas
+  rather than merely optional.
+- **§11.2's REDACTION CONFIRMATION SURVIVES AND IS NOT AN INFERENCE
+  GATE.** Redaction's explicit confirmation dialog exists because
+  redaction is the one edit **Undo cannot rescue after save** (§5, §11.2)
+  — it warns about a **destructive save**, not about an inference. **Do
+  not delete it under clause 4.** The distinction is checkable: clause 4
+  forbids gating *what pdfce guessed*; §11.2 gates *what the operator
+  chose, irreversibly*.
+- **★ R167's EDITOR CHROME SURVIVES, and this is the likeliest
+  over-read.** R167 permits an overlay painted each frame to show
+  something R43 declines to synthesise — **a dashed outline for a widget
+  with no paintable `/AP`**, a type glyph, a resize handle, a selection
+  highlight — on three conditions (never written to any `/AP`;
+  unmistakably chrome; editing contexts only). **That chrome discloses
+  EDITABILITY and SELECTION, which are facts about the EDITOR's state,
+  not pdfce's uncertainty about content.** Clause 2 forbids marking *how
+  confident pdfce is in content it produced*. **Both can be true at
+  once**, and a session that revokes R167 by citing this decision has
+  made an invisible form field invisible again — the exact defect R167
+  was minted to fix (decision 033 §1.3, observed live).
+
+#### The one-line test
+
+> **Would a screenshot of the editing canvas be distinguishable from a
+> screenshot of the same document saved and reopened?**
+
+**If yes, AND the difference is pdfce marking its own uncertainty, that
+is the defect.** **The second half of that sentence is load-bearing** —
+without it the test also condemns R167's chrome, the selection
+rectangle, the text cursor and every handle in the editor, none of which
+this decision touches.
+
+#### What this decision does NOT settle
+
+- **It does not lift the GUI pause** (decision 058, standing since
+  2026-08-13). **A rule about how a shell must behave is not permission
+  to build one.**
+- **It does not specify a disclosure SURFACE.** *Status line, results
+  panel, post-command report, properties field* are the permitted shapes,
+  not a design. The surface for any given capability is
+  `pdfce-ui-specialist`'s call at the time that capability gets a shell.
+- **It does not describe, endorse or evaluate `D:\dev\pdfceGUI`'s
+  design** — 058's restraint clause is unchanged; nothing about that
+  project beyond the operator's two statements is known here.
+- **It does not change any `pdfce-core` or `pdfce-cli` behaviour at
+  HEAD.** No verb's output, refusal or return type is affected. The CLI
+  bullet above restates an existing obligation; it does not add one.
+- **It does not audit the existing shell for violations.**
+  `crates/pdfce-gui` may today contain markings clause 2 forbids; **no
+  such audit was performed in this filing and none is claimed.** Under
+  058 that crate may be replaced wholesale, so auditing it would be work
+  against a deletion candidate — **but if GUI work resumes on it, clause
+  2 binds that work.**
+
+#### The cross-project deliverable this decision produced, named here because otherwise it is not handed off
+
+Both files live **outside** this repository, in the `pdfceGUI` request
+channel (`docs/NEXT_SESSION.md` §*"CHECK THE GUI REQUEST CHANNEL"*), and
+are named here per the standing discipline that **a cross-project
+deliverable is not handed off until a pdfce doc names it**:
+
+- **`D:\Dev\FeatureRequests\pdfce_FeatureRequests\note_rule4_narrowed_again_no_provisional_marking.md`**
+  — the outbound note carrying the operator's statement, the four
+  clauses, the correctness argument and the one-line test, written for a
+  session that **cannot ask a question here**.
+- **`D:\Dev\FeatureRequests\pdfce_FeatureRequests\README.md`**,
+  non-negotiable **#1** — **corrected in place** with a dated amendment
+  block pointing at that note. **The uncorrected briefing would have led
+  that project to build the thing the operator has just rejected**, which
+  is the sharpest available illustration of the standing warning in
+  `NEXT_SESSION.md`: *a stale briefing is worse than none, because it is
+  trusted.*
+
+Both were written by the engineer before this dispatch; **this filing did
+not re-do them and does not restate their contents as its own work.**
+
+**Body section updated in the same filing: §11.1**, which gains the
+reciprocal cross-reference to this decision so a reader who lands on the
+dirty-set rule learns that a *user-facing* guarantee now rests on it.
+**No crate boundary moved, no dependency was added, no `cargo-about`
+regeneration is owed.** Full record: `SESSION_LOG.md`'s
+hundred-and-fortieth filing, and project rule **4** in
+`D:\Dev\pdfce\CLAUDE.md` as amended the same day.

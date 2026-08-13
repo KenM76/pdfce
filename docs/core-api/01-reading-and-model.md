@@ -1376,9 +1376,17 @@ Guards: `SNAP_FLATTEN_STEPS` 16 `:120`, `MAX_NEIGHBOURHOOD_SEGMENTS` 256
 `:130`, `MAX_CANDIDATES` 4096 `:136`.
 
 `SnapKind::is_derived()` is your rule-4 hook: a `DerivedCenterline`
-candidate is something pdfce **inferred**, and per project rule 4 it must be
-visibly distinguished before it becomes document state. The API hands you
-the flag; the disclosure is your shell's job.
+candidate is something pdfce **inferred** — there is no such line in the
+file, pdfce worked it out from two edges — so the operator has to be able to
+tell it apart from a real edge. The API hands you the flag; the disclosure is
+your shell's job.
+
+**Disclose it in the snap INDICATOR, not in the placed geometry** (decision
+059). A snap indicator is a *pre-commit affordance* — it is the
+cursor, describing what is about to happen — so distinguishing a derived
+candidate there is exactly right. Once the point is placed, the resulting
+geometry renders like any other: **no residual marking on applied content**.
+See `03-capabilities.md`'s rule-4 block for why that line is drawn where it is.
 
 Related: `centerline::page_candidates(&model)` (`centerline.rs:69`) and
 `derive_from_path(index, &path)` (`:91`), with

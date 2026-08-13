@@ -40643,3 +40643,331 @@ still partly wrong**, for the second consecutive filing. Measured after
 committing; `git rev-list --count origin/main..HEAD` = **15**, and
 `python tools/check-ledger-numbers.py` re-run post-commit: **clean**,
 *"SESSION_LOG filings 139 → next free is 140"*.
+
+## 2026-08-13 (hundred-and-fortieth filing) — **RULE 4 IS NARROWED A SECOND TIME, AND THIS ONE IS A CORRECTNESS RULE.** The operator read the outbound briefing's non-negotiable #1 and rejected the phrase *"visible before it becomes document state"*: **the commit point is SAVE**, inferred content **renders exactly as saved content will render**, disclosure moves **off-canvas**, and **no accept/reject gate stands in front of anything**. Decision **059** minted; **no Pass, no R-number, no operator question, no `FEATURES.md` row**. The load-bearing reason is his last sentence — **every provisional marking is a second rendering path, and two paths drift**
+
+**This is an OPERATOR-INSTRUCTION filing, not a Pass completion. No code
+changed, nothing shipped, and no Pass number was invented.** Four
+documents were edited at six sites; the deliverable that reaches the
+`pdfceGUI` project was written by the engineer *before* this dispatch and
+is **named** here rather than re-done.
+
+**Ledger, measured by `python tools/check-ledger-numbers.py` in this
+dispatch, not carried from any prior entry:** *"standing rules R191 →
+next free R192; decision records 058 → next free 059; SESSION_LOG filings
+139 → next free 140; Pass families with headings up to 73 (highest ID
+73.1)"*, and the parse reported **`ledger-numbers: clean — no duplicate
+Pass, rule, or decision numbers`**. **This filing mints decision `059`
+and SESSION_LOG filing `140` — both the next free numbers — and nothing
+else:**
+
+- **No standing rule.** **R192 is already claimed by an unruled
+  PROPOSAL** (*an obligation that falls between two correct tools is
+  enforced by neither*) and this filing adds nothing to it. **This
+  amendment needs no R-number** — it amends **project rule 4**, which
+  already exists in `D:\Dev\pdfce\CLAUDE.md`. Minting a standing rule
+  beside an amended project rule would create two texts that can
+  disagree, which is the failure this project keeps paying for.
+- **No Pass.** Family ceiling stays **73**, next free **`Pass 74`**.
+- **No operator question.** Nothing is being asked; ceiling stays
+  **`(bm)`**, next free **`(bn)`**.
+- **No `FEATURES.md` row, and the omission is DELIBERATE.** No capability
+  changed and no **core / cli / gui** box moves. Recorded explicitly
+  because that file's maintenance contract (updated in the same filing as
+  every roadmap change) makes an intentional no-op and a forgotten one
+  look identical afterwards.
+
+### The operator's statement, verbatim and in full
+
+> *"I had you write a handoff to D:\Dev\FeatureRequests\pdfce_FeatureRequests
+> and noticed under the non-negotiables, item 1 - must be visible before
+> it becomes a document state: I think this has consequenses for
+> usability. As a user I just want to type in an existing gui text box
+> and have it look normal and reflow normal. I want OCRed stuff to look
+> normal when the command is executed too. I only expect things to be
+> committed when I hit save, and not commited if I hit undo. The nagging
+> and red flagging in the original GUI made for a lot of extra bugs in
+> the visibility when editing."*
+
+**What he was reading:** `D:\Dev\FeatureRequests\pdfce_FeatureRequests\README.md`,
+*"Two non-negotiables the shell inherits"*, **item 1** — rule 4 restated
+to the `pdfceGUI` project in the phrase *"visible before it becomes
+document state"*. **He rejected the central phrase, not the rule around
+it.**
+
+### The amendment — four clauses
+
+1. **THE COMMIT POINT IS SAVE.** Nothing in an open edit session is
+   document state; **Undo rejects, Save commits**. An inference that
+   lands in the session and draws on the canvas has therefore **not**
+   "become document state" — **the session IS the preview** — and needs
+   no gate in front of it. **This is not a concession:**
+   `ARCHITECTURE.md` **§11.1** has required since 2026-07-23 that the
+   dirty set be a **save-time structural diff against the base
+   revision**, never an accumulation of every object a command touched,
+   *precisely* so an undone edit cannot reach the saved bytes. **Rule 4
+   now DEPENDS on §11.1 rather than duplicating it**, and the two are
+   cross-referenced in **both** directions in this filing.
+2. **INFERRED CONTENT RENDERS EXACTLY AS SAVED CONTENT WILL RENDER.**
+   Typing into an existing text box looks normal and reflows normally,
+   live. OCR output looks normal the instant the command completes. **No
+   badge, tint, red flag, dashed outline or "provisional" layer** drawn
+   into the page view.
+3. **DISCLOSURE MOVES OFF-CANVAS AND STAYS THERE** — status line,
+   results panel, post-command report, properties field. **Never
+   blocking, never requiring acknowledgement, never positioned relative
+   to the document.**
+4. **NO ACCEPT/REJECT GATE IN FRONT OF ANYTHING.** Already true for
+   direct manipulations since decision **024 §4.4**; now true for
+   **inferences** as well — the half 024 deliberately left standing.
+
+### ★★ Why this is a CORRECTNESS rule, not a usability preference — the part that must survive
+
+His closing sentence — *"made for a lot of extra bugs in the visibility
+when editing"* — is the whole argument.
+
+**Every provisional-state marking is a SECOND RENDERING PATH for the same
+content, and two paths drift.** Content drawn as *pending* and the same
+content drawn as *committed* are **different code, exercised at different
+times**, on different state, under different invalidation rules. The
+divergence surfaces as content that **looks wrong, vanishes,
+double-draws, or fails to reflow** — intermittent, timing-dependent, and
+blamed on the editing feature rather than on the marking machinery that
+produced it.
+
+**Deleting the marking machinery REMOVES A BUG CLASS.** It does not
+merely reduce friction. **Recorded in that form, and repeated in three
+documents, on purpose:** a future session that files this under
+*friction-reduction* will trade it away for a "helpful" highlight the
+first time a surface feels ambiguous, and will then rediscover the same
+defects with no reason to connect them to the highlight.
+
+### ★ The shape of the failure — this rule has now been narrowed TWICE, the same way
+
+| | first narrowing | second narrowing |
+|---|---|---|
+| **date / record** | 2026-08-05, decision **024 §4.4** | 2026-08-13, decision **059** |
+| **burden taken OFF** | things the operator **DID** (direct manipulations) | the **RENDERING** of things pdfce **GUESSED** |
+| **operator's symptom** | *"a separate accept / reject box somewhere on the screen"* | *"nagging and red flagging … extra bugs in the visibility"* |
+| **actual defect** | the confirm control's **placement** (relative to the page, so it moved on zoom/scroll/page change) | a **second rendering path** for uncertain content |
+| **how it surfaced** | operator noticing shipped friction | operator reading an outbound **briefing** |
+
+**Two narrowings against one rule, neither found by review, is itself the
+finding: rule 4 has been consistently read as a mandate for VISIBLE
+MACHINERY when it was only ever a mandate for NON-SILENCE.** Both
+readings satisfy the words *"visible before it becomes document state"* —
+**the words were the defect**, which is why this filing amends the rule's
+text instead of adding a gloss beside it.
+
+**One thing worth noticing in the last row.** The second narrowing was
+caught **in a briefing to another project**, before that project built
+anything from it — the cheapest possible moment to catch it. **Restating
+a rule to an audience that has not absorbed its history is the only
+review step this project has that reads the rule's actual words.**
+
+### What is UNCHANGED — recorded so the next session does not over-read it
+
+- **Invisible inferences still owe an off-canvas disclosure. They are why
+  rule 4 exists**, because the operator cannot see them by definition:
+  **OCR text at render mode 3** (invisible, under the image — ISO 32000-1
+  §9.3.6 Table 106), a **font substitution that renders plausibly**, a
+  **best-fit residual**, an **over-eager snap**, a **near-parallel
+  classification**. **Render normally; report separately. BOTH.** A shell
+  that ships neither has swapped one rule-4 violation for another.
+- **The CLI's obligation is the mirror image and is untouched.** A
+  `pdfce-cli` invocation **IS** the commit — it writes a file, there is
+  no session and no undo — so it must **PRINT** what it inferred on the
+  way past. **What rule 4 forbids is SILENCE, in both shells; only the
+  vehicle differs.** Project rule 11 is unaffected. The asymmetry is not
+  an inconsistency: clause 1 holds *because* the GUI has a save point and
+  the CLI has none.
+- **`docs/core-api/03-capabilities.md` still names the inferences
+  per capability.** A shell that does not know which returned values are
+  inferred still ships a rule-4 violation — now by having **no report**
+  rather than **no gate**.
+- **§11.2's redaction confirmation survives.** It warns about a
+  **destructive save** (the one edit Undo cannot rescue afterwards), not
+  about an inference. **Do not delete it under clause 4.**
+- **R167's editor chrome survives** — see the sweep below.
+
+### The one-line test, and the half of it that is load-bearing
+
+> *Would a screenshot of the editing canvas differ from a screenshot of
+> the same document saved and reopened?*
+
+**If yes, AND the difference is pdfce marking its own uncertainty, that
+is the defect.** Without the second clause the test also condemns the
+selection rectangle, the text cursor, every resize handle and R167's
+chrome — none of which this decision touches.
+
+### What was filed — four documents, six sites
+
+1. **`docs/ARCHITECTURE.md` §12 — decision `059`**, dated 2026-08-13:
+   the operator quote verbatim, the four clauses, the correctness
+   argument, the two-narrowings table, the unchanged list, the one-line
+   test, a *does-not-settle* list, and the cross-project deliverable
+   named. Cross-references **024 §4.4** (first narrowing) and **§11.1**
+   (dirty set).
+2. **`docs/ARCHITECTURE.md` §11.1** — the **reciprocal** cross-reference,
+   added to the save-time-diff bullet: a **user-facing** guarantee now
+   rests on it, and weakening the dirty set to touched-set tracking would
+   **make rule 4 clause 1 false in the same edit**. Filed both ways
+   deliberately — a dependency recorded at one end only is a dependency
+   nobody checks from the other.
+3. **`D:\Dev\pdfce\CLAUDE.md` rule 4** — amended **in place**, in the
+   same style the 2026-08-05 narrowing already used: the rule's head now
+   states the amended obligation plainly (a session reading only
+   `CLAUDE.md` builds the right thing), and a dated **★★ NARROWED AGAIN
+   2026-08-13** block keeps the superseded wording legible — struck, not
+   deleted — beside the operator quote, the four clauses, the correctness
+   argument, the unchanged list and the one-line test.
+4. **`docs/ROADMAP.md` — three sites, no Pass entry and no R-number:**
+   the **Glossary** *"fuzzy, never sneaky"* entry (whose *"always
+   reviewable hints"* wording is the exact reading 059 rejects) and the
+   **Standing rules** discipline bullet both gain dated amendments; and
+   **R149**'s cross-reference to *"rule 4 as narrowed by decision 024
+   §4.4"* is extended to name 059, because a pointer to half a narrowing
+   is worse than no pointer.
+5. **`docs/SESSION_LOG.md`** — this entry.
+
+### The cross-project deliverable, named here because otherwise it is not handed off
+
+Both live **outside** this repository, in the `pdfceGUI` request channel
+(`docs/NEXT_SESSION.md` §*"CHECK THE GUI REQUEST CHANNEL"*), and are
+named per the standing discipline that **a RAG / cross-project
+deliverable is not handed off until a pdfce doc names it**:
+
+- **`D:\Dev\FeatureRequests\pdfce_FeatureRequests\note_rule4_narrowed_again_no_provisional_marking.md`**
+  — the outbound note: operator statement, four clauses, correctness
+  argument, unchanged list, one-line test. Written for a session that
+  **cannot ask a question here**.
+- **`D:\Dev\FeatureRequests\pdfce_FeatureRequests\README.md`**,
+  non-negotiable **#1** — **corrected in place** with a dated amendment
+  block pointing at that note.
+
+**Both were written by the engineer before this dispatch. This filing did
+not re-do them and claims none of their content as its own work.** The
+uncorrected briefing would have led that project to build the thing the
+operator has just rejected — the sharpest available illustration of
+`NEXT_SESSION.md`'s own warning that *a stale briefing is worse than
+none, because it is trusted*.
+
+### ★ Found while sweeping — four consistency items, three fixed and one left standing on purpose
+
+1. **`ROADMAP.md`'s Glossary said inferences are *"always reviewable
+   hints, never silent auto-applies."*** Read literally after 059 that is
+   the **gated-hint** reading the operator rejected. **Amended**, with
+   the current text stated inline so the glossary is usable without
+   opening two other files.
+2. **The Standing-rules discipline bullet was a bare four-word
+   restatement** (*"fuzzy, never sneaky for every algorithmic
+   suggestion"*) carrying none of the narrowing. **Amended** with the
+   disclosure-not-gate-not-marking form, and with the explicit statement
+   that **a provisional marking drawn into the page view is now a
+   DEFECT** rather than a compliance measure.
+3. **R149 pointed at "rule 4 as narrowed by decision 024 §4.4"** —
+   accurate on the day it was written, and now **half** the narrowing.
+   **Extended to name 059.** The other two standing-rule references to
+   rule 4 (**R150**, and R124's revoked placeholder text) were read and
+   **left alone**: R150 cites the *disclosure obligation* generically,
+   which 059 does not touch.
+4. **★ R167 is the one real tension, and it SURVIVES — left standing
+   deliberately, and recorded in decision 059 as the likeliest
+   over-read.** R167 permits an overlay painted each frame to show what
+   R43 declines to synthesise — **a dashed outline for a widget with no
+   paintable `/AP`**, a type glyph, a resize handle, a selection
+   highlight. Clause 2 forbids **dashed outlines** by name, so a reader
+   with only clause 2 in hand would revoke R167 and **make an invisible
+   form field invisible again** — the exact live defect (decision 033
+   §1.3) R167 was minted to fix. **The distinction is that R167's chrome
+   discloses EDITABILITY and SELECTION — facts about the EDITOR's state —
+   whereas clause 2 forbids marking pdfce's UNCERTAINTY ABOUT CONTENT.**
+   Both are true at once. Written into 059's *unchanged* list rather than
+   into R167, because the rule that needs the caveat is the new one.
+
+**One thing NOT swept, and stated rather than left implicit:** `Shipped`
+entries that cite rule 4 in its pre-059 wording (e.g. the *"as narrowed
+by §4.4"* line in a 2026-08-08 entry) were **not** rewritten — the
+Shipped section is **append-only**, and a dated entry describing what was
+true when it shipped is not an error.
+
+### Verification, tooling and state — all MEASURED in this dispatch (librarian hard rule 8)
+
+- **`python tools/check-ledger-numbers.py`** — **clean**, *"no duplicate
+  Pass, rule, or decision numbers"*; ceilings as quoted at the head of
+  this entry. **059 and 140 were verified free by that run, not read off
+  the dispatch that supplied them** — the numbers agreed.
+- **`git log --oneline -1`** → **`794526a`** (*"a channel, and an
+  obligation to actually read it"*). **`git status --short`** shows two
+  modified files, **`docs/core-api/01-reading-and-model.md`** and
+  **`docs/core-api/03-capabilities.md`** — **the engineer's in-flight
+  work, NOT this filing's**, and **untouched by it**. **Re-measured after
+  this filing's own edits, that set had GROWN by one untracked file,
+  `crates/pdfce-core/src/ocr/layer.rs`** — also the engineer's, also
+  untouched here. **Recorded because a working-tree reading is a
+  timestamp, not a state**, and the difference between the two `git
+  status` runs is the concurrent session, not this one. This filing's
+  edits are confined to `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`,
+  `docs/SESSION_LOG.md` and `CLAUDE.md`; **stage them by name.**
+- **Remote, measured (`git rev-parse origin/main`):** `origin/main` =
+  **`42364db`**; **`git rev-list --count origin/main..HEAD` = 17** before
+  this filing's own commit. **Nothing is pushed** — a measured fact, not
+  a request (project rule 8).
+- **Backup currency MEASURED**, by `ls -lt` and `git bundle list-heads`,
+  not read from any document: the newest bundle on disk is
+  **`D:\Dev\pdfce-backups\pdfce-20260813-post-rebase.bundle`**,
+  **12,622,472 bytes ≈ 12.04 MiB**, written **2026-08-13 09:27**, its
+  `refs/heads/main` = **`dc5a77f`** — **1 commit behind `HEAD`**
+  (`git rev-list --count dc5a77f..HEAD` = 1). **This supersedes the
+  hundred-and-thirty-ninth filing's "16 commits behind" figure**, which
+  measured the *then*-newest bundle (`pdfce-20260813-0755.bundle`,
+  14,241,767 bytes, `main` = `6db55ae`); **a post-rebase bundle has been
+  taken since**, so the *"take a backup"* item from that filing is
+  **discharged** — and this is exactly why hard rule 8 forbids quoting a
+  backup figure from a document: **that number was correct when written
+  and wrong four hours later.**
+- **No `cargo` command was run and none is claimed.** This filing changes
+  no code; `cargo fmt`, `clippy`, `cargo tree` and test counts belong to
+  Passes, not to it.
+- **`tools/check-commits-filed.py` was NOT run** — it classifies *code*
+  commits, and this filing adds none, so a run would only reproduce the
+  hundred-and-thirty-ninth filing's reading. **Stated rather than
+  silently skipped.**
+- **Rule 15 (dimension terminology):** nothing here touches **ce
+  dimensions** or **pdf dimensions**. The only appearance of the term is
+  illustrative — *"placing a ce dimension"* as an example of a **direct
+  manipulation** in decision 024's row of the narrowings table. No
+  dimension code, contract or sidecar is affected either way.
+
+### Still in flight
+
+- **The GUI pause (decision 058) is unchanged and unaffected.** 059 says
+  how a shell must behave; **it is not permission to build one**, and it
+  lifts nothing.
+- **`crates/pdfce-gui` was NOT audited against clause 2.** It may today
+  contain markings the clause forbids. **No audit was performed and none
+  is claimed** — under 058 that crate may be replaced wholesale, so
+  auditing it is work against a deletion candidate. **If GUI work
+  resumes on it, clause 2 binds that work.**
+- **`Pass 72.0`** (redaction absence proof into core) and **`Pass 73.0`**
+  (R58 enforcement into core) remain the ordered core-side work, per the
+  hundred-and-thirty-eighth and hundred-and-thirty-ninth filings.
+  Untouched by this filing.
+- **`R192` remains PROPOSED and unruled.** The engineer's ruling is still
+  owed; this filing deliberately did not spend it.
+
+### For next session
+
+1. **Do not re-litigate rule 4's shape.** It has been narrowed twice, both
+   times by the operator, both times toward **less** machinery. A third
+   session proposing a "provisional" treatment is proposing the bug class
+   back.
+2. **Any new inference-producing capability owes a DISCLOSURE SURFACE in
+   its Pass scope** — off-canvas in the GUI, **printed** in the CLI. That
+   is now the compliance artefact rule 4 asks for; a gate is not.
+3. **When `D:\dev\pdfceGUI` asks about disclosure**, point at the note in
+   the request channel, not at `CLAUDE.md` — that session cannot read
+   this repository's rule file, which is exactly why the note exists.
+4. **`(bm)`** (`detach_file` / `unembed_fonts` confidentiality) and
+   **`(v)`** (R58 scope) are still open and are still not the same
+   question.

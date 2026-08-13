@@ -52,14 +52,44 @@ logs or docs. The distinction is **provenance**, not representation.
 sneaky".** Anything pdfce **inferred** — a best-fit circle and its residual,
 a snapped point, a near-parallel classification, an auto-detected form field,
 an OCR word and its confidence, a substituted font, a reflow that overflows —
-must be **visible before it becomes document state**, and the operator must
-be able to reject it **without undoing anything else**. It is a requirement
-on *disclosure*, not on any particular widget: a value on screen plus a
-deliberate commit at a *fixed, predictable* screen position satisfies it; a
-confirm button whose position is derived from the document does not, and was
-the operator's actual 2026-08-05 complaint. Each capability below carries a
-mandatory **"★ What the UI must disclose"** section. A shell that skips one
-ships a rule-4 violation and will not know it has.
+must be **disclosed** rather than applied silently. Each capability below
+carries a mandatory **"★ What the UI must disclose"** section. A shell that
+skips one ships a rule-4 violation and will not know it has.
+
+> **What rule 4 does and does not demand (decision 059).** It is a rule about
+> **disclosure**. It is not a rule about widgets, and it is emphatically not a
+> licence to mark up the page.
+>
+> - **The commit point is SAVE.** Undo rejects, Save commits. Nothing in an
+>   open `EditSession` is document state, so an inference already applied in
+>   the session needs nothing in front of it. The session **is** the preview.
+>   (`ARCHITECTURE.md` §11.1 is what makes this safe rather than merely
+>   convenient: the dirty set is a save-time **diff against the base
+>   revision**, so an undone inference cannot reach the saved bytes.)
+> - **Applied content renders exactly as saved content will render.** Typing
+>   reflows live and looks normal; OCR looks normal the moment the command
+>   completes. **No badge, tint, red flag, dashed outline or "provisional"
+>   layer drawn into the page view.** Operator, 2026-08-13: *"the nagging and
+>   red flagging in the original GUI made for a lot of extra bugs in the
+>   visibility when editing"* — provisional styling is a **second rendering
+>   path for the same content**, and two paths drift.
+> - **Disclosure lives off-canvas**: a status line, a results panel, a
+>   post-command report, a properties field. Never blocking, never requiring
+>   acknowledgement, never positioned relative to the document (that was the
+>   earlier 2026-08-05 complaint, decision 024 §4.4).
+> - **The distinction that keeps this workable:** a **pre-commit affordance**
+>   is not content marking. A snap indicator, a hover highlight, a rubber-band,
+>   a selection handle — these are the *cursor*, they describe what is about to
+>   happen, and they are welcome. What is forbidden is styling content that has
+>   **already been applied** as though it were pending.
+> - **The half that survives, and it is the point of the rule:** inferences
+>   the operator **cannot see** still owe an off-canvas report — invisible OCR
+>   text at render mode 3, a plausible-looking font substitution, a best-fit
+>   residual, an over-eager snap. **Render normally; report separately. Both.**
+>
+> One-line test: *would a screenshot of the editing canvas differ from a
+> screenshot of the same document saved and reopened?* If yes, and the
+> difference is pdfce marking its own uncertainty, that is the defect.
 
 **Reading the core/cli/gui state.** Taken from `docs/FEATURES.md` at this
 commit. `gui [ ]` is **not** a missing feature — it is a capability whose
