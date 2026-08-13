@@ -664,7 +664,15 @@ fn winansi_code(ch: char) -> Option<u8> {
 /// Encode `text` to `WinAnsi` bytes, substituting `?` for any character
 /// with no `WinAnsi` code and returning how many were substituted (a
 /// named Base-14-Latin limit — disclosed, never silently dropped).
-fn encode_winansi(text: &str) -> (Vec<u8>, usize) {
+///
+/// `pub(crate)` since `Pass 68.0`: the ce-dimension `/AP` baker
+/// ([`crate::dimension::author_dimension`]) declares the same
+/// `/WinAnsiEncoding` Base-14 font this module does, and was writing raw UTF-8
+/// into it. That was invisible for as long as every label was ASCII, and
+/// became visible the moment angular ce dimensions put a degree sign in one —
+/// `77.5°` rendered as `77.5Â°`. One encoder, shared, rather than a second one
+/// that would have to learn the same table.
+pub(crate) fn encode_winansi(text: &str) -> (Vec<u8>, usize) {
     let mut out = Vec::new();
     let mut miss = 0usize;
     for ch in text.chars() {

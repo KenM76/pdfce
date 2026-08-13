@@ -41,7 +41,7 @@ use crate::writer::content::{ContentBuilder, LineCap, LineJoin, Paint};
 
 use super::group::{DimStandard, DimensionKind};
 use super::measure_dict::build_measure_dict;
-use super::units::{NumberFormat, ScaleState, format_measurement};
+use super::units::{NumberFormat, ScaleState};
 
 /// The resource name the dimension label's font is authored under (matches the
 /// `/AP` `/Resources` `/Font` key and the `Tf` operator).
@@ -225,7 +225,11 @@ pub fn author_dimension(kind: &DimensionKind, style: DimensionStyle) -> Authored
         format,
         standard: _,
     } = style;
-    let display = format_measurement(kind.measured_points(), scale, format);
+    // Through `display_with`, never `format_measurement` directly: an ANGULAR
+    // ce dimension must not be run through the length formatter, and this
+    // baked label is the copy that outlives the session. See
+    // `DimensionKind::display_with`.
+    let display = kind.display_with(scale, format);
     let label = format!("{}{}", kind.caption_prefix(), display.text);
 
     // The leader endpoints in page space (the /L pair).
@@ -342,7 +346,21 @@ pub fn author_dimension(kind: &DimensionKind, style: DimensionStyle) -> Authored
     b.begin_text();
     b.set_font(FONT_RESOURCE, LABEL_SIZE);
     b.set_text_matrix(ux, uy, -uy, ux, tx, ty);
-    b.show_text(label.as_bytes());
+    // ★ WinAnsi, not raw UTF-8. The label font is declared
+    // `/WinAnsiEncoding` (`standard14_font_dict`), so a multi-byte UTF-8
+    // character is read as one byte per byte: a degree sign (U+00B0, UTF-8
+    // `C2 B0`) drew as `Â°`. Harmless for as long as every label was ASCII,
+    // which it was until angular ce dimensions arrived.
+    //
+    // The substitution count is deliberately ignored HERE rather than
+    // discarded silently: nothing a ce-dimension label can contain is outside
+    // WinAnsi (digits, the unit words, the decimal marker, the foot and inch
+    // marks, and the degree sign all have codes), so a miss would mean the
+    // formatter had started emitting something new — which is a change that
+    // should come with its own disclosure decision rather than inherit one
+    // guessed at here.
+    let (label_bytes, _unmapped) = crate::vartext::encode_winansi(&label);
+    b.show_text(&label_bytes);
     b.end_text();
 
     let rect = bounds.into_rect();

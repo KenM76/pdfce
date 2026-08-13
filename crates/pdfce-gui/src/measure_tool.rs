@@ -493,6 +493,85 @@ impl TwoLinePick {
     }
 }
 
+/// How many chords approximate a previewed dimension arc.
+///
+/// Twenty-four over the full turn is smooth at any zoom pdfce offers, and an
+/// angular ce dimension's wedge is a fraction of that — so the drawn arc is
+/// visually smooth while staying a handful of segments.
+const ARC_PREVIEW_STEPS: usize = 24;
+
+/// The page-space line segments that draw a ce dimension's live preview.
+///
+/// # Why this is a function and not two painter loops
+///
+/// Two places preview a ce dimension before it is committed: the two-line
+/// authoring gesture (previewing what Accept would author) and the placement
+/// drag (previewing where a release would put it). They must draw the SAME
+/// shape for the same kind, or the operator sees one thing while authoring and
+/// a different thing while adjusting it.
+///
+/// Keeping it here rather than in `main.rs` also makes it testable — the arc
+/// decomposition in particular has a wrap-around case (a wedge crossing ±π)
+/// that is easy to get wrong and invisible until an operator picks the two
+/// arms that trigger it.
+///
+/// Returns page-space pairs; the caller supplies the projection to screen.
+/// Empty for [`DimensionKind::Circular`], which the ce-dimension preview does
+/// not draw (the circular tool outlines its source objects instead).
+#[must_use]
+pub fn dimension_preview_segments(kind: &DimensionKind) -> Vec<(Point, Point)> {
+    match *kind {
+        DimensionKind::Linear { .. } => kind
+            .linear_geometry()
+            .map(|(dim_a, dim_b, ext_a, ext_b)| {
+                vec![(dim_a, dim_b), (ext_a, dim_a), (ext_b, dim_b)]
+            })
+            .unwrap_or_default(),
+        DimensionKind::Angular {
+            apex,
+            dir_a,
+            dir_b,
+            radius,
+            ..
+        } => {
+            let start = dir_a.y.atan2(dir_a.x);
+            // Take the SHORT way round between the two arms. Without this fold
+            // a wedge whose arms straddle the ±π discontinuity would sweep the
+            // long way and draw a reflex arc — the correct angle, illustrated
+            // by the wrong picture.
+            let mut sweep = dir_b.y.atan2(dir_b.x) - start;
+            while sweep > std::f64::consts::PI {
+                sweep -= std::f64::consts::TAU;
+            }
+            while sweep < -std::f64::consts::PI {
+                sweep += std::f64::consts::TAU;
+            }
+            let at = |ang: f64| {
+                Point::new(
+                    radius.mul_add(ang.cos(), apex.x),
+                    radius.mul_add(ang.sin(), apex.y),
+                )
+            };
+            let mut out = Vec::with_capacity(ARC_PREVIEW_STEPS + 2);
+            for step in 0..ARC_PREVIEW_STEPS {
+                #[allow(clippy::cast_precision_loss)]
+                let (t0, t1) = (
+                    step as f64 / ARC_PREVIEW_STEPS as f64,
+                    (step + 1) as f64 / ARC_PREVIEW_STEPS as f64,
+                );
+                out.push((at(sweep.mul_add(t0, start)), at(sweep.mul_add(t1, start))));
+            }
+            // A leg from the apex out along each arm. These matter most when
+            // the apex is VIRTUAL: they are what shows the operator where
+            // pdfce decided the two lines would meet.
+            out.push((apex, at(start)));
+            out.push((apex, at(start + sweep)));
+            out
+        }
+        DimensionKind::Circular { .. } => Vec::new(),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Circular pick — the tool's OWN best-fit pick-set (ui-spec §3)
 // ---------------------------------------------------------------------------
@@ -1801,6 +1880,104 @@ mod tests {
             .expect("complete")
             .expect("the replacement pair is dimensionable");
         assert!(authored.is_linear());
+    }
+
+    // ---- Shared ce-dimension preview shape (`Pass 68.0`) ----------------
+
+    /// A linear ce dimension previews as its dimension line plus two extension
+    /// lines — three segments, the same three the placement drag draws.
+    #[test]
+    fn a_linear_ce_dimension_previews_as_line_plus_two_extensions() {
+        let segs = dimension_preview_segments(&DimensionKind::Linear {
+            a: p(0.0, 0.0),
+            b: p(100.0, 0.0),
+            constraint: AxisConstraint::Horizontal,
+            offset: 20.0,
+            text_along: 0.0,
+        });
+        assert_eq!(segs.len(), 3, "dimension line + two extension lines");
+    }
+
+    /// An angular ce dimension previews as an arc plus a leg out along each
+    /// arm. The legs are what show where a VIRTUAL apex sits.
+    #[test]
+    fn an_angular_ce_dimension_previews_as_an_arc_plus_two_arm_legs() {
+        let apex = p(50.0, 50.0);
+        let radius = 30.0;
+        let segs = dimension_preview_segments(&DimensionKind::Angular {
+            apex,
+            dir_a: p(1.0, 0.0),
+            dir_b: p(0.0, 1.0),
+            radius,
+            text_along: 0.0,
+        });
+        assert_eq!(segs.len(), ARC_PREVIEW_STEPS + 2, "arc chords + two legs");
+
+        // Every arc point sits on the circle of the stated radius about the
+        // apex — the check that catches a centre/radius mix-up.
+        for (a, _) in segs.iter().take(ARC_PREVIEW_STEPS) {
+            let r = (a.x - apex.x).hypot(a.y - apex.y);
+            assert!((r - radius).abs() < 1e-9, "off the arc: {a:?} r={r}");
+        }
+        // The two legs start at the apex.
+        for (a, _) in segs.iter().skip(ARC_PREVIEW_STEPS) {
+            assert!(
+                (a.x - apex.x).abs() < 1e-9 && (a.y - apex.y).abs() < 1e-9,
+                "a leg must start at the apex, got {a:?}"
+            );
+        }
+    }
+
+    /// ★ A wedge whose arms straddle the ±π discontinuity takes the SHORT way
+    /// round. Without the fold the preview sweeps the long way and draws a
+    /// reflex arc — the correct angle illustrated by the wrong picture, which
+    /// no unit on the value side would catch.
+    #[test]
+    fn an_arc_spanning_the_angle_wraparound_takes_the_short_way() {
+        const RADIUS: f64 = 10.0;
+        let apex = p(0.0, 0.0);
+        let at = |deg: f64| p(deg.to_radians().cos(), deg.to_radians().sin());
+        let segs = dimension_preview_segments(&DimensionKind::Angular {
+            apex,
+            // +150° and -150°. The short way between them is 60°, crossing
+            // ±180°; the long way is 300°. A naive subtraction gives -300 and
+            // draws the reflex arc.
+            dir_a: at(150.0),
+            dir_b: at(-150.0),
+            radius: RADIUS,
+            text_along: 0.0,
+        });
+        // Summing the chord lengths approximates the arc length. 60° of a
+        // radius-10 circle is ~10.47; the reflex 300° would be ~52.4.
+        let arc_len: f64 = segs
+            .iter()
+            .take(ARC_PREVIEW_STEPS)
+            .map(|(a, b)| (b.x - a.x).hypot(b.y - a.y))
+            .sum();
+        let short_way = RADIUS * 60f64.to_radians();
+        assert!(
+            (arc_len - short_way).abs() < 0.05,
+            "expected the short way ({short_way:.2}), got {arc_len:.2} \
+             (the reflex arc would be {:.2})",
+            RADIUS * 300f64.to_radians()
+        );
+    }
+
+    /// A circular ce dimension has no such preview — the circular tool
+    /// outlines its source objects instead, and inventing an arc here would
+    /// draw a shape that tool never commits.
+    #[test]
+    fn a_circular_ce_dimension_has_no_preview_segments() {
+        let fit =
+            pdfce_core::dimension::fit_circle_taubin(&[p(10.0, 0.0), p(0.0, 10.0), p(-10.0, 0.0)])
+                .expect("fits");
+        assert!(
+            dimension_preview_segments(&DimensionKind::Circular {
+                fit,
+                show_diameter: false
+            })
+            .is_empty()
+        );
     }
 
     /// ★ Switching pick mode discards whatever pick was in progress — the

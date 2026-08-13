@@ -22889,42 +22889,99 @@ fn run_dimension_drag(
             .dimension_model()
             .dimension(id)
             .map(|d| d.kind)
-            .filter(|k| matches!(k, pdfce_core::dimension::DimensionKind::Linear { .. }));
+            .filter(|k| {
+                // Circular is the ONE kind with nowhere to stand off to.
+                // Filtering on "is it Linear" instead is what made an angular
+                // ce dimension grabbable and undraggable — see
+                // `EditError::NotALinearDimension`'s docs for the same mistake
+                // one layer down.
+                !matches!(k, pdfce_core::dimension::DimensionKind::Circular { .. })
+            });
         let placed = current.and_then(|kind| {
             let cur = cur?;
-            let (u, n) = kind.axis_frame()?;
-            let pdfce_core::dimension::DimensionKind::Linear {
-                a,
-                b,
-                constraint,
-                offset,
-                text_along,
-            } = kind
-            else {
-                return None;
-            };
             let (mx, my) = (
                 f64::from(cur.x - start_pdf.x),
                 f64::from(cur.y - start_pdf.y),
             );
-            Some(pdfce_core::dimension::DimensionKind::Linear {
-                a,
-                b,
-                constraint,
-                offset: offset + mx * n.x + my * n.y,
-                text_along: text_along + mx * u.x + my * u.y,
-            })
+            match kind {
+                pdfce_core::dimension::DimensionKind::Linear {
+                    a,
+                    b,
+                    constraint,
+                    offset,
+                    text_along,
+                } => {
+                    let (u, n) = kind.axis_frame()?;
+                    Some(pdfce_core::dimension::DimensionKind::Linear {
+                        a,
+                        b,
+                        constraint,
+                        offset: offset + mx * n.x + my * n.y,
+                        text_along: text_along + mx * u.x + my * u.y,
+                    })
+                }
+                // ★ `Pass 68.0`. The angular analogue of the same drag. An
+                // arc's own frame is POLAR about the apex, so the standoff is
+                // a change in RADIUS and the text position is a change in
+                // ANGLE. Applied as deltas for the reason the linear case
+                // gives: the arc keeps the grip the operator took hold of
+                // instead of jumping so the pointer sits on it.
+                pdfce_core::dimension::DimensionKind::Angular {
+                    apex,
+                    dir_a,
+                    dir_b,
+                    radius,
+                    text_along,
+                } => {
+                    let (sx, sy) = (f64::from(start_pdf.x), f64::from(start_pdf.y));
+                    let (cx, cy) = (sx + mx, sy + my);
+                    let r_at = |x: f64, y: f64| (x - apex.x).hypot(y - apex.y);
+                    let a_at = |x: f64, y: f64| (y - apex.y).atan2(x - apex.x);
+                    // A grab landing exactly on the apex has no angle to
+                    // measure from, so the rotation component is dropped
+                    // rather than invented. The radius drag still works.
+                    let swept = if r_at(sx, sy) <= f64::EPSILON {
+                        0.0
+                    } else {
+                        let mut d = a_at(cx, cy) - a_at(sx, sy);
+                        while d > std::f64::consts::PI {
+                            d -= std::f64::consts::TAU;
+                        }
+                        while d < -std::f64::consts::PI {
+                            d += std::f64::consts::TAU;
+                        }
+                        d.to_degrees()
+                    };
+                    Some(pdfce_core::dimension::DimensionKind::Angular {
+                        apex,
+                        dir_a,
+                        dir_b,
+                        // Core clamps this too. Doing it here as well keeps the
+                        // PREVIEW honest, so an overshot drag draws what it
+                        // will actually commit (R85) rather than an arc that
+                        // snaps back on release.
+                        radius: (radius + r_at(cx, cy) - r_at(sx, sy))
+                            .abs()
+                            .max(pdfce_core::edit::MIN_DIMENSION_ARC_RADIUS),
+                        text_along: text_along + swept,
+                    })
+                }
+                pdfce_core::dimension::DimensionKind::Circular { .. } => None,
+            }
         });
 
         if let Some(kind) = placed {
-            if let Some((dim_a, dim_b, ext_a, ext_b)) = kind.linear_geometry() {
+            {
                 let painter = ui.painter_at(image_rect);
                 let stroke = egui::Stroke::new(2.0, dimension_drag_color(ui.ctx()));
                 let to_screen = |pt: pdfce_core::vector::Point| -> Option<egui::Pos2> {
                     viewer::pdf_space_to_canvas(egui::pos2(pt.x as f32, pt.y as f32), page)
                         .map(|c| viewer::page_to_screen(c, image_rect, extent, zoom))
                 };
-                for (p0, p1) in [(dim_a, dim_b), (ext_a, dim_a), (ext_b, dim_b)] {
+                // One shape function for both placeable kinds, shared with the
+                // two-line authoring preview — so a ce dimension looks the same
+                // while it is being created and while it is being moved.
+                for (p0, p1) in measure_tool::dimension_preview_segments(&kind) {
                     if let (Some(s0), Some(s1)) = (to_screen(p0), to_screen(p1)) {
                         painter.line_segment([s0, s1], stroke);
                     }
@@ -22938,11 +22995,20 @@ fn run_dimension_drag(
                 // Only the placement — standoff perpendicular, text position
                 // along — changes, which is the two components of the placement
                 // POINT SolidWorks' own API takes (`AddDimension2(x, y, z)`).
-                let pdfce_core::dimension::DimensionKind::Linear {
-                    offset, text_along, ..
-                } = kind
-                else {
-                    return consumed;
+                //
+                // Both placeable kinds carry the two placement components in
+                // their own terms — a linear standoff, or an arc radius — and
+                // `place_dimension` takes them positionally.
+                let (offset, text_along) = match kind {
+                    pdfce_core::dimension::DimensionKind::Linear {
+                        offset, text_along, ..
+                    } => (offset, text_along),
+                    pdfce_core::dimension::DimensionKind::Angular {
+                        radius, text_along, ..
+                    } => (radius, text_along),
+                    pdfce_core::dimension::DimensionKind::Circular { .. } => {
+                        return consumed;
+                    }
                 };
                 let outcome = doc.session_mut().place_dimension(id, offset, text_along);
                 diag::trace(|| {
@@ -23543,69 +23609,13 @@ fn run_measure_tool(
                 .two_lines
                 .authoring(parallel_epsilon, TwoLinePlacement::default())
             {
-                match authored.kind {
-                    DimensionKind::Linear { .. } => {
-                        if let Some((dim_a, dim_b, ext_a, ext_b)) = authored.kind.linear_geometry()
-                        {
-                            for (a, b) in [(dim_a, dim_b), (ext_a, dim_a), (ext_b, dim_b)] {
-                                if let (Some(sa), Some(sb)) = (to_screen(a), to_screen(b)) {
-                                    painter.line_segment(
-                                        [sa, sb],
-                                        egui::Stroke::new(1.5, preview_color),
-                                    );
-                                }
-                            }
-                        }
+                // The SAME shape the placement drag previews for this kind —
+                // one function, so authoring a ce dimension and adjusting it
+                // afterwards cannot draw two different pictures of it.
+                for (a, b) in measure_tool::dimension_preview_segments(&authored.kind) {
+                    if let (Some(sa), Some(sb)) = (to_screen(a), to_screen(b)) {
+                        painter.line_segment([sa, sb], egui::Stroke::new(1.5, preview_color));
                     }
-                    DimensionKind::Angular {
-                        apex,
-                        dir_a,
-                        dir_b,
-                        radius,
-                        ..
-                    } => {
-                        // The arc, as a short polyline between the two arms,
-                        // plus a leg out along each arm to the arc. Drawing the
-                        // legs matters most when the apex is VIRTUAL — they are
-                        // what shows the operator where pdfce decided the lines
-                        // would meet.
-                        let start = dir_a.y.atan2(dir_a.x);
-                        let mut sweep = dir_b.y.atan2(dir_b.x) - start;
-                        while sweep > std::f64::consts::PI {
-                            sweep -= std::f64::consts::TAU;
-                        }
-                        while sweep < -std::f64::consts::PI {
-                            sweep += std::f64::consts::TAU;
-                        }
-                        const ARC_STEPS: usize = 24;
-                        let mut prev: Option<Point> = None;
-                        for step in 0..=ARC_STEPS {
-                            #[allow(clippy::cast_precision_loss)]
-                            let t = step as f64 / ARC_STEPS as f64;
-                            let ang = sweep.mul_add(t, start);
-                            let pt = Point::new(
-                                radius.mul_add(ang.cos(), apex.x),
-                                radius.mul_add(ang.sin(), apex.y),
-                            );
-                            if let Some(p0) = prev
-                                && let (Some(sa), Some(sb)) = (to_screen(p0), to_screen(pt))
-                            {
-                                painter
-                                    .line_segment([sa, sb], egui::Stroke::new(1.5, preview_color));
-                            }
-                            prev = Some(pt);
-                        }
-                        for dir in [dir_a, dir_b] {
-                            let tip = Point::new(
-                                radius.mul_add(dir.x, apex.x),
-                                radius.mul_add(dir.y, apex.y),
-                            );
-                            if let (Some(sa), Some(sb)) = (to_screen(apex), to_screen(tip)) {
-                                painter.line_segment([sa, sb], egui::Stroke::new(1.0, snap_color));
-                            }
-                        }
-                    }
-                    DimensionKind::Circular { .. } => {}
                 }
             }
         }

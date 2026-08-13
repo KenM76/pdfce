@@ -165,6 +165,17 @@ use crate::writer::{DirtySet, SaveOptions, SaveReport, WriteError};
 /// operator can no longer step back past that point.
 pub const MAX_UNDO_DEPTH: usize = 256;
 
+/// The smallest arc radius a placement drag may leave an angular ce dimension
+/// with, in points (`Pass 68.0`).
+///
+/// A drag is a delta, so an operator can pull an arc inward past its own
+/// vertex. Zero or negative is not a smaller dimension, it is an unreadable
+/// and un-grabbable one — the mark stays in the document, collapsed onto the
+/// apex, and the operator has no handle left to drag it back out with. Clamped
+/// rather than refused: overshooting a drag is a slip of the hand, not a
+/// request that deserves an error.
+pub const MIN_DIMENSION_ARC_RADIUS: f64 = 4.0;
+
 /// The document-information-dictionary fields an operator may edit
 /// (§14.3.3, Table 317).
 ///
@@ -2382,15 +2393,37 @@ pub enum EditError {
         /// The newest schema version this build understands.
         supported: i64,
     },
-    /// A placement operation named a ce dimension that is not linear
-    /// (Pass 27.1).
+    /// A placement operation named a ce dimension that cannot be placed
+    /// (Pass 27.1; **scope corrected in `Pass 68.0`** — see below).
     ///
     /// A circular dimension has no axis to stand off from or slide along, so
     /// there is nothing for `offset`/`text_along` to mean. Refused by name
     /// rather than ignored, so a caller learns its assumption was wrong
     /// instead of watching a drag do nothing.
+    ///
+    /// # ★ This refusal silently widened, and had to be narrowed back
+    ///
+    /// It was written when [`DimensionKind`] had exactly two variants, so
+    /// "not linear" and "circular" were the same statement — the name says
+    /// one and the message says the other, and nothing distinguished them.
+    /// [`DimensionKind::Angular`] arriving in `Pass 68.0` broke that
+    /// equivalence, and this refusal began covering a kind nobody had reasoned
+    /// about: an ANGULAR ce dimension has a standoff (its arc radius) and a
+    /// text position (along that arc), which is exactly what
+    /// `place_dimension` sets. It was refused anyway, purely because it was
+    /// not `Linear`.
+    ///
+    /// The visible symptom was the one this error's own docs promise to
+    /// prevent: the GUI let an operator grab an angular ce dimension and drag
+    /// it, and the drag did nothing. A refusal keyed on "not the kind I know"
+    /// rather than on the property it actually needs will do this every time a
+    /// variant is added — the same shape as R186, one rung down.
+    ///
+    /// It now names the property: only a CIRCULAR ce dimension is refused,
+    /// because only it genuinely lacks somewhere to stand off to.
     #[error(
-        "ce dimension {id} is circular, and only a linear one has a standoff and a text position"
+        "ce dimension {id} is circular, and only a linear or angular one has a standoff and a \
+         text position"
     )]
     NotALinearDimension {
         /// The dimension id.
@@ -15706,8 +15739,20 @@ impl EditSession {
     /// # Errors
     ///
     /// [`EditError::DimensionNotFound`], [`EditError::NotALinearDimension`]
-    /// for a circular target (which has no axis to place along), plus the
+    /// for a CIRCULAR target (which has no axis to place along), plus the
     /// encryption and enforced-certification guards.
+    ///
+    /// # What the two arguments mean per kind (`Pass 68.0`)
+    ///
+    /// | kind | `offset` | `text_along` |
+    /// |---|---|---|
+    /// | [`DimensionKind::Linear`] | standoff perpendicular to the axis, points | position along the dimension line from its midpoint, points |
+    /// | [`DimensionKind::Angular`] | **arc radius** from the apex, points, clamped to [`MIN_DIMENSION_ARC_RADIUS`] | position along the arc from its midpoint, **degrees** |
+    /// | [`DimensionKind::Circular`] | refused | refused |
+    ///
+    /// Angular was refused outright until `Pass 68.0` — not by decision, but
+    /// because the guard tested "is this `Linear`" at a time when the only
+    /// other kind was circular. See [`EditError::NotALinearDimension`].
     pub fn place_dimension(
         &mut self,
         dimension: DimensionId,
@@ -15724,20 +15769,41 @@ impl EditSession {
         let record = model
             .dimension(dimension)
             .ok_or(EditError::DimensionNotFound { id: dimension.0 })?;
-        let DimensionKind::Linear {
-            a, b, constraint, ..
-        } = record.kind
-        else {
-            return Err(EditError::NotALinearDimension { id: dimension.0 });
-        };
-        if let Some(d) = model.dimension_mut(dimension) {
-            d.kind = DimensionKind::Linear {
+        // Both placeable kinds carry the same two placement components, in
+        // their own geometry's terms: a standoff perpendicular to what is
+        // being measured, and a position for the text along it. Only the
+        // circular kind has neither.
+        let placed = match record.kind {
+            DimensionKind::Linear {
+                a, b, constraint, ..
+            } => DimensionKind::Linear {
                 a,
                 b,
                 constraint,
                 offset,
                 text_along,
-            };
+            },
+            DimensionKind::Angular {
+                apex, dir_a, dir_b, ..
+            } => DimensionKind::Angular {
+                apex,
+                dir_a,
+                dir_b,
+                // The arc radius is the angular analogue of the standoff, and
+                // it is a RADIUS: a negative one has no meaning, and a zero
+                // one collapses the arc onto the vertex where it can neither
+                // be read nor grabbed again. Clamped rather than refused —
+                // dragging past the apex is an ordinary slip of the hand, not
+                // a request that deserves an error.
+                radius: offset.abs().max(MIN_DIMENSION_ARC_RADIUS),
+                text_along,
+            },
+            DimensionKind::Circular { .. } => {
+                return Err(EditError::NotALinearDimension { id: dimension.0 });
+            }
+        };
+        if let Some(d) = model.dimension_mut(dimension) {
+            d.kind = placed;
         }
 
         let mut objects = self.regenerate_dimension_writes(&model, &[dimension])?;

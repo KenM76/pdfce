@@ -250,6 +250,38 @@ pub enum DimensionKind {
 }
 
 impl DimensionKind {
+    /// This dimension's displayed value under a group's scale and format.
+    ///
+    /// # ★ The one place a ce dimension's value becomes text
+    ///
+    /// [`DimensionModel::display`] and [`crate::dimension::author_dimension`]
+    /// both need this. Until `Pass 68.0` they each computed it, and only the
+    /// first one had the angular branch — so the pane read `77.5°` while the
+    /// label baked into the page's `/AP` read **`77.47 pt`**, an angle run
+    /// through the length formatter and given a unit it does not have. That
+    /// is the exact failure [`Self::Angular`]'s own docs warn about, arrived
+    /// at through the writer rather than the reader.
+    ///
+    /// One producer now. A second copy of a branch this easy to omit is how
+    /// the number an operator reads and the number the file carries come
+    /// apart, and the file's copy is the one that outlives the session.
+    ///
+    /// # An angle bypasses the scale entirely
+    ///
+    /// 30° on a drawing at 1:50 is 30°. Multiplying by the scale would produce
+    /// 1500 of nothing, and `raw_page_units` would be `false`, so the wrong
+    /// number would arrive carrying no disclosure that anything was odd.
+    #[must_use]
+    pub fn display_with(&self, scale: ScaleState, format: NumberFormat) -> MeasurementDisplay {
+        if self.is_angular() {
+            return MeasurementDisplay {
+                text: format_angle_degrees(self.measured_points(), format),
+                raw_page_units: false,
+            };
+        }
+        format_measurement(self.measured_points(), scale, format)
+    }
+
     /// The dimension line's own frame: the unit vector along the axis being
     /// measured, and the canonical normal the standoff is measured along
     /// (Pass 27.0).
@@ -694,21 +726,7 @@ impl DimensionModel {
     pub fn display(&self, id: DimensionId) -> Option<MeasurementDisplay> {
         let d = self.dimension(id)?;
         let g = self.group(d.group)?;
-        // ★ An angle bypasses the scale entirely. 30 degrees on a drawing at
-        // 1:50 is 30 degrees; multiplying it by the scale would produce 1500
-        // of nothing, and `raw_page_units` would be false, so the wrong
-        // number would arrive carrying no disclosure that anything was odd.
-        if d.kind.is_angular() {
-            return Some(MeasurementDisplay {
-                text: format_angle_degrees(d.kind.measured_points(), g.format),
-                raw_page_units: false,
-            });
-        }
-        Some(format_measurement(
-            d.kind.measured_points(),
-            g.scale,
-            g.format,
-        ))
+        Some(d.kind.display_with(g.scale, g.format))
     }
 
     /// Delete `group`, reassigning its members to the default group (ui-spec

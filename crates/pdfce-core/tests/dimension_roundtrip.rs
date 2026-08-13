@@ -69,6 +69,18 @@ fn linear() -> DimensionKind {
     }
 }
 
+/// An angular ce dimension: two arms meeting at a right angle at the origin
+/// of the test page (`Pass 68.0`).
+fn angular() -> DimensionKind {
+    DimensionKind::Angular {
+        apex: Point::new(100.0, 100.0),
+        dir_a: Point::new(1.0, 0.0),
+        dir_b: Point::new(0.0, 1.0),
+        radius: 40.0,
+        text_along: 0.0,
+    }
+}
+
 fn session() -> (Vec<u8>, EditSession) {
     let bytes = minimal_pdf();
     let doc = Document::from_bytes(bytes.clone()).unwrap();
@@ -1165,6 +1177,226 @@ fn setting_the_display_of_a_linear_ce_dimension_is_refused_by_name() {
     assert!(
         matches!(err, pdfce_core::edit::EditError::NotACircularDimension { id } if id == dim_id.0),
         "expected NotACircularDimension, got {err:?}"
+    );
+}
+
+/// ★★ The label BAKED INTO THE PAGE for an angular ce dimension reads in
+/// DEGREES, not points (`Pass 68.0`).
+///
+/// `DimensionModel::display` had the angular branch; `author_dimension` did
+/// not, and computed the same value a second way. So the Tool Options pane
+/// read `77.5°` while the `/AP` stamped onto the page read **`77.47 pt`** — an
+/// angle through the length formatter, wearing a unit it does not have. This
+/// asserts against the SAVED document, because the baked copy is the one that
+/// outlives the session and the one another reader will show.
+#[test]
+fn an_angular_ce_dimensions_baked_label_is_in_degrees_not_points() {
+    let (_orig, mut s) = session();
+    let (annot_id, _dim) = s.add_dimension(0, DEFAULT_GROUP_ID, angular()).unwrap();
+
+    let reloaded = Document::from_bytes(save(&s)).unwrap();
+    let Object::Dict(annot) = &reloaded.get(annot_id).unwrap().value else {
+        panic!("annotation is not a dict");
+    };
+    let Some(Object::String(bytes)) = annot.get(b"Contents") else {
+        panic!("the authored label is stored as /Contents");
+    };
+    let contents = String::from_utf8_lossy(bytes).into_owned();
+
+    assert!(
+        contents.contains('\u{b0}'),
+        "an angular ce dimension's label must carry the degree sign, got {contents:?}"
+    );
+    assert!(
+        !contents.contains("pt"),
+        "an angle is not a length and must not be stamped with a unit, got {contents:?}"
+    );
+    // The right-angle fixture: 90 degrees.
+    assert!(
+        contents.starts_with("90"),
+        "expected 90 degrees, got {contents:?}"
+    );
+}
+
+/// ★★ The degree sign is written as ONE `WinAnsi` byte in the appearance
+/// stream, not as two UTF-8 bytes (`Pass 68.0`).
+///
+/// The label font is declared `/WinAnsiEncoding`, and the baker wrote
+/// `label.as_bytes()` — raw UTF-8. That was correct for as long as every ce
+/// dimension label was ASCII, and it was, until an angle put U+00B0 in one:
+/// `C2 B0` rendered as `Â°` on the page.
+///
+/// This asserts on the CONTENT STREAM rather than on `/Contents`, because
+/// `/Contents` is a text string the viewer never draws — the bytes inside
+/// `BT … Tj … ET` are what an operator actually sees, and they are what was
+/// wrong.
+#[test]
+fn the_degree_sign_is_one_winansi_byte_in_the_appearance_stream() {
+    let (_orig, mut s) = session();
+    let (annot_id, _dim) = s.add_dimension(0, DEFAULT_GROUP_ID, angular()).unwrap();
+    let reloaded = Document::from_bytes(save(&s)).unwrap();
+
+    let Object::Dict(annot) = &reloaded.get(annot_id).unwrap().value else {
+        panic!("annotation is not a dict");
+    };
+    let ap_id = annot
+        .get(b"AP")
+        .and_then(Object::as_dict)
+        .and_then(|ap| ap.get(b"N"))
+        .and_then(Object::as_reference)
+        .expect("a baked /AP /N reference");
+    let Some(Object::Stream(ap)) = reloaded.get(ap_id).map(|io| &io.value) else {
+        panic!("/AP /N is not a stream");
+    };
+    let stream = String::from_utf8_lossy(ap.data_span.slice(reloaded.bytes()).unwrap());
+
+    // The content-stream writer escapes high bytes as octal, so the question
+    // is which octal escapes are present — NOT whether the raw bytes are.
+    // Asserting on raw bytes passes vacuously here, because BOTH the correct
+    // and the broken encoding get escaped and neither appears literally.
+    assert!(
+        stream.contains("\\260"),
+        "the degree sign must be the single WinAnsi byte 0xB0 (octal 260): {stream}"
+    );
+    assert!(
+        !stream.contains("\\302\\260"),
+        "the degree sign must not be raw UTF-8 (C2 B0 -> octal 302 260): {stream}"
+    );
+}
+
+/// ★ The pane and the page agree, by construction rather than by care.
+///
+/// The two used to be computed separately. This pins that the model's own
+/// displayed value is exactly the string baked into the annotation — if a
+/// future change reintroduces a second formatting path, this fails before an
+/// operator sees two different numbers for one ce dimension.
+#[test]
+fn the_displayed_value_and_the_baked_label_are_the_same_string() {
+    let (_orig, mut s) = session();
+    let (annot_id, dim_id) = s.add_dimension(0, DEFAULT_GROUP_ID, angular()).unwrap();
+    let shown = s
+        .dimension_model()
+        .display(dim_id)
+        .expect("the model displays it")
+        .text;
+
+    let reloaded = Document::from_bytes(save(&s)).unwrap();
+    let Object::Dict(annot) = &reloaded.get(annot_id).unwrap().value else {
+        panic!("annotation is not a dict");
+    };
+    let Some(Object::String(bytes)) = annot.get(b"Contents") else {
+        panic!("/Contents");
+    };
+    let baked = String::from_utf8_lossy(bytes).into_owned();
+    assert_eq!(
+        shown, baked,
+        "what the operator reads and what the file carries must be one string"
+    );
+}
+
+/// ★ An ANGULAR ce dimension is placeable (`Pass 68.0`).
+///
+/// It was refused until this Pass — not by decision, but because
+/// `place_dimension`'s guard asked "is this `Linear`" back when the only other
+/// kind was circular. An angular ce dimension has both placement components
+/// the verb sets: an arc radius to stand off by, and a text position along
+/// that arc. The operator-visible symptom was a drag that did nothing, which
+/// is precisely what `NotALinearDimension`'s own docs exist to prevent.
+#[test]
+fn placing_an_angular_ce_dimension_moves_its_arc_not_its_value() {
+    let (_orig, mut s) = session();
+    let (_annot, dim_id) = s.add_dimension(0, DEFAULT_GROUP_ID, angular()).unwrap();
+    let before = s
+        .dimension_model()
+        .dimension(dim_id)
+        .expect("just added")
+        .kind
+        .measured_points();
+
+    s.place_dimension(dim_id, 75.0, 12.0)
+        .expect("an angular ce dimension has a standoff and a text position");
+
+    let after = s
+        .dimension_model()
+        .dimension(dim_id)
+        .expect("still there")
+        .kind;
+    match after {
+        DimensionKind::Angular {
+            radius, text_along, ..
+        } => {
+            assert!((radius - 75.0).abs() < 1e-9, "arc radius, got {radius}");
+            assert!((text_along - 12.0).abs() < 1e-9, "got {text_along}");
+        }
+        other => panic!("expected Angular, got {other:?}"),
+    }
+    // Placement is value-preserving by construction: the angle is unchanged.
+    assert!(
+        (after.measured_points() - before).abs() < 1e-9,
+        "placing a ce dimension must never change what it reports"
+    );
+}
+
+/// ★ Dragging an arc inward past its own vertex clamps rather than collapsing
+/// it. A zero-radius arc sits on the apex, unreadable and with no handle left
+/// to drag it back out — the mark would be present and unrecoverable.
+#[test]
+fn placing_an_angular_ce_dimension_clamps_a_negative_arc_radius() {
+    let (_orig, mut s) = session();
+    let (_annot, dim_id) = s.add_dimension(0, DEFAULT_GROUP_ID, angular()).unwrap();
+    s.place_dimension(dim_id, -30.0, 0.0)
+        .expect("an overshot drag is a slip, not an error");
+    match s.dimension_model().dimension(dim_id).unwrap().kind {
+        DimensionKind::Angular { radius, .. } => {
+            assert!(radius > 0.0, "the arc must stay visible, got {radius}");
+            assert!(
+                (radius - 30.0).abs() < 1e-9,
+                "a negative standoff reads as its magnitude, got {radius}"
+            );
+        }
+        other => panic!("expected Angular, got {other:?}"),
+    }
+
+    s.place_dimension(dim_id, 0.0, 0.0)
+        .expect("still placeable");
+    match s.dimension_model().dimension(dim_id).unwrap().kind {
+        DimensionKind::Angular { radius, .. } => {
+            assert!(
+                (radius - pdfce_core::edit::MIN_DIMENSION_ARC_RADIUS).abs() < 1e-9,
+                "a zero radius must clamp to the floor, got {radius}"
+            );
+        }
+        other => panic!("expected Angular, got {other:?}"),
+    }
+}
+
+/// A CIRCULAR ce dimension is still refused by name — the narrowing did not
+/// open the door to the kind that genuinely has nowhere to stand off to.
+#[test]
+fn placing_a_circular_ce_dimension_is_still_refused_by_name() {
+    let (_orig, mut s) = session();
+    let fit = pdfce_core::dimension::fit_circle_taubin(&[
+        Point::new(100.0, 0.0),
+        Point::new(0.0, 100.0),
+        Point::new(-100.0, 0.0),
+    ])
+    .expect("three non-collinear points fit a circle");
+    let (_annot, dim_id) = s
+        .add_dimension(
+            0,
+            DEFAULT_GROUP_ID,
+            DimensionKind::Circular {
+                fit,
+                show_diameter: false,
+            },
+        )
+        .unwrap();
+    let err = s
+        .place_dimension(dim_id, 10.0, 0.0)
+        .expect_err("a circle has no axis to stand off from");
+    assert!(
+        matches!(err, pdfce_core::edit::EditError::NotALinearDimension { id } if id == dim_id.0),
+        "expected NotALinearDimension, got {err:?}"
     );
 }
 
