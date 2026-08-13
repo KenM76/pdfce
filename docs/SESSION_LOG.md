@@ -42022,3 +42022,187 @@ are **permitted as of 2026-08-13 and none are built.**
    exists and the shape is fully specified.
 5. **`(bm)`** (`detach_file` / `unembed_fonts` confidentiality) and
    **`(v)`** (R58 scope) remain open and remain different questions.
+
+---
+
+## 2026-08-13 (hundred-and-forty-fourth filing — **ADDENDUM from the CONCURRENT SIBLING dispatch, same ordinal, same operator correction**) — **TWO LIBRARIANS FILED THIS AT ONCE AND BOTH WROTE A `decision 061` HEADING. That is recorded as the filing's most transferable finding, not swept up.** Adds four things the primary entry does not carry: **`R13` ALREADY DREW THE OPERATOR'S LINE and disagreed with `R12` for six weeks**; **`R53`/`R54`'s `R12` backstop is now weaker for the shells**; **operator question `(bn)`**; and a **standing-rule PROPOSAL claiming `R194`** whose instance set REPLACES the one it was dispatched with
+
+**This is an addendum, not a competing entry.** The primary filing 144
+above is the record. Everything here is additive; **nothing in it
+contradicts the primary entry**, and where the two overlapped, the
+duplicate was **removed from this side**, not from theirs.
+
+**No commit behind it.** `git log --oneline -1` = **`197f0a5`**, read in
+this dispatch. **The librarian does not commit; the engineer does.**
+
+### ★★ THE COLLISION — what happened, and the process finding worth more than the filing
+
+Two `pdfce-librarian` dispatches ran against the same operator correction
+simultaneously, neither aware of the other. **Both appended a
+`### 2026-08-13 … decision 061` heading to `ARCHITECTURE.md` §12.** For a
+short window the file contained **two decision records bearing the same
+number** — precisely the ledger corruption `tools/check-ledger-numbers.py`
+exists to catch.
+
+**How it was caught:** this dispatch re-ran `git status --porcelain`
+between edits and saw `docs/FEATURES.md` and `docs/ROADMAP.md` modified
+**when it had touched neither**. It stopped, read the sibling's work, and
+reconciled: **its own duplicate §12 entry was deleted**, its unique
+findings re-filed as a labelled **addendum to decision 061**, and its
+`ARCHITECTURE.md` §1.1 restructure merged with the sibling's amendment so
+the section reads once rather than twice.
+
+**Why it happened, and it is not carelessness on either side.** Each
+dispatch read the ledger, found `061` free — **it was free when each one
+read it** — and wrote. **The gate reads a FILE, and two writers race
+between the read and the write.** A check-then-act gap with no lock. No
+amount of care *inside* one dispatch closes it, because the other
+dispatch is invisible from inside.
+
+**★ This is `R192`'s own shape at a layer `R192` does not reach.** The
+gate's input set is *the file as of the last read*; the obligation's
+subject set is *every number any concurrent writer will claim*. **A
+number read from a file is free only until someone else writes**, and the
+gate does not say so. Worth adding to the `R192` retrofit Backlog item
+when the four gates get their blind-spot statements.
+
+**The practical mitigation costs one command and it worked:** a librarian
+holding a shell should **re-run `git status --porcelain` immediately
+before its first write and again before its last**, and treat *"a doc I
+did not touch is modified"* as **stop and reconcile**, never as noise.
+
+**★ And note what the collision did NOT cost.** The two filings agree on
+every substantive point — the three-clause separation, the engine/shell
+split, the twice-over justification for the engine half, the refusal to
+widen privacy, the `R13` clause-5 collision. **Two independent readings
+of the same operator sentence converged.** That is real evidence the
+reading is right, and it is recorded as such rather than thrown away with
+the duplicate heading.
+
+### The four additions
+
+**1. `R13` ALREADY DREW THE OPERATOR'S LINE — and disagreed with `R12`,
+three lines away, for six weeks.** `R13` reads *"never downloads a file
+the user did not ask for."* That **user-asked-for** qualifier **is** the
+run-versus-ask distinction the operator articulated on 2026-08-13. `R12`,
+in the same decision record, was an absolute with no such qualifier.
+**Decision 003 encoded two different answers to the same question, side
+by side, from 2026-07-30 to 2026-08-13** — and the over-broad one was the
+one with a fail-closed CI job behind it.
+
+**Nothing flagged it, and that is the interesting part: each rule is
+completely coherent read alone.** The contradiction is a property of the
+**pair**. **Review is an operation on one claim at a time** — the same
+asymmetry hard rule 10 was written about for *figures*, appearing here
+for *scopes*. Reading `R12` carefully would never have found this.
+
+**2. `R53`/`R54` cite `R12` as a structural backstop, and that citation is
+now weaker for the shells.** The JS-posture rules argue a trigger action
+referencing `/URI` or `/SubmitForm` could achieve nothing because *"`R12`
+(no network) + `R13` (no process launch)"* make it impossible. A shell may
+now link an HTTP client, so that impossibility no longer holds
+workspace-wide. **Nothing becomes reachable and no action is owed** —
+`R53` (no JS interpreter exists) and `R54` (no trigger ever fires) are the
+actual enforcement and are untouched. **What was lost is a belt-and-braces
+argument, not a guard.** Recorded because **a defence-in-depth layer that
+quietly became a single layer is exactly the thing worth knowing before
+someone leans on it.** A note is appended at `R54` in *Standing rules*.
+
+**3. Operator question `(bn)` — may an update check run at STARTUP?**
+Filed on this dispatch's explicit instruction. *"Can download an update
+when asked"* (clause 3, which moved) and *"phones home on every launch"*
+(clause 2, which did not) are different acts. **A startup check is the one
+permitted fetch that happens with no person present** — every launch,
+every machine — so it can carry a usage signal whether or not anyone
+intends it to, which is exactly what clause 2 rules out. Against that: a
+portable app with no installer has no other way to announce a release,
+which is why `R14` makes discovery external. *Default: off by default,
+opt-in, user-initiated, display-only, no identifiers, disclosed* —
+i.e. `R14` and §1.1 unchanged. **Nothing is blocked by leaving it
+unanswered.** The primary filing recorded this as *"raised to the operator
+directly"* rather than parked in the list; **both are true, and the list
+entry is the durable half.**
+
+**4. Standing-rule PROPOSAL claiming `R194` — and its instance set is NOT
+the one it was dispatched with.** *A rule's text quantifies; its reason
+does not necessarily quantify the same way.* **Three instances, same
+anatomy — an ABSOLUTE QUANTIFIER where a SPECIFIC SUBJECT SET was meant,
+with the rule's own reason justifying the narrower set and nothing
+comparing the two:** `R58` (*"every removal/scrub operation"* — meant
+confidentiality removals; **nine** shipped operations outside its literal
+text; still unfixed at `(v)`), **project rule 4** (narrowed twice, both
+times by the operator), and **`R12`**.
+
+**★ `MAX_PIXMAP_EDGE` was nominated as the third instance and is
+EXCLUDED.** Its defect was a **wrong justification**, not a wrong
+quantifier — the `R193` draft's shape — and merging them makes the thin
+abstraction `RULING 3` already rejected. **`R58` replaces it and is the
+stronger instance.**
+
+**★★ The wording suggested at dispatch — *"record a rule's motivating
+WHY alongside its text"* — was TESTED AND DEFEATED, by the project's own
+record.** `MAX_PIXMAP_EDGE` **did** record its why and **the why was the
+defect**. `R58` **has** its why written down one section away (§5.9) and
+went over-broad **anyway**, for nine operations. **Recording a reason is
+neither sufficient nor effective; comparing the reason's subject set
+against the text's is the act that would have caught all three**, and the
+proposal is worded around the comparison instead.
+
+**Counter-instances were checked so the rule does not condemn healthy
+absolutes:** `R13`, GUI-core separation, **`R10`** and **`R53`** all pass
+— and the last two **already enumerate their subject sets**, which is the
+proposal's own form arrived at independently, and the evidence that the
+obligation is cheap.
+
+**Argued honestly against itself:** three instances is **exactly** the
+bar, not comfortably over it (`R192` was minted on its fourth); two of
+three were found by the operator from outside, which is uncomfortable and
+is recorded but is **not** the rule's trigger, since `R58` was found by an
+agent. **If declined, the honest disposition is `R193`'s** — decline on
+the count, keep `R194` claimed, leave the draft intact for instances to be
+added rather than rewritten.
+
+### Files edited by this addendum
+
+| file | change |
+|---|---|
+| `docs/ARCHITECTURE.md` §1.1 | **restructured into three named clauses** (operate / privacy / crate-ban) carrying the operator quote verbatim and the **previously unrecorded WHY** (bloat and startup cost); the sibling's amendment block **merged in** rather than left as a second copy; the 2026-07-30 `webbrowser` precision clause **kept**, with a new note that 003 §3.4 was a correction of **WORDING** and this is a correction of **SCOPE** — a larger and rarer act |
+| `docs/ARCHITECTURE.md` §12 | this dispatch's **duplicate decision-061 entry DELETED**; unique findings re-filed as **"ADDENDUM to decision 061, NOT a separate decision"**. Ceiling stays **061**, next free **062** |
+| `docs/ROADMAP.md` *Standing rules* | **PROPOSAL claiming `R194`** appended at section end (proposal-then-ruling precedent); **`R54`** gains the weakened-backstop note |
+| `docs/ROADMAP.md` *Open operator questions* | **`(bn)`** filed; ceiling `(bm)` → `(bn)`, next free `(bo)` |
+| `docs/ROADMAP.md` *Backlog* | the `pdfce-fetch` bucket gains a **cross-reference** to the README obligation — **trimmed to a pointer** on finding the sibling had already filed it properly under *packaging* |
+| `.claude/agents/pdfce-engineer.md` | its *"do not add ANY network call… don't decide solo"* hard-never **split into three**: an absolute for the **engine**, clause 2's opt-in bar for **unasked-for** calls, and `R13`'s **execute-what-you-fetched** block. It stated the over-broad rule in imperative form and nothing else would have narrowed it |
+| `docs/SESSION_LOG.md` | this addendum, plus the primary entry's operator-question ledger row **reconciled** to `(bn)` |
+
+### Deliberately NOT written
+
+- **No second `FEATURES.md` edit.** The sibling's *Will not* claim repair
+  is correct and complete; **no capability changed, so no box could
+  move.** Checked, not assumed — the repaired bullet now scopes the CI
+  gate to the engine and states that operator-initiated downloads are
+  permitted and **none are built**.
+- **No `(bo)` for the `R13` add-in collision.** The sibling filed it as a
+  ***Backlog* ruling-owed item**, which is adequate and reaches the same
+  operator. **Filing it twice in two forms would be the drift, not the
+  diligence.**
+- **No rule minted.** `R194` is **claimed by a proposal**, not minted.
+- **`docs/decisions/003-distribution-posture.md` left byte-unchanged** —
+  a dated record; decision 061 amends it, exactly as `R12`'s own text
+  demanded.
+- **No RAG file.** The generalisable half of the `R194` shape is not yet
+  ruled on, and the concurrency finding is Claude-Code-tooling, not Rust
+  or PDF — if it graduates it belongs in `C:\personal_rag\claude_code\`,
+  which is `troubleshooting-librarian`'s territory, not this one's.
+
+### For next session — additions to the primary entry's list
+
+1. **★ `R193` AND `R194` ARE BOTH CLAIMED. The next genuinely free rule
+   number is `R195`.** The gate still prints `R193`. It is now wrong by
+   **two** numbers.
+2. **Rule on the `R194` proposal** — mint, or decline on the count and
+   keep the number, per `R193`'s precedent. **Do not rewrite the draft;
+   add instances to it.**
+3. **`(bn)` is answerable in one sentence** and nothing is blocked by it.
+4. **The concurrency hazard is real and cheap to avoid** — one
+   `git status --porcelain` before a librarian's first and last write.
+   Consider whether the `R192` Backlog retrofit should name it.
