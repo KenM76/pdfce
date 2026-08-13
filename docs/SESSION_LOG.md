@@ -38483,20 +38483,42 @@ the dimension objects **pdfce authors**. Never the bare word.
   neither filing explains. Filed per hard rule 10 for the next session
   with a shell to reconcile, not resolved here.
 
+  **★ AMENDMENT, 2026-08-12 (hundred-and-thirtieth filing) — RESOLVED,
+  no tests missing.** Reconciled by the dispatching engineer, who had
+  a shell this session (this librarian did not; relayed, not
+  independently re-run, per hard rule 8). `git diff c4ec3f5 1f7ef59`
+  over `crates/pdfce-core/tests/dimension_roundtrip.rs` (+6
+  `#[test]`s) and `crates/pdfce-gui/src/measure_tool.rs` (+4
+  `#[test]`s) counts **10** tests added, and **3,622 + 10 = 3,632**,
+  the measured total at `1f7ef59`. The **3,629** figure above was a
+  true reading taken at an intermediate point in the
+  hundred-and-twenty-ninth dispatch — after 7 of the 10 tests existed
+  but before the last 3 were written — not a second unexplained
+  baseline. Full ten-test list and the honest **3,622 → 3,632 (+10)**
+  delta filed in `ROADMAP.md`'s `1f7ef59` Shipped entry. Also relayed:
+  `tools/check-commits-filed.py` (391 code commits, clean; 5 baseline
+  carries pre-existing) and `tools/check-ledger-numbers.py` (Pass
+  ceiling 71 / next 72, standing rules R191 / next R192, decisions 055
+  / next 056, filings 129 / next 130), both re-run and reported clean.
+  This filing's own hundred-and-twenty-ninth `docs/` changes are
+  committed as `8089444`.
+
 **Still in flight:**
 - Retroactively re-classifying a **committed** two-line ce dimension
   remains structurally impossible — operator's call, unaddressed.
 - The `parallel_epsilon_degrees` proximity caption (ui-spec §12) — P1,
   unbuilt.
-- `tools/check-commits-filed.py` re-run, this filing's own separate
+- ~~`tools/check-commits-filed.py` re-run, this filing's own separate
   `docs/`-staged commit, and the 3,622-vs-3,629 test-count gap all
-  remain owed to whichever session next has a shell.
+  remain owed to whichever session next has a shell.~~ **CLOSED
+  2026-08-12 (hundred-and-thirtieth filing)** — see amendment above and
+  `ROADMAP.md`'s `1f7ef59` entry.
 
 **For next session:**
-- Re-run `tools/check-commits-filed.py` and `tools/check-ledger-
-  numbers.py` — neither has been run by a librarian with a shell since
-  the hundred-and-twenty-seventh filing.
-- Reconcile the 3,622-vs-3,629 test-count gap noted above.
+- ~~Re-run `tools/check-commits-filed.py` and `tools/check-ledger-
+  numbers.py`~~ — done, hundred-and-thirtieth filing, both clean.
+- ~~Reconcile the 3,622-vs-3,629 test-count gap noted above.~~ — done,
+  see amendment above.
 - Commit this filing's `docs/` changes by name, separately, per the
   `af5580e` convention this project keeps repeating in its own
-  "for next session" notes.
+  "for next session" notes. Still owed.

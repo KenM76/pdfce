@@ -245,22 +245,43 @@ positive instance of an existing discipline, not a new finding.
 
 #### Test results and gates (relayed, not re-run by this librarian)
 
-**3,629 → 3,632 tests, workspace-wide, 0 failing** (+3, matching the
-three named regression tests above: the drag-on-angular test, the
-model/`/AP`-label-agreement test, the WinAnsi-encoding test — 3
-matches 3, per hard rule 10(a)). `cargo fmt --all`, `cargo clippy
---workspace --all-targets --all-features -- -D warnings`,
-`tools/check-ui-strings.sh`, `tools/check-fmt-excluded.py` — all
-reported clean.
+**3,622 → 3,632 tests, workspace-wide, 0 failing (+10 over the
+hundred-and-twenty-eighth filing's closing total).** `cargo fmt --all`,
+`cargo clippy --workspace --all-targets --all-features -- -D
+warnings`, `tools/check-ui-strings.sh`, `tools/check-fmt-excluded.py`
+— all reported clean.
 
-**★ Baseline not reconciled against the prior filing's closing total —
-flagged, not resolved.** The hundred-and-twenty-eighth filing closed at
-**3,622**; this dispatch's own baseline is **3,629**, a gap of **7**
-nothing in either filing explains. Neither this librarian nor the
-dispatch had the tooling to re-run the full suite and account for it
-this session. Filed per hard rule 10 rather than silently accepted —
-the next session with a shell should reconcile it before quoting either
-number as a milestone.
+**★ RESOLVED 2026-08-12, hundred-and-thirtieth filing — the 7-test gap
+this entry originally flagged was an intermediate measurement, not
+missing tests.** Reconciled by the dispatching engineer, who had a
+shell this session (this librarian did not; per hard rule 8, relayed
+below, not independently re-run). `git diff c4ec3f5 1f7ef59` over the
+two touched test files, counted by `#[test]` attributes added:
+`crates/pdfce-core/tests/dimension_roundtrip.rs` **+6**
+(`placing_an_angular_ce_dimension_moves_its_arc_not_its_value`,
+`placing_an_angular_ce_dimension_clamps_a_negative_arc_radius`,
+`placing_a_circular_ce_dimension_is_still_refused_by_name`,
+`an_angular_ce_dimensions_baked_label_is_in_degrees_not_points`,
+`the_displayed_value_and_the_baked_label_are_the_same_string`,
+`the_degree_sign_is_one_winansi_byte_in_the_appearance_stream`);
+`crates/pdfce-gui/src/measure_tool.rs` **+4**
+(`a_linear_ce_dimension_previews_as_line_plus_two_extensions`,
+`an_angular_ce_dimension_previews_as_an_arc_plus_two_arm_legs`,
+`an_arc_spanning_the_angle_wraparound_takes_the_short_way`,
+`a_circular_ce_dimension_has_no_preview_segments`) = **10 tests over
+10 files' worth of diff**, and **3,622 + 10 = 3,632**, the measured
+workspace total at `1f7ef59` — the arithmetic closes exactly. The
+hundred-and-twenty-ninth filing's own **3,629** "before" figure was a
+true reading taken at an intermediate point in the same dispatch —
+after 7 of the 10 tests existed (the 3 angular-placement tests plus
+the 4 preview-shape tests) but before the last 3 (the two
+label-agreement tests and the WinAnsi encoding test) were written —
+not a second, unaccounted-for baseline. The honest delta for `1f7ef59`
+over `c4ec3f5` is **+10 (6 core + 4 GUI), not +3**; the previously
+quoted "+3, matching the three named regression tests" undercounted
+the commit's own contribution by the 7 tests that existed before the
+dispatch's snapshot was taken. No tests are missing; nothing was
+silently accepted — see hard rule 10(a).
 
 **GUI-core separation:** `cargo tree -p pdfce-core` / `-p pdfce-render`
 reported **zero** GUI dependencies. **Relayed** — this librarian had no
@@ -297,21 +318,30 @@ librarian had no shell to re-run `git bundle verify` itself.
   items" list) — operator's call, unaddressed by this filing.
 - The `parallel_epsilon_degrees` proximity caption (ui-spec §12) — P1,
   unbuilt.
-- `tools/check-commits-filed.py` re-run and this filing's own separate
-  `docs/`-staged commit remain owed to whichever session next has a
-  shell.
+- ~~`tools/check-commits-filed.py` re-run and this filing's own
+  separate `docs/`-staged commit remain owed to whichever session next
+  has a shell.~~ **CLOSED 2026-08-12, hundred-and-thirtieth filing.**
+  This filing's own `docs/` changes are now committed (`8089444`).
+  Per the dispatching engineer, who had a shell this session (relayed
+  here, not independently re-run by this librarian):
+  `tools/check-commits-filed.py` reports clean over the whole history
+  (391 code commits; the 5 baseline carries are pre-existing debt,
+  untouched) and `tools/check-ledger-numbers.py` reports clean — see
+  updated ledger figures below.
 
 #### No Pass ID, decision, or new standing rule minted
 
 `Pass 68.0` is an existing Pass; these are bugfixes to its
 already-shipped GUI half. R186 gains a seventh recorded instance, not a
 new number, matching its own established precedent. **Ledger ceilings
-not independently re-checked this dispatch** (no shell to run
-`tools/check-ledger-numbers.py`) — carried forward from the
-hundred-and-twenty-eighth filing's measured figures: Pass families up
-to **71**, next free **72**; standing rules to **R191**, next free
-**R192**; decisions to **055**, next free **056**; SESSION_LOG filings
-**128**, next free **129**, which is this one.
+RE-CHECKED 2026-08-12, hundred-and-thirtieth filing, by the
+dispatching engineer's shell (`tools/check-ledger-numbers.py`,
+relayed):** Pass families up to **71**, next free **72**; standing
+rules to **R191**, next free **R192**; decisions to **055**, next free
+**056**; SESSION_LOG filings **129**, next free **130**, which is this
+one. These match, unchanged, the figures this entry originally carried
+forward from the hundred-and-twenty-eighth
+filing.
 
 ---
 
