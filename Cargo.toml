@@ -34,6 +34,7 @@ members = [
     "crates/pdfce-gui",
     "crates/pdfce-cli",
     "crates/pdfce-print",
+    "crates/pdfce-fetch",
 ]
 # tools/difftest is the OUT-OF-TREE differential test oracle mandated by
 # docs/decisions/001-oxidize-pdf-adopt-vs-build.md §7: it pins oxidize-pdf
@@ -113,3 +114,7 @@ license = "MIT"
 pdfce-core = { path = "crates/pdfce-core", default-features = false }
 pdfce-render = { path = "crates/pdfce-render", default-features = false }
 pdfce-print = { path = "crates/pdfce-print" }
+# Network code for operator-initiated downloads. `default-features = false`
+# here like the others, so each shell re-enables `download` through its own
+# [features] block -- the forwarding the convention requires.
+pdfce-fetch = { path = "crates/pdfce-fetch", default-features = false }

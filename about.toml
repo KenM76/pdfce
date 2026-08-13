@@ -49,6 +49,35 @@ accepted = [
     # line"); pdfce's FIRST conjunctive-attribution dependency.
     "IJG",
     "ISC",
+    # CDLA-Permissive-2.0 — the Linux Foundation's *Community Data License
+    # Agreement*, reached via `webpki-roots`, which is the dependency that
+    # carries Mozilla's trusted root-certificate store for `rustls`.
+    #
+    # ★ IT IS A DATA LICENSE, NOT A SOFTWARE LICENSE, and that is why it is a
+    # DIFFERENT CATEGORY rather than just another id in the list — the same
+    # distinction the bundled-font block below already draws. `webpki-roots`
+    # ships almost no code; what it ships is a compiled-in LIST OF CERTIFICATE
+    # AUTHORITIES. CDLA-Permissive-2.0 governs that data.
+    #
+    # PERMISSIVE, with an unusually short obligation: redistribute the text of
+    # the agreement with the data, and do not remove the attribution. There is
+    # **no share-alike clause at all** — 2.0 deliberately dropped the
+    # "Results" reciprocity that CDLA-Sharing-1.0 has, which is precisely the
+    # difference between the two and the reason the `-Permissive` suffix is
+    # load-bearing. Nothing touches pdfce's own MIT license (LEGAL.md §6.1).
+    #
+    # WHY IT APPEARS AT ALL: pdfce needs an HTTPS client for operator-initiated
+    # downloads (`R12` as narrowed 2026-08-13 — the SHELLS may fetch, the
+    # engine may not). Pure-Rust TLS means `rustls`, and verifying a server
+    # certificate means having a root store. The alternative is `native-tls`,
+    # which uses the OS store and therefore bundles no root data and needs no
+    # new license family — heavier on Windows, and rejected in favour of this.
+    #
+    # Accepted by operator decision 2026-08-13 ("yes it can join the accepted
+    # list"), after `cargo about generate` FAILED on it and the choice was put
+    # to him rather than made here — this list's own comment above requires
+    # exactly that.
+    "CDLA-Permissive-2.0",
     "MIT",
     "MIT-0",
     "Unicode-3.0",
