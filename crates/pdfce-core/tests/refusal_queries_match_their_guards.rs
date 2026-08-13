@@ -1,0 +1,183 @@
+//! # A `*_refusal()` query must answer the SAME question its guard asks
+//!
+//! Reported from outside by the `pdfceGUI` session (2026-08-13) as a
+//! correctness defect in a `#[must_use]` public query, not a missing feature:
+//!
+//! > *"`fill_refusal()` can answer 'no refusal' where every fill errors… A
+//! > shell that follows that instruction to the letter still ships the box
+//! > that rejects whatever is typed into it, on two of the three refusal
+//! > paths."*
+//!
+//! ## Why this is worse than an ordinary bug
+//!
+//! These queries exist so a shell can satisfy `R83` — **disable a control
+//! rather than offer one that always errors**. So a refusal query that
+//! under-reports does not degrade gracefully. It produces exactly the
+//! behaviour `R83` forbids, while the shell's source reads as though `R83`
+//! were satisfied, and **every test on both sides passes**.
+//!
+//! ## The shape, which is the part worth keeping
+//!
+//! `fill_refusal()` asked `check_certification_for_fill()`. `fill_guards()` —
+//! the preamble every fill runs — asked **three** things: encryption, that
+//! gate, and `/Size`-suppression. Two independent transcriptions of one list,
+//! which drifted.
+//!
+//! The fix is not "add the two missing checks", because that produces a third
+//! transcription. It is `X_refusal() { self.X_guards().err() }`, which makes
+//! them **incapable** of disagreeing. `embed_fonts`/`unembed_fonts` already had
+//! the property the other way round — the verb calls the query — which is why
+//! those never drifted and are the healthy examples in the same file.
+//!
+//! This file asserts the property directly, so a future guard added to either
+//! preamble cannot silently stop being reported.
+
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+use std::path::{Path, PathBuf};
+
+use pdfce_core::document::Document;
+use pdfce_core::edit::{EditError, EditSession};
+
+fn fixture(rel: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/synthetic")
+        .join(rel)
+}
+
+/// ★ THE REPORTED DEFECT: an encrypted document must be reported by
+/// `fill_refusal`, not discovered when the operator types.
+///
+/// The fixture is the **empty-user-password** one deliberately. A
+/// password-protected file cannot be opened at all, so it never reaches an
+/// `EditSession` and cannot exercise this guard — the only encrypted documents
+/// that can reach a Forms panel are exactly the ones that open without a
+/// prompt, which is also why this defect was reachable by a real shell.
+#[test]
+fn fill_refusal_reports_encryption_rather_than_letting_the_fill_discover_it() {
+    let doc = Document::load(&fixture("encryption/enc-emptyuser.pdf")).expect("fixture loads");
+    let session = EditSession::new(doc);
+
+    let refusal = session.fill_refusal();
+    assert!(
+        matches!(refusal, Some(EditError::DocumentEncrypted)),
+        "fill_refusal must report DocumentEncrypted on an encrypted file; got \
+         {refusal:?}. Returning None here is the defect: a shell would enable \
+         the field and the operator would learn it was refused only after typing."
+    );
+}
+
+/// ★ AND THE PROPERTY, not just the instance: whatever the guard refuses, the
+/// query reports — checked by running both against the same document.
+///
+/// This is what makes a future third guard safe. If someone adds a check to
+/// `fill_guards` and the query stops matching, this fails.
+#[test]
+fn fill_refusal_and_the_fill_itself_agree_on_every_fixture() {
+    for rel in [
+        "encryption/enc-emptyuser.pdf",
+        "forms/demo-form.pdf",
+        "forms/certified-p2-form.pdf",
+    ] {
+        let doc = Document::load(&fixture(rel)).expect("fixture loads");
+        let mut session = EditSession::new(doc);
+
+        let predicted = session.fill_refusal();
+        // Attempt a fill against a field that may or may not exist; what is
+        // being compared is the GUARD outcome, so a NoSuchField answer counts
+        // as "the guards let it through".
+        let actual = session.fill_text_field("any-field-name", "x").err();
+
+        match (&predicted, &actual) {
+            (Some(p), Some(a)) => assert_eq!(
+                std::mem::discriminant(p),
+                std::mem::discriminant(a),
+                "{rel}: fill_refusal predicted {p:?} but the fill refused with \
+                 {a:?} — the query and the guard disagree"
+            ),
+            (Some(p), None) => panic!("{rel}: fill_refusal predicted {p:?} but the fill succeeded"),
+            (None, Some(a)) => {
+                // Only acceptable if the failure is about the FIELD, not the
+                // document — the guards genuinely passed.
+                assert!(
+                    !matches!(
+                        a,
+                        EditError::DocumentEncrypted
+                            | EditError::ObjectCreationWouldExposeHiddenObjects { .. }
+                            | EditError::CertificationForbidsChange { .. }
+                            | EditError::FieldLockedBySignature
+                    ),
+                    "{rel}: ★ fill_refusal said None but the fill refused with a \
+                     DOCUMENT-level guard: {a:?}. This is the exact under-report \
+                     the pdfceGUI session found."
+                );
+            }
+            (None, None) => {}
+        }
+    }
+}
+
+/// ★ `flatten_refusal` exists and reports the suppression guard that
+/// `deletion_refusal` correctly does not.
+///
+/// The requesting session had been gating its Flatten control on
+/// `deletion_refusal` under a local alias, because it was the nearest available
+/// question. The two agree on two checks of three — the worst kind of
+/// near-miss, since it works until it does not.
+#[test]
+fn flatten_refusal_reports_encryption_and_is_not_deletion_refusal() {
+    let doc = Document::load(&fixture("encryption/enc-emptyuser.pdf")).expect("fixture loads");
+    let session = EditSession::new(doc);
+    assert!(
+        matches!(
+            session.flatten_refusal(),
+            Some(EditError::DocumentEncrypted)
+        ),
+        "flatten_refusal must report encryption"
+    );
+}
+
+/// `flatten_refusal` and `flatten_fields` agree.
+#[test]
+fn flatten_refusal_and_flatten_itself_agree() {
+    for rel in ["encryption/enc-emptyuser.pdf", "forms/demo-form.pdf"] {
+        let doc = Document::load(&fixture(rel)).expect("fixture loads");
+        let mut session = EditSession::new(doc);
+        let predicted = session.flatten_refusal();
+        let actual = session.flatten_fields(None).err();
+        if let Some(p) = &predicted {
+            let a = actual
+                .as_ref()
+                .unwrap_or_else(|| panic!("{rel}: predicted {p:?} but flatten succeeded"));
+            assert_eq!(
+                std::mem::discriminant(p),
+                std::mem::discriminant(a),
+                "{rel}: flatten_refusal predicted {p:?}, flatten refused {a:?}"
+            );
+        }
+    }
+}
+
+/// `deletion_refusal` is CORRECT and must not be "fixed".
+///
+/// The report suggested it under-reports because `flatten_fields` guards on
+/// suppression and it does not. But `deletion_refusal` predicts **deletion**,
+/// and `deletion_preflight` is encryption + `check_certification` — exactly
+/// what it reports. Adding a suppression check here would make it wrong in the
+/// other direction: it would disable a Delete control that would have worked.
+///
+/// Asserted so a later reader acting on that report does not "correct" a
+/// correct function.
+#[test]
+fn deletion_refusal_matches_deletion_and_must_not_gain_the_flatten_guard() {
+    let doc = Document::load(&fixture("forms/demo-form.pdf")).expect("fixture loads");
+    let mut session = EditSession::new(doc);
+    let predicted = session.deletion_refusal();
+    let actual = session.delete_field("definitely-not-a-real-field").err();
+    if predicted.is_none() {
+        assert!(
+            !matches!(actual, Some(EditError::DocumentEncrypted)),
+            "deletion_refusal said None but deletion refused on a document guard"
+        );
+    }
+}

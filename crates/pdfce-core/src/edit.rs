@@ -12196,9 +12196,78 @@ impl EditSession {
     /// }
     /// # }
     /// ```
+    /// # ★ Why this delegates to [`Self::fill_guards`] rather than repeating it
+    ///
+    /// Until 2026-08-13 this asked only `check_certification_for_fill()`, while
+    /// `fill_guards` — the preamble every fill actually runs — asked **three**
+    /// questions: encryption, that certification gate, and the
+    /// `/Size`-suppression guard. So on an **encrypted** document, or one with
+    /// suppressed objects, this returned `None` and the fill then failed with
+    /// `DocumentEncrypted` or `ObjectCreationWouldExposeHiddenObjects`.
+    ///
+    /// That is precisely the outcome the doc example above exists to prevent: a
+    /// shell following it to the letter still shipped the box that rejects
+    /// whatever is typed into it, on two of the three refusal paths — and the
+    /// two most likely to occur. Reported from outside by the `pdfceGUI`
+    /// session, which hit it building a Forms panel and had to re-derive the
+    /// missing conditions locally, duplicating a guard list it could not see.
+    ///
+    /// **The pair drifted because they were two independent transcriptions of
+    /// one list.** Delegating does not merely fix today's gap; it makes the
+    /// query and the guard **incapable** of disagreeing, so a future guard
+    /// added to `fill_guards` is reported here for free. `embed_fonts` and
+    /// `unembed_fonts` already had this property the other way round — the verb
+    /// calls the query — which is why they never drifted.
     #[must_use]
     pub fn fill_refusal(&self) -> Option<EditError> {
-        self.check_certification_for_fill().err()
+        self.fill_guards().err()
+    }
+
+    /// Why **flattening** would refuse right now, or `None`.
+    ///
+    /// [`Self::fill_refusal`]'s and [`Self::deletion_refusal`]'s sibling, and a
+    /// **third distinct question** — added 2026-08-13 because a shell had no
+    /// way to ask it and was gating its Flatten control on `deletion_refusal`
+    /// under a local alias, which is a guess about this crate's intent encoded
+    /// in someone else's source.
+    ///
+    /// # Why it is not `deletion_refusal`
+    ///
+    /// Deleting a field and flattening one are both structural, so they share
+    /// the **strict** certification gate ([`Self::check_certification`], not
+    /// the `/P`-aware fill gate — §12.8.2.2 Table 257 permits filling a
+    /// certified form, not restructuring it). But flatten additionally
+    /// **creates page content**, so it carries the `/Size`-suppression guard
+    /// that deletion does not.
+    ///
+    /// They therefore agree on two checks of three, which is the worst kind of
+    /// near-miss: it works until it does not, on documents that are not exotic.
+    ///
+    /// This is a **pure query** — safe to call every frame from a UI.
+    #[must_use]
+    pub fn flatten_refusal(&self) -> Option<EditError> {
+        self.flatten_guards().err()
+    }
+
+    /// The shared preamble for [`Self::flatten_fields`]: encryption, the
+    /// **strict** certification gate, and the `/Size`-suppression guard.
+    ///
+    /// Extracted from `flatten_fields`'s body so [`Self::flatten_refusal`] can
+    /// be the same expression rather than a second transcription of it — the
+    /// defect that made `fill_refusal` wrong for two of its three paths.
+    fn flatten_guards(&self) -> Result<(), EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        // STRICT gate: flatten removes structure, so it uses the same
+        // conservative refusal the page ops use — a certified document is
+        // refused by name.
+        self.check_certification()?;
+        let suppressed = self.base.suppressed_object_count();
+        if suppressed > 0 {
+            return Err(EditError::ObjectCreationWouldExposeHiddenObjects { count: suppressed });
+        }
+        Ok(())
     }
 
     /// Why field/widget DELETION would refuse right now, or `None`.
@@ -13728,17 +13797,10 @@ impl EditSession {
     ///   [`EditError::ObjectCreationWouldExposeHiddenObjects`],
     ///   [`EditError::ObjectNumbersExhausted`], [`EditError::PageTree`].
     pub fn flatten_fields(&mut self, names: Option<&[&str]>) -> Result<FlattenOutcome, EditError> {
-        if self.base.trailer().contains_key(b"Encrypt") {
-            return Err(EditError::DocumentEncrypted);
-        }
-        // STRICT gate: flatten removes structure, so it uses the same
-        // conservative refusal the page ops use — a certified document is
-        // refused by name.
-        self.check_certification()?;
-        let suppressed = self.base.suppressed_object_count();
-        if suppressed > 0 {
-            return Err(EditError::ObjectCreationWouldExposeHiddenObjects { count: suppressed });
-        }
+        // ONE expression, shared with `flatten_refusal` -- see that query's
+        // doc comment for why a second transcription here would be a defect
+        // waiting to happen rather than a duplication.
+        self.flatten_guards()?;
 
         let form = forms::parse_acroform(&self.graph()).ok_or(EditError::NoInteractiveForm)?;
         let slots = self.page_slots()?;
