@@ -387,31 +387,70 @@ jobs:
       - run: cargo check -p pdfce-core -p pdfce-render --target wasm32-unknown-unknown
 
   no-network:
-    name: verify no HTTP/TLS client in any pdfce crate
+    name: verify the ENGINE needs no network (core + render)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.97.1"
-      # ARCHITECTURE.md §1.1 / decision 003 rule R12: pdfce makes no
-      # network calls, and the way that stays true is that no network
-      # client is linkable in the first place. Fail-closed denylist.
-      # NOT on the list, deliberately: `url` (a parser) and `webbrowser`
-      # (hands a URL to the OS browser; unconditionally linked by
-      # eframe 0.35 and not removable — see decision 003 §3.4). Also not
-      # `zbus` — the Linux accessibility D-Bus bridge, a local IPC
-      # socket, which is why this check runs against the SHIPPED
-      # Windows target.
-      - name: cargo tree denylist (all crates, shipped target)
+      # ARCHITECTURE.md §1.1 / decision 003 rule R12, AS NARROWED BY THE
+      # OPERATOR ON 2026-08-13. Verbatim: "the no network rule was made
+      # too broad. all I meant by that is the software itself didn't rely
+      # on network technology to function which would bloat it and slow
+      # things down the way it does for other pdf software. it is fine to
+      # have download update or download addin capability."
+      #
+      # SO THE SUBJECT SET SHRANK FROM FOUR CRATES TO TWO, and the line
+      # this job now enforces is the operator's own: what the software
+      # needs to RUN, versus what the operator can ASK it to fetch.
+      #
+      #   ENFORCED  pdfce-core, pdfce-render -- the ENGINE. Parsing and
+      #             rendering a file must never require a network, and
+      #             this has a SECOND independent justification: both
+      #             crates must cross into the wasm32/web fork, where a
+      #             native HTTP stack does not exist.
+      #   ALLOWED   pdfce-cli, pdfce-gui, tools/ -- the SHELLS. Operator-
+      #             initiated fetching (model downloads, updates,
+      #             add-ins) is explicitly permitted.
+      #
+      # WHAT THIS DOES NOT RELAX, and the distinction is the whole point:
+      # no telemetry, no usage analytics, no crash reporting, no licence
+      # callback, no silent phone-home. The operator narrowed ONE clause;
+      # that is not consent to widen the neighbouring one. A network call
+      # that happens without the operator asking still needs §1.1's
+      # opt-in treatment and a decision record.
+      #
+      # ★ R192 -- WHAT THIS GATE CANNOT SEE, enumerated rather than
+      # gestured at:
+      #   - It reads the CARGO GRAPH, so it cannot see a raw socket
+      #     opened through `std::net`, which needs no dependency at all.
+      #     Nothing checks for that.
+      #   - It cannot see a network call in a BUILD SCRIPT or proc macro
+      #     (`cargo tree` without `-e build,proc-macro`).
+      #   - It says nothing about the shells, BY DESIGN as of 2026-08-13
+      #     -- so "CI is green" is no longer evidence that pdfce as a
+      #     whole makes no network calls. It is evidence about the engine
+      #     only.
+      #   - It cannot distinguish an operator-initiated fetch from a
+      #     silent one. That obligation is enforced by review and by the
+      #     decision-record requirement, not here.
+      #
+      # NOT on the denylist, deliberately: `url` (a parser) and
+      # `webbrowser` (hands a URL to the OS browser; unconditionally
+      # linked by eframe 0.35 and not removable -- see decision 003
+      # §3.4). Also not `zbus` -- the Linux accessibility D-Bus bridge, a
+      # local IPC socket, which is why this check runs against the
+      # SHIPPED Windows target.
+      - name: cargo tree denylist (ENGINE crates, shipped target)
         run: |
           set -e
           deny='reqwest|ureq|hyper|isahc|attohttpc|curl|surf|native-tls|openssl|rustls|webpki|tokio|socket2|hickory|trust-dns'
           fail=0
-          for p in pdfce-core pdfce-render pdfce-cli pdfce-gui; do
+          for p in pdfce-core pdfce-render; do
             if cargo tree -p "$p" --target x86_64-pc-windows-msvc 2>/dev/null \
                  | grep -Ei "(^|[[:space:]])($deny)[[:space:]]"; then
-              echo "::error::$p has a network-client dependency — violates the no-network posture (ARCHITECTURE.md §1.1, decision 003 R12). Adding one requires a NEW decision record."
+              echo "::error::$p is an ENGINE crate and has a network-client dependency. Parsing and rendering must never require a network (ARCHITECTURE.md §1.1, R12 as narrowed 2026-08-13), and both crates must compile for wasm32 where no native HTTP stack exists. The SHELLS may fetch on the operator's behalf; these two may not. Adding one here requires a NEW decision record."
               fail=1
             fi
           done
