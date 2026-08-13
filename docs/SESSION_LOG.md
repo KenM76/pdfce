@@ -40355,3 +40355,22 @@ heading (1, 19, 114, 115, 130), all pre-existing.
 This is the **hundred-and-thirty-eighth** `SESSION_LOG.md` filing (the
 hundred-and-thirty-seventh confirmed present by direct read before this
 entry was appended).
+
+**★ AMENDMENT, appended immediately after this filing's own commit
+(`b349b1c`), because the entry above would otherwise stand as stale:
+`python tools/check-commits-filed.py` is now CLEAN** — *"393 code
+commit(s) checked (whole history); 5 known-unfiled carried in the
+baseline"*. The entry above reported it RED and said the repair was the
+hash rewrite. **Half of that repair happened as a side effect of writing
+the mapping table**: the gate looks for each live hash somewhere in the
+filings, and `dbc4aa9` and `7ebee12` now appear in it. **The baseline
+file was still not touched.** What this does NOT mean: the ten stale
+citations are still stale, and `Pass 69.0`/`Pass 69.1`'s *Shipped*
+headings still name commits (`d5431a4`, `c057682`) that are not in
+`main`'s history. **The gate is green and the record is still wrong** —
+worth knowing about this particular gate, because it checks that a hash
+is *mentioned somewhere*, not that the hashes a Pass is *headed with*
+are reachable. **A green gate is not a true record here**, and this
+amendment exists so the next reader does not infer otherwise. Item 2 of
+*For next session* stands unchanged. Measured after committing, by
+running the gate; `git rev-list --count origin/main..HEAD` = **12**.
