@@ -5583,6 +5583,38 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
+### Bundled `ocrs` OCR model weights (CC-BY-SA-4.0)
+
+The two neural-network weight files in
+`crates/pdfce-core/assets/models/ocrs/` (`text-detection.rten`,
+`text-rec-checkpoint.rten`), shipped in the portable folder as
+`models/ocrs/`, are the pre-trained models of the
+[ocrs](https://github.com/robertknight/ocrs) OCR engine by **Robert
+Knight**, obtained from <https://huggingface.co/robertknight/ocrs> on
+2026-08-13.
+
+They are licensed **CC-BY-SA-4.0**
+(<https://creativecommons.org/licenses/by-sa/4.0/>), as declared in that
+repository's model card. They are trained on
+[HierText](https://github.com/google-research-datasets/hiertext) (also
+CC-BY-SA-4.0) plus synthetic data.
+
+**pdfce has made no changes to these files.** They are byte-identical to
+the upstream artifacts; only their filenames were shortened (upstream
+carries a content-addressed suffix). Per-file SHA-256 hashes are recorded
+in `crates/pdfce-core/assets/models/ocrs/PROVENANCE.md`.
+
+CC-BY-SA-4.0 is a licence for creative works and contains no linking or
+source-distribution terms. These files are redistributed **unmodified, in
+a collection**, alongside pdfce's own MIT-licensed code; that is not an
+adaptation, and pdfce's licence is unaffected. Anyone who **modifies**
+these weights — fine-tuning, quantizing, retraining, or converting them to
+another runtime's format — creates Adapted Material and must release the
+resulting model under CC-BY-SA-4.0 or a compatible licence.
+
+The human-readable licence deed is linked above; the full legal code is at
+<https://creativecommons.org/licenses/by-sa/4.0/legalcode>.
+
 ### Bundled Foxit substitute faces (BSD-3-Clause, via pdfium)
 
 The 14 CFF font files in `crates/pdfce-render/assets/fonts/`
