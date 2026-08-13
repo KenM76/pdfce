@@ -234,8 +234,26 @@ baseline** · `tools/check-ledger-numbers.py` · `tools/gen-embed-fixtures.py`
 / `tools/gen-unembed-fixtures.py` · `tools/package-portable.py --note "..."`.
 
 **Live ceilings — re-run `check-ledger-numbers.py`, do not trust this
-line.** After the hundred-and-thirty-fourth filing: rules **R191** → next
-free **R192** (**claimed by an unruled PROPOSAL**) · decisions **056** →
-next **057** · filings **134** → next **135** (the hundred-and-thirty-fifth
-was in flight as this was written — verify) · Pass families to **71** →
-next **`Pass 72`** · operator questions **(bl)** → next **(bm)**.
+line.** Measured after the hundred-and-thirty-fifth filing (`d2e614d`),
+not forecast: rules **R191** → next free **R192** (**claimed by an unruled
+PROPOSAL**) · decisions **057** → next **058** · filings **135** → next
+**136** · Pass families to **71** → next **`Pass 72`** · operator questions
+**(bl)** → next **(bm)**.
+
+`tools/check-commits-filed.py` at HEAD: **clean**, 393 code commits over
+the whole history, 5 known-unfiled carried in the baseline — **that
+baseline is DEBT, not an allowlist**, and shortening it is the intended
+direction.
+
+**★ Local is 5 commits ahead of `origin/main` (`4069cbb`). `Pass 69.0` and
+`Pass 69.1` are NOT pushed.** Stated as a fact, not a request — pushing is
+the operator's act and no go-ahead has been given for these.
+
+**One deliberately-unpatched staleness, so nobody "fixes" it twice:**
+Amendment B §2 in the ce-dimension ui-spec says `StyleProvenance::each()`
+returns *"nine pairs"* and forecasts *"a tenth"*. At HEAD it returns
+**eleven** — tolerance brought two properties, since it has its own
+precision slot. The design half of that prediction held exactly; only the
+arithmetic was one short, and the paragraph is self-correcting by
+construction, which is the very thing it was describing (a fixed-size
+array gives a compile error, not a shorter list).
