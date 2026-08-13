@@ -81,6 +81,240 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★★★ `1f7ef59` — `Pass 68.0`'s angular ce-dimension authoring gets THREE latent defects fixed in one sitting: a drag guard that failed open on the new kind (R186's SEVENTH instance), a baked label reading an angle's value under a length's unit, and the first non-ASCII byte this writer has ever emitted going out raw instead of WinAnsi-escaped — 2026-08-12 (hundred-and-twenty-ninth filing)
+
+**Sourcing.** No shell tool this dispatch either — `Read`/`Write`/`Edit`/
+`Glob`/`Grep`/`WebSearch`/`WebFetch` only, same restriction as the
+hundred-and-twenty-eighth filing. Two full hashes arrived already at
+stated 40-character length; **not independently re-verified here**
+(hard rule 8):
+
+| hash | subject |
+|---|---|
+| `916da7e0c11eed65abb8965466c7a8b0cb7e7811` | the hundred-and-twenty-eighth filing, now committed |
+| `1f7ef5901faa335efefb6b703801fe7e9eeec086` | an angle is not a length, and the file was the copy that said otherwise |
+
+`916da7e0c` is this file's own previous entry, now on disk as a commit —
+the "give this filing its own commit with `docs/` staged by name" item
+the hundred-and-twenty-eighth filing left owed is **discharged**: the
+dispatch reports `docs/` staged by name and `git status --short`
+checked first, per the `af5580e` convention. `tools/check-commits-
+filed.py` was **not** re-run this dispatch (no shell) — carried forward
+as the next session's task once this filing itself is committed.
+
+All test counts, gate results and the running-application observation
+below are **relayed**, not re-run by this librarian.
+
+**★ TERMINOLOGY (project rule 15).** Entirely about **ce dimensions** —
+the dimension objects **pdfce authors** (`/Line` + `/IT /LineDimension`
++ `/Measure` + the `/PieceInfo` sidecar,
+`crates/pdfce-core/src/dimension/`). Never the bare word.
+
+**No new Pass ID.** These are three latent defects in `Pass 68.0`'s
+already-shipped GUI half (`c4ec3f5`, hundred-and-twenty-eighth filing),
+made *reachable* by that Pass, not introduced by it — angular ce
+dimensions did not exist as a GUI-authorable kind before `Pass 68.0`, so
+nothing had ever driven these three code paths with one. All three were
+found by **using** the shipped feature, not by reading the diff.
+
+#### 1. `EditSession::place_dimension`'s linear-only guard failed OPEN on a kind it had never been asked about — R186's SEVENTH instance
+
+`place_dimension` tested "is this `DimensionKind::Linear`" and returned
+`EditError::NotALinearDimension` for anything else. That guard is
+original to **Pass 27.1**, when `Linear` had exactly one sibling,
+`Circular` — so keying on "is it `Linear`" and keying on "does it carry
+the two properties a drag sets" were **the same test**, and nothing
+distinguished them. `Pass 68.0` gave `DimensionKind` a third variant,
+`Angular`, which *does* carry the two properties `place_dimension` sets
+(an arc radius to stand off by, a text position along that arc) — and
+the guard's name-based test silently widened its refusal onto a kind
+that satisfies its actual precondition, because nobody had reasoned
+about `Angular` when the guard was written; there was no `Angular` yet
+to reason about. A drag on a selected angular ce dimension did
+**nothing** — no error, no undo entry, no visible response at all —
+which is exactly the failure `EditError::NotALinearDimension`'s own
+docs promise to prevent, reached silently because the guard never fired
+to produce that error in the first place.
+
+**Same shape as R186's six prior instances:** a guard correct for the
+case it was built against (`Linear` vs. `Circular`, the only two kinds
+that existed) is silently not reached by the adjacent case (`Angular`)
+that arrives without the marker the guard actually keys on — here the
+marker is the *variant name*, and the fact the guard actually needs is
+the *presence of the two properties a drag sets*, which is a **property
+test, not a variant test**. Fixed by re-keying the guard on the
+property (`Circular` is the one kind refused; `Linear` and `Angular`
+both pass). A new test drags a freshly-authored angular ce dimension
+and asserts the arc radius changed.
+
+**Recorded as R186's SEVENTH INSTANCE, not re-numbered**, matching the
+third-through-sixth-instance precedent (see *Standing rules*, below).
+**Practical form, one rung more specific than the rule's existing
+statement:** when a guard is written against exactly two cases, check
+whether it keys on *which* of the two things you have, or on *what the
+case needs* — the first survives no better than one release cycle past
+the addition of a third case.
+
+#### 2. The baked `/AP` label and the pane's displayed string computed the same angle two different ways, and only one of them knew it was an angle
+
+`DimensionModel::display` had a genuine angular branch — degrees, one
+decimal, a trailing `°`. `author_dimension`, which bakes the `/AP`
+appearance stream actually written to the PDF, computed its own label a
+**second** time, through the *length* formatter, with no angular branch
+at all: a 77.5° ce dimension's baked `/Contents` read **`77.47 pt`** —
+the angle's raw numeric value with a length's unit stapled on. Nothing
+in the GUI showed this: the pane's live display used the correct path,
+so the operator never saw the wrong string, only the file did. This is
+precisely what `DimensionKind::Angular`'s own doc comment already warns
+against — an angle value reaching a length-shaped consumer — reached
+through the *writer* half of the code rather than the *reader* half the
+doc comment was written against.
+
+Fixed by making `DimensionKind::display_with` (new, `pub`, in
+`pdfce-core`) the single producer for both the pane and the
+appearance-stream label — one function, two callers, instead of two
+functions that happened to agree on `Linear`/`Circular` and diverged
+the moment `Angular` needed a branch neither original implementation
+reasoned about together. A new test asserts the model's displayed
+string and the baked `/Contents` string are **the same string**, not
+merely both independently "correct."
+
+#### 3. The correct string then read `77.5Â°` — the writer emitted UTF-8 into a stream declared `/WinAnsiEncoding`
+
+Once (2) was fixed, the label read `77.5°` in the pane and, for the
+first time, needed to reach the `/AP` content stream carrying a real
+non-ASCII character. `author_dimension` wrote `label.as_bytes()`
+directly — Rust's native UTF-8 encoding of `°` is two bytes (`0xC2
+0xB0`), which is not what `/WinAnsiEncoding` (a single-byte encoding,
+`°` = `0xB0`) means by that codepoint. **This is the first non-ASCII
+character this writer has ever emitted**, not a regression in encoding
+logic that used to work: `caption_prefix` deliberately spells `"DIA "`
+and `"R "` for diameter/radius rather than reaching for `⌀` or a
+stylized R, precisely so every prior label stayed ASCII and therefore
+correct under either reading by accident. The degree sign is the first
+label this writer has ever needed to actually encode.
+
+`vartext::encode_winansi` already existed, doing the right thing for
+the same font in the same situation elsewhere in the codebase; it is
+now `pub(crate)` and shared rather than a second implementation being
+written. Fixed by routing the baked label through it.
+
+**Verification finding worth its own record: the first version of the
+regression test PASSED VACUOUSLY.** It asserted the raw bytes `0xC2
+0xB0` were absent from the content stream — true of **both** the broken
+build and the fixed one, because pdfce's content-stream writer
+octal-escapes every byte ≥ `0x80` inside a literal string (`\260` for
+the correct single-byte `0xB0`, `\302\260` for the broken two-byte
+UTF-8 sequence) — **neither form ever appears as a raw high byte** in
+the bytes actually written to the file. The test was rewritten to
+assert on the escaped octal forms it actually needed to distinguish.
+Filed as a new `personal_rag/pdf` lesson (below) — general form: *when
+asserting on generated PDF bytes, assert in the encoding the writer
+actually emits, or the assertion may be testing nothing.*
+
+#### Both new regression tests were SEEN TO FAIL before being trusted
+
+Per this project's own `D:\dev\rag\egui\
+a_derived_value_with_one_producer_cannot_drift_a_cached_copy_with_n_producers_will.md`
+discipline ("a test that has only ever been seen passing proves the
+test compiles"): the arc-normalisation fold was removed and the drag
+test observed to fail; the shared `display_with`/encoder change was
+reverted and the label test observed to fail; both then restored and
+reobserved passing. **Applied unprompted this session** — recorded as a
+positive instance of an existing discipline, not a new finding.
+
+#### Also in `1f7ef59`
+
+- `measure_tool::dimension_preview_segments` — the two-line authoring
+  preview and the placement drag now draw through **one shape-per-kind
+  function** instead of two separately-maintained drawing paths. Its
+  arc **folds the sweep into the short way round**; without the fold, a
+  wedge straddling ±π draws the **reflex** arc — the numeric angle
+  correct, the picture wrong, which nothing on the value side (the
+  label, the tests above) would have caught, since the drawn arc and
+  the reported angle are two different code paths reading the same two
+  endpoints.
+- New `pub` core API: `DimensionKind::display_with` (checked against
+  `D:\dev\rag\rust\rust-style-guide-and-api-guidelines.md` per rule
+  10 — one shared formatter, not a second stringly-typed branch) and
+  `pdfce_core::edit::MIN_DIMENSION_ARC_RADIUS` (4.0 pt) — a drag can
+  pull an angular ce dimension's arc inward past its own vertex; the
+  clamp exists because zero is not a smaller ce dimension, it is an
+  unreadable and un-grabbable one, so the drag clamps rather than
+  refuses.
+
+#### Test results and gates (relayed, not re-run by this librarian)
+
+**3,629 → 3,632 tests, workspace-wide, 0 failing** (+3, matching the
+three named regression tests above: the drag-on-angular test, the
+model/`/AP`-label-agreement test, the WinAnsi-encoding test — 3
+matches 3, per hard rule 10(a)). `cargo fmt --all`, `cargo clippy
+--workspace --all-targets --all-features -- -D warnings`,
+`tools/check-ui-strings.sh`, `tools/check-fmt-excluded.py` — all
+reported clean.
+
+**★ Baseline not reconciled against the prior filing's closing total —
+flagged, not resolved.** The hundred-and-twenty-eighth filing closed at
+**3,622**; this dispatch's own baseline is **3,629**, a gap of **7**
+nothing in either filing explains. Neither this librarian nor the
+dispatch had the tooling to re-run the full suite and account for it
+this session. Filed per hard rule 10 rather than silently accepted —
+the next session with a shell should reconcile it before quoting either
+number as a milestone.
+
+**GUI-core separation:** `cargo tree -p pdfce-core` / `-p pdfce-render`
+reported **zero** GUI dependencies. **Relayed** — this librarian had no
+shell to re-run `cargo tree` this dispatch.
+
+#### Verified in the running application (relayed)
+
+The page label reads `77.5°` (the correct glyph, not `77.5Â°`). A drag
+moved a selected angular ce dimension's arc from radius 40 to radius 73
+with the measured value unchanged: `commit-place-dimension
+id=DimensionId(0) offset=73.14 along=-5.69 -> Ok(())`.
+
+#### `FEATURES.md` — not touched, and why
+
+Row 99 ("Reposition by drag, or numerically",
+`core [x] · cli [x] · gui [x]`) was accurate for `Linear`/`Circular`
+throughout, and had been silently overclaiming for `Angular`
+specifically for the span between `Pass 68.0` shipping (angular becomes
+GUI-authorable) and this fix — both within the same day, closed before
+any session read the row as ground truth. No new capability; no row
+change.
+
+#### Backup, re-measured (relayed)
+
+Fresh bundle **`D:\Dev\pdfce-backups\pdfce-20260812-2136.bundle`**,
+`git bundle verify` reported okay, `refs/heads/main` =
+`1f7ef5901faa335efefb6b703801fe7e9eeec086` = `HEAD`. **Relayed** — this
+librarian had no shell to re-run `git bundle verify` itself.
+
+#### Still open, carried forward unchanged from the hundred-and-twenty-eighth filing
+
+- Retroactively re-classifying a **committed** two-line ce dimension
+  remains structurally impossible (item 2 of that filing's own "Open
+  items" list) — operator's call, unaddressed by this filing.
+- The `parallel_epsilon_degrees` proximity caption (ui-spec §12) — P1,
+  unbuilt.
+- `tools/check-commits-filed.py` re-run and this filing's own separate
+  `docs/`-staged commit remain owed to whichever session next has a
+  shell.
+
+#### No Pass ID, decision, or new standing rule minted
+
+`Pass 68.0` is an existing Pass; these are bugfixes to its
+already-shipped GUI half. R186 gains a seventh recorded instance, not a
+new number, matching its own established precedent. **Ledger ceilings
+not independently re-checked this dispatch** (no shell to run
+`tools/check-ledger-numbers.py`) — carried forward from the
+hundred-and-twenty-eighth filing's measured figures: Pass families up
+to **71**, next free **72**; standing rules to **R191**, next free
+**R192**; decisions to **055**, next free **056**; SESSION_LOG filings
+**128**, next free **129**, which is this one.
+
+---
+
 ### ★★★★★ `bd53ab3` + `c4ec3f5` — `Pass 68.0` **SHIPS**: the canvas can pick two lines and author a ce dimension from them — closing the request that opened this Pass, across core, CLI and GUI — 2026-08-12 (hundred-and-twenty-eighth filing)
 
 **Sourcing.** No shell tool this dispatch. The two hashes below arrived
@@ -197,6 +431,14 @@ this librarian had no shell to re-run `cargo tree` this dispatch.**
   click coordinates off a screenshot rather than a computation defect,
   but stated as an open 0.1° gap rather than waved away, since neither
   this librarian nor the dispatch re-measured it a second way.
+
+  **★ RESOLVED 2026-08-12 (hundred-and-twenty-ninth filing), NOT A
+  DEFECT.** The recomputation's own inputs were the source of the gap,
+  not the GUI's arithmetic: the arm endpoints were read **by eye off a
+  screenshot**, never computed a second independent way against the
+  same click input the GUI itself used. ~0.1° is that reading method's
+  own expected error, not a disagreement between two computations of
+  the same event.
 - Two opposite edges of the 80×80 even-odd square (object 4, bbox
   40,200→120,280) → *"These two lines are 0.00° apart — reading them as
   PARALLEL. Distance: 80.00 pt."* plus the no-scale disclosure and
@@ -243,6 +485,19 @@ pick is how an angular ce dimension gets authored at all today.
    does nothing. A real gap this Pass surfaces; **P1, not P0**, because
    the auto-computed arc radius already gives a usable result on
    authoring. (ui-spec §11.2)
+
+   **★ CLOSED 2026-08-12 (`1f7ef5901faa335efefb6b703801fe7e9eeec086`,
+   hundred-and-twenty-ninth filing).** `place_dimension`'s guard was
+   keyed on `DimensionKind::Linear` by name — a marker that happened to
+   coincide with "has the two properties a drag sets" only because
+   `Linear` had exactly one sibling, `Circular`, when the guard was
+   written (`Pass 27.1`). `Angular` satisfies the actual precondition
+   (an arc radius, a text position along it) but not the name test, so
+   the guard silently widened its refusal onto a kind it was never
+   reasoned about. Re-keyed on the property (only `Circular` is
+   refused); recorded as **R186's SEVENTH INSTANCE** — see *Standing
+   rules*. Full record: this file's `1f7ef59` *Shipped* entry
+   (hundred-and-twenty-ninth filing).
 2. **Retroactively re-classifying an already-authored two-line ce
    dimension is structurally impossible, not merely unscoped.**
    `DimensionKind::Angular`/`Linear` deliberately retain only the
@@ -58821,6 +59076,34 @@ and
   hundred-and-seventh's own correction footer (added this instance).
   Not re-numbered, matching the third/fourth/fifth-instance precedent.
   **Ceiling stays `R186`, next free `R187`.**
+
+  **★ SEVENTH INSTANCE (2026-08-12, `1f7ef5901faa335efefb6b703801fe7e9eeec086`,
+  hundred-and-twenty-ninth filing) — the marker is a `DimensionKind`
+  variant NAME, and the fact the guard actually needs is a PROPERTY two
+  of the three variants share.** `EditSession::place_dimension` refused
+  every ce dimension that was not `DimensionKind::Linear`
+  (`EditError::NotALinearDimension`), correct at the time it was written
+  (`Pass 27.1`) because `Linear`'s only sibling was `Circular`, which
+  genuinely lacks the two fields (`arc_radius`, a text position along an
+  arc) the drag verb sets. `Pass 68.0` (2026-08-12) added
+  `DimensionKind::Angular`, which carries both fields — the guard's
+  by-name test had no way to know that, because reasoning about
+  `Angular` was not possible before it existed. A drag on a selected
+  angular ce dimension did **nothing**: no error surfaced (the guard
+  never fired to produce one), no undo entry, no visible response —
+  silent in exactly the way R186 is about. Same shape as all six prior
+  instances (a guard correct for the case it was built against, silently
+  not reached by the adjacent case arriving without the marker the guard
+  keys on); the marker here is unusually legible in hindsight — an enum
+  variant's *name*, checked instead of the *property* the caller
+  actually needed — which is why it is recorded as a **sub-shape** worth
+  naming on its own: **a guard written when a sum type has two variants
+  is at risk the moment a third variant is added, if the guard tested
+  "which variant" instead of "does this variant have what I need."**
+  Fixed by re-keying on the property (`Circular` alone refused).
+  Not re-numbered, matching the third-through-sixth-instance precedent.
+  Full record: `ROADMAP.md`'s `1f7ef59` *Shipped* entry (hundred-and-
+  twenty-ninth filing). **Ceiling stays `R186`, next free `R187`.**
 
 - **R187 — A guard added specifically to catch a hazard is proven by
   making the hazard OCCUR and watching the guard fire, not by reading

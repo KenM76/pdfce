@@ -38407,3 +38407,96 @@ as **pickable page geometry**, and pdfce still must not alter them.
   gap, retroactive-reclassification impossibility, the 0.1° polyline
   discrepancy) wherever the next `Pass 68.0`-adjacent work is scoped —
   they were surfaced this filing, not resolved.
+
+## 2026-08-12 (hundred-and-twenty-ninth filing) — `916da7e0c`+`1f7ef59`: the hundred-and-twenty-eighth filing's own housekeeping debt is discharged (committed by name), and TWO of the three P1/open items it surfaced are CLOSED — an angular ce dimension can be dragged, its baked label reads the same string as the pane, and the first non-ASCII byte this writer has ever emitted stops going out raw
+
+**Sourcing.** No shell tool this dispatch — `Read`/`Write`/`Edit`/`Glob`/
+`Grep`/`WebSearch`/`WebFetch` only, matching the prior filing's own
+restriction. Two full 40-character hashes supplied, **not
+independently re-verified** here (hard rule 8):
+`916da7e0c11eed65abb8965466c7a8b0cb7e7811` (the hundred-and-twenty-eighth
+filing, now committed with `docs/` staged by name per the `af5580e`
+convention) and `1f7ef5901faa335efefb6b703801fe7e9eeec086` (the three
+fixes below). Test counts, gate results, and the running-application
+observation are **relayed**, not re-run.
+
+**★ TERMINOLOGY (project rule 15).** Entirely about **ce dimensions** —
+the dimension objects **pdfce authors**. Never the bare word.
+
+**Shipped:**
+- **`1f7ef59`** — three latent defects in `Pass 68.0`'s angular
+  ce-dimension authoring, all reachable only because `Pass 68.0` made
+  `Angular` a GUI-authorable kind, none introduced by that Pass, all
+  found by USING the feature:
+  1. `EditSession::place_dimension`'s drag guard keyed on
+     `DimensionKind::Linear` by name (a marker), not on the two
+     properties a drag actually sets (the fact it needs) — silently
+     refused every angular drag with no error and no undo entry.
+     Re-keyed on the property. **R186's SEVENTH INSTANCE.**
+  2. The baked `/AP` label and the pane's displayed string computed the
+     same angle two different ways; the baker's copy ran the angle
+     through the LENGTH formatter, baking `77.47 pt` into the file for
+     a 77.5° ce dimension the pane displayed correctly. Unified onto one
+     producer, `DimensionKind::display_with`, now `pub` in `pdfce-core`.
+  3. Once (2) was fixed, the label read `77.5Â°` — `label.as_bytes()`
+     wrote raw UTF-8 into a stream declared `/WinAnsiEncoding`. The
+     first non-ASCII label this writer has ever emitted (`caption_prefix`
+     deliberately stays ASCII — `"DIA "`, `"R "`); routed through the
+     already-existing `vartext::encode_winansi`, now shared.
+
+**Findings + decisions:**
+- **A vacuous test, caught before being trusted.** The first version of
+  (3)'s regression test asserted "the raw bytes `0xC2 0xB0` are absent"
+  — true on BOTH the broken and fixed build, because pdfce's
+  content-stream writer octal-escapes every byte ≥ `0x80` inside a
+  literal string (ISO 32000-1 §7.3.4.2's `\ddd` escape): the correct
+  `°` is `\260`, the broken one `\302\260`, and neither ever appears as
+  a raw high byte on disk. Rewritten to assert on the escaped forms.
+  New `personal_rag/pdf` lesson filed (below) — general form: assert in
+  the encoding the writer actually emits, not the encoding of the value
+  being encoded.
+- **Both new regression tests were SEEN TO FAIL before being trusted** —
+  the arc fold removed and the encoder reverted, each failure observed,
+  each then restored. Per this project's own `D:\dev\rag\egui\
+  a_derived_value_with_one_producer_cannot_drift_a_cached_copy_with_n_producers_will.md`
+  discipline, applied unprompted. Recorded as a positive instance, not a
+  new finding.
+- **The hundred-and-twenty-eighth filing's 0.1° polyline gap is
+  RESOLVED, not a defect** — the recomputation's own inputs (arm
+  endpoints read by eye off a screenshot) are the source of the ~0.1°
+  spread, not a disagreement between two computations of the same
+  click. Amendment added at the point the gap was originally filed
+  (`ROADMAP.md`'s `Pass 68.0` entry), per the append-only-with-
+  dated-footer convention, not only here.
+- **`measure_tool::dimension_preview_segments`** now draws through one
+  shape-per-kind function instead of two; its arc folds the sweep to
+  the short way round, since an unfolded sweep straddling ±π draws the
+  reflex arc — a correct angle illustrated by the wrong picture, which
+  nothing on the value side would have caught.
+- New `pub` core API: `DimensionKind::display_with`,
+  `pdfce_core::edit::MIN_DIMENSION_ARC_RADIUS` (4.0 pt — a drag can pull
+  an arc inward past its own vertex; clamps rather than refuses, since
+  zero is not a smaller ce dimension, it is an unreadable one).
+- **A test-count baseline that does NOT reconcile, flagged rather than
+  silently accepted.** This dispatch's own baseline is **3,629**; the
+  hundred-and-twenty-eighth filing closed at **3,622** — a gap of **7**
+  neither filing explains. Filed per hard rule 10 for the next session
+  with a shell to reconcile, not resolved here.
+
+**Still in flight:**
+- Retroactively re-classifying a **committed** two-line ce dimension
+  remains structurally impossible — operator's call, unaddressed.
+- The `parallel_epsilon_degrees` proximity caption (ui-spec §12) — P1,
+  unbuilt.
+- `tools/check-commits-filed.py` re-run, this filing's own separate
+  `docs/`-staged commit, and the 3,622-vs-3,629 test-count gap all
+  remain owed to whichever session next has a shell.
+
+**For next session:**
+- Re-run `tools/check-commits-filed.py` and `tools/check-ledger-
+  numbers.py` — neither has been run by a librarian with a shell since
+  the hundred-and-twenty-seventh filing.
+- Reconcile the 3,622-vs-3,629 test-count gap noted above.
+- Commit this filing's `docs/` changes by name, separately, per the
+  `af5580e` convention this project keeps repeating in its own
+  "for next session" notes.
