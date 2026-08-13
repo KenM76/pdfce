@@ -81,6 +81,362 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 69.1 — `c057682` — the **ce-dimension TOLERANCE**: the TENTH and ELEVENTH properties of `Pass 69.0`'s cascade, not a second system — **SHIPPED IN PART: core [x] · cli [x] · gui [ ]** — filed 2026-08-13 (hundred-and-thirty-fifth filing)
+
+**★ READ THE STATUS LINE BEFORE THE CONTENT.** Same shape as
+`Pass 69.0` directly below, and for the same reason: **core** and **CLI**
+shipped, the **GUI** half is **deferred at the operator's explicit
+instruction**, unchanged and still standing from earlier the same day:
+
+> *"continue the planned work except for gui related, don't do any more
+> work on the gui until I say so."* — operator, 2026-08-13
+
+**A recorded instruction, not an engineering shortfall.** The deferral is
+**not scoped to one Pass** — it applies to whatever GUI surface this Pass
+would have wanted, exactly as it applies to `Pass 69.0`'s panel. The two
+GUI halves are now a **single** outstanding item and are filed that way in
+`FEATURES.md` (one *Planned* row covering both), rather than as two
+unticked lines a reader would have to add up.
+
+**Terminology (project rule 15):** every dimension in this entry is a
+**ce dimension** — one pdfce authors. **Nothing here touches pdf
+dimensions.** A tolerance already printed on a CAD-exported drawing is
+page content pdfce reads and must not alter; this Pass authors pdfce's
+own tolerance notation on pdfce's own ce dimensions.
+
+#### The one-sentence version, which is also the design claim
+
+**A tolerance is one more property of the `Pass 69.0` cascade** — same
+`Option`, same three tiers, same provenance reporting, same
+clear-restores-inheritance semantics as a stroke width — **and that was
+the point of building the mechanism one Pass earlier.**
+`StyleProvenance::each()` went from **9 entries to 11**. That number is
+the whole claim in measurable form: had tolerance needed its own
+inheritance design, the count would not have moved and a second,
+divergent mechanism would exist beside the first.
+
+**Eleven, not ten**, because the tolerance carries **its own precision
+slot** (see the −3-sentinel divergence below). The forecast in the
+ui-spec's Amendment B said *"nine (soon ten)"*; the design half of that
+prediction held exactly and the arithmetic was one short. See *"the
+ui-spec predicted this correctly"* below — that discrepancy is
+**self-correcting by construction** and is recorded rather than patched.
+
+#### What shipped
+
+**New module `crates/pdfce-core/src/dimension/tolerance.rs`** (402 lines
+of the commit's 1,064 insertions). New public re-exports in
+`pdfce_core::dimension` — **`Tolerance`, `ToleranceError`** — verified
+this filing by reading the `pub use` block in `dimension/mod.rs`
+directly, not relayed.
+
+`Tolerance` is `Copy` and heap-free **on purpose**: it rides inside
+`StyleOverrides`, which is `Copy` so the cascade resolves without
+allocation on every `/AP` regeneration. **The variants that would need a
+`String` are exactly the ones deliberately absent** (below) — the
+omissions and the `Copy` bound are the same decision seen twice.
+
+| variant | drawn as |
+|---|---|
+| `None` | nothing — the factory default, and what every ce dimension authored before this Pass carries |
+| `Basic` | a **box** round the nominal; **prints no text of its own** |
+| `Symmetric { magnitude }` | `50.00 ±0.10` |
+| `Deviation { plus, minus }` | `50.00 +0.20/-0.10` — both **signed and stored as supplied** |
+| `Limit { upper, lower }` | `50.20/49.90` — **the nominal is SUPPRESSED** |
+| `Min` / `Max` | `50.00 MIN` / `50.00 MAX` |
+
+**Two new cascade properties**, both on all three tiers: `tolerance` and
+`tolerance_places`. **New `EditError::InvalidTolerance { reason }`.** No
+new `EditSession` verb — `set_group_style` and `set_dimension_style`
+already existed and simply carry two more fields, which is what "not a
+second system" means at the API layer.
+
+**CLI parity in the same Pass (rule 11):** `--tolerance` and
+`--tolerance-places` on **both** `group-style` and `dimension-style`,
+plus `dimension-list --style` printing both new properties with the tier
+each came from. **The listing prints a tolerance in the exact grammar
+`--tolerance` accepts** — `none | basic | min | max | sym:<v> |
+dev:<p>/<m> | limit:<u>/<l>`, with `symmetric:`/`deviation:` accepted as
+long forms — so a value read out of a listing feeds straight back into a
+script. **A test pins that round trip**, because a listing that has to be
+reformatted by hand before it can be re-fed is a listing that will be
+reformatted wrongly.
+
+**Commit size:** 8 files, **1,064 insertions / 15 deletions** = **≈133
+inserted lines per file** (hard rule 10(a) — the per-item form beside the
+total, denominator stated). Against `Pass 69.0`'s 13 files / 2,928
+insertions ≈ 225 per file: **this Pass is about a third the size of the
+one that built the mechanism it extends**, which is the ratio the split
+was taken to produce.
+
+#### Seven of the reference's thirteen types — and the six omissions are STATED, not accidental
+
+The reference's `swTolType_e` has **thirteen** members
+(`D:\Dev\Rag-Specialized\SolidWorks_Dimensions\` §A.1). **Seven are
+implemented.** The six that are not are each refused for a reason that is
+in the module doc, so a later reader can tell an omission from an
+oversight:
+
+| omitted | why |
+|---|---|
+| `swTolFIT`, `swTolFITWITHTOL`, `swTolFITTOLONLY` | **ISO 286 limits-and-fits.** The RAG **explicitly flags the available hole/shaft class list as `UNVERIFIED`** (§A.3). Implementing a fit table from recall is precisely what **project rule 1** forbids — and **a wrong `H7/g6` deviation is a manufacturing defect, not a cosmetic one.** |
+| `swTolBLOCK`, `swTolGeneral` | Resolve against a **document-level block-tolerance / ISO 2768 class table pdfce does not have** (§A.4). **A "general tolerance" that resolved to nothing would print a promise the file cannot keep.** |
+| `swTolMETRIC` | **Not a distinct type — it shares value `7` with `swTolFIT`** (§A.1). Modelling it separately would **invent a distinction the reference does not have.** |
+
+**Each is a future variant plus one arm in the caption builder.** Nothing
+here forecloses them; what is foreclosed is shipping them from memory.
+
+**Naming discipline, stated in the module doc and worth repeating here:**
+pdfce draws **SolidWorks-STYLE** tolerance notation. **Never
+"SolidWorks-conformant", never "ASME Y14.5 conformant"** — Y14.5 is
+paywalled and was not obtained, so the notation is drafting practice read
+off the reference tool's own API surface rather than off a standard. Same
+epistemic posture `DimStandard` already takes toward ISO 129-1.
+
+#### ★ Tolerance values are in the DISPLAYED unit, not page points — and that is load-bearing
+
+**The nominal is DERIVED** from geometry and scale. **The tolerance is a
+LITERAL the operator supplied.** They are different kinds of number and
+**only one of them moves when the scale changes.** Storing the tolerance
+in points would mean **a group rescale silently changed the tolerance** —
+the exact opposite of what a tolerance means, and a rule-4 violation at
+the model layer rather than the UI layer (the mirror of decision 056's
+scale-is-not-a-style-property argument, and reached by the same reasoning
+from the other end).
+
+The same reasoning fixes `Limit`'s storage: **the two limits are stored
+absolute, not as deviations from the nominal**, because deriving them at
+draw time would make **the printed limits move when the scale changed**.
+
+**No unit suffix appears in any caption branch**, deliberately: a
+tolerance is read in the same unit as the nominal beside it, and
+`50.00 mm ±0.10 mm` is not how a drawing is written.
+
+#### Three display behaviours taken from the reference, not from recall
+
+1. **`Basic` draws a BOX and prints no text of its own** — the box IS the
+   notation. Its caption is the **empty string, not a space**, so the
+   label stays byte-identical to an untoleranced one and **the box is the
+   only difference**. It is stroked **before** the text (a future filled
+   box cannot paint over the glyphs) and **in the text's own frame**, so a
+   rotated ISO-aligned label gets a rotated box rather than an
+   axis-aligned one that no longer fits.
+2. **`Limit` SUPPRESSES the nominal** and prints its two limits (§A.1,
+   verbatim: *"nominal is suppressed in display"*). **A display decision,
+   not a loss** — the measured value is unchanged and still in the
+   sidecar.
+3. **★ The tolerance carries its OWN precision slot.** The reference has
+   **four precision slots, not one** (§B.1). This is the divergence worth
+   naming: the reference's *"same as the nominal's"* state is a **−3
+   sentinel hidden inside the digit count**
+   (`swTolerancePrecisionFollowsNominal`). **pdfce spells it as an ABSENT
+   value** and resolves it in one named helper (`nominal_places`). **That
+   is a FOURTH deliberate divergence, extending decision 056's list of
+   three** — and it is the same objection 056 raised against
+   `swPrecisionFollowsDocumentSetting` = −2: **a magic number inside a
+   property's legitimate value range means every consumer must know the
+   magic number, and one that does not reads it as a precision.**
+
+**One honest assumption, flagged rather than buried:** a fractional
+number format has no decimal digits at all, so a tolerance beside a
+`5/8"` falls back to **two** places. The module doc says so in those
+words, because **it IS an assumption** and a silent one would be
+indistinguishable from a measured default.
+
+#### ★ `Some(Tolerance::None)` is DELIBERATELY distinct from `None` (inherit)
+
+**A group that tolerances everything, with one feature that must not be
+toleranced, is a real drawing** — and it cannot be expressed if the two
+collapse. `None` = inherit the group's; `Some(Tolerance::None)` = **this
+ce dimension explicitly has no tolerance, overriding the group.**
+
+**Pinned by a CLI test** that asserts both halves: the listing reports
+`tolerance=none` with source `dimension` (**not** `group`), **and** the
+baked label really carries no tolerance afterwards. Asserting only the
+first would pass on a build that stored the override and then re-baked
+from the group.
+
+#### Refusals are BY NAME and nothing is repaired
+
+| refused | `ToleranceError` |
+|---|---|
+| NaN / infinite anywhere | `NotFinite` |
+| a **negative** symmetric magnitude | `NegativeMagnitude` — `±-0.1` is a typo, not a tolerance |
+| an **inverted** limit pair | `LimitsInverted` |
+
+**Silently swapping an inverted pair would print a drawing stating the
+maximum is below the minimum — a manufacturing defect delivered by an
+editor being helpful.** That is rule 4's "sneaky" case in its most
+expensive form: a corrected value the operator never saw.
+
+**Validated in TWO places, and the second is the one that matters.**
+`EditSession` validates **before anything is written** (a refusal never
+leaves a half-written model behind), **and the sidecar reader validates
+too** — so **a corrupted or hostile file cannot deliver what the API
+refuses.** An unknown or invalid tolerance out of a file reads as
+**`None` = inherit**, consistent with `Pass 69.0`'s file-supplied-values-
+inherit-rather-than-clamp rule.
+
+**A `Deviation` pair may be wholly negative and that is NOT an error** —
+both limits below nominal is a common shaft callout. It is exactly why
+`Deviation` stores **signed** values and can never be normalised to
+magnitudes, and there is a test named for it.
+
+#### ★★ NO `SIDECAR_VERSION` bump — and the WARNING that predicted one was right to be raised and right to be resolved AGAINST
+
+`Pass 69.1`'s own *Next up* entry (filed one hour earlier) carried this
+forward: *"a `ToleranceType` enum in the sidecar **IS** a variant set, so
+this Pass may well owe the bump `Pass 69.0` did not. Decide it against
+§4.1 (R), not by precedent."* **It was decided against (R), and (R) says
+no bump is owed.** `SIDECAR_VERSION` stays at **2**.
+
+**The distinction (R) actually draws is finer than "variant vs
+optional-with-default", and this Pass is what made that visible:**
+
+- **`DimensionKind::Angular` owed the bump** because `/Kind` is a key an
+  **old build already reads and dispatches on**, and an unknown token
+  there hits `_ => return None` and **drops the whole RECORD**. An older
+  pdfce would read the file, **silently lose every angular ce
+  dimension**, and be free to save it back that way — permanent loss,
+  invisible until afterwards.
+- **`/Tolerance` owes no bump** because it is a **NEW optional key**. An
+  old build has no concept of it, ignores it, and draws what it always
+  drew. An unknown token in a **new** build reads as `None` = **inherit**.
+  **The failure mode is the loss of a presentation property, not the loss
+  of a record** — and the ce dimension, its geometry and its measurement
+  all survive.
+
+**Stated as the reusable rule:** *(R)'s "a new variant owes a bump"
+bites when the variant belongs to a key an older build already dispatches
+on, where the failure mode is record loss. A wholly new optional key
+whose unknown value degrades to inherit is the optional-with-default
+case however enum-shaped its value is.* Recorded in decision 057 and in
+§4.1 **(T)**.
+
+**The sidecar layout follows from the same care.** The numeric types
+write **named** keys — `/TolMagnitude`, `/TolPlus`/`/TolMinus`,
+`/TolUpper`/`/TolLower` — **not a positional `[a b]` array**, which would
+be **one transposition away from turning a `+0.2/-0.1` into a
+`-0.1/+0.2` with nothing downstream able to tell.**
+
+#### ★★ THE ± SIGN — the second non-ASCII character this writer has ever emitted, and the two test findings COMPOSED on their first joint outing
+
+**The first non-ASCII character (the degree sign) SHIPPED BROKEN in
+`Pass 68.0`.** So the ± test is pitched deliberately, and **both halves
+of its pitch are needed — each defeats the other's blind spot:**
+
+1. **It asserts in the encoding the writer actually emits** — the octal
+   escape `\261` **present**, the UTF-8 pair `\302\261` **absent**.
+   Asserting on raw bytes would **pass vacuously**, because the writer
+   octal-escapes every high byte and **neither form ever appears raw**.
+2. **It saves with `--mode full`.** Under an **incremental** save the
+   superseded appearance object is **still in the file**, so the absence
+   half would **pass vacuously** for the opposite reason.
+
+**These are the two findings this librarian filed separately — the
+`Pass 68.0` octal-escaping lesson and, yesterday, the
+absence-assertion-under-incremental-save lesson — and `Pass 69.1` is the
+first time they were BOTH required by one assertion.** Get one right and
+you still have a test that cannot fail. **A dated footer recording that
+joint outing was added to the newer lesson in this filing** (the
+mechanism is not restated — hard rule 4):
+`C:\personal_rag\pdf\lesson_20260813_absence_assertion_vacuous_under_incremental_save.md`.
+
+**The pair is therefore no longer hypothetical.** That is the whole value
+of the footer: two lessons that each name the other as related had never
+been observed to bind on the same line of test code until now.
+
+#### One producer for the caption, because `Pass 68.0` paid for two
+
+`Tolerance::caption` builds the label text and **every other surface
+reads what it produced.** `Pass 68.0` shipped a defect whose entire cause
+was **two independent derivations of one display value** — the properties
+pane read `77.5°` while the `/AP` baked into the document read
+`77.47 pt`. Likewise `is_boxed()` and `suppresses_nominal()` are **named
+predicates rather than a `matches!` at each call site**, so the baker and
+any future exporter cannot disagree about which types are boxed.
+
+#### The ui-spec PREDICTED this correctly — recorded because a correct prediction is worth more than a rewrite
+
+**`docs/ui_specs/` was NOT updated by this Pass, deliberately.**
+`tool-options-dock-and-ce-dimension-properties.md`'s **Amendment B
+(2026-08-13)** — written one Pass earlier — already said, verbatim:
+
+> *"tolerance lands in `Pass 69.1` as one more property in this same
+> cascade, so it inherits from the group like everything else and needs
+> the same two-state treatment from day one."*
+
+**That held exactly.** No Amendment C was appended, because appending one
+to say *nothing changed* would make the spec's amendment chain a log of
+filings rather than a log of changes.
+
+**One stale figure inside that amendment, named rather than patched.**
+B.2 records `StyleProvenance::each()` as *"a fixed-size array of **nine**
+(name, source) pairs"* and forecasts *"a tenth property"*. **At `HEAD` it
+returns eleven** — the tolerance brought **two** properties, not one,
+because of its own precision slot. **This is self-correcting by
+construction and that is exactly what B.2 was describing**: the array is
+fixed-size **so a panel rendering it in a loop gets a COMPILE ERROR, not
+a silently shorter list.** The deferred GUI cannot be built against the
+stale number even if someone reads it. **Left as written** — it is a
+dated amendment recording what was true on its own date, and rewriting a
+dated record is what append-only discipline forbids.
+
+#### Gates — every one run this session
+
+| gate | result |
+|---|---|
+| `cargo test --workspace` | **3,667 passed, 0 failed** — was **3,654** after `Pass 69.0`, so **+13 tests over 8 changed files** |
+| `cargo fmt --all --check` | clean |
+| `tools/check-fmt-excluded.py` | clean |
+| `cargo clippy --workspace --all-targets -- -D warnings` | clean |
+| `tools/check-ui-strings.sh` | clean |
+| `tools/check-ledger-numbers.py` | clean — **rules ceiling R191, decisions 056, filings 134** (pre-filing) |
+| **fuzz `dimension_sidecar`, RE-RUN over the widened key set** | **344,301 runs, 0 crashes** |
+| `cargo tree -p pdfce-core` / `-p pdfce-render` | **zero GUI-crate matches.** GUI-core separation (rule 2, §3) **HOLDS** |
+
+**No dependency added, so no `cargo-about` regeneration is owed. No
+packaging change, so no packaging smoke test is owed.** Both stated
+because their absence is otherwise indistinguishable from an omission.
+
+**★ The fuzz target was RE-RUN rather than assumed still valid**, and the
+reason is the same one that justified creating it in `Pass 69.0`: this
+Pass **widened the untrusted-input surface again** — **two more optional
+keys per tier** (`/Tolerance`, `/TolPlaces`) **plus five value keys**
+(`/TolMagnitude`, `/TolPlus`, `/TolMinus`, `/TolUpper`, `/TolLower`).
+A target that was exhaustive over yesterday's key set is not exhaustive
+over today's, and **a fuzz result inherited across a schema widening is a
+figure that has stopped describing the thing it names.**
+
+**Run-count comparison, both denominators stated (hard rule 10(a)):**
+`Pass 69.0`'s first run was **776,315 iterations over 60 s ≈ 12,940
+runs/s**; this re-run was **344,301 iterations**. **The wall time of this
+re-run was not recorded**, so **no runs/s figure is claimed for it** and
+the two counts must not be read as a throughput comparison — a smaller
+count over an unrecorded interval says nothing about speed. Stated
+explicitly because two raw totals sitting side by side invite exactly
+that subtraction.
+
+#### What this Pass did NOT do
+
+- **The GUI half.** Deferred by operator instruction (above), together
+  with `Pass 69.0`'s. **One outstanding item, not two.**
+- **The six omitted tolerance types.** Stated above with reasons; a fit
+  table needs a **sourced** ISO 286 class list first (rule 1).
+- **Extension-line drag** (the original spec's item 3) — untouched, still
+  unimplemented.
+- **No standing rule was minted. R192 remains a PROPOSED, unruled number
+  and this filing adds nothing to that proposal.**
+
+**Decision record:** `ARCHITECTURE.md` §12 **decision 057**, minted this
+filing, with a **dated forward-pointer footer added to decision 056** —
+056 explicitly listed tolerance under *"what this decision does NOT
+settle"*, so the Pass that settles it earns its own number rather than an
+edit to a dated entry. **Body section updated in the same filing:** §4.1
+gains **(T)**.
+
+---
+
 ### Pass 69.0 — `d5431a4` — the **ce-dimension STYLE cascade**: three tiers, nine properties, one independent `Option` per property — **SHIPPED IN PART: core [x] · cli [x] · gui [ ]** — filed 2026-08-13 (hundred-and-thirty-fourth filing)
 
 **★ READ THE STATUS LINE BEFORE THE CONTENT. This Pass is NOT complete
@@ -41748,7 +42104,37 @@ family, so `69.1` is available without disturbing anything.
 
 ---
 
-### Pass 69.1 — **ce-dimension TOLERANCE** — the second half of the operator's 2026-08-12 request, split out 2026-08-13 (hundred-and-thirty-fourth filing) — **UNSTARTED**
+### Pass 69.1 — **ce-dimension TOLERANCE** — the second half of the operator's 2026-08-12 request, split out 2026-08-13 (hundred-and-thirty-fourth filing) — **★ STATUS 2026-08-13: PARTLY SHIPPED. The heading's original "UNSTARTED" is now FALSE and is struck by the banner below.**
+
+> **★★ AMENDED 2026-08-13 (hundred-and-thirty-fifth filing), `c057682` —
+> CORE AND CLI ARE SHIPPED; THE GUI HALF IS DEFERRED BY THE SAME STANDING
+> OPERATOR INSTRUCTION.**
+>
+> **This entry is amended in place, not deleted**, for the same reason
+> `Pass 69.0`'s was: the delivery record belongs in *Shipped*, but any
+> criterion this Pass did **not** meet has to stay somewhere a reader can
+> still find it unticked.
+>
+> **The delivery record is the `Pass 69.1` entry at the top of
+> *Shipped*.** Read it for what was built. This banner records only what
+> became of the six carried requirements listed below:
+>
+> | # | requirement | outcome |
+> |---|---|---|
+> | 1 | tolerance on `DimensionRecord`, not `DimensionKind` | **MET** — it lives in `StyleOverrides`, which lives on `DimensionRecord` |
+> | 2 | at least `None`/`Symmetric`/`Deviation`/`Limit`, plus what the RAG shows | **MET AND EXCEEDED** — seven of the reference's thirteen `swTolType_e` types, with `Basic`, `Min` and `Max` beyond the four named here. **The six omissions are STATED with reasons** (fit classes are `UNVERIFIED` in the RAG; block/general need a table pdfce lacks; `swTolMETRIC` is not a distinct type). The RAG **was** read first, as instructed |
+> | 3 | the two exotic inherit-sources stay COLLAPSED per decision 056 divergence 2 | **HONOURED, and a FOURTH divergence was taken** — tolerance text size and precision walk the same three-tier chain as everything else, and the reference's **−3 sentinel** for *"precision same as nominal"* is spelled as an **absent value** |
+> | 4 | decide the `SIDECAR_VERSION` bump against §4.1 (R), not by precedent | **DONE, AND THE ANSWER IS NO BUMP.** The warning was right to be raised and right to be resolved against: `/Tolerance` is a **new optional key** whose unknown value degrades to *inherit*, not a new variant of a key an old build already dispatches on. `SIDECAR_VERSION` stays at **2**. The refinement of (R) this produced is in decision 057 and §4.1 (T) |
+> | 5 | rule 4 — a DERIVED tolerance is disclosed; a TYPED one is not gated | **NOT YET ASSESSABLE, and it is not owed yet.** pdfce derives no tolerance today: a typed tolerance is a literal the operator supplied. **The derived case arrives with the fit classes**, which are the omitted types. Carried forward with them |
+> | 6 | CLI parity in the same Pass (rule 11) | **MET** — `--tolerance` / `--tolerance-places` on both style verbs, and `dimension-list --style` prints a tolerance **in the exact grammar `--tolerance` accepts** |
+>
+> **STILL OPEN, and the only thing still open here: the GUI surface.**
+> Deferred at the operator's standing instruction — *"don't do any more
+> work on the gui until I say so"* (2026-08-13). **It is the SAME
+> outstanding item as `Pass 69.0`'s deferred panel**, not a second one:
+> the tolerance is a property of that panel's cascade, so one panel
+> discharges both. `FEATURES.md` carries it as **one** *Planned* row for
+> exactly this reason.
 
 **The ID is minted here rather than left as a reference inside
 `Pass 69.0`'s sequencing note**, so that the tolerance work has a stable
