@@ -31,10 +31,12 @@ record an inferred one as fact.** It is unambiguous as it stands.
 
 ## ⇢ IF THE OPERATOR JUST SAID "CONTINUE"
 
-**Ask `(bl)` again — it has now gone four sessions unasked-then-asked and
-is still the only thing blocking a whole feature from reaching him.** Then
-take §2 (`Pass 67.0` phase C) without waiting, since it needs nothing from
-him.
+**Take §1 — `Pass 71.0`'s engine binding.** `(bl)` is ANSWERED (yes), so
+OCR is now pure engineering with an ordered plan and every figure already
+measured. Nothing in the queue is blocked on him.
+
+**Do not ask `(bl)` again.** The one thing still worth a sentence is the
+model-downloader withdrawal, and it is a confirmation, not a blocker.
 
 ---
 
@@ -93,29 +95,71 @@ if it is to be disclosed before the edit is applied. Written up in
 
 ---
 
-## 1. ★★ `(bl)` — STILL UNANSWERED, STILL BLOCKING OCR
+## 1. ★★ `(bl)` IS ANSWERED — **YES** — AND `Pass 71.0` IS NOW PURE ENGINEERING
 
-**Nothing here is an engineering blocker. Raise it; do not resolve it.**
+**Operator, 2026-08-13, verbatim and in full:** *"yes to the license. keep
+going."* A **CC-BY-SA-4.0 model file may ship inside pdfce's MIT portable
+folder.** Do **not** re-raise it.
 
-May a **CC-BY-SA-4.0 model file** ship inside pdfce's **MIT** portable
-folder?
+**Four things that answer does NOT cover** — the gap is where a wrong
+inference would live:
 
-| candidate | wasm32 | languages | weights |
-|---|---|---|---|
-| `ocrs`/`rten` | **the ONLY passing route** | Latin only | **CC-BY-SA-4.0** |
-| `ocr-rs` / PaddleOCR | none | **50+** | Apache-2.0 |
+1. **Not authority to publish or release.** Rule 8 untouched. The repo is
+   public, so **a bundled weight file is published the moment it is
+   committed**.
+2. **Not an engine choice.** That was answered 2026-08-12 (*"just build
+   for both"*) → both, behind Cargo features. `(bl)` only removes the
+   licence obstacle in front of the pure-Rust one.
+3. **Not clearance for an ADAPTATION.** Fine-tuning, quantizing,
+   retraining, or converting the weights to another runtime's format
+   plausibly creates **Adapted Material**, which must then be
+   CC-BY-SA-4.0. *"We'll fine-tune it for CAD drawings later"* is a
+   decision with a licence attached and needs **its own** operator answer.
+4. **It CREATES an attribution obligation rather than closing one.**
+   `cargo-about` builds `THIRD_PARTY_LICENSES.md` from the **Cargo
+   dependency graph**; a model file is not a Cargo dependency, so it
+   **will not be seen, will not be attributed, and nothing will fail**
+   (survey §3.3). `tools/check-shipped-assets.py` is what catches it —
+   `PROVENANCE.md` naming the licence, plus a citation in `about.hbs`.
 
-*"Copyleft weights and a web future"* versus *"permissive weights, more
-languages, no web future"* — **not** *"one is clean."* Do **not** resolve it
-by picking the permissive engine and calling it moot: that forfeits the
-WASM route, an `ARCHITECTURE.md` §3 commitment. *Default if unanswered:
-ship neither model set.* Engine question already answered (**both**, behind
-Cargo features, `fbcb946`). Sourcing: `docs/ocr-engine-survey.md` — **Surya
-is a recorded trap** (Open RAIL-M, $5 M revenue cap); **Tesseract's default
-Windows build ships LGPL binaries**.
+### The engine binding — ordered, and none of it is blocked
 
-**Also still owed:** confirm the model-**downloader** withdrawal
-(`af5580e`) — he agreed on a wrong estimate, so the agreement was
+Everything below is measured and already on record; **do not re-derive
+it**. `docs/ocr-engine-survey.md` is the source for every figure.
+
+1. **Add `ocrs = "0.12.2"` behind a Cargo feature**, following `Pass 70.0`'s
+   strippable-capability convention (`fbcb946`): **default ON**, **forwarded
+   from EVERY shell**, **both CI gates**, **refuse by name when stripped**.
+   Forgetting to forward does not break the build — it removes a capability,
+   silently.
+   - **Licence work is already done**: 42 packages, **every one permissive,
+     zero copyleft** (survey §3.2). Two notes, not blockers — `flatbuffers`
+     is **Apache-2.0 only** (no MIT arm), and `unicode-ident`'s
+     `AND Unicode-3.0` is already in pdfce's graph today via `syn`.
+   - **The `no-network` denylist passes**, verified the way CI runs it.
+2. **Implement `pdfce_core::ocr::OcrEngine` for it.** The trait is
+   deliberately tiny: 8-bit greyscale in, `RecognizedWord`s in **image
+   pixel coords, y-down**, out. **Do not do the y-flip in the engine** —
+   `words_to_page_space` owns it, precisely so every engine is wrong or
+   right together. `reports_confidence()` has no default on purpose.
+3. **Ship the two `.rten` files and PIN them.** `text-detection` ≈ 2.52 MB
+   and `text-rec-checkpoint` ≈ 9.72 MB, **≈12.24 MB total**, from
+   `robertknight/ocrs`. **The Hugging Face and S3 copies are NOT
+   byte-identical** (13,280 B smaller / 124 B larger, different filenames),
+   so **pin exactly which artifact ships and hash it** — "the ocrs models"
+   is not one thing. `ocrs-models` has **no LICENSE file**; the CC-BY-SA
+   declaration exists only on the HF model card.
+   **No network code may enter any pdfce crate** — the download lives in
+   `ocrs-cli`, not the `ocrs` library, so pdfce loads from disk via the
+   already-shipped `ocr::models::resolve_model_dir` (`af5580e`).
+4. **CLI subcommand** (rule 11), and the GUI stays unbuilt under the pause.
+
+**Weights are ~12 MB of binary in a public repo's history, permanently.**
+That is worth one sentence to the operator before the commit that adds
+them — not a permission request, a heads-up he can act on.
+
+**Still owed from him:** confirm the model-**downloader** withdrawal
+(`af5580e`) — he agreed on a wrong estimate, so that agreement was
 uninformed.
 
 ## 2. `Pass 67.0` phase C — re-subset fonts — the best non-GUI next move
