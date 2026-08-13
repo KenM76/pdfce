@@ -1,5 +1,13 @@
 # pdfce
 
+##NOTE THAT THE CURRENT GUI FOR THIS PROJECT SUUUUCKS.
+The core and CLI are shining, but the GUI might as well be a basic
+viewer. I have split it off into its own project with a proper plan.
+If you need a fast RUST native pdf GUI editor and are planning it as an
+LLM project the core from this should save you weeks of time.
+If you need a CLI tool to use with your LLM to interact with pdf
+documents, this might be your tool of choice to do that too.
+
 An open-source, non-monetized PDF editor for Windows, written in Rust.
 The long-term goal is feature parity with Adobe Acrobat Pro; **it is not
 there yet**, and the sections below say plainly what does and does not
