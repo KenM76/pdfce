@@ -81,6 +81,135 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★ `v0.5.3` tagged and released at `0963b5f` (annotated tag `b2d0595`) — second release in project history CI-verified green at its tagged commit, `v0.5.2` was the first; packaging smoke test exercises `Pass 68.0`'s two-line ce-dimension authoring end to end, in both the CLI and the GUI — 2026-08-12 (hundred-and-thirty-first filing)
+
+**Sourcing.** This librarian has no shell (hard rule 8). Every figure
+below — the tag/commit hashes, the asset name and byte count, the two
+CI run IDs and their job lists, the packaging-smoke-test output, and
+the backup-bundle verification — is **relayed** from the dispatching
+engineer's own shell run, not independently re-verified here. The
+dispatch stated this explicitly and supplied full 40-character hashes,
+which is the discipline this file's own entries have asked for since
+the hundred-and-fifth filing.
+
+**Operator authorisation, recorded because project rule 8 requires it
+per release.** Ken's standing release authorisation, verbatim,
+2026-08-11: *"please continue to post the latest versions to git so I
+can try them on my laptop at home."* Scope is narrow — builds for his
+own testing, not blanket publishing authority — and this release stays
+inside that scope.
+
+**What shipped.** Tag `v0.5.3` = commit
+`b2d05956a92b5fe16a0f3924d32a09875348527e` (an annotated tag object),
+pointing at `0963b5f2cac7bcbbe5ef2eadea62ecc3f4d63a53` — commit
+message *"0.5.3 — the version these binaries report"* — which is also
+`HEAD` and `origin/main` at release time. Published at
+<https://github.com/KenM76/pdfce/releases/tag/v0.5.3>. Asset
+`pdfce-v0.5.3-portable-win64.zip`, **10,308,179 bytes (≈9.83 MiB)**.
+
+**`tools/verify-release.py v0.5.3` reports all seven checks ok:**
+working tree clean · tag exists locally · tag is at `HEAD` · tag is
+pushed · `origin/main` CONTAINS the tagged commit · GitHub release has
+at least one asset · CI is GREEN at the tagged commit.
+
+**Climbing out of a bad record, worth stating plainly.** This is the
+**second** release in the project's history tagged at a commit CI had
+already accepted (`v0.5.2` was the first). Three of the four releases
+before `v0.5.2` were tagged at commits CI had rejected, and `v0.3.0`
+was published with failing tests (see this file's own `v0.5.1` entry
+and the hundred-and-twenty-fourth filing for the full record of that
+history). The ordering rule this project settled on — file, let CI go
+green, then tag — was followed here in that order.
+
+**CI evidence, measured twice, all 10 jobs green in both runs:**
+
+| run | commit | note |
+|---|---|---|
+| `31658805648` | `8089444` | the hundred-and-twenty-ninth filing's own `docs/` commit |
+| `31659289450` | `0963b5f` | the version-bump commit = the tagged commit |
+
+Jobs green in both runs: `cargo fmt --check` · `cargo clippy -D
+warnings` · `cargo test (ubuntu-latest)` · `cargo test
+(windows-latest)` · cross-target compile check (macOS / wasm32) ·
+verify `pdfce-core` / `pdfce-render` have zero GUI deps · verify
+`pdfce-gui` strings live in `ui_text.rs` · verify no HTTP/TLS client in
+any pdfce crate · third-party license audit · fuzz targets build
+(nightly).
+
+**Open question, flagged not resolved.** `docs/NEXT_SESSION.md` (written
+before this release) named `fbcb946`'s **lite-build** and
+**capability-presence** jobs as a new-release hazard to watch. Neither
+appears in this run's 10-job list above — the CI job set genuinely may
+have been reorganised, or those checks may run under different names
+folded into the list above. **Not asserted either way here** (hard rule
+8); the next session with a shell should check `.github/workflows/` and
+a `gh run view` against `31659289450` directly rather than trust this
+paragraph's guess.
+
+**Packaging smoke test — run, and it exercised `Pass 68.0`'s newest
+feature, not just `--version`.** Staged folder
+`D:\builds\pdfce-20260812-2203-0963b5f`
+(`BUILD-INFO.txt`, `LICENSE`, `README.md`, `THIRD_PARTY_LICENSES.md`,
+`pdfce-cli.exe` 10,444,288 B, `pdfce-gui.exe` 15,784,448 B). Copied to
+a fresh path and both binaries run from there:
+
+- `pdfce-cli --version` → `pdfce-cli 0.5.3` — the version bump preceded
+  the tag deliberately, so `--version` cannot report a lie.
+- `dimension-add --kind two-lines` on the parallel fixture →
+  `authored=linear distance=40.0000`; on the angled fixture →
+  `authored=angular degrees=30.029 apex_is_real=1`.
+- **Read back through `dimension-list` from the SAVED files** —
+  `kind=linear value="40.00 pt"` and `kind=angular value="30.0°"`.
+  What pdfce decided in memory and what actually landed in the file are
+  different claims; only the second is what the operator ends up with,
+  and only the second was checked here.
+- `pdfce-gui.exe` launched from the fresh folder, two-line pick mode
+  armed, two lines picked, verdict *"These two lines meet at an angle —
+  measuring 77.5°."* rendered on screen.
+
+The temporary smoke copy was deleted afterwards.
+
+**Backup, re-measured, not carried forward from a prior figure.**
+`D:\Dev\pdfce-backups\pdfce-20260812-2205.bundle`, `git bundle verify`
+→ okay. `refs/heads/main` = `0963b5f2cac7bcbbe5ef2eadea62ecc3f4d63a53`
+(= `HEAD`), and `refs/tags/v0.5.3` =
+`b2d05956a92b5fe16a0f3924d32a09875348527e` — **the tag object itself is
+inside the bundle**, so the release is recoverable from backup alone,
+not merely the commit it points at.
+
+**What went out in this release, by cross-reference, not re-filed
+here.** `Pass 68.0`'s GUI half (two-line ce dimensioning: `bd53ab3`,
+`c4ec3f5`, filed as the hundred-and-twenty-eighth entry immediately
+below) plus the three latent defects it exposed (`1f7ef59` — the
+angular drag that did nothing, the length-formatted angle label, the
+UTF-8-into-WinAnsi degree sign — filed as this file's own entry
+immediately above, hundred-and-twenty-ninth/hundred-and-thirtieth
+filings). This entry is the release record; it does not restate that
+work.
+
+**Housekeeping observation, flagged not fixed.** `v0.5.2` (tag at
+`5b54a1e`, per `docs/NEXT_SESSION.md`'s "four commits behind `HEAD`"
+figure) has **no Shipped-section entry and no `SESSION_LOG.md` entry
+anywhere in this project's own record** — grepped for `v0.5.2`,
+`0.5.2`, and the commit hash `5b54a1e` across both files; zero hits
+outside `NEXT_SESSION.md` itself. This is the first gap of this kind
+found in the release record (`v0.1.0` through `v0.5.1` all have a
+Shipped-section entry). **Not backfilled here** — this librarian has no
+`verify-release.py` output, asset name/size, or CI run IDs for `v0.5.2`
+to file honestly, and inventing them would be exactly the kind of
+unmeasured assertion hard rule 8 exists to prevent. Flagged for a
+session with a shell to close.
+
+**No Pass ID, decision, or new standing rule minted for this release**
+(per this dispatch's own instruction, and consistent with every prior
+release entry in this file). Ledger ceilings unaffected except the
+filing count: Pass families ceiling stays **71**, next free **72**;
+standing rules ceiling stays **R191**, next free **R192**; decisions
+ceiling stays **055**, next free **056**; SESSION_LOG filings move
+**130 → 131**, which is this one.
+
+---
+
 ### ★★★★ `1f7ef59` — `Pass 68.0`'s angular ce-dimension authoring gets THREE latent defects fixed in one sitting: a drag guard that failed open on the new kind (R186's SEVENTH instance), a baked label reading an angle's value under a length's unit, and the first non-ASCII byte this writer has ever emitted going out raw instead of WinAnsi-escaped — 2026-08-12 (hundred-and-twenty-ninth filing)
 
 **Sourcing.** No shell tool this dispatch either — `Read`/`Write`/`Edit`/

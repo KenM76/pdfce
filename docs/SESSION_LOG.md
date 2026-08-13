@@ -38522,3 +38522,97 @@ the dimension objects **pdfce authors**. Never the bare word.
 - Commit this filing's `docs/` changes by name, separately, per the
   `af5580e` convention this project keeps repeating in its own
   "for next session" notes. Still owed.
+
+## 2026-08-12 (hundred-and-thirty-first filing) — `v0.5.3` released at `0963b5f`/tag `b2d0595`: second consecutive release CI-verified green at its tagged commit; packaging smoke test exercises `Pass 68.0`'s two-line ce-dimension authoring end to end; a release-record gap found for `v0.5.2` — flagged, not fixed
+
+**Sourcing.** No shell tool this dispatch (hard rule 8). All figures
+below — tag/commit hashes, asset size, the two CI run IDs and their job
+lists, the packaging-smoke-test output, and the backup-bundle
+verification — are **relayed** from the dispatching engineer's own
+shell run, not independently re-verified here. Full 40-character
+hashes were supplied.
+
+**★ TERMINOLOGY (project rule 15).** The packaging smoke test below
+exercises **ce dimensions** — the dimension objects pdfce authors, not
+pdf dimensions already present in a file.
+
+**Shipped:**
+- **`v0.5.3` tagged and released** at commit
+  `0963b5f2cac7bcbbe5ef2eadea62ecc3f4d63a53` (annotated tag
+  `b2d05956a92b5fe16a0f3924d32a09875348527e`), = `HEAD` = `origin/main`.
+  Published at
+  <https://github.com/KenM76/pdfce/releases/tag/v0.5.3>. Asset
+  `pdfce-v0.5.3-portable-win64.zip`, **10,308,179 bytes (≈9.83 MiB)**.
+  Built under the operator's standing release authorisation
+  (2026-08-11: *"please continue to post the latest versions to git so
+  I can try them on my laptop at home"* — scope is builds for his own
+  testing, not blanket publishing authority).
+- Full record filed in `docs/ROADMAP.md`'s Shipped section, top entry
+  — see that entry for the complete CI job table, the packaging smoke
+  test transcript, and the backup verification. Not restated in full
+  here.
+
+**Findings + decisions:**
+- **`tools/verify-release.py v0.5.3` reports all seven checks ok** —
+  working tree clean, tag exists locally, tag at `HEAD`, tag pushed,
+  `origin/main` contains the tagged commit, GitHub release has an
+  asset, CI green at the tagged commit.
+- **This is the second release in project history tagged at a commit
+  CI had already accepted** (`v0.5.2` was the first). Against a bad
+  prior record — 3 of the 4 releases before `v0.5.2` tagged at a
+  commit CI had rejected, `v0.3.0` published with failing tests — the
+  file-then-CI-green-then-tag ordering held here.
+- **CI measured twice, all 10 jobs green both times:** run
+  `31658805648` at `8089444` (the hundred-and-twenty-ninth filing's own
+  commit) and run `31659289450` at `0963b5f` (the tagged commit).
+- **Open question, flagged not resolved:** `docs/NEXT_SESSION.md` named
+  `fbcb946`'s lite-build and capability-presence jobs as a new-release
+  hazard to watch. Neither name appears in this run's 10-job list —
+  reorganised job names or folded checks, not asserted either way (hard
+  rule 8). Next session with a shell should check `.github/workflows/`
+  directly.
+- **The packaging smoke test used the newest feature, not just
+  `--version`.** From a fresh copy of the staged folder
+  (`D:\builds\pdfce-20260812-2203-0963b5f`): `pdfce-cli --version` →
+  `pdfce-cli 0.5.3`; `dimension-add --kind two-lines` authored a linear
+  ce dimension (`distance=40.0000`) and an angular one
+  (`degrees=30.029 apex_is_real=1`); **read back from the saved files**
+  via `dimension-list` — `kind=linear value="40.00 pt"`,
+  `kind=angular value="30.0°"` — confirming what landed on disk, not
+  only what pdfce computed in memory; `pdfce-gui.exe` launched from the
+  fresh folder, two-line pick mode armed, verdict *"These two lines
+  meet at an angle — measuring 77.5°."* rendered. Temporary smoke copy
+  deleted afterwards.
+- **Backup re-measured, not carried forward:**
+  `D:\Dev\pdfce-backups\pdfce-20260812-2205.bundle`, `git bundle verify`
+  okay, `refs/heads/main` = `0963b5f…` = `HEAD`, and — worth calling
+  out — `refs/tags/v0.5.3` = `b2d0595…` is **inside the bundle too**,
+  so the release itself, not only the commit it points at, is
+  recoverable from backup alone.
+- **★ A gap found in the release record, flagged not fixed.** `v0.5.2`
+  (tag at `5b54a1e`, per `docs/NEXT_SESSION.md`'s own "four commits
+  behind `HEAD`" line) has **no Shipped-section entry in `ROADMAP.md`
+  and no entry anywhere in this file** — grepped for `v0.5.2`, `0.5.2`,
+  and `5b54a1e` across both documents; every prior release from `v0.1.0`
+  through `v0.5.1` has one, `v0.5.2` does not. Not backfilled here: no
+  `verify-release.py` output, asset size, or CI run IDs for `v0.5.2`
+  are available to this librarian, and inventing them would be exactly
+  the unmeasured assertion hard rule 8 forbids. Left for a session with
+  a shell.
+
+**Still in flight:** unchanged from the hundred-and-thirtieth filing —
+retroactive re-classification of a committed two-line ce dimension,
+the `parallel_epsilon_degrees` proximity caption (P1). Not touched by
+this release-record filing.
+
+**For next session:**
+- Decide whether to backfill a `v0.5.2` Shipped/`SESSION_LOG` record,
+  or accept the gap and move on — operator/engineer call, not this
+  librarian's to make solo.
+- Check `.github/workflows/` (or `gh run view 31659289450`) to resolve
+  whether the lite-build/capability-presence jobs were renamed, folded,
+  or genuinely absent from this run.
+- `docs/FEATURES.md` needed **no change** for this filing — no
+  capability row moved; `Pass 68.0`'s two-line dimensioning row was
+  already ticked in the hundred-and-twenty-eighth filing. Confirmed by
+  inspection, not edited.
