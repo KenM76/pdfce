@@ -99,10 +99,75 @@ base CTM. Nothing is cached between calls.
   noise, not a trend — the harness reports a single run per case, deliberately,
   because the floor's magnitude is the finding and it is not a close call.
 
-## Not measured, and still owed
+## Not measured in THIS section
 
-The requesting session's question 3 — **the honest upper bound on magnification
-before output stops being meaningful** (PDF coordinate precision, the
-rasteriser's fixed-point arithmetic, hairline stroke widths) — is not answered
-here. `MAX_ZOOM` should be set from where quality measurably degrades, and that
-needs its own experiment.
+The requesting session's question 3 — the honest upper bound on magnification —
+is answered in the second half of this document, below.
+
+---
+
+# The magnification ceiling — measured, and it is not where anyone would guess
+
+**Added 2026-08-13**, answering question 3 of the same request (*"the honest
+upper bound on magnification before the output stops being meaningful"*), which
+the first version of this document recorded as owed.
+
+```text
+cargo run --release -p pdfce-render --example zoom_ceiling
+```
+
+**Method.** A 1 pt black bar whose left edge sits at **x = 2999.7373 pt** on a
+3370 pt (A0) sheet. At each scale a tight region is rendered around that edge
+and the first ink column is compared against where the arithmetic says it must
+land. Error is in **device pixels**.
+
+Position matters as much as scale: `f32` carries a 24-bit mantissa, so it is
+the **absolute magnitude** of `coordinate × scale` that consumes precision. A
+bar near the origin would show nothing.
+
+| scale | region px | error px |
+|---:|---|---:|
+| 1.3 | 1 × 1 | 0.755 |
+| 21 | 3 × 2 | 0.076 |
+| 336 | 28 × 15 | 0.222 |
+| 672 | 54 × 28 | 1.444 |
+| 2,690 | 216 × 107 | 0.775 |
+| 5,381 | 431 × 214 | 0.551 |
+| 10,762 | 862 × 428 | 0.102 |
+| 21,524 | 1724 × 856 | 0.797 |
+| **43,047** | 3448 × 1712 | **2.594** |
+| 86,095 | 6896 × 3424 | 5.187 |
+| 172,189 | 13792 × 6848 | 11.374 |
+
+## Reading it
+
+Below ~5,000× the error is **sub-pixel and non-monotonic** — it wanders
+between 0.02 and 1.4 px with no trend. That is anti-aliasing and threshold
+rounding on where the ink crosses the detection cut, **not** precision decay.
+
+Beyond ~43,000× it **doubles as the scale doubles** (2.59 → 5.19 → 11.37).
+That is the signature of `f32` mantissa exhaustion, and the arithmetic agrees:
+`2999.7373 × 43,047 ≈ 1.29 × 10⁸`, well past the 1.677 × 10⁷ above which the
+`f32` spacing exceeds 1.0, so the representable gap — and hence the error —
+scales with the coordinate from there.
+
+## ★ The conclusion, which is the useful part
+
+**Numerical precision is not the binding constraint on magnification, and is
+not close to being one.** On the worst realistic case — a coordinate near
+3,000 pt on an A0 sheet — device coordinates stay sub-pixel accurate to roughly
+**5,000×**, three orders of magnitude beyond any plausible viewing zoom.
+
+**So `MAX_ZOOM` must be set from performance and usability, not from
+numerics.** The real limit is the ~0.7–1.1 s per-render interpretation floor
+measured above. Setting it from `f32` would be picking a number for a reason
+that does not apply — the same class of error `MAX_PIXMAP_EDGE`'s original
+justification made.
+
+## What is still NOT covered here
+
+Hairline strokes (`0 w`), which render at a device-minimum width regardless of
+scale and therefore get relatively *thinner* the deeper the zoom, and text
+hinting at extreme sizes. Both are **appearance** questions rather than
+correctness ones, and neither is measured by this harness. Stated so the
+"measured" claim above is not read wider than it is.
