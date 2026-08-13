@@ -15309,11 +15309,16 @@ fn cmd_dimension_add(args: &DimensionAddArgs<'_>) -> u8 {
             }
         }
         // ★ The two-line mode: pdfce reads the geometry and decides.
+        //
+        // The reading AND the authoring both live in
+        // `pdfce_core::dimension::two_lines`, shared verbatim with the GUI
+        // gesture. This arm is now only argument-shaping and disclosure —
+        // deliberately, because two copies of the sign convention and the arc
+        // default is how the two shells come to author visibly different ce
+        // dimensions from the same geometry.
         DimKindArg::TwoLines => {
-            use pdfce_core::vector::linepick::{
-                ParallelPolicy, PickedLine, TwoLineRelation, classify_two_lines,
-                measured_angle_degrees,
-            };
+            use pdfce_core::dimension::{TwoLinePlacement, author_from_two_lines};
+            use pdfce_core::vector::linepick::{ParallelPolicy, PickedLine, TwoLineRelation};
             let [a1, a2, b1, b2, ..] = pts.as_slice() else {
                 eprintln!(
                     "pdfce-cli: {}: --kind two-lines needs FOUR points — two for each \
@@ -15346,56 +15351,48 @@ fn cmd_dimension_add(args: &DimensionAddArgs<'_>) -> u8 {
             if treat_as_parallel {
                 policy = policy.forcing_parallel();
             }
-            let Some(relation) = classify_two_lines(&la, &lb, policy) else {
-                eprintln!(
-                    "pdfce-cli: {}: one of those lines has zero length — two distinct \
-                     points are needed per line",
-                    input.display()
-                );
-                return exit::EDIT_REFUSED;
+            let authored = match author_from_two_lines(
+                &la,
+                &lb,
+                policy,
+                TwoLinePlacement {
+                    constraint: constraint.to_core(),
+                    offset,
+                    text_along,
+                },
+            ) {
+                Ok(authored) => authored,
+                Err(refusal) => {
+                    // Both refusals are named, and the wording comes from the
+                    // error type itself so the CLI and the GUI say the same
+                    // thing about the same geometry.
+                    eprintln!(
+                        "pdfce-cli: {}: {refusal}. Nothing was authored.",
+                        input.display()
+                    );
+                    return exit::EDIT_REFUSED;
+                }
             };
+
             // Disclose the measurement AND the decision taken from it, always.
             // The operator gave four numbers; what pdfce did with them is an
             // inference, and rule 4 says an inference is stated rather than
             // silently applied.
-            if let Some(measured) = measured_angle_degrees(&la, &lb) {
+            if let Some(measured) = authored.measured_angle_degrees {
                 println!(
                     "  two_lines measured_angle={measured:.3} epsilon={} forced={}",
                     settings.parallel_epsilon_degrees,
                     u32::from(treat_as_parallel)
                 );
             }
-            match relation {
-                TwoLineRelation::Collinear => {
-                    eprintln!(
-                        "pdfce-cli: {}: those two lines are COLLINEAR — they lie on the \
-                         same line, so the distance between them is zero and there is no \
-                         angle. Nothing was authored.",
-                        input.display()
-                    );
-                    return exit::EDIT_REFUSED;
-                }
+            match authored.relation {
+                // Refused above: `author_from_two_lines` returns
+                // `TwoLineRefusal::Collinear` rather than an authoring, so this
+                // arm is unreachable. Written as a no-op rather than a panic —
+                // an impossible state is not worth aborting an edit over.
+                TwoLineRelation::Collinear => {}
                 TwoLineRelation::Parallel { distance } => {
                     println!("  two_lines authored=linear distance={distance:.4}");
-                    // The dimension runs perpendicular between the two lines,
-                    // anchored at the first line's pick and reaching the
-                    // second — which is the measurement just reported, drawn.
-                    let (ux, uy) = la.direction().unwrap_or((1.0, 0.0));
-                    let (nx, ny) = (-uy, ux);
-                    // Sign the normal toward the OTHER line, so the dimension
-                    // spans the gap instead of pointing away from it.
-                    let toward = (lb.pick.x - la.pick.x).mul_add(nx, (lb.pick.y - la.pick.y) * ny);
-                    let sign = if toward < 0.0 { -1.0 } else { 1.0 };
-                    DimensionKind::Linear {
-                        a: la.pick,
-                        b: pdfce_core::vector::Point::new(
-                            (nx * sign).mul_add(distance, la.pick.x),
-                            (ny * sign).mul_add(distance, la.pick.y),
-                        ),
-                        constraint: constraint.to_core(),
-                        offset,
-                        text_along,
-                    }
                 }
                 TwoLineRelation::Angled {
                     degrees,
@@ -15419,31 +15416,9 @@ fn cmd_dimension_add(args: &DimensionAddArgs<'_>) -> u8 {
                             input.display()
                         );
                     }
-                    let dir = |p: &PickedLine| {
-                        let (dx, dy) = (p.pick.x - apex.x, p.pick.y - apex.y);
-                        let len = dx.hypot(dy);
-                        if len <= f64::EPSILON {
-                            pdfce_core::vector::Point::new(1.0, 0.0)
-                        } else {
-                            pdfce_core::vector::Point::new(dx / len, dy / len)
-                        }
-                    };
-                    DimensionKind::Angular {
-                        apex,
-                        dir_a: dir(&la),
-                        dir_b: dir(&lb),
-                        // The arc radius defaults to a readable fraction of
-                        // the shorter arm, so the mark sits ON the geometry
-                        // rather than at an arbitrary distance from it.
-                        radius: if offset.abs() > f64::EPSILON {
-                            offset.abs()
-                        } else {
-                            (la.length().min(lb.length()) * 0.5).max(20.0)
-                        },
-                        text_along,
-                    }
                 }
             }
+            authored.kind
         }
     };
 

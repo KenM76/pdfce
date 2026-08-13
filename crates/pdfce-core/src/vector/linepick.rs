@@ -317,6 +317,46 @@ pub fn pick_line(
     best.map(|(_, line)| line)
 }
 
+/// Pick the straight line nearest `point` **anywhere on the page**.
+///
+/// [`pick_line`] answers "which segment of *this object* did the operator
+/// click"; a canvas click does not come with an object index, so this is the
+/// form a shell actually needs. Every object is offered to [`pick_line`] and
+/// the nearest straight segment across all of them wins.
+///
+/// # Why the search is exhaustive rather than short-circuiting
+///
+/// Returning the first object with a hit would make the answer depend on
+/// content-stream order — two edges a fraction of a point apart would resolve
+/// to whichever was drawn first, which from the operator's side is
+/// indistinguishable from the pick being random. Comparing every candidate
+/// costs a pass over the page's objects once per click, which is nothing
+/// beside a click, and makes "the nearest line wins" true rather than usually
+/// true.
+///
+/// Ties are broken toward the LOWER object index, so a repeated click on the
+/// same spot resolves the same way every time. An arbitrary rule, but a
+/// stable one — the alternative is a pick that changes its mind.
+///
+/// Returns `None` when nothing straight is within `tolerance`, including when
+/// the nearest thing is a curve ([`pick_line`] skips those deliberately).
+#[must_use]
+pub fn pick_line_in_page(model: &PageObjects, point: Point, tolerance: f64) -> Option<PickedLine> {
+    let mut best: Option<(f64, PickedLine)> = None;
+    for index in 0..model.objects.len() {
+        let Some(candidate) = pick_line(model, index, point, tolerance) else {
+            continue;
+        };
+        // Re-measure against the segment actually chosen, so objects are
+        // compared on the same quantity `pick_line` used internally.
+        let (dist, _) = distance_to_segment(point, candidate.start, candidate.end);
+        if best.as_ref().is_none_or(|(d, _)| dist < *d) {
+            best = Some((dist, candidate));
+        }
+    }
+    best.map(|(_, line)| line)
+}
+
 /// Perpendicular distance from `p` to segment `a`–`b`, and the closest point
 /// ON the segment (clamped to its ends).
 fn distance_to_segment(p: Point, a: Point, b: Point) -> (f64, Point) {
@@ -614,6 +654,125 @@ mod tests {
         let a = line(10.0, 10.0, 10.0, 10.0, 10.0, 10.0);
         let b = line(0.0, 0.0, 100.0, 0.0, 50.0, 0.0);
         assert_eq!(classify_two_lines(&a, &b, ParallelPolicy::default()), None);
+    }
+}
+
+/// Tests for the page-wide picker, over genuinely decomposed content streams
+/// rather than hand-built [`PickedLine`]s — this is the layer where "which
+/// object did the click land on" is actually decided.
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
+mod page_pick_tests {
+    use super::*;
+    use crate::content::ContentStream;
+    use crate::vector::decompose::{NoXObjects, decompose};
+    use crate::vector::geometry::Matrix;
+
+    fn model(src: &[u8]) -> PageObjects {
+        let cs = ContentStream::parse(src.to_vec()).unwrap();
+        decompose(&cs, Matrix::IDENTITY, &NoXObjects)
+    }
+
+    /// A click near one of two separate stroked lines picks THAT line, and
+    /// reports which object it came from.
+    #[test]
+    fn a_click_picks_the_nearest_line_across_objects() {
+        // Two horizontal strokes as two separate path objects.
+        let m = model(b"10 100 m 200 100 l S 10 300 m 200 300 l S");
+        let picked = pick_line_in_page(&m, Point { x: 100.0, y: 302.0 }, 5.0)
+            .expect("a click 2 units from the upper line must pick it");
+        assert_eq!(picked.object_index, 1, "the SECOND path is the near one");
+        assert!((picked.start.y - 300.0).abs() < 1e-9);
+        assert!(
+            (picked.pick.x - 100.0).abs() < 1e-9,
+            "the pick projects onto the segment at the click's x, got {:?}",
+            picked.pick
+        );
+    }
+
+    /// ★ The nearest line wins even when a farther object is drawn first —
+    /// the failure this guards is a pick that resolves by content-stream order
+    /// and therefore looks random to the operator.
+    #[test]
+    fn paint_order_does_not_decide_the_pick() {
+        // The FAR line is drawn first, the NEAR line second.
+        let m = model(b"0 0 m 200 0 l S 0 100 m 200 100 l S");
+        let picked =
+            pick_line_in_page(&m, Point { x: 50.0, y: 96.0 }, 10.0).expect("within tolerance");
+        assert_eq!(
+            picked.object_index, 1,
+            "the nearer line must win regardless of which was painted first"
+        );
+    }
+
+    /// Nothing within tolerance yields no pick, rather than the least-bad line
+    /// on the page.
+    #[test]
+    fn a_click_in_empty_space_picks_nothing() {
+        let m = model(b"10 100 m 200 100 l S");
+        assert!(pick_line_in_page(&m, Point { x: 100.0, y: 400.0 }, 5.0).is_none());
+    }
+
+    /// ★ A curve is not a line, and clicking one picks nothing rather than its
+    /// chord. Dimensioning "the line" of a Bézier would measure something the
+    /// drawing does not contain.
+    #[test]
+    fn clicking_a_curve_picks_nothing() {
+        let m = model(b"0 0 m 50 100 150 100 200 0 c S");
+        assert!(
+            pick_line_in_page(&m, Point { x: 100.0, y: 74.0 }, 12.0).is_none(),
+            "a cubic must be skipped, never chorded"
+        );
+    }
+
+    /// A rectangle's four edges are individually pickable, and clicking near
+    /// one picks that edge rather than the whole shape.
+    #[test]
+    fn an_edge_of_a_rectangle_is_pickable_on_its_own() {
+        let m = model(b"100 100 200 50 re S");
+        // Near the bottom edge (y = 100).
+        let bottom =
+            pick_line_in_page(&m, Point { x: 200.0, y: 102.0 }, 5.0).expect("the bottom edge");
+        assert!((bottom.start.y - 100.0).abs() < 1e-9 && (bottom.end.y - 100.0).abs() < 1e-9);
+        // Near the top edge (y = 150).
+        let top = pick_line_in_page(&m, Point { x: 200.0, y: 148.0 }, 5.0).expect("the top edge");
+        assert!((top.start.y - 150.0).abs() < 1e-9 && (top.end.y - 150.0).abs() < 1e-9);
+    }
+
+    /// ★ End-to-end: two edges of one rectangle, picked by clicking, classify
+    /// the way the operator expects — the opposite edges are parallel and the
+    /// adjacent ones meet at a right angle. This is the whole feature in
+    /// miniature, driven only by click coordinates.
+    #[test]
+    fn two_clicks_on_a_rectangle_classify_as_the_geometry_demands() {
+        let m = model(b"100 100 200 50 re S");
+        let bottom = pick_line_in_page(&m, Point { x: 200.0, y: 101.0 }, 5.0).expect("bottom");
+        let top = pick_line_in_page(&m, Point { x: 200.0, y: 149.0 }, 5.0).expect("top");
+        let left = pick_line_in_page(&m, Point { x: 101.0, y: 125.0 }, 5.0).expect("left");
+
+        match classify_two_lines(&bottom, &top, ParallelPolicy::default()) {
+            Some(TwoLineRelation::Parallel { distance }) => {
+                assert!(
+                    (distance - 50.0).abs() < 1e-6,
+                    "the two long edges are 50 apart, got {distance}"
+                );
+            }
+            other => panic!("opposite edges must be parallel, got {other:?}"),
+        }
+        match classify_two_lines(&bottom, &left, ParallelPolicy::default()) {
+            Some(TwoLineRelation::Angled { degrees, .. }) => {
+                assert!(
+                    (degrees - 90.0).abs() < 1e-6,
+                    "adjacent edges meet at a right angle, got {degrees}"
+                );
+            }
+            other => panic!("adjacent edges must be angled, got {other:?}"),
+        }
     }
 }
 

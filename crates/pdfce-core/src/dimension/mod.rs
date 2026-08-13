@@ -56,6 +56,9 @@ pub mod group;
 pub mod length_parse;
 pub mod measure_dict;
 pub mod sidecar;
+/// Turn two picked lines into the ce dimension they call for — the single
+/// implementation shared by the CLI's `--kind two-lines` and the GUI gesture.
+pub mod two_lines;
 pub mod units;
 
 // Re-export the everyday surface at `crate::dimension::…`.
@@ -70,6 +73,7 @@ pub use group::{
 pub use length_parse::{LengthParseError, ParsedLength, parse_length};
 pub use measure_dict::{build_measure_dict, build_ocg, build_ocproperties};
 pub use sidecar::{SIDECAR_VERSION, deserialize_model, serialize_model, sidecar_version};
+pub use two_lines::{TwoLineAuthoring, TwoLinePlacement, TwoLineRefusal, author_from_two_lines};
 pub use units::{
     DecimalMarker, FractionMode, MeasurementDisplay, NO_SCALE_DISCLOSURE, NumberFormat, ScaleEntry,
     ScalePreview, ScaleState, Unit, format_angle_degrees, format_measurement, preview_group_scale,
