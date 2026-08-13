@@ -40046,3 +40046,312 @@ the baseline — and that baseline is DEBT, not an allowlist.** This is the
 **hundred-and-thirty-seventh** `SESSION_LOG.md` filing (the
 hundred-and-thirty-sixth confirmed present by direct read before this
 entry was appended).
+
+## 2026-08-13 (hundred-and-thirty-eighth filing) — THE REDACTION TRUE-REMOVAL PROOF HAS NO HOME IN `pdfce-core`: it lives in `crates/pdfce-gui`, the crate decision 058 says may be replaced wholesale — and the danger is **not prospective**, `pdfce-cli` ALREADY writes redacted files with no absence proof and exits `SUCCESS`. `Pass 72.0` minted; decision 058 gains a footnote rather than a new record; `FEATURES.md`'s redaction row CORRECTED (it claimed a proof core and cli do not have); and the rebase has left **10 commit hashes cited in the docs unreachable from `HEAD`**
+
+**Ledger, measured by `python tools/check-ledger-numbers.py` at the head
+of this dispatch, not carried from the previous filing:** *"standing
+rules R191 → next free R192; decision records 058 → next free 059;
+SESSION_LOG filings 137 → next free 138; Pass families with headings up
+to 71."* **This filing mints `Pass 72.0`** (family ceiling 71 → **72**)
+**and nothing else.** **No decision record** — 058 gains a footnote;
+ceiling stays **058**, next free **059**. **No standing rule** — **R191**
+stands, **R192** remains an unruled proposal and this filing adds nothing
+to it. **No operator question** — ceiling stays **`(bl)`**, next free
+**`(bm)`**.
+
+**Shipped:** nothing. **No code changed in this filing at all** — it is a
+documentation filing, so **no test, `cargo fmt`, `clippy` or `cargo tree`
+figure is claimed**, because none was run *for* it.
+
+---
+
+### The finding, verified rather than relayed
+
+The dispatch reported that redaction's true-removal verification does not
+live in `pdfce-core` and asked for it to be checked before filing. **It
+was checked against the working tree, and it is correct in every
+particular** — plus two details it did not carry, and one framing that
+was too generous.
+
+| claim | verdict | measurement |
+|---|---|---|
+| `prepare_redaction_apply` is at `crates/pdfce-gui/src/redact_apply.rs:269` | **CONFIRMED, exact line** | `grep -rn "prepare_redaction_apply" crates/` → **16 hits, all 16 in `crates/pdfce-gui/`** |
+| the proof is absent from `pdfce_core::redact`'s public surface | **CONFIRMED** | `grep -n "pub fn \|pub enum \|pub struct " crates/pdfce-core/src/redact.rs` → exactly **nine** public items: `RedactError` (195), `CarrierStatus` (242), `CarrierAction` (256), `RedactionReport` (290), `has_disclosed_residuals` (343), `apply_redactions` (1079), `RedactionMark` (1792), `redaction_marks` (1822), `count_redaction_marks` (1921). **None is a verdict type; none is an absence-proof entry point.** |
+| decoded-stream hit ⇒ **refuse** | **CONFIRMED** | `redact_apply.rs` module docs §3, verbatim: *"A decoded stream is content a renderer or a text extractor will read back. Its survival is a real leak, not a coincidence, and no acknowledgement checkbox makes it acceptable."* |
+| raw-bytes-only ⇒ **disclose + require acknowledgement** | **CONFIRMED** | same table: *"pdfce cannot tell a genuine un-recognised carrier from an unrelated coincidence … Refusing would be a trap the operator cannot act on; claiming removal would be a lie. Naming it is the only honest option."* |
+| found nowhere ⇒ the only case licensed to say **"verified"** | **CONFIRMED** | same table: *"This is what licenses §5.1's wording contract to use the word 'verified' at all."* Gated by `AbsenceVerification::is_clean()` (`:219`). |
+
+**Nothing in the dispatch needed correcting downward.** Two additions:
+
+- **`MIN_VERIFIABLE_LEN = 4`** (`redact_apply.rs:127`). Strings under four
+  characters are excluded from the **raw-byte half only**, **counted** in
+  `strings_too_short_for_raw_check`, and **still checked against decoded
+  streams**. **The proof reports its own limit** — that is part of what
+  must move, not a caveat about it. A proof that silently dropped short
+  strings would be a weaker proof wearing the same name.
+- **Core produces the proof's INPUT and says so.**
+  `RedactionReport::redacted_text` (`redact.rs:319`) carries the decoded
+  removed strings, and its own doc comment reads *"for the absence-proof
+  gate to grep."* **`pdfce-core` names a gate it does not contain.** That
+  is the cleanest single statement of the defect: the boundary was drawn
+  with the evidence on one side and the verdict on the other.
+
+### ★ The one framing that was too generous — the risk is REALIZED, not prospective
+
+The dispatch's urgency argument was *"a new shell calling
+`redact::apply_redactions` directly and writing the bytes ships an
+UNVERIFIED redaction and will not know."* **That is not a forecast about a
+future shell. It is a description of `pdfce-cli` at `HEAD`:**
+
+- `cmd_redact_apply` (`crates/pdfce-cli/src/main.rs:13472`) calls
+  `redact::apply_redactions` **directly** (`:13491`);
+- **writes the file at `:13505`, unconditionally**;
+- reaches its only gate at **`:13547`** — **42 lines after the bytes are
+  on disk**;
+- and that gate reads `report.has_disclosed_residuals()`, which is core's
+  §12.5.6.23 **carrier sweep** — *"did pdfce scrub every place text is
+  KNOWN to hide?"* — **a different question** from the absence proof's
+  *"is the removed string still in the output?"*
+
+**A file can pass the first and fail the second.** The GUI's **REFUSE**
+verdict has **no CLI counterpart at all**, because the CLI never looks;
+`redact-apply` exits `SUCCESS` on a file it never verified, having already
+written it. **`--acknowledge-residuals` must not be read as the missing
+gate**, and `Pass 72.0`'s criterion 4 says so explicitly: the new
+disclosure gets its own flag rather than overloading one flag with two
+different safety properties.
+
+**Why the correction matters more than the finding.** *"A future shell
+might"* is a design risk someone schedules. *"A shipped shell does"* is a
+defect. **The same sentence describes both, and only the measurement
+distinguishes them** — which is why the dispatch's instruction to verify
+rather than relay was the right call, and why it produced a bigger result
+than it was looking for.
+
+### The near-miss that makes the gap easy to under-read
+
+`pdfce-core` **does** contain an absence proof — as a **test**:
+`apply_removes_redacted_text_from_the_whole_saved_file`
+(`crates/pdfce-core/src/redact.rs:2183`), asserting `"SECRET"` survives
+in neither the raw bytes nor any decoded content stream of one synthetic
+fixture. **It must not be cited as covering this.** It proves *the
+algorithm works on a fixture pdfce wrote*; the GUI's check proves *the
+removal worked on the operator's document*. **Only the second is what
+"verified" means to the person receiving the file**, and only the second
+can catch a carrier nobody anticipated — which is the whole reason the
+raw-byte half exists. **A test is a property of pdfce; the gate is a
+property of the file.**
+
+### Why this is `R151` INVERTED, and why the inverse is worse
+
+`R151` is *a core capability with no shell caller* — `move_subpath`
+existing from Pass 28.0 with nobody calling it until Pass 36.0. **This is
+a safety proof with no core home.** Both are the same underlying error —
+**a thing living at the wrong altitude** — but the directions do not cost
+the same. **A capability with no caller wastes work and is discovered by
+anyone who looks for callers. A proof in the wrong crate silently narrows
+who is protected by it, and is invisible to every mechanical boundary
+check this project runs**, because `cargo tree` asks *what does core
+depend on?* and nobody was asking *what does core PROVE?* It stays
+invisible for exactly as long as there is only one shell — and pdfce has
+had two shells the whole time.
+
+### Where it was filed, and the one judgement call
+
+- **`docs/ROADMAP.md`** — **`Pass 72.0`**, head of *Next up*, high
+  priority, **UNSTARTED**. Seven acceptance criteria: the verdict enum and
+  check in core (1); `MIN_VERIFIABLE_LEN` and the too-short count move
+  with it (2); **a test proves the refuse case actually refuses** (3) —
+  called out because *"a test that only exercises the clean path does not
+  discharge this criterion"*, the refuse path having never been proven
+  outside the GUI; the CLI exercises it headlessly and **refuses before
+  writing** (4); the GUI is **rewired, not duplicated** (5), since *two
+  copies of a safety check is worse than one in the wrong place*;
+  `cargo tree` stays clean (6); `FEATURES.md` becomes true (7). A *What
+  this Pass does NOT do* block records that it changes no removal logic,
+  retires no crate, and lifts no pause — with a fallback if criterion 5's
+  rewire is itself judged to fall under the GUI pause: **ship 1–4 and 6,
+  and file the duplication as live debt rather than forgetting it.**
+- **`docs/ARCHITECTURE.md`** — a **footnote on decision 058**, not
+  decision 059. **The dispatching engineer's reading was offered as his
+  and it is adopted as correct**: 058 predicted this class of finding and
+  fixed the reading of it *in advance*, so a worked first instance
+  attached to the prediction is worth more than a separate record a reader
+  could land on without the prediction. **The footnote adds one
+  generalisation 058 did not have**, and it is the sharper of the pair:
+  058 records that *an invariant defended for one future scenario pays out
+  in a different one*; the footnote records the inverse — **a crate
+  boundary can be perfectly clean in the dependency graph and still have
+  the wrong things on each side of it.** It also notes that **058's
+  sufficiency test has returned its first result and the result is
+  NEGATIVE**, before `D:\dev\pdfceGUI` asked for anything: a second shell
+  cannot obtain redaction verification from `pdfce-core`, because it is
+  not there. **No boundary has moved yet — the move earns its own §12
+  entry when `Pass 72.0` ships.** No body section needed updating: §3 and
+  §5 are both still accurate as written; what changed is that **§5's
+  guarantee is now known to be enforced in only one of two shells**, which
+  is a `ROADMAP.md` fact until the Pass lands.
+- **`docs/FEATURES.md`** — **the judgement call, and it went the other way
+  from the dispatch's guess.** The dispatch offered *"no capability moved,
+  but a reader is entitled to know the proof is shell-side today"* and
+  left it open. **The row was not merely incomplete — it was FALSE.** It
+  read *"`[x]` core · `[x]` cli · `[x]` gui — Apply redaction with a
+  runtime-verified true-removal proof"*, and **neither core nor the CLI
+  has one**. That is precisely the *"never tick a box you cannot
+  substantiate … an over-optimistic features list is worse than a short
+  one"* failure, on a **security** claim, in the one document the operator
+  scans to answer *"what can it do?"*. Corrected in place per the file's
+  own rule (**replace the sentence, never append to it**): the row now
+  says true removal works in all three and **the runtime proof runs in the
+  GUI only**, naming the CLI's write-then-gate order and that its gate
+  checks a different property. A **Planned** row was added at the top of
+  the table for the proof's move into core.
+
+### Also recorded, per the dispatch
+
+- **`StyleProvenance::each()` returns 11 pairs**, confirmed at
+  `crates/pdfce-core/src/dimension/style.rs:423` — the signature is
+  literally `pub const fn each(&self) -> [(&'static str, StyleSource); 11]`
+  and eleven entries are listed, the last two being `tolerance` and
+  `tolerance-places`. The ui-spec's **Amendment B** still says *"nine"*.
+  **Code is authoritative. Amendment B is deliberately NOT edited** — the
+  previous filing already reasoned that the paragraph is self-correcting
+  by construction, and the method's own doc comment enforces it
+  mechanically: *"Returned as a fixed-size array rather than an iterator
+  so the caller gets a compile error, not a silently shorter listing, when
+  a property is added and this method is not extended."* **Noted once,
+  here, so a future reader who spots 11-vs-9 does not re-investigate it.**
+- **Imposition's mutual-exclusion guard is CLI-local** — filed as a
+  ***Backlog*** item, **not a Pass**, exactly as directed. The guard is at
+  `crates/pdfce-cli/src/main.rs:8565`, refusing at `:8591`;
+  `pdfce-print` exposes `plan_n_up` (`imposition.rs:644`), `plan_booklet`
+  (`:1145`) and `plan_poster` (`:1435`) with **nothing between them**.
+  The guard's own comment records that the regression is historical, not
+  hypothetical: *"`--poster --booklet` composed nine poster tiles, threw
+  them away, and printed a booklet."* **Same SHAPE as the redaction
+  finding — a guard above the crate that needs it — but it costs wasted
+  work, not a safety property**, which is the whole reason for the
+  different disposition. The backlog entry names the fix shape
+  (unrepresentable beats guarded: a job-spec constructor in `pdfce-print`
+  that cannot hold two modes) and the promotion trigger (**a second shell
+  landing before it is fixed**). **Adjacent but distinct** from
+  `FEATURES.md`'s existing *"Imposition in the GUI — needs the sheet
+  composition extracted into `pdfce-print`"* row: that one is about
+  **composition**, this one is about the **guard**; fixing either does not
+  fix the other.
+
+---
+
+### ★★★ Git and backup state, MEASURED this dispatch — and the rebase has invalidated 10 hash citations
+
+**Every figure below is from a command run in this dispatch. Nothing is
+quoted from an earlier filing** — the dispatch warned that `HEAD` and
+`origin` had both moved, and they had.
+
+- **`git rev-parse origin/main`** → **`42364db`** (*"Fix formatting of
+  note in README.md"*). The previous filing recorded `4069cbb`; **that
+  figure is now stale and this entry supersedes it.**
+- **`git rev-list --count origin/main..HEAD`** → **11**. `HEAD` =
+  **`6c5124c`**. **Nothing is pushed.** Stated as measurement, not
+  request — pushing is the operator's act (project rule 8).
+- **`git status --short`** → one entry, **`?? docs/core-api/`**, untracked
+  and **deliberately left untracked and unstaged**: two agents are still
+  writing into it. **Not read as finished, not staged.** The four `docs/`
+  files this filing edited were staged **individually by name**.
+
+**The rebase orphaned commits the docs point at.** Measured by extracting
+every 7–8 character hex token from `ROADMAP.md`, `SESSION_LOG.md`,
+`ARCHITECTURE.md` and `NEXT_SESSION.md` (**513 distinct tokens**), keeping
+those that resolve to a commit, and testing each with
+`git merge-base --is-ancestor <h> HEAD`:
+
+**10 cited hashes are NOT reachable from `HEAD`.** All 10 are pre-rebase
+versions of the 11 unpushed commits. **The mapping, old → new, by
+subject** — recorded now because **`git gc` will prune the orphans and
+this table cannot be rebuilt from hashes afterwards**:
+
+| cited in docs (orphaned) | live hash | subject |
+|---|---|---|
+| `d5431a4` | **`7ebee12`** | the checkbox is an Option, and it is per property |
+| `be41d75` | **`8891754`** | the hundred-and-thirty-fourth filing — shipped in part, and the part is named |
+| `c057682` | **`dbc4aa9`** | tolerance is the tenth property, not a second system |
+| `6db55ae` | **`4f8a3e2`** | the handoff, and the pause written where it will be read |
+| `f251f18` | **`f796fbc`** | the backup figure, measured rather than owed |
+| `d2e614d` | **`c269bcd`** | the hundred-and-thirty-fifth filing — the tenth property, and the pair that stopped being hypothetical |
+| `88fde1e` | **`062a35d`** | the ceilings, measured after the filing rather than forecast |
+| `46731fc` | **`87853b7`** | (bl) is answered, and the handoff now says what to do instead of what to ask |
+| `874197f` | **`2276e52`** | the hundred-and-thirty-sixth filing -- (bl) answered yes, and the four things that yes does not cover |
+| `7031296` | **`5c37c7c`** | "he gave no reason" was a claim, and it has been corrected |
+
+**The two that matter most are in *Shipped* HEADINGS**: `Pass 69.1`'s
+entry is headed `c057682` and `Pass 69.0`'s is headed `d5431a4`. **Both
+now name commits that are not in `main`'s history.**
+
+**The citations were deliberately NOT rewritten in this filing**, and the
+reason is a judgement worth recording rather than a shortcut: the 11
+commits are **still unpushed**, so a second rebase, an amend or a squash
+before push would invalidate any rewrite done now — **a correction that
+can be falsified by the next ordinary operation is not yet worth making.**
+Recording the mapping is the part that is only possible *now*. **The
+rewrite is owed once the branch is pushed and its hashes are final**, and
+this table is what makes it a mechanical edit rather than an
+investigation.
+
+**`python tools/check-commits-filed.py` is RED, and it is a rebase
+artifact, not unfiled work.** It reports **2 code commits in no filing**:
+`dbc4aa9` and `7ebee12` — which are, per the table above, the rebased
+`c057682` and `d5431a4`, **both fully filed under their old hashes** in
+the hundred-and-thirty-fourth and hundred-and-thirty-fifth filings.
+**Nothing was added to `tools/commits-filed-baseline.txt`** — the gate's
+own output forbids it (*"that file is the pre-existing debt this gate was
+written around; extending it would silence exactly what the gate exists to
+catch"*), and silencing would be the wrong repair anyway. **The correct
+repair is the hash rewrite above, which turns the gate green by making the
+record true rather than by making the check quiet.** The gate is
+**correctly** red: the docs really do fail to cite two commits that are in
+`main`.
+
+**Backup currency, measured by `ls` and `git bundle list-heads`, not read
+from any document:**
+`D:\Dev\pdfce-backups\pdfce-20260813-0755.bundle`, **14,241,767 bytes,
+written 2026-08-13 07:49** (newest of 5 bundles in the directory; a
+183,439,240-byte full zip from 2026-08-08 sits beside them). Its
+`refs/heads/main` = **`6db55ae`** — **and `git merge-base --is-ancestor
+6db55ae HEAD` returns FALSE.** **"N commits behind" is the wrong frame for
+this bundle and must not be used**: the bundle's `main` is on the
+**pre-rebase** line. `git rev-list --count HEAD..6db55ae` = **4** (commits
+the bundle has that `HEAD` does not) and `6db55ae..HEAD` = **13** (the
+reverse). **This is not a defect in the bundle** — it means the orphaned
+pre-rebase commits *are* backed up, which is the more useful property
+right now. **What it does mean is that the newest bundle does not contain
+`HEAD`**, so a fresh bundle is owed after this filing commits.
+
+**`python tools/check-ledger-numbers.py`: clean** — no duplicate Pass,
+rule or decision numbers; two informational notes (`Pass 23.3` and
+`Pass 32.0` each filed in two stages) and five filing ordinals with no
+heading (1, 19, 114, 115, 130), all pre-existing.
+
+**Still in flight:**
+- **`Pass 72.0` is UNSTARTED** and is the highest-priority item in *Next
+  up*. Until it ships, **`pdfce-cli` writes redacted files with no absence
+  proof** — that is the live state of the tree, not a scheduling note.
+- `docs/core-api/` is **untracked and being written by two running
+  agents**. Not staged, not read as finished, and its eventual disposition
+  is not decided here.
+- The **GUI pause** is unchanged. Decision 058's footnote does not lift it
+  and `Pass 72.0` explicitly does not.
+
+**For next session:**
+1. **Ship `Pass 72.0`**, or make a deliberate decision not to and record
+   it — the finding is now on the record either way, and *"nobody got to
+   it"* is the outcome the filing exists to prevent.
+2. **After the branch is pushed**, rewrite the 10 stale hash citations
+   from the table above and re-run `check-commits-filed.py`; it should go
+   green without touching the baseline file.
+3. **Take a fresh backup bundle** — the newest does not contain `HEAD`,
+   and its `main` is on the orphaned pre-rebase line.
+
+This is the **hundred-and-thirty-eighth** `SESSION_LOG.md` filing (the
+hundred-and-thirty-seventh confirmed present by direct read before this
+entry was appended).

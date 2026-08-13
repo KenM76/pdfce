@@ -135,7 +135,7 @@ provisional; re-verify before any acceptance criterion leans on them.
 | core | cli | gui | Acrobat | Feature |
 |:----:|:---:|:---:|:-------:|---------|
 | [x] | [x] | [x] | [x] | Mark redactions by text search, named region or pattern. |
-| [x] | [x] | [x] | ◐ | Apply redaction with a runtime-verified true-removal proof. |
+| [x] | [x] | [x] | ◐ | Apply redaction — true removal, forced full rewrite, in all three. **The runtime proof that the removed text is absent from the output bytes runs in the GUI only**; the CLI writes the file before its gate, and that gate checks a different property (the carrier sweep). |
 | [x] | [x] | [ ] | ? | Detect an unencrypted wrapper (§7.6.7) and warn that the visible page is a cover, not the document. **No GUI surface.** |
 
 ### Fonts & rendering
@@ -203,6 +203,7 @@ the model or verb exists and only the named shell is missing. The
 
 | core | cli | gui | Acrobat | Feature |
 |:----:|:---:|:---:|:-------:|---------|
+| [ ] | [ ] | ◐ | ? | **Redaction absence proof in `pdfce-core`** — the three-way verdict (decoded-stream survivor ⇒ refuse; raw-bytes-only ⇒ disclose and require acknowledgement; found nowhere ⇒ *verified*) so every shell gets it. The GUI has its own copy today; core and the CLI have none. |
 | [x] | [x] | [x] | [x] | **Encryption** — RC4 (40–128 bit), AES-128 (`/AESV2`) and AES-256 at `/R` 5 (`/AESV3`) decrypt read-only, including the empty-user-password case every other reader opens silently; CLI (`--open-password`/`--open-password-file`) and GUI (inline canvas prompt) can supply a password for any of the three. All eight Table 22 permission bits shown read-only in Properties > Security, captioned declared-by-the-author and unenforced; a `/Perms` mismatch (possible only at `/R` 5) is reported, never refused on. `/R` 6 is still refused by name — its Algorithm 2.B is unsourced. **Writing an encrypted document is still unimplemented in every configuration.** |
 | [ ] | [ ] | [ ] | ◐ | Re-subset an embedded font down to only the glyphs used — no removal, no visual change, works even where unembedding is refused. |
 | [ ] | [ ] | [ ] | ◐ | Convert text to vector paths — the only one of the font operations that works where unembedding is refused; irreversible, and the text stops being text. |

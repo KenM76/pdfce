@@ -42029,6 +42029,180 @@ in the "still open" list. Full build record: this file's own
 
 ## Next up
 
+### ★★★★★ Pass 72.0 — HIGH PRIORITY — **the redaction TRUE-REMOVAL PROOF has no home in `pdfce-core`: it lives in `crates/pdfce-gui`, the crate decision 058 says may be replaced wholesale — and `pdfce-cli` ALREADY SHIPS WITHOUT IT** — filed 2026-08-13 (hundred-and-thirty-eighth filing) — **UNSTARTED**
+
+> **`R151`'s shape INVERTED.** `R151` is *a core capability with no shell
+> caller*. This is **a safety proof with no core home** — the check that
+> licenses pdfce to use the word *"verified"* about a redaction exists
+> only in one shell, and the other shell writes redacted files to disk
+> without it.
+
+**This is the FIRST INSTANCE of the class of finding decision 058 fixed
+its reading of in advance**, and it arrived before `D:\dev\pdfceGUI` asked
+for anything. 058's rule: *"Anything it DOES need is a place the boundary
+was drawn wrong — a finding about THIS repository, to be recorded as one
+… not quietly accommodated."* This entry is that record.
+
+#### What was measured, and with what command
+
+All figures below are from direct reads of the working tree at the head of
+this filing (`git rev-parse HEAD` = `6c5124c`, 11 commits ahead of
+`origin/main` = `42364db`), not from any prior filing.
+
+| fact | where | how measured |
+|---|---|---|
+| `prepare_redaction_apply` — the whole absence proof — is in the **GUI shell crate** | `crates/pdfce-gui/src/redact_apply.rs:269` | `grep -rn "prepare_redaction_apply" crates/` — 16 hits, **every one of them in `crates/pdfce-gui/`** |
+| `pdfce_core::redact`'s **entire** public surface | `crates/pdfce-core/src/redact.rs` | `grep -n "pub fn \|pub enum \|pub struct "` → `RedactError` (195), `CarrierStatus` (242), `CarrierAction` (256), `RedactionReport` (290), `has_disclosed_residuals` (343), `apply_redactions` (1079), `RedactionMark` (1792), `redaction_marks` (1822), `count_redaction_marks` (1921). **Nine items. No verdict type, no absence-proof entry point.** |
+| core produces the proof's **INPUT** but not the proof | `redact.rs:319` | `RedactionReport::redacted_text`, whose own doc comment reads *"for the absence-proof gate to grep"* — **core names a gate it does not contain** |
+| `apply_redactions` never greps its own output | `redact.rs:1079–1224` | read in full: carrier sweep → container decomposition → `save_full` → `Ok((bytes, report))`. **No read-back of `bytes`.** |
+| the CLI calls `apply_redactions` **directly** | `crates/pdfce-cli/src/main.rs:13472` (`cmd_redact_apply`) | read in full |
+| the CLI **writes the file before any gate runs** | `crates/pdfce-cli/src/main.rs:13505` | `std::fs::write(output, &bytes)` at 13505; the only gate is at **13547**, 42 lines later |
+
+#### The three-way verdict, quoted from the source rather than paraphrased
+
+`crates/pdfce-gui/src/redact_apply.rs` module docs, §3 *"Absence is
+VERIFIED on the actual output bytes, not assumed"*, verbatim table:
+
+| Where the string still occurs | Verdict | Why (source's own words) |
+|---|---|---|
+| in a **decoded stream** of the output | **REFUSE** — write nothing | *"A decoded stream is content a renderer or a text extractor will read back. Its survival is a real leak, not a coincidence, and no acknowledgement checkbox makes it acceptable."* |
+| in the **raw bytes only** (no decoded stream) | **DISCLOSE** as a residual requiring explicit acknowledgement | *"pdfce cannot tell a genuine un-recognised carrier from an unrelated coincidence … Refusing would be a trap the operator cannot act on; claiming removal would be a lie. Naming it is the only honest option."* |
+| nowhere | **verified** | *"This is what licenses §5.1's wording contract to use the word 'verified' at all."* |
+
+**The engineer's reported shape is CORRECT in every particular** and is
+confirmed here rather than relayed. Two details worth carrying that the
+report did not mention, because they are part of what must move:
+
+- **`MIN_VERIFIABLE_LEN = 4`** (`redact_apply.rs:127`). Strings shorter
+  than four characters are excluded from the **raw-byte half only** and
+  **counted** in `AbsenceVerification::strings_too_short_for_raw_check`,
+  never silently skipped. They are still checked against decoded streams,
+  where a match *is* meaningful. **The proof reports its own limit** —
+  that is a property of the proof, not a caveat about it, and it must
+  survive the move.
+- **`AbsenceVerification::is_clean()`** (`redact_apply.rs:219`) is the
+  single predicate that gates the word *"verified"*.
+
+#### ★ THE CORRECTION TO THE DISPATCH: the risk is not prospective, it is REALIZED AT HEAD
+
+The dispatch framed the danger as *"a new shell calling
+`redact::apply_redactions` directly and writing the bytes ships an
+UNVERIFIED redaction and will not know."* **That is not a forecast. It is
+a description of `pdfce-cli` today**, at this commit, in a shipped
+release:
+
+```rust
+// crates/pdfce-cli/src/main.rs:13491
+let (bytes, report) = match redact::apply_redactions(&doc, &SaveOptions::identity()) { … };
+// :13505 — WRITTEN TO DISK HERE, unconditionally
+if let Err(err) = std::fs::write(output, &bytes) { … }
+// :13547 — the only gate, 42 lines AFTER the write
+if report.has_disclosed_residuals() && !acknowledge_residuals { … }
+```
+
+**`--acknowledge-residuals` is a different property and must not be
+mistaken for the missing one.** `has_disclosed_residuals()`
+(`redact.rs:343`) is true when a **carrier** was *present but
+disclosed-not-scrubbed* — the §12.5.6.23 diligence sweep over `/Info`,
+XMP and the detect-and-disclose set. That answers *"did pdfce scrub every
+place text is KNOWN to hide?"* The absence proof answers *"is the removed
+string still IN THE OUTPUT?"* **A file can pass the first and fail the
+second**, and the CLI cannot refuse for a decoded-stream survivor because
+it never looks — the REFUSE row of the table above **has no CLI
+counterpart at all**.
+
+**The exit code is the part that makes this a claim rather than a gap.**
+`redact-apply` exits `SUCCESS` on a file it never verified, having already
+written it. The operator is told the redaction succeeded.
+
+#### The near-miss that makes the core-side gap easy to under-read
+
+`pdfce-core` **does** contain an absence proof — as a **test**:
+`apply_removes_redacted_text_from_the_whole_saved_file`
+(`redact.rs:2183`), which asserts `"SECRET"` survives in neither the raw
+bytes nor any decoded content stream of one synthetic fixture.
+
+**That test is not the missing thing and must not be cited as covering
+it.** It proves *the algorithm works on a fixture the project wrote*. The
+GUI's proof establishes *the removal worked on THIS operator's document*.
+The first is a property of pdfce; the second is a property of the file
+about to be handed to someone. **Only the second is what "verified" means
+to an operator**, and only the second can catch a carrier nobody
+anticipated — which is the entire reason the raw-byte half exists.
+
+#### Why this is urgent rather than tidy
+
+1. **The failure is silent and the output looks correct.** *"Looks
+   correct"* is precisely the property redaction does not sell.
+2. **`CLAUDE.md` rule 3 / `ARCHITECTURE.md` §5 make true removal a
+   load-bearing invariant**, and the engineer's brief carries a hard
+   *do not ship a redaction feature that leaves the removed content
+   recoverable*. **An invariant whose proof lives in a replaceable shell
+   is an invariant with a deletion date.**
+3. **Two shells, one proof, and the proof is in the one that may be
+   deleted.** If `crates/pdfce-gui` is retired per decision 058 and
+   nothing moves first, pdfce's redaction verification goes to **zero
+   shells** in a single directory removal — and the removal would look
+   like a GUI decision.
+4. **`R151` inverted**, worth naming as its own shape: not *core
+   capability, no caller*, but **safety proof, no core home**. Both are
+   the same underlying error — **a thing living at the wrong altitude** —
+   and this direction is the more dangerous one, because a capability
+   with no caller merely wastes work while a proof in the wrong crate
+   silently narrows who is protected by it.
+
+#### Acceptance criteria
+
+1. **The verdict type and the check are in `pdfce-core`.** A public
+   verdict enum (three-way: refuse / disclose-and-acknowledge / verified)
+   and a public entry point that performs the check over the produced
+   bytes. Named and documented per rule 10 (`D:\dev\rag\rust\rust-style-guide-and-api-guidelines.md`),
+   with the doc comment carrying the whole contract — **decision 058's
+   external-consumer clause applies directly: an external shell author
+   reads the doc comment and nothing else in this repo.**
+2. **`MIN_VERIFIABLE_LEN` and the too-short count move with it.** The
+   proof must keep reporting its own limit; a proof that silently drops
+   short strings is a different, weaker proof wearing the same name.
+3. **A refusal is a REFUSAL, and a test proves it.** A fixture in which a
+   redacted string survives in a **decoded stream** must make the core
+   entry point return the refuse verdict. **A test that only exercises
+   the clean path does not discharge this criterion** — the refuse case
+   is the one that has never been proven end-to-end outside the GUI.
+4. **`pdfce-cli` exercises it headlessly, and REFUSES BEFORE WRITING.**
+   The write at `main.rs:13505` moves after the check. A decoded-stream
+   survivor must produce a non-zero exit and **no output file**. The
+   existing `--acknowledge-residuals` flag keeps its current meaning
+   (carrier sweep) and the new disclosure gets its own — **do not overload
+   one flag with two different safety properties.**
+5. **The GUI is REWIRED, not duplicated.** `prepare_redaction_apply` keeps
+   the session materialisation, the modal, the disclosure and the
+   acknowledgement UI, and calls the core check. **Two copies of a safety
+   check is worse than one in the wrong place**, because they diverge
+   silently and each reviewer assumes the other is authoritative.
+6. **`cargo tree -p pdfce-core` clean** (rule 2) — the check is pure byte
+   and stream inspection and must not pull anything toward a GUI
+   dependency.
+7. **`FEATURES.md`'s redaction row becomes true again** in the shipping
+   filing (see the correction filed against it today — the row currently
+   claims core and cli have a runtime-verified proof and they do not).
+
+#### What this Pass does NOT do
+
+- **It does not change the removal.** `apply_redactions`' surgery,
+  carrier sweep, container decomposition and forced full rewrite (R35) are
+  untouched. This is about proving the result, not producing it.
+- **It does not retire `crates/pdfce-gui`** and must not be read as
+  preparation for doing so. Decision 058 is explicit that no such decision
+  has been made.
+- **It does not lift the GUI pause.** Criterion 5 rewires an existing GUI
+  call site to a moved function; it adds no GUI surface. **If even that is
+  judged to fall under the pause, ship criteria 1–4 and 6 and leave 5
+  owed** — but then the duplication warning in criterion 5 becomes a live
+  debt and must be filed as one, not forgotten.
+
+**Terminology (rule 15):** nothing in this Pass touches **ce dimensions**
+or **pdf dimensions**. It is redaction only.
+
 ### Pass 69.0 — ★★ OPERATOR REQUEST 2026-08-12 — **ce-dimension STYLE + TOLERANCE, with a group default and a per-ce-dimension override checkbox, at SolidWorks option breadth** — filed 2026-08-12 (hundred-and-twenty-fifth filing) — **STATUS 2026-08-13: SPLIT AND PARTLY SHIPPED. The heading's original "UNSTARTED" is now FALSE and is struck by the banner below.**
 
 > **★ AMENDMENT, 2026-08-13 (hundred-and-thirty-fourth filing), `d5431a4`
@@ -48386,6 +48560,37 @@ Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
 
+- **★ Boundary debt, filed 2026-08-13 (hundred-and-thirty-eighth filing)
+  — imposition's MUTUAL-EXCLUSION GUARD is CLI-LOCAL, so `pdfce-print`
+  will let a second shell compose poster tiles and then throw them
+  away.** **Same SHAPE as today's redaction finding — a guard living
+  above the crate that needs it — but it costs WASTED WORK, not a safety
+  property, which is why it is filed here and not as a Pass.**
+  **Measured:** the guard is at `crates/pdfce-cli/src/main.rs:8565`
+  (*"The three job-shape modes are mutually exclusive"*), refusing at
+  `:8591` with *"cannot be combined — each one changes the shape of the
+  job, and no two of them compose. Pick one."* `pdfce-print` exposes
+  `plan_n_up` (`imposition.rs:644`), `plan_booklet` (`:1145`) and
+  `plan_poster` (`:1435`) as three independent public entry points with
+  **nothing between them** — `grep -rn "booklet\|poster\|n_up"
+  crates/pdfce-print/src/*.rs` finds no guard, no combined-spec type and
+  no refusal. The guard's own comment records that this is not
+  hypothetical: *"Before this guard existed the three branches ran in
+  sequence and the last one to fire silently overwrote the others' work:
+  `--poster --booklet` composed nine poster tiles, threw them away, and
+  printed a booklet. The operator got a plausible job that was not the
+  one they asked for, with no indication anything had been discarded."*
+  **That regression is re-armed for every shell that is not
+  `pdfce-cli`** — including `D:\dev\pdfceGUI` if it composes a print job
+  itself. **The fix shape, when it is scoped:** the mutual exclusion is a
+  property of the *job spec*, not of argument parsing, so it belongs in
+  `pdfce-print` — either as a constructor that cannot represent two modes
+  at once (best: unrepresentable beats guarded) or as a refusal on the
+  spec. The CLI then reports the refusal rather than deriving it.
+  **Deliberately NOT a Pass:** no invariant is at risk and no output is
+  wrong-but-plausible in a way that survives to a third party — the
+  operator sees a booklet and can tell it is a booklet. Promote it to a
+  Pass if a second shell lands before it is fixed.
 - **Tooling debt, not a feature — `tools/check-passes-filed.py` carries
   the identical latent shallow-clone flaw `check-commits-filed.py` had
   (fixed `cd86adc`, hundred-and-eighth filing): it walks `git log` the

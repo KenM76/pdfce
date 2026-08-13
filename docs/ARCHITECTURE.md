@@ -19544,3 +19544,103 @@ fmt, clippy or `cargo tree` figure is claimed for it**, because none was
 run *for* it. Full record: `ROADMAP.md`'s **GUI pause** block at the head
 of *In progress*, and `SESSION_LOG.md`'s hundred-and-thirty-seventh
 filing.
+
+#### ★★★ FOOTNOTE to decision 058, added 2026-08-13 (hundred-and-thirty-eighth filing) — THE FIRST INSTANCE, found before `D:\dev\pdfceGUI` asked for anything: the redaction TRUE-REMOVAL PROOF has no home in `pdfce-core`
+
+**Filed as a footnote rather than as decision 059, deliberately.** 058
+predicted this class of finding and **fixed the reading of it in
+advance**; a worked first instance attached to the prediction is worth
+more than a separate record that a reader could land on without the
+prediction. **No decision number is minted by this footnote** — decision
+ceiling stays **058**, next free **059**. **No standing rule is minted** —
+**R191** stands, **R192** remains an unruled proposal. **One Pass is
+minted, in `ROADMAP.md` only: `Pass 72.0`** (family ceiling 71 → 72). **No
+operator question is minted** — ceiling stays **`(bl)`**, next free
+**`(bm)`**.
+
+**What was found**, verified by direct read of the working tree at
+`6c5124c` (not relayed from the dispatch that reported it):
+
+`prepare_redaction_apply` — the check that greps a redaction's **actual
+output bytes** for the strings it claims to have removed, and the only
+thing that licenses pdfce to use the word *"verified"* — is at
+**`crates/pdfce-gui/src/redact_apply.rs:269`**. `grep -rn
+"prepare_redaction_apply" crates/` returns 16 hits and **every one is in
+`crates/pdfce-gui/`**. `pdfce_core::redact`'s public surface is nine
+items (`grep -n "pub fn \|pub enum \|pub struct " crates/pdfce-core/src/redact.rs`)
+and **none of them is the proof**. Core produces the proof's *input* —
+`RedactionReport::redacted_text`, whose doc comment at `redact.rs:319`
+says it exists *"for the absence-proof gate to grep"* — so **core names a
+gate it does not contain.**
+
+**Why it belongs on 058 rather than anywhere else.** 058 says: *"Anything
+it DOES need is a place the boundary was drawn wrong — a finding about
+THIS repository, to be recorded as one … not quietly accommodated."* This
+is that, one step earlier than 058 imagined it: **the boundary error was
+found by mapping `pdfce-core`'s public API for the external project, not
+by the external project hitting a wall.** 058 argued that an independent
+implementation proves **SUFFICIENCY** where `cargo tree` proves only
+**NECESSITY**. **The sufficiency test has now returned its first result
+and the result is NEGATIVE** — a second shell cannot obtain pdfce's
+redaction verification from `pdfce-core`, because it is not there. That is
+exactly the failure `cargo tree` is structurally blind to: `pdfce-core`'s
+dependency graph is clean, and its surface is still insufficient.
+
+**The generalisation, which is the part worth carrying to other
+projects.** 058 already records one — *an invariant defended for one
+future scenario pays out in a different one.* This footnote adds the
+inverse, and it is the sharper of the two: **a crate boundary can be
+perfectly clean in the dependency graph and still have the wrong things on
+each side of it.** `cargo tree` asks *what does core depend on?* Nobody was
+asking *what does core PROVE?* A safety property implemented in a shell is
+invisible to every mechanical boundary check this project runs, and it
+stays invisible for exactly as long as there is only one shell.
+
+**★ The severity is higher than 058's framing would suggest, because the
+second shell already exists and already ships without the proof.**
+`pdfce-cli`'s `cmd_redact_apply` (`crates/pdfce-cli/src/main.rs:13472`)
+calls `redact::apply_redactions` directly, **writes the file at
+`:13505`**, and reaches its only gate at `:13547` — 42 lines after the
+bytes are on disk. That gate reads `report.has_disclosed_residuals()`,
+which is core's §12.5.6.23 **carrier sweep** (*"did pdfce scrub every
+place text is KNOWN to hide?"*) — **a different question** from the
+absence proof (*"is the removed string still in the output?"*). The GUI's
+**REFUSE** verdict, for a redacted string surviving in a **decoded
+stream**, **has no CLI counterpart**, because the CLI never looks. So the
+finding is not *"a future shell might ship an unverified redaction"*; it
+is *"a shipped shell does, at HEAD, exiting `SUCCESS`."*
+
+**One near-miss, recorded so it is not mistaken for coverage.**
+`pdfce-core` does contain an absence proof — as the test
+`apply_removes_redacted_text_from_the_whole_saved_file`
+(`crates/pdfce-core/src/redact.rs:2183`). It proves *the algorithm works
+on a fixture pdfce wrote*. The GUI's check proves *the removal worked on
+the operator's document*. **Only the second is what "verified" means to
+the person receiving the file**, and only the second can catch a carrier
+nobody anticipated. A test is not a runtime property.
+
+**Relation to §5 and to `R151`.** §5 names true removal as the one
+deliberate exception to round-trip/minimal-diff — the place pdfce must
+*really* destroy content. **An invariant whose proof lives in a crate
+decision 058 says may be replaced wholesale is an invariant with a
+deletion date**, and retiring `crates/pdfce-gui` would take pdfce's
+redaction verification to **zero shells** in one directory removal, in a
+change that would read as a GUI decision. Structurally this is **`R151`
+inverted**: `R151` is *a core capability with no shell caller*; this is *a
+safety proof with no core home*. Both are the same underlying error — **a
+thing living at the wrong altitude** — and this direction is the worse
+one, because a capability with no caller merely wastes work, while a proof
+in the wrong crate silently narrows who is protected by it.
+
+**No boundary has MOVED yet.** The remedy is scoped as **`Pass 72.0`**
+(*Next up*, high priority) and is not performed by this filing. **When it
+ships it will move a boundary, and that move earns its own §12 entry** —
+this footnote records the finding, not the fix. **Body sections updated in
+the same filing: none** — §3's invariant statement and §5's true-removal
+exception both remain accurate as written; **what changed is that §5's
+guarantee is now known to be enforced in only one of two shells**, and
+that is a `ROADMAP.md` fact until the Pass lands. **No code changed, no
+dependency was added, no `cargo-about` regeneration is owed, and no test,
+fmt, clippy or `cargo tree` figure is claimed** — none was run *for* this
+filing. Full record: `ROADMAP.md`'s **`Pass 72.0`** entry at the head of
+*Next up*, and `SESSION_LOG.md`'s hundred-and-thirty-eighth filing.
