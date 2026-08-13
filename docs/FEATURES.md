@@ -272,8 +272,13 @@ Scope decisions already taken, from pdfce's own records.
   half but not the XFA half, and a one-sided add makes two viewers
   disagree on field count. Reading and filling is planned; creating is
   not.
-- **Any network call without explicit, disclosed opt-in** — enforced by
-  a fail-closed CI gate. Rules out telemetry and silent update checks.
+- **Telemetry, analytics, crash reporting, licence callback, or any
+  silent phone-home** — off by design; anything network-touching is
+  opt-in, off by default and disclosed. The engine (`pdfce-core`,
+  `pdfce-render`) additionally **cannot** contain a network client, and
+  a fail-closed CI gate enforces that half. Operator-initiated
+  downloads in the shells (models, updates, add-ins) are **permitted as
+  of 2026-08-13 and none are built** (`ROADMAP.md` `R12`, decision 061).
 - **Executing embedded JavaScript** — a sandboxed engine is prohibited
   by standing rule. Recognised built-ins are reimplemented natively
   instead.

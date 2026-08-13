@@ -43724,6 +43724,22 @@ top-of-*Shipped*, item 4.
    not permission** — **and as of 2026-08-13 the permission exists
    separately, which is precisely what makes the enforcement useful
    rather than moot.**
+   > **★ AMENDED 2026-08-13 (hundred-and-forty-fourth filing, decision
+   > 061) — A FETCH ROUTE IS NOW PERMITTED, AND THE `af5580e` WITHDRAWAL
+   > WAS MADE UNDER A READING OF `R12` THAT NO LONGER HOLDS.** `R12` is
+   > narrowed to the engine only, so a downloader may live in the
+   > shells. **This does not supersede the resolver above** — a named
+   > path, then `models/<engine>` beside the executable, then user data
+   > remains the lookup order, and **fetch fills that first-party
+   > directory rather than becoming a fourth lookup step.** The
+   > downloader's shape is fixed by decision 061: the sibling crate
+   > **`pdfce-fetch`** (pinned URL + SHA-256, **not built**), depended on
+   > **optionally** by each shell, **never** by `pdfce-core`. See the
+   > *Backlog* entry *"`pdfce-fetch`: THE ONE FETCH PRIMITIVE"* for the
+   > full constraint table. **Note the second-order effect the operator
+   > raised earlier and which this answers more completely than the
+   > packaging argument did:** with a downloader permitted, the weights
+   > need **neither a git commit nor bundling**.
 3. **The review surface (rule 4).** OCR output is an inference on **every
    word**. The needs-review set must be visible and rejectable before it
    becomes document state, and **the uncertainty must be STATED where the
@@ -49635,6 +49651,101 @@ Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
 
+- **★★★ NETWORK, filed 2026-08-13 (hundred-and-forty-fourth filing) —
+  `pdfce-fetch`: THE ONE FETCH PRIMITIVE, IN A SIBLING CRATE, STRIPPABLE
+  FROM BOTH SHELLS. Nothing here is built; the crate does not exist.**
+  Scoped by **decision 061** on two consecutive operator instructions —
+  the first permitting *"download update or download addin capability"*,
+  the second binding it: *"and if we add these they should be modular in
+  the same ways as out other features. if someone doesn't include the
+  crate in the package then that removes the feature."*
+
+  **The crate shape, which is the binding constraint on any Pass that
+  scopes out of this bucket:**
+
+  | property | value |
+  |---|---|
+  | working name | **`pdfce-fetch`** (engineer may rename on creation) |
+  | scope | **pinned-URL download + SHA-256 verification, and nothing else** |
+  | depended on by | `pdfce-cli` and `pdfce-gui`, **optionally**, each shell owning its own default-ON feature |
+  | **never** depended on by | **`pdfce-core`, `pdfce-render` — under any future decision.** This is what keeps `R12`'s enforced half checkable by `cargo tree` and the wasm32 fork reachable |
+  | default | **ON** (convention rule 1 — a capability that vanishes from a default build is a regression wearing a feature flag) |
+  | when stripped | **REFUSES BY NAME** (rule 2 / `R27`) — *"fetching is not compiled into this build"*, never a silent no-op and **never *"download failed"***, which would send the operator hunting a network fault that does not exist |
+  | dependency form | **`optional = true`** (rule 3) — disabling **removes the code**, which is the operator's own words |
+  | CI | **`--no-default-features` build** (rule 4), so the `cfg` cannot rot |
+  | attribution | **automatic** — `THIRD_PARTY_LICENSES.md` is generated from the shipping graph, so a build without the feature drops the HTTP stack's attribution with it |
+
+  **Why a sibling crate and not core:** `R12`'s narrowing makes
+  `pdfce-core`/`pdfce-render` network-free **permanently**, so a fetch
+  feature in core could never be switched on — and two shells each
+  implementing a pinned URL, a hash check and a failure path is exactly
+  the duplication the GUI–core split exists to prevent. **The precedent
+  is exact:** `crates/pdfce-print/Cargo.toml`'s description reads
+  *"Platform code, shared by both shells… Deliberately NOT in pdfce-core
+  or pdfce-render, which must stay platform-free."* **This crate is that
+  sentence with `network` in place of `platform`.**
+
+  **Three consumers, in likely order:**
+  1. **OCR model fetch-and-verify** — the downloader withdrawn at
+     `af5580e` under the *over-broad* reading of `R12`, now unblocked.
+     Composes with `ocr::models`' existing resolver rather than
+     replacing it: a named path, then `models/<engine>` beside the
+     executable, then user data — **fetch fills that first-party
+     directory, it does not become a fourth lookup step.** Per-engine
+     directories stay (different weight licences).
+  2. **Update download** — bounded by `R13`/`R14`; see the ruling item
+     below, which must land first.
+  3. **Add-in download** — **BLOCKED on the `R13` ruling below.**
+
+  **★ THIS IS THE FIRST STRIPPABLE CAPABILITY THAT DOES NOT LIVE IN
+  `pdfce-core`, and the convention does not describe that shape.** Both
+  existing ones (`jpx`, `ocrs`) are core features **forwarded outward**
+  to the shells; this one has nowhere to sit in core, so each shell owns
+  its own feature and there is nothing to forward. **All four rules
+  apply unchanged in substance; none of their wording admits this
+  shape.**
+
+  **OWED, and it is a CODE edit this librarian deliberately did not
+  make:** extend the strippable-capability convention text in
+  **`crates/pdfce-core/Cargo.toml`'s `[features]` header** to admit
+  shell-only strippable capabilities — stating that the feature may live
+  in a shell rather than in core, that the "dependency" being removed
+  may be a **workspace sibling crate**, and that where there is no core
+  feature there is nothing to forward. **Engineer's edit.** Leaving the
+  next person to infer the shape from two examples that both contradict
+  it is how a convention rots.
+
+  **★ CROSS-REFERENCE, not a second filing: the `README.md` privacy-copy
+  obligation belongs to this bucket's first consumer.** `README.md`'s
+  *"Privacy, platform and signing"* block tells users, in the second
+  person, that *"pdfce does not use the network. It contains no HTTP
+  client and no TLS stack — you can confirm this yourself in
+  `THIRD_PARTY_LICENSES.md`."* **True at `HEAD`, must NOT be softened
+  now** (hedging would make the README less true than the software), and
+  **must be rewritten in the same Pass that first links a network client
+  into a shell.** The obligation is filed once, on the existing README
+  privacy-copy item under *packaging* — recorded here only so nobody
+  scoping `pdfce-fetch` has to discover it. **The replacement is a
+  reframe, not a retraction**: decision 061 §4 keeps the whole old claim
+  as a **build configuration**, verifiable by the same command with the
+  attribution file agreeing.
+
+- **★★ RULING OWED, filed 2026-08-13 (hundred-and-forty-fourth filing) —
+  `R13` CLAUSE 5 (*"never executes anything it fetched"*) IS A DIRECT
+  COLLISION WITH *"download addin capability"*, AND NO ADD-IN PASS CAN
+  BE SCOPED UNTIL IT IS RULED ON.** An add-in **is executed code**. The
+  operator narrowed the **network** rule and said nothing about the
+  **execution** rule; narrowing one clause is not consent to widen its
+  neighbour, so this is filed rather than assumed. Two adjacent clauses
+  are **unresolved** on the same boundary — *never replaces its own
+  binary* and *never launches an installer*: a download that hands the
+  operator a folder is compatible with both, one that swaps the running
+  exe is compatible with neither. **Two `R13` clauses survive intact and
+  are NOT in question** (never downloads a file the user did not ask
+  for; never self-updates) — recorded so the ruling is scoped to three
+  clauses, not five. Full table: decision **061 §7**. This is an
+  operator ruling, not an engineering one.
+
 - **★★ TOOLING, filed 2026-08-13 (hundred-and-forty-third filing) —
   RETROFIT THE `R192` BLIND-SPOT STATEMENTS ONTO THE FOUR GATES, AND ONE
   OF THE THREE MEASURED BLIND SPOTS IS LIVE RIGHT NOW.** `R192` (minted
@@ -52591,6 +52702,18 @@ nothing gets forgotten, not as a commitment to build in this order.
     link clicks go to the OS browser, manual updates + keep-user-state
     folder, Windows-x64-only support statement, unsigned-binary
     SmartScreen disclosure + checksum verification pointer.
+    - **★ OBLIGATION ADDED 2026-08-13 (decision 061, hundred-and-forty-
+      fourth filing) — the "no network use" half is TRUE AT HEAD AND
+      BECOMES FALSE ON THE FIRST DOWNLOADER.** `README.md`'s *"Privacy,
+      platform and signing"* block states *"pdfce does not use the
+      network. It contains no HTTP client and no TLS stack — you can
+      confirm this yourself in `THIRD_PARTY_LICENSES.md`."* **Do NOT
+      pre-emptively soften it** — that would make it less true than it
+      is, and the claim is accurate today. **It must be rewritten in the
+      same Pass that first links a network client into a shell**, per
+      the claim-bearing-copy rule. `ARCHITECTURE.md` §1.1 clause 3
+      states this obligation as filed here; this bullet is what makes
+      that true.
   - Re-read the current Scoop/WinGet schema at the moment a manifest is
     actually written — manifest schemas drift (decision 003 §5.4).
 - **CLI batch operations (`pdfce-cli`)** — a subcommand per feature
@@ -52853,7 +52976,52 @@ nothing gets forgotten, not as a commitment to build in this order.
 
 ## Open operator questions (as of 2026-08-02 — answer any, all default to the stated fallback if not answered)
 
-**NEW this filing (hundred-and-twenty-sixth filing, 2026-08-12) — filed
+**NEW this filing (hundred-and-forty-fourth filing, 2026-08-13) — filed
+OPEN, not yet answered. Operator-question ceiling moves `(bm)` → `(bn)`,
+next free `(bo)`:**
+
+- **(bn) Is an automatic update *CHECK AT STARTUP* permitted, or does it
+  stay opt-in and off by default?** Filed 2026-08-13 with **decision
+  061**, which narrowed `R12` on your correction — *"it is fine to have
+  download update or download addin capability."*
+
+  **What the correction settled, and what it did not.** *"Can download an
+  update when asked"* and *"phones home on every launch"* are **different
+  acts**, and only the first was permitted. A **download you request** is
+  the clause you narrowed (§1.1 clause 3 — what the software needs to RUN
+  versus what you can ASK it to fetch). A **check that runs by itself at
+  startup** transmits a request **you did not make at the moment it
+  happens**, which is §1.1 clause 2 — the **privacy** clause — and you
+  said nothing about that one. **The engineer explicitly refused to read
+  permission into your silence**, and that refusal is recorded in decision
+  061 rather than merely acted on: an operator narrowing one clause is not
+  consent to widen a neighbouring one.
+
+  **What it would actually cost, so this is a real question and not a
+  formality.** An update check is the one network call that happens
+  **without a person present** — it fires on every launch, on every
+  machine, whether or not anyone wants an update — and it is therefore the
+  only permitted fetch that can carry a usage signal (a request per
+  launch, from an IP, at a time) **whether or not anyone intends it to.**
+  That is precisely what the privacy clause exists to rule out. Against
+  that: a portable app with no installer has **no other way to tell you a
+  release exists**, which is exactly why `R14` makes update discovery
+  external (package-manager manifests, manual replace-the-folder) rather
+  than absent.
+
+  *Default if unanswered:* **off by default, opt-in, user-initiated per
+  check, display-only, no identifiers, kill-switchable, disclosed in
+  decision 003 §6.3's exact terms** — i.e. `R14` and §1.1's existing
+  opt-in clause continue to apply in full, unchanged. Nothing is blocked
+  by leaving this unanswered; no update-check code exists.
+
+  **Note for the record:** the parallel filing of decision 061 recorded
+  this as *"raised to the operator by the engineer directly"* rather than
+  parked here. Both are true — it **was** raised in conversation. It is
+  also filed here, because a question raised in a conversation is lost at
+  the end of it and a question in this list is not.
+
+**NEW in the hundred-and-twenty-sixth filing (2026-08-12) — filed
 OPEN, not yet answered. Operator-question ceiling moves (bk) → (bl),
 next free (bm):**
 
@@ -54671,15 +54839,72 @@ not a judgment call:**
     amending 003, naming the crate and the feature it serves.
     `pdfce-core` and `pdfce-render` may never contain network code
     under any future decision.
+
+    **★★ NARROWED 2026-08-13 (decision 061, hundred-and-forty-fourth
+    filing; CI change `197f0a5`) — THE SUBJECT SET SHRINKS FROM FOUR
+    CRATES TO TWO, ON THE OPERATOR'S CORRECTION.** Verbatim: *"the no
+    network rule was made too broad. all I meant by that is the software
+    itself didn't rely on network technology to function which would
+    bloat it and slow things down the way it does for other pdf
+    software. it is fine to have download update or download addin
+    capability."* **The line that replaces the old one is his: what the
+    software needs to RUN versus what the operator can ASK it to
+    fetch.**
+    - **ENFORCED, permanently — `pdfce-core`, `pdfce-render`.** The
+      sentence above (*"may never contain network code under any future
+      decision"*) is **unchanged and remains the strongest clause in the
+      rule.** Justified twice over: the §1.1 privacy posture, **and** the
+      wasm32 fork, where no native HTTP stack exists.
+    - **ALLOWED — `pdfce-cli`, `pdfce-gui`, `tools/`.**
+      Operator-initiated fetching only: model downloads, updates,
+      add-ins.
+    - **The CI job's NAME changed with its scope**, because the old one
+      (*"verify no HTTP/TLS client in any pdfce crate"*) asserted the
+      over-broad claim to anyone reading a green run. It now reads
+      *"verify the ENGINE needs no network (core + render)."* **A green
+      run is evidence about the engine, not about pdfce as a whole.**
+    - **Narrowed, not removed** — and the decision-record requirement
+      above still governs which crate and which feature.
+    - **★ The old absolute is not lost.** *"No HTTP client exists in
+      this binary, verifiable by `cargo tree`"* becomes a **build
+      configuration** rather than a project-wide constraint, because the
+      capability is strippable (decision 061 §3). **Nothing was given
+      up; an option was gained.**
   - **R13 — pdfce never self-updates.** Never downloads a file the
     user did not ask for, never replaces its own binary, never
     executes anything it fetched, never launches an installer.
     Permanent.
+
+    **★ FLAGGED 2026-08-13 (decision 061 §7, hundred-and-forty-fourth
+    filing) — NOT AMENDED, BECAUSE THE RULING IS NOT THIS LIBRARIAN'S TO
+    MAKE.** `R12`'s narrowing permits *"download update or download
+    addin capability"*, and this rule's five clauses do not all survive
+    that unchanged. **Clauses 1 and 2 do** — the permission is for
+    *operator-initiated* fetching, so *"a file the user did not ask
+    for"* is untouched, and *downloading* an update is not
+    *self-updating*. **Clauses 3 and 4 (never replaces its own binary,
+    never launches an installer) are UNRESOLVED**: a download that hands
+    the operator a folder is compatible, one that swaps the running exe
+    is not. **Clause 5 — *never executes anything it fetched* — is a
+    DIRECT COLLISION**, because an **add-in is executed code**, and no
+    add-in Pass can be scoped until it is ruled on. Filed under
+    *Backlog*; the operator narrowed the **network** rule and said
+    nothing about the **execution** rule, and narrowing one clause is
+    not consent to widen its neighbour.
   - **R14 — Update discovery is external by default.** Manual
     replace-the-folder plus package-manager manifests are the shipping
     answer. Any in-app checker obeys decision 003 §6.4 in full —
     opt-in, off by default, user-initiated per check, display-only, no
     identifiers, kill-switchable, disclosed in §6.3's exact terms.
+
+    **★ 2026-08-13 (decision 061) — WEAKENED BUT NOT CONTRADICTED, and
+    the distinction is worth stating so nobody reads the narrowing as
+    retiring this rule.** `R12`'s narrowing permits a *download*; this
+    rule was already written to admit an in-app checker under decision
+    003 §6.4's full conditions, so nothing here is overturned. **The
+    §6.4 conditions are NOT relaxed** — *"can download an update when
+    asked"* and *"phones home at every launch"* are different things,
+    and only the first was permitted.
   - **R15 — The distribution folder is partitioned.** Replaceable
     payload and user state are separate; user state never sits loose
     among the binaries; the documented update procedure names exactly
@@ -55087,6 +55312,20 @@ not a judgment call:**
     can reference `/URI` // `/SubmitForm` // `/ImportData` // `/Launch`.
     Recognition is pure data modeling — there is no JS action dispatcher
     in pdfce and none is added.
+
+    **★ NOTE ADDED 2026-08-13 (decision 061 addendum) — `R53`/`R54` ARE
+    UNCHANGED AND NOTHING BECOMES REACHABLE; what changed is that the
+    `R12` half of the citation above is now a WEAKER backstop for the
+    SHELLS.** `R12` was narrowed to `pdfce-core`/`pdfce-render` only, so a
+    shell **may** link an HTTP client, and the claim *"even if a trigger
+    fired, there is no network stack for `/URI` or `/SubmitForm` to use"*
+    no longer holds workspace-wide. **The actual enforcement was never
+    `R12`**: it is `R53` (no JS interpreter exists in pdfce) and `R54`
+    (no trigger event ever fires), both untouched, and **no action is
+    owed.** Recorded because **a defence-in-depth layer that quietly
+    became a single layer is exactly the thing worth knowing before
+    someone leans on it** — a future session scoping JS or forms work
+    must not cite the `R12` backstop as though it were still structural.
   - **R55 (was R-JS-3) — JS carriers are byte-preserved; never stripped,
     never silently baked.** All `/JS` strings/streams, all `/AA` dicts,
     the `/CO` calculation-order array, the `/Names /JavaScript` name tree,
@@ -62702,6 +62941,162 @@ it.** Same discipline as hard rule 8's amendment and the XFA item's
 `★ ANSWERED` footer: **a question that has been settled must be settled
 where it will be asked again**, or the finding never propagates to the
 place that needs it.
+
+
+### PROPOSAL (2026-08-13, hundred-and-forty-fourth filing) — claiming `R194`, **NOT MINTED, NOT IN FORCE, AMENDS NOTHING**
+
+**Status: a librarian PROPOSAL. `R194` is CLAIMED by this text and is not
+available; the minted ceiling stays `R192`.** The dispatching engineer
+asked for exactly this — *"Propose, do not mint, and claim `R194` if you
+propose"* — and the form follows the `R159`/`R164`/`R165`/`R192`/`R193`
+precedent: proposal text first, ruling appended later, original text left
+unedited.
+
+**Note the number.** `R193` is **claimed** by the declined-but-intact
+proposal above and `tools/check-ledger-numbers.py` still reports it as
+free — the live hazard filed in the hundred-and-forty-third filing. The
+gate was **not** trusted; `R194` was taken by reading the section.
+
+#### Why it is proposed: the project has now recorded the same shape THREE times, which is this section's own promotion bar
+
+> **PROPOSED `R194` — A RULE'S TEXT QUANTIFIES; ITS REASON DOES NOT
+> NECESSARILY QUANTIFY THE SAME WAY. When a standing rule, invariant or
+> project rule is written or amended with an absolute — *every*, *any*,
+> *no*, *never*, *all* — the rule states the subject set it quantifies
+> over EXTENSIONALLY (the crates, the operations, the gestures), and the
+> author checks each named member against the rule's own stated reason.
+> A member the reason does not reach is a member the text should not
+> cover. An absolute with no enumerated subject set is asserting that
+> its reason covers everything, which has been false every time it has
+> been checked.**
+>
+> **This does NOT forbid absolutes.** It obliges the enumeration and the
+> comparison. Healthy absolutes pass it (see the counter-instances
+> below) and are strengthened by having passed.
+
+#### The three instances, all in this project, all the same anatomy
+
+**The text quantified over a wider set than the reason justified, and
+nothing anywhere compared the two.**
+
+| # | rule | the absolute, as written | what the reason actually covered | how far it drifted before someone noticed | found by |
+|---|---|---|---|---|---|
+| 1 | **`R58`** | *"**every** removal/scrub operation forces a full rewrite"* | removals whose contract is **confidentiality** (§5.9's own stated reason: an incremental save leaves removed content recoverable) | **nine** shipped operations measured outside its literal text; **still unfixed**, parked at open question `(v)` since 2026-08-04 | an agent (decision 022 §5.4) |
+| 2 | **project rule 4** (*fuzzy, never sneaky*) | *"**every** algorithmic suggestion is a reviewable hint the operator accepts or overrides"* | things pdfce **GUESSED** — not direct manipulations the operator performed and can see | narrowed **twice**: decision 024 §4.4 (confirm step off direct manipulation), decision 059 (provisional *rendering* off inferences) | **the operator**, both times |
+| 3 | **`R12`** | *"**no** HTTP/TLS/socket client crate may enter **any** pdfce crate"* | the **engine** must not *require* a network to run — an architecture/performance promise about not being a web app | four crates enforced where two were meant; **withdrew a piece of finished work** (`af5580e`) that the correct scope permitted | **the operator**, 2026-08-13 |
+
+#### ★ THE SHARPEST INSTANCE, because the correction was already written down NEXT TO the defect
+
+**`R13` — three lines below `R12`, in the same decision record — reads
+*"never downloads a file the user did not ask for."*** That
+**user-asked-for** qualifier **is** the run-versus-ask line the operator
+drew on 2026-08-13. **Decision 003 encoded two different answers to the
+same question, adjacent, for six weeks**, and the over-broad one was the
+one with a fail-closed CI job behind it.
+
+**Nothing flagged it, and the reason is the argument for this rule.**
+Each rule is completely coherent read alone. **The contradiction is a
+property of the PAIR**, and review is an operation on one claim at a
+time — the same asymmetry hard rule 10 was written about for *figures*,
+appearing here for *scopes*. Reading `R12` carefully would never have
+found this. **Only enumerating `R12`'s subject set and asking whether the
+reason reached every member would have.**
+
+#### ★★ WHY THE OBVIOUS WORDING WAS TESTED AND REJECTED — *"record the rule's motivating WHY"* does not work
+
+The wording first suggested when this was dispatched was *"record a
+rule's motivating WHY alongside its text"*, on the reasoning that §1.1
+recorded a posture without its reason (bloat/startup cost) and that the
+missing reason is what let it drift. **That reasoning is right about
+`R12` and is defeated by the other instances**, both of which come from
+the project's own record rather than from argument:
+
+- **`MAX_PIXMAP_EDGE` recorded its why, and the why WAS the defect.**
+  *"Beyond any plausible viewing zoom at Pass 1"* is a written-down
+  motivation that was wrong. Writing it down did not help; it is what
+  made the number look justified.
+- **`R58` has its why written down one section away from its text**
+  (`ARCHITECTURE.md` §5.9, the confidentiality argument) — **and the text
+  is over-broad anyway**, for nine operations, for over a week, with the
+  reason sitting right there.
+
+**So recording a reason is neither sufficient nor, on this evidence,
+effective.** The reason being *absent* is not the mechanism; the reason
+and the text never being *compared* is. **This proposal is worded around
+the comparison** — enumerate, then check each member — because that is
+the step nobody performs unless a rule asks for it, and it is the step
+that would have caught all three.
+
+#### `MAX_PIXMAP_EDGE` is deliberately EXCLUDED from the instance set
+
+It was nominated as the third case. It is **not** an instance of this
+shape: its defect was a **wrong justification**, not a **wrong
+quantifier**. That is the `R193` draft's shape, and it stays there.
+**Merging them would produce exactly the thin abstraction `RULING 3`
+rejected** when it refused to merge `R192` and `R193` — *the set the
+thing reasons over is not the set it acts on* — which can be cited for
+anything and therefore constrains nothing. **Swapping `MAX_PIXMAP_EDGE`
+out for `R58` did not weaken the count; `R58` is the stronger instance.**
+
+#### ★ COUNTER-INSTANCES, which are what make this discriminating rather than a ban on the word "never"
+
+**Absolutes in this project that are CORRECT, and that this rule must not
+condemn.** Each was checked against its own reason while drafting:
+
+| rule | the absolute | does the reason reach every member? |
+|---|---|---|
+| **`R13`** | *"pdfce never self-updates… Permanent."* | **Yes** — the reason (a document tool must never mutate its own binary behind the operator) reaches every member of "self-update". Genuinely universal. |
+| **GUI-core separation** (`ARCHITECTURE.md` §3) | *"`pdfce-core` and `pdfce-render` must **never** gain a GUI/windowing dependency"* | **Yes** — the reason (the web fork must be a shell-crate swap) reaches every GUI dependency without exception. |
+| **`R10`** | *"**No** `#[cfg(target_os)]` in `pdfce-core` or `pdfce-render`, **ever**"* | **Yes**, and note it **already states its subject set extensionally** — two named crates, not "any pdfce crate". This is the proposal's own form, arrived at independently. |
+| **`R53`** | *"pdfce **never** executes embedded PDF JavaScript"* | **Yes** — enumerated in the rule itself (`/AA`, `/OpenAction`, `/Names /JavaScript`, built-ins, custom), which is again this proposal's form. |
+
+**`R10` and `R53` are the proof the obligation is cheap**: two of the
+project's healthiest rules already do it, unprompted, and their
+enumerations are the reason a reader can tell at a glance what they
+cover. **The rule asks the rest to catch up with them.**
+
+#### The honest count, argued against this proposal
+
+- **Three instances is exactly the bar**, not comfortably over it. `R192`
+  was minted on its **fourth**.
+- **Two of the three were found by the operator, from outside, by hitting
+  the consequence.** That is a real and uncomfortable observation about
+  the project's review, and it is recorded — but it is **not** part of
+  the proposed rule's trigger, because `R58` was found by an agent. A
+  rule that fired only on operator complaints would be a rule that fires
+  after the cost is paid.
+- **The strongest objection: this is a rule about how to write rules**,
+  and the section is right to be suspicious of those. The answer is that
+  it obliges a **specific, checkable act producing an artefact in the
+  rule's own text** — the enumeration — which is the property `R192` has
+  and the `R193` draft was declined for lacking. **A reviewer can check
+  compliance by reading the rule**, exactly as `R192` is checked by
+  reading the tool.
+- **A fourth instance would settle it.** If the engineer declines on the
+  count, the honest disposition is `R193`'s: **decline on the count, not
+  the merits; keep `R194` claimed; leave this draft intact for a future
+  session to add instances to rather than rewrite.**
+
+#### Why this is NOT already covered
+
+**`R192`** binds **gates and gate-like tools** and says so in a
+deliberately narrow scope statement — *"not a general 'state your
+assumptions' rule and must not be cited as one."* It **disclaims this
+territory by name.** The separation, in `RULING 3`'s own table form:
+
+| | `R192` (minted) | proposed `R194` |
+|---|---|---|
+| **the action** | write down what your **gate** cannot see | enumerate the members your **rule's text** covers, and check each against the rule's reason |
+| **the actor** | whoever builds the **tool** | whoever **writes or amends the rule** |
+| **the trigger** | a gate is added or widened | an absolute is written into a rule or invariant |
+| **the evidence afterwards** | the tool's docstring | **the rule's own text** — the enumeration is in it |
+
+Different actor, different trigger, **and it produces an artefact** —
+which is the axis on which `R193` was declined and `R192` accepted.
+
+**Ledger:** minted ceiling stays **`R192`**. `R193` claimed (declined
+proposal), **`R194` claimed by this proposal**; next genuinely free is
+**`R195`**. Nothing is renumbered.
 
 ## Update protocol
 

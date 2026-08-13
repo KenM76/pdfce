@@ -476,10 +476,36 @@ captured, then let compaction proceed.
   any command touched this session" — it must be a diff against the
   base revision at save time, or undo will silently bloat saves with
   reverted-then-saved objects. See `ARCHITECTURE.md` §11.1.
-- **Do not** add any network call (telemetry, update-check, anything)
-  without it being explicitly opt-in and disclosed — see
-  `ARCHITECTURE.md` §1.1. Flag to the user before adding, don't decide
-  solo even if it seems harmless.
+- **Do not** add a network client to **`pdfce-core` or `pdfce-render`** —
+  ever, under any future decision record. The engine must never *require*
+  a network to parse or render, and the same crates must cross into the
+  wasm32/web fork where no native HTTP stack exists, so this half is
+  justified twice over. Enforced fail-closed by the `no-network` CI job.
+  **★ NARROWED 2026-08-13 (decision 061) — this line used to read "do not
+  add ANY network call… don't decide solo even if it seems harmless", and
+  the operator corrected that scope as too broad.** The shells
+  (`pdfce-cli`, `pdfce-gui`, `tools/`) **may** carry a network client for
+  **operator-initiated** fetching — model downloads, update downloads,
+  add-in downloads — and doing so needs **no** decision record and no
+  flag. His words: *"it is fine to have download update or download addin
+  capability."* The line is **what the software needs to RUN versus what
+  the operator can ASK it to fetch.**
+- **Do not** add a network call that fires **without the operator asking
+  at the moment it happens** — telemetry, usage analytics, crash
+  reporting, licence callback, **a startup update check** — without it
+  being explicitly opt-in, off by default and disclosed. This is
+  `ARCHITECTURE.md` §1.1 **clause 2**, which decision 061 left completely
+  untouched. **Flag to the user before adding; don't decide solo even if
+  it seems harmless.** The 2026-08-13 narrowing moved clause 3 only, and
+  **an operator narrowing one clause is not consent to widen a
+  neighbouring one** — that refusal is part of decision 061, not an
+  omission from it.
+- **Do not** treat a fetched artefact as executable. `R13`'s *"never
+  executes anything it fetched"* is **permanent and was NOT narrowed**,
+  and it collides head-on with *"download addin capability"* — an add-in
+  is executed code. **That ruling is owed from the operator** (`ROADMAP.md`
+  *Backlog*, and decision 061 §7); **no add-in Pass can be scoped until it
+  lands.** Downloading is permitted; running the download is not, yet.
 
 ## Hard "always"s
 

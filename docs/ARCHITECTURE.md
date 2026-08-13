@@ -36,37 +36,164 @@ feature breadth in one native application. The closest attempts (Open
 PDF Studio, KillerPDF) each have confirmed major gaps and neither uses
 a native Rust PDF engine. This validates the project's premise.
 
-### 1.1 Privacy posture (explicit, binding — not merely implicit in "no web server")
+### 1.1 Network posture — THREE separate clauses, not one (★ RE-SCOPED 2026-08-13 by the operator, decision 061)
 
-pdfce makes **no network calls of any kind by default**: no telemetry,
-no usage analytics, no crash reporting, no update-check phone-home, no
-license-verification callback. Every document a user opens is
-processed entirely locally, in-process, with no data ever leaving the
-machine unless the user explicitly initiates it themselves (e.g.
-emailing a file — an action pdfce doesn't perform on their behalf
-anyway). If a future feature ever genuinely needs network access (an
-opt-in update checker, say), it must be **off by default and
-explicitly opted into**, disclosed plainly in the UI and in
-`README.md`, never silently enabled. This is a load-bearing part of
-the project's value proposition ("not a web app" is a promise about
-data handling, not just deployment topology) and is treated with the
-same weight as the GUI-core-separation and round-trip invariants —
-don't add a network call without flagging it to the user first.
+**★ READ THIS HEADING CHANGE AS A WARNING.** This section was titled
+*"Privacy posture"* and stated a single, absolute posture. **It was
+conflating three different promises**, and on 2026-08-13 the operator
+corrected the third of them as **too broad**. The three are separated
+below because collapsing them is what produced the error: the first two
+are unchanged and permanent, and only the third moved.
 
-**Precision clause (2026-07-30, decision 003 §3.4 — a correction of
-wording, not a weakening):** pdfce makes no network requests and
-contains **no HTTP client and no TLS stack** — verifiable by any
-reader of the generated `THIRD_PARTY_LICENSES.md` — but the shipped
-GUI binary does link the `webbrowser` crate (and its `url` parser
-dependency), because eframe 0.35 hardcodes egui-winit's `links`
-feature and it cannot be disabled downstream. That code opens the OS
-default browser and makes no request itself; it is inert unless pdfce
-emits an `OpenUrl` event. When it fires, the request belongs to the
-user's browser, not to pdfce. State the posture in exactly these terms
-(decision 003 §6.3's copy) — "no network code at all" would be false.
-Enforcement is the fail-closed `no-network` CI job (decision 003 R12):
-no HTTP/TLS/socket client crate may enter any pdfce crate without a
-new decision record.
+**The operator's correction, verbatim and in full (2026-08-13):**
+
+> *"the no network rule was made too broad. all I meant by that is the
+> software itself didn't rely on network technology to function which
+> would bloat it and slow things down the way it does for other pdf
+> software. it is fine to have download update or download addin
+> capability."*
+
+**The line that replaces the absolute is his own:** *what the software
+needs to **RUN**, versus what the operator can **ASK** it to fetch.*
+
+#### Clause 1 — pdfce does not OPERATE over network technology (KEPT; this is the ORIGIN of the rule)
+
+No web server, no browser runtime, no local network listener. Everything
+happens in one native process (§1). This is the clause the whole posture
+grew out of, and it is unchanged.
+
+**★ AND HERE IS THE MOTIVATION, WHICH THIS SECTION NEVER RECORDED UNTIL
+NOW — the omission is the most instructive part of the whole
+correction.** The reason is **architecture and performance**, in the
+operator's own words: *"which would bloat it and slow things down the way
+it does for other pdf software."* Every competitor that ships a browser
+runtime or a local service pays for it in install size and startup
+latency, and pdfce's single-native-process design is what buys that back.
+
+§1.1 recorded the **posture** and not the **reason**, and a posture with
+no stated reason has nothing to check a later restatement against. That
+is very likely how it drifted into an absolute: an agent restating
+*"pdfce doesn't need the network"* with no reason beside it has no way to
+tell which broader readings are still faithful, and the broadest reading
+always feels like the safe one. See the `R194` proposal in `ROADMAP.md`
+*Standing rules* for the generalised shape and its two sibling instances.
+
+#### Clause 2 — PRIVACY (KEPT, UNCHANGED, and explicitly NOT relaxed by the 2026-08-13 correction)
+
+No telemetry, no usage analytics, no crash reporting, no
+licence-verification callback, no silent phone-home. Every document a
+user opens is processed entirely locally, in-process, with no data ever
+leaving the machine unless the user explicitly initiates it themselves
+(e.g. emailing a file — an action pdfce doesn't perform on their behalf
+anyway). If a feature genuinely needs network access **that the operator
+did not ask for at the moment it happens** (an update checker that runs
+at startup, say), it must be **off by default and explicitly opted
+into**, disclosed plainly in the UI and in `README.md`, never silently
+enabled.
+
+**★ THE OPERATOR SAID NOTHING ABOUT THIS CLAUSE, AND THAT SILENCE WAS
+DELIBERATELY NOT READ AS PERMISSION.** The engineer refused to widen it,
+and the refusal is recorded here rather than merely acted on, because the
+general form is worth more than this instance: **an operator narrowing
+one clause is not consent to widen a neighbouring one.** A correction is
+scoped to what it names. Where two obligations were written as one
+sentence, un-collapsing them is the *first* step of applying the
+correction, not an optional tidy-up afterwards.
+
+#### Clause 3 — the BLANKET BAN on any network-client crate (★ THIS is what was too broad, and it is NARROWED, not removed)
+
+The old text: *no HTTP/TLS/socket client crate may enter **any** pdfce
+crate.* That turned *"does not need the network to function"* into
+*"cannot fetch anything, ever"* — a different and much stronger claim
+than the one clause 1 was ever about. **Download-update and
+download-addin capability are explicitly permitted** as of 2026-08-13.
+
+The replacement is a **narrowed gate, not the absence of one**:
+
+| subject | posture | why |
+|---|---|---|
+| **`pdfce-core`, `pdfce-render`** — the ENGINE | **network-free, permanently, gate-enforced** | Parsing and rendering a file must never *require* a network. **Second, independent justification:** both crates must cross into the **wasm32/web fork** (§3), where a native HTTP stack does not exist — so this half of the gate is load-bearing twice over and does not rest on the posture alone. |
+| **`pdfce-cli`, `pdfce-gui`, `tools/`** — the SHELLS | **may carry a network client** for operator-initiated fetching | This is what the operator authorised: model downloads, update downloads, add-in downloads. The fetch happens *because the operator asked*, which is the side of clause 2's line that was never in dispute. |
+
+**Enforcement, as it now stands on disk:** the fail-closed `no-network`
+CI job, narrowed to the engine at **`197f0a5`** (2026-08-13). Its job
+name was part of the problem and was fixed in the same commit —
+*"verify no HTTP/TLS client in any pdfce crate"* asserted the over-broad
+claim to anyone reading a green run, and now reads *"verify the ENGINE
+needs no network (core + render)"*. **A green CI run is no longer
+evidence that pdfce as a whole makes no network calls**, and the name has
+to say so. Per `R192`, the job's comment block now **enumerates** what it
+cannot see (a raw `std::net` socket needs no dependency; build scripts
+and proc macros are outside `cargo tree`'s default edges; the shells are
+out of scope by design; and nothing in a Cargo-graph check can
+distinguish an operator-initiated fetch from a silent one — that last one
+is clause 2's obligation and is enforced by review and by the
+decision-record requirement, not by this job).
+
+Adding a network client to a **shell** no longer needs a decision record.
+Adding one to `pdfce-core` or `pdfce-render` is **not** unlockable by a
+future decision record; that bar is unchanged from the original R12.
+
+#### Precision clause (2026-07-30, decision 003 §3.4) — STILL TRUE, STILL USEFUL, and note that it is a different KIND of amendment
+
+pdfce (as of this writing) makes no network requests and contains **no
+HTTP client and no TLS stack** — verifiable by any reader of the
+generated `THIRD_PARTY_LICENSES.md` — but the shipped GUI binary does
+link the `webbrowser` crate (and its `url` parser dependency), because
+eframe 0.35 hardcodes egui-winit's `links` feature and it cannot be
+disabled downstream. That code opens the OS default browser and makes no
+request itself; it is inert unless pdfce emits an `OpenUrl` event. When
+it fires, the request belongs to the user's browser, not to pdfce. State
+the posture in exactly these terms (decision 003 §6.3's copy) — "no
+network code at all" would be false.
+
+**★ THE TWO AMENDMENTS ARE NOT THE SAME ACT, and conflating them would
+lose the lesson.** Decision 003 §3.4 was a **correction of WORDING**: the
+claim was very slightly false as phrased, the intent was untouched, and
+nothing about what pdfce may do changed. The 2026-08-13 correction is a
+**correction of SCOPE**: the wording was accurate, and the *subject set
+it quantified over* was wrong. The second is the larger and rarer act —
+it changes what the project is permitted to build, it changes a CI gate,
+and it un-withdraws withdrawn work (`af5580e`). A precision clause can be
+filed as a footnote; a scope correction earns a decision record, and this
+one has **061**.
+
+**★ DOWNSTREAM CLAIM THAT IS TRUE TODAY AND BECOMES FALSE ON THE FIRST
+DOWNLOADER, tracked so it is not discovered by a user.** `README.md`'s
+*"Privacy, platform and signing"* block states *"pdfce does not use the
+network. It contains no HTTP client and no TLS stack — you can confirm
+this yourself in `THIRD_PARTY_LICENSES.md`."* That is **accurate at HEAD**
+and must **not** be pre-emptively softened, which would make it less true
+than it is. It must be rewritten **in the same Pass that first links a
+network client into a shell**, per the claim-bearing-copy rule. Filed as
+a Backlog obligation in `ROADMAP.md`.
+
+#### Clause 3, continued — ★ THE GUARANTEE IS NOT LOST; IT BECOMES A BUILD CONFIGURATION
+
+The strongest sentence §1.1 used to carry was **"no HTTP client exists in
+this binary, verifiable by anyone reading `cargo tree`."** The obvious
+objection to the narrowing is that this was given up.
+
+**It was not.** The permitted capability is **strippable** — the operator
+bound it so in the follow-on instruction that scoped it (*"if we add
+these they should be modular in the same ways as out other features. if
+someone doesn't include the crate in the package then that removes the
+feature"*), and decision 061 §3 applies the `Pass 70.0`
+strippable-capability convention to it in full. So anyone who wants the
+old guarantee **builds without the feature and verifies it exactly as
+before** — same command, same evidence — and `THIRD_PARTY_LICENSES.md`
+agrees, because `cargo-about` generates it from the shipping graph.
+
+**Nothing was given up; an option was gained.** Recorded here, not only
+in §12, so a future session re-reading the narrowing finds the answer to
+*"we gave up a guarantee"* **already made** rather than re-litigating it.
+
+The fetch code lives in a sibling crate — working name **`pdfce-fetch`**,
+**PLANNED, NOT BUILT**, no such directory on disk — which the shells
+depend on **optionally** and which `pdfce-core`/`pdfce-render` **never**
+depend on at all. That is what keeps this section's enforced half
+checkable by `cargo tree` and the wasm32 fork reachable. Full shape and
+its `pdfce-print` precedent: **decision 061 §2**.
 
 ## 2. Language & toolkit decision (made 2026-07-23, by the user)
 
@@ -997,6 +1124,42 @@ D:\Dev\pdfce\
                                    rather than a scale-mode variant. See §12's 2026-08-10
                                    (eighty-fifth filing) entry for the crate-boundary
                                    decision record.
+    pdfce-fetch\                 <- ★★ PLANNED, NOT BUILT — no such directory exists on
+                                   disk as of 2026-08-13. Listed here because decision
+                                   061 fixed its SHAPE, and a shape nobody can find is
+                                   how two shells end up implementing it twice. Working
+                                   name; the engineer may rename it when it is created.
+                                   PURPOSE: pinned-URL download plus SHA-256
+                                   verification — the one network primitive the shells
+                                   are permitted (§1.1's 2026-08-13 narrowing). Serves
+                                   OCR model fetch-and-verify, update download and
+                                   add-in download.
+                                   BOUNDARY, and it is the load-bearing part:
+                                   `pdfce-cli` and `pdfce-gui` depend on it OPTIONALLY;
+                                   **`pdfce-core` and `pdfce-render` never depend on it
+                                   at all, under any future decision.** That is what
+                                   keeps §1.1's engine half enforceable by `cargo tree`
+                                   and keeps the wasm32 fork reachable.
+                                   PRECEDENT, exact: `crates/pdfce-print/Cargo.toml`'s
+                                   own description reads *"Platform code, shared by both
+                                   shells (docs/ARCHITECTURE.md §3). Deliberately NOT in
+                                   pdfce-core or pdfce-render, which must stay
+                                   platform-free."* This crate is that sentence with
+                                   **network** in place of **platform**. A non-core
+                                   sibling shared by both shells is established practice
+                                   here, not a new pattern.
+                                   WHAT IS NEW: it is the FIRST STRIPPABLE CAPABILITY
+                                   THAT DOES NOT LIVE IN `pdfce-core`. Every existing
+                                   one (`jpx`, `ocrs`) sits in core and is forwarded
+                                   outward to the shells; this one has nowhere to sit in
+                                   core, so the forwarding runs the other way — each
+                                   shell owns its own default-ON feature that pulls the
+                                   crate in. `crates/pdfce-core/Cargo.toml`'s
+                                   strippable-capability convention is written entirely
+                                   in terms of core features forwarded outward and does
+                                   not yet describe this shape; extending that header is
+                                   filed under *Backlog* in `ROADMAP.md` as the
+                                   engineer's edit.
     pdfce-gui\                  <- The native desktop shell. egui/eframe application,
                                    window chrome, file dialogs (rfd crate), menus,
                                    docking layout (egui_dock or hand-rolled), the
@@ -20329,3 +20492,384 @@ existing *"Rasterize vector paths, text and images"* row carried
 many Passes and writes a PNG. **`—` and `[ ]` are the distinction that
 file's legend exists to protect, and this was neither** — it was a
 capability the file could not see. Corrected to `cli [x]`.
+
+---
+
+### 2026-08-13 (hundred-and-forty-fourth filing, CI change `197f0a5`) — decision 061: **THE NO-NETWORK ABSOLUTE BECOMES A TWO-SCOPE RULE (engine ENFORCED, shells ALLOWED) — and because the permitted capability is STRIPPABLE, the old absolute survives as a BUILD CONFIGURATION rather than being given up.** The fetch capability is the **first strippable capability that cannot live in `pdfce-core`**, so it gets a sibling crate (`pdfce-fetch`, PLANNED, not built) and the strippable-capability convention has to grow a shape it does not currently describe
+
+**Two operator instructions, one after the other, and the second is the
+one that makes this a decision rather than a relaxation.** The first
+narrowed `R12`; the second bound the thing it permitted.
+
+**Instruction 1, verbatim and in full:**
+
+> *"the no network rule was made too broad. all I meant by that is the
+> software itself didn't rely on network technology to function which
+> would bloat it and slow things down the way it does for other pdf
+> software. it is fine to have download update or download addin
+> capability."*
+
+**Instruction 2, verbatim and in full — the follow-on:**
+
+> *"and if we add these they should be modular in the same ways as out
+> other features. if someone doesn't include the crate in the package
+> then that removes the feature."*
+
+*"These"* = the download-update and download-addin capability the first
+instruction permitted. He is applying the **strippable-capability
+convention** (`Pass 70.0`, `crates/pdfce-core/Cargo.toml`'s `[features]`
+header) to it, by name and by mechanism — *"if someone doesn't include
+the crate"* is rule 3 of that convention (`optional = true`, so
+disabling **removes the code** rather than branching around it).
+
+#### 1. What was wrong, separated into three postures
+
+§1.1 carried three things under one heading and **only the third was
+over-broad**. The full separation, with what is kept, is written into
+**§1.1 itself** as a dated amendment rather than duplicated here. In
+summary: (1) *does not OPERATE over a network* — **KEPT**, and its
+motivation (bloat, startup cost) is now on the record, having never been
+written down; (2) **privacy** — **KEPT, UNCHANGED, NOT RELAXED**, because
+narrowing one clause is not consent to widen its neighbour; (3) **a
+blanket ban on any HTTP/TLS/socket client crate in ANY pdfce crate** —
+**too broad**, and replaced.
+
+**The replacing line is the operator's own: what the software needs to
+RUN versus what the operator can ASK it to fetch.**
+
+| scope | posture | why |
+|---|---|---|
+| `pdfce-core`, `pdfce-render` | **ENFORCED, permanently** | privacy posture **plus** the wasm32 fork, where no native HTTP stack exists — this half of the gate is load-bearing twice over |
+| `pdfce-cli`, `pdfce-gui`, `tools/` | **ALLOWED**, operator-initiated only | model downloads, updates, add-ins |
+
+`R12`'s subject set therefore shrinks **from four crates to two**. The
+rule is **narrowed, not withdrawn**, and its ROADMAP text carries the
+same dated amendment.
+
+#### 2. ★ THE STRUCTURAL CONSEQUENCE THE INSTRUCTION DOES NOT MENTION — the capability has nowhere to sit in core
+
+**Every existing strippable capability lives in `pdfce-core` and is
+FORWARDED OUTWARD to the shells.** `jpx` and `ocrs` are both core
+features; each shell re-declares a feature that forwards to core's.
+
+**Download cannot follow that pattern**, because §1 just made
+`pdfce-core` and `pdfce-render` network-free **permanently and
+gate-enforced**. A fetch feature in core would be a feature that can
+never be switched on.
+
+And the obvious alternative is worse: **if `pdfce-cli` and `pdfce-gui`
+each implement fetching independently, the logic exists twice** — a
+pinned URL, a SHA-256 check, a failure path, a disclosure — which is
+precisely the duplication the GUI–core split exists to prevent, and the
+same failure mode `pdfce-print` was created to avoid (*"each shell
+computing its own page placement is how a GUI print comes to land
+differently from a CLI print of the same document at the same
+settings"*).
+
+**DECISION: a sibling crate, working name `pdfce-fetch`** — pinned-URL
+download plus SHA-256 verification, nothing else — **which the shells
+depend on OPTIONALLY and which `pdfce-core`/`pdfce-render` never depend
+on at all.**
+
+**The precedent is exact and is cited rather than argued.**
+`crates/pdfce-print/Cargo.toml`'s own description reads:
+
+> *"Platform code, shared by both shells (docs/ARCHITECTURE.md §3).
+> Deliberately NOT in pdfce-core or pdfce-render, which must stay
+> platform-free."*
+
+**The fetch crate is that sentence with `network` in place of
+`platform`.** So a non-core sibling shared by both shells is
+**established practice**, decided once already in the eighty-fifth
+filing, and this decision inherits it rather than inventing it.
+
+**`pdfce-fetch` DOES NOT EXIST.** No such directory is on disk as of this
+filing. §3's tree block marks it **PLANNED, NOT BUILT** in its first
+line, deliberately, because a crate documented as though it exists is a
+`R151`-shaped error at the documentation layer — the exact defect found
+one filing earlier in `ocr::layer`'s module header.
+
+#### 3. The convention's four rules, applied unchanged
+
+They carry over verbatim from `crates/pdfce-core/Cargo.toml`'s
+`[features]` header:
+
+1. **Default ON.** A build that omits nothing behaves as it did before
+   the feature existed.
+2. **The gated-out path REFUSES BY NAME** (R27). *"Fetching is not
+   compiled into this build"* — never a silent no-op, never a hang, and
+   in particular never *"download failed"*, which would send the
+   operator hunting a network fault that does not exist.
+3. **`optional = true`**, so disabling **removes the code**. This is the
+   clause the operator stated in his own words.
+4. **CI builds `--no-default-features`**, which is what stops a `cfg`
+   from rotting into something that no longer compiles when switched
+   off.
+
+**Attribution follows automatically and needs no separate rule:**
+`THIRD_PARTY_LICENSES.md` is generated by `cargo-about` from the
+**shipping graph**, so a build without the feature drops the HTTP
+stack's attribution with it. No hand-maintenance, no drift.
+
+#### 4. ★ WHAT THIS REFRAMES — the old absolute is not lost, it is now a build configuration
+
+The strongest thing §1.1 used to say was: **"no HTTP client exists in
+this binary, verifiable by anyone reading `cargo tree`."** The obvious
+objection to §1's narrowing is that this was given up.
+
+**It was not.** Because the capability is strippable, that guarantee
+**becomes a BUILD CONFIGURATION rather than a project-wide constraint**:
+anyone who wants it builds without the feature and verifies it **exactly
+as before** — same command, same evidence, and the attribution file
+agrees, because it is generated from the same graph.
+
+**Nothing was given up; an option was gained.** This is written down
+here and in §1.1 so that a future session re-reading decision 061 finds
+the argument **already made** rather than re-litigating the narrowing —
+which is the failure mode the project has hit repeatedly (a settled
+question re-opened because the answer lived somewhere the reader did not
+look).
+
+#### 5. What this obliges that is NOT yet done — filed, not performed
+
+**`crates/pdfce-core/Cargo.toml`'s `[features]` header does not describe
+this shape.** Its convention text is written entirely in terms of **core
+features forwarded outward**, which is the only shape that existed when
+it was written. A shell-only strippable capability — where each shell
+owns its own default-ON feature and there is no core feature to forward
+— is admitted by none of its four rules' wording, though all four apply
+unchanged in substance.
+
+**That header is a CODE file, so this filing did not edit it.** The need
+is recorded under *Backlog* in `ROADMAP.md`, naming the file, for the
+engineer to make. **Leaving the next person to infer the shape from two
+examples that both contradict it is how conventions rot.**
+
+#### 6. What was minted, and what deliberately was not
+
+- **Decision `061`** — this entry. Ceiling 060 → **061**; next free
+  **062**.
+- **No standing rule.** This is the **application of an existing
+  convention** (`Pass 70.0`), not a new one, and `R12` already covers
+  the network half — it is **amended**, not replaced. Next genuinely
+  free rule number remains **`R194`** (`R192` minted, `R193` claimed by
+  the declined proposal — and note that `tools/check-ledger-numbers.py`
+  reports `R193` as free, a known live hazard filed in the
+  hundred-and-forty-third filing; the gate was **not** trusted here).
+- **No Pass ID.** Nothing is built. The Pass family ceiling stays **74**.
+- **No operator question.** The one genuinely open item — *"download an
+  update when asked"* vs *"phones home at every launch"* — is recorded
+  in §1.1 and was **raised to the operator by the engineer directly**
+  rather than parked in the questions list.
+- **No `FEATURES.md` row.** Nothing is built; see that file's *Will not*
+  correction below, which is a **claim repair**, not a capability entry.
+
+#### 7. ★ Found while sweeping — `R13` and `R14` now sit at an angle to what was permitted, and this is NOT resolved here
+
+**`R13` reads, in part:** *"pdfce never self-updates. Never downloads a
+file the user did not ask for, never replaces its own binary, never
+executes anything it fetched, never launches an installer.
+**Permanent.**"*
+
+Against the operator's *"it is fine to have download update or download
+addin capability"*, three of those five clauses need a ruling and the
+first two do not:
+
+| `R13` clause | status against the narrowing |
+|---|---|
+| never downloads a file the user did not ask for | **SURVIVES INTACT** — the permission is for *operator-initiated* fetching, which is asked-for by construction |
+| never self-updates | **SURVIVES** as stated — *downloading* an update is not *applying* one |
+| never replaces its own binary | **UNRESOLVED** — a "download update" that hands the operator a folder is compatible; one that swaps the running exe is not |
+| never launches an installer | **UNRESOLVED** — same boundary |
+| **never executes anything it fetched** | **★ DIRECT COLLISION.** An **add-in is executed code.** *"Download addin capability"* cannot be built without ruling on this clause, and it is the sharpest of the five |
+
+**`R14`** (*"Update discovery is external by default — manual
+replace-the-folder plus package-manager manifests are the shipping
+answer"*) is **weakened but not contradicted**: it already admits an
+in-app checker under decision 003 §6.4's full conditions.
+
+**This is filed as found, not resolved.** The operator narrowed the
+**network** rule; he did not speak to the **execution** rule, and §1's
+own reasoning applies to this librarian too — *narrowing one clause is
+not consent to widen its neighbour.* Filed under *Backlog* in
+`ROADMAP.md` as the ruling that must precede any add-in Pass. **No add-in
+work can be scoped without it.**
+
+#### Body sections updated in the same filing
+
+**§1.1** — retitled *"Network posture — THREE separate clauses, not
+one"* and restructured into clauses 1–3 plus the precision clause, with
+the operator's verbatim instruction, the two-scope table, the CI-job
+rename, and the build-configuration reframe. **★ Written by a CONCURRENT
+SIBLING DISPATCH, not by this filing** — both were sent at the narrowing
+and their §1.1 edits raced; the sibling's structure is the one on disk
+and this entry's §1/§4 reasoning was absorbed into it rather than left
+duplicated. **Recorded because attribution inside a decision record is
+itself a claim**, and "this filing edited §1.1" would have been false.
+**§3** — the `pdfce-fetch\` tree block, marked **PLANNED, NOT BUILT** in
+its first line: **this filing's edit**, and the only §3 change.
+
+### 2026-08-13 (hundred-and-forty-fourth filing) — **ADDENDUM to decision 061, NOT a separate decision.** Three findings from a second sweep of the same correction, plus the reason this addendum exists at all: **TWO LIBRARIAN DISPATCHES FILED THE SAME OPERATOR CORRECTION CONCURRENTLY, AND BOTH WROTE A `### … decision 061` HEADING**
+
+**Read decision 061 above first; this adds to it and contradicts nothing
+in it.** It is filed as an addendum rather than as decision `062` because
+**it is not a decision** — nothing here rules on anything. Ceiling stays
+**061**; next free is **062**.
+
+#### 0. ★ THE PROCESS FINDING, AND IT IS THE MOST TRANSFERABLE THING IN THIS ENTRY
+
+**Two `pdfce-librarian` dispatches were in flight against this same
+operator correction at the same time**, each unaware of the other, and
+**both appended a `### 2026-08-13 … decision 061` heading to §12.** For a
+short window this file contained **two decision records bearing the same
+number** — the precise ledger corruption `tools/check-ledger-numbers.py`
+exists to catch. It was found by the second dispatch by **re-running
+`git status` between edits** and noticing files it had not touched had
+changed, then reconciled here: the first filing is the record, this is
+its addendum, and the duplicate heading was removed.
+
+**Why it happened, stated so it is not read as carelessness.** Neither
+dispatch was wrong. Each read the ledger, took `061` as free (it *was*
+free when each read it), and wrote. **The ledger gate reads a FILE, and
+two writers race between the read and the write** — a check-then-act gap
+with no lock, and no amount of care inside one dispatch closes it.
+
+**This is `R192`'s own shape at a new layer, and it is worth naming as
+such:** the gate's input set is *the file as of the last read*, and the
+obligation's subject set is *every number any concurrent writer will
+claim*. **A number read from a file is free only until someone else
+writes.** The gate cannot see an in-flight sibling and does not say so.
+
+**The practical rule, which costs one command:** a librarian holding a
+shell should **re-run `git status --porcelain` immediately before its
+first write and again before its last**, and treat *"a doc I did not
+touch is modified"* as **stop and reconcile**, not as noise. The second
+dispatch did exactly this and that is the only reason the duplicate
+lasted minutes rather than reaching a commit.
+
+**★ And note what the collision did NOT cost.** The two filings agree on
+every substantive point — the three-clause separation, the engine/shell
+split, the twice-over justification, the refusal to widen privacy, the
+`R13` collision. **Two independent readings of the same operator
+sentence converged**, which is meaningful evidence that the reading is
+right, and is recorded as such rather than discarded with the duplicate.
+
+#### 1. `R13` ALREADY DREW THE OPERATOR'S LINE — two rules from the SAME decision record disagreed for six weeks, and nothing noticed
+
+Decision 061 §7 tables `R13`'s five clauses against the narrowing. This
+addendum adds the observation §7 does not make, which is about `R12`
+rather than about `R13`:
+
+> **`R13` reads *"never downloads a file the user did not ask for."*
+> That **user-asked-for** qualifier IS the run-versus-ask distinction the
+> operator articulated on 2026-08-13.**
+
+`R12`, **three lines above it in the same decision record**, read *"no
+HTTP/TLS/socket client crate may enter any pdfce crate"* — an absolute
+with no such qualifier. **Decision 003 therefore encoded two different
+answers to the same question, side by side, from 2026-07-30 to
+2026-08-13**, and the over-broad one was the one with a fail-closed CI
+job behind it.
+
+**Nothing flagged it, and the reason is the interesting part: each rule
+is entirely coherent read on its own.** The contradiction is a property
+of the **pair**, and review is an operation on **one claim at a time** —
+the same asymmetry hard rule 10 was written about for figures, appearing
+here for rule *scopes*. **Reading `R12` carefully would never have found
+this. Only reading `R12` and `R13` together would.**
+
+This is the sharpest single piece of evidence for the `R194` proposal
+(§3 below), because it shows the over-broad text was not merely
+unchallenged — **its own correction was already written down, adjacent to
+it, in the same document.**
+
+#### 2. `R53`/`R54` cite `R12` as a STRUCTURAL BACKSTOP, and that citation is now weaker for the shells
+
+The JavaScript-posture rules argue that a JS trigger action referencing
+`/URI` or `/SubmitForm` could achieve nothing, because *"`R12` (no
+network) + `R13` (no process launch)"* make it structurally impossible.
+`R53`'s own text uses the same argument to rule a sandboxed JS engine
+**prohibited** rather than deferred.
+
+Under the narrowed `R12`, a **shell** may link an HTTP client, so the
+impossibility no longer holds workspace-wide.
+
+**The practical outcome is unchanged and is not in doubt.** `R53` (no JS
+interpreter exists in pdfce) and `R54` (no trigger event ever fires) are
+the actual enforcement and are untouched by this decision. Nothing
+becomes reachable. **What was lost is a belt-and-braces argument, not a
+guard.**
+
+It is recorded because of what that costs later: **a defence-in-depth
+layer that quietly becomes a single layer is exactly the thing worth
+knowing before someone leans on it.** A future session scoping JS or
+forms work will find *"`R12` makes `/SubmitForm` impossible anyway"* in
+the record and must not treat it as still structural. **No action is
+owed today**; `R53`/`R54` need no amendment, and this is a note, not a
+defect.
+
+#### 3. The meta-finding: THIS IS THE THIRD PROJECT RULE FOUND WRITTEN BROADER THAN INTENDED — proposal claiming `R194`, filed in `ROADMAP.md`
+
+**The anatomy shared by all three: an ABSOLUTE QUANTIFIER standing where
+a SPECIFIC SUBJECT SET was meant, with the rule's own REASON justifying
+the narrower set, and nothing anywhere comparing the two.**
+
+| rule | the absolute, as written | what was meant | how it was found |
+|---|---|---|---|
+| **`R58`** | *"**every** removal/scrub operation forces a full rewrite"* | removals whose contract is **confidentiality** | an agent (decision 022), 2026-08-04; **nine** shipped operations measured outside its literal text; still unfixed at question `(v)` |
+| **project rule 4** | *"**every** algorithmic suggestion is a reviewable hint the operator accepts or overrides"* | things pdfce **guessed**, disclosed off-canvas | **the operator**, twice — decision 024 §4.4, then decision 059 |
+| **`R12`** | *"**no** HTTP/TLS/socket client crate in **any** pdfce crate"* | the **engine** must not require a network to run | **the operator**, 2026-08-13 — this filing |
+
+**`MAX_PIXMAP_EDGE` is deliberately EXCLUDED, though it was the third
+case nominated when this was dispatched.** Its doc comment justified the
+number with *"beyond any plausible viewing zoom"* — a **wrong
+justification**, not a wrong quantifier. That is the `R193` draft's
+shape, and it is kept separate for the same reason the engineer refused
+to merge `R192` and `R193`: an abstraction thin enough to cover both
+covers everything and constrains nothing. **Swapping it out for `R58`
+did not weaken the count — it is the stronger instance**, because `R58`'s
+reason is written down one section away from its text (§5.9,
+confidentiality) and the text is over-broad **anyway**.
+
+**★ That last point defeats the wording first suggested for this rule
+— *"record a rule's motivating WHY alongside its text"* — and the
+counter-evidence comes from the nominated instance list itself.**
+`MAX_PIXMAP_EDGE` **did** record its why, and the why was the defect;
+`R58` **has** its why recorded nearby, and went over-broad regardless.
+**Recording a reason is neither sufficient nor, on this evidence,
+effective.** The operative act is not *writing* the reason — it is
+**comparing the reason's subject set against the text's**, which nobody
+performs unless the rule asks for it. The proposal is worded around that
+comparison. Full text, the honest count, and the healthy-absolute
+counter-instances that stop it condemning `R2`/`R13`: **`ROADMAP.md`
+*Standing rules*, PROPOSAL claiming `R194`.**
+
+**Proposed, NOT minted. `R194` is claimed by the proposal and is not
+available.** (`R192` minted, `R193` claimed by the declined proposal —
+and `tools/check-ledger-numbers.py` still reports `R193` as next free,
+the known live hazard filed in the hundred-and-forty-third filing. It
+was not trusted here either.)
+
+#### 4. `README.md`'s privacy block — TRUE AT HEAD, and it must not be pre-emptively softened
+
+`README.md`'s *"Privacy, platform and signing"* block states:
+
+> *"**pdfce does not use the network.** It contains no HTTP client and no
+> TLS stack — you can confirm this yourself in
+> `THIRD_PARTY_LICENSES.md`, which lists every library linked into the
+> binary."*
+
+**That is accurate at `HEAD` and stays**, because `pdfce-fetch` does not
+exist. Softening it now would make the README **less true than the
+software**, which is its own defect.
+
+**It must be rewritten in the same Pass that first links a network client
+into a shell** — not the Pass after, and not at release time. This is a
+user-facing claim, so the claim-bearing-copy discipline applies: the
+replacement wording is sourced from `ARCHITECTURE.md` §1.1 and decision
+061, never invented. **The honest replacement is not a retraction**,
+because decision 061 §4 preserves the whole of the old claim as a **build
+configuration**: a build without the feature verifies exactly as the
+README describes, by the same command, with the attribution file
+agreeing. Filed as a **Backlog obligation** attached to the
+`pdfce-fetch` bucket.

@@ -41739,3 +41739,286 @@ original never edited.
    reasoning are in *Standing rules*, after the `R193` proposal.
 5. **`(bm)`** (`detach_file` / `unembed_fonts` confidentiality) and
    **`(v)`** (R58 scope) remain open and remain different questions.
+
+---
+
+## 2026-08-13 (hundred-and-forty-fourth filing) — **`R12` NARROWS FROM FOUR CRATES TO TWO, AND THE FOLLOW-ON INSTRUCTION BINDS WHAT IT PERMITTED: the fetch capability must be STRIPPABLE — which makes it the FIRST strippable capability that CANNOT LIVE IN `pdfce-core`, so it gets a sibling crate (`pdfce-fetch`, PLANNED, NOT BUILT) and the convention has to grow a shape it does not describe.** **★ The reframe that matters: the old absolute — *"no HTTP client exists in this binary, verifiable by `cargo tree`"* — is NOT LOST, it becomes a BUILD CONFIGURATION. Nothing was given up; an option was gained.** Decision **061** minted; **no Pass, no rule, no operator question, no `FEATURES.md` row** — one `FEATURES.md` **claim repair**. **`R13` clause 5 is a DIRECT COLLISION with "download addin" and is FILED, NOT RULED**
+
+**Filed FRESH at ordinal 144, not appended to a sibling.** The dispatch
+warned a sibling might already have filed the `R12`/§1.1 narrowing as
+filing 144 with decision 061. **It had not.** Measured, not assumed:
+`git show --stat 197f0a5` touches **exactly one file**,
+`.github/workflows/ci.yml` (+52/−13) — the engineer's CI change, with no
+doc filing behind it; `grep` for *"hundred-and-forty-fourth"* and *"061"*
+across `SESSION_LOG.md`, `ROADMAP.md` and `ARCHITECTURE.md` returned
+**zero** relevant hits before this filing; `R12`'s ROADMAP text and §1.1
+both still carried the over-broad wording. **So this filing records BOTH
+the narrowing and the modularity follow-on**, which is the dispatch's
+stated fallback.
+
+**No commit behind the doc half.** `git log --oneline -1` = **`197f0a5`**,
+read in this dispatch. **The librarian does not commit; the engineer
+does.** Working tree at time of writing: `docs/ARCHITECTURE.md`,
+`docs/ROADMAP.md`, `docs/FEATURES.md` modified (`git status --short`),
+nothing else.
+
+### Ledger — measured, not carried
+
+`python tools/check-ledger-numbers.py`, run in this dispatch:
+
+| ledger | before | after | this filing |
+|---|---|---|---|
+| SESSION_LOG filings | 143 | **144** | **used — this entry** |
+| decision records | 060 | **061** | **used — decision 061 MINTED** |
+| standing rules | R192 | R192 | **NOT used by THIS entry.** Next genuinely free was `R194` when this table was written; **the concurrent sibling then CLAIMED `R194` with a PROPOSAL under this same ordinal**, so **`R195` is now the next genuinely free number** — `R193` and `R194` are both claimed-but-unminted. **The gate says `R193`; it is wrong in two ways now, not one.** |
+| Pass families | 74 | 74 | **NOT used** — next free `Pass 75` |
+| operator questions | `(bm)` | **`(bn)`** | **USED — by the concurrent sibling under this same ordinal**, which filed **`(bn)`** (*may an update check run at STARTUP?*) on its dispatch's explicit instruction. This row read *"NOT used, next free `(bn)`"* when written and was true then. **Next free is now `(bo)`.** Both filings agree the question is real and unanswered; they differed only on whether a question raised in conversation also needs a list entry. **It does — a conversation ends, and the list does not.** |
+
+**★ THE GATE'S RULE LINE IS STILL WRONG AND WAS NOT TRUSTED HERE.** It
+prints `standing rules : R192 -> next free is R193`. **`R193` is
+claimed** by the declined-but-number-retained proposal. This is the live
+hazard filed in the hundred-and-forty-third filing, **confirmed still
+live by running the gate in this dispatch** — the fix is the top
+*Backlog* item and has not landed. No rule was minted here, so nothing
+was at risk this filing; the next one that mints will be.
+
+### The two operator instructions
+
+**Instruction 1** (already actioned in CI by `197f0a5`, absent from the
+docs until this filing), verbatim and in full:
+
+> *"the no network rule was made too broad. all I meant by that is the
+> software itself didn't rely on network technology to function which
+> would bloat it and slow things down the way it does for other pdf
+> software. it is fine to have download update or download addin
+> capability."*
+
+**Instruction 2 — the follow-on this dispatch was sent to file**,
+verbatim and in full:
+
+> *"and if we add these they should be modular in the same ways as out
+> other features. if someone doesn't include the crate in the package
+> then that removes the feature."*
+
+*"These"* = the download-update and download-addin capability instruction
+1 permitted. He is applying the **strippable-capability convention**
+(`Pass 70.0`, `crates/pdfce-core/Cargo.toml`'s `[features]` header) to
+it — by name and by mechanism. *"If someone doesn't include the crate"*
+**is rule 3 of that convention in his own words** (`optional = true`, so
+disabling removes the code rather than branching around it).
+
+### What §1.1 was actually carrying — three postures, one over-broad
+
+Only the **third** was too wide. Recorded in full at §1.1 and decision
+061 §1; in summary:
+
+1. **Does not OPERATE over a network** — no web server, no browser
+   runtime, no listener. **KEPT**, and it is the origin of the whole
+   posture. **Its motivation was never written down and now is:** bloat
+   and startup cost, *"the way it does for other pdf software"*.
+   **A posture recorded without its reason is exactly how it drifts into
+   an absolute** — which is what happened here, and is the same failure
+   shape the librarian's own hard rule 8 was amended for.
+2. **Privacy** — telemetry, analytics, crash reporting, licence
+   callback, silent phone-home. **KEPT, UNCHANGED, NOT RELAXED.** He
+   said nothing about it. **Narrowing one clause is not consent to widen
+   its neighbour** — a principle this filing then had to apply against
+   *itself*, see `R13` below.
+3. **A blanket ban on any HTTP/TLS/socket client crate in ANY pdfce
+   crate, fail-closed in CI.** **TOO BROAD.** It converted *"does not
+   need the network to function"* into *"cannot fetch anything, ever."*
+
+**The replacing line is the operator's own: what the software needs to
+RUN versus what the operator can ASK it to fetch.** `pdfce-core` +
+`pdfce-render` **ENFORCED permanently** (privacy **and** the wasm32
+fork, where no native HTTP stack exists — load-bearing twice over);
+`pdfce-cli`, `pdfce-gui`, `tools/` **ALLOWED** for operator-initiated
+fetching only. **The CI job's NAME changed with its scope**, because the
+old one asserted the over-broad claim to anyone reading a green run.
+
+### ★ The structural consequence the instruction does not mention
+
+**Every existing strippable capability (`jpx`, `ocrs`) lives in
+`pdfce-core` and is FORWARDED OUTWARD to the shells. Download cannot.**
+The narrowing makes core network-free *permanently*, so a fetch feature
+in core could never be switched on — and if `pdfce-cli` and `pdfce-gui`
+each implement fetching independently, **the logic exists twice**, which
+is the exact duplication the GUI–core split exists to prevent (and the
+same failure `pdfce-print` was created to avoid).
+
+**Recorded ruling: a sibling crate, working name `pdfce-fetch`** —
+pinned-URL download plus SHA-256 verification, nothing else — **depended
+on OPTIONALLY by both shells and NEVER by `pdfce-core`/`pdfce-render`.**
+
+**The precedent is exact and was cited rather than argued.**
+`crates/pdfce-print/Cargo.toml`'s own description reads *"Platform code,
+shared by both shells (docs/ARCHITECTURE.md §3). Deliberately NOT in
+pdfce-core or pdfce-render, which must stay platform-free."* **The fetch
+crate is that sentence with `network` in place of `platform`.** So a
+non-core sibling shared by both shells is **established practice**,
+decided once already in the eighty-fifth filing.
+
+**`pdfce-fetch` DOES NOT EXIST** — no such directory on disk. §3's tree
+block says **PLANNED, NOT BUILT** in its first line, deliberately: a
+crate documented as though it exists is the `R151` shape at the
+**documentation** layer, which is the exact defect found one filing
+earlier in `ocr::layer`'s module header.
+
+### ★ The outcome worth recording, because it reframes what was lost
+
+The obvious objection to the narrowing is *"we gave up a guarantee."*
+**We did not.** The old absolute — *"no HTTP client exists in this
+binary, verifiable by anyone reading `cargo tree`"* — **becomes a BUILD
+CONFIGURATION rather than a project-wide constraint.** Anyone who wants
+it builds without the feature and verifies it **exactly as before**,
+**and the attribution agrees**, because `THIRD_PARTY_LICENSES.md` is
+generated from the shipping graph — a build without the feature drops
+the HTTP stack's attribution with it, with no hand-maintenance.
+
+**Nothing was given up; an option was gained.** Written into **both**
+§1.1 and decision 061 §4 so a future session re-reading the narrowing
+finds the argument **already made** rather than re-litigating it. That
+is the whole point of putting it in two places: the project's repeated
+failure mode is a settled question re-opened because the answer lived
+somewhere the reader did not look.
+
+### ★ Found while sweeping — `R13` clause 5 is a direct collision, and it is FILED, NOT RULED
+
+`R13` reads: *"pdfce never self-updates. Never downloads a file the user
+did not ask for, never replaces its own binary, never executes anything
+it fetched, never launches an installer. **Permanent.**"* Against
+*"download update or download addin capability"*, the five clauses do
+not fare alike:
+
+| clause | status |
+|---|---|
+| never downloads a file the user did not ask for | **SURVIVES INTACT** — the permission is *operator-initiated*, asked-for by construction |
+| never self-updates | **SURVIVES** — *downloading* an update is not *applying* one |
+| never replaces its own binary | **UNRESOLVED** — hand the operator a folder, fine; swap the running exe, not |
+| never launches an installer | **UNRESOLVED** — same boundary |
+| **never executes anything it fetched** | **★ DIRECT COLLISION — an add-in IS executed code** |
+
+**Two of five survive, three need a ruling, and one of those three
+blocks any add-in Pass outright.** `R14` is **weakened but not
+contradicted** — it already admitted an in-app checker under decision
+003 §6.4's conditions, and **those conditions are not relaxed.**
+
+**This was filed, not resolved, and the reason is the filing's own §1
+argument turned on itself:** the operator narrowed the **network** rule
+and said nothing about the **execution** rule. **A librarian ruling on
+clause 5 because it stands next to a clause the operator did move would
+be the identical error the narrowing corrected.** `R13` therefore gains
+a dated **FLAG**, not an amendment.
+
+### Files edited
+
+| file | what changed |
+|---|---|
+| `docs/ARCHITECTURE.md` **§1.1** | retitled *"Network posture — THREE separate clauses, not one"* and restructured into clauses 1–3 + the precision clause. **★ NOT THIS FILING'S EDIT — see the race note below.** |
+| `docs/ROADMAP.md` *Backlog* (packaging) | the existing **README privacy-copy** item gains the dated obligation that its *"no network use"* half is **true at HEAD and becomes false on the first downloader** — do not pre-emptively soften, rewrite in the Pass that first links a client. §1.1 asserted this was filed; **it was not, until this bullet** |
+| `docs/ARCHITECTURE.md` **§3** | new `pdfce-fetch\` tree block, **PLANNED, NOT BUILT** stated first, with the boundary, the `pdfce-print` precedent, and what is new about it |
+| `docs/ARCHITECTURE.md` **§12** | **decision 061**, seven numbered sections |
+| `docs/ROADMAP.md` *Standing rules* | **`R12` amended** (two-scope table, CI-name change, build-configuration point); **`R13` FLAGGED** with the five-clause table; **`R14`** given the weakened-not-contradicted note |
+| `docs/ROADMAP.md` *Backlog* | **two new entries** — the `pdfce-fetch` constraint table + the owed `Cargo.toml` convention edit; and the owed **`R13` ruling** |
+| `docs/ROADMAP.md` *Next up* | `Pass 71.0` slice 2's model-files entry gains an amendment: the `af5580e` withdrawal was made under a reading of `R12` that no longer holds; **fetch fills the resolver's first-party directory, it is not a fourth lookup step** |
+| `docs/FEATURES.md` | **one claim repair, no new row.** See below. |
+
+### ★ A CONCURRENT SIBLING DISPATCH WAS WRITING §1.1 AT THE SAME TIME, and the race is recorded rather than smoothed over
+
+**The dispatch's premise was that a sibling had already filed, or had
+not. The true state was neither: it was filing WHILE this one did.**
+`git show --stat 197f0a5` and a grep for *"061"* both said *absent* at
+the start of this filing — **and both were true at the moment they were
+run.** The sibling's doc edits landed minutes later, into
+`ARCHITECTURE.md` §1.1, while §3 and §12 were being written here.
+
+**How it surfaced, and it was not by noticing:** `git diff --numstat`
+reported **31 deleted lines** in `ARCHITECTURE.md` when this filing had
+made only insertions. **A pure-append filing that shows deletions is
+somebody else's edit**, and that arithmetic is the only thing that
+caught it.
+
+**Resolution, in the dispatch's own terms (*"do not duplicate it"*):**
+the sibling's §1.1 restructure is **better than the amendment this
+filing had appended** — it separates the three postures into named
+clauses rather than a blockquote — so **the sibling's structure is what
+is on disk and this filing's §1.1 block was removed, not merged twice.**
+The reasoning that was unique here (strippability, the
+build-configuration reframe, the sibling-crate consequence) is now
+carried in §1.1's *"Clause 3, continued"* and in **decision 061 §2–§4**,
+which the sibling's text cites by number.
+
+**One gap closed rather than assumed:** §1.1 states the README
+network-claim rewrite is *"filed as a Backlog obligation in
+`ROADMAP.md`"*. **It was not filed** — the Backlog carried a README
+privacy-copy item that still read *"no network use (verifiable via
+`THIRD_PARTY_LICENSES.md`)"* with no obligation attached. **This filing
+attached it**, so the §1.1 sentence is now true. **A claim that a thing
+was filed is a claim like any other**, and this one outran its record by
+minutes.
+
+**Division of labour, stated so a future reader is not misled by
+proximity:** §1.1 is the sibling's; **§3's `pdfce-fetch\` block,
+decision 061, the `R12`/`R13`/`R14` rule edits, both Backlog entries,
+the `Pass 71.0` slice-2 amendment, the README obligation, and this
+`SESSION_LOG` entry are this filing's.**
+
+### `FEATURES.md` — NO ROW WAS ADDED, and that is the correct answer
+
+**Nothing is built.** There is no `pdfce-fetch` crate, no subcommand, no
+GUI surface, and no core API. A *Planned* row would be the file's own
+worst failure mode — a features list read as current that describes a
+capability with no code behind it.
+
+**One correction was owed and made**, under the file's *"replace the
+sentence, never append"* rule. Its *Will not* section carried:
+
+> *"Any network call without explicit, disclosed opt-in — enforced by a
+> fail-closed CI gate. Rules out telemetry and silent update checks."*
+
+**Two things wrong with that as of today.** It reads as a blanket
+prohibition on a capability that is now **permitted**, and it credits
+the CI gate with enforcing the whole of it when the gate now covers
+**the engine only**. Replaced with a bullet that keeps the part that is
+still absolutely true (telemetry, analytics, crash reporting, licence
+callback, silent phone-home — all still out), states the engine-only
+scope of the gate, and says plainly that operator-initiated downloads
+are **permitted as of 2026-08-13 and none are built.**
+
+### Still in flight
+
+- **`pdfce-fetch` is a SHAPE, not code.** Nothing built, no Pass ID
+  minted, next free is `Pass 75`.
+- **`crates/pdfce-core/Cargo.toml`'s `[features]` header is UNEDITED.**
+  It is a code file; this librarian recorded the owed edit in *Backlog*
+  and named the file. **Engineer's edit.**
+- **The `R13` ruling blocks add-ins**, and only add-ins — model fetch and
+  update *download* can proceed without it.
+- **Backup currency, measured** with `git bundle list-heads` on the
+  newest bundle plus `git log --oneline dc5a77f..HEAD | wc -l`: newest
+  bundle `pdfce-20260813-post-rebase.bundle`, its `refs/heads/main` is
+  **`dc5a77f`**, `HEAD` is **`197f0a5`**, **11 commits ahead**. Measured
+  in this dispatch, not inferred from any document.
+- **Nothing pushed.** Pushing is the operator's act.
+
+### For next session
+
+1. **★ STILL DO NOT TAKE `R193` — AND `R194` IS NOW CLAIMED TOO.** The
+   gate was re-run this filing and **still** prints `R193` as free. It
+   is claimed by the declined proposal; **`R194` is claimed by the
+   sibling's proposal filed under this same ordinal**. **The next
+   genuinely free rule number is `R195`.** The gate is now wrong by two
+   numbers rather than one, which raises the priority of the *Backlog*
+   fix. Next free decision is **062**; next free filing is **145**.
+2. **Extend the strippable-capability convention text** in
+   `crates/pdfce-core/Cargo.toml`'s `[features]` header to admit
+   shell-only strippable capabilities — the first *Backlog* entry states
+   exactly what it must say. Small, and it is a code edit.
+3. **Ask the operator the `R13` question**, scoped to three clauses, not
+   five: may pdfce replace its own binary, launch an installer, and
+   **execute an add-in it fetched**? The third is the one that matters.
+4. **Do not build `pdfce-fetch` speculatively.** Its first consumer
+   should be the OCR model fetch-and-verify, where the resolver already
+   exists and the shape is fully specified.
+5. **`(bm)`** (`detach_file` / `unembed_fonts` confidentiality) and
+   **`(v)`** (R58 scope) remain open and remain different questions.
