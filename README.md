@@ -1,6 +1,6 @@
 # pdfce
 
-##NOTE THAT THE CURRENT GUI FOR THIS PROJECT SUUUUCKS.
+## NOTE THAT THE CURRENT GUI FOR THIS PROJECT SUUUUCKS.
 The core and CLI are shining, but the GUI might as well be a basic
 viewer. I have split it off into its own project with a proper plan.
 If you need a fast RUST native pdf GUI editor and are planning it as an
