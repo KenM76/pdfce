@@ -81,6 +81,18 @@ pub struct Group {
     /// Changing it regenerates every member, exactly like a scale change — a
     /// group exists so its members agree.
     pub standard: DimStandard,
+    /// **The group's appearance defaults** (`Pass 69.0`) — the middle tier of
+    /// the style cascade ([`super::style`]).
+    ///
+    /// Every field is an `Option`: `None` means the group has not spoken and
+    /// the factory default applies. A member that overrides nothing follows
+    /// this; a member that overrides ONE property still follows this for the
+    /// rest, which is the whole point of per-property inheritance.
+    ///
+    /// The unit, number format, decimal marker, drafting standard and scale
+    /// are NOT duplicated here — they are the concrete fields above, and this
+    /// group's tier for them. Two homes for one property is how they drift.
+    pub style: super::style::GroupStyle,
 }
 
 /// The drafting standard governing how ce dimensions are DRAWN (Pass 27.2).
@@ -122,6 +134,7 @@ impl Group {
             ocg: None,
             visible: true,
             standard: DimStandard::default(),
+            style: super::style::GroupStyle::default(),
         }
     }
 
@@ -552,6 +565,17 @@ pub struct DimensionRecord {
     pub annot: Option<ObjId>,
     /// The authored `/AP` `/N` appearance-stream object (`None` until wired).
     pub ap: Option<ObjId>,
+    /// **This ce dimension's own style overrides** (`Pass 69.0`) — the bottom
+    /// tier of the cascade ([`super::style`]). `Default::default()` (every
+    /// field `None`) means "inherit everything from the group", which is what
+    /// every ce dimension authored before this Pass carries.
+    ///
+    /// On [`DimensionRecord`] rather than on [`DimensionKind`], deliberately
+    /// and for the same reason the ui-spec gives for tolerance: `DimensionKind`
+    /// is documented in-source as *the immutable geometry*, and a style is
+    /// presentation layered on top of a measurement — exactly parallel to how
+    /// [`Group`] layers a [`NumberFormat`] over `measured_points`.
+    pub style: super::style::StyleOverrides,
 }
 
 /// The authoritative dimensioning model — the whole `/PieceInfo` sidecar's
@@ -695,6 +719,10 @@ impl DimensionModel {
             kind,
             annot: None,
             ap: None,
+            // A newly authored ce dimension overrides NOTHING: it takes its
+            // whole appearance from its group. Anything else would make the
+            // group's default a suggestion rather than a default.
+            style: super::style::StyleOverrides::default(),
         });
         id
     }

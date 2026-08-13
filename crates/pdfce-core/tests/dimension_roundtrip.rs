@@ -692,10 +692,12 @@ fn ansi_breaks_the_dimension_line_for_the_value_and_iso_does_not() {
     use pdfce_core::dimension::{DimStandard, DimensionStyle, author_dimension};
 
     let kind = linear();
-    let style = |standard| DimensionStyle {
-        scale: ScaleState::Calibrated { scale: 0.01 },
-        format: NumberFormat::decimal(Unit::Meter, 2),
-        standard,
+    let style = |standard| {
+        DimensionStyle::new(
+            ScaleState::Calibrated { scale: 0.01 },
+            NumberFormat::decimal(Unit::Meter, 2),
+            standard,
+        )
     };
     let ansi = author_dimension(&kind, style(DimStandard::Ansi));
     let iso = author_dimension(&kind, style(DimStandard::Iso));
@@ -969,11 +971,11 @@ fn iso_text_never_reads_upside_down_in_any_direction() {
         };
         let authored = author_dimension(
             &kind,
-            DimensionStyle {
-                scale: ScaleState::Calibrated { scale: 0.01 },
-                format: NumberFormat::decimal(Unit::Meter, 2),
-                standard: DimStandard::Iso,
-            },
+            DimensionStyle::new(
+                ScaleState::Calibrated { scale: 0.01 },
+                NumberFormat::decimal(Unit::Meter, 2),
+                DimStandard::Iso,
+            ),
         );
         let (dx, dy) = direction(&authored.ap_content);
         assert!(

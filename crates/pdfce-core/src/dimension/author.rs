@@ -41,20 +41,13 @@ use crate::writer::content::{ContentBuilder, LineCap, LineJoin, Paint};
 
 use super::group::{DimStandard, DimensionKind};
 use super::measure_dict::build_measure_dict;
+use super::style::{ArrowForm, StyleDefaults, StyleOverrides};
 use super::units::{NumberFormat, ScaleState};
+use crate::vector::Rgb;
 
 /// The resource name the dimension label's font is authored under (matches the
 /// `/AP` `/Resources` `/Font` key and the `Tf` operator).
 const FONT_RESOURCE: &[u8] = b"Helv";
-
-/// The dimension label point size.
-const LABEL_SIZE: f64 = 10.0;
-
-/// The leader/extension stroke width (points).
-const LINE_WIDTH: f64 = 0.75;
-
-/// Arrowhead length (points).
-const ARROW_LEN: f64 = 7.0;
 
 /// Padding either side of the value where it interrupts an ANSI dimension
 /// line, in points. **Convention, not mandated** — see
@@ -82,18 +75,63 @@ pub struct DimensionStyle {
     pub format: NumberFormat,
     /// The drafting standard the dimension is drawn to.
     pub standard: DimStandard,
+    /// Label point size (Pass 69.0; was the `LABEL_SIZE` constant).
+    pub text_height: f64,
+    /// Leader/extension/dimension-line stroke width in points (Pass 69.0; was
+    /// the `LINE_WIDTH` constant).
+    pub line_width: f64,
+    /// Arrowhead length in points (Pass 69.0; was the `ARROW_LEN` constant).
+    pub arrow_length: f64,
+    /// Terminator form (Pass 69.0; the baker previously always filled a
+    /// triangle).
+    pub arrow_form: ArrowForm,
+    /// Line, text and terminator colour (Pass 69.0; previously an
+    /// unconditional black, written both into the content stream and the
+    /// annotation's `/C`).
+    pub color: Rgb,
+}
+
+impl DimensionStyle {
+    /// A style with the factory appearance defaults and the caller's
+    /// measurement fields — the constructor every test and doc example uses,
+    /// so adding a sixth appearance property does not touch a dozen struct
+    /// literals.
+    ///
+    /// **Not the path production code should take.** A real ce dimension's
+    /// style comes from [`super::style::resolve_style`], which walks the
+    /// factory → group → ce-dimension cascade. This constructor exists for
+    /// call sites that genuinely have no group (doc examples, unit tests of
+    /// the baker itself).
+    #[must_use]
+    pub const fn new(scale: ScaleState, format: NumberFormat, standard: DimStandard) -> Self {
+        let f = StyleDefaults::FACTORY;
+        Self {
+            scale,
+            format,
+            standard,
+            text_height: f.text_height,
+            line_width: f.line_width,
+            arrow_length: f.arrow_length,
+            arrow_form: f.arrow_form,
+            color: f.color,
+        }
+    }
 }
 
 impl From<&super::group::Group> for DimensionStyle {
-    /// Every regeneration path derives the style from the group, so this keeps
-    /// those call sites to one line and makes "the group is the authority"
-    /// structural rather than a convention each caller re-implements.
+    /// The group's style with no per-ce-dimension overrides — i.e. the two
+    /// upper tiers of the cascade only.
+    ///
+    /// Kept as a `From` because "the group is the authority" is still true for
+    /// every property a ce dimension does not override, and several call sites
+    /// legitimately have a group and nothing else (a group-wide preview, a
+    /// regeneration of a record that has been looked up separately). Call
+    /// sites that DO have the record must use
+    /// [`super::style::resolve_style`] — a `From<&Group>` there would silently
+    /// discard the operator's per-ce-dimension overrides, and the file would
+    /// disagree with the panel.
     fn from(g: &super::group::Group) -> Self {
-        Self {
-            scale: g.scale,
-            format: g.format,
-            standard: g.standard,
-        }
+        super::style::resolve_style(g, &StyleOverrides::default())
     }
 }
 
@@ -112,13 +150,20 @@ impl DimensionStyle {
     /// requirement.** ISO 129-1 requires a gap without fixing its value; the
     /// ANSI figures are practice, and ASME Y14.2 is paywalled and was not
     /// obtained. Decision 026 records the sourcing and confidence for each.
+    ///
+    /// Since Pass 69.0 the ISO branch reads the RESOLVED [`Self::line_width`]
+    /// rather than a module constant, so a group (or one ce dimension) that
+    /// thickens its lines gets the proportionally larger gap ISO's convention
+    /// actually asks for. The ANSI branch is unchanged — its figures are
+    /// absolute lengths by construction, which is the whole reason the two
+    /// traditions are modelled separately.
     #[must_use]
     pub fn extension_metrics(self) -> (f64, f64) {
         match self.standard {
             // ~1.4 mm and ~1 mm at 72 dpi.
             DimStandard::Ansi => (4.0, 3.0),
             // 8x the stroke width, per ISO's line-width-relative convention.
-            DimStandard::Iso => (LINE_WIDTH * 8.0, LINE_WIDTH * 8.0),
+            DimStandard::Iso => (self.line_width * 8.0, self.line_width * 8.0),
         }
     }
 
@@ -206,11 +251,14 @@ pub struct AuthoredDimension {
 /// };
 /// let authored = author_dimension(
 ///     &kind,
-///     DimensionStyle {
-///         scale: ScaleState::Calibrated { scale: 0.01 },
-///         format: NumberFormat::decimal(Unit::Meter, 2),
-///         standard: DimStandard::Ansi,
-///     },
+///     // `new` = the factory appearance defaults. A real ce dimension's style
+///     // comes from `dimension::resolve_style`, which walks the
+///     // factory -> group -> ce-dimension cascade.
+///     DimensionStyle::new(
+///         ScaleState::Calibrated { scale: 0.01 },
+///         NumberFormat::decimal(Unit::Meter, 2),
+///         DimStandard::Ansi,
+///     ),
 /// );
 /// // 100 pt at 0.01 m/pt = 1.00 m.
 /// assert_eq!(authored.label, "1.00 m");
@@ -220,11 +268,8 @@ pub struct AuthoredDimension {
 /// ```
 #[must_use]
 pub fn author_dimension(kind: &DimensionKind, style: DimensionStyle) -> AuthoredDimension {
-    let DimensionStyle {
-        scale,
-        format,
-        standard: _,
-    } = style;
+    let DimensionStyle { scale, format, .. } = style;
+    let label_size = style.text_height;
     // Through `display_with`, never `format_measurement` directly: an ANGULAR
     // ce dimension must not be run through the length formatter, and this
     // baked label is the copy that outlives the session. See
@@ -238,16 +283,36 @@ pub fn author_dimension(kind: &DimensionKind, style: DimensionStyle) -> Authored
     // Accumulate the drawn bbox as we build the appearance content.
     let mut bounds = BoundsAcc::new();
     let mut b = ContentBuilder::new();
-    b.set_stroke_gray(0.0);
-    b.set_fill_gray(0.0);
-    b.set_line_width(LINE_WIDTH);
+    // ★ Grey stays grey, and that is a compatibility decision rather than a
+    // stylistic one. Before Pass 69.0 this emitted `0 g` / `0 G`
+    // unconditionally; every ce dimension in every existing document was baked
+    // that way. Emitting `0 0 0 rg` for the same black would repaint identical
+    // pixels while changing the stream bytes, so the first unrelated
+    // regeneration (a scale edit on some other property) would rewrite every
+    // appearance stream in the file for no visible reason — a minimal-diff
+    // (R34) violation that is invisible until somebody diffs two saves.
+    //
+    // So: a pure grey is written with the grey operators it always used, and
+    // DeviceRGB appears only once a colour actually needs it.
+    let c = style.color;
+    #[allow(clippy::float_cmp)] // exact equality is the intent: only an
+    // untouched/explicitly-grey colour takes the legacy path.
+    let grey = c.r == c.g && c.g == c.b;
+    if grey {
+        b.set_stroke_gray(f64::from(c.r));
+        b.set_fill_gray(f64::from(c.r));
+    } else {
+        b.set_stroke_rgb(f64::from(c.r), f64::from(c.g), f64::from(c.b));
+        b.set_fill_rgb(f64::from(c.r), f64::from(c.g), f64::from(c.b));
+    }
+    b.set_line_width(style.line_width);
     b.set_line_cap(LineCap::Butt);
     b.set_line_join(LineJoin::Miter);
 
     // The label's metrics are needed BEFORE the line is stroked, because under
     // ANSI the line is broken to make room for it. Computing them here rather
     // than after drawing is what lets one function serve both standards.
-    let text_w = estimate_text_width(&label, LABEL_SIZE);
+    let text_w = estimate_text_width(&label, label_size);
     let anchor = kind.label_anchor().unwrap_or_else(|| l0.midpoint(l1));
 
     match *kind {
@@ -277,7 +342,7 @@ pub fn author_dimension(kind: &DimensionKind, style: DimensionStyle) -> Authored
             );
         }
         DimensionKind::Circular { fit, .. } => {
-            draw_circular(&mut b, &mut bounds, fit.center, fit.radius, l1);
+            draw_circular(&mut b, &mut bounds, fit.center, fit.radius, l1, style);
         }
         DimensionKind::Angular {
             apex,
@@ -286,7 +351,7 @@ pub fn author_dimension(kind: &DimensionKind, style: DimensionStyle) -> Authored
             radius,
             ..
         } => {
-            draw_angular(&mut b, &mut bounds, apex, dir_a, dir_b, radius);
+            draw_angular(&mut b, &mut bounds, apex, dir_a, dir_b, radius, style);
         }
     }
 
@@ -323,7 +388,7 @@ pub fn author_dimension(kind: &DimensionKind, style: DimensionStyle) -> Authored
     let lift = if style.breaks_line_for_text() {
         // Centred ON the line: drop the baseline by roughly half a cap height
         // so the glyphs straddle it rather than sit on it.
-        -LABEL_SIZE * 0.35
+        -label_size * 0.35
     } else {
         TEXT_ABOVE_GAP
     };
@@ -334,17 +399,17 @@ pub fn author_dimension(kind: &DimensionKind, style: DimensionStyle) -> Authored
     for (du, dv) in [
         (0.0, 0.0),
         (text_w, 0.0),
-        (0.0, LABEL_SIZE),
-        (text_w, LABEL_SIZE),
+        (0.0, label_size),
+        (text_w, label_size),
     ] {
         bounds.add(Point::new(tx + ux * du + px * dv, ty + uy * du + py * dv));
         bounds.add(Point::new(
-            tx + ux * du - px * LABEL_SIZE * 0.3,
-            ty + uy * du - py * LABEL_SIZE * 0.3,
+            tx + ux * du - px * label_size * 0.3,
+            ty + uy * du - py * label_size * 0.3,
         ));
     }
     b.begin_text();
-    b.set_font(FONT_RESOURCE, LABEL_SIZE);
+    b.set_font(FONT_RESOURCE, label_size);
     b.set_text_matrix(ux, uy, -uy, ux, tx, ty);
     // ★ WinAnsi, not raw UTF-8. The label font is declared
     // `/WinAnsiEncoding` (`standard14_font_dict`), so a multi-byte UTF-8
@@ -383,12 +448,17 @@ pub fn author_dimension(kind: &DimensionKind, style: DimensionStyle) -> Authored
             Object::Real(l1.y),
         ]),
     );
+    // `/C` — the annotation's own colour (§12.5.2 Table 164), kept in step
+    // with what the baked `/AP` actually paints. A reader that ignores the
+    // appearance stream and draws from the annotation keys alone (and some
+    // do, for a `/Line`) would otherwise draw a black dimension over a
+    // coloured one.
     annot.insert(
         Name::from(b"C"),
         Object::Array(vec![
-            Object::Real(0.0),
-            Object::Real(0.0),
-            Object::Real(0.0),
+            Object::Real(f64::from(style.color.r)),
+            Object::Real(f64::from(style.color.g)),
+            Object::Real(f64::from(style.color.b)),
         ]),
     );
     annot.insert(
@@ -552,9 +622,9 @@ fn draw_linear(b: &mut ContentBuilder, bounds: &mut BoundsAcc, d: LinearDraw) {
         bounds.add(end);
     }
 
-    // Arrowheads pointing outward at each end (toward the extension ticks).
-    arrowhead(b, bounds, a, (-ux, -uy));
-    arrowhead(b, bounds, c, (ux, uy));
+    // Terminators pointing outward at each end (toward the extension ticks).
+    arrowhead(b, bounds, a, (-ux, -uy), style);
+    arrowhead(b, bounds, c, (ux, uy), style);
 }
 
 /// Draw a circular dimension: the fitted circle outline + a radius leader from
@@ -565,6 +635,7 @@ fn draw_circular(
     center: Point,
     radius: f64,
     rim: Point,
+    style: DimensionStyle,
 ) {
     // The fitted circle outline (four kappa cubics), for context.
     if radius.is_finite() && radius > 0.0 {
@@ -578,9 +649,9 @@ fn draw_circular(
     b.paint(Paint::Stroke);
     bounds.add(center);
     bounds.add(rim);
-    // Arrowhead at the rim pointing outward.
+    // Terminator at the rim pointing outward.
     let (ux, uy) = unit_vector(center, rim);
-    arrowhead(b, bounds, rim, (ux, uy));
+    arrowhead(b, bounds, rim, (ux, uy), style);
 }
 
 /// Draw an ANGULAR ce dimension: two extension lines out along the arms, an
@@ -607,6 +678,7 @@ fn draw_angular(
     dir_a: Point,
     dir_b: Point,
     radius: f64,
+    style: DimensionStyle,
 ) {
     if !(radius.is_finite() && radius > 0.0) {
         return;
@@ -627,7 +699,7 @@ fn draw_angular(
 
     // Extension lines: from the apex out past the arc, so the arc visibly
     // spans between two drawn arms rather than floating.
-    let ext = radius + ARROW_LEN;
+    let ext = radius + style.arrow_length;
     for d in [dir_a, dir_b] {
         b.move_to(apex.x, apex.y);
         let (ex, ey) = (d.x.mul_add(ext, apex.x), d.y.mul_add(ext, apex.y));
@@ -667,35 +739,121 @@ fn draw_angular(
         (tx * sign, ty * sign)
     };
     let sign = if sweep >= 0.0 { 1.0 } else { -1.0 };
-    arrowhead(b, bounds, start, tangent(a0, -sign));
+    arrowhead(b, bounds, start, tangent(a0, -sign), style);
     let end = at(1.0);
-    arrowhead(b, bounds, end, tangent(a0 + sweep, sign));
+    arrowhead(b, bounds, end, tangent(a0 + sweep, sign), style);
 }
 
-/// Emit a filled arrowhead at `tip`, pointing along the unit direction `dir`.
-fn arrowhead(b: &mut ContentBuilder, bounds: &mut BoundsAcc, tip: Point, dir: (f64, f64)) {
+/// Emit the terminator at `tip`, pointing along the unit direction `dir`, in
+/// whatever form the resolved style asks for (Pass 69.0).
+///
+/// # Why one function rather than one per form
+///
+/// Every form shares the same three inputs (tip, direction, size) and the same
+/// obligation to feed `bounds` — and a terminator missing from the bounds
+/// accumulator produces an under-sized `/Rect`, which clips it in every
+/// conforming reader. Keeping them in one function makes that obligation
+/// impossible to forget for a form added later: the `match` returns nothing, so
+/// a new arm that never touches `bounds` is visibly different from its
+/// neighbours.
+///
+/// The proportions (a 0.35 half-width, a 45-degree slash, a radius-0.2 dot) are
+/// **drafting convention, not standard requirements** — the same honesty
+/// [`DimensionStyle::extension_metrics`] applies to the extension-line gap.
+/// They scale with [`DimensionStyle::arrow_length`], so enlarging the
+/// terminator enlarges it proportionally rather than distorting it.
+fn arrowhead(
+    b: &mut ContentBuilder,
+    bounds: &mut BoundsAcc,
+    tip: Point,
+    dir: (f64, f64),
+    style: DimensionStyle,
+) {
     let (ux, uy) = dir;
     if !(ux.is_finite() && uy.is_finite()) {
         return;
     }
+    let len = style.arrow_length;
+    if !(len.is_finite() && len > 0.0) {
+        return;
+    }
     let (px, py) = (-uy, ux);
-    let half = ARROW_LEN * 0.35;
-    let bx = tip.x - ux * ARROW_LEN;
-    let by = tip.y - uy * ARROW_LEN;
+    let half = len * 0.35;
+    let bx = tip.x - ux * len;
+    let by = tip.y - uy * len;
     let b1 = Point::new(bx + px * half, by + py * half);
     let b2 = Point::new(bx - px * half, by - py * half);
-    b.move_to(tip.x, tip.y);
-    b.line_to(b1.x, b1.y);
-    b.line_to(b2.x, b2.y);
-    b.close_subpath();
-    b.paint(Paint::Fill);
-    bounds.add(tip);
-    bounds.add(b1);
-    bounds.add(b2);
+
+    match style.arrow_form {
+        // The pre-Pass-69.0 shape, byte-for-byte: a closed filled triangle.
+        ArrowForm::Filled => {
+            b.move_to(tip.x, tip.y);
+            b.line_to(b1.x, b1.y);
+            b.line_to(b2.x, b2.y);
+            b.close_subpath();
+            b.paint(Paint::Fill);
+            bounds.add(tip);
+            bounds.add(b1);
+            bounds.add(b2);
+        }
+        // An open V — two strokes meeting at the tip, deliberately NOT closed
+        // back across the base. A closed-and-stroked triangle is a different
+        // mark (a hollow triangle), and architectural practice wants the V.
+        ArrowForm::Open => {
+            b.move_to(b1.x, b1.y);
+            b.line_to(tip.x, tip.y);
+            b.line_to(b2.x, b2.y);
+            b.paint(Paint::Stroke);
+            bounds.add(tip);
+            bounds.add(b1);
+            bounds.add(b2);
+        }
+        // A 45-degree tick THROUGH the dimension line, centred on the tip —
+        // it extends on both sides, which is what distinguishes it from a
+        // half-length tick that reads as a stray line end.
+        ArrowForm::Slash => {
+            // Rotate the along-line direction by 45 degrees.
+            const R: f64 = std::f64::consts::FRAC_1_SQRT_2;
+            let (sx, sy) = (ux.mul_add(R, -(uy * R)), uy.mul_add(R, ux * R));
+            let arm = len * 0.5;
+            let p1 = Point::new(tip.x - sx * arm, tip.y - sy * arm);
+            let p2 = Point::new(tip.x + sx * arm, tip.y + sy * arm);
+            b.move_to(p1.x, p1.y);
+            b.line_to(p2.x, p2.y);
+            b.paint(Paint::Stroke);
+            bounds.add(p1);
+            bounds.add(p2);
+        }
+        // A filled dot centred ON the tip (not behind it): the dot marks the
+        // point, it does not point at it.
+        ArrowForm::Dot => {
+            let r = len * 0.2;
+            emit_circle_path(b, tip, r);
+            b.paint(Paint::Fill);
+            bounds.add(Point::new(tip.x - r, tip.y - r));
+            bounds.add(Point::new(tip.x + r, tip.y + r));
+        }
+        // Nothing drawn — but the tip still counts toward the bounds, because
+        // the dimension line reaches it and an under-sized `/Rect` would clip
+        // the line itself.
+        ArrowForm::None => bounds.add(tip),
+    }
 }
 
 /// Emit a circle outline centred at `c` radius `r` as four kappa cubics.
 fn emit_circle(b: &mut ContentBuilder, c: Point, r: f64) {
+    emit_circle_path(b, c, r);
+    b.paint(Paint::Stroke);
+}
+
+/// The circle PATH alone, unpainted — so a caller can choose stroke or fill.
+///
+/// Split out of [`emit_circle`] for the `Dot` terminator (Pass 69.0), which
+/// needs the same four-kappa construction with `f` rather than `S`. The split
+/// is deliberate rather than a second copy of the curve maths: the kappa
+/// constant and the quadrant order are the kind of thing that gets transcribed
+/// slightly wrong, and two copies would drift the first time one is corrected.
+fn emit_circle_path(b: &mut ContentBuilder, c: Point, r: f64) {
     const KAPPA: f64 = 0.552_284_749_830_793_4;
     let o = r * KAPPA;
     b.move_to(c.x + r, c.y);
@@ -704,7 +862,6 @@ fn emit_circle(b: &mut ContentBuilder, c: Point, r: f64) {
     b.curve_to(c.x - r, c.y - o, c.x - o, c.y - r, c.x, c.y - r);
     b.curve_to(c.x + o, c.y - r, c.x + r, c.y - o, c.x + r, c.y);
     b.close_subpath();
-    b.paint(Paint::Stroke);
 }
 
 /// The unit vector from `a` to `b`, or `(1, 0)` for a degenerate (zero-length)
@@ -835,11 +992,11 @@ mod tests {
     fn linear_dimension_bakes_a_line_it_and_measure() {
         let d = author_dimension(
             &linear(),
-            DimensionStyle {
-                scale: ScaleState::Calibrated { scale: 0.01 },
-                format: NumberFormat::decimal(Unit::Meter, 2),
-                standard: DimStandard::Ansi,
-            },
+            DimensionStyle::new(
+                ScaleState::Calibrated { scale: 0.01 },
+                NumberFormat::decimal(Unit::Meter, 2),
+                DimStandard::Ansi,
+            ),
         );
         assert_eq!(d.label, "1.00 m");
         assert_eq!(
@@ -871,11 +1028,11 @@ mod tests {
         // renders it; a malformed stream would fail render).
         let d = author_dimension(
             &linear(),
-            DimensionStyle {
-                scale: ScaleState::Calibrated { scale: 0.01 },
-                format: NumberFormat::decimal(Unit::Meter, 2),
-                standard: DimStandard::Ansi,
-            },
+            DimensionStyle::new(
+                ScaleState::Calibrated { scale: 0.01 },
+                NumberFormat::decimal(Unit::Meter, 2),
+                DimStandard::Ansi,
+            ),
         );
         ContentStream::parse(d.ap_content.clone()).expect("baked /AP must reparse");
         // The label text is shown, and a font is set.
@@ -888,11 +1045,11 @@ mod tests {
     fn never_set_scale_bakes_raw_units_and_no_measure() {
         let d = author_dimension(
             &linear(),
-            DimensionStyle {
-                scale: ScaleState::NeverSet,
-                format: NumberFormat::decimal(Unit::Meter, 2),
-                standard: DimStandard::Ansi,
-            },
+            DimensionStyle::new(
+                ScaleState::NeverSet,
+                NumberFormat::decimal(Unit::Meter, 2),
+                DimStandard::Ansi,
+            ),
         );
         assert_eq!(d.label, "100.00 pt");
         assert!(d.annot.get(b"Measure").is_none());
@@ -910,11 +1067,11 @@ mod tests {
                 fit,
                 show_diameter: false,
             },
-            DimensionStyle {
-                scale: ScaleState::Calibrated { scale: 0.05 },
-                format: NumberFormat::decimal(Unit::Centimeter, 2),
-                standard: DimStandard::Ansi,
-            },
+            DimensionStyle::new(
+                ScaleState::Calibrated { scale: 0.05 },
+                NumberFormat::decimal(Unit::Centimeter, 2),
+                DimStandard::Ansi,
+            ),
         );
         assert!(r.label.starts_with("R "), "{}", r.label);
         let dia = author_dimension(
@@ -922,11 +1079,11 @@ mod tests {
                 fit,
                 show_diameter: true,
             },
-            DimensionStyle {
-                scale: ScaleState::Calibrated { scale: 0.05 },
-                format: NumberFormat::decimal(Unit::Centimeter, 2),
-                standard: DimStandard::Ansi,
-            },
+            DimensionStyle::new(
+                ScaleState::Calibrated { scale: 0.05 },
+                NumberFormat::decimal(Unit::Centimeter, 2),
+                DimStandard::Ansi,
+            ),
         );
         assert!(dia.label.starts_with("DIA "), "{}", dia.label);
         // Diameter reads twice the radius.
@@ -939,19 +1096,19 @@ mod tests {
         // Same inputs → byte-identical appearance (regeneration-safe).
         let a = author_dimension(
             &linear(),
-            DimensionStyle {
-                scale: ScaleState::OneToOne,
-                format: NumberFormat::decimal(Unit::Inch, 2),
-                standard: DimStandard::Ansi,
-            },
+            DimensionStyle::new(
+                ScaleState::OneToOne,
+                NumberFormat::decimal(Unit::Inch, 2),
+                DimStandard::Ansi,
+            ),
         );
         let b = author_dimension(
             &linear(),
-            DimensionStyle {
-                scale: ScaleState::OneToOne,
-                format: NumberFormat::decimal(Unit::Inch, 2),
-                standard: DimStandard::Ansi,
-            },
+            DimensionStyle::new(
+                ScaleState::OneToOne,
+                NumberFormat::decimal(Unit::Inch, 2),
+                DimStandard::Ansi,
+            ),
         );
         assert_eq!(a, b);
     }

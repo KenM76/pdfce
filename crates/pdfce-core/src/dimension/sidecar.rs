@@ -34,7 +34,9 @@ use super::fit::FitCircle;
 use super::group::{
     DimStandard, DimensionId, DimensionKind, DimensionModel, DimensionRecord, Group, GroupId,
 };
+use super::style::{ArrowForm, GroupStyle, StyleOverrides};
 use super::units::{DecimalMarker, FractionMode, NumberFormat, ScaleState, Unit};
+use crate::vector::Rgb;
 
 /// The sidecar schema version pdfce writes (bumped only on a breaking layout
 /// change; readers ignore unknown extra keys, §14.5 forward-compat).
@@ -181,6 +183,21 @@ fn serialize_group(g: &Group) -> Object {
     if let Some(ocg) = g.ocg {
         d.insert(Name::from(b"Ocg"), Object::Reference(ocg));
     }
+    // The Pass 69.0 group-tier style. Every key is written ONLY when the group
+    // actually overrides that property, so a document whose groups have never
+    // been styled produces byte-identical sidecar output to what it produced
+    // before this Pass existed (R34 minimal diff — and the reason no
+    // `SIDECAR_VERSION` bump is owed here; see the constant's own note).
+    put_style_keys(
+        &mut d,
+        StyleKeys {
+            text_height: g.style.text_height,
+            line_width: g.style.line_width,
+            arrow_length: g.style.arrow_length,
+            arrow_form: g.style.arrow_form,
+            color: g.style.color,
+        },
+    );
     Object::Dict(d)
 }
 
@@ -232,6 +249,16 @@ fn deserialize_group(obj: &Object) -> Option<Group> {
         standard: match name_of(d.get(b"Standard")).as_deref() {
             Some(b"iso") => DimStandard::Iso,
             _ => DimStandard::Ansi,
+        },
+        style: {
+            let k = read_style_keys(d);
+            GroupStyle {
+                text_height: k.text_height,
+                line_width: k.line_width,
+                arrow_length: k.arrow_length,
+                arrow_form: k.arrow_form,
+                color: k.color,
+            }
         },
     })
 }
@@ -330,6 +357,27 @@ fn serialize_dimension(dim: &DimensionRecord) -> Object {
     if let Some(ap) = dim.ap {
         d.insert(Name::from(b"Ap"), Object::Reference(ap));
     }
+    // The Pass 69.0 per-ce-dimension overrides. Same optional-key discipline
+    // as `/Offset`: written only where the operator actually ticked the
+    // override, so a ce dimension that inherits everything adds no keys and the
+    // sidecar bytes are unchanged from before this Pass.
+    //
+    // The measurement-side overrides use DIFFERENT key names from the group's
+    // (`/OvUnit` rather than `/Unit`) even though the values are identical in
+    // shape. Reusing `/Unit` inside a dimension dict would be a key that means
+    // "the value" in one dict and "the override, absence meaning inherit" in
+    // another - the same word for two different contracts, one grep apart.
+    put_override_keys(&mut d, &dim.style);
+    put_style_keys(
+        &mut d,
+        StyleKeys {
+            text_height: dim.style.text_height,
+            line_width: dim.style.line_width,
+            arrow_length: dim.style.arrow_length,
+            arrow_form: dim.style.arrow_form,
+            color: dim.style.color,
+        },
+    );
     Object::Dict(d)
 }
 
@@ -367,12 +415,215 @@ fn deserialize_dimension(obj: &Object) -> Option<DimensionRecord> {
         },
         _ => return None,
     };
+    let appearance = read_style_keys(d);
     Some(DimensionRecord {
         id,
         group,
         kind,
         annot: d.get(b"Annot").and_then(Object::as_reference),
         ap: d.get(b"Ap").and_then(Object::as_reference),
+        style: StyleOverrides {
+            unit: name_of(d.get(b"OvUnit"))
+                .and_then(|n| String::from_utf8(n).ok())
+                .and_then(|t| Unit::parse(&t)),
+            fraction: read_override_fraction(d),
+            decimal_marker: match name_of(d.get(b"OvDecimalMarker")).as_deref() {
+                Some(b"comma") => Some(DecimalMarker::Comma),
+                Some(b"point") => Some(DecimalMarker::Point),
+                _ => None,
+            },
+            standard: match name_of(d.get(b"OvStandard")).as_deref() {
+                Some(b"iso") => Some(DimStandard::Iso),
+                Some(b"ansi") => Some(DimStandard::Ansi),
+                _ => None,
+            },
+            text_height: appearance.text_height,
+            line_width: appearance.line_width,
+            arrow_length: appearance.arrow_length,
+            arrow_form: appearance.arrow_form,
+            color: appearance.color,
+        },
+    })
+}
+
+// ---- style (de)serialization (Pass 69.0) ------------------------------------
+
+/// The five APPEARANCE properties, as `Option`s - the shape both tiers of the
+/// cascade store, and therefore the shape both read and write.
+///
+/// A private carrier type rather than ten positional arguments: the group tier
+/// ([`GroupStyle`]) and the ce-dimension tier ([`StyleOverrides`]) have
+/// different field sets overall but identical appearance halves, and the whole
+/// point of a shared writer is that the two can never encode the same property
+/// differently.
+struct StyleKeys {
+    text_height: Option<f64>,
+    line_width: Option<f64>,
+    arrow_length: Option<f64>,
+    arrow_form: Option<ArrowForm>,
+    color: Option<Rgb>,
+}
+
+/// Write the appearance keys that are actually set. Absent = inherit.
+fn put_style_keys(d: &mut Dict, k: StyleKeys) {
+    if let Some(v) = k.text_height {
+        d.insert(Name::from(b"TextHeight"), Object::Real(v));
+    }
+    if let Some(v) = k.line_width {
+        d.insert(Name::from(b"LineWidth"), Object::Real(v));
+    }
+    if let Some(v) = k.arrow_length {
+        d.insert(Name::from(b"ArrowLength"), Object::Real(v));
+    }
+    if let Some(v) = k.arrow_form {
+        d.insert(
+            Name::from(b"ArrowForm"),
+            Object::Name(Name::from(v.token().as_bytes())),
+        );
+    }
+    if let Some(c) = k.color {
+        d.insert(
+            Name::from(b"Color"),
+            Object::Array(vec![
+                Object::Real(f64::from(c.r)),
+                Object::Real(f64::from(c.g)),
+                Object::Real(f64::from(c.b)),
+            ]),
+        );
+    }
+}
+
+/// Read the appearance keys back. Anything absent, malformed, or outside a
+/// usable range reads as `None` - i.e. **inherit** - never as a wrong value.
+///
+/// # Why an out-of-range number inherits rather than clamping
+///
+/// These come out of the FILE. A `/LineWidth` of `-3` or `1e12` is corruption
+/// or another product's bug, and clamping it to something plausible would draw
+/// a ce dimension the operator never asked for while reporting nothing.
+/// Falling back to inheritance draws what the group says, which is an answer
+/// the operator DID give.
+fn read_style_keys(d: &Dict) -> StyleKeys {
+    StyleKeys {
+        text_height: positive_of(d.get(b"TextHeight")),
+        line_width: positive_of(d.get(b"LineWidth")),
+        arrow_length: positive_of(d.get(b"ArrowLength")),
+        arrow_form: name_of(d.get(b"ArrowForm"))
+            .and_then(|n| String::from_utf8(n).ok())
+            .and_then(|t| ArrowForm::parse(&t)),
+        color: color_of(d.get(b"Color")),
+    }
+}
+
+/// Write the four MEASUREMENT-side overrides (unit, fraction, marker,
+/// standard), under `Ov`-prefixed keys. See the call site for why the prefix.
+fn put_override_keys(d: &mut Dict, o: &StyleOverrides) {
+    if let Some(u) = o.unit {
+        d.insert(
+            Name::from(b"OvUnit"),
+            Object::Name(Name::from(u.token().as_bytes())),
+        );
+    }
+    match o.fraction {
+        Some(FractionMode::Decimal { places }) => {
+            d.insert(Name::from(b"OvFrac"), Object::Name(Name::from(b"decimal")));
+            d.insert(Name::from(b"OvPlaces"), Object::Integer(i64::from(places)));
+        }
+        Some(FractionMode::Fraction {
+            denominator,
+            reduce,
+        }) => {
+            d.insert(Name::from(b"OvFrac"), Object::Name(Name::from(b"fraction")));
+            d.insert(
+                Name::from(b"OvDenom"),
+                Object::Integer(i64::from(denominator)),
+            );
+            d.insert(Name::from(b"OvReduce"), Object::Boolean(reduce));
+        }
+        None => {}
+    }
+    if let Some(m) = o.decimal_marker {
+        d.insert(
+            Name::from(b"OvDecimalMarker"),
+            Object::Name(Name::from(match m {
+                DecimalMarker::Comma => b"comma".as_slice(),
+                DecimalMarker::Point => b"point".as_slice(),
+            })),
+        );
+    }
+    if let Some(std) = o.standard {
+        d.insert(
+            Name::from(b"OvStandard"),
+            Object::Name(Name::from(match std {
+                DimStandard::Iso => b"iso".as_slice(),
+                DimStandard::Ansi => b"ansi".as_slice(),
+            })),
+        );
+    }
+}
+
+/// The per-ce-dimension fraction/precision override, or `None` to inherit.
+///
+/// Unlike the group's reader, a missing `/OvPlaces` does NOT fall back to a
+/// default of 2: an `/OvFrac /decimal` with no digit count is a malformed
+/// override, and inventing a precision the file does not state is exactly the
+/// silent substitution rule 4 forbids. It inherits instead.
+fn read_override_fraction(d: &Dict) -> Option<FractionMode> {
+    match name_of(d.get(b"OvFrac"))?.as_slice() {
+        b"decimal" => {
+            let places = u32::try_from(d.get(b"OvPlaces").and_then(Object::as_int)?).ok()?;
+            // A fixed-decimal format with more than a dozen places is not a
+            // format, it is a corrupted integer; the formatter would emit a
+            // label nobody can read.
+            (places <= 12).then_some(FractionMode::Decimal { places })
+        }
+        b"fraction" => {
+            let denominator = u32::try_from(d.get(b"OvDenom").and_then(Object::as_int)?).ok()?;
+            (denominator > 0 && denominator <= 4096).then_some(FractionMode::Fraction {
+                denominator,
+                reduce: bool_of(d.get(b"OvReduce")).unwrap_or(false),
+            })
+        }
+        _ => None,
+    }
+}
+
+/// A strictly-positive, finite, sanely-bounded number from the file, or `None`.
+///
+/// The bound is [`MAX_PAGE_VALUE`] for the same reason the geometry guard uses
+/// it: a text height of 1e9 points is not a preference, and letting it reach
+/// the writer produces a `/Rect` that breaks every reader downstream.
+fn positive_of(obj: Option<&Object>) -> Option<f64> {
+    let v = obj.and_then(Object::as_number)?;
+    (v.is_finite() && v > 0.0 && v <= MAX_PAGE_VALUE).then_some(v)
+}
+
+/// An `[r g b]` colour array with every component in 0.0-1.0, or `None`.
+///
+/// Out-of-range components inherit rather than clamp - same argument as
+/// [`read_style_keys`]: a clamped colour is a colour the operator never chose.
+fn color_of(obj: Option<&Object>) -> Option<Rgb> {
+    let a = obj.and_then(Object::as_array)?;
+    if a.len() != 3 {
+        return None;
+    }
+    let mut c = [0.0f32; 3];
+    for (slot, o) in c.iter_mut().zip(a) {
+        let v = o.as_number()?;
+        if !(v.is_finite() && (0.0..=1.0).contains(&v)) {
+            return None;
+        }
+        #[allow(clippy::cast_possible_truncation)]
+        // A 0.0-1.0 colour component into f32 is lossless enough for a paint
+        // value; `Rgb` is f32 because `pdfce-render`'s pipeline is.
+        {
+            *slot = v as f32;
+        }
+    }
+    Some(Rgb {
+        r: c[0],
+        g: c[1],
+        b: c[2],
     })
 }
 
@@ -653,5 +904,195 @@ mod angular_sidecar_tests {
             1,
             "and must keep its dimensions rather than coming back empty"
         );
+    }
+}
+
+/// Pass 69.0 - the style cascade's sidecar half.
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
+mod style_sidecar_tests {
+    use super::*;
+    use crate::dimension::group::DEFAULT_GROUP_ID;
+    use crate::vector::Point;
+
+    /// A model with one calibrated group and one linear ce dimension, and NO
+    /// style anywhere - the pre-Pass-69.0 shape, which is what the
+    /// compatibility assertions below need.
+    fn sample_model() -> DimensionModel {
+        let mut m = DimensionModel::new();
+        m.set_group_scale(
+            DEFAULT_GROUP_ID,
+            ScaleState::Calibrated { scale: 0.05 },
+            NumberFormat::decimal(Unit::Meter, 3),
+        );
+        m.add_dimension(
+            DEFAULT_GROUP_ID,
+            DimensionKind::Linear {
+                a: Point::new(1.0, 2.0),
+                b: Point::new(3.0, 4.0),
+                constraint: crate::vector::AxisConstraint::Horizontal,
+                offset: 0.0,
+                text_along: 0.0,
+            },
+        );
+        m
+    }
+
+    /// ★ The compatibility claim, asserted on BYTES rather than on behaviour.
+    ///
+    /// A model whose groups and ce dimensions carry no style must serialise to
+    /// exactly what it serialised to before the style keys existed. Asserting
+    /// "it round-trips" would pass even if every dict gained five default keys
+    /// — and that is precisely the failure mode: a sidecar that grows keys on
+    /// every save makes each save dirty an object R34 says is untouched.
+    #[test]
+    fn an_unstyled_model_writes_no_style_keys_at_all() {
+        let model = sample_model();
+        let Object::Dict(d) = serialize_model(&model) else {
+            panic!("the sidecar is a dictionary");
+        };
+        let groups = d.get(b"Groups").and_then(Object::as_array).unwrap();
+        let dims = d.get(b"Dimensions").and_then(Object::as_array).unwrap();
+        for entry in groups.iter().chain(dims.iter()) {
+            let e = entry.as_dict().unwrap();
+            for key in [
+                b"TextHeight".as_slice(),
+                b"LineWidth",
+                b"ArrowLength",
+                b"ArrowForm",
+                b"Color",
+                b"OvUnit",
+                b"OvFrac",
+                b"OvStandard",
+                b"OvDecimalMarker",
+            ] {
+                assert!(
+                    e.get(key).is_none(),
+                    "an unstyled entry must not gain the key {}",
+                    String::from_utf8_lossy(key)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn group_and_dimension_style_round_trip() {
+        let mut model = sample_model();
+        model.group_mut(DEFAULT_GROUP_ID).unwrap().style = GroupStyle {
+            text_height: Some(14.0),
+            line_width: Some(1.5),
+            arrow_length: None,
+            arrow_form: Some(ArrowForm::Slash),
+            color: Some(Rgb {
+                r: 1.0,
+                g: 0.0,
+                b: 0.0,
+            }),
+        };
+        let first = model.dimensions()[0].id;
+        model.dimension_mut(first).unwrap().style = StyleOverrides {
+            unit: Some(Unit::Inch),
+            fraction: Some(FractionMode::Fraction {
+                denominator: 16,
+                reduce: true,
+            }),
+            decimal_marker: Some(DecimalMarker::Comma),
+            standard: Some(DimStandard::Iso),
+            text_height: Some(9.0),
+            line_width: None,
+            arrow_length: Some(5.0),
+            arrow_form: Some(ArrowForm::Dot),
+            color: None,
+        };
+
+        let back = deserialize_model(&serialize_model(&model)).expect("round trip");
+        assert_eq!(
+            back.group(DEFAULT_GROUP_ID).unwrap().style,
+            model.group(DEFAULT_GROUP_ID).unwrap().style
+        );
+        assert_eq!(
+            back.dimension(first).unwrap().style,
+            model.dimension(first).unwrap().style
+        );
+        // The un-set halves must come back as `None` (inherit), not as some
+        // materialised default — that distinction IS the feature.
+        assert!(
+            back.group(DEFAULT_GROUP_ID)
+                .unwrap()
+                .style
+                .arrow_length
+                .is_none()
+        );
+        assert!(back.dimension(first).unwrap().style.line_width.is_none());
+    }
+
+    /// A file-supplied style value that is absurd or malformed must read as
+    /// **inherit**, never as a clamped substitute the operator never chose.
+    #[test]
+    fn corrupt_style_values_fall_back_to_inheritance() {
+        let mut model = sample_model();
+        let Object::Dict(mut d) = serialize_model(&model) else {
+            panic!("dict");
+        };
+        let mut groups = d
+            .get(b"Groups")
+            .and_then(Object::as_array)
+            .unwrap()
+            .to_vec();
+        let Object::Dict(ref mut g0) = groups[0] else {
+            panic!("dict");
+        };
+        g0.insert(Name::from(b"TextHeight"), Object::Real(-4.0));
+        g0.insert(Name::from(b"LineWidth"), Object::Real(1.0e12));
+        g0.insert(
+            Name::from(b"ArrowForm"),
+            Object::Name(Name::from(b"lightning-bolt")),
+        );
+        g0.insert(
+            Name::from(b"Color"),
+            Object::Array(vec![
+                Object::Real(2.0),
+                Object::Real(0.0),
+                Object::Real(0.0),
+            ]),
+        );
+        d.insert(Name::from(b"Groups"), Object::Array(groups));
+
+        let back = deserialize_model(&Object::Dict(d)).expect("still a valid sidecar");
+        let style = back.group(DEFAULT_GROUP_ID).unwrap().style;
+        assert!(style.text_height.is_none(), "a negative height inherits");
+        assert!(style.line_width.is_none(), "an absurd width inherits");
+        assert!(style.arrow_form.is_none(), "an unknown form inherits");
+        assert!(style.color.is_none(), "an out-of-range colour inherits");
+        // And the group is otherwise intact — one bad key must not cost the
+        // scale the operator calibrated.
+        model.set_group_visible(DEFAULT_GROUP_ID, true);
+        assert_eq!(
+            back.group(DEFAULT_GROUP_ID).unwrap().scale,
+            model.group(DEFAULT_GROUP_ID).unwrap().scale
+        );
+    }
+
+    /// An `/OvFrac /decimal` with no `/OvPlaces` is malformed. It must inherit
+    /// rather than invent a precision — the group's reader defaults to 2
+    /// places because a group MUST have a format; an override must not.
+    #[test]
+    fn a_malformed_precision_override_inherits_rather_than_inventing_one() {
+        let mut d = Dict::new();
+        d.insert(Name::from(b"OvFrac"), Object::Name(Name::from(b"decimal")));
+        assert!(read_override_fraction(&d).is_none());
+        d.insert(Name::from(b"OvPlaces"), Object::Integer(3));
+        assert_eq!(
+            read_override_fraction(&d),
+            Some(FractionMode::Decimal { places: 3 })
+        );
+        // Absurd precision is corruption, not a preference.
+        d.insert(Name::from(b"OvPlaces"), Object::Integer(9999));
+        assert!(read_override_fraction(&d).is_none());
     }
 }

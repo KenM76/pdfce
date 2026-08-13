@@ -478,6 +478,31 @@ pub enum CommandKind {
         /// How many members were regenerated.
         members: usize,
     },
+    /// A ce dimension GROUP's **style defaults** changed (Pass 69.0) and every
+    /// wired member that does not override the changed properties was
+    /// regenerated. ONE undoable command. See [`EditSession::set_group_style`].
+    ///
+    /// `members` counts what was REGENERATED, which is every wired member —
+    /// not every member the change was VISIBLE on. Those differ whenever a
+    /// member overrides the property that moved, and the count deliberately
+    /// reports the cheaper, honest number: a regeneration that produced
+    /// identical bytes still happened. A surface that wants to tell the
+    /// operator how many ce dimensions actually MOVED must ask
+    /// [`crate::dimension::style_provenance`] per member, because only that
+    /// distinguishes "followed the group" from "overrode it".
+    SetGroupStyle {
+        /// How many wired members were regenerated.
+        members: usize,
+    },
+    /// ONE ce dimension's **style overrides** changed (Pass 69.0): its own
+    /// appearance/format overrides were replaced wholesale and its baked `/AP`
+    /// regenerated. ONE undoable command. See
+    /// [`EditSession::set_dimension_style`].
+    SetDimensionStyle {
+        /// How many properties the ce dimension overrides AFTER the change
+        /// (`0` ⇒ it now inherits everything from its group again).
+        overrides: usize,
+    },
     /// A ce dimension was DELETED (Pass 25.6): its `/Annots` reference, its
     /// annotation dictionary, its `/AP` stream and its sidecar record were all
     /// removed together. ONE undoable command. See
@@ -15391,13 +15416,22 @@ impl EditSession {
             }
         };
         // The group is the authority for every display property — scale,
-        // format and (Pass 27.2) drafting standard — so the style is derived
-        // from it in one step rather than assembled field by field.
-        let style = model.group(gid).map_or(
-            DimensionStyle {
-                scale: ScaleState::NeverSet,
-                format: Unit::Millimeter.default_format(),
-                standard: DimStandard::default(),
+        // format, (Pass 27.2) drafting standard and (Pass 69.0) the appearance
+        // defaults — so the style is derived from it in one step rather than
+        // assembled field by field.
+        //
+        // A ce dimension being authored for the FIRST time carries no
+        // overrides yet (they are set afterwards, against its id), so the group
+        // tier is the whole answer here and `From<&Group>` is exact rather than
+        // lossy. Regeneration is the path that must consult the record's own
+        // overrides — see `regenerate_dimension_writes`.
+        let style = model.group(gid).map_or_else(
+            || {
+                DimensionStyle::new(
+                    ScaleState::NeverSet,
+                    Unit::Millimeter.default_format(),
+                    DimStandard::default(),
+                )
             },
             DimensionStyle::from,
         );
@@ -15969,6 +16003,124 @@ impl EditSession {
             trailer: None,
         });
         Ok(members.len())
+    }
+
+    /// **Set a ce dimension GROUP's style defaults** and regenerate every wired
+    /// member, as one undoable command (Pass 69.0). Returns how many members
+    /// were regenerated.
+    ///
+    /// # The whole struct, not one property
+    ///
+    /// The caller passes the complete [`GroupStyle`] it wants, and it replaces
+    /// what was there. A per-property setter API (`set_group_arrow_form`, …)
+    /// would grow one method per property, and — worse — would make "clear
+    /// this override" a different call from "set it", so a surface would have
+    /// two code paths where the operator sees one checkbox. Read the current
+    /// value, change the field, pass it back: the shape
+    /// [`Self::set_group_scale`] already uses for format.
+    ///
+    /// # Why every wired member regenerates, including the ones that override
+    ///
+    /// Regenerating a member that overrides the changed property produces
+    /// byte-identical output, so the write is free in the diff (R34 compares
+    /// before/after). Filtering them out would mean this method needed to know
+    /// WHICH properties changed and which members override each of them —
+    /// duplicating the cascade's own logic in a second place, where it could
+    /// disagree. The cascade decides; this just re-runs it.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::DimensionGroupNotFound`] for an unknown group, plus the
+    /// encryption, enforced-certification and newer-sidecar guards every
+    /// ce-dimension mutation carries. Every refusal happens before any
+    /// mutation.
+    pub fn set_group_style(
+        &mut self,
+        group: GroupId,
+        style: crate::dimension::GroupStyle,
+    ) -> Result<usize, EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+        self.check_dimension_sidecar()?;
+
+        let mut model = self.read_dimension_model();
+        let Some(g) = model.group_mut(group) else {
+            return Err(EditError::DimensionGroupNotFound { id: group.0 });
+        };
+        g.style = style;
+
+        let members: Vec<DimensionId> = model
+            .members(group)
+            .filter(|d| d.annot.is_some() && d.ap.is_some())
+            .map(|d| d.id)
+            .collect();
+        let mut objects = self.regenerate_dimension_writes(&model, &members)?;
+        objects.push(self.catalog_dimension_write(&model)?);
+        self.commit(Command {
+            kind: CommandKind::SetGroupStyle {
+                members: members.len(),
+            },
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(members.len())
+    }
+
+    /// **Set ONE ce dimension's style overrides** and regenerate just it, as
+    /// one undoable command (Pass 69.0). Returns how many properties it
+    /// overrides afterwards.
+    ///
+    /// Passing [`StyleOverrides::default`] clears every override and returns
+    /// the ce dimension to full inheritance — that is the "untick every box"
+    /// operation, and it deliberately needs no separate method. See
+    /// [`Self::set_group_style`] for why the API takes the whole struct.
+    ///
+    /// # Scope: exactly one ce dimension
+    ///
+    /// Unlike a group-level change this regenerates a single member, which is
+    /// worth stating because the ce-dimension mutations differ in cost by two
+    /// orders of magnitude and a caller batching per-member overrides in a
+    /// loop should know it is not paying the group-wide price each time.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::DimensionNotFound`] for an unknown id, plus the
+    /// encryption, enforced-certification and newer-sidecar guards.
+    pub fn set_dimension_style(
+        &mut self,
+        dimension: DimensionId,
+        style: crate::dimension::StyleOverrides,
+    ) -> Result<usize, EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+        self.check_dimension_sidecar()?;
+
+        let mut model = self.read_dimension_model();
+        // Refuse an unknown id BEFORE mutating anything (rule 4: a refusal
+        // never leaves a half-written model behind).
+        if model.dimension(dimension).is_none() {
+            return Err(EditError::DimensionNotFound { id: dimension.0 });
+        }
+        if let Some(d) = model.dimension_mut(dimension) {
+            d.style = style;
+        }
+
+        let mut objects = self.regenerate_dimension_writes(&model, &[dimension])?;
+        objects.push(self.catalog_dimension_write(&model)?);
+        self.commit(Command {
+            kind: CommandKind::SetDimensionStyle {
+                overrides: style.count(),
+            },
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(style.count())
     }
 
     /// **Delete a ce dimension**, as one undoable command (Pass 25.6).
@@ -16658,7 +16810,14 @@ impl EditSession {
             let group = model
                 .group(record.group)
                 .ok_or(EditError::DimensionGroupNotFound { id: record.group.0 })?;
-            let authored = author_dimension(&record.kind, DimensionStyle::from(group));
+            // ★ The FULL cascade, not `From<&Group>` (Pass 69.0). This is the
+            // only place a ce dimension's appearance is rebuilt after
+            // authoring, so it is the only place a per-ce-dimension override
+            // can be honoured — and the only place one can be silently
+            // dropped. A `From<&Group>` here would make every override work in
+            // the panel and vanish in the saved file.
+            let style = crate::dimension::resolve_style(group, &record.style);
+            let authored = author_dimension(&record.kind, style);
 
             let mut ap_dict = authored.ap_dict;
             ap_dict.insert(

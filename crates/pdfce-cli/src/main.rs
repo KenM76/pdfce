@@ -3312,6 +3312,13 @@ enum Command {
     DimensionList {
         /// Input PDF.
         input: PathBuf,
+        /// Also print each group's style defaults and each ce dimension's
+        /// RESOLVED style with the tier every property came from
+        /// (`factory` / `group` / `dimension`) - the Pass 69.0 inheritance
+        /// disclosure. Without it, each ce dimension still reports how many
+        /// properties it overrides.
+        #[arg(long)]
+        style: bool,
     },
     /// **Set a ce dimension group's drafting standard** (Pass 27.2) and
     /// regenerate every member to it.
@@ -3335,6 +3342,123 @@ enum Command {
         /// The drafting standard.
         #[arg(long, value_enum)]
         standard: StandardArg,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Save mode.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Reload and verify the edit undoes byte-identically.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+    /// **Set a ce dimension GROUP's style defaults** (Pass 69.0) and
+    /// regenerate every member.
+    ///
+    /// This is the middle tier of the style cascade: factory default -> GROUP
+    /// default -> per-ce-dimension override. A member that does not override a
+    /// property follows what is set here; a member that overrides it does not.
+    /// Read the current state, and which tier each value came from, with
+    /// `dimension-list --style`.
+    ///
+    /// Flags not given are LEFT ALONE (read-modify-write), so setting one
+    /// property never silently clears another. To clear a property back to the
+    /// factory default use `--clear <property>`; to clear them all, `--reset`.
+    GroupStyle {
+        /// Input PDF.
+        input: PathBuf,
+        /// Group id, as printed by `dimension-list`.
+        #[arg(long, default_value_t = 0)]
+        group: u32,
+        /// Label point size.
+        #[arg(long)]
+        text_height: Option<f64>,
+        /// Dimension/extension-line stroke width, in points.
+        #[arg(long)]
+        line_width: Option<f64>,
+        /// Arrowhead length, in points.
+        #[arg(long)]
+        arrow_length: Option<f64>,
+        /// Terminator form drawn at each end of the dimension line.
+        #[arg(long, value_enum)]
+        arrow_form: Option<ArrowFormArg>,
+        /// Colour, as `r,g,b` components in 0.0-1.0 or as `#rrggbb`.
+        #[arg(long)]
+        color: Option<String>,
+        /// Clear a property back to the factory default (repeatable, or
+        /// comma-separated). Property names are the ones
+        /// `dimension-list --style` prints.
+        #[arg(long, value_enum, value_delimiter = ',')]
+        clear: Vec<StylePropArg>,
+        /// Clear every group-tier style property.
+        #[arg(long)]
+        reset: bool,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Save mode.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Reload and verify the edit undoes byte-identically.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+    /// **Set ONE ce dimension's style overrides** (Pass 69.0) - the operator's
+    /// per-ce-dimension "override and set differently" checkbox, in batch form.
+    ///
+    /// Each property set here detaches THAT property from the group for THIS
+    /// ce dimension only; everything else keeps following the group, so a
+    /// later group edit still moves it. `--clear`/`--reset` re-attach.
+    ///
+    /// The scale is deliberately absent: it is a group property and stays one.
+    /// A ce dimension quietly measuring at a different scale from its group
+    /// would print a number nothing on the page discloses.
+    DimensionStyle {
+        /// Input PDF.
+        input: PathBuf,
+        /// The ce dimension id, as printed by `dimension-list`.
+        #[arg(long)]
+        dimension: u32,
+        /// Display unit for this ce dimension only.
+        #[arg(long)]
+        unit: Option<String>,
+        /// Fixed decimal places for this ce dimension only.
+        #[arg(long)]
+        places: Option<u32>,
+        /// Show the value as a fraction with this denominator (inches).
+        #[arg(long)]
+        denominator: Option<u32>,
+        /// Reduce the fraction (only with `--denominator`).
+        #[arg(long)]
+        reduce: bool,
+        /// Decimal marker for this ce dimension only.
+        #[arg(long, value_enum)]
+        decimal_marker: Option<DecimalMarkerArg>,
+        /// Drafting standard for this ce dimension only.
+        #[arg(long, value_enum)]
+        standard: Option<StandardArg>,
+        /// Label point size.
+        #[arg(long)]
+        text_height: Option<f64>,
+        /// Dimension/extension-line stroke width, in points.
+        #[arg(long)]
+        line_width: Option<f64>,
+        /// Arrowhead length, in points.
+        #[arg(long)]
+        arrow_length: Option<f64>,
+        /// Terminator form.
+        #[arg(long, value_enum)]
+        arrow_form: Option<ArrowFormArg>,
+        /// Colour, as `r,g,b` components in 0.0-1.0 or as `#rrggbb`.
+        #[arg(long)]
+        color: Option<String>,
+        /// Clear an override, returning that property to inheritance
+        /// (repeatable, or comma-separated).
+        #[arg(long, value_enum, value_delimiter = ',')]
+        clear: Vec<StylePropArg>,
+        /// Clear every override on this ce dimension.
+        #[arg(long)]
+        reset: bool,
         /// Output path.
         #[arg(short, long)]
         output: PathBuf,
@@ -5437,7 +5561,7 @@ fn run() -> ExitCode {
             mode,
             verify_undo,
         }),
-        Command::DimensionList { input } => cmd_dimension_list(&input),
+        Command::DimensionList { input, style } => cmd_dimension_list(&input, style),
         Command::DimensionDelete {
             input,
             dimension,
@@ -5453,6 +5577,76 @@ fn run() -> ExitCode {
             mode,
             verify_undo,
         } => cmd_group_set_standard(&input, group, standard, &output, mode, verify_undo),
+        Command::GroupStyle {
+            input,
+            group,
+            text_height,
+            line_width,
+            arrow_length,
+            arrow_form,
+            color,
+            clear,
+            reset,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_group_style(&GroupStyleArgs {
+            input: &input,
+            group,
+            appearance: AppearanceArgs {
+                text_height,
+                line_width,
+                arrow_length,
+                arrow_form,
+                color,
+            },
+            clear: &clear,
+            reset,
+            output: &output,
+            mode,
+            verify_undo,
+        }),
+        Command::DimensionStyle {
+            input,
+            dimension,
+            unit,
+            places,
+            denominator,
+            reduce,
+            decimal_marker,
+            standard,
+            text_height,
+            line_width,
+            arrow_length,
+            arrow_form,
+            color,
+            clear,
+            reset,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_dimension_style(&DimensionStyleArgs {
+            input: &input,
+            dimension,
+            unit: unit.as_deref(),
+            places,
+            denominator,
+            reduce,
+            decimal_marker,
+            standard,
+            appearance: AppearanceArgs {
+                text_height,
+                line_width,
+                arrow_length,
+                arrow_form,
+                color,
+            },
+            clear: &clear,
+            reset,
+            output: &output,
+            mode,
+            verify_undo,
+        }),
         Command::DimensionOffset {
             input,
             dimension,
@@ -17484,7 +17678,441 @@ fn cmd_dimension_delete(
     finish_edit(input, &outcome)
 }
 
-fn cmd_dimension_list(input: &Path) -> u8 {
+/// The style properties `--clear` can name, and the vocabulary
+/// `dimension-list --style` prints.
+///
+/// One enum shared by both commands and both directions (setting and
+/// reporting), so a property cannot be clearable under one name and reported
+/// under another.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
+enum StylePropArg {
+    /// Display unit (ce-dimension tier only).
+    Unit,
+    /// Decimal places / fraction denominator (ce-dimension tier only).
+    Fraction,
+    /// Decimal marker (ce-dimension tier only).
+    DecimalMarker,
+    /// Drafting standard (ce-dimension tier only).
+    Standard,
+    /// Label point size.
+    TextHeight,
+    /// Stroke width.
+    LineWidth,
+    /// Arrowhead length.
+    ArrowLength,
+    /// Terminator form.
+    ArrowForm,
+    /// Colour.
+    Color,
+}
+
+/// The terminator forms, mirrored from `pdfce_core::dimension::ArrowForm`.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
+enum ArrowFormArg {
+    /// Solid filled triangle - ANSI/ASME mechanical practice, the default.
+    Filled,
+    /// Open (stroked) V - common in architectural work.
+    Open,
+    /// 45-degree tick through the dimension line - architectural practice.
+    Slash,
+    /// Filled dot.
+    Dot,
+    /// No terminator.
+    None,
+}
+
+impl ArrowFormArg {
+    fn to_core(self) -> pdfce_core::dimension::ArrowForm {
+        use pdfce_core::dimension::ArrowForm as F;
+        match self {
+            Self::Filled => F::Filled,
+            Self::Open => F::Open,
+            Self::Slash => F::Slash,
+            Self::Dot => F::Dot,
+            Self::None => F::None,
+        }
+    }
+}
+
+/// The decimal marker, mirrored from `pdfce_core::dimension::DecimalMarker`.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
+enum DecimalMarkerArg {
+    /// `1.5` - ANSI/ASME practice.
+    Point,
+    /// `1,5` - mandated by ISO 129-1:2018 cl. 4.1.1.
+    Comma,
+}
+
+impl DecimalMarkerArg {
+    fn to_core(self) -> pdfce_core::dimension::DecimalMarker {
+        match self {
+            Self::Point => pdfce_core::dimension::DecimalMarker::Point,
+            Self::Comma => pdfce_core::dimension::DecimalMarker::Comma,
+        }
+    }
+}
+
+/// The five appearance flags both style commands share.
+struct AppearanceArgs {
+    text_height: Option<f64>,
+    line_width: Option<f64>,
+    arrow_length: Option<f64>,
+    arrow_form: Option<ArrowFormArg>,
+    color: Option<String>,
+}
+
+struct GroupStyleArgs<'a> {
+    input: &'a Path,
+    group: u32,
+    appearance: AppearanceArgs,
+    clear: &'a [StylePropArg],
+    reset: bool,
+    output: &'a Path,
+    mode: SaveMode,
+    verify_undo: bool,
+}
+
+struct DimensionStyleArgs<'a> {
+    input: &'a Path,
+    dimension: u32,
+    unit: Option<&'a str>,
+    places: Option<u32>,
+    denominator: Option<u32>,
+    reduce: bool,
+    decimal_marker: Option<DecimalMarkerArg>,
+    standard: Option<StandardArg>,
+    appearance: AppearanceArgs,
+    clear: &'a [StylePropArg],
+    reset: bool,
+    output: &'a Path,
+    mode: SaveMode,
+    verify_undo: bool,
+}
+
+/// Parse `--color`: either `r,g,b` components in 0.0-1.0, or `#rrggbb`.
+///
+/// # Why two forms
+///
+/// `r,g,b` is what the PDF object model actually stores (`/C` is an array of
+/// three numbers in 0.0-1.0), so it is the honest primary form. `#rrggbb` is
+/// what an operator has in his hand from anywhere else. Refusing the hex form
+/// would make the flag technically correct and practically annoying; accepting
+/// only hex would hide the storage.
+fn parse_style_color(spec: &str) -> Result<pdfce_core::vector::Rgb, String> {
+    let s = spec.trim();
+    if let Some(hex) = s.strip_prefix('#') {
+        if hex.len() != 6 || !hex.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Err(format!("`{spec}` is not a #rrggbb colour"));
+        }
+        let byte = |i: usize| -> f32 {
+            f32::from(u8::from_str_radix(&hex[i..i + 2], 16).unwrap_or(0)) / 255.0
+        };
+        return Ok(pdfce_core::vector::Rgb {
+            r: byte(0),
+            g: byte(2),
+            b: byte(4),
+        });
+    }
+    let parts: Vec<&str> = s.split(',').map(str::trim).collect();
+    if parts.len() != 3 {
+        return Err(format!(
+            "`{spec}` is not a colour: expected `r,g,b` in 0.0-1.0, or `#rrggbb`"
+        ));
+    }
+    let mut c = [0.0f32; 3];
+    for (slot, text) in c.iter_mut().zip(&parts) {
+        let v: f32 = text
+            .parse()
+            .map_err(|_| format!("`{text}` is not a number in `{spec}`"))?;
+        if !(v.is_finite() && (0.0..=1.0).contains(&v)) {
+            return Err(format!("colour component `{text}` is outside 0.0-1.0"));
+        }
+        *slot = v;
+    }
+    Ok(pdfce_core::vector::Rgb {
+        r: c[0],
+        g: c[1],
+        b: c[2],
+    })
+}
+
+/// Refuse a non-positive or non-finite metric BEFORE it reaches the model.
+///
+/// A zero text height or a negative stroke width is not a style, and the
+/// sidecar reader would refuse to read it back anyway - so accepting it here
+/// would write a document whose own next load silently ignores the value. A
+/// refusal by name at the point of entry is the honest version of that.
+fn checked_metric(name: &str, v: f64) -> Result<f64, String> {
+    if v.is_finite() && v > 0.0 {
+        Ok(v)
+    } else {
+        Err(format!("--{name} must be a positive number (got {v})"))
+    }
+}
+
+/// `group-style` - set the group tier of the style cascade (Pass 69.0).
+fn cmd_group_style(args: &GroupStyleArgs<'_>) -> u8 {
+    let (source, mut session) = match open_for_edit(args.input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let gid = pdfce_core::dimension::GroupId(args.group);
+    // Read-modify-write: flags not given must leave the existing value alone,
+    // so the operator can set one property without knowing the other four.
+    let Some(current) = session.dimension_model().group(gid).map(|g| g.style) else {
+        eprintln!(
+            "pdfce-cli: {}: no ce dimension group {} (see `dimension-list`)",
+            args.input.display(),
+            args.group
+        );
+        return exit::EDIT_REFUSED;
+    };
+    let mut style = if args.reset {
+        pdfce_core::dimension::GroupStyle::default()
+    } else {
+        current
+    };
+    for prop in args.clear {
+        match prop {
+            StylePropArg::TextHeight => style.text_height = None,
+            StylePropArg::LineWidth => style.line_width = None,
+            StylePropArg::ArrowLength => style.arrow_length = None,
+            StylePropArg::ArrowForm => style.arrow_form = None,
+            StylePropArg::Color => style.color = None,
+            // Named so the refusal says WHICH property and WHY, rather than
+            // ignoring the flag and leaving the operator to discover from the
+            // saved file that nothing happened.
+            other => {
+                eprintln!(
+                    "pdfce-cli: {}: `{other:?}` is a per-ce-dimension property, not a group one -- \
+                     the group's unit, precision, decimal marker and drafting standard are its own \
+                     fields, set with `group-set-standard` and the scale commands",
+                    args.input.display()
+                );
+                return exit::EDIT_REFUSED;
+            }
+        }
+    }
+    match apply_appearance(&args.appearance) {
+        Ok(a) => {
+            if let Some(v) = a.text_height {
+                style.text_height = Some(v);
+            }
+            if let Some(v) = a.line_width {
+                style.line_width = Some(v);
+            }
+            if let Some(v) = a.arrow_length {
+                style.arrow_length = Some(v);
+            }
+            if let Some(v) = a.arrow_form {
+                style.arrow_form = Some(v);
+            }
+            if let Some(v) = a.color {
+                style.color = Some(v);
+            }
+        }
+        Err(msg) => {
+            eprintln!("pdfce-cli: {}: {msg}", args.input.display());
+            return exit::EDIT_REFUSED;
+        }
+    }
+
+    let members = match session.set_group_style(gid, style) {
+        Ok(n) => n,
+        Err(err) => return report_edit_error(args.input, &err),
+    };
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        args.output,
+        args.mode,
+        ProducerArg::Preserve,
+        args.verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "group-style {} group={} regenerated={members} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        args.input.display(),
+        args.group,
+        args.mode.name(),
+        args.output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    finish_edit(args.input, &outcome)
+}
+
+/// The five appearance values, validated and converted to core types.
+struct ResolvedAppearance {
+    text_height: Option<f64>,
+    line_width: Option<f64>,
+    arrow_length: Option<f64>,
+    arrow_form: Option<pdfce_core::dimension::ArrowForm>,
+    color: Option<pdfce_core::vector::Rgb>,
+}
+
+fn apply_appearance(a: &AppearanceArgs) -> Result<ResolvedAppearance, String> {
+    Ok(ResolvedAppearance {
+        text_height: a
+            .text_height
+            .map(|v| checked_metric("text-height", v))
+            .transpose()?,
+        line_width: a
+            .line_width
+            .map(|v| checked_metric("line-width", v))
+            .transpose()?,
+        arrow_length: a
+            .arrow_length
+            .map(|v| checked_metric("arrow-length", v))
+            .transpose()?,
+        arrow_form: a.arrow_form.map(ArrowFormArg::to_core),
+        color: a.color.as_deref().map(parse_style_color).transpose()?,
+    })
+}
+
+/// `dimension-style` - set ONE ce dimension's overrides (Pass 69.0).
+fn cmd_dimension_style(args: &DimensionStyleArgs<'_>) -> u8 {
+    if args.places.is_some() && args.denominator.is_some() {
+        eprintln!(
+            "pdfce-cli: {}: --places and --denominator are two different number formats; give one",
+            args.input.display()
+        );
+        return exit::EDIT_REFUSED;
+    }
+    let (source, mut session) = match open_for_edit(args.input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let did = pdfce_core::dimension::DimensionId(args.dimension);
+    let Some(current) = session.dimension_model().dimension(did).map(|d| d.style) else {
+        eprintln!(
+            "pdfce-cli: {}: no ce dimension {} (see `dimension-list`)",
+            args.input.display(),
+            args.dimension
+        );
+        return exit::EDIT_REFUSED;
+    };
+    let mut style = if args.reset {
+        pdfce_core::dimension::StyleOverrides::default()
+    } else {
+        current
+    };
+    for prop in args.clear {
+        match prop {
+            StylePropArg::Unit => style.unit = None,
+            StylePropArg::Fraction => style.fraction = None,
+            StylePropArg::DecimalMarker => style.decimal_marker = None,
+            StylePropArg::Standard => style.standard = None,
+            StylePropArg::TextHeight => style.text_height = None,
+            StylePropArg::LineWidth => style.line_width = None,
+            StylePropArg::ArrowLength => style.arrow_length = None,
+            StylePropArg::ArrowForm => style.arrow_form = None,
+            StylePropArg::Color => style.color = None,
+        }
+    }
+    if let Some(token) = args.unit {
+        let Some(unit) = pdfce_core::dimension::Unit::parse(token) else {
+            eprintln!(
+                "pdfce-cli: {}: unknown --unit `{token}` (mm|cm|m|in|ft|ft-in)",
+                args.input.display()
+            );
+            return exit::EDIT_REFUSED;
+        };
+        style.unit = Some(unit);
+    }
+    if let Some(places) = args.places {
+        if places > 12 {
+            eprintln!(
+                "pdfce-cli: {}: --places {places} is not a precision (max 12)",
+                args.input.display()
+            );
+            return exit::EDIT_REFUSED;
+        }
+        style.fraction = Some(pdfce_core::dimension::FractionMode::Decimal { places });
+    }
+    if let Some(denominator) = args.denominator {
+        if denominator == 0 || denominator > 4096 {
+            eprintln!(
+                "pdfce-cli: {}: --denominator {denominator} is out of range (1-4096)",
+                args.input.display()
+            );
+            return exit::EDIT_REFUSED;
+        }
+        style.fraction = Some(pdfce_core::dimension::FractionMode::Fraction {
+            denominator,
+            reduce: args.reduce,
+        });
+    }
+    if let Some(m) = args.decimal_marker {
+        style.decimal_marker = Some(m.to_core());
+    }
+    if let Some(std) = args.standard {
+        style.standard = Some(std.to_core());
+    }
+    match apply_appearance(&args.appearance) {
+        Ok(a) => {
+            if let Some(v) = a.text_height {
+                style.text_height = Some(v);
+            }
+            if let Some(v) = a.line_width {
+                style.line_width = Some(v);
+            }
+            if let Some(v) = a.arrow_length {
+                style.arrow_length = Some(v);
+            }
+            if let Some(v) = a.arrow_form {
+                style.arrow_form = Some(v);
+            }
+            if let Some(v) = a.color {
+                style.color = Some(v);
+            }
+        }
+        Err(msg) => {
+            eprintln!("pdfce-cli: {}: {msg}", args.input.display());
+            return exit::EDIT_REFUSED;
+        }
+    }
+
+    let overrides = match session.set_dimension_style(did, style) {
+        Ok(n) => n,
+        Err(err) => return report_edit_error(args.input, &err),
+    };
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        args.output,
+        args.mode,
+        ProducerArg::Preserve,
+        args.verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "dimension-style {} dimension={} overrides={overrides} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        args.input.display(),
+        args.dimension,
+        args.mode.name(),
+        args.output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    finish_edit(args.input, &outcome)
+}
+
+fn cmd_dimension_list(input: &Path, show_style: bool) -> u8 {
     use pdfce_core::dimension::{DimensionKind, ScaleState};
 
     let doc = match open_for_read(input) {
@@ -17513,6 +18141,23 @@ fn cmd_dimension_list(input: &Path) -> u8 {
             g.visible,
             model.member_count(g.id),
         );
+        if show_style {
+            // The group tier, printed as what it IS: a set of optional
+            // defaults. `-` means the group has not spoken and the factory
+            // default applies - deliberately not printed as the factory value,
+            // because "10 (unset)" and "10 (set to 10)" behave differently the
+            // moment the factory default changes.
+            let st = g.style;
+            println!(
+                "    group-style text-height={} line-width={} arrow-length={} arrow-form={} color={}",
+                opt_num(st.text_height),
+                opt_num(st.line_width),
+                opt_num(st.arrow_length),
+                st.arrow_form
+                    .map_or_else(|| "-".to_owned(), |f| f.token().to_owned()),
+                opt_color(st.color),
+            );
+        }
     }
     for d in model.dimensions() {
         let value = model.display(d.id).map_or_else(String::new, |m| m.text);
@@ -17545,12 +18190,94 @@ fn cmd_dimension_list(input: &Path) -> u8 {
                 radius, text_along, ..
             } => format!(" arc_radius={radius} text_along={text_along}"),
         };
+        // The override COUNT is printed unconditionally, and that is the
+        // point: an operator scanning a list needs to see at a glance which ce
+        // dimensions will move when he edits the group and which will not.
+        // Printing nothing unless `--style` is passed would hide exactly the
+        // surprise the cascade exists to prevent.
         println!(
-            "  dim {} group={} kind={kind} value=\"{value}\"{placement}",
-            d.id.0, d.group.0
+            "  dim {} group={} kind={kind} value=\"{value}\"{placement} overrides={}",
+            d.id.0,
+            d.group.0,
+            d.style.count()
         );
+        if show_style {
+            let Some(group) = model.group(d.group) else {
+                continue;
+            };
+            let resolved = pdfce_core::dimension::resolve_style(group, &d.style);
+            let prov = pdfce_core::dimension::style_provenance(group, &d.style);
+            let values: [(&str, String); 9] = [
+                ("unit", resolved.format.unit.token().to_owned()),
+                ("fraction", format_fraction(resolved.format.fraction)),
+                (
+                    "decimal-marker",
+                    resolved.format.decimal_marker.as_str().to_owned(),
+                ),
+                (
+                    "standard",
+                    format!("{:?}", resolved.standard).to_lowercase(),
+                ),
+                ("text-height", fmt_num(resolved.text_height)),
+                ("line-width", fmt_num(resolved.line_width)),
+                ("arrow-length", fmt_num(resolved.arrow_length)),
+                ("arrow-form", resolved.arrow_form.token().to_owned()),
+                (
+                    "color",
+                    format!(
+                        "{},{},{}",
+                        resolved.color.r, resolved.color.g, resolved.color.b
+                    ),
+                ),
+            ];
+            // Paired positionally against `StyleProvenance::each`, whose own
+            // doc comment explains why it returns a fixed-size array: a
+            // property added without extending both sides is a compile error
+            // rather than a silently shorter listing.
+            let sources = prov.each();
+            for ((name, value), (src_name, src)) in values.iter().zip(sources.iter()) {
+                debug_assert_eq!(
+                    name, src_name,
+                    "value and provenance lists must stay aligned"
+                );
+                println!("    style {name}={value} ({})", src.token());
+            }
+        }
     }
     exit::SUCCESS
+}
+
+/// `Some(3.5)` as `3.5`, `None` as `-` (meaning: inherited, not set here).
+fn opt_num(v: Option<f64>) -> String {
+    v.map_or_else(|| "-".to_owned(), fmt_num)
+}
+
+/// A colour as `r,g,b`, or `-` when unset.
+fn opt_color(c: Option<pdfce_core::vector::Rgb>) -> String {
+    c.map_or_else(|| "-".to_owned(), |c| format!("{},{},{}", c.r, c.g, c.b))
+}
+
+/// A metric with trailing zeros trimmed, so `10` reads as `10` rather than
+/// `10.000000000000002`-adjacent noise in a listing an operator scans.
+fn fmt_num(v: f64) -> String {
+    let s = format!("{v:.4}");
+    let s = s.trim_end_matches('0').trim_end_matches('.');
+    if s.is_empty() {
+        "0".to_owned()
+    } else {
+        s.to_owned()
+    }
+}
+
+/// The number format, in the vocabulary `dimension-style` accepts back.
+fn format_fraction(f: pdfce_core::dimension::FractionMode) -> String {
+    match f {
+        pdfce_core::dimension::FractionMode::Decimal { places } => format!("{places}dp"),
+        pdfce_core::dimension::FractionMode::Fraction {
+            denominator,
+            reduce,
+        } => format!("1/{denominator}{}", if reduce { " reduced" } else { "" }),
+    }
 }
 
 /// `group-add` — create a named dimension group (Pass 12.M2).

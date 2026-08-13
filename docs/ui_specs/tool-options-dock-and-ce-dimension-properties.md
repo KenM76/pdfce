@@ -769,3 +769,126 @@ already specifies ("the document's `/Info` metadata, OR the properties
 of whatever is currently selected on the canvas") — unchanged by this
 amendment, repeated here only so the token-usage note above doesn't
 read as though it supersedes that still-open instruction.
+
+---
+
+## Amendment B (2026-08-13) — `Pass 69.0` shipped the STYLE CASCADE in core + CLI; the GUI surface is the open half
+
+**Appended, not rewritten**, per criterion 7 of `ROADMAP.md`'s `Pass 69.0`
+entry (*"updated, not shadowed by a second spec"*). Written by the engineer,
+not the UI specialist: it records what the model underneath this panel now
+*is*, so the panel design above can be built against something real rather
+than against a sketch. Nothing in §C.11.1 is retracted; two of its
+recommendations were overtaken by the operator's own request and that is
+stated below rather than silently applied.
+
+### B.1 What exists now, and what it is called
+
+`pdfce-core::dimension::style` — a **three-tier, per-property** cascade:
+
+```text
+factory default  (StyleDefaults::FACTORY)   the values pdfce always drew
+      ↓ for any property the group leaves unset
+group default    (Group::style: GroupStyle) the operator's "for this group"
+      ↓ for any property the ce dimension leaves unset
+ce dimension     (DimensionRecord::style: StyleOverrides)  "except THIS one"
+```
+
+Nine properties, each an independent `Option` — **that `Option` IS the
+operator's checkbox**. `None` = the box is clear (inherited); `Some(v)` = the
+box is ticked and this tier says `v`.
+
+| property | tiers | notes |
+|---|---|---|
+| `unit` | group field → ce dimension | the group tier is `Group::format.unit`, a concrete field |
+| `fraction` (decimal places / fraction denominator) | group field → ce dimension | ditto |
+| `decimal_marker` | group field → ce dimension | ditto |
+| `standard` (ANSI/ISO) | group field → ce dimension | ditto |
+| `text_height` | factory → group → ce dimension | was the `LABEL_SIZE` constant |
+| `line_width` | factory → group → ce dimension | was `LINE_WIDTH` |
+| `arrow_length` | factory → group → ce dimension | was `ARROW_LEN` |
+| `arrow_form` | factory → group → ce dimension | new: filled / open / slash / dot / none |
+| `color` | factory → group → ce dimension | new; also written to the annotation's `/C` |
+
+**The SCALE is deliberately not in that list** and must not gain a
+per-ce-dimension control. It is what turns page points into a real-world
+length; a ce dimension quietly measuring at a different scale from its group
+would print a number nothing on the page discloses (rule 4).
+
+### B.2 The inheritance disclosure is already computable — do not invent a second one
+
+`dimension::style_provenance(group, &record.style) -> StyleProvenance` answers,
+per property, **which tier supplied the value**: `Factory` / `Group` /
+`Dimension`. `StyleSource::follows_group()` is the predicate the panel actually
+wants — *"will a group edit move this?"* — and it is `true` for `Factory` as
+well as `Group`, which is the easy thing to get wrong when deriving it from the
+variant by hand.
+
+`StyleProvenance::each()` returns a **fixed-size array of nine
+(name, source) pairs**, so a panel that renders them in a loop gets a compile
+error rather than a silently shorter list when a tenth property lands (which
+`Pass 69.1`'s tolerance will be).
+
+This satisfies §C.11.1's two-state convention (*inherited-and-greyed* vs
+*overridden-and-editable*) with data rather than with a UI-local heuristic. The
+panel needs to render it; it does not need to compute it.
+
+### B.3 Two §C.11.1 recommendations were overtaken by the operator, and here is which
+
+1. **§C.11.1 recommended unit/format stay group-ONLY for v1** (its item 14,
+   P2: *"defer a full per-field override mechanism until an operator actually
+   asks for it"*). The operator asked, in the request that created this Pass:
+   *"groups of dimensions should have a default dimensioning and tolerance
+   style that can be set for the group, but these should have a checkbox to
+   override and set differently."* So unit, precision, decimal marker and
+   drafting standard **are** per-ce-dimension overridable in the model as of
+   `Pass 69.0`. Whether the PANEL exposes all four immediately is still a
+   progressive-disclosure judgment for the UI specialist — the model no longer
+   forecloses it either way.
+2. **§C.11.1's inheritance-disclosure note said no inheritance question arises
+   for tolerance "except for the P1 document-default case."** With a general
+   cascade in place that is no longer true: tolerance lands in `Pass 69.1` as
+   one more property in this same cascade, so it inherits from the group like
+   everything else and needs the same two-state treatment from day one. This is
+   a simplification, not extra work — one convention, nine (soon ten)
+   properties.
+
+### B.4 What the GUI still owes (this Pass shipped `core [x] cli [x] gui [ ]`)
+
+**Deferred at the operator's explicit instruction on 2026-08-13** (*"don't do
+any more work on the gui until I say so"*), and recorded rather than rounded
+up:
+
+- The group-tier controls, wherever the Group Manager's content ends up living
+  (§C.12 / P0 item 8): five appearance defaults, each with a clear/"use
+  default" affordance.
+- The per-ce-dimension section in `DockPanel::Properties` (§C.12): the same
+  nine properties, each with the override checkbox the operator asked for, each
+  labelled with its `StyleSource`.
+- The **`follows_group` disclosure at the moment of a group edit** — §C.11.1's
+  *"cannot change one and be surprised 40 others changed or didn't"*. The count
+  the GUI should show is **not** `EditSession::set_group_style`'s return value:
+  that is the number REGENERATED (every wired member), not the number that will
+  visibly MOVE. The moving set is the members whose `StyleProvenance` for the
+  edited property reports `follows_group() == true`, and it must be computed
+  before the edit is applied if it is to be disclosed before the edit is
+  applied.
+
+### B.5 The CLI half, for reference — the vocabulary a panel should not diverge from
+
+`pdfce-cli` ships `group-style`, `dimension-style` and
+`dimension-list --style`. Three conventions worth mirroring in the panel:
+
+- **Read-modify-write.** Setting one property leaves the others alone; there is
+  no "apply the whole style" gesture that silently clears what it was not told
+  about.
+- **Clearing is a first-class verb** (`--clear <property>`, `--reset`), and it
+  restores *inheritance*, not the previously-inherited value frozen in place.
+  This is a deliberate divergence from SolidWorks, whose `DeleteStyle` leaves
+  the annotation carrying the attributes the style had pushed into it
+  (`SolidWorks_Dimensions` §F.4).
+- **The property names are one vocabulary** (`text-height`, `line-width`,
+  `arrow-length`, `arrow-form`, `color`, `unit`, `fraction`, `decimal-marker`,
+  `standard`) shared by the setter flags, the `--clear` argument and the
+  listing. A panel using different words for the same nine things is how an
+  operator ends up unable to script what he just clicked.

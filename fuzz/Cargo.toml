@@ -322,3 +322,19 @@ path = "fuzz_targets/crypto_decrypt.rs"
 test = false
 doc = false
 bench = false
+
+# Pass 12.M2 + Pass 69.0: the ce-dimension `/PieceInfo` sidecar reader. Every
+# number it consumes comes out of the FILE and becomes geometry (`/Rect`, `/L`)
+# or, since the style cascade, a stroke width and a text height. The reader's
+# stated contract is that it is total -- a malformed sidecar yields `None` or a
+# partial model, never a panic -- and Pass 69.0 widened its input surface by
+# nine optional keys per group and thirteen per ce dimension, one of them an
+# array and one a token-parsed name. The target drives style RESOLUTION too,
+# not just parsing: an inherited absurdity only misbehaves once a file-supplied
+# override is combined with a file-supplied group default.
+[[bin]]
+name = "dimension_sidecar"
+path = "fuzz_targets/dimension_sidecar.rs"
+test = false
+doc = false
+bench = false

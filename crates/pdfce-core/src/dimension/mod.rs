@@ -36,6 +36,11 @@
 //!    (overlay-append, R46 zero-exception).
 //! 6. [`sidecar`] — the authoritative §14.5 `/PieceInfo /pdfce /Private` model
 //!    serialization (round-trips the whole [`group::DimensionModel`]).
+//! 7. [`style`] — the **style cascade** (`Pass 69.0`): factory default →
+//!    group default → per-ce-dimension override, one independent
+//!    inherit-flag per property, mirroring how the reference tool models it
+//!    (`D:\Dev\Rag-Specialized\SolidWorks_Dimensions\` §F.3) rather than a
+//!    single all-or-nothing "detached from the group" bit.
 //!
 //! ## Hybrid storage (decision 011 §2.4 "binding answer 1")
 //!
@@ -56,6 +61,10 @@ pub mod group;
 pub mod length_parse;
 pub mod measure_dict;
 pub mod sidecar;
+/// The factory -> group -> ce-dimension STYLE CASCADE (`Pass 69.0`): the
+/// per-property override model behind the operator's group-default-plus-
+/// override-checkbox request.
+pub mod style;
 /// Turn two picked lines into the ce dimension they call for — the single
 /// implementation shared by the CLI's `--kind two-lines` and the GUI gesture.
 pub mod two_lines;
@@ -73,6 +82,10 @@ pub use group::{
 pub use length_parse::{LengthParseError, ParsedLength, parse_length};
 pub use measure_dict::{build_measure_dict, build_ocg, build_ocproperties};
 pub use sidecar::{SIDECAR_VERSION, deserialize_model, serialize_model, sidecar_version};
+pub use style::{
+    ArrowForm, GroupStyle, StyleDefaults, StyleOverrides, StyleProvenance, StyleSource,
+    resolve_style, style_provenance,
+};
 pub use two_lines::{TwoLineAuthoring, TwoLinePlacement, TwoLineRefusal, author_from_two_lines};
 pub use units::{
     DecimalMarker, FractionMode, MeasurementDisplay, NO_SCALE_DISCLOSURE, NumberFormat, ScaleEntry,
