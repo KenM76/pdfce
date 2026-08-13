@@ -38616,3 +38616,61 @@ this release-record filing.
   capability row moved; `Pass 68.0`'s two-line dimensioning row was
   already ticked in the hundred-and-twenty-eighth filing. Confirmed by
   inspection, not edited.
+
+## 2026-08-12 (hundred-and-thirty-second filing) — `v0.5.2` BACKFILLED: the release gap the hundred-and-thirty-first filing found is now closed, with every figure measured this session, not invented
+
+**Sourcing.** This dispatch had a shell. Every figure below was measured
+just now — `git rev-parse` for the tag/commit, the live GitHub release
+API for the asset and download count, `gh run` for the CI result — not
+recalled from `docs/NEXT_SESSION.md`'s prose and not reconstructed from
+surrounding commit messages. This is stated explicitly because a
+backfilled record that reads as contemporaneous is worse than the gap it
+closes: a future reader needs to be able to tell which entries were
+written from live measurement and which were reconstructed after the
+fact, and this one is the second kind, done honestly.
+
+**Shipped (backfilled from 2026-08-12, the day before this filing):**
+- **`v0.5.2` tagged and released** at commit
+  `5b54a1eca2b28b3848fa7438586b909fcedff183` (annotated tag
+  `97bb7cd2256fe122955cf8daf2c171736c413607`), commit subject *"0.5.2 —
+  the version these binaries report"*, committed 2026-08-12 19:53:30
+  −0400. Release published 2026-08-13T00:02:34Z. Asset
+  `pdfce-v0.5.2-portable-win64.zip`, **10,290,964 bytes**, 1 download at
+  measurement time.
+- Full record filed in `docs/ROADMAP.md`'s Shipped section, inserted
+  between the hundred-and-twenty-seventh and hundred-and-twenty-eighth
+  filings' entries (chronological position — `v0.5.2` shipped the CLI
+  half of `Pass 68.0` but not yet the GUI half). Not restated in full
+  here.
+
+**Findings + decisions:**
+- **`tools/verify-release.py v0.5.2` re-run just now: all seven checks
+  ok**, including CI GREEN at the tagged commit (run `31652521712`,
+  `completed`/`success`). Checks 3 and 5 correctly report ADVANCED
+  (`HEAD` and `origin/main` both ahead of the tag now) — the ordinary
+  post-release state, not a failure.
+- **`v0.5.2` was the FIRST release in this project's history tagged at a
+  commit CI had already accepted** — `v0.5.3` was the second, a fact
+  that entry's own text already stated before this gap was closed.
+- **Why the gap happened — a further instance of the still-unruled
+  `R192` proposal** (*"an obligation that falls between two correct
+  tools is enforced by neither"*). `check-commits-filed.py` gates on
+  commits, and the version-bump commit for `v0.5.2` **was** covered by
+  a filing, so that gate was satisfied while the release record itself
+  was missing — nothing in the toolchain gates on releases as a
+  distinct thing from the commits composing them. Recorded as evidence;
+  the ruling on whether to mint `R192` remains the engineer's.
+- What shipped under `v0.5.2`, by cross-reference: the core and CLI
+  halves of two-line ce-dimension authoring (`e931836`, `905791f`,
+  `bc13a86`), the attachment round trip, and gate fixes `0d7c1bd` /
+  `1496e13`. Not the GUI half — that shipped after this tag.
+
+**Still in flight:** unchanged from the hundred-and-thirty-first filing.
+This backfill touches only the release record.
+
+**For next session:**
+- The `v0.5.2` release-record gap the hundred-and-thirty-first filing
+  flagged is now **closed**. Do not re-flag it.
+- `docs/FEATURES.md` — no change; no capability moved by this filing.
+- Give this filing its own commit with `docs/` staged by name, per the
+  `af5580e` convention; run `git status --short` first.

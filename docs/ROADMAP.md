@@ -682,6 +682,91 @@ any of those ledgers.
 
 ---
 
+### ★★★ BACKFILL, filed 2026-08-12 (hundred-and-thirty-second filing) — `v0.5.2` tagged and released at `5b54a1e`, the day before, with NO Shipped-section entry until now
+
+**This entry is a backfill, not a contemporaneous release record — say so
+plainly rather than let it read as one.** The hundred-and-thirty-first
+filing found, unprompted, that `v0.5.2` had no `ROADMAP.md`/`SESSION_LOG.md`
+entry anywhere, though every release from `v0.1.0` through `v0.5.1` has one,
+and **declined to invent the missing figures** because it had no shell (hard
+rule 8). That refusal is why the numbers below can be trusted: **every
+figure in this entry was measured after the fact, this session, by a
+dispatch that had a shell** — not recalled, not relayed from
+`docs/NEXT_SESSION.md`'s prose, and not reconstructed from the surrounding
+commit messages. The asset byte count and CI run ID in particular come from
+the live GitHub release and the live GitHub Actions API, checked just now,
+not from memory of what they probably were.
+
+**What was measured, and how:**
+
+| fact | value | source |
+|---|---|---|
+| annotated tag object | `97bb7cd2256fe122955cf8daf2c171736c413607` | `git rev-parse` |
+| tagged commit | `5b54a1eca2b28b3848fa7438586b909fcedff183` | `git rev-parse` |
+| commit subject | *"0.5.2 — the version these binaries report"* | `git log` |
+| commit date | 2026-08-12 19:53:30 −0400 | `git log` |
+| release published | 2026-08-13T00:02:34Z | GitHub release API |
+| asset | `pdfce-v0.5.2-portable-win64.zip`, **10,290,964 bytes** | GitHub release API |
+| downloads at measurement time | 1 | GitHub release API |
+| CI run at the tagged commit | `31652521712`, `completed` / `success` | `gh run` |
+
+`tools/verify-release.py v0.5.2` was re-run just now: **all seven checks
+ok**, including CI GREEN at the tagged commit. Checks 3 and 5 correctly
+report **ADVANCED** (`HEAD` at `6265c59`, `origin/main` at `8ac3d10`, both
+ahead of the tag) — this is the ordinary post-release state, and the tool
+reporting it as a pass rather than a false alarm is itself the
+hundred-and-twenty-fourth/hundred-and-twenty-fifth filings' gate fix
+holding up under a second real release, not merely under the release it was
+built to fix.
+
+**What shipped, by cross-reference, not re-filed here.** Per
+`docs/NEXT_SESSION.md`'s record at the time: the core and CLI halves of
+two-line ce dimensioning (`e931836` — pick a line and let the operator
+overrule the guess; `905791f` — `DimensionKind::Angular`; `bc13a86` — the
+CLI's `dimension-add --kind two-lines`, filed as this file's own entry
+immediately below, hundred-and-twenty-seventh filing), the attachment
+round trip, and gate fixes `0d7c1bd` / `1496e13`. Its packaging smoke test
+exercised two-line ce dimensioning and the attachment round trip on the
+copied binaries. **`v0.5.2` did NOT contain the GUI half** — `bd53ab3` /
+`c4ec3f5` (the canvas two-line pick gesture, this file's entry immediately
+above, hundred-and-twenty-eighth filing) shipped after this tag, which is
+why this backfilled entry sits between the two in this reverse-chronological
+section rather than above both.
+
+**Historically significant on its own terms, independent of the gap.**
+`v0.5.2` was the **first release in this project's history tagged at a
+commit CI had already accepted** — `v0.5.3` (this file's top entry) was
+the second, and that entry's own text already said so before this gap was
+closed. Three of the four releases before it were tagged at commits CI had
+rejected, and `v0.3.0` was published with failing tests (see this file's
+`v0.5.1` entry for the full record of that history).
+
+**Why the gap happened, worth a sentence because it is the second finding
+of this shape.** `tools/check-commits-filed.py` gates on *commits*, and
+`5b54a1e` (the version-bump commit) **was** covered by a filing — nothing
+in the toolchain gates on *releases* as a distinct thing from the commits
+that make them up, so a tag-and-publish step taken in a session that then
+ended left no trace once the session's commits were otherwise accounted
+for. The obligation ("every release gets a Shipped-section entry") fell
+into the gap between two tools that were each individually correct: the
+commit-filing gate and the release-tagging step. This is a further
+measured instance in support of the still-unruled **`R192` proposal**
+(*"an obligation that falls between two correct tools is enforced by
+neither"* — proposed hundred-and-twenty-sixth filing, not yet minted).
+Whether to mint it remains the engineer's call; this entry adds evidence,
+not a ruling.
+
+**No Pass ID, rule, or decision minted for this backfill.** Ledger ceilings
+unaffected except the filing count: Pass families ceiling stays **71**,
+next free **72**; standing rules ceiling stays **R191**, next free **R192**
+(still an unruled proposal); decisions ceiling stays **055**, next free
+**056**; `SESSION_LOG.md` filings move **131 → 132**, which is this one.
+
+**`docs/FEATURES.md` — no change.** No capability moved; this entry is a
+release record for work already reflected in that file's rows.
+
+---
+
 ### ★★★★ `1496e13` + `0d7c1bd` + `bc13a86` — `Pass 68.0`'s **CLI HALF IS REAL** (`dimension-add --kind two-lines`: parallel → a LINEAR ce dimension, angled → an ANGULAR one, collinear → refused by name — the operator's request reachable from a script for the first time, and **still NOT SHIPPED because the canvas cannot pick two lines**); a licence gate that DOCUMENTED a check it never performed now performs it, and its first true run was a **FALSE POSITIVE**; and `af5580e`'s mis-scoping is **measured rather than alleged** — 2026-08-12 (hundred-and-twenty-seventh filing)
 
 **Sourcing, stated before any figure (hard rule 8).** This librarian **had a
