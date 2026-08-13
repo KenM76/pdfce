@@ -100,6 +100,7 @@ provisional; re-verify before any acceptance criterion leans on them.
 | [x] | [x] | [x] | [x] | Toggle a group's OCG layer visibility. |
 | [x] | [x] | [x] | [x] | Delete a ce dimension — annotation, `/AP` and `/PieceInfo` sidecar together. |
 | [x] | [x] | [x] | **[ ]** | Pick two lines to dimension them from the canvas — parallel gives a linear ce dimension, angled gives an angular one, collinear refused by name; a settable near-parallel threshold, an override that still prints the angle it overrode, and a virtual apex dimensioned and disclosed. |
+| [x] | [x] | **[ ]** | ? | ce-dimension style — a per-group default with a per-ce-dimension override, independently per property (text height, line weight, arrow length, arrow form, colour, unit, fraction/precision, decimal marker, drafting standard); which tier supplied each value is readable. **No GUI surface yet**, so the override is settable only from the CLI. |
 
 ### Annotations & markup
 
@@ -210,7 +211,8 @@ the model or verb exists and only the named shell is missing. The
 | [ ] | [ ] | [ ] | ? | Resize a vector object. |
 | ◐ | ◐ | [ ] | **[ ]** | Node-editing remainder — Tab cycling and arrow-key nudge. |
 | [ ] | [ ] | [ ] | [x] | Make ce dimensions and foreign annotations selectable and deletable from the canvas; also gates click-a-comment-to-select. |
-| [ ] | [ ] | [ ] | **[ ]** | ce-dimension style and tolerance at SolidWorks option breadth — a per-group default plus a per-ce-dimension override checkbox. Neither a style object nor any tolerance exists today. |
+| [ ] | [ ] | [ ] | **[ ]** | ce-dimension tolerance at SolidWorks option breadth — symmetric, deviation, limit and the fit forms, inheriting through the style cascade. No tolerance exists anywhere today. |
+| — | — | [ ] | ? | ce-dimension style in the GUI — the panel that shows which values are inherited and which are overridden, and lets the override be set. The model and the CLI already do this; only the disclosure surface is missing. |
 | [ ] | [ ] | [ ] | ? | Drag a ce dimension's extension lines. |
 | [ ] | [ ] | [ ] | [x] | Re-measure a placed ce dimension — change what it measures without losing its id, group and placement. |
 | [ ] | [ ] | [ ] | [x] | Select, move and resize a placed markup annotation on the canvas. |

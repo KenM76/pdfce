@@ -38786,3 +38786,310 @@ state not independently asserted — this librarian has no shell this
 dispatch (hard rule 8). This is the **hundred-and-thirty-third**
 `SESSION_LOG.md` filing (the hundred-and-thirty-second confirmed
 present by direct read before this entry was appended).
+
+---
+
+## 2026-08-13 (hundred-and-thirty-fourth filing) — `d5431a4`: `Pass 69.0`'s STYLE CASCADE ships in core + CLI and the GUI half is DEFERRED BY OPERATOR INSTRUCTION rather than forgotten; three divergences from the SolidWorks reference recorded with their `SOURCED` evidence; decision 056 minted; the load-bearing test's SAVE MODE is part of its assertion, and that finding graduates to `personal_rag/pdf`
+
+**Sourcing.** This librarian **had a shell this dispatch** and used it
+(hard rule 8 as amended — *if you have a shell, look*). The dispatch note
+said otherwise; the note was wrong, and the tools were checked rather
+than believed. **Independently verified here, by command:** `git log`
+(HEAD = `d5431a4`, parent `4069cbb`), `git status --porcelain` (one
+dirty path — see the housekeeping note below), `git show --stat d5431a4`
+(**13 files, 2,928 insertions, 123 deletions**), the full commit message
+read in place, the public re-export block in
+`crates/pdfce-core/src/dimension/mod.rs` read directly, §F.3 and §F.4 of
+`solidworks__dimension_and_tolerance_options.md` read directly, and
+**Amendment B confirmed present** at line 775 of
+`docs/ui_specs/tool-options-dock-and-ce-dimension-properties.md`.
+**Relayed, not re-run here:** the gate figures (test counts, fmt/clippy/
+checker results, `cargo tree`, the fuzz run) — those come from the
+dispatching engineer's own session this same day.
+
+**Terminology (project rule 15).** Every dimension in this entry is a
+**ce dimension** — one pdfce authors. **Nothing filed here touches pdf
+dimensions**; a CAD-exported dimension's line weight, arrowheads and
+colour remain page content pdfce reads and must not alter.
+
+**Shipped:**
+
+- **`Pass 69.0` — the ce-dimension STYLE cascade — `d5431a4`, SHIPPED IN
+  PART: core [x] · cli [x] · gui [ ].** New module
+  `crates/pdfce-core/src/dimension/style.rs`: three tiers — **factory
+  (`StyleDefaults::FACTORY`) → group (`Group::style: GroupStyle`) → ce
+  dimension (`DimensionRecord::style: StyleOverrides`)** — over **nine
+  properties, each an independent `Option`**. **Four** of the nine (unit,
+  fraction/precision, decimal marker, drafting standard) have a concrete
+  group-tier field and so have **two** tiers; **five** (text height, line
+  width, arrow length, arrow form, colour) have **all three**.
+  `arrow_form` (filled / open / slash / dot / none) and `colour` are new
+  properties; the other three replace the hard-coded constants
+  `LABEL_SIZE = 10.0`, `LINE_WIDTH = 0.75`, `ARROW_LEN = 7.0`, which are
+  now the bottom tier rather than the only tier.
+- **New public surface in `pdfce_core::dimension`** (read from the crate,
+  not relayed): `ArrowForm`, `GroupStyle`, `StyleOverrides`,
+  `StyleDefaults`, `StyleProvenance`, `StyleSource`, `resolve_style`,
+  `style_provenance`, plus `DimensionStyle::new` and five new fields on
+  `DimensionStyle`.
+- **New `EditSession` verbs, one undo entry each:**
+  `set_group_style(GroupId, GroupStyle) -> Result<usize>` (returns
+  members **regenerated**) and
+  `set_dimension_style(DimensionId, StyleOverrides) -> Result<usize>`
+  (returns **override count**), with new `CommandKind` variants
+  `SetGroupStyle` and `SetDimensionStyle`.
+- **CLI parity in the same Pass (rule 11):** `group-style`,
+  `dimension-style`, `dimension-list --style`. **`dimension-list` prints
+  `overrides=N` on every ce-dimension line UNCONDITIONALLY**, not behind
+  the flag — hiding the override count would hide exactly the surprise
+  the cascade exists to prevent.
+
+**★ THE GUI HALF IS DEFERRED BY OPERATOR INSTRUCTION, NOT FORGOTTEN.**
+Operator, 2026-08-13, verbatim:
+
+> *"continue the planned work except for gui related, don't do any more
+> work on the gui until I say so."*
+
+**This is a recorded instruction, not an engineering shortfall**, and it
+is why `Pass 69.0` is filed as **shipped-in-part** rather than moved to
+*Shipped* as complete. **Its GUI acceptance criteria stay LIVE and
+unticked** — criterion 2's inheritance disclosure in particular. The
+Pass's *Next up* entry was **amended in place** with a dated banner
+listing what is done (criteria 1, 4, 6, 7) and what is still owed
+(criterion 2 = the GUI, criterion 3 = tolerance, criterion 5 = carried
+with the tolerance, plus the spec's extension-line drag), rather than
+being deleted or quietly reworded to match what shipped.
+
+**Decisions made this session:**
+
+- **Decision 056** (`ARCHITECTURE.md` §12) — *the ce-dimension style
+  cascade: three tiers, one `Option` per property, and why the scale is
+  not one of the properties.* **Body section updated in the same filing:
+  §4.1 gains (S).**
+- **Why it earned a NUMBER** when the hundred-and-twenty-fifth filing's
+  three rulings did not: those constrained one API each; this one fixes
+  **the representation of inheritance for the whole ce-dimension model**
+  — every presentational property today and every one `Pass 69.1` adds —
+  and **forecloses two alternatives a later Pass would otherwise reach
+  for** (a per-annotation "detached" bit; a per-property enum-valued
+  inherit-source).
+- **No standing rule was minted. R192 remains a PROPOSED, unruled number
+  and this filing adds nothing to that proposal** — stated explicitly so
+  the proposal's continued existence is not mistaken for an unrecorded
+  ruling.
+
+**Findings + decisions:**
+
+- **★ The RAG named in `Pass 69.0`'s own entry was READ AND USED — that
+  handoff loop is closed by this filing.**
+  `D:\Dev\Rag-Specialized\SolidWorks_Dimensions\` was named deliberately
+  in the Pass entry per `pdfce-engineer.md`'s rule that **a RAG
+  deliverable is not handed off until a pdfce doc names it** (the
+  `comparison__pdfce_feature_column.md` precedent). Its §F.3 and §F.4
+  were read directly by this librarian while filing, and every divergence
+  below is stated against a specific `SOURCED` finding in it.
+- **Divergence 1 — ONE representation of "inherit."** §F.3 measured the
+  reference API: **essentially every settable display property is an
+  `(inherit-flag, value)` pair**, with **no single "detached" bit
+  anywhere**. But the flag is spelled **three ways in one API** — a
+  `UseDoc` boolean, a **negative sentinel inside the value's own numeric
+  range** (`swPrecisionFollowsDocumentSetting` = −2), and **a member of
+  the value enum** (`swDimArrowsFollowDoc` = 3). §F.3's own advice:
+  *"Pick one representation in pdfce; do not replicate the
+  inconsistency."* **pdfce uses `Option::None` everywhere.** The sentinel
+  is the spelling worth naming as rejected — **a magic number inside a
+  property's legitimate value range means every consumer must know the
+  magic number**, and one that does not reads −2 as a precision.
+- **Divergence 2 — the exotic inherit-SOURCES are collapsed**, which is
+  the divergence §F.3 explicitly asked to be documented. The reference
+  inherits **tolerance text size from the PARENT DIMENSION** (flag named
+  `UseDimension`, not `UseDoc`), **extension-line style from the LEADER**
+  (`ExtensionLineSameAsLeaderStyle`), **tolerance precision from the
+  NOMINAL** (`swTolerancePrecisionFollowsNominal`), **leading zeros from
+  the DRAFTING STANDARD** (`swLeadingZero_FollowStandard`). **pdfce has
+  three tiers and every property walks the same chain.** Two of those
+  sources land squarely in `Pass 69.1`, so this is what stops that Pass
+  re-litigating the model it inherits.
+- **Divergence 3 — ★ the SCALE is not overridable per ce dimension, and
+  must not become one.** Every other property is safe to override because
+  overriding changes how a ce dimension **looks**; scale changes what it
+  **claims**. **A ce dimension quietly measuring at a different scale
+  from its group would print a number nothing on the page discloses** —
+  rule 4 at the model layer, and the mirror image of §4.1 (R)'s angular
+  case: there the risk was a false warning, here it is **a wrong number
+  with no warning available at all**.
+- **Where pdfce EXCEEDS the reference** (user memory *exceed the parity
+  reference when you can*): **clearing an override restores
+  INHERITANCE.** The reference's `DeleteStyle` does not — §F.4's Remarks
+  verbatim: *"Dimensions and annotations retain the properties previously
+  applied by the style unless the items are reset to the document
+  default."* Reverting there is a separate action
+  (`ApplyDefaultStyleAttributes()`). In pdfce the value was never copied
+  down, so **clearing the `Option` IS the revert.** SolidWorks is the
+  **floor**, not the ceiling.
+- **The provenance API is what makes the override DATA rather than a UI
+  affordance.** `style_provenance()` answers per property which tier
+  supplied the value; `StyleSource::follows_group()` answers *will a
+  group edit move this?* **A widget-only override is state that exists
+  nowhere once the panel closes** — unqueryable by the CLI, untestable
+  without driving a GUI. Putting it in the model is why the CLI can print
+  it today and the deferred panel can be built later against a settled
+  API. **`follows_group()` is TRUE for `Factory` as well as `Group`** —
+  the easy thing to get wrong, since a property no tier has set still
+  follows the group the moment the group sets it.
+- **★★ THE COUNT TRAP, repeated in three places because it is how a
+  correct-looking disclosure answers the wrong question.** The count
+  `set_group_style` returns is the number **REGENERATED**, not the number
+  that will visibly **MOVE**. They differ whenever a member overrides the
+  edited property — a regenerated ce dimension whose own `Option` is
+  `Some` re-bakes identically. **Only the second answers the operator's
+  stated worry** (*"cannot change one and be surprised 40 others changed
+  or didn't"*). `follows_group()` computes it; the return value does not.
+  Filed in the *Shipped* entry, in §4.1 (S), and in Amendment B.
+- **No `SIDECAR_VERSION` bump, and that is the DOCUMENTED RULE rather
+  than a shortcut.** §4.1 (R): **an optional-with-default field owes no
+  bump; a new VARIANT does.** Every key added here is
+  optional-with-default. **The claim is pinned on BYTES** — a test proves
+  an unstyled model writes **no style keys at all** — because *"it
+  round-trips"* would pass **even if every dict quietly gained five
+  default keys**, and **a sidecar that grows keys on every save dirties
+  objects R34 says are untouched.** The same argument kept **`0 g`** in
+  the content stream for black instead of `0 0 0 rg`: the longer spelling
+  repaints identical pixels while rewriting every appearance stream in
+  the file.
+- **★ THE LOAD-BEARING TEST ASSERTS ON THE BAKED APPEARANCE, AND THE SAVE
+  MODE IS PART OF THE ASSERTION.** Every other test in the new suite
+  reads the model back through `dimension-list`, i.e. from the
+  `/PieceInfo` sidecar. **A build that stored the override faithfully and
+  then regenerated the `/AP` from the group alone would pass all of them
+  and still draw the wrong thing in every reader.** So one test asserts
+  on the appearance stream — and saves with **`--mode full`
+  DELIBERATELY**, because under an **incremental** save the superseded
+  appearance object is still in the file, so the *"the factory `0.75 w`
+  is gone"* half **would pass VACUOUSLY**. **That is `Pass 68.0`'s
+  near-miss in a new costume — a byte assertion that cannot fail.** The
+  test **was seen to fail** (cascade replaced by `From<&Group>`) before
+  being trusted.
+- **That last finding GRADUATED to `C:\personal_rag\pdf\`** as a
+  PDF-domain lesson, written this filing:
+  `lesson_20260813_absence_assertion_vacuous_under_incremental_save.md`
+  — *an assertion that some byte sequence is ABSENT from a PDF is vacuous
+  under an incremental save, because the superseded object is still in
+  the file. **Absence assertions need a full rewrite; presence assertions
+  do not.*** Both `C:\personal_rag\pdf\index.md` and the master
+  `C:\personal_rag\index.md` updated in the same filing; a dated
+  forward-pointer footer was added to the closely related 2026-08-09
+  incremental-save lesson rather than restating its mechanism (hard
+  rule 4).
+- **File-supplied values INHERIT rather than clamp.** A negative text
+  height, a `1e12` stroke width, an unknown arrow form, an out-of-range
+  colour component, an `/OvFrac /decimal` with no `/OvPlaces` — **each
+  reads as "inherit", never as a plausible substitute the operator never
+  chose.** Rule 4 applied **at the parser** rather than at the UI: a
+  clamp would invent a value and then present it as the operator's.
+- **New fuzz target `dimension_sidecar`** (`fuzz/fuzz_targets/`,
+  registered in `fuzz/Cargo.toml`), per §10.2, because this Pass
+  **widened an untrusted-input surface by nine optional keys per group
+  and thirteen per ce dimension**, one an array and one a token-parsed
+  name. **It drives style RESOLUTION as well as parsing** — an inherited
+  absurdity only misbehaves once a file-supplied override meets a
+  file-supplied group default, which parser-only fuzzing never
+  constructs.
+
+**Gates — relayed from the engineer's run this session, every one green:**
+
+| gate | result |
+|---|---|
+| `cargo test --workspace` | **3,654 passed, 0 failed** — was **3,632** at `v0.5.3`, so **+22** |
+| `cargo fmt --all --check` | clean |
+| `tools/check-fmt-excluded.py` | clean — **12 out-of-workspace crates** |
+| `cargo clippy --workspace --all-targets -- -D warnings` | clean |
+| `tools/check-ui-strings.sh` | clean |
+| `tools/check-ledger-numbers.py` | clean — **R191 / decisions 055 / filings 133** (pre-filing) |
+| `tools/check-shipped-assets.py` | clean — **2 asset dirs, 60 files** |
+| `cargo tree -p pdfce-core` / `-p pdfce-render` | **no egui / eframe / winit / wgpu / glow** — rule 2 HOLDS |
+| fuzz `dimension_sidecar` | **776,315 runs over 60 s = ≈12,940 runs/s, 0 crashes** (nightly, ASan DLL on PATH per the Windows workaround already filed in `D:\dev\rag\rust\`) |
+
+**No dependency added, so no `cargo-about` regeneration is owed. No
+packaging change, so no packaging smoke test is owed.** Both stated
+because their absence is otherwise indistinguishable from an omission.
+**Commit size in per-item form (hard rule 10(a)):** 13 files, **2,928
+insertions / 123 deletions = ≈225 inserted lines per file.**
+
+**Still in flight:**
+
+- **`Pass 69.0`'s GUI half** — deferred by operator instruction, criteria
+  live and unticked. **Not blocked by anything technical**; the model and
+  the provenance API are settled and waiting.
+- **`Pass 69.1` (ce-dimension tolerance) — UNSTARTED.** ID minted this
+  filing as its own *Next up* entry rather than left as a forward
+  pointer. **Note for whoever takes it: a `ToleranceType` enum in the
+  sidecar IS a variant set**, so unlike `Pass 69.0` it may well owe a
+  `SIDECAR_VERSION` bump — decide it against §4.1 (R), not against this
+  Pass's precedent.
+- **★ Open operator question `(bl)` — STILL UNANSWERED**, and **raised to
+  the operator again in this session's report**: may a **CC-BY-SA-4.0
+  model file** ship inside pdfce's **MIT** portable folder? The
+  pure-Rust engine (`ocrs`/`rten`) is the **only OCR route that passes
+  the wasm32 CI gate** and its **weights are copyleft**; the Apache-2.0
+  alternative (PaddleOCR via `ocr-rs`) covers **50+ languages** but has
+  **no WASM**. **This is a legal reading, therefore the operator's.**
+  *Default if unanswered: ship neither model set.* **`(bl)` remains the
+  operator-question ceiling; next free is `(bm)`.**
+- **`Pass 46` slices 2–4** — open, unchanged.
+- **The GUI attachments surface** — open, unchanged, and now additionally
+  subject to the GUI deferral.
+- **`Pass 67.0` phases C / D / F** — open, unchanged.
+- **The `v0.1.0` / `v0.4.0` / `v0.5.0` missing release records** — the
+  gap measured by the hundred-and-thirty-third filing is still open,
+  still cheap to close from the table already filed, still not urgent.
+- **The two escalations awaiting the operator's own statement** — open,
+  unchanged in substance.
+
+**For next session:**
+
+- The GUI deferral is a **standing instruction until the operator lifts
+  it** — it is not scoped to `Pass 69.0`. Do not treat the next Pass's
+  GUI half as exempt because it is a different Pass.
+- `(bl)` is the one item where **the default is to ship nothing**, so
+  silence has a cost that compounds: `Pass 71.0` cannot finish without
+  it.
+- **Housekeeping, checked by command not inferred:**
+  `tools/render-profile/Cargo.lock` was **already dirty in the working
+  tree before this session began** and is **NOT part of this work** — it
+  was **not** staged. This filing's commit stages `docs/` **by name**,
+  per the `af5580e` convention.
+
+**Ledger for this filing.** Pass family ceiling **UNCHANGED at 71**
+(71.x highest); **`Pass 69.1` is a new ID within an existing family**, so
+the ceiling does not move. `docs/FEATURES.md`: **edited** — a new
+*Implemented* ce-dimension row for the style cascade at **core [x] · cli
+[x] · gui [ ]**; the former combined "style and tolerance" *Planned* row
+**narrowed to tolerance only**, and a **separate *Planned* row added for
+the GUI disclosure surface** so the two remaining halves are not
+conflated into one unticked line. `docs/ARCHITECTURE.md`: **edited** —
+**§12 gains decision 056**, **§4.1 gains (S)**. Standing rules: **no new
+rule minted** — ceiling unchanged at **R191**, next free **R192** (still
+an unruled proposal; this filing adds nothing to it). Decision records:
+ceiling now **056**, next free **057**. Operator-question ceiling
+**`(bl)`**, next free **`(bm)`** — unmoved by this filing. **Git state
+CHECKED TWICE, not inferred (hard rule 8), and it CHANGED between the two
+checks — both readings are given because only the second describes the
+commit this filing actually made.** `git log` gives HEAD `d5431a4`,
+parent `4069cbb`, at both checks. `git status --porcelain` **at the start
+of this filing**: exactly one dirty path, `tools/render-profile/Cargo.lock`,
+pre-existing and not this librarian's work. **At commit time**: eleven
+dirty paths plus one untracked — the same `Cargo.lock`, this filing's four
+`docs/` files, and **seven modified files under `crates/` plus a new
+untracked `crates/pdfce-core/src/dimension/tolerance.rs`**. **The engineer
+is working `Pass 69.1` CONCURRENTLY with this filing.** Nothing under
+`crates/` and no `Cargo.lock` was staged; **only the four `docs/` files
+were staged, by name**, which is the entire reason the `af5580e`
+convention says by name rather than `-A`. **The concurrent work is NOT
+filed here** — `tolerance.rs` existing on disk is not `Pass 69.1`
+shipping, and a later reader must not read this filing's timestamp as
+covering it. **Backup currency not checked this dispatch** — engineer
+should check `D:\Dev\pdfce-backups\` if it matters. This is the
+**hundred-and-thirty-fourth** `SESSION_LOG.md` filing (the
+hundred-and-thirty-third confirmed present by direct read before this
+entry was appended).

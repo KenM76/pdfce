@@ -2735,6 +2735,139 @@ reason; the stronger one is that **a scanned document is often the RECORD
 of something**, and a decode/re-encode cycle costs generation loss on an
 image whose provenance the operator may have to defend.
 
+### (S) `d5431a4` — the ce-dimension STYLE CASCADE: `dimension::style`, two new `EditSession` verbs, and five new fields on `DimensionStyle` — 2026-08-13
+
+**Terminology (project rule 15):** this surface resolves style for **ce
+dimensions** — the ones pdfce authors. **It does not touch pdf
+dimensions.** A CAD-exported dimension's line weight and arrowheads are
+page content pdfce reads and must not alter, and nothing in this module
+has a code path that reaches them.
+
+#### `dimension::style` — three tiers, nine properties, one `Option` each
+
+**New module `crates/pdfce-core/src/dimension/style.rs`.** The cascade:
+
+```
+factory (StyleDefaults::FACTORY)
+    -> group        (Group::style: GroupStyle)
+        -> ce dimension (DimensionRecord::style: StyleOverrides)
+```
+
+**New public surface in `pdfce_core::dimension`:** `ArrowForm`,
+`GroupStyle`, `StyleOverrides`, `StyleDefaults`, `StyleProvenance`,
+`StyleSource`, `resolve_style`, `style_provenance`, plus
+`DimensionStyle::new` and **five new fields** on `DimensionStyle`.
+
+**Nine properties. Four have two tiers, five have three** — the split is
+not arbitrary: unit, fraction/precision, decimal marker and drafting
+standard already had a concrete **group-tier field** on `Group`, so they
+inherit group → ce dimension; text height, line width, arrow length,
+arrow form and colour have a factory tier beneath the group because
+**they previously had no group field at all** and their only prior
+existence was as module constants in `author.rs` — `LABEL_SIZE = 10.0`,
+`LINE_WIDTH = 0.75`, `ARROW_LEN = 7.0`. **Those constants are now the
+BOTTOM TIER, not the only tier.** `arrow_form` (filled / open / slash /
+dot / none) and `colour` are genuinely new; colour also reaches the
+annotation's **`/C`**, so a reader drawing from the keys alone does not
+draw a black ce dimension over a coloured one.
+
+**★ `Option::None` MEANS INHERIT, and it is the entire override
+mechanism.** There is no separate `use_group: bool`, no sentinel value
+inside a property's own numeric range, and no "inherit" member inside any
+value enum. **One representation, everywhere.** The operator asked for *"a
+checkbox to override and set differently"* — **the `Option` IS that
+checkbox**, which is what makes the inherited-vs-overridden state
+**recoverable from the data** rather than being a UI-only affordance that
+exists nowhere once the panel is closed.
+
+#### `StyleProvenance` / `StyleSource` — the part that makes disclosure possible
+
+`style_provenance()` answers, **per property, which tier supplied the
+value**. `StyleSource::follows_group()` answers the question a panel
+actually asks: **will a group edit move this ce dimension?**
+
+**★ `follows_group()` is TRUE for `Factory` as well as `Group`, and that
+is the easy thing to get wrong.** A property no tier has ever set still
+follows the group the moment the group sets it, so treating "came from
+the factory" as "detached" would under-report exactly the ce dimensions
+that are about to move.
+
+**★★ THE COUNT TRAP, stated on this file because it is an API contract
+and not a UI note.** `EditSession::set_group_style` returns the number of
+members **REGENERATED**. That is **not** the number that will visibly
+**MOVE** — the two differ whenever a member overrides the edited
+property, because a regenerated ce dimension whose own `Option` is `Some`
+re-bakes to an identical appearance. **`follows_group()` computes the
+second number; the return value is the first.** Any caller disclosing
+"this will change N ce dimensions" must compute it, not print the return
+value.
+
+#### The two verbs
+
+| verb | returns | `CommandKind` | undo |
+|---|---|---|---|
+| `set_group_style(GroupId, GroupStyle)` | `Result<usize>` — members **regenerated** | `SetGroupStyle` | one entry |
+| `set_dimension_style(DimensionId, StyleOverrides)` | `Result<usize>` — **override count** | `SetDimensionStyle` | one entry |
+
+**One undo entry each**, including the group verb that may regenerate
+many appearance streams — a group style change is **one operator act**,
+and an undo stack that unwound it member by member would be unusable on
+a group of forty.
+
+#### THE SCALE IS NOT A STYLE PROPERTY, and must not become one
+
+**Deliberate, and stated here rather than left as an omission someone
+later "fixes."** Scale is what turns page points into a real-world
+length. **A ce dimension quietly measuring at a different scale from its
+group would print a number nothing on the page discloses** — rule 4, at
+the model layer. Every other presentational property is safe to override
+because overriding it changes how the ce dimension *looks*; overriding
+the scale changes what it *claims*.
+
+#### `SIDECAR_VERSION` is NOT bumped, per (R)'s own stated rule
+
+**(R) states it: an optional-with-default field does not owe a bump; a
+new VARIANT does.** Every key this surface adds is
+optional-with-default, so an old build meeting an unknown style key
+**reads it as absent and draws what it always drew**. There is no
+variant-widening here — `ArrowForm` lives inside an optional key, so its
+absence is the same "inherit" an old build already implements by having
+no concept of it.
+
+**The claim is pinned on BYTES, not on round-tripping:** a test proves an
+unstyled model writes **no style keys at all**. *"It round-trips"* would
+pass **even if every dict quietly gained five default keys**, and **a
+sidecar that grows keys on every save dirties objects R34 says are
+untouched** — the round-trip invariant (§5) is violated by a *successful*
+round trip in that case, which is precisely why the weaker assertion is
+not enough. Same argument keeps **`0 g`** in the content stream for black
+rather than `0 0 0 rg`: the longer spelling repaints identical pixels
+while rewriting every appearance stream in the file.
+
+#### File-supplied values INHERIT rather than clamp
+
+A negative text height, a `1e12` stroke width, an unknown arrow form, an
+out-of-range colour component, an `/OvFrac /decimal` with no `/OvPlaces`
+— **each reads as "inherit."** Never as a clamped substitute. **A clamp
+would invent a value and then present it as the operator's**, which is
+rule 4's failure mode expressed at the parser instead of at the UI. The
+untrusted-input surface this widened — **nine optional keys per group,
+thirteen per ce dimension**, one an array and one a token-parsed name —
+is covered by the new **`dimension_sidecar`** fuzz target (§10.2), which
+drives **resolution as well as parsing** because an inherited absurdity
+only misbehaves once a file-supplied override meets a file-supplied group
+default.
+
+**CLI surface added in the same Pass** (project rule 11): `group-style`,
+`dimension-style`, `dimension-list --style`. **`dimension-list` prints
+`overrides=N` unconditionally**, not behind the flag — hiding the
+override count would hide exactly the surprise the cascade exists to
+prevent.
+
+**GUI: none.** Deferred by operator instruction 2026-08-13. **The model
+is complete without it**, which is the point of putting provenance in the
+data: the disclosure surface can be built later against a settled API.
+
 ### (I) What this sync did NOT cover — stated so the edges are honest
 
 **A partial sync that names its edges is worth more than a
@@ -18707,3 +18840,156 @@ a long while to touch `Cargo.toml` files: `cargo tree -p pdfce-core
 **0 hits over 43 lines**, and `pdfce-render` returns **0**. **No crate
 boundary moved.** Full build record: `ROADMAP.md`'s
 hundred-and-twenty-sixth filing.
+
+### 2026-08-13 (hundred-and-thirty-fourth filing, `d5431a4`) — decision 056: the ce-dimension STYLE cascade is THREE tiers with ONE `Option` per property, the exotic inherit-sources of the reference model are collapsed into that one chain, and the SCALE is deliberately not one of the properties
+
+**Ceiling check, measured by `tools/check-ledger-numbers.py` this
+session:** *"rules ceiling R191, decisions 055, filings 133."* **This
+filing mints decision 056** — the next free number — **and no standing
+rule.** **R192 remains a PROPOSED, unruled number and this filing adds
+nothing to that proposal**, said explicitly so a later reader does not
+mistake the proposal's continued existence for a ruling that went
+unrecorded.
+
+**Terminology (project rule 15):** this decision is about **ce
+dimensions** throughout. **pdf dimensions are not in scope** and no code
+path here reaches them.
+
+**The request, from the operator, 2026-08-12, verbatim:**
+
+> *"groups of dimensions should have a default dimensioning and tolerance
+> style that can be set for the group, but these should have a checkbox
+> to override and set differently."*
+> *"they should have the same options as SolidWorks does for
+> dimensions."*
+
+#### Why this earns a NUMBER when the last three rulings did not
+
+The hundred-and-twenty-fifth filing declined to mint a number for three
+rulings because each **constrained exactly one API** and was fully stated
+in that API's own doc comments. **This one is the opposite shape.** It
+fixes the **representation of inheritance for the whole ce-dimension
+model** — every presentational property that exists today and every one
+`Pass 69.1` will add — and it **forecloses two alternatives that a later
+Pass would otherwise be free to reach for** (a per-annotation "detached"
+bit; a per-property enum-valued inherit-source). A ruling that binds
+future Passes is what the ledger is for.
+
+#### The decision, in three parts, each taken against a MEASURED reference rather than a recalled one
+
+**The reference is `D:\Dev\Rag-Specialized\SolidWorks_Dimensions\`**,
+§F.3 and §F.4 of `solidworks__dimension_and_tolerance_options.md`. It was
+named in `Pass 69.0`'s own roadmap entry precisely so this handoff could
+be tracked, and **it was read and used** — the three divergences below
+are each stated against a specific `SOURCED` finding in it, not against a
+memory of how SolidWorks behaves.
+
+**1. THREE TIERS, and one `Option` per property is the ONLY
+representation of "inherit."** §F.3 measured the reference API and found
+that **essentially every settable display property is an
+`(inherit-flag, value)` pair** — there is **no single "detached from the
+document" bit anywhere in it**. pdfce takes that shape. What pdfce does
+**not** take is the reference's **three simultaneous spellings of the
+same flag**: a `UseDoc` boolean parameter, a **negative sentinel inside
+the value's own numeric range** (`swPrecisionFollowsDocumentSetting`
+= −2), and **a member of the value enum itself** (`swDimArrowsFollowDoc`
+= 3). §F.3's own closing advice is *"Pick one representation in pdfce; do
+not replicate the inconsistency."* **pdfce uses `Option::None`, and only
+`Option::None`.** The sentinel spelling is the one worth naming as
+rejected: **a magic number living inside a property's legitimate value
+range means every consumer must know the magic number**, and a consumer
+that does not know it reads −2 as a precision.
+
+**2. THE EXOTIC INHERIT-SOURCES ARE COLLAPSED — deliberately, and this
+is the divergence §F.3 explicitly asked to be documented.** The reference
+inherits a **tolerance's text size from the PARENT DIMENSION** (the flag
+is called `UseDimension`, not `UseDoc`), an **extension line's style from
+the LEADER** (`ExtensionLineSameAsLeaderStyle`), **tolerance precision
+from the NOMINAL's** precision (`swTolerancePrecisionFollowsNominal`),
+and **leading zeros from the DRAFTING STANDARD**
+(`swLeadingZero_FollowStandard`). §F.3's design conclusion offers two
+routes — *"an enum-valued source per property, or at minimum a documented
+decision to collapse the exotic sources."* **pdfce takes the second, and
+this paragraph is that document.** **Three tiers, and every property
+walks the same chain.**
+
+**The reason is a cost the reference already pays and pdfce would
+inherit.** A per-property inherit-source enum makes the resolution order
+**property-dependent**, so no reader can answer *"where did this value
+come from?"* without a table; it makes the **cycle question real** (a
+tolerance inheriting from a dimension that inherits from a tolerance);
+and it makes a disclosure panel's job combinatorial rather than uniform.
+**Two of those exotic sources land squarely in `Pass 69.1`** — tolerance
+text size and tolerance precision — **so this decision is what stops that
+Pass re-litigating the model it inherits.**
+
+**3. ★ THE SCALE IS NOT AN OVERRIDABLE PROPERTY, and must not become
+one.** Every other presentational property is safe to override because
+overriding it changes how a ce dimension **looks**. **Scale changes what
+it CLAIMS.** It is the factor that turns page points into a real-world
+length, and **a ce dimension quietly measuring at a different scale from
+its group would print a number that nothing on the page discloses** —
+rule 4, applied at the model layer rather than at the UI. This is the
+same reasoning §4.1 (R) records for the angular scale contract, where an
+unscaled angle **deliberately does not set `raw_page_units`** because a
+warning that fires when nothing is wrong gets trained away: **here the
+danger is the mirror image — a wrong number with no warning available at
+all**, because the page carries no evidence of which scale produced it.
+
+#### The provenance API is what makes this DATA rather than a UI affordance
+
+`style_provenance()` answers, **per property, which tier supplied the
+value**; `StyleSource::follows_group()` answers **will a group edit move
+this ce dimension?** **This is the load-bearing half of the decision, not
+a convenience.** The operator's request was for a *checkbox*, and the
+naive reading of a checkbox is a widget. **A widget-only override is
+state that exists nowhere once the panel closes** — it cannot be queried
+by the CLI, cannot be tested without driving a GUI, and cannot be
+disclosed by anything except the surface that set it. Putting provenance
+in the model means **the CLI can print it today** (`dimension-list
+--style` names the tier per value) **and the deferred GUI panel can be
+built later against a settled API** rather than inventing its own notion
+of "inherited."
+
+**`follows_group()` returns TRUE for `Factory` as well as `Group`** — a
+property no tier has set still follows the group the moment the group
+sets it — **and `set_group_style` returns the count REGENERATED, not the
+count that will visibly MOVE.** Both are recorded in §4.1 (S) because
+both are ways a correct-looking disclosure answers the wrong question.
+
+#### Where pdfce EXCEEDS the reference, recorded per the operator's standing preference
+
+**Clearing an override in pdfce restores INHERITANCE.** The reference's
+`DeleteStyle` does not: §F.4's Remarks, verbatim — *"Dimensions and
+annotations retain the properties previously applied by the style unless
+the items are reset to the document default."* Reverting there is a
+**separate action** (`ApplyDefaultStyleAttributes()`). **In pdfce the
+value was never copied down**, so clearing the `Option` **is** the
+revert. Recorded rather than taken silently, per the user memory *exceed
+the parity reference when you can*: SolidWorks is the **floor** for the
+option set, not the ceiling.
+
+#### What this decision does NOT settle
+
+- **Tolerance.** `Pass 69.1`, unstarted. This decision fixes the
+  cascade a tolerance will inherit through; it does not choose the
+  tolerance model.
+- **Whether `Pass 69.1` owes a `SIDECAR_VERSION` bump.** This Pass did
+  **not** bump, correctly, because every key it added is
+  optional-with-default. **A `ToleranceType` enum in the sidecar is a
+  VARIANT set**, and §4.1 (R)'s rule says a new variant **does** owe a
+  bump. **Decide it against (R), not by this Pass's precedent** — the two
+  situations differ in exactly the way (R) distinguishes.
+- **The GUI disclosure surface.** Deferred by operator instruction
+  2026-08-13; `Pass 69.0`'s criterion 2 stays live and unticked.
+
+**Body section updated in the same filing:** **§4.1 gains (S)** — the
+style-cascade surface. **No crate boundary moved; no dependency was
+added** (so no `cargo-about` regeneration is owed), and **§3's GUI-core
+separation was verified by command, not by construction**: `cargo tree -p
+pdfce-core` and `-p pdfce-render` show **no egui / eframe / winit / wgpu
+/ glow**. **Gate denominators, both stated (hard rule 10(a)): 3,654 tests
+passed / 0 failed, up from 3,632 at `v0.5.3` = +22; the new
+`dimension_sidecar` fuzz target ran 776,315 iterations over 60 s
+= ≈12,940 runs/s with 0 crashes.** Full build record: `ROADMAP.md`'s
+hundred-and-thirty-fourth filing.

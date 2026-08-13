@@ -81,6 +81,242 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 69.0 — `d5431a4` — the **ce-dimension STYLE cascade**: three tiers, nine properties, one independent `Option` per property — **SHIPPED IN PART: core [x] · cli [x] · gui [ ]** — filed 2026-08-13 (hundred-and-thirty-fourth filing)
+
+**★ READ THE STATUS LINE BEFORE THE CONTENT. This Pass is NOT complete
+and is deliberately not filed as complete.** Its **core** and **CLI**
+halves shipped; its **GUI** half is **deferred at the operator's explicit
+instruction this session**, verbatim:
+
+> *"continue the planned work except for gui related, don't do any more
+> work on the gui until I say so."* — operator, 2026-08-13
+
+**That is a recorded operator instruction, not an engineering
+shortfall**, and the distinction is the reason it is stated in the
+heading rather than in a footnote. `Pass 69.0`'s **GUI acceptance
+criteria stay LIVE and unticked** (criterion 2's inheritance disclosure
+in particular) — see the Pass's own *Next up* entry, amended in this same
+filing rather than removed. A future session that finds this entry in
+*Shipped* and concludes the panel exists will be wrong; a future session
+that finds the criteria unticked and concludes the work was forgotten
+will also be wrong. Both readings are pre-empted here on purpose.
+
+**Terminology (project rule 15):** every dimension in this entry is a
+**ce dimension** — one pdfce authors. **Nothing here touches pdf
+dimensions**; a CAD-exported dimension's line weight, arrowheads and
+colour are page content pdfce reads and must not alter. The cascade below
+resolves style for **ce dimensions only**.
+
+#### What shipped
+
+**New module `crates/pdfce-core/src/dimension/style.rs`** — a
+three-tier, **per-property** inheritance cascade:
+
+```
+factory (StyleDefaults::FACTORY)
+    -> group      (Group::style: GroupStyle)
+    -> ce dimension (DimensionRecord::style: StyleOverrides)
+```
+
+**Nine properties, each an independent `Option`, and that `Option` IS the
+operator's requested checkbox.** Of the nine, **four** — unit,
+fraction/precision, decimal marker, drafting standard — have a concrete
+group-tier field already and therefore have **two** tiers; the remaining
+**five** — text height, line width, arrow length, arrow form, colour —
+have **all three**. **`arrow_form`** (filled / open / slash / dot / none)
+and **`colour`** are new properties with no prior representation
+anywhere; the other three replace what were hard-coded module constants
+in `dimension/author.rs` — **`LABEL_SIZE = 10.0`, `LINE_WIDTH = 0.75`,
+`ARROW_LEN = 7.0`** — which are now the **bottom tier** rather than the
+only tier.
+
+**New public surface in `pdfce_core::dimension`** (verified this filing
+by reading the re-export block in `dimension/mod.rs`, not relayed):
+`ArrowForm`, `GroupStyle`, `StyleOverrides`, `StyleDefaults`,
+`StyleProvenance`, `StyleSource`, `resolve_style`, `style_provenance`,
+plus `DimensionStyle::new` and **five new fields** on `DimensionStyle`.
+
+**New `EditSession` verbs**, one undo entry each:
+
+| verb | returns | new `CommandKind` |
+|---|---|---|
+| `set_group_style(GroupId, GroupStyle)` | `Result<usize>` — **members REGENERATED** | `SetGroupStyle` |
+| `set_dimension_style(DimensionId, StyleOverrides)` | `Result<usize>` — **override COUNT** | `SetDimensionStyle` |
+
+**New CLI subcommands, same Pass (project rule 11):** `group-style`,
+`dimension-style`, and `dimension-list --style` (which prints all nine
+resolved values with the tier each came from). **`dimension-list` now
+also prints `overrides=N` on every ce-dimension line
+UNCONDITIONALLY** — not behind `--style`. An operator scanning a list
+needs to see which ce dimensions will move when he edits the group, and
+putting that behind a flag would hide **exactly the surprise the cascade
+exists to prevent**.
+
+**Commit size:** 13 files, **2,928 insertions / 123 deletions** =
+**≈225 inserted lines per file** (hard rule 10(a) — the per-item form
+beside the total, denominator stated).
+
+#### The RAG named in this Pass's own entry WAS read and used — that loop is closed here
+
+`Pass 69.0`'s *Next up* entry named
+**`D:\Dev\Rag-Specialized\SolidWorks_Dimensions\`** deliberately, per
+`pdfce-engineer.md`'s standing instruction that **a RAG deliverable is
+not handed off until a pdfce doc names it** (the
+`comparison__pdfce_feature_column.md` precedent, which went untracked for
+exactly this reason). **This filing is the other half of that handoff:
+the RAG was read, its §F.3 measured the reference API's shape, and three
+divergences from it were taken deliberately and recorded rather than
+discovered later.** Verified this filing by reading §F.3 and §F.4 of
+`solidworks__dimension_and_tolerance_options.md` directly — the claims
+below are checked, not relayed.
+
+**The three deliberate divergences:**
+
+1. **ONE representation of "inherit."** The reference expresses the
+   inherit-flag **three ways in one API** — a `UseDoc` boolean parameter,
+   a **negative sentinel inside the value's own numeric range**
+   (`swPrecisionFollowsDocumentSetting` = −2), and **a member of the
+   value enum itself** (`swDimArrowsFollowDoc` = 3). §F.3's own closing
+   advice is *"Pick one representation in pdfce; do not replicate the
+   inconsistency."* **pdfce uses `Option::None` for every property.**
+2. **The exotic inherit-SOURCES are collapsed.** The reference inherits a
+   tolerance's text size from **the parent dimension**
+   (`SetFont( bool UseDimension, … )` — the flag is not even called
+   `UseDoc`), an extension line's style from **the leader**
+   (`ExtensionLineSameAsLeaderStyle`), leading zeros from **the drafting
+   standard** (`swLeadingZero_FollowStandard`). **pdfce has three tiers
+   and every property walks the same chain.** §F.3 anticipated exactly
+   this choice and asked for it to be *documented* rather than silent —
+   this entry and decision 056 are that documentation.
+3. **The SCALE is not overridable per ce dimension, deliberately, and
+   must not become so.** Scale is what turns page points into a
+   real-world length. **A ce dimension quietly measuring at a different
+   scale from its group would print a number nothing on the page
+   discloses** — rule 4, at the model layer rather than the UI layer.
+
+**Parity posture — SolidWorks is the FLOOR** (user memory *exceed the
+parity reference when you can*). **pdfce exceeds it in one respect worth
+recording:** clearing an override in pdfce **restores inheritance**,
+whereas the reference's `DeleteStyle` is documented as leaving the
+annotation **carrying the attributes the style pushed into it** — §F.4's
+Remarks, verbatim: *"Dimensions and annotations retain the properties
+previously applied by the style unless the items are reset to the
+document default."* Reverting there is a **separate** action
+(`ApplyDefaultStyleAttributes()`). **In pdfce, clearing the `Option` IS
+the revert**, because the value was never copied down in the first place.
+
+#### Values that come out of a FILE inherit rather than clamp
+
+A negative text height, a `1e12` stroke width, an unknown arrow form, an
+out-of-range colour component, an `/OvFrac /decimal` with no `/OvPlaces`
+— **each reads as "inherit", never as a plausible substitute the operator
+never chose.** That is **rule 4 applied at the PARSER rather than at the
+UI**: a clamp would silently invent a value and present it as the
+operator's, which is the precise thing "fuzzy, never sneaky" forbids.
+
+#### Two findings about the TESTS, both load-bearing
+
+**1. No `SIDECAR_VERSION` bump, and that is the DOCUMENTED RULE rather
+than a shortcut.** `ARCHITECTURE.md` §4.1 **(R)** states it outright: **an
+optional-with-default field does NOT owe a bump; a new VARIANT does.**
+Every key added by this Pass is optional-with-default. **The claim is
+asserted on BYTES** — a test proves an unstyled model writes **no style
+keys at all** — because *"it round-trips"* would pass **even if every
+dict quietly gained five default keys**, and **a sidecar that grows keys
+on every save dirties objects R34 says are untouched.** The same argument
+kept **`0 g`** in the content stream for a black colour instead of
+`0 0 0 rg`: emitting the longer spelling would repaint identical pixels
+while rewriting every appearance stream in the file.
+
+**2. ★ The load-bearing test asserts on the BAKED APPEARANCE, and the
+SAVE MODE is part of the assertion.** Every *other* test in the new suite
+reads the model back through `dimension-list` — i.e. from the
+`/PieceInfo` sidecar. **A build that stored the override faithfully and
+then regenerated the `/AP` from the group alone would pass all of them
+and still draw the wrong thing in every reader.** So one test asserts on
+the baked appearance stream, and it saves with **`--mode full`
+DELIBERATELY**: under an **incremental** save the superseded appearance
+object **is still in the file**, so the *"the factory `0.75 w` is gone"*
+half of the assertion **would pass VACUOUSLY**. That is **`Pass 68.0`'s
+near-miss in a new costume** — a byte assertion that cannot fail. **The
+test was SEEN TO FAIL** (cascade replaced by `From<&Group>`) **before
+being trusted.**
+
+**This second finding is generalizable and has been graduated** to
+`C:\personal_rag\pdf\lesson_20260813_absence_assertion_vacuous_under_incremental_save.md`
+in this same filing: *an assertion that some byte sequence is ABSENT from
+a PDF is vacuous under an incremental save, because the superseded object
+is still in the file. **Absence assertions need a full rewrite; presence
+assertions do not.***
+
+#### Gates — every one run this session, figures relayed from the engineer's own run
+
+| gate | result |
+|---|---|
+| `cargo test --workspace` | **3,654 passed, 0 failed** — was **3,632** at `v0.5.3`, so **+22 tests** |
+| `cargo fmt --all --check` | clean |
+| `tools/check-fmt-excluded.py` | clean — **12 out-of-workspace crates** |
+| `cargo clippy --workspace --all-targets -- -D warnings` | clean |
+| `tools/check-ui-strings.sh` | clean |
+| `tools/check-ledger-numbers.py` | clean — **rules ceiling R191, decisions 055, filings 133** (pre-filing) |
+| `tools/check-shipped-assets.py` | clean — **2 asset dirs, 60 files** |
+| `cargo tree -p pdfce-core` / `-p pdfce-render` | **no egui / eframe / winit / wgpu / glow.** GUI-core separation (rule 2, §3) **HOLDS** |
+| **new fuzz target `dimension_sidecar`** | **776,315 runs over 60 s = ≈12,940 runs/s, 0 crashes** |
+
+**No dependency was added, so no `cargo-about` regeneration is owed. No
+packaging change, so no packaging smoke test is owed.** Both stated
+because their absence is otherwise indistinguishable from an omission.
+
+**Why a new fuzz target at all**, per `ARCHITECTURE.md` §10.2: this Pass
+**widened an untrusted-input surface** by **nine optional keys per group
+and thirteen per ce dimension**, one an array and one a token-parsed
+name. **It drives style RESOLUTION as well as parsing**, because **an
+inherited absurdity only misbehaves once a file-supplied override is
+combined with a file-supplied group default** — fuzzing the parser alone
+would never construct that pair.
+
+#### The ui-spec was updated in the same commit — do not write a second one
+
+`docs/ui_specs/tool-options-dock-and-ce-dimension-properties.md` gained
+**Amendment B (2026-08-13)** in `d5431a4` itself, satisfying
+`Pass 69.0` **criterion 7** (*updated, not shadowed*). Verified this
+filing by grep: the amendment heading is present at that file's line 775.
+It records the model as built, names the two **§C.11.1** recommendations
+the operator's own request overtook, and enumerates what the GUI still
+owes.
+
+**★ One trap from that amendment is repeated HERE because the roadmap is
+what gets read when the GUI half is picked up: the count
+`set_group_style` returns is the number REGENERATED, not the number that
+will visibly MOVE.** Those two differ **whenever a member overrides the
+edited property** — a regenerated ce dimension whose own `Option` is
+`Some` re-bakes to the same appearance. **Only the second number answers
+the operator's stated worry** (*"cannot change one and be surprised 40
+others changed or didn't"*). **A GUI that discloses the regenerated count
+answers the wrong question confidently**, which is worse than disclosing
+nothing. `StyleSource::follows_group()` is the predicate that computes
+the right one — and it is **true for `Factory` as well as `Group`**,
+which is the easy thing to get wrong.
+
+#### What this Pass did NOT do — stated so the edges are honest
+
+- **The GUI half.** Deferred by operator instruction (above). Criteria 2
+  (inheritance disclosure) and the panel work in §C.11.1 remain **open**.
+- **Tolerance.** `Pass 69.0`'s criterion 3 — `None / Symmetric /
+  Deviation / Limit` on `DimensionRecord` — is **`Pass 69.1`, UNSTARTED**.
+  The style cascade was split out first because the tolerance needs a
+  style model to hang its own text size and precision on; the split was
+  the sequencing note in `Pass 69.0`'s own entry, taken.
+- **Extension-line drag** (the spec's item 3) — untouched, still
+  unimplemented.
+- **No standing rule was minted.** **R192 remains a PROPOSED, unruled
+  number and this filing adds nothing to that proposal.**
+
+**Decision record:** `ARCHITECTURE.md` §12 **decision 056**, minted this
+filing. **Body section updated in the same filing:** §4.1 gains **(S)**.
+
+---
+
 ### ★★★ CORRECTION, filed 2026-08-12 (hundred-and-thirty-third filing) — two claims already in the ledger were false; the release history is measured in full, across all eight tags, and a three-tag record gap is named as an open item rather than backfilled
 
 **Sourcing.** This librarian has no shell this dispatch (hard rule 8).
@@ -41310,7 +41546,52 @@ in the "still open" list. Full build record: this file's own
 
 ## Next up
 
-### Pass 69.0 — ★★ OPERATOR REQUEST 2026-08-12 — **ce-dimension STYLE + TOLERANCE, with a group default and a per-ce-dimension override checkbox, at SolidWorks option breadth** — filed 2026-08-12 (hundred-and-twenty-fifth filing), UNSTARTED
+### Pass 69.0 — ★★ OPERATOR REQUEST 2026-08-12 — **ce-dimension STYLE + TOLERANCE, with a group default and a per-ce-dimension override checkbox, at SolidWorks option breadth** — filed 2026-08-12 (hundred-and-twenty-fifth filing) — **STATUS 2026-08-13: SPLIT AND PARTLY SHIPPED. The heading's original "UNSTARTED" is now FALSE and is struck by the banner below.**
+
+> **★ AMENDMENT, 2026-08-13 (hundred-and-thirty-fourth filing), `d5431a4`
+> — THE STYLE HALF SHIPPED IN CORE + CLI. THE GUI HALF IS DEFERRED BY
+> OPERATOR INSTRUCTION. THE TOLERANCE HALF IS `Pass 69.1`, UNSTARTED.**
+>
+> **This entry is retained in place and NOT moved to *Shipped*, because
+> it is not finished.** The delivery record is the `Pass 69.0` entry at
+> the head of *Shipped*; **this entry remains the live contract for what
+> is still owed.**
+>
+> **What is DONE** — acceptance criteria **1** (a style object exists,
+> per group and per ce dimension, carrying text height, line weight,
+> arrow length, arrow form and colour beside the existing
+> `{ scale, format, standard }`), **4** (every new field is
+> optional-with-default; **no `SIDECAR_VERSION` bump is owed**, per §4.1
+> (R)'s stated rule, and a byte-level test proves an unstyled model
+> writes **no style keys at all**), **6** (CLI parity in the same Pass —
+> `group-style`, `dimension-style`, `dimension-list --style`), and **7**
+> (`docs/ui_specs/tool-options-dock-and-ce-dimension-properties.md`
+> gained **Amendment B** in the same commit — **updated, not shadowed**).
+>
+> **What is STILL OWED, and deliberately left unticked:**
+> - **Criterion 2 — the GUI half.** The override checkbox exists in the
+>   MODEL (an `Option` per property) and the inherited-vs-overridden
+>   state is recoverable as DATA (`style_provenance` /
+>   `StyleSource::follows_group`). **What does not exist is the
+>   DISCLOSURE SURFACE** — §C.11.1's inheritance disclosure in a panel.
+>   **Deferred at the operator's explicit instruction, 2026-08-13,
+>   verbatim:** *"continue the planned work except for gui related, don't
+>   do any more work on the gui until I say so."* **This is a recorded
+>   instruction, not a shortfall**; the criterion stays live and unticked
+>   rather than being quietly reworded to match what shipped.
+> - **Criterion 3 — tolerance on `DimensionRecord`.** Split out as
+>   **`Pass 69.1`, UNSTARTED**, taking the sequencing note at the foot of
+>   this entry. **NO TOLERANCE EXISTS ANYWHERE YET** — the survey finding
+>   above is unchanged and still accurate.
+> - **Criterion 5** — applies to a tolerance pdfce *derives*, so it is
+>   carried forward with `Pass 69.1` and is not assessable yet.
+> - **The spec's item 3, extension-line drag** — untouched.
+>
+> **One trap for whoever picks up the GUI half:** the count
+> `set_group_style` returns is the number **REGENERATED**, not the number
+> that will visibly **MOVE**. They differ whenever a member overrides the
+> edited property, and **only the second answers the operator's stated
+> worry.** Full statement: the *Shipped* entry and Amendment B.
 
 **Operator's words, verbatim, both requests, so acceptance criteria stay
 faithful:**
@@ -41464,6 +41745,64 @@ one still open, with a written spec already waiting. **Splitting `69.0`
 further** — style model first, tolerance second — **is reasonable if the
 acceptance criteria read better that way**; the Pass IDs are assigned per
 family, so `69.1` is available without disturbing anything.
+
+---
+
+### Pass 69.1 — **ce-dimension TOLERANCE** — the second half of the operator's 2026-08-12 request, split out 2026-08-13 (hundred-and-thirty-fourth filing) — **UNSTARTED**
+
+**The ID is minted here rather than left as a reference inside
+`Pass 69.0`'s sequencing note**, so that the tolerance work has a stable
+entry of its own (hard rule 2) instead of living as a forward pointer
+that a later reader has to reconstruct.
+
+**Scope: `Pass 69.0`'s acceptance criterion 3, plus criterion 5 as it
+applies to a DERIVED tolerance.** Do not re-derive the survey — read
+`Pass 69.0`'s entry above. Its findings are unchanged and still measured:
+**no tolerance exists anywhere** in `pdfce-core`, the GUI, the CLI or the
+`/PieceInfo` sidecar (the `tolerance` hits elsewhere in the tree are
+`SnapConfig::tolerance`, **an unrelated hit-test radius** — a name
+collision worth knowing about before someone greps and believes the
+feature is half-built).
+
+**What `Pass 69.0` has already built FOR this Pass**, and the reason the
+split was taken in this order rather than the other: **a tolerance needs
+a style model to hang its own text size and precision on.** That model
+now exists (`dimension/style.rs`, three tiers, per-property `Option`), so
+`Pass 69.1` extends a cascade rather than inventing one.
+
+**Carried requirements, unchanged from `Pass 69.0`:**
+
+1. **Tolerance lands on `DimensionRecord`, not `DimensionKind`** — the
+   ui-spec's own argument, and `DimensionKind` is documented in-source as
+   *"the immutable geometry"* while a tolerance is presentation.
+2. **At least `None / Symmetric / Deviation / Limit`**, plus whatever
+   `D:\Dev\Rag-Specialized\SolidWorks_Dimensions\` shows beyond those
+   (bilateral, min/max, fit-with-tolerance, basic, and the display
+   forms). **Read that RAG first** — `Pass 69.0` did, and its §F.3/§F.4
+   findings on inherit-flag shape apply directly here.
+3. **Two exotic inherit-sources in the reference land squarely in this
+   Pass and were explicitly COLLAPSED by `Pass 69.0`'s divergence 2:**
+   tolerance text size inherits from **the parent dimension**
+   (`SetFont( bool UseDimension, … )`) and tolerance precision from
+   **the nominal's** precision (`swTolerancePrecisionFollowsNominal`).
+   **pdfce's answer is the same three-tier chain every other property
+   walks.** Recorded here so the divergence is honoured rather than
+   re-litigated mid-Pass.
+4. **Optional-with-default and version-gated** per `SIDECAR_VERSION`'s
+   documented migration path. **Note the rule**: an optional-with-default
+   field owes **no** bump, a new **VARIANT** does — and a
+   `ToleranceType` enum in the sidecar **is** a variant set, so this Pass
+   may well owe the bump `Pass 69.0` did not. Decide it against §4.1 (R),
+   not by precedent.
+5. **Rule 4** — a tolerance pdfce *derives* (e.g. from a fit class) is
+   disclosed before it becomes document state; a tolerance the operator
+   *typed* is not gated behind a confirm button (decision 024 §4.4).
+6. **CLI parity in the same Pass** (rule 11).
+
+**GUI note:** whatever GUI surface this Pass would want is subject to the
+**same operator deferral** recorded against `Pass 69.0` — *"don't do any
+more work on the gui until I say so"* (2026-08-13). Core and CLI are not
+blocked by it.
 
 ---
 
