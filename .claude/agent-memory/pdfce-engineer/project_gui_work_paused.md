@@ -1,37 +1,66 @@
 ---
 name: gui-work-paused
-description: 2026-08-13 — Ken paused ALL pdfce-gui work until he says otherwise; core/CLI/docs continue normally
+description: 2026-08-13 — pdfce-gui is paused because it was unusable; a replacement is being built at D:\dev\pdfceGUI in a separate session and may replace/merge into this repo
 metadata:
   type: project
 ---
 
-**2026-08-13, verbatim:** *"continue the planned work except for gui
-related, don't do any more work on the gui until I say so."*
+**The instruction, 2026-08-13, verbatim:** *"continue the planned work except
+for gui related, don't do any more work on the gui until I say so."*
 
-**Why:** not stated. He gave no reason and none was asked for — the
-instruction is unambiguous on its own and a reason is not needed to obey
-it. Do **not** infer one (an inferred constraint recorded as a fact is
-the exact mistake the global CLAUDE.md's subagent rule was written after).
+**The reason, given later the same day, verbatim:** *"I paused GUI production
+in this branch because it was unusable and I realised it needed a separate
+project plan rather than the current method which just seems to be low
+priority and a patchwork things stuck together as they are added. The new one
+is being built in d:\dev\pdfceGUI in another session and if successful will
+likely replace the current one and may have its dev folder merged into this
+one."*
 
-**How to apply:**
-- `pdfce-core`, `pdfce-render`, `pdfce-cli`, `docs/`, RAGs, tests, fuzz,
-  tooling — all continue normally. Only `crates/pdfce-gui/` and the
-  GUI-driving harnesses (`tools/gui-drive.ps1`, `tools/gui-shot.ps1`) are
-  paused.
-- A Pass whose GUI half is deferred by this instruction ships as
-  `core [x] · cli [x] · gui [ ]` in `docs/FEATURES.md`, with the
-  instruction recorded in the ROADMAP entry as an **operator instruction**,
-  not as an engineering shortfall. `Pass 69.0` and `Pass 69.1` are the
-  worked precedent (2026-08-13).
-- The pause is **not** a licence to stop designing for the GUI: write the
-  core API so the eventual panel has the data it needs (see
-  `StyleProvenance` / `StyleSource::follows_group`, built precisely so a
-  future panel renders inheritance rather than recomputing it), and record
-  what the GUI owes in the relevant `docs/ui_specs/` file.
-- **This memory expires the moment he lifts it.** Check for a newer
-  instruction before treating it as current; if he asks for GUI work, he
-  has lifted it — do not quote this file back at him.
+**★ This file previously asserted "he gave no reason and none was asked for —
+do not infer one." That was true when written and is now wrong.** Keeping the
+correction visible rather than silently overwriting it, because the shape
+matters: an absence recorded as a *property of the operator's instruction*
+("there is no reason") reads identically to an absence that was simply not
+volunteered yet. The safe form is *"no reason has been given"*, which invites
+the update; *"he gave no reason"* quietly forecloses it.
 
-Related: [[launch-on-completion]] is partially suspended for the duration —
-a GUI window cannot be launched for a Pass with no GUI half. Launch the CLI
-demonstration instead, which is what was done for `Pass 69.0`/`69.1`.
+**What the reason changes, engineering-wise:**
+
+1. **`crates/pdfce-gui` may be REPLACED WHOLESALE.** Do not invest in it. Any
+   refactor, polish or new panel there is potentially throwaway, and worse,
+   raises the cost of the swap. The critique is explicitly about *method* —
+   patchwork accreted feature-by-feature at low priority — so adding one more
+   well-built panel does not answer it.
+2. **The GUI-core separation invariant is now being TESTED FOR REAL, by
+   someone else.** `D:\dev\pdfceGUI` consuming `pdfce-core`/`pdfce-render`
+   from outside this repo is exactly the scenario §3's invariant was written
+   for (the "fork to a web app later" goal). If that project needs nothing to
+   move in core, the separation is real. **Anything it does need is a place
+   the boundary was drawn wrong** — treat such a request as a finding about
+   this repo, not as an accommodation.
+3. **`pdfce-core`'s public API is now a consumed boundary with a real external
+   consumer**, not a hypothetical one. Rust API Guidelines compliance and
+   doc-comment completeness stopped being hygiene and became someone else's
+   unblocking. Where a core verb has a trap (e.g. `set_group_style` returns
+   the count REGENERATED, not the count that will visibly MOVE), that trap is
+   now reachable by a session that cannot ask me.
+4. **A merge of `D:\dev\pdfceGUI` into this repo is possible.** Keep the
+   workspace layout mergeable; do not spread GUI assumptions into core crates.
+5. **`gui [ ]` rows in `FEATURES.md` are MORE accurate now, not less** — and
+   will need re-basing against the new shell if it lands. Do not pre-tick
+   anything in anticipation.
+
+**How to apply:** core / render / CLI / print / docs / RAGs / tests / fuzz /
+tooling all continue normally. `crates/pdfce-gui/`, `tools/gui-drive.ps1` and
+`tools/gui-shot.ps1` stay untouched. A Pass whose GUI half is deferred ships
+`core [x] · cli [x] · gui [ ]` with the instruction recorded as an **operator
+instruction, not an engineering shortfall** — `Pass 69.0`/`69.1` are the
+worked precedent.
+
+**This expires when he lifts it**, and asking for GUI work IS lifting it. Do
+not quote this file back at him. Note also that *"keep going"* (2026-08-13,
+answering the OCR licence question) did **not** lift it — a different sentence
+answering a different question.
+
+Related: [[launch-on-completion]] is partially suspended — a GUI window cannot
+be launched for a Pass with no GUI half; launch the CLI demonstration instead.
