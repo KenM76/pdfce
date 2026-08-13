@@ -686,6 +686,155 @@ rule (2026-08-07 R156/R87 amendments).
 §6 (whitelist scope) and `ARCHITECTURE.md` §12's 2026-08-10 entry
 (design points + evidence-tier discipline for Pass 7.2).
 
+### 6.7 CC-BY-SA-4.0 OCR model weights — the operator ACCEPTED them into the MIT portable folder (2026-08-13, BINDING)
+
+**Operator's answer, verbatim and in full, 2026-08-13:**
+
+> *"yes to the license. keep going."*
+
+**That is the entirety of what he said, and it is recorded at exactly that
+length.** He was answering `ROADMAP.md` open operator question **`(bl)`**
+as this project had been carrying it:
+
+> **May a CC-BY-SA-4.0 model file ship inside pdfce's MIT single-folder
+> portable distribution?**
+
+**Answer: YES.**
+
+#### 6.7.1 Why this needed §6.2 step 4 in the first place
+
+§6.2 step 4 says **stop and ask** for anything that is not permissive,
+*"even if pdfce's current license would technically allow it."*
+CC-BY-SA-4.0 is not permissive, so the rule fired on its own terms. Two
+further features made it a genuine question rather than an obvious no:
+
+- **§6.1's categorical GPL/AGPL bar is about LINKING.** CC-BY-SA-4.0
+  attaches to a **data file** pdfce would **redistribute**, not to code it
+  links. The bar does not reach it, and nothing else in this document did
+  either.
+- **The alternative is not equivalent.** The pure-Rust route
+  (`ocrs`/`rten`) is **the only OCR candidate that passes pdfce's own
+  wasm32 CI gate** — every alternative makes OCR the first feature that
+  cannot cross into the web fork (`ARCHITECTURE.md` §3) — and its weights
+  are the copyleft ones. PaddleOCR's weights are **Apache-2.0** and cover
+  **50+ languages**, but that route has **no WASM**. The honest framing
+  was *"copyleft weights and a web future"* versus *"permissive weights,
+  more languages, no web future"*, **not** *"one is clean and one is
+  not"*.
+
+#### 6.7.2 The reasoning the operator accepted — attributed as the SURVEY'S READING, not as an agent's legal conclusion
+
+`docs/ocr-engine-survey.md` §3.3 set out the analysis below. **It is
+recorded here as the reading that was put in front of the operator and
+that he accepted, not as a legal conclusion this project's agents
+reached or are entitled to reach.** The distinction is the whole reason
+the question was escalated rather than cleared.
+
+The survey's reading, in its own terms:
+
+- CC-BY-SA is a licence on a **creative work**, not a software licence,
+  and **has no linking concept at all**. Creative Commons' own FAQ
+  *"recommend[s] against using Creative Commons licenses for software"*
+  because CC licences *"do not contain specific terms about the
+  distribution of source code"*.
+- CC distinguishes a **collection** — BY-SA material sitting alongside
+  other material, where the collection may carry its own licence — from
+  an **adaptation**, which modifies the underlying work and must itself
+  be released under BY-SA. On that reading, **shipping the unmodified
+  `.rten` files next to MIT code is distribution of a verbatim work in a
+  collection, and there is no propagation path to pdfce's own MIT
+  licence.**
+- **This is the same SHAPE of reasoning §6.5.2 already applied to
+  MPL-2.0 for veraPDF** — a copyleft artifact whose own terms permit the
+  surrounding larger work to carry other terms. §6.5.2 is the
+  neighbouring precedent, and the parallel is why the survey framed the
+  question as answerable at all.
+
+**The survey itself named three things that resist being cleared by an
+agent**, and they are why this subsection exists rather than a code
+comment: the collection-vs-adaptation call is a **reading** and not
+something the licence text names; §6.2 step 4 fires on its own terms; and
+**any adaptation clearly does propagate** (see 6.7.3 item 3).
+
+#### 6.7.3 ★ FOUR THINGS THIS ACCEPTANCE DOES NOT DECIDE
+
+Recorded together because the gap between *"the licence is accepted"* and
+*"therefore X"* is exactly where a wrong inference would live.
+
+1. **It is not authority to publish or release anything.** §1's publish
+   gate and project rule 8 are **untouched** — pushing and releasing
+   remain separate, still-ungranted operator acts. **The repository is
+   public** (§1.1), so a bundled weight file is **published the moment it
+   is committed**. The licence answer removes a licence obstacle; it does
+   not remove the publish gate, and the gate does not become weaker
+   because the obstacle in front of it is gone.
+2. **It does not choose the engine.** The engine question was answered
+   separately on 2026-08-12 — *"use whichever one is best for everyone
+   including other languages, or heck, just build for both"* → **both
+   engines, behind Cargo features**, ranked on multi-language coverage.
+   **`(bl)` removes the licence obstacle in front of the pure-Rust one
+   only.**
+3. **It does not clear an ADAPTATION.** Survey §3.3 is explicit:
+   fine-tuning, quantizing, retraining, or **converting the weights to
+   another runtime's format** plausibly creates **Adapted Material**,
+   which must then be released under CC-BY-SA-4.0 or a compatible
+   licence. That binds **the derived model**, not pdfce's source — but
+   *"we'll just fine-tune it later for CAD drawings"* **is a decision
+   with a licence attached. A future Pass that touches the weights owes
+   its own operator decision under §6.2 step 4; this acceptance does not
+   cover it.**
+4. **It does not close the attribution obligation — it CREATES it.**
+   CC-BY-SA-4.0 requires **attribution, a licence notice/link, and an
+   indication of changes**. §6.3 makes `THIRD_PARTY_LICENSES.md` the
+   compliance artifact and it is generated by `cargo-about` **from the
+   Cargo dependency graph**. **A model file is not a Cargo dependency, so
+   `cargo-about` will not see it, will not attribute it, and nothing will
+   fail.** The compliance artifact for the weights must therefore be
+   **authored deliberately** — a `PROVENANCE.md` naming the licence, plus
+   a citation in `about.hbs` — which is exactly what
+   `tools/check-shipped-assets.py` (`e3fb7e0`) already **enforces** for
+   any `crates/*/assets/` directory. **Enforcement is not acceptance; the
+   acceptance is what arrived on 2026-08-13, and the enforcement is what
+   makes it verifiable.**
+
+   Note the direction of the §6.5.4-rule-5 hazard here. For veraPDF the
+   absence from `THIRD_PARTY_LICENSES.md` is **correct** and must not be
+   "fixed". For a bundled model the absence would be **incorrect** — and
+   **it looks identical**.
+
+#### 6.7.4 Provenance is thinner than one would want, and pdfce must PIN AND HASH
+
+Recorded because it is an obligation the acceptance creates, not a
+reservation about it:
+
+- **`ocrs-models` has no LICENSE file.** The CC-BY-SA-4.0 declaration
+  exists **only on the Hugging Face model card** (`cardData:
+  {"license": "cc-by-sa-4.0"}` plus the `license:cc-by-sa-4.0` tag). That
+  is a thinner provenance record than one would want for the one
+  non-permissive artifact in the build.
+- **The two distribution channels are not byte-identical**, measured in
+  survey §3.4:
+
+| File role | S3 bytes | Hugging Face bytes | Delta (S3 − HF) |
+|---|---|---|---|
+| text detection | 2,510,284 | 2,523,564 | **−13,280 B** |
+| text recognition | 9,716,568 | 9,716,444 | **+124 B** |
+| **total, 2 files** | **12,226,852 (≈ 12.23 MB)** | **12,240,008 (≈ 12.24 MB)** | −13,156 B (0.11%) |
+
+  The filenames differ between channels as well. **So pdfce must pin
+  exactly which artifact it ships and hash it, rather than treating "the
+  ocrs models" as one thing.** That pinning is an engineering obligation
+  of `Pass 71.0`, not an open question.
+- **The weights are stale by construction:** S3 objects carry
+  `Last-Modified: Mon, 01 Jan 2024`; `ocrs-models` last saw a push
+  2024-08-20. Not a licence fact, but it travels with the same files and
+  is easy to lose.
+
+**Mirrors:** `ROADMAP.md` *Open operator questions* → `(bl)` (answered,
+ceiling stays `(bl)`, next free `(bm)`), and `Pass 71.0`'s *Next up*
+entry, which is **no longer blocked on an operator decision**. Full
+evidence: `docs/ocr-engine-survey.md` §3.3–§3.5.
+
 ## 7. Decision log
 
 - **2026-07-23** — Legal posture document created at project bootstrap.
@@ -901,3 +1050,71 @@ rule (2026-08-07 R156/R87 amendments).
   wrapped sentence yields a complete, plausible, wrong sentence*) is
   escalated to `C:\personal_rag\claude_code\`. See `ARCHITECTURE.md`
   §12's 2026-08-07 **twelfth** entry for the mirror of this record.
+- **2026-08-13 — ★★ CC-BY-SA-4.0 OCR MODEL WEIGHTS ARE ACCEPTED INTO THE
+  MIT PORTABLE FOLDER. Open operator question `(bl)` is ANSWERED: YES.**
+  Operator, **verbatim and in full**: *"yes to the license. keep going."*
+  **That is the entire answer and it is recorded at that length.** He was
+  answering the question as this project had been carrying it — *may a
+  **CC-BY-SA-4.0** model file ship inside pdfce's **MIT** single-folder
+  portable distribution?* Full subsection: **§6.7**.
+  **§6.2 step 4 is thereby DISCHARGED for this artifact** — the
+  stop-and-ask fired correctly (CC-BY-SA-4.0 is not permissive), the
+  question was escalated rather than cleared by an agent, and the operator
+  answered. **§6.1's categorical GPL/AGPL bar was never the governing
+  rule here**: it is about **linking**, and this is a **data file pdfce
+  redistributes**.
+  **The reasoning is recorded as the SURVEY'S READING THAT THE OPERATOR
+  ACCEPTED, not as an agent's legal conclusion** (§6.7.2) —
+  `docs/ocr-engine-survey.md` §3.3: CC-BY-SA has no linking concept, CC
+  distinguishes a **collection** (own licence permitted) from an
+  **adaptation** (must be BY-SA), and unmodified `.rten` files beside MIT
+  code are a collection with **no propagation path to pdfce's MIT
+  licence** — **the same shape of reasoning §6.5.2 already applied to
+  MPL-2.0 for veraPDF**, which is the neighbouring precedent.
+  **What it unblocks:** `Pass 71.0`'s **engine half** only. Slice 1
+  (`9f2af1d`, the engine-independent invisible-text-layer substrate) and
+  `ocr::models` (`af5580e`, the resolver) had already shipped; the engine
+  was blocked on this and **only** this. **`ocrs`/`rten` is now a
+  permitted route**, including its **two bundled `.rten` weight files**.
+  **★ FOUR THINGS IT DOES NOT DECIDE (§6.7.3), because the gap between
+  "the licence is accepted" and "therefore X" is where a wrong inference
+  would live:** (1) **not authority to publish or release** — §1's
+  publish gate and project rule 8 are untouched, and since the repository
+  is public (§1.1) a bundled weight file is **published the moment it is
+  committed**; (2) **not an engine choice** — that was the separate
+  2026-08-12 answer (*"…or heck, just build for both"* → both engines
+  behind Cargo features, ranked on multi-language coverage), and `(bl)`
+  clears the licence obstacle in front of **the pure-Rust one only**;
+  (3) **not clearance for an ADAPTATION** — fine-tuning, quantizing,
+  retraining or **format-converting** the weights plausibly creates
+  **Adapted Material** binding the **derived model** to CC-BY-SA-4.0, so
+  a future Pass touching the weights **owes its own §6.2 step 4
+  decision**; (4) **not the end of the attribution obligation but its
+  beginning** — `cargo-about` generates `THIRD_PARTY_LICENSES.md` **from
+  the Cargo dependency graph**, a model file is **not a Cargo
+  dependency**, so it **will not be seen, will not be attributed, and
+  nothing will fail**. The artifact must be hand-authored
+  (`PROVENANCE.md` + an `about.hbs` citation), which is what
+  `tools/check-shipped-assets.py` (`e3fb7e0`) already **enforces**.
+  **Enforcement is not acceptance** — and note the §6.5.4-rule-5 hazard
+  runs **in reverse** here: veraPDF's absence from
+  `THIRD_PARTY_LICENSES.md` is **correct** and must not be "fixed"; a
+  bundled model's absence would be **incorrect**, and **it looks
+  identical**.
+  **★ PROVENANCE IS THIN AND MUST BE PINNED (§6.7.4):** `ocrs-models` has
+  **no LICENSE file** — the declaration exists **only on the Hugging Face
+  model card — and the S3 and Hugging Face copies are NOT byte-identical**:
+  detection **2,510,284 B (S3)** vs **2,523,564 B (HF)** = **13,280 B
+  smaller**, recognition **9,716,568 B** vs **9,716,444 B** = **124 B
+  larger**, under **different filenames**, totals **12,226,852 vs
+  12,240,008 B over 2 files** (0.11% apart). **pdfce must pin exactly
+  which artifact it ships and hash it** — an engineering obligation of
+  `Pass 71.0`, not an open question.
+  **Mirrors:** `ROADMAP.md`'s *Open operator questions* → `(bl)`
+  (**answered, not retired — ceiling stays `(bl)`, next free `(bm)`**) and
+  `Pass 71.0`'s *Next up* entry (**no longer blocked on an operator
+  decision**); `SESSION_LOG.md`'s hundred-and-thirty-sixth filing.
+  **No `ARCHITECTURE.md` §12 decision record was minted** — this is the
+  operator's decision, and §12 records the project's *engineering*
+  decisions; **`LEGAL.md` is where licence decisions live.** Decision
+  ceiling therefore stays **057**, next free **058**.

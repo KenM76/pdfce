@@ -39468,3 +39468,310 @@ pushing is the operator's act (project rule 8). This is the
 **hundred-and-thirty-fifth** `SESSION_LOG.md` filing (the
 hundred-and-thirty-fourth confirmed present by direct read before this
 entry was appended).
+
+---
+
+## 2026-08-13 (hundred-and-thirty-sixth filing) — OPEN OPERATOR QUESTION `(bl)` IS ANSWERED: **YES**, a CC-BY-SA-4.0 model file may ship inside pdfce's MIT portable folder. `Pass 71.0`'s engine half is unblocked; **four things the answer does not decide** are recorded beside it, because that gap is where a wrong inference would live
+
+**Sourcing.** This librarian **had a shell this dispatch and used it**
+(hard rule 8 as amended — *if you have a shell, look*). **Measured here,
+by command:** `git log` / `git rev-parse HEAD` / `git rev-parse
+origin/main` / `git rev-list --count`, `git status --short`,
+`tools/check-commits-filed.py` **run at both ends**,
+`tools/check-ledger-numbers.py` **run pre-filing**, `git bundle
+list-heads` + `stat` on the newest backup bundle, and
+`docs/ocr-engine-survey.md` §3.3–§3.5 read directly for every byte figure
+and every clause of the licence reasoning quoted below. **Relayed, not
+re-derived here:** nothing — this filing records an operator statement
+and the documents that already carried the question.
+
+**Terminology (project rule 15).** No dimension of either kind appears in
+this filing. It is a licensing record.
+
+**Shipped:** nothing. **No Pass moved, no code changed, no capability
+became reachable.** This filing records **an operator answer**, which is
+a different kind of event and is filed as one.
+
+---
+
+### What was asked, and what he said
+
+**Open operator question `(bl)`**, as this project has carried it since
+the hundred-and-twenty-sixth filing:
+
+> **May a CC-BY-SA-4.0 model file ship inside pdfce's MIT single-folder
+> portable distribution?**
+
+**Operator, 2026-08-13, verbatim and in full:**
+
+> *"yes to the license. keep going."*
+
+**That is the whole of what he said, and it is recorded at exactly that
+length.** No elaboration has been added to it anywhere in this filing;
+where reasoning appears below, it is **the survey's reasoning that was
+put in front of him**, attributed as such, not a longer answer
+retro-fitted onto four words.
+
+**Answer: YES.** **Operator-question ceiling stays `(bl)`** — answered,
+not retired; **next free remains `(bm)`.**
+
+### What it unblocks, stated exactly
+
+**`Pass 71.0`'s ENGINE half, and nothing else.** Slice 1 (`9f2af1d`, the
+engine-independent invisible-text-layer substrate, ISO 32000-1 §9.3.6
+Table 106 mode 3) and `ocr::models` (`af5580e`, the operator-supplied
+model resolver) **had already shipped**; the engine was blocked on this
+and **only** this. **`ocrs`/`rten` is now a permitted route**, including
+its **two bundled `.rten` weight files**.
+
+The resolver is **not superseded** by the answer. A named path, then
+`models/<engine>` beside the executable, then user data remains the
+lookup order, and an operator-supplied model set remains the path that
+requires no redistribution at all. **What changes is that a build MAY now
+ship files into that first-party directory** — which is the only way OCR
+works out of the box.
+
+### ★ FOUR THINGS THIS ANSWER DOES NOT DECIDE
+
+Filed as a numbered list, in three places, because the gap between *"the
+licence is accepted"* and *"therefore X"* is exactly where a wrong
+inference would live — and an inference drawn there would be drawn by
+someone who believed he had permission.
+
+1. **It is not authority to publish or release anything.** Project rule 8
+   and `LEGAL.md` §1's publish gate are **untouched** — pushing and
+   releasing remain separate, still-ungranted operator acts. **The
+   repository is public** (`LEGAL.md` §1.1), so a bundled weight file is
+   **published the moment it is committed.** The licence answer removes a
+   licence obstacle; the gate behind it does not become weaker because
+   the obstacle in front of it is gone.
+2. **It does not choose the engine.** That was answered separately on
+   2026-08-12 — *"use whichever one is best for everyone including other
+   languages, or heck, just build for both"* → **both engines, behind
+   Cargo features**, ranked on **multi-language coverage**. **`(bl)`
+   removes the licence obstacle in front of the pure-Rust one only.**
+3. **It does not clear an ADAPTATION.** `docs/ocr-engine-survey.md` §3.3
+   is explicit: fine-tuning, quantizing, retraining, or **converting the
+   weights to another runtime's format** plausibly creates **Adapted
+   Material**, which must then be released under CC-BY-SA-4.0 or a
+   compatible licence. **That binds the DERIVED MODEL, not pdfce's
+   source** — but *"we'll just fine-tune it later for CAD drawings"* is
+   **a decision with a licence attached**, and it is a decision nobody has
+   made. **A future Pass that touches the weights owes its own operator
+   decision under `LEGAL.md` §6.2 step 4; this one does not cover it.**
+4. **It does not close the attribution obligation — it CREATES it.**
+   CC-BY-SA-4.0 requires **attribution, a licence notice/link, and an
+   indication of changes**. `THIRD_PARTY_LICENSES.md` is generated by
+   `cargo-about` **from the Cargo dependency graph**, and **a model file
+   is not a Cargo dependency**, so **`cargo-about` will not see it, will
+   not attribute it, and nothing will fail** (survey §3.3). The
+   compliance artifact must be **authored deliberately** — a
+   `PROVENANCE.md` naming the licence, plus a citation in `about.hbs` —
+   which is exactly what `tools/check-shipped-assets.py` (`e3fb7e0`)
+   already **enforces** for any `crates/*/assets/` directory.
+   **Enforcement is not acceptance; the acceptance is what arrived today,
+   and the enforcement is what makes it verifiable.**
+
+   **Note the direction of the hazard**, because it is the same hazard
+   pointing the opposite way from the one already written down. For
+   veraPDF, absence from `THIRD_PARTY_LICENSES.md` is **CORRECT** and
+   `LEGAL.md` §6.5.4 rule 5 says not to "fix" it. For a bundled model,
+   absence would be **INCORRECT** — **and it looks identical.**
+
+### The reasoning is filed as THE SURVEY'S READING THAT HE ACCEPTED
+
+`LEGAL.md` §6.7.2 records the collection-vs-adaptation analysis
+**attributed to `docs/ocr-engine-survey.md` §3.3 as the reading put in
+front of the operator**, not as a legal conclusion this project's agents
+reached. That attribution is the point of the subsection, not a
+formality: the survey's own §3.3 gives three reasons the question
+resisted being cleared by an agent, the first of which is that
+*"mere aggregation into a single install folder is a collection, not an
+adaptation" is a READING* — well supported, and a reading.
+
+The substance, in the survey's terms: CC-BY-SA is a licence on a
+**creative work** with **no linking concept at all**; CC distinguishes a
+**collection** (may carry its own licence) from an **adaptation** (must
+be BY-SA); unmodified `.rten` files beside MIT code are a collection, so
+**there is no propagation path to pdfce's own MIT licence**. **This is
+the same SHAPE of reasoning `LEGAL.md` §6.5.2 already applied to MPL-2.0
+for veraPDF** — the neighbouring precedent, and the reason the question
+was answerable at all rather than merely arguable.
+
+**`LEGAL.md` §6.2 step 4 is discharged for this artifact.** The
+stop-and-ask fired correctly (CC-BY-SA-4.0 is not permissive), the
+question was escalated rather than cleared, the operator answered.
+**§6.1's categorical GPL/AGPL bar was never the governing rule here** —
+it is about **linking**, and this is **a data file pdfce redistributes**.
+
+### ★ PROVENANCE IS THINNER THAN ONE WOULD WANT, AND PINNING IS NOW AN OBLIGATION
+
+Recorded as an obligation the acceptance **creates**, not as a
+reservation about it (survey §3.3–§3.4):
+
+- **`ocrs-models` has NO LICENSE file.** The CC-BY-SA-4.0 declaration
+  exists **only on the Hugging Face model card** (`cardData:
+  {"license": "cc-by-sa-4.0"}` plus the `license:cc-by-sa-4.0` tag) —
+  a thinner provenance record than one would want for **the one
+  non-permissive artifact in the build**.
+- **The two distribution channels are NOT byte-identical**, so "the ocrs
+  models" is not one thing:
+
+| File role | S3 bytes | Hugging Face bytes | Delta (S3 − HF) |
+|---|---|---|---|
+| text detection | 2,510,284 | 2,523,564 | **−13,280 B** |
+| text recognition | 9,716,568 | 9,716,444 | **+124 B** |
+| **total, 2 files** | **12,226,852 (≈ 12.23 MB)** | **12,240,008 (≈ 12.24 MB)** | **−13,156 B = 0.11%** |
+
+  The **filenames differ between channels** as well. **pdfce must pin
+  exactly which artifact it ships and hash it.** That is now an
+  **engineering obligation of `Pass 71.0`, not an open question.**
+- **The weights are stale by construction** — S3 `Last-Modified:
+  Mon, 01 Jan 2024`; `ocrs-models` last pushed 2024-08-20. Not a licence
+  fact, but it travels with the same files and is easy to lose.
+
+**Decisions made this session:**
+
+- **`(bl)` ANSWERED YES** — the operator's, not an agent's. Filed in
+  `ROADMAP.md`'s *Open operator questions*, `ROADMAP.md`'s `Pass 71.0`
+  *Next up* entry, and `LEGAL.md` **§6.7** + a **§7 decision-log entry**.
+- **`LEGAL.md` gains §6.7**, a full subsection, because **this is a
+  licensing decision and `LEGAL.md` is where licence decisions live.**
+  Sub-parts: §6.7.1 why §6.2 step 4 fired; §6.7.2 the survey's reading,
+  attributed; §6.7.3 the four non-decisions; §6.7.4 pin-and-hash.
+- **NO `ARCHITECTURE.md` §12 decision record was minted, and that is a
+  deliberate judgment rather than an omission.** §12 records the
+  project's **engineering** decisions; this decision was **the
+  operator's**, and its subject is a **licence**. Minting **058** here
+  would put a licence ruling in the engineering log and leave a future
+  reader satisfying *"check §12"* and *"check `LEGAL.md`"* separately for
+  one fact. **Decision ceiling therefore stays 057, next free 058.**
+- **NO standing rule minted.** **R191 remains the ceiling; R192 is still
+  a PROPOSED, unruled number and this filing adds nothing to that
+  proposal** — stated explicitly so the proposal's continued existence is
+  not mistaken for an unrecorded ruling.
+
+**Findings + decisions:**
+
+- **`docs/FEATURES.md` was DELIBERATELY NOT EDITED, and the reason is the
+  file's own contract.** **No capability moved.** OCR remains
+  `core [ ] · cli [ ] · gui [ ]` because **no engine is wired and nothing
+  is operator-reachable** — a licence answer is not a shipped feature.
+  The row's existing sentence (*"core carries the engine-independent
+  invisible-text-layer substrate … no engine is wired, so nothing is
+  reachable from any shell"*) is **still exactly true at HEAD**, and
+  `FEATURES.md`'s header forbids appending a note to a row (*"When a row
+  changes, **replace** the sentence — never append… A row that has grown
+  a history has stopped being a scan"*). **Adding "the licence is now
+  cleared" would be appending history to a scan.** Ticking anything would
+  breach *"never tick a box you cannot substantiate."* **The correct edit
+  was none.**
+- **The through-line worth keeping.** `(bl)` was filed OPEN on 2026-08-12
+  with the default *"ship neither model set"*, and was **narrowed the
+  same day by `af5580e`** — the resolver removed the obligation **by
+  removing the out-of-the-box behaviour**, which the roadmap explicitly
+  recorded as *"a trade Ken has not been asked about."* **He has now been
+  asked, and answered.** The narrowing was the right interim move and
+  **the right interim move was not the answer** — recorded because the
+  temptation in that window was to call the resolver a resolution and
+  close the question.
+- **One thing STILL worth confirming with him, unchanged by today's
+  answer and not folded into it:** `af5580e` **withdrew an optional
+  downloader that the operator HAD already agreed to** (on a wrong
+  estimate — it would have ended `ARCHITECTURE.md` §1.1's written
+  no-HTTP-client/no-TLS-stack claim and tripped the fail-closed `R12`
+  no-network CI job). **He agreed to the thing that was withdrawn.**
+  *"Yes to the license"* answers redistribution, **not** the withdrawal.
+
+**Still in flight:**
+
+- **`Pass 71.0` — NO LONGER BLOCKED ON AN OPERATOR DECISION.** Remaining
+  work is **engineering**: bind both engines behind default-OFF Cargo
+  features (including **a forwarding block in EVERY shell** — `Pass 70.0`
+  convention, and forgetting one removes a capability without breaking
+  the build); **ship + pin + hash + attribute** the weights; build the
+  **rule-4 review surface** (OCR is an inference on **every word**, and a
+  Latin-only engine with **no confidence at any level** is the hardest
+  case rule 4 has met); `pdfce-cli ocr` (rule 11); language selection.
+  **The engineer is working the engine binding concurrently under
+  `crates/` as this filing lands.**
+- **The GUI deferral is STILL a standing operator instruction** — *"don't
+  do any more work on the gui until I say so"* — and today's *"keep
+  going"* is **an answer to a licence question, not a lift of that
+  deferral.** Two Passes have now shipped core + CLI under it. **Do not
+  read one operator sentence as answering a different operator
+  sentence.**
+- **The GUI half of `Pass 69.0` AND `Pass 69.1`** — one panel, two
+  Passes, unchanged.
+- **The six omitted ce-dimension tolerance types** (ISO 286 fit forms,
+  block, general) — unchanged; rule 1 governs.
+- **`Pass 46` slices 2–4**, **the GUI attachments surface**, **`Pass 67.0`
+  phases C / D / F** — open, unchanged.
+- **The `v0.1.0` / `v0.4.0` / `v0.5.0` missing release records** — the gap
+  measured by the hundred-and-thirty-third filing is still open, still
+  cheap to close from the table already filed, still not urgent.
+- **The two escalations awaiting the operator's own statement** — open,
+  unchanged in substance.
+
+**For next session:**
+
+- **`(bl)` is answered; `(bm)` is the next free question number.** Do not
+  re-surface `(bl)`, and do not read it as broader than it is — **the
+  four non-decisions above are carried in `Pass 71.0`'s own entry** for
+  exactly the reader who never opens the questions list.
+- **The first commit that lands a weight file PUBLISHES it**, because the
+  repository is public. Rule 8's publish gate is the one that governs
+  that act, and it is **still ungranted**.
+- **Pin and hash before shipping.** Two channels, two filenames, a
+  13,280 B and a 124 B difference. Whichever is chosen, record **which**
+  and its hash in `PROVENANCE.md`.
+- **`check-shipped-assets.py` will PASS a `PROVENANCE.md` that names the
+  licence** — passing it is not the same as discharging CC-BY-SA-4.0's
+  attribution, notice/link and indication-of-changes requirements, and
+  **`cargo-about` will stay silent either way.**
+
+**Ledger for this filing.** **No Pass shipped**; Pass family ceiling
+**UNCHANGED at 71** (71.0 highest). `docs/ROADMAP.md`: **edited** — the
+`(bl)` entry gains a dated **ANSWERED** block; `Pass 71.0`'s *Next up*
+heading and a new block record that it is **no longer blocked on an
+operator decision**; the *Bucket history* paragraph gains a dated
+amendment marker (both halves of the original bucket decision are now
+closed); slice 2's *"NARROWS `(bl)` but does not close it"* gains a dated
+**CLOSED** marker rather than being rewritten. `docs/LEGAL.md`:
+**edited** — **new §6.7** (four sub-parts) and a **new §7 decision-log
+entry**. `docs/FEATURES.md`: **deliberately NOT edited** — no capability
+moved; reason stated above in *Findings*. `docs/ARCHITECTURE.md`:
+**deliberately NOT edited** — no §12 record minted; reason stated above
+in *Decisions*. Standing rules: **no new rule** — ceiling **R191**, next
+free **R192** (still an unruled proposal; this filing adds nothing to
+it). Decision records: ceiling **057**, next free **058**.
+Operator-question ceiling **`(bl)`**, next free **`(bm)`** — **answered,
+not retired**, so the ceiling does not move. **Git state MEASURED, not
+inferred (hard rule 8), and it CHANGED during this filing — both readings
+are given.** At the **start of this dispatch**: `HEAD` = **`88fde1e`**,
+**7 commits ahead of `origin/main`**, one dirty path
+(`tools/render-profile/Cargo.lock`). **Before committing**: `HEAD` =
+**`46731fc`** (the engineer landed *"(bl) is answered, and the handoff now
+says what to do instead of what to ask"*, **`docs/NEXT_SESSION.md` only** —
+a file this filing does not edit, so **there was no conflict and nothing
+of his is staged here**), **8 commits ahead of `origin/main`**, and
+`git status --short` showed **only this filing's own two paths** —
+**`tools/render-profile/Cargo.lock` is no longer dirty**, measured rather
+than assumed, so the standing "do not stage it" caution had nothing to
+act on this time. **Remote state, measured (`git rev-parse origin/main`):**
+`origin/main` = **`4069cbb`**, so local `main` is **8 commits ahead and
+NOTHING IS PUSHED.** Stated as a measured fact, not a request — pushing is
+the operator's act (project rule 8), and that is doubly worth saying in a
+filing about a licence. **Backup currency MEASURED this dispatch**, by
+`git bundle list-heads` and `stat`, **not read from any document**:
+`D:\Dev\pdfce-backups\pdfce-20260813-0755.bundle`, **14,241,767 bytes,
+written 2026-08-13 07:49:46**, its `refs/heads/main` = **`6db55ae`** —
+**3 commits behind `HEAD`** (`f251f18`, `88fde1e`, `46731fc`, all
+docs-only). **`tools/check-commits-filed.py` run at both ends: clean, 393
+code commits over the whole history, 5 known-unfiled carried in the
+baseline — and that baseline is DEBT, not an allowlist.**
+`tools/check-ledger-numbers.py` run pre-filing: **clean**, confirming
+R191 / decision 057 / filing 135 as the ceilings this entry increments
+from. This is the **hundred-and-thirty-sixth** `SESSION_LOG.md` filing
+(the hundred-and-thirty-fifth confirmed present by direct read before
+this entry was appended).

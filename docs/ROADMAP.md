@@ -42192,7 +42192,58 @@ blocked by it.
 
 ---
 
-### Pass 71.0 — **OCR**, promoted from the Backlog bucket 2026-08-12 (hundred-and-twenty-sixth filing) on the operator's engine decision — **SLICE 1 SHIPPED (`9f2af1d`, the engine-independent text-layer substrate); NO ENGINE IS WIRED, so NOTHING IS OPERATOR-REACHABLE**
+### Pass 71.0 — **OCR**, promoted from the Backlog bucket 2026-08-12 (hundred-and-twenty-sixth filing) on the operator's engine decision — **SLICE 1 SHIPPED (`9f2af1d`, the engine-independent text-layer substrate); NO ENGINE IS WIRED, so NOTHING IS OPERATOR-REACHABLE** — **★ NO LONGER BLOCKED ON AN OPERATOR DECISION as of 2026-08-13: `(bl)` IS ANSWERED YES**
+
+> **★★ THE LICENCE BLOCK IS LIFTED — 2026-08-13 (hundred-and-thirty-sixth
+> filing). Operator, verbatim and in full:**
+>
+> > *"yes to the license. keep going."*
+>
+> He was answering **`(bl)`** as this project has been carrying it — *may
+> a **CC-BY-SA-4.0** model file ship inside pdfce's **MIT** single-folder
+> portable distribution?* **YES.** That is the whole of what he said and
+> it is recorded at that length.
+>
+> **What remains on this Pass is ENGINEERING, not a decision:** bind the
+> engine behind a Cargo feature, ship + **hash** + **attribute** the
+> weights, build the rule-4 review surface, and ship `pdfce-cli ocr`.
+>
+> **★ FOUR THINGS THE ANSWER DOES NOT DECIDE — carried HERE, not only in
+> the questions list, because a reader who lands on `Pass 71.0` is the
+> one who needs them:**
+>
+> 1. **Not authority to publish or release.** Project rule 8 is
+>    untouched — pushing and releasing stay separate operator acts. **The
+>    repository is public**, so a bundled weight file is *published* the
+>    moment it is committed.
+> 2. **Not an engine choice.** That was the separate 2026-08-12 answer
+>    (*"…or heck, just build for both"*) → **both engines, behind Cargo
+>    features**, ranked on multi-language coverage. `(bl)` removes the
+>    licence obstacle in front of **the pure-Rust one only**.
+> 3. **Not clearance for an ADAPTATION.** Survey §3.3: fine-tuning,
+>    quantizing, retraining, or **converting the weights to another
+>    runtime's format** plausibly creates **Adapted Material**, which must
+>    then be released under CC-BY-SA-4.0 or a compatible licence. That
+>    binds the **derived model**, not pdfce's source. **A future Pass that
+>    touches the weights owes its OWN operator decision.**
+> 4. **Not the end of the attribution obligation — its BEGINNING.**
+>    `cargo-about` reads the **Cargo dependency graph**; a model file is
+>    not a Cargo dependency, so it **will not be seen, will not be
+>    attributed, and nothing will fail**. The compliance artifact is
+>    authored by hand: `PROVENANCE.md` naming the licence + a citation in
+>    `about.hbs`, which is what `tools/check-shipped-assets.py`
+>    (`e3fb7e0`) already enforces. **Enforcement is not acceptance.**
+>
+> **★ PIN AND HASH THE EXACT ARTIFACT.** `ocrs-models` has **no LICENSE
+> file** (the CC-BY-SA declaration lives only on the Hugging Face card),
+> and the two channels are **not byte-identical**: detection **2,510,284 B
+> (S3)** vs **2,523,564 B (HF)** = **13,280 B smaller**; recognition
+> **9,716,568 B (S3)** vs **9,716,444 B (HF)** = **124 B larger**, under
+> **different filenames**, totals agreeing to within 0.1% (12.23 vs
+> 12.24 MB over 2 files). **"The ocrs models" is not one thing.**
+>
+> Licensing mirror: `LEGAL.md` §6.7. Question mirror: *Open operator
+> questions* → `(bl)`.
 
 **Operator's decision, verbatim, and it is what promoted the bucket:**
 
@@ -42209,6 +42260,14 @@ recognize-text-in-scanned-page. Needs a decision on OCR engine binding"*.
 **That decision is now made** for the *engine* half. **The LICENCE half is
 not** — see open operator question **`(bl)`**. The bucket text is retained
 below in *Backlog* as the scoping record, per append-only discipline.
+
+> **★ AMENDED 2026-08-13 (hundred-and-thirty-sixth filing): the licence
+> half IS now made too.** `(bl)` is **ANSWERED YES** — *"yes to the
+> license. keep going."* **Both halves of the original bucket's "needs a
+> decision on OCR engine binding" are therefore closed**, one on
+> 2026-08-12 (which engine) and one on 2026-08-13 (may its weights
+> ship). The sentence above is left standing because it was true at its
+> date; this marker is the correction.
 
 #### Slice 1 — SHIPPED (`9f2af1d`)
 
@@ -42254,9 +42313,19 @@ top-of-*Shipped*, item 4.
      supplies his own CC-BY-SA-4.0 weights is not pdfce redistributing
      them; **the question remains live for any build that BUNDLES a model
      set**, which is still the only way OCR works out of the box.
+     **★ CLOSED 2026-08-13 (hundred-and-thirty-sixth filing): the bundled
+     case is PERMITTED — `(bl)` answered YES.** The resolver is **not
+     superseded by that answer**: a named path, then `models/<engine>`
+     beside the executable, then user data remains the lookup order, and
+     an operator-supplied model set remains the path that requires no
+     redistribution at all. **What changes is that a build MAY now ship
+     the files into that first-party directory**, so OCR can work out of
+     the box.
    `tools/check-shipped-assets.py` (`e3fb7e0`) will refuse a model
    directory whose `PROVENANCE.md` states no terms; **that is enforcement,
-   not permission.**
+   not permission** — **and as of 2026-08-13 the permission exists
+   separately, which is precisely what makes the enforcement useful
+   rather than moot.**
 3. **The review surface (rule 4).** OCR output is an inference on **every
    word**. The needs-review set must be visible and rejectable before it
    becomes document state, and **the uncertainty must be STATED where the
@@ -51257,6 +51326,80 @@ next free (bm):**
   written no-HTTP-client/no-TLS-stack claim and tripped the fail-closed
   `R12` no-network CI job. **That withdrawal is itself worth confirming
   with him**, since he agreed to the thing that was withdrawn.
+
+  > **★★ ANSWERED 2026-08-13 (hundred-and-thirty-sixth filing) — YES.
+  > Operator, verbatim and in full:**
+  >
+  > > *"yes to the license. keep going."*
+  >
+  > **That is the entire answer he gave, and it is recorded at exactly
+  > that length.** He answered the question as this project has been
+  > carrying it — *may a CC-BY-SA-4.0 model file ship inside pdfce's MIT
+  > single-folder portable distribution?* — and the answer is **YES**.
+  > **Do not elaborate it into a longer ruling than he issued.**
+  >
+  > **What it unblocks, stated exactly.** `Pass 71.0`'s **engine half**.
+  > Slice 1 (`9f2af1d`, the engine-independent text-layer substrate) and
+  > `ocr::models` (`af5580e`, the resolver) already shipped; the engine
+  > was blocked on this and **only** this. **`ocrs`/`rten` is now a
+  > permitted route**, including its **two bundled `.rten` weight
+  > files**.
+  >
+  > **★ FOUR THINGS THIS ANSWER DOES NOT DECIDE.** They are listed
+  > because the gap between "the licence is accepted" and "therefore X"
+  > is exactly where a wrong inference would live.
+  >
+  > 1. **It is not authority to publish or release anything.** Project
+  >    rule 8 is untouched: pushing and releasing remain separate
+  >    operator acts. **The repository is public**, so a bundled weight
+  >    file is *published* the moment it is committed — the licence
+  >    answer removes the licence obstacle, not the publish gate.
+  > 2. **It does not choose the engine.** The engine question was
+  >    answered separately on 2026-08-12 (*"use whichever one is best for
+  >    everyone including other languages, or heck, just build for
+  >    both"*) → **both, behind Cargo features**, ranked on
+  >    multi-language coverage. **`(bl)` only removes the licence
+  >    obstacle in front of the pure-Rust one.**
+  > 3. **It does not clear an ADAPTATION.**
+  >    `docs/ocr-engine-survey.md` §3.3 is explicit: fine-tuning,
+  >    quantizing, retraining, or converting the weights to another
+  >    runtime's format **plausibly creates Adapted Material**, which
+  >    must then be released under CC-BY-SA-4.0 or a compatible licence.
+  >    That binds **the derived model**, not pdfce's source — but
+  >    *"we'll just fine-tune it later for CAD drawings"* **is a decision
+  >    with a licence attached. A future Pass that touches the weights
+  >    owes its own operator decision; this one does not cover it.**
+  > 4. **It does not close the attribution obligation — it CREATES it.**
+  >    CC-BY-SA-4.0 requires attribution, a licence notice/link, and an
+  >    indication of changes. `THIRD_PARTY_LICENSES.md` is generated by
+  >    `cargo-about` **from the Cargo dependency graph**, and a model
+  >    file **is not a Cargo dependency**, so **`cargo-about` will not
+  >    see it, will not attribute it, and nothing will fail** (survey
+  >    §3.3). The compliance artifact must be **authored deliberately**:
+  >    a `PROVENANCE.md` naming the licence, plus a citation in
+  >    `about.hbs` — which is exactly what
+  >    `tools/check-shipped-assets.py` (`e3fb7e0`) already **enforces**
+  >    for any `crates/*/assets/` directory. **Enforcement is not
+  >    acceptance; the acceptance is what just arrived, and the
+  >    enforcement is what makes it verifiable.**
+  >
+  > **★ PROVENANCE IS THINNER THAN ONE WOULD WANT, AND THAT IS ON
+  > RECORD.** `ocrs-models` has **no LICENSE file** — the CC-BY-SA
+  > declaration exists **only on the Hugging Face model card** (survey
+  > §3.3). The survey also records that the **S3 and Hugging Face copies
+  > are not byte-identical**: detection **2,510,284 B (S3)** vs
+  > **2,523,564 B (HF)** = **13,280 B smaller**; recognition
+  > **9,716,568 B (S3)** vs **9,716,444 B (HF)** = **124 B larger** —
+  > **under different filenames**, totals agreeing to within 0.1%
+  > (12.23 MB vs 12.24 MB over 2 files). So **pdfce must pin exactly
+  > which artifact it ships and hash it**, rather than treating "the
+  > ocrs models" as one thing. **That pinning is now an engineering
+  > obligation of the Pass, not an open question.**
+  >
+  > **Operator-question ceiling stays `(bl)`** — answered, not retired;
+  > next free remains **`(bm)`**. Licensing mirror: `LEGAL.md` §6.7.
+  > Delivery mirror: `Pass 71.0`'s *Next up* entry, which is **no longer
+  > blocked on an operator decision**.
 
 **NEW in the hundred-and-twentieth filing (2026-08-12) — filed
 OPEN, not yet answered. Operator-question ceiling moved (bj) → (bk),
