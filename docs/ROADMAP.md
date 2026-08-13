@@ -42203,6 +42203,223 @@ anticipated — which is the entire reason the raw-byte half exists.
 **Terminology (rule 15):** nothing in this Pass touches **ce dimensions**
 or **pdf dimensions**. It is redaction only.
 
+### ★★★★ Pass 73.0 — HIGH PRIORITY — **`R58` says its own enforcement lives "in the writer, not left to each scrub Pass to remember" — and THERE IS NO SUCH WRITER MECHANISM. The rule is asserted, not enforced; redaction forces its full rewrite by remembering, which is the exact thing the rule says nobody has to do** — filed 2026-08-13 (hundred-and-thirty-ninth filing) — **UNSTARTED**
+
+> **This is NOT open operator question `(v)`, and answering `(v)` would
+> not fix it.** `(v)` is about R58's **SCOPE** — *which* operations the
+> rule covers, and it has been correctly flagged as over-broad since
+> 2026-08-04. This entry is about R58's **MECHANISM** — whether *any*
+> operation is BOUND by the rule, as opposed to each one separately
+> implementing it. A perfectly narrowed R58 would still have zero
+> enforcement the morning after `(v)` is answered.
+
+> **"A gate's DOCSTRING is not the gate", at RULE scale.** This project
+> already learned that sentence about tooling. Here the docstring is a
+> standing rule, and the thing it describes — a writer-level mechanism —
+> does not exist in any crate.
+
+#### What was measured, and with what command
+
+Working tree at the head of this filing (`git rev-parse HEAD` =
+`6c5124c`, 11 commits ahead of `origin/main` = `42364db`). Every row was
+run by this librarian, not relayed from the dispatch that reported it.
+
+| fact | how measured | result |
+|---|---|---|
+| there is no full-rewrite-forcing identifier anywhere in the workspace | `grep -rn "force_full" crates/`; `grep -rn "requires_full" crates/`; `grep -rn "RequiresFullRewrite" crates/` | **0 hits each — 0 of 3 identifiers exist**, across all four crates |
+| redaction forces the rewrite **by calling it**, not by being bound to it | read `crates/pdfce-core/src/redact.rs:1219–1224` | comment `// --- forced FULL REWRITE (R35) ---` at `:1219`, then `let (bytes, _save) = save_full(doc, &dirty, options)?;` at `:1223`. **`apply_redactions` returns the finished bytes**, so a caller cannot choose incremental — structural, but structural *to this one function* |
+| the only refusal in the writer is `R67`'s, not `R58`'s | `grep -n "loaded_via_recovery\|RecoveredBaseForbidsIncremental" crates/pdfce-core/src/` — 5 hits | the guard is `save.rs:309–310`, and its own comment names it *"Decision 013 (the recovered-base rule) … Sibling of R35 / R58"* — a **sibling**, not an implementation of R58 |
+| obligation 2's mechanism is redaction-private too | `grep -rn "decompose_containers" crates/` | **2 hits, both in `redact.rs`** (`:1215` the call, `:1670` the definition). A private `fn`, one caller. Not a writer mechanism either |
+| the save mode of every `EditSession` verb is the **caller's** choice | `grep -rn "save_full\|save_incremental" crates/pdfce-cli/src/` | `main.rs:10733/10735/10743` — `RoundTripMode` selects. **Nothing in `pdfce-core` binds a verb to a mode** |
+
+**A third site the reporting dispatch did not mention, and it points the
+other way.** `crates/pdfce-core/src/writer/save.rs:584` returns
+`WriteError::HybridFullRewrite` for a `SectionShape::Classic { xref_stm:
+Some(_) }` document — **a hybrid-reference file cannot be full-rewritten
+at all** (§7.5.8.4 / R33). Because `apply_redactions` calls `save_full`
+and `RedactError::Write(#[from] WriteError)` propagates it, **redaction on
+a hybrid file ERRORS rather than under-scrubbing.** That is the right
+failure direction and is not a defect. It is recorded here because it is
+the one thing R58's remedy genuinely cannot do, **nothing in `redact.rs`
+says so**, and a future Sanitize Pass told to "ride the forced full
+rewrite" will meet it as a surprise.
+
+#### The framing correction — the reported consequence is HALF already on the record, and the half that is new is the worse half
+
+The dispatch reported that `delete_pages`, `flatten_fields`,
+`detach_file`, `delete_annotation` and `unembed_fonts` all save
+incrementally "while R58 says otherwise". **The premise is correct and
+the alarm is wrong for at least three of them**, and this filing says so
+rather than relaying it:
+
+- `delete_annotation` is **already named** as R58's third literal
+  exception, in `(v)`, in `ARCHITECTURE.md` §5.9's staleness note, and in
+  the whole of §5.12 — filed 2026-08-04, judged **correct** to stay
+  incremental, because its contract is *"no longer in the current
+  revision"*, not *"provably unrecoverable"*.
+- `delete_object` and `delete_redaction_mark` were the first two;
+  `delete_subpaths` is the fourth, at open question `(ao)`.
+- So the *scope* complaint is nine days old and already escalated. **The
+  new fact is that the rule has no mechanism**, which no prior filing
+  states and which `(v)` does not reach.
+
+**Where it compounds, and this is the part that makes it a Pass rather
+than a note.** R58's obligation 3 requires *"an absence test that greps
+the whole saved output for the removed bytes → zero"*. Yesterday's lesson
+(`C:\personal_rag\pdf\lesson_20260813_absence_assertion_vacuous_under_incremental_save.md`,
+and this file's own entry at the head) established that **an absence
+assertion over incrementally-saved bytes is VACUOUS**, because the
+superseded object is still in the file. Put the two together:
+
+> A future **Sanitize / Remove-Hidden-Information / metadata-scrub** Pass
+> — which R58 names **by name**, prospectively — would be bound by
+> nothing to force the rewrite, and would then discharge its absence
+> obligation with a test **that cannot fail**. **Two safeguards, both
+> reading correct, both inert.** The rule is the thing that was supposed
+> to prevent exactly this, and it is the thing that does not exist.
+
+**And per decision 058, the only layer that could prevent it today is the
+one that may be replaced wholesale**: a shell choosing `RoundTripMode::Full`.
+**Same shape as `Pass 72.0`** — a safety property living above the crate
+that owes it — found the same day, from a different direction.
+
+#### Acceptance criteria
+
+1. **The binding is in `pdfce-core`, not in any shell** (decision 058;
+   rule 2). Preferred shape, matching the imposition backlog entry's
+   reasoning: **unrepresentable beats guarded** — a
+   confidentiality-contract operation should not be *able* to reach
+   `save_incremental`, rather than being checked on the way in.
+2. **The mechanism has a GREPPABLE identifier.** Whatever it is named,
+   `grep -rn "<name>" crates/` must return hits in `pdfce-core`. This is
+   the finding's own remedy: **the next audit of R58 must be answerable
+   by grep**, not by reading two functions and inferring. The three names
+   this Pass was filed against — `force_full`, `requires_full`,
+   `RequiresFullRewrite` — are reasonable candidates precisely because
+   someone already reached for them.
+3. **The test is SEEN TO FAIL before it is trusted.** Write it, remove
+   the binding, watch it go red, restore the binding, watch it go green —
+   and **record that you did**, per
+   `D:\dev\rag\rust\prove_test_suite_non_vacuous_by_deliberately_breaking_the_thing_it_tests.md`.
+   A test for an enforcement mechanism, written by the same hand that
+   wrote the mechanism, is the highest-risk case this project has for a
+   green assertion that checks nothing.
+4. **The absence test asserts its own SAVE MODE**, or it is vacuous. Per
+   yesterday's lesson: the mode is part of the assertion, not context for
+   it.
+5. **Obligation 2 is resolved in one direction or the other.**
+   `decompose_containers` either moves into the shared mechanism, or
+   §5.9's obligation 2 is reworded to say plainly that container
+   decomposition is **redaction-local** and every future scrub Pass must
+   implement its own. **One or the other — leaving both as they are is
+   the failure this Pass exists to end.**
+6. **§5.9's obligation 1 wording is corrected in the same filing**, to
+   describe the mechanism that then exists. Today's text — *"enforced in
+   the writer, not left to each scrub Pass to remember"* — must not
+   survive the Pass in its current form whatever the outcome.
+7. **This Pass does NOT answer `(v)`.** Scope is the operator's call
+   (decision 022's restraint, repeated). If `(v)` is still open when this
+   Pass is worked, the Pass must **name explicitly which operations it
+   binds** and record the rest as unbound — it must not settle a standing
+   rule's scope by shipping an implementation and letting the code become
+   the answer.
+8. `cargo tree -p pdfce-core` clean (rule 2); `cargo fmt --check` and
+   `cargo clippy -- -D warnings` workspace-wide (rule 10).
+
+#### What this Pass does NOT do
+
+- **It does not change any removal's behaviour.** If the correct answer
+  for `delete_pages` is "stays incremental", this Pass makes that a
+  *stated, bound* fact rather than an accident of nobody having written
+  the rule down in code.
+- **It does not touch redaction's output.** `Pass 72.0` is the redaction
+  Pass; this one is the rule behind it.
+
+**Terminology (rule 15):** nothing here touches **ce dimensions** or
+**pdf dimensions**.
+
+### Pass 73.1 — **two DEFECTS in `pdfce-core`'s edit surface, both found by the same API-mapping pass: the ONE non-atomic verb, and two preflights that under-report what the real path refuses** — filed 2026-08-13 (hundred-and-thirty-ninth filing) — **UNSTARTED**
+
+> Filed as a Pass, not as trivia, for the reason stated in the dispatch:
+> **a defect goes where a fix will be found.** Both are small; both are
+> the kind that a caller cannot discover from the type signature and will
+> therefore get wrong.
+
+#### Defect A — `add_radio_button` is the only verb that can `Err` AFTER committing
+
+**Measured** by reading `crates/pdfce-core/src/edit.rs:8382–8391`:
+
+```rust
+self.commit(Command { kind: CommandKind::AddFormField, objects, /* … */ });   // :8383
+if spec.selected {
+    self.set_button_state(&spec.name, &spec.export_value)?;                    // :8390
+}
+```
+
+`commit` is **infallible** and, in every other verb on this surface, it
+is **last** — which is exactly what makes those verbs atomic, and what
+lets a caller read `Err` as *"nothing happened"*. Here `commit` is
+followed by a fallible call, so **`Err` from `add_radio_button` means
+"the widget was merged into the field and the group's selection was NOT
+re-pointed"** — a partially applied edit, reported through a channel that
+conventionally means the opposite.
+
+The source comment at `:8377–8382` explains *why* `set_button_state`
+runs after the merge (R92 — one path decides what "selected" looks like,
+and it must see the group the merge actually produced). **That reasoning
+is sound and this Pass must not undo it.** The fix is to make the pair
+land as one command, not to move the call.
+
+**Acceptance:** a test that induces the `set_button_state` failure and
+asserts the session is **unchanged** — same undo depth, same objects —
+and the `# Errors` doc comment states the atomicity contract either way.
+
+#### Defect B — two of the six `*_refusal()` preflights under-report
+
+The six are `annotation_deletion_refusal` (`:11492`), `fill_refusal`
+(`:12200`), `deletion_refusal` (`:12239`), `rename_refusal` (`:12268`),
+`unembed_refusal` (`:16303`), `embed_refusal` (`:16553`). They exist to
+satisfy **R83** — *ask before offering the control* — so a shell greys
+out an action instead of offering a button whose every press errors.
+**Two of the six answer a narrower question than the path they gate**,
+which inverts R83: the control is offered, and then it fails.
+
+| preflight | what it runs | what the real path runs | gap |
+|---|---|---|---|
+| `fill_refusal` (`:12200`) | `self.check_certification_for_fill().err()` — **one** check | `fill_guards` (`:12304`) — `trailer().contains_key(b"Encrypt")` → `DocumentEncrypted`, **then** the same certification check, **then** `suppressed_object_count() > 0` → `ObjectCreationWouldExposeHiddenObjects` | **2 of 3 checks missing.** An encrypted document reports *fillable* and refuses on the first keystroke |
+| `annotation_deletion_refusal` (`:11492`) | encryption + `check_certification_for_annotation` — **document-scoped only** | per-annotation refusals (locked, TrapNet, widget — see open question `(u)`) | takes **`&self` and no `annot_id`**, so it is *structurally incapable* of seeing them. Not an omission in the body; a gap in the signature |
+
+`fill_refusal`'s own sibling proves this is a known standard on this
+surface: `deletion_refusal`'s doc comment argues at length about *why*
+its gate differs from `fill_refusal`'s, and `annotation_deletion_refusal`
+**does** check `Encrypt` — so the encryption check was understood to
+belong in a preflight, and `fill_refusal` simply does not have it.
+
+**This is a fresh instance of an already-filed finding**, and should be
+fixed in that finding's shape rather than patched per-site:
+`D:\dev\rag\rust\a_disclosure_count_must_use_the_same_predicate_as_the_write_it_describes.md`.
+**No new RAG file is owed for Defect B.**
+
+**Acceptance:**
+1. Each of the six preflights calls **the same predicate** the real path
+   calls — not a re-derived subset.
+2. A test that, for each preflight, builds a document tripping **each**
+   guard the real path has and asserts **preflight and real path agree**
+   (both refuse, same variant). This test is what makes the class extinct
+   rather than the two instances.
+3. `annotation_deletion_refusal` either takes an `annot_id` (and answers
+   the per-annotation question), or its doc comment states in its first
+   paragraph that it answers the **document-scoped** question only and
+   that a shell must still handle a per-annotation refusal at press time.
+   **Either is acceptable; silence is not.** Note the interaction with
+   open question `(u)` — if widgets are refused by name, that refusal is
+   per-annotation and lands here.
+4. `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo tree -p
+   pdfce-core` clean.
+
+**Terminology (rule 15):** nothing here touches **ce dimensions** or
+**pdf dimensions**.
+
 ### Pass 69.0 — ★★ OPERATOR REQUEST 2026-08-12 — **ce-dimension STYLE + TOLERANCE, with a group default and a per-ce-dimension override checkbox, at SolidWorks option breadth** — filed 2026-08-12 (hundred-and-twenty-fifth filing) — **STATUS 2026-08-13: SPLIT AND PARTLY SHIPPED. The heading's original "UNSTARTED" is now FALSE and is struck by the banner below.**
 
 > **★ AMENDMENT, 2026-08-13 (hundred-and-thirty-fourth filing), `d5431a4`
@@ -48560,6 +48777,46 @@ Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
 
+- **API-surface debt, filed 2026-08-13 (hundred-and-thirty-ninth filing)
+  — `EditSession::into_document` LOOKS like the "finish editing" path,
+  has ZERO callers repo-wide, and DISCARDS every unsaved edit.**
+  **Measured:** `grep -rn "into_document" crates/ docs/` — one definition
+  (`crates/pdfce-core/src/edit.rs:3399`), one doc cross-reference
+  (`:3366`), and **no call site in any crate, test, tool or example**;
+  the remaining hits are documentation. It returns `self.base` — the
+  **base** document — so a caller who reaches for it as the natural
+  counterpart to `EditSession::new(doc)` silently loses the whole
+  session. **The name is the trap**, and an unused `pub` item cannot be
+  caught by review that only reads call sites, because there are none.
+  Already documented correctly at
+  `docs/core-api/02-editing-and-saving.md:79` and `:436` — the engineer's
+  API map found it too — so the record is not the gap; the **signature**
+  is. **Fix shape when scoped:** rename to say what it does
+  (`into_base_document` / `discard_edits`), or take the edits with it, or
+  `#[doc(hidden)]` it. **Deliberately not a Pass:** nothing is wrong at
+  HEAD because nothing calls it. Promote it the moment anything does.
+- **Documentation debt, filed 2026-08-13 (hundred-and-thirty-ninth
+  filing) — `delete_subpath` has NO doc comment, and `delete_node`'s
+  rustdoc OPENS with subpath semantics.** **Measured:** in
+  `crates/pdfce-core/src/edit.rs`, lines **4664–4750** are one
+  **contiguous** `///` block (verified: the only non-`///` lines between
+  4660 and 4750 are 4660–4663, the tail of the preceding `fn`) sitting
+  above `pub fn delete_node` at **`:4751`**. That block opens *"**Delete
+  one subpath** of the path object…"* (`:4664`) and contains *"**Deleting
+  the only subpath deletes the object**"* (`:4689`) before reaching
+  *"**Delete one anchor**…"* (`:4717`), which is the doc `delete_node`
+  actually owes. `pub fn delete_subpath` at **`:4770`** then has **no doc
+  comment at all**. So rustdoc currently renders subpath semantics on the
+  node function and nothing on the subpath function. **Nothing catches
+  this:** `missing_docs` is **not enforced** — `grep -rn "missing_docs"
+  crates/ Cargo.toml` returns exactly **one** hit, a *comment* at
+  `crates/pdfce-core/Cargo.toml:108` describing a lint that is not
+  active. **Minor, and filed anyway**, because this is a
+  documentation-first project (rule 6) and a doc comment attached to the
+  wrong item is worse than an absent one — it reads as authoritative.
+  **Fix shape:** split the block at `:4717`, move the first half above
+  `delete_subpath`, and consider turning `missing_docs` on for
+  `pdfce-core` (its own `Cargo.toml` comment already contemplates it).
 - **★ Boundary debt, filed 2026-08-13 (hundred-and-thirty-eighth filing)
   — imposition's MUTUAL-EXCLUSION GUARD is CLI-LOCAL, so `pdfce-print`
   will let a second shell compose poster tiles and then throw them
@@ -52456,6 +52713,45 @@ slice or an already-decided default that can be revisited:**
   Pass 22.0's `delete_annotation` becomes a THIRD unreconciled exception**
   (see the §5.9/§5.12 note for exactly which shipped/proposed operations
   already sit outside R58's literal scope).
+  **★ AMENDED 2026-08-13 (hundred-and-thirty-ninth filing) — this question
+  is about SCOPE, and a MECHANISM defect has since been measured beside
+  it. Answering `(v)` does not fix the other one, and this note exists so
+  a "yes" here is not read as closing both.** `Pass 73.0` records the
+  measurement: R58's stated enforcement layer (*"enforced in the writer"*)
+  contains no such mechanism — `force_full`, `requires_full` and
+  `RequiresFullRewrite` return **0 hits each** across `crates/`. `(v)`
+  remains exactly as posed. **Five more operations have also been measured
+  outside R58's literal text**, beyond the four already named
+  (`delete_object`, `delete_redaction_mark`, proposed `delete_annotation`,
+  `delete_subpaths` at `(ao)`): `delete_pages` (`edit.rs:14644`),
+  `flatten_fields` (`:13730`), `detach_file` (`:10347`), `unembed_fonts`
+  (`:16373`) and `delete_annotation` again. **Three of those five fold
+  cleanly into `(v)`'s proposed narrowing. Two do not — see `(bm)`.**
+- **(bm) Are `detach_file` and `unembed_fonts` CONFIDENTIALITY removals?**
+  Filed 2026-08-13 (hundred-and-thirty-ninth filing), alongside `Pass
+  73.0`. `(v)`'s proposed narrowing sorts removals by whether their
+  contract is confidentiality. **Every operation named under `(v)` and
+  `(ao)` so far sorts obviously into "not confidentiality"** — deleting a
+  page, an annotation, a mark, a subpath, some geometry. These two do
+  not, and this librarian will not sort them solo:
+  - **`detach_file`** removes an **embedded file attachment**. An
+    operator who detaches a file is frequently doing it *precisely so the
+    document stops carrying that payload* — which is a confidentiality
+    contract in everything but name. Under incremental save the whole
+    attachment stream survives in the prior revision, intact and
+    extractable.
+  - **`unembed_fonts`** removes an **embedded font program**. Usually a
+    size or licensing operation — but a font program is a redistributed
+    third-party binary, and "I removed the font because I may not ship
+    it" is a removal whose *point* is that the bytes are gone.
+  The distinction matters because it decides whether each verb is bound
+  by whatever `Pass 73.0` builds. **This is a contract question, not an
+  implementation one**, which is why it is yours. *Default if unanswered:
+  **treat both as NON-confidentiality** (they stay incremental, matching
+  today's behaviour) and **disclose it** — the operator is told, at the
+  call, that the removed payload remains recoverable from the prior
+  revision unless the document is saved with a full rewrite. Silent
+  either way is the one option ruled out.*
 - **(w) Per-group vs. per-ce-dimension display format?** Decision 023 §6.3/
   §10 item 1 recommends **per-group**, with "draw a second group at the
   same scale" as the free escape hatch if a workflow needs two formats
@@ -53878,6 +54174,37 @@ not a judgment call:**
   that same restraint rather than unilaterally rewriting binding rule
   text. Full reasoning: `ARCHITECTURE.md` §5.9's new staleness note and
   §5.12.
+  **★★ SECOND, SEPARATE DEFECT FOUND 2026-08-13 (hundred-and-thirty-ninth
+  filing) — THE RULE HAS NO ENFORCEMENT MECHANISM, AND ITS OWN TEXT
+  CLAIMS OTHERWISE. This is NOT the staleness above and is NOT open
+  question `(v)`.** The staleness note concerns R58's **SCOPE** (which
+  operations it covers). This concerns its **MECHANISM** (whether any
+  operation is bound by it at all). `ARCHITECTURE.md` §5.9's obligation 1
+  reads *"Force full rewrite, refuse incremental save. The R35 mechanism,
+  **enforced in the writer, not left to each scrub Pass to remember**."*
+  **Measured, this filing:** `grep -rn "force_full" crates/`,
+  `grep -rn "requires_full" crates/` and
+  `grep -rn "RequiresFullRewrite" crates/` return **0 hits each — 0 of 3**.
+  There is no writer-level mechanism. `apply_redactions` forces its
+  rewrite by calling `save_full` itself (`redact.rs:1223`) — i.e. **by
+  remembering**, the exact thing the obligation says nobody has to do —
+  and `save_incremental`'s only refusal (`save.rs:309`) is **R67's**
+  recovered-base guard, whose own comment calls itself a *sibling* of
+  R58, not an implementation of it. Obligation 2 is the same shape:
+  `decompose_containers` is a private `fn` in `redact.rs` with exactly
+  one caller (`grep -rn "decompose_containers" crates/` → 2 hits, both in
+  that file). **Answering `(v)` would leave every word of this true.**
+  A narrowed R58 would still bind nothing, and the future
+  Sanitize/Remove-Hidden-Information Pass this rule names **by name**
+  would then discharge obligation 3 with an absence test that **cannot
+  fail** (an absence assertion over incrementally-saved bytes is vacuous
+  — this file's own entry at the head, and
+  `C:\personal_rag\pdf\lesson_20260813_absence_assertion_vacuous_under_incremental_save.md`).
+  **The remedy is `Pass 73.0`, under *Next up*** — and its criterion 6
+  requires this obligation-1 wording to be corrected in the same filing
+  that gives it something true to describe. **R58's binding text is again
+  NOT rewritten here**, for the same reason as the staleness note: the
+  fix is a Pass, not a librarian's edit.
 - **R59 — Render-fidelity is proved against an INDEPENDENT renderer at
   corpus scale before any subsystem edits content it re-renders.** Added
   2026-08-01 (decision 010). A self-comparison (pdfce-before vs

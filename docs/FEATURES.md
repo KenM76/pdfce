@@ -121,7 +121,7 @@ provisional; re-verify before any acceptance criterion leans on them.
 | [x] | [x] | [x] | [x] | Fill fields — text, check box, radio, choice. Rich text (`/RV`) is read and exported but can only be *replaced* by a disclosed downgrade to plain text. |
 | [x] | [x] | [ ] | [x] | Flatten a form to static page content. **No GUI surface.** |
 | [x] | [x] | [x] | [x] | Import and export form data — FDF, XFDF and two-column CSV. CSV values that a spreadsheet would read as formulae are prefixed and disclosed. |
-| [x] | [x] | ◐ | [x] | Create a field — text, check box, radio, choice, push button — with a name-collision resolver, border style, visibility, password and comb. **The GUI cannot create a push button.** |
+| [x] | [x] | ◐ | [x] | Create a field — text, check box, radio, choice, push button — with a name-collision resolver, border style, visibility, password and comb. **The GUI cannot create a push button.** **Adding a *selected* radio button is the one verb that can fail *after* committing** — its `Err` does not mean "nothing happened" (`Pass 73.1`). |
 | [x] | [x] | [x] | [x] | Delete a field, a single widget, or a grouping node and its named subtree. |
 | [x] | [x] | [x] | [x] | Rename a field, reporting how many descendants the rename reached. |
 | [x] | [x] | [ ] | [x] | Move a widget, carrying its artwork rather than regenerating it. **No GUI surface.** |
@@ -223,7 +223,7 @@ the model or verb exists and only the named shell is missing. The
 | [ ] | [ ] | [ ] | ? | Wide/batch CSV — one row per document, for filling many copies of one form. |
 | [ ] | [ ] | [ ] | ? | Static-XFA hybrid — read and fill the XFA half in step with AcroForm. |
 | [ ] | [ ] | [ ] | [x] | Links and bookmarks authoring — create, edit, reorder, named destinations. |
-| [ ] | [ ] | [ ] | [x] | Redaction: mark by dragging on the canvas; Sanitize / Remove Hidden Information. |
+| [ ] | [ ] | [ ] | [x] | Redaction: mark by dragging on the canvas; Sanitize / Remove Hidden Information. **Sanitize is blocked on `Pass 73.0`** — the rule that would force it to a full rewrite (R58) is asserted, not enforced, so a Sanitize built today would save incrementally and its absence test could not fail. |
 | [ ] | [ ] | [ ] | [x] | Digital signatures — PKCS#7/PAdES signing and verification. |
 | [ ] | [ ] | [ ] | [x] | Bates numbering. |
 | [ ] | [ ] | [ ] | [x] | PDF/A conformance and validation. |

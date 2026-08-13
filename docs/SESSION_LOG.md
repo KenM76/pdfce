@@ -40374,3 +40374,254 @@ are reachable. **A green gate is not a true record here**, and this
 amendment exists so the next reader does not infer otherwise. Item 2 of
 *For next session* stands unchanged. Measured after committing, by
 running the gate; `git rev-list --count origin/main..HEAD` = **12**.
+
+## 2026-08-13 (hundred-and-thirty-ninth filing) — **`R58`'s ENFORCEMENT LAYER IS EMPTY.** The rule's own text says the forced full rewrite is *"enforced in the writer, not left to each scrub Pass to remember"* — and `force_full`, `requires_full`, `RequiresFullRewrite` return **0 hits each** across `crates/`. This is NOT open question `(v)`: `(v)` is about the rule's SCOPE, this is about whether ANY operation is BOUND by it. `Pass 73.0` + `Pass 73.1` minted, open question `(bm)` minted; the reporting dispatch's alarm about five verbs is CORRECTED — three of the five were already on the record as correct
+
+**Ledger, measured by `python tools/check-ledger-numbers.py` at the head
+of this dispatch and again after the hundred-and-thirty-eighth filing
+landed mid-dispatch, not carried from any prior entry:** *"standing rules
+R191 → next free R192; decision records 058 → next free 059; SESSION_LOG
+filings 138 → next free 139; Pass families with headings up to 71"* (the
+pre-138 reading was *"Pass families MENTIONED up to 72"*, which is why
+this filing did **not** assume 72 was free). **This filing mints `Pass
+73.0` and `Pass 73.1`** (family ceiling 72 → **73**) **and open operator
+question `(bm)`** (ceiling `(bl)` → **`(bm)`**). **No decision record** —
+ceiling stays **058**, next free **059**; no architectural *decision* was
+made here, only a measurement filed against an existing section, and
+minting a record for a finding would misrepresent it as a choice. **No
+standing rule** — **R191** stands, **R192** remains an unruled proposal;
+R58 itself is **not rewritten**, deliberately, for the same reason
+decision 022 declined to narrow it solo.
+
+### A dispatch was relayed to this librarian, and VERIFYING IT CHANGED THE ANSWER
+
+An API-mapping agent reported, from live source, that **R58 is
+"DOCUMENTATION ONLY"**, and that `delete_pages`, `flatten_fields`,
+`detach_file`, `delete_annotation` and `unembed_fonts` all save
+incrementally, "leaving the removed content present in the file and
+recoverable — while R58 says otherwise in writing." This librarian was
+told to verify before filing, and did. **The verdict is CONFIRMED IN ITS
+MECHANICS AND CORRECTED IN ITS FRAMING**, and the correction matters in
+both directions.
+
+**Confirmed, by this librarian's own commands, at `cd4196a`:**
+
+| claim | command | result |
+|---|---|---|
+| no full-rewrite-forcing identifier exists | `grep -rn "force_full" crates/` · `grep -rn "requires_full" crates/` · `grep -rn "RequiresFullRewrite" crates/` | **0 hits each — 0 of 3**, across all four crates |
+| redaction forces its rewrite structurally | read `crates/pdfce-core/src/redact.rs:1219–1224` | `save_full(doc, &dirty, options)?` at `:1223`, under the comment `// --- forced FULL REWRITE (R35) ---`. Structural **to that one function** — it returns finished bytes |
+| a recovered base refuses incremental | read `crates/pdfce-core/src/writer/save.rs:305–312` | `doc.loaded_via_recovery()` → `WriteError::RecoveredBaseForbidsIncremental` |
+| the named verbs do not bind a save mode | `grep -rn "fn delete_pages\|fn flatten_fields\|fn detach_file\|fn delete_annotation\|fn unembed_fonts" crates/` → `edit.rs:14644 / 13730 / 10347 / 10847 / 16373`; `grep -rn "save_full\|save_incremental" crates/pdfce-cli/src/` → `main.rs:10733/10735/10743` | correct — the **shell** picks the mode via `RoundTripMode` |
+
+**Corrected — the framing, in the direction that makes the finding
+WORSE, not milder.** *"R58 is documentation only"* is **false as stated**:
+R58's confidentiality core **is** enforced, at the two sites the report
+itself names. What is not enforced is something more specific and more
+dangerous — **the rule's stated MECHANISM**. `ARCHITECTURE.md` §5.9
+obligation 1 reads *"enforced in the writer, **not left to each scrub
+Pass to remember**"*, and redaction forces its rewrite **by remembering**:
+`apply_redactions` calls `save_full` itself. Obligation 2 is the same
+shape — `decompose_containers` is a **private** `fn` in `redact.rs` with
+exactly **one** caller (`grep -rn "decompose_containers" crates/` → **2
+hits, both in that file**). So R58 does not fail to be implemented; it
+**names a layer that contains nothing**, and two one-off implementations
+sit where a mechanism was described.
+
+**Corrected — the alarm about the five verbs. THREE OF THE FIVE WERE
+ALREADY ON THE RECORD, AND ALREADY JUDGED CORRECT.** `delete_annotation`
+is named as R58's **third** literal exception in open question `(v)`, in
+§5.9's staleness note and throughout §5.12 — filed **2026-08-04**, nine
+days before this dispatch, with the reasoning that its contract is *"no
+longer in the current revision"*, not *"provably unrecoverable"*.
+`delete_object` and `delete_redaction_mark` were the first two;
+`delete_subpaths` is the fourth, at `(ao)`. **A relayed alarm about a
+known, deliberate, documented exception would have been filed as a new
+danger** — which is precisely the failure mode this project's own
+standing lesson about relaying unmeasured claims exists to prevent.
+
+**And a third site the report did not find, pointing the other way.**
+`crates/pdfce-core/src/writer/save.rs:584` returns
+`WriteError::HybridFullRewrite` for a `SectionShape::Classic { xref_stm:
+Some(_) }` document — a **hybrid-reference file cannot be full-rewritten
+at all** (§7.5.8.4 / R33). Since `apply_redactions` calls `save_full` and
+`RedactError::Write(#[from] WriteError)` propagates, **redaction on a
+hybrid file ERRORS rather than under-scrubbing.** Right failure
+direction, not a defect — but it means **R58's remedy is unavailable on
+that file class**, nothing in `redact.rs` says so, and a future Sanitize
+Pass told to "ride the forced full rewrite" will meet it as a surprise.
+Filed in §5.9 so it is met on paper first.
+
+### Why this is a Pass and not a note — the two inert safeguards
+
+R58's obligation 3 requires *"an absence test that greps the whole saved
+output for the removed bytes → zero"*. **Yesterday's finding** —
+`C:\personal_rag\pdf\lesson_20260813_absence_assertion_vacuous_under_incremental_save.md`,
+already carried at the head of `ROADMAP.md` — established that an
+absence assertion over incrementally-saved bytes is **vacuous**, because
+the superseded object is still in the file. Compose the two:
+
+> A future **Sanitize / Remove-Hidden-Information / metadata-scrub** Pass
+> — which R58 names **by name, prospectively** — would be bound by
+> **nothing** to force the rewrite, and would then discharge its absence
+> obligation with a test **that cannot fail**. **Two safeguards, both
+> reading correct, both inert.**
+
+**Per decision 058, the only layer that could catch it today is a shell
+choosing `RoundTripMode::Full` — the layer that may be replaced
+wholesale.** That is the **same shape** as the hundred-and-thirty-eighth
+filing's redaction-proof finding, found the same day from a different
+direction: a safety property living above the crate that owes it. Two
+independent instances in one day is the signal, not the coincidence.
+
+**"A gate's DOCSTRING is not the gate", at RULE scale.** The project
+learned that sentence about tooling. Here the docstring is a standing
+rule and the gate is a writer that does not contain one.
+
+### What was filed
+
+**`docs/ROADMAP.md`**
+- **`Pass 73.0`** (*Next up*, ★★★★, HIGH PRIORITY) — make R58 **enforced
+  rather than asserted**. Eight acceptance criteria, three of which are
+  the point: **(1)** the binding is **in `pdfce-core`, not in any shell**
+  (decision 058), preferably **unrepresentable rather than guarded**;
+  **(2)** the mechanism carries a **greppable identifier**, so the *next*
+  audit of R58 is answerable by `grep` — which this one was not; **(3)**
+  the test is **SEEN TO FAIL** before it is trusted, and that is
+  recorded. Criterion 5 forces obligation 2 to resolve **in one direction
+  or the other** (move `decompose_containers`, or say plainly it is
+  redaction-local). Criterion 7 forbids the Pass from answering `(v)` by
+  shipping — scope stays the operator's.
+- **`Pass 73.1`** (*Next up*) — the two **defects**, filed where a fix
+  will be found rather than as trivia. **Defect A:** `add_radio_button`
+  is the **one non-atomic verb** — `commit` (infallible, and last in
+  every other verb) at `edit.rs:8383`, then a fallible
+  `set_button_state(…)?` at `:8390`. **`Err` here does not mean "nothing
+  happened"**: the widget merged and the group's selection did not
+  re-point. The source comment at `:8377–8382` explains *why* the call
+  must follow the merge (R92) and that reasoning is sound — the fix is
+  one command, not a moved call. **Defect B:** `fill_refusal` (`:12200`)
+  runs **1 of the 3** checks `fill_guards` (`:12304`) runs, missing
+  `Encrypt` → `DocumentEncrypted` and `suppressed_object_count()` →
+  `ObjectCreationWouldExposeHiddenObjects`; `annotation_deletion_refusal`
+  (`:11492`) takes **`&self` and no `annot_id`**, so it is *structurally*
+  incapable of seeing locked / TrapNet / widget refusals. Both **invert
+  R83** — the control is offered and then fails. Defect B is a fresh
+  instance of an **already-filed** finding
+  (`a_disclosure_count_must_use_the_same_predicate_as_the_write_it_describes.md`),
+  so **no new RAG file is owed for it**.
+- **R58's Standing-rules bullet** — dated amendment recording the
+  mechanism defect **beside**, and explicitly distinguished from, the
+  2026-08-04 scope staleness. **R58's binding text is again not
+  rewritten.**
+- **Open question `(v)`** — amended so a "yes" is not read as closing
+  both problems, and extended with the **five further operations**
+  measured outside R58's literal text (`delete_pages` `:14644`,
+  `flatten_fields` `:13730`, `detach_file` `:10347`, `unembed_fonts`
+  `:16373`, `delete_annotation` `:10847`).
+- **Open question `(bm)`, minted** — *are `detach_file` and
+  `unembed_fonts` **confidentiality** removals?* Every operation named
+  under `(v)`/`(ao)` sorts obviously into "not confidentiality". These
+  two do not: detaching an embedded file and removing an embedded font
+  program are both removals of a **payload** an operator may be removing
+  precisely so the document stops carrying it, and under incremental
+  save the whole stream survives in the prior revision. **A contract
+  question, therefore the operator's.** *Default if unanswered:* treat
+  both as non-confidentiality (matching today's behaviour) **and
+  disclose** — silent either way is the option ruled out.
+- **Two Backlog entries** — `into_document` (`edit.rs:3399`) has **zero
+  callers repo-wide** and **discards** every unsaved edit while looking
+  like the finish-editing counterpart to `EditSession::new`; and
+  `delete_subpath` (`:4770`) has **no doc comment** while `delete_node`
+  (`:4751`) carries a **contiguous** `///` block (`4664–4750`) that
+  **opens with subpath semantics**. `missing_docs` is **not enforced** —
+  `grep -rn "missing_docs" crates/ Cargo.toml` returns **1 hit, a comment
+  at `crates/pdfce-core/Cargo.toml:108`** describing a lint that is not
+  on. Both deliberately Backlog: nothing is wrong at HEAD.
+
+**`docs/ARCHITECTURE.md`** — **§5.9 only.** A dated second-defect block
+under the existing staleness note, with the five-row measurement table,
+the hybrid-file limit, and an explicit statement that obligation 1's
+wording is **not** rewritten here because `Pass 73.0` criterion 6 must
+correct it in the filing that gives it something true to describe.
+**§12 deliberately untouched, and this is a stated call:** the decision
+log is the audit trail for *choices*, and no choice was made here — a
+measurement was filed against a section that was already wrong. Minting
+059 would record a decision that does not exist, and the project has
+just spent two filings correcting records that asserted more than was
+measured.
+
+**`docs/FEATURES.md`** — **two rows, and this is also a stated call.**
+Nothing was un-shipped, so no box changed. The **create-a-field** row
+gains the `add_radio_button` atomicity caveat, because a caller reading
+that row will write the `Err`-means-nothing-happened bug. The **Sanitize
+/ Remove Hidden Information** row is marked **blocked on `Pass 73.0`** —
+that row is the exact capability R58 names prospectively, and a
+planned-features row that does not say "the rule protecting this is not
+enforced" is how someone builds it next.
+
+### Verification, tooling and state — all measured this dispatch
+
+- **`python tools/check-ledger-numbers.py`** run **twice** (before the
+  hundred-and-thirty-eighth filing landed and after): **clean both
+  times** — *"no duplicate Pass, rule, or decision numbers"*. The
+  re-measure is why this filing is **139 and not 138**, and why the new
+  Passes are **73.x and not 72.x**: `72` was taken by the filing that
+  committed mid-dispatch. **The instruction not to assume 72 was correct
+  and would have collided.**
+- **A concurrent librarian dispatch committed while this one was
+  editing** — `b349b1c`, `df4f6dc`, `cd4196a` landed between this
+  dispatch's first and second `git status`. **Verified no overlap**:
+  `git show HEAD:docs/ROADMAP.md | grep -c "Pass 73.0"` = **0** against
+  **4** in the working tree, so nothing of this filing's was swept into
+  theirs and nothing of theirs is carried in this commit.
+- **Remote state, measured (`git rev-parse origin/main`):** `origin/main`
+  = **`42364db`**; `git rev-list --count origin/main..HEAD` = **14**
+  before this filing's own commit. **Nothing is pushed** — stated as a
+  measured fact, not a request (project rule 8).
+- **Backup currency MEASURED**, by `ls` and `git bundle list-heads`, not
+  read from any document: `D:\Dev\pdfce-backups\pdfce-20260813-0755.bundle`,
+  **14,241,767 bytes**, written **2026-08-13 07:49**, its
+  `refs/heads/main` = **`6db55ae`** — **16 commits behind `HEAD`**
+  (`git rev-list --count 6db55ae..HEAD`). **The most recent bundle on
+  disk is now more than a full session stale**, and every one of those 16
+  is docs-or-memory-only, so the code risk is nil and the *record* risk
+  is the whole of it.
+- **`python tools/check-commits-filed.py`** run at the end of this
+  dispatch — result recorded in the amendment footer below, appended
+  after this filing's own commit, because the gate cannot see a commit
+  that has not been made.
+- **No `cargo` command was run and none is claimed.** This filing touches
+  four `docs/` files and changes no code; `cargo fmt`, `cargo clippy` and
+  `cargo tree` figures belong to `Pass 73.0`/`73.1` when they are worked,
+  not to this entry.
+- **Rule 15:** nothing in this filing concerns **ce dimensions** or **pdf
+  dimensions**. Every removal named here is document-structure surgery.
+
+### Still in flight
+
+- **`Pass 72.0`** (redaction absence proof into core) and **`Pass 73.0`**
+  (R58 enforcement into core) are the **same finding at two altitudes**
+  and should be sequenced together: 72.0 moves one proof, 73.0 builds the
+  mechanism that would have required it. Working 73.0 first makes 72.0's
+  criterion 1 cheaper; working 72.0 first gives 73.0 a worked example.
+  **Not ordered here — engineer's call**, but they must not be worked by
+  two hands at once.
+- **`Pass 73.1`**'s Defect B fix is small and its **test** is the
+  valuable half: six preflights × each guard the real path runs. That
+  test is what makes the class extinct rather than the two instances.
+- The **GUI pause** (decision 058) is unaffected by all of the above —
+  every Pass minted today is core-side.
+
+### For next session
+
+1. **Answer `(bm)`** — `detach_file` and `unembed_fonts`: confidentiality
+   removals or not? It gates whether `Pass 73.0` binds them. Default is
+   recorded (non-confidentiality **plus** disclosure).
+2. **`(v)` is still open and is still SCOPE-only.** The amendment filed
+   today exists so answering it is not mistaken for closing the mechanism
+   defect. Both need answers; they are not the same answer.
+3. **Take a backup bundle** — the newest on disk is 16 commits behind.
+4. `Pass 73.0` criterion 3 is the one to hold the line on: **the test
+   must be seen to fail.** A test for an enforcement mechanism, written
+   by the hand that wrote the mechanism, is this project's highest-risk
+   case for a green assertion that checks nothing.

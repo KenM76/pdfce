@@ -3634,6 +3634,60 @@ than resolving it unilaterally. See §5.12, below, for the settled
 (non-wording) part of this same finding: whether annotation deletion
 joins the forced-full-rewrite family at all.
 
+**★★ SECOND DEFECT, MEASURED 2026-08-13 (hundred-and-thirty-ninth
+filing) — OBLIGATION 1 ABOVE ASSERTS A MECHANISM THAT DOES NOT EXIST,
+AND OBLIGATION 2 IS REDACTION-PRIVATE. This is NOT the staleness note
+above, and it is NOT open question (v).** The staleness note is about
+R58's **SCOPE**: which operations the rule covers. This is about R58's
+**MECHANISM**: whether *any* operation is bound by the rule at all.
+They are independent, and answering (v) leaves every sentence below
+true.
+
+Obligation 1 reads, verbatim, *"Force full rewrite, refuse incremental
+save. The R35 mechanism, **enforced in the writer, not left to each
+scrub Pass to remember**."* Measured against the working tree at
+`6c5124c`:
+
+| claim in the text | command | result |
+|---|---|---|
+| a writer-level forcing mechanism exists | `grep -rn "force_full" crates/` · `grep -rn "requires_full" crates/` · `grep -rn "RequiresFullRewrite" crates/` | **0 hits each — 0 of 3.** No such identifier exists in any of the four crates |
+| it is "not left to each scrub Pass to remember" | read `crates/pdfce-core/src/redact.rs:1219–1224` | `apply_redactions` **remembers**: it calls `save_full(doc, &dirty, options)?` itself, under a comment naming R35. It is structural only in that the function returns finished bytes, so its own callers cannot override it — that binds `apply_redactions`, nothing else |
+| the writer refuses incremental save for scrubs | read `crates/pdfce-core/src/writer/save.rs:305–312` | the **only** refusal is `doc.loaded_via_recovery()` → `WriteError::RecoveredBaseForbidsIncremental`. Its own comment calls it *"Sibling of R35 / R58"* — a sibling, i.e. **R67 (§5.10)**, not an implementation of R58 |
+| obligation 2's decomposition is general | `grep -rn "decompose_containers" crates/` | **2 hits, both in `redact.rs`** (`:1215` call, `:1670` private definition). Redaction-local |
+| a verb's save mode is decided in core | `grep -rn "save_full\|save_incremental" crates/pdfce-cli/src/` | `main.rs:10733/10735/10743` — the **shell** picks via `RoundTripMode`. No `EditSession` verb constrains it |
+
+**Why this is worse than the scope staleness, and why it is a Pass.**
+The scope problem produces named exceptions that a reader can see. The
+mechanism problem produces **silence**: a future
+Sanitize / Remove-Hidden-Information / metadata-scrub Pass — which
+obligation 1 names *prospectively, by name* — would compile, review
+clean, and save incrementally, and would then satisfy obligation 3 with
+an absence test **that cannot fail**, because an absence assertion over
+incrementally-saved bytes is vacuous (the superseded object is still in
+the file; `C:\personal_rag\pdf\lesson_20260813_absence_assertion_vacuous_under_incremental_save.md`).
+**Two safeguards, both reading correct, both inert.** And per decision
+058, the only layer that could catch it today is a shell choosing
+`RoundTripMode::Full` — the layer that may be replaced wholesale.
+
+**One thing the remedy genuinely cannot do, recorded here because
+nothing in `redact.rs` says it.** `crates/pdfce-core/src/writer/save.rs:584`
+returns `WriteError::HybridFullRewrite` for a `SectionShape::Classic
+{ xref_stm: Some(_) }` document — a **hybrid-reference file cannot be
+full-rewritten at all** (§7.5.8.4, R33 — see §5.6). Since
+`apply_redactions` calls `save_full` and `RedactError::Write(#[from]
+WriteError)` propagates, **redaction on a hybrid file ERRORS rather than
+under-scrubbing.** That failure direction is correct and is not a
+defect. It does mean R58's remedy is *unavailable* on that file class,
+and any future scrub Pass told to "ride the forced full rewrite" will
+meet it as a surprise.
+
+**Obligation 1's wording is deliberately NOT rewritten here.** The fix
+is `ROADMAP.md`'s **`Pass 73.0`** (*Next up*), whose criterion 6
+requires this text to be corrected in the same filing that gives it a
+real mechanism to describe, and whose criterion 2 requires that
+mechanism to carry a **greppable identifier** — so the next audit of
+R58 is answerable by `grep`, which this one was not.
+
 ### 5.10 A cross-reference-recovered document forces a full rewrite (R67 — third sibling of §5.2/R35 and §5.9/R58)
 
 *(Added 2026-07-31, decision 013. **FLIPPED TO SHIPPED/ACTIVE 2026-08-01**
