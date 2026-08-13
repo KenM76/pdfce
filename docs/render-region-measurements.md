@@ -8,8 +8,8 @@ from the `pdfceGUI` session. Re-runnable:
 cargo run --release -p pdfce-render --example region_bench -- <file.pdf>
 ```
 
-**Subject:** `D:\Dev\temp\pdfce\ncored-benchmark-cad-drawing.pdf` — A1
-landscape (1190.55 × 841.89 pt), 5.6 MB, dense vector site plan,
+**Subject:** `D:\Dev\temp\pdfce\ncored-benchmark-cad-drawing.pdf` — **A3
+landscape** (1190.55 × 841.89 pt), 5.6 MB, dense vector site plan,
 148,517 paints · 24,128 clip ops. Release build. Load: ~5 ms.
 
 ---
@@ -58,7 +58,7 @@ This is the part the timing table understates. At scale 32 the whole page would
 be 38,112 × 26,940 px — **3.8 GiB, and over `MAX_PIXMAP_EDGE` regardless**, so
 it is not slow, it is *impossible*. The region renders in 1.07 s.
 
-| A1 landscape @ 2× DPR | whole-page | region |
+| a true A1 landscape @ 2× DPR | whole-page | region |
 |---|---|---|
 | max zoom | **3.4×** (guard-bound) | limited only by region size |
 | memory at max | 1.00 GiB | ~0.5 MB for a 400 × 300 pt viewport |
@@ -84,12 +84,47 @@ crate, and this measurement is the evidence for funding it.
 implementation exactly, differing only in pixmap size and a translation on the
 base CTM. Nothing is cached between calls.
 
+## ★ A SECOND DOCUMENT, and the caveat below was right
+
+**Measured 2026-08-13 by the `pdfceGUI` session** on `iso32000-2-preview.pdf`
+— the PDF 2.0 spec preview, 689 KB, text-heavy A4 — in answer to the
+one-document caveat this section originally carried:
+
+```text
+FULL   scale 1   596x842   =   501,832 px    8.97 ms
+FULL   scale 2  1191x1684  = 2,005,644 px   13.94 ms
+FLOOR  1x1pt      1x2      =         2 px    3.21 ms
+REGION scale 1   401x301   =   120,701 px    6.08 ms
+```
+
+| | dense CAD (A3) | text-heavy (A4) |
+|---|---:|---:|
+| interpretation floor | **691 ms** | **3.2 ms** |
+| full page, scale 1 | 877 ms | 8.97 ms |
+| floor as share of full page | **~99 %** | **~36 %** |
+
+**Both conclusions survive, but only one magnitude does.** *Never tile for
+speed* holds on both. *Tiling is a catastrophe* holds only where
+interpretation dominates: the 3×3 penalty is **~9×** on the CAD sheet and
+**~1.9×** on the text page, where the absolute numbers (29 ms vs 55 ms) put
+nothing about interactivity at stake.
+
+**The real finding is not about tiling at all.** It is that one document type
+costs **700 ms** per render and the other costs **9 ms** — a spread of nearly
+three orders of magnitude on the same code path. Any strategy tuned for one is
+mistuned for the other, which is the argument for the display-list handle
+below rather than for any particular render granularity.
+
 ## Honest limits of this measurement
 
-- **One document.** A dense CAD sheet is the worst case for interpretation cost
-  and the best case for the argument above. A text-heavy office page would show
-  a much lower floor and a relatively larger fill share; the "do not tile"
-  conclusion weakens as the floor falls.
+- ~~**One document.**~~ **Discharged** — see the section directly above. The
+  original caveat read: *"A dense CAD sheet is the worst case for
+  interpretation cost and the best case for the argument above. A text-heavy
+  office page would show a much lower floor and a relatively larger fill share;
+  the 'do not tile' conclusion weakens as the floor falls."* That is exactly
+  what the second measurement found. Kept rather than deleted, because a caveat
+  that turned out to be correct is evidence about how much to trust the next
+  one.
 - **One machine, single-threaded.** `pdfce-render` uses no `rayon` and no
   threads. Region fills are embarrassingly parallel once a display list exists;
   without one, parallelism would duplicate the floor per worker rather than

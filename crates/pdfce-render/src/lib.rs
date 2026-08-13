@@ -289,7 +289,8 @@ pub fn render_page_with_view(
 /// `page_edge × scale` and [`MAX_PIXMAP_EDGE`] silently becomes a **zoom
 /// ceiling that gets tighter the larger the sheet** — backwards for drafting
 /// review, where the big sheets carry the detail worth magnifying. On an A1
-/// landscape sheet at 2× device pixel ratio that ceiling is **3.4×**.
+/// landscape sheet at 2× device pixel ratio that ceiling is **3.4×**; on the
+/// A3 sheet the measurements were taken from, **6.9×**.
 ///
 /// Raising the constant does not fix it: a whole-page RGBA pixmap grows as the
 /// **square** of the edge, and 16,384 px is not arbitrary — it is exactly
@@ -306,7 +307,7 @@ pub fn render_page_with_view(
 ///
 /// What makes it worth having anyway is that `tiny_skia` culls geometry
 /// outside the pixmap cheaply, so the expensive half — anti-aliased span
-/// filling — is paid only for the region. On a dense A1 CAD drawing
+/// filling — is paid only for the region. On a dense A3 CAD drawing
 /// (148,517 paints, 24,128 clip ops) the measured figures are in
 /// `docs/render-region-measurements.md`.
 ///
