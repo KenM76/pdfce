@@ -2534,6 +2534,83 @@ impl AnchorWalk {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Selection survival across a delete (Pass 75.0)
+// ---------------------------------------------------------------------------
+
+/// Re-point a paint-order object index across a delete, or report that the
+/// object it named is gone.
+///
+/// # Why this exists at all — it is three lines a caller could write
+///
+/// Because getting it wrong is **silent**, and the wrong answer is worse than
+/// an error. `decompose_page` mints paint-order **positions**, not identities,
+/// and a position is only an identity while nothing moves. A shell holding a
+/// selection across `EditSession::delete_objects` has three possible outcomes:
+///
+/// | outcome | what the operator sees |
+/// |---|---|
+/// | the index resolves to the same object | correct |
+/// | the index resolves to nothing | correct — the selection clears |
+/// | **the index resolves to a DIFFERENT object** | **the outline redraws around the wrong thing, and the next Delete removes it** |
+///
+/// The third is unreportable after the fact: nothing errors, and the shell has
+/// no way to notice. It was raised by the `pdfceGUI` session
+/// (`request_stable_object_identity.md`, 2026-08-13), which correctly declined
+/// to build move/resize until it was answered:
+///
+/// > *"given a token taken before an edit, either resolve it to the same
+/// > object afterwards, or tell me it is gone. 'Resolves to a different
+/// > object' is the one answer that is worse than an error."*
+///
+/// A caller **does** have the information — it supplied `deleted` itself — so
+/// this could be re-derived at every call site. `R151`'s sibling argument
+/// applies: a formula every consumer re-implements is a defect waiting for one
+/// of them to get the `<` versus `<=` backwards, and that particular slip
+/// produces an off-by-one that only manifests when the deleted object sits
+/// exactly at the selection boundary.
+///
+/// # Which verbs need this
+///
+/// **Only the `delete_*` family.** `crates/pdfce-core/tests/object_identity_across_edits.rs`
+/// proves empirically that `move_*` does **not** renumber — it rewrites
+/// operator operands in place, so no operator is added or removed and the
+/// decomposition yields the same objects in the same order. Indices are
+/// therefore stable across moves, resizes and node edits, and no remapping is
+/// needed for them.
+///
+/// # Returns
+///
+/// `Some(new_index)` if the object survived, `None` if `index` was itself
+/// deleted. `deleted` need not be sorted and may contain duplicates.
+///
+/// # Examples
+///
+/// ```
+/// use pdfce_core::vector::remap_index_after_delete;
+///
+/// // Deleting object 1 from a page of five.
+/// assert_eq!(remap_index_after_delete(0, &[1]), Some(0)); // before the hole
+/// assert_eq!(remap_index_after_delete(1, &[1]), None);    // it was the hole
+/// assert_eq!(remap_index_after_delete(2, &[1]), Some(1)); // shifted down
+/// assert_eq!(remap_index_after_delete(4, &[1, 3]), Some(2)); // two holes below
+/// ```
+#[must_use]
+pub fn remap_index_after_delete(index: usize, deleted: &[usize]) -> Option<usize> {
+    if deleted.contains(&index) {
+        return None;
+    }
+    // Count DISTINCT deleted indices strictly below `index`. Distinct, because
+    // `deleted` is caller-supplied and a duplicate would otherwise shift the
+    // survivor twice — a plausible input (a shell unioning two selections)
+    // producing a silently wrong answer, which is the whole failure class this
+    // function exists to close.
+    let mut below: Vec<usize> = deleted.iter().copied().filter(|&d| d < index).collect();
+    below.sort_unstable();
+    below.dedup();
+    Some(index - below.len())
+}
+
 #[cfg(test)]
 #[allow(
     clippy::unwrap_used,
