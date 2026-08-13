@@ -42,6 +42,7 @@ use crate::writer::content::{ContentBuilder, LineCap, LineJoin, Paint};
 use super::group::{DimStandard, DimensionKind};
 use super::measure_dict::build_measure_dict;
 use super::style::{ArrowForm, StyleDefaults, StyleOverrides};
+use super::tolerance::Tolerance;
 use super::units::{NumberFormat, ScaleState};
 use crate::vector::Rgb;
 
@@ -89,6 +90,12 @@ pub struct DimensionStyle {
     /// unconditional black, written both into the content stream and the
     /// annotation's `/C`).
     pub color: Rgb,
+    /// The tolerance drawn beside (or, for a limit tolerance, instead of) the
+    /// nominal value (Pass 69.1).
+    pub tolerance: Tolerance,
+    /// The tolerance's own decimal precision; `None` ⇒ the nominal's
+    /// (Pass 69.1).
+    pub tolerance_places: Option<u32>,
 }
 
 impl DimensionStyle {
@@ -114,6 +121,8 @@ impl DimensionStyle {
             arrow_length: f.arrow_length,
             arrow_form: f.arrow_form,
             color: f.color,
+            tolerance: f.tolerance,
+            tolerance_places: f.tolerance_places,
         }
     }
 }
@@ -275,7 +284,29 @@ pub fn author_dimension(kind: &DimensionKind, style: DimensionStyle) -> Authored
     // baked label is the copy that outlives the session. See
     // `DimensionKind::display_with`.
     let display = kind.display_with(scale, format);
-    let label = format!("{}{}", kind.caption_prefix(), display.text);
+    // The label, nominal + tolerance, built in ONE place (Pass 69.1).
+    //
+    // `Pass 68.0` shipped a defect whose entire cause was two independent
+    // derivations of a display value — the pane read `77.5°` while the `/AP`
+    // baked into the document read `77.47 pt`. The tolerance caption is
+    // therefore assembled by `Tolerance::caption`, here, and every other
+    // surface reads what this produced rather than recomputing it.
+    let tol_places = style
+        .tolerance_places
+        .unwrap_or_else(|| nominal_places(format));
+    let label = if style.tolerance.suppresses_nominal() {
+        // A limit tolerance PRINTS ITS TWO LIMITS AND NOT THE NOMINAL
+        // (`SolidWorks_Dimensions` §A.1). The measured value is unchanged and
+        // still in the sidecar — this is a display decision, not a loss.
+        style.tolerance.caption(format, tol_places)
+    } else {
+        format!(
+            "{}{}{}",
+            kind.caption_prefix(),
+            display.text,
+            style.tolerance.caption(format, tol_places)
+        )
+    };
 
     // The leader endpoints in page space (the /L pair).
     let (l0, l1) = leader_endpoints(kind);
@@ -408,6 +439,34 @@ pub fn author_dimension(kind: &DimensionKind, style: DimensionStyle) -> Authored
             ty + uy * du - py * label_size * 0.3,
         ));
     }
+    // The BASIC box (Pass 69.1): a theoretically-exact value is drawn inside a
+    // rectangle, and the box IS the notation - `Tolerance::Basic` prints no
+    // text of its own. Drawn BEFORE the text so a future filled box cannot
+    // paint over the glyphs, and sized off the same `text_w`/`label_size` the
+    // text uses so the two cannot disagree.
+    if style.tolerance.is_boxed() {
+        let pad = label_size * 0.25;
+        let (bw, bh) = (text_w + pad * 2.0, label_size + pad * 2.0);
+        // In the text's own frame, so a rotated (ISO-aligned) label gets a
+        // rotated box rather than an axis-aligned one that no longer fits.
+        let corner = |du: f64, dv: f64| Point::new(tx + ux * du + px * dv, ty + uy * du + py * dv);
+        let quad = [
+            corner(-pad, -pad - label_size * 0.25),
+            corner(bw - pad, -pad - label_size * 0.25),
+            corner(bw - pad, bh - pad - label_size * 0.25),
+            corner(-pad, bh - pad - label_size * 0.25),
+        ];
+        b.move_to(quad[0].x, quad[0].y);
+        for q in &quad[1..] {
+            b.line_to(q.x, q.y);
+        }
+        b.close_subpath();
+        b.paint(Paint::Stroke);
+        for q in quad {
+            bounds.add(q);
+        }
+    }
+
     b.begin_text();
     b.set_font(FONT_RESOURCE, label_size);
     b.set_text_matrix(ux, uy, -uy, ux, tx, ty);
@@ -476,6 +535,21 @@ pub fn author_dimension(kind: &DimensionKind, style: DimensionStyle) -> Authored
         ap_content: b.into_bytes(),
         rect,
         label,
+    }
+}
+
+/// The nominal's own decimal precision, for a tolerance that follows it.
+///
+/// The reference expresses "same as nominal" as a −3 sentinel inside the digit
+/// count (`swTolerancePrecisionFollowsNominal`, `SolidWorks_Dimensions` §B.2);
+/// pdfce expresses it as an absent value and resolves it here. A fractional
+/// format has no decimal digits at all, and a tolerance beside a `5/8"` is
+/// still written as a decimal in practice, so it falls back to two — stated
+/// rather than silently assumed, because it IS an assumption.
+fn nominal_places(format: NumberFormat) -> u32 {
+    match format.fraction {
+        super::units::FractionMode::Decimal { places } => places,
+        super::units::FractionMode::Fraction { .. } => 2,
     }
 }
 

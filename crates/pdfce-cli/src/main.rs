@@ -3385,6 +3385,14 @@ enum Command {
         /// Colour, as `r,g,b` components in 0.0-1.0 or as `#rrggbb`.
         #[arg(long)]
         color: Option<String>,
+        /// Tolerance, as `none` | `basic` | `min` | `max` | `sym:<v>` |
+        /// `dev:<plus>/<minus>` | `limit:<upper>/<lower>`. Values are in the
+        /// DISPLAYED unit, not page points.
+        #[arg(long, allow_hyphen_values = true)]
+        tolerance: Option<String>,
+        /// The tolerance's own decimal precision. Omit to follow the nominal's.
+        #[arg(long)]
+        tolerance_places: Option<u32>,
         /// Clear a property back to the factory default (repeatable, or
         /// comma-separated). Property names are the ones
         /// `dimension-list --style` prints.
@@ -3452,6 +3460,14 @@ enum Command {
         /// Colour, as `r,g,b` components in 0.0-1.0 or as `#rrggbb`.
         #[arg(long)]
         color: Option<String>,
+        /// Tolerance, as `none` | `basic` | `min` | `max` | `sym:<v>` |
+        /// `dev:<plus>/<minus>` | `limit:<upper>/<lower>`. Values are in the
+        /// DISPLAYED unit, not page points.
+        #[arg(long, allow_hyphen_values = true)]
+        tolerance: Option<String>,
+        /// The tolerance's own decimal precision. Omit to follow the nominal's.
+        #[arg(long)]
+        tolerance_places: Option<u32>,
         /// Clear an override, returning that property to inheritance
         /// (repeatable, or comma-separated).
         #[arg(long, value_enum, value_delimiter = ',')]
@@ -5585,6 +5601,8 @@ fn run() -> ExitCode {
             arrow_length,
             arrow_form,
             color,
+            tolerance,
+            tolerance_places,
             clear,
             reset,
             output,
@@ -5599,6 +5617,8 @@ fn run() -> ExitCode {
                 arrow_length,
                 arrow_form,
                 color,
+                tolerance,
+                tolerance_places,
             },
             clear: &clear,
             reset,
@@ -5620,6 +5640,8 @@ fn run() -> ExitCode {
             arrow_length,
             arrow_form,
             color,
+            tolerance,
+            tolerance_places,
             clear,
             reset,
             output,
@@ -5640,6 +5662,8 @@ fn run() -> ExitCode {
                 arrow_length,
                 arrow_form,
                 color,
+                tolerance,
+                tolerance_places,
             },
             clear: &clear,
             reset,
@@ -17704,6 +17728,10 @@ enum StylePropArg {
     ArrowForm,
     /// Colour.
     Color,
+    /// Tolerance (Pass 69.1).
+    Tolerance,
+    /// Tolerance precision (Pass 69.1).
+    TolerancePlaces,
 }
 
 /// The terminator forms, mirrored from `pdfce_core::dimension::ArrowForm`.
@@ -17759,6 +17787,8 @@ struct AppearanceArgs {
     arrow_length: Option<f64>,
     arrow_form: Option<ArrowFormArg>,
     color: Option<String>,
+    tolerance: Option<String>,
+    tolerance_places: Option<u32>,
 }
 
 struct GroupStyleArgs<'a> {
@@ -17879,6 +17909,8 @@ fn cmd_group_style(args: &GroupStyleArgs<'_>) -> u8 {
             StylePropArg::ArrowLength => style.arrow_length = None,
             StylePropArg::ArrowForm => style.arrow_form = None,
             StylePropArg::Color => style.color = None,
+            StylePropArg::Tolerance => style.tolerance = None,
+            StylePropArg::TolerancePlaces => style.tolerance_places = None,
             // Named so the refusal says WHICH property and WHY, rather than
             // ignoring the flag and leaving the operator to discover from the
             // saved file that nothing happened.
@@ -17909,6 +17941,12 @@ fn cmd_group_style(args: &GroupStyleArgs<'_>) -> u8 {
             }
             if let Some(v) = a.color {
                 style.color = Some(v);
+            }
+            if let Some(v) = a.tolerance {
+                style.tolerance = Some(v);
+            }
+            if let Some(v) = a.tolerance_places {
+                style.tolerance_places = Some(v);
             }
         }
         Err(msg) => {
@@ -17956,6 +17994,8 @@ struct ResolvedAppearance {
     arrow_length: Option<f64>,
     arrow_form: Option<pdfce_core::dimension::ArrowForm>,
     color: Option<pdfce_core::vector::Rgb>,
+    tolerance: Option<pdfce_core::dimension::Tolerance>,
+    tolerance_places: Option<u32>,
 }
 
 fn apply_appearance(a: &AppearanceArgs) -> Result<ResolvedAppearance, String> {
@@ -17974,7 +18014,79 @@ fn apply_appearance(a: &AppearanceArgs) -> Result<ResolvedAppearance, String> {
             .transpose()?,
         arrow_form: a.arrow_form.map(ArrowFormArg::to_core),
         color: a.color.as_deref().map(parse_style_color).transpose()?,
+        tolerance: a.tolerance.as_deref().map(parse_tolerance).transpose()?,
+        tolerance_places: match a.tolerance_places {
+            Some(p) if p > 12 => {
+                return Err(format!(
+                    "--tolerance-places {p} is not a precision (max 12)"
+                ));
+            }
+            other => other,
+        },
     })
+}
+
+/// Parse a `--tolerance` spec (Pass 69.1).
+///
+/// Grammar, deliberately terse because it is typed by hand into a batch
+/// script and read back in a diff:
+///
+/// ```text
+/// none | basic | min | max
+/// sym:<magnitude>            symmetric,  drawn ±v
+/// dev:<plus>/<minus>         deviation,  drawn +p/-m   (both signed)
+/// limit:<upper>/<lower>      limit,      drawn u/l     (nominal suppressed)
+/// ```
+///
+/// Long forms (`symmetric:`, `deviation:`) are accepted for the same reason
+/// the tokens are what the sidecar stores: a script that reads a value out of
+/// `dimension-list --style` should be able to feed it straight back in.
+///
+/// Every parse runs through `Tolerance::validate`, so a refusal here says the
+/// same thing the core API would say rather than a second, differently-worded
+/// approximation of it.
+fn parse_tolerance(spec: &str) -> Result<pdfce_core::dimension::Tolerance, String> {
+    use pdfce_core::dimension::Tolerance;
+    let s = spec.trim();
+    let (head, rest) = s.split_once(':').map_or((s, ""), |(h, r)| (h, r));
+    let num = |t: &str| -> Result<f64, String> {
+        t.trim()
+            .parse::<f64>()
+            .map_err(|_| format!("`{t}` is not a number in --tolerance `{spec}`"))
+    };
+    let pair = |what: &str| -> Result<(f64, f64), String> {
+        // `split_once('/')` and not `split('/')`: a negative number carries no
+        // slash, so the FIRST slash is always the separator, and splitting on
+        // all of them would accept `1/2/3` as if it meant something.
+        let (a, b) = rest.split_once('/').ok_or_else(|| {
+            format!("--tolerance {what} needs two values as `<{what}>:<a>/<b>`, got `{spec}`")
+        })?;
+        Ok((num(a)?, num(b)?))
+    };
+    let t = match head.to_ascii_lowercase().as_str() {
+        "none" => Tolerance::None,
+        "basic" => Tolerance::Basic,
+        "min" => Tolerance::Min,
+        "max" => Tolerance::Max,
+        "sym" | "symmetric" => Tolerance::Symmetric {
+            magnitude: num(rest)?,
+        },
+        "dev" | "deviation" => {
+            let (plus, minus) = pair("dev")?;
+            Tolerance::Deviation { plus, minus }
+        }
+        "limit" => {
+            let (upper, lower) = pair("limit")?;
+            Tolerance::Limit { upper, lower }
+        }
+        other => {
+            return Err(format!(
+                "unknown --tolerance `{other}` \
+                 (none|basic|min|max|sym:<v>|dev:<p>/<m>|limit:<u>/<l>)"
+            ));
+        }
+    };
+    t.validate().map_err(|e| e.to_string())
 }
 
 /// `dimension-style` - set ONE ce dimension's overrides (Pass 69.0).
@@ -18015,6 +18127,8 @@ fn cmd_dimension_style(args: &DimensionStyleArgs<'_>) -> u8 {
             StylePropArg::ArrowLength => style.arrow_length = None,
             StylePropArg::ArrowForm => style.arrow_form = None,
             StylePropArg::Color => style.color = None,
+            StylePropArg::Tolerance => style.tolerance = None,
+            StylePropArg::TolerancePlaces => style.tolerance_places = None,
         }
     }
     if let Some(token) = args.unit {
@@ -18072,6 +18186,12 @@ fn cmd_dimension_style(args: &DimensionStyleArgs<'_>) -> u8 {
             }
             if let Some(v) = a.color {
                 style.color = Some(v);
+            }
+            if let Some(v) = a.tolerance {
+                style.tolerance = Some(v);
+            }
+            if let Some(v) = a.tolerance_places {
+                style.tolerance_places = Some(v);
             }
         }
         Err(msg) => {
@@ -18157,6 +18277,15 @@ fn cmd_dimension_list(input: &Path, show_style: bool) -> u8 {
                     .map_or_else(|| "-".to_owned(), |f| f.token().to_owned()),
                 opt_color(st.color),
             );
+            // The group's DEFAULT tolerance (Pass 69.1), on its own line
+            // because a tolerance spec carries slashes and colons and would be
+            // unreadable wedged into the space-separated line above.
+            println!(
+                "    group-tolerance {} places={}",
+                st.tolerance
+                    .map_or_else(|| "-".to_owned(), format_tolerance_spec),
+                opt_places(st.tolerance_places),
+            );
         }
     }
     for d in model.dimensions() {
@@ -18207,7 +18336,7 @@ fn cmd_dimension_list(input: &Path, show_style: bool) -> u8 {
             };
             let resolved = pdfce_core::dimension::resolve_style(group, &d.style);
             let prov = pdfce_core::dimension::style_provenance(group, &d.style);
-            let values: [(&str, String); 9] = [
+            let values: [(&str, String); 11] = [
                 ("unit", resolved.format.unit.token().to_owned()),
                 ("fraction", format_fraction(resolved.format.fraction)),
                 (
@@ -18228,6 +18357,14 @@ fn cmd_dimension_list(input: &Path, show_style: bool) -> u8 {
                         "{},{},{}",
                         resolved.color.r, resolved.color.g, resolved.color.b
                     ),
+                ),
+                ("tolerance", format_tolerance_spec(resolved.tolerance)),
+                (
+                    "tolerance-places",
+                    // `-` means "follow the nominal's precision", which is a
+                    // different statement from any digit count and must not be
+                    // printed as one.
+                    opt_places(resolved.tolerance_places),
                 ),
             ];
             // Paired positionally against `StyleProvenance::each`, whose own
@@ -18267,6 +18404,29 @@ fn fmt_num(v: f64) -> String {
     } else {
         s.to_owned()
     }
+}
+
+/// A tolerance in the exact spec grammar `--tolerance` accepts back, so a
+/// value read out of a listing can be fed straight into a script.
+fn format_tolerance_spec(t: pdfce_core::dimension::Tolerance) -> String {
+    use pdfce_core::dimension::Tolerance;
+    match t {
+        Tolerance::None | Tolerance::Basic | Tolerance::Min | Tolerance::Max => {
+            t.token().to_owned()
+        }
+        Tolerance::Symmetric { magnitude } => format!("sym:{}", fmt_num(magnitude)),
+        Tolerance::Deviation { plus, minus } => {
+            format!("dev:{}/{}", fmt_num(plus), fmt_num(minus))
+        }
+        Tolerance::Limit { upper, lower } => {
+            format!("limit:{}/{}", fmt_num(upper), fmt_num(lower))
+        }
+    }
+}
+
+/// A precision slot, or `-` for "follow the nominal's".
+fn opt_places(p: Option<u32>) -> String {
+    p.map_or_else(|| "-".to_owned(), |p| p.to_string())
 }
 
 /// The number format, in the vocabulary `dimension-style` accepts back.

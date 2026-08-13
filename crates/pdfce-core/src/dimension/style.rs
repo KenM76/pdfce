@@ -71,17 +71,20 @@
 //!    way nothing on the page discloses. `fuzzy-never-sneaky` (project rule 4)
 //!    makes that a refusal rather than a feature.
 //!
-//! ## What this module deliberately does NOT contain
+//! ## Tolerance is one of these properties, not a parallel system
 //!
-//! **Tolerance.** It is the other half of the operator's request and lands in
-//! `Pass 69.1`, on `DimensionRecord`, participating in this exact cascade. The
-//! mechanism is built here first precisely so tolerance can be one more
-//! property rather than a second, divergent inheritance design.
+//! `Pass 69.1` added [`super::tolerance::Tolerance`] and its own precision
+//! slot as the tenth and eleventh properties of this same cascade — which was
+//! the point of building the mechanism first. A group can carry a default
+//! tolerance and one ce dimension can override it, using the same `Option`,
+//! the same provenance reporting and the same clear-restores-inheritance
+//! semantics as a stroke width.
 
 use crate::vector::Rgb;
 
 use super::author::DimensionStyle;
 use super::group::{DimStandard, Group};
+use super::tolerance::Tolerance;
 use super::units::{DecimalMarker, FractionMode, NumberFormat, Unit};
 
 /// The terminator drawn at each end of a ce dimension line.
@@ -183,6 +186,17 @@ pub struct StyleDefaults {
     pub arrow_form: ArrowForm,
     /// Line + text + terminator colour.
     pub color: Rgb,
+    /// The tolerance drawn beside the nominal (`Pass 69.1`).
+    pub tolerance: Tolerance,
+    /// The tolerance's OWN decimal precision, or `None` for "same as the
+    /// nominal's" (`Pass 69.1`).
+    ///
+    /// A separate slot because the reference has one too — four precision
+    /// slots, not one (`SolidWorks_Dimensions` §B.1). `None` is pdfce's
+    /// spelling of `swTolerancePrecisionFollowsNominal`, which the reference
+    /// expresses as a −3 sentinel hidden inside the digit count; a distinct
+    /// absent-value is the same information without the trap.
+    pub tolerance_places: Option<u32>,
 }
 
 impl StyleDefaults {
@@ -194,6 +208,10 @@ impl StyleDefaults {
         arrow_length: 7.0,
         arrow_form: ArrowForm::Filled,
         color: Rgb::BLACK,
+        // No tolerance is the factory default, and it is what every ce
+        // dimension authored before `Pass 69.1` carries.
+        tolerance: Tolerance::None,
+        tolerance_places: None,
     };
 }
 
@@ -225,6 +243,15 @@ pub struct GroupStyle {
     pub arrow_form: Option<ArrowForm>,
     /// Line/text/terminator colour; `None` ⇒ factory (black).
     pub color: Option<Rgb>,
+    /// The group's DEFAULT tolerance (`Pass 69.1`); `None` ⇒ factory (none).
+    ///
+    /// This is the ui-spec's *"document-level default tolerance"* (§C.11.1,
+    /// its item 15) landing at the group tier instead — the tier that already
+    /// owns every other default, and the one the operator named.
+    pub tolerance: Option<Tolerance>,
+    /// The group's default tolerance precision; `None` ⇒ factory (follow the
+    /// nominal's).
+    pub tolerance_places: Option<u32>,
 }
 
 impl GroupStyle {
@@ -269,6 +296,17 @@ pub struct StyleOverrides {
     pub arrow_form: Option<ArrowForm>,
     /// Colour; `None` ⇒ the group's, then factory.
     pub color: Option<Rgb>,
+    /// This ce dimension's tolerance (`Pass 69.1`); `None` ⇒ the group's
+    /// default, then factory (none).
+    ///
+    /// Overriding a group default WITH "no tolerance" is `Some(Tolerance::None)`
+    /// — deliberately distinct from `None`, which means inherit. A group that
+    /// tolerances everything and one feature that must not be toleranced is a
+    /// real drawing, and it cannot be expressed if the two collapse.
+    pub tolerance: Option<Tolerance>,
+    /// This ce dimension's tolerance precision; `None` ⇒ the group's, then
+    /// factory (follow the nominal's).
+    pub tolerance_places: Option<u32>,
 }
 
 impl StyleOverrides {
@@ -294,6 +332,8 @@ impl StyleOverrides {
             + usize::from(self.arrow_length.is_some())
             + usize::from(self.arrow_form.is_some())
             + usize::from(self.color.is_some())
+            + usize::from(self.tolerance.is_some())
+            + usize::from(self.tolerance_places.is_some())
     }
 }
 
@@ -366,6 +406,10 @@ pub struct StyleProvenance {
     pub arrow_form: StyleSource,
     /// Source of the colour.
     pub color: StyleSource,
+    /// Source of the tolerance.
+    pub tolerance: StyleSource,
+    /// Source of the tolerance precision.
+    pub tolerance_places: StyleSource,
 }
 
 impl StyleProvenance {
@@ -376,7 +420,7 @@ impl StyleProvenance {
     /// gets a compile error, not a silently shorter listing, when a property
     /// is added and this method is not extended.
     #[must_use]
-    pub const fn each(&self) -> [(&'static str, StyleSource); 9] {
+    pub const fn each(&self) -> [(&'static str, StyleSource); 11] {
         [
             ("unit", self.unit),
             ("fraction", self.fraction),
@@ -387,6 +431,8 @@ impl StyleProvenance {
             ("arrow-length", self.arrow_length),
             ("arrow-form", self.arrow_form),
             ("color", self.color),
+            ("tolerance", self.tolerance),
+            ("tolerance-places", self.tolerance_places),
         ]
     }
 }
@@ -459,6 +505,14 @@ pub fn resolve_style(group: &Group, over: &StyleOverrides) -> DimensionStyle {
             .or(group.style.arrow_form)
             .unwrap_or(f.arrow_form),
         color: over.color.or(group.style.color).unwrap_or(f.color),
+        tolerance: over
+            .tolerance
+            .or(group.style.tolerance)
+            .unwrap_or(f.tolerance),
+        tolerance_places: over
+            .tolerance_places
+            .or(group.style.tolerance_places)
+            .or(f.tolerance_places),
     }
 }
 
@@ -509,6 +563,11 @@ pub fn style_provenance(group: &Group, over: &StyleOverrides) -> StyleProvenance
         ),
         arrow_form: three(over.arrow_form.is_some(), group.style.arrow_form.is_some()),
         color: three(over.color.is_some(), group.style.color.is_some()),
+        tolerance: three(over.tolerance.is_some(), group.style.tolerance.is_some()),
+        tolerance_places: three(
+            over.tolerance_places.is_some(),
+            group.style.tolerance_places.is_some(),
+        ),
     }
 }
 
@@ -574,7 +633,7 @@ mod tests {
         // A property whose group tier is a concrete field never reports
         // Factory — the group always has an answer for it.
         assert_eq!(p.standard, StyleSource::Group);
-        assert_eq!(p.each().len(), 9);
+        assert_eq!(p.each().len(), 11);
     }
 
     /// `follows_group` is the predicate a UI actually needs, and getting it

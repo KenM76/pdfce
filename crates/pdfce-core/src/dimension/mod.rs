@@ -65,6 +65,9 @@ pub mod sidecar;
 /// per-property override model behind the operator's group-default-plus-
 /// override-checkbox request.
 pub mod style;
+/// The ce-dimension TOLERANCE model (`Pass 69.1`): the SolidWorks-style
+/// notation set, carried as one more property of the `Pass 69.0` cascade.
+pub mod tolerance;
 /// Turn two picked lines into the ce dimension they call for — the single
 /// implementation shared by the CLI's `--kind two-lines` and the GUI gesture.
 pub mod two_lines;
@@ -86,6 +89,7 @@ pub use style::{
     ArrowForm, GroupStyle, StyleDefaults, StyleOverrides, StyleProvenance, StyleSource,
     resolve_style, style_provenance,
 };
+pub use tolerance::{Tolerance, ToleranceError};
 pub use two_lines::{TwoLineAuthoring, TwoLinePlacement, TwoLineRefusal, author_from_two_lines};
 pub use units::{
     DecimalMarker, FractionMode, MeasurementDisplay, NO_SCALE_DISCLOSURE, NumberFormat, ScaleEntry,

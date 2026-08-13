@@ -35,6 +35,7 @@ use super::group::{
     DimStandard, DimensionId, DimensionKind, DimensionModel, DimensionRecord, Group, GroupId,
 };
 use super::style::{ArrowForm, GroupStyle, StyleOverrides};
+use super::tolerance::Tolerance;
 use super::units::{DecimalMarker, FractionMode, NumberFormat, ScaleState, Unit};
 use crate::vector::Rgb;
 
@@ -196,6 +197,8 @@ fn serialize_group(g: &Group) -> Object {
             arrow_length: g.style.arrow_length,
             arrow_form: g.style.arrow_form,
             color: g.style.color,
+            tolerance: g.style.tolerance,
+            tolerance_places: g.style.tolerance_places,
         },
     );
     Object::Dict(d)
@@ -258,6 +261,8 @@ fn deserialize_group(obj: &Object) -> Option<Group> {
                 arrow_length: k.arrow_length,
                 arrow_form: k.arrow_form,
                 color: k.color,
+                tolerance: k.tolerance,
+                tolerance_places: k.tolerance_places,
             }
         },
     })
@@ -376,6 +381,8 @@ fn serialize_dimension(dim: &DimensionRecord) -> Object {
             arrow_length: dim.style.arrow_length,
             arrow_form: dim.style.arrow_form,
             color: dim.style.color,
+            tolerance: dim.style.tolerance,
+            tolerance_places: dim.style.tolerance_places,
         },
     );
     Object::Dict(d)
@@ -442,6 +449,8 @@ fn deserialize_dimension(obj: &Object) -> Option<DimensionRecord> {
             arrow_length: appearance.arrow_length,
             arrow_form: appearance.arrow_form,
             color: appearance.color,
+            tolerance: appearance.tolerance,
+            tolerance_places: appearance.tolerance_places,
         },
     })
 }
@@ -462,6 +471,8 @@ struct StyleKeys {
     arrow_length: Option<f64>,
     arrow_form: Option<ArrowForm>,
     color: Option<Rgb>,
+    tolerance: Option<Tolerance>,
+    tolerance_places: Option<u32>,
 }
 
 /// Write the appearance keys that are actually set. Absent = inherit.
@@ -491,6 +502,33 @@ fn put_style_keys(d: &mut Dict, k: StyleKeys) {
             ]),
         );
     }
+    // The tolerance (Pass 69.1): a type name plus, for the two numeric types,
+    // a pair of values under names that say which is which. A positional
+    // `[a b]` array would be one transposition away from turning a `+0.2/-0.1`
+    // into a `-0.1/+0.2`, and nothing downstream could tell.
+    if let Some(t) = k.tolerance {
+        d.insert(
+            Name::from(b"Tolerance"),
+            Object::Name(Name::from(t.token().as_bytes())),
+        );
+        match t {
+            Tolerance::Symmetric { magnitude } => {
+                d.insert(Name::from(b"TolMagnitude"), Object::Real(magnitude));
+            }
+            Tolerance::Deviation { plus, minus } => {
+                d.insert(Name::from(b"TolPlus"), Object::Real(plus));
+                d.insert(Name::from(b"TolMinus"), Object::Real(minus));
+            }
+            Tolerance::Limit { upper, lower } => {
+                d.insert(Name::from(b"TolUpper"), Object::Real(upper));
+                d.insert(Name::from(b"TolLower"), Object::Real(lower));
+            }
+            Tolerance::None | Tolerance::Basic | Tolerance::Min | Tolerance::Max => {}
+        }
+    }
+    if let Some(places) = k.tolerance_places {
+        d.insert(Name::from(b"TolPlaces"), Object::Integer(i64::from(places)));
+    }
 }
 
 /// Read the appearance keys back. Anything absent, malformed, or outside a
@@ -512,7 +550,43 @@ fn read_style_keys(d: &Dict) -> StyleKeys {
             .and_then(|n| String::from_utf8(n).ok())
             .and_then(|t| ArrowForm::parse(&t)),
         color: color_of(d.get(b"Color")),
+        tolerance: read_tolerance(d),
+        tolerance_places: d
+            .get(b"TolPlaces")
+            .and_then(Object::as_int)
+            .and_then(|v| u32::try_from(v).ok())
+            .filter(|p| *p <= 12),
     }
+}
+
+/// Read a tolerance back, or `None` for absent/malformed/invalid.
+///
+/// Runs the value through [`Tolerance::validate`] rather than trusting it,
+/// which is the difference between a file describing a tolerance and a file
+/// describing a tolerance that could be drawn. An inverted limit pair out of a
+/// corrupted file would otherwise print a drawing stating the maximum is below
+/// the minimum — a manufacturing defect delivered by a parser.
+fn read_tolerance(d: &Dict) -> Option<Tolerance> {
+    let num = |key: &[u8]| d.get(key).and_then(Object::as_number);
+    let t = match name_of(d.get(b"Tolerance"))?.as_slice() {
+        b"none" => Tolerance::None,
+        b"basic" => Tolerance::Basic,
+        b"min" => Tolerance::Min,
+        b"max" => Tolerance::Max,
+        b"symmetric" => Tolerance::Symmetric {
+            magnitude: num(b"TolMagnitude")?,
+        },
+        b"deviation" => Tolerance::Deviation {
+            plus: num(b"TolPlus")?,
+            minus: num(b"TolMinus")?,
+        },
+        b"limit" => Tolerance::Limit {
+            upper: num(b"TolUpper")?,
+            lower: num(b"TolLower")?,
+        },
+        _ => return None,
+    };
+    t.validate().ok()
 }
 
 /// Write the four MEASUREMENT-side overrides (unit, fraction, marker,
@@ -970,6 +1044,8 @@ mod style_sidecar_tests {
                 b"OvFrac",
                 b"OvStandard",
                 b"OvDecimalMarker",
+                b"Tolerance",
+                b"TolPlaces",
             ] {
                 assert!(
                     e.get(key).is_none(),
@@ -993,6 +1069,8 @@ mod style_sidecar_tests {
                 g: 0.0,
                 b: 0.0,
             }),
+            tolerance: Some(Tolerance::Symmetric { magnitude: 0.25 }),
+            tolerance_places: Some(3),
         };
         let first = model.dimensions()[0].id;
         model.dimension_mut(first).unwrap().style = StyleOverrides {
@@ -1008,6 +1086,11 @@ mod style_sidecar_tests {
             arrow_length: Some(5.0),
             arrow_form: Some(ArrowForm::Dot),
             color: None,
+            tolerance: Some(Tolerance::Deviation {
+                plus: 0.2,
+                minus: -0.1,
+            }),
+            tolerance_places: None,
         };
 
         let back = deserialize_model(&serialize_model(&model)).expect("round trip");

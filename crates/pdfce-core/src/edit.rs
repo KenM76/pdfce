@@ -2469,6 +2469,20 @@ pub enum EditError {
         /// The dimension id.
         id: u32,
     },
+    /// A **tolerance** was supplied that cannot be drawn (`Pass 69.1`).
+    ///
+    /// Refused rather than repaired, and refused BEFORE anything is written.
+    /// The three cases are a non-finite number, a negative symmetric
+    /// magnitude (`±-0.1` is a typo, not a tolerance) and an inverted limit
+    /// pair. Silently swapping an inverted pair would print a drawing stating
+    /// that the maximum is below the minimum, which is a manufacturing defect
+    /// delivered by an editor being helpful.
+    #[error("that tolerance cannot be drawn: {reason}")]
+    InvalidTolerance {
+        /// Which of the three, in the words
+        /// [`crate::dimension::ToleranceError`] itself uses.
+        reason: String,
+    },
     /// Field authoring was asked for on a document carrying an **XFA**
     /// layer (§12.7.8).
     ///
@@ -16030,9 +16044,10 @@ impl EditSession {
     ///
     /// # Errors
     ///
-    /// [`EditError::DimensionGroupNotFound`] for an unknown group, plus the
-    /// encryption, enforced-certification and newer-sidecar guards every
-    /// ce-dimension mutation carries. Every refusal happens before any
+    /// [`EditError::DimensionGroupNotFound`] for an unknown group;
+    /// [`EditError::InvalidTolerance`] for a tolerance that cannot be drawn;
+    /// plus the encryption, enforced-certification and newer-sidecar guards
+    /// every ce-dimension mutation carries. Every refusal happens before any
     /// mutation.
     pub fn set_group_style(
         &mut self,
@@ -16045,6 +16060,13 @@ impl EditSession {
         self.check_certification()?;
         self.check_dimension_sidecar()?;
 
+        // Validate BEFORE touching the model (rule 4: a refusal never leaves
+        // a half-written model behind).
+        if let Some(t) = style.tolerance {
+            t.validate().map_err(|e| EditError::InvalidTolerance {
+                reason: e.to_string(),
+            })?;
+        }
         let mut model = self.read_dimension_model();
         let Some(g) = model.group_mut(group) else {
             return Err(EditError::DimensionGroupNotFound { id: group.0 });
@@ -16087,8 +16109,9 @@ impl EditSession {
     ///
     /// # Errors
     ///
-    /// [`EditError::DimensionNotFound`] for an unknown id, plus the
-    /// encryption, enforced-certification and newer-sidecar guards.
+    /// [`EditError::DimensionNotFound`] for an unknown id;
+    /// [`EditError::InvalidTolerance`] for a tolerance that cannot be drawn;
+    /// plus the encryption, enforced-certification and newer-sidecar guards.
     pub fn set_dimension_style(
         &mut self,
         dimension: DimensionId,
@@ -16100,6 +16123,11 @@ impl EditSession {
         self.check_certification()?;
         self.check_dimension_sidecar()?;
 
+        if let Some(t) = style.tolerance {
+            t.validate().map_err(|e| EditError::InvalidTolerance {
+                reason: e.to_string(),
+            })?;
+        }
         let mut model = self.read_dimension_model();
         // Refuse an unknown id BEFORE mutating anything (rule 4: a refusal
         // never leaves a half-written model behind).

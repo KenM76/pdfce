@@ -108,7 +108,11 @@ fn prop<'a>(list: &'a [(String, String, String)], name: &str) -> &'a (String, St
 fn a_fresh_ce_dimension_reports_every_property_as_inherited() {
     let doc = with_dimension("fresh.pdf");
     let s = styles(&doc);
-    assert_eq!(s.len(), 9, "all nine properties must be disclosed: {s:?}");
+    assert_eq!(
+        s.len(),
+        11,
+        "all eleven properties must be disclosed: {s:?}"
+    );
     assert_eq!(prop(&s, "line-width").1, "0.75", "the factory stroke width");
     assert_eq!(prop(&s, "line-width").2, "factory");
     assert_eq!(prop(&s, "arrow-form").1, "filled");
@@ -429,4 +433,239 @@ fn unknown_ids_are_refused() {
         out.to_str().expect("utf-8 path"),
     ]);
     assert_eq!(code, EDIT_REFUSED, "{stderr}");
+}
+
+// ---- Pass 69.1: tolerance -------------------------------------------------
+
+/// A group DEFAULT tolerance reaches a member that does not override it, and
+/// the baked label says so.
+#[test]
+fn a_group_default_tolerance_reaches_its_members() {
+    let doc = with_dimension("tol-group.pdf");
+    let out = temp_out("tol-group-out.pdf");
+    let (code, stdout, stderr) = run(&[
+        "group-style",
+        doc.to_str().expect("utf-8 path"),
+        "--tolerance",
+        "sym:0.5",
+        "--tolerance-places",
+        "1",
+        "--mode",
+        "full",
+        "-o",
+        out.to_str().expect("utf-8 path"),
+    ]);
+    assert_eq!(code, 0, "{stdout}\n{stderr}");
+
+    let s = styles(&out);
+    assert_eq!(prop(&s, "tolerance").1, "sym:0.5");
+    assert_eq!(prop(&s, "tolerance").2, "group");
+    assert_eq!(prop(&s, "tolerance-places").1, "1");
+
+    // ★ WinAnsi, not UTF-8 — the `Pass 68.0` regression in its second costume.
+    // The label font is declared `/WinAnsiEncoding`, and `±` (U+00B1) is only
+    // the SECOND non-ASCII character this writer has ever emitted; the first
+    // (the degree sign) shipped broken. The assertion is therefore in the
+    // encoding the writer actually emits: the octal escape is present and the
+    // UTF-8 pair is not. Asserting on RAW bytes would pass vacuously — the
+    // writer octal-escapes every high byte, so neither form appears raw.
+    let bytes = std::fs::read(&out).expect("output");
+    let text = String::from_utf8_lossy(&bytes);
+    assert!(
+        text.contains("\\261"),
+        "the plus-minus must be WinAnsi-escaped in the baked label"
+    );
+    assert!(
+        !text.contains("\\302\\261"),
+        "and must not be the UTF-8 pair"
+    );
+}
+
+/// A per-ce-dimension tolerance beats the group's, and an explicit "no
+/// tolerance on THIS one" is expressible.
+#[test]
+fn a_ce_dimension_can_override_a_group_tolerance_with_no_tolerance() {
+    let doc = with_dimension("tol-override.pdf");
+    let grouped = temp_out("tol-override-group.pdf");
+    let (code, _, stderr) = run(&[
+        "group-style",
+        doc.to_str().expect("utf-8 path"),
+        "--tolerance",
+        "sym:0.5",
+        "-o",
+        grouped.to_str().expect("utf-8 path"),
+    ]);
+    assert_eq!(code, 0, "{stderr}");
+
+    let off = temp_out("tol-override-off.pdf");
+    let (code, stdout, stderr) = run(&[
+        "dimension-style",
+        grouped.to_str().expect("utf-8 path"),
+        "--dimension",
+        "0",
+        "--tolerance",
+        "none",
+        "--mode",
+        "full",
+        "-o",
+        off.to_str().expect("utf-8 path"),
+    ]);
+    assert_eq!(code, 0, "{stdout}\n{stderr}");
+
+    let s = styles(&off);
+    assert_eq!(prop(&s, "tolerance").1, "none");
+    assert_eq!(
+        prop(&s, "tolerance").2,
+        "dimension",
+        "an explicit `none` is an OVERRIDE, not inheritance — a group that \
+         tolerances everything and one feature that must not be toleranced is \
+         a real drawing"
+    );
+    let bytes = std::fs::read(&off).expect("output");
+    let text = String::from_utf8_lossy(&bytes);
+    assert!(
+        !text.contains("\\261"),
+        "and the label must carry no tolerance at all"
+    );
+}
+
+/// A limit tolerance SUPPRESSES the nominal and prints its two limits — the
+/// reference's own behaviour for this type.
+#[test]
+fn a_limit_tolerance_replaces_the_nominal_value() {
+    let doc = with_dimension("tol-limit.pdf");
+    let out = temp_out("tol-limit-out.pdf");
+    let (code, stdout, stderr) = run(&[
+        "dimension-style",
+        doc.to_str().expect("utf-8 path"),
+        "--dimension",
+        "0",
+        "--tolerance",
+        "limit:200.2/199.8",
+        "--mode",
+        "full",
+        "-o",
+        out.to_str().expect("utf-8 path"),
+    ]);
+    assert_eq!(code, 0, "{stdout}\n{stderr}");
+    let bytes = std::fs::read(&out).expect("output");
+    let text = String::from_utf8_lossy(&bytes);
+    assert!(
+        text.contains("200.20/199.80"),
+        "the two limits must be drawn"
+    );
+    assert!(
+        !text.contains("(200.00 pt"),
+        "and the nominal must be suppressed, not printed alongside"
+    );
+}
+
+/// `basic` draws a box and changes no text — the box IS the notation.
+#[test]
+fn a_basic_tolerance_draws_a_box_and_leaves_the_label_alone() {
+    let doc = with_dimension("tol-basic.pdf");
+    let out = temp_out("tol-basic-out.pdf");
+    let (code, stdout, stderr) = run(&[
+        "dimension-style",
+        doc.to_str().expect("utf-8 path"),
+        "--dimension",
+        "0",
+        "--tolerance",
+        "basic",
+        "--mode",
+        "full",
+        "-o",
+        out.to_str().expect("utf-8 path"),
+    ]);
+    assert_eq!(code, 0, "{stdout}\n{stderr}");
+
+    let boxed = std::fs::read(&out).expect("output");
+    let plain = std::fs::read(&doc).expect("the untoleranced original");
+    let stroke_ops = |b: &[u8]| b.windows(3).filter(|w| *w == b"\nS\n").count();
+    assert!(
+        stroke_ops(&boxed) > stroke_ops(&plain),
+        "the box must add a stroked path: {} vs {}",
+        stroke_ops(&boxed),
+        stroke_ops(&plain)
+    );
+    let text = String::from_utf8_lossy(&boxed);
+    assert!(
+        text.contains("(200.00 pt)"),
+        "and the label text must be untouched — Basic prints no characters"
+    );
+}
+
+/// An inverted limit pair is refused by name rather than silently swapped: a
+/// drawing stating that the maximum is below the minimum is a manufacturing
+/// defect delivered by an editor being helpful.
+#[test]
+fn an_inverted_limit_pair_is_refused_not_swapped() {
+    let doc = with_dimension("tol-inverted.pdf");
+    let out = temp_out("tol-inverted-out.pdf");
+    let (code, _, stderr) = run(&[
+        "dimension-style",
+        doc.to_str().expect("utf-8 path"),
+        "--dimension",
+        "0",
+        "--tolerance",
+        "limit:1/2",
+        "-o",
+        out.to_str().expect("utf-8 path"),
+    ]);
+    assert_eq!(code, EDIT_REFUSED, "{stderr}");
+    assert!(stderr.contains("upper limit"), "{stderr}");
+    assert!(!out.exists(), "and nothing must be written");
+}
+
+/// A negative symmetric magnitude is a typo, not a tolerance.
+#[test]
+fn a_negative_symmetric_magnitude_is_refused() {
+    let doc = with_dimension("tol-negative.pdf");
+    let out = temp_out("tol-negative-out.pdf");
+    let (code, _, stderr) = run(&[
+        "group-style",
+        doc.to_str().expect("utf-8 path"),
+        "--tolerance",
+        "sym:-0.1",
+        "-o",
+        out.to_str().expect("utf-8 path"),
+    ]);
+    assert_eq!(code, EDIT_REFUSED, "{stderr}");
+    assert!(stderr.contains("magnitude"), "{stderr}");
+}
+
+/// The listing prints a tolerance in the exact grammar `--tolerance` accepts,
+/// so a value read out of a listing can be fed straight back into a script.
+#[test]
+fn the_listed_tolerance_spec_is_accepted_back_verbatim() {
+    let doc = with_dimension("tol-roundtrip.pdf");
+    let first = temp_out("tol-roundtrip-1.pdf");
+    let (code, _, stderr) = run(&[
+        "dimension-style",
+        doc.to_str().expect("utf-8 path"),
+        "--dimension",
+        "0",
+        "--tolerance",
+        "dev:0.2/-0.1",
+        "-o",
+        first.to_str().expect("utf-8 path"),
+    ]);
+    assert_eq!(code, 0, "{stderr}");
+
+    let listed = prop(&styles(&first), "tolerance").1.clone();
+    assert_eq!(listed, "dev:0.2/-0.1");
+
+    let second = temp_out("tol-roundtrip-2.pdf");
+    let (code, _, stderr) = run(&[
+        "dimension-style",
+        first.to_str().expect("utf-8 path"),
+        "--dimension",
+        "0",
+        "--tolerance",
+        &listed,
+        "-o",
+        second.to_str().expect("utf-8 path"),
+    ]);
+    assert_eq!(code, 0, "feeding the listed spec back must work:\n{stderr}");
+    assert_eq!(prop(&styles(&second), "tolerance").1, listed);
 }
