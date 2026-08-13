@@ -1675,6 +1675,39 @@ pub enum SaveError {
 /// write.
 #[must_use]
 pub fn resolve_store() -> StoreLocation {
+    // ★ RESOLVED ONCE PER PROCESS, and that is a correctness property rather
+    // than a performance one.
+    //
+    // The `pdfceGUI` session's report (2026-08-13) found the write probe's
+    // shared-filename race by way of its SHARPEST symptom: two callers in one
+    // process DISAGREEING — the layout store resolving `Portable` while the
+    // recent list resolved `PlatformFallback`, so two files meant to sit beside
+    // each other did not.
+    //
+    // Fixing the probe makes that disagreement unlikely. Caching makes it
+    // IMPOSSIBLE: every caller in a process now gets one answer by
+    // construction, whatever the filesystem does underneath. That is the
+    // difference between fixing an instance and closing the class, and it was
+    // their suggestion — "a stronger property than making the probe reliable".
+    //
+    // It is also called at least three times per start-up (settings, layout,
+    // recent list), each time doing filesystem work, so the saving is real; it
+    // is simply not the reason.
+    //
+    // WHAT THIS DELIBERATELY GIVES UP: a directory that becomes writable
+    // MID-RUN is not noticed. Accepted, because the inputs — `current_exe()`
+    // and the platform env vars — do not meaningfully change within a process,
+    // and because a store that moves under a running application is a worse
+    // outcome than one that is stale. `store_in` remains the escape hatch for
+    // an explicit directory (tests, and a future `--user-data-dir`), and it
+    // does not consult this cache.
+    static RESOLVED: std::sync::OnceLock<StoreLocation> = std::sync::OnceLock::new();
+    RESOLVED.get_or_init(resolve_store_uncached).clone()
+}
+
+/// The uncached resolution [`resolve_store`] memoises. See its doc comment for
+/// why the memoisation is a correctness property.
+fn resolve_store_uncached() -> StoreLocation {
     if let Some(dir) = portable_dir()
         && directory_is_writable(&dir)
     {
@@ -1740,7 +1773,45 @@ fn directory_is_writable(dir: &Path) -> bool {
     if std::fs::create_dir_all(dir).is_err() {
         return false;
     }
-    let probe = dir.join(".pdfce-write-probe");
+    // ★ THE PROBE NAME MUST BE UNIQUE PER CALL.
+    //
+    // Until 2026-08-13 this was the fixed name `.pdfce-write-probe`, shared by
+    // every caller in every thread and every process. One caller's
+    // `remove_file` races another's `write` on the same path, the `write`
+    // fails, and this function answers `false` FOR A DIRECTORY THAT IS PLAINLY
+    // WRITABLE.
+    //
+    // Measured by the `pdfceGUI` session, which reported it: 8 threads x 2,000
+    // iterations against one writable temp directory produced **1,223 false
+    // negatives in 16,000 calls, ~7.6 %**. Not a rare interleaving.
+    //
+    // WHY A FALSE `false` IS WORSE THAN AN ERROR. `resolve_store` uses this to
+    // choose between the PORTABLE directory beside the executable and the
+    // PLATFORM FALLBACK. A spurious `false` does not surface as a failure — it
+    // produces a different, valid-looking answer, silently relocating
+    // settings, layout and the recent list to the platform config directory.
+    // `package-portable.py`'s `BUILD-INFO.txt` tells the operator to "replace
+    // the binaries but KEEP `userdata/`", which is only true if the portable
+    // directory was the one chosen.
+    //
+    // The sharper failure, and how they found it: TWO CALLERS IN ONE PROCESS
+    // DISAGREEING — the layout store resolving `Portable` while the recent list
+    // resolves `PlatformFallback`, so two files meant to sit beside each other
+    // do not.
+    //
+    // Process id AND a counter, because neither alone suffices: two processes
+    // share a counter's starting value, and one process's threads share its
+    // pid. Needs no dependency.
+    //
+    // A leftover probe from a killed process is now named distinctly and is
+    // therefore harmless, where a stale `.pdfce-write-probe` was a name the
+    // next run would collide with.
+    static PROBE_SEQ: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
+    let probe = dir.join(format!(
+        ".pdfce-write-probe.{}.{}",
+        std::process::id(),
+        PROBE_SEQ.fetch_add(1, core::sync::atomic::Ordering::Relaxed)
+    ));
     if std::fs::write(&probe, b"").is_err() {
         return false;
     }
@@ -1748,6 +1819,126 @@ fn directory_is_writable(dir: &Path) -> bool {
     // write already proved the point.
     let _ = std::fs::remove_file(&probe);
     true
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod probe_race_tests {
+    use super::directory_is_writable;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    /// ★ Concurrent probes of ONE writable directory must all answer true.
+    ///
+    /// Reported by the `pdfceGUI` session with a measured reproduction: the
+    /// probe used a fixed filename, so one caller's `remove_file` raced
+    /// another's `write` and the function answered `false` for a writable
+    /// directory — **1,223 of 16,000 calls, ~7.6 %**.
+    ///
+    /// Thread and iteration counts mirror that reproduction closely enough to
+    /// hit the same interleaving; at their rate 8 x 1,000 would expect ~600
+    /// failures before the fix. **Zero** is asserted rather than "few", because
+    /// unique names make the collision impossible by construction rather than
+    /// merely unlikely.
+    #[test]
+    fn concurrent_probes_never_call_a_writable_directory_unwritable() {
+        let dir = std::env::temp_dir().join(format!("pdfce-probe-race-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+
+        let bad = Arc::new(AtomicUsize::new(0));
+        std::thread::scope(|s| {
+            for _ in 0..8 {
+                let dir = dir.clone();
+                let bad = Arc::clone(&bad);
+                s.spawn(move || {
+                    for _ in 0..1000 {
+                        if !directory_is_writable(&dir) {
+                            bad.fetch_add(1, Ordering::Relaxed);
+                        }
+                    }
+                });
+            }
+        });
+
+        let bad = bad.load(Ordering::Relaxed);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(
+            bad, 0,
+            "{bad} of 8000 probes called a WRITABLE directory unwritable. In              production this does not error -- it silently relocates settings,              layout and the recent list out of the portable userdata/ directory."
+        );
+    }
+
+    /// The probe cleans up after itself.
+    ///
+    /// Unique names make a leftover harmless, but 8,000 of them would be a
+    /// different defect. Asserted separately so "unique" cannot be satisfied by
+    /// "never deleted".
+    #[test]
+    fn probing_leaves_no_files_behind() {
+        let dir = std::env::temp_dir().join(format!("pdfce-probe-litter-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        for _ in 0..50 {
+            assert!(directory_is_writable(&dir));
+        }
+        let leftovers: Vec<String> = std::fs::read_dir(&dir)
+            .expect("readable")
+            .filter_map(Result::ok)
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .filter(|n| n.contains("write-probe"))
+            .collect();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(
+            leftovers.is_empty(),
+            "probe files left behind: {leftovers:?}"
+        );
+    }
+
+    /// ★ Every caller in a process gets the SAME store, by construction.
+    ///
+    /// The reported defect's sharpest symptom was two callers in one process
+    /// disagreeing — the layout store resolving `Portable` while the recent
+    /// list resolved `PlatformFallback`. The probe fix makes that unlikely;
+    /// the `OnceLock` makes it impossible, which is the property actually
+    /// wanted. Hammered from threads because that is where the disagreement
+    /// arose.
+    #[test]
+    fn every_caller_in_a_process_resolves_the_same_store() {
+        let first = super::resolve_store();
+        let all_same = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+        std::thread::scope(|s| {
+            for _ in 0..8 {
+                let first = first.clone();
+                let all_same = std::sync::Arc::clone(&all_same);
+                s.spawn(move || {
+                    for _ in 0..200 {
+                        let got = super::resolve_store();
+                        if got.kind != first.kind || got.path != first.path {
+                            all_same.store(false, std::sync::atomic::Ordering::Relaxed);
+                        }
+                    }
+                });
+            }
+        });
+        assert!(
+            all_same.load(std::sync::atomic::Ordering::Relaxed),
+            "two callers in one process resolved DIFFERENT stores — this is              the defect that put the layout file and the recent-file list in              different directories"
+        );
+    }
+
+    /// An unwritable directory is still reported unwritable.
+    ///
+    /// The fix must not turn the function into one that always says yes --
+    /// which is the cheapest way to make the race test pass and would be
+    /// strictly worse than the bug.
+    #[test]
+    fn a_path_that_cannot_be_a_directory_is_still_refused() {
+        let file = std::env::temp_dir().join(format!("pdfce-probe-file-{}", std::process::id()));
+        std::fs::write(&file, b"x").expect("write");
+        // A FILE, not a directory: create_dir_all must fail on it.
+        let answer = directory_is_writable(&file);
+        let _ = std::fs::remove_file(&file);
+        assert!(!answer, "a regular file is not a writable directory");
+    }
 }
 
 #[cfg(test)]
