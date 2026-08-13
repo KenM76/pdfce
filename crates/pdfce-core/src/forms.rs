@@ -401,6 +401,24 @@ pub struct Widget {
     /// or one whose `/AP` `/N` is a single stream. Used by checkbox/radio
     /// fill to know which state to select.
     pub on_states: Vec<Vec<u8>>,
+    /// Whether this widget's `/AP` `/N` defines an **`Off`** appearance.
+    ///
+    /// Deliberately separate from [`Self::on_states`], which excludes `Off` per
+    /// §12.7.4.2.3 and must keep doing so — a button's *on*-states are the
+    /// names it can be set TO, and `Off` is not one of them.
+    ///
+    /// # What a shell does with it
+    ///
+    /// `false` on a checkbox means **unticking it will render nothing**: there
+    /// is no appearance stream for the off state, so the widget goes blank
+    /// rather than showing an empty box. That is worth disclosing *before* the
+    /// click, which is the whole reason this exists — asked for by the
+    /// `pdfceGUI` session, 2026-08-13.
+    ///
+    /// Always `false` when `/AP` `/N` is a single stream rather than a state
+    /// subdictionary: there is no state dictionary to carry an `Off` entry, so
+    /// `false` is the fact rather than a default.
+    pub has_off_appearance: bool,
     /// `/P` — the page this widget appears on, if present (§12.5.6.19).
     pub page: Option<ObjId>,
     /// `/MK` `/CA` — the widget's **normal caption** (Table 189), as raw
@@ -1392,12 +1410,13 @@ fn model_widget<G: ObjectGraph + ?Sized>(
         .and_then(Object::as_dict)
         .and_then(|mk| mk.get(b"CA").map(|o| graph.resolve(o)))
         .and_then(string_bytes);
-    let (has_normal_appearance, on_states) = appearance_of(graph, dict);
+    let (has_normal_appearance, on_states, has_off_appearance) = appearance_of(graph, dict);
     Widget {
         id,
         rect,
         appearance_state,
         on_states,
+        has_off_appearance,
         page,
         caption,
         has_normal_appearance,
@@ -1405,21 +1424,37 @@ fn model_widget<G: ObjectGraph + ?Sized>(
     }
 }
 
-/// Read a widget's `/AP` `/N`: whether it is usable, and (for a state
-/// subdictionary) the non-`Off` on-state names.
-fn appearance_of<G: ObjectGraph + ?Sized>(graph: &G, dict: &Dict) -> (bool, Vec<Vec<u8>>) {
+/// Read a widget's `/AP` `/N`: whether it is usable, (for a state
+/// subdictionary) the non-`Off` on-state names, and whether an `/Off`
+/// appearance is present.
+///
+/// # Why `Off` is returned separately rather than added to the state list
+///
+/// §12.7.4.2.3 makes "on-states" the right model for the *names a button can
+/// be set to*, and `Off` is not one of them — adding it would break what
+/// [`Widget::on_states`] means and what every fill path reads it for.
+///
+/// But a shell needs the other fact too: **whether unticking this checkbox
+/// will leave a blank widget**. Asked by the `pdfceGUI` session (2026-08-13),
+/// which wanted to disclose it *before* the operator clicks rather than after
+/// the box goes empty. It costs one lookup in a subdictionary already in hand,
+/// which is why it is answered rather than declined.
+fn appearance_of<G: ObjectGraph + ?Sized>(graph: &G, dict: &Dict) -> (bool, Vec<Vec<u8>>, bool) {
     let Some(ap) = dict
         .get(b"AP")
         .map(|o| graph.resolve(o))
         .and_then(Object::as_dict)
     else {
-        return (false, Vec::new());
+        return (false, Vec::new(), false);
     };
     let Some(n) = ap.get(b"N").map(|o| graph.resolve(o)) else {
-        return (false, Vec::new());
+        return (false, Vec::new(), false);
     };
     match n {
-        Object::Stream(_) => (true, Vec::new()),
+        // A single stream is one unconditional appearance -- there is no state
+        // subdictionary, so there is no `/Off` entry to find. `false` here is
+        // "no Off appearance", which is the honest answer.
+        Object::Stream(_) => (true, Vec::new(), false),
         Object::Dict(sub) => {
             let states: Vec<Vec<u8>> = sub
                 .iter()
@@ -1427,9 +1462,14 @@ fn appearance_of<G: ObjectGraph + ?Sized>(graph: &G, dict: &Dict) -> (bool, Vec<
                 .map(|(k, _)| k.as_bytes().to_vec())
                 .filter(|k| k.as_slice() != b"Off")
                 .collect();
-            (!sub.is_empty(), states)
+            // Present AND non-null: an explicit `/Off null` defines nothing,
+            // and is filtered out of `states` above for the same reason.
+            let has_off = sub
+                .get(b"Off")
+                .is_some_and(|v| !matches!(graph.resolve(v), Object::Null));
+            (!sub.is_empty(), states, has_off)
         }
-        _ => (false, Vec::new()),
+        _ => (false, Vec::new(), false),
     }
 }
 

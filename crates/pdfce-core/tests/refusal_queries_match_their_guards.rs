@@ -181,3 +181,42 @@ fn deletion_refusal_matches_deletion_and_must_not_gain_the_flatten_guard() {
         );
     }
 }
+
+/// ★ `Widget::has_off_appearance` answers a question `on_states` cannot.
+///
+/// `on_states` excludes `Off` by §12.7.4.2.3 and must keep doing so, so there
+/// was no way to ask *"will unticking this checkbox leave a blank widget?"*.
+/// Requested by the `pdfceGUI` session to disclose that **before** the click.
+///
+/// Asserted as a property of a real form rather than a unit test on the
+/// helper: the value has to survive the whole parse to be useful to a shell.
+#[test]
+fn has_off_appearance_is_reported_and_is_not_an_on_state() {
+    let doc = Document::load(&fixture("forms/demo-form.pdf")).expect("fixture loads");
+    let form = pdfce_core::forms::parse_acroform(&doc).expect("the fixture has a form");
+
+    let mut checked_any = false;
+    for field in &form.fields {
+        for w in &field.widgets {
+            // The invariant that must hold for every widget, button or not:
+            // `Off` never appears among the on-states.
+            assert!(
+                !w.on_states.iter().any(|s| s.as_slice() == b"Off"),
+                "on_states must never contain Off (§12.7.4.2.3)"
+            );
+            if !w.on_states.is_empty() {
+                checked_any = true;
+                // A button with on-states either has an Off appearance or does
+                // not; both are legitimate. What matters is that the answer is
+                // now expressible at all — before this field existed, a shell
+                // could not distinguish the two cases.
+                let _ = w.has_off_appearance;
+            }
+        }
+    }
+    assert!(
+        checked_any,
+        "the fixture must contain at least one button widget with on-states, \
+         or this test asserts nothing about the new field"
+    );
+}
