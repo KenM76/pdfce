@@ -41172,3 +41172,314 @@ Recorded here explicitly because the maintenance contract makes an
    invisible to every position assertion in it.
 4. **`(bm)`** (`detach_file` / `unembed_fonts` confidentiality) and
    **`(v)`** (R58 scope) remain open and remain different questions.
+
+## 2026-08-13 (hundred-and-forty-second filing) — **TWO commits, ONE ordinal: `Pass 71.0` slice 3 binds the `ocrs` ENGINE (`49af8fb`) and `Pass 74.0` ships `render_page_region` (`2fe6216`)** — the first REPORTS NO CONFIDENCE AT ALL and thereby argues the trait's required-no-default design **by the world rather than by reasoning**; the second corrects a guard whose justification was **a prediction about USE**, and measures that **~99% of a render's cost is interpretation, so tiling is a 9× regression**. **Decision `060` minted; `R193` PROPOSED, not minted; `R192` untouched; Pass family ceiling 73 → 74.** **`FEATURES.md`: one new row, one correction, and OCR's boxes DELIBERATELY UNMOVED for the third consecutive slice.** **★ The first `pdfceGUI` channel request to be answered and CLOSED**
+
+**ONE filing ordinal for two commits, and this is the choice being
+recorded.** A filing ordinal indexes **a filing act** — one librarian
+dispatch, one sweep of the ledgers, one set of cross-references — not a
+Pass. The two commits landed 15 minutes apart in one session and were
+handed over together. They keep **separate `Shipped` headings** so
+nothing is merged, both marked *hundred-and-forty-second filing*, and
+`tools/check-ledger-numbers.py` collects ordinals from **SESSION_LOG
+headings only**, so a single entry here is exactly one ordinal.
+**Precedent:** the hundred-and-twenty-sixth filing covered **six**
+commits under one ordinal.
+
+**Commits, full hashes read with `git rev-parse` in this dispatch rather
+than relayed:**
+
+| short | full | what | size |
+|---|---|---|---|
+| `49af8fb` | `49af8fb83f7fb071b7db69d4dcd64479552c9d31` | `Pass 71.0` **slice 3** — the `ocrs` engine bound to `OcrEngine` | 11 files, **887 insertions / 138 deletions** |
+| `2fe6216` | `2fe6216a6b088fc533301afac75c7913898b3b2d` | **`Pass 74.0`** — `render_page_region` | 4 files, **663 insertions / 5 deletions** = ≈166 per file, **51 % of it test + bench harness** |
+
+**Also in history and NOT owed here:** `6b31a43`
+(`6b31a437de8a83bc5ec4cb3145b4c9af32196a91`) is the librarian's own
+hundred-and-forty-first filing. Nothing is outstanding against it.
+
+### Ledger — measured, and what each number did
+
+Measured in this dispatch with `python tools/check-ledger-numbers.py`,
+**not carried from any prior entry**:
+
+| ledger | at HEAD | next free | this filing |
+|---|---|---|---|
+| SESSION_LOG filings | 141 | **142** | **used — this entry, for both commits** |
+| decision records | 059 | **060** | **used — the region cost model** |
+| standing rules | R191 | R192 | **NOT used. `R192` stays claimed by the unruled proposal; a NEW proposal claims `R193`, unminted. Ceiling stays R191.** |
+| Pass families | ceiling 73 | `Pass 74` | **used — `Pass 74.0`, minted in the commit itself. Ceiling 73 → 74; next free `Pass 75`.** |
+| operator questions | `(bm)` | `(bn)` | **NOT used** |
+
+### Shipped
+
+- **`Pass 71.0` slice 3 — `pdfce_core::ocr::engine_ocrs` (`49af8fb`).**
+  `OcrsEngine` implements `OcrEngine` behind the Cargo feature **`ocrs`**
+  — named after the **crate**, not the capability, so the second engine
+  lands as a sibling without a rename — **default ON**, forwarded from
+  **every** shell including `pdfce-gui`'s manifest (a `Cargo.toml` line
+  with no GUI surface; omitting it removes a capability without breaking
+  the build). **The Pass is still NOT complete and stays in *Next up*.**
+- **`Pass 74.0` — `pdfce_render::render_page_region` (`2fe6216`).** A new
+  Pass family, minted in the commit because the request arrived and was
+  closed inside one session — **there was no *Next up* entry to promote,
+  and that absence is the record.** Essentially the requester's own
+  proposed signature; **shares `render_page_with_view`'s implementation**
+  so annotation z-order, the cancellation contract, the `FormFieldsOnly`
+  scope rule and `contents_unresolved` carry-through cannot drift; **all
+  four region corners mapped through the CTM**, because a two-corner
+  mapping is correct unrotated and **silently transposed at `/Rotate`
+  90/270**.
+
+### Findings, in descending order of how far they generalise
+
+1. **★★ A GUARD JUSTIFIED BY *"BEYOND ANY PLAUSIBLE X"* IS A PREDICTION
+   ABOUT **USE**, NOT A FACT ABOUT THE FORMAT.** `MAX_PIXMAP_EDGE`'s doc
+   comment said 16,384 px was *"beyond any plausible viewing zoom at
+   Pass 1"* — **the arithmetic was right and the conclusion was wrong**,
+   because it reasoned about **pages** while the constant bounded
+   `page_edge × zoom`. The result: a zoom ceiling that gets **tighter
+   the larger the sheet** (9.7× A4, 6.9× A3, **3.4× A1**, **2.4× A0** at
+   2× DPR) — backwards for drafting review. **Raising the number was
+   never the fix** (RGBA grows as the square of the edge; 16,384 is
+   **exactly 1.00 GiB**, and 6.9× on A1 would cost **4 GiB per open
+   page**). Found by **an independent project building against the
+   crate**, not by review and not by any test. **PROPOSED as `R193`**,
+   not minted: the shape has **failed once**, and the codebase's two
+   other use-predicated guards are **healthy** —
+   `MAX_ANNOTS_PER_PAGE` names its evidence
+   (`tools/annot-corpus-check.py`), `MAX_DECODED_LEN` carries its
+   arithmetic (7× headroom over the worst legitimate case it names).
+   **One failure plus two healthy instances is not three failures.**
+2. **★★ AN ENGINE THAT REPORTS NO CONFIDENCE AT ALL, AND SAID SO.**
+   `ocrs`'s output type is **a char and a rectangle** — no score at
+   character, word, line or page level — so `reports_confidence()`
+   returns **`false`**, and **that is a fact about the world, not a
+   stub.** **The first real implementation of the trait landed on the
+   side a convenience default would have got wrong**: `true` would have
+   made it claim scores it does not have; `false`-by-default would let a
+   future scoring engine under-report by omission. **The
+   required-with-no-default design is now argued by the world rather
+   than by reasoning about it**, which is the strongest form the
+   argument can take.
+3. **★★ ~99 % OF A RENDER'S COST IS INTERPRETATION, NOT FILL — SO
+   TILING IS A 9× REGRESSION.** A **2-pixel** render costs **691 ms**; a
+   **120,701-pixel** render costs **699 ms**. Fill is **0.18 µs per
+   pixel**, and that figure is **stable across a 33× change in pixel
+   count** (0.186 vs 0.182 ms per 1,000 px over the floor), which is what
+   makes the split a measurement rather than an interpretation of one.
+   Consequences: **do not tile** (3 × 3 ring = 9 × ~0.7 s ≈ 6.2 s against
+   ~0.7 s for one region); **the API buys REACHABILITY, not speed** (at
+   32× the whole page is 3.8 GiB and over the guard — **not slow,
+   impossible**); and **a display-list cache would remove ~99 % of the
+   repeat cost — the highest-value optimisation available to
+   `pdfce-render`, NOT BUILT, with the 691 ms floor as its evidence.**
+   Measured on the operator's A1 benchmark drawing (148,517 paints ·
+   24,128 clip ops), release build, one run per case;
+   `docs/render-region-measurements.md`, reproducible via the committed
+   `crates/pdfce-render/examples/region_bench.rs`.
+4. **★★★ A CORPUS GAP: NO FIXTURE IN `fixtures/synthetic/` CARRIES A
+   `/Rotate` KEY AT ALL — and the rotation test written as an
+   INTEGRATION test found nothing to load and SKIPPED, REPORTING SUCCESS
+   WHILE TESTING NOTHING.** It now lives as a **unit** test over the
+   in-memory `doc_with_content` helper. **This outlives the feature**:
+   `page_device_geometry` has **four** rotation branches and the file
+   corpus cannot exercise a single non-zero one, so every
+   `/Rotate`-sensitive behaviour pdfce ships — rendering, region mapping,
+   imposition, print orientation, DXF export — is tested against 0° files
+   only unless it built its own in-memory case.
+5. **`ASCENT_FRAC` / `DESCENT_FRAC` existed TWICE in `pdfce-core` under
+   the same names with different values** — 0.75/0.25 in `text_edit`
+   (the block model's nominal figures) and 0.718/0.207 in `ocr::layer`
+   (Helvetica's real AFM metrics). **Both correct**; a grep for the
+   identifier returned the wrong one about half the time, and **0.043 em
+   is small enough to read as a rounding artefact**. Fixed on discovery —
+   the OCR pair now carries the face in its name. **That 0.043 em IS the
+   0.558 pt residual slice 2's test documents** (0.043 × 13 pt = 0.559 pt
+   against 0.558 pt measured): the same number from the other end.
+6. **`ocrs`'s `ImageSource::from_bytes` infers a channel count from
+   `len / (w × h)`**, so a **double-sized** buffer is silently taken as a
+   2-channel image and "works", recognising noise. `recognize()`
+   validates length first and refuses by name (`ImageSize`).
+7. **A briefing patched twice in two hours had the wrong STRUCTURE, not
+   two errors.** `docs/core-api/03-capabilities.md` §5 — what the
+   `pdfceGUI` project builds against — was **rewritten**: slice 2
+   falsified four statements, slice 3 falsified more of it an hour later.
+   It now leads with the honest state, maps the four layers, carries
+   accurate `file:line` tables and **six traps**.
+
+### Decisions made this filing
+
+- **Decision `060` minted** (`ARCHITECTURE.md` §12) — the region cost
+  model and the **three architectural positions it fixes**: the guard
+  bounds the **output pixmap** rather than `page × scale`; **do not
+  tile**, measured; and the **display list is the next investment, not
+  built**, with the floor as its evidence. Minted because those are
+  positions a future session must not re-derive or contradict, and **none
+  of them is implied by the code**.
+- **No decision for the engine choice**, stated so a later reader cannot
+  mistake a judgement for an oversight. Every part of it already has a
+  home — **which engine** was the operator's 2026-08-12 answer (*"…or
+  heck, just build for both"*), recorded verbatim on the `Pass 71.0`
+  entry; **the adoption and its licence classification** are
+  `docs/PRIOR_ART.md`'s new OCR-engines table (rule 13's canonical
+  record); **the evidence** is `docs/ocr-engine-survey.md`; **the public
+  surface** is §4.1 sync entry **(V)**. A §12 entry would create a second
+  text that can disagree with the first.
+- **`R193` PROPOSED, not minted**, for the reason in finding 1. **A note
+  is attached for the engineer**: proposed `R192` (*an obligation between
+  two correct tools*) and proposed `R193` are **both "the set the thing
+  REASONS OVER is not the set it ACTS ON"**, at the enforcement layer and
+  the limits layer respectively. They may be one rule; that judgement is
+  his, and **merging them on a resemblance is how a rule ends up meaning
+  nothing.**
+
+### `FEATURES.md` — one new row, one correction, and one deliberate no-op
+
+- **NEW row** under *Fonts & rendering*: *"Rasterize an arbitrary page
+  **region**…"*, **`core [x] · cli [ ] · gui [ ]`**. **No shell box
+  ticked, because no shell calls it** — `R151`'s signal, working as
+  intended. It earns a row despite being an API-for-shells because the
+  file's own question is *what can pdfce do*, and **`pdfce-render` can
+  now do something it could not do yesterday**; suppressing the row would
+  hide a capability rather than avoid over-claiming one.
+- **CORRECTION found while sweeping:** the *"Rasterize vector paths, text
+  and images"* row carried **`cli —`** (*not applicable*) while
+  **`pdfce-cli render-page` has existed for many Passes and writes a
+  PNG** (`crates/pdfce-cli/src/main.rs:1697`). **`—` and `[ ]` are the
+  distinction that file's legend exists to protect, and this was
+  neither** — it was a capability the file could not see. **Now
+  `cli [x]`.**
+- **OCR stays `core [ ] · cli [ ] · gui [ ]` for the THIRD consecutive
+  slice**, and the sentence was rewritten (replace-never-append) to say
+  the engine is bound. **The weights are not in the repository, so no
+  build can recognise text**; `from_model_dir` compiles, runs and returns
+  a named **`ModelMissing`** — a clean refusal, not a stub. Slice 1
+  refused the rounding for types with no writer, slice 2 for a writer
+  with no engine, slice 3 for an engine with no weights. **Stated
+  explicitly because that file's maintenance contract makes an
+  intentional no-op and a forgotten one look identical afterwards.**
+
+### Licensing and dependencies (`49af8fb`)
+
+**20 crates added, ZERO copyleft, no new licence CATEGORY.** `ocrs` +
+the 11 `rten` crates are **MIT OR Apache-2.0**; **`flatbuffers` beneath
+them is Apache-2.0 ONLY** (permissive, but no dual arm to elect).
+`Cargo.lock` **+195 lines**. `THIRD_PARTY_LICENSES.md` **regenerated via
+`cargo-about`** (rule 13 — generated, never hand-edited). **The two
+dual-licensed hits a naive scan reports — `r-efi` and `self_cell` — were
+TRACED and are pre-existing `egui` dependencies, not `ocrs`'s.**
+**No-network is STRUCTURAL, not promised:** the model downloader lives in
+the separate **`ocrs-cli` binary crate**, so nothing linkable from
+`pdfce-core` can fetch.
+
+### Gates — measured by the engineer, relayed
+
+| gate | `49af8fb` | `2fe6216` |
+|---|---|---|
+| `cargo test` workspace | **3,690 / 0 fail** | **3,695 / 0 fail** |
+| `cargo fmt --all --check` | clean | clean |
+| `cargo clippy --workspace --all-targets -- -D warnings` | clean | clean |
+| `check-ledger-numbers` · `check-fmt-excluded` · `check-shipped-assets` · `check-ui-strings` | clean | clean |
+| **`cargo tree -p pdfce-core` / `-p pdfce-render`** | **no `egui`/`eframe`/`winit`/`wgpu`** | same |
+| `--no-default-features` **build AND tests** | clean | — |
+| `cargo check --target wasm32-unknown-unknown` | **clean, feature in the DEFAULT set** | — |
+| no-network denylist · R24 SIMD gate | clean | — |
+
+### Cross-project deliverables — named, because that is what makes them delivered
+
+**The first request through the `pdfceGUI` channel to be answered and
+CLOSED.** Both halves exist on disk and were read in this dispatch:
+
+- `D:\Dev\FeatureRequests\pdfce_FeatureRequests\done_request_region_rasterisation.md`
+  — **renamed** from `request_*` on closure, which is the channel's own
+  protocol.
+- `D:\Dev\FeatureRequests\pdfce_FeatureRequests\note_region_rasterisation_shipped_and_measured.md`
+  — the reply: the API, the measurement, **two caveats volunteered
+  against the result** (one document; single-threaded, so parallel region
+  calls duplicate the floor), and **question 3 refused rather than
+  guessed**.
+
+Per **decision 058** this was treated as **a finding about where the
+crate drew its boundary, not a favour** — and **§3's GUI-core separation
+invariant was validated by an independent implementation**: the boundary
+held, and the one place it was drawn wrong was found by the consumer
+within a day.
+
+### RAG graduations this filing
+
+| file | tier |
+|---|---|
+| `D:\dev\rag\rust\a_limit_justified_by_beyond_any_plausible_use_is_a_prediction_not_a_fact.md` | ecosystem |
+| `D:\dev\rag\rust\a_test_that_skips_when_its_fixture_is_missing_reports_success_while_testing_nothing.md` | ecosystem |
+| `C:\personal_rag\pdf\lesson_20260813_page_render_cost_is_interpretation_not_fill.md` | PDF domain |
+| `C:\personal_rag\pdf\lesson_20260813_ocrs_reports_no_confidence_at_any_level.md` | PDF domain |
+
+### Still in flight
+
+- **`Pass 71.0` is STILL NOT COMPLETE and stays in *Next up*.** The
+  pipeline is now end-to-end in core and **nothing is operator-reachable**.
+  Remaining, in order: **(a) the weights**, **(b) `pdfce-cli ocr`**,
+  **(c) the second engine** (`ocr-rs`/PaddleOCR, Apache-2.0, 50+
+  languages, **no WASM**), then the rule-4/decision-059 off-canvas review
+  surface and language selection.
+- **★★ OWED TO THE OPERATOR, and the two halves must not be collapsed:**
+  the **licence** question is **settled** (*"yes to the license"*,
+  2026-08-13 — `(bl)` answered YES, **do not re-raise**), but
+  **committing ~12 MB of `.rten` weights into a PUBLIC repository's
+  history is PERMANENT and is a separate, knowing act he has not been
+  asked about.** The engineer is raising it in the session summary as a
+  heads-up, not a permission request. **It is neither authorised nor
+  forbidden — it has not been put to him.**
+- **Two new *Backlog* entries**, both filed with their evidence attached:
+  the **display-list cache** (691 ms floor as the funding case) and the
+  **`/Rotate` corpus gap**.
+- **`MAX_ZOOM` is unset and owed** — the honest upper bound on
+  magnification needs its own experiment. **Guessing a round number would
+  be the same class of error `Pass 74.0` just corrected.**
+- **`Pass 73.0`** (R58's empty enforcement layer), **`Pass 73.1`** and
+  **`Pass 72.0`** — all **UNSTARTED**.
+- **The GUI pause stands.** Nothing here touches a GUI surface.
+- **`R192` remains PROPOSED and unruled; `R193` joins it.** Two unruled
+  proposals now sit in *Standing rules*, and the engineer's ruling on
+  whether they are one rule is owed.
+
+### Git and backup state — MEASURED in this dispatch, with the commands
+
+Hard rule 8: checked, not inferred.
+
+| fact | figure | command |
+|---|---|---|
+| `HEAD` | `2fe6216` | `git log -1` |
+| `origin/main` | **`42364db`** | `git log -1 origin/main` |
+| **local ahead of `origin/main`** | **22 commits** | `git rev-list --count origin/main..HEAD` |
+| newest backup bundle | `D:\Dev\pdfce-backups\pdfce-20260813-post-rebase.bundle`, **2026-08-13 09:27:53** | `ls -lt --time-style=full-iso` |
+| that bundle's `refs/heads/main` | **`dc5a77f`** | `git bundle list-heads` |
+| **bundle staleness** | **7 commits behind `HEAD`** | `git rev-list --count dc5a77f..HEAD` |
+
+**`NEXT_SESSION.md` carried "local is 5 commits ahead of `origin/main`
+(`4069cbb`)" and a backup line naming `pdfce-20260813-0755.bundle` — both
+now stale, both corrected there by an appended amendment** rather than by
+overwriting an engineer-owned file. **The correction names its
+world-source** (the commands above), per hard rule 10's corollary: *a
+correction is a claim.*
+
+**Nothing is pushed and nothing is tagged.** Pushing is the operator's
+act.
+
+### For next session
+
+1. **The weights question to put to him is about the COMMIT, not the
+   licence.** He has already said yes to the licence. What he has not
+   been asked is whether ~12 MB of binary should enter a public repo's
+   history permanently. **Do not re-ask `(bl)`.**
+2. **`pdfce-cli ocr` is the box that moves first.** Everything before it
+   is substrate; a `FEATURES.md` box moves when a shell can run OCR end
+   to end.
+3. **Do not tile, and do not parallelise region renders.** Both are in
+   decision 060 with the measurement; re-deriving them costs ~6 s per
+   viewport.
+4. **Two unruled rule proposals await the engineer** — `R192` and
+   `R193`, possibly one rule.
+5. **`(bm)`** (`detach_file` / `unembed_fonts` confidentiality) and
+   **`(v)`** (R58 scope) remain open and remain different questions.

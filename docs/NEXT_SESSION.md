@@ -16,6 +16,29 @@ gate clean. Nothing half-built.
 > `pdfce-render`. **Still not pushed, not tagged.** Full record: top of
 > `ROADMAP.md`'s *Shipped*, and §1's own amendment below.
 
+> **[APPENDED 2026-08-13 by `pdfce-librarian`, hundred-and-forty-second
+> filing — SUPERSEDES THE AMENDMENT DIRECTLY ABOVE ON EVERY FIGURE IT
+> RESTATES.]** Two more commits landed:
+>
+> | commit | what | tests |
+> |---|---|---|
+> | **`49af8fb`** | **`Pass 71.0` slice 3** — `pdfce_core::ocr::engine_ocrs`, the `ocrs` engine bound to `OcrEngine` behind a **default-ON Cargo feature**; **20 crates added, ZERO copyleft**; `THIRD_PARTY_LICENSES.md` regenerated | 3,688 → **3,690** |
+> | **`2fe6216`** | **`Pass 74.0`** — `pdfce_render::render_page_region` (a **NEW Pass family**, minted in the commit; ceiling 73 → **74**) | 3,690 → **3,695** |
+>
+> **`HEAD` = `2fe6216`, 3,695 tests, 0 failures, every gate clean**
+> (slice 3 additionally: `--no-default-features` **build and tests**,
+> `cargo check --target wasm32-unknown-unknown`, the no-network denylist
+> and the R24 SIMD gate). `cargo tree` re-verified on `pdfce-core` and
+> `pdfce-render` at both commits. **Still not pushed, not tagged.**
+>
+> **Nothing is half-built** — `git status --short` at the head of this
+> dispatch showed **no modified source file**, only agent-memory
+> scratch under `.claude/`. (This filing then modified five files under
+> `docs/`, which are its own output and are uncommitted at the time of
+> writing; **the librarian does not commit.**) Full record:
+> `ROADMAP.md`'s two top-of-*Shipped* entries and `SESSION_LOG.md`'s
+> hundred-and-forty-second filing.
+
 ---
 
 ## ⇢ ★ FIRST, EVERY SESSION: CHECK THE GUI REQUEST CHANNEL
@@ -150,6 +173,53 @@ if it is to be disclosed before the edit is applied. Written up in
 
 ## 1. ★★ `(bl)` IS ANSWERED — **YES** — AND `Pass 71.0` IS NOW PURE ENGINEERING
 
+> **[APPENDED 2026-08-13 by `pdfce-librarian`, hundred-and-forty-second
+> filing — STEPS 1 AND 2 OF THE ORDERED PLAN BELOW ARE DONE. Read this
+> before working the list; the list is left standing rather than
+> rewritten, because this file is engineer-owned.]**
+>
+> **DONE — `49af8fb`, `Pass 71.0` slice 3:** step 1 (the Cargo feature,
+> **named `ocrs` after the crate rather than `ocr` after the capability**,
+> default ON, forwarded from **every** shell including `pdfce-gui`'s
+> manifest) and step 2 (`OcrsEngine: OcrEngine` in
+> `crates/pdfce-core/src/ocr/engine_ocrs.rs`). **The y-flip was NOT done
+> in the engine** — `words_to_page_space` still owns it, exactly as the
+> list says. **The wasm32 gate was verified empirically at adoption**,
+> with the feature in the default set, rather than taken from the survey.
+>
+> **★ The one thing the plan could not predict: `reports_confidence()`
+> returns `false`, and it is a fact rather than a stub.** `ocrs`'s output
+> type is a char and a rectangle — there is no score at any level. **The
+> first real implementation of the trait landed on the side a convenience
+> default would have got wrong**, which is the argument for
+> required-with-no-default made by the world instead of by reasoning.
+> Downstream, `OcrLayerReport.confidence_available` is what carries it.
+>
+> **STILL OWED, and this is the whole remaining Pass, in order:**
+>
+> 1. **The WEIGHTS — step 3 below, but the open item is the COMMIT, not
+>    the licence.** `(bl)` is answered **YES**; **do not re-raise it**.
+>    What has **not** been put to the operator is that **~12 MB of
+>    `.rten` binary entering a PUBLIC repo's history is permanent.** The
+>    engineer raised it in the 2026-08-13 session summary as a heads-up.
+>    **Until he answers, the files are neither authorised nor
+>    forbidden.** Everything else in step 3 (pin the exact artifact —
+>    **the S3 and HF copies are NOT byte-identical** — hash it, hand-author
+>    `PROVENANCE.md`) still binds.
+> 2. **`pdfce-cli ocr`** (step 4, rule 11). **This is the box that moves
+>    first** in `FEATURES.md`; OCR is still `core [ ] cli [ ] gui [ ]`
+>    because no build can recognise text and no shell has a surface.
+> 3. **The SECOND engine** — `ocr-rs`/PaddleOCR, **Apache-2.0**, **50+
+>    languages** (the operator's own stated ranking criterion), **no
+>    WASM**, so it is a sibling feature the wasm32 build omits rather than
+>    a replacement. The feature naming above is what makes this a drop-in.
+>
+> Then the rule-4 / decision-059 **off-canvas** review surface (hardest
+> case rule 4 has met: it must state that *nothing was scored*) and
+> language selection. `docs/PRIOR_ART.md` now carries an **OCR engines**
+> table — **Surya is recorded there as REJECTED BY NAME**; do not
+> re-evaluate it on accuracy.
+
 **Operator, 2026-08-13, verbatim and in full:** *"yes to the license. keep
 going."* A **CC-BY-SA-4.0 model file may ship inside pdfce's MIT portable
 folder.** Do **not** re-raise it.
@@ -261,6 +331,31 @@ does not answer.
   `DeviceSettings::pick_tray_by_page_size` sets no `DEVMODE` field;
   `build_devmode`'s doc claims a driver-default start the code does not do.
 
+> **[APPENDED 2026-08-13 by `pdfce-librarian`, hundred-and-forty-second
+> filing — TWO NEW BACKLOG ITEMS, both from `Pass 74.0`, both arriving
+> with their evidence already measured. Both are core-only, so neither is
+> touched by the GUI pause.]**
+>
+> - **A display-list cache in `pdfce-render`.** Measured at `2fe6216`: a
+>   **2-pixel** render costs **691 ms** and a **120,701-pixel** render
+>   costs **699 ms**, so **~99 % of the cost is interpretation, not
+>   fill**. A reusable parsed representation replayed against N regions
+>   takes the **second and subsequent** renders of a page from ~700 ms to
+>   tens of ms. **It is the highest-value optimisation this crate has**,
+>   and every alternative divides the 1 % — **tiling MULTIPLIES it (9× for
+>   a 3 × 3 ring) and parallelism duplicates the floor per worker.** Not
+>   started; the `pdfceGUI` project has been told plainly that it does not
+>   exist. Positions fixed in **decision 060**.
+> - **A `/Rotate` fixture gap.** **No file in `fixtures/synthetic/`
+>   carries a `/Rotate` key at all**, so `page_device_geometry`'s four
+>   rotation branches have **zero file-level coverage**. Found the worst
+>   way: a rotation test written as an integration test **found nothing to
+>   load and skipped, reporting success while testing nothing.** Cheap to
+>   close (three generated fixtures, 90/180/270, via a
+>   `tools/gen-*-fixtures.py` sibling so they are reproducible per rule 7)
+>   and it unblocks honest coverage for rendering, region mapping,
+>   imposition, print orientation and DXF export at once.
+
 ## 4. Deferred BY THE PAUSE — not forgotten, not startable
 
 - The GUI half of `Pass 69.0` + `69.1` (group-tier controls, the
@@ -310,6 +405,21 @@ recoverable from backup alone.
 
 **This ledger has carried a wrong backup figure twice. Re-run `ls -t` and
 `git bundle list-heads` — including when the number above is this one.**
+
+> **[APPENDED 2026-08-13 by `pdfce-librarian`, hundred-and-forty-second
+> filing — THE BLOCK ABOVE IS STALE, AND ITS OWN LAST SENTENCE IS WHY
+> THIS AMENDMENT NAMES ITS COMMANDS.]** Re-measured in this dispatch:
+>
+> | fact | figure | command |
+> |---|---|---|
+> | newest bundle | **`D:\Dev\pdfce-backups\pdfce-20260813-post-rebase.bundle`**, mtime **2026-08-13 09:27:53** | `ls -lt --time-style=full-iso D:/Dev/pdfce-backups/` |
+> | its `refs/heads/main` | **`dc5a77f`** | `git bundle list-heads <bundle>` |
+> | **staleness** | **7 commits behind `HEAD` (`2fe6216`)** | `git rev-list --count dc5a77f..HEAD` |
+>
+> **`pdfce-20260813-0755.bundle` named above is no longer the newest**,
+> and the `v0.5.3` recoverability claim attached to it was not re-checked
+> here — **re-verify it against the post-rebase bundle before relying on
+> it.** A fresh bundle is cheap and seven commits is not nothing.
 
 ---
 
@@ -365,6 +475,29 @@ direction.
 **★ Local is 5 commits ahead of `origin/main` (`4069cbb`). `Pass 69.0` and
 `Pass 69.1` are NOT pushed.** Stated as a fact, not a request — pushing is
 the operator's act and no go-ahead has been given for these.
+
+> **[APPENDED 2026-08-13 by `pdfce-librarian`, hundred-and-forty-second
+> filing — BOTH FIGURES ABOVE ARE NOW WRONG, and the ceiling line above
+> them is wrong on four ledgers.]** Measured, with the commands, in this
+> dispatch:
+>
+> - **`origin/main` is `42364db`**, not `4069cbb` (`git log -1
+>   origin/main`), and it **is** an ancestor of `HEAD`
+>   (`git merge-base --is-ancestor origin/main HEAD` → yes).
+> - **Local is 22 commits ahead**, not 5
+>   (`git rev-list --count origin/main..HEAD`). Still unpushed, still
+>   untagged; pushing remains the operator's act.
+> - **Live ceilings, from `python tools/check-ledger-numbers.py` run in
+>   this dispatch — the line above is measured after the *135th* filing
+>   and is stale on four of five:** rules **R191** → next free **R192**
+>   (**still claimed by an unruled PROPOSAL; a SECOND unruled proposal now
+>   claims `R193`**) · decisions **060** → next **061** · filings **142**
+>   → next **143** · **Pass families to 74** → next free family number
+>   **75** · operator questions **(bm)** → next **(bn)**.
+>
+> **Re-run the checker anyway.** The instruction directly above this
+> block is right and this amendment does not replace it — it only makes
+> the stale numbers non-misleading in the meantime.
 
 **One deliberately-unpatched staleness, so nobody "fixes" it twice:**
 Amendment B §2 in the ce-dimension ui-spec says `StyleProvenance::each()`

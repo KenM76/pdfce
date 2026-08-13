@@ -96,6 +96,501 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★ Pass 74.0 — `2fe6216` — **`render_page_region`**, a NEW Pass family minted in the commit — and the finding is not the feature: **`MAX_PIXMAP_EDGE`'s doc comment justified its number with *"beyond any plausible viewing zoom"*, which is a PREDICTION ABOUT USE, not a fact about the format — and the use changed.** **The FIRST request through the `pdfceGUI` channel to be answered and CLOSED.** **`FEATURES.md`: one new row, `core [x] · cli [ ] · gui [ ]`** — filed 2026-08-13 (hundred-and-forty-second filing)
+
+**Full hash: `2fe6216a6b088fc533301afac75c7913898b3b2d`**, read with
+`git rev-parse 2fe6216` in this dispatch — not relayed.
+
+**`Pass 74.0` is a NEW Pass family.** The ceiling was **73** (`Pass 73.0`
+/ `73.1`, both unstarted); this Pass was **minted in the commit itself**,
+not pre-filed under *Next up*, because the request arrived and was closed
+inside one session. **Ceiling moves 73 → 74; the next free family number
+is 75.** There is deliberately no *Next up* entry to promote — its
+absence here is the record, not an omission.
+
+**Decision `060` is minted this filing** (`ARCHITECTURE.md` §12), and a
+**standing-rule PROPOSAL claiming `R193`** is filed under *Standing
+rules*. Neither takes `R192`, which stays claimed by the unruled
+proposal. See *"What was minted, and what was deliberately not"* below.
+
+#### ★ The cross-project deliverable — named here because that is what makes it delivered
+
+**This is the first request to come through the shared channel
+(`D:\Dev\FeatureRequests\pdfce_FeatureRequests\`, operator-instituted
+2026-08-13) and be CLOSED**, and both halves of the exchange exist on
+disk and are named here per the cross-project-deliverable discipline
+(the same rule that made `comparison__pdfce_feature_column.md` a
+deliverable only once a pdfce doc named it):
+
+| file | role |
+|---|---|
+| `D:\Dev\FeatureRequests\pdfce_FeatureRequests\done_request_region_rasterisation.md` | the inbound request, **renamed** from `request_*` on closure, which is the channel's own protocol |
+| `D:\Dev\FeatureRequests\pdfce_FeatureRequests\note_region_rasterisation_shipped_and_measured.md` | the outbound reply — the API, the measurement, the two caveats, and the one question **refused rather than guessed** |
+| `D:\Dev\pdfce\docs\render-region-measurements.md` | the in-repo measurement record the reply points at |
+| `crates/pdfce-render/examples/region_bench.rs` | the **committed** harness that reproduces every figure |
+
+**Per decision 058 this was treated as a FINDING, not a favour** — a
+place `pdfce-render` drew its boundary wrong, reported by the session
+that hit it. The reply says so in those terms.
+
+#### ★★ THE FINDING, WHICH GENERALISES FURTHEST
+
+`MAX_PIXMAP_EDGE`'s doc comment read:
+
+> *"16,384 px covers a 14,400-unit (200-inch, Annex C max) page edge at
+> 80+ DPI — **beyond any plausible viewing zoom at Pass 1**."*
+
+**The arithmetic was right and the conclusion was wrong, because it
+reasoned about PAGES when an operator zooms into REGIONS.** Bounding
+`page_edge × scale` makes the constant a **zoom ceiling**, and one that
+gets **TIGHTER THE LARGER THE SHEET** — backwards for drafting review,
+where the big sheets carry the detail worth magnifying:
+
+| sheet | longest edge | max zoom @ 2× DPR |
+|---|---:|---:|
+| A4 portrait | 842 pt | **9.7×** |
+| A3 | 1191 pt | 6.9× |
+| **A1 landscape** | 2384 pt | **3.4×** |
+| A0 | 3370 pt | **2.4×** |
+
+**Raising the number was not the fix.** A whole-page RGBA pixmap grows
+as the **square** of the edge, and 16,384 is not arbitrary — it is
+**exactly 1.00 GiB**. Reaching 6.9× on A1 would cost **4 GiB per open
+page**. The fix is `render_page_region`, after which the constant bounds
+the **returned pixmap** and memory becomes a function of **viewport
+area** rather than of zoom.
+
+**The constant's doc comment now carries its own correction in place**
+(`crates/pdfce-render/src/lib.rs`, read directly in this dispatch), which
+is the correct disposal: deleting the wrong justification would have
+removed the defect and kept the class.
+
+**The generalisable shape, and it is the reason a rule is PROPOSED
+below:** *a guard justified by "beyond any plausible X" is a **prediction
+about use**, not a fact about the format, and it must be re-read whenever
+the use changes.*
+
+#### The API
+
+```rust
+pub fn render_page_region(
+    doc: &DocumentView<'_>,
+    page: &Page,
+    scale: f32,
+    region: pdfce_core::page_tree::Rect,  // PAGE space, pre-scale, y-UP
+    options: &RenderOptions,
+) -> Result<RenderedPage, RenderError>;
+```
+
+Essentially **the requester's own proposed signature**, unchanged.
+
+**Smaller than either side expected**, and that is worth carrying:
+`page_device_geometry` was **already public** and already returned the
+base CTM, and both `interpret::run` and the annotation pass take that CTM
+as a parameter. **A region is a differently-sized pixmap plus a
+device-space translation** — roughly 60 lines of new logic inside a
+224-line diff on `lib.rs`.
+
+**It SHARES `render_page_with_view`'s implementation rather than
+duplicating it**, so the annotation z-order, the cancellation contract,
+the `FormFieldsOnly` scope rule and the `contents_unresolved`
+carry-through **cannot drift** between whole-page and region. That is the
+same reason `ocr::layer` reached for `append_contents` instead of
+re-deriving the `/Contents`-array recipe.
+
+**All four corners of the region are mapped through the CTM, not two.**
+A two-corner mapping is correct unrotated and **silently transposed at
+`/Rotate` 90/270** — it would render the wrong part of a landscape scan
+while looking entirely plausible.
+
+#### ★★ THE MEASUREMENT, WHICH CHANGES WHAT THE FEATURE IS FOR
+
+Measured on the operator's own A1 benchmark drawing
+(`D:\Dev\temp\pdfce\ncored-benchmark-cad-drawing.pdf`, 1190.55 × 841.89
+pt, 5.6 MB, **148,517 paints · 24,128 clip ops**), release build, one run
+per case. Full table and method: `docs/render-region-measurements.md`.
+
+| case | pixels | time | **µs per 1,000 px above the floor** |
+|---|---:|---:|---:|
+| **floor** — a 1 × 1 **point** region | **2** | **691 ms** | — (denominator ≈ 0) |
+| region 400 × 300 pt, scale 1 | 120,701 | 699 ms | **0.066 ms/1,000 px** |
+| region 400 × 300 pt, scale 32 | 120,701 | 1,067 ms | 3.1 (zoom, not area) |
+| full page, scale 1 | 1,002,822 | 877 ms | **0.186 ms/1,000 px** |
+| full page, scale 2 | 4,011,288 | 1,422 ms | 0.182 ms/1,000 px |
+
+**A two-pixel render costs 691 ms; a 120,701-pixel render costs 699 ms.**
+**~99 % of the cost on this document is resolution- and
+area-INDEPENDENT** — content-stream interpretation and path construction,
+paid in full regardless of how few pixels come out. **Fill is nearly
+free**: the entire 1,002,822-pixel page adds **~180 ms over the floor**,
+i.e. **0.18 µs per pixel**, and the per-pixel figure is **stable across a
+33× change in pixel count** (0.182 vs 0.186 ms per 1,000 px), which is
+what makes "the floor is interpretation" a measurement rather than an
+interpretation of one.
+
+**The requesting session predicted ~0.74 s of resolution-independent cost
+from `tools/render-profile`'s scale sweep and was right** — the floor is
+0.69 s and it is essentially all of it.
+
+**Three consequences, in the order they matter:**
+
+1. **★ DO NOT TILE.** A 3 × 3 ring is **9 × ~0.7 s ≈ 6.2 s** against
+   ~0.7 s for one region covering the same area — **a 9× regression, not
+   an optimisation.** Tiling stays legitimate for **bounding memory** on
+   an enormous viewport and for nothing else. This is the consequence
+   that would have burned the requesting session, which is why the reply
+   leads with it.
+2. **The API buys REACHABILITY, not speed.** At scale 32 the whole page
+   would be 38,112 × 26,940 px — **3.8 GiB and over the guard
+   regardless.** It is **not slow, it is impossible.** The region renders
+   in **1.07 s**. *"Zoom further than other software allows"* is now
+   reachable at **~0.7–1.1 s per step** on a sheet this dense.
+3. **A display-list cache would remove ~99 % of the repeat cost** —
+   ~700 ms → roughly the fill cost, tens of ms, for the second and
+   subsequent renders of a page. **It is the single highest-value
+   optimisation available to `pdfce-render`, it is NOT BUILT, and the
+   691 ms floor is the evidence for funding it.** Filed as its own
+   *Backlog* entry this filing so the evidence and the work are in the
+   same document.
+
+**Honest limits, carried from the measurement doc rather than dropped:**
+one document (a dense CAD sheet is the **best** case for the "do not
+tile" argument and a text-heavy page would weaken it), one machine,
+single-threaded (`pdfce-render` uses no `rayon` — **N workers duplicate
+the floor rather than dividing it**, so parallel region calls are not a
+speed-up until a display list exists), `--release` only, and the
+`scale 8` row (801 ms) being *faster* than `scale 2` (855 ms) is **run
+noise, stated as such**.
+
+#### The tests — differential, because nothing else is an oracle
+
+**A region render is trivially "correct" against itself.** The real
+contract is that **region R at scale s is BYTE-IDENTICAL to the crop of a
+full-page render at scale s**. Four integration tests
+(`crates/pdfce-render/tests/region_matches_full_page.rs`, 238 lines) plus
+a rotated-page unit test.
+
+**Sabotage run before the suite was trusted:** the device-space
+translation was removed and two tests were **seen to fail**, at **4,389
+of 512,000 bytes differing = 0.86 % of the compared buffer** — small
+enough that an eyeball comparison would have passed it.
+
+`four_tiles_reassemble_into_the_whole_page` asserts the quadrants cover
+every pixel **exactly once**. The floor/ceil policy **covers** a
+requested region rather than cropping it; rounding instead would lose a
+row between adjacent tiles and show a **hairline seam that reads as a
+rendering artefact** rather than as an arithmetic bug.
+
+#### ★★★ A CORPUS GAP FOUND ON THE WAY, WORTH MORE THAN THE TEST IT BLOCKED
+
+**NO FIXTURE IN `fixtures/synthetic/` CARRIES A `/Rotate` KEY AT ALL.**
+
+The rotation test was written as an **integration** test first, **found
+nothing to load, and SKIPPED — reporting success while testing
+nothing.** It now lives as a **unit** test over the in-memory
+`doc_with_content` helper, which can set `/Rotate 90` directly.
+
+**This outlives the feature**, which is why it is filed as a *Backlog*
+entry this filing rather than left in a commit message:
+`page_device_geometry` has **four** rotation branches and **the file
+corpus cannot exercise a single non-zero one**. Every `/Rotate`-sensitive
+behaviour pdfce ships — rendering, region mapping, imposition, print
+orientation, DXF export — is tested against 0° files only, unless it
+happens to have built its own in-memory case.
+
+**The shape, graduated to `D:\dev\rag\rust\` this filing:** a test that
+skips when its fixture is missing **reports success while testing
+nothing**, and it does so in the one state where the absence is hardest
+to notice — a green suite.
+
+#### Unanswered and OWED, recorded in two places rather than dropped
+
+**Question 3 of the request — the honest upper bound on magnification
+before output stops being meaningful** (PDF coordinate precision,
+`tiny_skia`'s fixed-point arithmetic, hairline stroke behaviour at
+extreme scale) — **is NOT answered.** It needs its own experiment.
+
+**`MAX_ZOOM` must be set from measured quality degradation, not from a
+round number** — guessing one would be exactly the invented figure this
+project keeps refusing to ship, and it would be the *same class of error*
+as the justification this Pass just corrected. Recorded in
+`docs/render-region-measurements.md` §*"Not measured, and still owed"*
+and in the outbound reply's Q3.
+
+#### Gates and invariants — measured by the engineer at `2fe6216`, relayed
+
+| gate | result |
+|---|---|
+| `cargo test` workspace | **3,695 pass / 0 fail** (+7 on 3,688) |
+| `cargo fmt --all --check` | clean |
+| `cargo clippy --workspace --all-targets -- -D warnings` | clean |
+| `tools/check-ledger-numbers.py` | clean |
+| `tools/check-fmt-excluded.py` | clean |
+| `tools/check-shipped-assets.py` | clean |
+| `tools/check-ui-strings.sh` | clean |
+| **GUI-core separation (§3)** — `cargo tree -p pdfce-core`, `-p pdfce-render` | **no `egui` / `eframe` / `winit` / `wgpu`** |
+
+**Commit size:** 4 files, **663 insertions / 5 deletions** = **≈166
+inserted lines per file** (hard rule 10(a) — per-item beside the total,
+denominator stated). **336 of those 663 lines are the test file plus the
+bench harness = 51 % of the diff**, against 224 lines of `lib.rs`.
+
+#### What was minted, and what was deliberately NOT
+
+- **`Pass 74.0`** — a new family, minted in the commit. Ceiling **73 →
+  74**.
+- **Decision `060`** — the region cost model and the three architectural
+  positions it fixes. §12, this filing. Minted because *"do not tile"*,
+  *"the guard bounds the output, not `page × scale`"* and *"the display
+  list is the next investment"* are **positions a future session must not
+  re-derive or contradict**, and they are not implied by the code.
+- **`R193` is PROPOSED, NOT MINTED.** The rules section's own promotion
+  bar is *second instance is a guess, third is a pattern*. This shape has
+  **failed once** (`MAX_PIXMAP_EDGE`) and is **present, unfailed, in two
+  other constants** — `MAX_ANNOTS_PER_PAGE` (*"beyond any measured
+  document"*, but grounded in `tools/annot-corpus-check.py`) and
+  `MAX_DECODED_LEN` (*"beyond any legitimate single stream"*, grounded in
+  arithmetic). **One failure plus two healthy instances is not three
+  failures**, so the engineer rules rather than the librarian minting.
+  **`R192` is untouched.**
+- **No operator question.** Nothing is being asked; ceiling stays `(bm)`.
+
+### ★★★★ `49af8fb` — `Pass 71.0` **slice 3**: **the `ocrs` engine is BOUND to `OcrEngine`, behind a Cargo feature — and the first real implementation of that trait REPORTS NO CONFIDENCE AT ALL, which is the argument for `reports_confidence()` having been required-with-no-default, made by the world rather than by reasoning about it** — **`FEATURES.md` STILL `core [ ] · cli [ ] · gui [ ]`, decided again** — filed 2026-08-13 (hundred-and-forty-second filing)
+
+**Full hash: `49af8fb83f7fb071b7db69d4dcd64479552c9d31`**, read with
+`git rev-parse 49af8fb` in this dispatch — not relayed.
+
+**This is NOT a new Pass.** It is **slice 3 of the existing `Pass 71.0`**
+(OCR), whose *Next up* entry **stays where it is because the Pass is
+still incomplete** — the model weights are not in the repository, there
+is no `pdfce-cli ocr`, and the second engine the operator asked for is
+unbuilt. **No Pass ID was minted by this commit** (the family ceiling
+moved 73 → 74 in `2fe6216`, filed above, for unrelated work).
+
+**No decision record was minted for this slice, and that is a judgement**
+— see *"Why no decision for the engine choice"* below. `ARCHITECTURE.md`
+gains a **§4.1 sync entry (V)** instead.
+
+#### Why this engine — VERIFIED here, not cited from the survey
+
+`docs/ocr-engine-survey.md` (2026-08-12) says `ocrs` is the only surveyed
+engine that passes pdfce's wasm32 gate. **That was measured at adoption
+rather than trusted:**
+
+```text
+cargo check -p pdfce-core -p pdfce-render --target wasm32-unknown-unknown
+```
+
+**clean, with the feature in the DEFAULT set.** The distinction matters
+because a survey figure is a claim about the world at its date, and the
+adoption is where it becomes load-bearing: **every alternative would have
+made OCR the first capability that cannot cross into the web fork** —
+precisely the cost the §3 GUI-core-separation invariant exists to avoid
+paying.
+
+#### Licences — re-verified against the RESOLVED GRAPH, not the survey
+
+| fact | figure |
+|---|---|
+| crates added to `THIRD_PARTY_LICENSES.md` | **20** |
+| of those, copyleft | **ZERO** |
+| new licence **categories** | **none** |
+| `ocrs` + the `rten` runtime (11 crates) | **MIT OR Apache-2.0** throughout |
+| `flatbuffers`, beneath `rten` | **Apache-2.0 ONLY** (no MIT arm) — permissive, but no dual arm to elect |
+| `Cargo.lock` delta | **+195 lines** |
+
+`THIRD_PARTY_LICENSES.md` **regenerated via `cargo-about`** (rule 13 —
+generated, never hand-edited). **The two dual-licensed hits a naive scan
+reports — `r-efi` and `self_cell` — were TRACED and are pre-existing
+`egui` dependencies, not `ocrs`'s**, and both offer a permissive arm
+anyway. That trace is the difference between a licence figure and a
+licence claim.
+
+**No-network is STRUCTURAL here, not promised.** `ocrs`'s model
+downloader lives in the separate **`ocrs-cli` BINARY crate**, not the
+library, so **nothing linkable from `pdfce-core` can fetch anything**.
+The CI denylist and the **R24 SIMD gate** were both run locally against
+the new tree; both clean.
+
+#### ★★ THE FINDING WORTH CARRYING — an engine that reports NO confidence
+
+**`ocrs` reports no confidence at all.** Its output type is **a char and
+a rectangle** — there is no score on a character, a word, a line or the
+page. So **`reports_confidence()` returns `false`, and that is a fact
+about the world, not a stub awaiting improvement.**
+
+**This is exactly why that method was defined as REQUIRED, WITH NO
+DEFAULT:**
+
+- a default of **`true`** would have made this engine **claim scores it
+  does not have**;
+- a default of **`false`** would let a future engine that **has** them
+  **under-report by omission**.
+
+**The first real implementation of the trait landed on the side a
+convenience default would have got wrong.** That is the argument for the
+design **made by the world rather than by reasoning about it** — the
+strongest form the argument can take, and the reason it is filed as a
+finding rather than as a note on the API.
+
+**The whole disclosure chain downstream exists to carry that one fact to
+the operator** instead of letting unscored guesses pass as checked:
+`OcrPage::confidence_available` → `OcrLayerReport.confidence_available`
+(kept **separate** from `mean_confidence`, slice 2) → the report line
+*"this engine reports NO per-word confidence, so no word here has been
+scored either way — that is not the same as a high score."* **An engine
+that reports nothing must not look better than one that reports
+honestly** — the asymmetry slice 1 tested for, now exercised by a real
+engine.
+
+Graduated to `C:\personal_rag\pdf\` this filing.
+
+#### What is and is NOT gated
+
+**Only the recogniser.** The types, the y-flip (`words_to_page_space`)
+and the mode-3 sandwich writer (`ocr::layer`) stay **unconditionally
+compiled**, so a stripped build can still **write** a text layer from
+words obtained some other way — **it simply cannot produce them.**
+
+**The feature is named after the CRATE (`ocrs`), not the capability
+(`ocr`)**, so the second engine the operator asked for can land as a
+**sibling without a rename**. That is a small naming decision with a real
+consequence: `--features ocr` would have had to mean "whichever engine",
+and the operator's answer was *both*.
+
+**Forwarded through every shell per the `Pass 70.0` convention** —
+**including `pdfce-gui`'s manifest**: a `Cargo.toml` line only, no GUI
+surface, which stays deferred under the pause. **Omitting it would have
+been precisely the silent capability loss that convention's own comment
+warns about**, and a shell whose feature graph is wrong is a worse
+starting point for whatever replaces that crate (decision 058) than one
+that is right and merely unused.
+
+#### One refusal that exists because the crate's convenience API guesses
+
+`recognize()` **validates the buffer length before handing the slice
+over.** `ocrs`'s `ImageSource::from_bytes` **infers a channel count from
+`len / (w × h)`**, so a buffer **twice** the expected size is silently
+taken as a **2-channel image** and "works", recognising noise. **A named
+`ImageSize` refusal beats a plausible-looking page of nonsense** — the
+same posture as every other named refusal in `pdfce-core`.
+
+#### TWO THINGS FIXED ON DISCOVERY, BOTH FOUND BY THE LIBRARIAN'S SWEEP
+
+1. **★ `ASCENT_FRAC` / `DESCENT_FRAC` existed TWICE in `pdfce-core`
+   under the same names with different values** — **0.75 / 0.25** in
+   `text_edit` (the block model's nominal figures, shared so a run's box
+   and a reflowed line's box agree) and **0.718 / 0.207** in `ocr::layer`
+   (Helvetica's real AFM metrics). **Both correct.** A grep for the
+   identifier returned the wrong one **about half the time**, and they
+   differ by **0.043 em** — small enough to read as a rounding artefact
+   rather than as a different quantity. **The OCR pair now carries the
+   face in its name.** **That 0.043 em IS the 0.558 pt residual the
+   slice-2 test documents** (0.043 × 13 pt = 0.559 pt against 0.558 pt
+   measured) — the same number, seen from the other end.
+2. **`docs/core-api/03-capabilities.md` §5 — the briefing the `pdfceGUI`
+   project builds against — was REWRITTEN, not patched.** The
+   librarian's correction table listed **four** statements slice 2
+   falsified; **slice 3 falsified more of it an hour later.** It now
+   leads with the honest state (**everything is wired except the model
+   weights**), a four-layer map of exactly where the boundary sits,
+   accurate `file:line` tables for all four modules, an end-to-end worked
+   sequence, and **six traps** including the two this session paid for.
+   **A briefing patched twice in two hours is a briefing whose structure
+   was wrong**, not one with two errors in it.
+
+#### Gates and invariants — measured by the engineer at `49af8fb`, relayed
+
+| gate | result |
+|---|---|
+| `cargo test` workspace | **3,690 pass / 0 fail** (+2 on 3,688) |
+| `cargo fmt --all --check` | clean |
+| `cargo clippy --workspace --all-targets -- -D warnings` | clean |
+| **`cargo build --no-default-features`** | clean |
+| **`cargo test --no-default-features`** | clean |
+| **`cargo check --target wasm32-unknown-unknown`** (`pdfce-core`, `pdfce-render`) | **clean, feature in the DEFAULT set** |
+| **no-network denylist** (as CI runs it) | clean |
+| **R24 SIMD gate** | clean |
+| `tools/check-ledger-numbers.py` · `check-fmt-excluded.py` · `check-shipped-assets.py` · `check-ui-strings.sh` | all clean |
+| **GUI-core separation (§3)** — `cargo tree -p pdfce-core`, `-p pdfce-render` | **no `egui` / `eframe` / `winit` / `wgpu`** |
+
+**Commit size:** 11 files, **887 insertions / 138 deletions**; the new
+module `crates/pdfce-core/src/ocr/engine_ocrs.rs` is **345 lines** and
+`docs/core-api/03-capabilities.md` accounts for **311 changed lines** —
+i.e. **the briefing rewrite is a third of the diff**, which is the shape
+of a slice whose main risk was a downstream project building against a
+false document.
+
+#### ★ `FEATURES.md` STAYS `core [ ] · cli [ ] · gui [ ]` — STATED AGAIN, DELIBERATELY
+
+**The model weights are not in the repository, so NO BUILD CAN RECOGNISE
+TEXT.** `from_model_dir` **compiles, runs, and returns a named
+`ModelMissing`** telling the operator which file to put where — **a clean
+refusal, not a stub** — and that is the whole distance between this slice
+and a ticked box.
+
+**Do not round up.** Ticking `core` for an engine with no weights would
+claim a capability that cannot run — `R151`'s shape, and **the third
+consecutive slice of this Pass to refuse the same rounding** (slice 1
+refused it for types with no writer, slice 2 for a writer with no engine,
+slice 3 for an engine with no weights). The row's *sentence* was
+rewritten (the file's rule is replace-never-append) to say the engine is
+now bound; **no box moved.**
+
+Recorded explicitly, again, because `FEATURES.md`'s maintenance contract
+makes an **intentional** no-op and a **forgotten** one look identical
+afterwards.
+
+#### ★★ OWED TO THE OPERATOR — a knowing act he has not been asked about
+
+**Committing ~12 MB of `.rten` weights into a PUBLIC repository's history
+is PERMANENT**, and the two questions are not the same one:
+
+- **The LICENCE question is SETTLED** — operator, 2026-08-13: *"yes to
+  the license. keep going."* Open question `(bl)` is **answered YES** and
+  **must not be re-raised.**
+- **The COMMIT is a separate, knowing act he has not been asked about.**
+  A permissive licence says the file *may* be redistributed; it does not
+  say a 12 MB binary blob *should* enter this repository's history, where
+  it cannot be removed without a rewrite. **The engineer is raising it in
+  the session summary as a heads-up, not a permission request.**
+
+**Filed here so the distinction cannot be lost to a compaction**, and
+because a reader who sees only *"(bl) answered YES"* will conclude the
+commit is authorised. It is not authorised and it is not forbidden — it
+has **not been put to him.**
+
+#### `docs/PRIOR_ART.md` gains an "OCR engines" table
+
+Verified present in this dispatch by reading the file. Four rows, and the
+one that matters most is the refusal:
+
+| crate | verdict, as filed |
+|---|---|
+| **`ocrs` + `rten`** | **ADOPTED 2026-08-13**, feature `ocrs`, default ON — the only surveyed engine that passes the wasm32 gate. |
+| **`ocr-rs`** (PaddleOCR) | **not yet adopted — the natural SECOND engine.** 50+ languages, which is the operator's stated ranking criterion; **no WASM**, so it can never be the only one. |
+| **Surya** | **★ REJECTED BY NAME — do not re-evaluate it on accuracy.** Apache-2.0 code, **modified Open RAIL-M weights with a $5 M revenue cap** and field-of-use restrictions, which cannot be bundled in an MIT application **at any accuracy**. Recorded by name precisely because its benchmark numbers invite a second look and **the disqualifier is not in them.** |
+| **Tesseract** | reference/precedent only — **its default Windows build ships LGPL binaries**, so the `KillerPDF` bundled-OCR precedent is **not** the free default it appears to be. |
+
+#### Why no decision record for the engine choice
+
+**Each candidate already has a home, and a §12 entry would create a
+second text that can disagree with the first** — the same reasoning the
+hundred-and-fortieth and hundred-and-forty-first filings used to decline
+numbers:
+
+- **which engine** — decided by the **operator on 2026-08-12** (*"…or
+  heck, just build for both"*), recorded verbatim on the `Pass 71.0`
+  *Next up* entry;
+- **the adoption and its licence classification** — `docs/PRIOR_ART.md`'s
+  new OCR-engines table, which is this project's canonical
+  dependency-adoption record (rule 13);
+- **the evidence** — `docs/ocr-engine-survey.md`, 116,991 bytes,
+  2026-08-12;
+- **the public surface** — `ARCHITECTURE.md` **§4.1 sync entry (V)**,
+  written this filing, because the §4 body is the living truth and has
+  run behind the shipped core surface before.
+
 ### ★★★★ `ed05033` — `Pass 71.0` slice 2: **the OCR sandwich writer exists, and slice 1's module header had been DESCRIBING IT IN THE PRESENT TENSE FOR A DAY WHILE IT DID NOT EXIST** — `pdfce_core::ocr::layer`, additive, invisible, byte-prefix-preserving — **`FEATURES.md` DELIBERATELY UNCHANGED: OCR stays core [ ] · cli [ ] · gui [ ]** — filed 2026-08-13 (hundred-and-forty-first filing)
 
 **Full hash: `ed050337328878b598f71f9be6834647f1e59cda`**, read with
@@ -43018,7 +43513,54 @@ blocked by it.
 
 ---
 
-### Pass 71.0 — **OCR**, promoted from the Backlog bucket 2026-08-12 (hundred-and-twenty-sixth filing) on the operator's engine decision — **SLICES 1 AND 2 SHIPPED (`9f2af1d` types, `ed05033` the sandwich WRITER); SLICE 3 IS THE ENGINE BINDING, IN FLIGHT UNCOMMITTED AT THE TIME OF FILING, so NOTHING IS OPERATOR-REACHABLE YET** — **★ NO LONGER BLOCKED ON AN OPERATOR DECISION as of 2026-08-13: `(bl)` IS ANSWERED YES**
+### Pass 71.0 — **OCR**, promoted from the Backlog bucket 2026-08-12 (hundred-and-twenty-sixth filing) on the operator's engine decision — **SLICES 1, 2 AND 3 SHIPPED (`9f2af1d` types, `ed05033` the sandwich WRITER, `49af8fb` the `ocrs` ENGINE); the PIPELINE IS COMPLETE END TO END IN CORE AND STILL NOTHING IS OPERATOR-REACHABLE, because the MODEL WEIGHTS ARE NOT IN THE REPOSITORY and there is no `pdfce-cli ocr`** — **★ NO LONGER BLOCKED ON AN OPERATOR DECISION as of 2026-08-13: `(bl)` IS ANSWERED YES**
+
+> **★★★ SLICE 3 SHIPPED 2026-08-13 (hundred-and-forty-second filing) —
+> `49af8fb`, `pdfce_core::ocr::engine_ocrs`.** `OcrsEngine` implements
+> `OcrEngine`, behind the Cargo feature **`ocrs`** (named after the
+> **crate**, not the capability, so the second engine lands as a sibling
+> without a rename), **default ON**, forwarded from **every** shell
+> including `pdfce-gui`'s manifest. **20 crates added, ZERO copyleft**
+> (`ocrs` + the 11 `rten` crates are MIT OR Apache-2.0; `flatbuffers`
+> beneath them is Apache-2.0 only), `THIRD_PARTY_LICENSES.md` regenerated
+> via `cargo-about`. **The wasm32 gate was VERIFIED empirically at
+> adoption, not cited from the survey.** **3,690 tests, +2.**
+>
+> **★ IT REPORTS NO CONFIDENCE AT ALL** — `ocrs`'s output type is a char
+> and a rectangle, so `reports_confidence()` returns **`false`**, and
+> **that is a fact about the world, not a stub.** The first real
+> implementation of the trait landed on the side a convenience default
+> would have got wrong. Full record: top-of-*Shipped*.
+>
+> **★★ THIS SLICE MOVED NO `FEATURES.md` BOX EITHER, AND THE REASON IS
+> THE REMAINING WORK:** the **model weights are not in the repository**,
+> so **no build can recognise text**. `from_model_dir` compiles, runs and
+> returns a named **`ModelMissing`** naming the file and the directory —
+> a clean refusal, not a stub.
+>
+> **★ WHAT IS ACTUALLY LEFT ON THIS PASS, in order:**
+>
+> 1. **The WEIGHTS — and the open item is the COMMIT, not the licence.**
+>    `(bl)` is answered **YES** and must not be re-raised. What has
+>    **not** been put to the operator is that **committing ~12 MB of
+>    `.rten` binary into a PUBLIC repository's history is permanent**.
+>    The engineer raised it in the 2026-08-13 session summary as a
+>    heads-up. **Until he responds, the files are neither authorised nor
+>    forbidden — they have not been asked about.** The four carve-outs
+>    below still bind (pin + hash the exact artifact, hand-authored
+>    `PROVENANCE.md`, no clearance for an adaptation, publishing is still
+>    an operator act).
+> 2. **`pdfce-cli ocr`** (rule 11). This is what makes the capability
+>    reachable from a shell at all, and it is the box that moves first.
+> 3. **The second engine** — `ocr-rs`/PaddleOCR, Apache-2.0, **50+
+>    languages**, which is the operator's own stated ranking criterion.
+>    **No WASM**, so it is a sibling feature the wasm32 build omits, never
+>    a replacement.
+> 4. **The review surface (rule 4, as narrowed by decision 059)** —
+>    **off-canvas**, and on this engine it must state that *nothing was
+>    scored*, which is the hardest case rule 4 has met.
+> 5. **Language selection**, a property of the engine chosen at build
+>    time as well as at run time.
 
 > **★★ SLICE 2 SHIPPED 2026-08-13 (hundred-and-forty-first filing) —
 > `ed05033`, `pdfce_core::ocr::layer`.** `build_layer_content` (pure) and
@@ -49093,6 +49635,57 @@ Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
 
+- **★★ PERFORMANCE, filed 2026-08-13 (hundred-and-forty-second filing) —
+  A DISPLAY-LIST CACHE IN `pdfce-render`, AND IT ARRIVES WITH ITS
+  EVIDENCE ALREADY MEASURED.** **Measured at `2fe6216`** on the
+  operator's A1 benchmark drawing (148,517 paints · 24,128 clip ops,
+  release build, `docs/render-region-measurements.md`): **a 2-pixel
+  render costs 691 ms and a 120,701-pixel render costs 699 ms**, so
+  **~99 % of the cost is resolution- and area-independent** — it is
+  content-stream interpretation and path construction, paid in full
+  regardless of how few pixels come out. Fill is **0.18 µs per pixel**
+  and that figure is stable across a **33× change in pixel count**
+  (0.186 vs 0.182 ms per 1,000 px), which is what makes the split a
+  measurement rather than a reading of one. **What the work is:** a
+  reusable parsed representation a shell holds and replays against N
+  regions, taking the **second and subsequent** renders of a page from
+  ~700 ms to roughly the fill cost — **tens of milliseconds**. **Why it
+  is the highest-value optimisation this crate has:** every other
+  candidate divides the 1 % (parallelism duplicates the floor per worker
+  rather than dividing it — `pdfce-render` uses no `rayon` today; tiling
+  **multiplies** it, 9× for a 3 × 3 ring). **Consumer already waiting:**
+  the `pdfceGUI` project's viewport, told plainly in
+  `note_region_rasterisation_shipped_and_measured.md` that it is **not
+  built** rather than left to assume it. **Deliberately not a Pass yet:**
+  it is Pass-sized, it touches the interpreter's data flow, and it is not
+  blocking anything at HEAD — `render_page_region` re-interprets every
+  call and is correct. **Promote it the moment a shell's zoom loop
+  depends on the second render being fast.** Full record: `Pass 74.0`,
+  top-of-*Shipped*, and **decision 060**.
+- **★★ TEST-CORPUS GAP, filed 2026-08-13 (hundred-and-forty-second
+  filing) — NO FIXTURE IN `fixtures/synthetic/` CARRIES A `/Rotate` KEY
+  AT ALL, and the way this was found is the argument for fixing it: a
+  rotation test written as an INTEGRATION test found nothing to load and
+  SKIPPED — REPORTING SUCCESS WHILE TESTING NOTHING.** Found during
+  `Pass 74.0` (`2fe6216`); the test now lives as a **unit** test over the
+  in-memory `doc_with_content` helper, which can set `/Rotate 90`
+  directly, so the feature is covered and **the corpus is not.** **Why
+  this outlives the feature that found it:** `page_device_geometry` has
+  **four** rotation branches (0/90/180/270) and **the file corpus cannot
+  exercise a single non-zero one**, so every `/Rotate`-sensitive
+  behaviour pdfce ships — page rendering, region mapping, imposition,
+  print orientation, DXF export, annotation placement — is tested against
+  0° files only **unless it happened to build its own in-memory case**.
+  A `/Rotate 90` page is not exotic: it is what a landscape scan and a
+  rotated CAD sheet look like. **Fix shape when scoped:** generate three
+  fixtures (90/180/270) alongside the existing synthetic set, ideally via
+  a `tools/gen-*-fixtures.py` sibling so they are reproducible rather than
+  checked-in binaries of unknown provenance (rule 7), then re-home the
+  rotation unit test as the integration test it was meant to be and
+  **watch it fail first** with the geometry sabotaged. **The
+  generalisable half** — *a test that skips when its fixture is missing
+  reports success while testing nothing* — is graduated to
+  `D:\dev\rag\rust\` this filing; **the corpus half is this entry.**
 - **API-surface debt, filed 2026-08-13 (hundred-and-thirty-ninth filing)
   — `EditSession::into_document` LOOKS like the "finish editing" path,
   has ZERO callers repo-wide, and DISCARDS every unsaved edit.**
@@ -61668,6 +62261,107 @@ minted on its second instance is a guess; on its third it is a pattern).
 > **— END OF THE PROPOSAL AS FILED. Nothing above is in force. Any
 > subsequently minted rule and any renumbering keep their claim on `R192`
 > unless and until the engineer rules otherwise.**
+
+### PROPOSAL (2026-08-13, hundred-and-forty-second filing) — claiming `R193`, **NOT MINTED, NOT IN FORCE, AMENDS NOTHING**
+
+**Status: a librarian PROPOSAL. The ceiling stays `R191`. `R192` remains
+claimed by the proposal directly above and is NOT taken here** — the
+dispatching engineer said so explicitly, and left the judgement of
+whether to propose at all to the librarian: *"This may be worth a
+standing rule — the engineer did not mint one and is leaving the
+judgement to you."* Form follows the `R159`/`R164`/`R165`/`R192`
+precedent: proposal text first, ruling appended later, original text left
+unedited.
+
+**Why a PROPOSAL and not a mint, stated first because it is the honest
+part.** This section's own promotion bar is *a shape minted on its second
+instance is a guess; on its third it is a pattern.* This shape has
+**failed exactly once**, and the two other instances of it in the
+codebase are **healthy**. One failure plus two healthy instances is not
+three failures. The engineer rules.
+
+> **PROPOSED `R193` — A LIMIT JUSTIFIED BY *"BEYOND ANY PLAUSIBLE X"* IS
+> A PREDICTION ABOUT **USE**, NOT A FACT ABOUT THE FORMAT. Say which kind
+> of justification a guard has, name the evidence when it is a
+> prediction, and re-read every use-predicated guard whenever the use
+> changes.**
+>
+> **The instance that failed** (`Pass 74.0`, `2fe6216`).
+> `MAX_PIXMAP_EDGE`'s doc comment read *"16,384 px covers a 14,400-unit
+> (200-inch, Annex C max) page edge at 80+ DPI — **beyond any plausible
+> viewing zoom at Pass 1**."* **The arithmetic was right and the
+> conclusion was wrong**, because the justification reasoned about a
+> quantity the **FORMAT** produces (page size, spec-bounded at 14,400
+> units) while the constant actually bounded a quantity the **OPERATOR**
+> produces (`page_edge × zoom`, unbounded). The result was a zoom ceiling
+> that got **tighter the larger the sheet** — 9.7× on A4, **2.4× on A0**
+> — which is backwards for exactly the documents where magnification
+> matters. It was found by an **independent project building against the
+> crate**, not by review, and not by any test.
+>
+> **The two instances that are HEALTHY, and they are what the rule is
+> actually asking for:**
+>
+> | constant | justification | why it is sound |
+> |---|---|---|
+> | `pdfce_core::annot::MAX_ANNOTS_PER_PAGE` | *"beyond any measured document"* | **names its evidence** — *"chosen far above the corpus maximum (see `tools/annot-corpus-check.py`)"*, and states that **no spec limit exists to inherit**. The prediction is checkable and the checker is committed. |
+> | `pdfce_core::filters::MAX_DECODED_LEN` | *"beyond any legitimate single stream"* | **carries its arithmetic** — *"content streams are KBs; even a 300-DPI A4 uncompressed RGB image is ~35 MB"* against a 256 MiB bound, i.e. **7× headroom over the worst legitimate case it names.** |
+>
+> **The diagnostic question, which is the practical form:** *"what
+> quantity does this guard BOUND, and what quantity does its
+> justification REASON ABOUT?"* If they are not the same quantity, the
+> justification is not about the guard. `MAX_PIXMAP_EDGE` bounded
+> `page × zoom` and reasoned about `page`. **The mismatch is visible in
+> one sentence and invisible in every test**, because a guard that has
+> never been hit passes everything.
+>
+> **Proposed practical form, three parts.** (1) **Label the
+> justification.** A guard's doc comment says whether its number comes
+> from a **fact** (a spec limit; an arithmetic identity — 16,384² × 4 B
+> **is** exactly 1.00 GiB, and *that* half of `MAX_PIXMAP_EDGE`'s comment
+> was always right) or from a **prediction about use**. (2) **A
+> prediction names its evidence and its subject set** — a corpus, a
+> committed measurement script, or worked arithmetic against the worst
+> legitimate case, as both healthy instances do. A prediction with no
+> named evidence is an opinion with a number attached. (3) **A Pass that
+> changes HOW a capability is used — a new entry point, a new shell, a
+> new gesture, a new consumer — re-reads the use-predicated guards on the
+> path it touched.** That is the step nobody took here: `MAX_PIXMAP_EDGE`
+> was written when the only caller rendered whole pages, and it was still
+> correct then.
+>
+> **Why this is NOT already covered.** `R186` is a guard keyed on a
+> hazard's **marker** failing open when the hazard arrives markerless —
+> **wrong predicate**. This guard's predicate is right; its
+> **justification** is about the wrong quantity, and it fails **closed**
+> (it refuses legitimate work) rather than open. `R151` is a capability
+> with no caller. `R191` is an instrument failing open.
+>
+> **★ Note for the engineer, because it may argue for ONE rule rather
+> than two.** Proposed `R192` (directly above) says *an obligation that
+> falls between two correct tools is enforced by neither* — a **tool's
+> input set ≠ the obligation's subject set**. This proposal says a
+> **guard's justification subject ≠ the quantity it bounds**. **Both are
+> "the set the thing REASONS OVER is not the set it ACTS ON."** They may
+> be one rule at two layers (enforcement vs. limits), or the abstraction
+> may be too thin to enforce anything. **That judgement is the
+> engineer's, and it is flagged rather than resolved here** — a librarian
+> merging two proposals on a resemblance is how a rule ends up meaning
+> nothing.
+>
+> **Anticipated objection, stated against the proposal because that is
+> this project's bar:** part (1) is a **writing convention**, and this
+> project already carries several (hard rule 10's figure-shape rules).
+> Conventions cost nothing at write time and are unenforceable
+> afterwards; a rule nobody can check is the failure mode this section
+> keeps naming. **The counter is part (3)**, which is not a writing
+> convention but a **step in a Pass** — and it is the step that was
+> missing, since the wrong justification survived review precisely by
+> being well written.
+>
+> **— END OF THE PROPOSAL AS FILED. Nothing above is in force. `R192`
+> keeps its claim; this proposal claims `R193`; the ceiling stays
+> `R191`.**
 
 ## Update protocol
 

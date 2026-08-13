@@ -142,7 +142,8 @@ provisional; re-verify before any acceptance criterion leans on them.
 
 | core | cli | gui | Acrobat | Feature |
 |:----:|:---:|:---:|:-------:|---------|
-| [x] | — | [x] | [x] | Rasterize vector paths, text and images. |
+| [x] | [x] | [x] | [x] | Rasterize vector paths, text and images; `render-page` writes a PNG. |
+| [x] | [ ] | [ ] | ? | Rasterize an arbitrary page **region**, so magnification is bounded by viewport size instead of page size. **No shell calls it.** ~99% of the cost is page interpretation, so tiling is a 9× regression, not an optimisation. |
 | [x] | — | [x] | ? | Off-thread cancellable rendering; a large CAD drawing stays interactive. |
 | [x] | — | [x] | [x] | Image codecs — DCT/JPEG, LZW, RunLength, CCITT Fax, JBIG2, JPEG 2000. |
 | [x] | [x] | — | — | JPEG write path. |
@@ -227,7 +228,7 @@ the model or verb exists and only the named shell is missing. The
 | [ ] | [ ] | [ ] | [x] | Digital signatures — PKCS#7/PAdES signing and verification. |
 | [ ] | [ ] | [ ] | [x] | Bates numbering. |
 | [ ] | [ ] | [ ] | [x] | PDF/A conformance and validation. |
-| [ ] | [ ] | [ ] | [x] | OCR — core can now **write** the invisible sandwich layer (`ocr::layer`: §9.3.6 mode 3, additive, the scan never re-encoded) as well as carry the types; **no engine is wired, so a caller must supply the recognised words and nothing is reachable from any shell.** |
+| [ ] | [ ] | [ ] | [x] | OCR — core writes the invisible sandwich layer (`ocr::layer`: §9.3.6 mode 3, additive, the scan never re-encoded) and the `ocrs` engine is bound behind a Cargo feature; **the model weights are not in the repository, so no build can recognise text** — the loader returns a named `ModelMissing` — and no shell has a surface. |
 | [ ] | [ ] | [ ] | [x] | Accessibility (PDF/UA) tagging. |
 | [ ] | [ ] | [ ] | [x] | Document comparison. |
 | [ ] | [ ] | [ ] | [x] | Portfolios (PDF Package). |
