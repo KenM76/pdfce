@@ -196,11 +196,42 @@ Tag `v0.5.3` → `0963b5f` (= `HEAD` = `origin/main`). Asset
 `tools/verify-release.py v0.5.3` reports **all seven checks ok**, including
 **CI is GREEN at the tagged commit**.
 
-**★ This is only the SECOND release in this project's history tagged at a
-commit CI had accepted.** `v0.5.2` was the first; 3 of the 4 before it were
-tagged at commits CI had rejected, and **`v0.3.0` was published with failing
-tests**. Keep the order: **FILE → LET CI GO GREEN → TAG**, and run
+**★ This is only the SECOND release tagged at a commit CI had accepted**
+(`v0.5.2` was the first). The full history, **measured this session** with
+`gh run list` against each tagged commit — not recalled:
+
+| tag | asset (bytes) | CI at the tagged commit |
+|---|---|---|
+| `v0.1.0` | 9,590,137 | **red** |
+| `v0.2.0` | 9,922,177 | **red** |
+| `v0.3.0` | 9,998,582 | **red** — published with failing tests |
+| `v0.4.0` | 10,023,075 | green |
+| `v0.5.0` | 10,086,482 | **red** |
+| `v0.5.1` | 10,244,728 | **red** |
+| `v0.5.2` | 10,290,964 | green |
+| `v0.5.3` | 10,308,179 | green |
+
+**5 of 8, not the "3 of the last 4" the ledger has been carrying** (that
+figure was true of its window and understates the whole). Mitigating
+context already on record (`f2ac2af`, hundred-and-seventh filing): CI was
+red on **every** push back past `v0.1.0` and nobody was watching, so the
+three earliest reds share one cause. The encouraging half: **the last two
+are green, and they are the only two ever checked by `verify-release.py`'s
+CI gate** — the tool postdates the rest.
+
+Keep the order: **FILE → LET CI GO GREEN → TAG**, and run
 `tools/verify-release.py` *before* tagging.
+
+**★ Half the releases have NO release record**, found while filing this
+one. `v0.2.0`, `v0.3.0`, `v0.5.3` have dedicated entries; `v0.5.2` now does
+(backfilled, `6d21fd1`); `v0.5.1` is recorded inside a work filing;
+**`v0.1.0`, `v0.4.0` and `v0.5.0` have none of either kind.** Deliberately
+NOT backfilled — filed as an open item with the measured table, for a
+session with appetite for it, or for the operator to say the old ones are
+not worth reconstructing. **The cause is `R192`'s exact shape:**
+`check-commits-filed.py` counts *commits*, and each version-bump commit
+*was* filed, so the gate was satisfied while the release record was
+missing. Nothing watches for a release with no filing.
 
 **Bump the version BEFORE the tag** (`--version` prints
 `CARGO_PKG_VERSION`, so tagging a version the binary does not report ships a
