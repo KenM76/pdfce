@@ -108,10 +108,43 @@ pub use tiny_skia;
 #[doc(inline)]
 pub use pdfce_core::{PdfError, PdfVersion};
 
-/// Maximum pixmap edge, in pixels (pdfce policy, ARCHITECTURE.md
-/// §10.1): bounds `page size × zoom` allocation. 16,384 px covers a
-/// 14,400-unit (200-inch, Annex C max) page edge at 80+ DPI — beyond
-/// any plausible viewing zoom at Pass 1.
+/// Maximum pixmap edge, in pixels (pdfce policy, `ARCHITECTURE.md`
+/// §10.1): bounds the raster allocation. 16,384 px of RGBA is exactly
+/// **1.00 GiB**, which is where the number comes from — memory grows as the
+/// **square** of the edge, so this is not a round number that could simply be
+/// raised.
+///
+/// # ★ Its original justification was wrong, and how it was wrong is useful
+///
+/// This doc comment used to end: *"16,384 px covers a 14,400-unit (200-inch,
+/// Annex C max) page edge at 80+ DPI — **beyond any plausible viewing zoom at
+/// Pass 1**."*
+///
+/// The arithmetic was right and the conclusion was not, because it reasoned
+/// about **pages** when the operator zooms into **regions**. Bounding
+/// `page_edge × scale` makes this constant a *zoom ceiling*, and one that gets
+/// **tighter the larger the sheet**:
+///
+/// | sheet | longest edge | max zoom @ 2× DPR |
+/// |---|---:|---:|
+/// | A4 portrait | 842 pt | 9.7× |
+/// | A3 | 1191 pt | 6.9× |
+/// | **A1 landscape** | 2384 pt | **3.4×** |
+/// | A0 | 3370 pt | 2.4× |
+///
+/// That is backwards for drafting review: the big sheets carry the detail
+/// worth magnifying. It was found by the `pdfceGUI` session building a viewer
+/// against this crate, against the operator's requirement *"I want to be able
+/// to zoom in as much as feasibly possible."*
+///
+/// **The fix was not a bigger number** — reaching 6.9× on A1 would cost 4 GiB
+/// per open page — **but [`render_page_region`]**, which makes this constant
+/// bound the *returned pixmap* instead, at which point 16,384 is generous and
+/// memory becomes a function of viewport area rather than of zoom.
+///
+/// The lesson worth carrying past this constant: a guard justified by *"beyond
+/// any plausible X"* is a **prediction about use**, not a fact about the
+/// format, and it should be re-read whenever the use changes.
 pub const MAX_PIXMAP_EDGE: u32 = 16 * 1024;
 
 /// Rasterization errors.
@@ -238,7 +271,128 @@ pub fn render_page_with_view(
     scale: f32,
     options: &RenderOptions,
 ) -> Result<RenderedPage, RenderError> {
-    let (width, height, base_ctm) = page_device_geometry(page, scale);
+    render_impl(doc, page, scale, None, options)
+}
+
+/// Rasterize a **sub-rectangle** of a page, so a viewer at high
+/// magnification pays for the pixels it is showing rather than for the whole
+/// sheet.
+///
+/// `region` is in **page space, pre-scale** — the same coordinate system as
+/// [`Page::crop_box`], y-up. The returned pixmap covers exactly that region at
+/// `scale`, and [`MAX_PIXMAP_EDGE`] then guards **the region** rather than the
+/// page.
+///
+/// # Why this exists, and what it changes
+///
+/// Every other entry point rasterises the whole page, so the pixmap edge is
+/// `page_edge × scale` and [`MAX_PIXMAP_EDGE`] silently becomes a **zoom
+/// ceiling that gets tighter the larger the sheet** — backwards for drafting
+/// review, where the big sheets carry the detail worth magnifying. On an A1
+/// landscape sheet at 2× device pixel ratio that ceiling is **3.4×**.
+///
+/// Raising the constant does not fix it: a whole-page RGBA pixmap grows as the
+/// **square** of the edge, and 16,384 px is not arbitrary — it is exactly
+/// 1.00 GiB. Reaching 6.9× on that sheet would cost 4 GiB per open page. With
+/// a region, memory is a function of **viewport area** and stops scaling with
+/// zoom altogether.
+///
+/// # ★ The cost model, measured — read this before building tiles on it
+///
+/// A region render still **interprets the whole content stream**. There is no
+/// display-list cache and no parse-once/fill-many seam; this function shares
+/// [`render_page_with_view`]'s implementation exactly, differing only in the
+/// pixmap size and a translation on the base CTM.
+///
+/// What makes it worth having anyway is that `tiny_skia` culls geometry
+/// outside the pixmap cheaply, so the expensive half — anti-aliased span
+/// filling — is paid only for the region. On a dense A1 CAD drawing
+/// (148,517 paints, 24,128 clip ops) the measured figures are in
+/// `docs/render-region-measurements.md`.
+///
+/// **The consequence for a tiled strategy is the important part:** because
+/// interpretation is re-paid per call, N tiles cost N × the interpretation.
+/// A 3×3 ring is **not** free. Prefer one region covering the viewport over
+/// nine tiles covering the same area, and treat tiling as a mechanism for
+/// *bounding memory*, not for *saving time*.
+///
+/// # Errors
+///
+/// [`RenderError::BadRasterSize`] if the region is empty or its raster exceeds
+/// [`MAX_PIXMAP_EDGE`]; otherwise as [`render_page`].
+pub fn render_page_region(
+    doc: &DocumentView<'_>,
+    page: &Page,
+    scale: f32,
+    region: pdfce_core::page_tree::Rect,
+    options: &RenderOptions,
+) -> Result<RenderedPage, RenderError> {
+    render_impl(doc, page, scale, Some(region), options)
+}
+
+/// The single rasterisation path, whole-page and region alike.
+///
+/// Shared deliberately rather than copied: a second implementation would be a
+/// second place for the annotation z-order, the cancellation contract, the
+/// `FormFieldsOnly` scope rule and the `contents_unresolved` carry-through to
+/// drift. The ONLY difference a region makes is the pixmap size and a
+/// translation on the base CTM — everything downstream is handed a CTM and a
+/// pixmap and neither knows nor cares which it got.
+fn render_impl(
+    doc: &DocumentView<'_>,
+    page: &Page,
+    scale: f32,
+    region: Option<pdfce_core::page_tree::Rect>,
+    options: &RenderOptions,
+) -> Result<RenderedPage, RenderError> {
+    let (page_w, page_h, page_ctm) = page_device_geometry(page, scale);
+
+    let (width, height, base_ctm) = match region {
+        None => (page_w, page_h, page_ctm),
+        Some(r) => {
+            // Map the region's four corners through the page CTM and take
+            // their device-space bounding box. Corners rather than two
+            // opposite points, because `/Rotate` 90/270 swaps the axes — a
+            // two-point mapping is correct for the unrotated case and
+            // silently transposed for the odd quarter-turns, which is the
+            // kind of bug that only shows on landscape scans.
+            let corners = [
+                (r.llx as f32, r.lly as f32),
+                (r.urx as f32, r.lly as f32),
+                (r.urx as f32, r.ury as f32),
+                (r.llx as f32, r.ury as f32),
+            ];
+            let mapped: Vec<(f32, f32)> = corners
+                .iter()
+                .map(|&(x, y)| {
+                    let mut p = [tiny_skia::Point::from_xy(x, y)];
+                    page_ctm.map_points(&mut p);
+                    (p[0].x, p[0].y)
+                })
+                .collect();
+            let min_x = mapped.iter().map(|p| p.0).fold(f32::INFINITY, f32::min);
+            let max_x = mapped.iter().map(|p| p.0).fold(f32::NEG_INFINITY, f32::max);
+            let min_y = mapped.iter().map(|p| p.1).fold(f32::INFINITY, f32::min);
+            let max_y = mapped.iter().map(|p| p.1).fold(f32::NEG_INFINITY, f32::max);
+            if !min_x.is_finite() || !min_y.is_finite() {
+                return Err(RenderError::BadRasterSize {
+                    width: 0,
+                    height: 0,
+                });
+            }
+            // Floor the origin and ceil the extent so the requested region is
+            // fully covered rather than cropped by up to a pixel on each edge
+            // — a tiled caller that lost a sub-pixel per tile would show seams.
+            let x0 = min_x.floor();
+            let y0 = min_y.floor();
+            let w = (max_x.ceil() - x0).max(0.0) as u32;
+            let h = (max_y.ceil() - y0).max(0.0) as u32;
+            // Device-space translation. Post-multiplied, so it composes with
+            // whatever rotation `page_device_geometry` already encoded.
+            (w, h, page_ctm.post_translate(-x0, -y0))
+        }
+    };
+
     if width == 0 || height == 0 || width > MAX_PIXMAP_EDGE || height > MAX_PIXMAP_EDGE {
         return Err(RenderError::BadRasterSize { width, height });
     }
@@ -647,6 +801,66 @@ mod tests {
         assert_eq!((out.pixmap.width(), out.pixmap.height()), (100, 100));
         assert_eq!(pixel(&out.pixmap, 50, 5), (0, 0, 0)); // top band
         assert_eq!(pixel(&out.pixmap, 50, 50), (255, 255, 255));
+    }
+
+    /// ★ A region of a ROTATED page is still the crop of the rotated page.
+    ///
+    /// This test lives here, as a unit test over the in-memory
+    /// [`doc_with_content`] helper, for a reason worth recording: **no fixture
+    /// in `fixtures/synthetic/` carries a `/Rotate` key at all.** A companion
+    /// integration test was written first, found nothing to load, and skipped
+    /// — reporting success while testing nothing. The helper can set
+    /// `/Rotate 90` directly, so the coverage is real here and unreachable
+    /// there.
+    ///
+    /// What it pins: `render_page_region` maps all **four** corners of the
+    /// requested region through the page CTM and takes their device-space
+    /// bounding box. Mapping only two opposite corners is correct for an
+    /// unrotated page and **silently transposed** at 90° and 270°, because
+    /// those quarter-turns swap the axes. That defect would render the wrong
+    /// part of a landscape scan while looking entirely plausible.
+    #[test]
+    fn a_region_of_a_rotated_page_is_the_crop_of_the_rotated_page() {
+        // Same content and rotation as `page_rotate_90_swaps_dimensions...`:
+        // a rect hugging the LEFT edge, which after 90° CW display rotation
+        // hugs the TOP edge. The full page is 100x100 device px at scale 1.
+        let (doc, page) = doc_with_content("0 0 0 rg 0 0 10 100 re f", "/Rotate 90");
+        let full = render_page(&doc, &page, 1.0).unwrap();
+        assert_eq!((full.pixmap.width(), full.pixmap.height()), (100, 100));
+
+        // The whole page as a region must reproduce the whole page exactly —
+        // the strongest single statement available, since it exercises the
+        // corner mapping under rotation and compares against a known-good
+        // raster rather than against itself.
+        let whole = pdfce_core::page_tree::Rect::from_corners(0.0, 0.0, 100.0, 100.0);
+        let got =
+            render_page_region(&doc.view(), &page, 1.0, whole, &RenderOptions::default()).unwrap();
+        assert_eq!(
+            (got.pixmap.width(), got.pixmap.height()),
+            (100, 100),
+            "the region covering the whole rotated page must have the ROTATED \
+             page's dimensions; a transposed mapping shows up here first"
+        );
+        assert_eq!(
+            got.pixmap.data(),
+            full.pixmap.data(),
+            "and identical pixels — a two-corner mapping would transpose them"
+        );
+
+        // Now a genuine sub-region: the top-left quarter of the DEVICE image,
+        // which under 90° CW comes from the page-space rect x∈[0,50], y∈[50,100].
+        let quarter = pdfce_core::page_tree::Rect::from_corners(0.0, 50.0, 50.0, 100.0);
+        let tile = render_page_region(&doc.view(), &page, 1.0, quarter, &RenderOptions::default())
+            .unwrap();
+        assert_eq!((tile.pixmap.width(), tile.pixmap.height()), (50, 50));
+        // The black band sits along the top of the rotated page, so this tile
+        // is black at its top rows and white further down.
+        assert_eq!(pixel(&tile.pixmap, 25, 5), (0, 0, 0), "top band present");
+        assert_eq!(
+            pixel(&tile.pixmap, 25, 45),
+            (255, 255, 255),
+            "and white below it"
+        );
     }
 
     #[test]
