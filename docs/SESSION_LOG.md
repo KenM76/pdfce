@@ -38245,3 +38245,165 @@ replacing the other. Re-run the commands; do not quote this number.**
 - **Run `tools/check-commits-filed.py` at the END of a filing as well as
   the start.** Three filings running it has named a commit that landed
   while the filing was being written.
+
+## 2026-08-12 (hundred-and-twenty-eighth filing) — `bd53ab3`+`c4ec3f5`: `Pass 68.0` SHIPS — the canvas can pick two lines and author a ce dimension from them, closing the request that opened the Pass; two deliberate divergences from the ui-spec recorded with reasons; a second, independent obstacle to sharing coordinates between the two GUI harnesses found and filed as an amendment, not a new sibling
+
+**Sourcing.** No shell tool granted this dispatch — unlike the previous
+four filings, `Read`/`Write`/`Edit`/`Glob`/`Grep`/`WebSearch`/`WebFetch`
+only. The two commit hashes below arrived **already at full 40-character
+SHA-1 length**, per the dispatch, resolved with `git rev-parse` on its
+own side; they are **not independently re-verified here** (hard rule 8).
+Test counts, gate results, and the `cargo tree` invariant result are
+**relayed**, not re-run. Live-application observations (the polyline
+angle, the square-edge distance, the Accept flow) are relayed, reported
+by the dispatch as driven with `tools/gui-shot.ps1`. **Consequently, two
+housekeeping items the dispatch asked for could not be performed this
+filing and are handed back:** re-running `tools/check-commits-filed.py`
+at the end of the filing, and giving this filing its own commit with
+`docs/` staged by name. Both need a shell this librarian did not have.
+
+**★ TERMINOLOGY (project rule 15).** This entire filing concerns **ce
+dimensions** — the dimension objects **pdfce authors**
+(`/Line` + `/IT /LineDimension` + `/Measure` + the `/PieceInfo` sidecar,
+`crates/pdfce-core/src/dimension/`). The *lines the operator picks* are
+**pdf dimensions**, or plain CAD geometry, or neither — they enter only
+as **pickable page geometry**, and pdfce still must not alter them.
+
+**Shipped:**
+- **`Pass 68.0`** (`bd53ab354d9f4af6f46ab3627fe5975dd11a6e14` +
+  `c4ec3f5e54ba27d016a9d0f68c8b586e1eebd6b9`) — two-line ce-dimension
+  picking, core + CLI + GUI. **Commit 1** (`bd53ab3`, core refactor, no
+  behaviour change): the relation→`DimensionKind` mapping the CLI's
+  `dimension-add --kind two-lines` carried inline moves to a new shared
+  module, `crates/pdfce-core/src/dimension/two_lines.rs`
+  (`author_from_two_lines`, `TwoLineAuthoring`, `TwoLinePlacement`,
+  `TwoLineRefusal`), so the GUI does not need a second copy pinned only
+  by an equivalence test; also adds `linepick::pick_line_in_page`
+  (exhaustive search, not first-hit — resolving by content-stream order
+  would make two close edges pick whichever was drawn first, which is
+  indistinguishable from random from the operator's side). Proven
+  behaviour-preserving by the 6 pre-existing CLI tests, unchanged, still
+  reading results back through `dimension-list`. **Commit 2** (`c4ec3f5`,
+  the GUI, the actual request): two-line picking ships as a pick MODE of
+  `CanvasTool::MeasureLinear` (`LinearPickMode::{Points, TwoLines}`), NOT
+  a new tool variant — the engineer built a fourth `CanvasTool` variant
+  first and reverted after `pdfce-ui-specialist` argued for the mode
+  reading (operator said "**the** dimensioning tool", Pass 46 §1.2's
+  ten-`MarkupKind`s-under-one-tool precedent, and a genuinely shared
+  group/Accept-strip/disclosure surface). New spec:
+  `docs/ui_specs/pass-68.0-two-line-ce-dimension-gesture.md` (975 lines).
+
+**Decisions made this session:**
+- **Cache-vs-recompute, decided against caching, with the reasoning
+  filed at `D:\dev\rag\egui\`.** The ui-spec proposed a cached `verdict`
+  field on `TwoLinePick`, recomputed "whenever `second` or
+  `force_parallel` changes" — a producer list already short by one, since
+  the `parallel_epsilon_degrees` slider in Settings changes the answer
+  without touching either named field. This is exactly the shape of
+  `D:\dev\rag\egui\a_derived_value_with_one_producer_cannot_drift_a_cached_copy_with_n_producers_will.md`.
+  Built instead as recompute-on-read, pinned by a test that varies only
+  the epsilon.
+- **`force_parallel` persists across a clear, against the ui-spec's
+  "reset per pair."** `linepick.rs`'s own doc comments give the reason:
+  resetting would force the operator to "change a global setting to
+  author one dimension and change it back, which is how a setting
+  becomes a thing people fight" when dimensioning a whole drawing pulled
+  from a sloppy exporter. Safe because the verdict always states
+  "forced" plus the true angle before Accept.
+
+**Findings + decisions:**
+- **`FEATURES.md`: two-line ce-dimension picking moves from *Planned*
+  (`core [x] · cli [x] · gui [ ]`) to *Implemented*, under "ce
+  dimensions" (`core [x] · cli [x] · gui [x]`).** Carried as a
+  deliberate not-rounded-up signal since the hundred-and-twenty-seventh
+  filing; now genuinely complete. Angular ce dimensions are authorable
+  from the GUI for the first time, folded into the same row rather than
+  given a second one, since the two-line pick is how an angular ce
+  dimension is authored at all today.
+- **A second, independent obstacle to sharing coordinates between
+  `gui-shot.ps1` and `gui-drive.ps1`, found live while verifying this
+  Pass and filed as an amendment to the existing RAG finding rather than
+  a new sibling** (`D:\dev\rag\egui\
+  two_gui_harnesses_with_different_default_window_sizes_make_coordinates_non_transferable.md`).
+  Matching `-W`/`-H` (the file's existing fix) is necessary but not
+  sufficient: `gui-shot`'s own blank-capture guard fires when pointed at
+  `gui-drive`'s default off-screen position (`-4000,-4000`), returning a
+  false "blank capture" on a window that is in fact rendering; the shot
+  must be taken on-screen. And once on-screen, the screenshot is of the
+  OS window (title bar included) while egui's client coordinates are
+  not — **measured title-bar height 31 px**, verified directly (a click
+  sent at image `y=441` missed; sent at `y=410` it landed on the
+  intended control). The file's own title is now stale — at least three
+  independent obstacles are known for this harness pair, not one.
+- **`Run_dimension_drag` filters to `DimensionKind::Linear` only** — an
+  angular ce dimension can be selected but a drag attempt silently does
+  nothing. Filed as **P1, not P0** (ui-spec §11.2): the auto-computed
+  arc radius already gives a usable result on authoring, so the gap is
+  in re-editing, not in getting a first result.
+- **Retroactively re-classifying an already-authored two-line ce
+  dimension is structurally impossible, not merely unscoped** (ui-spec
+  §9.3). `DimensionKind::Angular`/`Linear` deliberately retain only the
+  resolved geometry, never the source `PickedLine`s, so a scale change
+  cannot silently reinterpret a committed ce dimension — but
+  `author_from_two_lines` needs those `PickedLine`s to reclassify. The
+  operator's original *"when making **or editing**"* is met for the
+  pre-Accept review window and cannot extend past Accept without a new
+  core capability. Open, unscoped, the operator's call.
+- **The `parallel_epsilon_degrees` proximity caption** (ui-spec §12) —
+  a third open item filed, not built: P1, unbuilt.
+- **A small discrepancy left open rather than reconciled without a
+  second measurement.** The GUI reported the polyline pick as *"77.5°"*;
+  the dispatch's own independent recomputation from the two arms'
+  endpoint coordinates gives 77.6° (116.6° and 194.2°, difference
+  77.6°). **0.1° apart**, plausibly sub-pixel rounding from reading click
+  coordinates off a screenshot rather than a computation defect, but
+  neither this librarian nor the dispatch re-measured it a second
+  independent way, so it is filed as open rather than waved away.
+- **A test-count arithmetic check that resolved on inspection, not left
+  ambiguous.** "3,593 → 3,622, +29" against a per-crate breakdown of
+  "pdfce-core 1,700 → 1,718 (+18) plus a new doc-test" read, on a first
+  pass, as +19 for core — which would make the total +30, not +29. On
+  closer reading the "plus a new doc-test" clause describes ONE of the
+  18, not an addition to it (cargo reports lib-test and doc-test counts
+  as separate suites that both roll into the same crate's delta); 18 +
+  11 (`pdfce-gui` `measure_tool`) = 29, matching the workspace total.
+  Recorded per hard rule 10(a) — the total and the per-item breakdown
+  now agree, and the reconciliation is written down rather than only
+  performed silently.
+- `pdfce-ui-specialist` self-corrected one of its own memory entries in
+  passing: `GestureInterrupt::Commit` is no longer unused, contrary to
+  what it recorded after a 2026-08-04 audit. Not actionable here —
+  `ROADMAP.md`'s own Pass 34.0 entry (2026-08-05, `b84fd53`) already
+  records the wiring correctly, and decision 031 and the
+  `033-gui-usability-and-the-workspace-that-does-nothing.md` decision
+  record both already confirm it wired. Noted only so a reader of this
+  entry does not go looking for a stale claim that lives in a specialist
+  agent's own memory file, not in any pdfce doc.
+
+**Still in flight:**
+- **`Pass 69.0`** (ce-dimension style + tolerance) — unstarted, unchanged
+  by this filing. Its own "Sequencing note" is corrected in this filing
+  to stop calling `Pass 68.0`'s data model "a hole" now that it has
+  shipped.
+- **`Pass 71.0` slice 2** — no OCR engine wired; blocked on operator
+  question `(bl)`.
+- **`Pass 46` slices 2–4** — post-hoc select/move/resize of a placed
+  markup still unbuilt.
+- The GUI still has no attachments surface.
+- **Two housekeeping items owed back to the engineer, both needing a
+  shell this librarian did not have this dispatch:** re-run
+  `tools/check-commits-filed.py` at the end of the filing (per the
+  dispatch's own three-filings-running instruction), and give this
+  filing its own commit with `docs/` staged by name rather than
+  `git add -A` (per `af5580e`'s precedent).
+
+**For next session:**
+- **Run `tools/check-commits-filed.py`** before trusting CI is clean —
+  this librarian could not run it this dispatch.
+- **Commit this filing's `docs/` changes by name** (`ROADMAP.md`,
+  `FEATURES.md`, `SESSION_LOG.md`), separately from any code commit, per
+  the standing instruction repeated across the last three filings.
+- **File the three P1/open items above** (`run_dimension_drag` angular
+  gap, retroactive-reclassification impossibility, the 0.1° polyline
+  discrepancy) wherever the next `Pass 68.0`-adjacent work is scoped —
+  they were surfaced this filing, not resolved.

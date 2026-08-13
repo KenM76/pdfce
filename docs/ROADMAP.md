@@ -81,6 +81,193 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★★★★ `bd53ab3` + `c4ec3f5` — `Pass 68.0` **SHIPS**: the canvas can pick two lines and author a ce dimension from them — closing the request that opened this Pass, across core, CLI and GUI — 2026-08-12 (hundred-and-twenty-eighth filing)
+
+**Sourcing.** No shell tool this dispatch. The two hashes below arrived
+**already at full 40-character SHA-1 length**, stated by the dispatch to
+have been resolved with `git rev-parse` on its own side — unlike the
+short-hash relays of the two prior filings, there is nothing left for
+this librarian to expand. They are **not independently re-verified**
+here (hard rule 8): no `git log`/`git show` was run against them. Full
+forms as supplied:
+
+| hash | subject |
+|---|---|
+| `bd53ab354d9f4af6f46ab3627fe5975dd11a6e14` | the canvas will need what the CLI already knew, so it stops being the CLI's |
+| `c4ec3f5e54ba27d016a9d0f68c8b586e1eebd6b9` | pick two lines, and the canvas says what it read before it draws it |
+
+All test counts, `cargo tree` invariant results, and gate results below
+are **relayed** from the dispatching engineer's brief; none were re-run
+by this librarian. Live-application observations (the polyline angle,
+the square-edge distance, the Accept flow) are also relayed, reported by
+the dispatch as driven with `tools/gui-shot.ps1`.
+
+**★ TERMINOLOGY (project rule 15), binding on everything below.** This
+Pass is entirely about **ce dimensions** — the dimension objects **pdfce
+authors** (`/Line` + `/IT /LineDimension` + `/Measure` + the
+`/PieceInfo` sidecar, everything under `crates/pdfce-core/src/dimension/`).
+The *lines the operator picks* are **pdf dimensions**, or plain CAD
+geometry, or neither — they enter only as **pickable page geometry**,
+and pdfce still must not alter them.
+
+#### 1. `bd53ab3` — core refactor, no behaviour change: the CLI's inline relation→`DimensionKind` mapping moves to a shared module the GUI can also call
+
+The CLI's `dimension-add --kind two-lines` (shipped `bc13a86`, hundred-
+and-twenty-seventh filing) carried the whole relation→`DimensionKind`
+decision inline in its own argument-handling code. Building the GUI
+gesture on top of that would have meant a **second copy**, pinned to the
+first only by an equivalence test. Instead the mapping moved to a new
+module, **`crates/pdfce-core/src/dimension/two_lines.rs`**
+(`author_from_two_lines`, `TwoLineAuthoring`, `TwoLinePlacement`,
+`TwoLineRefusal`), and the CLI's `two-lines` arm now calls into it —
+that arm is argument-shaping and disclosure only.
+
+**Rationale worth carrying forward, stated by the dispatch and worth
+repeating because it generalises past this Pass:** an equivalence test
+pins two implementations to agree *today*; it does not stop them being
+edited apart tomorrow, and it only fails if someone remembers to extend
+it when either side changes. `Settings::parallel_epsilon_degrees` was
+already centralised (`e931836`, hundred-and-twenty-sixth filing) so the
+two shells could not disagree about when two lines count as parallel —
+duplicating the code that **consumes** that value would have
+reintroduced the same divergence risk one level above the value that
+was centralised specifically to prevent it.
+
+**Behaviour preservation** is proven by the 6 pre-existing CLI tests,
+unchanged, still reading results back through `dimension-list` rather
+than from the authoring command's own stdout — the same "what pdfce
+decided" vs "what is in the file" distinction the hundred-and-twenty-
+seventh filing recorded, still honoured.
+
+**Also added:** `linepick::pick_line_in_page` — a canvas click has no
+object index to look up, unlike a CLI four-point invocation. Its search
+is **exhaustive, not first-hit**, because resolving by content-stream
+order would make two edges a fraction of a point apart pick whichever
+was drawn first in the PDF — indistinguishable from random, from the
+operator's side.
+
+#### 2. `c4ec3f5` — the GUI gesture, the operator's actual request, and a reverted false start recorded because the reasoning is reusable
+
+**Two-line picking is a pick MODE of `CanvasTool::MeasureLinear`**
+(`LinearPickMode::{Points, TwoLines}`), **not a new `CanvasTool`
+variant.** The engineer's first attempt built a fourth `CanvasTool`
+variant and **reverted it** after `pdfce-ui-specialist` argued for the
+mode reading instead. Recording why the specialist's argument won,
+because it is a reusable test for the next tool-vs-mode question this
+project hits:
+
+- The operator's own words named **"the dimensioning tool"** — definite
+  article, naming the tool that already exists, not a new one.
+- **Pass 46 §1.2's precedent** already settled this shape once: ten
+  `MarkupKind`s live under one tool. The test that precedent establishes
+  is whether the operator **explicitly declares** the mode before it
+  changes what a click means — which a picked "two lines" toggle
+  satisfies and an ambient tool-guess would not.
+- The group, the Accept strip and the disclosure area are **genuinely
+  shared** between point-based and two-line linear/angular authoring —
+  splitting the tool would have split UI that has no reason to diverge.
+
+**New GUI state:** `TwoLinePick` + `LinearPickMode` in `measure_tool.rs`,
+`MeasureState::set_linear_pick_mode`. **New spec:**
+`docs/ui_specs/pass-68.0-two-line-ce-dimension-gesture.md` (975 lines,
+authored by `pdfce-ui-specialist`).
+
+#### Test results and gates (relayed, not re-run by this librarian)
+
+**3,593 → 3,622 tests, workspace-wide, 0 failing** (+29: `pdfce-core`
+**1,700 → 1,718**, +18, including one new doc-test; `pdfce-gui`
+`measure_tool` **22 → 33**, +11 — 18 + 11 = 29, the two figures agree
+per hard rule 10(a)). `cargo fmt --all` applied; `cargo clippy
+--workspace --all-targets --all-features -- -D warnings` clean.
+`tools/check-ui-strings.sh` clean; `tools/check-fmt-excluded.py` clean
+(12 out-of-workspace crates).
+
+**GUI-core separation:** `cargo tree -p pdfce-core` / `-p pdfce-render`
+reported **zero** GUI dependencies, checked by the dispatch via grep for
+`egui`/`eframe`/`winit`/`wgpu`/`glow` in the tree output. **Relayed —
+this librarian had no shell to re-run `cargo tree` this dispatch.**
+
+#### Verified in the running application (relayed — driven with `tools/gui-shot.ps1` on `fixtures/synthetic/vector/paths.pdf`)
+
+- Two arms of the blue polyline → *"These two lines meet at an angle —
+  measuring 77.5°."* The dispatch's own independent recomputation from
+  the arm endpoints gives **77.6°** (directions 116.6° and 194.2°,
+  difference 77.6°) — **0.1° from the GUI's reported 77.5°**, not
+  reconciled further here; consistent with sub-pixel rounding in reading
+  click coordinates off a screenshot rather than a computation defect,
+  but stated as an open 0.1° gap rather than waved away, since neither
+  this librarian nor the dispatch re-measured it a second way.
+- Two opposite edges of the 80×80 even-odd square (object 4, bbox
+  40,200→120,280) → *"These two lines are 0.00° apart — reading them as
+  PARALLEL. Distance: 80.00 pt."* plus the no-scale disclosure and
+  witness lines on both edges. **80.00 pt is exact for that geometry.**
+- Accept authored it: arrowheads, `80.00 pt` label, *"Dimension added to
+  group 'Default' — additive, on its own layer, one undo step."*, title
+  showed unsaved changes, undo enabled.
+- Snap-to-content and Alignment correctly disappear in line pick mode.
+
+#### `FEATURES.md` — the row this Pass completes
+
+**Two-line ce dimensioning moves from Planned (`core [x] · cli [x] · gui
+[ ]`) to Implemented, under "ce dimensions" (`core [x] · cli [x] · gui
+[x]`).** This row was carried as a deliberate not-rounded-up signal in
+the hundred-and-twenty-seventh filing; it is now genuinely complete.
+Angular ce dimensions are authorable from the GUI for the first time —
+folded into the same row rather than a second one, since the two-line
+pick is how an angular ce dimension gets authored at all today.
+
+#### Two deliberate divergences from the ui-spec — recorded with reasons, not silently taken
+
+1. **No cached `verdict` field.** The spec proposed caching the
+   parallel/angled classification, recomputed "whenever `second` or
+   `force_parallel` changes." That producer list was already short by
+   one: the **epsilon slider in Settings** re-reads the same two lines
+   into a different answer without touching either named field — exactly
+   the failure recorded in `D:\dev\rag\egui\
+   a_derived_value_with_one_producer_cannot_drift_a_cached_copy_with_n_producers_will.md`.
+   `TwoLinePick::authoring()` re-derives on every read instead; pinned by
+   a test that varies only the epsilon.
+2. **`force_parallel` SURVIVES a clear** (spec said reset per pair).
+   `linepick.rs`'s own doc comments settle it: the override exists
+   because the alternative is *"to change a global setting to author one
+   dimension and change it back, which is how a setting becomes a thing
+   people fight."* Resetting per pair rebuilds that friction for anyone
+   dimensioning a whole drawing from a sloppy exporter, and persisting is
+   safe because the verdict always states "forced" plus the true angle
+   before any Accept.
+
+#### Open items the ui-spec raised — filed here, not resolved
+
+1. **`run_dimension_drag` filters to `DimensionKind::Linear` only.** An
+   **angular** ce dimension can be selected but a drag attempt silently
+   does nothing. A real gap this Pass surfaces; **P1, not P0**, because
+   the auto-computed arc radius already gives a usable result on
+   authoring. (ui-spec §11.2)
+2. **Retroactively re-classifying an already-authored two-line ce
+   dimension is structurally impossible, not merely unscoped.**
+   `DimensionKind::Angular`/`Linear` deliberately retain only the
+   RESOLVED geometry, never the source `PickedLine`s — a decision made so
+   a scale change cannot silently reinterpret a committed ce dimension.
+   `author_from_two_lines` needs those `PickedLine`s. So the operator's
+   *"when making **or editing**"* (Pass 68.0's originating request) is
+   satisfied for the pre-Accept review window and cannot extend past
+   Accept without a new, distinct core capability. **Open, unscoped —
+   the operator's call.** (ui-spec §9.3)
+3. **The `parallel_epsilon_degrees` proximity caption** (ui-spec §12) —
+   P1, unbuilt.
+
+#### No Pass ID, rule or decision minted this filing
+
+`Pass 68.0` is an existing Pass reaching completion, not a new one.
+**Ledger ceilings not independently re-checked here** (no shell this
+dispatch to run `tools/check-ledger-numbers.py`) — carried forward from
+the hundred-and-twenty-seventh filing's measured figures (Pass families
+up to 71, unclaimed at 72; standing rules to R191, unclaimed at R192;
+decisions to 055, unclaimed at 056) since nothing in this filing adds to
+any of those ledgers.
+
+---
+
 ### ★★★★ `1496e13` + `0d7c1bd` + `bc13a86` — `Pass 68.0`'s **CLI HALF IS REAL** (`dimension-add --kind two-lines`: parallel → a LINEAR ce dimension, angled → an ANGULAR one, collinear → refused by name — the operator's request reachable from a script for the first time, and **still NOT SHIPPED because the canvas cannot pick two lines**); a licence gate that DOCUMENTED a check it never performed now performs it, and its first true run was a **FALSE POSITIVE**; and `af5580e`'s mis-scoping is **measured rather than alleged** — 2026-08-12 (hundred-and-twenty-seventh filing)
 
 **Sourcing, stated before any figure (hard rule 8).** This librarian **had a
@@ -40465,224 +40652,6 @@ in the "still open" list. Full build record: this file's own
 
 ## Next up
 
-### Pass 68.0 — ★★ OPERATOR REQUEST 2026-08-12 — **PICK TWO LINES, GET A DIMENSION**: a two-line pick model plus a THIRD `DimensionKind` (angular) — filed 2026-08-12 (hundred-and-twenty-fifth filing), **STARTED IN THE WORKING TREE WHILE THIS ENTRY WAS BEING WRITTEN** — **★★★ CORE + CLI BUILT 2026-08-12 (`e931836` + `905791f` + `bc13a86`); THE GUI GESTURE IS NOT, so no operator can author an angular ce dimension BY POINTING AT ANYTHING, which is how the request was phrased. STILL NOT SHIPPED. See the top-of-*Shipped* entries (hundred-and-twenty-sixth and hundred-and-twenty-seventh filings) for the delivery record**
-
-> **★★★ STATUS BLOCK UPDATE, 2026-08-12 (hundred-and-twenty-seventh
-> filing). THE CLI HALF IS NOW REAL; `Pass 68.0` IS STILL NOT MOVED TO
-> *Shipped*.**
->
-> **`bc13a86` — `dimension-add --kind two-lines`.** Four points, two per
-> line, and the geometry decides: **parallel → a LINEAR ce dimension of
-> the perpendicular distance; angled → an ANGULAR ce dimension;
-> collinear → REFUSED BY NAME**, because a zero-length ce dimension is a
-> mark that is present and invisible. **Measured on the release binary:**
-> `100,100 300,100 100,140 300,140` → `authored=linear distance=40.0000`;
-> `100,100 300,100 100,100 273,200` → `authored=angular degrees=30.029`;
-> `0,0 100,0 200,0 300,0` → refused, `"COLLINEAR"`.
-> - **`--treat-as-parallel` is the CLI form of the operator's checkbox and
->   STILL PRINTS THE ANGLE IT OVERRODE** (`measured_angle=5.001 forced=1
->   authored=linear`).
-> - **The threshold reads `Settings::parallel_epsilon_degrees`, never a
->   literal**, so the CLI and the GUI slider cannot come to disagree.
-> - **The pick point defaults to each segment's MIDPOINT, stated rather
->   than implicit** — two crossing lines bound FOUR angles and the pick
->   chooses which; someone typing coordinates has no click, so the default
->   is unavoidable and the only question is whether it is written down.
-> - **A virtual apex is dimensioned AND disclosed** (`apex_is_real=0` plus
->   a sentence). Refusing would be wrong — CAD dimensions virtual
->   intersections routinely — and staying quiet would be too.
-> - **The tests read results back through `dimension-list`**, not from the
->   authoring command's own report: *what pdfce decided* and *what is in
->   the file* are different claims and only the second is what the
->   operator ends up with. **3,587 → 3,593 tests.**
->
-> **WHAT IS STILL MISSING — and it is the request itself: THE GUI
-> GESTURE.** The canvas cannot select two lines. **Acceptance criterion 1
-> is untouched**; criteria 2, 3 and 5 are met in the CLI and unmet in the
-> GUI; criterion 4's disclosure exists as printed text and has **no
-> canvas form**.
->
-> **`FEATURES.md` now reads core `[x]` · cli `[x]` · gui `[ ]`** —
-> `R151`'s shape one rung up. **Filed as a signal; do not round it up.**
->
-> **Already settled by the CLI half, so the GUI does not re-litigate it:**
-> the classification, the override, the threshold source, the four-angle
-> disambiguation and the virtual-apex disclosure are decided and tested.
-> **The GUI owes a gesture and a disclosure surface, not a second reading
-> of the geometry.** Dispatch `pdfce-ui-specialist` first — the inference
-> needing disclosure is the parallel-vs-angled **classification**, not the
-> operator's own click, so decision 024 §4.4 governs and explicitly does
-> **not** call for a page-relative floating confirm box.
-
-> **★★ STATUS BLOCK, ADDED 2026-08-12 (hundred-and-twenty-sixth filing).
-> `Pass 68.0` IS DELIBERATELY NOT MOVED TO *Shipped*.**
->
-> **What LANDED, in two commits** — full record in the top-of-*Shipped*
-> entry, items 1 and 2:
-> - **`e931836`** — `crates/pdfce-core/src/vector/linepick.rs` (new). A
->   `PickedLine` that records **where on the line the operator clicked**,
->   because two crossing lines bound **four** angles and SolidWorks' own
->   `AddDimension2` docs say the result depends on which endpoints were
->   selected. Curves skipped, not chorded. Plus the two things the
->   operator asked for mid-build: **`Settings::parallel_epsilon_degrees`**
->   (default 0.5°, range 0–45, GUI slider — `R169`, a choice no standard
->   makes is a setting) and **`ParallelPolicy::force_parallel`**, checked
->   **before** the threshold so a forced pair never depends on the global
->   value, and **without faking the measurement**
->   (`measured_angle_degrees` still reports the truth).
-> - **`905791f`** — **`DimensionKind::Angular`**, the third variant.
->   `display()` branches on **`is_angular()` BEFORE applying scale**,
->   because **an angle is invariant under uniform scaling** and feeding
->   30° through the length formatter in a 1:50 group yields **1500 with no
->   unit and no disclosure**. `SIDECAR_VERSION` **1 → 2**.
->
-> **What is MISSING, and it is the operator's actual request:**
-> 1. **The GUI gesture.** The canvas cannot select two lines and author a
->    ce dimension from them. Everything above is substrate.
-> 2. **The CLI.** `dimension-add` has **no angular kind**.
-> 3. Acceptance criteria below are therefore **partially met at best**;
->    re-read them against the shipped core before building the shell.
->
-> **`FEATURES.md` carries this as core `[x]` · cli `[ ]` · gui `[ ]`** —
-> **`R151`'s exact shape, filed as a signal and not rounded up.**
->
-> **The entry stays here, in *Next up*, rather than moving**, following
-> `Pass 67.0`'s precedent for a multi-part Pass annotated in place. The
-> remaining work is the same operator request, not a new one.
-
-**★ STATUS CORRECTION, MADE BEFORE THIS ENTRY WAS EVEN SAVED, AND
-MEASURED RATHER THAN RELAYED.** This entry was drafted as *UNSTARTED*.
-`git status --short`, run at the end of the same filing, shows the
-engineer has **already begun**: **untracked
-`crates/pdfce-core/src/vector/linepick.rs`** plus modified
-`crates/pdfce-core/src/vector/mod.rs` (+4) and
-`crates/pdfce-core/src/settings/mod.rs` (+84), **none of it committed.**
-The new module's own header states the problem in the same terms this
-entry does — *"something has to be able to answer 'which LINE did the
-operator click', as a pair of endpoints, rather than 'which point'"* —
-and independently names the same three near-misses (`snap_candidates`,
-`hit_test_subpaths`, `centerline`). **So the survey below is corroborated
-by a second author working from the code, not merely repeated.** The
-`settings/mod.rs` growth is consistent with the parallel-vs-angled
-threshold becoming a **setting** rather than a hard-coded constant, which
-is the standing instruction (*fix bugs on discovery; make spec ambiguity
-a setting*) — **stated as a reading of a diff, not as a fact about
-intent.** **Nothing in the working tree was touched by this filing.**
-
-**Operator's words, verbatim, so acceptance criteria stay faithful:**
-
-> *"dimensioning tool should allow the selection of two lines. if those
-> lines are parallel it makes a linear dimension between them like
-> SolidWorks would, if they are at an angle it makes an angle
-> dimension."*
-
-**Terminology (project rule 15), binding on every dispatch this Pass
-generates:** everything below concerns **ce dimensions** — the dimension
-objects **pdfce authors** (`/Line` + `/IT /LineDimension` + `/Measure` +
-the `/PieceInfo` sidecar, everything under
-`crates/pdfce-core/src/dimension/`). It concerns **pdf dimensions** (ones
-already in the file from CAD) **only as pickable page geometry** — the
-*lines* the operator selects may well be part of a CAD-exported drawing,
-and **pdfce still must not alter them.** A subagent handed the
-unqualified word writes an entire analysis in it; say which kind, every
-time.
-
-#### Why this is a NEW pick model and not a tweak — the survey finding that sizes the work
-
-**Nothing in the codebase returns "the line the operator clicked on" as
-two endpoints.** Established by a survey completed 2026-08-12 and
-**independently re-checked by this librarian** on live source (`Grep`/
-`Read`, marked **measured** below):
-
-- `snap_candidates` returns single `Point`s.
-- `hit_test_subpaths` (`crates/pdfce-core/src/vector/hit.rs:340`) returns
-  **subpath INDICES**; the endpoints live on `Subpath`/`Segment`, one
-  dereference away — so the data exists but no function hands back the
-  pair.
-- `CenterlineCandidate` (`crates/pdfce-core/src/vector/centerline.rs:42`)
-  is **the one existing two-endpoint result**, and it is narrow: filled
-  thin quads with **aspect ratio ≥ 8.0** only.
-- **`MeasureLinear` and `MeasureScale` are strictly POINT-based** — three
-  clicks and two clicks respectively.
-- **`MeasureCircular` picks whole OBJECTS but immediately reduces them to
-  an unordered anchor cloud** for a Taubin fit, so it is not a precedent
-  for "this object, as a line".
-
-**So the deliverable is a genuinely new pick primitive** — *give me the
-segment under the pointer as (p0, p1), with its provenance* — plus the
-disambiguation rules that go with it (which segment of a multi-segment
-subpath; a `re` rectangle's four edges; a curve, which is **not** a line
-and must be refused or projected, decided rather than defaulted).
-
-#### The angular ce dimension does not exist as a TYPE
-
-**Measured on disk:** `DimensionKind`
-(`crates/pdfce-core/src/dimension/group.rs`, the enum beginning at
-line 137) has **exactly two variants** — `Linear { a, b, constraint,
-offset, text_along }` and `Circular { fit, show_diameter }`. **An
-ANGULAR ce dimension is a THIRD variant that does not exist**, and it
-brings its own:
-
-1. **geometry** — vertex + two rays + a sweep, not two points and an axis
-   constraint;
-2. **`/AP` authoring** — an arc with two arrowheads, extension lines that
-   *extend the picked lines* rather than drop perpendicular from points,
-   and a value in degrees (or deg-min-sec — **an authoring option, not a
-   default to hard-code**; see the memory rule *fix bugs on discovery;
-   make spec ambiguity a setting*);
-3. **`/Measure` dict semantics** — the existing dict describes a linear
-   scale; an angular measurement is dimensionless and the correct
-   `/Measure` shape for it must be **sourced from the spec corpus, not
-   assumed** (rule 1 — dispatch `pdfce-spec-librarian`);
-4. **a sidecar migration** — see below.
-
-#### Acceptance criteria (draft — to be firmed once the SolidWorks RAG lands)
-
-1. Arming the ce-dimension tool offers a **two-line pick** mode
-   (whether that is a mode or an automatic consequence of clicking a
-   line rather than a point is a `pdfce-ui-specialist` question, not an
-   engineering default).
-2. **Two PARALLEL lines → a linear ce dimension between them**, measuring
-   the perpendicular separation, *"like SolidWorks would"*. The
-   parallel-vs-angled test needs a **stated tolerance** — two CAD lines
-   that differ by 0.02° are parallel in intent and angled in arithmetic.
-   **That tolerance is disclosed, not silent** (rule 4): the operator is
-   told which of the two he got and can flip it without redoing the pick.
-3. **Two ANGLED lines → an angular ce dimension** at their intersection,
-   including the case where **the intersection is off the picked
-   segments** (extended intersection) and the case where **it is off the
-   page**.
-4. The classification is an **inference**, so rule 4 binds: the chosen
-   kind is **visible before it becomes document state**, and rejecting it
-   costs one gesture and undoes nothing else.
-5. **CLI parity in the same Pass** (rule 11): the same two-line selection
-   expressed as a scriptable subcommand surface.
-6. `SIDECAR_VERSION` migration per the established path — see below.
-
-#### The sidecar migration path is already documented; follow it, do not reinvent it
-
-**Measured:** `crates/pdfce-core/src/dimension/sidecar.rs:41`
-`pub const SIDECAR_VERSION: i64 = 1`, with a **RANGE version gate** at
-line 100 and `EditError::SidecarWrittenByNewerBuild` protecting the write
-side. **Every added key is optional-with-default.** A third
-`DimensionKind` variant is exactly the case that path was built for: an
-older build must read a newer sidecar's linear and circular ce dimensions
-without choking on the angular ones, and must not silently drop them on
-rewrite.
-
-#### Dependencies and prior art
-
-- **`docs/ui_specs/tool-options-dock-and-ce-dimension-properties.md`** —
-  read **before** designing anything; §C.11 is titled *"What already
-  exists — read before designing anything new"*.
-- **`D:\Dev\Rag-Specialized\SolidWorks_Dimensions\`** — the SolidWorks
-  dimension/tolerance option catalog (see `Pass 69.0` below, where it is
-  load-bearing). Relevant here for **how SolidWorks resolves the
-  two-line pick specifically**.
-- **`pdfce-spec-librarian`** for the `/Measure` question in (3) above.
-
----
-
 ### Pass 69.0 — ★★ OPERATOR REQUEST 2026-08-12 — **ce-dimension STYLE + TOLERANCE, with a group default and a per-ce-dimension override checkbox, at SolidWorks option breadth** — filed 2026-08-12 (hundred-and-twenty-fifth filing), UNSTARTED
 
 **Operator's words, verbatim, both requests, so acceptance criteria stay
@@ -40830,13 +40799,13 @@ taken.
 
 #### Sequencing note (engineer's call, recorded not decided)
 
-`Pass 68.0` and `Pass 69.0` are **independent** — the pick model does not
-need the style model and vice versa. **`69.0` is the one with a written
-spec already waiting**, `68.0` is the one whose data model has a hole
-(`DimensionKind` third variant). **Splitting `69.0` further** — style
-model first, tolerance second — **is reasonable if the acceptance
-criteria read better that way**; the Pass IDs are assigned per family, so
-`69.1` is available without disturbing anything.
+`Pass 68.0` and `Pass 69.0` were **independent** — the pick model did not
+need the style model and vice versa. **`Pass 68.0` shipped 2026-08-12**
+(hundred-and-twenty-eighth filing, top of *Shipped*); `Pass 69.0` is the
+one still open, with a written spec already waiting. **Splitting `69.0`
+further** — style model first, tolerance second — **is reasonable if the
+acceptance criteria read better that way**; the Pass IDs are assigned per
+family, so `69.1` is available without disturbing anything.
 
 ---
 
