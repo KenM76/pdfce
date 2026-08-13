@@ -57,6 +57,10 @@
 /// proposed and withdrawn.
 pub mod models;
 
+/// The sandwich writer — recognised words become an invisible, selectable
+/// text layer over page content that is left byte-identical.
+pub mod layer;
+
 use crate::page_tree::Rect;
 
 /// One recognised word, positioned in PDF default user space.

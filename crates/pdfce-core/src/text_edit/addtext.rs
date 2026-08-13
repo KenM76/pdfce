@@ -1033,7 +1033,7 @@ fn make_font_program_stream(span: ByteSpan, len: usize) -> Object {
 /// becomes a single `R_new`. A never-empty array is guaranteed (Table 30
 /// forbids `[]`). Streams are always indirect (§7.3.8.1), so a non-array
 /// `/Contents` value is a reference, wrapped defensively either way.
-fn append_contents(before: Option<&Object>, new_id: ObjId) -> Object {
+pub(crate) fn append_contents(before: Option<&Object>, new_id: ObjId) -> Object {
     match before {
         Some(Object::Array(existing)) => {
             let mut v = existing.clone();
@@ -1900,7 +1900,7 @@ fn build_font_dict(base_font: &str, symbolic: bool, enc: BaseEncoding, font: Std
 /// are local to the stream, but the page and the appended stream SHARE one
 /// effective resource dict). The `pdfce` prefix keeps it clear of the common
 /// `/F{n}` producer convention.
-fn pick_font_name(existing: &Dict) -> Vec<u8> {
+pub(crate) fn pick_font_name(existing: &Dict) -> Vec<u8> {
     (1u32..=u32::MAX)
         .map(|n| format!("pdfceF{n}"))
         .find(|cand| existing.get(cand.as_bytes()).is_none())
