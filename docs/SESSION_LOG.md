@@ -39775,3 +39775,274 @@ R191 / decision 057 / filing 135 as the ceilings this entry increments
 from. This is the **hundred-and-thirty-sixth** `SESSION_LOG.md` filing
 (the hundred-and-thirty-fifth confirmed present by direct read before
 this entry was appended).
+
+---
+
+## 2026-08-13 (hundred-and-thirty-seventh filing) — THE REASON FOR THE GUI PAUSE, given at last, and it is NOT what "don't do any more GUI work" implied: the objection is to the METHOD, `crates/pdfce-gui` MAY BE REPLACED WHOLESALE by a project built outside this repo, and §3's GUI-core separation invariant is about to be validated by an INDEPENDENT IMPLEMENTATION. Decision **058** minted; four dated amendment footers correct the earlier record; `FEATURES.md` deliberately NOT edited
+
+**Documentation-only filing. No Pass shipped, no code changed.**
+
+### What he said, verbatim and in full
+
+> *"FYI I paused GUI production in this branch because it was unusable
+> and I realised it needed a separate project plan rather than the
+> current method which just seems to be low priority and a patchwork
+> things stuck together as they are added. The new one is being built in
+> d:\dev\pdfceGUI in another session and if successful will likely
+> replace the current one and may have its dev folder merged into this
+> one."*
+
+**Recorded at exactly that length.** *"Being built in another session,
+may replace, may be merged"* is the **entire** fact set this repository
+holds about `D:\dev\pdfceGUI`. **Nobody here has seen it**, and nothing
+about its stack, structure, progress or design is asserted in any
+document this filing touches. That restraint is the direct application of
+the lesson `LEGAL.md` §1.1 and project rule 8 record — **a document
+asserted a fact about the environment that nobody had measured, and it
+read as reassurance for a day.**
+
+### Why this is a filing and not a note
+
+The pause was filed **twice already** — the hundred-and-thirty-fourth
+(`Pass 69.0`) and hundred-and-thirty-fifth (`Pass 69.1`) filings — **as an
+instruction with no stated reason.** That was correct: none had been
+given. **It has now been given, and it is not what a reader would have
+guessed from *"don't do any more GUI work".***
+
+**The objection is to the METHOD, not to the priority and not to the
+quality of any individual panel.** *"A patchwork things stuck together as
+they are added"* is a criticism of **accretion** — a shell that grew
+feature-by-feature behind whatever Pass happened to need a surface — and
+the remedy he names is *"a separate project plan"*, not more care per
+panel. **The wrong inference available from the original instruction was
+that the GUI is merely low-priority and will resume as-is.** It may not
+resume as-is at all.
+
+### ★ The shape of the error, because it recurs and it is cheap to avoid
+
+***"He gave no reason"*** **and** ***"no reason has been given yet"***
+**read identically and behave differently.**
+
+- The first **quietly forecloses the update.** A reader who believes no
+  reason exists has no reason to go looking when one arrives, and no
+  reason to treat the arrival as news.
+- The second **invites it.** It carries a tense, and a tense is what makes
+  an absence checkable later.
+
+**The engineer's own agent memory carried the foreclosing form and was
+corrected today** — `7031296`, *"'he gave no reason' was a claim, and it
+has been corrected"*, landed under
+`.claude/agent-memory/pdfce-engineer/` while this dispatch was in flight.
+**Generalise it past this instance:** an absence recorded without a tense
+is indistinguishable from a settled negative, and the two behave
+differently in exactly the case that matters — when the absence ends.
+This is the same family as hard rule 8 (*know the edge of your own
+evidence*) pointed at the time axis rather than the source axis.
+
+### ★★ THE FIVE ENGINEERING CONSEQUENCES — these are the substance
+
+1. **`crates/pdfce-gui` MAY BE REPLACED WHOLESALE. Do not invest in it.**
+   Refactors, polish and new panels there are **potentially throwaway and
+   raise the cost of the swap.** And because the critique is of the
+   *method*, **adding one more well-built panel does not answer it** —
+   that is precisely the accretion being objected to. **A future session
+   that reads the pause, finds a tidy well-scoped panel task, and
+   discharges it as a favour will have made the situation worse, in good
+   faith.**
+2. **★ §3's GUI-core separation invariant is now being TESTED FOR REAL,
+   by a party that cannot ask us.** `D:\dev\pdfceGUI` consuming
+   `pdfce-core` / `pdfce-render` from **outside** this repository is
+   **exactly** the scenario the invariant was written for — the *"fork to
+   a web app later"* goal, **arriving early and in a different costume.**
+   **The reading is fixed in advance** (decision 058), so it is not
+   decided later by whoever finds it inconvenient: if that project needs
+   **nothing** to move in core, the separation is **real and demonstrated
+   rather than asserted**; **anything it does need is a place the boundary
+   was drawn wrong**, and is recorded as a **finding about this repo**,
+   not quietly accommodated.
+3. **`pdfce-core`'s public API now has a REAL external consumer, not a
+   hypothetical one.** Project rule 10 (API Guidelines) and doc-comment
+   completeness **stop being hygiene and become somebody else's
+   unblocking.** The worked example, already known to be a trap:
+   **`EditSession::set_group_style` returns the count REGENERATED, not the
+   count that will visibly MOVE.** That trap is documented in `Pass 69.0`'s
+   *Shipped* entry and ui-spec Amendment B — **both inside this repo,
+   neither of which an external shell author has any reason to open.** **A
+   trap documented only in the roadmap is undocumented to an external
+   consumer**; the doc comment on the verb is the only disclosure that
+   reaches them.
+4. **A merge of `D:\dev\pdfceGUI`'s dev folder into this repo is
+   possible.** Keep the workspace layout **mergeable**; **do not let GUI
+   assumptions spread into core crates.** This is a discipline, not a
+   procedure — a real merge earns its own decision.
+5. **`gui [ ]` rows in `FEATURES.md` are MORE accurate now, not less**,
+   and will need **re-basing against the new shell if it lands.** **Do not
+   pre-tick anything in anticipation.**
+
+### Decisions made this session
+
+- **Decision 058 minted** (`ARCHITECTURE.md` §12) — *a shell crate this
+  repo owns may be replaced by an externally-developed one, and §3's
+  crate-boundary invariant is the interface that makes that possible.*
+  **It earns a number because the thing being decided is what a crate
+  boundary is FOR**, which is an architecture fact, not a scheduling one.
+  A workspace whose shell had reached into core internals would not have
+  this option at all — *"likely replace the current one"* would have read
+  *"rewrite the project."* **The invariant bought an exit that is now
+  being used, for a reason nobody anticipated.**
+- **The invariant's justification is RECLASSIFIED, and that is the part
+  worth carrying to other projects.** §3 has always justified itself by
+  the **web fork** — a justification that was **speculative by
+  construction**, because no web fork exists. It now has a
+  **non-speculative** one as well. **Generalised: an invariant defended
+  for one future scenario pays out in a DIFFERENT one, and the payout
+  arrives before the scenario it was written for. That is the argument
+  against relaxing a boundary because its stated motivating case has not
+  materialised yet.**
+- **The two checks are filed as answering different questions, with a
+  table, because collapsing them is the available mistake.**
+  `cargo tree -p pdfce-core` / `-p pdfce-render` proves **NECESSITY** (no
+  windowing crate in the graph) and is **cheap, deterministic and remains
+  the daily gate — explicitly not superseded.** An independent shell built
+  against the surface proves **SUFFICIENCY** (a second shell can be built
+  without anything on the far side having to move), which `cargo tree`
+  **cannot** prove: a core crate can be perfectly free of `winit` and
+  still be unbuildable-against — missing accessors, types that only make
+  sense to the one caller that exists, contracts that live in
+  `pdfce-gui` rather than in `pdfce-core`'s docs.
+- **NO standing rule minted.** **R191 remains the ceiling; R192 is still a
+  PROPOSED, unruled number and this filing adds nothing to that
+  proposal** — stated explicitly so the proposal's continued existence is
+  not mistaken for an unrecorded ruling.
+- **NO Pass minted** (ceiling stays **71**, next free **`Pass 72`**) and
+  **no operator question minted** (ceiling stays **`(bl)`**, next free
+  **`(bm)`**) — **nothing here is being asked of him.** He volunteered
+  this; it is an FYI, and filing it as a question would manufacture a
+  decision he has already made.
+
+### Findings + decisions
+
+- **★ `docs/FEATURES.md` was DELIBERATELY NOT EDITED, and this is stated
+  rather than left silent.** Two independent reasons, either sufficient:
+  **(a) no capability moved** — the `gui [ ]` boxes are *more* accurate
+  today than yesterday, not less, and ticking or untickng anything would
+  breach *"never tick a box you cannot substantiate"*; **(b) a
+  "being replaced" note on those rows would be appending HISTORY to a
+  SCAN**, which the file's own header forbids (*"When a row changes,
+  **replace** the sentence — never append… A row that has grown a history
+  has stopped being a scan"*). **The correct edit was none.** Same
+  disposition, same reasoning, as the hundred-and-thirty-sixth filing
+  reached for OCR — recorded again because *"the librarian skipped
+  `FEATURES.md`"* and *"the librarian judged the correct edit to be none"*
+  are the same silence otherwise.
+- **The earlier record is CORRECTED, not merely added to.** Four dated
+  amendment footers were added to the places that recorded the pause with
+  no stated reason: `Pass 69.0`'s and `Pass 69.1`'s ***Shipped*** entries,
+  and both Passes' ***Next up*** entries. **No dated entry was
+  rewritten** — the project's standing footer convention. Each footer
+  carries the same three things: the reason is now on record; it is a
+  rejection of the **method**; **the shell the deferred panel lands in is
+  now an open question.**
+- **`docs/NEXT_SESSION.md` was also amended, and the librarian flags that
+  it touched an ENGINEER-OWNED file.** That file's standing-constraint
+  block read *"He gave no reason and was not asked for one. **Do not infer
+  one, and do not record an inferred one as fact.**"* — **the exact
+  foreclosing form named above, sitting at the top of the document the
+  project's own memory says to read FIRST on "continue".** Left alone, the
+  next session would be instructed not to look for a reason that is now on
+  record. **An append-only dated footer was added; his paragraph was not
+  rewritten or removed.** Flagged here so the engineer can fold it into
+  his own wording when he next overwrites the handoff.
+- **A reason is not a lift, and that sentence is now written in five
+  places** (the *In progress* block, all four Pass footers, the handoff
+  footer). The pause — *"continue the planned work except for gui related,
+  don't do any more work on the gui until I say so"* — is **unchanged and
+  still standing.** This is the same discipline the hundred-and-thirty-
+  sixth filing needed for *"keep going"*: **do not read one operator
+  sentence as answering a different operator sentence.** That filing had
+  to say *"a licence answer is not a lift of the GUI deferral"*; this one
+  has to say *"a stated reason is not a lift of it either."* **Two
+  consecutive filings, two different sentences, the same misreading
+  available in both.**
+
+### Still in flight
+
+- **The GUI pause — STANDING, now WITH its reason.** Everything paused
+  before is still paused: `crates/pdfce-gui/`, `tools/gui-drive.ps1`,
+  `tools/gui-shot.ps1`. Not paused: core, render, CLI, print, docs, RAGs,
+  tests, fuzz, tooling.
+- **The GUI half of `Pass 69.0` AND `Pass 69.1`** — still **one** panel,
+  two Passes, one outstanding item, **one `FEATURES.md` *Planned* row.**
+  **What changed is not its status but its DESTINATION**: the shell it
+  would land in may not be the shell that exists.
+- **`Pass 71.0`'s engine binding** — unblocked, engineering only, the
+  engineer working it concurrently. Unaffected by this filing.
+- **The six omitted ce-dimension tolerance types**, **`Pass 46` slices
+  2–4**, **the GUI attachments surface**, **`Pass 67.0` phases C / D / F**
+  — open, unchanged.
+- **The `v0.1.0` / `v0.4.0` / `v0.5.0` missing release records** —
+  unchanged, still cheap to close, still not urgent.
+- **The model-downloader withdrawal confirmation** — unchanged; still the
+  one thing worth a sentence to him.
+
+### For next session
+
+- **Do not build a panel in `crates/pdfce-gui` as a favour.** It is the
+  single most plausible well-intentioned mistake available from here.
+- **If a request arrives from the `D:\dev\pdfceGUI` side** — an accessor,
+  a type made public, a contract clarified — **record it as a finding
+  about THIS repo before satisfying it.** The two-line accessor is the
+  cheap and locally-correct action, and it is the one that converts
+  evidence into maintenance: the request carries the information *that the
+  boundary had a hole*, and that is the part which costs nothing to
+  discard and is unrecoverable afterwards.
+- **Where a core verb's return value can be misread, fix the DOC COMMENT,
+  not the roadmap entry.** `set_group_style` is the live example.
+- **Nothing about `D:\dev\pdfceGUI` is known here beyond his one
+  sentence.** If a future filing needs a fact about it, **get it from him
+  or from the directory — not from these documents**, which contain
+  exactly one quotation and no inference.
+
+**Ledger for this filing.** **No Pass shipped**; Pass family ceiling
+**UNCHANGED at 71** (71.0 highest), next free **`Pass 72`**.
+`docs/ROADMAP.md`: **edited** — a new **GUI pause** block at the head of
+*In progress* (the primary record), plus **four dated amendment footers**
+(`Pass 69.0` *Shipped*, `Pass 69.1` *Shipped*, `Pass 69.0` *Next up*
+criterion 2, `Pass 69.1` *Next up* GUI note); **no dated entry
+rewritten.** `docs/ARCHITECTURE.md`: **edited** — **decision 058 minted**
+in §12, and **§3's invariant statement** gains the
+independent-implementation paragraph (decision log = audit trail, body
+section = living truth; both moved together). `docs/NEXT_SESSION.md`:
+**edited** — one dated append-only footer on an **engineer-owned** file,
+flagged above. `docs/FEATURES.md`: **deliberately NOT edited** — reason
+stated above in *Findings*, both halves. Standing rules: **no new rule** —
+ceiling **R191**, next free **R192** (still an unruled proposal; this
+filing adds nothing to it). Decision records: **058 minted**, ceiling
+**058**, next free **059**. Operator-question ceiling **`(bl)`**, next
+free **`(bm)`** — unmoved; nothing was asked. **Git state MEASURED, not
+inferred (hard rule 8), and it CHANGED between dispatch and filing — both
+readings given.** The dispatch stated `HEAD` = **`874197f`** with one
+uncommitted path under `.claude/agent-memory/pdfce-engineer/`. **Measured
+at the start of this filing's edits:** `HEAD` = **`7031296`** — the
+engineer had committed that memory correction as *"'he gave no reason' was
+a claim, and it has been corrected"* — **10 commits ahead of
+`origin/main`**, and `git status --short` showed **only this filing's own
+three `docs/` paths**, so nothing of his was staged here. **Remote state,
+measured (`git rev-parse origin/main`):** `origin/main` = **`4069cbb`**,
+so local `main` is **10 commits ahead and NOTHING IS PUSHED.** Stated as a
+measured fact, not a request — pushing is the operator's act (project rule
+8). **Backup currency MEASURED this dispatch**, by `git bundle
+list-heads` and `ls`, **not read from any document**:
+`D:\Dev\pdfce-backups\pdfce-20260813-0755.bundle`, **14,241,767 bytes,
+written 2026-08-13 07:49**, its `refs/heads/main` = **`6db55ae`** —
+**6 commits behind `HEAD`**, all of them docs-or-memory-only
+(`f251f18`, `88fde1e`, `46731fc`, `874197f`, `7031296`, and this
+filing's own commit once it lands). **`tools/check-ledger-numbers.py` run
+pre-filing: clean** — confirming **R191 / decision 057 / filing 136** as
+the ceilings this entry increments from, and **Pass families up to 71**.
+**`tools/check-commits-filed.py` run at BOTH ends of this dispatch:
+clean, 393 code commits over the whole history, 5 known-unfiled carried in
+the baseline — and that baseline is DEBT, not an allowlist.** This is the
+**hundred-and-thirty-seventh** `SESSION_LOG.md` filing (the
+hundred-and-thirty-sixth confirmed present by direct read before this
+entry was appended).

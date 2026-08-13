@@ -98,6 +98,21 @@ GUI halves are now a **single** outstanding item and are filed that way in
 `FEATURES.md` (one *Planned* row covering both), rather than as two
 unticked lines a reader would have to add up.
 
+> **[AMENDED 2026-08-13 — hundred-and-thirty-seventh filing. THE REASON
+> FOR THE PAUSE HAS SINCE BEEN GIVEN.]** This entry recorded the deferral
+> as an instruction with **no stated reason**, which was accurate when
+> filed. The operator has since given one, and it is **not** what this
+> entry's wording would lead a reader to guess: the objection is to the
+> **method** by which the GUI has been built (*"a patchwork things stuck
+> together as they are added"*), not to its priority — and a **separate
+> GUI project** is under way in `D:\dev\pdfceGUI` that **may replace
+> `crates/pdfce-gui` wholesale.** **Consequence for this entry: do not
+> discharge this Pass's deferred GUI half by building a panel in the
+> current shell without re-reading that record first.** Full statement,
+> verbatim quote and the five engineering consequences: the **GUI pause**
+> block at the head of *In progress*, and **decision 058** in
+> `ARCHITECTURE.md` §12. **The entry above is not rewritten.**
+
 **Terminology (project rule 15):** every dimension in this entry is a
 **ce dimension** — one pdfce authors. **Nothing here touches pdf
 dimensions.** A tolerance already printed on a CAD-exported drawing is
@@ -456,6 +471,24 @@ filing rather than removed. A future session that finds this entry in
 *Shipped* and concludes the panel exists will be wrong; a future session
 that finds the criteria unticked and concludes the work was forgotten
 will also be wrong. Both readings are pre-empted here on purpose.
+
+> **[AMENDED 2026-08-13 — hundred-and-thirty-seventh filing. THE REASON
+> FOR THE PAUSE HAS SINCE BEEN GIVEN, AND IT PRE-EMPTS A THIRD WRONG
+> READING.]** This entry filed the deferral with **no stated reason** —
+> correct at the time; none had been given. The operator has since given
+> one: he paused GUI production **because the current shell was unusable
+> and the METHOD was wrong** (*"a patchwork things stuck together as they
+> are added"*), and a **separate GUI project** is being built in
+> `D:\dev\pdfceGUI` that, if successful, will **likely replace**
+> `crates/pdfce-gui` and **may be merged** into this repo. **The third
+> wrong reading this entry could not pre-empt:** that the deferred panel
+> will simply be built later in the shell that exists. **It may not be
+> built there at all.** Full statement, verbatim quote and the five
+> engineering consequences — including the one that concerns this Pass
+> directly, that **`set_group_style`'s REGENERATED-vs-MOVED count trap is
+> now reachable by an external consumer who cannot ask us** — the **GUI
+> pause** block at the head of *In progress*, and **decision 058** in
+> `ARCHITECTURE.md` §12. **The entry above is not rewritten.**
 
 **Terminology (project rule 15):** every dimension in this entry is a
 **ce dimension** — one pdfce authors. **Nothing here touches pdf
@@ -40718,6 +40751,100 @@ to a dedicated `oxidize-pdf` audit that remains the gate before Pass 1.
 
 ## In progress
 
+> ### ★★★ THE GUI PAUSE — THE REASON, GIVEN 2026-08-13, AND THE REPLACEMENT PROJECT (hundred-and-thirty-seventh filing)
+>
+> **Read this before planning any `crates/pdfce-gui` work.** The pause
+> itself was filed twice — in the hundred-and-thirty-fourth and
+> hundred-and-thirty-fifth filings, against `Pass 69.0` and `Pass 69.1` —
+> **as an instruction with no stated reason.** That was correct at the
+> time: none had been given. **It has now been given, and it is not what a
+> reader would have guessed from *"don't do any more GUI work."***
+>
+> **Operator, 2026-08-13, verbatim and in full:**
+>
+> > *"FYI I paused GUI production in this branch because it was unusable
+> > and I realised it needed a separate project plan rather than the
+> > current method which just seems to be low priority and a patchwork
+> > things stuck together as they are added. The new one is being built in
+> > d:\dev\pdfceGUI in another session and if successful will likely
+> > replace the current one and may have its dev folder merged into this
+> > one."*
+>
+> **The objection is to the METHOD, not to the priority and not to the
+> quality of any individual panel.** *"Patchwork things stuck together as
+> they are added"* is a criticism of accretion — a shell that grew
+> feature-by-feature behind whatever Pass happened to need a surface — and
+> the remedy he names is *"a separate project plan"*, not more care per
+> panel. **The most likely wrong inference from the original instruction
+> was that the GUI is merely low-priority and will resume as-is.** It may
+> not resume as-is at all.
+>
+> **What is known about `D:\dev\pdfceGUI`, in full, and nothing beyond
+> it:** it is being built in another session; if successful it will
+> **likely replace** the current shell; its dev folder **may** be merged
+> into this repo. **Nobody in this repo has seen it.** Do not describe its
+> stack, structure, progress or design here — `LEGAL.md` §1.1 and rule 8's
+> corrected-remote incident are this project's standing lesson about
+> asserting unmeasured facts about its own environment, and an
+> externally-developed sibling is exactly the environment nobody here has
+> measured.
+>
+> #### The five engineering consequences — these are the substance
+>
+> 1. **`crates/pdfce-gui` MAY BE REPLACED WHOLESALE. Do not invest in
+>    it.** Refactors, polish and new panels there are potentially
+>    throwaway and **raise the cost of the swap**. And because the
+>    critique is of the *method*, **adding one more well-built panel does
+>    not answer it** — that is precisely the accretion being objected to.
+> 2. **★ §3's GUI-core separation invariant is now being TESTED FOR REAL,
+>    by a party that cannot ask us.** `D:\dev\pdfceGUI` consuming
+>    `pdfce-core` / `pdfce-render` from outside this repo is **exactly**
+>    the scenario the invariant was written for — the *"fork to a web app
+>    later"* goal, arriving early and in a different costume. **If that
+>    project needs nothing to move in core, the separation is real and has
+>    been demonstrated rather than asserted.** **Anything it does need is a
+>    place the boundary was drawn wrong** — such a request is a **finding
+>    about this repo**, to be recorded as one, not quietly accommodated.
+>    Decision **058** carries the architectural statement.
+> 3. **`pdfce-core`'s public API now has a REAL external consumer, not a
+>    hypothetical one.** Project rule 10 (API Guidelines compliance) and
+>    doc-comment completeness stop being hygiene and become **somebody
+>    else's unblocking**. Where a core verb carries a trap — the worked
+>    example is **`EditSession::set_group_style` returning the count
+>    REGENERATED, not the count that will visibly MOVE** (`Pass 69.0`'s
+>    *Shipped* entry and ui-spec Amendment B) — **that trap is now
+>    reachable by a session that cannot ask a question here.**
+> 4. **A merge of `D:\dev\pdfceGUI`'s dev folder into this repo is
+>    possible.** Keep the workspace layout mergeable; **do not let GUI
+>    assumptions spread into core crates.**
+> 5. **`gui [ ]` rows in `FEATURES.md` are MORE accurate now, not less**,
+>    and will need **re-basing against the new shell if it lands.** **Do
+>    not pre-tick anything in anticipation**, and **do not add a "being
+>    replaced" note to those rows** — that file's own header forbids
+>    growing history onto a scan.
+>
+> #### ★ The shape of the earlier error, because it recurs
+>
+> ***"He gave no reason"*** **and** ***"no reason has been given yet"***
+> **read identically and behave differently.** The first quietly
+> forecloses the update — a reader who believes no reason exists does not
+> go looking when one arrives. The second invites it. **The engineer's own
+> agent memory carried the foreclosing form and was corrected the same
+> day.** Prefer the second form for every absent fact, not just this one:
+> an absence recorded without a tense is indistinguishable from a
+> settled negative.
+>
+> **Amendment footers pointing here** have been added to the four places
+> that recorded the pause without a reason: `Pass 69.0`'s and
+> `Pass 69.1`'s *Shipped* entries, and both Passes' *Next up* entries.
+> **Those dated entries are not rewritten** — the project's standing
+> footer convention.
+>
+> **The pause itself is UNCHANGED and still standing.** *"Continue the
+> planned work except for gui related, don't do any more work on the gui
+> until I say so"* (2026-08-13). **A reason is not a lift.** If he asks
+> for GUI work, he has lifted it; do not quote the pause back at him.
+
 > **★ AN `⚠ OPEN DEFECT` ENTRY STOOD HERE FOR PART OF 2026-08-06 AND HAS
 > BEEN REMOVED. IT WAS NOT A DEFECT.** Filed from `7d3e44c` — *"a
 > confirmed-hit click reaches the canvas with the right tool armed and
@@ -41935,6 +42062,16 @@ in the "still open" list. Full build record: this file's own
 >   do any more work on the gui until I say so."* **This is a recorded
 >   instruction, not a shortfall**; the criterion stays live and unticked
 >   rather than being quietly reworded to match what shipped.
+>   **[AMENDED 2026-08-13, hundred-and-thirty-seventh filing — THE REASON
+>   IS NOW ON RECORD.]** This bullet recorded the deferral with no stated
+>   reason (accurate then; none had been given). The reason is a rejection
+>   of the **method** — *"a patchwork things stuck together as they are
+>   added"* — and a **separate GUI project** in `D:\dev\pdfceGUI` may
+>   **replace `crates/pdfce-gui` wholesale**. **The criterion stays live
+>   and unticked, but whoever discharges it may be building it in a
+>   DIFFERENT SHELL.** Do not open this criterion without reading the
+>   **GUI pause** block at the head of *In progress* and **decision 058**
+>   first.
 > - **Criterion 3 — tolerance on `DimensionRecord`.** Split out as
 >   **`Pass 69.1`, UNSTARTED**, taking the sequencing note at the foot of
 >   this entry. **NO TOLERANCE EXISTS ANYWHERE YET** — the survey finding
@@ -42189,6 +42326,18 @@ now exists (`dimension/style.rs`, three tiers, per-property `Option`), so
 **same operator deferral** recorded against `Pass 69.0` — *"don't do any
 more work on the gui until I say so"* (2026-08-13). Core and CLI are not
 blocked by it.
+
+> **[AMENDED 2026-08-13 — hundred-and-thirty-seventh filing. THE REASON
+> FOR THAT DEFERRAL IS NOW ON RECORD.]** The note above states the
+> deferral with no reason, which was accurate when written. The operator
+> has since given one: the GUI was paused because the current shell was
+> unusable and its **construction method** was wrong (*"a patchwork things
+> stuck together as they are added"*), and a **separate GUI project** in
+> `D:\dev\pdfceGUI` may **replace `crates/pdfce-gui`** and **may be
+> merged** into this repo. **This Pass's GUI half is still the SAME single
+> outstanding item as `Pass 69.0`'s panel** — that is unchanged — but the
+> shell it lands in is now an open question. See the **GUI pause** block
+> at the head of *In progress* and **decision 058**.
 
 ---
 

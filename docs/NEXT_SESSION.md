@@ -19,6 +19,32 @@ gate clean. Nothing half-built.
 He gave no reason and was not asked for one. **Do not infer one, and do not
 record an inferred one as fact.** It is unambiguous as it stands.
 
+> **[AMENDED 2026-08-13 by `pdfce-librarian`, hundred-and-thirty-seventh
+> filing — HE HAS SINCE GIVEN THE REASON, so the two sentences above no
+> longer describe the situation.]** The paragraph is left standing rather
+> than rewritten (this file is engineer-owned; the librarian appends, it
+> does not overwrite). **The reason, from the operator, verbatim and in
+> full:**
+>
+> > *"FYI I paused GUI production in this branch because it was unusable
+> > and I realised it needed a separate project plan rather than the
+> > current method which just seems to be low priority and a patchwork
+> > things stuck together as they are added. The new one is being built in
+> > d:\dev\pdfceGUI in another session and if successful will likely
+> > replace the current one and may have its dev folder merged into this
+> > one."*
+>
+> **The objection is to the METHOD, not the priority** — so *"a
+> well-built new panel"* does not answer it — and **`crates/pdfce-gui`
+> may be REPLACED WHOLESALE by a project built outside this repo.** **Do
+> not invest in the current shell.** *"Do not infer a reason"* still
+> holds for anything beyond his sentence; **nothing about
+> `D:\dev\pdfceGUI` beyond it is known here.** The pause itself is
+> **unchanged and still standing — a reason is not a lift.** Full record
+> and the five engineering consequences: `ROADMAP.md`'s **GUI pause**
+> block at the head of *In progress*, and **decision 058** in
+> `ARCHITECTURE.md` §12.
+
 - Paused: `crates/pdfce-gui/`, `tools/gui-drive.ps1`, `tools/gui-shot.ps1`.
 - Not paused: core, render, CLI, print, docs, RAGs, tests, fuzz, tooling.
 - A Pass whose GUI half is deferred ships `core [x] · cli [x] · gui [ ]`

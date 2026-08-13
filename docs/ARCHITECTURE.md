@@ -1186,6 +1186,34 @@ is checked, not just hoped for — `cargo tree -p pdfce-core` and
 single invariant that keeps the future web fork a "swap the shell
 crate" job instead of a rewrite.
 
+**★ ABOUT TO BE VALIDATED BY AN INDEPENDENT IMPLEMENTATION, 2026-08-13
+(decision 058, hundred-and-thirty-seventh filing).** The operator has
+paused GUI production in this repo and a **separate GUI project is being
+built in `D:\dev\pdfceGUI` in another session**, which — his words — *"if
+successful will likely replace the current one and may have its dev
+folder merged into this one."* **A second shell consuming `pdfce-core` /
+`pdfce-render` from OUTSIDE this repository is exactly the scenario this
+invariant was written for**, arriving early and in a different costume
+than the web fork it was aimed at. **That is a stronger test than any
+`cargo tree` check**, because `cargo tree` proves only that no windowing
+crate is in the graph; an independent implementation proves the boundary
+is *sufficient* — that a shell can be built against this surface without
+needing anything on the far side of it to move. **The reading of the
+result, fixed in advance so it is not decided by whoever is inconvenienced
+by it:** if that project needs **nothing** to move in core, the separation
+is **real and demonstrated rather than asserted**; **anything it does need
+is a place the boundary was drawn wrong**, and is recorded as a finding
+about this repo rather than quietly accommodated. **`cargo tree` remains
+the cheap daily gate** and is not superseded — the two checks answer
+different questions. **Second-order consequence, and the one with teeth:
+`pdfce-core`'s public API now has a REAL external consumer** (§8, project
+rule 10) — doc-comment completeness and API-guideline compliance stop
+being hygiene and become somebody else's unblocking, by a party who
+**cannot ask a question here**. Full record: `ROADMAP.md`'s **GUI pause**
+block at the head of *In progress*. **Nothing about `D:\dev\pdfceGUI`
+beyond the operator's own sentence is known to this repo; nothing further
+is asserted about it here.**
+
 **Empirically checked against a mobile target for the first time,
 2026-08-11 (investigation only — no Android build committed, no
 decision to target Android made; full measurements and effort
@@ -19364,3 +19392,155 @@ target was RE-RUN over the widened key set for 344,301 runs with 0
 crashes — wall time NOT recorded, so no runs/s is claimed and this must
 not be read against 056's 776,315-over-60 s as a throughput comparison.**
 Full build record: `ROADMAP.md`'s hundred-and-thirty-fifth filing.
+
+---
+
+### 2026-08-13 (hundred-and-thirty-seventh filing) — decision 058: a shell crate THIS REPO OWNS may be replaced by an EXTERNALLY-DEVELOPED one, and §3's crate-boundary invariant is the interface that makes that possible — the invariant is about to be validated by an INDEPENDENT IMPLEMENTATION, which is a stronger test than `cargo tree`
+
+**Ceiling check, measured by `tools/check-ledger-numbers.py` at the head
+of this dispatch:** *"standing rules R191 → next free R192; decision
+records 057 → next free 058; SESSION_LOG filings 136 → next free 137."*
+**This filing mints decision 058** — the next free number — **and no
+standing rule.** **R192 remains a PROPOSED, unruled number and this
+filing adds nothing to that proposal.**
+
+**No Pass is minted.** Pass family ceiling stays **71**, next free
+**`Pass 72`**. **No operator question is minted** — nothing here is being
+asked; ceiling stays **`(bl)`**, next free **`(bm)`**.
+
+#### The operator's statement, verbatim and in full — this is the whole of what is known
+
+> *"FYI I paused GUI production in this branch because it was unusable
+> and I realised it needed a separate project plan rather than the
+> current method which just seems to be low priority and a patchwork
+> things stuck together as they are added. The new one is being built in
+> d:\dev\pdfceGUI in another session and if successful will likely
+> replace the current one and may have its dev folder merged into this
+> one."*
+
+**Nothing about `D:\dev\pdfceGUI` beyond this sentence is known to this
+repository, and nothing further is asserted about it anywhere in these
+documents.** *"Being built in another session, may replace, may be
+merged"* is the entire fact set. This restraint is not politeness — it is
+the direct application of the lesson `LEGAL.md` §1.1 and project rule 8
+record, where **a document asserted a fact about the environment that
+nobody had measured and it read as reassurance for a day.** An
+externally-developed sibling repository is precisely the part of the
+environment nobody here has measured.
+
+#### Why this is an ARCHITECTURE decision and not a scheduling note
+
+**Because the thing being decided is what a crate boundary is FOR.**
+
+`ROADMAP.md` already carries the pause, the reason and the five
+engineering consequences; that is scheduling and it belongs there. What
+belongs here is the structural claim underneath it: **`crates/pdfce-gui`
+is replaceable by an implementation this project did not write, and the
+reason it is replaceable is §3.** A workspace whose shell crate had
+reached into `pdfce-core`'s internals, or whose core crate had grown a
+windowing dependency, would not have this option at all — the operator's
+*"likely replace the current one"* would have been *"rewrite the
+project."* **The invariant bought an exit that is now being used**, three
+weeks after it was written, for a reason nobody anticipated.
+
+**This also reclassifies the invariant's own justification.** §3 has
+always justified itself by the **web fork** — *"the single invariant that
+keeps the future web fork a 'swap the shell crate' job instead of a
+rewrite."* That justification was **speculative by construction**: no web
+fork exists, so the invariant's value was an argument, not an
+observation. It now has a **non-speculative** justification as well.
+**The generalised form, which is the part worth carrying to other
+projects:** an invariant defended for one future scenario pays out in a
+*different* one, and the payout arrives before the scenario it was
+written for. **This is the argument against relaxing a boundary because
+its stated motivating case has not materialised yet.**
+
+#### ★ The test: an independent implementation is STRONGER evidence than `cargo tree`
+
+The two checks answer different questions and neither replaces the other.
+
+| check | what it proves | what it CANNOT prove |
+|---|---|---|
+| `cargo tree -p pdfce-core` / `-p pdfce-render` (the standing §3 gate) | **NECESSITY** — no windowing crate is in the dependency graph. Cheap, deterministic, runnable on every Pass | That the surface is **usable** by a shell. A core crate can be perfectly free of `winit` and still be unbuildable-against — missing accessors, types that only make sense to the one caller that exists, contracts that live in `pdfce-gui` rather than in `pdfce-core`'s docs |
+| an **independent shell built against it** (`D:\dev\pdfceGUI`) | **SUFFICIENCY** — that a second shell can be built on this surface **without anything on the far side of the boundary having to move** | Nothing about the graph; it is not a substitute for the gate, and it is not repeatable on demand |
+
+**`cargo tree` remains the cheap daily gate** and is explicitly not
+superseded. **What is new is that the sufficiency half stops being an
+assertion.**
+
+#### The reading of the result, FIXED IN ADVANCE
+
+Stated now, before any result exists, so that it is not decided later by
+whoever finds it inconvenient:
+
+- **If `D:\dev\pdfceGUI` needs NOTHING to move in `pdfce-core` /
+  `pdfce-render`** → the separation is **real and has been demonstrated
+  rather than asserted.** That is a stronger sentence than this document
+  has ever been entitled to write about §3.
+- **Anything it DOES need is a place the boundary was drawn wrong** — a
+  **finding about THIS repository**, to be recorded as one (a
+  `ROADMAP.md` entry and, if it moves a boundary, a §12 decision),
+  **not quietly accommodated** by adding whatever was asked for and
+  moving on. A patch that satisfies an external consumer without
+  recording *why the surface was insufficient* converts evidence into
+  maintenance.
+
+**The asymmetry is deliberate.** A silent accommodation is the failure
+mode here, because it is the cheap and locally-correct action: the
+request arrives, the accessor is two lines, and the one piece of
+information the episode carried — *that the boundary had a hole* — is the
+part that costs nothing to discard and is never recoverable afterwards.
+
+#### The consequence with teeth: `pdfce-core`'s public API has a REAL external consumer
+
+Project rule 10 (Rust API Guidelines compliance, §8) and the
+documentation-first obligation have until now been enforced against a
+**hypothetical** consumer. They are now enforced against an actual one
+**who cannot ask a question here.** Every ambiguity in a doc comment is
+now somebody else's blocked hour rather than an internal reader's
+momentary pause.
+
+**The worked example, chosen because it already exists and is already
+known to be a trap:** `EditSession::set_group_style` returns the number
+of ce dimensions **REGENERATED**, **not** the number that will visibly
+**MOVE**. The two differ whenever a member overrides the edited property,
+and **only the second answers the question a panel is actually asking**
+(*what will the operator see change?*). That trap is documented in
+`Pass 69.0`'s *Shipped* entry and in ui-spec Amendment B — **both of
+which live in this repository and neither of which an external shell
+author has any reason to open.** **A trap documented only in the roadmap
+is undocumented to an external consumer.** Where a core verb's return
+value can be misread this way, **the doc comment on the verb is the only
+disclosure that reaches them.**
+
+**Terminology (project rule 15):** `set_group_style` operates on **ce
+dimensions** — the ones pdfce authors. **pdf dimensions are not in
+scope** and no code path in this decision reaches them.
+
+#### What this decision does NOT settle
+
+- **It does not adopt `D:\dev\pdfceGUI`.** *"Likely replace"* and *"may
+  be merged"* are the operator's words and remain his call. **No decision
+  to retire `crates/pdfce-gui` has been made**, and this entry must not
+  be cited as one.
+- **It does not lift the GUI pause.** The standing instruction of
+  2026-08-13 is unchanged. **A reason is not a lift.**
+- **It does not describe, endorse or evaluate the other project's
+  design** — see the restraint clause above.
+- **It does not mint a merge plan.** Consequence 4 in the `ROADMAP.md`
+  record — *keep the workspace layout mergeable, do not let GUI
+  assumptions spread into core crates* — is a discipline, not a
+  procedure. A real merge, if it happens, earns its own decision.
+- **It does not change `FEATURES.md`.** No capability moved; see the
+  filing record for why the correct edit there was **none**.
+
+**Body section updated in the same filing:** **§3's invariant statement**
+gains the independent-implementation paragraph, so a reader who lands on
+the invariant learns that it is about to be tested rather than only that
+it is asserted. **No crate boundary moved, no dependency was added** (so
+no `cargo-about` regeneration is owed), **and no code changed in this
+filing at all** — this is a documentation-only filing, so **no test,
+fmt, clippy or `cargo tree` figure is claimed for it**, because none was
+run *for* it. Full record: `ROADMAP.md`'s **GUI pause** block at the head
+of *In progress*, and `SESSION_LOG.md`'s hundred-and-thirty-seventh
+filing.
