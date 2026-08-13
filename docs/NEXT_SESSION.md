@@ -185,11 +185,14 @@ binary does not report ships a false claim where a user checks it).
 
 ## 7. Backup — re-measure, do not quote
 
-Last measured 2026-08-12 ~22:05:
-`D:\Dev\pdfce-backups\pdfce-20260812-2205.bundle`. **That predates this
-session's three commits** — a fresh bundle is owed. This ledger has carried
-a wrong backup figure twice; re-run `ls -t` and `git bundle list-heads`,
-including when the number above is this one.
+Measured 2026-08-13 ~07:55:
+**`D:\Dev\pdfce-backups\pdfce-20260813-0755.bundle`**, `git bundle verify`
+okay, `refs/heads/main` = `6db55ae…` = `HEAD` at handoff, and
+`refs/tags/v0.5.3` (`b2d0595…`) is inside it, so the last release is
+recoverable from backup alone.
+
+**This ledger has carried a wrong backup figure twice. Re-run `ls -t` and
+`git bundle list-heads` — including when the number above is this one.**
 
 ---
 
