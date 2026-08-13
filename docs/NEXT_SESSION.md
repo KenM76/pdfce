@@ -4,9 +4,9 @@ Engineer-owned handoff. Read this **before** `ROADMAP.md` — that says what
 shipped, this says what to do next. Overwrite it once acted on.
 
 **State at handoff (2026-08-12, late evening):** branch `main`, `HEAD` =
-`1f7ef5901faa335efefb6b703801fe7e9eeec086`, working tree clean apart from the
-librarian filing for `1f7ef59` (commit it, `docs/` staged by name). Tag
-`v0.5.2` is now **four commits behind HEAD**. 3,632 tests, 0 failures.
+`0963b5f2cac7bcbbe5ef2eadea62ecc3f4d63a53`, pushed, **tag `v0.5.3` at HEAD**,
+**CI GREEN**, `verify-release` clean on all seven checks, every code commit
+filed (`check-commits-filed.py` clean over 391). 3,632 tests, 0 failures.
 Nothing is broken and nothing is half-built.
 
 ---
@@ -188,32 +188,53 @@ deliberately, `git status --short` run before each, `docs/` staged by name.
 
 ---
 
-## 7. Release state — `v0.5.2`, now FOUR commits behind
+## 7. Release state — **`v0.5.3` IS OUT, and it is clean**
 
-Tag `v0.5.2` is at `5b54a1e`; `HEAD` is `1f7ef59`. **A `v0.5.3` is owed** —
-the two-line GUI gesture is exactly the kind of thing the operator's
-standing authorisation exists for (2026-08-11: *"please continue to post the
-latest versions to git so I can try them on my laptop at home"*).
+Tag `v0.5.3` → `0963b5f` (= `HEAD` = `origin/main`). Asset
+`pdfce-v0.5.3-portable-win64.zip`, **10,308,179 B**, at
+`https://github.com/KenM76/pdfce/releases/tag/v0.5.3`.
+`tools/verify-release.py v0.5.3` reports **all seven checks ok**, including
+**CI is GREEN at the tagged commit**.
 
-**★ THE ORDERING RULE, enforced by the tool: FILE, LET CI GO GREEN, THEN
-TAG.** Run `tools/verify-release.py <tag>` **before** tagging — it consults
-CI. History: **3 of the last 4 releases were tagged at a commit CI had
-rejected**; `v0.3.0` was published with failing tests. Those jobs run on
-ubuntu/macOS/wasm32 while local verification happens on Windows —
-**cross-platform breakage is invisible to local gate runs by construction.**
+**★ This is only the SECOND release in this project's history tagged at a
+commit CI had accepted.** `v0.5.2` was the first; 3 of the 4 before it were
+tagged at commits CI had rejected, and **`v0.3.0` was published with failing
+tests**. Keep the order: **FILE → LET CI GO GREEN → TAG**, and run
+`tools/verify-release.py` *before* tagging.
 
 **Bump the version BEFORE the tag** (`--version` prints
-`CARGO_PKG_VERSION`). **New-ish hazard:** `fbcb946`'s **lite-build** and
-**capability-presence** jobs have now been through one release; a red X on
-either is a real capability regression, not a flake.
+`CARGO_PKG_VERSION`, so tagging a version the binary does not report ships a
+false claim where a user checks it). Done here and verified: the copied
+binary printed `pdfce-cli 0.5.3`.
 
-Scope of the authorisation is narrow: builds for his own testing. **Not**
-blanket publishing authority.
+Packaging smoke test run properly: staged folder **copied to a fresh path**,
+both binaries launched from it, and the *new feature* exercised — CLI
+authored both kinds and they were read back **through `dimension-list` from
+the saved files** (`40.00 pt`, `30.0°`), and the GUI reached the `77.5°`
+verdict.
+
+**★ CORRECTION TO A CLAIM THIS FILE USED TO MAKE.** It said `fbcb946` added
+a **lite-build job** and a **capability-presence job**, and warned to watch
+them at release time. They are **not jobs** — they are **steps inside
+`cargo test (${{ matrix.os }})`** (`.github/workflows/ci.yml` lines 91 and
+105). Consequence worth keeping: they do **not** appear in `gh run view`'s
+job list, so looking for them by name suggests they never ran, when in fact
+they ran on **both** matrix legs and passed. This is the *same* defect §9
+already names from the other direction — **a job whose name describes one of
+the several unrelated gates it runs.** It has now produced a false alarm in
+both directions, which strengthens the case for splitting it.
+
+Scope of the standing authorisation is narrow: builds for his own testing.
+**Not** blanket publishing authority.
 
 ## 8. Backup — re-measure, do not quote
 
-Measured 2026-08-12 ~21:36: **`D:\Dev\pdfce-backups\pdfce-20260812-2136.bundle`**,
-`git bundle verify` okay, `refs/heads/main` = `1f7ef59…` = `HEAD`.
+Measured 2026-08-12 ~22:05:
+**`D:\Dev\pdfce-backups\pdfce-20260812-2205.bundle`**, `git bundle verify`
+okay, `refs/heads/main` = `0963b5f…` = `HEAD`, and **`refs/tags/v0.5.3` is
+inside the bundle** (`b2d0595…`), so the release is recoverable from backup
+alone.
+
 **This ledger has carried a wrong backup figure twice. Re-run `ls -t` and
 `git bundle list-heads` — including when the number above is this one.**
 
@@ -244,9 +265,15 @@ Measured 2026-08-12 ~21:36: **`D:\Dev\pdfce-backups\pdfce-20260812-2136.bundle`*
   `D:\Dev\Rag-Specialized\PDF_Spec\_sources\ISO_32000-2_sponsored_EC3.pdf`
   — **SINGLE USER, watermarked to him by name: never committed, never
   shipped, paraphrase and cite only.** The repo is public.
-- **The CI job's NAME does not name the gate that fails** — every red X
-  renders as `verify pdfce-gui strings live in ui_text.rs`, but that job
-  runs **three** unrelated gates. Rename or split. Small and actionable.
+- **★ The CI job's NAME does not name the gate — now demonstrated in BOTH
+  directions, so this is worth actually fixing.** Every red X on one job
+  renders as `verify pdfce-gui strings live in ui_text.rs`, though that job
+  runs **three** unrelated gates. And `cargo test (${{ matrix.os }})` hosts
+  the two **strippable-capability** gates (`ci.yml` lines 91, 105), so they
+  are invisible in `gh run view`'s job list and a reader concludes they never
+  ran. **A name that hides a failure is bad; a name that hides a success is
+  how a real gate gets re-implemented by someone who thinks it is missing.**
+  Rename or split — small and actionable.
 - Two dead/stale printing items (Backlog, deliberately unfixed):
   `DeviceSettings::pick_tray_by_page_size` sets no `DEVMODE` field;
   `build_devmode`'s doc claims a driver-default start the code does not do.
