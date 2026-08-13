@@ -30,3 +30,4 @@
 - [Design system + the Acrobat-GUI rule conflict](project_design_system_and_rule12_conflict.md) — UI_PREFERENCES.md is at the REPO ROOT not docs/ (twice misread as missing); chrome theme-aware vs overlay theme-INVARIANT; handoff vs rule 12
 - [GUI work paused](project_gui_work_paused.md) — Ken, 2026-08-13: no pdfce-gui work until he says so; core/CLI/docs continue, ship gui [ ] honestly
 - [pdfceGUI request channel](project_gui_request_channel.md) — CHECK D:\Dev\FeatureRequests\pdfce_FeatureRequests EVERY SESSION; requests from the new GUI project land there
+- [No provisional marking](feedback_no_provisional_marking.md) — Ken 2026-08-13: inferred content renders NORMALLY, Save commits, disclosure goes off-canvas; marking = a second render path that drifts
