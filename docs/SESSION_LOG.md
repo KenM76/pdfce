@@ -40625,3 +40625,21 @@ enforced" is how someone builds it next.
    must be seen to fail.** A test for an enforcement mechanism, written
    by the hand that wrote the mechanism, is this project's highest-risk
    case for a green assertion that checks nothing.
+
+**★ AMENDMENT, appended immediately after this filing's own commit
+(`6157dd5`), discharging the promise made in the entry above rather than
+leaving it owed: `python tools/check-commits-filed.py` is CLEAN** —
+*"393 code commit(s) checked (whole history); 5 known-unfiled carried in
+the baseline"*, unchanged from the reading the hundred-and-thirty-eighth
+filing's own amendment recorded. **That is expected and is not evidence
+of anything**: this filing added **no code commit**, so the gate had
+nothing new to classify. Recorded because the entry above said it would
+be, and an unrecorded promised check is indistinguishable from a check
+that failed. **The caveat that filing raised still stands and is not
+repaired here** — the gate looks for a hash *mentioned somewhere*, not
+for the hashes a Pass is *headed with*, so `Pass 69.0`/`69.1`'s *Shipped*
+headings still name commits unreachable from `main`. **Green gate, record
+still partly wrong**, for the second consecutive filing. Measured after
+committing; `git rev-list --count origin/main..HEAD` = **15**, and
+`python tools/check-ledger-numbers.py` re-run post-commit: **clean**,
+*"SESSION_LOG filings 139 → next free is 140"*.
