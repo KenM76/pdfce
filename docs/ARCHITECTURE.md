@@ -3301,6 +3301,39 @@ text layer from words obtained some other way.
 | `MODEL_DIR = "ocrs"` | the **per-engine** directory name `ocr::models::resolve_model_dir` looks for. Per-engine because the two engines' weights carry **different licences** and a merged folder would force `PROVENANCE.md` to describe a mixture. |
 | `DETECTION_MODEL = "text-detection.rten"`, `RECOGNITION_MODEL = "text-rec-checkpoint.rten"` | the pinned filenames. |
 
+#### ★ The weights SHIP, as DATA FILES — and the embed-vs-disk threshold is a design constraint, not a size preference
+
+**Added 2026-08-13 (`40c377a`, hundred-and-forty-sixth filing).** The two
+`.rten` files are committed at
+`crates/pdfce-core/assets/models/ocrs/`, **12,240,008 B over 2 files =
+6.12 MB each**, retrieved from `huggingface.co/robertknight/ocrs` on
+2026-08-13, licence **CC-BY-SA-4.0** (read from the model card's YAML
+front matter at source; the `ocrs-models` GitHub repository carries **no**
+`LICENSE` file), SHA-256-pinned in a hand-authored `PROVENANCE.md`
+**and** cited in `about.hbs`.
+
+**They are NOT `include_bytes!`, and the reason is architectural rather
+than about size.** The bundled Foxit faces **are** compiled in, which is
+right for **264 KB**. Embedding 12 MB would **defeat
+`resolve_model_dir`'s design**: it loads **from disk** precisely so an
+operator can point at **their own** models. So the weights ship as files
+the packaging step places beside the binary. *(264 KB embedded vs
+12,240,008 B on disk — a **46×** ratio at the point the rule flips.)*
+
+**The licence boundary lives in `PROVENANCE.md`, deliberately, and is not
+duplicated into a decision record** — a second copy is a copy that can
+drift. In summary: CC-BY-SA has **no linking concept**; these ship
+**unmodified in a COLLECTION**, not as an **ADAPTATION**, so **pdfce's
+MIT licence is unaffected** — but **modifying the weights (fine-tuning,
+quantizing, retraining, format conversion) creates Adapted Material that
+must itself be CC-BY-SA.**
+
+**`tools/check-shipped-assets.py` enforces the shipped half.** It failed
+correctly on this very asset when `PROVENANCE.md` existed but `about.hbs`
+did not cite the directory — **`PROVENANCE.md` serves readers of the
+repository; `about.hbs` serves the people given a binary**, and
+`cargo-about` cannot see a non-Cargo file.
+
 #### The feature is named after the CRATE, not the capability
 
 **`ocrs`, not `ocr`.** The operator's 2026-08-12 decision was **both**
@@ -3356,10 +3389,30 @@ as every other refusal in this crate.
 
 #### Still not operator-reachable
 
-**The weights are not in the repository.** `from_model_dir` compiles,
-runs, and returns a named `ModelMissing`. `FEATURES.md` keeps OCR at
-`core [ ] cli [ ] gui [ ]` — the **third** consecutive slice to refuse
-that rounding, and deliberately so.
+**★ CORRECTED 2026-08-13 (hundred-and-forty-sixth filing).** This
+paragraph read *"**The weights are not in the repository.**
+`from_model_dir` compiles, runs, and returns a named `ModelMissing`"* —
+**true when written at slice 3, falsified by `40c377a`.** The weights
+**are** in the repository (see *"The weights SHIP, as DATA FILES"*
+above), and **a build can recognise text end to end** — `4b82641`'s smoke
+harness proves the whole chain: models load in 9.9 ms, words come back
+with boxes, the invisible layer is written, the page renders unchanged,
+the text extracts.
+
+**What is still true is the heading.** OCR remains **not
+operator-reachable**, and `FEATURES.md` keeps it at
+`core [ ] cli [ ] gui [ ]` — now the **fourth** consecutive slice to
+refuse that rounding. The reason changed underneath the conclusion:
+**it is no longer the missing weights, it is that no shell has a
+surface** (`pdfce-cli ocr` is unbuilt, and so is the GUI flow). **Note
+the shape — a conclusion that stayed correct while its stated reason went
+stale is exactly the failure this document keeps re-learning.**
+
+**And one thing the smoke harness deliberately does NOT establish:
+recognition QUALITY.** The only available test documents are vector PDFs
+that already contain text — the wrong input, out-of-distribution in the
+opposite direction from a bad scan. A real quality claim needs a
+rights-cleared scanned page (`LEGAL.md` §5).
 
 ### (W) `2fe6216` — `pdfce_render::render_page_region`, and `MAX_PIXMAP_EDGE` CHANGES WHAT IT BOUNDS — 2026-08-13
 

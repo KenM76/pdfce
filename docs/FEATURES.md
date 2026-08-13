@@ -231,7 +231,7 @@ the model or verb exists and only the named shell is missing. The
 | [ ] | [ ] | [ ] | [x] | Digital signatures — PKCS#7/PAdES signing and verification. |
 | [ ] | [ ] | [ ] | [x] | Bates numbering. |
 | [ ] | [ ] | [ ] | [x] | PDF/A conformance and validation. |
-| [ ] | [ ] | [ ] | [x] | OCR — core writes the invisible sandwich layer (`ocr::layer`: §9.3.6 mode 3, additive, the scan never re-encoded) and the `ocrs` engine is bound behind a Cargo feature; **the model weights are not in the repository, so no build can recognise text** — the loader returns a named `ModelMissing` — and no shell has a surface. |
+| [ ] | [ ] | [ ] | [x] | OCR — core writes the invisible sandwich layer (`ocr::layer`: §9.3.6 mode 3, additive, the scan never re-encoded), the `ocrs` engine is bound behind a Cargo feature, and the CC-BY-SA-4.0 weights now ship (12,240,008 B), so a build **can** recognise text end to end; **no shell has a surface, so nothing is operator-reachable**, and recognition **quality is unproven** — the only test documents are vector PDFs that already contain text. |
 | [ ] | [ ] | [ ] | [x] | Accessibility (PDF/UA) tagging. |
 | [ ] | [ ] | [ ] | [x] | Document comparison. |
 | [ ] | [ ] | [ ] | [x] | Portfolios (PDF Package). |

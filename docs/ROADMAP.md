@@ -96,6 +96,490 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★ Pass 76.0 — `d24c1df` — **OBJECT IDENTITY ACROSS EDITS: which verbs renumber, MEASURED rather than read, and a `remap_index_after_delete` that returns `None` rather than a different object** — ★★ **AND A PASS-NUMBER COLLISION: this commit's own message calls itself `Pass 75.0`, a number the ROADMAP had already minted for the reusable parsed handle. RULED — the ROADMAP keeps `75.0`; this work is `76.0`.** Also files `Pass 71.0`'s **end-to-end OCR smoke harness** (`4b82641`, and a false positive its author caught by arithmetic) and the **12,240,008 B of CC-BY-SA-4.0 weights now permanently in a public repository's history** (`40c377a`). **`FEATURES.md`: NO checkbox changed; the OCR row's sentence REPLACED, because it asserted the weights were not in the repository** — filed 2026-08-13 (hundred-and-forty-sixth filing)
+
+**Full hashes**, read with `git rev-parse` in this dispatch — not relayed:
+
+| short | full | committed |
+|---|---|---|
+| `4b82641` | `4b8264169cf828146dd37211537d6ea894031918` | 2026-08-13 13:07:56 −0400 |
+| `40c377a` | `40c377a68223d67c91c6bb40823c3942c59ad98f` | 2026-08-13 13:25:44 −0400 |
+| `d24c1df` | `d24c1dfc3ba764f18781c3ebc9b8342243e05212` | 2026-08-13 14:38:50 −0400 |
+
+**`HEAD` at filing time is `19ceb60b6dbd29638d2eee357d53a6f4ba6f015d`** — *not*
+one of these three; this is a retrospective filing of debt the
+hundred-and-forty-fifth filing named in its own *For next session* list, item
+6. Working tree **clean** (`git status --porcelain`, empty), **35 commits
+ahead of `origin/main` = `42364dbcfd11db7164a93f4b8f9b6072b022f7e4`**
+(`git rev-list --count origin/main..HEAD`).
+
+**This was DEBT, not a gate violation, and the distinction is the reason it
+needed a deliberate dispatch.** `python tools/check-commits-filed.py` reports
+**clean — 401 code commits checked, 5 known-unfiled carried in the baseline**,
+and it reported clean *while these three had no `ROADMAP.md` entry*, because
+its join is *"the short hash appears in `ROADMAP.md` or `SESSION_LOG.md`"* and
+filing 145's owed-list mentioned all three by hash. **That is the gate's own
+documented `KNOWN WEAKNESS`, live rather than theoretical** — its docstring
+names exactly this case (*"a hash cited in an OWED list … therefore counts as
+filed"*). Nothing was concealed; a gate simply cannot distinguish *cited as
+owed* from *filed*. The three were **not** added to
+`tools/commits-filed-baseline.txt`, per that file's own instruction.
+
+#### ★★★ THE COLLISION — `Pass 75.0` was claimed twice, and the ruling goes against the obvious reading
+
+**The facts, all measured:**
+
+| where | `Pass 75.0` means | minted | visible to a gate? |
+|---|---|---|---|
+| `d24c1df`'s **commit message body**, first line | object identity / `remap_index_after_delete` | 2026-08-13 **14:38** | **no** — see the blind-spot table below |
+| `docs/ROADMAP.md` *Next up*, filed by `19ceb60` | the **reusable parsed handle** (display list) in `pdfce-render` | 2026-08-13 **15:47** (filing 145) | yes |
+
+So the object-identity work claimed the number **69 minutes earlier**, and
+the dispatch that produced this filing offered that as the argument for
+letting it keep `75.0`: it shipped first, and the parsed handle is
+*scheduled, not started*, so it is the cheaper one to renumber.
+
+**RULED THE OTHER WAY. `Pass 75.0` stays the reusable parsed handle;
+the object-identity work is `Pass 76.0`.** Three reasons, in ascending
+order of weight:
+
+1. **Chronological priority in a channel nobody reads is not priority.**
+   The ROADMAP is where a Pass number is minted — that is what makes it the
+   authority. A number claimed in a commit-message body was never presented
+   to the ledger at all, so no concurrent filing could have avoided it.
+   Awarding the number to the earlier claim would teach the opposite lesson:
+   that minting in a commit message works, and that the ledger yields to it.
+2. **The *Shipped* section and `SESSION_LOG.md` are append-only** (librarian
+   hard rule 1). Filing 145's *Shipped* entry, its minting table, its
+   Backlog promotion banner and its `SESSION_LOG.md` entry all state
+   *"`Pass 75.0` MINTED"* about the display list. Renumbering it would mean
+   either editing append-only history in four places or leaving four records
+   saying something false.
+3. **★ THE COST ASYMMETRY RUNS OPPOSITE TO THE INTUITION, and this is the
+   decisive one.** *"The unstarted work is cheaper to renumber"* measures
+   **engineering** cost — no code has been written against `75.0` yet, true.
+   But the renumbering cost here is **documentary**, and counted that way it
+   inverts. **Counted at `19ceb60`** with
+   `git show HEAD:docs/<file> | grep -c "Pass 75\.0"` — measured in this
+   dispatch, not estimated:
+
+   | document | lines mentioning `Pass 75.0` (the display list) | lines mentioning `d24c1df` |
+   |---|---|---|
+   | `docs/ROADMAP.md` | **11** | **0** |
+   | `docs/SESSION_LOG.md` | **15** | **1** — filing 145's *owed* list, which is a note that it is **unfiled**, not a filing |
+   | `docs/ARCHITECTURE.md` | **1** | 0 |
+   | **total** | **27 lines across 3 documents = 9 per document** | **1, and it says the work is not yet recorded** |
+
+   **27 citations versus 1.** Renumbering the work with no citations costs
+   **one sentence**; renumbering the work with 27 costs **27 edits, several
+   of them into append-only history**. The intuition counted the wrong
+   ledger — it measured how much *code* existed, when the thing being
+   renumbered is a *record*.
+
+   *(A correction against this filing's own first draft, per hard rule 10's
+   corollary: this paragraph initially said "ten cross-references in
+   `ROADMAP.md` alone" and "zero presence in any document" — both written
+   before the grep. The real figures are 11 and 1. **The direction of the
+   argument is unchanged and the margin is wider than claimed**, but the
+   numbers were estimated and then filed, which is the exact habit the rule
+   exists to stop.)*
+
+**Neither ruling reuses a Pass ID for a different feature** (hard rule 2) —
+both retire one of the two claims. What is retired here is the
+commit-message claim, and **because that message is immutable history it can
+never be corrected in place**, which is precisely why the note below exists.
+
+##### The losing number carries its note, in both directions
+
+- **`d24c1df`'s commit message says `Pass 75.0` and that claim is VOID.**
+  The work is **`Pass 76.0`**. A reader who greps commit messages for
+  `Pass 75.0` and finds an object-identity commit, then greps `ROADMAP.md`
+  and finds a display list, is looking at this collision and not at a
+  document error.
+- The *Next up* entry for **`Pass 75.0`** carries the same statement, so the
+  reader who arrives from the other side lands on it too.
+- **Neither statement is discoverable from the other without one of them
+  existing.** That is the whole point of writing both.
+
+#### ★★ HOW IT HAPPENED — a Pass number minted where NO gate can see it, and there are three gates
+
+This is a **fresh, unlisted instance of `R192`'s blind-spot class**, and it
+is sharper than the instances already recorded because **three separate
+checks touched this artifact and not one of them could see the claim.**
+Measured by reading each tool's own source in this dispatch, not inferred:
+
+| gate | reads | why it could not see `Pass 75.0` in `d24c1df` |
+|---|---|---|
+| `tools/check-ledger-numbers.py` | **`docs/` markdown only** | It reads **no git at all** — *"no git, no working tree, no remotes"*, a purity its own docstring states and `check-passes-filed.py`'s docstring calls load-bearing. **The entire commit-message channel is outside its input set**, so a Pass number minted there is not merely missed, it is unreachable. |
+| `tools/check-passes-filed.py` | git — **SUBJECT LINES only** | It extracts Pass IDs from *"every commit whose SUBJECT LINE claims a Pass ID"*. `d24c1df`'s subject is *"an index is a position, and a position is only an identity while nothing moves"* — **no Pass ID**. The claim is on the **first line of the body**. Reports `clean`. |
+| `tools/check-commits-filed.py` | git hashes ↔ `docs/` | Joins on *hash appears in the record*; filing 145's owed-list satisfied it. It has **no concept of a Pass ID at all**. Reports `clean`. |
+
+**★ The sharpest part is that one gate reasoned its way to this blind spot
+and stopped one step short.** `check-passes-filed.py`'s docstring argues —
+correctly — that the hash is *"a far stronger join key than the Pass ID"*.
+That is a conclusion about **which key to JOIN on**. It was silently carried
+over into a decision about **which text to SCAN**, and those are different
+questions: the join can be by hash while the scan still covers the whole
+message. **A subject-line scan is a choice nobody wrote down as a choice**,
+which is the exact defect `R192` names.
+
+**Filed into the `R192` retrofit *Backlog* item** as measured blind spot
+**(d)**, alongside the three already there.
+
+**And the shape recurs.** `d24c1df`'s own message records that *"this session
+has already been bitten twice by conclusions drawn from one half of a pair"*,
+and `4b82641`'s records the **fourth** such instance, and `40c377a`'s the
+**fifth**. This collision is the **sixth**, and it is the only one where the
+half that could not be seen was a **ledger number** rather than a
+measurement. **A check aimed at the right thing and structurally unable to
+see it** is now this session's dominant failure mode, across three unrelated
+subsystems.
+
+---
+
+#### `Pass 76.0` — what actually shipped in `d24c1df`
+
+**Answers `request_stable_object_identity.md` from the `pdfceGUI` session**,
+the fourth exchange through that channel. They had **stopped building
+move/resize**, because `decompose_page` mints **paint-order indices rather
+than identities**, and an edit that renumbers would silently re-point a live
+selection at a *different* object. Their framing, kept because it is the
+requirement:
+
+> Given a token taken before an edit, either resolve it to the same object
+> afterwards, or tell me it is gone. **"Resolves to a different object" is
+> the one answer that is worse than an error.**
+
+**They were right to stop, and the hazard is NARROWER than they assumed.**
+
+##### ★ The move-vs-delete renumbering table — MEASURED, not read
+
+| verb | what it does to the content stream | renumbers? |
+|---|---|---|
+| `move_object`, `move_objects`, `move_subpath`, `move_node`, `move_nodes`, `move_handle` | rewrites **OPERANDS in place** | **NO** |
+| `delete_object`, `delete_objects`, `delete_subpath`, `delete_node`, `delete_text_run` | excises byte **SPANS** | **YES** |
+
+**A move changes numbers inside existing operators**, so no operator is added
+or removed, the decomposition walks the same operators in the same order, and
+**indices are stable**. Consequence, and it is the deliverable: **move, resize
+and node editing can be built on paint-order indices today — no token, no
+invalidation.**
+
+**★ Why this is a TEST and not a comment.** Reading `plan_move` tells you
+operands are rewritten. It tells you **nothing** about what the
+decomposition then yields — *that is a property of the PAIR*. So the test
+decomposes, edits, decomposes again, and asserts **the count is unchanged
+AND every other object keeps its exact fingerprint at its exact index AND
+the moved object actually moved.** Without that last assertion the whole
+thing is **vacuously satisfied by a no-op**.
+
+##### The delete fallback
+
+**`remap_index_after_delete(index, deleted) -> Option<usize>`.** `None` means
+gone; **it never returns a different object's index** — the requester's own
+fallback, which they called *"strictly less useful but it closes the
+silent-failure path, which is the part that matters."*
+
+It is **three lines a caller could write from indices it already supplied**,
+and it is in core anyway because **getting it wrong is SILENT**: `<` versus
+`<=` diverges **only** when the deleted object sits exactly at the selection
+boundary. Duplicates are handled — a shell unioning two overlapping
+selections would otherwise shift a survivor **twice**, plausible input
+producing a silently wrong index.
+
+**The load-bearing test is not the doctest.** It is
+`the_remap_formula_predicts_the_real_renumbering`, which runs a real
+`delete_objects` against a real fixture and checks **every** surviving index
+against the object actually there. **Arithmetic and a content-stream splice
+have no reason to agree except that test.**
+
+##### ★★ A SABOTAGE THAT PASSED — and that was the SABOTAGE's fault, not the tests'
+
+The first mutation tried was **`<` → `<=`**. **All four tests passed**, which
+reads as a coverage gap. **It is not.** `<=` differs from `<` only when
+`d == index`, and that case **already returned `None` at the guard above** —
+so **the mutation was UNREACHABLE CODE**. A sabotage of dead code proves
+nothing about the tests either way.
+
+Re-run with **three reachable mutations** — `<` → `>`, dedup removed, guard
+removed — and **all three FAILED**.
+
+**Recorded as a reusable rule: *"the sabotage passed"* demands a second
+question — WAS THE MUTATION REACHABLE? — before it is allowed to mean *"the
+test is weak"*.** This is the same one-half-of-a-pair shape as the collision
+above: a result was read without checking the property that makes it
+meaningful.
+
+##### What was deliberately NOT built
+
+- **No generation-tagged token.** `VectorObject` already exposes `tokens()`
+  (**stable** across a move, since operator count is unchanged) and
+  `bytes()` (**not** stable, since rewriting `10` to `100` lengthens the
+  operand). Given the table above, a whole-stream identity handle **buys
+  nothing indices do not already give**, and building it speculatively is how
+  a crate grows surface nobody calls — **`R151`**. Filed as available if the
+  requester hits a case that needs it.
+- **No change to any move verb.** They were already correct. **The defect was
+  that nobody had written down that they were.**
+- **Nothing about reorder or paste — neither verb exists.** When they land
+  they **must** be checked against `crates/pdfce-core/src/vector/edit.rs` and
+  **the table above extended**; a new verb that renumbers without saying so
+  re-opens exactly this hazard.
+
+**An owed document, named rather than left implicit:** `docs/core-api` part 1
+does **not** cover this, so the requester's question 3 (*"did I read past
+it?"*) is answered **no** — a gap in a document written precisely so they
+would not have to ask. **The durable statement belongs in part 2
+(`EditSession`), and that is still owed.**
+
+**Files:** `crates/pdfce-core/src/vector/edit.rs` (+77),
+`crates/pdfce-core/src/vector/mod.rs` (+1/−1),
+`crates/pdfce-core/tests/object_identity_across_edits.rs` (+235).
+**3,700 tests, 0 failures. `fmt`, `clippy` and all four gates clean.**
+
+---
+
+#### `4b82641` — `Pass 71.0`'s end-to-end smoke harness, and the false positive its author caught by arithmetic
+
+**`crates/pdfce-render/examples/ocr_smoke.rs`, +107 lines. No weights
+committed by this commit.**
+
+**What now works, measured** — real models from `robertknight/ocrs` on
+Hugging Face, loaded through `OcrsEngine::from_model_dir`, run over a
+rasterised page:
+
+| observation | value |
+|---|---|
+| models loaded | **9.9 ms** |
+| recognise, **A3 sheet** at 2× | **1.8 s, 62 words** = **29 ms per word** |
+| `reports_confidence()` | **`false`** |
+| layer written · disclosures fired · saved file reloads · text extracts | all yes |
+
+*(The commit message says "A1 at 2x". **That label is wrong and is corrected
+here**: `de089f6`/filing 145 established the benchmark drawing is **A3
+landscape**, 1190.55 × 841.89 pt. The **timing is unaffected** — it was
+measured on the file, not derived from an assumed size. Per-word form filed
+beside the total, hard rule 10(a).)*
+
+**The integration is complete**: models load, the engine runs, words come
+back with boxes, the y-flip applies, the invisible layer is written, the page
+still renders unchanged, and the text comes back out. **Two disclosures fired
+for real rather than in a test** — the no-confidence statement, and three
+words whose horizontal scaling was clamped.
+
+**The refusal path was exercised first and by accident, which is the best
+way:** the harness ran before the files were renamed and got
+`ModelMissing { path: ".../text-detection.rten" }` — named, actionable,
+exactly as designed.
+
+##### ★★★ THE FALSE POSITIVE — reported, then retracted by arithmetic
+
+**The engineer read the harness's extraction output and reported that `ocrs`
+had recognised Lithuanian words off a CAD drawing — *pandusas*, *siuksl*,
+*mur*.**
+
+**IT HAD NOT. Those were the drawing's OWN text layer.** Extraction runs over
+the **saved** file, so on any PDF that **already contains text** it returns
+the document's text **mixed with** the OCR layer's — **and the document's
+half always looks better.** What `ocrs` actually returned for that page was
+**`HiTN`, `03POK`, `trasir`, `japsaos`**.
+
+**★ It was caught by ARITHMETIC, not by reading.** `ocrs`'s default alphabet
+is **ASCII only**, so it **cannot emit a diacritic at all** — therefore **any
+accented character in that output is by definition not from OCR.** A
+one-line impossibility argument, applied to output that had already been read
+and believed.
+
+**The harness header now says: read the RECOGNISED LIST, never the
+extraction**, with this incident named as the reason.
+
+**The recurring shape, named in the commit itself: a measurement whose output
+has TWO SOURCES and no label saying which is which.** This is the **fourth**
+instance in the session — after the `Tz` assertion, the skipped rotation
+test, and the zoom harness whose coordinates were exactly representable.
+
+##### ★★ WHAT THIS DOES NOT PROVE — stated so the commit is not read wider than it is
+
+**RECOGNITION QUALITY IS UNPROVEN, and cannot be proven here.** **Both
+documents available are the wrong input: vector PDFs that already contain
+text.** OCR exists for pages that are **pictures of text**; crisp small
+vector glyphs are out-of-distribution **in the opposite direction from a bad
+scan**, and measured output on both was **poor**. **A real quality claim
+needs a genuine scanned page, and this project has no rights-cleared one** —
+**`LEGAL.md` §5 and project rule 7 govern adding any.** *Do not read the
+"62 words" figure as an accuracy result; it is a count of what came back, not
+a count of what was right.*
+
+##### The filenames, and whose versioning is whose
+
+Upstream's files are **hash-suffixed** (`text-detection-ssfbcj81.rten`,
+`text-rec-checkpoint-s52qdbqt.rten`) — **not** the names
+`docs/ocr-engine-survey.md` recorded from the S3 mirror. **Renamed to the
+canonical local names on install**, on a stated principle: **upstream's
+content-addressed suffix is THEIR versioning; the SHA-256 is OURS.**
+
+---
+
+#### `40c377a` — 12 MB of weights, and `tools/check-shipped-assets.py` earning its existence on its first real asset
+
+**The operator: *"Yes put the OCR in"*, then *"do both"*** — bundle the
+weights **and** build the downloader. **This commit is the bundling half.
+The downloader is still owed** (see *Still owed* below).
+
+| file | bytes | sha256 |
+|---|---|---|
+| `crates/pdfce-core/assets/models/ocrs/text-detection.rten` | 2,523,564 | `614aafab…c1ca4c36` |
+| `crates/pdfce-core/assets/models/ocrs/text-rec-checkpoint.rten` | 9,716,444 | `606d9a04…37bfca65` |
+| **total** | **12,240,008 B = 11.67 MiB over 2 files = 6.12 MB each** | |
+
+Retrieved **2026-08-13** from `huggingface.co/robertknight/ocrs`. Licence
+**CC-BY-SA-4.0**, read from the model card's YAML front matter **at source on
+the retrieval date** — not from the survey, not from memory. **Worth knowing
+before someone goes looking: the `ocrs-models` GitHub repository carries NO
+`LICENSE` file; the model card is the declaration.**
+
+**This is binary in a PUBLIC repository's history and it is PERMANENT. The
+operator was told that plainly before being asked, and asked for it anyway.**
+(Project rule 8: the repository has a remote and is public; anything
+committed is published by default.)
+
+##### Data files, NOT `include_bytes!` — and the threshold is a design constraint, not a size preference
+
+The bundled Foxit faces **are** compiled in, which is right for **264 KB**.
+**Twelve megabytes is not** — and embedding would **defeat the design**:
+`ocr::models::resolve_model_dir` loads **from disk** precisely so an operator
+can point at **their own** models. So these ship as **files the packaging
+step places beside the binary**, and the runtime finds them there.
+*(264 KB embedded vs 12,240,008 B on disk — a **46×** ratio at the point the
+rule flips.)*
+
+##### ★★★ THE GATE EARNED ITS EXISTENCE ON ITS FIRST REAL ASSET
+
+**`tools/check-shipped-assets.py` (`e3fb7e0`) was written for exactly this
+file and had never seen a case it was built for.** With `PROVENANCE.md`
+written and the files in place **it still FAILED**, with the right complaint:
+
+> Has a `PROVENANCE.md`, but **`about.hbs` never cites this directory** — so
+> its licence does **not** reach the generated `THIRD_PARTY_LICENSES.md`, and
+> therefore **never reaches anyone who was given a binary rather than the
+> source**.
+
+**`PROVENANCE.md` is for readers of the REPOSITORY; `about.hbs` is for the
+people you SHIP to.** That distinction **is** the reason the gate exists, and
+the engineer's own account is that he **would have missed it**: the
+provenance was written, the obligation believed discharged, **and the
+end-user-facing half was still empty.** **`cargo-about` cannot see a
+non-Cargo file, so nothing else in this repository would ever have said so.**
+
+**This is the counter-example to a fair worry about this project's gates** —
+that they accumulate faster than they catch anything. This one caught a real,
+shipped-artifact licence gap **on its first genuine input**, in the one
+direction (repository readers vs binary recipients) that no other tool in the
+workspace can observe.
+
+##### What the attribution says, and what it deliberately does not
+
+`about.hbs` (+32) and the regenerated `THIRD_PARTY_LICENSES.md` (+32) carry:
+**creator, source, retrieval date, licence with both deed and legalcode
+links, training corpus, per-file SHA-256**, and — **because CC-BY-SA requires
+an indication of changes** — an **explicit statement that pdfce made NONE**.
+The files are **byte-identical upstream**; only the names were shortened.
+
+**`PROVENANCE.md` (+76) states the licence boundary in BOTH directions,
+because a future reader will need both:**
+
+- **CC-BY-SA has no linking concept.** These ship **unmodified, in a
+  COLLECTION** rather than as an **ADAPTATION**, and **pdfce's MIT licence is
+  unaffected.**
+- **★ MODIFYING the weights creates Adapted Material that must itself be
+  CC-BY-SA.** Fine-tuning for CAD drawings, quantizing, retraining,
+  converting to another runtime's format — **all of it.** **That warning
+  lives in `PROVENANCE.md` rather than only in a roadmap entry, because it is
+  the file someone will have open when the idea occurs to them.** *(This is
+  also why no decision record duplicates it — see the minting table.)*
+
+##### A verification note the engineer filed against himself
+
+He grepped the generated file for `ocrs OCR model weights`, got **zero**, and
+**briefly concluded the entry had not been emitted.** The heading contains
+**backticks** around the crate name. **THE SEARCH WAS WRONG, NOT THE FILE** —
+**the fifth time in one session a check was aimed correctly and could not see
+its target**, and the second time that day the invisibility was caused by
+**markdown decoration** specifically (the first being `R192`'s Pass-heading
+anchor).
+
+**3,695 tests, 0 failures. `shipped-assets` clean at 3 directories and 62
+files. `THIRD_PARTY_LICENSES.md` regenerated via `cargo-about`** (project
+rule 13: generated, never hand-edited).
+
+---
+
+#### What was minted, and what deliberately was not
+
+| ledger | before | after | note |
+|---|---|---|---|
+| **Pass families** | ceiling **75** | **76 — `Pass 76.0` MINTED** | Measured with `tools/check-ledger-numbers.py`, which reported *"Pass families with headings : up to 75 (highest ID 75.0)"*. **Next free family number is 77.** `76` was confirmed absent from the gate's `CLAIMED BUT NOT YET HEADED` list before use. |
+| **standing rules** | `R192` minted; `R193`, `R194` **claimed** | unchanged | **No rule minted.** The collision is a fresh **instance** of `R192`, which already covers it — an existing rule with new evidence, not a new rule (the *Standing rules* section's own bar is three instances before proposing). **Next genuinely free is `R195`**; `tools/check-ledger-numbers.py` still prints `R193` and **must not be trusted on that line.** |
+| **decisions** | `061` | unchanged | **No decision minted, and the reason is deliberate.** Operator question `(bl)` is **already ANSWERED YES** and recorded; the collection-vs-adaptation boundary has a **durable home in `crates/pdfce-core/assets/models/ocrs/PROVENANCE.md`**, chosen by the commit *because that is the file someone will have open when the idea occurs to them*. **A decision record duplicating it would create a second copy that can drift** — the failure this project has hit repeatedly. `ARCHITECTURE.md` §4's OCR section is updated instead, which is the living-truth half. |
+| **operator questions** | ceiling `(bn)` | unchanged | **None added.** Nothing here needs Ken's ruling — the Pass-number collision is a librarian ruling under an existing authority, not a scope question. |
+| **filings** | 145 | **146** | this one. |
+
+#### `FEATURES.md` — NO checkbox moved, and one row's sentence had gone FALSE
+
+**No `core`/`cli`/`gui`/`Acrobat` box changed on any row, and that is the
+correct answer** — stated explicitly, because a filing silent about
+`FEATURES.md` is indistinguishable from one that forgot it.
+
+- **OCR stays `core [ ] · cli [ ] · gui [ ]`.** The weights now ship, so a
+  build **can** recognise text — but **there is still no `pdfce-cli ocr` and
+  no GUI surface, so nothing is operator-reachable.** **Deliberately not
+  rounded up:** a `[x]` core with no caller is the `R151` shape this file
+  exists to expose, and here even core's box would be over-claiming, because
+  the row's subject is the *capability*, not the module.
+- **★ The row's SENTENCE was replaced, because it had gone false.** It read
+  *"**the model weights are not in the repository, so no build can recognise
+  text**"* — true when written at the hundred-and-forty-second filing,
+  **falsified by `40c377a` two commits later.** Replaced rather than
+  appended to, per the file's own contract (*"a row that has grown a history
+  has stopped being a scan"*).
+- **`Pass 76.0` moved no box either.** `FEATURES.md` rows for *"descend into
+  an object and select, move or delete one subpath"* and *"move or delete a
+  node"* are **already `[x] [x] [x]`**. `d24c1df` **documented and tested a
+  property those verbs already had**; it added no capability. **The Pass's
+  own summary says so: *"the defect was that nobody had written down that
+  they were [correct]."***
+
+#### Graduated to the RAGs this filing
+
+**Nothing.** Stated rather than left silent. The three commits' findings are
+**project-internal**: two are about pdfce's own gates and ledger (`R192`
+territory, filed in *Backlog*), one is about a `pdfce-core` API contract
+(filed as `Pass 76.0`), and the false positive is a property of **this
+harness's output format**, not of PDFs or of Rust. **The one candidate that
+was weighed and declined:** *"a mixed-source output needs a per-item source
+label"* is real and general — but it is the **same** finding as
+`D:\dev\rag\rust\a_record_can_carry_its_own_refutation_because_review_checks_claims_against_the_world.md`
+approached from the output side, and duplicating it in a second file is the
+drift librarian hard rule 4 forbids. **Re-raise it if a third unrelated
+instance appears outside this session.**
+
+#### Still owed, carried forward from these three commits
+
+1. **The `ocrs` model DOWNLOADER.** `40c377a` says *"The downloader
+   follows"*, and it has **not** landed — verified with
+   `git log -S download` over `crates/` since 2026-08-13, **zero hits**.
+   The operator asked for **both**.
+2. **`pdfce-cli ocr`** (project rule 11) — **the box that moves first**, and
+   the only thing standing between a complete core pipeline and an
+   operator-reachable capability.
+3. **A rights-cleared scanned page**, without which recognition quality
+   stays unproven. **`LEGAL.md` §5 / rule 7 govern.**
+4. **`docs/core-api` part 2 (`EditSession`)** must carry the move-vs-delete
+   renumbering table. `Pass 76.0` names this as owed in its own body.
+5. **The `R192` retrofit item** now has a **fourth** measured blind spot.
+
+---
+
 ### ★★★ `de089f6` — **THE BENCHMARK DRAWING IS A3, NOT A1.** A wrong fact this project PUBLISHED — **five sites across four of its own documents** (`lib.rs`, `render-region-measurements.md`, `ROADMAP.md` ×2, `ARCHITECTURE.md`) — corrected by the CONSUMER — who found it from a number in a status bar that **could not be true**. **★ The right answer was already on disk in `C:\personal_rag\pdf\`, six days earlier, in a lesson carrying the same file's byte count — `R182`'s next instance.** Second document measured: **700 ms vs 9 ms per render on the same code path.** **`Pass 75.0` MINTED and SCHEDULED under *Next up*** — the display-list *Backlog* entry's own stated promotion trigger fired. **`FEATURES.md`: NO checkbox changed; one unqualified figure gained its qualifier** — filed 2026-08-13 (hundred-and-forty-fifth filing)
 
 **Full hash: `de089f6499801ec9e46d0058ab3c89604301690c`**, read with
@@ -43457,11 +43941,40 @@ fixed in that finding's shape rather than patched per-site:
 
 ### ★ Pass 75.0 — **THE REUSABLE PARSED HANDLE (display list) in `pdfce-render`** — a parsed page representation a shell **holds across frames** and replays against N regions, so the second and subsequent renders of an unchanged page cost roughly **FILL** rather than **INTERPRETATION** — filed 2026-08-13 (hundred-and-forty-fifth filing) — **UNSTARTED · SCHEDULED, NOT URGENT** (the requester says nothing is blocked this week)
 
+> **★★ NUMBER-COLLISION NOTE, added 2026-08-13 (hundred-and-forty-sixth
+> filing) — READ THIS IF YOU ARRIVED FROM A COMMIT MESSAGE.**
+> **`d24c1df`'s commit message calls ITSELF `Pass 75.0`.** It is not this
+> Pass. That commit is **object identity across edits /
+> `remap_index_after_delete`**, and it is **`Pass 76.0`** — filed at the
+> top of *Shipped*. **The commit message's claim is VOID and, being
+> immutable history, can never be corrected in place**, which is why this
+> note exists on both sides of the collision.
+>
+> **`Pass 75.0` — this entry, the reusable parsed handle — KEEPS the
+> number.** Ruled against the obvious reading (`d24c1df` claimed it 69
+> minutes earlier and was already shipped) for three reasons given in
+> full at the top of *Shipped*, the decisive one being **cost counted in
+> the right ledger**: measured at `19ceb60` with `grep -c`, this entry had
+> **27 lines citing `Pass 75.0` across three documents** (11 `ROADMAP.md`,
+> 15 `SESSION_LOG.md`, 1 `ARCHITECTURE.md`), several in **append-only**
+> history, while `d24c1df` had **1** — filing 145's *owed* list, which
+> records that it is **unfiled**. **27 versus 1: renumbering the unstarted
+> Pass was the expensive option, not the cheap one.**
+>
+> **How it happened:** the number was minted **inside a commit-message
+> body**, where `tools/check-ledger-numbers.py` (reads no git),
+> `tools/check-passes-filed.py` (reads **subject lines only**) and
+> `tools/check-commits-filed.py` (has no concept of a Pass ID) **all
+> three** are structurally unable to see it. Filed as `R192` blind spot
+> **(d)** in *Backlog*.
+
 **A NEW Pass family.** Ceiling was **74** (`Pass 74.0`); this filing mints
 **`Pass 75.0`** and moves the ceiling **74 → 75**. **Next free family
 number is 76.** *(Measured with `tools/check-ledger-numbers.py`, which
 reported highest ID `74.0` — the dispatch's stated ceiling of 75 was
-wrong and is not carried forward.)*
+wrong and is not carried forward.)* **★ Superseded 2026-08-13: `76` was
+taken by `Pass 76.0` (hundred-and-forty-sixth filing); next free family
+number is now `77`.**
 
 **Promoted, not invented.** The *Backlog* entry
 *"A DISPLAY-LIST CACHE IN `pdfce-render`"* (hundred-and-forty-second
@@ -43938,7 +44451,38 @@ blocked by it.
 
 ---
 
-### Pass 71.0 — **OCR**, promoted from the Backlog bucket 2026-08-12 (hundred-and-twenty-sixth filing) on the operator's engine decision — **SLICES 1, 2 AND 3 SHIPPED (`9f2af1d` types, `ed05033` the sandwich WRITER, `49af8fb` the `ocrs` ENGINE); the PIPELINE IS COMPLETE END TO END IN CORE AND STILL NOTHING IS OPERATOR-REACHABLE, because the MODEL WEIGHTS ARE NOT IN THE REPOSITORY and there is no `pdfce-cli ocr`** — **★ NO LONGER BLOCKED ON AN OPERATOR DECISION as of 2026-08-13: `(bl)` IS ANSWERED YES**
+### Pass 71.0 — **OCR**, promoted from the Backlog bucket 2026-08-12 (hundred-and-twenty-sixth filing) on the operator's engine decision — **SLICES 1–4 SHIPPED (`9f2af1d` types, `ed05033` the sandwich WRITER, `49af8fb` the `ocrs` ENGINE, `4b82641` + `40c377a` the END-TO-END PROOF and the WEIGHTS); the PIPELINE IS COMPLETE END TO END IN CORE, THE WEIGHTS NOW SHIP, AND STILL NOTHING IS OPERATOR-REACHABLE, because there is no `pdfce-cli ocr` and no GUI surface** — **★ NO LONGER BLOCKED ON AN OPERATOR DECISION as of 2026-08-13: `(bl)` IS ANSWERED YES**
+
+> **★★★ SLICE 4 SHIPPED 2026-08-13 (hundred-and-forty-sixth filing) —
+> `4b82641` the smoke harness, `40c377a` the weights. THIS HEADING'S
+> PREVIOUS TEXT HAS BEEN CORRECTED: it read *"the MODEL WEIGHTS ARE NOT
+> IN THE REPOSITORY"*, which `40c377a` falsified.** The two `.rten` files
+> are committed at `crates/pdfce-core/assets/models/ocrs/`,
+> **12,240,008 B over 2 files = 6.12 MB each**, **CC-BY-SA-4.0**,
+> SHA-256-pinned, with a hand-authored `PROVENANCE.md` **and** an
+> `about.hbs` entry so the licence reaches binary recipients and not only
+> repository readers. **A build can now recognise text.** Full record,
+> including the gate that caught the missing `about.hbs` citation and the
+> false positive retracted by arithmetic: **top of *Shipped*.**
+>
+> **★★ WHAT SLICE 4 DOES NOT ESTABLISH — do not read it wider.**
+> **RECOGNITION QUALITY IS UNPROVEN.** Both documents available are the
+> **wrong input** — vector PDFs that already contain text, which are
+> out-of-distribution in the **opposite** direction from a bad scan.
+> **62 words returned is a COUNT, not an accuracy result**, and measured
+> output on both documents was **poor**. **A real quality claim needs a
+> genuine scanned page and this project has no rights-cleared one**
+> (`LEGAL.md` §5, rule 7).
+>
+> **`FEATURES.md` STILL `core [ ] · cli [ ] · gui [ ]`** — the row's
+> *sentence* changed because it asserted the weights were absent; **no
+> box moved**, because nothing is operator-reachable.
+>
+> **★ STILL OWED ON THIS PASS, and item 1 is a direct instruction from
+> the operator that has not been carried out:** the operator said
+> *"do both"* — bundle the weights **AND** build the **downloader**.
+> **The downloader has not landed** (`git log -S download` over
+> `crates/` since 2026-08-13: zero hits). Then `pdfce-cli ocr`.
 
 > **★★★ SLICE 3 SHIPPED 2026-08-13 (hundred-and-forty-second filing) —
 > `49af8fb`, `pdfce_core::ocr::engine_ocrs`.** `OcrsEngine` implements
@@ -43971,7 +44515,15 @@ blocked by it.
 >    `.rten` binary into a PUBLIC repository's history is permanent**.
 >    The engineer raised it in the 2026-08-13 session summary as a
 >    heads-up. **Until he responds, the files are neither authorised nor
->    forbidden — they have not been asked about.** The four carve-outs
+>    forbidden — they have not been asked about.**
+>    **★ DISCHARGED 2026-08-13 (hundred-and-forty-sixth filing), by the
+>    operator: *"Yes put the OCR in"*, then *"do both"*.** He was told
+>    plainly that a 12 MB binary in a public repository's history is
+>    **permanent** and asked for it anyway. **Shipped as `40c377a`.** The
+>    *"do both"* half — **the downloader — is still owed.** The four
+>    carve-outs below were all honoured: pinned + SHA-256'd, hand-authored
+>    `PROVENANCE.md`, no adaptation performed or cleared, and publishing
+>    remains an operator act. The four carve-outs
 >    below still bind (pin + hash the exact artifact, hand-authored
 >    `PROVENANCE.md`, no clearance for an adaptation, publishing is still
 >    an operator act).
@@ -50226,11 +50778,56 @@ nothing gets forgotten, not as a commitment to build in this order.
   blind spot first — which is all `R192` obliges — and treat widening as
   separate, careful work with the qualifier logic extended alongside it.**
 
+  **★★★ BLIND SPOT (d), ADDED 2026-08-13 (hundred-and-forty-sixth
+  filing) — A PASS NUMBER WAS MINTED IN A COMMIT MESSAGE, AND ALL THREE
+  GATES THAT TOUCH PASS NUMBERS ARE STRUCTURALLY UNABLE TO SEE IT. This
+  one has already produced a real collision**, unlike (a)–(c), which were
+  found by measurement before they cost anything.
+
+  **What happened:** `d24c1df`'s commit-message **body** opens
+  *"Pass 75.0 -- answering request_stable_object_identity.md"*. Sixty-nine
+  minutes later, filing 145 minted **`Pass 75.0`** in `ROADMAP.md` for the
+  **reusable parsed handle**. **Two unrelated pieces of work, one number.**
+  Ruled at the hundred-and-forty-sixth filing: the ROADMAP keeps `75.0`,
+  the object-identity work became **`Pass 76.0`**.
+
+  **The three gates, and why each is blind — read from each tool's own
+  source in that dispatch, not inferred:**
+
+  | tool | input set | why it cannot see a Pass ID in a commit-message BODY |
+  |---|---|---|
+  | `tools/check-ledger-numbers.py` | **`docs/` markdown only** | Reads **no git at all**. Its docstring states this purity (*"no git, no working tree, no remotes"*) and `check-passes-filed.py`'s docstring calls it load-bearing. **The entire commit-message channel is outside its input set** — not missed, unreachable. |
+  | `tools/check-passes-filed.py` | git, **SUBJECT LINES only** | Extracts Pass IDs from *"every commit whose SUBJECT LINE claims a Pass ID"*. `d24c1df`'s subject line contains no Pass ID. Reports `clean`. |
+  | `tools/check-commits-filed.py` | git hashes ↔ `docs/` | Joins on *hash appears in the record*; **has no concept of a Pass ID at all**. Was additionally satisfied by filing 145's owed-list. Reports `clean`. |
+
+  **★ THE PART THAT MAKES THIS AN `R192` CASE RATHER THAN A BUG:
+  `check-passes-filed.py` reasoned its way to the boundary and stopped one
+  step short.** Its docstring argues — correctly — that the hash is *"a far
+  stronger join key than the Pass ID"*. **That is a conclusion about which
+  key to JOIN on. It was silently carried into a decision about which text
+  to SCAN**, and those are different questions: the join can be by hash
+  while the scan covers the whole message. **A subject-line-only scan is a
+  choice nobody wrote down as a choice** — which is precisely what `R192`
+  obliges.
+
+  **Owed, in the same "state it before you widen it" order as (a)–(c):**
+  each of the three gates states, in its own docstring, **that a Pass ID
+  appearing anywhere other than a `ROADMAP.md` heading is invisible to
+  it**. **Widening is a separate, later question** and is *not* obviously
+  the right fix here either — scanning full commit-message bodies for
+  `Pass NN.N` would match every retrospective cross-reference in this
+  project's very long messages, which is the same false-positive trap
+  recorded for the heading anchor. **The cheap real mitigation is a
+  convention, not a tool: mint Pass numbers in `ROADMAP.md` FIRST, and let
+  the commit message CITE a number that already exists.**
+
   **Why this outlives the four tools:** this is the **second** time
   `check-ledger-numbers.py` has been found with an input set narrower
   than its obligation. `0720adb` (2026-08-06) closed the first gap by
   widening the anchor by exactly one decoration and **did not write down
-  that other decorations existed** — which is the whole of `R192`.
+  that other decorations existed** — which is the whole of `R192`. **Blind
+  spot (d) makes it the third**, and the first to be discovered by a
+  collision rather than by an audit.
 - **★★ PERFORMANCE, filed 2026-08-13 (hundred-and-forty-second filing) —
   A DISPLAY-LIST CACHE IN `pdfce-render`, AND IT ARRIVES WITH ITS
   EVIDENCE ALREADY MEASURED.** **★★ PROMOTED 2026-08-13

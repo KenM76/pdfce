@@ -42494,3 +42494,189 @@ A1.
    heading with one star or none.** Backlog item under `R192` already
    scopes the widening and warns it is not a one-line change (the widened
    matcher surfaces four false collisions in *Shipped*).
+
+---
+
+## 2026-08-13 (hundred-and-forty-sixth filing) — **THREE CODE COMMITS FILED OUT OF DEBT, AND A PASS NUMBER THAT HAD BEEN MINTED TWICE.** `d24c1df`'s own commit message calls itself **`Pass 75.0`** — a number `ROADMAP.md` had already minted for the reusable parsed handle. **RULED: the ROADMAP keeps `75.0`; the object-identity work is `Pass 76.0`** — against the obvious reading, on **cost counted in the right ledger**. ★ **The number was minted in a commit-message BODY, where ALL THREE Pass-aware gates are structurally blind** — a fresh `R192` instance, and the first found by a collision rather than an audit. Also: **OCR runs end to end** (`4b82641`) with a **false positive its author retracted by arithmetic**, and **12,240,008 B of CC-BY-SA-4.0 weights** now permanently in a public repository (`40c377a`), caught mid-flight by the licence gate written for exactly them. **`FEATURES.md`: NO box moved; the OCR row's sentence replaced because it had gone FALSE.**
+
+**Shipped:**
+
+- **`Pass 76.0`** (`d24c1df`) — **object identity across edits.** Which
+  verbs renumber, measured rather than read; `remap_index_after_delete`
+  returns `None` rather than a different object. 3,700 tests, 0 failures.
+- **`Pass 71.0` slice 4** (`4b82641` + `40c377a`) — the end-to-end OCR
+  smoke harness and the bundled `ocrs` weights. **`Pass 71.0` remains
+  under *Next up***: the pipeline is complete in core and **still nothing
+  is operator-reachable.**
+
+**This was DEBT, not a gate violation** — `tools/check-commits-filed.py`
+reported **clean (401 code commits, 5 baseline)** throughout, because
+filing 145's own owed-list cited all three hashes and its join is *"the
+hash appears in the record"*. **That is the gate's documented
+`KNOWN WEAKNESS`, live rather than theoretical.** The three were **not**
+added to `tools/commits-filed-baseline.txt`.
+
+**Decisions made this session:**
+
+- **★ THE `Pass 75.0` COLLISION, RULED.** `d24c1df` claimed `Pass 75.0`
+  in its commit-message body at **14:38**; filing 145 minted `Pass 75.0`
+  in `ROADMAP.md` for the display list at **15:47**. **The ROADMAP keeps
+  the number; the object-identity work is `Pass 76.0`.** Three reasons,
+  ascending:
+  1. **Chronological priority in a channel nobody reads is not
+     priority.** The ROADMAP is where numbers are minted; a claim never
+     presented to the ledger could not have been avoided by any
+     concurrent filing. Awarding it the number teaches that minting in a
+     commit message works.
+  2. **The *Shipped* section and this log are append-only.** Four records
+     already say *"`Pass 75.0` MINTED"* about the display list.
+  3. **★ THE COST ASYMMETRY INVERTS THE INTUITION.** *"The unstarted work
+     is cheaper to renumber"* measures **engineering** cost. The cost here
+     is **documentary**. **Counted at `19ceb60` with
+     `git show HEAD:docs/<file> | grep -c "Pass 75\.0"`** — not estimated:
+     the **unstarted** Pass had **27 citing lines across three documents**
+     (11 `ROADMAP.md`, 15 `SESSION_LOG.md`, 1 `ARCHITECTURE.md` =
+     **9 per document**), several in append-only history; **`d24c1df` had
+     1**, and that one line is filing 145's *owed* list recording it as
+     **unfiled**. **27 versus 1 — the cheap renumber was the shipped one.**
+     *(Correction against this entry's own first draft, per hard rule 10's
+     corollary: it first said "ten" and "zero", both written before the
+     grep. Direction unchanged, margin wider, numbers now sourced.)*
+
+  **Both sides carry the note** — `Pass 75.0`'s *Next up* entry and
+  `Pass 76.0`'s *Shipped* entry — because `d24c1df`'s message is immutable
+  and can never be corrected in place.
+- **No decision record minted for the weights**, deliberately. `(bl)` is
+  already answered YES and recorded; the collection-vs-adaptation boundary
+  has a durable home in `PROVENANCE.md`, chosen by the commit *because it
+  is the file someone will have open when the idea occurs to them*. **A
+  decision record duplicating it would be a second copy that can drift.**
+  `ARCHITECTURE.md` §4's OCR section was updated instead — the
+  living-truth half.
+- **No standing rule minted.** The collision is a fresh **instance** of
+  `R192`, filed as blind spot **(d)** in the retrofit *Backlog* item.
+
+**Findings + decisions:**
+
+- **★★ A PASS NUMBER MINTED WHERE NO GATE CAN SEE IT.** Read from each
+  tool's own source, not inferred:
+  `tools/check-ledger-numbers.py` reads **`docs/` markdown only** and no
+  git at all — the commit-message channel is **outside its input set**;
+  `tools/check-passes-filed.py` reads git but **subject lines only**, and
+  `d24c1df`'s subject carries no Pass ID; `tools/check-commits-filed.py`
+  has **no concept of a Pass ID** whatsoever. **Three gates touched the
+  artifact; none could see the claim.**
+  **★ The sharp part:** `check-passes-filed.py` argues correctly that the
+  hash is *"a far stronger join key than the Pass ID"* — a conclusion
+  about **which key to JOIN on**, silently carried into a decision about
+  **which text to SCAN**. **A subject-line-only scan is a choice nobody
+  wrote down as a choice.**
+  **Mitigation is a convention, not a tool:** mint the number in
+  `ROADMAP.md` first; let the commit message **cite** a number that
+  already exists. Scanning full bodies for `Pass NN.N` would match every
+  retrospective cross-reference in this project's very long messages —
+  the same false-positive trap already recorded for the heading anchor.
+- **★★ THE FALSE POSITIVE (`4b82641`).** The engineer read the harness's
+  **extraction** output and reported that `ocrs` had recognised Lithuanian
+  words off a CAD drawing — *pandusas*, *siuksl*, *mur*. **It had not.
+  Those were the drawing's OWN text layer.** Extraction runs over the
+  **saved** file, so on any PDF that already contains text it returns the
+  document's text **mixed with** the OCR layer's — **and the document's
+  half always looks better.** `ocrs` actually returned `HiTN`, `03POK`,
+  `trasir`, `japsaos`. **Caught by ARITHMETIC, not by reading:** `ocrs`'s
+  default alphabet is **ASCII only**, so it **cannot emit a diacritic**,
+  and any accented character in that output is **by definition not from
+  OCR**. Harness header now says **read the recognised list, never the
+  extraction.** **The shape: a measurement whose output has TWO SOURCES
+  and no label saying which is which.**
+- **★★ RECOGNITION QUALITY IS UNPROVEN and cannot be proven here.** Both
+  available documents are the **wrong input** — vector PDFs that already
+  contain text, out-of-distribution in the **opposite** direction from a
+  bad scan. Measured output on both was **poor**. **"62 words" is a COUNT,
+  not an accuracy result.** A real claim needs a **rights-cleared scanned
+  page**, and this project has none (`LEGAL.md` §5, rule 7).
+- **★★★ `tools/check-shipped-assets.py` EARNED ITS EXISTENCE ON ITS FIRST
+  REAL ASSET.** Written for exactly this file (`e3fb7e0`) and never
+  before given a case it was built for. With `PROVENANCE.md` written and
+  the files in place **it still FAILED**, correctly: **`about.hbs` did not
+  cite the directory**, so the licence would have reached **readers of the
+  repository** but **not people given a binary**. `cargo-about` cannot see
+  a non-Cargo file, so **nothing else in this repository would ever have
+  said so** — and the engineer's own account is that he **would have
+  missed it**, having written the provenance and believed the obligation
+  discharged. **This is the counter-example to the fair worry that this
+  project's gates accumulate faster than they catch anything.**
+- **A SABOTAGE THAT PASSED, AND THAT WAS THE SABOTAGE'S FAULT.** First
+  mutation `<` to `<=`: all four tests passed. **The mutation was
+  UNREACHABLE** — `<=` differs from `<` only when `d == index`, already
+  returned `None` at the guard above. Re-run with three **reachable**
+  mutations, **all three failed.** **Reusable rule: *"the sabotage
+  passed"* demands a second question — was the mutation reachable? —
+  before it may mean *"the test is weak"*.**
+- **The move-vs-delete table (the `Pass 76.0` deliverable):** the six
+  `move_*` verbs rewrite **operands in place**, so indices are **stable**;
+  the five `delete_*` verbs excise **byte spans**, so indices
+  **renumber**. **Move, resize and node editing can be built on
+  paint-order indices today, with no token and no invalidation.** Proven
+  by a test over the **pair** (decompose, edit, decompose again), not by
+  reading `plan_move`.
+- **The recurring session failure mode, now at six instances across three
+  unrelated subsystems:** a check aimed at the right thing and
+  structurally unable to see it. The `Tz` assertion; the skipped rotation
+  test; the zoom harness with exactly-representable coordinates; the OCR
+  extraction with two sources; the `THIRD_PARTY_LICENSES.md` grep defeated
+  by **backticks**; and now a **ledger number** in a channel no gate
+  reads. **The sixth is the only one where the invisible half was a
+  number rather than a measurement.**
+
+**Graduated to the RAGs this filing:** **nothing**, and that is stated
+rather than left silent. All three commits' findings are
+project-internal — two about pdfce's own gates and ledger (`R192`
+territory), one a `pdfce-core` API contract. **The one candidate weighed
+and declined:** *"a mixed-source output needs a per-item source label"* is
+real and general, but it is the **same** finding as
+`D:\dev\rag\rust\a_record_can_carry_its_own_refutation_because_review_checks_claims_against_the_world.md`
+seen from the output side; duplicating it is the drift hard rule 4
+forbids. **Re-raise if a third unrelated instance appears outside this
+session.**
+
+**Still in flight:**
+
+- **★ THE `ocrs` DOWNLOADER IS OWED AND IS A DIRECT OPERATOR
+  INSTRUCTION.** The operator said *"do both"* — bundle the weights **and**
+  build the downloader. `40c377a` says *"The downloader follows."*
+  **It has not landed** — `git log -S download` over `crates/` since
+  2026-08-13 returns **zero hits**.
+- **`pdfce-cli ocr`** (rule 11) — the box that moves first, and the only
+  thing between a complete core pipeline and an operator-reachable
+  capability.
+- **`docs/core-api` part 2 (`EditSession`)** must carry the move-vs-delete
+  renumbering table. `Pass 76.0` names this owed in its own body.
+- **`Pass 72.0` and `Pass 73.0` remain HIGH PRIORITY and unstarted.**
+  `Pass 75.0` (the parsed handle) is scheduled, not urgent; `Pass 76.0` is
+  now shipped.
+- **`R193`'s and `R194`'s proposals are still unruled. Next genuinely free
+  rule number is `R195`** — `tools/check-ledger-numbers.py` still prints
+  `R193` and must not be trusted on that line.
+- **`(bn)` is still open.** The **24,142-vs-24,128 clip-count
+  discrepancy** is still open, small, not load-bearing.
+
+**For next session:**
+
+1. **Next free Pass family number is `77`.** `76` was taken this filing.
+   Measured with `tools/check-ledger-numbers.py`, not relayed.
+2. **★ MINT PASS NUMBERS IN `ROADMAP.md` BEFORE PUTTING THEM IN A COMMIT
+   MESSAGE.** This filing exists partly because that order was reversed
+   once. The commit message should **cite** a number that already exists
+   in the ledger.
+3. **File every new Pass heading with ONE STAR OR NONE** — the anchor
+   `^#{2,4} (?:★ )?Pass ` admits exactly one. Still true; `Pass 76.0` was
+   written `### ★ Pass 76.0` for this reason and the gate sees it.
+4. **Build the downloader.** It is the outstanding half of an explicit
+   operator instruction, and it is the item most likely to be forgotten
+   because the bundling half already shipped and *feels* complete.
+5. **`4b82641`'s commit message says "A1 at 2x".** That label is **wrong**
+   — the benchmark drawing is **A3** (`de089f6`, filing 145). Corrected in
+   the *Shipped* entry; the timing figure is unaffected. **Another
+   instance of a corrected fact not reaching a document written before the
+   correction.**
