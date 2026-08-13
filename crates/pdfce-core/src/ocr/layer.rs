@@ -76,11 +76,11 @@
 //!
 //! | axis | fitted by | why |
 //! |---|---|---|
-//! | vertical | the **font size** ([`ASCENT_FRAC`] + [`DESCENT_FRAC`]) | size is the only vertical control; there is no vertical-scaling operator short of a full `Tm` |
+//! | vertical | the **font size** ([`HELVETICA_ASCENT_FRAC`] + [`HELVETICA_DESCENT_FRAC`]) | size is the only vertical control; there is no vertical-scaling operator short of a full `Tm` |
 //! | horizontal | **`Tz`** (horizontal scaling, §9.3.4) | the size is already spent on the vertical fit, so width must come from somewhere else |
 //!
-//! Vertical: `size = height / (ASCENT_FRAC + DESCENT_FRAC)` and the baseline
-//! sits at `lly + DESCENT_FRAC × size`, so the glyph box's top lands at
+//! Vertical: `size = height / (HELVETICA_ASCENT_FRAC + HELVETICA_DESCENT_FRAC)` and the baseline
+//! sits at `lly + HELVETICA_DESCENT_FRAC × size`, so the glyph box's top lands at
 //! `lly + height` — the reported box top — by construction.
 //!
 //! Horizontal: the word's natural width at that size is measured through the
@@ -160,9 +160,26 @@ use super::OcrPage;
 ///
 /// Helvetica's `Ascender` is 718/1000 em (and its `CapHeight` is the same
 /// value, which is why an all-caps word and a mixed-case word fit the same
-/// way). Paired with [`DESCENT_FRAC`] this defines the glyph box the vertical
-/// fit solves against.
-pub const ASCENT_FRAC: f64 = 0.718;
+/// way). Paired with [`HELVETICA_DESCENT_FRAC`] this defines the glyph box the
+/// vertical fit solves against.
+///
+/// # ★ Why the name carries the face, and is not just `ASCENT_FRAC`
+///
+/// `pdfce-core` already contains `ASCENT_FRAC` / `DESCENT_FRAC` — twice, in
+/// `text_edit::addtext` and `text_edit::reflow` — holding **0.75 / 0.25**.
+/// Those are the *block model's* nominal figures, deliberately shared between
+/// the two so a new run's box and a reflowed line's box agree with each other.
+/// These are the *real AFM metrics of one specific face*, used because this
+/// module is solving a fit against a font it chose itself.
+///
+/// **Both are correct, and a third module adding a fourth `ASCENT_FRAC` would
+/// also be correct.** That is exactly the problem: under the bare name, a grep
+/// for the identifier returns the wrong constant about half the time, and the
+/// two differ by 0.043 em — small enough to look like a rounding artefact
+/// rather than a different quantity. The 0.558 pt residual in this module's
+/// integration test is that difference, measured. Naming the face is what makes
+/// the collision impossible to have by accident.
+pub const HELVETICA_ASCENT_FRAC: f64 = 0.718;
 
 /// Descent as a fraction of the font size, for the vertical fit.
 ///
@@ -170,7 +187,7 @@ pub const ASCENT_FRAC: f64 = 0.718;
 /// magnitude. This is what lifts the baseline off the bottom of the reported
 /// box: without it, a word with a descender would have its tail hang below the
 /// ink the engine actually saw, and every selection would sit low.
-pub const DESCENT_FRAC: f64 = 0.207;
+pub const HELVETICA_DESCENT_FRAC: f64 = 0.207;
 
 /// The smallest horizontal scaling emitted, as a `Tz` percentage.
 ///
@@ -443,8 +460,8 @@ fn place_word(word: &super::RecognizedWord, font: Std14) -> Option<PlacedWord> {
 
     // Vertical fit: solve size so the glyph box (ascent+descent) equals the
     // reported box height, then sit the baseline a descender above its bottom.
-    let size = h / (ASCENT_FRAC + DESCENT_FRAC);
-    let baseline_y = DESCENT_FRAC.mul_add(size, r.lly);
+    let size = h / (HELVETICA_ASCENT_FRAC + HELVETICA_DESCENT_FRAC);
+    let baseline_y = HELVETICA_DESCENT_FRAC.mul_add(size, r.lly);
 
     // Horizontal fit: solve Tz so the natural advance equals the box width.
     let natural = natural_width(font, size, &codes);
@@ -733,7 +750,7 @@ mod tests {
     fn the_glyph_box_top_lands_on_the_reported_box_top() {
         let p =
             place_word(&word("Ag", 10.0, 100.0, 60.0, 120.0), Std14::Helvetica).expect("placeable");
-        let top = ASCENT_FRAC.mul_add(p.size, p.baseline_y);
+        let top = HELVETICA_ASCENT_FRAC.mul_add(p.size, p.baseline_y);
         assert!((top - 120.0).abs() < 1e-9, "glyph top {top} should be 120");
         assert!(
             p.baseline_y > 100.0,

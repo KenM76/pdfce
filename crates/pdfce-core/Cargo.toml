@@ -36,7 +36,7 @@ license.workspace = true
 # 4. CI builds `--no-default-features` (see .github/workflows/ci.yml), which
 #    is what stops a `cfg` from rotting into something that no longer
 #    compiles when switched off.
-default = ["jpx"]
+default = ["jpx", "ocrs"]
 
 # JPEG 2000 image decoding (`JPXDecode`, ISO 32000-1 §7.4.9 / ITU-T T.800).
 #
@@ -45,6 +45,50 @@ default = ["jpx"]
 # Without it, a JPX image is refused by name and everything else in the
 # document still works.
 jpx = ["dep:hayro-jpeg2000"]
+
+# The `ocrs` text-recognition engine (`Pass 71.0` slice 3).
+#
+# WHAT IS AND IS NOT GATED, because the split is the whole design:
+#
+#   NOT gated  `ocr::{RecognizedWord, OcrPage, OcrEngine, words_to_page_space}`
+#              and `ocr::layer` — the types, the y-flip, and the mode-3
+#              sandwich writer. All engine-independent, all pure PDF work, no
+#              dependency. A build with this feature off can still WRITE a text
+#              layer from words some other source produced.
+#   Gated      `ocr::engine_ocrs` — the recogniser itself, and only it.
+#
+# The operator's engine decision (2026-08-12) was "just build for both", so
+# this is the first of two engine features rather than the engine. Naming it
+# after the crate rather than the capability (`ocrs`, not `ocr`) is what leaves
+# room for the second without a rename.
+#
+# WHY IT IS ON BY DEFAULT: rule 1 of the strippable-capability convention
+# above. OCR is the reason most people reach for a PDF tool at all on scanned
+# material; a default build that silently could not do it would be a
+# regression wearing a feature flag. Stripping it is a deliberate act for a
+# lighter build, and the stripped path REFUSES BY NAME (rule 2) rather than
+# returning zero words — "found no text" and "cannot look for text" must never
+# be the same answer, least of all on a scan.
+#
+# LICENCE: `ocrs` and the whole `rten` stack it pulls (11 crates) are
+# MIT OR Apache-2.0; `flatbuffers` beneath them is Apache-2.0 only. All
+# permissive, zero copyleft, verified against the resolved graph — see
+# `docs/ocr-engine-survey.md` §3.2. NOTE that this covers the CODE ONLY. The
+# model WEIGHTS are CC-BY-SA-4.0, are not a Cargo dependency, and are
+# therefore invisible to `cargo-about`; `tools/check-shipped-assets.py` is
+# what covers them (`PROVENANCE.md` + a citation in `about.hbs`).
+#
+# NO NETWORK, and it is structural rather than promised: the model DOWNLOADER
+# lives in the separate `ocrs-cli` binary crate, not in the `ocrs` library, so
+# nothing here can fetch anything. Models are loaded from disk through
+# `ocr::models::resolve_model_dir`. This is what keeps ARCHITECTURE §1.1's
+# privacy posture true without a denylist having to catch it.
+ocrs = ["dep:ocrs", "dep:rten"]
+# NOTE: there is deliberately no `rten` feature. `cargo add --optional` writes
+# one automatically, and it was removed: `rten` alone compiles the inference
+# runtime and nothing that uses it, so it would be a public feature that adds
+# weight and no capability. The `dep:` prefix above is what suppresses the
+# implicit one.
 
 [dependencies]
 # thiserror: the ecosystem-standard derive for well-behaved error types
@@ -267,3 +311,28 @@ cbc = { version = "0.2.1", default-features = false }
 # by its arrival. `.github/workflows/ci.yml` asserts alloc/oid/zeroize
 # stay off, on all four targets, in the same shape as the `aes` check.
 sha2 = { version = "0.11.0", default-features = false }
+# ocrs: the pure-Rust OCR engine (`Pass 71.0` slice 3, gated by the `ocrs`
+# feature above, which carries the full rationale).
+#
+# WHY THIS ONE, out of the field surveyed in `docs/ocr-engine-survey.md`:
+# it is the ONLY candidate that passes pdfce's wasm32 CI gate. Every
+# alternative would have made OCR the first capability that cannot cross into
+# the web fork — which is the exact cost the GUI-core separation invariant
+# exists to avoid paying. PaddleOCR via `ocr-rs` covers 50+ languages and is
+# Apache-2.0, but has no WASM; Surya was REJECTED outright and must not be
+# re-evaluated on its accuracy figures, because its weights carry a modified
+# Open RAIL-M licence with a $5M revenue cap, and a field-of-use restriction
+# cannot be bundled in an MIT application.
+#
+# License: MIT OR Apache-2.0. Permissive; no operator flag required
+# (docs/LEGAL.md §6). The 11-crate `rten` runtime beneath it is likewise
+# MIT OR Apache-2.0 throughout, with Apache-2.0-only `flatbuffers` at the
+# bottom — still permissive. The MODEL WEIGHTS are a separate question with a
+# separate answer; see the feature comment.
+ocrs = { version = "0.12.2", optional = true }
+# rten: the inference runtime `ocrs` runs its two models on. A DIRECT
+# dependency because `ocrs` does NOT re-export it, and `OcrEngineParams`'s
+# fields are typed `rten::Model` — so constructing the engine at all requires
+# naming this crate. Gated by the same `ocrs` feature; it has no independent
+# use here. License: MIT OR Apache-2.0.
+rten = { version = "0.24", optional = true }

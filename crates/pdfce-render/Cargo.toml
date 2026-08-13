@@ -32,8 +32,12 @@ profile = []
 # forward. A crate that forgets silently defeats stripping for the entire
 # workspace, and the symptom is a flag that appears to work and changes
 # nothing.
-default = ["jpx"]
+default = ["jpx", "ocrs"]
 jpx = ["pdfce-core/jpx"]
+# The `ocrs` text-recognition engine. Forwarded even though `pdfce-render`
+# never calls it: the CLI reaches core THROUGH this crate, so a missing rung
+# here would strip OCR from the CLI with no diagnostic anywhere.
+ocrs = ["pdfce-core/ocrs"]
 
 [dependencies]
 # Depends on pdfce-core plus the CPU rasterizer. NOTHING here may pull a

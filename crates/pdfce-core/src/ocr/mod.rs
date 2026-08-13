@@ -61,6 +61,15 @@ pub mod models;
 /// text layer over page content that is left byte-identical.
 pub mod layer;
 
+/// The `ocrs` recogniser, behind the Cargo feature of the same name.
+///
+/// The ONLY engine-aware module in the OCR subsystem. Everything else here is
+/// compiled unconditionally, so a build without this feature can still write a
+/// text layer from words obtained some other way — it simply cannot produce
+/// them itself.
+#[cfg(feature = "ocrs")]
+pub mod engine_ocrs;
+
 use crate::page_tree::Rect;
 
 /// One recognised word, positioned in PDF default user space.

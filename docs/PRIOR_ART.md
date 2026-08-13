@@ -135,6 +135,21 @@ of which is a Rust-native engine.
 | **`hayro-jbig2`** | Apache-2.0 OR MIT | adopt | Pure Rust, decode-only (sufficient — PDF writers essentially never author new JBIG2). |
 | `jbig2dec` FFI bindings (any) | **GPL-3.0** | strong-copyleft | **skip** — avoid entirely; `hayro-jbig2` makes this unnecessary. |
 
+### OCR engines
+
+Full survey with measurements: `docs/ocr-engine-survey.md` (2026-08-12). The
+operator's decision (2026-08-12) was *"use whichever one is best for everyone
+including other languages, or heck, just build for both"* → **both, behind
+Cargo features**, ranked on multi-language coverage. `ocrs` is the first,
+adopted 2026-08-13 (`Pass 71.0` slice 3).
+
+| Crate | License | Verdict | Why |
+|---|---|---|---|
+| **`ocrs`** + the `rten` runtime (11 crates) | MIT OR Apache-2.0 throughout; `flatbuffers` beneath is Apache-2.0-only | **ADOPTED 2026-08-13**, feature `ocrs`, default ON | **The only surveyed engine that passes pdfce's wasm32 CI gate** — verified empirically at adoption, not taken from the survey (`cargo check -p pdfce-core -p pdfce-render --target wasm32-unknown-unknown`, clean with the feature in the default set). Every alternative would have made OCR the first capability that cannot cross into the web fork. Adds 20 crates to the attribution file, **zero copyleft**, no new licence category. **No network is structural, not promised**: the model downloader lives in the separate `ocrs-cli` binary crate, so nothing linkable from `pdfce-core` can fetch. **Reports NO per-word confidence** (`TextChar` is a char and a rect) — carried honestly through `reports_confidence() == false` rather than papered over. **Its WEIGHTS are CC-BY-SA-4.0 and are a separate question from the code**: not a Cargo dependency, therefore structurally invisible to `cargo-about`; `tools/check-shipped-assets.py` is what covers them. |
+| **`ocr-rs`** (PaddleOCR) | Apache-2.0 | **not yet adopted** — the natural second engine | 50+ languages, materially better multi-language coverage than `ocrs`, which is the operator's stated ranking criterion. **No WASM**, so it cannot be the only engine; it is a strong candidate for the second, where the wasm32 build simply omits it. |
+| **Surya** | Apache-2.0 **code**, modified **Open RAIL-M weights** | **REJECTED — do not re-evaluate on accuracy** | The weights carry a **$5M revenue cap and field-of-use restrictions**, which cannot be bundled in an MIT application at any accuracy. Recorded by name because its benchmark numbers are attractive enough to invite a second look, and the disqualifier is not in them. |
+| **Tesseract** (via any binding) | Apache-2.0 upstream, **but the default Windows build ships LGPL binaries** | reference/precedent only | `PRIOR_ART`'s KillerPDF row cites it as a working bundled-OCR precedent; the LGPL binary detail means it is **not** the free default it appears to be. Native-only, so same wasm32 disqualification as PaddleOCR. |
+
 ### Fonts
 
 | Crate | License | Verdict | Why |

@@ -1395,147 +1395,214 @@ defect but a **security failure**. The cardinal rule, verbatim
 
 ---
 
-## 5. OCR — the engine-independent substrate
+## 5. OCR — substrate, writer, and engine
 
-`core [ ] · cli [ ] · gui [ ]` — `FEATURES.md:229`, and read that row carefully:
-*"core carries the engine-independent invisible-text-layer substrate (§9.3.6
-mode 3, one y-flip site, per-word confidence that may be absent); **no engine
-is wired, so nothing is reachable from any shell.**"*
+`core [x] · cli [ ] · gui [ ]` for **writing** a text layer from words you
+supply. `core [ ] · cli [ ] · gui [ ]` for **OCR as a capability**, because the
+last piece — the model weights — is not in the repository yet. Both statements
+are true at once; §5.1 is the map of which is which, and it is the first thing
+to read before planning a panel.
 
-**Verified at this commit:** `grep -rn "ocr\|Ocr" crates/pdfce-cli/src/`
-returns **zero hits** — there is no `pdfce-cli ocr` subcommand. There is no
-test anywhere in the workspace that builds an OCR text layer, because no
-builder exists.
+**This section was rewritten 2026-08-13** after `Pass 71.0` slices 2 and 3
+landed. Two earlier versions of it told a shell author that no code wrote a
+text layer and that no engine existed. Both were true when written. If you are
+holding a cached copy that says *"from here on you are on your own"*, discard
+it.
 
-**This is not a panel a new shell can build yet.** It is documented here so
-that a shell author knows exactly where the boundary is and does not
-mistake the substrate for a feature. Two decisions gate it, both the
-operator's, both recorded in `CLAUDE.md`'s open items: which engine(s) to
-bundle (**answered** 2026-08-12 — both, behind Cargo features, ranked on
-multi-language coverage) and whether a **CC-BY-SA-4.0 model file** may ship
-inside pdfce's MIT portable folder (**open**, `ROADMAP.md` question `(bl)`;
-**default if unanswered: ship neither model set**).
+### 5.1 The four layers, and exactly where the boundary sits today
 
-### 5.1 What exists
+OCR in `pdfce-core` is four separable pieces, and knowing which one you are
+missing is the difference between a two-hour job and a wrong architecture.
 
-`crates/pdfce-core/src/ocr/mod.rs` (372 lines) and `ocr/models.rs`
-(298 lines). Declared at `lib.rs:108`.
+| # | piece | module | state |
+|---|---|---|---|
+| 1 | **Types + coordinates** — `RecognizedWord`, `OcrPage`, the `OcrEngine` trait, the single y-flip | `ocr` (always compiled) | **done** |
+| 2 | **The sandwich writer** — words → an invisible, selectable text layer in a real PDF | `ocr::layer` (always compiled) | **done**, 21 tests |
+| 3 | **A recogniser** — pixels → words | `ocr::engine_ocrs`, behind the `ocrs` Cargo feature | **done**, code only |
+| 4 | **Model weights** — the ~12 MB of `.rten` files piece 3 loads | not in the repo | **THE GAP** |
+
+**So: everything is wired except the weights.** `OcrsEngine::from_model_dir`
+compiles, runs, and returns a named `ModelMissing` error today. Nothing is
+stubbed, nothing is faked, and the failure is a clean refusal that tells the
+operator which file to put where.
+
+**What this means for you.** You can build the entire OCR panel now — the
+command, the progress, the report, the error path — against the real API, and
+it will work end to end the moment weights are present. You do **not** need to
+design around a placeholder. The one thing you cannot do is ship a build that
+recognises text, and that is a licensing/packaging step on the pdfce side, not
+an API gap.
+
+### 5.2 Public surface
+
+**Piece 1 — types and coordinates** (`crates/pdfce-core/src/ocr/mod.rs`)
 
 | item | `file:line` |
 |---|---|
-| `RecognizedWord { text, rect: Rect, confidence: Option<f32> }` | `ocr/mod.rs:74` |
-| `OcrPage { words, confidence_available }` | `ocr/mod.rs:95` |
-| `OcrPage::mean_confidence(&self) -> Option<f32>` | `ocr/mod.rs:119` |
-| `OcrPage::words_needing_review(&self, threshold: f32) -> Vec<&RecognizedWord>` | `ocr/mod.rs:135` |
-| `trait OcrEngine { type Error; fn recognize(&self, width: u32, height: u32, pixels: &[u8]) -> Result<Vec<RecognizedWord>, Self::Error>; fn reports_confidence(&self) -> bool; }` | `ocr/mod.rs:150`, `:168`, `:181` |
-| `words_to_page_space(&[RecognizedWord], image_width, image_height, page_rect) -> Vec<RecognizedWord>` | `ocr/mod.rs:198` |
-| `ModelSource { OperatorSupplied, BesideExecutable, UserData }` + `path()`, `token()` | `ocr/models.rs:84`, `:100`, `:108` |
-| `ModelsNotFound { engine, searched: Vec<PathBuf> }` | `ocr/models.rs:126` |
-| `resolve_model_dir(engine, explicit, exe_dir, user_data) -> Result<ModelSource, ModelsNotFound>` | `ocr/models.rs:164` |
+| `RecognizedWord { text, rect, confidence: Option<f32> }` | `ocr/mod.rs:87` |
+| `OcrPage { words, confidence_available: bool }` | `ocr/mod.rs:108` |
+| `OcrPage::mean_confidence() -> Option<f32>` | `ocr/mod.rs:132` |
+| `OcrPage::words_needing_review(threshold) -> Vec<&RecognizedWord>` | `ocr/mod.rs:148` |
+| `trait OcrEngine { recognize(w, h, pixels); reports_confidence() }` | `ocr/mod.rs:163` |
+| `words_to_page_space(words, img_w, img_h, page_rect)` — **the only y-flip** | `ocr/mod.rs:211` |
 
-### 5.2 What a caller must supply — the whole rest of it
+**Piece 2 — the writer** (`crates/pdfce-core/src/ocr/layer.rs`)
 
-1. **An engine.** Implement `OcrEngine`. Input contract (`ocr/mod.rs:154-158`):
-   **8-bit greyscale, row-major, top-down, one byte per pixel.** Nothing in
-   `pdfce-core` rasterises the scan to greyscale for you.
-2. **The coordinate conversion** — `words_to_page_space(...)`. `page_rect`
-   is *"the region of the page the image covers, in user space — normally the
-   full crop box … but not necessarily, which is why it is a parameter"*
-   (`ocr/mod.rs:194-196`).
-3. **The PDF authoring — entirely yours.** No function in the `ocr` module
-   writes anything to a PDF. Drive `pdfce_core::writer::content::ContentBuilder`
-   directly: `new()` `writer/content.rs:183`, `begin_text()` `:444`,
-   `set_font()` `:457`, **`set_render_mode(3)` `:486`**, `set_text_matrix()`
-   `:517`, `text_move()` `:501`, `show_text()` `:551`, `end_text()` `:449`,
-   `into_bytes()` `:192`.
-4. **Appending that stream as a second content stream on the page** is also
-   yours. The module doc states the design — *"an OCR layer is additive; it
-   appends a second content stream"* (`ocr/mod.rs:28-40`) — but no code
-   implements it.
+| item | `file:line` |
+|---|---|
+| `add_ocr_layer(&doc, page_index, &OcrPage, &opts) -> Result<OcrLayerOutcome, OcrLayerError>` | `ocr/layer.rs:603` |
+| `build_layer_content(&OcrPage, font_name, &opts) -> (Vec<u8>, OcrLayerReport)` — **pure**, no `Document`, no I/O | `ocr/layer.rs:496` |
+| `OcrLayerOptions::new()` / `.with_font(Std14)` | `ocr/layer.rs:216`, `:238`, `:244` |
+| `OcrLayerReport` — see §5.4, every field is a disclosure | `ocr/layer.rs:259` |
+| `OcrLayerReport::disclosures() -> Vec<String>` — **ready-to-show lines** | `ocr/layer.rs:313` |
+| `OcrLayerError` (`PageIndex`, `Encrypted`, `NothingToWrite`, `Unsupported`, `PageTree`, `ObjectNumbersExhausted`, `Write`) | `ocr/layer.rs:365` |
+| `OcrLayerOutcome { bytes, report }` | `ocr/layer.rs:397` |
+| `HELVETICA_ASCENT_FRAC` 0.718 · `HELVETICA_DESCENT_FRAC` 0.207 · `MIN_TZ` 1.0 · `MAX_TZ` 10 000.0 | `ocr/layer.rs:182`, `:190`, `:199`, `:207` |
 
-### 5.3 Minimal worked sequence (the two pieces that DO exist)
+**Piece 3 — the engine** (`crates/pdfce-core/src/ocr/engine_ocrs.rs`, feature `ocrs`, **on by default**)
+
+| item | `file:line` |
+|---|---|
+| `OcrsEngine::from_model_dir(&Path)` | `engine_ocrs.rs:184` |
+| `OcrsEngine::from_model_files(&Path, &Path)` | `engine_ocrs.rs:193` |
+| `MODEL_DIR` `"ocrs"` · `DETECTION_MODEL` · `RECOGNITION_MODEL` | `engine_ocrs.rs:86`, `:89`, `:97` |
+| `OcrsEngineError` (`ModelMissing`, `ModelLoad`, `ImageSize`, `Image`, `Recognition`) | `engine_ocrs.rs:108` |
+
+**Piece 4 — finding the weights on disk** (`crates/pdfce-core/src/ocr/models.rs`)
+
+| item | `file:line` |
+|---|---|
+| `resolve_model_dir(engine, explicit, exe_dir, user_data) -> Result<ModelSource, ModelsNotFound>` | `models.rs:164` |
+| `ModelSource` (`OperatorSupplied` / `BesideExecutable` / `UserData`), `.path()` | `models.rs:84`, `:100` |
+| `ModelsNotFound { engine, searched }` — **carries every path tried** | `models.rs:126` |
+
+### 5.3 Worked sequence, end to end
 
 ```rust
-use pdfce_core::ocr::{OcrEngine, OcrPage, RecognizedWord, words_to_page_space};
-use pdfce_core::page_tree::Rect;
+use pdfce_core::document::Document;
+use pdfce_core::ocr::{OcrEngine as _, OcrPage, layer, models, words_to_page_space};
+use pdfce_core::ocr::engine_ocrs::{MODEL_DIR, OcrsEngine};
 
-fn build_page<E: OcrEngine>(
-    engine: &E,
-    grey: &[u8], w: u32, h: u32,   // 8-bit greyscale, row-major, TOP-DOWN
-    page_rect: Rect,               // the region of the page this image covers
-) -> Result<OcrPage, E::Error> {
-    let words = engine.recognize(w, h, grey)?;         // image pixels, y-DOWN
-    let words = words_to_page_space(&words, w, h, page_rect); // → PDF user space, y-UP
-    Ok(OcrPage { words, confidence_available: engine.reports_confidence() })
-}
-// From here on you are on your own: ContentBuilder + set_render_mode(3) +
-// appending a second content stream. Nothing in core does it.
+// 1. Find the weights. An operator-named path that does not exist is REPORTED,
+//    never silently replaced by a bundled copy (models.rs:164).
+let src = models::resolve_model_dir(MODEL_DIR, explicit, exe_dir, user_data)?;
+
+// 2. Load the engine once, not per page. Both models load eagerly, so a bad
+//    install fails here rather than on page 340 of a batch.
+let engine = OcrsEngine::from_model_dir(src.path())?;
+
+// 3. Rasterise the page yourself (pdfce-render) and give it 8-bit greyscale.
+//    Returned rects are IMAGE PIXELS, y-DOWN.
+let words = engine.recognize(img_w, img_h, &grey)?;
+
+// 4. Flip to page space. This is the ONLY place a flip may happen.
+let page_rect = /* the page's crop box, or the region the image covers */;
+let page = OcrPage {
+    words: words_to_page_space(&words, img_w, img_h, page_rect),
+    confidence_available: engine.reports_confidence(),
+};
+
+// 5. Write the layer. Additive: one content stream, one font dict, one page
+//    dict. The scan is never decoded or re-encoded.
+let out = layer::add_ocr_layer(&doc, page_index, &page, &layer::OcrLayerOptions::new())?;
+std::fs::write(path, &out.bytes)?;
+
+// 6. Disclose — off-canvas. See §5.4.
+for line in out.report.disclosures() { /* status line / results panel */ }
 ```
 
-Real test of the flip: `ocr/mod.rs:261-275`
-(`a_word_at_the_top_of_the_image_lands_at_the_top_of_the_page`).
+**Step 4 is the one to get right.** `confidence_available` must come from
+`engine.reports_confidence()`, not from "did any word have a score" — those
+differ, and the difference is the whole point (§5.4).
 
 ### 5.4 ★ What the UI must disclose
 
-OCR output is **entirely inference** — it is the purest rule-4 case in the
-crate.
+OCR is **the single largest inference pdfce makes** — every word is a guess.
+Rule 4 as amended by **decision 059** says precisely what to do about that, and
+for OCR the amendment does more work than anywhere else in this document:
 
-1. **"This engine reports no per-word confidence" must be said out loud.**
-   `RecognizedWord::confidence` is `Option<f32>` and the `None` case is
-   *load-bearing, not a convenience*: *"a shell must say 'this engine reports
-   no per-word confidence' rather than silently presenting unscored guesses as
-   though they had been checked. **An absent score and a high score must never
-   look the same**"* (`ocr/mod.rs:49-53`). And on the field itself: *"`None`
-   is NOT 'assume it is fine'"* (`ocr/mod.rs:88-89`).
-   `OcrPage::confidence_available` (`:103-108`) exists so the disclosure is
-   made **once per page** and so *"engine has no confidence support"* stays
-   distinguishable from *"engine had nothing to say about this word"*.
-2. **Every recognised word is reviewable and rejectable before it becomes
-   document state.** That is rule 4 applied literally: the words are a guess
-   about what the pixels say. `words_needing_review(threshold)` is the
-   review-queue builder — and note it **includes unscored words**
-   (`ocr/mod.rs:130-133`): *"an unscored word is exactly as unverified as a
-   low-scored one — excluding them would let an engine that reports nothing
-   produce an empty 'needs review' list and look better than one that reports
-   honestly."* Predicate: `w.confidence.is_none_or(|c| c < threshold)`.
-3. **`mean_confidence` skips unscored words and returns `None` when nothing
-   is scored** (`ocr/mod.rs:113-117`) — *"deliberately skips unscored words
-   rather than treating them as zero or as one, both of which would be
-   inventing data, in opposite directions."* Do not display 0 % for `None`.
-4. **Which model directory was used, and where pdfce looked when it failed.**
-   `ModelSource::token()` yields `"operator-supplied"` / `"beside-executable"`
-   / `"user-data"`; `ModelsNotFound::searched` lists every path tried —
-   *"'OCR models not found' is unactionable. 'I looked in these three places'
-   tells the operator exactly where to put the files"* (`models.rs:264-268`).
+**Render normally. The page must look untouched — because it is.**
+The layer is written at text rendering mode 3 (ISO 32000-1 §9.3.6 Table 106,
+*"neither fill nor stroke text (invisible)"*), and
+`crates/pdfce-render/tests/ocr_layer_is_invisible.rs` asserts **not one pixel
+of 7,755,264 changes**. The operator asked for exactly this: *"I want OCRed
+stuff to look normal when the command is executed too."*
+
+**So: never draw a confidence tint, badge, dashed outline or highlight into the
+page view.** That is not a style preference — provisional marking is a second
+rendering path for the same content, and two paths drift. It is the bug class
+decision 059 exists to delete.
+
+**Disclose off-canvas**, from `OcrLayerReport`:
+
+| field | what it must say, and the trap |
+|---|---|
+| `words_written` | how much text was added. |
+| `confidence_available` | **`false` is a fact, and must be stated as one.** `disclosures()` says *"this engine reports NO per-word confidence, so no word here has been scored either way — that is not the same as a high score."* **`ocrs` — the only engine currently wired — reports no confidence at all**, so this is the live case, not a hypothetical. |
+| `mean_confidence: Option<f32>` | `None` means *nothing was scored*. **Never render it as 0%** — that is a specific, alarming, false claim about text nobody scored. |
+| `words_substituted` | characters with no WinAnsi code, written as `?`. A **high count means the page is in a script a Standard-14 face cannot represent** (CJK, Cyrillic, Greek, Arabic) — a real limit, surfaced here rather than discovered as a page of question marks. |
+| `words_skipped` | empty text or a degenerate box. A large number means the engine and the page geometry disagree — a genuine diagnosis. |
+| `words_scale_clamped` | `Tz` hit `MIN_TZ`/`MAX_TZ`; selection there will not track the ink. |
+
+`OcrLayerReport::disclosures()` builds all of these as finished strings and
+**says nothing when there is nothing to say** — a report that always emits a
+paragraph trains the reader to skip it. Use it rather than composing your own,
+so the CLI and the GUI cannot disagree about what was disclosed.
+
+**`OcrPage::words_needing_review(threshold)` counts unscored words as needing
+review.** That is deliberate: excluding them would let an engine that reports
+nothing produce an empty needs-review list and look *more* trustworthy than one
+that reports honestly.
 
 ### 5.5 Traps
 
-- **★ The y-flip has exactly one site, and it is not inside the engine.**
-  `ocr/mod.rs:184-196`: *"The y-flip is the most common OCR-layer defect there
-  is: get it wrong and every word lands mirrored vertically, the page still
-  looks perfect, and nobody notices until someone selects a line and gets a
-  different one. Doing it once, here, means an engine implementor cannot get
-  it wrong and every engine is wrong or right together."* An engine
-  implementation that pre-flips its own rectangles **double-flips**. Return
-  image pixels, y-down, always.
-- **A zero-sized image yields an empty `Vec` silently** (`ocr/mod.rs:204-206`,
-  test `:363`). Guard it upstream if that would be a surprise.
-- **★ Render mode 3 leaks forward.** `writer/content.rs:463-485`: text state
-  is **not** reset by `BT` (§9.4.1 resets only `Tm`/`Tlm`), so a mode set in
-  one text object persists into the next one in the same content stream —
-  *"a caller that sets 3 and does not set it back has made everything after it
-  invisible too."* And modes 4–7 accumulate a clipping path that §9.3.6 says
-  *shall not* be changed back to a non-clipping mode before the `ET`. The
-  builder takes a `u8` deliberately and **cannot enforce either rule for you**.
-- **★ A named model path that does not exist is an error, never a silent
-  fallback** (`models.rs:172-176`): *"Silently using something else after they
-  named a specific folder is the sneaky half of rule 4: they would believe
-  they were running the model they pointed at."*
-- **There is no downloader and there never will be.** `ARCHITECTURE.md` §1.1
-  — pdfce contains no HTTP client and no TLS stack, enforced by a fail-closed
-  CI job (`models.rs:14-24`, rule R12). Models are bundled or operator-supplied.
+1. **The y-flip belongs to `words_to_page_space` and nowhere else.** Engines
+   report y-DOWN image pixels; PDF is y-UP. `ocr::engine_ocrs` deliberately
+   does **not** flip. A "helpful" flip in a second place produces a layer that
+   is mirrored *twice* — i.e. correct — for one engine and mirrored once for
+   the next, and that defect gets blamed on the wrong module for a long time.
+   The symptom is silent: the page looks perfect until someone selects a line
+   and gets a different one.
+2. **`add_ocr_layer` refuses `NothingToWrite` rather than writing an empty
+   layer.** Do not treat it as a failure to report loudly — on a blank or
+   image-free page it is the correct answer, and writing a stream plus a font
+   for zero words would grow the file and change its bytes to accomplish
+   nothing.
+3. **`OcrsEngine::recognize` validates the buffer length and refuses a
+   mismatch.** `ocrs`'s own `ImageSource::from_bytes` infers a channel count
+   from `len / (w × h)`, so a buffer twice the expected size is silently taken
+   as a 2-channel image and "works", recognising noise. Pass exactly
+   `width × height` bytes of 8-bit greyscale.
+4. **Load the engine once.** Both models load eagerly in the constructor. Doing
+   it per page re-reads ~12 MB and re-initialises the runtime every time.
+5. **`ASCENT_FRAC` is ambiguous in this crate; the OCR ones carry the face.**
+   `text_edit::addtext` and `text_edit::reflow` hold `ASCENT_FRAC`/`DESCENT_FRAC`
+   = **0.75/0.25** (the block model's nominal figures, shared so a run's box and
+   a reflowed line's box agree). `ocr::layer` holds
+   `HELVETICA_ASCENT_FRAC`/`HELVETICA_DESCENT_FRAC` = **0.718/0.207** (the real
+   AFM metrics). **Both are correct.** They differ by 0.043 em, which is small
+   enough to look like a rounding artefact rather than a different quantity —
+   so if you compare authored geometry against extracted geometry you will see a
+   constant sub-point offset (0.558 pt at 13 pt) that is **not a bug**.
+6. **A `Tz` error is invisible to an origin check.** If you write your own
+   geometry assertions, assert on the **extent**, not just the position: `Tm`
+   sets the left edge correctly no matter how wrong the horizontal scaling is.
+   This cost pdfce a test that named the defect in its own failure message and
+   could not detect it.
 
----
+### 5.6 What is still owed on the pdfce side
+
+- **The model weights** (~12 MB, two `.rten` files). The licence question is
+  settled — the operator answered **yes** on 2026-08-13 to a CC-BY-SA-4.0 model
+  file shipping inside pdfce's MIT portable folder — but the files are not
+  committed, and committing ~12 MB of binary into a public repository's history
+  is permanent, so it is a deliberate step rather than a routine one.
+- **A `pdfce-cli ocr` subcommand.** Not yet present; `grep -rn "ocr" crates/pdfce-cli/src/`
+  returns zero hits at this commit.
+- **A second engine.** The operator's decision (2026-08-12) was *"just build
+  for both"*. `ocrs` is the first; the feature is named after the crate rather
+  than the capability precisely so the second can land without a rename.
+
 
 ## 6. Print & imposition (`pdfce-print`)
 

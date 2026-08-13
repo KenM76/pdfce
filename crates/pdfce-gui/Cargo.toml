@@ -27,8 +27,15 @@ path = "src/main.rs"
 # That is the failure mode to remember: forgetting to forward does not break
 # the build, it removes a capability, and only a dependency query or a real
 # JPX document reveals it.
-default = ["jpx"]
+default = ["jpx", "ocrs"]
 jpx = ["pdfce-core/jpx", "pdfce-render/jpx"]
+# The `ocrs` text-recognition engine (`Pass 71.0` slice 3). A MANIFEST line
+# only -- no GUI surface was built for OCR, which is deferred under the
+# 2026-08-13 GUI pause. It is forwarded anyway because omitting it is exactly
+# the silent capability loss the comment above warns about, and a shell whose
+# feature graph is wrong is a worse starting point for whatever replaces this
+# crate than one that is right and merely unused.
+ocrs = ["pdfce-core/ocrs", "pdfce-render/ocrs"]
 
 [dependencies]
 # eframe = egui's application shell. GUI dependencies live HERE and only
