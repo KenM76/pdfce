@@ -171,6 +171,66 @@ surfaced**; an empty vector is the normal case, a non-empty one means the
 gesture changed an operator's *form* (an `re` rectangle expanded to explicit
 segments, an implicit `m` materialised, a curve discarded with a node).
 
+#### ★ 1.10.1 Object indices across an edit — which verbs RENUMBER
+
+**All eleven verbs address objects by `decompose_page`'s paint-order index.
+An index is a POSITION, not an identity, and a position is only an identity
+while nothing moves.** So the question a shell holding a live selection must
+be able to answer is: *does my index still name the same object after that
+edit?*
+
+There are three possible outcomes and only one of them is dangerous:
+
+| outcome | consequence |
+|---|---|
+| resolves to the same object | correct |
+| resolves to nothing | correct — clear the selection |
+| **resolves to a DIFFERENT object** | **the outline redraws around the wrong thing and the next Delete removes it. Nothing errors.** |
+
+**The answer, measured** (`crates/pdfce-core/tests/object_identity_across_edits.rs`
+decomposes, edits, and decomposes again — this is not read off the planners):
+
+| family | mechanism | renumbers? |
+|---|---|---|
+| `move_object` · `move_objects` · `move_subpath` · `move_node` · `move_nodes` · `move_handle` | rewrites operator **operands** in place | **NO** |
+| `delete_object` · `delete_objects` · `delete_subpath` · `delete_node` · `delete_text_run` | excises byte **spans** | **YES** |
+
+**A move changes numbers inside existing operators**, so no operator is added
+or removed, the decomposition walks the same operators in the same order, and
+indices are stable. **Build move, resize and node editing on indices — a
+selection survives them unchanged.**
+
+**For the delete family, remap:**
+
+```rust
+use pdfce_core::vector::remap_index_after_delete;
+
+remap_index_after_delete(0, &[1]) == Some(0)   // below the hole — unmoved
+remap_index_after_delete(1, &[1]) == None      // it WAS the hole
+remap_index_after_delete(2, &[1]) == Some(1)   // shifted down
+remap_index_after_delete(4, &[1, 3]) == Some(2)
+```
+
+`None` means *gone*. It never returns a different object's index. `deleted`
+need not be sorted, and duplicates are handled — a shell unioning two
+overlapping selections would otherwise shift a survivor twice.
+
+**On durable tokens.** `VectorObject` already exposes `tokens() -> TokenRange`
+(operator indices — **stable across a move**, since the operator count is
+unchanged) and `bytes() -> ByteSpan` (**not** stable: rewriting `10` to `100`
+lengthens the operand and shifts everything after it). Neither survives a
+delete. A generation-tagged whole-stream handle is *possible* but is not built,
+deliberately — given the table above it would buy nothing indices do not
+already give for the move family.
+
+**If `reorder` or `paste` are ever added, they must be checked against that
+test file and this table extended.** A new verb that renumbers without saying
+so re-opens exactly this hazard, silently.
+
+*Raised by the `pdfceGUI` session, 2026-08-13, which correctly declined to
+build move/resize until it was answered. Part 1 covers picking and snapping and
+said nothing about identity across edits — this section is that gap closed.*
+
 | I want to… | Call | Line |
 |---|---|---|
 | Move one object | `move_object(page_index, object_index, dx, dy)` | 4483 |
