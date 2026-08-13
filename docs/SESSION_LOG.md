@@ -42206,3 +42206,291 @@ added rather than rewritten.
 4. **The concurrency hazard is real and cheap to avoid** — one
    `git status --porcelain` before a librarian's first and last write.
    Consider whether the `R192` Backlog retrofit should name it.
+
+---
+
+## 2026-08-13 (hundred-and-forty-fifth filing) — **A FACT THIS PROJECT PUBLISHED WAS WRONG, AND THE CONSUMER CAUGHT IT: the benchmark drawing is A3, not A1 (`de089f6`).** ★ The correct size had been in `C:\personal_rag\pdf\` **for six days**, in a lesson keyed on the same file's byte count — **`R182`'s next instance, and the widest one yet, because what went unchecked was not a fix but a fact that was then published in five places.** Second document measured: **~700 ms vs ~9 ms per render on the same unbranched code path**, which is the real argument for the display list. **`Pass 75.0` MINTED and SCHEDULED** — the Backlog entry's own written promotion trigger fired. **No rule, no decision, no operator question. `FEATURES.md`: no checkbox moved; one figure qualified, one Planned row added, one legend clause.**
+
+**Shipped:**
+
+- `de089f6` — **documentation correction only.** Two files
+  (`crates/pdfce-render/src/lib.rs` doc comments,
+  `docs/render-region-measurements.md`), **45 insertions, 9 deletions, no
+  code.** Not a Pass; filed at the top of *Shipped* because it corrects
+  what `Pass 74.0` published.
+
+**State verified in this dispatch, with the commands (hard rule 8):**
+
+| claim | command | result |
+|---|---|---|
+| `HEAD` | `git rev-parse HEAD` | `de089f6499801ec9e46d0058ab3c89604301690c` — **the filed commit is HEAD** |
+| working tree | `git status --porcelain` | **empty (clean)** |
+| remote | `git remote -v` | `origin https://github.com/KenM76/pdfce.git` |
+| ahead of remote | `git rev-list --count origin/main..HEAD` | **34 commits** (`origin/main` = `42364db`) |
+| latest backup bundle | `ls -la D:/Dev/pdfce-backups/` + `git bundle list-heads ...post-rebase.bundle` | `pdfce-20260813-post-rebase.bundle` (Aug 13 09:27), `refs/heads/main` = `dc5a77f` |
+| bundle staleness | `git rev-list --count dc5a77f..HEAD` | **18 commits behind HEAD** — measured, not inferred |
+
+**Gates at `de089f6`, as reported by the engineer and scoped honestly:**
+`cargo fmt --all` clean (workspace); `cargo clippy -p pdfce-render
+--all-targets -- -D warnings` clean (one crate). **The full workspace
+suite (~3,700 tests) was green at the PRECEDING commit and was not re-run
+here** — `de089f6` changes two doc comments and one markdown file, so no
+test's subject moved. Stated rather than implied.
+
+**Decisions made this session:**
+
+- **None minted.** `Pass 75.0` schedules work; it does not settle an
+  architectural question, and decision `060` already recorded the display
+  list as *"the next investment, deliberately NOT BUILT"*. Moving it from
+  *Backlog* to *Next up* is a roadmap act. **Decision ceiling stays
+  `061`; next free is `062`.**
+- **No standing rule minted.** `R182` already covers the failure; it
+  gains a **dated instance note** instead. **`R193` and `R194` are both
+  CLAIMED by unruled proposals, so the next genuinely free rule number is
+  `R195`** — and `tools/check-ledger-numbers.py` still prints `R193`,
+  now wrong by two.
+- **No operator question added.** Ceiling stays `(bn)`.
+
+**Findings + decisions:**
+
+1. **★★★ THE CORRECTION, AND ITS EXACT BOUNDARY.**
+   `D:\Dev\temp\pdfce\ncored-benchmark-cad-drawing.pdf` has `MediaBox`
+   **1190.55 × 841.89 pt = A3 landscape exactly** (a true A1 is
+   2383.94 × 1683.78). **Every zoom-ceiling figure given for that
+   specific document was out by a factor of two** — its real whole-page
+   ceiling is **13.8× at 1× DPR and 6.9× at 2×**, not 6.9 and 3.4.
+   **What is NOT wrong:** the generic ceiling table in
+   `MAX_PIXMAP_EDGE`'s doc comment (its A1 row, 2384 pt → 3.4×, is
+   correct **for a real A1**), the claim that the ceiling tightens as
+   sheets grow, and **every timing figure** — those were measured on the
+   file, not derived from its assumed size. **Four sites in the ledger
+   said "A1"; two were about the measured document and wrong, two were
+   about a real A1 and right.** A blanket replace would have broken the
+   correct half, which is why the correction table in the *Shipped*
+   entry enumerates them one at a time.
+
+2. **★ HOW IT WAS FOUND — a number that could not be true, in a UI.**
+   The `pdfceGUI` session, driving its own running shell, read **147 %
+   for fit-page**, which is impossible for an A1 sheet in that window.
+   **An assumption nobody had measured was disproved by a status bar.**
+   Worth more than the correction itself: the shell was the only place in
+   the whole exchange where the wrong number had to *touch a running
+   program* and produce something a human would look at.
+
+3. **★★★ AND THE ANSWER WAS ALREADY ON DISK, IN THIS ROLE'S OWN TIER 5,
+   SIX DAYS EARLIER.**
+   `C:\personal_rag\pdf\lesson_20260807_cad_sheet_clips_per_element_24142_clips_one_page_w_star_dominant.md`
+   (2026-08-07, commit `76200e9`) opens: *"a **5,724,699-byte** ArchiCAD
+   architectural sheet, **1191 × 842 pt (A3 landscape)**"*. **Same file,
+   proven by byte count rather than by resemblance:**
+   `ls -la D:/Dev/temp/pdfce/` reports **5,724,699 bytes** for
+   `ncored-benchmark-cad-drawing.pdf`. **`R182`'s practical form names
+   `C:\personal_rag\pdf\` for exactly this class of question.**
+   **The transferable shape is not "someone forgot to check."** Three
+   independent sources each held the right answer — the file's own
+   `MediaBox`, `region_bench`'s first line of output, and a six-day-old
+   lesson — and the wrong label still survived a request, a reply, a
+   Pass, a decision record and a Backlog entry. **The number of places a
+   fact is correctly recorded does not bound how long a wrong version of
+   it circulates.** Only a consumer with a running program broke it.
+
+4. **★ THE RECORD PRINTED ITS OWN REFUTATION, FOUR WORDS APART.** The
+   `Pass 74.0` *Shipped* entry read *"the operator's own **A1** benchmark
+   drawing (`...`, **1190.55 × 841.89 pt**, ...)"* — the claim and the
+   `MediaBox` that disproves it **inside the same parenthesis**. This is
+   hard rule 10's premise, observed live: **filing both forms converts a
+   set-property into a single-claim property, but nothing in an
+   append-only record performs the comparison.** The rule buys the
+   *possibility* of the catch, not the catch. Here it was bought and not
+   spent for a day.
+
+5. **★★ THE SECOND DOCUMENT — 700 ms vs 9 ms on the same code path.**
+   `iso32000-2-preview.pdf` (text-heavy A4, 689 KB): interpretation floor
+   **3.2 ms of an 8.97 ms full page ≈ 36 %**, against **691 ms of 877 ms
+   ≈ 99 %** on the CAD sheet. **3 × 3 tile penalty: ~9× on CAD
+   (6.2 s vs 0.70 s), ~1.9× on text (55 ms vs 29 ms).** Both `Pass 74.0`
+   conclusions survive; **only the magnitude does not.** *Never tile for
+   speed* holds everywhere; *tiling is a catastrophe* holds only where
+   interpretation dominates. **The real finding is not about tiling:**
+   one document class costs **three orders of magnitude** more per render
+   than another **on the same unbranched code path**, so any fixed
+   strategy is mistuned for one of them. That is the argument for the
+   display-list handle rather than for any render granularity — the
+   requesting session's framing, adopted because it is better than the
+   one it replaced.
+
+6. **The one-document caveat is DISCHARGED, NOT DELETED**, with its
+   original text struck-through-and-kept in
+   `docs/render-region-measurements.md`. **A caveat that turned out to be
+   correct is evidence about how much to trust the next one.** The
+   remaining limits — one machine, single-threaded, `--release`, one run
+   per case — are undischarged and stay.
+
+7. **A figure that does NOT reconcile, filed rather than smoothed.** Two
+   instruments disagree about the same file: `tools/render-profile`'s
+   2026-08-07 content census says **24,142 clip ops / 129,515 paths** of
+   129,758 content objects; `examples/region_bench` says **24,128 clip
+   ops / 148,517 paints**. **Deltas: 14 clips (0.06 %) and 19,002
+   paints-vs-paths (14.7 %).** Plausibly different counting subjects
+   (paints likely include text-show and image draws) plus a `q`/`Q`
+   nesting boundary — **unverified.** **Neither figure is load-bearing**
+   for any conclusion in `Pass 74.0` or `Pass 75.0`; the timing floor is.
+   Recorded per hard rule 10 with both instruments named so a future
+   reader who meets both does not have to guess which was a typo.
+   **Whoever next runs either harness on this file should settle it.**
+
+8. **★★ `Pass 75.0` MINTED — and the promotion was TRIGGERED, not
+   improvised.** The *Backlog* display-list entry
+   (hundred-and-forty-second filing) ended with a written condition:
+   *"promote it the moment a shell's zoom loop depends on the second
+   render being fast."* The `pdfceGUI` session then said in writing that
+   its stage **S6** does. **A conditional Backlog entry was re-read and
+   honoured** — worth naming, because most never are. Family ceiling
+   **74 → 75; next free is 76.**
+
+9. **The regression argument is the load-bearing half of `Pass 75.0`,
+   and it came from the consumer.** Today's shell renders a whole page
+   once and pans/zooms over the texture smoothly, and **the operator has
+   said that feels better than the tiled competitor.** If S6 switches to
+   per-viewport regions for zoom range, **it loses that smoothness unless
+   repeat renders are cheap.** So the handle is not an optimisation on a
+   working thing — it is what stops a planned change from trading away a
+   property the operator has already praised. **That sentence is why this
+   is a scheduled Pass and not a Backlog wish.**
+
+10. **Filed under *Next up*, not *Backlog*, and the reasoning is
+    recorded** so it can be argued with: it is fully scoped (shape, key,
+    acceptance criteria, gating measurement), its Backlog promotion
+    condition has fired by name, and **"not urgent" is an ordering
+    statement, not a status statement** — *Next up* already holds
+    unstarted Passes of mixed priority, and this one sits below the two
+    marked HIGH PRIORITY.
+
+11. **Two consumer confirmations recorded so they are not re-litigated:**
+    `MAX_ZOOM` will be set **from performance**, not from `f32` and not
+    from the pixmap guard, **documented with that reasoning rather than
+    as a round figure** (closing decision `060`'s *"what is NOT decided
+    here, and is owed"*); and the consumer **will not drive N region
+    calls across cores**, having understood that without a display list
+    **N workers each pay the full interpretation floor** — N× the work
+    for ~1× the throughput. **`Pass 75.0` is also what would make that
+    parallelism worth revisiting.**
+
+12. **The channel earned its keep in a direction nobody designed it
+    for.** `D:\Dev\FeatureRequests\pdfce_FeatureRequests\` was instituted
+    so a consumer could ask for capability. Its third exchange carried
+    **a correction back up into the producer's own published record** —
+    one the producer's own harness and RAG could have made at any point
+    in six days. **A dependency channel is also an error-detection
+    channel, and the consumer sees things the producer structurally
+    cannot: it runs the code against reality.**
+
+**`FEATURES.md` — no checkbox moved, and that is the correct answer:**
+
+- **Nothing shipped but a documentation correction, and `Pass 75.0` is
+  scheduled rather than built.** Stated explicitly because a filing
+  silent about `FEATURES.md` is indistinguishable from one that forgot
+  it.
+- **Two edits were still owed under the file's own contract.** (1) The
+  region row's *"~99% of the cost is page interpretation, so tiling is a
+  9× regression"* was **unqualified**, and as of `de089f6` that is a
+  property of dense CAD sheets, not of the feature — now reads
+  *"~99% on a dense CAD sheet (691 ms floor), ~36% on a text page
+  (3.2 ms)"* with both tile penalties. **Hard rule 10(b): the qualifier
+  goes in the label, because the label is what gets quoted**, and that
+  row is the shortest, most quotable statement of the figure in the repo.
+  (2) A ***Planned*** row for `Pass 75.0`, boxes unticked.
+- **One legend clause added.** The new row's `cli` column is `?` —
+  a one-shot CLI invocation may have nothing to hold a display list
+  across, so whether that column is `[ ]` or `—` **is decided in the
+  Pass**. `?` was previously defined for the `Acrobat` column only, so
+  the legend now says: *in a Planned row only, `?` means which of `[ ]`
+  and `—` this is has not been decided yet — never "probably built".*
+  **That is the one distinction the legend exists to protect**, and
+  guessing it would have been the exact failure it warns about.
+
+**Corrections applied to the ledger itself this filing:**
+
+| document | site | disposition |
+|---|---|---|
+| `ROADMAP.md` | `Pass 74.0` *Shipped* — *"the operator's own A1 benchmark drawing"* | struck and corrected in place, marked, with a note that the `MediaBox` disproving it is four words later |
+| `ROADMAP.md` | *Backlog* display-list entry — *"the operator's A1 benchmark drawing"* | struck and corrected, **plus a PROMOTED banner** pointing at `Pass 75.0`; body otherwise unedited (append-only) |
+| `ROADMAP.md` | `R182` | dated instance note appended |
+| `ARCHITECTURE.md` §12 decision `060` | measurement-table caption *"(A1 landscape, ...)"* | struck and corrected, with a blockquote bounding exactly what does and does not change |
+| `ARCHITECTURE.md` §12 decision `060` | *"Honest limits"* | amendment: caveat **discharged** with the second-document table; clause 3 noted as moved from Backlog to `Pass 75.0`; **decision not superseded** |
+
+**Deliberately NOT corrected**, because they are right: `ROADMAP.md`'s
+generic sheet table (*"A1 landscape · 2384 pt · 3.4×"*), *"Reaching 6.9×
+on A1 would cost 4 GiB per open page"*, and `ARCHITECTURE.md`'s *"9.7× on
+A4, 6.9× on A3, 3.4× on A1, 2.4× on A0"* — all statements about a **real**
+A1.
+
+**Graduated to the RAGs this filing:**
+
+- `D:\dev\rag\rust\a_single_input_benchmark_measures_the_input_class_not_the_code_path.md`
+  — 700 ms vs 9 ms on one unbranched path; ecosystem-wide methodology.
+- `C:\personal_rag\pdf\lesson_20260813_page_size_from_mediabox_not_title_block.md`
+  — the A-series in points, why a CAD title block is not evidence of
+  sheet size, and the byte-count identity check that proved the
+  2026-08-07 lesson was about the same document.
+
+**Still in flight:**
+
+- **`Pass 75.0` — UNSTARTED.** Scheduled, not urgent; the requester says
+  S5 and the rest of S4 come first and **nothing is blocked today**. If
+  S6's timeline moves up they signal through the channel.
+- **`Pass 72.0` and `Pass 73.0` remain HIGH PRIORITY and unstarted** —
+  the redaction absence proof with no core home, and `R58`'s asserted-
+  but-unenforced full-rewrite. **`Pass 75.0` sits below both.**
+- **`R194`'s proposal is still unruled**, as is `R193`'s (declined on the
+  count, number retained). **Next genuinely free rule number: `R195`.**
+- **`(bn)` is still open** and answerable in one sentence.
+- **The 24,142-vs-24,128 clip-count discrepancy is open**, small, and
+  not load-bearing.
+
+**For next session:**
+
+1. **`tools/check-ledger-numbers.py` is now wrong by two on rule
+   numbers** (prints `R193`; `R193` and `R194` are both claimed). The
+   claimed-vs-minted distinction exists for Passes and not for rules —
+   already filed in *Backlog* under `R192`. **Do not take `R193` or
+   `R194`.**
+2. **The dispatch that produced this filing stated the Pass ceiling as
+   75; it was 74.** Re-measured with `tools/check-ledger-numbers.py`
+   rather than relayed — **which is the same failure mode this entire
+   filing is about**, one ledger layer down. **Next free family number is
+   now genuinely 76.**
+3. **`Pass 75.0`'s acceptance criterion 7 needs a real answer, not a
+   default** — whether a display list has any meaning for a one-shot
+   `pdfce-cli` invocation. It is the difference between `—` and `[ ]` in
+   `FEATURES.md`, and the file's legend exists to protect exactly that.
+4. **Consider whether `R182` should be widened** from *"grep before
+   writing the FIX"* to *"grep before publishing any CLAIM"*. This
+   filing is one instance of the wider shape; **the section's bar is
+   three**, so it is noted, not proposed.
+5. **Settle the clip-count discrepancy** in one line, next time either
+   harness runs on `ncored-benchmark-cad-drawing.pdf`.
+6. **★ THREE CODE COMMITS FROM TODAY ARE IN NO FILING**, reported by
+   `python tools/check-commits-filed.py` at the end of this dispatch —
+   **`4b82641`** (OCR end to end; a first reading of its output that was
+   a false positive caught by arithmetic), **`40c377a`** (12 MB of
+   weights and the licence gate that caught them), **`d24c1df`** (an
+   index is a position, and a position is only an identity while nothing
+   moves). **This dispatch was given `de089f6` only**, and `de089f6` is
+   no longer flagged — the gate is satisfied for it. **Do NOT add the
+   three to `tools/commits-filed-baseline.txt`**; the gate's own message
+   says extending that file silences exactly what it exists to catch.
+   Each needs a dispatch with its **full commit message**, which is where
+   the defect, the measurement and the owed follow-up live.
+7. **This filing's Pass heading had to shed two stars to be COUNTABLE**,
+   which is `R192`'s documented blind spot (b) meeting a live filing.
+   `Pass 75.0` was first written `### ★★★ Pass 75.0` and
+   `tools/check-ledger-numbers.py` reported the family as **MENTIONED but
+   NOT HEADED** — the anchor `^#{2,4} (?:★ )?Pass ` admits **exactly one
+   star**. Rewritten to `### ★ Pass 75.0`, after which the gate reports
+   *"Pass families with headings : up to 75"* correctly. **The
+   emphasis a heading carries should not determine whether the ledger can
+   see it**, and until the anchor is widened, **file every new Pass
+   heading with one star or none.** Backlog item under `R192` already
+   scopes the widening and warns it is not a one-line change (the widened
+   matcher surfaces four false collisions in *Shipped*).

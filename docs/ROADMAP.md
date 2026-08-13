@@ -96,6 +96,256 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★★ `de089f6` — **THE BENCHMARK DRAWING IS A3, NOT A1.** A wrong fact this project PUBLISHED — **five sites across four of its own documents** (`lib.rs`, `render-region-measurements.md`, `ROADMAP.md` ×2, `ARCHITECTURE.md`) — corrected by the CONSUMER — who found it from a number in a status bar that **could not be true**. **★ The right answer was already on disk in `C:\personal_rag\pdf\`, six days earlier, in a lesson carrying the same file's byte count — `R182`'s next instance.** Second document measured: **700 ms vs 9 ms per render on the same code path.** **`Pass 75.0` MINTED and SCHEDULED under *Next up*** — the display-list *Backlog* entry's own stated promotion trigger fired. **`FEATURES.md`: NO checkbox changed; one unqualified figure gained its qualifier** — filed 2026-08-13 (hundred-and-forty-fifth filing)
+
+**Full hash: `de089f6499801ec9e46d0058ab3c89604301690c`**, read with
+`git rev-parse de089f6` in this dispatch — not relayed. **`HEAD` at the
+time of filing is this same commit** (`git rev-parse HEAD`), working tree
+**clean** (`git status --porcelain`, empty), **34 commits ahead of
+`origin/main` = `42364db`** (`git rev-list --count origin/main..HEAD`).
+
+**Two files, 45 insertions, 9 deletions:**
+`crates/pdfce-render/src/lib.rs` (doc comments only) and
+`docs/render-region-measurements.md`. **No code changed**, which is why
+the gates below are scoped rather than a full re-run.
+
+| gate | result | scope |
+|---|---|---|
+| `cargo fmt --all` | clean | workspace |
+| `cargo clippy -p pdfce-render --all-targets -- -D warnings` | clean | one crate |
+| full workspace suite | **green at the PRECEDING commit, ~3,700 tests** | not re-run at `de089f6`, and **that is stated rather than implied**: this commit touches two doc comments and one markdown file, so no test's subject changed. |
+
+#### ★ The correction, bounded precisely — over-reading it is the likelier error
+
+**Wrong:** the *label* on the one document every region measurement was
+taken from. `D:\Dev\temp\pdfce\ncored-benchmark-cad-drawing.pdf` has
+`MediaBox` **1190.55 × 841.89 pt**, which is **A3 landscape exactly**.
+
+| sheet | points (landscape) |
+|---|---|
+| **A3** | **1190.55 × 841.89** ← the drawing |
+| A1 | 2383.94 × 1683.78 |
+
+Computed from the A-series in points in the commit's own session rather
+than accepted on report. **Consequence: every zoom-ceiling figure given
+for THAT SPECIFIC DOCUMENT was out by a factor of two** — its real
+whole-page ceiling is **13.8× at 1× DPR and 6.9× at 2×**, not 6.9 and
+3.4.
+
+**NOT wrong, and this half matters as much:**
+
+- The **generic** ceiling table in `MAX_PIXMAP_EDGE`'s doc comment is
+  **untouched** — its A1 row says **2384 pt → 3.4×**, and both figures
+  are correct **for a real A1**. Only the row that said *"this is the
+  document we measured"* was mislabelled.
+- **6.9× is still under `MAX_ZOOM`.** The ceiling still tightens as
+  sheets grow. `render_page_region` was still the right answer, for the
+  reason `Pass 74.0` gave. **Nothing downstream of the label changes.**
+- Every **timing** figure — the 691 ms floor, 699 ms at 120,701 px, the
+  877 ms full page — is **unaffected**. Those were measured on the file,
+  not derived from its assumed size.
+
+#### How it was found, which is the better half of the report
+
+Driving their running shell, the `pdfceGUI` session read **147 % for
+fit-page** in the status bar. **That is impossible for an A1 sheet in
+that window.** A number that *could not be true*, noticed in a UI,
+disproving an assumption **nobody on either side had measured**.
+
+**And the refuting evidence was already being printed.**
+`crates/pdfce-render/examples/region_bench.rs` — this project's own
+committed harness — prints the `MediaBox` **on its first line**, and the
+engineer had it in view throughout `Pass 74.0`. The `Pass 74.0` *Shipped*
+entry below states *"the operator's own A1 benchmark drawing
+(`…`, **1190.55 × 841.89 pt**, …)"* — **the claim and its refutation in
+the same parenthesis, four words apart, for one day.** That is hard rule
+10's shape exactly: the record carried both forms, and **nothing performs
+the comparison** unless a reader arrives with a reason to.
+
+#### ★★ THE SWEEP FINDING: the right answer was in this project's own RAG, six days earlier — `R182`'s next instance
+
+`C:\personal_rag\pdf\lesson_20260807_cad_sheet_clips_per_element_24142_clips_one_page_w_star_dominant.md`,
+written **2026-08-07** at commit `76200e9`, opens by describing its
+subject as *"a **5,724,699-byte** ArchiCAD architectural sheet, **1191 ×
+842 pt (A3 landscape)**"*.
+
+**Same file, proven by byte count, not by resemblance:**
+
+```
+$ ls -la D:/Dev/temp/pdfce/ | grep ncored
+-rw-r--r-- 1 Ken 197121 5724699 Aug  7 13:49 ncored-benchmark-cad-drawing.pdf
+```
+
+**5,724,699 = 5,724,699.** The lesson's own identifying number and the
+file on disk agree exactly.
+
+**So the correct page size had been in `C:\personal_rag\pdf\` — one of
+this role's five storage tiers — for six days, in a lesson about this
+exact file, while `ROADMAP.md`, `ARCHITECTURE.md` and two source
+documents said A1.** `R182`'s practical form names that tree by name:
+*"a PDF-producer-behavior surprise greps `C:\personal_rag\pdf\` — before
+the fix is written, not after."* A page-size assertion about a CAD sheet
+is squarely that. **A dated instance note is appended to `R182` this
+filing.** No new rule: `R182` already covers it, and minting a second
+rule for the same obligation is the merge `R193`'s ruling rejected.
+
+**Note the shape, because it is not "we forgot to check a document."**
+Three independent sources — the file's `MediaBox`, the harness's first
+line of output, and a six-day-old lesson keyed on the same byte count —
+**each carried the answer**, and the wrong label survived a request, a
+reply, a Pass, a decision record and a Backlog entry. **The number of
+places a fact is correctly recorded does not bound how long a wrong
+version of it circulates.** What broke the chain was a *consumer* with a
+running program in front of them.
+
+##### One figure that does NOT reconcile, filed rather than smoothed
+
+The two instruments disagree slightly about the same file, and per hard
+rule 10 both forms are recorded with their instrument named rather than
+one being quietly preferred:
+
+| quantity | `tools/render-profile` content census (2026-08-07 lesson) | `examples/region_bench` (2026-08-13, `Pass 74.0`) |
+|---|---:|---:|
+| clip operations | **24,142** | **24,128** |
+| path/paint count | **129,515 paths** of 129,758 content objects | **148,517 paints** |
+
+**Unresolved, and small.** The clip counts differ by **14 (0.06 %)** and
+the paint/path counts by **19,002 (14.7 %)** — plausibly *paints* counts
+text-show and image-draw operations that *paths* does not, and the clip
+delta may be a counting boundary on nested `q`/`Q`. **Neither figure is
+load-bearing for any conclusion in `Pass 74.0` or `Pass 75.0`** — the
+timing floor is. Recorded here so a future reader who finds both does not
+have to wonder which was a typo. **Whoever next runs either harness on
+this file should settle it in one line.**
+
+#### ★★ THE SECOND DOCUMENT — and the finding is not about tiling
+
+The measurement `Pass 74.0`'s own caveat asked for, run by the requesting
+session on `iso32000-2-preview.pdf` (the PDF 2.0 spec preview, 689 KB,
+**text-heavy A4**, 595.276 × 841.89 pt) and folded into
+`docs/render-region-measurements.md` this commit:
+
+| | **dense CAD (A3)** — `ncored-benchmark-cad-drawing.pdf` | **text-heavy (A4)** — `iso32000-2-preview.pdf` |
+|---|---:|---:|
+| interpretation floor (1 × 1 pt region, 2 px) | **691 ms** | **3.2 ms** |
+| full page, scale 1 | **877 ms** (1,002,822 px) | **8.97 ms** (501,832 px) |
+| floor as share of full page | **~99 %** | **~36 %** |
+| region 400 × 300 pt, scale 1 | 699 ms (120,701 px) | 6.08 ms (120,701 px) |
+| **3 × 3 tile penalty** | **~9×** (6.2 s vs 0.70 s) | **~1.9×** (55 ms vs 29 ms) |
+
+**Both `Pass 74.0` conclusions survive; only one MAGNITUDE does.**
+
+- ***Never tile for speed*** holds on **both** documents.
+- ***Tiling is a catastrophe*** holds **only where interpretation
+  dominates.** On an ordinary page it is a mild loss at absolute numbers
+  (**29 ms vs 55 ms**) that put nothing about interactivity at stake.
+
+**★ THE REAL FINDING IS NOT ABOUT TILING.** One document type costs
+**~700 ms** per render and the other **~9 ms** — **a spread of nearly
+three orders of magnitude on the same code path, with no branch
+distinguishing them.** Any strategy tuned for one is **mistuned** for the
+other. **That, not the tile penalty, is the argument for the display-list
+handle** (`Pass 75.0` below) rather than for any particular render
+granularity. The requesting session's framing; adopted in substance
+because it is better than the one it replaced.
+
+#### The one-document caveat is DISCHARGED, not deleted
+
+`docs/render-region-measurements.md`'s *"Honest limits"* section now
+carries the original caveat **struck through with its full text kept**,
+marked **discharged**, because **a caveat that turned out to be correct
+is evidence about how much to trust the next one.** The original read:
+*"A dense CAD sheet is the worst case for interpretation cost and the
+best case for the argument above. A text-heavy office page would show a
+much lower floor and a relatively larger fill share; the 'do not tile'
+conclusion weakens as the floor falls."* **That is exactly what the
+second measurement found.** Deleting it would have removed the only
+record that the project's own hedging was calibrated.
+
+The **remaining** limits are undischarged and stay: one machine,
+single-threaded (`pdfce-render` uses no `rayon`; **N workers duplicate
+the floor rather than dividing it**), `--release` only, one run per case,
+and the `scale 8` row being faster than `scale 2` is **run noise, stated
+as such**.
+
+#### Corrections applied to the ledger in this same filing
+
+`de089f6` corrected two files in the working tree. **Two more carried the
+same wrong label and are corrected here**, in place, marked rather than
+silently rewritten (append-only discipline):
+
+| document | site | disposition |
+|---|---|---|
+| `docs/ROADMAP.md` | `Pass 74.0` *Shipped*, *"Measured on the operator's own A1 benchmark drawing"* | corrected inline, marked |
+| `docs/ROADMAP.md` | *Backlog*, the display-list entry, *"Measured at `2fe6216` on the operator's A1 benchmark drawing"* | corrected inline, marked, **and PROMOTED** — see `Pass 75.0` |
+| `docs/ARCHITECTURE.md` §12 decision `060` | the measurement table's caption, *"(A1 landscape, 148,517 paints · 24,128 clip ops …)"* | corrected inline, marked |
+
+**Deliberately NOT changed**, because they are correct: `ROADMAP.md`'s
+generic sheet-ceiling table (*"A1 landscape · 2384 pt · 3.4×"*), the
+sentence *"Reaching 6.9× on A1 would cost 4 GiB per open page"* (a claim
+about a **real** A1, and true), and `ARCHITECTURE.md`'s *"9.7× on A4,
+6.9× on A3, 3.4× on A1, 2.4× on A0"*. **Four sites said A1; two were
+about the measured document and wrong, two were about a real A1 and
+right.** A blanket find-and-replace would have broken the correct half —
+which is the reason this table exists.
+
+#### What was minted, and what deliberately was not
+
+| ledger | before | after | note |
+|---|---|---|---|
+| **Pass families** | ceiling **74** | **75** — **`Pass 75.0` MINTED** | see *Next up*. **The dispatch said the ceiling was 75 "after `Pass 75.0`"; it was not** — `tools/check-ledger-numbers.py` reports highest ID `74.0`, and `Pass 74.0`'s own entry says *"the next free family number is 75"*. Re-measured, not relayed. |
+| **standing rules** | `R192` minted; `R193`, `R194` **claimed** | unchanged | **no rule minted.** `R182` gains a dated **instance note** — an existing rule already covers the failure. **Next genuinely free is `R195`**, and `tools/check-ledger-numbers.py` still prints `R193`. |
+| **decisions** | `061` | unchanged | **no decision minted.** `Pass 75.0` schedules work; it does not settle an architectural question. Decision `060` already records the display list as *"the next investment, deliberately NOT BUILT"* — this filing moves it from Backlog to a Pass, which is a roadmap act, not a new decision. |
+| **operator questions** | ceiling `(bn)` | unchanged | **none added.** Nothing here needs Ken's ruling. |
+| **filings** | 144 | **145** | this one. |
+
+#### `FEATURES.md` — no checkbox moved, and one figure gained its qualifier
+
+**No row's `core`/`cli`/`gui`/`Acrobat` box changed, and that is the
+correct answer**: `de089f6` shipped a documentation correction, and
+`Pass 75.0` is **scheduled, not built**. Stated explicitly because a
+filing that is silent about `FEATURES.md` is indistinguishable from one
+that forgot it.
+
+**Two edits were still owed**, both required by the file's own contract:
+
+1. **The region row's figure gained its qualifier.** It read *"~99% of
+   the cost is page interpretation, so tiling is a 9× regression"* —
+   **unqualified, and as of this commit that is a property of dense CAD
+   sheets, not of the feature.** On a text-heavy page it is ~36 % and
+   ~1.9×. **Hard rule 10(b): the qualifier goes in the LABEL, because the
+   label is what gets quoted** — and this row is the shortest, most
+   quotable statement of that figure anywhere in the repo.
+2. **A *Planned* row for `Pass 75.0`**, all boxes unticked. A Pass filed
+   with no features row is how the two documents start to diverge.
+
+#### Graduated to the RAGs this filing
+
+- `D:\dev\rag\rust\a_single_input_benchmark_measures_the_input_class_not_the_code_path.md`
+  — **700 ms vs 9 ms on one unbranched code path.** Ecosystem-wide
+  methodology, not PDF-specific.
+- `C:\personal_rag\pdf\lesson_20260813_page_size_from_mediabox_not_title_block.md`
+  — the A-series in points, why a CAD title block is not evidence of
+  sheet size, and the file-identity-by-byte-count check that proved the
+  prior lesson was about the same document.
+
+#### Provenance — this is the third exchange through the `pdfceGUI` channel
+
+Inbound `2026-08-13-reusable-parsed-handle-request.md`, outbound
+`2026-08-13-reusable-parsed-handle-reply.md`, both in
+`D:\Dev\FeatureRequests\pdfce_FeatureRequests\archive\`, indexed in that
+folder's `INDEX.md`. **`open/` is empty as of this filing** (`ls`), which
+by that channel's own convention means **nothing is owed** to the other
+project.
+
+**The channel earned its keep in a direction nobody designed it for.**
+It was instituted so a consumer could ask for capability. This time it
+carried **a correction back up into the producer's own published record**
+— and the correction was one the producer's own tooling and RAG could
+have made at any point in six days.
+
+---
+
 ### ★ Pass 74.0 — `2fe6216` — **`render_page_region`**, a NEW Pass family minted in the commit — and the finding is not the feature: **`MAX_PIXMAP_EDGE`'s doc comment justified its number with *"beyond any plausible viewing zoom"*, which is a PREDICTION ABOUT USE, not a fact about the format — and the use changed.** **The FIRST request through the `pdfceGUI` channel to be answered and CLOSED.** **`FEATURES.md`: one new row, `core [x] · cli [ ] · gui [ ]`** — filed 2026-08-13 (hundred-and-forty-second filing)
 
 **Full hash: `2fe6216a6b088fc533301afac75c7913898b3b2d`**, read with
@@ -205,10 +455,14 @@ while looking entirely plausible.
 
 #### ★★ THE MEASUREMENT, WHICH CHANGES WHAT THE FEATURE IS FOR
 
-Measured on the operator's own A1 benchmark drawing
+Measured on the operator's own ~~A1~~ **A3** benchmark drawing
 (`D:\Dev\temp\pdfce\ncored-benchmark-cad-drawing.pdf`, 1190.55 × 841.89
 pt, 5.6 MB, **148,517 paints · 24,128 clip ops**), release build, one run
-per case. Full table and method: `docs/render-region-measurements.md`.
+per case. **★ CORRECTED 2026-08-13 (hundred-and-forty-fifth filing,
+`de089f6`): the drawing is A3 landscape, not A1** — and the `MediaBox`
+that proves it is **printed four words later in this same parenthesis**.
+No timing figure below is affected; only the sheet label was wrong. Full
+record at the top of *Shipped*. Full table and method: `docs/render-region-measurements.md`.
 
 | case | pixels | time | **µs per 1,000 px above the floor** |
 |---|---:|---:|---:|
@@ -43201,6 +43455,177 @@ fixed in that finding's shape rather than patched per-site:
 **Terminology (rule 15):** nothing here touches **ce dimensions** or
 **pdf dimensions**.
 
+### ★ Pass 75.0 — **THE REUSABLE PARSED HANDLE (display list) in `pdfce-render`** — a parsed page representation a shell **holds across frames** and replays against N regions, so the second and subsequent renders of an unchanged page cost roughly **FILL** rather than **INTERPRETATION** — filed 2026-08-13 (hundred-and-forty-fifth filing) — **UNSTARTED · SCHEDULED, NOT URGENT** (the requester says nothing is blocked this week)
+
+**A NEW Pass family.** Ceiling was **74** (`Pass 74.0`); this filing mints
+**`Pass 75.0`** and moves the ceiling **74 → 75**. **Next free family
+number is 76.** *(Measured with `tools/check-ledger-numbers.py`, which
+reported highest ID `74.0` — the dispatch's stated ceiling of 75 was
+wrong and is not carried forward.)*
+
+**Promoted, not invented.** The *Backlog* entry
+*"A DISPLAY-LIST CACHE IN `pdfce-render`"* (hundred-and-forty-second
+filing) ended with an explicit condition: **"promote it the moment a
+shell's zoom loop depends on the second render being fast."** The
+`pdfceGUI` session has now said, in writing, that its stage **S6** does.
+**The trigger was written down before it fired and was honoured when it
+did** — that is worth naming, because most conditional Backlog entries
+are never re-read.
+
+#### Why this is a REGRESSION RISK, not an optimisation — the requester's argument, kept in substance
+
+This is the sentence that makes it a scheduled Pass rather than a
+Backlog wish, and it came from the consumer, not from here:
+
+> Today's shell **renders the whole page once and pans/zooms over the
+> texture smoothly, and the operator has said explicitly that this feels
+> better than the tiled competitor.** If S6 switches to per-viewport
+> regions to gain the zoom range, it **loses that smoothness** — unless
+> the second and subsequent renders of a page are cheap.
+
+So the trade S6 faces without a handle is **zoom range bought with
+smoothness**, on the one axis the operator has already expressed a
+preference about. **A region is a viewport; panning changes the region;
+changing the region re-interprets the page** — ~0.7 s per pan gesture on
+the CAD sheet, on a document that currently pans for free by scrolling an
+existing texture. The handle is what turns region rendering from
+*"correct but sluggish"* into the thing that makes deep zoom usable.
+
+#### The evidence — ALREADY MEASURED. Do not re-derive it.
+
+From `docs/render-region-measurements.md` (`examples/region_bench.rs`,
+release build, one run per case), on
+`D:\Dev\temp\pdfce\ncored-benchmark-cad-drawing.pdf` — **A3 landscape**,
+1190.55 × 841.89 pt, 148,517 paints · 24,128 clip ops:
+
+| case | pixels | time |
+|---|---:|---:|
+| **floor** — a 1 × 1 **point** region | **2** | **691 ms** |
+| region 400 × 300 pt, scale 1 | 120,701 | **699 ms** |
+| full page, scale 1 | 1,002,822 | 877 ms |
+
+**A 2-pixel render costs 691 ms; a 120,701-pixel render costs 699 ms.**
+**~99 % of the cost on this document is interpretation**, paid in full
+regardless of how few pixels come out. **Fill is ~0.18 µs per pixel**
+(0.186 ms per 1,000 px at 120,701 px; 0.182 at 4,011,288 — stable across
+a 33× change in pixel count). With a handle, repeat renders drop to
+**roughly fill cost: tens of milliseconds.**
+
+**And the second document is why the handle is the right answer rather
+than any render-granularity tweak:** `iso32000-2-preview.pdf` (text-heavy
+A4) has a **3.2 ms floor of an 8.97 ms full page (~36 %)** against
+**691 ms of 877 ms (~99 %)** on the CAD sheet. **One document type costs
+~700 ms per render and the other ~9 ms on the same unbranched code
+path** — any fixed strategy is mistuned for one of them. A handle makes
+the expensive case cheap **on the second render** without needing to know
+in advance which case it is holding.
+
+#### Requested shape — and one shape explicitly declined as less useful
+
+**Keyed on `(page, epoch)`.** The consumer already tracks a document
+`edit_epoch` and re-decomposes on `(page, epoch)`, so a handle keyed the
+same way **drops into their existing invalidation** with no new
+invalidation concept on either side.
+
+**NOT a batch call taking N regions.** Stated by the requester as
+*"strictly less useful"*: **their regions arrive one per frame as the
+operator moves, not in batches.** A batch API would be correct and
+unused — the shape of a shell's render loop, not a guess about it.
+
+*(Both are the consumer's stated preference for their own call site, not
+a `pdfce-render` API decision taken here. The public surface still gets
+the `rust-style-guide-and-api-guidelines.md` pass when the Pass is
+built — including whether the handle borrows or owns, and what happens
+to a handle held across a document mutation.)*
+
+#### Acceptance criteria
+
+1. **The measurement IS the criterion, so it cannot ship while still
+   slow.** Second-and-subsequent region renders of an **unchanged** page
+   on the A3 CAD benchmark fall from **~700 ms to approximately fill
+   cost — tens of ms** — verified with the **committed**
+   `crates/pdfce-render/examples/region_bench.rs`, extended with a
+   repeat-render case. **The first render may cost what it costs.**
+2. **Invalidation is keyed on `(page, epoch)`** and a stale handle is
+   **impossible to use silently** — either the type makes it
+   unrepresentable, or the call refuses by name. A display list that
+   renders a document's *previous* state while reporting success is
+   strictly worse than no cache.
+3. **Byte-identical output.** A region rendered *through* a handle is
+   byte-identical to the same region rendered without one, at the same
+   scale — the differential-test discipline `Pass 74.0` established
+   (`crates/pdfce-render/tests/region_matches_full_page.rs`), extended
+   rather than duplicated.
+4. **Memory is bounded and stated.** A held display list for a
+   148,517-paint sheet has a size; it is **measured and documented**, not
+   assumed small. A shell holding one per page needs that number.
+5. **The text-page case does not regress.** On `iso32000-2-preview.pdf`
+   (~9 ms full page) the handle must not make the **first** render
+   materially slower — a build cost that exceeds the saving is a loss on
+   every document where interpretation is already cheap, which is most of
+   them.
+6. **GUI-core separation intact** — `cargo tree -p pdfce-render` shows no
+   GUI/windowing dependency (rule 2). **`cargo fmt --all`,
+   `cargo clippy --all-targets -- -D warnings` clean** (rule 10).
+7. **`pdfce-cli` note (rule 11):** a display list is an **in-process,
+   across-frames** object. A one-shot CLI invocation has nothing to hold
+   it across, so the default *"every Pass ships its CLI subcommand"*
+   likely resolves to **`—` (not applicable)** rather than to a gap —
+   *unless* a multi-page or multi-region batch verb can demonstrably use
+   one within a single run. **Decide it in the Pass, with a reason
+   written down**; do not leave `FEATURES.md` guessing between `—` and
+   `[ ]`, which is the one distinction that file's legend exists to
+   protect.
+
+#### Priority — scheduled, and deliberately not urgent
+
+The requester's own words: **"Not urgent this week — the shell has S5 and
+the rest of S4 to build first, and nothing is blocked today. But S6's
+design assumes it, and I would rather that assumption be a scheduled Pass
+than a hope."**
+
+**Filed under *Next up* rather than left in *Backlog*, and here is the
+reasoning** — the choice was live and is recorded so it can be argued
+with:
+
+- *Backlog* in this file means **not yet scoped to a Pass**. This is
+  scoped: shape, key, acceptance criteria and the measurement that gates
+  it are all fixed. Leaving it in Backlog would misdescribe its state.
+- **The Backlog entry's own promotion condition has fired by name.**
+  Leaving it there after that would make the condition decorative.
+- **"Not urgent" is an ordering statement, not a status statement.**
+  *Next up* already holds unstarted Passes of mixed priority
+  (`Pass 72.0`/`73.0` are marked HIGH PRIORITY; this one is not, and sits
+  below them deliberately).
+- **A scheduled assumption is cheaper than a hoped-for one**, which is
+  precisely what the requester asked for.
+
+**If S6's timeline moves up, the requester says so through the channel
+and this gets re-prioritised** — stated in the outbound reply as a
+cheaper signal than discovering it late.
+
+#### Two consumer confirmations recorded here so they are not re-litigated
+
+- **`MAX_ZOOM` will be set from PERFORMANCE** — not from `f32`
+  precision, not from `MAX_PIXMAP_EDGE` — **and documented with that
+  reasoning rather than as a round figure.** This closes the loop on
+  `Pass 74.0`'s addendum and on decision `060`'s *"what is NOT decided
+  here, and is owed"*: the measured `zoom_ceiling` harness showed
+  sub-pixel accuracy to **~5,000×**, three orders of magnitude past any
+  plausible viewing zoom, so **numerics are not the binding
+  constraint** — the ~0.7–1.1 s per-render floor is. Setting the limit
+  from `f32` would repeat *the same class of error*
+  `MAX_PIXMAP_EDGE`'s original justification made.
+- **The consumer will NOT drive N region calls across cores**, having
+  understood that **without a display list, N workers each pay the full
+  interpretation floor** — N× the work for ~1× the throughput. Recorded
+  in their own roadmap so a future contributor does not try it. **This
+  Pass is also what makes that parallelism worth revisiting**, since
+  region fills are embarrassingly parallel once a display list exists.
+
+**Terminology (rule 15):** nothing here touches **ce dimensions** or
+**pdf dimensions**.
+
 ### Pass 69.0 — ★★ OPERATOR REQUEST 2026-08-12 — **ce-dimension STYLE + TOLERANCE, with a group default and a per-ce-dimension override checkbox, at SolidWorks option breadth** — filed 2026-08-12 (hundred-and-twenty-fifth filing) — **STATUS 2026-08-13: SPLIT AND PARTLY SHIPPED. The heading's original "UNSTARTED" is now FALSE and is struck by the banner below.**
 
 > **★ AMENDMENT, 2026-08-13 (hundred-and-thirty-fourth filing), `d5431a4`
@@ -49808,8 +50233,18 @@ nothing gets forgotten, not as a commitment to build in this order.
   that other decorations existed** — which is the whole of `R192`.
 - **★★ PERFORMANCE, filed 2026-08-13 (hundred-and-forty-second filing) —
   A DISPLAY-LIST CACHE IN `pdfce-render`, AND IT ARRIVES WITH ITS
-  EVIDENCE ALREADY MEASURED.** **Measured at `2fe6216`** on the
-  operator's A1 benchmark drawing (148,517 paints · 24,128 clip ops,
+  EVIDENCE ALREADY MEASURED.** **★★ PROMOTED 2026-08-13
+  (hundred-and-forty-fifth filing) — THIS ENTRY'S OWN STATED TRIGGER
+  FIRED. It read *"promote it the moment a shell's zoom loop depends on
+  the second render being fast"*, and the `pdfceGUI` session then said
+  in writing that its stage S6 does. Now `Pass 75.0` under *Next up*;
+  this entry is retained in place, unedited except for this banner and
+  the sheet-label correction below, as the record of the pre-promotion
+  scoping and of a trigger that was written down and then actually
+  honoured.** **Measured at `2fe6216`** on the
+  operator's ~~A1~~ **A3** benchmark drawing (**★ CORRECTED 2026-08-13,
+  hundred-and-forty-fifth filing** — A3 landscape, 1190.55 × 841.89 pt;
+  no timing figure in this entry is affected) (148,517 paints · 24,128 clip ops,
   release build, `docs/render-region-measurements.md`): **a 2-pixel
   render costs 691 ms and a 120,701-pixel render costs 699 ms**, so
   **~99 % of the cost is resolution- and area-independent** — it is
@@ -61913,6 +62348,33 @@ and
   across all four files) in the very next commit, same session. Full
   record: `ROADMAP.md`'s `6798e8b`/`e8de47c` *Shipped* entry (seventy-first
   filing), Part 2. **Ceiling moves `R181` → `R182`; next free `R183`.**
+
+  **★ FURTHER INSTANCE, 2026-08-13 (hundred-and-forty-fifth filing,
+  `de089f6`) — and it is the widest-blast-radius one yet, because what
+  went unchecked was not a fix but a FACT that was then PUBLISHED.**
+  `Pass 74.0` described the benchmark drawing as **A1 landscape**,
+  relaying the requesting project's own label without measuring it, and
+  the wrong size went into `crates/pdfce-render/src/lib.rs`,
+  `docs/render-region-measurements.md`, `ROADMAP.md`'s *Shipped* and
+  *Backlog* sections, and `ARCHITECTURE.md` §12 decision `060`. **The
+  correct size — `1191 × 842 pt (A3 landscape)` — had been sitting in
+  `C:\personal_rag\pdf\lesson_20260807_cad_sheet_clips_per_element_24142_clips_one_page_w_star_dominant.md`
+  since 2026-08-07**, in a lesson about **the same file, identified by
+  the same byte count** (`5,724,699`, confirmed against
+  `ls -la D:/Dev/temp/pdfce/`). **The rule's practical form names this
+  exact tree for this exact class** — *"a PDF-producer-behavior surprise
+  greps `C:\personal_rag\pdf\`"* — and a page-size assertion about a CAD
+  sheet is squarely one. **The instance is instructive because the
+  original rule was framed around fixes** (*grep before writing the FIX*)
+  **and the thing that needed grepping here was a one-line factual
+  claim** — cheaper to check than any fix, published further than any
+  fix, and corrected only when the downstream consumer noticed a status
+  bar reading **147 %** for a fit-page zoom that was impossible for the
+  sheet size everyone believed in. **No new rule minted:** `R182` covers
+  it as written; widening it to *"any claim, not only a fix"* is left as
+  a candidate for a future filing with a second instance of that
+  narrower shape. Full record: top of *Shipped* (hundred-and-forty-fifth
+  filing).
 
 - **R183 — A verification filter that matches only your expectation
   cannot tell you your input was wrong; include the harness's own

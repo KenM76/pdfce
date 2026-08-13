@@ -18,6 +18,8 @@ is stale until the next filing.
 `[x]` built · `[ ]` **a gap** · `—` **not applicable**, a shape mismatch
 rather than a gap (e.g. "pan the canvas" has no batch form) · `◐` partial.
 Confusing `[ ]` with `—` is the mistake this legend exists to prevent.
+In a *Planned* row only, `?` means **which of `[ ]` and `—` this is has
+not been decided yet** — never "probably built".
 
 **core** = `pdfce-core`/`pdfce-render` (headless) · **cli** =
 `pdfce-cli` · **gui** = `pdfce-gui`.
@@ -143,7 +145,7 @@ provisional; re-verify before any acceptance criterion leans on them.
 | core | cli | gui | Acrobat | Feature |
 |:----:|:---:|:---:|:-------:|---------|
 | [x] | [x] | [x] | [x] | Rasterize vector paths, text and images; `render-page` writes a PNG. |
-| [x] | [ ] | [ ] | ? | Rasterize an arbitrary page **region**, so magnification is bounded by viewport size instead of page size. **No shell calls it.** ~99% of the cost is page interpretation, so tiling is a 9× regression, not an optimisation. |
+| [x] | [ ] | [ ] | ? | Rasterize an arbitrary page **region**, so magnification is bounded by viewport size instead of page size. **No shell calls it.** Cost is dominated by page interpretation, not pixels — **~99% on a dense CAD sheet (691 ms floor), ~36% on a text page (3.2 ms)** — so never tile for speed: the 3×3 penalty is 9× on the first and 1.9× on the second. Every render re-interprets the page; nothing is cached between calls. |
 | [x] | — | [x] | ? | Off-thread cancellable rendering; a large CAD drawing stays interactive. |
 | [x] | — | [x] | [x] | Image codecs — DCT/JPEG, LZW, RunLength, CCITT Fax, JBIG2, JPEG 2000. |
 | [x] | [x] | — | — | JPEG write path. |
@@ -206,6 +208,7 @@ the model or verb exists and only the named shell is missing. The
 |:----:|:---:|:---:|:-------:|---------|
 | [ ] | [ ] | ◐ | ? | **Redaction absence proof in `pdfce-core`** — the three-way verdict (decoded-stream survivor ⇒ refuse; raw-bytes-only ⇒ disclose and require acknowledgement; found nowhere ⇒ *verified*) so every shell gets it. The GUI has its own copy today; core and the CLI have none. |
 | [x] | [x] | [x] | [x] | **Encryption** — RC4 (40–128 bit), AES-128 (`/AESV2`) and AES-256 at `/R` 5 (`/AESV3`) decrypt read-only, including the empty-user-password case every other reader opens silently; CLI (`--open-password`/`--open-password-file`) and GUI (inline canvas prompt) can supply a password for any of the three. All eight Table 22 permission bits shown read-only in Properties > Security, captioned declared-by-the-author and unenforced; a `/Perms` mismatch (possible only at `/R` 5) is reported, never refused on. `/R` 6 is still refused by name — its Algorithm 2.B is unsourced. **Writing an encrypted document is still unimplemented in every configuration.** |
+| [ ] | ? | [ ] | ? | **Reusable parsed page handle (display list)** — a shell holds it across frames and replays it against one region per frame, so repeat renders of an unchanged page cost fill (tens of ms) instead of interpretation (~700 ms on a dense CAD sheet). Keyed on `(page, edit epoch)`. The CLI column is `?` on purpose: a one-shot invocation may have nothing to hold it across, and whether that is `—` or `[ ]` is decided in the Pass. |
 | [ ] | [ ] | [ ] | ◐ | Re-subset an embedded font down to only the glyphs used — no removal, no visual change, works even where unembedding is refused. |
 | [ ] | [ ] | [ ] | ◐ | Convert text to vector paths — the only one of the font operations that works where unembedding is refused; irreversible, and the text stops being text. |
 | [ ] | [ ] | [ ] | **[ ]** | Replace one font with another across a document, remapping encodings and widths — Acrobat has no equivalent. |

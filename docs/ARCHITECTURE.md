@@ -20402,9 +20402,24 @@ would cost 4 GiB per open page.**
 | full page, scale 1 | 1,002,822 | 877 ms |
 | full page, scale 2 | 4,011,288 | 1,422 ms |
 
-*(A1 landscape, 148,517 paints · 24,128 clip ops, release build, one run
-per case. `docs/render-region-measurements.md`; reproducible via the
-committed `crates/pdfce-render/examples/region_bench.rs`.)*
+*(~~A1~~ **A3 landscape**, 148,517 paints · 24,128 clip ops, release
+build, one run per case. `docs/render-region-measurements.md`;
+reproducible via the committed
+`crates/pdfce-render/examples/region_bench.rs`.)*
+
+> **★ CORRECTED 2026-08-13 (hundred-and-forty-fifth filing, `de089f6`).**
+> The measured document —
+> `D:\Dev\temp\pdfce\ncored-benchmark-cad-drawing.pdf` — is **A3
+> landscape (1190.55 × 841.89 pt)**, not A1. **No timing figure in this
+> decision is affected**; they were measured on the file, not derived
+> from its assumed size. **Its own whole-page zoom ceiling is therefore
+> 13.8× at 1× DPR and 6.9× at 2×**, not 6.9 / 3.4. **Clause 1's generic
+> table above — *"9.7× on A4, 6.9× on A3, 3.4× on A1, 2.4× on A0"* — and
+> the sentence *"6.9× on A1 would cost 4 GiB per open page"* are about a
+> **real** A1 and are **correct as written**; only the caption naming the
+> measured document was wrong. Found by the `pdfceGUI` session from a
+> status bar reading 147 % for fit-page, impossible for an A1 sheet in
+> that window. Full record: `ROADMAP.md`, top of *Shipped*.
 
 **~99 % of the cost is resolution- and area-independent** — content-stream
 interpretation and path construction, paid in full regardless of how few
@@ -20458,6 +20473,45 @@ tile" conclusion and a text-heavy office page would weaken it (lower
 floor, larger relative fill share). **One machine, single-threaded,
 `--release` only, one run per case**; the `scale 8` row being faster than
 `scale 2` is **run noise and is labelled as such** in the source table.
+
+> **★★ AMENDMENT 2026-08-13 (hundred-and-forty-fifth filing, `de089f6`)
+> — the one-document caveat is DISCHARGED, and it was RIGHT.** The
+> requesting session re-ran the harness on `iso32000-2-preview.pdf`
+> (text-heavy A4, 689 KB):
+>
+> | | dense CAD (A3) | text-heavy (A4) |
+> |---|---:|---:|
+> | interpretation floor | **691 ms** | **3.2 ms** |
+> | full page, scale 1 | 877 ms (1,002,822 px) | 8.97 ms (501,832 px) |
+> | floor as share of full page | **~99 %** | **~36 %** |
+> | 3 × 3 tile penalty | **~9×** (6.2 s vs 0.70 s) | **~1.9×** (55 ms vs 29 ms) |
+>
+> **Clause 2 survives on both documents; only its magnitude is
+> document-dependent.** *Never tile for speed* holds everywhere; *tiling
+> is a catastrophe* holds only where interpretation dominates — at
+> **29 ms vs 55 ms** nothing about interactivity is at stake.
+>
+> **★ The finding this produces is bigger than the caveat it closes:**
+> one document type costs **~700 ms** per render and the other **~9 ms**
+> — **three orders of magnitude on the same unbranched code path.** Any
+> strategy tuned for one is mistuned for the other. **That, not the tile
+> penalty, is the argument for clause 3's display list**, which is why
+> the handle beats any choice of render granularity.
+>
+> The caveat is kept **struck rather than deleted** in
+> `docs/render-region-measurements.md`, because a caveat that turned out
+> to be correct is evidence about how much to trust the next one. The
+> remaining limits (one machine, single-threaded, `--release`, one run
+> per case) are **undischarged and still stand**.
+>
+> **Clause 3 has moved from Backlog to a Pass.** The display list is now
+> **`Pass 75.0`**, scheduled under `ROADMAP.md`'s *Next up* — promoted
+> because the Backlog entry's own written trigger (*"the moment a shell's
+> zoom loop depends on the second render being fast"*) fired: the
+> `pdfceGUI` session confirmed its stage S6 depends on it. **Still not
+> built, and not urgent** — the requester states nothing is blocked.
+> **Decision `060` is not superseded by that**; scheduling work is a
+> roadmap act, and no clause here changes.
 
 #### Provenance — this came from outside the repo
 
