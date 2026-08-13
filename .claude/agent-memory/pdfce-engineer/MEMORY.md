@@ -28,3 +28,4 @@
 - [Rungs: click-out commits, and the three-rung ladder](project_rung_ladder_state.md) — 2026-08-05: Passes 34.0/36.0/36.1/36.2 shipped; what commits implicitly and what still doesn't
 - [Screenshot when the question is visual](feedback_screenshot_when_the_question_is_visual.md) — `drawn=true` in a trace hid a 680px coordinate-space bug; use gui-shot.ps1 for "I can't see X"
 - [Design system + the Acrobat-GUI rule conflict](project_design_system_and_rule12_conflict.md) — UI_PREFERENCES.md is at the REPO ROOT not docs/ (twice misread as missing); chrome theme-aware vs overlay theme-INVARIANT; handoff vs rule 12
+- [GUI work paused](project_gui_work_paused.md) — Ken, 2026-08-13: no pdfce-gui work until he says so; core/CLI/docs continue, ship gui [ ] honestly
