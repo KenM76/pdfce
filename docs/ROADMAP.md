@@ -96,6 +96,251 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★★★ `ed05033` — `Pass 71.0` slice 2: **the OCR sandwich writer exists, and slice 1's module header had been DESCRIBING IT IN THE PRESENT TENSE FOR A DAY WHILE IT DID NOT EXIST** — `pdfce_core::ocr::layer`, additive, invisible, byte-prefix-preserving — **`FEATURES.md` DELIBERATELY UNCHANGED: OCR stays core [ ] · cli [ ] · gui [ ]** — filed 2026-08-13 (hundred-and-forty-first filing)
+
+**Full hash: `ed050337328878b598f71f9be6834647f1e59cda`**, read with
+`git rev-parse ed05033` in this dispatch — not relayed.
+
+**This is NOT a new Pass.** It is **slice 2 of the existing `Pass 71.0`**
+(OCR), whose *Next up* entry stays where it is because **the Pass is
+still incomplete**: slice 3 is the engine binding. Pass-family ceiling is
+unchanged at **73**; no Pass ID was minted.
+
+**No decision record was minted either, and that is a judgement, not an
+omission** — see *"Why no decision 060"* below.
+
+#### The finding, which is the reason this entry leads with it rather than with the feature
+
+**`Pass 71.0` slice 1 (`9f2af1d`) was filed as "the engine-independent
+text-layer substrate", and its module header said it took *"words with
+page positions and writes them into a PDF as an invisible, selectable
+text layer"*. IT DID NOT WRITE ANYTHING.**
+
+A workspace-wide grep for `OcrPage` / `RecognizedWord` /
+`words_to_page_space`, **excluding the module itself**, returned **zero
+hits** — **no writer, and no caller of anything**. The types were an
+island.
+
+**This is `R151`'s shape at the DOCUMENTATION layer rather than the
+CHECKBOX layer**, and the distinction is the whole finding. `R151` is
+usually caught by the boxes: a `core [x]` with no shell behind it. Here
+the boxes were **correct** — slice 1 filed OCR at `core [ ] cli [ ] gui
+[ ]` and said so explicitly, refusing to round up. **The false claim was
+in the prose**, in the present tense, in a doc comment, and the boxes
+being right is exactly what made it invisible: a reader checking the
+ledger found nothing wrong.
+
+**It survived a filing that called the slice shipped** — the
+hundred-and-twenty-sixth, which quoted that very sentence approvingly.
+The engineer recorded it **in the new module's header** rather than
+quietly deleting it, which is the correct disposal: the fix removes the
+defect, the record removes the *class*.
+
+> **Amendment filed against slice 1's own Shipped record** in this same
+> filing — see the hundred-and-twenty-sixth filing's §4, which now
+> carries a dated footer. **The original text is not rewritten.**
+
+#### What is now real
+
+**New module `crates/pdfce-core/src/ocr/layer.rs` — 904 lines**, of the
+commit's **1,401 insertions over 5 files**; **491 of those lines are
+test files** (`crates/pdfce-core/tests/ocr_layer.rs` 316 +
+`crates/pdfce-render/tests/ocr_layer_is_invisible.rs` 175), i.e.
+**35% of the diff is test code**.
+
+| item | shape |
+|---|---|
+| `build_layer_content` | **pure** — words in, content stream + counts out. No document, no I/O. |
+| `add_ocr_layer` | the **incremental save** — one appended content stream, one Standard-14 font dict, one rewritten page dict, **nothing else touched**. |
+| `OcrLayerOptions` | `new()` / `with_font(Std14)` |
+| `OcrLayerReport` | `words_written`, `words_skipped`, `words_substituted`, `words_scale_clamped`, `mean_confidence: Option<f32>`, **`confidence_available: bool`**, `content_object`, `font_object`, and `disclosures() -> Vec<String>` |
+| `OcrLayerError` / `OcrLayerOutcome` | named refusals; `{ bytes, report }` |
+| consts | `ASCENT_FRAC` **0.718**, `DESCENT_FRAC` **0.207** (Helvetica's real AFM metrics), `MIN_TZ` **1.0**, `MAX_TZ` **10 000.0** |
+
+**Sourced, not recalled** (project rule 1): **ISO 32000-1 §9.3.6 Table
+106 mode 3** — *"neither fill nor stroke text (invisible)"* — which the
+spec corpus (`iso32000__s__9.3.md`) names **as the OCR mechanism, by
+name**. **`Tz` is §9.3.4, and it is a PERCENTAGE while `Th` is the
+ratio** — the corpus flags that confusion as a **100× error**, and it
+duly occurred (below).
+
+##### The `q … Q` wrapper is not tidiness — it is the difference between an OCR run and a data-loss report
+
+`Tf`, `Tr` and `Tz` are **graphics state**; only `Tm`/`Tlm` are reset by
+`BT`. A `/Contents` **array** is defined as the concatenation of its
+members. **An unwrapped layer therefore leaves `3 Tr` set for every
+subsequent stream in the page**, which an operator reads as **"running
+OCR deleted my document's text"**. §8.4.2 requires the balance; the
+consequence of skipping it is the part worth carrying.
+
+##### Two axes, two different mechanisms — the geometry claim
+
+| axis | fitted by | why |
+|---|---|---|
+| vertical | the **font size**, against `ASCENT_FRAC` + `DESCENT_FRAC` | size is the only vertical control; the glyph box's top lands on the reported top **by construction** |
+| horizontal | **`Tz`** (§9.3.4) | the size is **already spent** on the vertical fit, so width has to come from somewhere else |
+
+**One `BT…ET` for the whole page**, because `Tm` is **absolute**: every
+word sets its own text matrix outright, so stream order affects
+extraction order and nothing else. **This also happens to sidestep the
+poppler `Tz`-across-`BT` defect** recorded at
+`C:\personal_rag\pdf\lesson_20260812_ocr_text_layer_bt_et_per_line_poppler_tz.md`
+— that lesson closed with *"as of `9f2af1d` pdfce has not chosen its
+emission granularity"*, and **it has now**; the lesson carries a dated
+footer as of this filing.
+
+##### The deliberate divergence from `add_text`, and why it is not an `R71` violation
+
+**`add_text` REFUSES BY NAME (`R71`) on a glyph the face lacks. This
+substitutes and discloses.** The reason is a scope difference, not a
+softening:
+
+- OCR is **bulk machine text the operator never typed and cannot
+  proofread**. Refusing a whole page's text layer over one character
+  makes the feature unusable **on exactly the documents that need it**.
+- Refusing would hold a **GUESS** to a **stricter** standard than a
+  **deliberate keystroke** — backwards.
+- **It is disclosed, not silent:** `words_substituted` is counted and
+  reported, and a **high count is how a caller detects it has hit the
+  named limit** — a Standard-14 WinAnsi face cannot represent CJK,
+  Cyrillic, Greek or Arabic.
+
+**`R71` gains a dated scoping footer in *Standing rules* this filing** so
+a future session does not read `ocr::layer` as a violation of it. **No
+new rule was minted** — `R192` remains claimed by the unruled proposal.
+
+##### Decision 059 is one commit old and is what this is shaped by
+
+The operator, 2026-08-13: *"I want OCRed stuff to look normal when the
+command is executed too."* **Mode 3 is not a compromise here — it is the
+whole point.** The page renders **pixel-identically** because nothing
+visible was added. **There is no low-confidence highlighting baked into
+the page and there must never be**; the disclosure is `OcrLayerReport`,
+**off-canvas**, exactly as decision 059 §3 requires.
+
+**`confidence_available == false` is stated as its own fact** rather than
+flattened into *"no low-confidence words found"* — the same asymmetry
+slice 1 tested for: **an engine that reports nothing must not look better
+than one that reports honestly.**
+
+#### The tests, and what the sabotage run CHANGED
+
+**3,667 → 3,688 tests, 0 failures** — **+21 across two crates**. The
+**pixel** test lives in **`pdfce-render`** because `pdfce-core` cannot
+rasterise and never will (GUI-core separation, §3) — and **bytes cannot
+answer *"does it look the same"***.
+
+**Two findings came out of RUNNING the sabotage check rather than
+assuming it:**
+
+1. **★★ THE FIRST VERSION OF THE GEOMETRY TEST COULD NOT SEE A BROKEN
+   `Tz` FIT — AND ITS OWN FAILURE MESSAGE NAMED THAT DEFECT.** It
+   asserted on `llx`/`lly` with a 6 pt tolerance chosen by eye, and said
+   *"a large `dx` is a broken `Tz` fit"*. Emitting `Tz` as the raw ratio
+   instead of the percentage — **the exact 100× confusion the corpus
+   flags** — left **`dx` at exactly 0.0000** and **the test PASSED**.
+   **`Tm` sets the origin correctly no matter how wrong the scaling is;
+   the error lives entirely in the EXTENT.** A width assertion was added
+   and **confirmed to fail at `dw` = 75.24 pt**. **An assertion on a
+   POSITION cannot see an error in a SIZE** — graduated to
+   `D:\dev\rag\rust\` this filing.
+2. **The measured `dy` is a constant 0.558 pt, and chasing it found that
+   BOTH SIDES ARE CORRECT.** `TextRun::bbox` is the **block model's** box
+   (nominal **0.75/0.25 em**, shared with the `Pass 15.x` reflow engine
+   so a run's box and a reflowed line's box agree); the layer fits
+   **Helvetica's real AFM metrics** (0.718/0.207). The gap is
+   **(0.25 − 0.207) × size = 0.043 × 13 pt = 0.559 pt**, against
+   **0.558 pt measured** — agreement to 0.001 pt, which is what makes it
+   a convention difference rather than a bug. Graduated to
+   `C:\personal_rag\pdf\` this filing.
+
+**Tolerances are now MEASURED, not eyeballed:** `dx` and `dw` < **0.01**,
+`dy` < **1.0** — tight enough that a baseline placed at the box bottom
+(`dy` **2.7**) and a y-flip (**hundreds**) both fail, **and both were
+seen to fail**.
+
+**Also seen to fail before being trusted:** `0 Tr` in place of `3 Tr`,
+which turns **279,312 of 7,755,264 raster bytes red = 3.60% of the
+page**.
+
+**`Rect::from_corners` NORMALISES its corners**, so a first-draft test
+case for an "inverted" box was **silently an ordinary one**. The
+defensive guard is now reached through a **struct literal**, which is the
+only way to exercise it.
+
+#### Gates and invariants — all measured at `ed05033`, all clean
+
+| gate | result |
+|---|---|
+| `cargo test` workspace | **3,688 pass / 0 fail** (+21 on 3,667) |
+| `cargo fmt --all --check` | clean |
+| `cargo clippy --workspace --all-targets -- -D warnings` | clean |
+| `tools/check-ledger-numbers.py` | clean |
+| `tools/check-fmt-excluded.py` | clean |
+| `tools/check-shipped-assets.py` | clean |
+| `tools/check-ui-strings.sh` | clean |
+| **GUI-core separation (§3)** — `cargo tree -p pdfce-core`, `-p pdfce-render` | **no `egui` / `eframe` / `winit` / `wgpu`** |
+| **Round-trip (rule 3)** | **the input file is a byte PREFIX of the output** — asserted by name in `the_original_bytes_are_a_prefix_of_the_output` |
+
+**The round-trip check is a prefix assertion, not a "looks similar"
+one**, which is the strongest form available under an incremental save
+and the reason it is worth naming: **the scan is never re-encoded**, so
+a document whose provenance an operator may have to defend comes back
+out with its image bytes untouched.
+
+#### ★ `FEATURES.md` IS UNCHANGED, AND THAT WAS DECIDED, NOT FORGOTTEN
+
+**OCR stays `core [ ] · cli [ ] · gui [ ]`.** **There is still no
+engine** — a caller must **supply** the recognised words, so **nothing is
+operator-reachable from any shell**.
+
+**Ticking `core` for a writer nobody can feed would claim a capability
+that cannot run** — `R151`'s shape, and **the same refusal slice 1
+already made, for the same reason**. The row's *sentence* was rewritten
+(the file's rule is replace-never-append) to say the writer now exists;
+**no box moved**.
+
+Recorded explicitly because `FEATURES.md`'s maintenance contract makes an
+**intentional** no-op and a **forgotten** one look identical afterwards.
+
+#### Why no decision 060
+
+Ledger at HEAD, measured by the engineer with
+`tools/check-ledger-numbers.py` **after** the hundred-and-fortieth filing
+landed: **filings 140 → next free 141** (used), **decisions 059 → next
+free 060** (**not** used), **rules R191 → next free R192** (**not**
+used — still claimed by the unruled proposal), **Pass-family ceiling 73**
+(unchanged).
+
+**Nothing architectural is otherwise unrecorded.** The three candidates
+were weighed and each already has a home:
+
+- **mode 3 / `q…Q` / two-axis geometry** — spec-governed mechanism, cited
+  in the module header and in this entry; a decision record would restate
+  a clause, not decide anything.
+- **substitute-and-disclose instead of refuse** — a **scoping** of `R71`,
+  filed as a dated footer **on `R71` itself**. Minting a decision beside
+  it would create two texts that can disagree, which is the failure this
+  project keeps paying for (the same reasoning the hundred-and-fortieth
+  filing used to decline an R-number).
+- **off-canvas disclosure, no in-page highlighting** — **already decided**
+  as **059**, one commit earlier. This is its first application, not a
+  new decision.
+
+**What was filed instead:** a **§4.1 sync entry (U)** in
+`ARCHITECTURE.md` for the new public surface — because the §4 body is the
+living truth and has run behind the shipped core surface before.
+
+#### What slice 3 is
+
+**The engine binding** — `ocrs` behind a Cargo feature, per
+`docs/ocr-engine-survey.md` and `NEXT_SESSION.md` §1. **Unblocked:** open
+operator question **`(bl)` was answered YES on 2026-08-13**. The
+obligations that answer did **not** discharge (pin + hash the exact
+artifact, hand-authored `PROVENANCE.md`, no clearance for an adaptation,
+publishing still an operator act) are carried in full on the `Pass 71.0`
+*Next up* entry and are unchanged by this slice.
+
 ### Pass 69.1 — `c057682` — the **ce-dimension TOLERANCE**: the TENTH and ELEVENTH properties of `Pass 69.0`'s cascade, not a second system — **SHIPPED IN PART: core [x] · cli [x] · gui [ ]** — filed 2026-08-13 (hundred-and-thirty-fifth filing)
 
 **★ READ THE STATUS LINE BEFORE THE CONTENT.** Same shape as
@@ -2345,6 +2590,32 @@ no implementation behind it. **`FEATURES.md` therefore keeps OCR at core
 `[ ]` · cli `[ ]` · gui `[ ]`** — **`R151`'s shape, refused deliberately**:
 ticking `core` for a trait with no implementation would claim a capability
 that cannot run.
+
+> **★★ [AMENDED 2026-08-13 — hundred-and-forty-first filing. THIS ENTRY'S
+> OWN SUMMARY LINE, AND THE MODULE HEADER IT QUOTES, CLAIMED A WRITE THAT
+> DID NOT EXIST.]**
+>
+> The heading above and its opening paragraph describe slice 1 as *"taking
+> recognised words with page positions and writing them into a PDF as an
+> invisible, selectable text layer"*, in the **present tense**, echoing
+> `crates/pdfce-core/src/ocr/mod.rs`'s own header. **`9f2af1d` wrote
+> nothing.** It shipped `RecognizedWord`, `OcrPage`, the `OcrEngine` trait,
+> the y-flip and model-dir resolution — **types with no writer and no
+> caller**. A workspace-wide grep for `OcrPage` / `RecognizedWord` /
+> `words_to_page_space`, **excluding the module itself, returned zero
+> hits.**
+>
+> **Nothing in the checkbox half of this entry was wrong** — OCR was filed
+> at `core [ ] cli [ ] gui [ ]` and the refusal to round up was explicit
+> and correct. **That is what made the prose claim invisible:** a reader
+> auditing the ledger found nothing to catch. **`R151`'s shape at the
+> documentation layer rather than the checkbox layer**, and it survived
+> this filing intact.
+>
+> **The writer is real as of `ed05033`** (`pdfce_core::ocr::layer`,
+> hundred-and-forty-first filing, top of *Shipped*). **This entry is not
+> rewritten** — the claim it made is the record. **`FEATURES.md` still
+> reads `core [ ] cli [ ] gui [ ]`, because there is still no engine.**
 
 ---
 
@@ -42747,7 +43018,37 @@ blocked by it.
 
 ---
 
-### Pass 71.0 — **OCR**, promoted from the Backlog bucket 2026-08-12 (hundred-and-twenty-sixth filing) on the operator's engine decision — **SLICE 1 SHIPPED (`9f2af1d`, the engine-independent text-layer substrate); NO ENGINE IS WIRED, so NOTHING IS OPERATOR-REACHABLE** — **★ NO LONGER BLOCKED ON AN OPERATOR DECISION as of 2026-08-13: `(bl)` IS ANSWERED YES**
+### Pass 71.0 — **OCR**, promoted from the Backlog bucket 2026-08-12 (hundred-and-twenty-sixth filing) on the operator's engine decision — **SLICES 1 AND 2 SHIPPED (`9f2af1d` types, `ed05033` the sandwich WRITER); SLICE 3 IS THE ENGINE BINDING, IN FLIGHT UNCOMMITTED AT THE TIME OF FILING, so NOTHING IS OPERATOR-REACHABLE YET** — **★ NO LONGER BLOCKED ON AN OPERATOR DECISION as of 2026-08-13: `(bl)` IS ANSWERED YES**
+
+> **★★ SLICE 2 SHIPPED 2026-08-13 (hundred-and-forty-first filing) —
+> `ed05033`, `pdfce_core::ocr::layer`.** `build_layer_content` (pure) and
+> `add_ocr_layer` (incremental save): ISO 32000-1 §9.3.6 Table 106 **mode
+> 3** invisible text, `q…Q`-wrapped, one `BT…ET` per page, vertical fit by
+> font size against Helvetica's real **0.718/0.207** AFM metrics,
+> horizontal fit by **`Tz`** (§9.3.4, a **percentage**). **Additive only** —
+> one appended content stream, one Standard-14 font dict, one rewritten
+> page dict; **the scan is never re-encoded**, and a test asserts the input
+> file is a **byte prefix** of the output. **3,688 tests, +21.**
+>
+> **This slice did NOT move any `FEATURES.md` box, deliberately.** A
+> caller must **supply** the recognised words; a writer nobody can feed is
+> not a capability (`R151`). **What slice 3 changes is exactly that.**
+>
+> **★ SLICE 3 IS ALREADY IN FLIGHT IN THE WORKING TREE — measured by
+> `git status --short` in this dispatch, not inferred.** Uncommitted at
+> filing time: **`crates/pdfce-core/src/ocr/engine_ocrs.rs` (untracked)**,
+> plus modified `Cargo.toml` on **all four crates** and **+195 lines of
+> `Cargo.lock`**. **Nothing about its state is claimed here beyond the
+> file list** — not that it compiles, not that it is tested, not that it
+> is nearly done. **It is named so a resuming session does not start it
+> twice.**
+>
+> **Slice 3, the remaining work, is ENGINEERING with no decision in front
+> of it:** bind `ocrs` behind a Cargo feature (`docs/ocr-engine-survey.md`,
+> `NEXT_SESSION.md` §1), ship + **hash** + **attribute** the weights, build
+> the rule-4 / decision-059 **off-canvas** review surface, and ship
+> `pdfce-cli ocr`. **The four carve-outs below still bind** — `(bl)`
+> removed the licence obstacle and nothing else.
 
 > **★★ THE LICENCE BLOCK IS LIFTED — 2026-08-13 (hundred-and-thirty-sixth
 > filing). Operator, verbatim and in full:**
@@ -54385,6 +54686,24 @@ not a judgment call:**
   resource from a donor face), so the original refusal's wording is
   correct as far as it goes; what changes is that the refusal now
   carries a remedy pointer where a donor face is available.
+  **★ SCOPED 2026-08-13 (hundred-and-forty-first filing) — R71 governs
+  KEYSTROKE-DRIVEN text edits, and `pdfce_core::ocr::layer` DIVERGES from
+  it on purpose.** The rule's first word is *"a keystroke"* and that is
+  load-bearing: an operator typed the character, can see it, and can
+  choose another. **An OCR text layer is none of those things.** It is
+  bulk machine text the operator never typed and cannot proofread, so
+  `ocr::layer` **substitutes and discloses** where `add_text` **refuses by
+  name**. Two reasons, both recorded rather than assumed: refusing a whole
+  page's text layer over one glyph makes OCR unusable **on exactly the
+  documents that need it**; and refusing would hold a **guess** to a
+  **stricter** standard than a deliberate keystroke, which is backwards.
+  **The divergence is disclosed, not silent** — `OcrLayerReport
+  .words_substituted` is counted and reported, and a **high count is how
+  a caller detects the named limit** (a Standard-14 WinAnsi face cannot
+  represent CJK, Cyrillic, Greek or Arabic). **No new rule was minted for
+  this** — `R192` stays claimed by the unruled proposal at the end of this
+  section, and a second text beside R71 could only disagree with it. Full
+  reasoning: `ed05033`'s *Shipped* entry.
 - **R72 — Recognized blocks and reflow are reviewable hints (decision 014,
   2026-07-31; librarian-assigned number).** Block recognition and reflow are
   DERIVED (ISO 32000-1 §14.8 S1-S9), counted, and presented as a reviewable

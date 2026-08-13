@@ -7,6 +7,15 @@ shipped, this says what to do next. Overwrite it once acted on.
 past `v0.5.3`, **not pushed, not tagged**. 3,667 tests, 0 failures. Every
 gate clean. Nothing half-built.
 
+> **[APPENDED 2026-08-13 by `pdfce-librarian`, hundred-and-forty-first
+> filing — THE LINE ABOVE IS STALE AND THIS FILE IS ENGINEER-OWNED, so it
+> is amended rather than overwritten.]** Since it was written,
+> **`ed05033`** landed: **`Pass 71.0` slice 2, the OCR sandwich writer**
+> (`pdfce_core::ocr::layer`). **3,667 → 3,688 tests, +21, 0 failures**;
+> every gate still clean; `cargo tree` re-verified on `pdfce-core` and
+> `pdfce-render`. **Still not pushed, not tagged.** Full record: top of
+> `ROADMAP.md`'s *Shipped*, and §1's own amendment below.
+
 ---
 
 ## ⇢ ★ FIRST, EVERY SESSION: CHECK THE GUI REQUEST CHANNEL
@@ -186,6 +195,26 @@ it**. `docs/ocr-engine-survey.md` is the source for every figure.
    pixel coords, y-down**, out. **Do not do the y-flip in the engine** —
    `words_to_page_space` owns it, precisely so every engine is wrong or
    right together. `reports_confidence()` has no default on purpose.
+   > **[APPENDED 2026-08-13 by `pdfce-librarian`, hundred-and-forty-first
+   > filing.] THE WRITER THE ENGINE FEEDS NOW EXISTS — `ed05033`,
+   > `pdfce_core::ocr::layer`.** `build_layer_content` (pure) and
+   > `add_ocr_layer` (incremental save, additive, the scan never
+   > re-encoded, input a byte prefix of output). **Do not write a second
+   > one**, and note what this changes about the ordering: after step 2
+   > the pipeline is **complete end to end in core**, so steps 3–4 are
+   > what make it *reachable*, not what make it *work*.
+   > **Two things this slice makes concrete for the engine work:**
+   > (a) `OcrLayerReport` is the **off-canvas** disclosure surface
+   > decision **059** requires — including `confidence_available: bool`
+   > kept **separate** from `mean_confidence`, so an engine reporting
+   > nothing cannot look better than one reporting honestly; the trait's
+   > `reports_confidence()` is what feeds it.
+   > (b) `words_substituted` is counted because the layer **substitutes
+   > and discloses** where `add_text` refuses (`R71`, scoped this filing)
+   > — **a Standard-14 WinAnsi face cannot represent CJK, Cyrillic, Greek
+   > or Arabic**, so a high count on a multi-language document is the
+   > signal that an **embedded composite face** is the next axis, not a
+   > bug report.
 3. **Ship the two `.rten` files and PIN them.** `text-detection` ≈ 2.52 MB
    and `text-rec-checkpoint` ≈ 9.72 MB, **≈12.24 MB total**, from
    `robertknight/ocrs`. **The Hugging Face and S3 copies are NOT

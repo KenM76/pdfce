@@ -3040,6 +3040,82 @@ Deferred by the operator's standing instruction of 2026-08-13, together
 with (S)'s panel. **It is the SAME outstanding surface, not a second
 one** — the tolerance is a property of that panel's cascade.
 
+### (U) `ed05033` — `pdfce_core::ocr::layer`: the OCR sandwich WRITER, and the correction of (R)'s claim that slice 1 already was one — 2026-08-13
+
+**`Pass 71.0` slice 2.** (R) above recorded the `ocr` module as *"taking
+recognised words with page positions and writing them into a PDF"*.
+**It did not write.** `9f2af1d` shipped `RecognizedWord`, `OcrPage`, the
+`OcrEngine` trait and the y-flip — **types with no writer and no
+caller**; a workspace-wide grep for `OcrPage` / `RecognizedWord` /
+`words_to_page_space`, excluding the module itself, returned **zero
+hits**. **(R) is not rewritten**; this entry is the correction, and the
+ROADMAP's hundred-and-twenty-sixth filing carries the matching dated
+footer.
+
+**Note the shape**: (R) also said *"even `core` is not ticked"* and that
+half was **right**. **The false claim was in the prose, in the present
+tense** — `R151`'s shape at the documentation layer, where a ledger audit
+cannot see it.
+
+#### New public surface in `pdfce_core::ocr`
+
+**New module `crates/pdfce-core/src/ocr/layer.rs` (904 lines);
+`ocr/mod.rs` gains `pub mod layer;`.**
+
+| item | shape |
+|---|---|
+| `build_layer_content(...)` | **pure** — an `OcrPage` in, content-stream bytes + counts out. **No `Document`, no I/O**, which is what makes the geometry unit-testable without a file. |
+| `add_ocr_layer(...)` | the document-level verb — **incremental save**, returning `OcrLayerOutcome { bytes, report }`. |
+| `OcrLayerOptions` | `new()`, `with_font(Std14)` — builder, `Default` available. |
+| `OcrLayerReport` | `words_written`, `words_skipped`, `words_substituted`, `words_scale_clamped`, `mean_confidence: Option<f32>`, **`confidence_available: bool`**, `content_object: u32`, `font_object: u32`, `disclosures() -> Vec<String>`. |
+| `OcrLayerError` | named refusals (nothing placeable on the page; page index out of range). |
+| `ASCENT_FRAC` = 0.718, `DESCENT_FRAC` = 0.207 | **Helvetica's real AFM metrics**, public because the vertical fit is defined in terms of them. |
+| `MIN_TZ` = 1.0, `MAX_TZ` = 10 000.0 | the `Tz` clamp; a clamped word is **counted** (`words_scale_clamped`), not silently squashed. |
+
+**`confidence_available` is a separate field from `mean_confidence: Option<f32>` on purpose.** An engine that
+exposes **no** per-word score must not produce a report that looks
+**better** than one that scores honestly — the same asymmetry (R)
+recorded for the `None` case, now visible in the report type.
+
+#### Two `pub(crate)` widenings in `text_edit/addtext.rs`
+
+`append_contents` and `pick_font_name` went `fn` → `pub(crate) fn`.
+**No public API change** — the crate boundary is unmoved. This is the
+page-dict/`/Contents`-array/resource-naming recipe being **shared rather
+than duplicated**: `/Contents` may be a stream **or** an array (Table 30
+forbids `[]`), and the `pdfceF{n}` resource name must dodge the producer's
+own `/F{n}` convention. **A second copy of that recipe is a second place
+to get Table 30 wrong.**
+
+#### Spec citations carried in the module header (rule 1)
+
+**ISO 32000-1 §9.3.6 Table 106 mode 3** (invisible text — the spec corpus
+names it as the OCR mechanism by name); **§9.3.4** (`Tz` is a
+**percentage**, `Th` the ratio — the corpus flags the confusion as a
+**100× error**, and it duly occurred during development); **§8.4.2**
+(`q`/`Q` balance — without it `3 Tr` leaks into every later stream in the
+page and all subsequent text renders invisible).
+
+#### Invariants this surface is bound by
+
+- **§3 GUI-core separation** — the **pixel** test lives in
+  `pdfce-render`, not `pdfce-core`, because core cannot rasterise and
+  never will, and **bytes cannot answer "does it look the same"**.
+  `cargo tree` on both crates re-verified clean at `ed05033`.
+- **§5 round-trip** — additive only; the scanned image is **never
+  re-encoded**, and a test asserts the input file is a **byte prefix** of
+  the output.
+- **Decision 059** — this is its **first application**. Nothing
+  provisional is drawn into the page; the page renders
+  **pixel-identically**, and the disclosure is `OcrLayerReport`,
+  **off-canvas**.
+
+#### Still not operator-reachable
+
+**No engine.** A caller must supply the words, so `FEATURES.md` keeps OCR
+at `core [ ] cli [ ] gui [ ]` — unchanged by this entry and deliberately
+so.
+
 ### (I) What this sync did NOT cover — stated so the edges are honest
 
 **A partial sync that names its edges is worth more than a

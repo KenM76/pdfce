@@ -227,7 +227,7 @@ the model or verb exists and only the named shell is missing. The
 | [ ] | [ ] | [ ] | [x] | Digital signatures — PKCS#7/PAdES signing and verification. |
 | [ ] | [ ] | [ ] | [x] | Bates numbering. |
 | [ ] | [ ] | [ ] | [x] | PDF/A conformance and validation. |
-| [ ] | [ ] | [ ] | [x] | OCR — core carries the engine-independent invisible-text-layer substrate (§9.3.6 mode 3, one y-flip site, per-word confidence that may be absent); **no engine is wired, so nothing is reachable from any shell.** |
+| [ ] | [ ] | [ ] | [x] | OCR — core can now **write** the invisible sandwich layer (`ocr::layer`: §9.3.6 mode 3, additive, the scan never re-encoded) as well as carry the types; **no engine is wired, so a caller must supply the recognised words and nothing is reachable from any shell.** |
 | [ ] | [ ] | [ ] | [x] | Accessibility (PDF/UA) tagging. |
 | [ ] | [ ] | [ ] | [x] | Document comparison. |
 | [ ] | [ ] | [ ] | [x] | Portfolios (PDF Package). |
