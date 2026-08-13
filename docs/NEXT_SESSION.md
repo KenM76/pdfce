@@ -1,19 +1,43 @@
 # NEXT SESSION — start here
 
-Engineer-owned handoff (this filing written by `pdfce-librarian` at the
-engineer's explicit request, same as every prior overwrite of this file).
-Read this **before** the librarian's record — `ROADMAP.md` says what
-shipped, this says what is in flight and what the next hour should be.
-Overwrite it once acted on.
+Engineer-owned handoff. Read this **before** `ROADMAP.md` — that says what
+shipped, this says what to do next. Overwrite it once acted on.
 
-**Written 2026-08-12 (hundred-and-twenty-seventh filing), branch `main`,
-finishing at `bc13a86b39fba80bfa3815acb47515293b879c10`**, after **three**
-further commits `1496e13` · `0d7c1bd` · `bc13a86`. The previous version of
-this file was written at `af5580e`; **this is an amendment of that
-version, not a full overwrite** — §§2–6 and 8 are carried forward
-substantively unchanged, §1 and §7 are rewritten, and the file's own
-header, ceilings and tooling notes are refreshed. **Working tree measured
-CLEAN at `bc13a86` (`git status --short` empty).**
+**State at handoff (2026-08-12, evening):** branch `main`, `HEAD` =
+`5b54a1eca2b28b3848fa7438586b909fcedff183`, tag **`v0.5.2`** at HEAD, **CI GREEN**, working tree clean, every
+commit filed (`tools/check-commits-filed.py` clean over 388 commits).
+Nothing is broken and nothing is half-committed.
+
+---
+
+## ⇢ IF THE OPERATOR JUST SAID "CONTINUE", DO THIS
+
+**Build the GUI gesture for two-line ce dimensioning — §1 below.**
+
+That is the top of the queue because it is the operator's own request, its
+core and CLI halves are already built and tested, and every design decision
+it needs is settled and written down in §1 (classification, the override, the
+threshold setting, the four-angle pick rule, virtual-apex disclosure). The
+canvas does not need to re-derive any of it — it needs a gesture wired to
+`pdfce_core::vector::linepick::pick_line`, which today has **no caller**.
+
+Before writing code, in this order:
+1. `git log --oneline -8` — see what actually landed last.
+2. Read §1 in full. It names the exact functions and the settled decisions.
+3. Read `docs/ui_specs/pass-46-canvas-interaction-model.md` §2 for the
+   canvas tool contract every gesture obeys (arm → options in the pane →
+   gesture targets the pointer → commit).
+4. Grep `D:\devag\egui\` before driving the GUI harness — **not only
+   before writing code**. Standing rule R172 exists because that step was
+   skipped twice in one session, both times at harness-driving time.
+
+**If instead the operator names something else, §§2–6 are the queue in
+priority order** and §§7–8 are standing obligations that apply regardless.
+
+**Do NOT start by asking him what to work on.** He said continue; §1 is the
+answer.
+
+---
 
 > **★★ CI WAS RED ON `main` AND THE HUNDRED-AND-TWENTY-SEVENTH FILING WAS
 > THE FIX.** Four consecutive runs failed, **all on `check-commits-filed`
@@ -338,26 +362,19 @@ directory** (verified by `ls`), so whatever the claim is, it is **not**
 
 ---
 
-## 7. ★ TAKE A BACKUP — 2 commits owed, and this figure was MEASURED, not inherited
+## 7. ★ BACKUP — re-measure it, do not quote this number
 
-**Measured at filing time**, by `ls -t`, `git bundle list-heads` and
-`git rev-list --count`, not by reading any document:
+**Measured 2026-08-12 ~19:5x**, after the `v0.5.2` release:
 
-- Newest bundle: **`pdfce-20260812-1552.bundle`**, whose `refs/heads/main`
-  is **`1496e135fd51a4a5cbde5e7539eaa7b7230bb01c`**.
-- `git rev-list --count 1496e13..HEAD` = **2**.
-- `HEAD` = **`bc13a86b39fba80bfa3815acb47515293b879c10`**, branch `main`.
-- `git status --short` = **empty** (clean working tree).
-- `git remote -v` = `https://github.com/KenM76/pdfce.git`.
-- **It was 5 earlier the same afternoon, at `af5580e` against the `1356`
-  bundle, and that figure was correct when measured** — a newer bundle was
-  taken at 15:52. **Both are stated rather than one silently replacing the
-  other**, which is the whole reason this section exists.
+- Newest bundle: **``**
+- `HEAD` = **`5b54a1eca2b28b3848fa7438586b909fcedff183`**, branch `main`, tag `v0.5.2` at HEAD.
+- The bundle above predates the `v0.5.2` version-bump commit, so **a fresh
+  bundle is owed** — `git bundle create <path> --all` then
+  `git bundle verify <path>`.
 
-**This ledger has carried a WRONG backup figure twice.** `ls` and
-`git bundle list-heads` cost nothing. **Re-run them; do not quote the
-number above without re-running it, including when the number above is
-this one.**
+**This ledger has carried a WRONG backup figure twice.** `ls -t` and
+`git bundle list-heads` cost nothing. **Re-run them; do not quote the number
+above without re-running it, including when the number above is this one.**
 
 ---
 
@@ -448,20 +465,31 @@ this one.**
 
 ---
 
-## Release state — `v0.5.1`
+## Release state — `v0.5.2` (2026-08-12), and it is CLEAN
 
-Tag `v0.5.1` → `aad48c73…`. **Its CI run is RED on `check-commits-filed`
-only** — three commits were tagged and released before the librarian filed
-them. **The released CODE is fine and that is proven:** `git diff
---name-only aad48c7 68408f1` returns **only `docs/` paths**, and `68408f1`
-passed CI fully. **Binaries fine, ordering wrong.**
+Tag `v0.5.2` → the version-bump commit, **CI GREEN at the tagged commit,
+verified by `tools/verify-release.py v0.5.2` reporting all seven checks ok**
+— including the new `CI is GREEN at the tagged commit` check. Asset
+`pdfce-v0.5.2-portable-win64.zip` (10,290,964 B). Packaging smoke test run
+from a fresh folder: two-line dimensioning and the attachment round trip both
+exercised on the copied binaries.
 
-**★ AND `main` ITSELF WAS RED FOR FOUR CONSECUTIVE RUNS ON THE SAME GATE,
-CLEARED BY THE HUNDRED-AND-TWENTY-SEVENTH FILING.** `1496e13`, `0d7c1bd`
-and `bc13a86` were in no filing; **no code failure was ever implicated.**
-**Do not tag until the gate is green** — this is the second distinct
-occurrence of the same ordering error in two days, and the rule below is
-the fix.
+**This is the first release in this project's history tagged at a commit CI
+had accepted.** The three before it were not:
+
+| tag | CI at the tagged commit |
+|---|---|
+| `v0.5.2` | **green** |
+| `v0.5.1` | red — `check-commits-filed` only; code proven fine |
+| `v0.5.0` | red — same gate |
+| `v0.4.0` | green |
+| `v0.3.0` | red — `cargo test` + `clippy` + cross-target |
+
+`v0.3.0` is the serious one and stays on the record: a published release
+whose tests did not pass. It was invisible locally because those jobs run on
+ubuntu/macOS/wasm32 while the engineer verifies on Windows — **cross-platform
+breakage is invisible to local gate runs by construction**, which is the
+standing argument for consulting CI rather than re-deriving confidence.
 
 **★ THE ORDERING RULE, now enforced by the tool: FILE, LET CI GO GREEN,
 THEN TAG.** Run `tools/verify-release.py <tag>` **before** tagging.
