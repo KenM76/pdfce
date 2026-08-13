@@ -9,6 +9,24 @@ gate clean. Nothing half-built.
 
 ---
 
+## ⇢ ★ FIRST, EVERY SESSION: CHECK THE GUI REQUEST CHANNEL
+
+**`D:\Dev\FeatureRequests\pdfce_FeatureRequests`** — the only channel
+between this session and the `pdfceGUI` project (operator instruction,
+2026-08-13). **List it before planning anything.**
+
+- `request_*.md` → something the GUI session needs from core or CLI.
+  **Triage it into the roadmap** via `pdfce-librarian` so it is tracked
+  where everything else is tracked, then rename to `done_*.md`.
+- **A request is a FINDING, not a favour.** Decision 058: anything that
+  project needs moved in core is *a place the boundary was drawn wrong*.
+  A workaround they had to invent is a defect report about `pdfce-core`.
+- That folder's `README.md` is the outbound briefing and points at
+  `docs/core-api/index.md`. **Keep it current when core changes under
+  it** — a stale briefing is worse than none, because it is trusted.
+
+---
+
 ## ⇢ ★ THE STANDING CONSTRAINT — READ THIS BEFORE PLANNING ANYTHING
 
 **The operator paused ALL GUI work on 2026-08-13**, verbatim:
