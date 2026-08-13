@@ -41483,3 +41483,259 @@ act.
    `R193`, possibly one rule.
 5. **`(bm)`** (`detach_file` / `unembed_fonts` confidentiality) and
    **`(v)`** (R58 scope) remain open and remain different questions.
+
+## 2026-08-13 (hundred-and-forty-third filing) — **THE TWO OWED RULINGS ARE RECORDED: `R192` IS MINTED ON ITS FOURTH INSTANCE, `R193` IS DECLINED ON THE COUNT AND KEEPS ITS NUMBER, AND THE PROPOSED MERGE OF THE TWO IS EXPLICITLY REJECTED.** The fourth instance was **re-measured rather than relayed, and the dispatch's narrative for it did not survive** — the real blind spot is **three blind spots in one gate, 15 invisible Pass declarations, and one that is LIVE**: `tools/check-ledger-numbers.py` reports `R193` as the next free rule number **while `R193` is claimed**. **No Pass, no decision, no operator question, no `FEATURES.md` row, no `ARCHITECTURE.md` entry**
+
+**This is a filing act with no commit behind it.** Nothing shipped; three
+rulings were owed since filing 139 and asked for again in filing 142, and
+this entry records them. **`git log --oneline -1` = `2754cf9`**, read in
+this dispatch. **The librarian does not commit; the engineer does.**
+
+### Ledger — measured, not carried
+
+Measured with `python tools/check-ledger-numbers.py` in this dispatch,
+before and after the edits:
+
+| ledger | before | after | this filing |
+|---|---|---|---|
+| SESSION_LOG filings | 142 | **143** | **used — this entry** |
+| standing rules | R191 | **R192** | **used — `R192` MINTED. ★ next genuinely free is `R194`, NOT `R193`** |
+| decision records | 060 | 060 | **NOT used** — next free 061 |
+| Pass families | 74 | 74 | **NOT used** — next free `Pass 75` |
+| operator questions | `(bm)` | `(bm)` | **NOT used** — next free `(bn)` |
+
+**★ THE GATE'S OWN OUTPUT IS WRONG ABOUT THE RULE CEILING AND THAT IS A
+FINDING, NOT A NUISANCE.** After the mint it prints
+`standing rules : R192 -> next free is R193`. **`R193` is claimed** by the
+declined proposal, which keeps its number. `collect_rules` matches only
+definition-shaped `- **RNNN — …` items, so a `### PROPOSAL … claiming
+R193` heading is invisible to it — the gate has a claimed-vs-minted
+distinction for **Passes** (`CLAIMED BUT NOT YET HEADED`) and **none for
+rules**. **This is `R192`'s own shape, in the gate that reports `R192`,
+in the filing that mints it.**
+
+### The three rulings
+
+1. **`R192` MINTED** — *a gate states what it cannot see* — on its fourth
+   instance, against this section's bar of three.
+2. **`R193` DECLINED on the count, not on the merits.** Not minted, the
+   number **stays claimed**, the draft **stays intact** for a future
+   session to mint substantially as written if a second and third
+   instance appear.
+3. **The unification of the two is REJECTED**, with the reasoning
+   recorded where it will be re-noticed.
+
+### The minted rule, in the wording settled here
+
+> **R192 — A GATE STATES WHAT IT CANNOT SEE. Every check, gate or
+> gate-like tool carries, in its own docstring or header, the obligation
+> it serves AND AN ENUMERATION of what falls inside that obligation and
+> outside its own input set — the files it cannot reach, the declaration
+> forms it will not match, the artefacts it is structurally blind to.
+> Adding OR WIDENING a gate includes asking *"what adjacent obligation
+> does this NOT cover?"* and writing the answer down. A gate with no
+> stated blind spot is asserting it has none, which has been false every
+> time it has been checked.**
+
+**Two things were added to the dispatch's draft, and both change what the
+rule obliges:**
+
+- **The headline moved from two tools to one.** The dispatch was right
+  that instance 4 widens the shape — it is **one** tool whose input set
+  is narrower than its obligation's subject set, not two tools with a gap
+  between them. So the *obligation* is on a single tool, and the two-tool
+  form ("*an obligation that falls between two correct tools is enforced
+  by neither*") is kept as the **generalised failure it describes**
+  rather than as the rule's demand.
+- **"Enumerate, do not gesture" — and this clause was earned by a
+  measurement, not by drafting taste.** See below. Without it the rule
+  would have been satisfiable by a sentence that had **already failed**.
+
+### ★★ THE FOURTH INSTANCE WAS RE-MEASURED, AND THE DISPATCH'S NARRATIVE FOR IT DID NOT SURVIVE
+
+The dispatch offered instance 4 as *"a `Pass 74.0` heading written in a
+different-but-valid form was invisible to it, so the gate stayed green
+while the record it guards was wrong — the family ceiling read 73."*
+
+**That specific account is false, and it is corrected here because a
+rule's instance set has to be true** (hard rule 10's corollary — *a
+correction is a claim, and it names its world-source*). `Pass 74.0`'s
+heading is `### ★ Pass 74.0` at `docs/ROADMAP.md:99` — **matched** by the
+shipping anchor. The ceiling reading 73 during filing 142 was **correct
+at the moment it was taken**: the gate ran before the librarian wrote the
+`Shipped` entry, so no heading existed yet.
+
+**The substance was right and is larger than reported.** Method: the
+gate's own `collect_passes` was imported and re-run against a widened
+anchor, and the two result sets diffed.
+
+| blind spot | measured | stated in the tool? |
+|---|---|---|
+| Pass-ID **declarations** the anchor `^#{2,4} (?:★ )?Pass ` cannot match | **15** — 9 in *Shipped*, 6 in *Next up*, across **three** valid decoration forms: backtick-wrapped (`### ★ ~Pass 61.0~`), multi-star (`### ★★★★★ Pass 72.0`, `### ★★★★ Pass 73.0`), strikethrough for a burned ID (`### ~~Pass 31.0~~`) | **no** |
+| families printed under `CLAIMED BUT NOT YET HEADED — do NOT reuse` that **do** have a heading | **5** — 31, 53, 61, 68, 72 | **no** |
+| standing-rule numbers **claimed** by an unruled proposal | invisible; no claimed-vs-minted concept for rules at all | **no** |
+| §12 decision duplicates · `R999` in prose · regex-parsed Markdown | — | **yes**, in its `WHAT IT DOES NOT CHECK` block |
+
+*(In the decoration column, `~Pass 61.0~` stands for the backtick-wrapped
+form — written with tildes here only so this table does not itself become
+a heading-shaped string. The literal form is in `R192`'s ROADMAP entry.)*
+
+**The family ceiling is right at 74 BY LUCK** — `Pass 74.0` happened to
+use the one decoration the anchor knows. **The gate was green over a
+record wrong in five places.**
+
+**Widening the anchor is NOT obviously the fix**, which is why the
+Backlog item asks for the statement first: the widened matcher surfaces
+**four apparent collisions** in *Shipped* (`52.0`/`52.1`/`52.2`,
+legitimate multi-Pass and staged-ship headings the qualifier logic cannot
+separate in that form, plus `68.0`, whose two hits are commentary
+sub-headings). That is the **same false-positive trap**
+`collect_passes`' own docstring records from its first attempt (*"9 false
+duplicates"*).
+
+### ★★★ THE FINDING THAT GENERALISES FURTHEST: A GENERIC DISCLAIMER IS NOT A BLIND-SPOT STATEMENT
+
+`check-ledger-numbers.py`'s docstring **already** carried:
+
+> *"It parses Markdown with regexes. If ROADMAP's heading or rule-item
+> conventions change, this silently stops covering whatever changed."*
+
+**15 declarations were invisible, in three enumerable forms, while that
+sentence was on the page.** An abstract admission that a blind spot may
+exist **reads as candour and discharges nothing**, because no reader can
+act on it. The obligation is to **name the set**, and naming it is a
+**measurement** — run the widened matcher, diff, count — not an opinion.
+That is what makes `R192` reviewable by reading the tool, which is the
+whole distinction from a writing convention.
+
+### ★ AND THE SECOND-FIX EVIDENCE, which is the strongest single argument for the rule
+
+This is the **second** time this exact tool has been found with an input
+set narrower than its obligation. The first — `0720adb`, 2026-08-06,
+*"the ledger gate could not see ten of its own Pass headings"* — closed
+the gap by widening the anchor by **exactly one decoration**, `★ `. Its
+own fix comment names the shape:
+
+> *"A gate whose blind spot is only discovered by someone independently
+> forecasting its output is a gate that has been reporting less than it
+> appeared to."*
+
+**Nobody wrote down that other decorations existed.** The same tool
+re-opened the same gap in three new forms and stayed green. **Closing a
+blind spot and enumerating the ones that remain are two different acts,
+and only the second compounds.**
+
+### Why `R193` was declined, and why the decline costs nothing
+
+**One failing instance** (`MAX_PIXMAP_EDGE`) against **two healthy
+counter-instances the proposal identified itself** — `MAX_ANNOTS_PER_PAGE`
+names its corpus check, `MAX_DECODED_LEN` carries arithmetic with ~7×
+headroom. The bar is three. **More telling than the count: the
+counter-instances outnumber the instance**, which is evidence of a single
+mistake rather than a pattern.
+
+**Declined on the count, NOT on the merits.** Part (3) of the draft — *a
+Pass that changes how a capability is used re-reads the use-predicated
+guards on the path it touched* — **is a step in a Pass, not a writing
+convention**, which is exactly the property this section demands.
+
+**The finding survives the decline in three independent places**: the
+draft itself (left intact, `R193` reserved), the cross-project RAG file
+`D:\dev\rag\rust\a_limit_justified_by_beyond_any_plausible_use_is_a_prediction_not_a_fact.md`
+(**verified present by `ls` in this dispatch**, written in filing 142),
+and the constant's own corrected doc comment in
+`crates/pdfce-render/src/lib.rs`.
+
+### Why the two are NOT one rule — recorded because the resemblance WILL be re-noticed
+
+Both reduce to *"the set the thing reasons over is not the set it acts
+on."* That abstraction is **thin enough to be cited for anything, and a
+rule that can be cited for anything constrains nothing** — the librarian's
+own argument against its own suggestion, adopted as the ruling.
+
+| | `R192` (minted) | `R193` draft (declined) |
+|---|---|---|
+| the action | write down what your **gate** cannot see | re-read a **guard's** justification when the use changes |
+| the actor | whoever builds the tool | whoever ships the Pass |
+| the trigger | a gate is added or widened | a **caller** changes |
+| the evidence afterwards | the docstring — **checkable by reading the tool** | **none — no artefact to inspect** |
+
+**The risk being managed is not the merge; it is the re-proposal.** A
+future session reading the two in sequence will see the common
+abstraction and believe it has found something. The rejection is filed
+**where it will be asked again**, same discipline as hard rule 8's
+amendment and the XFA item's `★ ANSWERED` footer.
+
+### Files edited
+
+| file | change |
+|---|---|
+| `docs/ROADMAP.md` *Standing rules* | **`R192` minted** as a full entry with its four instances, the measured blind-spot table, the enumerate-don't-gesture teeth, the second-fix evidence, a deliberately narrow scope statement, and the `R194`-not-`R193` warning; the `R192` proposal heading annotated **SUPERSEDED** + a `RESOLVED` record appended after its text; the `R193` proposal heading annotated **DECLINED ON THE COUNT** + a `RESOLVED` record appended after its text, carrying **RULING 3** (the rejected merge) as its own sub-heading |
+| `docs/ROADMAP.md` *Backlog* | **new top item** — retrofit the `R192` blind-spot statements onto the four gates, with the per-tool scope measured (one already complies), the urgent claimed-rule-number half called out, and widening explicitly separated from stating |
+| `docs/SESSION_LOG.md` | this entry |
+| `D:\dev\rag\rust\a_gate_states_what_it_cannot_see.md` | **new** — the ecosystem-wide half; `D:\dev\rag\rust\index.md` bullet added in the same session |
+
+**Both proposal texts are left byte-unchanged**, per this section's
+`R159`/`R164`/`R165` precedent: proposal first, ruling appended after,
+original never edited.
+
+### What was deliberately NOT written
+
+- **`docs/FEATURES.md` — NOT touched, and that is correct.** No
+  capability changed, no box could move. The maintenance contract binds
+  `FEATURES.md` to `ROADMAP.md` changes **that concern capability**; a
+  rules-section ruling has no feature row, and inventing one would be the
+  drift the contract exists to prevent.
+- **`docs/ARCHITECTURE.md` §12 — NOT touched, and the engineer's view is
+  agreed rather than merely accepted.** §12 records **architectural**
+  decisions — crate boundaries, library choices, invariant definitions.
+  `R192` is a **documentation obligation on tooling**; it redraws no
+  boundary, picks no library, and defines no invariant of the object
+  model or the render path. Filing it in §12 would dilute a log whose
+  value is that every entry changed the architecture. **The rules section
+  is the right home and the only home.**
+- **No Pass minted.** The retrofit is Backlog, not a Pass — it is four
+  docstrings and one gate feature, and it is not blocking anything except
+  the rule-number hazard, which is stated loudly instead.
+- **No operator question minted.** Nothing here needs Ken.
+- **The four gates were NOT edited in this filing**, on the engineer's
+  explicit instruction. **A librarian recording a ruling and a librarian
+  changing four tools are different acts**, and mixing them would put
+  unreviewed tool changes inside a rules commit.
+
+### Verification
+
+| check | result |
+|---|---|
+| `python tools/check-ledger-numbers.py` | **clean** — no duplicate Pass, rule or decision numbers; rules ceiling **R192** post-edit (was R191), filings **142** pre-append |
+| `R192` grep before minting | **no prior definition-shaped `R192` item anywhere in `docs/`** — only proposal/claim references |
+| the fourth instance | **measured in this dispatch**, not relayed — `collect_passes` re-run against a widened anchor, diffed; 15 declarations, 5 mis-listed families |
+| `D:\dev\rag\rust\a_limit_justified_by_beyond_any_plausible_use_is_a_prediction_not_a_fact.md` | **present** (`ls`), so the declined proposal's finding is not lost |
+
+### Git and backup state — CHECKED, with the commands
+
+- **`git log --oneline -1`** → `2754cf9`.
+- **`git status --porcelain`** → `M docs/ROADMAP.md` before this entry
+  was appended; `docs/SESSION_LOG.md` joins it. **Nothing committed by
+  the librarian.**
+- **`git remote -v`** → `origin https://github.com/KenM76/pdfce.git`.
+  **Nothing pushed. Pushing is the operator's act.**
+- **Backup currency, measured** with `git bundle list-heads` on the
+  newest bundle plus `git log --oneline <bundle-head>..HEAD | wc -l`:
+  the newest bundle is `pdfce-20260813-post-rebase.bundle`, its
+  `refs/heads/main` is **`dc5a77f`**, and `HEAD` is **9 commits ahead of
+  it**. Not inferred from any document.
+
+### For next session
+
+1. **★ DO NOT TAKE `R193`.** The gate will offer it. It is claimed by the
+   declined proposal. **The next genuinely free rule number is `R194`.**
+   The fix for the gate is the top Backlog item.
+2. **The Backlog retrofit is small and one part of it is live** — the
+   claimed-rule-number blind spot is a duplicate waiting to be minted.
+3. **`R193` is minted, substantially as drafted, when a second and third
+   instance appear.** Add instances to the draft; do not rewrite it.
+4. **Do not re-propose merging `R192` and `R193`.** The rejection and its
+   reasoning are in *Standing rules*, after the `R193` proposal.
+5. **`(bm)`** (`detach_file` / `unembed_fonts` confidentiality) and
+   **`(v)`** (R58 scope) remain open and remain different questions.
