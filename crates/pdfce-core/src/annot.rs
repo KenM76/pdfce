@@ -303,6 +303,25 @@ pub struct Annotation {
     pub rect: Option<Rect>,
     /// Decoded `/F` flags (§12.5.3, Table 165). Default `0`.
     pub flags: AnnotFlags,
+    /// `/CA` — the annotation's **constant opacity** (§12.5.2, Table 164),
+    /// `0.0`–`1.0`. `None` when the key is absent, which §12.5.2 defines as
+    /// fully opaque.
+    ///
+    /// # Why `Option` rather than defaulting to `1.0` here
+    ///
+    /// "Absent" and "explicitly 1.0" are different facts about the file, and
+    /// collapsing them here would make a writer unable to round-trip the
+    /// difference. The *render* default is 1.0; the *model* keeps what the
+    /// document said.
+    ///
+    /// # It applies to the annotation AS COMPOSITED, not inside its appearance
+    ///
+    /// §12.5.2: the value is the constant opacity used when painting the
+    /// annotation onto the page. An appearance stream that also sets `/ca` in
+    /// its own `ExtGState` therefore **compounds** with this — 0.5 twice reads
+    /// as 0.25. That is why pdfce's markup writer sets `/CA` alone and leaves
+    /// the appearance's graphics state at 1.0.
+    pub constant_alpha: Option<f64>,
     /// The selected normal (`/N`) appearance, per §12.5.5.
     pub appearance: Appearance,
     /// Whether `/Subtype` is `Popup` (§12.5.6.14). A `/Popup` is a reader
@@ -644,6 +663,15 @@ fn model_annotation<G: ObjectGraph + ?Sized>(
             _ => None,
         }
     };
+    // §12.5.2 Table 164: a number, 0.0-1.0. Out-of-range values are CLAMPED
+    // rather than refused -- a producer writing 1.5 means "opaque", and
+    // refusing to place the annotation over it would lose content to defend a
+    // range check. Non-numeric is treated as absent.
+    let constant_alpha = dict
+        .get(b"CA")
+        .map(|o| graph.resolve(o))
+        .and_then(Object::as_number)
+        .map(|v| v.clamp(0.0, 1.0));
     let contents = text_of(b"Contents");
     let title = text_of(b"T");
     let mod_date = text_of(b"M");
@@ -675,6 +703,7 @@ fn model_annotation<G: ObjectGraph + ?Sized>(
         subtype,
         rect,
         flags,
+        constant_alpha,
         appearance,
         is_popup,
         oc,

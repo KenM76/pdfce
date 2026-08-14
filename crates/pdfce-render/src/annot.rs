@@ -681,17 +681,76 @@ fn paint_appearance(
     let placement = a.post_concat(base_ctm);
     let initial = GraphicsState::default_with_ctm(placement);
 
-    let sub = interpret::run_form_at(
-        doc,
-        stream,
-        Some(id),
-        &page.resources,
-        fonts,
-        initial,
-        pixmap,
-        cancel,
-        policy,
-    );
+    // ★ §12.5.2 /CA -- the annotation's CONSTANT OPACITY, applied to the
+    // annotation AS COMPOSITED onto the page.
+    //
+    // Until 2026-08-14 this was ignored entirely, and the consequence was not
+    // limited to markup pdfce authors: EVERY IMPORTED ANNOTATION CARRYING /CA
+    // RENDERED SOLID. Reduced opacity is the house style for a shaded area or
+    // a fill over a drawing -- precisely because the drawing underneath has to
+    // stay readable -- so a Bluebeam or Acrobat cloud at 50% covered the thing
+    // the operator opened the file to read. Reported by the `pdfceGUI` session,
+    // which correctly ranked it as a FIDELITY DEFECT IN THE CURRENT PRODUCT
+    // rather than a prerequisite of a future authoring control.
+    //
+    // Absent means opaque (§12.5.2), so the common path is unchanged and pays
+    // nothing: no scratch allocation, no composite.
+    let alpha = annot.constant_alpha.unwrap_or(1.0);
+    #[allow(clippy::float_cmp)]
+    let sub = if alpha >= 1.0 {
+        interpret::run_form_at(
+            doc,
+            stream,
+            Some(id),
+            &page.resources,
+            fonts,
+            initial,
+            pixmap,
+            cancel,
+            policy,
+        )
+    } else {
+        // The appearance must be composited as ONE object at `alpha`, not
+        // drawn with each operator at `alpha`. Those differ wherever the
+        // appearance overlaps itself -- a cloud's arc chain, a polygon's
+        // border meeting its fill -- where per-operator alpha would darken
+        // every seam and the correct result is uniform.
+        //
+        // The scratch is TRANSPARENT (tiny_skia's `Pixmap::new` zero-fills),
+        // deliberately: the page pixmap is white-filled, and a white scratch
+        // would composite an opaque rectangle over the page.
+        let Some(mut scratch) = Pixmap::new(pixmap.width(), pixmap.height()) else {
+            diag.annotations_placement_degenerate += 1;
+            diag.note_annotation(
+                "annotation /CA compositing buffer could not be allocated - painted opaque",
+            );
+            return;
+        };
+        let sub = interpret::run_form_at(
+            doc,
+            stream,
+            Some(id),
+            &page.resources,
+            fonts,
+            initial,
+            &mut scratch,
+            cancel,
+            policy,
+        );
+        #[allow(clippy::cast_possible_truncation)]
+        pixmap.draw_pixmap(
+            0,
+            0,
+            scratch.as_ref(),
+            &tiny_skia::PixmapPaint {
+                opacity: alpha as f32,
+                ..tiny_skia::PixmapPaint::default()
+            },
+            tiny_skia::Transform::identity(),
+            None,
+        );
+        sub
+    };
     diag.merge(sub);
     diag.annotations_painted += 1;
 
