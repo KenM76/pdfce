@@ -7505,9 +7505,42 @@ impl EditSession {
     /// accessibility gap, so it is disclosed separately from
     /// [`Self::document_is_tagged`].
     ///
-    /// `/Tabs` is inheritable through the page tree (Table 30), so an
-    /// absent entry on the page itself is not the answer — the ancestors
-    /// are walked, bounded by the page tree's own depth guard.
+    /// # ★ `/Tabs` is NOT inheritable, and this walks ancestors anyway
+    ///
+    /// This comment previously read *"`/Tabs` is inheritable through the page
+    /// tree (Table 30)"*. **That is false.** ISO 32000 Table 30's preamble:
+    /// *"Attributes that are **not** explicitly identified in the table as
+    /// inheritable **shall not** be inherited"* — and an exhaustive search of
+    /// that table for the `(…; inheritable)` marker yields **exactly four**:
+    /// `Resources`, `MediaBox`, `CropBox`, `Rotate`. `/Tabs` is not among
+    /// them, so per the standard a page with no `/Tabs` of its own **names no
+    /// tab order at all**, whatever its ancestors say.
+    ///
+    /// Reported by the `pdfceGUI` session (2026-08-14), sourced from
+    /// `PDF_Spec/iso32000/iso32000__s__7.7.3.md` and verified here against the
+    /// same section. **Their own request two hours earlier asserted the same
+    /// wrong thing**, having taken it from this comment — which is precisely
+    /// the cost of a false sentence in a doc comment: it propagates outward as
+    /// a fact about the format.
+    ///
+    /// # Why the walk is KEPT despite that
+    ///
+    /// It is now a **deliberately conservative** check, not an application of
+    /// inheritance, and the distinction changes what it claims rather than
+    /// what it does.
+    ///
+    /// This feeds one disclosure — [`FieldAuthorDisclosures::structure_tab_order`]
+    /// — whose purpose is to warn that a pdfce-authored field may have no tab
+    /// position. Walking ancestors over-warns on pages the standard says carry
+    /// no `/Tabs`; it never under-warns. **A viewer that inherits anyway would
+    /// use the ancestor's `/S`**, and the failure this disclosure guards
+    /// against is silent, so erring toward warning is the right direction.
+    ///
+    /// **It must not become a `/Tabs` READER on that basis.** A reader that
+    /// reported an ancestor's mode as the page's mode would be asserting the
+    /// false thing this comment used to say. If one is built, it owes three
+    /// distinct answers — absent / on this page / on an ancestor — and the
+    /// third is disclosed, never applied.
     fn page_uses_structure_tab_order(&self, page_id: ObjId) -> bool {
         let graph = self.graph();
         let mut current = Some(page_id);
