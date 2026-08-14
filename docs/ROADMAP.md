@@ -96,6 +96,581 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★ Pass 81.0 — `a84bdc3` — **`pdfce-render` NOW READS ANNOTATION `/CA`.** Every imported markup at reduced opacity had been **rendering solid over the drawing it annotates** — §12.5.2 constant opacity was parsed by nothing and applied by nothing. **Composited ONCE as one object into a TRANSPARENT scratch**, not drawn per-operator at alpha — filed 2026-08-14 (hundred-and-forty-seventh filing, **mid-filing amendment**)
+
+> **★★ THIS ENTRY EXISTS BECAUSE THE WORK SHIPPED WHILE THE FILING THAT
+> SCHEDULED IT WAS BEING WRITTEN.** `Pass 81.0` was minted **in this same
+> filing**, as *Next up*, **UNSTARTED** — and `a84bdc3` landed at
+> **05:09**, mid-dispatch, caught by `tools/check-commits-filed.py` on a
+> re-run. **The scheduled entry is retained under *Next up* as the scoping
+> record, retitled and banner-marked**, exactly as `~~Pass 36.1~~` was.
+> **Nothing is renumbered; the number was minted here and is honoured
+> here.**
+
+#### Why it jumped its own queue — and the argument is the requester's, not the engineer's
+
+The gap was found while answering a **markup-opacity authoring** question
+and was filed as a **prerequisite of a future control**. **The requester
+corrected the framing, and was right.** Quoted because the correction is
+the finding:
+
+> *"pdfceGUI is a viewer before it is an editor… the stated audience is
+> drawing review, where incoming markup arrives from Bluebeam and Acrobat.
+> Reduced-opacity markup is the house style for a shaded area or a fill
+> over a drawing, precisely because the drawing underneath has to stay
+> readable. Every one of those renders solid in pdfce right now — which
+> does not look like an opacity bug, **it looks like the markup COVERED
+> THE DRAWING**, and the drawing is the thing the operator opened the file
+> to read."*
+
+**That reclassifies it: a fidelity defect in SHIPPED behaviour affecting
+every document opened, not a gap in an unbuilt feature.** Note also what
+the requester declined to do — they **refused to assert a prevalence
+number they had not measured** (*"no measurement of prevalence and would
+not assert one"*), offering to count on a real corpus **if the number
+would change the decision**. It did not.
+
+#### What changed
+
+**`pdfce-core`** — `annot::Annotation` gains **`constant_alpha:
+Option<f64>`** (`annot.rs:324`), parsed from `/CA`.
+
+Two API rulings, both stated in the commit and both worth carrying:
+
+- **CLAMPED to `0.0..=1.0`, not refused.** *A producer writing `1.5` means
+  opaque, and refusing to place the annotation to defend a range check
+  would lose content.*
+- **`Option`, not a `1.0` default.** *"Absent" and "explicitly 1.0" are
+  different facts about the file, and a writer must be able to round-trip
+  the difference.* **The RENDER default is 1.0; the MODEL keeps what the
+  document said.** This is §5's *never normalize* applied to a read
+  surface.
+
+**`pdfce-render`** — an appearance with `alpha < 1.0` is interpreted into
+a **transparent scratch pixmap** and **composited once at that alpha**.
+
+**Two details that are the point rather than implementation:**
+
+1. **COMPOSITED AS ONE OBJECT, not drawn per-operator at alpha.** Those
+   differ **wherever an appearance overlaps itself** — a cloud's arc
+   chain, a polygon's border meeting its fill — where per-operator alpha
+   **darkens every seam** and the correct result is uniform. *(This is
+   also why `Pass 81.1` must not reach for Highlight's `ExtGState`: same
+   distinction, other end of the pipe.)*
+2. **The scratch is TRANSPARENT, deliberately.** The page pixmap is
+   **white-filled**; a white scratch would **composite an opaque rectangle
+   over the page.**
+
+**The opaque path is untouched and allocates nothing**, so the common case
+pays nothing.
+
+#### Tests — differential, because the claim is about what you SEE
+
+Half-opacity is compared **against the OPAQUE render**, not against
+expected pixel values — *the exact composite depends on the blend and the
+point is the relationship.* **Sabotage:** forcing alpha back to 1.0 fails
+it with *"mean green: opaque 0.0, half 0.0"* — **identical, which is
+exactly the defect's signature.**
+
+**Three more guard the directions a careless fix would break:**
+
+| test | the disaster it prevents |
+|---|---|
+| an **absent** `/CA` renders identically to an explicit `1.0` | defaulting a missing key to **0** would make **every ordinary annotation invisible** — the mirror-image catastrophe |
+| `/CA 0` paints nothing **without erroring** | a refusal on a legal value |
+| `/CA 1.5` **clamps** rather than vanishing | the range check eating content |
+
+**Gates:** **3,721 tests, 0 failures** — `3,717 + 4`, and the chain from
+`Pass 79.0` therefore still reconciles (see the reconciliation table under
+`Pass 79.0`). `fmt` and `clippy -D warnings` clean.
+
+**STILL NOT DONE, and deliberately separate: the `/CA` WRITE on
+`MarkupSpec`** — that is **`Pass 81.1`**, still in *Next up*. **The
+ordering held**: a correctly-authored `/CA` will now render correctly,
+where shipping the control first *"would have made the shell look broken
+for doing the right thing."*
+
+**`FEATURES.md`:** the *Annotations & markup* render row's sentence
+**replaced** — it had been amended **in this same filing** to state the
+gap, and the gap closed hours later; the *Markup opacity* Planned row now
+covers **only the write half.** **No box moved in the Implemented
+section**: reading annotations was already `[x] [x] [x]`, and this is a
+**fidelity repair to a shipped capability.**
+
+**Terminology (rule 15):** nothing here touches **ce dimensions** or **pdf
+dimensions** — though a **pdf** annotation authored elsewhere is exactly
+what was rendering wrong.
+
+---
+
+### ★ Pass 79.0 — `b943ea1` — **ONE PROBE FILENAME SHARED BY EVERY THREAD, AND A FALSE `false` DOES NOT ERROR — IT SILENTLY RELOCATES WHERE USER STATE LIVES.** Reported with a measurement (**1,223 of 16,000 calls = 7.64 %**) by the `pdfceGUI` session and reproduced here independently (**599 of 8,000 = 7.49 %**). Fixed **twice over**: a unique probe name makes disagreement *unlikely*, a `OnceLock` memoisation of `resolve_store` makes it **impossible** — filed 2026-08-14 (hundred-and-forty-seventh filing)
+
+#### The filing — four commits, one dispatch, and every figure measured in it
+
+This entry heads a filing of **four commits**, all committed 2026-08-13
+evening, all filed here 2026-08-14. **Full hashes read with
+`git show -s --format=%H` in this dispatch, not relayed:**
+
+| Pass | short | full | committed |
+|---|---|---|---|
+| **`77.0`** | `7393473` | `73934734ebd45c559432482ba6b5902500c5c407` | 2026-08-13 16:44:50 −0400 |
+| **`78.0`** | `fa243df` | `fa243df59e6e78da48a30e2dc1ad5e2c23359ace` | 2026-08-13 16:59:02 −0400 |
+| **`78.1`** | `991f0d2` | `991f0d2776cde9a47e7cf931bbcadfb01ae21e32` | 2026-08-13 17:12:56 −0400 |
+| **`79.0`** | `b943ea1` | `b943ea1c5322b08557817a6ba93c1dcd106f7872` | 2026-08-13 17:29:27 −0400 |
+
+**Git state, measured, not inferred** (librarian hard rule 8): `HEAD` =
+`b943ea1c5322b08557817a6ba93c1dcd106f7872`, i.e. **the newest of the four**;
+working tree **clean** (`git status --porcelain`, empty output);
+**40 commits ahead of `origin/main` = `42364dbcfd11db7164a93f4b8f9b6072b022f7e4`**
+(`git rev-list --count origin/main..HEAD`).
+
+**Backup currency, looked up rather than asserted:** the newest bundle in
+`D:\Dev\pdfce-backups\` is `pdfce-20260813-post-rebase.bundle` (2026-08-13
+09:27). `git bundle list-heads` on it reports `refs/heads/main` =
+`dc5a77f9716ecec52de8a292aac313f917c83048`, and
+`git rev-list --count dc5a77f..HEAD` = **24**. **The backup does not contain
+any of these four commits** — stated because the same claim has been wrong
+twice in this project when inferred from the session log instead of the disk.
+
+**This was NOT debt.** `python tools/check-commits-filed.py` reported
+**`4 code commit(s) are in no filing`** and named all four — the first time
+this dispatch cycle that the gate caught the gap itself rather than being
+satisfied by an owed-list citation. None was added to
+`tools/commits-filed-baseline.txt`, per that file's own instruction.
+
+##### Gates at `b943ea1`, as reported by the engineer
+
+**3,717 tests, 0 failures.** `cargo fmt --all`,
+`cargo clippy --workspace --all-targets -- -D warnings`,
+`tools/check-fmt-excluded.py`, `tools/check-shipped-assets.py`,
+`tools/check-ui-strings.py`, `tools/check-ledger-numbers.py` — **all clean.**
+`cargo tree` confirms **`pdfce-core` and `pdfce-render` carry no network
+client and cannot see `pdfce-fetch` at all**; **wasm32 cross-check clean**
+(R12 as narrowed 2026-08-13, decision 061).
+
+##### ★ THE TEST-COUNT CHAIN RECONCILES EXCEPT AT ONE COMMIT, AND THE TWO FIGURES EITHER SIDE PROVE WHICH ONE IS WRONG
+
+Hard rule 10(a) asks for a total *beside* its per-item form. Doing that here
+found a real discrepancy at no cost. **Method:** stated totals read from each
+commit message; per-commit test additions counted with
+`git show <sha> | grep -c "^+.*#\[test\]"` in this dispatch.
+
+| commit | tests added | running total | message says | agrees? |
+|---|---:|---:|---:|---|
+| `d24c1df` (`Pass 76.0`, prior filing) | — | 3,700 | 3,700 | ✔ |
+| `7393473` | **+7** | 3,707 | 3,707 | ✔ |
+| `fa243df` | **+5** | 3,712 | 3,712 | ✔ |
+| `991f0d2` | **+1** | **3,713** | **3,712** | ✘ **one short** |
+| `b943ea1` | **+4** | **3,717** | 3,717 | ✔ |
+
+**`991f0d2`'s message reports the PREVIOUS total** — it added a test and
+carried `fa243df`'s number forward. The proof is not the count itself but the
+**arithmetic between records**: `b943ea1`'s independently stated 3,717 is
+exactly `3,713 + 4`, and is unreachable from 3,712. **Nothing is wrong with
+the software; a figure in immutable history is off by one**, and it is
+recorded here because that message can never be corrected in place. **This is
+hard rule 10 working exactly as designed** — one division and one addition at
+write time turned a set-property into a single-claim property a reader can
+check.
+
+#### `Pass 79.0` — what shipped in `b943ea1`
+
+**The defect.** `directory_is_writable` probed with the **fixed** filename
+`.pdfce-write-probe`, shared by every caller, in every thread, in every
+process. One caller's `remove_file` races another's write on the same path,
+the write fails, and the function answers **`false` for a directory that is
+plainly writable**.
+
+**Why a false `false` is worse than an error**, which is the reporter's
+framing and is the reason this was worth reporting rather than absorbing:
+`resolve_store` uses the answer to choose between the **portable** directory
+beside the executable and the **platform fallback**. A spurious `false` does
+not surface as a failure — **it produces a different, valid-looking answer.**
+Settings, layout and the recent list silently resolve to the platform config
+directory instead of `userdata/` beside the exe, while
+`package-portable.py`'s `BUILD-INFO.txt` tells the operator the update
+procedure is *"replace the binaries but KEEP `userdata/`"* — **true only if
+the portable directory was the one chosen.**
+
+**The sharper symptom, and how it was found: TWO CALLERS IN ONE PROCESS
+DISAGREEING.** The layout store resolves `Portable` while the recent list
+resolves `PlatformFallback`, so two files that are supposed to sit beside
+each other do not.
+
+**Both of the reporter's fixes were taken, and the second is the better one:**
+
+1. **Unique probe name** — process id **and** a counter. *Neither alone
+   suffices*: two processes share a counter's starting value; one process's
+   threads share its pid. A leftover probe from a killed process is now
+   named distinctly and is harmless, where a stale `.pdfce-write-probe` was
+   a name the next run would collide with.
+2. **`resolve_store` memoised in a `OnceLock`.** The reporter's words: *"a
+   stronger property than making the probe reliable."* Fixing the probe makes
+   disagreement **unlikely**; caching makes it **impossible**, whatever the
+   filesystem does underneath. **That is the difference between fixing an
+   instance and closing the class** — the same distinction that governed
+   `Pass 78.0` fourteen minutes earlier, and the same one that governs the
+   `add_markup_appearance` refusal filed under `Pass 82.0` in *Next up*.
+
+**What the cache deliberately gives up, documented rather than discovered:**
+a directory that becomes writable **mid-run** is not noticed. Accepted,
+because the inputs (`current_exe` and the platform env vars) do not
+meaningfully change within a process, and **a store that MOVES under a
+running application is a worse outcome than one that is stale.** `store_in`
+remains the escape hatch for an explicit directory and **does not consult the
+cache**.
+
+**Four tests, and one of them exists to stop the cheapest wrong fix.** The
+race test asserts **zero** rather than *"few"*, because unique names make the
+collision impossible **by construction**. `a_path_that_cannot_be_a_directory_is_still_refused`
+guards the other direction — making `directory_is_writable` always return
+`true` would pass the race test and be **strictly worse than the bug**.
+`probing_leaves_no_files_behind` asserts cleanup separately, so *"unique"*
+cannot be satisfied by *"never deleted"*. **Sabotage:** reverting to the
+shared name fails the race test at **599/8,000**.
+
+**★ Worth carrying from the report, about test design.** Their failing test
+asserted that the recent-file path and the layout path are **equal to each
+other**, not equal to a path spelled in the test. Their words: a test that
+hard-coded the expected directory *"would have passed on every run where both
+callers lost the race together, and the defect would have stayed invisible."*
+**A differential oracle catching a bug a value assertion could not** — the
+same reason `Pass 74.0`'s region tests compare against a full-page render
+rather than against expected pixels.
+
+**`FEATURES.md`: NO box moved.** *Persisted user settings* was and remains
+`[x] [x] [x]`; this is a **defect repair to a shipped capability**, and the
+row's sentence is unchanged because it was never false.
+
+**Terminology (rule 15):** nothing here touches **ce dimensions** or **pdf
+dimensions**.
+
+---
+
+### ★ Pass 78.1 — `991f0d2` — **`Widget::has_off_appearance`: `on_states` cannot say *"there is an `/Off` appearance"*, and a shell needed to say it BEFORE the click** — item 4 of the `pdfceGUI` form-refusal report — filed 2026-08-14 (hundred-and-forty-seventh filing)
+
+**The gap, and why `on_states` could not close it.** `forms.rs` documents
+`on_states` as the states a widget defines **excluding `Off`**, and filters
+it out, because **§12.7.4.2.3** makes on-states *the names a button can be
+set TO* — and `Off` is not one of them. **That model is right and the
+requesters explicitly did not ask for it to be broken** (*"that would break
+the type's meaning"*).
+
+But it left no way to ask a different question: **will unticking this
+checkbox leave a blank widget?** If `/AP` `/N` carries no `Off` entry, the
+off state has no appearance stream and **the widget renders nothing**. They
+wanted to disclose that **before** the operator clicks, rather than after the
+box goes empty.
+
+**That is a `CLAUDE.md` rule-4 case of exactly the kind decision 059 kept:
+an inference the operator cannot see by looking.** Rendering nothing looks
+identical to rendering an empty box *until you know which one you are
+getting*.
+
+**Why it was built rather than declined.** The requesters offered *"if it is
+not worth it, saying so is a complete answer"*. It costs **one lookup in a
+subdictionary already in hand**, at the same site as the existing `Off`
+filter — so the honest answer was yes.
+
+**Two details that are facts rather than defaults, and are documented as
+such in the source:**
+
+- **A single `/AP` `/N` STREAM yields `false`.** There is no state
+  subdictionary, so there is no `Off` entry to find; `false` is **the
+  answer**, not a fallback.
+- **Present AND non-null.** An explicit `/Off null` defines nothing, and is
+  already filtered out of `on_states` for the same reason — **accepting it
+  here would have made the two disagree about the same dictionary.**
+
+**The test asserts the invariant across every widget of a real form** (`Off`
+never appears among `on_states`) rather than unit-testing the helper, because
+the value has to survive the whole parse to be useful to a shell. **It also
+fails if the fixture contains no button widget with on-states at all** —
+otherwise it would pass while asserting nothing about the new field, which is
+**the vacuous-test shape this session hit five times.**
+
+**All four items of the `pdfceGUI` report are now answered:** 1 fixed
+(`Pass 78.0`), 2 **explained as not a defect** (`Pass 78.0`), 3 added as
+`flatten_refusal` (`Pass 78.0`), 4 added here.
+
+**Gates:** the message states **3,712 tests, 0 failures**; that figure is
+**one short** — see the reconciliation table under `Pass 79.0` above. `fmt`
+and `clippy -D warnings` clean.
+
+**`FEATURES.md`: NO box moved.** The *Forms (AcroForm)* rows were already
+`[x]` where this lands; a new read-only query on `forms::Widget` adds no
+capability row.
+
+---
+
+### ★ Pass 78.0 — `fa243df` — **A `#[must_use]` QUERY THAT ANSWERS *"no refusal"* WHERE EVERY CALL ERRORS IS WORSE THAN NO QUERY.** `fill_refusal()` asked **1 of the 3** guards `fill_guards()` runs. Fixed **by delegation**, not by transcription; `flatten_refusal()` added; **item 2 of the report REJECTED on the merits and a test now guards the rejection** — filed 2026-08-14 (hundred-and-forty-seventh filing)
+
+> **Reported from outside** by the `pdfceGUI` session **as a correctness
+> defect in a public API, not a missing feature.** They were right, and the
+> engineer verified all four items against the source before touching
+> anything.
+
+#### The defect
+
+`fill_refusal()` asked `check_certification_for_fill()`. `fill_guards()` —
+**the preamble every fill actually runs** — asked **three** things:
+encryption, that certification gate, and the `/Size`-suppression guard. So on
+an **encrypted** document, or one with **suppressed objects**, the query
+returned `None` and the fill then failed with `DocumentEncrypted` or
+`ObjectCreationWouldExposeHiddenObjects`.
+
+**That is precisely what the function's own doc example exists to prevent**
+(*"Disable the control and show `err`, rather than offering a box that will
+reject whatever is typed into it"*). **A shell following it to the letter
+still shipped the box that rejects whatever is typed into it, on two of the
+three paths — and the two most likely to occur.** They hit it building a
+Forms panel and worked around it by **re-deriving the missing conditions**,
+duplicating a guard list they cannot see and would not be told about when it
+changed.
+
+#### Why this is worse than an ordinary bug — the reporter's framing, and it is right
+
+These queries exist so a shell can satisfy **R83** — *disable a control
+rather than offer one that always errors*. **A refusal query that
+UNDER-REPORTS does not degrade gracefully:** it produces exactly the
+behaviour R83 forbids, **while the shell's source reads as though R83 were
+satisfied, AND EVERY TEST ON BOTH SIDES PASSES.**
+
+#### The fix is the SHAPE, not the missing checks
+
+Adding the two absent guards would have produced a **third transcription**.
+The fix is `fill_refusal() { self.fill_guards().err() }`, which makes the
+query and the guard **incapable of disagreeing** — **a future fourth guard is
+reported for free.** `flatten_fields` likewise now delegates to an extracted
+`flatten_guards()`.
+
+**Worth recording: `embed_fonts` and `unembed_fonts` already had this
+property the other way round — THE VERB CALLS THE QUERY — which is exactly
+why those two never drifted. The healthy pattern was already in the same
+file, twice.**
+
+#### ★ ONE ITEM OF THE REPORT IS WRONG, AND SAYING SO IS PART OF ANSWERING IT
+
+**Item 2** claimed `deletion_refusal()` under-reports because
+`flatten_fields` guards on suppression and it does not. But
+**`deletion_refusal` predicts DELETION**, and `deletion_preflight` is
+encryption + `check_certification` — **exactly what it reports. It is
+correct.** Adding a suppression check would make it **wrong in the other
+direction**: disabling a Delete control that would have worked.
+
+**A test asserts `deletion_refusal` must NOT gain the flatten guard**, so a
+later reader acting on the report does not *"correct"* a correct function.
+**That is the durable half of the rejection** — a refusal recorded only in
+prose gets re-proposed; a refusal recorded as a failing test does not.
+
+The real gap was **item 3**, and it is now **`flatten_refusal()`** — a
+**third distinct question**. Deletion and flatten share the strict
+certification gate, but **flatten additionally CREATES page content** and so
+carries the suppression guard. **They agree on two checks of three, which is
+the worst kind of near-miss** — it works until it does not, on documents that
+are not exotic. The requesting session had been gating Flatten on
+`deletion_refusal` under a local alias, **which is a guess about this crate's
+intent encoded in someone else's source.**
+
+#### The whole class was swept, since the reporter could only see the form family from outside
+
+**Six `*_refusal` queries exist.** `annotation_deletion_guards` takes a
+**specific annotation** (locked / TrapNet / widget) and is a **genuinely
+different question** from the document-level query — **not drift.** `embed`
+and `unembed` are healthy via the inverse pattern above. **`fill` was the
+only defect.**
+
+#### Tests, and the fixture choice is part of the point
+
+**Five new tests: two assert the instance, three assert the PROPERTY** —
+query and guard compared **against each other** across fixtures, so a future
+guard that stops being reported **fails here**.
+
+**The encrypted fixture is the EMPTY-USER-PASSWORD one, deliberately.** A
+password-protected file cannot be opened at all, never reaches an
+`EditSession`, and cannot exercise this guard. **The only encrypted documents
+that can reach a Forms panel are the ones that open without a prompt** —
+which is also **why the defect was reachable by a real shell rather than
+theoretical.** The first draft used `enc-aes-128.pdf` and failed at
+`Document::load` with `PasswordRequired`.
+
+**Sabotage run:** reverting `fill_refusal` to its buggy form fails **2 of the
+5** with the intended messages (*"got None. Returning None here is the
+defect…"*).
+
+**Gates:** 3,712 tests, 0 failures. `fmt`, `clippy -D warnings`,
+`check-ui-strings` clean.
+
+#### ★ RELATIONSHIP TO `Pass 73.1` — this discharges MOST of its Defect B, and `Pass 73.1` STAYS SCHEDULED
+
+`Pass 73.1` (*Next up*, filed in the hundred-and-thirty-ninth filing) named
+**two** under-reporting preflights. **This Pass settles one of them and
+rules on the other differently than 73.1 assumed** — full amendment on that
+entry. **What remains of `Pass 73.1`:** Defect A (`add_radio_button`'s
+post-commit `Err`) **entirely**, and Defect B's acceptance criterion 3
+(`annotation_deletion_refusal`'s doc comment must state in its first
+paragraph that it answers the **document-scoped** question only).
+**Verified in this dispatch by reading `crates/pdfce-core/src/edit.rs`
+:11459–11490 — the doc comment still does not say it, and `fa243df` did not
+touch that function.**
+
+**`FEATURES.md`: NO box moved.** *Fill fields* and *Flatten a form* were
+already `[x] [x]` in core+CLI; a refusal query is **how a shell asks whether
+to offer the control**, not a new capability. This is a **defect repair to a
+shipped capability**, and it is recorded here rather than in the features
+scan by design.
+
+**Terminology (rule 15):** nothing here touches **ce dimensions** or **pdf
+dimensions**.
+
+---
+
+### ★ Pass 77.0 — `7393473` — **`pdfce-fetch`: THE ONE NETWORK PRIMITIVE, IN A SIBLING CRATE — pinned URL + SHA-256 VERIFIED BEFORE ANYTHING REACHES DISK.** ★ **The first STRIPPABLE capability that does NOT live in `pdfce-core`** (it cannot — the engine is network-free permanently), so the convention's own header text does not describe its shape. Also: **CDLA-Permissive-2.0 accepted into `about.toml` on the operator's decision** after `cargo about generate` FAILED on it — filed 2026-08-14 (hundred-and-forty-seventh filing)
+
+**Promoted from the *Backlog* bucket** *"NETWORK — `pdfce-fetch`: THE ONE
+FETCH PRIMITIVE, IN A SIBLING CRATE, STRIPPABLE FROM BOTH SHELLS"* (filed
+2026-08-13 by decision 061, which fixed the crate's shape before it existed).
+**Every property that bucket specified was built as specified** — table
+below. This is **the second half of the operator's *"do both"***: the weights
+were bundled at `40c377a` and the downloader was owed from that commit's own
+closing line.
+
+#### Why a sibling crate and not a core feature
+
+Every strippable capability so far (`jpx`, `ocrs`) **lives in `pdfce-core`
+and is forwarded outward**. This one **cannot**: under **R12 as narrowed
+2026-08-13**, core and render stay **network-free permanently and
+gate-enforced**, so there is **nowhere in core for it to sit**. Putting it in
+both shells instead would duplicate the logic the GUI–core split exists to
+prevent.
+
+**The precedent is exact.** `crates/pdfce-print/Cargo.toml`'s own description
+reads *"Platform code, shared by both shells. Deliberately NOT in pdfce-core
+or pdfce-render, which must stay platform-free."* **This crate is that
+sentence with `network` in place of `platform`.**
+
+#### The bucket's specification versus what shipped — checked key by key in this dispatch
+
+Read from `crates/pdfce-fetch/Cargo.toml` and `src/lib.rs` at `HEAD`.
+
+| bucket said | shipped | ✔ |
+|---|---|---|
+| name `pdfce-fetch` | `pdfce-fetch` | ✔ |
+| scope: pinned-URL download + SHA-256 **and nothing else** | `PinnedArtifact`, `verify_bytes`, `sha256_hex`, `fetch_verified`, `MAX_ARTIFACT_BYTES` (64 MiB) — **five public items, no more** | ✔ |
+| default **ON** | `default = ["download"]` | ✔ |
+| stripped build **refuses by name** | `FetchError::FeatureUnsupported` | ✔ |
+| dependency `optional = true` | `ureq = { version = "3", optional = true }` | ✔ |
+| **never** depended on by core/render | `cargo tree` — **zero hits each** | ✔ |
+| attribution automatic | `THIRD_PARTY_LICENSES.md` regenerated from the shipping graph | ✔ |
+| depended on **optionally** by `pdfce-cli` and `pdfce-gui` | **NOT YET — see the R151 note below** | ✘ *(not built)* |
+
+#### ★ WHAT THE NARROWING DID NOT COST, and it is written into the crate rather than left in a filing
+
+Before 2026-08-13, *"no HTTP client exists in this binary, verifiable by
+anyone reading `cargo tree`"* was a **project-wide constraint**. It is now a
+**BUILD CONFIGURATION**: build without the feature and **the claim is true
+again, verified the same way**, and `THIRD_PARTY_LICENSES.md` **drops the
+whole TLS stack's attribution with it** because it is generated from the
+shipping graph. **Nothing was given up; an option was gained.** That argument
+lives in the crate's `[features]` block so a future reader does not
+re-litigate the narrowing.
+
+#### Two design properties that are the point rather than details
+
+1. **VERIFY BEFORE WRITING.** Not download-then-check-then-delete: that
+   leaves an unverified file on disk for a window, and **a process that dies
+   in that window leaves it there permanently, looking exactly like a good
+   one.** Bytes are hashed **in memory**; only a match reaches the
+   filesystem.
+2. **THE HASH IS A SUPPLY-CHAIN CONTROL, NOT AN INTEGRITY CHECK.** Pinned
+   **per artifact** because `docs/ocr-engine-survey.md` established that the
+   Hugging Face and S3 copies of *"the ocrs models"* are **NOT
+   byte-identical** — different filenames, one **13,280 bytes** smaller. **A
+   fetch trusting a URL alone installs weights nobody tested, silently.**
+
+**`verify_bytes` is deliberately OUTSIDE the feature gate:** an operator who
+obtained a file by hand can still check it against the manifest, and **there
+is no reason to make the stripped build weaker than it needs to be.**
+
+#### Licensing — CDLA-Permissive-2.0, and the decision was the operator's
+
+`cargo about generate` **FAILED** on `webpki-roots`' `CDLA-Permissive-2.0`
+id. **The choice was put to the operator rather than made in-session, which
+is what `about.toml`'s own comment requires**, and he accepted it
+2026-08-13. It is a **DATA licence**: `webpki-roots` ships **Mozilla's root
+certificate store, not code**, and **2.0 deliberately dropped the
+share-alike that CDLA-Sharing-1.0 has**. `native-tls` was the alternative and
+was rejected in favour of it. Full rationale in `about.toml`.
+
+**The whole TLS stack is permissive, verified against the resolved graph** —
+`ureq` MIT/Apache-2.0, `rustls` Apache-2.0/ISC/MIT, `ring` **Apache-2.0 AND
+ISC** (conjunctive — *both* apply), `rustls-webpki` and `untrusted` ISC,
+`webpki-roots` CDLA-Permissive-2.0. **Zero copyleft added** (rule 13,
+`LEGAL.md` §6.1).
+
+#### Deliberately NOT built, and the reason is an unresolved rule
+
+**Anything that executes what it fetched.** **`R13` clause 5 forbids it**,
+and that clause is **UNRESOLVED against the operator's *"download addin
+capability"***, since an add-in **is executed code**. The crate **moves bytes
+to disk and stops**, and **says so in its module docs** so nobody extends it
+past the line while the ruling is outstanding. **Also refused: mirror
+fallback and *"latest version"*** — *a pinned artifact has one source, and
+silently reaching for a second is how you run the copy that was not
+measured.*
+
+#### ★ R151, AT CRATE SCALE — MEASURED IN THIS DISPATCH, AND IT IS SHARPER THAN THE USUAL INSTANCE
+
+`grep -rn "pdfce_fetch" crates/ --include=*.rs` excluding the crate itself
+returns **zero hits**; `crates/pdfce-cli/Cargo.toml` and
+`crates/pdfce-gui/Cargo.toml` contain **no `fetch` line at all**. The crate
+is a **workspace member with no dependent crate**.
+
+**R151's usual shape is a core capability with no shell caller. This is an
+entire CRATE with no caller** — and the boundary the design leans on
+(*"the shells depend on it optionally; core never does"*) is, at `HEAD`,
+**enforced trivially, because nothing depends on it at all.** The `cargo
+tree` result is true and is **not yet evidence about the boundary**, because
+the boundary has not been exercised. It becomes evidence when the CLI half
+lands.
+
+**STILL OWED, and it is the second time an OCR half has looked complete
+because the other half shipped:** the **`pdfce-cli` subcommand** that calls
+`pdfce-fetch` with the `ocrs` manifest. `7393473`'s own message closes with
+*"Still owed: the CLI subcommand that calls this with the ocrs manifest."*
+**The crate exists; nothing calls it.** Filed in *Next up* under the
+`Pass 71.0` OCR entry's owed list and in this filing's `SESSION_LOG.md`
+*Still in flight*.
+
+#### ★ AND THE CONVENTION HEADER EDIT IS STILL OWED — checked, not assumed
+
+The *Backlog* bucket filed an **OWED code edit**: extend
+**`crates/pdfce-core/Cargo.toml`'s `[features]` header** to admit
+**shell-only** strippable capabilities. **Read in this dispatch: that header
+is still written entirely in terms of core features forwarded outward** —
+rules 1–4 are intact and correct, and **none of their wording admits this
+shape.** `7393473` recorded the new shape in **`pdfce-fetch`'s own
+`[features]` block**, which is genuinely better than nothing and is **not the
+same thing**: a reader adding the *next* strippable capability reads the
+**core** header, because that is where the convention is declared. **The item
+stays open in *Backlog*, now with a worked example on disk.**
+
+**Gates:** **3,707 tests, 0 failures, BOTH feature configurations.** The
+stripped-build refusal test **compiles ONLY with the feature off** and
+asserts **the message names the file and says what to do instead**. `fmt`,
+`clippy -D warnings`, `check-fmt-excluded` clean. `THIRD_PARTY_LICENSES.md`
+regenerated.
+
+**`FEATURES.md`:** a **Planned** row added — *Operator-initiated download* —
+with **`core` marked `—`, not `[ ]`**: core can never have this, which is a
+**shape mismatch, not a gap**, and the legend's whole purpose is that
+distinction. **No shell box ticked**, because nothing is operator-reachable.
+
+**Terminology (rule 15):** nothing here touches **ce dimensions** or **pdf
+dimensions**.
+
+---
+
 ### ★ Pass 76.0 — `d24c1df` — **OBJECT IDENTITY ACROSS EDITS: which verbs renumber, MEASURED rather than read, and a `remap_index_after_delete` that returns `None` rather than a different object** — ★★ **AND A PASS-NUMBER COLLISION: this commit's own message calls itself `Pass 75.0`, a number the ROADMAP had already minted for the reusable parsed handle. RULED — the ROADMAP keeps `75.0`; this work is `76.0`.** Also files `Pass 71.0`'s **end-to-end OCR smoke harness** (`4b82641`, and a false positive its author caught by arithmetic) and the **12,240,008 B of CC-BY-SA-4.0 weights now permanently in a public repository's history** (`40c377a`). **`FEATURES.md`: NO checkbox changed; the OCR row's sentence REPLACED, because it asserted the weights were not in the repository** — filed 2026-08-13 (hundred-and-forty-sixth filing)
 
 **Full hashes**, read with `git rev-parse` in this dispatch — not relayed:
@@ -43936,8 +44511,446 @@ fixed in that finding's shape rather than patched per-site:
 4. `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo tree -p
    pdfce-core` clean.
 
+#### ★★ AMENDMENT 2026-08-14 (hundred-and-forty-seventh filing) — **DEFECT B IS SUBSTANTIALLY DISCHARGED BY `Pass 78.0` (`fa243df`), ITS SECOND ROW WAS RULED THE OTHER WAY, AND THIS PASS STAYS SCHEDULED FOR WHAT REMAINS**
+
+`Pass 78.0` shipped from an **external report** (the `pdfceGUI` session)
+that arrived at Defect B's first row independently, four days after it was
+filed here. **Neither side knew about the other's record**, which is worth
+noting on its own: the same defect was found twice, from opposite sides of
+the API.
+
+**What `Pass 78.0` settled, against this entry's acceptance list:**
+
+| criterion | state after `fa243df` |
+|---|---|
+| **1** — each preflight calls the same predicate the real path calls | **MET for `fill_refusal`** (`self.fill_guards().err()` — delegation, not a third transcription). `embed`/`unembed` were **already healthy via the inverse pattern** (the verb calls the query). `rename_refusal` and `deletion_refusal` swept and found correct. |
+| **2** — a property test comparing preflight and real path across fixtures | **MET** — five new tests, **three of them asserting the PROPERTY** rather than the instance. |
+| **3** — `annotation_deletion_refusal` takes an `annot_id` **or** its doc comment states the document-scoped limit | **NOT MET.** Verified in this dispatch by reading `crates/pdfce-core/src/edit.rs:11459–11490`: the doc comment still does not say it, and `fa243df` did not touch that function. |
+
+**★ AND THE SECOND ROW OF THIS ENTRY'S OWN DEFECT-B TABLE IS RULED THE
+OTHER WAY.** This entry listed `annotation_deletion_refusal` as
+*under-reporting* because it is **document-scoped only** while the real
+path also carries **per-annotation** refusals. `Pass 78.0`'s class sweep
+ruled that **`annotation_deletion_guards` answers a genuinely different
+question** — *may this annotation be deleted* versus *may annotations be
+deleted at all* — **and that this is not drift.** Both queries are
+correct; **what is missing is the disclosure that they are two questions**,
+which is exactly why criterion 3's *doc-comment* branch, and not its
+`annot_id` branch, is the cheap and correct discharge.
+
+**Do not confuse this with the report's rejected item 2.** That was
+**`deletion_refusal`** (document-level field deletion) and it was rejected
+on the merits, with a test now guarding the rejection. This row is
+**`annotation_deletion_refusal`** — a different function, a different
+ruling, and the two are one word apart in the source.
+
+**WHAT REMAINS OF `Pass 73.1`, and it stays in *Next up*:**
+
+1. **Defect A in full** — `add_radio_button` is still the one verb that can
+   `Err` **after** committing. `fa243df` did not touch it, and
+   `FEATURES.md`'s Forms row still carries the warning that cites this
+   Pass.
+2. **Criterion 3** — one doc-comment paragraph on
+   `annotation_deletion_refusal`. **The cheapest item in *Next up*, and it
+   is the one that stops a shell from making `Pass 78.0`'s mistake in the
+   annotation family instead of the form family.**
+
 **Terminology (rule 15):** nothing here touches **ce dimensions** or
 **pdf dimensions**.
+
+### ~~Pass 81.0~~ — **SHIPPED 2026-08-14, commit `a84bdc3`, WHILE THIS VERY FILING WAS BEING WRITTEN. See the `Pass 81.0` entry at the top of *Shipped*.** Retained below as the scoping record — it is the measurement that justified the Pass, and the requester's re-framing (recorded in the *Shipped* entry) is what moved it from *prerequisite of a feature* to *fidelity defect in shipped behaviour*
+
+> **★★ STATUS BANNER — READ THIS BEFORE ACTING ON ANYTHING BELOW.**
+> **`Pass 81.0` is SHIPPED.** This entry said **UNSTARTED** for roughly
+> two hours: the number was minted in the hundred-and-forty-seventh filing
+> and `a84bdc3` landed at **05:09** the same morning, mid-dispatch. **The
+> measurements below are still accurate as of `b943ea1` and are FALSE as
+> of `a84bdc3`** — `pdfce-render` now reads annotation `/CA`. **`Pass
+> 81.1` (the WRITE half) is still scheduled and is unaffected.**
+
+> **Found while scoping a feature request, and it is the bigger half of
+> that request.** The consumer asked for the ability to *write* `/CA`
+> (`Pass 81.1`). Measuring what pdfce does with `/CA` on the way in
+> found that **it does nothing with it.**
+
+#### What was measured, and with what command
+
+Run in this dispatch against `HEAD` = `b943ea1`, confirming the
+engineer's figures rather than relaying them:
+
+| fact | how measured |
+|---|---|
+| **exactly one** `/CA` read in the whole of `crates/pdfce-render/` | `grep -rn '"CA"\|b"CA"' crates/pdfce-render/src/` → **1 hit**, `interpret.rs:2050` |
+| that hit is **`ExtGState` stroking alpha**, not annotation opacity | `interpret.rs:2050` — `ext.get(b"CA")`, inside the `gs` operator handler |
+| **zero** `/CA` reads in the annotation paint path | `grep -rn "CA" crates/pdfce-render/src/annot.rs` → **no output** |
+
+#### ★★ THREE DIFFERENT KEYS SPELLED `/CA` LIVE IN THIS PROJECT, AND CONFLATING THEM IS THE FIRST WAY THIS PASS GOES WRONG
+
+This is a **rule-15-shaped hazard** in a different vocabulary: one token,
+three unrelated meanings, and two of them are already implemented — so a
+reader greps `/CA`, finds hits, and concludes the work is done.
+
+| `/CA` | where | meaning | state at `HEAD` |
+|---|---|---|---|
+| **`ExtGState` `/CA`** | §11.6.4.4 Table 58, content stream | **stroking** constant alpha (`/ca` is non-stroking) | **SHIPPED** — `d3ea5de`, 2026-08-09, the transparency fix |
+| **annotation `/CA`** | §12.5.2 Table 164, the **annotation dictionary** | the markup annotation's **whole-annotation opacity** | **THIS PASS — absent** |
+| **`/MK` `/CA`** | §12.5.6.19 Table 189, a widget's appearance characteristics | the widget's **caption string** | **SHIPPED** — read-only, forms surface |
+
+**`d3ea5de` did not fix this one.** It fixed the content-stream key at the
+interpreter level. **An annotation's `/CA` is applied to the annotation's
+whole appearance stream as a group**, not to an operation inside it, so it
+is a different mechanism at a different level — and no amount of
+`ExtGState` handling reaches it.
+
+#### The blast radius, which is the argument for HIGH PRIORITY
+
+**This is not "a feature we have not built yet" — it is a fidelity defect
+on documents pdfce already opens.** Reduced-opacity markup is **typical
+Bluebeam and Acrobat output** — clouds, highlights and shape markup are
+routinely placed at 30–60 % opacity so the drawing underneath stays
+readable. **pdfce paints all of them solid**, which on a dense CAD sheet
+means the markup **obliterates the content it was annotating.**
+
+**And it is silent** — nothing tells the operator a transparency
+instruction was dropped, **which is the exact shape `d3ea5de` was written
+to end** for the content-stream key. The pattern recurring at a different
+level is itself the finding.
+
+#### ★ ORDERING IS BINDING: `81.0` BEFORE `81.1`
+
+**Until the reader is fixed, a correctly-written `/CA` looks right in
+Acrobat and WRONG in pdfce.** Shipping the writer first would mean pdfce's
+own output renders solid in pdfce while rendering correctly everywhere
+else — **which makes the shell look broken for doing the right thing**,
+and sends the next bug report at the writer instead of the reader.
+
+#### Acceptance
+
+1. `pdfce-render`'s annotation paint path reads the annotation dictionary's
+   `/CA` (§12.5.2 Table 164; Optional, **default 1.0**) and applies it to
+   the appearance stream **as a group**, not per-operation.
+2. **Endpoint tests, in the shape `d3ea5de` established:** `/CA 0` leaves
+   the paper untouched; `/CA 1` is **byte-identical** to no `/CA` at all;
+   an absent key behaves as `1.0`.
+3. **The control that catches the easy mistake:** an annotation `/CA` must
+   **not** be confused with an `ExtGState` `/CA` inside the same appearance
+   stream — a test with **both present at different values** proves they
+   compose rather than one overwriting the other.
+4. **A rendered-fixture test with a real reduced-opacity markup**, since
+   the defect's whole character is that it is invisible to code reading.
+5. **Highlight's `ExtGState` must NOT be generalised to carry this** — see
+   the warning under `Pass 81.1`.
+6. `cargo fmt --check`, `cargo clippy -- -D warnings`,
+   `cargo tree -p pdfce-render` clean.
+
+**Terminology (rule 15):** nothing here touches **ce dimensions** or **pdf
+dimensions** — but note that a **pdf** annotation authored elsewhere is
+exactly what renders wrong today.
+
+### Pass 82.1 — **`validate_geometry` accepts a TWO-VERTEX "polygon"**, and the consuming shell was working around it with its own `≥ 3` rule — a boundary finding under decision 058, and it must be fixed for **`Polygon` as well as `Cloud`** — filed 2026-08-14 (hundred-and-forty-seventh filing) — **UNSTARTED**
+
+> **Small, independent of `Pass 82.0`, and should not wait for it.** It is
+> filed as a slice of the cloud family only because that is where it was
+> found. **Nothing in it depends on clouds existing.**
+
+**Measured in this dispatch**, `crates/pdfce-core/src/edit.rs:15247`:
+
+```rust
+MarkupSpec::Polygon { vertices, .. } | MarkupSpec::PolyLine { vertices, .. } => {
+    vertices.len() < 2
+}
+```
+
+**`Polygon` and `PolyLine` share one arm, and `< 2` is right for exactly
+one of them.** A two-point **PolyLine** is a line segment and draws
+something. A two-point **Polygon** is a degenerate closed figure — pdfce
+authors it, the `/AP` draws a doubled-back line, and **`add_markup`'s
+guard 4 (*"geometry must draw something"*) has been satisfied by
+something that draws a line pretending to be an area.**
+
+**This is a decision-058 boundary finding, filed as one.** 058's rule:
+*"Anything it DOES need is a place the boundary was drawn wrong — a
+finding about THIS repository, to be recorded as one … not quietly
+accommodated."* The `pdfceGUI` session **did** accommodate it — it carries
+its own `≥ 3` check — and **that is the symptom**: a shell re-deriving a
+validity rule the engine owns is the same defect class as `Pass 78.0`'s
+re-derived guard list, one level down.
+
+**Acceptance:**
+1. `Polygon` requires **`vertices.len() >= 3`**; `PolyLine` keeps `>= 2`.
+   **Split the match arm** — sharing it is what produced the defect.
+2. The **same rule applies to `Cloud`** when `Pass 82.0` lands (a cloud is
+   a polygon with a border effect; a two-vertex cloud is the same
+   nonsense).
+3. A refusal **by name**, not `EmptyGeometry` — *"a polygon needs at least
+   three vertices"* tells the caller what to fix; *"empty geometry"* about
+   a two-point list does not (R27).
+4. A test per subtype asserting the boundary **from both sides** (2 refused
+   / 3 accepted for `Polygon`; 1 refused / 2 accepted for `PolyLine`).
+5. `cargo fmt --check`, `cargo clippy -- -D warnings` clean.
+
+**Terminology (rule 15):** nothing here touches **ce dimensions** or **pdf
+dimensions**.
+
+### Pass 80.0 — **NOTE TEXT ON GEOMETRIC MARKUP — `/Contents` PLUS `/T` AND `/M` TOGETHER**, because a Comments panel that lists a note with no author *"looks like a bug in the panel rather than an absence in the writer"* — filed 2026-08-14 (hundred-and-forty-seventh filing) — **UNSTARTED**
+
+> **A named consumer is waiting.** The `pdfceGUI` session's Comments panel
+> shows **"No note text"** on every markup pdfce itself authors, because
+> `MarkupSpec` has no way to carry `/Contents`. pdfce can already **READ**
+> `/Contents`, `/T` and `/M` (`Pass 38.4`, `8228f44`) — **this is the
+> write half of a read surface that already shipped**, which is why it is
+> in *Next up* rather than *Backlog*.
+
+#### The deciding argument is the requester's, and it is about the trio, not the single key
+
+> *"A Comments panel that lists a note with no author … looks like a bug
+> in the panel rather than an absence in the writer."*
+
+**`/Contents` alone would ship the defect it was asked to fix.** Acrobat,
+Bluebeam and pdfce's own Comments panel all display **author and date
+beside the note**; a note that has text but no author renders as a row
+with a blank column, and **a reader blames the reader, not the writer.**
+So the unit of work is the **trio** — `/Contents` + `/T` + `/M` — and the
+two accompanying keys carry **engineer rulings that must survive into the
+implementation.**
+
+#### ★ RULING 1 — `/M` IS ENGINE-STAMPED, NOT CALLER-SUPPLIED
+
+**The caller does not get to supply the modification date.** Two reasons,
+and the second is the structural one:
+
+1. **A caller-supplied date is a caller-supplied lie.** `/M` records when
+   the annotation was written. The only party that knows that is the party
+   doing the writing.
+2. **§7.9.4's date format is exactly the kind of thing two shells would
+   spell differently** — `D:YYYYMMDDHHmmSSOHH'mm`, with an optional
+   timezone that has its own apostrophe convention. Handing that to every
+   caller guarantees two spellings of the same instant in one document,
+   and pdfce would have **shipped the divergence itself**.
+
+**This is the `Pass 78.0` principle applied before the fact:** one
+producer for one value, so two producers cannot disagree.
+
+#### ★ RULING 2 — `/T` IS OPTIONAL, WITH **NO INVENTED PLACEHOLDER**
+
+`title: Option<String>`. **`None` OMITS THE KEY.** It does **not** write
+`"pdfce"`, `"Unknown"`, `"Author"`, or the OS user name.
+
+**This is `CLAUDE.md` rule 4 — *fuzzy, never sneaky* — at the writer.** A
+title pdfce invented would be **a fact invented by the writer**, indistinguishable
+in the saved file from one the operator typed, and **it would travel**:
+every downstream viewer, every export, every comment summary would attribute
+the markup to a name nobody chose. **An absent key is honest and is what
+§12.5.6.2 Table 170 permits** (`/T` is Optional). A panel showing a blank
+author column for an anonymous note is **correct disclosure**, not a defect.
+
+#### Acceptance
+
+1. `MarkupSpec`'s variants carry `contents: Option<String>` and
+   `title: Option<String>`; **`None` omits the key in both cases.**
+2. **`/M` is stamped by `add_markup` itself**, in §7.9.4 format, from the
+   system clock — **no caller parameter exists to override it.**
+3. Text is written as a PDF string with pdfce's existing escaping /
+   encoding path (a note containing `)`, a backslash, or non-Latin text
+   must round-trip).
+4. **Round-trip test against the READ surface that already exists**
+   (`annot::Annotation::{contents, title, modified}`, `Pass 38.4`): write
+   the trio, save, reload, and assert **the reader returns what the writer
+   was given** — the differential-oracle shape, not a value assertion
+   against a hard-coded string.
+5. A test asserting **`None` omits the key**, checked against the saved
+   bytes — otherwise a placeholder could be reintroduced and every
+   round-trip test would still pass.
+6. `pdfce-cli`'s markup subcommands gain the two options (rule 11).
+7. `cargo fmt --check`, `cargo clippy -- -D warnings`,
+   `cargo tree -p pdfce-core` clean.
+
+**Terminology (rule 15):** nothing here touches **ce dimensions** or **pdf
+dimensions**.
+
+### Pass 81.1 — **MARKUP OPACITY: `opacity` on `MarkupSpec`, writing `/CA` ALONE** — the smaller half of the opacity request, and it **lands after `Pass 81.0`** — filed 2026-08-14 (hundred-and-forty-seventh filing) — **UNSTARTED**
+
+**What the consumer asked for:** an `opacity` field on `MarkupSpec` so a
+markup can be authored at reduced opacity — §12.5.2 Table 164's `/CA`,
+Optional, **default 1.0**, a number in `0.0..=1.0`.
+
+**`/CA` ALONE, and the word *alone* is the specification.** No `ExtGState`
+is added to the appearance stream, no `/ca` is written, no blend mode is
+touched. `/CA` applies to the annotation's appearance **as a group**,
+which is precisely the semantics wanted, and it is **one key**.
+
+#### ★ HIGHLIGHT'S `ExtGState` MUST NOT BE GENERALISED FOR THIS
+
+pdfce's Highlight markup already writes an `ExtGState` into its appearance
+stream. **It is there for the MULTIPLY BLEND MODE** — that is what makes a
+highlight tint the text beneath it instead of covering it — and blend mode
+and constant alpha are **different properties that happen to live in the
+same dictionary.**
+
+**Reusing that code path for opacity would be a plausible-looking mistake
+with two consequences:** it would put a blend mode on shapes that must not
+have one (a Square at 50 % opacity is *not* a multiply-blended Square), and
+it would make the opacity **operation-scoped** inside the stream rather
+than **annotation-scoped**, which is a different rendered result wherever
+the appearance overlaps itself. **Recorded here because the shortcut is
+right there and looks like reuse.**
+
+#### Ordering — **SATISFIED 2026-08-14: `Pass 81.0` SHIPPED (`a84bdc3`) hours after this entry was filed**
+
+**`Pass 81.0` first**, and it landed first. Until `pdfce-render` read
+annotation `/CA`, this Pass would have produced files that **look right in
+Acrobat and wrong in pdfce** — the shell penalised in its own viewer for
+writing the correct thing. **That constraint is now discharged**; this
+Pass is free to proceed whenever it is picked up.
+
+#### ★ THE READ PATH CLAMPS AND THE WRITE PATH MUST REFUSE — that asymmetry is DELIBERATE, not a contradiction
+
+`Pass 81.0` **clamps** an out-of-range `/CA` to `0.0..=1.0` rather than
+refusing, on the stated ground that *"a producer writing `1.5` means
+opaque, and refusing to place the annotation to defend a range check would
+lose content."* **That is the right rule for reading someone else's
+file. It is the wrong rule for writing pdfce's own** — a caller passing
+`1.5` has a bug, and silently clamping it produces a document the caller
+did not ask for (R27). **Lenient in what it accepts, strict in what it
+emits**; recorded here because a reader who sees the clamp on the read
+side will otherwise "fix" the refusal on the write side.
+
+**Also inherited from `81.0`, and it constrains this Pass:** the model
+stores `Option<f64>` precisely so that **absent** and **explicitly 1.0**
+stay distinguishable through a round-trip. **A writer that normalises
+either into the other breaks that**, which is why acceptance criterion 1
+below omits the key for `None` rather than writing `1.0`.
+
+#### Acceptance
+
+1. `opacity: Option<f64>` on `MarkupSpec`'s variants; `None` **omits
+   `/CA`** (which is exactly `1.0`, so writing it would be a no-op key —
+   §5's *never normalize*).
+2. **Refuse by name**, do not clamp, on a value outside `0.0..=1.0` (R27:
+   a clamp silently produces a document the caller did not ask for).
+3. **No `ExtGState` is written** — assert it against the saved appearance
+   stream bytes, so the Highlight shortcut cannot be taken later without a
+   test failing.
+4. Highlight's existing multiply-blend `ExtGState` is **unchanged**, and a
+   test pins that a Highlight authored with `opacity` carries **both** —
+   its blend `ExtGState` **and** an annotation-level `/CA`.
+5. A **render** test proving the written `/CA` is honoured by
+   `Pass 81.0`'s reader — the two halves must be checked against each
+   other, not each against its own expectation.
+6. `pdfce-cli`'s markup subcommands gain `--opacity` (rule 11).
+7. `cargo fmt --check`, `cargo clippy -- -D warnings` clean.
+
+**Terminology (rule 15):** nothing here touches **ce dimensions** or **pdf
+dimensions**.
+
+### Pass 82.0 — **REVISION CLOUDS — `MarkupSpec::Cloud` and, the more valuable half, `Square { border_effect }`** (`/BE << /S /C /I n >>`, §12.5.4 Table 167). ★ **The general escape hatch `add_markup_appearance` is REFUSED, ON THE RECORD — and the requester declined to ask for it before the engineer could refuse it** — filed 2026-08-14 (hundred-and-forty-seventh filing) — **UNSTARTED**
+
+> **A genuine absence, checked rather than assumed.** The requester
+> searched `ROADMAP.md` and `FEATURES.md` for a cloud entry before asking
+> and found none **in any category** — not a declined item, not a Backlog
+> bullet, **nothing.** Confirmed in this dispatch: `grep -ni "revision
+> cloud\|border effect\|BorderEffect"` over `ROADMAP.md` returns **zero
+> hits.** A `FEATURES.md` row is added by this filing.
+
+#### What is asked for
+
+1. **`MarkupSpec::Cloud { vertices, border, interior, width, intensity }`**
+   — a closed polygon carrying **`/BE << /S /C /I n >>`** (§12.5.4
+   Table 167: `/S /C` = the cloudy border effect, `/I` = intensity,
+   **0, 1 or 2**).
+2. **★ `Square { border_effect }` — and this is the half that carries the
+   value.** *Drag a box, make it cloudy* is **the gesture** reviewers
+   actually perform; a cloud from a free-form vertex list is the rarer
+   case. A `/BE` on `Square` is **one optional key on a subtype pdfce
+   already authors**, and it reaches the common workflow with a fraction
+   of the surface.
+
+#### ★★ THE ESCAPE HATCH IS REFUSED, AND THE REFUSAL IS THE MOST TRANSFERABLE PART OF THIS ENTRY
+
+The obvious way to satisfy a request like this **once and for all** is a
+general `add_markup_appearance` — hand `pdfce-core` a prebuilt annotation
+dictionary and appearance stream and let the shell write whatever subtype
+it likes.
+
+**The requester declined to ask for it**, reasoning that it would let a
+shell write **a dictionary the engine never validated**, bypassing
+`add_markup`'s **four guards**. **The engineer agrees and would have
+refused it.** Both halves are recorded because a refusal that only one
+party arrived at gets re-proposed by the other.
+
+**`add_markup`'s four guards, read from
+`crates/pdfce-core/src/edit.rs:9990–10030` in this dispatch:**
+
+| # | guard | refuses with |
+|---|---|---|
+| 1 | document is **encrypted** | `DocumentEncrypted` |
+| 2 | **certification** (annotation-aware `/P 3` gate, `Pass 38.5`) | `CertificationForbidsChange` |
+| 3 | **`/Size` suppression** — creating objects would expose hidden entries (§7.5.5) | `ObjectCreationWouldExposeHiddenObjects` |
+| 4 | **geometry draws something** | `EmptyGeometry` |
+
+**The principle, stated so it can be cited:** ***a guard that can be
+bypassed by a second entry point is not a guard, it is a convention.***
+Guards 1–3 are **document-safety** properties, not stylistic ones — an
+escape hatch would let a shell author an annotation into an encrypted
+document, into a certified document that forbids it, or into a document
+whose `/Size` is hiding objects, **and every one of those failures is
+silent in the saved file.**
+
+**★ Note the shape: this is `Pass 78.0` seen from the opposite end.** There,
+a **query** re-derived a guard list and drifted from it, so the fix was to
+make the two the same expression. Here, a proposed **second entry point**
+would let a caller skip the list entirely. **Same principle, both
+directions: one guarded operation, one entry point, one expression of the
+guard.**
+
+##### The rule that was NOT minted, and why — recorded so the count is not lost
+
+That principle now has **two instances in one day** (`Pass 78.0`'s
+delegation; this refusal). **A standing rule is NOT minted**, because this
+project's own bar, applied twice this week in declining the `R193` and
+`R194` proposals, is **three instances**, and *"decline on the count, not
+the merits"* is the disposition those rulings established. **`R195`
+remains the next genuinely free rule number** — nothing here claims it.
+**If a third unrelated instance appears, the draft is ready and the
+instances are enumerated here and under `Pass 78.0`.**
+
+#### The correct alternative, which is what this Pass is
+
+**Named subtypes, each validated.** Every new markup shape is a
+`MarkupSpec` variant that goes through the same four guards and the same
+`annot_author::build_appearance` builder. It is more work per subtype and
+it is the reason `add_markup` can be trusted at all.
+
+#### Acceptance
+
+1. `MarkupSpec::Cloud { vertices, border, interior, width, intensity }`,
+   authored through `add_markup` — **no new entry point.**
+2. `/BE` written as `<< /S /C /I n >>`; **`/I` refused by name outside
+   `{0, 1, 2}`** (Table 167 admits 0, 1 and 2 — not a continuous range).
+3. **`Square` gains `border_effect`**, the same `/BE` on the subtype the
+   drag gesture produces. **Ship both in this Pass**; a cloud request
+   answered with only the vertex-list form misses the workflow that
+   motivated it.
+4. A **baked `/AP`** for both, per **R43** (pdfce paints from the
+   appearance stream or not at all) — a cloud whose cloudiness lives only
+   in `/BE` renders as a plain polygon in a viewer that ignores it.
+5. **`Pass 82.1`'s `≥ 3` vertex rule applies to `Cloud`.**
+6. `pdfce-cli` subcommand coverage for both (rule 11).
+7. `cargo fmt --check`, `cargo clippy -- -D warnings`,
+   `cargo tree -p pdfce-core` clean.
+
+#### Sourcing note
+
+`/BE` and Table 167 are cited from the request and confirmed against
+pdfce's existing annotation work. **Before implementation, dispatch
+`pdfce-spec-librarian`** for the §12.5.4 Table 167 entry — in particular
+whether `/BE` is honoured on `Square`/`Circle` only or on the polygon
+subtypes too, and what a conforming reader does with `/I` on a subtype
+that does not support it. **Rule 1: do not implement `/BE`'s byte layout
+from memory.**
+
+**Terminology (rule 15):** nothing here touches **ce dimensions** or **pdf
+dimensions**.
 
 ### ★ Pass 75.0 — **THE REUSABLE PARSED HANDLE (display list) in `pdfce-render`** — a parsed page representation a shell **holds across frames** and replays against N regions, so the second and subsequent renders of an unchanged page cost roughly **FILL** rather than **INTERPRETATION** — filed 2026-08-13 (hundred-and-forty-fifth filing) — **UNSTARTED · SCHEDULED, NOT URGENT** (the requester says nothing is blocked this week)
 
@@ -50630,7 +51643,13 @@ nothing gets forgotten, not as a commitment to build in this order.
 
 - **★★★ NETWORK, filed 2026-08-13 (hundred-and-forty-fourth filing) —
   `pdfce-fetch`: THE ONE FETCH PRIMITIVE, IN A SIBLING CRATE, STRIPPABLE
-  FROM BOTH SHELLS. Nothing here is built; the crate does not exist.**
+  FROM BOTH SHELLS.** ~~Nothing here is built; the crate does not
+  exist.~~ **★ SUPERSEDED 2026-08-14 (hundred-and-forty-seventh filing):
+  THE CRATE IS BUILT AND SHIPPED as `Pass 77.0` (`7393473`) — see
+  *Shipped*. Struck rather than deleted, because this bucket's shape
+  specification was written before the crate and every key of it was
+  honoured; the amendment at the end of this bucket records what is
+  still open.**
   Scoped by **decision 061** on two consecutive operator instructions —
   the first permitting *"download update or download addin capability"*,
   the second binding it: *"and if we add these they should be modular in
@@ -50706,6 +51725,30 @@ nothing gets forgotten, not as a commitment to build in this order.
   reframe, not a retraction**: decision 061 §4 keeps the whole old claim
   as a **build configuration**, verifiable by the same command with the
   attribution file agreeing.
+
+  **★★ AMENDMENT 2026-08-14 (hundred-and-forty-seventh filing) — THE
+  CRATE SHIPPED AS `Pass 77.0`; THREE ITEMS OF THIS BUCKET ARE STILL
+  OPEN, AND TWO OF THEM ARE THE KIND THAT LOOK CLOSED.**
+
+  | this bucket's item | state at `b943ea1`, measured in this dispatch |
+  |---|---|
+  | the crate, its shape, its feature, its refusal-by-name, its licences | **DONE** — `Pass 77.0`, every key of the shape table honoured |
+  | **consumer 1 — OCR model fetch-and-verify** | **NOT DONE.** `grep -rn "pdfce_fetch" crates/ --include=*.rs` outside the crate returns **zero hits**; neither shell's `Cargo.toml` mentions it. **The crate has no caller** — R151 at crate scale. |
+  | **consumer 2 — update download** | still **blocked** on the `R13` ruling below |
+  | **consumer 3 — add-in download** | still **blocked** on the `R13` ruling below |
+  | **the OWED `[features]`-header edit in `crates/pdfce-core/Cargo.toml`** | **STILL OWED.** Read in this dispatch: that header is still written entirely in terms of **core** features forwarded outward. `7393473` documented the new shape in **`pdfce-fetch`'s own** `[features]` block — better than nothing, **and not the same thing**, because the next person adding a strippable capability reads the **core** header, where the convention is declared. |
+  | the `README.md` privacy-copy rewrite | **NOT YET DUE** — it falls due *"in the same Pass that first links a network client into a shell."* **No shell links it yet**, so `README.md`'s *"pdfce does not use the network"* block is **still true at `HEAD`** and must not be pre-emptively softened. **It falls due with the CLI subcommand.** |
+
+  **★ The two that look closed are the dangerous pair**, and they are the
+  same shape as the OCR halves: **the visible artifact shipped** (the
+  crate; the weights) **while the reachable one did not** (the CLI
+  subcommand; a shell surface). `7393473`'s own closing line says *"Still
+  owed: the CLI subcommand that calls this with the ocrs manifest."*
+  **This is the second time an OCR half has been at risk of looking
+  complete because its sibling shipped** — recorded here, in this
+  filing's `SESSION_LOG.md` *Still in flight*, and in `Pass 77.0`'s
+  *Shipped* entry, on the principle that an owed item cited in exactly
+  one place is an owed item that gets forgotten.
 
 - **★★ RULING OWED, filed 2026-08-13 (hundred-and-forty-fourth filing) —
   `R13` CLAUSE 5 (*"never executes anything it fetched"*) IS A DIRECT

@@ -109,8 +109,8 @@ provisional; re-verify before any acceptance criterion leans on them.
 
 | core | cli | gui | Acrobat | Feature |
 |:----:|:---:|:---:|:-------:|---------|
-| [x] | [x] | [x] | [x] | Render and count annotations, honouring the annotation-flag set. |
-| [x] | [x] | [x] | [x] | Author geometric markup — Ink, Square, Circle, Line, Polygon. The GUI draws under the pointer as a canvas tool with options in the side pane. **Cannot set note text** (`/Contents`), so the Comments panel shows "No note text" on pdfce's own; **a placed markup cannot be selected, moved or resized.** |
+| [x] | [x] | [x] | [x] | Render and count annotations, honouring the annotation-flag set and an annotation's own `/CA` opacity — composited once as one object, so a shape's own overlaps do not darken at the seams. |
+| [x] | [x] | [x] | [x] | Author geometric markup — Ink, Square, Circle, Line, Polygon. The GUI draws under the pointer as a canvas tool with options in the side pane. **Cannot set note text** (`/Contents`), opacity (`/CA`) or a cloudy border (`/BE`); a two-vertex "polygon" is wrongly accepted; **a placed markup cannot be selected, moved or resized.** |
 | [x] | [x] | [x] | [x] | Author text-bearing annotations — FreeText and Stamp with variable-text appearance. |
 | [x] | [x] | [x] | [x] | Read an annotation's note text, author and modification date. |
 | [x] | [x] | [x] | [x] | Delete an annotation. |
@@ -209,6 +209,10 @@ the model or verb exists and only the named shell is missing. The
 | [ ] | [ ] | ◐ | ? | **Redaction absence proof in `pdfce-core`** — the three-way verdict (decoded-stream survivor ⇒ refuse; raw-bytes-only ⇒ disclose and require acknowledgement; found nowhere ⇒ *verified*) so every shell gets it. The GUI has its own copy today; core and the CLI have none. |
 | [x] | [x] | [x] | [x] | **Encryption** — RC4 (40–128 bit), AES-128 (`/AESV2`) and AES-256 at `/R` 5 (`/AESV3`) decrypt read-only, including the empty-user-password case every other reader opens silently; CLI (`--open-password`/`--open-password-file`) and GUI (inline canvas prompt) can supply a password for any of the three. All eight Table 22 permission bits shown read-only in Properties > Security, captioned declared-by-the-author and unenforced; a `/Perms` mismatch (possible only at `/R` 5) is reported, never refused on. `/R` 6 is still refused by name — its Algorithm 2.B is unsourced. **Writing an encrypted document is still unimplemented in every configuration.** |
 | [ ] | ? | [ ] | ? | **Reusable parsed page handle (display list)** — a shell holds it across frames and replays it against one region per frame, so repeat renders of an unchanged page cost fill (tens of ms) instead of interpretation (~700 ms on a dense CAD sheet). Keyed on `(page, edit epoch)`. The CLI column is `?` on purpose: a one-shot invocation may have nothing to hold it across, and whether that is `—` or `[ ]` is decided in the Pass. |
+| [ ] | [ ] | [ ] | [x] | **Markup opacity (`/CA`) — the WRITE half only.** Reading shipped first (see the render row above); authoring a markup at reduced opacity does not exist yet, in any shell. |
+| [ ] | [ ] | [ ] | [x] | **Revision clouds** — `/BE << /S /C /I n >>` on a polygon, and the half that matters more, a cloudy border on a dragged rectangle. |
+| [ ] | [ ] | [ ] | ? | **Note text on geometric markup** — `/Contents` with `/T` and `/M` together, since a note listed with no author reads as a broken panel. The read side already ships. **A shell is waiting on this.** |
+| — | [ ] | [ ] | — | **Operator-initiated download** — pinned URL + SHA-256 verified before anything reaches disk, in the sibling crate `pdfce-fetch`; **built and tested, but no shell depends on it**, so nothing is operator-reachable. `core` is `—`: the engine is network-free permanently, so this can never live there. |
 | [ ] | [ ] | [ ] | ◐ | Re-subset an embedded font down to only the glyphs used — no removal, no visual change, works even where unembedding is refused. |
 | [ ] | [ ] | [ ] | ◐ | Convert text to vector paths — the only one of the font operations that works where unembedding is refused; irreversible, and the text stops being text. |
 | [ ] | [ ] | [ ] | **[ ]** | Replace one font with another across a document, remapping encodings and widths — Acrobat has no equivalent. |
@@ -222,7 +226,6 @@ the model or verb exists and only the named shell is missing. The
 | [ ] | [ ] | [ ] | ? | Drag a ce dimension's extension lines. |
 | [ ] | [ ] | [ ] | [x] | Re-measure a placed ce dimension — change what it measures without losing its id, group and placement. |
 | [ ] | [ ] | [ ] | [x] | Select, move and resize a placed markup annotation on the canvas. |
-| [ ] | [ ] | [ ] | ? | Note-text authoring for geometric markup. |
 | [ ] | [ ] | [ ] | [x] | True in-place page insertion, so Insert edits the open document. |
 | [ ] | [ ] | [ ] | ? | Wide/batch CSV — one row per document, for filling many copies of one form. |
 | [ ] | [ ] | [ ] | ? | Static-XFA hybrid — read and fill the XFA half in step with AcroForm. |
@@ -281,7 +284,9 @@ Scope decisions already taken, from pdfce's own records.
   `pdfce-render`) additionally **cannot** contain a network client, and
   a fail-closed CI gate enforces that half. Operator-initiated
   downloads in the shells (models, updates, add-ins) are **permitted as
-  of 2026-08-13 and none are built** (`ROADMAP.md` `R12`, decision 061).
+  of 2026-08-13**; the primitive exists in the sibling crate
+  `pdfce-fetch`, and **no shell links it yet** (`ROADMAP.md` `R12`,
+  decision 061, `Pass 77.0`).
 - **Executing embedded JavaScript** — a sandboxed engine is prohibited
   by standing rule. Recognised built-ins are reimplemented natively
   instead.

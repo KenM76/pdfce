@@ -1124,11 +1124,27 @@ D:\Dev\pdfce\
                                    rather than a scale-mode variant. See §12's 2026-08-10
                                    (eighty-fifth filing) entry for the crate-boundary
                                    decision record.
-    pdfce-fetch\                 <- ★★ PLANNED, NOT BUILT — no such directory exists on
-                                   disk as of 2026-08-13. Listed here because decision
-                                   061 fixed its SHAPE, and a shape nobody can find is
-                                   how two shells end up implementing it twice. Working
-                                   name; the engineer may rename it when it is created.
+    pdfce-fetch\                 <- ★★ BUILT 2026-08-13, `7393473` (`Pass 77.0`). This
+                                   block previously read "PLANNED, NOT BUILT — no such
+                                   directory exists on disk"; that was true when decision
+                                   061 fixed the crate's SHAPE before it existed, and it
+                                   is now false. The shape below was honoured key for key
+                                   at creation — see `ROADMAP.md`'s `Pass 77.0` entry for
+                                   the key-by-key check.
+                                   ★ WHAT IS TRUE AND WHAT IS NOT YET, at `b943ea1`:
+                                   the crate exists, its five public items are
+                                   `PinnedArtifact`, `verify_bytes`, `sha256_hex`,
+                                   `fetch_verified` and `MAX_ARTIFACT_BYTES`, and
+                                   `cargo tree` shows `pdfce-core`/`pdfce-render` cannot
+                                   see it (zero hits each). But **NO CRATE DEPENDS ON IT
+                                   AT ALL** — `grep -rn "pdfce_fetch" crates/` outside the
+                                   crate returns zero hits and neither shell's
+                                   `Cargo.toml` names it. So the boundary stated below is
+                                   currently enforced TRIVIALLY, and the `cargo tree`
+                                   result is not yet evidence about it: nothing has
+                                   exercised it. That changes when the `pdfce-cli`
+                                   subcommand lands (owed; `ROADMAP.md` *Next up*).
+                                   Working name; kept.
                                    PURPOSE: pinned-URL download plus SHA-256
                                    verification — the one network primitive the shells
                                    are permitted (§1.1's 2026-08-13 narrowing). Serves
@@ -1159,7 +1175,31 @@ D:\Dev\pdfce\
                                    in terms of core features forwarded outward and does
                                    not yet describe this shape; extending that header is
                                    filed under *Backlog* in `ROADMAP.md` as the
-                                   engineer's edit.
+                                   engineer's edit. ★ STILL OWED at 2026-08-14: read in
+                                   that filing's dispatch, the core header is unchanged.
+                                   `7393473` documented the new shape in `pdfce-fetch`'s
+                                   OWN `[features]` block, which is better than nothing
+                                   and is not the same thing — the next person adding a
+                                   strippable capability reads the CORE header, because
+                                   that is where the convention is declared.
+                                   FEATURE + LICENCES, as built: `default = ["download"]`,
+                                   `ureq = { version = "3", optional = true }`; the
+                                   stripped path returns `FetchError::FeatureUnsupported`
+                                   by name, and `verify_bytes` sits deliberately OUTSIDE
+                                   the gate so an operator-supplied file can still be
+                                   checked against the manifest. Whole TLS stack
+                                   permissive (ureq MIT/Apache-2.0, rustls
+                                   Apache-2.0/ISC/MIT, ring Apache-2.0 AND ISC —
+                                   conjunctive, rustls-webpki + untrusted ISC,
+                                   webpki-roots CDLA-Permissive-2.0, a DATA licence
+                                   accepted into `about.toml` by the OPERATOR on
+                                   2026-08-13 after `cargo about generate` failed on it).
+                                   DELIBERATELY ABSENT: anything that EXECUTES what it
+                                   fetched (R13 clause 5, unresolved against the
+                                   operator's "download addin" instruction — the crate
+                                   moves bytes to disk and stops, and says so in its
+                                   module docs), plus mirror fallback and "latest
+                                   version": a pinned artifact has one source.
     pdfce-gui\                  <- The native desktop shell. egui/eframe application,
                                    window chrome, file dialogs (rfd crate), menus,
                                    docking layout (egui_dock or hand-rolled), the
@@ -3472,6 +3512,145 @@ the architectural positions are **decision 060** (§12).
 rotation test is a **unit** test over an in-memory document. Filed under
 *Backlog*; `page_device_geometry`'s four rotation branches have no
 file-level coverage.
+
+### (X) `7393473` + `fa243df` + `991f0d2` + `b943ea1` + `a84bdc3` — a NEW CRATE (`pdfce-fetch`), one new `EditSession` query, two new fields on `Widget` and `Annotation`, and a `pdfce-core` behaviour change that no signature records — 2026-08-13/14
+
+**Five commits, `Pass 77.0`/`78.0`/`78.1`/`79.0`/`81.0`.** Four are
+additive; **one changes behaviour behind an unchanged signature**
+(item 3), which is the one a downstream implementor must actually read.
+**`a84bdc3` (item 6) landed while this section was being written** — see
+`ROADMAP.md`'s `Pass 81.0` *Shipped* entry.
+
+#### 1. NEW CRATE — `pdfce-fetch` (`Pass 77.0`, `7393473`)
+
+Full crate rationale and boundary in **§3**; decision **061** fixed the shape,
+and **§1.1** governs the network posture. The public surface is deliberately
+five items and no more:
+
+| item | kind | notes |
+|---|---|---|
+| `PinnedArtifact` | struct | URL + expected SHA-256 + filename, constructed by `new` |
+| `FetchError` | enum | includes `FeatureUnsupported` — the **refuse-by-name** path when built `--no-default-features` |
+| `MAX_ARTIFACT_BYTES` | const | **64 MiB**, a resource-limit guard in the §10.1 family |
+| `verify_bytes` | fn | **OUTSIDE the feature gate** — a hand-obtained file can still be checked |
+| `sha256_hex` / `fetch_verified` | fn | `fetch_verified` **hashes in memory and writes only on a match** |
+
+**The contract that is the design, not a detail: VERIFY BEFORE WRITING.** A
+download-then-check-then-delete shape leaves an unverified file on disk for a
+window, and **a process that dies in that window leaves it there permanently,
+looking exactly like a good one.**
+
+**`pdfce-core` and `pdfce-render` never depend on this crate** — verified by
+`cargo tree` (zero hits each) and by the wasm32 cross-check. **At `b943ea1`
+NOTHING depends on it**, so that boundary is currently enforced trivially;
+see §3's block for why that distinction matters.
+
+#### 2. NEW — `EditSession::flatten_refusal()` (`Pass 78.0`, `fa243df`)
+
+`pub fn flatten_refusal(&self) -> Option<EditError>`, `#[must_use]`, a **pure
+query** safe to call every frame (R83). **A third distinct question**, not a
+synonym for either sibling:
+
+| query | gate |
+|---|---|
+| `fill_refusal` | encryption + the `/P`-aware **fill** certification gate + `/Size` suppression |
+| `deletion_refusal` | encryption + the **strict** certification gate |
+| **`flatten_refusal`** | encryption + the **strict** certification gate + `/Size` suppression |
+
+**Flatten and deletion agree on two checks of three** — flatten additionally
+**creates page content**, so it carries the suppression guard. A shell that
+gates Flatten on `deletion_refusal` (which one did, under a local alias) is
+right until it is not, on documents that are not exotic.
+
+#### 3. ★ BEHAVIOUR CHANGE WITH NO SIGNATURE CHANGE — `EditSession::fill_refusal()` (`Pass 78.0`)
+
+**The signature is identical and the behaviour is not.** It previously asked
+`check_certification_for_fill()` alone — **one of the three guards
+`fill_guards()` runs** — so on an **encrypted** document or one with
+**suppressed objects** it answered `None` and the fill then failed. It is now
+`self.fill_guards().err()`.
+
+**For a downstream implementor this means: `fill_refusal` now returns `Some`
+on documents where it previously returned `None`.** A shell that greyed out
+its fill control on `Some` will grey it out in **more** cases than before —
+**correctly, and possibly visibly.** Nothing that was previously usable
+becomes unusable; what changes is *when the shell is told*.
+
+**The structural point, and it generalises past this function:** the query is
+now **the same expression** as the guard, so a fourth guard added to
+`fill_guards` is reported for free. `embed_fonts`/`unembed_fonts` already had
+this property **the other way round — the verb calls the query — which is why
+they never drifted.** `deletion_refusal` was **examined and left alone**, and
+a test now asserts it must **not** gain the flatten guard.
+
+#### 4. NEW FIELD — `forms::Widget::has_off_appearance: bool` (`Pass 78.1`, `991f0d2`)
+
+**Additive** (`forms.rs:421`), populated by `appearance_of`. Answers the one
+question `on_states` structurally cannot: **will unticking this checkbox
+leave a blank widget?**
+
+`on_states` is defined as the states a widget can be set **TO**
+(§12.7.4.2.3), which **excludes `Off` by construction** — and that model was
+kept deliberately. Two documented facts rather than defaults:
+
+- **A single `/AP` `/N` STREAM yields `false`** — there is no state
+  subdictionary, so there is no `Off` entry to find. That is the answer, not
+  a fallback.
+- **Present AND non-null** — `/Off null` defines nothing, and is already
+  filtered from `on_states` for the same reason; accepting it here would make
+  the two disagree about the same dictionary.
+
+#### 5. `settings` — the store is now resolved ONCE PER PROCESS (`Pass 79.0`, `b943ea1`)
+
+`crates/pdfce-core/src/settings/mod.rs`. Two changes, one of which is a
+contract:
+
+- `directory_is_writable` probes with a **unique** filename (**pid AND a
+  counter** — neither alone suffices: processes share a counter's starting
+  value, threads share a pid).
+- **`resolve_store` is memoised in a `OnceLock`.** The observable contract:
+  **every caller in a process gets the same store**, and a directory that
+  becomes writable **mid-run is not noticed**. Accepted deliberately —
+  `current_exe` and the platform env vars do not meaningfully change within a
+  process, and **a store that MOVES under a running application is a worse
+  outcome than one that is stale.** **`store_in` is the escape hatch for an
+  explicit directory and does not consult the cache.**
+
+#### 6. NEW FIELD — `annot::Annotation::constant_alpha: Option<f64>` (`Pass 81.0`, `a84bdc3`, added mid-filing)
+
+**Additive** (`crates/pdfce-core/src/annot.rs:324`), parsed from the
+annotation dictionary's `/CA` (§12.5.2 Table 164). Paired with a
+`pdfce-render` change: an appearance with `alpha < 1.0` is interpreted into
+a **transparent scratch pixmap and composited once at that alpha**.
+
+**Two API rulings that a downstream implementor must not "tidy":**
+
+- **CLAMPED to `0.0..=1.0`, never refused.** A producer writing `1.5` means
+  opaque; **refusing to place the annotation to defend a range check would
+  lose content.** This is the READ side's rule and is deliberately the
+  opposite of what the future WRITE side must do (`Pass 81.1`): **lenient in
+  what it accepts, strict in what it emits.**
+- **`Option<f64>`, not a `1.0` default.** *Absent* and *explicitly 1.0* are
+  **different facts about the file**, and a writer must be able to round-trip
+  the difference. **The RENDER default is 1.0; the MODEL keeps what the
+  document said** — §5's *never normalize*, applied to a read surface.
+
+**And the compositing shape is a contract, not an implementation detail:**
+**one composite of the whole appearance**, not per-operator alpha. The two
+differ **wherever an appearance overlaps itself** (a cloud's arc chain, a
+polygon's border meeting its fill), where per-operator alpha **darkens every
+seam**. The scratch is **transparent** because the page pixmap is
+white-filled and a white scratch would composite an **opaque rectangle** over
+the page. **The opaque path is untouched and allocates nothing.**
+
+#### 7. `Pass 79.0`, continued — why item 5 was a CORRECTNESS change and not a performance one
+
+A raced probe
+answered **`false` for a plainly writable directory** (measured **1,223 of
+16,000 calls = 7.64 %** by the reporter, **599 of 8,000 = 7.49 %** reproduced
+here), and that answer silently relocated settings/layout/recent from the
+portable `userdata/` to the platform fallback — **with two callers in one
+process able to disagree.**
 
 ### (I) What this sync did NOT cover — stated so the edges are honest
 
@@ -20970,6 +21149,21 @@ was not trusted here either.)
 exist. Softening it now would make the README **less true than the
 software**, which is its own defect.
 
+> **★ AMENDED 2026-08-14 (hundred-and-forty-seventh filing) — THE
+> CONCLUSION HOLDS AND ITS STATED REASON HAS GONE STALE, which is exactly
+> the failure mode this project keeps re-learning.** `pdfce-fetch` **now
+> exists** (`Pass 77.0`, `7393473`). The README block is **still true at
+> `HEAD`**, but for a **different and narrower reason**: `cargo tree`
+> shows **no shell links the crate** — `grep -rn "pdfce_fetch" crates/`
+> outside the crate returns **zero hits**, and neither shell's
+> `Cargo.toml` names it. So the binary genuinely contains no HTTP client
+> and no TLS stack, and a reader can still confirm it in
+> `THIRD_PARTY_LICENSES.md`. **The rewrite obligation is unchanged and is
+> now imminent**: it falls due with the `pdfce-cli` subcommand that calls
+> `pdfce-fetch`, which is the next thing owed on that crate. A reason
+> nobody can check is a claim nobody can maintain — hence this amendment
+> rather than a silent edit.
+
 **It must be rewritten in the same Pass that first links a network client
 into a shell** — not the Pass after, and not at release time. This is a
 user-facing claim, so the claim-bearing-copy discipline applies: the
@@ -20980,3 +21174,105 @@ configuration**: a build without the feature verifies exactly as the
 README describes, by the same command, with the attribution file
 agreeing. Filed as a **Backlog obligation** attached to the
 `pdfce-fetch` bucket.
+
+### 2026-08-14 (hundred-and-forty-seventh filing) — decision 062: **MARKUP AUTHORING HAS EXACTLY ONE ENTRY POINT. The general escape hatch `add_markup_appearance` is REFUSED — a guard that a second entry point can bypass is not a guard, it is a convention.** Two consequences fixed with it: **`/M` is ENGINE-STAMPED, never caller-supplied**, and **`/T` is optional with NO invented placeholder**
+
+**Status: DECIDED.** Scopes `Pass 80.0` (note text) and `Pass 82.0`
+(revision clouds) in `ROADMAP.md` *Next up*. **Nothing here is built.**
+
+#### 1. The refusal, and it was arrived at from both sides independently
+
+A shell (`pdfceGUI`) needed markup subtypes `pdfce-core` does not author —
+revision clouds, and a cloudy border on a `Square`. **The obvious general
+answer** is an `add_markup_appearance`: let the caller hand the engine a
+prebuilt annotation dictionary plus appearance stream, and every future
+subtype is satisfied at once with no core change.
+
+**The requester declined to ask for it. The engineer agrees and would have
+refused it.** Both halves are recorded because a refusal only one party
+reached gets re-proposed by the other, and this one is attractive enough to
+be re-proposed.
+
+**What it would bypass — `add_markup`'s four guards, read from
+`crates/pdfce-core/src/edit.rs:9990–10030`:**
+
+| # | guard | refusal |
+|---|---|---|
+| 1 | document is **encrypted** | `DocumentEncrypted` |
+| 2 | **certification** — the annotation-aware `/P 3` gate (§12.8.2.2 Table 254, `Pass 38.5`), not the strict one | `CertificationForbidsChange` |
+| 3 | **`/Size` suppression** — creating objects would expose entries a filtering `/Size` is hiding (§7.5.5) | `ObjectCreationWouldExposeHiddenObjects` |
+| 4 | **geometry draws something** | `EmptyGeometry` |
+
+**Guards 1–3 are document-safety properties, not stylistic ones.** An escape
+hatch would let a shell author an annotation into an encrypted document, into
+a certified document that forbids it, or into a document whose `/Size` is
+hiding objects — **and every one of those failures is silent in the saved
+file.** A shell would not learn it had done any of them.
+
+**★ The same principle governed `Pass 78.0` (`fa243df`) from the opposite
+end, fourteen minutes earlier in the same session.** There, a **query**
+(`fill_refusal`) re-derived a guard list and drifted from it; the fix made
+the query and the guard **the same expression**. Here, a proposed **second
+entry point** would let a caller skip the list entirely. **One guarded
+operation, one entry point, one expression of the guard** — stated once here
+so both Passes can cite it.
+
+**No standing rule was minted.** The principle has **two** instances; this
+project's own bar, applied twice in the preceding week when declining the
+`R193` and `R194` proposals, is **three** — *decline on the count, not the
+merits*. `R195` remains the next genuinely free rule number and **nothing
+claims it**. If a third unrelated instance appears, the instances are
+enumerated here, under `Pass 78.0` and under `Pass 82.0`.
+
+**The accepted alternative is more work and is the point:** every new markup
+shape is a **named `MarkupSpec` variant**, validated, going through the same
+four guards and the same `annot_author::build_appearance` builder. **That is
+what makes `add_markup` trustworthy at all**, and R43 (paint from the baked
+`/AP` or not at all) means the engine must build the appearance anyway.
+
+#### 2. `/M` is engine-stamped, never caller-supplied
+
+`add_markup` writes the §7.9.4 modification date itself. **No caller
+parameter exists to override it.**
+
+1. **A caller-supplied date is a caller-supplied lie.** `/M` records when the
+   annotation was written; the only party that knows that is the party doing
+   the writing.
+2. **§7.9.4's format is exactly what two shells would spell differently** —
+   `D:YYYYMMDDHHmmSSOHH'mm`, with an optional timezone carrying its own
+   apostrophe convention. Handing it to every caller guarantees two spellings
+   of the same instant in one document, **and pdfce would have shipped the
+   divergence itself.** Same reasoning as §1: one producer per value, so two
+   producers cannot disagree.
+
+#### 3. `/T` is optional and pdfce invents NOTHING
+
+`title: Option<String>`; **`None` omits the key.** Not `"pdfce"`, not
+`"Unknown"`, not the OS user name.
+
+**This is `CLAUDE.md` rule 4 — *fuzzy, never sneaky* — applied at the
+writer rather than at the UI.** An invented title is **a fact invented by
+the writer**, indistinguishable in the saved file from one the operator
+typed, and **it travels**: every downstream viewer, export and comment
+summary would attribute the markup to a name nobody chose. `/T` is
+**Optional** in §12.5.6.2 Table 170, so absence is conforming, and a panel
+showing a blank author column for an anonymous note is **correct
+disclosure, not a defect.**
+
+**Why the trio ships together anyway** (`/Contents` + `/T` + `/M`), which is
+the requester's argument and is about the panel rather than the spec: *"a
+Comments panel that lists a note with no author … looks like a bug in the
+panel rather than an absence in the writer."* **Shipping `/Contents` alone
+would ship the defect it was asked to fix** — the author column would be
+blank on every pdfce-authored note, and readers blame the reader.
+
+#### 4. What this decision does NOT do
+
+- It does **not** rule on whether `/BE` is honoured on every markup subtype —
+  that is a **spec** question, and `pdfce-spec-librarian` is to be dispatched
+  for §12.5.4 Table 167 before `Pass 82.0` starts (rule 1).
+- It does **not** touch the **read** side. `annot::Annotation::{contents,
+  title, modified}` already ship (`Pass 38.4`, `8228f44`) and are the
+  differential oracle the write side is tested against.
+- It does **not** create a general "author any annotation" capability by
+  another name. **If a future subtype is wanted, it gets a variant.**
