@@ -15741,6 +15741,74 @@ impl EditSession {
             .collect()
     }
 
+    /// Every form-field **widget** on `page_index`, with its page-space
+    /// `/Rect` as `[llx, lly, urx, ury]` — the query a shell hit-tests against
+    /// to let an operator click a field on the canvas.
+    ///
+    /// The [`dimension_rects`](Self::dimension_rects) shape, for widgets. Both
+    /// answer "what is on this page, and where", and a shell that hit-tests one
+    /// wants to hit-test the other with the same code.
+    ///
+    /// # Why this exists rather than leaving callers to `parse_acroform`
+    ///
+    /// A shell CAN derive this today, and the `pdfceGUI` session was doing
+    /// exactly that (2026-08-14) — parsing the entire `/AcroForm` field tree to
+    /// obtain geometry it could ask for directly. That is a whole-form parse
+    /// per hit-test, and worse, it makes every consumer re-implement the two
+    /// details below. Neither is obvious, and getting either wrong fails
+    /// *silently*.
+    ///
+    /// # Two details a hand-rolled version gets wrong
+    ///
+    /// **Corners are NORMALISED.** §7.9.5 permits `/Rect` in either corner
+    /// order, and a shell that assumed `[min, min, max, max]` would simply
+    /// never hit a widget written the other way round — no error, just a field
+    /// that cannot be clicked. Same argument as `dimension_rects`.
+    ///
+    /// **`/P` is not consulted, and that is deliberate.** Widgets are found by
+    /// walking THIS page's `/Annots`, not by filtering all widgets on their
+    /// `/P`. `/P` is Optional (§12.5.2 Table 164) and frequently absent on
+    /// widgets, so a `/P`-based filter would silently return nothing for a
+    /// large class of real forms. `dimension_rects` compares `/P` because ce
+    /// dimensions are pdfce's own and always carry it; that asymmetry is a fact
+    /// about the input, not an inconsistency.
+    ///
+    /// # Ordering
+    ///
+    /// `/Annots` array order — which is **paint order**, and (absent `/Tabs`)
+    /// also the tab order. It is not `/AcroForm` `/Fields` order, and the two
+    /// commonly differ. If you need field order, that is a different question
+    /// with a different answer.
+    ///
+    /// Reads the session overlay, so a widget moved or created this session is
+    /// reported at its current position.
+    #[must_use]
+    pub fn widget_rects(&self, page_index: usize) -> Vec<(ObjId, [f64; 4])> {
+        let Ok(slots) = self.page_slots() else {
+            return Vec::new();
+        };
+        let Some(page_id) = slots.get(page_index).map(|s| s.id) else {
+            return Vec::new();
+        };
+        let annots = crate::annot::page_annotations(&self.graph(), page_id);
+        annots
+            .iter()
+            .filter(|a| a.subtype.as_slice() == b"Widget")
+            .filter_map(|a| {
+                let rect = a.rect?;
+                Some((
+                    a.id?,
+                    [
+                        rect.llx.min(rect.urx),
+                        rect.lly.min(rect.ury),
+                        rect.llx.max(rect.urx),
+                        rect.lly.max(rect.ury),
+                    ],
+                ))
+            })
+            .collect()
+    }
+
     /// Every distinct ce dimension **group** with at least one dimension on
     /// `page_index`, in the model's own group order (Pass 52.2).
     ///

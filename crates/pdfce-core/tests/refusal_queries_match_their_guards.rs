@@ -220,3 +220,150 @@ fn has_off_appearance_is_reported_and_is_not_an_on_state() {
          or this test asserts nothing about the new field"
     );
 }
+
+/// A one-page form whose widget carries **no `/P`** — the case no fixture in
+/// `fixtures/synthetic/forms/` covers.
+///
+/// Every one of the ten form fixtures writes `/P` on every widget, so a
+/// `/P`-based filter passes the whole corpus while failing on real files. `/P`
+/// is Optional (§12.5.2 Table 164) and plenty of producers omit it. Built
+/// in-memory rather than added as a fixture because the property being tested
+/// is a *single absent key*, and a reader of a binary fixture cannot see that
+/// the absence is the point.
+fn form_doc_with_no_p_on_the_widget() -> Document {
+    let bodies = [
+        "<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R] >> >>",
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 200 200] /Resources << >> >>",
+        "<< /Type /Page /Parent 2 0 R /Annots [4 0 R] >>",
+        // A merged field/widget: /FT /Tx makes it a field, /Subtype /Widget an
+        // annotation. NOTE THE ABSENCE OF /P -- that is the whole point.
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (nop) /Rect [10 20 110 60] >>",
+    ];
+    let mut buf = b"%PDF-1.7
+"
+    .to_vec();
+    let mut offsets = Vec::new();
+    for (i, body) in bodies.iter().enumerate() {
+        offsets.push(buf.len());
+        buf.extend_from_slice(
+            format!(
+                "{} 0 obj
+{body}
+endobj
+",
+                i + 1
+            )
+            .as_bytes(),
+        );
+    }
+    let xref_at = buf.len();
+    let size = bodies.len() + 1;
+    buf.extend_from_slice(
+        format!(
+            "xref
+0 {size}
+0000000000 65535 f 
+"
+        )
+        .as_bytes(),
+    );
+    for off in &offsets {
+        buf.extend_from_slice(
+            format!(
+                "{off:010} 00000 n 
+"
+            )
+            .as_bytes(),
+        );
+    }
+    buf.extend_from_slice(
+        format!(
+            "trailer
+<< /Size {size} /Root 1 0 R >>
+startxref
+{xref_at}
+%%EOF
+"
+        )
+        .as_bytes(),
+    );
+    Document::from_bytes(buf).expect("synthetic form parses")
+}
+
+/// ★★ THE TEST THAT ACTUALLY BITES: a widget with no `/P` is still found.
+///
+/// The first version of this asserted the `/P` point against `demo-form.pdf`
+/// and **the sabotage passed** — because every fixture in the corpus writes
+/// `/P`. The test's own failure message claimed to guard the filter and could
+/// not. This one can: filtering on `/P` returns nothing here.
+#[test]
+fn a_widget_without_a_p_entry_is_still_found() {
+    let doc = form_doc_with_no_p_on_the_widget();
+    let session = EditSession::new(doc);
+    let rects = session.widget_rects(0);
+    assert_eq!(
+        rects.len(),
+        1,
+        "★ a widget with NO /P must still be found. /P is Optional (§12.5.2          Table 164) and commonly absent; a /P-based filter returns nothing          here and nothing on a large class of real forms, with no error."
+    );
+    assert_eq!(rects[0].1, [10.0, 20.0, 110.0, 60.0]);
+}
+
+/// ★ `widget_rects` finds widgets by walking `/Annots`, NOT by filtering on `/P`.
+///
+/// Requested by the `pdfceGUI` session (2026-08-14), which was deriving the
+/// same data by parsing the whole `/AcroForm` per hit-test.
+///
+/// The `/P` point is the one that matters and is why this is a test rather than
+/// a doc note: `/P` is Optional (§12.5.2 Table 164) and is frequently **absent**
+/// on widgets. A `/P`-based filter — the obvious way to write this, and the way
+/// `dimension_rects` legitimately does it for ce dimensions — would return
+/// **nothing** on a large class of real forms, with no error. This asserts a
+/// real fixture's widgets are found.
+#[test]
+fn widget_rects_finds_widgets_on_a_real_form() {
+    let doc = Document::load(&fixture("forms/demo-form.pdf")).expect("fixture loads");
+    let session = EditSession::new(doc);
+    let rects = session.widget_rects(0);
+
+    assert!(
+        !rects.is_empty(),
+        "★ no widgets found on page 0 of a form fixture. If this fails after a \
+         refactor, the likely cause is filtering on /P — which is Optional and \
+         absent on most widgets, so the filter silently matches nothing."
+    );
+
+    for (id, [llx, lly, urx, ury]) in &rects {
+        assert!(
+            llx <= urx && lly <= ury,
+            "widget {id:?} rect must be normalised (§7.9.5 permits either \
+             corner order): [{llx}, {lly}, {urx}, {ury}]"
+        );
+    }
+}
+
+/// Every rect returned belongs to a widget the form parser also knows.
+///
+/// A differential check rather than a value assertion: it compares the new
+/// query against the route the requesting session was using, so the two cannot
+/// disagree about which widgets exist.
+#[test]
+fn widget_rects_agrees_with_the_acroform_parse_it_replaces() {
+    let doc = Document::load(&fixture("forms/demo-form.pdf")).expect("fixture loads");
+    let form = pdfce_core::forms::parse_acroform(&doc).expect("has a form");
+    let session = EditSession::new(doc);
+
+    let known: std::collections::BTreeSet<_> = form
+        .fields
+        .iter()
+        .flat_map(|f| f.widgets.iter().map(|w| w.id))
+        .collect();
+
+    for (id, _) in session.widget_rects(0) {
+        assert!(
+            known.contains(&id),
+            "widget_rects returned {id:?}, which the AcroForm parse does not \
+             know as a widget — the two routes disagree about what a widget is"
+        );
+    }
+}
