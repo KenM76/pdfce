@@ -43012,3 +43012,250 @@ and `82.1` remain scheduled and unstarted**; **next free Pass family is
 still `83`**, **next free decision is still `063`**, **next free rule is
 still `R195`**. `HEAD` at the close of this filing is
 `a84bdc3`; the newest backup bundle is now **25 commits** behind.
+
+## 2026-08-14 (hundred-and-forty-eighth filing) — **TWO COMMITS FILED, EXACTLY ONE PASS NUMBER MINTED.** `Pass 83.0` adds `EditSession::widget_rects`; **`a19e54d` gets NO Pass on purpose** — it changes no behaviour and adds no `pub` item. ★ **A DOC COMMENT ASSERTED A FALSE FACT ABOUT THE PDF FORMAT, AND THE CORRECT LIST WAS ALREADY IN THE SAME CRATE 7,000 LINES AWAY** — the third such instance in two days, **and a FOURTH was found by grepping during this dispatch**. **NO NEW RULE MINTED: `R182`'s own pre-authorised widening is PERFORMED instead, and `R195` stays free.** ★ **A test that named its hazard SURVIVED SABOTAGE because all 30 widgets in all 10 form fixtures write `/P`** — second corpus gap of that shape in one day. **`FEATURES.md`: NO row changed, as a ruling.**
+
+**Shipped:**
+
+- **`Pass 83.0`** (`e8e9881`) — **`EditSession::widget_rects`**, ask 2 of the
+  `pdfceGUI` tab-order request and the only one of its four **independent of
+  the blocked F4 work**. The consumer was **parsing the entire `/AcroForm`
+  field tree per hit-test** for geometry it could ask for directly. One
+  `pub fn`, **+68 lines implementation/doc, +147 test**. Deliberately the
+  `dimension_rects` shape. **3,724 tests, 0 failures.**
+- **`a19e54d`** — **NO PASS NUMBER, DELIBERATELY.** `/Tabs` is **not** an
+  inheritable page attribute; the doc comment on
+  `page_uses_structure_tab_order` said it was. **Behaviour deliberately
+  unchanged**; the ancestor walk is re-documented as a **conservative
+  over-warning check**. One file, **+36 / -3**, **no test added and that is
+  stated rather than implied.** Same total: **3,724 tests, 0 failures.**
+
+**Why exactly one Pass number, stated because the asymmetry will be
+questioned:** a Pass is this project's unit of *shipped work*. `e8e9881`
+adds callable public surface; `a19e54d` ships **no behaviour, no `pub`
+item, no changed test subject**. Minting a number for a comment correction
+would make the Pass ledger a worse index of capability and would burn a
+number that `R151`-style *"does anything call this?"* audits read as a
+promise of callable surface. **Precedent, not invention:** `de089f6`
+(filing 145) is filed exactly this way — keyed by hash under *Shipped*,
+no Pass — and `tools/check-commits-filed.py`'s join is **the hash**, never
+a Pass ID. **Next free Pass family is `84`.**
+
+**Gates at `a19e54d`, as reported by the engineer:** **3,724 tests, 0
+failures**; `cargo fmt --all --check`, `cargo clippy --workspace
+--all-targets -- -D warnings`, `check-ledger-numbers`, `check-passes-filed`,
+`check-fmt-excluded`, `check-shipped-assets`, `check-ui-strings` **all
+clean**. **Only `check-commits-filed` failed, on exactly these two** —
+**this was NOT debt**, the gate caught the gap itself, and **neither hash
+was added to `tools/commits-filed-baseline.txt`.**
+
+**Git and backup state, MEASURED in this dispatch** (librarian hard rule 8):
+`HEAD` = `a19e54d8d78e953eff378076306a33dc5c657c8f` by `git rev-parse HEAD`;
+working tree carried only this filing's own `docs/` edits by
+`git status --porcelain`. **44 commits ahead of `origin/main` =
+`42364db`** (`git rev-list --count origin/main..HEAD`). Newest backup
+bundle is **`pdfce-20260814-0516.bundle`**, whose `main` is `bdfd511` by
+`git bundle list-heads`; `git rev-list --count bdfd511..HEAD` = **2**.
+**The backup contains NEITHER of the two commits filed here** — which is
+the whole of the gap, and it is small.
+
+**Decisions made this session:**
+
+- **★ NO STANDING RULE MINTED, AND THE REASON IS NOT THE COUNT.** Four
+  instances of *"the answer was already on disk and failed to reach the
+  place that needed it"* are now on the record — that clears any bar this
+  project applies. **The disposition is instead that `R182`'s OWN
+  PRE-AUTHORISED WIDENING IS PERFORMED**, because `R182`'s amendment text
+  had already named the trigger: *"widening it to 'any claim, not only a
+  fix' is left as a candidate for a future filing with a second instance of
+  that narrower shape."* **That condition is met twice over.** `R195`
+  remains the next genuinely free rule number **and nothing claims it.**
+- **The widening has TWO axes, and the second was NOT pre-authorised — it is
+  flagged as new rather than smuggled in.** (1) **fix -> any CLAIM** (the
+  pre-authorised axis): grep before asserting any fact you did not measure
+  in this dispatch. (2) **★ "institutional memory" now includes THIS
+  REPOSITORY'S OWN SOURCE TREE and the spec RAG**, not only the external
+  `personal_rag` / `D:\dev\rag` trees `R182` enumerated — because **no habit
+  of "a PDF-producer surprise greps `C:\personal_rag\pdf\`" points anyone at
+  `page_tree.rs`'s module doc while they are editing `edit.rs`.**
+- **★ THE ALTERNATIVE RULE WAS WEIGHED AND DECLINED ON ITS SHAPE, AND THE
+  DECLINE IS RECORDED SO IT IS NOT RE-PROPOSED.** The obvious reading of all
+  four instances is a **writer-side** obligation — *"when you record an
+  answer, propagate it to every document that asks the question."* Declined
+  because **the set of places that ask a question is not enumerable in
+  advance**, so the obligation is unbounded and **nobody can ever discharge
+  it or check that they did.** That is **hard rule 10's own stated test**
+  for why no consistency checker is coming, applied to a rule instead of a
+  tool. The **reader-side** cure is the only bounded one — one grep, at
+  write time, by the person making the claim.
+- **And the honest framing of what these four are: hard rule 10's diagnosis
+  in a SECOND MEDIUM.** *Review is an operation on one claim; consistency is
+  an operation on a set; nothing in an append-only record performs that
+  operation.* Rule 10 solved it for **figures** with a carrier costing one
+  division at write time. **That carrier has no analogue for non-numeric
+  prose**, which is exactly why the cure here must be a habit and not a
+  format. Recorded so the next session does not propose rule 10's mechanism
+  for a medium it cannot serve.
+- **`FEATURES.md`: NO ROW CHANGED, and that is a RULING, not an omission.**
+  `widget_rects` is a **geometry accessor serving an existing capability's
+  implementation**, not a new thing pdfce can do — the *Forms (AcroForm)*
+  rows for filling and creating fields already answer *"can pdfce do this?"*
+  the same way before and after. `a19e54d` moves nothing by construction.
+  **Checked rather than assumed:** a case-insensitive grep of
+  `docs/FEATURES.md` for *tab order* / `/Tabs` / *tab-order* returns **zero
+  hits**, so no `FEATURES.md` sentence had gone false — unlike filing 146,
+  where the OCR row's sentence had and was replaced.
+
+**Findings + decisions:**
+
+- **★★ THE `/Tabs` CORRECTION MATTERS LESS THAN THE FACT THAT THE CRATE
+  ALREADY KNEW.** `crates/pdfce-core/src/page_tree.rs`'s module doc opens
+  with *"## The four inheritable attributes (§7.7.3.4 — exactly four)"* and
+  *"Nothing else inherits"*, **and the code inherits exactly those four.
+  THE MACHINERY WAS NEVER WRONG.** One doc comment in `edit.rs` contradicted
+  the module **7,000 lines away** that had it right. **Nothing was unknown,
+  nothing was contradicted by evidence — the two documents simply never
+  met.**
+- **★ THE FALSE SENTENCE PROPAGATED OUT OF THE CRATE.** The `pdfceGUI`
+  session's own tab-order request, **two hours earlier**, asserted *"with
+  the Table 30 inheritance walk"* — **taken from this comment.** They caught
+  their own error in the same note, which is the only reason it did not
+  reach their shipped reader. **The transferable half: a doc comment about a
+  file format is read as a fact about the FORMAT, not about pdfce**, and it
+  leaves the crate **without a citation trail back to whoever guessed it.**
+  A wrong `///` is a wrong specification.
+- **The spec basis, read in this dispatch rather than relayed.** ISO 32000
+  Table 30's preamble: *"Attributes that are **not** explicitly identified
+  in the table as inheritable **shall not** be inherited."* Exhaustive
+  search of that table for the `(...; inheritable)` marker yields **exactly
+  four: `Resources`, `MediaBox`, `CropBox`, `Rotate`.**
+  `PDF_Spec/iso32000/iso32000__s__7.7.3.md` line **59** carries the
+  preamble, line **92** records *"Verified by exhaustive search."*
+- **★ THE FOURTH INSTANCE, FOUND BY GREPPING DURING THIS DISPATCH — AND IT
+  IS IN THE TREE THAT HELD THE RIGHT ANSWER FOR THE FIRST ONE.**
+  `C:\personal_rag\pdf\lesson_20260813_page_render_cost_is_interpretation_not_fill.md:21`
+  read *"an **A1** landscape CAD site plan (**1190.55 x 841.89 pt**, 5.6 MB,
+  148,517 paints / 24,128 clip ops)"* — **the correct measurement under the
+  wrong label.** 1190.55 x 841.89 pt **is A3 landscape** (420 x 297 mm); A1
+  is 2384 x 1684 pt. `de089f6` corrected five sites across four pdfce
+  documents and **did not sweep the RAG tree it had just been corrected
+  BY.** **Corrected in this dispatch**, in that lesson and in
+  `C:\personal_rag\pdf\index.md:36`, each with a dated correction footer
+  naming its world-source — the `MediaBox` figure already present in the
+  same sentence — per hard rule 10's corollary that **a correction is a
+  claim.**
+- **★★ A TEST NAMED ITS HAZARD AND WAS STRUCTURALLY UNABLE TO SEE IT.** The
+  engineer wrote a test asserting that `widget_rects` must not filter on
+  `/P`, **with a failure message naming the `/P` filter as the hazard**,
+  then sabotaged the implementation by adding that filter. **THE SABOTAGE
+  PASSED.** **Measured independently in this dispatch**, by scanning every
+  `/Subtype /Widget` object in `fixtures/synthetic/forms/*.pdf` for a `/P`
+  key: **30 of 30 widgets across 10 fixtures = 100 %** — per fixture 2/2,
+  2/2, 2/2, 2/2, 3/3, 3/3, 8/8, 3/3, 4/4, 1/1. **The `/P`-absent case was
+  not merely untested: it is UNREACHABLE FROM THIS CORPUS.**
+- **The "ten fixtures vs eleven files" reconciliation, filed because the two
+  numbers otherwise look like a discrepancy.**
+  `fixtures/synthetic/forms/` holds **11** PDFs;
+  **`tagged-struct-tabs.pdf` carries no widget at all** (a byte grep for
+  `/Widget` returns 0), so the widget-bearing corpus is **10**. The commit
+  message's *"ten form fixtures"* is correct.
+- **The cure, and why the cure is the finding.** Fixed with an **in-memory**
+  one-page form whose widget omits `/P`, built in the test rather than added
+  as a fixture — because **the property under test is a SINGLE ABSENT KEY,
+  and a reader of a binary fixture cannot see that the absence is the
+  point.** Re-run: the `/P` sabotage now **fails**. **The recurring cure
+  across all six of this session's blind checks is the same — MAKE THE
+  HAZARD OCCUR.**
+- **★ `/P` IS OPTIONAL AND ITS ABSENCE IS SILENT — the API fact underneath
+  all of the above.** §12.5.2 Table 164 marks a widget's `/P` **Optional**,
+  and it is frequently absent in real forms, so **a `/P`-based filter
+  returns an empty set with no error** — a page whose fields are visible and
+  unclickable. `widget_rects` therefore walks **this page's `/Annots`**.
+  **`dimension_rects` legitimately DOES compare `/P`**, because ce
+  dimensions are pdfce's own and always carry it. **That asymmetry is a fact
+  about the INPUT, not an inconsistency**, and it is written into **both**
+  doc comments precisely because the next reader's instinct is to unify
+  them — which would break `widget_rects` in the silent direction.
+- **Ordering is a contract, and two correct orders answer two different
+  questions.** `widget_rects` returns `/Annots` array order — **paint
+  order**, and (absent `/Tabs`) **also tab order** — **not** `/AcroForm`
+  `/Fields` order. The requesting shell **deliberately uses `/Fields`
+  order** for its fill list because that matches the printed form.
+- **The assertion that will still be true in a year is the DIFFERENTIAL
+  one.** Every `ObjId` `widget_rects` returns is one the `/AcroForm` parse
+  **also calls a widget**, so the new query and the route it replaces
+  **cannot disagree about what a widget is.** Same oracle shape as
+  `Pass 74.0`'s region tests and `Pass 79.0`'s two-caller path equality —
+  **a value assertion would have frozen today's fixture.**
+- **The `/Tabs` walk is KEPT and its claim is not.** It feeds one disclosure
+  (`FieldAuthorDisclosures::structure_tab_order`); walking ancestors
+  **over-warns** on pages the standard says carry no `/Tabs` and **never
+  under-warns**, and **the failure it guards against is silent**, so erring
+  toward warning is the right direction. **It must not become a `/Tabs`
+  READER on that basis** — a reader owes **three** distinct answers,
+  *absent / on this page / on an ancestor*, and **the third is DISCLOSED,
+  never APPLIED.**
+- **★ Two PDF 2.0 facts supplied by the reporter, recorded because the
+  reader is not built and they would otherwise live only in a commit
+  message: `/Tabs /A` (annotations-array order) and `/Tabs /W` (widget
+  order) BOTH make `/Annots` order the tab order** — the one case where the
+  array order is exactly what the file asks for, so **a reader must not warn
+  on those pages.**
+
+**Graduated to the RAGs this filing:** **nothing new was written, and that
+is stated rather than left silent — both lessons already existed on disk**,
+checked by listing `C:\personal_rag\pdf\` and grepping the master index
+rather than assumed (hard rule 4, anti-duplication):
+
+- `C:\personal_rag\pdf\lesson_20260814_tabs_looks_inheritable_and_is_not.md`
+  — carries the four-attribute list, the *"two independent implementations
+  asserted the opposite on the same day, both citing the right table"*
+  finding, the three-state model, and the *"do not warn on PDF 2.0's `/A` or
+  `/W`"* clause.
+- `C:\personal_rag\pdf\lesson_20260814_widget_p_key_optional_and_absent_in_practice.md`
+  — carries the producer fact **and** the transferable half: *"when every
+  fixture shares a property, a test that needs it absent cannot fail."*
+
+Both are indexed in `C:\personal_rag\pdf\index.md` **and** in the master
+`C:\personal_rag\index.md` (lines 7 and 19) — **verified, not assumed.**
+**One RAG file WAS edited this filing**, but as a correction rather than a
+graduation: the A1->A3 label fix described above.
+
+**Still in flight:**
+
+- **★ THE RELEASE IS THE ONLY THING GATED ON THIS FILING.** The order is
+  **FILE -> CI green -> TAG**, and `check-commits-filed` was the sole red
+  gate. **The engineer commits and pushes; the librarian committed
+  nothing.**
+- **`Pass 80.0`, `81.1`, `82.0`, `82.1` remain SCHEDULED and UNSTARTED.**
+  `Pass 81.1` still lands **after** `81.0` (shipped).
+- **`Pass 72.0` and `Pass 73.0` remain HIGH PRIORITY and unstarted**;
+  `Pass 73.1` remains scheduled for Defect A plus one doc-comment paragraph.
+- **The `pdfce-cli` subcommand that calls `pdfce-fetch` is still owed** —
+  `pdfce-fetch` still has no caller (`R151` at crate scale), and
+  `README.md`'s privacy block rewrite falls due **with** it.
+- **The `[features]`-header edit in `crates/pdfce-core/Cargo.toml`** — still
+  open.
+- **THREE of the four `pdfceGUI` tab-order asks are answered in the reply,
+  not built.** One of them turns on a question this project has recorded as
+  **unsourced after two attempts.**
+- **`R193`'s and `R194`'s proposals are still unruled.** **`R195` is the
+  next genuinely free rule number** — `tools/check-ledger-numbers.py` still
+  prints `R193` and **must not be trusted on that line.**
+- **`R13` clause 5 vs *"download addin"* is still FILED, NOT RULED** — an
+  operator ruling.
+- **`(bn)` is still open**, and this filing brushed it: the render-cost
+  lesson says **24,128** clip ops where the CAD-sheet lesson says
+  **24,142**. **Not touched** — correcting a page-size label is not licence
+  to pick a side in an open discrepancy.
+
+**For next session:**
+
+1. **Next free Pass family is `84`** — `83` was taken this filing. **Next
+   free decision is `063`. Next free filing ordinal is `149`. Next
+   genuinely free rule is `R195`.** All measured with
+   `tools/check-ledger-numbers.py` after the edits, not relayed — with the
+   standing exception that its **rule line prints `R193` and is wrong.**
+2. **The `/P` corpus gap is now a Backlog entry paired with the `/Rotate`
+   one.** They are the two cases the synthetic corpus **structurally cannot
+   exercise**; a single `tools/gen-*-fixtures.py` Pass could close both.

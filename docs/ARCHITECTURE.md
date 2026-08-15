@@ -3652,6 +3652,98 @@ here), and that answer silently relocated settings/layout/recent from the
 portable `userdata/` to the platform fallback — **with two callers in one
 process able to disagree.**
 
+### (Y) `e8e9881` + `a19e54d` — one new `EditSession` query (`widget_rects`), and a CONTRACT CORRECTION on `FieldAuthorDisclosures::structure_tab_order` that changes **what it claims** while changing **nothing it does** — 2026-08-14
+
+**Two commits, `Pass 83.0` and one deliberately Pass-less.** The first is
+purely additive. **The second is the one a downstream implementor must
+actually read**, because it does not appear in any signature: a public
+disclosure's *documented meaning* changed.
+
+#### 1. NEW — `EditSession::widget_rects()` (`Pass 83.0`, `e8e9881`)
+
+```rust
+#[must_use]
+pub fn widget_rects(&self, page_index: usize) -> Vec<(ObjId, [f64; 4])>
+```
+
+A **pure query**, safe to call every frame (R83). Returns every form-field
+**widget** on `page_index` with its page-space `/Rect` as
+`[llx, lly, urx, ury]`. Reads the session overlay, so a widget moved or
+created this session is reported at its current position. Out-of-range
+`page_index` returns an **empty `Vec`**, not an error — the
+`dimension_rects` convention, unchanged.
+
+**Deliberately the `dimension_rects` shape**, because both answer *"what is
+on this page, and where"* and a shell hit-testing one wants to hit-test the
+other with the same code.
+
+**Two contracts a hand-rolled equivalent gets wrong, and both fail
+SILENTLY:**
+
+| contract | why it is a contract and not an implementation detail |
+|---|---|
+| **corners are NORMALISED** | §7.9.5 permits `/Rect` in either corner order. A consumer assuming `[min, min, max, max]` never *errors* — it just never hits a widget written the other way round. |
+| **`/P` is NOT consulted** | Widgets are found by walking **this page's `/Annots`**. `/P` is **Optional** (§12.5.2 Table 164) and frequently absent, so a `/P` filter **silently returns an empty set** on a large class of real forms. |
+
+**★ The asymmetry with `dimension_rects` is INTENDED and is documented in
+both places.** `dimension_rects` *does* compare `/P` against the page
+object id — legitimately, because **ce dimensions are pdfce's own and
+always carry it.** That is **a fact about the input, not an
+inconsistency.** A downstream implementor (or a future refactor) that
+"harmonises" the two breaks `widget_rects` in the silent direction.
+
+**Ordering is part of the contract:** `/Annots` array order — **paint
+order**, and (absent `/Tabs`) **also the tab order**. It is **not**
+`/AcroForm` `/Fields` order, and the two commonly differ. *Field order is a
+different question with a different answer*; the requesting shell
+deliberately uses `/Fields` order for its fill list because that matches
+the printed form.
+
+#### 2. CONTRACT CORRECTION — `FieldAuthorDisclosures::structure_tab_order` (`a19e54d`)
+
+**No signature changed. No behaviour changed. No test changed.** What
+changed is the documented basis of the disclosure, and it matters to
+anyone consuming it.
+
+**The old basis was FALSE:** the private `page_uses_structure_tab_order`
+was documented as applying `/Tabs` inheritance *"through the page tree
+(Table 30)"*. **`/Tabs` is not inheritable.** Table 30's preamble —
+*"Attributes that are **not** explicitly identified in the table as
+inheritable **shall not** be inherited"* — and an exhaustive search of that
+table for the `(…; inheritable)` marker yields **exactly four:
+`Resources`, `MediaBox`, `CropBox`, `Rotate`**
+(`PDF_Spec/iso32000/iso32000__s__7.7.3.md`). **`page_tree.rs`'s own module
+doc already said exactly this, and the inheritance machinery has always
+been correct** — the false sentence lived only in `edit.rs`.
+
+**The new basis, which yields the same behaviour:** the ancestor walk is a
+**deliberately conservative** check. It **over-warns** on pages the
+standard says carry no `/Tabs`; it **never under-warns**. A viewer that
+inherits anyway would use the ancestor's `/S`, and **the failure this
+disclosure guards against is silent**, so erring toward warning is the
+right direction.
+
+**★ THE BOUNDARY A DOWNSTREAM IMPLEMENTOR MUST NOT CROSS:** this walk
+**must not be promoted into a `/Tabs` READER.** A reader that reported an
+ancestor's mode as the page's mode would assert the false thing the old
+comment said. If one is built it owes **three distinct answers — absent /
+on this page / on an ancestor — and the third is DISCLOSED, never
+APPLIED.**
+
+**Recorded for that future reader:** **PDF 2.0 adds `/Tabs /A`
+(annotations-array order) and `/Tabs /W` (widget order), and BOTH make
+`/Annots` order the tab order** — the one case where the array order is
+exactly what the file asks for, so a reader **must not warn** on those
+pages.
+
+**Why this is filed in §4.1 at all**, given the changed item is a private
+`fn`: the §4.1 sync exists to carry *what a downstream implementor must
+read*, and **a public disclosure whose documented meaning was wrong is
+exactly that** — it left the crate and was quoted back as a fact about the
+PDF format by a consuming project before it was caught. See `ROADMAP.md`'s
+`a19e54d` *Shipped* entry (hundred-and-forty-eighth filing) and the
+`R182` amendment for the general finding.
+
 ### (I) What this sync did NOT cover — stated so the edges are honest
 
 **A partial sync that names its edges is worth more than a
