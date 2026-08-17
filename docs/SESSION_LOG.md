@@ -43943,3 +43943,112 @@ open; the new overlay-text-colour Backlog item is unscoped.
    awareness only.
 3. **`Pass 85.2` (pattern paint, both tiling and shading) remains next
    in the suggested Ghent build order**, unaffected by this filing.
+
+## 2026-08-17 (hundred-and-fifty-fifth filing) — **`Pass 85.2` SLICE 1 (`5df75dd`): SHADING PATTERNS (`PatternType 2`) NOW PAINT, ANCHORED TO THE PATTERN'S OWN BASE CTM — `R180` GAINS A FOURTH INSTANCE, THE SECOND FILED TODAY, AND THE FREQUENCY ITSELF IS NOW ON RECORD**
+
+**Shipped:**
+- `Pass 85.2` slice 1 — `5df75dd`. Second item on the Ghent gap-inventory
+  queue, following `Pass 85.0`'s `sh`-operator paint. `crate::shading::
+  Shading::load` had exactly one caller; `scn` naming a `PatternType 2`
+  pattern — the route real documents overwhelmingly use — incremented
+  `patterns_unpainted` and drew nothing. Fixed: `Interpreter::base_ctm`
+  captured at every entry point (gets the form-XObject case right for
+  free); `Interpreter::paint_with_pattern` resolves `/Pattern`, branches
+  on `/PatternType`, masks the fill path against any clip in force, and
+  runs the SAME painter `sh` uses; `Half.pattern` holds the pattern NAME
+  (not a resolved pattern), putting it under `q`/`Q` for free and
+  resolving a form XObject's `scn` against the form's own `/Pattern`
+  sub-dict; `patterns_unpainted` now means a genuine shortfall rather
+  than a selection. Tiling patterns (`PatternType 1`) deliberately not
+  done — slice 2 remains. Tests 3,757 → 3,764 (+7, 0 failures); both
+  sabotages (anchor-at-current-CTM; remove pattern-clearing) run and
+  seen to fail. All seven scripted gates clean; `cargo tree` re-verified.
+
+**Decisions made this session:** none — a spec-conformance completion of
+a paint path `Pass 85.0` already modelled, not a new crate boundary,
+invariant, or library choice. Decision ceiling unchanged at 065, next
+free 066.
+
+**Findings + decisions:**
+- **Why `sh` and a shading pattern are not the same paint with a
+  different trigger**: `sh` paints in current user space and fills the
+  clip region (Table 77); a pattern paints in pattern space, mapped to
+  the parent content stream's DEFAULT space by the pattern's own
+  `/Matrix` (§8.7.2 NOTE 1, paired with PM5's `shall`, per the spec
+  corpus's own instruction not to cite NOTE 1 alone), and fills the
+  PATH. A pattern is immune to a `cm` that `sh` obeys. Already sourced
+  in the corpus (`iso32000__s__8.7.md`'s PM1–PM9); no spec-librarian
+  dispatch needed this time.
+- **A degenerate-fixture finding, judged and WIDENED into an existing
+  RAG file rather than filed as a sibling.** Every fixture puts a `cm`
+  between `scn` and the fill — without one, current-CTM and base-CTM
+  anchoring are arithmetically identical, and the suite would report
+  success while testing nothing. Ruled a third instance of
+  `D:\dev\rag\rust\a_symmetric_fixture_cannot_detect_a_transposition_of_its_own_symmetric_parameters.md`,
+  not a new file: the degenerate quantity is a MISSING TRANSFORM between
+  two reference frames rather than a symmetric parameter pair, but the
+  file's own "Where this shows up" section and checkable rule already
+  generalise to exactly this shape. Its title's "six days apart" also
+  corrected — both prior instances are dated 2026-08-17 in the file's
+  own body, so the title already contradicted itself before this filing.
+- **Two near-duplicate tests, only one load-bearing — filed as its own
+  finding, not folded into the fixture one, because the mechanism
+  differs (a hidden gating predicate, not a degenerate parameter).**
+  `a_later_solid_colour_replaces_the_pattern` stays green with the
+  pattern-clearing code removed entirely, because `paints` is true
+  there regardless. Only `a_pattern_does_not_survive_into_a_non_painting_space`
+  sees the bug — the sole combination where `paints` is false
+  (`/Separation /None`) AND a stale pattern name is destructive.
+- **`R180` gains its FOURTH instance, the SECOND filed today.** Four
+  false claims, all falsified by this commit, all corrected in it: a
+  CLI test that had pinned `patterns_unpainted=1` on a now-paintable
+  fixture (caught by the suite — renamed and inverted, not deleted); a
+  CLI stderr note ("pdfce does not yet paint patterns"); a doc comment
+  on `ColorSpace::paints` making the same claim project-wide; and a
+  render-crate unit test named for a limitation its own fixture did not
+  actually exercise (missing `/Function`, not the pattern itself). **The
+  frequency is recorded plainly**: every capability-lifting Pass this
+  session has falsified at least one sentence describing the
+  capability's prior, more-limited state. Not, on its own, grounds to
+  mint a mechanical check — three of the four instances were caught by
+  reading, not a gate, and `R192`'s own entry already argues against a
+  general "state your assumptions" gate — recorded as a frequency
+  signal for the next Standing-rules health review, not a proposal.
+
+**RAG graduations, this filing:**
+- `D:\dev\rag\rust\a_symmetric_fixture_cannot_detect_a_transposition_of_its_own_symmetric_parameters.md`
+  — widened with a third instance (missing-transform, not
+  parameter-swap), title and date inconsistency corrected, `index.md`
+  bullet updated.
+- New: `D:\dev\rag\rust\two_tests_that_look_like_duplicates_can_cover_different_predicate_branches_and_only_one_is_load_bearing.md`
+  — the near-duplicate-test finding above. `index.md` bullet added.
+- **Declined:** `C:\personal_rag\pdf\` — the `sh`-vs-`PatternType 2`
+  anchoring contrast is fully covered by the spec corpus's own PM1–PM9;
+  writing it into `personal_rag/pdf` would duplicate the spec RAG's own
+  territory (same judgement already applied twice this session to the
+  Table 89/Table 192 items).
+
+**`docs/FEATURES.md`:** new *Implemented* row for shading-pattern fills
+(`core [x]` · `cli [x]` · `gui [ ]`, GUI paused). The `sh`-only shading
+row's wording corrected (dropped "only"). The Planned tiling-pattern
+row's cross-reference to shading patterns removed, since the two no
+longer share the same unpainted state.
+
+**Still in flight:** `Pass 72.0`, `73.0`, `73.1`, `86.0` remain HIGH
+PRIORITY and unstarted; `Pass 85.2` slice 2 (tiling patterns), `85.1`,
+`85.4`, `85.5` remain unstarted; `Pass 87.0` remains GUI-paused;
+`bdfd511`'s missing `ROADMAP.md` entry remains open; the overlay-text-
+colour Backlog item remains unscoped.
+
+**For next session:**
+1. **Next free Pass family is `90`** (unaffected — `85.2` reuses family
+   `85`). Next free decision is **066**, unchanged. Next free filing
+   ordinal is **156**. **Next free standing rule is `R196`** (unchanged
+   — this filing added a fourth instance to `R180`, minted no new rule;
+   read this from the Standing rules section's own closing ledger line).
+2. **Tiling patterns (`PatternType 1`) are next in the Ghent build
+   order** — `Pass 85.2` slice 2. After that, clause-11 transparency
+   (`Pass 85.4`), then overprint (`Pass 85.5`) last, gated on `iccce`.
+3. **`R180`'s rising frequency is now on record** (four instances, two
+   filed today) — worth a look at any future standing-rules health
+   review, not an action item now.

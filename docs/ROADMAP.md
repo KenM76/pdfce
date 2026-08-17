@@ -96,6 +96,46 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★★★ Pass 85.2 slice 1 — `5df75dd` — **SHADING PATTERNS (`PatternType 2`) NOW PAINT — `scn` NAMING A GRADIENT NO LONGER DRAWS NOTHING** — closes the shading half of the `85.2` gap-inventory row; tiling patterns (`PatternType 1`) remain — filed 2026-08-17 (hundred-and-fifty-fifth filing)
+
+**Origin.** Second item on the Ghent gap-inventory queue (`docs/NEXT_SESSION.md`, *"shading patterns + tiling patterns"*), following `Pass 85.0`'s `sh`-operator paint. Ships the shading-pattern half only; tiling patterns and clause-11 transparency/overprint remain queued.
+
+**What was wrong.** `Pass 85.0` made `sh` paint axial and radial shadings and stopped there. `crate::shading::Shading::load` had exactly ONE caller. A `scn` naming a `PatternType 2` pattern — the route real documents overwhelmingly use, and the one the operator's Ghent X-4 file needs — incremented `patterns_unpainted` and drew nothing.
+
+**Why the two routes are not the same paint with a different trigger.** `sh` paints in CURRENT user space and fills the CLIP REGION (Table 77). A pattern paints in PATTERN space, mapped to the DEFAULT space of the *parent content stream* by the pattern's own `/Matrix`, and fills the PATH (§8.7.2 NOTE 1; PM5's `shall` is the binding form — the spec corpus's own instruction is to cite NOTE 1 paired with PM5, not alone). A pattern is therefore IMMUNE to a `cm` that `sh` obeys — swap the two anchorings and every page still renders a gradient, in the right place, until something applies a transform. Sourced from `iso32000__s__8.7.md`'s PM1–PM9, already in the corpus; no spec-librarian dispatch needed.
+
+**What shipped.**
+- `Interpreter::base_ctm`, captured as `initial.ctm` at every entry point — gets the form-XObject case (PM4) right for free, since `run` is handed the page's device transform and `run_form_at` the form's, so a pattern used inside a form anchors to the form's own space with no second rule.
+- `Interpreter::paint_with_pattern` — resolves `/Pattern`, branches on `/PatternType`, builds a mask from the fill path, multiplies it with any clip in force, and runs the SAME painter `sh` uses. A second painter reached only by patterns would be a painter only patterns could get wrong.
+- `Half.pattern` holds the pattern NAME (not a resolved pattern) — puts it in the colour half of the graphics state, under `q`/`Q` for free. Lazy resolution also means a form XObject's `scn` resolves against the FORM's own `/Pattern` sub-dictionary, not whichever resources were current when the colour was set.
+- `patterns_unpainted` now means a SHORTFALL rather than a selection — tiling patterns, an unresolvable name, a degenerate matrix, or a shading modelled but not drawable. The counter moved out of `ColorState::set` to the paint site to make that true.
+- **Not done, deliberately and disclosed:** tiling patterns (`PatternType 1`) — running the pattern's own content stream into a tile and replicating on `/XStep`/`/YStep` is a different job from evaluating a function per pixel.
+
+**★ A degenerate-fixture test-methodology finding, THIRD instance of a shape this ledger already tracks, but not a transposition this time.** Every fixture puts a `cm` between `scn` and the fill, because without one the two anchorings (current-CTM vs. base-CTM) are arithmetically indistinguishable and the suite would report success while testing nothing — matching the radial-shading (`9839d6f`) and Lab-transposition (`1345663`) instances the RAG file `D:\dev\rag\rust\a_symmetric_fixture_cannot_detect_a_transposition_of_its_own_symmetric_parameters.md` already records, but the degenerate quantity here is a MISSING TRANSFORM between two reference frames, not a symmetric parameter PAIR being swapped. **Ruling: widened rather than treated as a sibling** — the file's own "Where this shows up" section already generalises past literal transposition to "combines or maps two same-typed parameters... row vs. column, x vs. y," and its checkable rule ("would this mutation change the output on the fixture's own input?") transfers directly to a missing-transform case. Graduated below as Instance 3, with the file's title corrected (it read "six days apart," which the body's own dates — both 2026-08-17 — already contradicted; fixed while the file was open for this edit, sourced from the body it was inconsistent with).
+
+**★ Two near-duplicate tests, only one load-bearing — filed as a caution against consolidating the pair.** `a_later_solid_colour_replaces_the_pattern` passes even with the pattern-clearing code removed, because `paints` is true there and the solid path runs regardless. Only `a_pattern_does_not_survive_into_a_non_painting_space` sees the bug: selecting a pattern then setting `/Separation /None` is the single combination where `paints` is false AND a stale pattern name is destructive, and a leftover name there would paint a gradient exactly where §8.6.6.4 requires nothing. Found by sabotaging the clearing and watching the obvious-looking sibling test stay green.
+
+**★★ `R180`'s FOURTH instance, and the second one filed today — the frequency itself is worth recording.** Four now-false claims, all falsified by this commit, all corrected in it:
+1. Caught BY THE SUITE — `pdfce-cli`'s `a_gradient_that_paints_nothing_is_disclosed_on_stdout_and_stderr` test pinned `patterns_unpainted=1` on a conformant gradient; renamed and inverted rather than deleted, since the fixture itself is the valuable part.
+2. Caught only by READING — the CLI's `patterns_unpainted` stderr note said "pdfce does not yet paint patterns."
+3. Caught only by READING — `ColorSpace::paints`'s doc comment said the same, project-wide rather than CLI-scoped.
+4. Caught only by READING — a render-crate unit test named `a_pattern_name_is_recognised_and_left_unpainted`, whose fixture is actually unpaintable because it is missing `/Function`, not because it names a pattern.
+
+Per the engineer's own framing: this is the second `R180` instance filed TODAY (after `Pass 89.1`'s third instance, hundred-and-fifty-fourth filing) and the fourth overall. **Recorded here plainly: `R180` is now firing roughly once per feature-completing Pass** — every capability-lifting Pass this session has falsified at least one sentence describing the capability's old, more limited state. This is not, on its own, grounds to mint a mechanical check (three of `R180`'s four instances were caught by reading, not by any gate, and `R192`'s own file already argues at length against a general "state your assumptions" gate); it is recorded as a **frequency signal** for whoever next reviews the Standing rules section's health, not as a proposal.
+
+**Verification.** 3,757 → **3,764 tests, +7, 0 failures.** BOTH sabotages run and SEEN TO FAIL: anchoring to the current CTM instead of the base CTM failed `the_gradient_is_not_squeezed_by_a_cm` in-tree, and independently moved the pdfium cross-check on the same fixture from mean 1.31/max 2 to mean 65.06/max 128. Removing the pattern-clearing code failed only the `/Separation /None` test named above. Independent cross-check, this fixture: pdfce vs. pdfium mean 1.310, max 2, frac32 0.0000. `cargo fmt --check`, `cargo clippy -- -D warnings`, `check-fmt-excluded.py`, `check-ui-strings.sh`, `check-shipped-assets.py`, `check-ledger-numbers.py` all clean. Image-fixture parity re-run: still 0 unexplained, 4 reference-divergence, 0 skips. `cargo tree -p pdfce-core` / `-p pdfce-render` re-verified — no GUI dependency.
+
+**`docs/FEATURES.md`.** New *Implemented* row for shading-pattern fills — `core [x]` · `cli [x]` · `gui [ ]` (GUI paused). The `sh`-only shading row's wording corrected (dropped "only," since shading patterns now paint through the same painter via a different trigger). The Planned tiling-pattern row's cross-reference to shading patterns removed, since the two no longer share the same unpainted state.
+
+**`ARCHITECTURE.md` §12.** No new decision-log entry — this is a spec-conformance completion of a paint path `Pass 85.0` already modelled, not a new crate boundary, invariant, or library choice (same posture as `Pass 85.0`/`85.3`/`89.0`, none of which added a §12 entry).
+
+**RAG graduations, this filing:**
+- `D:\dev\rag\rust\a_symmetric_fixture_cannot_detect_a_transposition_of_its_own_symmetric_parameters.md` — widened with a third instance (missing-transform, not parameter-swap) and a title/date correction; `index.md` bullet updated to match.
+- New `D:\dev\rag\rust\` file for the near-duplicate-test finding (see below).
+- **Declined for `C:\personal_rag\pdf\`:** the `sh`-vs-`PatternType 2` anchoring contrast is fully covered by the spec corpus's own PM1–PM9 (`iso32000__s__8.7.md`) — a canonical-spec fact, not an empirical real-world-producer divergence. Writing it into `personal_rag/pdf` would duplicate the spec RAG's own territory (project rule 6, same judgement applied to the Table 89/Table 192 items this session already declined).
+
+**Ledger effects.** Pass family: **85** (sub-Pass `85.2`, slice 1 of 2 — tiling remains as slice 2; no new family, next free stays **90**). Standing rules: **no new rule minted** — `R180` gains its **fourth instance** (full text below); ceiling stays **R195**, next free **R196**, re-derived from *Standing rules*' own closing ledger line, not from `tools/check-ledger-numbers.py`. Decisions: **none** — ceiling stays **065**, next free **066**.
+
 ### ★★★★ Pass 89.1 — `a7210a4` — **THE OPERATOR PICKED A FILL COLOUR, AND THE FIND-AND-MARK PATH THREW IT AWAY BEFORE IT REACHED A FILE** — sibling of `Pass 89.0`, second `pdfceGUI` request today — filed 2026-08-17 (hundred-and-fifty-fourth filing)
 
 **Origin — REQUEST CHANNEL, second item from `pdfceGUI` today, distinct from
@@ -45323,19 +45363,21 @@ and deferred-op counts on that file — not estimated.**
 |---|---|---|---|
 | ~~`85.0`~~ | `sh` operator + shading patterns, types 1–3 (function/axial/radial) | page 1 defers 52 ops, page 4 defers 85; `sh` named in both | §8.7.4.5.2–.8, Tables 79–84 (function-based/axial/radial); §7.10 evaluator ALREADY EXISTS (`pdfce_core::function`) — the colour half is done, geometry is not — **SHIPPED 2026-08-17, `33ea830`+`9839d6f` (axial + radial only; function-based and mesh remain, see `85.1`). See the `Pass 85.0` Shipped entry, top of *Shipped*.** |
 | `85.1` | mesh shadings, types 4–7 | subset of the `sh` deferrals above; not separately isolated in this file's corpus | §8.7.4.5.5–.8, same Table range — separate slice, lower priority (rarer in practice) |
-| `85.2` | pattern paint — **both** tiling (`PatternType 1`, §8.7.3) **and shading** (`PatternType 2`, §8.7.4) patterns; widened from "tiling pattern paint" 2026-08-17, hundred-and-fifty-first filing, on discovering `Pass 85.0` shipped `sh`-only shading paint and left `scn`-named shading patterns in the same unpainted state as tiling — same counter, same root cause, not two separate gaps | `patterns_unpainted` (Table 74's own initial `/Pattern` colour "causes nothing to be painted" — current behaviour is deliberate, not accidental, but unpainted either way); `Shading::load` (`interpret.rs:2290`) has exactly one caller, the `sh` handler — the model built for `85.0` is not wired to `scn` | §8.7.3 (tiling) + §8.7.4 (shading) — **coordinate spaces differ**: `sh` is CTM-relative, a shading pattern is base-CTM-relative (§8.7.2 NOTE 1), so `85.0`'s paint path is not a drop-in reuse for this Pass |
+| `85.2` | pattern paint — **shading** (`PatternType 2`, §8.7.4) **SHIPPED**; **tiling** (`PatternType 1`, §8.7.3) still not started | shading half: `scn` naming a `PatternType 2` pattern now paints, anchored to the pattern's own base CTM (§8.7.2 NOTE 1/PM5) rather than the current CTM `sh` uses — **SHIPPED 2026-08-17, `5df75dd`, `Pass 85.2` slice 1. See the Shipped entry, top of *Shipped*.** Tiling half: `interpret.rs`'s `/Pattern` fill path still has no `PatternType 1` branch; `patterns_unpainted` now counts only a genuine shortfall (tiling, an unresolvable name, a degenerate matrix, or an unpaintable shading) | §8.7.3 (tiling, NOT STARTED) + §8.7.4 (shading, SHIPPED) — tiling additionally needs the pattern's own content stream run into a tile and replicated on `/XStep`/`/YStep`, a different job from evaluating a function per pixel |
 | ~~`85.3`~~ | closes **`Pass 1.1` item 6.4** — `/Separation`/`/DeviceN`/`Lab` IMAGE colour spaces | **10 images missing page 1, 6 page 4, 2 page 5** — stderr: "image colour space /Separation is not supported", "/DeviceN is not supported" | §8.6.6.4/§8.6.6.5; vector fills already work (`separation_to_rgb`/`device_n_to_rgb` are wired to the §7.10 evaluator) — this is the per-pixel image path only — **SHIPPED 2026-08-17, `1e7a0be` (`CalGray`/`CalRGB` came free from the same delegation). See the `Pass 85.3` Shipped entry, top of *Shipped*.** |
 | `85.4` | group transparency — `ExtGState` `/BM` blend modes, `/SMask` soft-mask GROUPS, transparency groups | `pdfce-render/src/interpret.rs:2053` still defers both; **distinct from the per-IMAGE `/SMask`/`/Mask` shipped in `Pass 48.1`** — do not conflate the two `/SMask` meanings when scoping | clause 11 (11.3–11.6.4); the image-level half is §11.6.5.3, already done |
 | `85.5` | overprint compositing | patches GWG 1.0, 1.1, 2.0, 3.0, 3.1, 4.0.1, 4.1, 12.0, 19.0, 19.1, 19.2 — most of pages 1 and 4 | **§8.6.7 says "if overprinting is not supported, the value of the overprint parameter shall be ignored" — pdfce is CONFORMANT TODAY.** Implementing it means compositing into a CMYK buffer; lowest priority, architectural, and partly gated on `iccce` (see `Backlog`, "Colour management (`iccce` coordination)", decision 064) |
 
 **Suggested build order** (highest visible-fidelity return first, per
 the operator's own framing of the file as a fidelity yardstick):
-~~`85.0`~~ → `85.2` → ~~`85.3`~~ → `85.4` → `85.5` → `85.1` last (rarer
-in practice than the other four shading types). **This is an ordering
-suggestion, not a dependency graph** — `85.2`/`85.3` have no dependency
-on `85.0`. **Two of six now shipped** (`85.0`, `85.3`); remaining:
-`85.2` (pattern paint), `85.4` (group transparency), `85.5` (overprint,
-lowest priority), `85.1` (mesh shadings, last by design).
+~~`85.0`~~ → `85.2` (partial: shading patterns shipped, tiling remains)
+→ ~~`85.3`~~ → `85.4` → `85.5` → `85.1` last (rarer in practice than the
+other four shading types). **This is an ordering suggestion, not a
+dependency graph** — `85.2`/`85.3` have no dependency on `85.0`. **Two of
+six fully shipped** (`85.0`, `85.3`); **one partially shipped** (`85.2` —
+shading patterns done 2026-08-17 (`5df75dd`), tiling patterns remain);
+remaining: `85.4` (group transparency), `85.5` (overprint, lowest
+priority), `85.1` (mesh shadings, last by design).
 
 **★ Two secondary findings from the same measurement run, filed here
 rather than as separate Passes because neither is a fidelity gap:**
@@ -65348,6 +65390,30 @@ and
   `--help` text by name as exactly this territory, so a third instance in
   that same shape is evidence for R180, not a fifth family member. Full
   record: `ROADMAP.md`'s `a7210a4` `Pass 89.1` *Shipped* entry, above.**
+  *Instance 4 (`Pass 85.2` slice 1, `5df75dd`, 2026-08-17, hundred-and-
+  fifty-fifth filing — FOUR false claims from one lifted limitation, the
+  widest single instance yet, and the SECOND instance filed in this same
+  session (after Instance 3, one filing earlier).* `Pass 85.0` made `sh`
+  paint shadings and left `scn`-named shading patterns (`PatternType 2`)
+  unpainted; `Pass 85.2` slice 1 lifted that limitation, and FOUR separate
+  sentences describing the old, more-limited state went false in the same
+  commit: a CLI test that had PINNED `patterns_unpainted=1` on a now-
+  paintable fixture (caught by the suite itself, the only one of the four
+  that was), a CLI stderr note ("pdfce does not yet paint patterns"), a
+  doc comment on `ColorSpace::paints` making the same claim project-wide,
+  and a render-crate unit test named for a limitation its own fixture did
+  not actually exercise (the fixture was unpaintable for an unrelated
+  reason — a missing `/Function` — not because it named a pattern).
+  **The frequency itself is the finding worth carrying forward**: this is
+  `R180`'s fourth instance and the second filed in one session, meaning
+  every capability-lifting Pass this session has falsified at least one
+  sentence describing the capability's prior, more-limited state. **Not,
+  on its own, grounds to mint a mechanical check** — three of the four
+  instances were caught by reading, not by a gate, and `R192`'s own entry
+  already argues at length against a general "state your assumptions"
+  gate — but recorded plainly as a frequency signal for whoever next
+  reviews this section's health. Full record: `ROADMAP.md`'s `5df75dd`
+  `Pass 85.2` slice 1 *Shipped* entry, top of *Shipped*.**
 
 - **R181 — A disclosure COUNT must be computed from the same predicate
   the write path it describes actually uses, never a proxy predicate
