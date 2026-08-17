@@ -140,6 +140,7 @@ use pdfce_core::settings::CmykIntent;
 use pdfce_core::view::DocumentView;
 use tiny_skia::{Pixmap, PremultipliedColorU8};
 
+use crate::color::ColorDiagnostics;
 use crate::font::RenderPolicy;
 use crate::gstate::Rgb;
 use crate::mask::{self, AlphaPlane};
@@ -330,6 +331,33 @@ pub struct ImageNotes {
     /// lookup table and was painted black (`color__indexed.md`: real
     /// producers trim trailing unused palette entries).
     pub palette_out_of_range: bool,
+    /// The image's colour space was `/Separation /None` or an all-`/None`
+    /// `/DeviceN`, so **nothing was painted** — the image is fully
+    /// transparent and the page shows through it.
+    ///
+    /// §8.6.6.4/.5: such a colorant "shall never be painted on the page".
+    /// This is pdfce OBEYING the standard, and it is recorded for R183's
+    /// reason: a picture that is correctly absent is otherwise
+    /// indistinguishable from one that failed to decode.
+    ///
+    /// ★ Measured 2026-08-17: **pdfium paints this BLACK.** pdfce is
+    /// deliberately right and the reference renderer is wrong, which is a
+    /// finding rather than a failure — but it means any pixel-parity run
+    /// containing a `/None` image will show a maximal divergence that is
+    /// pdfce's correctness, not its defect.
+    pub colorant_none_suppressed: bool,
+    /// The image was decoded through a `crate::color::ColorSpace` that
+    /// pdfce converts by its OWN colorimetry rather than by a colour
+    /// management engine — `Lab`, `CalGray` and `CalRGB`, whose XYZ→sRGB
+    /// step is documented as pdfce's engineering choice (Bradford
+    /// adaptation to D65, the sRGB matrix and transfer function, no
+    /// rendering intent and no gamut mapping).
+    ///
+    /// Disclosed because it is precisely the kind of divergence that
+    /// otherwise lands in a parity harness's *unexplained* bucket and
+    /// costs somebody an afternoon: two engines can both be defensible
+    /// here and still differ by tens of levels in the saturated corners.
+    pub uncalibrated_colorimetry: Option<&'static str>,
     /// The `/Decode` array's length was not `2 × components`, so the
     /// Table 90 default was used instead (`iso32000__s__8.9.5.2.md`
     /// recommends this over truncating, which silently mis-tints).
@@ -1074,6 +1102,43 @@ fn decode_sampled(
     // cheapest time to not create the next one is now.
     let keying = colour_key.is_some();
 
+    // A `Space::Special` conversion runs the document's own function per
+    // distinct sample tuple; everything else is closed-form arithmetic and
+    // wants no cache at all. `tinting` is the loop-invariant branch, in
+    // the same spirit as `keying` above it.
+    let tinting = matches!(&space, Space::Special(_));
+    // §8.6.6.4/.5: a `/None` colorant "shall never be painted on the
+    // page". The whole image is therefore transparent — NOT white.
+    //
+    // The first version of this Pass returned white from the conversion
+    // instead, which looks identical on a blank page and is wrong the
+    // moment anything is underneath: an opaque white image ERASES the
+    // backdrop the standard requires to show through. Caught by a fixture
+    // whose divergence from pdfium was maximal in both directions.
+    let suppressed = matches!(&space, Space::Special(cs) if !cs.paints());
+    if suppressed {
+        notes.colorant_none_suppressed = true;
+    }
+    if let Space::Special(cs) = &space {
+        notes.uncalibrated_colorimetry = match &**cs {
+            crate::color::ColorSpace::Lab { .. } => Some("Lab"),
+            crate::color::ColorSpace::CalGray { .. } => Some("CalGray"),
+            crate::color::ColorSpace::CalRgb { .. } => Some("CalRGB"),
+            _ => None,
+        };
+    }
+    let mut tint_cache = tinting.then(|| TintCache::new(layout.bits, readable));
+    let mut scratch_diag = ColorDiagnostics::default();
+
+    // Per-component clamp bounds. Only `Lab` differs from 0–1, and it
+    // differs enough to matter — see the `default_decode` note.
+    let clamp_range: Vec<(f32, f32)> = match &space {
+        Space::Special(cs) => (0..cs.components())
+            .map(|i| cs.component_range(i))
+            .collect(),
+        _ => vec![(0.0, 1.0); components],
+    };
+
     let mut pixmap = Pixmap::new(width, height).ok_or(ImageError::TooLarge)?;
     let mut out_of_range = false;
     let texels = pixmap.pixels_mut();
@@ -1096,7 +1161,7 @@ fn decode_sampled(
             // they become ("representing colour values BEFORE decoding
             // with the `Decode` array"). Filling it is skipped entirely
             // when no colour-key mask is in force.
-            let mut raw_comps = [0u32; 4];
+            let mut raw_comps = [0u32; MAX_IMAGE_COMPONENTS];
             let rgb = match &palette {
                 Some(table) => {
                     // Indexed: one component, and after the (default:
@@ -1122,14 +1187,20 @@ fn decode_sampled(
                     }
                 }
                 None => {
-                    let mut comps = [0.0f32; 4];
-                    for c in 0..readable.min(4) {
+                    let mut comps = [0.0f32; MAX_IMAGE_COMPONENTS];
+                    for c in 0..readable {
                         let raw = read_sample(
                             data,
                             row_bit_base + (first + c) * layout.bits as usize,
                             layout.bits,
                         );
-                        if keying && let Some(slot) = raw_comps.get_mut(c) {
+                        // Filled unconditionally when the space needs a
+                        // cache key, not only when colour-keying: the key
+                        // IS the raw tuple, so `tinting` joins `keying` as
+                        // a reason to keep these.
+                        if (keying || tinting)
+                            && let Some(slot) = raw_comps.get_mut(c)
+                        {
                             *slot = raw;
                         }
                         let (dmin, slope) = ramp.get(c).copied().unwrap_or((0.0, 1.0));
@@ -1137,8 +1208,15 @@ fn decode_sampled(
                         // value falls outside the range allowed for a
                         // component it shall be adjusted to the nearest
                         // allowed value."
+                        //
+                        // The allowed range is the SPACE's, not 0–1 — the
+                        // distinction only bites for `Lab`, whose L is
+                        // 0–100 and whose a/b are routinely negative.
+                        // Clamping those to 0–1 would flatten the image to
+                        // near-black.
+                        let (lo, hi) = clamp_range.get(c).copied().unwrap_or((0.0, 1.0));
                         if let Some(slot) = comps.get_mut(c) {
-                            *slot = (dmin + raw as f32 * slope).clamp(0.0, 1.0);
+                            *slot = (dmin + raw as f32 * slope).clamp(lo, hi);
                         }
                     }
                     // §11.6.5.3: "If a colour conversion is required,
@@ -1150,7 +1228,12 @@ fn decode_sampled(
                     if let Some(m) = matte {
                         mask::undo_matte(&mut comps, components.min(4), m, plane_alpha);
                     }
-                    space.to_rgb(intent, &comps)
+                    match &mut tint_cache {
+                        Some(cache) => {
+                            cache.lookup(&space, intent, &raw_comps[..readable], &comps[..readable])
+                        }
+                        None => space.to_rgb(intent, &comps, &mut scratch_diag),
+                    }
                 }
             };
             // Alpha, in the order the precedence ladder resolved: a
@@ -1158,7 +1241,8 @@ fn decode_sampled(
             // partial state), otherwise the plane's sample, otherwise
             // opaque.
             let a = match &colour_key {
-                Some(key) if key.masks(&raw_comps[..readable.min(4)]) => 0,
+                _ if suppressed => 0,
+                Some(key) if key.masks(&raw_comps[..readable]) => 0,
                 _ => plane_alpha,
             };
             if let Some(slot) = texels.get_mut(y * width as usize + x) {
@@ -1296,6 +1380,100 @@ fn premultiplied(c: Rgb, alpha: u8) -> PremultipliedColorU8 {
 /// `pub(crate)` for [`crate::mask`], which needs exactly one thing from
 /// it: [`Space::components`], to enforce that an `/SMask`'s colour space
 /// carries one component per sample.
+/// Ceiling on an image colour space's component count.
+///
+/// Bounds two things at once: the per-pixel component buffer, and a
+/// malformed file's ability to make the row-stride arithmetic enormous.
+/// A real `DeviceN` is a duotone (2), a hexachrome (6), or occasionally a
+/// packaging file with a dozen inks; 32 is comfortably past any of them
+/// and matches the guard `crate::shading` puts on `/Function` outputs.
+pub(crate) const MAX_IMAGE_COMPONENTS: usize = 32;
+
+/// Memoises [`Space::Special`] conversions on the **pre-`/Decode`
+/// integer samples**.
+///
+/// # Why a cache is load-bearing rather than an optimisation
+///
+/// A `Separation` or `DeviceN` conversion runs the document's
+/// `/tintTransform` — a §7.10 function, which for `FunctionType 4` is a
+/// PostScript calculator interpreted per call. A 40-megapixel duotone
+/// would run it 40 million times to produce, at most, 65 536 distinct
+/// answers. Without memoisation this Pass would trade "the image is
+/// missing" for "the page takes a minute", which is not obviously the
+/// better failure.
+///
+/// # Why the key is the RAW samples
+///
+/// The raw integers are the natural quantisation: two texels with
+/// identical samples have identical colour by definition, so the cache is
+/// **exact** — it changes speed and nothing else. Keying on the decoded
+/// floats instead would need an epsilon, and an epsilon here would be a
+/// silent colour approximation of exactly the kind rule 4 forbids.
+///
+/// The key packs each component into `bits` and requires
+/// `components × bits ≤ 64`. That covers 8 channels at 8 bits and 4 at
+/// 16 — every duotone, every hexachrome at 8 bits, every `Lab` image.
+/// Wider inputs fall back to computing per pixel (correct, slower), which
+/// is the honest degradation: a cache that dropped precision to fit would
+/// change the picture.
+struct TintCache {
+    /// Distinct sample tuples seen, and the colour each produced.
+    seen: std::collections::HashMap<u64, Rgb>,
+    /// Bits per component, for packing the key.
+    bits: u32,
+    /// How many components participate in the key.
+    components: usize,
+    /// Whether the key fits in 64 bits at all.
+    packable: bool,
+    /// Diagnostics from the DISTINCT conversions, not from the texels.
+    ///
+    /// This is why the cache owns them: routed straight from the pixel
+    /// loop, `tint_transform_not_applied` would report once per texel and
+    /// a shell would print "8 million spot-colour conversions had no tint
+    /// transform" for one broken image.
+    diag: ColorDiagnostics,
+}
+
+impl TintCache {
+    fn new(bits: u32, components: usize) -> Self {
+        let packable = components > 0 && bits > 0 && (components as u32).saturating_mul(bits) <= 64;
+        Self {
+            seen: std::collections::HashMap::new(),
+            bits,
+            components,
+            packable,
+            diag: ColorDiagnostics::default(),
+        }
+    }
+
+    /// Pack the raw samples into a key, or `None` when they do not fit.
+    fn key(&self, raw: &[u32]) -> Option<u64> {
+        if !self.packable {
+            return None;
+        }
+        let mut k = 0u64;
+        for v in raw.iter().take(self.components) {
+            k = (k << self.bits) | u64::from(*v);
+        }
+        Some(k)
+    }
+
+    /// The colour for one texel, computed once per distinct sample tuple.
+    fn lookup(&mut self, space: &Space, intent: CmykIntent, raw: &[u32], comps: &[f32]) -> Rgb {
+        match self.key(raw) {
+            Some(k) => {
+                if let Some(hit) = self.seen.get(&k) {
+                    return *hit;
+                }
+                let rgb = space.to_rgb(intent, comps, &mut self.diag);
+                self.seen.insert(k, rgb);
+                rgb
+            }
+            None => space.to_rgb(intent, comps, &mut self.diag),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) enum Space {
     /// `DeviceGray` / `CalGray` / `ICCBased` with `N 1`.
@@ -1307,6 +1485,26 @@ pub(crate) enum Space {
     /// `[/Indexed base hival lookup]` (§8.6.6.3). The palette is
     /// resolved to RGB at construction — see [`Space::palette`].
     Indexed(Vec<Rgb>),
+    /// Any space this rasterizer does not decode itself, delegated whole
+    /// to [`crate::color::ColorSpace`]: `Separation`, `DeviceN`, `Lab`,
+    /// `CalGray` and `CalRGB`.
+    ///
+    /// # Why delegate rather than add four more arms here
+    ///
+    /// [`crate::color`] already parses every one of these, already
+    /// evaluates a `/tintTransform` through [`pdfce_core::function`], and
+    /// already knows `/All` and `/None`. Re-implementing them here would
+    /// put a **second** answer to "what colour is this tint?" in the
+    /// binary — and the two would be reached by different content (a
+    /// filled rectangle versus an image), so a divergence would show up
+    /// as *the same spot colour printing two different ways on one page*.
+    /// That is the exact failure `pdfce_core::function` was centralised to
+    /// prevent, stated in [`crate::color`]'s own module docs.
+    ///
+    /// The cost is that conversion is no longer a closed-form arithmetic
+    /// step — a `Separation` runs a §7.10 function per distinct sample
+    /// tuple — which is what [`TintCache`] exists to bound.
+    Special(std::sync::Arc<crate::color::ColorSpace>),
 }
 
 impl Space {
@@ -1316,11 +1514,17 @@ impl Space {
     /// count. That distinction drives the row stride, the `Decode`
     /// array length, and the predictor's `/Colors`, and getting it
     /// wrong shears the image (`color__indexed.md`).
-    pub(crate) const fn components(&self) -> usize {
+    pub(crate) fn components(&self) -> usize {
         match self {
             Self::Gray | Self::Indexed(_) => 1,
             Self::Rgb => 3,
             Self::Cmyk => 4,
+            // A `DeviceN` carries one component per colorant name, so this
+            // is the ONLY space whose sample width is not fixed by its
+            // family. It drives the row stride and the `/Decode` length,
+            // so a wrong answer here shears the image rather than
+            // discolouring it.
+            Self::Special(cs) => cs.components(),
         }
     }
 
@@ -1336,6 +1540,17 @@ impl Space {
     fn default_decode(&self, max_sample: f32) -> Vec<(f32, f32)> {
         match self {
             Self::Indexed(_) => vec![(0.0, max_sample)],
+            // ★ NOT `[0 1]` per component. Table 90's default is the
+            // space's own component RANGE, and `Lab` is the case where
+            // that is not 0–1: its L runs 0–100 and its a/b run over the
+            // `/Range` array's values, which are routinely negative.
+            // Defaulting a `Lab` image to `[0 1]` would collapse every
+            // sample into the darkest corner of the space and paint a
+            // near-black picture — plausible enough to be mistaken for a
+            // badly exposed scan rather than for a decode bug.
+            Self::Special(cs) => (0..cs.components())
+                .map(|i| cs.component_range(i))
+                .collect(),
             _ => vec![(0.0, 1.0); self.components()],
         }
     }
@@ -1348,10 +1563,30 @@ impl Space {
         }
     }
 
-    /// Convert decoded components (already clamped to 0–1) to RGB.
-    fn to_rgb(&self, intent: CmykIntent, comps: &[f32; 4]) -> Rgb {
+    /// Convert decoded components (already clamped into range) to RGB.
+    ///
+    /// `diag` is threaded because [`Self::Special`] delegates to
+    /// [`crate::color::ColorSpace::to_rgb`], which counts its own
+    /// shortfalls (a missing `/tintTransform`, a `/Separation /All`
+    /// approximation). Callers in a per-pixel loop must route through
+    /// [`TintCache`] rather than calling this directly — otherwise those
+    /// counters would tick once per texel and report millions.
+    fn to_rgb(&self, intent: CmykIntent, comps: &[f32], diag: &mut ColorDiagnostics) -> Rgb {
         let c = |i: usize| comps.get(i).copied().unwrap_or(0.0);
         match self {
+            // `None` here means the space paints nothing at all —
+            // `/Separation /None`, or an all-`/None` `DeviceN`
+            // (§8.6.6.4/.5, "shall never be painted on the page").
+            //
+            // The colour returned is irrelevant BECAUSE THE ALPHA IS
+            // ZERO: the decoder sets `suppressed` from the same
+            // `paints()` query and forces every texel transparent. Black
+            // is chosen over white deliberately — if the alpha path were
+            // ever bypassed, a black block is an obvious defect that gets
+            // reported, whereas white is invisible on the blank page a
+            // test most likely uses and silently erases content on a real
+            // one. Fail loudly, not plausibly.
+            Self::Special(cs) => cs.to_rgb(comps, intent, diag).unwrap_or(Rgb::BLACK),
             // An Indexed space never reaches here — the palette path
             // short-circuits it — but returning grey rather than
             // panicking keeps this total.
@@ -1513,8 +1748,45 @@ fn resolve_space_array(
                 )),
             }
         }
-        // `[/Indexed base hival lookup]` — §8.6.6.3.
+        // `[/Indexed base hival lookup]` — §8.6.6.3. Kept HERE rather
+        // than delegated, because an image's `Indexed` space is not a
+        // per-sample conversion at all: the sample IS the palette index,
+        // the width of a sample is the index width and not the base
+        // space's component count, and the whole palette is resolved once
+        // at construction. `crate::color`'s `Indexed` answers a different
+        // question (what colour is index N) and would give the row stride
+        // the wrong number of components.
         b"Indexed" | b"I" => resolve_indexed(doc, items, resources, depth, intent),
+        // Everything else `crate::color` knows how to parse — the two
+        // this Pass exists for (`Separation`, `DeviceN`) and the three
+        // that came free with them (`Lab`, `CalGray`, `CalRGB`).
+        //
+        // Before this, EVERY one of these was an outright refusal and the
+        // image was dropped from the raster entirely. On the operator's
+        // Ghent X-4 file that was 18 pictures across three pages, which is
+        // the largest single hole this crate had.
+        b"Separation" | b"DeviceN" | b"Lab" | b"CalGray" | b"CalRGB" => {
+            let obj = Object::Array(items.to_vec());
+            let mut scratch = ColorDiagnostics::default();
+            match crate::color::resolve_object(doc, &obj, resources, depth, &mut scratch) {
+                Some(cs) if cs.components() > 0 && cs.components() <= MAX_IMAGE_COMPONENTS => {
+                    Ok(Space::Special(cs))
+                }
+                // A space that resolves to zero components, or to more
+                // than the guard allows, is refused rather than clamped:
+                // the component count sets the row stride, so a wrong one
+                // does not discolour the image, it shears it.
+                Some(cs) => Err(ImageError::UnsupportedColorSpace(format!(
+                    "/{} with {} component(s)",
+                    String::from_utf8_lossy(&family),
+                    cs.components()
+                ))),
+                None => Err(ImageError::UnsupportedColorSpace(format!(
+                    "/{} (did not resolve)",
+                    String::from_utf8_lossy(&family)
+                ))),
+            }
+        }
         other => Err(ImageError::UnsupportedColorSpace(format!(
             "/{}",
             String::from_utf8_lossy(other)
@@ -1541,6 +1813,11 @@ fn resolve_indexed(
     depth: usize,
     intent: CmykIntent,
 ) -> Result<Space, ImageError> {
+    // The palette is built ONCE, at construction, so its conversions are
+    // bounded by `hival + 1` and want no cache. The diagnostics are
+    // scratch for the same reason: a shortfall in a 256-entry palette is
+    // reported by the entry count, not by a counter.
+    let mut palette_diag = ColorDiagnostics::default();
     let base_obj =
         items
             .get(1)
@@ -1610,7 +1887,7 @@ fn resolve_indexed(
         for (c, slot) in comps.iter_mut().take(m).enumerate() {
             *slot = f32::from(entry.get(c).copied().unwrap_or(0)) / 255.0;
         }
-        table.push(base.to_rgb(intent, &comps));
+        table.push(base.to_rgb(intent, &comps, &mut palette_diag));
     }
     Ok(Space::Indexed(table))
 }

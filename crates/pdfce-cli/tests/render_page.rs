@@ -428,6 +428,15 @@ fn renders_a_single_page_to_png_with_the_stable_stdout_line() {
             "shadings_painted",
             "shadings_refused",
             "shadings_mesh",
+            // §8.6.6.4/.5 and §8.6.5 image colour, appended 2026-08-17.
+            // Both exist because the pixel-parity harness reads THIS LINE
+            // and nothing else: a `Lab` image with a perfectly good
+            // stderr explanation still landed in that harness's
+            // *unexplained* bucket, which is the third time in one
+            // session that a disclosure reached a human and not a
+            // machine.
+            "img_colorant_none",
+            "img_uncalibrated",
         ],
         "metrics key order is part of the stable contract"
     );

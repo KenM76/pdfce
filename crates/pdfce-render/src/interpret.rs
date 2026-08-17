@@ -540,6 +540,24 @@ pub struct Diagnostics {
     /// definitions and their wording; this struct owns the page-level
     /// aggregation. See [`crate::color::ColorDiagnostics`].
     pub color: crate::color::ColorDiagnostics,
+    /// Images suppressed entirely because their colour space was
+    /// `/Separation /None` or an all-`/None` `/DeviceN` (§8.6.6.4/.5).
+    ///
+    /// Census of pdfce obeying the standard, not a shortfall — but it
+    /// belongs on the machine line, because a reference renderer that
+    /// paints such an image (pdfium paints it BLACK, measured
+    /// 2026-08-17) will diverge maximally and a parity harness needs to
+    /// know the divergence is pdfce's correctness.
+    pub images_colorant_none: usize,
+    /// Images converted through pdfce's OWN XYZ→sRGB colorimetry rather
+    /// than a colour-management engine — `Lab`, `CalGray`, `CalRGB`.
+    ///
+    /// On the stdout line rather than only in a note, because that is the
+    /// only channel a parity harness reads. A `Lab` image landed in the
+    /// harness's *unexplained* bucket while a perfectly good stderr
+    /// sentence explained it — the third instance today of a disclosure
+    /// that reached a human and not a machine.
+    pub images_uncalibrated_colorimetry: usize,
     /// §8.7.4 shadings — the gradient inventory.
     ///
     /// Nested for the same reason `color` is: the counters are defined and
@@ -614,6 +632,23 @@ alpha applied, colours stay shifted toward the matte colour"
         }
         if notes.palette_out_of_range {
             self.note_image("/Indexed lookup table shorter than hival (painted black)");
+        }
+        // R183: a picture that is correctly absent is otherwise
+        // indistinguishable from one that failed to decode. This one is
+        // pdfce obeying §8.6.6.4/.5, not falling short — and the note
+        // carries the pdfium disagreement, because a parity run will show
+        // a maximal divergence here that is pdfce's correctness.
+        if notes.colorant_none_suppressed {
+            self.images_colorant_none += 1;
+            self.note_image(
+                "image colour space is /Separation /None or an all-/None /DeviceN: NOTHING painted, per 8.6.6.4/.5 (note: pdfium paints such an image black)",
+            );
+        }
+        if let Some(space) = notes.uncalibrated_colorimetry {
+            self.images_uncalibrated_colorimetry += 1;
+            self.note_image(&format!(
+                "{space} image converted by pdfce's own XYZ->sRGB (Bradford to D65, no colour management, no rendering intent): defensible, not colour-managed"
+            ));
         }
         if notes.decode_array_ignored {
             self.note_image("/Decode array had the wrong length (default used)");
@@ -703,6 +738,8 @@ polarity unverifiable (decision 006 R30)",
         for (subtype, count) in other.annotations_without_ap {
             *self.annotations_without_ap.entry(subtype).or_insert(0) += count;
         }
+        self.images_colorant_none += other.images_colorant_none;
+        self.images_uncalibrated_colorimetry += other.images_uncalibrated_colorimetry;
         self.color.merge(other.color);
         self.shading.merge(other.shading);
         for s in other.annotation_notes {

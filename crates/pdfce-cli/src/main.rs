@@ -111,7 +111,8 @@
 //!               pattern_spaces=<x> patterns_unpainted=<y> \
 //!               indexed_clamped=<z> indexed_short=<aa> \
 //!               shadings=<ab> shadings_via_sh=<ac> shadings_paintable=<ad> \
-//!               shadings_painted=<ae> shadings_refused=<af> shadings_mesh=<ag>
+//!               shadings_painted=<ae> shadings_refused=<af> shadings_mesh=<ag> \
+//!               img_colorant_none=<ah> img_uncalibrated=<ai>
 //! ```
 //!
 //! `render-page`'s line is deliberately split by the first `"; "` into a
@@ -6585,7 +6586,8 @@ cs_unresolved={} colors_not_set={} icc_alternate={} icc_device_fallback={} \
 tint_applied={} tint_not_applied={} sep_all_approximated={} \
 sep_none_suppressed={} pattern_spaces={} patterns_unpainted={} \
 indexed_clamped={} indexed_short={} shadings={} shadings_via_sh={} \
-shadings_paintable={} shadings_painted={} shadings_refused={} shadings_mesh={}",
+shadings_paintable={} shadings_painted={} shadings_refused={} shadings_mesh={} \
+img_colorant_none={} img_uncalibrated={}",
         input.display(),
         output.display(),
         rendered.pixmap.width(),
@@ -6712,6 +6714,20 @@ shadings_paintable={} shadings_painted={} shadings_refused={} shadings_mesh={}",
         d.shading.painted,
         d.shading.refused,
         d.shading.mesh(),
+        // Appended after every pre-existing key. Both exist because the
+        // pixel-parity harness reads THIS LINE and nothing else — a
+        // stderr sentence, however well written, is invisible to it, and
+        // a `Lab` image with a perfectly good explanation on stderr still
+        // landed in that harness's *unexplained* bucket.
+        //
+        // These two very nearly shipped as counters with no shell caller,
+        // which is the exact defect `Pass 84.0` existed to fix: the patch
+        // that was supposed to add them here aborted before writing, the
+        // engine-side half landed, and only the stable-line ORDER TEST
+        // caught the gap. That test is the reason this file cannot grow a
+        // counter the CLI does not print.
+        d.images_colorant_none,
+        d.images_uncalibrated_colorimetry,
     );
     report_diagnostics(d);
 
