@@ -96,6 +96,101 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★★★ Pass 89.1 — `a7210a4` — **THE OPERATOR PICKED A FILL COLOUR, AND THE FIND-AND-MARK PATH THREW IT AWAY BEFORE IT REACHED A FILE** — sibling of `Pass 89.0`, second `pdfceGUI` request today — filed 2026-08-17 (hundred-and-fifty-fourth filing)
+
+**Origin — REQUEST CHANNEL, second item from `pdfceGUI` today, distinct from
+`Pass 89.0`'s.** Archived by the engineer to
+`D:\Dev\FeatureRequests\pdfce_FeatureRequests\archive\2026-08-17-redaction-fill-search-path-request.md`;
+reply in the sibling `-reply.md`. **Both of today's channel items are now
+closed; `open/` is down to five, all print/annotation items.**
+
+**What was wrong.** `EditSession::mark_redactions_by_search`,
+`mark_redactions_by_search_with` and `mark_redactions_by_pattern` all
+funnelled into `author_text_matches`, which hard-coded its `RedactSpec` as
+`fill: None, overlay_text: None, quadding: Left`. Find-and-mark — the verb
+an operator actually uses to redact a real document — silently discarded
+every fill-colour and caption choice; the only reachable path for a styled
+mark was placing every mark by hand via `add_redaction`. **The reporter had
+already verified the `/IC` chain end to end and found it correct** — this
+was reported as an UNREACHABLE feature, not a broken one.
+
+**What shipped.**
+- `pdfce_core::annot_author::RedactAppearance` — everything `RedactSpec`
+  carries **except geometry** (`fill`, `overlay_text`, `quadding`), with
+  `to_spec(quads) -> RedactSpec` the single rejoining point. The split IS
+  the repair: appearance is one operator choice, geometry is per-match, and
+  fusing them is what forced a search verb to invent an appearance per hit.
+- Two additive verbs — `mark_redactions_by_search_styled`,
+  `mark_redactions_by_pattern_styled`. Purely additive: the four existing
+  verbs delegate with `RedactAppearance::default()`, unchanged in meaning.
+- **Explicit parameter, not session state.** A
+  `set_default_redaction_appearance` was considered and rejected in source:
+  it would make a call's result depend on an earlier call the reader cannot
+  see.
+- `Quadding` gains `Default = Left` (Table 222 fixes `/Q`'s default at 0 —
+  the derive and the spec are now one fact).
+- `pdfce-cli redact-mark` builds ONE `RedactAppearance`, shared by
+  `--rect`, `--search` AND `--pattern`.
+
+**Three operator-visible strings were false, one of them for less than an
+hour before this fix.** All three described the OLD hard-coded-black
+default that `Pass 89.0` (`a705d14`, same session, ~1 hour earlier) had
+already replaced with Table 192's transparent default — and `a705d14`
+touched neither string:
+1. The CLI's `--search` note: *"note: --fill/--overlay-text are ignored for
+   --search marks this build (default black fill applied on apply)"* — the
+   disclosure half was accurate, the parenthetical was not.
+2. `--fill`'s clap help: *"Default black — the Acrobat default."*
+3. `--overlay-text`'s clap help: described burn-in as deferred *"as a
+   follow-up"* — no longer true once this Pass ships, in the same commit.
+
+All three corrected here. **This is `R180`'s THIRD instance** — see
+*Standing rules*, below — caught the same way the prior two were: by
+reading the actual output, not by a gate. **`tools/check-ui-strings.sh` is
+scoped to `pdfce-gui`'s `ui_text.rs` and does not see `pdfce-cli`'s
+clap-derived `--help` text at all**, which is itself the shape
+`D:\dev\rag\rust\a_gate_states_what_it_cannot_see.md` (pdfce `R192`)
+already generalises — graduated there this filing as a fifth instance.
+
+**A known gap found only by looking at the render, filed to Backlog, not
+fixed speculatively.** `pdfce-core`'s redaction-mark `/DA` hard-codes BLACK
+overlay text, so a caption burnt into a dark fill is illegible; there is no
+overlay-text colour (or size, or a whole `/DA`) on the API at all.
+`pdfceGUI` is told by name in the reply file so it does not discover this
+as a bug when it wires a fill-colour picker.
+
+**Verification.** Tests **3,755 → 3,757, +2, 0 failures.** The first new
+test asserts END TO END — search → mark → save → reload → apply → the
+bytes — because apply DELETES the annotation; a test stopping at the mark
+would prove the appearance reached an object that does not survive. That
+is the exact gap that let this ship unreachable in the first place.
+**Sabotage run and SEEN TO FAIL**: restoring the hard-coded default
+appearance fails that test and only that test. `cargo fmt --check`,
+`cargo clippy -- -D warnings`, `check-fmt-excluded.py`,
+`check-ui-strings.sh`, `check-shipped-assets.py`, `check-ledger-numbers.py`
+all clean. `cargo tree -p pdfce-core` / `-p pdfce-render` re-verified — no
+GUI dependency. Verified through the RELEASE CLI and by looking at the
+render: a `--search`-created mark carries the operator's dark red fill and
+its caption.
+
+**`docs/FEATURES.md`.** *Redaction & security* row "Redaction mark
+appearance follows Table 192's precedence ladder" — folded in rather than
+given its own row: checkboxes unchanged at `core [x]` · `cli [x]` ·
+`gui [ ]` (the appearance capability itself was already ticked; this Pass
+makes the ticks TRUE for find-and-mark too, where they had not actually
+been reachable). Sentence updated to say the appearance is now reachable
+from manual, search AND pattern marking alike.
+
+**Ledger effects.** Pass family: **89** (sibling `.1`; no new family
+minted — next free family stays **90**, unaffected). Standing rules: **no
+new rule minted** — `R180` gains its **third instance** (full text below);
+ceiling stays **R195**, next free **R196** — re-derived from *Standing
+rules*' own closing ledger line this filing, not relayed from
+`Pass 89.0`'s own filing or from `tools/check-ledger-numbers.py`.
+Decisions: **none** — an API-shape choice (`RedactAppearance` as an
+explicit parameter, not session state) documented in source, not an
+architectural policy; ceiling stays **065**, next free **066**.
+
 ### ★★★★ Pass 89.0 — `a705d14` — **`/OverlayText` REACHED THE FILE AND WAS NEVER DRAWN, AND THE ANNOTATION CARRYING IT WAS THEN DELETED — THE FULL ISO 32000-1 TABLE 192 OVERLAY LADDER NOW SHIPS** — closes Pass 8.0 deviation 2 — filed 2026-08-17 (hundred-and-fifty-third filing)
 
 **Origin — REQUEST CHANNEL, not internally discovered.** `pdfceGUI`
@@ -58024,6 +58119,17 @@ not a judgment call:**
   scoped into a real Pass, the operator's own framing should gate it:
   headless/CLI is free, a launching GUI is days, a GUI worth using is a
   separate product decision.**
+- **Overlay-text colour on a redaction mark — `/DA` hard-codes BLACK, so a
+  caption burnt into a dark fill is illegible, and there is no colour
+  (or size, or a whole `/DA`) exposed on the API at all.** Found by
+  LOOKING at the render while verifying `Pass 89.1` (`a7210a4`,
+  2026-08-17, hundred-and-fifty-fourth filing) — a `--search` mark with a
+  dark red fill and a burnt-in caption renders the caption unreadably.
+  Deliberately not fixed speculatively here — colour? size? a whole
+  `/DA`? is a design question for the consumer of `RedactAppearance`, not
+  a default to invent under a bug-fix Pass. `pdfceGUI` has been told by
+  name in the reply file so it does not discover this as a bug when it
+  wires a fill-colour picker against `Pass 89.1`'s new styled verbs.
 
 ## Standing rules
 
@@ -65217,6 +65323,31 @@ and
   project's own three-instance bar for promoting a NEW rule is
   unaffected — this is evidence for `R180` itself, not a candidate for
   a fifth member of the family.**
+  *Instance 3 (`Pass 89.1`, `a7210a4`, 2026-08-17, hundred-and-fifty-fourth
+  filing — three strings this time, and the first where the falsifying
+  commit and the falsified strings sat in the SAME SESSION, ~1 hour apart,
+  rather than days.* `Pass 89.0` (`a705d14`) replaced redaction's
+  hard-coded-black `/IC` default with Table 192's transparent default; it
+  touched neither of two `pdfce-cli redact-mark` clap-help strings nor a
+  CLI runtime note, all three of which described the exact default it had
+  just removed. **Distinct from Instance 1 in one load-bearing way**:
+  Instance 1's falsifying and falsified commits were three days apart,
+  giving the sentence time to look settled; here the gap was under an
+  hour, in the same session, effectively the same hand — evidence that
+  R180's trigger is the CHANGE itself, not elapsed time since it. **Also a
+  fresh instance of the gate-blind-spot shape `R192` names**
+  (`D:\dev\rag\rust\a_gate_states_what_it_cannot_see.md`, graduated there
+  as its fifth instance this filing): `tools/check-ui-strings.sh`'s input
+  set is `pdfce-gui`'s `ui_text.rs`; the obligation's subject set is every
+  operator-visible literal in every shell; `pdfce-cli`'s clap-derived
+  `--help` text sits in the gap between them, watched by nothing
+  mechanical. Caught by reading the actual CLI output — the same method
+  that caught the prior session's own two-string instance
+  (`docs/NEXT_SESSION.md`, hundred-and-fifty-first filing). **Not promoted
+  to a rule of its own**: R180's own practical form already names
+  `--help` text by name as exactly this territory, so a third instance in
+  that same shape is evidence for R180, not a fifth family member. Full
+  record: `ROADMAP.md`'s `a7210a4` `Pass 89.1` *Shipped* entry, above.**
 
 - **R181 — A disclosure COUNT must be computed from the same predicate
   the write path it describes actually uses, never a proxy predicate

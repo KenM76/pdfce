@@ -138,7 +138,7 @@ provisional; re-verify before any acceptance criterion leans on them.
 |:----:|:---:|:---:|:-------:|---------|
 | [x] | [x] | [x] | [x] | Mark redactions by text search, named region or pattern. |
 | [x] | [x] | [x] | ◐ | Apply redaction — true removal, forced full rewrite, in all three. **The runtime proof that the removed text is absent from the output bytes runs in the GUI only**; the CLI writes the file before its gate, and that gate checks a different property (the carrier sweep). |
-| [x] | [x] | [ ] | ? | Redaction mark appearance follows Table 192's precedence ladder — `/OverlayText` burnt in via the shared variable-text layout path, absent `/IC` left transparent (not painted black), `/RO` disclosed and left undrawn (falls back to a visible box), `/Repeat` disclosed and ignored. **No GUI control authors overlay text, reads `/RO`, or sets `/Repeat`.** |
+| [x] | [x] | [ ] | ? | Redaction mark appearance follows Table 192's precedence ladder — `/OverlayText` burnt in via the shared variable-text layout path, absent `/IC` left transparent (not painted black), `/RO` disclosed and left undrawn (falls back to a visible box), `/Repeat` disclosed and ignored — reachable from manual, search AND pattern marking alike. **No GUI control authors overlay text, reads `/RO`, or sets `/Repeat`; overlay-text colour is not settable from any shell (hard-coded black `/DA`).** |
 | [x] | [x] | [ ] | ? | Detect an unencrypted wrapper (§7.6.7) and warn that the visible page is a cover, not the document. **No GUI surface.** |
 
 ### Fonts & rendering

@@ -43847,3 +43847,99 @@ remains open.
    item, noted for cross-project awareness only.
 3. **`Pass 85.2` (pattern paint, both tiling and shading) remains next
    in the suggested Ghent build order**, unaffected by this filing.
+
+## 2026-08-17 (hundred-and-fifty-fourth filing) — **`Pass 89.1` (`a7210a4`): THE FIND-AND-MARK PATH DISCARDED THE OPERATOR'S FILL COLOUR AND CAPTION — `RedactAppearance` SHIPS AS ITS OWN TYPE, AND `R180` GAINS A THIRD INSTANCE, GRADUATED TO `D:\dev\rag\rust\` AS A FIFTH `R192`-SHAPED GATE BLIND SPOT**
+
+**Shipped:**
+- `Pass 89.1` — `a7210a4`. Origin: request channel, second `pdfceGUI` item
+  today (sibling of `Pass 89.0`'s), archived to
+  `archive/2026-08-17-redaction-fill-search-path-request.md`, replied to by
+  name. `EditSession::mark_redactions_by_search`/`_with`/`_by_pattern` all
+  funnelled into `author_text_matches`, which hard-coded `RedactSpec` as
+  `fill: None, overlay_text: None, quadding: Left` — find-and-mark, the
+  verb an operator actually uses, silently discarded every fill-colour and
+  caption choice; the reporter had already verified the `/IC` chain and
+  found it correct, so this was an UNREACHABLE feature, not a broken one.
+  Fixed by splitting `RedactAppearance` (fill/overlay_text/quadding) out of
+  `RedactSpec` (geometry), with `to_spec(quads)` the single rejoining
+  point, plus two additive styled verbs and a `pdfce-cli redact-mark` that
+  now builds one `RedactAppearance` shared by `--rect`/`--search`/
+  `--pattern`. `Quadding` gains `Default = Left` (Table 222). An explicit
+  parameter, not session state, by deliberate choice recorded in source.
+  Tests 3,755 → 3,757 (+2, 0 failures); the new end-to-end test (search →
+  mark → save → reload → apply → bytes) exists because apply DELETES the
+  annotation, so a test stopping at the mark cannot see this defect —
+  sabotage (reinstating the hard-coded default) fails that test and only
+  that test. All seven scripted gates clean; `cargo tree` re-verified.
+
+**Decisions made this session:** none — an API-shape choice
+(`RedactAppearance` as an explicit parameter, never session state)
+documented in source, not an architectural policy. Decision ceiling
+unchanged at 065, next free 066.
+
+**Findings + decisions:**
+- **Three operator-visible CLI strings were false**, all describing the
+  hard-coded-black redaction default that `Pass 89.0` (`a705d14`, same
+  session, ~1 hour earlier) had already replaced with Table 192's
+  transparent default, and which `a705d14` did not touch: a
+  `redact-mark --search` runtime note's parenthetical, and two `clap`
+  help strings on `--fill`/`--overlay-text`. Corrected here.
+- **`R180` gains its THIRD instance** (Standing rules, full text below) —
+  the first where the falsifying and falsified commits sat in the SAME
+  SESSION, ~1 hour apart, rather than days: evidence R180's trigger is the
+  change itself, not elapsed time. **Also a fresh instance of the
+  gate-blind-spot shape `R192` names**: `tools/check-ui-strings.sh`'s
+  input set is `pdfce-gui`'s `ui_text.rs`; the obligation's subject set is
+  every operator-visible literal in every shell; `pdfce-cli`'s
+  clap-derived `--help` text sits in the gap, watched by nothing
+  mechanical. **Not promoted to a new rule** — R180's own practical form
+  already names `--help` text by name as this exact territory, so a third
+  instance in that shape is evidence for R180, not a fifth family member.
+  Caught by reading actual CLI output, same method as the prior session's
+  own two-string instance.
+- **A known gap found only by looking at the render, filed to Backlog, not
+  fixed speculatively**: `pdfce-core`'s redaction-mark `/DA` hard-codes
+  BLACK overlay text, so a caption over a dark fill is illegible, and there
+  is no overlay-text colour (or size, or a whole `/DA`) on the API at all.
+  `pdfceGUI` told by name in the reply file so it is not discovered as a
+  bug when it wires a fill-colour picker against `Pass 89.1`'s new verbs.
+
+**RAG graduations, this filing:**
+- `D:\dev\rag\rust\a_gate_states_what_it_cannot_see.md` — fifth instance
+  added: a "no hardcoded UI string" gate scoped to one binary's strings
+  module cannot see a sibling binary's `clap`-generated `--help` text.
+  Table widened to five rows; new section, References and `index.md`
+  bullet updated.
+- **Declined:** `C:\personal_rag\pdf\` — this finding is API-design/
+  process, not PDF-domain producer-vs-spec divergence.
+
+**`docs/FEATURES.md`:** *Redaction & security* row "Redaction mark
+appearance follows Table 192's precedence ladder" — checkboxes unchanged
+(`core [x]` · `cli [x]` · `gui [ ]`; the capability was already ticked,
+this Pass makes the ticks TRUE for find-and-mark rather than manual marks
+only). Sentence replaced to say appearance is reachable from manual,
+search AND pattern marking alike, and to name overlay-text colour as
+unsettable from any shell.
+
+**Still in flight:** unchanged from the hundred-and-fifty-third filing's
+own list — `Pass 72.0`, `73.0`, `73.1`, `86.0` remain HIGH PRIORITY and
+unstarted; `Pass 85.1`, `85.2`, `85.4`, `85.5` remain unstarted; `Pass
+87.0` remains GUI-paused; `bdfd511`'s missing `ROADMAP.md` entry remains
+open; the new overlay-text-colour Backlog item is unscoped.
+
+**For next session:**
+1. **Next free Pass family is `90`** (`89.0`/`89.1` used, same family, no
+   new family minted this filing). Next free decision is **066**,
+   unchanged. Next free filing ordinal is **155**. **Next free standing
+   rule is `R196`** (unchanged — this filing added an instance to `R180`,
+   minted no new rule; read this from the Standing rules section's own
+   closing ledger line, never from `tools/check-ledger-numbers.py`'s
+   next-free output, which `R192`'s own entry names as unreliable here).
+2. **`pdfceGUI` now owes follow-through on BOTH today's items** — the
+   overlay-text/quadding control (`Pass 89.0`) and a fill-colour/caption
+   picker wired to the new styled verbs (`Pass 89.1`), plus should be told
+   the `/DA`-black caption-legibility gap before it ships a dark-fill
+   default; not this project's action item, noted for cross-project
+   awareness only.
+3. **`Pass 85.2` (pattern paint, both tiling and shading) remains next
+   in the suggested Ghent build order**, unaffected by this filing.
