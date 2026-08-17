@@ -927,6 +927,58 @@ pub struct RedactSpec {
     pub quadding: Quadding,
 }
 
+/// Everything a [`RedactSpec`] carries EXCEPT its geometry — the
+/// apply-time appearance of a redaction mark.
+///
+/// # Why this is split out
+///
+/// A [`RedactSpec`] describes ONE mark, geometry included. That is the
+/// right shape when the caller drew the region and the wrong shape when
+/// the caller found N regions by searching: the appearance is a single
+/// operator choice ("black box, "REDACTED" in the middle"), the geometry is
+/// per-match, and fusing them forces a search-and-mark verb either to
+/// invent an appearance per hit or — as pdfce did until this was added —
+/// to hard-code one and silently discard whatever the operator chose.
+///
+/// That was not a hypothetical. `EditSession::mark_redactions_by_search`
+/// and `..._by_pattern` built their specs internally with `fill: None,
+/// overlay_text: None`, so the ONLY way to get a coloured or captioned mark
+/// was to place every one of them by hand. It was reported from outside
+/// (`pdfceGUI`, 2026-08-17) as a fill-colour control that could not be
+/// wired to the find-and-mark path, which is decision 058's case exactly:
+/// a consumer's missing surface was a boundary drawn wrong in core.
+///
+/// [`Default`] is the historical behaviour — no fill, no overlay text,
+/// left-quadded — so the pre-existing verbs keep meaning what they meant.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct RedactAppearance {
+    /// `/IC`, the fill applied **on apply**. See [`RedactSpec::fill`] —
+    /// `None` is TRANSPARENT, not black.
+    pub fill: Option<Color>,
+    /// `/OverlayText`, drawn over the fill on apply.
+    pub overlay_text: Option<String>,
+    /// `/Q` justification for the overlay text.
+    pub quadding: Quadding,
+}
+
+impl RedactAppearance {
+    /// Combine this appearance with a mark's geometry into a
+    /// [`RedactSpec`].
+    ///
+    /// The one place the two halves are joined, so a caller that acquires
+    /// geometry some new way (a future select-by-region, an OCR word box)
+    /// cannot accidentally reintroduce a hard-coded appearance.
+    #[must_use]
+    pub fn to_spec(&self, quads: Vec<Quad>) -> RedactSpec {
+        RedactSpec {
+            quads,
+            fill: self.fill,
+            overlay_text: self.overlay_text.clone(),
+            quadding: self.quadding,
+        }
+    }
+}
+
 /// Author a `/Redact` mark's annotation dictionary + red-outline preview
 /// `/AP` `/N`. The redaction sibling of [`build_appearance`].
 ///

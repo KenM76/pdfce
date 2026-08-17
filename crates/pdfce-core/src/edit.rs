@@ -11560,11 +11560,49 @@ impl EditSession {
         if query.is_empty() {
             return Ok(Vec::new());
         }
+        self.mark_redactions_by_search_styled(
+            query,
+            options,
+            &crate::annot_author::RedactAppearance::default(),
+        )
+    }
+
+    /// [`EditSession::mark_redactions_by_search_with`], with the mark
+    /// APPEARANCE the operator chose.
+    ///
+    /// # Why this exists
+    ///
+    /// The find-and-mark verbs used to build their `RedactSpec` internally
+    /// with `fill: None, overlay_text: None`, so an operator who picked a
+    /// redaction fill colour or a caption and then used *find and mark*
+    /// got neither — silently, because a mark with no `/IC` is a perfectly
+    /// valid mark. Reported from outside (`pdfceGUI`, 2026-08-17) as a
+    /// fill-colour control that could not be wired to this path at all.
+    ///
+    /// The appearance is an explicit parameter rather than session state
+    /// on purpose: a `set_default_redaction_appearance` would make the
+    /// result of this call depend on an earlier call the reader cannot see,
+    /// on the feature where "why is this mark not what I chose?" is the
+    /// expensive question.
+    ///
+    /// # Errors
+    ///
+    /// As [`EditSession::mark_redactions_by_search`].
+    pub fn mark_redactions_by_search_styled(
+        &mut self,
+        query: &str,
+        options: &TextSearchOptions,
+        appearance: &crate::annot_author::RedactAppearance,
+    ) -> Result<Vec<ObjId>, EditError> {
+        if query.is_empty() {
+            return Ok(Vec::new());
+        }
         let q = query.to_string();
         let case_insensitive = options.case_insensitive;
         self.author_text_matches(
             |text| find_matches(text, &q, case_insensitive),
             options.boundary_rule(),
+            appearance,
         )
     }
 
@@ -11588,6 +11626,30 @@ impl EditSession {
         if pattern.is_empty() {
             return Ok(Vec::new());
         }
+        self.mark_redactions_by_pattern_styled(
+            pattern,
+            case_insensitive,
+            &crate::annot_author::RedactAppearance::default(),
+        )
+    }
+
+    /// [`EditSession::mark_redactions_by_pattern`], with the mark
+    /// APPEARANCE the operator chose. See
+    /// [`EditSession::mark_redactions_by_search_styled`] for why the
+    /// appearance is a parameter.
+    ///
+    /// # Errors
+    ///
+    /// As [`EditSession::mark_redactions_by_search`].
+    pub fn mark_redactions_by_pattern_styled(
+        &mut self,
+        pattern: &str,
+        case_insensitive: bool,
+        appearance: &crate::annot_author::RedactAppearance,
+    ) -> Result<Vec<ObjId>, EditError> {
+        if pattern.is_empty() {
+            return Ok(Vec::new());
+        }
         let p = pattern.to_string();
         // `None`: no whole-word option is exposed on the pattern verb.
         // Not an oversight — nothing calls for it yet, and R151 says an
@@ -11598,6 +11660,7 @@ impl EditSession {
         self.author_text_matches(
             |text| find_pattern_matches(text, &p, case_insensitive),
             None,
+            appearance,
         )
     }
 
@@ -11637,15 +11700,11 @@ impl EditSession {
         &mut self,
         matcher: F,
         whole_word: Option<WordBoundary>,
+        appearance: &crate::annot_author::RedactAppearance,
     ) -> Result<Vec<ObjId>, EditError>
     where
         F: Fn(&str) -> Vec<(usize, usize)>,
     {
-        // The extraction and geometry imports moved with the scan into
-        // `scan_text_matches`; what stays is what AUTHORING needs.
-        use crate::annot_author::RedactSpec;
-        use crate::vartext::Quadding;
-
         // R179: the two DOCUMENT-WIDE gates, hoisted ahead of the scan.
         //
         // `add_redaction` re-checks both, so this is not the thing that
@@ -11684,12 +11743,11 @@ impl EditSession {
 
         let mut created = Vec::with_capacity(matches.len());
         for m in matches {
-            let spec = RedactSpec {
-                quads: vec![m.quad],
-                fill: None,
-                overlay_text: None,
-                quadding: Quadding::Left,
-            };
+            // The appearance is the CALLER's, not this function's. It used
+            // to be hard-coded here, which meant every operator choice on
+            // the find-and-mark path was discarded before it reached a
+            // file.
+            let spec = appearance.to_spec(vec![m.quad]);
             created.push(self.add_redaction(m.page_index, &spec)?);
         }
         Ok(created)

@@ -973,13 +973,20 @@ enum Command {
         /// scan every page).
         #[arg(long, default_value_t = 1)]
         page: u32,
-        /// Fill colour applied to the region ON APPLY, as `RRGGBB` hex.
-        /// Default black — the Acrobat default.
+        /// Fill colour (`/IC`) applied to the region ON APPLY, as `RRGGBB`
+        /// hex. Applies to `--rect`, `--search` and `--pattern` alike.
+        ///
+        /// OMITTING IT LEAVES THE REGION TRANSPARENT, not black: ISO
+        /// 32000-1 Table 192 says an absent `/IC` leaves the interior
+        /// transparent. Pass `--fill 000000` for a black box.
         #[arg(long)]
         fill: Option<String>,
-        /// Overlay text drawn over the region on apply (recorded on the
-        /// mark; this build applies the fill and discloses overlay-text
-        /// burn-in as a follow-up).
+        /// Overlay text (`/OverlayText`) drawn over the fill on apply,
+        /// wrapped and clipped to the region. Applies to `--rect`,
+        /// `--search` and `--pattern` alike.
+        ///
+        /// Base-14 Latin this build: a character with no WinAnsi code is
+        /// drawn as `?` and counted in the `redact-apply` report.
         #[arg(long)]
         overlay_text: Option<String>,
         /// Output path.
@@ -11900,7 +11907,7 @@ struct RedactMarkArgs<'a> {
 /// `redact-mark`: author reviewable `/Redact` marks (the non-destructive
 /// MARK phase). Removal is a separate `redact-apply` (R52).
 fn cmd_redact_mark(args: &RedactMarkArgs<'_>) -> u8 {
-    use pdfce_core::annot_author::{Quad, RedactSpec};
+    use pdfce_core::annot_author::{Quad, RedactAppearance};
     use pdfce_core::vartext::Quadding;
 
     let (source, mut session) = match open_for_edit(args.input) {
@@ -11919,6 +11926,14 @@ fn cmd_redact_mark(args: &RedactMarkArgs<'_>) -> u8 {
         None => None,
     };
     let overlay_text = args.overlay_text.map(str::to_string);
+    // ONE appearance, used by all three marking paths. It used to be built
+    // only on the --rect path; --search printed a note saying the settings
+    // were ignored, and --pattern dropped them with no note at all.
+    let appearance = RedactAppearance {
+        fill,
+        overlay_text,
+        quadding: Quadding::Left,
+    };
 
     let created = if let Some(rectspec) = args.rect {
         let Some(index) = args.page.checked_sub(1).map(|i| i as usize) else {
@@ -11935,29 +11950,20 @@ fn cmd_redact_mark(args: &RedactMarkArgs<'_>) -> u8 {
                 return exit::EDIT_REFUSED;
             }
         };
-        let spec = RedactSpec {
-            quads: vec![Quad::from_rect(rect)],
-            fill,
-            overlay_text,
-            quadding: Quadding::Left,
-        };
+        let spec = appearance.to_spec(vec![Quad::from_rect(rect)]);
         match session.add_redaction(index, &spec) {
             Ok(_) => 1usize,
             Err(err) => return report_edit_error(args.input, &err),
         }
     } else if let Some(query) = args.search {
-        if args.fill.is_some() || args.overlay_text.is_some() {
-            eprintln!(
-                "pdfce-cli: note: --fill/--overlay-text are ignored for --search marks this build \
-                 (default black fill applied on apply)"
-            );
-        }
-        match session.mark_redactions_by_search(query, args.ignore_case) {
+        let options =
+            pdfce_core::edit::TextSearchOptions::default().with_case_insensitive(args.ignore_case);
+        match session.mark_redactions_by_search_styled(query, &options, &appearance) {
             Ok(ids) => ids.len(),
             Err(err) => return report_edit_error(args.input, &err),
         }
     } else if let Some(pattern) = args.pattern {
-        match session.mark_redactions_by_pattern(pattern, args.ignore_case) {
+        match session.mark_redactions_by_pattern_styled(pattern, args.ignore_case, &appearance) {
             Ok(ids) => ids.len(),
             Err(err) => return report_edit_error(args.input, &err),
         }

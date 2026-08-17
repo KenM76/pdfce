@@ -3165,6 +3165,63 @@ mod tests {
         assert!(fonts.get(b"F1").is_some(), "existing resources survive");
     }
 
+    /// THE SECOND REPORTED DEFECT: the find-and-mark path built its
+    /// `RedactSpec` internally with `fill: None, overlay_text: None`, so
+    /// every appearance choice an operator made was discarded before it
+    /// reached a file — silently, because a mark with no `/IC` is a
+    /// perfectly valid mark.
+    ///
+    /// Asserted END TO END (search → mark → save → reload → apply → the
+    /// bytes) rather than by inspecting the authored annotation, because
+    /// the annotation is DELETED by apply. A test that stopped at the mark
+    /// would prove the appearance was written to an object that does not
+    /// survive, which is exactly the gap that let this ship.
+    #[test]
+    fn marks_from_search_carry_the_operators_chosen_appearance() {
+        use crate::annot_author::{Color, RedactAppearance};
+
+        let doc = Document::from_bytes(redactable_pdf()).unwrap();
+        let mut session = EditSession::new(doc);
+        let appearance = RedactAppearance {
+            fill: Some(Color::Rgb(0.0, 0.5, 1.0)),
+            overlay_text: Some("GONE".to_string()),
+            quadding: Quadding::Center,
+        };
+        let ids = session
+            .mark_redactions_by_search_styled(
+                "SECRET",
+                &crate::edit::TextSearchOptions::default(),
+                &appearance,
+            )
+            .unwrap();
+        assert!(!ids.is_empty(), "search should have found SECRET");
+        let (marked, _) = session
+            .to_incremental_bytes(&SaveOptions::identity())
+            .unwrap();
+
+        let doc = Document::from_bytes(marked).unwrap();
+        let (out, report) = apply_redactions(&doc, &SaveOptions::identity()).unwrap();
+        let content = all_decoded_content(&Document::from_bytes(out).unwrap());
+        assert_eq!(report.overlay_text_burned, 1, "the caption must be drawn");
+        assert_eq!(report.overlay_transparent, 0, "a fill WAS chosen");
+        assert!(contains(&content, b"GONE"), "the operator's caption");
+        assert!(
+            contains(&content, b"0 0.5 1 rg"),
+            "the operator's fill colour; content was {:?}",
+            String::from_utf8_lossy(&content)
+        );
+    }
+
+    /// The unstyled verb keeps its historical meaning, so adding the
+    /// styled sibling cannot have quietly changed every existing caller.
+    #[test]
+    fn unstyled_search_marks_still_default_to_no_appearance() {
+        let doc = Document::from_bytes(mark_and_save(&redactable_pdf())).unwrap();
+        let (_, report) = apply_redactions(&doc, &SaveOptions::identity()).unwrap();
+        assert_eq!(report.overlay_text_burned, 0);
+        assert_eq!(report.overlay_transparent, 1);
+    }
+
     /// `/OverlayText` is a PDF text string (§7.9.2.2), so a UTF-16BE one
     /// must decode rather than being burnt in as mojibake — permanently,
     /// on the one operation with no undo.

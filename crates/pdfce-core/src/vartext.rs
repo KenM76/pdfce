@@ -118,9 +118,13 @@ impl TextColor {
 /// Quadding `/Q` (§12.7.3.3 Table 222): the justification of the variable
 /// text. Values are reproduced verbatim: `0` left, `1` centre, `2` right;
 /// **default `0`** (left).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// `Default` is `Left`, which is not a convenience choice — Table 222 fixes
+/// `/Q`'s default value at `0`, so the derived default and the spec's
+/// default are the same fact.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Quadding {
     /// `0` — left-justified (the default).
+    #[default]
     Left,
     /// `1` — centred.
     Center,
