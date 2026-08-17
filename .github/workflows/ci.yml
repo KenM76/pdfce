@@ -374,12 +374,39 @@ jobs:
           targets: aarch64-apple-darwin,wasm32-unknown-unknown
       # WHAT THIS PROVES: the workspace type-checks for these targets.
       # WHAT IT DOES NOT PROVE: that it links, runs, or opens a window.
-      # `cargo check` needs no linker and no platform SDK, which is why
-      # this runs at ubuntu rates instead of macOS rates — see
-      # docs/decisions/003-distribution-posture.md §3.1 and §5.3.
       # macOS is NOT a supported platform (rule R9) — this job exists to
-      # keep the code portable, not to claim it runs there.
-      - run: cargo check --workspace --target aarch64-apple-darwin
+      # keep the code portable, not to claim it runs there. See
+      # docs/decisions/003-distribution-posture.md §3.1 and §5.3.
+      #
+      # ★ `pdfce-fetch` IS EXCLUDED, and the reason corrects a premise this
+      # comment used to state as fact. It read:
+      #
+      #     "`cargo check` needs no linker and no platform SDK, which is
+      #      why this runs at ubuntu rates instead of macOS rates"
+      #
+      # That is true of RUST code and false of BUILD SCRIPTS. `cargo check`
+      # still RUNS build scripts, and `pdfce-fetch` pulls `ureq` → `rustls`
+      # → `ring`, whose build script compiles C. Cross-compiling that C from
+      # a Linux runner to `aarch64-apple-darwin` needs an Apple-targeting
+      # toolchain the runner does not have, and it fails with
+      # `cc: error: unrecognized debug output level 'full'` — `ring` passing
+      # a Clang flag to the runner's GCC.
+      #
+      # This job had therefore been RED since before 2026-08-15, on a
+      # failure that has nothing to do with pdfce's portability, which is
+      # the worst state for a gate: it reports a problem that is not there
+      # and so stops being read.
+      #
+      # WHAT IS CONSEQUENTLY NOT CHECKED, stated rather than gestured at
+      # (`a_gate_states_what_it_cannot_see`, D:/dev/rag/rust): `pdfce-fetch`
+      # is not type-checked for macOS by this job. It is a ~200-line shell
+      # crate with NO dependents in the workspace, it is excluded from the
+      # wasm32 check below for the same reason it exists (it is a native
+      # network shell, and R12 forbids the engine from having one), and it
+      # is still fully type-checked on ubuntu and windows by `cargo test`.
+      # If it ever gains a dependent, this exclusion silently widens — that
+      # is the thing to watch.
+      - run: cargo check --workspace --exclude pdfce-fetch --target aarch64-apple-darwin
       # The web-fork invariant, checked positively rather than only by
       # the absence of GUI crates: pdfce-core + pdfce-render must stay
       # WASM-compilable (ARCHITECTURE.md §3, §1). pdfce-gui/pdfce-cli are
