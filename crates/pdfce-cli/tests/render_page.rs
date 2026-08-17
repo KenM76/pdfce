@@ -437,6 +437,17 @@ fn renders_a_single_page_to_png_with_the_stable_stdout_line() {
             // machine.
             "img_colorant_none",
             "img_uncalibrated",
+            // Clause 11 transparency (§11.3.5 `/BM`, §11.6.5 `/SMask`).
+            // Neither is implemented, and before these keys existed
+            // neither was COUNTED: `apply_ext_gstate` read seven keys and
+            // silently dropped the rest, so a page composited by the wrong
+            // rule reported nothing at all. Disclosing the gap BEFORE
+            // implementing it is what made it measurable — the operator's
+            // Ghent X-4 file turned out to carry 113 ignored blend modes
+            // and 36 ignored soft masks, with the worst page being one
+            // that had looked clean by every other counter.
+            "blend_modes_ignored",
+            "soft_masks_ignored",
         ],
         "metrics key order is part of the stable contract"
     );

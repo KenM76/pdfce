@@ -222,6 +222,27 @@ pub struct Diagnostics {
     /// Operators skipped inside `BX`/`EX` compatibility sections
     /// (spec-sanctioned skips, §7.8.2 Table 32).
     pub compat_skipped: usize,
+    /// `gs` operators that selected a **non-Normal blend mode** (`/BM`,
+    /// ISO 32000-1 §11.3.5) which pdfce does not implement — the marks
+    /// were composited as `Normal` instead.
+    ///
+    /// Counted because the result is WRONG rather than missing, and
+    /// wrongness of this shape is invisible: a Multiply that composited as
+    /// Normal produces a perfectly ordinary-looking opaque overlay. A
+    /// missing image leaves a hole somebody notices; a missing blend mode
+    /// just looks like a different document.
+    pub blend_modes_ignored: usize,
+    /// `gs` operators that selected a **soft mask** (`/SMask`, §11.6.5)
+    /// which pdfce does not implement — the marks were painted
+    /// unmasked.
+    ///
+    /// The failure direction matters and is why this is separate from
+    /// `blend_modes_ignored`: an ignored soft mask paints MORE than the
+    /// document asked for, so content the author faded out or masked away
+    /// appears at full strength. On a page whose design relies on a mask
+    /// to hide something, that is the difference between a rendering
+    /// artefact and showing what was meant to be hidden.
+    pub soft_masks_ignored: usize,
     /// Structural oddities tolerated (unbalanced `Q`, missing current
     /// point, mid-path `cm`, operand type/count mismatches).
     pub tolerated: usize,
@@ -688,6 +709,8 @@ polarity unverifiable (decision 006 R30)",
         self.oc_sections_hidden += other.oc_sections_hidden;
         self.unknown_ops += other.unknown_ops;
         self.compat_skipped += other.compat_skipped;
+        self.blend_modes_ignored += other.blend_modes_ignored;
+        self.soft_masks_ignored += other.soft_masks_ignored;
         self.tolerated += other.tolerated;
         self.glyphs_notdef += other.glyphs_notdef;
         self.glyphs_substituted += other.glyphs_substituted;
@@ -2134,6 +2157,53 @@ impl Interpreter<'_> {
         // value outside 0..1 has an obvious intended reading at each end.
         if let Some(v) = ext.get(b"ca").and_then(Object::as_number) {
             self.gs.current.fill_alpha = (v as f32).clamp(0.0, 1.0);
+        }
+        // §11.3.5 `/BM` and §11.6.5 `/SMask` — clause 11 transparency.
+        //
+        // NEITHER IS IMPLEMENTED, and until this was added neither was
+        // even COUNTED: `apply_ext_gstate` read `LW`, `LC`, `LJ`, `ML`,
+        // `D`, `ca` and `CA` and silently dropped the rest. A page asking
+        // for a Multiply blend or a soft mask rendered as though it had
+        // asked for neither, with nothing on the result line to say so.
+        //
+        // `/BM` may be a name or an ARRAY of names (Table 58: "the first
+        // blend mode in the array that the conforming reader supports").
+        // `Normal` and `Compatible` are what pdfce actually does, so
+        // selecting either is not a shortfall and is not counted — this
+        // counts only the modes whose absence changes the picture.
+        if let Some(bm) = ext.get(b"BM").map(|o| self.doc.resolve(o)) {
+            let first = match bm {
+                Object::Name(n) => Some(n.as_bytes().to_vec()),
+                Object::Array(a) => a
+                    .first()
+                    .map(|o| self.doc.resolve(o))
+                    .and_then(Object::as_name)
+                    .map(|n| n.as_bytes().to_vec()),
+                _ => None,
+            };
+            if let Some(name) = first
+                && name != b"Normal"
+                && name != b"Compatible"
+            {
+                self.diag.blend_modes_ignored += 1;
+                self.diag.note(
+                    format!(
+                        "gs /BM /{}: blend mode not implemented; composited as Normal",
+                        String::from_utf8_lossy(&name)
+                    )
+                    .as_bytes(),
+                );
+            }
+        }
+        // `/SMask /None` is the RESET — it turns a soft mask off, which is
+        // exactly what pdfce already does, so it is not a shortfall.
+        if let Some(sm) = ext.get(b"SMask").map(|o| self.doc.resolve(o))
+            && !matches!(sm, Object::Name(n) if n.as_bytes() == b"None")
+            && !matches!(sm, Object::Null)
+        {
+            self.diag.soft_masks_ignored += 1;
+            self.diag
+                .note(b"gs /SMask: soft mask not implemented; marks painted unmasked");
         }
         if let Some(v) = ext.get(b"CA").and_then(Object::as_number) {
             self.gs.current.stroke_alpha = (v as f32).clamp(0.0, 1.0);

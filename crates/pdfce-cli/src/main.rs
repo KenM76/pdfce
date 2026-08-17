@@ -6594,7 +6594,8 @@ tint_applied={} tint_not_applied={} sep_all_approximated={} \
 sep_none_suppressed={} pattern_spaces={} patterns_unpainted={} \
 indexed_clamped={} indexed_short={} shadings={} shadings_via_sh={} \
 shadings_paintable={} shadings_painted={} shadings_refused={} shadings_mesh={} \
-img_colorant_none={} img_uncalibrated={}",
+img_colorant_none={} img_uncalibrated={} \
+blend_modes_ignored={} soft_masks_ignored={}",
         input.display(),
         output.display(),
         rendered.pixmap.width(),
@@ -6735,6 +6736,13 @@ img_colorant_none={} img_uncalibrated={}",
         // counter the CLI does not print.
         d.images_colorant_none,
         d.images_uncalibrated_colorimetry,
+        // §11.3.5 blend modes and §11.6.5 soft masks. Appended after every
+        // pre-existing key. Neither is implemented; before these existed
+        // neither was COUNTED either, so a page composited wrongly said
+        // nothing at all. `soft_masks_ignored` is the one to watch: an
+        // ignored mask paints MORE than the document asked for.
+        d.blend_modes_ignored,
+        d.soft_masks_ignored,
     );
     report_diagnostics(d);
 
@@ -6862,6 +6870,30 @@ their text was SKIPPED, not approximated{}",
         eprintln!(
             "pdfce-cli: note: {} glyph(s) had no mapping and were drawn as .notdef or omitted",
             d.glyphs_notdef
+        );
+    }
+    // Clause 11 transparency. Split into two notes rather than one,
+    // because the two failure DIRECTIONS are opposite and only one of them
+    // can expose content: an ignored blend mode composites the same marks
+    // by the wrong rule, while an ignored soft mask paints marks the
+    // document asked to be faded or hidden.
+    if d.blend_modes_ignored > 0 {
+        eprintln!(
+            "pdfce-cli: note: {} graphics-state(s) selected a non-Normal BLEND MODE (/BM, ISO \
+32000-1 §11.3.5) that pdfce does not implement; those marks were composited as Normal. The page \
+is not blank where they are — it is WRONG there, which is harder to notice: a Multiply that \
+composited as Normal just looks like an ordinary opaque overlay",
+            d.blend_modes_ignored
+        );
+    }
+    if d.soft_masks_ignored > 0 {
+        eprintln!(
+            "pdfce-cli: note: {} graphics-state(s) selected a SOFT MASK (/SMask, §11.6.5) that \
+pdfce does not implement; those marks were painted UNMASKED. This paints MORE than the document \
+asked for — content the author faded out or masked away appears at full strength, so on a page \
+whose design relies on a mask this is the difference between an artefact and showing what was \
+meant to be hidden",
+            d.soft_masks_ignored
         );
     }
     if (d.unknown_ops > 0 || d.deferred_ops > 0) && !d.sample_ops.is_empty() {
