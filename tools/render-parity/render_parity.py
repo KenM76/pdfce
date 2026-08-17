@@ -611,10 +611,60 @@ GAP_KEYS = {
     "dct_cmyk": "devicecmyk-jpeg",              # decision 006 §3.7 colorimetry (image)
     "dct_cmyk_unverifiable": "dct-polarity",
 }
-# Annotation keys that indicate a pdfium REFERENCE-divergence (annots mode).
+# Annotation keys that indicate a pdfium REFERENCE-divergence. Only ever
+# non-zero in `--annots` mode, so they are consulted only there.
 REF_KEYS = {
     "annots_widget": "pdfium-fflodraw-widget",  # pdfium needs FPDF_FFLDraw
     "annots_no_ap": "pdfium-synthesized-noap",  # pdfium synthesizes /IC etc.; R43 refuses
+}
+
+# Image colour-space keys where PDFIUM is the renderer that diverges from the
+# standard. Consulted in EVERY mode -- unlike REF_KEYS above, these fire on
+# ordinary content, not on annotations.
+#
+# WHY THESE ARE REFERENCE-DIVERGENCES AND NOT DISCLOSED GAPS
+# ==========================================================
+# The distinction between GAP_KEYS and a reference-divergence is not a matter
+# of taste: it is the claim about WHO is wrong. A disclosed gap says pdfce
+# could not do something. A reference-divergence says pdfce did it correctly
+# and pdfium did not, so the comparison carries no information about pdfce.
+# Asserting the second needs an oracle that is neither renderer, and for
+# these two keys there is one.
+#
+# `img_uncalibrated` fires for exactly /Lab, /CalGray and /CalRGB -- the three
+# CIE-based non-ICC spaces, all defined by CLOSED-FORM arithmetic in ISO
+# 32000-1 8.6.5.2-8.6.5.4. `tools/check-image-colorspace-truth.py` computes
+# that arithmetic independently of both renderers. Measured 2026-08-17 over
+# 3,600 interior texels per space:
+#
+#     space     pdfce mean / max      pdfium mean / max
+#     lab         0.019 / 1             40.854 / 152
+#     calgray     0.000 / 0              2.000 /   9
+#     calrgb      0.030 / 1              3.012 /   9
+#
+# pdfce is exact to within one 8-bit code on all three; pdfium is not. The
+# session handoff had recorded the opposite assumption -- that pdfce's
+# uncalibrated conversion was the CAUSE of the lab.pdf divergence -- and the
+# measurement reversed it.
+#
+# `img_colorant_none` fires for a /Separation /None image, which 8.6.6.4 says
+# "shall never be painted on the page". pdfce leaves the backdrop untouched;
+# pdfium paints the image SOLID BLACK. Measured on sep-none.pdf: every pdfce
+# pixel (255,255,255) against every pdfium pixel (0,0,0), frac32 = 1.0. That
+# is the maximum divergence the harness can report, and all of it is pdfce
+# being right.
+#
+# THE COST, STATED RATHER THAN HIDDEN
+# ===================================
+# Classifying a page this way removes it from the bug-candidate pool, so a
+# REAL pdfce defect on a page that also carries a Lab image would be masked.
+# That is accepted deliberately, because a page pdfium renders wrongly cannot
+# yield a verdict about pdfce either way -- but it is why the analytic oracle
+# above exists as a separate, non-comparative check. Run it, not this harness,
+# when the question is whether the CIE-based conversions are correct.
+IMAGE_REF_KEYS = {
+    "img_uncalibrated": "pdfium-cie-conversion",
+    "img_colorant_none": "pdfium-paints-colorant-none",
 }
 
 
@@ -659,7 +709,9 @@ class PageResult:
     clean: int = 0  # 1 if no disclosed gap AND no DeviceCMYK (band-derivation set)
     devicecmyk: int = 0
     gaps: str = ""  # comma-joined gap reasons (bucket ii candidates)
-    refdiv: str = ""  # comma-joined reference-divergence reasons (annots mode)
+    # Comma-joined reasons the REFERENCE renderer is the divergent one. Fed by
+    # IMAGE_REF_KEYS in every mode, plus REF_KEYS under `--annots`.
+    refdiv: str = ""
     bucket: str = ""  # filled in phase 2
     # keep the delta image path only when we emit a diff panel
     _arrays: object = field(default=None, repr=False, compare=False)
@@ -766,8 +818,21 @@ def gap_reasons(diag: dict[str, int]) -> list[str]:
     return [label for key, label in GAP_KEYS.items() if diag.get(key, 0) > 0]
 
 
-def ref_reasons(diag: dict[str, int]) -> list[str]:
-    return [label for key, label in REF_KEYS.items() if diag.get(key, 0) > 0]
+def ref_reasons(diag: dict[str, int], annots: bool) -> list[str]:
+    """Reasons the REFERENCE renderer -- not pdfce -- is the divergent one.
+
+    `annots` gates only the annotation half: those counters are always zero
+    outside `--annots` mode, so consulting them there would be noise. The
+    image colour-space half is unconditional, because a Lab image or a
+    /Separation /None image is ordinary page content that arrives in every
+    mode. Gating BOTH halves on `--annots` was the original defect: two keys
+    added specifically to explain lab.pdf were never read, and the page kept
+    reporting `unexplained-divergence` in the default mode.
+    """
+    keys = dict(IMAGE_REF_KEYS)
+    if annots:
+        keys.update(REF_KEYS)
+    return [label for key, label in keys.items() if diag.get(key, 0) > 0]
 
 
 def collect_pdfs(root: Path) -> list[tuple[str, Path]]:
@@ -826,7 +891,8 @@ def comparability_config(args: argparse.Namespace) -> dict:
 
     DPI changes the raster size and therefore the anti-aliasing fraction;
     `pages_per_file` changes which and how many pages enter every distribution;
-    `annots` switches the reference-divergence confounder on; the band settings
+    `annots` switches the ANNOTATION reference-divergence confounder on (the
+    image colour-space one is unconditional); the band settings
     define the bucket boundary itself. `--emit-diffs`, `--out`, `--max-files`
     and the timeouts do not change a measured value and are excluded (except
     `max_files`, which changes the POPULATION and so is folded into the
@@ -1345,7 +1411,7 @@ def measure_page(
 
     delta, stats, dim_mismatch = compare(pdfce_img, pdfium_img)
     gaps = gap_reasons(diag)
-    refs = ref_reasons(diag) if args.annots else []
+    refs = ref_reasons(diag, args.annots)
     if dcmyk:
         gaps = gaps + ["devicecmyk-file"] if "devicecmyk-jpeg" not in gaps else gaps
     # `tolerated` disqualifies a page from DEFINING the band.
@@ -1619,8 +1685,13 @@ def write_reports(results, ok, clean, band, band_src, n_files_ok, n_files, args,
     P("        it is anti-aliasing. The 2026-08-09 structural audit found")
     P("        15.4% of that population is not edge-shaped, and four")
     P("        confirmed pdfce bugs were inside it.")
-    if args.annots:
-        P(f"  (ref) reference-divergence  : {buckets['reference-divergence']}")
+    # Printed UNCONDITIONALLY. It used to be gated on `--annots`, which was
+    # harmless while only annotation keys fed it and actively misleading once
+    # image colour-space keys did: a page moved out of `unexplained` into a
+    # bucket the report did not print, so the headline number improved and
+    # nothing on screen said where the page went. A bucket that can be
+    # non-zero must always be visible, or the harness is hiding its own work.
+    P(f"  (ref) reference-divergence  : {buckets['reference-divergence']}")
     P(f"  (abt) reference-aborted     : {buckets['reference-aborted']}   "
       f"<- pdfium died; not a pdfce bucket")
     P("")
@@ -1631,13 +1702,27 @@ def write_reports(results, ok, clean, band, band_src, n_files_ok, n_files, args,
     P("--- DeviceCMYK colorimetry characterization (decision 006 sec3.7 / deliverable 7) ---")
     dd = _distribution(dcmyk_frac)
     cd = _distribution(clean_frac)
+    # TWO independent populations, and they need TWO guards. `_distribution`
+    # returns a bare `{"n": 0}` for an empty one, so reading `cd['mean']`
+    # under a guard that only tested `dd['n']` raised KeyError the first time
+    # a run had DeviceCMYK pages but no clean ones. That is not a contrived
+    # combination: it is what a small, deliberately-targeted fixture corpus
+    # looks like once every page is explained, and it took down the whole
+    # report -- including the unexplained tail printed below it -- rather
+    # than degrading one line.
     if dd["n"]:
         P(f"  DeviceCMYK-only pages: n={dd['n']} mean frac32={dd['mean']:.5f} "
           f"p95={dd['p95']:.5f} max={dd['max']:.5f}")
-        P(f"  clean pages (baseline): n={cd['n']} mean frac32={cd['mean']:.5f} "
-          f"p95={cd['p95']:.5f}")
-        P(f"  => DeviceCMYK pages diverge {(dd['mean']/cd['mean']) if cd['mean'] else float('nan'):.1f}x "
-          f"the clean-page mean (naive-additive Rgb::from_cmyk vs pdfium AdobeCMYK_to_sRGB1)")
+        if cd["n"]:
+            P(f"  clean pages (baseline): n={cd['n']} mean frac32={cd['mean']:.5f} "
+              f"p95={cd['p95']:.5f}")
+            ratio = (dd["mean"] / cd["mean"]) if cd["mean"] else float("nan")
+            P(f"  => DeviceCMYK pages diverge {ratio:.1f}x the clean-page mean "
+              "(naive-additive Rgb::from_cmyk vs pdfium AdobeCMYK_to_sRGB1)")
+        else:
+            P("  clean pages (baseline): n=0 — NO baseline population in this")
+            P("     run, so the DeviceCMYK figure above is an absolute number")
+            P("     and NOT a multiple of anything. Do not quote it as a ratio.")
     else:
         P("  no DeviceCMYK-only pages in this run")
     P("")
