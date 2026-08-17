@@ -43,7 +43,7 @@
 //! | `Lab` | Full §8.6.5.4 decode, including the piecewise `g(x)`. |
 //! | `ICCBased` | **The spec's own fallback**, not an approximation pdfce invented — see [`ColorSpace::IccBased`]. |
 //! | `Indexed` | Full §8.6.6.3, string *and* stream lookups, normative index clamp. |
-//! | `Separation`, `DeviceN` | Parsed in full, **tint transform not evaluated** — see [`ColorDiagnostics::tint_transform_not_applied`]. |
+//! | `Separation`, `DeviceN` | Parsed in full, **tint transform evaluated** via [`pdfce_core::function`] — [`ColorDiagnostics::tint_transforms_applied`] counts the successes, [`ColorDiagnostics::tint_transform_not_applied`] the residue (a missing or unusable `/tintTransform`). |
 //! | `Pattern` | Recognised; nothing is painted, and it is counted. See [`ColorDiagnostics::patterns_unpainted`]. |
 //!
 //! ### Why `Separation`/`DeviceN` stop short of the transform
@@ -52,19 +52,23 @@
 //! **additive** device, so a `Separation` space *never* applies a colorant
 //! directly and *always* reverts to `alternateSpace` via `tintTransform`.
 //! There is no colorant-matching step to implement at all. What is missing
-//! is only the second half — a §7.10 function evaluator (types 0/2/3/4).
-//! That evaluator is being written in `pdfce-core` as
-//! `pdfce_core::function`, deliberately in ONE place because images
+//! was only the second half — a §7.10 function evaluator (types 0/2/3/4).
+//! **That evaluator landed**: it lives in `pdfce-core` as
+//! [`pdfce_core::function`], deliberately in ONE place because images
 //! (`DeviceN` samples), shadings and tint transforms all need it, and two
 //! evaluators that disagree would paint the same colour two ways in one
-//! document.
+//! document. [`separation_to_rgb`] and [`device_n_to_rgb`] call it, so a
+//! spot colour with a usable `/tintTransform` now paints **the document's
+//! own colour**, and [`ColorDiagnostics::tint_transforms_applied`] counts
+//! each one.
 //!
-//! Until it lands, a tint is rendered as the alternate space's own
-//! **neutral** interpretation of that tint ([`ColorSpace::neutral_from_tint`]):
-//! the lightness ordering is right, the hue is not reproduced, and
-//! [`ColorDiagnostics::tint_transform_not_applied`] counts every such
-//! conversion. Wiring the evaluator in is a change to exactly one function
-//! in this file.
+//! What survives is the **residue**, and it is a file property rather than
+//! a pdfce one: a `Separation`/`DeviceN` space whose `/tintTransform` is
+//! absent, malformed, or of the wrong arity. Those fall back to the
+//! alternate space's **neutral** interpretation of the tint
+//! ([`ColorSpace::neutral_from_tint`]) — the lightness ordering is right,
+//! the hue is not reproduced — and
+//! [`ColorDiagnostics::tint_transform_not_applied`] counts every one.
 //!
 //! ## White points, and where pdfce is choosing rather than matching
 //!
@@ -651,15 +655,21 @@ pub struct ColorDiagnostics {
     /// second sentence of Table 66's `Alternate` row. Distinct resolutions.
     pub icc_device_fallback_used: usize,
     /// Colour conversions in a `Separation` or `DeviceN` space where the
-    /// **tint transform was not applied** because pdfce has no §7.10
-    /// function evaluator yet.
+    /// **tint transform was not applied** — because the document's
+    /// `/tintTransform` is absent, malformed, or of the wrong arity for
+    /// the space's component count.
+    ///
+    /// This counts a property of the **file**, not a gap in pdfce: the
+    /// §7.10 evaluator ([`pdfce_core::function`]) is wired into both
+    /// [`separation_to_rgb`] and [`device_n_to_rgb`], and a conformant
+    /// space paints the document's own colour and increments
+    /// [`Self::tint_transforms_applied`] instead. The field doc formerly
+    /// said "because pdfce has no §7.10 function evaluator yet", which
+    /// stayed behind when the evaluator landed.
     ///
     /// The colour painted is [`ColorSpace::neutral_from_tint`] in the
     /// alternate space: right lightness, **wrong hue**. A non-zero value
-    /// here on a drawing whose spot colours look grey is the explanation,
-    /// and it goes to zero — without any other change to this module's
-    /// public surface — the day `pdfce_core::function` is wired into
-    /// [`separation_to_rgb`] and [`device_n_to_rgb`].
+    /// here on a drawing whose spot colours look grey is the explanation.
     pub tint_transform_not_applied: usize,
     /// Tint transforms that WERE evaluated (§7.10). The positive twin of
     /// `tint_transform_not_applied` — reported so a shell can say the
@@ -1618,17 +1628,25 @@ fn indexed_to_rgb(
     base.to_rgb(&comps, intent, diag).unwrap_or(Rgb::BLACK)
 }
 
-/// §8.6.6.4 tint → colour, minus the tint transform.
+/// §8.6.6.4 tint → colour, through the document's own tint transform.
 ///
-/// # The one line that changes when the function evaluator lands
+/// # The structure, and why the three arms differ
 ///
-/// The `Colorant::Named` arm is where `pdfce_core::function` will be
-/// evaluated: call the space's `tintTransform` with `[tint]`, receive the
-/// alternate space's components, and hand them to `alternate.to_rgb`. The
-/// surrounding structure — additive device, therefore always revert to the
-/// alternate (§8.6.6.4 rule S4) — is already correct and does not change.
-/// Everything else in this file stays as it is, and
-/// [`ColorDiagnostics::tint_transform_not_applied`] stops incrementing.
+/// pdfce is an **additive** device, so §8.6.6.4 rule S4 applies without
+/// exception: a `Separation` never applies its colorant directly and
+/// always reverts to `alternateSpace` via `tintTransform`. There is no
+/// colorant-matching step to implement.
+///
+/// - [`Colorant::None`] paints nothing (the caller suppresses via
+///   [`ColorSpace::paints`]), so there is no colour to report.
+/// - [`Colorant::All`] explicitly **ignores** the alternate space and the
+///   transform, per the clause; the screen appearance is pdfce's choice
+///   and is disclosed as one.
+/// - [`Colorant::Named`] evaluates the document's `/tintTransform` via
+///   [`pdfce_core::function`] and hands the result to
+///   [`ColorSpace::to_rgb`]. Only a file whose transform is missing,
+///   malformed or wrongly-shaped falls through to the neutral stand-in,
+///   and that fall-through is counted.
 fn separation_to_rgb(
     colorant: &Colorant,
     alternate: &ColorSpace,
@@ -1672,20 +1690,37 @@ fn separation_to_rgb(
     }
 }
 
-/// §8.6.6.5 tints → colour, minus the tint transform.
+/// §8.6.6.5 tints → colour, through the document's own tint transform.
 ///
-/// The effective tint is the **maximum** over the non-`/None` components.
-/// That is pdfce's choice and it is the conservative one: in a subtractive
-/// space the darkest colorant dominates the appearance, so an all-zero
-/// `DeviceN` renders as paper and a single fully-applied colorant renders
-/// dark, which preserves the drawing's figure/ground. Averaging would wash
-/// a single strong colorant out in a six-channel space.
+/// # The normal path
 ///
-/// `/None` components are excluded from the maximum because they "shall
-/// never be painted on the page" (§8.6.6.5) — including them would darken
-/// the result for ink that is not there. They *are* still part of the
-/// component count, and would still be passed to the transform once one
-/// exists, exactly as that clause requires.
+/// All components are passed to `/tintTransform` **in `names` order,
+/// including the `/None` ones**, because that is what the clause requires
+/// — the transform's input arity is the space's full component count, and
+/// dropping a channel would silently mis-index every colorant after it.
+/// The result goes to the alternate space. This is what a conformant file
+/// takes.
+///
+/// # The fallback, and why it maximises rather than averages
+///
+/// A file whose transform is absent, malformed or of the wrong arity falls
+/// back to a single effective tint: the **maximum** over the non-`/None`
+/// components. That is pdfce's choice and it is the conservative one: in a
+/// subtractive space the darkest colorant dominates the appearance, so an
+/// all-zero `DeviceN` renders as paper and a single fully-applied colorant
+/// renders dark, which preserves the drawing's figure/ground. Averaging
+/// would wash a single strong colorant out in a six-channel space.
+///
+/// `/None` components are excluded from **that maximum** because they
+/// "shall never be painted on the page" (§8.6.6.5) — including them would
+/// darken the result for ink that is not there. Note the asymmetry: they
+/// are excluded from the fallback's maximum and included in the
+/// transform's input, and both are what the clause asks for.
+///
+/// A space whose components are **all** `/None` returns `None` outright:
+/// the clause says such a space "shall always discard its output" and
+/// "shall never revert to the alternate colour space", so there is no
+/// fallback to reach.
 fn device_n_to_rgb(
     names: &[Colorant],
     alternate: &ColorSpace,
@@ -1717,10 +1752,19 @@ fn device_n_to_rgb(
     {
         return Some(rgb);
     }
+    // The note names the FILE's shortfall, not pdfce's. Its previous
+    // wording — "NOT evaluated (no 7.10 function evaluator yet)" — was
+    // written before `pdfce_core::function` existed and was left behind
+    // when the evaluator was wired in directly above. It is the one stale
+    // sentence in this file that a shell PRINTS, so an operator chasing a
+    // grey spot colour was told to wait for a feature that had shipped
+    // instead of to check the document's own `/tintTransform`. Its
+    // `Separation` twin in `separation_to_rgb` was updated at the time;
+    // this one was not.
     diag.tint_transform_not_applied += 1;
     diag.note(
-        "DeviceN tint transform NOT evaluated (no 7.10 function evaluator yet); \
-         lightness preserved, hue is not the document's",
+        "DeviceN tint transform missing or unusable; lightness preserved, \
+         hue is not the document's",
     );
     alternate.to_rgb(&alternate.neutral_from_tint(tint), intent, diag)
 }

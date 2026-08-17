@@ -382,6 +382,34 @@ fn renders_a_single_page_to_png_with_the_stable_stdout_line() {
             // inserted: this list IS the contract, and a caller that
             // splits on position breaks the moment a key moves.
             "oc_hidden",
+            // §8.6 colour, appended 2026-08-17. The whole of
+            // `pdfce_render::ColorDiagnostics` — twelve counters that the
+            // engine had computed, merged across nested form XObjects and
+            // unit-tested since the colour-space slice shipped, and that
+            // NO shell had ever read. They stopped at the crate boundary,
+            // which is disclosure to nobody (project rule 4).
+            //
+            // Found by rendering the Ghent PDF Output Suite 5.0 test file:
+            // it reported a clean render for pages whose gradient patches
+            // paint nothing at all, because `patterns_unpainted` was the
+            // only counter that could have said so and it went nowhere.
+            //
+            // All twelve are here, census included, because the struct is
+            // merged as a unit and a partial exposure would only create a
+            // second judgement call later about which half was worth
+            // reporting. Appended at the END, same contract.
+            "cs_unresolved",
+            "colors_not_set",
+            "icc_alternate",
+            "icc_device_fallback",
+            "tint_applied",
+            "tint_not_applied",
+            "sep_all_approximated",
+            "sep_none_suppressed",
+            "pattern_spaces",
+            "patterns_unpainted",
+            "indexed_clamped",
+            "indexed_short",
         ],
         "metrics key order is part of the stable contract"
     );
@@ -996,4 +1024,195 @@ fn build_pdf15_objstm_pdf() -> Vec<u8> {
     buf.extend_from_slice(b"\nendstream\nendobj\n");
     buf.extend_from_slice(format!("startxref\n{xref_at}\n%%EOF\n").as_bytes());
     buf
+}
+
+// ---------------------------------------------------------------------------
+// §8.6 colour disclosure — the ColorDiagnostics channel reaching a shell
+// ---------------------------------------------------------------------------
+
+/// A page whose only visible mark is a **shading-pattern fill** — the
+/// shape a gradient takes in every real-world file — and the assertion
+/// that pdfce both leaves it blank AND says so.
+///
+/// # Why this fixture is built by hand rather than via `multipage_pdf`
+///
+/// It needs a `/Pattern` entry in the page `/Resources` and a
+/// `PatternType 2` object carrying a `ShadingType 2` dictionary. That is
+/// more structure than the shared builder's fixed resource dict provides,
+/// and inlining it keeps the exact thing under test readable at the call
+/// site (this file's module header, "Why the fixtures are built inline").
+///
+/// The content stream is the canonical four operators: select the pattern
+/// colour space (`/Pattern cs`), name the pattern (`/P0 scn`), build a
+/// rectangle covering most of the page, fill it.
+fn shading_pattern_pdf() -> Vec<u8> {
+    build_pdf(&[
+        (1, "<< /Type /Catalog /Pages 2 0 R >>".into()),
+        (
+            2,
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 200 100] >>".into(),
+        ),
+        (
+            3,
+            "<< /Type /Page /Parent 2 0 R /Contents 4 0 R /Resources \
+             << /Pattern << /P0 5 0 R >> >> >>"
+                .into(),
+        ),
+        (4, {
+            let content = "/Pattern cs /P0 scn 10 10 180 80 re f";
+            format!(
+                "<< /Length {} >>\nstream\n{content}\nendstream",
+                content.len()
+            )
+        }),
+        // PatternType 2 = shading pattern (§8.7.4.1, Table 76), wrapping a
+        // ShadingType 2 axial shading (§8.7.4.5.3, Table 79) that runs a
+        // type-2 exponential function from red to blue across the page.
+        // Every part of this is well-formed: the point of the test is that
+        // a CONFORMANT gradient paints nothing today.
+        (
+            5,
+            "<< /PatternType 2 /Shading << /ShadingType 2 /ColorSpace /DeviceRGB \
+             /Coords [10 0 190 0] /Extend [true true] /Function \
+             << /FunctionType 2 /Domain [0 1] /C0 [1 0 0] /C1 [0 0 1] /N 1 >> >> >>"
+                .into(),
+        ),
+    ])
+}
+
+#[test]
+fn a_gradient_that_paints_nothing_is_disclosed_on_stdout_and_stderr() {
+    let dir = TempDir::new("pattern");
+    let pdf = dir.write("gradient.pdf", &shading_pattern_pdf());
+    let png = dir.join("out.png");
+
+    let out = run(&[
+        "render-page",
+        pdf.to_str().unwrap(),
+        "-o",
+        png.to_str().unwrap(),
+    ]);
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+
+    let line = stdout(&out);
+
+    // The counters. `pattern_spaces` counts the `cs` selection,
+    // `patterns_unpainted` the `scn` that named a pattern and produced no
+    // marks. Both are ColorDiagnostics fields that crossed no crate
+    // boundary before this test existed.
+    assert!(
+        line.contains(" pattern_spaces=1 "),
+        "the /Pattern cs selection must be counted: {line:?}"
+    );
+    assert!(
+        line.contains(" patterns_unpainted=1"),
+        "the unpainted pattern fill must be counted: {line:?}"
+    );
+
+    // The prose. This is the half an operator reads, and the sentence has
+    // to name the CONSEQUENCE (nothing was painted), not just the feature,
+    // because a page that renders blank where a gradient belongs is
+    // otherwise indistinguishable from one that rendered correctly onto
+    // white.
+    let err = stderr(&out);
+    assert!(
+        err.contains("patterns_unpainted") || err.contains("PATTERN"),
+        "stderr must name the unpainted pattern: {err:?}"
+    );
+    assert!(
+        err.contains("NOTHING was painted"),
+        "stderr must state the consequence, not just the feature: {err:?}"
+    );
+
+    // And the fact the disclosure is ABOUT: the fill really is absent.
+    // Without this the test would pass just as well if pdfce had painted
+    // the gradient correctly and reported a stale counter — which is the
+    // failure mode a counter-only assertion cannot see.
+    let png_bytes = std::fs::read(&png).unwrap();
+    assert!(
+        !png_bytes.is_empty(),
+        "a page with no paintable marks still writes a PNG"
+    );
+    assert_eq!(png_dimensions(&png), (200, 100));
+}
+
+#[test]
+fn a_spot_colour_with_a_usable_tint_transform_is_reported_as_the_documents_own() {
+    // The positive twin. `tint_applied` exists so a shell can say the spot
+    // colours on a page ARE the document's own rather than pdfce's
+    // stand-in, and until this test there was no shell that could.
+    //
+    // It also guards a specific stale sentence: `device_n_to_rgb`'s
+    // fallback note used to read "NOT evaluated (no 7.10 function
+    // evaluator yet)" long after the evaluator had shipped, so an operator
+    // chasing a grey spot colour was told to wait for a feature that
+    // already existed. A file with a WORKING transform must reach neither
+    // the counter nor any sentence about a missing evaluator.
+    let dir = TempDir::new("spot");
+    let pdf = dir.write(
+        "spot.pdf",
+        &build_pdf(&[
+            (1, "<< /Type /Catalog /Pages 2 0 R >>".into()),
+            (
+                2,
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 200 100] >>".into(),
+            ),
+            (
+                3,
+                "<< /Type /Page /Parent 2 0 R /Contents 4 0 R /Resources \
+                 << /ColorSpace << /CS0 [/Separation /PANTONE#20185#20C /DeviceCMYK \
+                 << /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [0 0.9 0.7 0] /N 1 >>] \
+                 >> >> >>"
+                    .into(),
+            ),
+            (4, {
+                let content = "/CS0 cs 1 scn 10 10 180 80 re f";
+                format!(
+                    "<< /Length {} >>\nstream\n{content}\nendstream",
+                    content.len()
+                )
+            }),
+        ]),
+    );
+    let png = dir.join("out.png");
+
+    let out = run(&[
+        "render-page",
+        pdf.to_str().unwrap(),
+        "-o",
+        png.to_str().unwrap(),
+    ]);
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+
+    let line = stdout(&out);
+    // TWO, not one, and the difference is a fact about the standard rather
+    // than an off-by-one. Table 74 makes `cs` "set the current colour to
+    // its initial value for that colour space" — for a `Separation` that
+    // is a tint of 1.0 — so selecting the space evaluates the transform
+    // once before `scn` evaluates it again. The first draft of this test
+    // asserted 1 and was wrong; the counter was right.
+    //
+    // Asserted exactly rather than as `>= 1` on purpose: this counter's
+    // job is to let a shell say how much of a page's colour is the
+    // document's own, and a test that tolerates any positive number
+    // cannot see it drift.
+    assert!(
+        line.contains(" tint_applied=2 "),
+        "a usable /tintTransform must be counted as APPLIED, once for the `cs` \
+initial colour and once for `scn`: {line:?}"
+    );
+    assert!(
+        line.contains(" tint_not_applied=0 "),
+        "a usable /tintTransform must not be counted as a shortfall: {line:?}"
+    );
+
+    let err = stderr(&out);
+    assert!(
+        !err.contains("function evaluator"),
+        "no sentence may claim the §7.10 evaluator is missing — it shipped: {err:?}"
+    );
+    assert!(
+        !err.contains("hue is not the document's"),
+        "a working transform must not be reported as a hue substitution: {err:?}"
+    );
 }

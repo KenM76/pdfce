@@ -104,7 +104,12 @@
 //!               unsupported_unknown_subtype=<e> unsupported_unusable_program=<f> \
 //!               supplied=<g> supplied_registered=<h> contents_unresolved=<i> \
 //!               images_masked=<j> images_mask_unsupported=<k> masks_resampled=<l> \
-//!               mattes_undone=<m> mattes_not_undone=<n> \n//!               oc_hidden=<o>
+//!               mattes_undone=<m> mattes_not_undone=<n> \n//!               oc_hidden=<o> \
+//!               cs_unresolved=<p> colors_not_set=<q> icc_alternate=<r> \
+//!               icc_device_fallback=<s> tint_applied=<t> tint_not_applied=<u> \
+//!               sep_all_approximated=<v> sep_none_suppressed=<w> \
+//!               pattern_spaces=<x> patterns_unpainted=<y> \
+//!               indexed_clamped=<z> indexed_short=<aa>
 //! ```
 //!
 //! `render-page`'s line is deliberately split by the first `"; "` into a
@@ -6573,7 +6578,11 @@ unsupported_type3={} unsupported_noncmap={} unsupported_vertical={} \
 unsupported_composite_not_embedded={} unsupported_unknown_subtype={} \
 unsupported_unusable_program={} supplied={} supplied_registered={} \
 contents_unresolved={} images_masked={} images_mask_unsupported={} \
-masks_resampled={} mattes_undone={} mattes_not_undone={} oc_hidden={}",
+masks_resampled={} mattes_undone={} mattes_not_undone={} oc_hidden={} \
+cs_unresolved={} colors_not_set={} icc_alternate={} icc_device_fallback={} \
+tint_applied={} tint_not_applied={} sep_all_approximated={} \
+sep_none_suppressed={} pattern_spaces={} patterns_unpainted={} \
+indexed_clamped={} indexed_short={}",
         input.display(),
         output.display(),
         rendered.pixmap.width(),
@@ -6640,6 +6649,40 @@ masks_resampled={} mattes_undone={} mattes_not_undone={} oc_hidden={}",
         // disclosure channel for the one feature whose correct behaviour
         // is "draw less" (R183).
         d.oc_sections_hidden,
+        // ---- §8.6 colour, appended after every pre-existing key ----
+        //
+        // `pdfce_render::ColorDiagnostics` has carried twelve counters
+        // since the colour-space slice shipped, and **no shell read any of
+        // them** — they were computed, merged across nested form XObjects,
+        // unit-tested, and then dropped on the floor at the crate
+        // boundary. The cost is not abstract: a page whose gradients are
+        // `/Pattern` fills paints NOTHING for them, and
+        // `patterns_unpainted` was the only thing that could have said so.
+        // pdfce reported such a page as a clean render. That is precisely
+        // the silence project rule 4 forbids, and it survived because the
+        // obligation is discharged in a *different crate* from the one
+        // that computes it — an engine-side counter with no shell caller
+        // discloses to nobody.
+        //
+        // All twelve go on the line, including the census ones
+        // (`tint_applied`, `sep_none_suppressed`, `pattern_spaces`,
+        // `indexed_clamped`). They are merged as a unit and documented
+        // individually as answering distinct operator questions, so a
+        // partial exposure would only create a second judgement call later
+        // about which half was worth reporting. The per-reason strings go
+        // to stderr with the rest.
+        d.color.spaces_unresolved,
+        d.color.colors_not_set,
+        d.color.icc_alternate_used,
+        d.color.icc_device_fallback_used,
+        d.color.tint_transforms_applied,
+        d.color.tint_transform_not_applied,
+        d.color.separation_all_approximated,
+        d.color.separation_none_suppressed,
+        d.color.pattern_spaces_selected,
+        d.color.patterns_unpainted,
+        d.color.indexed_index_clamped,
+        d.color.indexed_lookup_short,
     );
     report_diagnostics(d);
 
@@ -6949,6 +6992,111 @@ flag; honoured (not painted) AND disclosed",
         eprintln!(
             "pdfce-cli: note: annotation placement notes: {}",
             d.annotation_notes.join("; ")
+        );
+    }
+    report_color_diagnostics(&d.color);
+}
+
+/// The §8.6 colour half of the honesty report.
+///
+/// # Why this is a separate function
+///
+/// [`pdfce_render::ColorDiagnostics`] is a self-contained struct that
+/// `pdfce-render` merges across nested form XObjects as a unit, and its
+/// counters answer a different family of operator question from the rest
+/// of [`pdfce_render::Diagnostics`] — "why is this the wrong colour?"
+/// rather than "why is this missing?". Keeping the reporting in one place
+/// mirrors that, and makes it visible at a glance whether a counter has a
+/// shell caller. It did not, for every one of them, until this function
+/// existed: the counters were computed and unit-tested inside the engine
+/// and never crossed the crate boundary, which is disclosure to nobody.
+///
+/// # What prints, and what deliberately does not
+///
+/// Only the counters that describe a **shortfall or a choice** get a
+/// sentence. The pure-census ones (`tint_transforms_applied`,
+/// `pattern_spaces_selected`, `indexed_index_clamped`) are on the stdout
+/// line where a script can read them, and print nothing here — decision
+/// 006 §4.4 records what a note on a known-good file does to an
+/// operator's trust in this channel, and "silence means faithful" is only
+/// a usable signal if it is kept true.
+///
+/// `separation_none_suppressed` is the exception among the census
+/// counters and DOES print, for R183's reason: content missing because
+/// the standard says to omit it is otherwise indistinguishable from
+/// content missing because pdfce failed.
+fn report_color_diagnostics(c: &pdfce_render::ColorDiagnostics) {
+    if c.spaces_unresolved > 0 {
+        eprintln!(
+            "pdfce-cli: note: {} colour space(s) named by `cs`/`CS` could not be resolved \
+(absent from the page's /ColorSpace resources, malformed, or an unknown family); the space is \
+left UNSET rather than defaulted to DeviceGray, so subsequent colour operators changed nothing",
+            c.spaces_unresolved
+        );
+    }
+    if c.colors_not_set > 0 {
+        eprintln!(
+            "pdfce-cli: note: {} colour-setting operator(s) could not be honoured (unresolved \
+space, or an operand count that did not match the space); the PREVIOUS colour stayed in force, \
+so those marks are painted in a stale colour",
+            c.colors_not_set
+        );
+    }
+    if c.patterns_unpainted > 0 {
+        eprintln!(
+            "pdfce-cli: note: {} fill/stroke(s) named a PATTERN (tiling or shading, ISO \
+32000-1 §8.7) and NOTHING was painted for them — pdfce does not yet paint patterns, and an \
+invented solid colour would be worse than a gap. Gradients and hatch fills are the common case, \
+so a page that looks blank where it should be shaded is explained by this number",
+            c.patterns_unpainted
+        );
+    }
+    if c.tint_transform_not_applied > 0 {
+        eprintln!(
+            "pdfce-cli: note: {} spot-colour conversion(s) (/Separation or /DeviceN) had no \
+usable /tintTransform in the DOCUMENT, so the tint was rendered as the alternate space's \
+neutral: the lightness is right and the HUE IS NOT the document's",
+            c.tint_transform_not_applied
+        );
+    }
+    if c.separation_all_approximated > 0 {
+        eprintln!(
+            "pdfce-cli: note: {} /Separation /All conversion(s) rendered as a neutral of \
+luminance 1-tint. §8.6.6.4 describes an INK behaviour (\"all available colorants at once\"), not \
+a screen appearance, so this is pdfce's choice and is disclosed as one",
+            c.separation_all_approximated
+        );
+    }
+    if c.separation_none_suppressed > 0 {
+        eprintln!(
+            "pdfce-cli: note: {} paint operation(s) suppressed because the colour space was \
+/Separation /None or an all-/None /DeviceN. This is pdfce OBEYING §8.6.6.4/.5, not failing — \
+disclosed because a page missing content for a conformant reason otherwise looks identical to \
+one that broke",
+            c.separation_none_suppressed
+        );
+    }
+    if c.icc_alternate_used > 0 || c.icc_device_fallback_used > 0 {
+        eprintln!(
+            "pdfce-cli: note: {} ICCBased space(s) rendered through their /Alternate and {} \
+through the device space implied by /N — the spec's own fallback (§8.6.5.5 Table 66), not an \
+approximation pdfce invented. pdfce has no colour-management engine, so an operator matching a \
+brand colour should not treat this render as colour-managed",
+            c.icc_alternate_used, c.icc_device_fallback_used
+        );
+    }
+    if c.indexed_lookup_short > 0 {
+        eprintln!(
+            "pdfce-cli: note: {} /Indexed lookup(s) fell past the end of a SHORT lookup table \
+and were painted BLACK. Producers routinely trim trailing unused entries, so this is tolerated \
+rather than fatal — but a wrongly-black palette entry now has a named cause",
+            c.indexed_lookup_short
+        );
+    }
+    if !c.notes.is_empty() {
+        eprintln!(
+            "pdfce-cli: note: colour divergences: {}",
+            c.notes.join("; ")
         );
     }
 }
