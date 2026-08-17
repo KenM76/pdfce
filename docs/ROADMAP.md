@@ -96,6 +96,193 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★★★ Pass 89.0 — `a705d14` — **`/OverlayText` REACHED THE FILE AND WAS NEVER DRAWN, AND THE ANNOTATION CARRYING IT WAS THEN DELETED — THE FULL ISO 32000-1 TABLE 192 OVERLAY LADDER NOW SHIPS** — closes Pass 8.0 deviation 2 — filed 2026-08-17 (hundred-and-fifty-third filing)
+
+**Origin — REQUEST CHANNEL, not internally discovered.** `pdfceGUI`
+filed `request_redaction_overlay_text_is_authored_and_never_drawn.md` to
+`D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\` (2026-08-17): it was
+about to build the GUI's overlay-text/quadding control per its own
+`NO_SURFACE.md`, read `pdfce-core`'s source first, and stopped rather than
+ship a text box that discards what the operator types. Per decision 058
+this is a defect report about where the core boundary was drawn wrong,
+not a GUI-side workaround request. Archived by the engineer to
+`archive/2026-08-17-redaction-overlay-text-request.md`; the fix is
+answered in `archive/2026-08-17-redaction-overlay-text-reply.md`. **The
+request channel and this roadmap now agree** — the reply names commit
+`a705d14` and tells `pdfceGUI` to build the control.
+
+**What was wrong — three defects, one reported.**
+
+1. **`/OverlayText` was written and never drawn.** The operator's overlay
+   text reached `/OverlayText` at author time (`annot_author.rs`); apply
+   never read it back, and apply then DELETES the annotation carrying it.
+   Operator-authored content, destroyed. **Not undocumented** — three doc
+   comments (`annot_author.rs:914-916`, `redact.rs:1025`,
+   `ARCHITECTURE.md:7475-7481`, the last amended below) all named
+   overlay-text burn-in as a follow-up — but **rustdoc is not a
+   disclosure surface**, and none of that reached `RedactionReport`,
+   which carried seven notes and not one about `/OverlayText`. See new
+   standing rule **R195**, below.
+2. **An absent `/IC` was painted BLACK.** Table 192: *"if this entry is
+   absent, the interior of the redaction region is left transparent."*
+   Now correctly transparent, and disclosed via a new report field. This
+   is the **second instance in one week** of the same shape as `Pass
+   85.3`'s `/Separation /None` defect — a box that looks like what
+   everyone expects, that the standard says in as many words not to
+   paint. **Watched, not yet ruled.** Two instances is below this
+   project's own three-instance bar for minting a new standing rule from
+   an unnamed pattern; noted here so a third occurrence is recognised
+   rather than treated as novel.
+3. **`/RO` and `/Repeat` were unimplemented** except the `/IC` rung —
+   the whole Table 192 precedence ladder existed as four independent
+   "ignored if" clauses in the reader's head, never as a ladder in code.
+
+**What shipped.** The ladder reified as one `OverlayRegime` type (`/RO` →
+`/OverlayText`(+`/IC`) → `/IC` → transparent) rather than four
+independent booleans — reading Table 192's clauses independently is
+exactly how a decoder paints `/IC` under an `/RO` meant to suppress it.
+`/OverlayText` is burnt in via `vartext::build_variable_text` — **the
+same layout code as form-field values and FreeText**, deliberately not a
+second implementation, so wrapping/region-clipping/`/Q`
+justification/`/DA` auto-size and their existing disclosures (auto-size
+chosen, unencodable characters) come free rather than needing a second,
+redaction-only implementation to get right on the one operation with no
+undo. `/OverlayText` is decoded via `textstring::decode_text_string`
+(§7.9.2.2) so a UTF-16BE producer does not get permanent mojibake baked
+into the page. `/RO` is disclosed and falls back to a **visible**
+`/IC`-coloured (black if no `/IC`) box rather than the spec's implied
+transparent default — **a deliberate redaction-safety judgement, not a
+spec reading**, recorded as such in source: a redaction mark that quietly
+paints nothing because the operator's viewer said "the redacting
+application should draw this" is a worse failure mode for the
+highest-stakes feature in the project than a visible box the spec did
+not strictly ask for. `/Repeat` is disclosed and ignored. A page's
+`/Resources /Font` is merged so the burnt-in text's `/DA` font resolves
+after the annotation carrying it is deleted — an explicit `/Resources`
+written onto a page that previously *inherited* one (§7.7.3.4), narrow
+and deliberate, confined to pages that gained an overlay font; mutating
+the shared ancestor would change every other inheriting page.
+
+`RedactionReport` gains three fields — `overlay_text_burned`,
+`overlay_ro_not_drawn`, `overlay_transparent` — plus seven new disclosure
+notes. **`pdfce-cli redact-apply` prints all three counters** (rule 11) —
+explicitly because `Pass 84.0`/`R151` exists, and shipping a counter with
+no shell reader in the same session that filed that lesson would have
+been absurd.
+
+**Also in this commit:** `basefont_to_std14` moved `edit` → `fontdata`
+(pure font-name data, no session/graph dependency; now two callers in
+different layers) — a refactor, not a behaviour change. New public API
+`ContentBuilder::append_raw`, doc comment states an explicit
+balanced-fragment contract (checked against
+`D:\dev\rag\rust\rust-style-guide-and-api-guidelines.md` per rule 10).
+`RedactSpec::fill`'s doc comment corrected — it said "default black when
+`None`"; that was wrong against Table 192. **This is a behaviour change a
+consumer will observe**, and the reply to `pdfceGUI` names it explicitly:
+`RedactSpec::fill = None` no longer means "black box," it means "no
+box" — pass `Some(Color::gray(0.0))` for black.
+
+**Verification.** 3,747 → **3,755 tests (+8 over 3,747 = 8 new,
+0 failures)**. **Both sabotage checks run and observed to fail first**:
+reverting the absent-`/IC` fix to black failed exactly one test;
+reproducing the original defect (laying the overlay text out as an empty
+string) failed three, including the test named for it. `cargo fmt
+--check`, `cargo clippy --workspace --all-targets -- -D warnings`,
+`check-fmt-excluded.py`, `check-ui-strings.sh`, `check-shipped-assets.py`,
+`check-ledger-numbers.py` all clean. `cargo tree -p pdfce-core` /
+`-p pdfce-render` re-verified — zero GUI-crate hits. Verified end to end
+through the **release** CLI and by **looking at** the rendered PNG (not
+trusting a counter alone): `/IC` box painted, white centred overlay text
+burnt in, covered glyphs gone, surviving text still positioned.
+
+**`docs/FEATURES.md`.** New row under *Redaction & security* —
+"Redaction mark appearance follows Table 192's precedence ladder" —
+`core [x]` · `cli [x]` · `gui [ ]`. **Not a shortfall**: GUI redaction
+work is operator-paused, and `pdfceGUI`'s own report is explicit that no
+control exists to author `/OverlayText`, read `/RO`, or set `/Repeat` —
+this is the `R151` shape (a wired, tested core capability with no
+caller), watched, not yet reached from any shell but the CLI. The
+existing "Apply redaction" row is unchanged — general apply already
+worked from the GUI before this Pass and still does; this Pass corrects
+what that apply draws, not whether it runs.
+
+**New standing rule R195 — a doc comment naming a deferral is a claim
+about the BACKLOG, not evidence the OPERATOR will be told (2026-08-17,
+librarian-minted, founding instance).** Three doc comments
+(`annot_author.rs:914-916`, `redact.rs:1025`, `ARCHITECTURE.md`'s Pass
+8.0 §12 entry) correctly and consistently described `/OverlayText`
+burn-in as a named follow-up, and `ARCHITECTURE.md`'s own copy went
+further, calling the deferral "disclosed at mark time" — which was false
+for the entire life of the sentence: nothing in `pdfce-core`'s runtime
+output ever mentioned `/OverlayText`. Neither doc comment was wrong as a
+statement about the codebase's own backlog; both were read, at least
+once, as a statement about what the operator would be told, which is a
+different claim requiring a different kind of evidence (a
+`RedactionReport` field, a printed note) that neither carried. **Distinct
+from `R151`** (a capability with no caller — here the capability *had* a
+caller, `add_redaction`; the gap was a disclosure with no runtime
+surface) **and from `R186`** (a guard failing open for an unmarked
+adjacent case — here there was no guard at all, only an absent
+disclosure). **Practical form:** a comment that calls something "a named
+follow-up" or "disclosed" is checked against the actual disclosure
+surface (a report field, a printed line) before it is trusted as true of
+runtime behaviour, not merely true of the source tree.
+
+**★ `Pass 88.0`'s reconciliation flag is now RESOLVED, and the relayed
+figure it flagged (`R193` next free) was WRONG — this librarian nearly
+repeated the exact error the ledger already warns about.** A first-pass
+`Grep` for `^- \*\*R1\d\d —` (definition-shaped bullets only) found
+`R192` as the highest hit and would have minted this rule as `R193`.
+**That is precisely the failure `R192`'s own entry documents as its
+fourth instance**: *"a `### PROPOSAL … claiming `R193`` heading is
+invisible [to `collect_rules`]… `tools/check-ledger-numbers.py` WILL
+REPORT `R193` AS NEXT FREE and it is wrong… Do not take `R193`."*
+Reading the Standing rules section's own closing ledger line (not the
+bullet list, not the gate) instead: **`R193` and `R194` are both
+CLAIMED by two declined-but-intact standing-rule PROPOSALS** (the
+"limit justified by 'beyond any plausible X'" draft and its sibling),
+neither minted, both explicitly kept off the table so a future session
+can revisit them without a collision — *"next genuinely free is `R195`.
+Nothing is renumbered."* **This is what the engineer's dispatch was
+relaying**: `check-ledger-numbers.py`'s own known-bad output, the exact
+gap `R192` exists to name. **Ceiling moves `R192` → `R195`; next free
+`R196`. `R193`/`R194` remain claimed, untouched by this filing.**
+
+**`ARCHITECTURE.md` §12.** No new decision-log entry — this ships a
+spec-conformance fix and a named follow-up closed, not a new
+architectural policy (same posture as `Pass 88.0`/`85.3`, neither of
+which added a §12 entry). The `/RO`-visible-box safety judgement above is
+recorded in source and in this Shipped entry, not elevated to a numbered
+decision; **a dated amendment footer is added to the stale Pass 8.0 §12
+bullet** (line ~7476) pointing forward to this entry, since that exact
+sentence — "disclosed at mark time" — is the one `pdfceGUI` read as
+current and was not.
+
+**RAG graduations, this filing:**
+- `C:\personal_rag\pdf\`: one new lesson — ISO 32000-1 Table 192's
+  overlay precedence is written as four separate "ignored if" clauses
+  scattered across five table rows rather than as an explicit ladder,
+  and implementing each clause independently (as four booleans rather
+  than one precedence type) is a specific, predictable decoder bug —
+  painting `/IC` under an `/RO` meant to suppress it.
+- **Declined to graduate:** "an absent `/IC` means transparent, not
+  black" — this restates Table 192's own stated default, canonical spec
+  text rather than an empirical real-world-producer divergence, so it is
+  `pdfce-spec-librarian`'s territory per hard rule 6. Same judgement
+  applied to the Table 89 Lab-decode item in `Pass 88.0`, above.
+- No `D:\dev\rag\rust\` or `D:\dev\rag\egui\` finding this filing — the
+  refactor (`basefont_to_std14`→`fontdata`) and the new `append_raw` API
+  are project-specific, not ecosystem-generalizable.
+
+**Ledger effects.** Pass families: **89 minted**, next free **90**.
+Standing rules: **R195 minted** (founding instance, above); ceiling
+moves `R192` → `R195`, next free `R196` — read from the Standing rules
+section's own closing ledger line, NOT from `tools/check-ledger-
+numbers.py`'s next-free output, which `R192`'s own entry names as wrong
+for exactly this case. `R193`/`R194` remain claimed by their existing
+declined-but-intact proposals, untouched. Decision records: **unchanged
+at 065**, next free **066**.
+
 ### ★★★★ Pass 88.0 — `1345663` — **THE ONE UNEXPLAINED DIVERGENCE WAS THE REFERENCE RENDERER BEING WRONG, NOT PDFCE**: an independent, closed-form colour oracle proves pdfium's Lab/CalGray/CalRGB image conversion is wrong by up to 152/255, and the render-parity harness's own explanation keys for `Pass 85.3` had never actually fired — filed 2026-08-17 (hundred-and-fifty-second filing)
 
 **Filed by `pdfce-librarian`, no shell available (hard rule 8) — every
@@ -42008,6 +42195,18 @@ it).
    `/IC`/default-black fill (Acrobat default); the overlay-text LABEL is
    NOT drawn. This is COSMETIC only (content is removed regardless);
    disclosed at mark time.
+   **★ AMENDED 2026-08-17 (hundred-and-fifty-third filing) — CLOSED by
+   `Pass 89.0`, `a705d14`.** Two of the three clauses above were not, in
+   fact, true for the entire life of this sentence: "disclosed at mark
+   time" described no code that existed, and the fill default was not
+   black-when-absent but black-when-*/IC-absent-too*, which Table 192
+   defines as transparent. `Pass 89.0` burns in `/OverlayText`, corrects
+   the absent-`/IC` default to transparent, and implements `/RO`/`/Repeat`
+   disclosure. Left here rather than corrected in place — this entry is
+   append-only — and named as the founding instance of standing rule
+   `R195` ("a doc comment naming a deferral is a claim about the backlog,
+   not evidence the operator will be told"). See `Pass 89.0`'s own
+   Shipped entry for the full record.
 3. **Form-XObject content in-region is NOT surgically redacted** —
    disclosed loudly (`form_intersect` note), never claimed removed.
 4. **XFA / structure-tree `/ActualText` / attachments** are detect +
@@ -66410,6 +66609,49 @@ which is the axis on which `R193` was declined and `R192` accepted.
 **Ledger:** minted ceiling stays **`R192`**. `R193` claimed (declined
 proposal), **`R194` claimed by this proposal**; next genuinely free is
 **`R195`**. Nothing is renumbered.
+
+- **R195 — A doc comment naming a deferral is a claim about the
+  BACKLOG, not evidence the OPERATOR will be told (2026-08-17,
+  hundred-and-fifty-third filing; librarian-minted).** `RedactSpec::
+  overlay_text` reached `/OverlayText` at author time; nothing at apply
+  time ever read it back, and apply then deletes the annotation
+  carrying it — operator-authored redaction-label text, destroyed. This
+  was **not undocumented**: three doc comments
+  (`annot_author.rs:914-916`, `redact.rs:1025`, `ARCHITECTURE.md`'s Pass
+  8.0 §12 entry) named the burn-in as a follow-up, and the last of the
+  three went further, calling the deferral **"disclosed at mark
+  time"** — false for the entire life of the sentence, since nothing in
+  `pdfce-core`'s runtime output, then or since, ever mentioned
+  `/OverlayText`. **Rustdoc is not a disclosure surface.** Both doc
+  comments were true statements about the codebase's own backlog and
+  were read, at least once (by an external requester building against
+  them), as a statement about what the operator would see — a different
+  claim, needing different evidence (a `RedactionReport` field, a
+  printed note), that neither carried. **Distinct from `R151`** (a
+  capability with no caller — here the capability *had* a caller,
+  `add_redaction`; the gap was a disclosure with no runtime surface)
+  **and from `R186`** (a guard failing open for an unmarked adjacent
+  case — here there was no guard at all, only an absent disclosure).
+  **Practical form:** before trusting a comment that calls something "a
+  named follow-up" or "disclosed," check it against the actual
+  disclosure surface (a report field, a printed line) — a comment is
+  evidence about the source tree, never evidence about what a shell or
+  an operator will be told. Full record: `ROADMAP.md`'s `a705d14` Pass
+  89.0 Shipped entry (this filing) and its amendment footer on `Pass
+  8.0`'s deviation 2. **Ceiling moves `R192` → `R195`; next free
+  `R196`. `R193`/`R194` remain claimed by their existing
+  declined-but-intact proposals, untouched by this entry.**
+
+  **★ Filed as `R195`, not `R193`, after this librarian's own first-pass
+  `Grep` for `^- \*\*R1\d\d —` nearly minted it as `R193` — exactly the
+  failure `R192`'s own entry warns about** (a `### PROPOSAL … claiming
+  `R193`` heading is invisible to a bullet-only pattern, and
+  `tools/check-ledger-numbers.py`'s next-free output is wrong for the
+  same reason). Reading this section's own closing ledger line instead
+  of the bullet list or the gate resolved `Pass 88.0`'s reconciliation
+  flag: the engineer's relayed "`R193` next free" was the checker's
+  known-bad figure, not a fresh reconciliation — `R193` and `R194` were
+  already, and remain, claimed.
 
 ## Update protocol
 

@@ -7479,6 +7479,21 @@ with a forward pointer.
     disclosed at mark time); form-XObject in-region not surgically redacted
     (disclosed); XFA/struct-tree/attachments detect+disclose not scrubbed;
     GUI apply-button + canvas marking deferred.
+    **★ AMENDED 2026-08-17 (hundred-and-fifty-third filing) — CLOSED by
+    `Pass 89.0`, `a705d14`.** This bullet is left exactly as filed
+    (append-only §12 history) but its "disclosed at mark time" clause was
+    FALSE for the entire life of the sentence — no runtime disclosure of
+    the `/OverlayText` deferral ever existed, and an external requester
+    (`pdfceGUI`) read this exact line as current status. `Pass 89.0` burns
+    in `/OverlayText`, corrects the absent-`/IC` default from black to
+    transparent (Table 192's own stated default), and implements `/RO`/
+    `/Repeat` disclosure. Founding instance of standing rule R195 ("a doc
+    comment naming a deferral is a claim about the backlog, not evidence
+    the operator will be told") — see `ROADMAP.md`'s `Pass 89.0` Shipped
+    entry for the full record. Living-truth body sections §5.2/§5.9 are
+    unaffected — the forced-full-rewrite invariant this Pass rides is
+    unchanged; no new decision-log entry was warranted for this Pass
+    (spec-conformance fix, not a new architectural policy).
   - **Ship stats: 1,018 workspace tests (+8)**; fmt/clippy clean workspace-
     wide; GUI-free core+render (zero egui/eframe/winit/wgpu); wasm32;
     `--duplicates`; `no-network`; `ui-strings` clean; R34/R46 additive-

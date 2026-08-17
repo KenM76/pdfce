@@ -43749,3 +43749,101 @@ filing's own list, minus `Pass 85.3` (now shipped) — `Pass 72.0`,
 3. **`Pass 85.2` (pattern paint, both tiling and shading) is next in the
    suggested Ghent build order** — two of six gap-inventory items now
    shipped (`85.0`, `85.3`).
+
+## 2026-08-17 (hundred-and-fifty-third filing) — **REQUEST-CHANNEL FIX: `Pass 89.0` (`a705d14`) closes `Pass 8.0` deviation 2 — the full ISO 32000-1 Table 192 overlay ladder ships, and the `R192`/`R193`/`R195` ceiling discrepancy flagged twice above is now RESOLVED (the relayed `R193` was the checker's own known-bad output)**
+
+**Shipped:**
+- `Pass 89.0` — `a705d14`. Origin: request channel, not internal
+  discovery — `pdfceGUI` filed
+  `request_redaction_overlay_text_is_authored_and_never_drawn.md`
+  after reading `pdfce-core`'s source and stopping rather than build a
+  GUI control that would discard operator-typed text; archived by the
+  engineer, replied to by name. Three defects fixed: (1) `/OverlayText`
+  reached the file at author time and was never drawn, and apply then
+  deleted the annotation carrying it — operator-authored content
+  destroyed, and though three doc comments correctly named the deferral
+  as a follow-up, none of it reached `RedactionReport`, which is the
+  founding instance of new standing rule `R195`; (2) an absent `/IC`
+  was painted black against Table 192's own "left transparent" default
+  — the second instance in one week of the same "spec says paint
+  nothing, naive default paints something" shape as `Pass 85.3`'s
+  `/Separation /None` defect, watched rather than ruled; (3) `/RO` and
+  `/Repeat` were entirely unimplemented. Fixed by reifying the whole
+  Table 192 precedence as one `OverlayRegime` type; overlay text burnt
+  in via the shared `vartext` layout path (no second implementation);
+  `/RO` disclosed and falls back to a visible box, a deliberate
+  redaction-safety judgement over the spec's implied transparent
+  default. Tests 3,747 → 3,755 (+8), both sabotage checks observed to
+  fail first. All seven scripted gates clean; `cargo tree` re-verified.
+
+**Decisions made this session:** none — a spec-conformance fix and a
+named follow-up closed, not a new architectural policy (same posture as
+`Pass 88.0`/`85.3`). Ceiling unchanged at **065**, next free **066**. A
+dated amendment footer was added to `ARCHITECTURE.md` §12's Pass 8.0
+entry and to `ROADMAP.md`'s own Pass 8.0 deviations list, pointing both
+forward to `Pass 89.0` — the append-only originals stay, since the
+sentence they carried ("disclosed at mark time") is exactly what a
+requester read as current and was not.
+
+**Findings + decisions:**
+- **New standing rule `R195`** — a doc comment naming a deferral is a
+  claim about the backlog, not evidence the operator will be told.
+  Distinct from `R151` (no caller — here `add_redaction` *was* the
+  caller; the gap was a disclosure with no runtime surface) and from
+  `R186` (a guard failing open for an unmarked case — here there was no
+  guard, only an absent disclosure). Full text: `ROADMAP.md` Standing
+  rules.
+- **★ The `R192`/`R193`/`R195` ceiling discrepancy flagged in both the
+  hundred-and-fifty-first and hundred-and-fifty-second filings is now
+  RESOLVED, and this librarian nearly repeated the exact error.** A
+  first-pass grep for definition-shaped rule bullets (`^- \*\*R1\d\d —`)
+  found `R192` as the highest hit and would have minted this rule as
+  `R193`. That is precisely `R192`'s own fourth documented instance: a
+  `### PROPOSAL … claiming `R193`` heading is invisible to a
+  bullet-only pattern, and `tools/check-ledger-numbers.py`'s next-free
+  output is wrong for the same reason — its own entry says outright,
+  *"Do not take `R193`."* Reading the Standing rules section's own
+  closing ledger line instead (not the bullet list, not the gate)
+  confirms what the hundred-and-fifty-first filing already suspected:
+  `R193` and `R194` are both claimed by two declined-but-intact
+  proposals, neither minted, and the genuinely next free number was, and
+  remains, `R195`. **The relayed `R193` figure two filings running was
+  the checker's own known-bad output, not a fresh reconciliation
+  question** — there was nothing to reconcile between two disagreeing
+  sources; one of the two sources was simply wrong, and `R192` already
+  says so.
+
+**RAG graduations, this filing:**
+- `C:\personal_rag\pdf\` — one new lesson: ISO 32000-1 Table 192's
+  overlay precedence is written as four separate "ignored if" clauses
+  across five table rows rather than as an explicit ladder, and
+  implementing each row independently (four booleans, not one
+  precedence type) is a specific, predictable decoder bug.
+- **Declined to graduate:** "an absent `/IC` means transparent, not
+  black" — canonical Table 192 text, `pdfce-spec-librarian`'s territory
+  (hard rule 6), same judgement as the Table 89 item declined in the
+  hundred-and-fifty-second filing.
+- No `D:\dev\rag\rust\`/`D:\dev\rag\egui\` finding — the refactor and
+  new `append_raw` API are project-specific, not ecosystem-generalizable.
+
+**Still in flight:** unchanged from the hundred-and-fifty-second
+filing's own list, minus the ceiling-reconciliation item (resolved
+above) — `Pass 72.0`, `73.0`, `73.1`, `86.0` remain HIGH PRIORITY and
+unstarted; `Pass 85.1`, `85.2`, `85.4`, `85.5` remain unstarted;
+`Pass 87.0` remains GUI-paused; `bdfd511`'s missing `ROADMAP.md` entry
+remains open.
+
+**For next session:**
+1. **Next free Pass family is `90`** (`89.0` used this filing). Next
+   free decision is **066**, unchanged. Next free filing ordinal is
+   **154**. **Next free standing rule is `R196`** (`R195` used this
+   filing; `R193`/`R194` stay claimed — read this from the Standing
+   rules section's own closing ledger line, never from
+   `tools/check-ledger-numbers.py`'s next-free output, which `R192`'s
+   own entry names as unreliable for exactly this number).
+2. **`pdfceGUI` still owes its own follow-through** — the reply names
+   commit `a705d14` and tells it to build the overlay-text/quadding
+   control now that the core half is honest; not this project's action
+   item, noted for cross-project awareness only.
+3. **`Pass 85.2` (pattern paint, both tiling and shading) remains next
+   in the suggested Ghent build order**, unaffected by this filing.
