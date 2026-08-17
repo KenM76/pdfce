@@ -44052,3 +44052,121 @@ colour Backlog item remains unscoped.
 3. **`R180`'s rising frequency is now on record** (four instances, two
    filed today) — worth a look at any future standing-rules health
    review, not an action item now.
+
+## 2026-08-17 (hundred-and-fifty-sixth filing) — **`Pass 90.0` (`ae46e82`): THE GHENT QUEUE WAS ORDERED ON AN ASSUMPTION NOBODY HAD MEASURED — CLAUSE-11 TRANSPARENCY DISCLOSURE SHIPS, AND MEASURING IT REVERSES THE `Pass 85.0`–`85.5` BUILD ORDER**
+
+**Shipped:**
+- `Pass 90.0` — `ae46e82`. Disclosure only, nothing implements
+  transparency. `apply_ext_gstate` (`crates/pdfce-render/src/
+  interpret.rs`) read `LW`/`LC`/`LJ`/`ML`/`D`/`ca`/`CA` from an
+  `ExtGState` and silently dropped everything else — `/BM` (§11.3.5)
+  and `/SMask` (§11.6.5) were not merely unimplemented, they were
+  **unmeasured**. Two new counters, `Diagnostics::blend_modes_ignored`
+  and `Diagnostics::soft_masks_ignored`, now count both — reading
+  `/BM`'s array form (Table 58), excluding `/BM /Normal`, `/BM
+  /Compatible` and the `/SMask /None` reset by name so the counters
+  fire only on a genuine gap — and both print on `render-page`'s
+  stable stdout line plus their own stderr notes. **Kept as two
+  separate counters, deliberately**: an ignored blend mode composites
+  the same marks by the wrong rule (wrong, not blank); an ignored soft
+  mask paints content the author masked away at full strength — the
+  two failure directions are opposite, and only the second can expose
+  something meant to stay hidden. Tests 3,764 → 3,770 (+6, 0
+  failures); both sabotages (drop the `/BM` array-form branch; stop
+  excluding the `/SMask /None` reset) fail their assertions in the new
+  `crates/pdfce-render/tests/transparency_is_disclosed.rs`. All seven
+  scripted gates clean; `cargo tree` re-verified.
+
+**Decisions made this session:** none — a diagnostics addition inside
+an existing counter struct and interpreter function, not a new crate
+boundary, invariant, or library choice (same posture as `Pass 84.0`,
+`85.0`, `85.2`, `85.3`). Decision ceiling unchanged at 065, next free
+066.
+
+**Findings + decisions:**
+- **The headline finding, and the reason for the Pass**: measured
+  against the operator's own Ghent PDF Output Suite X-4 file (PDF/X-4,
+  6 pages), `pattern_spaces=0` on every page — not one page uses a
+  `scn` pattern at all. The shading-pattern Pass shipped this session
+  (`5df75dd`) does not move this file, and tiling patterns — the
+  previous queue's very next item — will not either. What the file
+  actually uses is transparency: **113 `/BM` + 36 `/SMask` occurrences
+  across the 6 pages, per page 1/76/1/1/31/3 and 1/31/1/1/1/1**. Page 2
+  is the worst page in the file and had looked clean by every prior
+  counter — it was compositing 76 blend modes by the wrong rule the
+  entire time, invisibly.
+- **`ROADMAP.md`'s `Pass 85.0`–`85.5` gap-inventory entry is
+  re-derived, not appended to**: the `85.4` row's measured-evidence
+  cell now carries the table above instead of "still defers both," and
+  the *Suggested build order* paragraph is replaced with `85.4`
+  (transparency, now first) → `85.1` (mesh shadings, now second,
+  spec-librarian dispatch still owed) → the `/Separation /All`
+  question (unchanged, a question not a Pass) → `85.2` slice 2
+  (tiling, demoted — measured zero Ghent occurrences) → `85.5`
+  (overprint, unchanged, last). The entry's own heading, which had
+  read "ALL UNSTARTED" three shipped Passes after that stopped being
+  true, is also corrected in this filing.
+- **A stable-line contract test earned its keep twice in one commit —
+  the third save credited to it this session.** `crates/pdfce-cli/
+  tests/render_page.rs` caught a stray `\n` that had broken the CLI's
+  one-line-per-render stdout contract, then separately caught the two
+  new diagnostic keys before they could ship unlisted mid-line rather
+  than appended at the end. `Pass 85.3` already credits this test with
+  catching a counter no shell printed; this is a third instance.
+- **A ruling was asked for and given: is "a queue item's priority was
+  never measured, only inherited as a reading" a rule-shaped finding?
+  Judged NOT YET — recorded as watched-pattern instance 1, not
+  minted.** Distinct from `R180` (a claim that was true once and went
+  stale): this is a claim that was never checked at all, and
+  propagated across three handoffs before costing a Pass aimed at the
+  wrong target. Declined to mint because this project's own promotion
+  bar — applied and reaffirmed twice already this week against the
+  `R193`/`R194` proposals — is three instances, and "decline on the
+  count, not the merits" is the disposition those rulings established.
+  One instance is not three. If a second surfaces (a different
+  prioritised list in this project or a sibling one, shown to have
+  been relayed rather than re-measured), that is instance 2.
+- **RAG graduation considered and declined**: "a gap that is not
+  counted cannot be prioritised — disclose before you implement" was
+  judged too close to a general engineering aphorism to be a concrete,
+  grep-first RAG finding for either `D:\dev\rag\rust\` or
+  `C:\personal_rag\pdf\`. The checkable version of the same idea is
+  the watched-pattern note above, which names what a second instance
+  would look like — that is the form worth keeping.
+
+**RAG graduations, this filing:** none — the one candidate considered
+was declined (see above).
+
+**`docs/FEATURES.md`:** the existing *Planned* row for group
+transparency (clause 11.3–11.6.4) amended in place — same row, not a
+new one, since ticking any box would claim the capability itself works
+when only its absence is now counted. Sentence now states both gaps
+are counted and disclosed, with the measured Ghent totals, and states
+plainly that a `/BM` still composites as `Normal` and an `/SMask`
+group still paints unmasked.
+
+**Still in flight:** `Pass 72.0`, `73.0`, `73.1`, `86.0` remain HIGH
+PRIORITY and unstarted; `Pass 85.1` (mesh shadings, spec-librarian
+dispatch owed), `Pass 85.2` slice 2 (tiling, now demoted), `Pass 85.4`
+implementation (transparency, disclosure only shipped), `Pass 85.5`
+(overprint, gated on `iccce`) all remain unstarted; `Pass 87.0` remains
+GUI-paused; `bdfd511`'s missing `ROADMAP.md` entry remains open; the
+overlay-text-colour Backlog item remains unscoped.
+
+**For next session:**
+1. **Next free Pass family is `91`** (this filing used family `90`).
+   Next free decision is **066**, unchanged. Next free filing ordinal
+   is **157**. Next free standing rule is **`R196`**, unchanged — no
+   rule minted this filing (watched-pattern instance 1, not a rule);
+   read this from the Standing rules section's own closing ledger
+   line, not from `tools/check-ledger-numbers.py` (still known-wrong
+   on this line).
+2. **Clause-11 transparency implementation (`Pass 85.4`) is next in
+   the re-derived Ghent build order** — the largest measured gap in
+   the operator's file. Mesh shadings (`Pass 85.1`) second, and needs
+   a `pdfce-spec-librarian` dispatch first (§8.7.4.5.5–.8 + Tables
+   82–84 are not yet in the spec corpus). Tiling patterns (`Pass 85.2`
+   slice 2) are now demoted — measured zero Ghent occurrences.
+3. **Watched pattern, instance 1, on record**: an ordering/priority
+   claim relayed across filings without being re-derived from a fresh
+   measurement. Not an action item until a second instance surfaces.

@@ -96,6 +96,187 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★★★ Pass 90.0 — `ae46e82` — **THE GHENT QUEUE WAS ORDERED ON AN ASSUMPTION NOBODY HAD MEASURED — CLAUSE-11 TRANSPARENCY (`/BM`, `/SMask`) WAS STRUCTURALLY UNMEASURABLE, AND MEASURING IT REVERSES THE `Pass 85.0`–`85.5` BUILD ORDER** — filed 2026-08-17 (hundred-and-fifty-sixth filing)
+
+**Disclosure only. Nothing in this Pass implements clause-11
+transparency — it makes pdfce's own blindness to it countable, for the
+first time.**
+
+**Origin.** After shipping `Pass 85.2` slice 1 (shading patterns), the
+engineer checked what the Ghent PDF Output Suite X-4 file still needs
+and found the queue this ledger had shipped —
+`85.0` → `85.2` → `85.3` → `85.4` → `85.5` → `85.1` — was an ordering
+**inferred from spec breadth**, never measured against the operator's
+own file. It was measured this session, at `5df75dd` (the commit
+`Pass 85.2` slice 1 shipped on): **`pattern_spaces=0` on every one of
+the file's 6 pages.** Not one page uses a `scn` pattern of any kind.
+The shading-pattern Pass just shipped does not move this file, and
+tiling patterns — the queue's very next item — will not either.
+
+**What was wrong.** What the file actually uses is transparency, and
+pdfce structurally could not see it: `apply_ext_gstate`
+(`crates/pdfce-render/src/interpret.rs`) read `LW`, `LC`, `LJ`, `ML`,
+`D`, `ca`, `CA` from the `ExtGState` dictionary and silently dropped
+everything else — `/BM` (§11.3.5) and `/SMask` (§11.6.5) were not
+merely unimplemented, they were **unmeasured**. A page asking for a
+`Multiply` blend or a soft mask rendered exactly as if it had asked
+for neither, and nothing on the result line said a word. This is a
+project-rule-4 hole (an inference — here, an implicit "no transparency
+requested" — rendered with no disclosure), and it is also the reason
+the queue could be mis-ordered: pdfce's own diagnostics could not see
+the gap that turned out to be the biggest one.
+
+**What shipped.**
+- `Diagnostics::blend_modes_ignored` and `Diagnostics::soft_masks_ignored`
+  (`interpret.rs:234`, `:245`), merged across nested `run`/`run_form_at`
+  invocations the same way the other eleven `Pass 84.0` counters are
+  (`interpret.rs:712-713`).
+- Read inside `apply_ext_gstate` (`interpret.rs:2161-2211`), including
+  `/BM`'s ARRAY form (Table 58: "the first blend mode in the array that
+  the conforming reader supports") — reading only the bare-name form
+  would silently miss every producer that writes an array, which is
+  exactly the shape of blind spot this Pass exists to close.
+- **Deliberately NOT counted**, because a counter that fires on
+  ordinary, unremarkable documents trains everyone to ignore it:
+  `/BM /Normal`, `/BM /Compatible` (what pdfce already does by not
+  blending), and `/SMask /None` (the RESET — producers emit it
+  constantly to clear an inherited soft mask, and it is not a
+  shortfall).
+- Both counters printed on `pdfce-cli render-page`'s stable stdout
+  line (`crates/pdfce-cli/src/main.rs:6598`, appended after
+  `img_uncalibrated`, at the end of the format string — the ordering
+  is part of the stable contract, see the render-crate test below),
+  plus two separate stderr prose notes, one per counter
+  (`main.rs:6880-6899`).
+- **The two counters are deliberately separate, not one combined
+  `transparency_ignored` figure — the reason is recorded because it is
+  not obvious from the numbers alone.** Their failure directions are
+  OPPOSITE, and only one of the two can expose content that should
+  have stayed hidden. An ignored blend mode composites the same marks
+  by the wrong rule — the page is not blank there, it is *wrong*
+  there, and a `Multiply` composited as `Normal` looks like an
+  ordinary opaque overlay nobody would think to question. An ignored
+  soft mask paints MORE than the document asked for: content the
+  author faded out or masked away renders at FULL STRENGTH, on a page
+  whose design specifically relied on a mask being the difference
+  between an artefact and disclosing something meant to stay hidden.
+  Folding the two into one number would bury the second inside the
+  first at exactly the moment it matters most.
+
+**Measured, `Ghent_PDF-Output-Test-V50_ALL_X4.pdf` (PDF/X-4, 6 pages),
+per page, then totalled — never a bare total without its denominator:**
+
+| page | 1 | 2 | 3 | 4 | 5 | 6 | **total (6 pages)** |
+|---|---|---|---|---|---|---|---|
+| `/BM` ignored | 1 | **76** | 1 | 1 | 31 | 3 | **113** |
+| `/SMask` ignored | 1 | **31** | 1 | 1 | 1 | 1 | **36** |
+
+**Page 2 is the worst page in the file, and it had looked CLEAN** — no
+unsupported images, no unpainted patterns, no refused shadings, every
+prior counter silent. It was compositing 76 blend modes by the wrong
+rule for the entire life of every prior filing that called this file
+"a long way off" without being able to say why. That number was
+unobtainable an hour before this commit.
+
+**Verification.** 3,764 → **3,770 tests, +6, 0 failures.** Sabotaging
+either counter's read (removing the `/BM` array-form branch, or
+removing the `/SMask /None`-reset exclusion so the reset itself gets
+counted) fails the corresponding assertions in
+`crates/pdfce-render/tests/transparency_is_disclosed.rs`. `cargo fmt
+--check`, `cargo clippy -- -D warnings`, `check-fmt-excluded.py`,
+`check-ui-strings.sh`, `check-shipped-assets.py`,
+`check-ledger-numbers.py` all clean. `cargo tree -p pdfce-core` /
+`-p pdfce-render` re-verified — no GUI dependency.
+
+**★ The stable-line contract test earned its keep TWICE in one commit
+— the third save credited to it this session, and worth recording for
+anyone weighing whether a contract test like this is worth its
+maintenance cost.** `crates/pdfce-cli/tests/render_page.rs` asserts
+both the exact stdout format string (catching a stray `\n` that had
+broken the CLI's documented one-line-per-render contract) and the
+exact key order (catching the two new keys before they could ship
+unlisted in the middle of the line rather than appended at the end).
+Same test, same commit, two separate defects caught before either
+reached a shell. `Pass 85.3`'s Shipped entry already credits this test
+with catching a counter no shell printed; this is the third save.
+
+**Gap-inventory reordering — the reason this filing exists.** The
+`Pass 85.0`–`85.5` Ghent gap-inventory entry (below, under *Next up*)
+is updated in this same filing: `85.4`'s "measured evidence" cell now
+carries the table above instead of "still defers both," and the
+*Suggested build order* paragraph is **replaced** (not appended to)
+with the order this measurement implies — `85.4` (transparency, now
+first) → `85.1` (mesh shadings, now second) → the `/Separation /All`
+question (unchanged, a question not a Pass) → `85.2` slice 2 (tiling,
+now demoted — measured zero Ghent occurrences) → `85.5` (overprint,
+unchanged, last). See that entry for the full table and reasoning;
+not duplicated here.
+
+**★★ Is "a queue item's priority was never measured, only inherited as
+a reading" a rule-shaped finding? Judged: NOT YET — recorded as
+instance 1 of a watched pattern, not minted.** The engineer asked this
+librarian to rule, with an explicit case for each side: adjacent to
+`R180` (a claim that goes stale) but distinct — `R180`'s instances are
+all claims that were TRUE once and fell out of date; this is a claim
+that was **never checked at all**, propagated across three handoffs,
+and would have spent a whole Pass (tiling patterns) aimed at a file
+that measurably does not use them. Against minting: this project's own
+promotion bar, applied and reaffirmed twice already this week against
+the `R193`/`R194` proposals, is **three instances**, not one, and
+*"decline on the count, not the merits"* is the disposition those
+rulings established (`R192`'s entry; `R193`/`R194` proposal records,
+both hundred-and-forty-third filing). **This filing has exactly one
+instance.** Ruling: decline to mint, for the count alone — not because
+the finding is wrong or unimportant; the cost this instance avoided
+(a mis-aimed Pass) argues the opposite. Recorded here as **watched
+pattern, instance 1**: an ordering, ranking, or priority claim in this
+ledger that was stated once and then relayed across subsequent
+filings without being re-derived from a fresh measurement against the
+actual target artifact. If a second instance surfaces — a different
+prioritised list, in this project or a sibling one, shown to have been
+relayed rather than re-measured — that is instance 2, and a third
+after that would clear this project's own bar. Not an action item for
+anyone until then.
+
+**RAG graduation — considered, declined.** A candidate finding was
+raised: *"a gap that is not counted cannot be prioritised — disclose
+before you implement, because the disclosure is what makes the
+implementation scopable."* Declined for both `D:\dev\rag\rust\` and
+`C:\personal_rag\pdf\`: it is not a Rust/egui ecosystem quirk, not a
+PDF-domain empirical finding about real-world producer behaviour, and
+not concretely actionable as stated — it is closer to general
+engineering methodology ("measure before you prioritise") than to the
+dense, grep-first, one-technical-fact-per-file shape both RAGs are
+built for. The concrete, checkable version of the same idea is already
+captured above as the watched-pattern note, which names what a second
+instance would look like; that is the form worth keeping, not a
+restated aphorism in a RAG file.
+
+**`docs/FEATURES.md`.** The existing *Planned* row for group
+transparency (clause 11.3–11.6.4) is amended in place — same row, not
+a new one, since the row's subject is the transparency capability
+itself and no core rendering capability shipped here. The sentence now
+states that both gaps are counted and disclosed (`render-page`'s
+stable line, plus stderr notes) while making unmistakable that neither
+composites correctly yet: a `/BM` still composites as `Normal`, an
+`/SMask` group still paints unmasked. No box ticked — ticking `core`
+here would claim transparency itself works, which is exactly the
+overclaim this filing exists to prevent.
+
+**`ARCHITECTURE.md` §12.** No new decision-log entry — a diagnostics
+addition inside an existing counter struct and an existing interpreter
+function, not a new crate boundary, invariant, or library choice (same
+posture as `Pass 84.0`, `85.0`, `85.2`, `85.3`, none of which added a
+§12 entry).
+
+**Ledger effects.** Pass family: **90** (new family — next free **91**).
+Standing rules: **no new rule minted** — see the watched-pattern ruling
+above; ceiling stays **R195**, next free **R196**, re-derived from
+*Standing rules*' own closing ledger line, not from
+`tools/check-ledger-numbers.py` (known-wrong on this line — `R193`/
+`R194` remain claimed by declined-but-intact proposals). Decisions:
+**none** — ceiling stays **065**, next free **066**.
+
 ### ★★★★ Pass 85.2 slice 1 — `5df75dd` — **SHADING PATTERNS (`PatternType 2`) NOW PAINT — `scn` NAMING A GRADIENT NO LONGER DRAWS NOTHING** — closes the shading half of the `85.2` gap-inventory row; tiling patterns (`PatternType 1`) remain — filed 2026-08-17 (hundred-and-fifty-fifth filing)
 
 **Origin.** Second item on the Ghent gap-inventory queue (`docs/NEXT_SESSION.md`, *"shading patterns + tiling patterns"*), following `Pass 85.0`'s `sh`-operator paint. Ships the shading-pattern half only; tiling patterns and clause-11 transparency/overprint remain queued.
@@ -45346,7 +45527,7 @@ built for exactly that (a synthetic function-based-shading page is
 sufficient — the Ghent corpus's own type-1 count is zero, per `Pass
 85.0`'s own measurement).
 
-### ★★★★ Pass 85.0–85.5 — **THE GHENT PDF OUTPUT SUITE GAP INVENTORY** — six render-fidelity gaps, ALL MEASURED (not estimated) from pdfce's own `Pass 84.0` diagnostics against `Ghent_PDF-Output-Test-V50_ALL_X4.pdf` (PDF/X-4, 6 pages) — filed 2026-08-17 (hundred-and-forty-ninth filing) — **ALL UNSTARTED, TWO SPEC/FEATURE-RAG DISPATCHES OWED AS PREREQUISITES**
+### ★★★★ Pass 85.0–85.5 — **THE GHENT PDF OUTPUT SUITE GAP INVENTORY** — six render-fidelity gaps, ALL MEASURED (not estimated) from pdfce's own `Pass 84.0` diagnostics against `Ghent_PDF-Output-Test-V50_ALL_X4.pdf` (PDF/X-4, 6 pages) — filed 2026-08-17 (hundred-and-forty-ninth filing) — **★ STATUS CORRECTED 2026-08-17 (`Pass 90.0`, hundred-and-fifty-sixth filing): this heading had read "ALL UNSTARTED" three shipped Passes after it stopped being true. Current status: `85.0` shipped, `85.3` shipped, `85.2` shading half shipped/tiling half unstarted, `85.4` disclosure shipped/implementation unstarted (`Pass 90.0`) — see the table below for the re-derived build order.**
 
 **Origin.** The operator rendered the Ghent suite and reported pdfce
 "a long way off." The Ghent suite is a formal prepress conformance
@@ -45362,22 +45543,35 @@ and deferred-op counts on that file — not estimated.**
 | Pass | gap | measured evidence | spec |
 |---|---|---|---|
 | ~~`85.0`~~ | `sh` operator + shading patterns, types 1–3 (function/axial/radial) | page 1 defers 52 ops, page 4 defers 85; `sh` named in both | §8.7.4.5.2–.8, Tables 79–84 (function-based/axial/radial); §7.10 evaluator ALREADY EXISTS (`pdfce_core::function`) — the colour half is done, geometry is not — **SHIPPED 2026-08-17, `33ea830`+`9839d6f` (axial + radial only; function-based and mesh remain, see `85.1`). See the `Pass 85.0` Shipped entry, top of *Shipped*.** |
-| `85.1` | mesh shadings, types 4–7 | subset of the `sh` deferrals above; not separately isolated in this file's corpus | §8.7.4.5.5–.8, same Table range — separate slice, lower priority (rarer in practice) |
-| `85.2` | pattern paint — **shading** (`PatternType 2`, §8.7.4) **SHIPPED**; **tiling** (`PatternType 1`, §8.7.3) still not started | shading half: `scn` naming a `PatternType 2` pattern now paints, anchored to the pattern's own base CTM (§8.7.2 NOTE 1/PM5) rather than the current CTM `sh` uses — **SHIPPED 2026-08-17, `5df75dd`, `Pass 85.2` slice 1. See the Shipped entry, top of *Shipped*.** Tiling half: `interpret.rs`'s `/Pattern` fill path still has no `PatternType 1` branch; `patterns_unpainted` now counts only a genuine shortfall (tiling, an unresolvable name, a degenerate matrix, or an unpaintable shading) | §8.7.3 (tiling, NOT STARTED) + §8.7.4 (shading, SHIPPED) — tiling additionally needs the pattern's own content stream run into a tile and replicated on `/XStep`/`/YStep`, a different job from evaluating a function per pixel |
+| `85.1` | mesh shadings, types 4–7 | Ghent page 1: `shadings_mesh=2`, painted 10 of 12 (the 2 mesh shadings are the only unpainted ones left in the `85.0` row). **NOT IN THE SPEC CORPUS** — `iso32000__s__8.7.md`'s own "NOT ingested" list names exactly this range; dispatch `pdfce-spec-librarian` for §8.7.4.5.5–.8 + Tables 82–84 before writing any of it | §8.7.4.5.5–.8, same Table range — **PROMOTED to second in the build order below**, per `Pass 90.0`'s measurement (2026-08-17) |
+| `85.2` | pattern paint — **shading** (`PatternType 2`, §8.7.4) **SHIPPED**; **tiling** (`PatternType 1`, §8.7.3) still not started | shading half: `scn` naming a `PatternType 2` pattern now paints, anchored to the pattern's own base CTM (§8.7.2 NOTE 1/PM5) rather than the current CTM `sh` uses — **SHIPPED 2026-08-17, `5df75dd`, `Pass 85.2` slice 1. See the Shipped entry, top of *Shipped*.** Tiling half: `interpret.rs`'s `/Pattern` fill path still has no `PatternType 1` branch; `patterns_unpainted` now counts only a genuine shortfall (tiling, an unresolvable name, a degenerate matrix, or an unpaintable shading). **★ Measured 2026-08-17 (`Pass 90.0`): `pattern_spaces=0` on all 6 Ghent pages — NOT ONE page uses `scn` naming a pattern of either type. Tiling is real work but NOT Ghent-driven; DEMOTED below `85.4`/`85.1` in the build order.** | §8.7.3 (tiling, NOT STARTED) + §8.7.4 (shading, SHIPPED) — tiling additionally needs the pattern's own content stream run into a tile and replicated on `/XStep`/`/YStep`, a different job from evaluating a function per pixel |
 | ~~`85.3`~~ | closes **`Pass 1.1` item 6.4** — `/Separation`/`/DeviceN`/`Lab` IMAGE colour spaces | **10 images missing page 1, 6 page 4, 2 page 5** — stderr: "image colour space /Separation is not supported", "/DeviceN is not supported" | §8.6.6.4/§8.6.6.5; vector fills already work (`separation_to_rgb`/`device_n_to_rgb` are wired to the §7.10 evaluator) — this is the per-pixel image path only — **SHIPPED 2026-08-17, `1e7a0be` (`CalGray`/`CalRGB` came free from the same delegation). See the `Pass 85.3` Shipped entry, top of *Shipped*.** |
-| `85.4` | group transparency — `ExtGState` `/BM` blend modes, `/SMask` soft-mask GROUPS, transparency groups | `pdfce-render/src/interpret.rs:2053` still defers both; **distinct from the per-IMAGE `/SMask`/`/Mask` shipped in `Pass 48.1`** — do not conflate the two `/SMask` meanings when scoping | clause 11 (11.3–11.6.4); the image-level half is §11.6.5.3, already done |
+| `85.4` | group transparency — `ExtGState` `/BM` blend modes, `/SMask` soft-mask GROUPS, transparency groups | `pdfce-render/src/interpret.rs:2161-2211` — **DISCLOSURE SHIPPED 2026-08-17, `Pass 90.0`, `ae46e82`; implementation NOT started.** Measured, per page (1–6): `/BM` ignored 1, **76**, 1, 1, 31, 3 — **total 113 across 6 pages**; `/SMask` ignored 1, **31**, 1, 1, 1, 1 — **total 36 across 6 pages**. Page 2 alone: 76 `/BM` + 31 `/SMask` — the WORST page in the file, and it had looked clean by every other counter until these two existed. **Now the LARGEST measured render-fidelity gap in this inventory — PROMOTED to first in the build order below.** Distinct from the per-IMAGE `/SMask`/`/Mask` shipped in `Pass 48.1` — do not conflate the two `/SMask` meanings when scoping | clause 11 (11.3–11.6.4); the image-level half is §11.6.5.3, already done |
 | `85.5` | overprint compositing | patches GWG 1.0, 1.1, 2.0, 3.0, 3.1, 4.0.1, 4.1, 12.0, 19.0, 19.1, 19.2 — most of pages 1 and 4 | **§8.6.7 says "if overprinting is not supported, the value of the overprint parameter shall be ignored" — pdfce is CONFORMANT TODAY.** Implementing it means compositing into a CMYK buffer; lowest priority, architectural, and partly gated on `iccce` (see `Backlog`, "Colour management (`iccce` coordination)", decision 064) |
 
-**Suggested build order** (highest visible-fidelity return first, per
-the operator's own framing of the file as a fidelity yardstick):
-~~`85.0`~~ → `85.2` (partial: shading patterns shipped, tiling remains)
-→ ~~`85.3`~~ → `85.4` → `85.5` → `85.1` last (rarer in practice than the
-other four shading types). **This is an ordering suggestion, not a
-dependency graph** — `85.2`/`85.3` have no dependency on `85.0`. **Two of
-six fully shipped** (`85.0`, `85.3`); **one partially shipped** (`85.2` —
-shading patterns done 2026-08-17 (`5df75dd`), tiling patterns remain);
-remaining: `85.4` (group transparency), `85.5` (overprint, lowest
-priority), `85.1` (mesh shadings, last by design).
+**Suggested build order — ★ RE-DERIVED 2026-08-17 (`Pass 90.0`,
+hundred-and-fifty-sixth filing), REPLACING the order below rather than
+appending to it.** The order this box originally shipped with
+(`85.0` → `85.2` → `85.3` → `85.4` → `85.5` → `85.1` last) was an
+**ordering suggestion inferred from spec breadth, never measured
+against the operator's own file** — see the *Standing-pattern watch*
+note at the end of `Pass 90.0`'s Shipped entry for the general
+finding. Measuring it (`pattern_spaces=0` on all 6 Ghent pages; 113
+`/BM` + 36 `/SMask` occurrences) reverses two placements: tiling
+patterns turn out not to be Ghent-driven at all, and clause-11
+transparency turns out to be the single largest gap in the file.
+**Current order:**
+`85.4` (clause-11 transparency, **now first** — largest measured gap)
+→ `85.1` (mesh shadings, **now second** — spec-librarian dispatch
+owed first) → `/Separation /All` re-check (a **question**, not a
+Pass — see the secondary-finding bullet below) → `85.2` slice 2
+(tiling patterns, **demoted** — measured zero Ghent occurrences) →
+`85.5` (overprint, unchanged, last, gated on `iccce`). **Still an
+ordering suggestion, not a dependency graph** — none of `85.1`/`85.2`/
+`85.4`/`85.5` depend on each other. **Three of six fully shipped**
+(`85.0`, `85.2` shading half, `85.3`); **`85.2` tiling half, `85.1`,
+`85.4`, `85.5` remain unstarted** — `85.4` additionally has its
+**disclosure** shipped (`Pass 90.0`), its implementation not.
 
 **★ Two secondary findings from the same measurement run, filed here
 rather than as separate Passes because neither is a fidelity gap:**
@@ -45386,7 +45580,11 @@ rather than as separate Passes because neither is a fidelity gap:**
   choice (not a gap). The magnitude is higher than expected for
   registration marks alone. **Flagged, not diagnosed** — worth a look
   before `85.0` starts, since a shading Pass will touch the same code
-  path.
+  path. **Re-confirmed unchanged by `Pass 90.0`'s measurement run
+  (2026-08-17); still a question about whether pdfce's own choice
+  should change, not a defect — third in the re-derived build order
+  above, ahead of tiling patterns, behind clause-11 transparency and
+  mesh shadings.**
 - CMYK JPEG polarity: 6 occurrences page 1, unverifiable — already a
   known, named shape (decision 006 / `R30`), not new.
 - Codestream geometry mismatch: 1 occurrence page 3, 1 page 5 — already
