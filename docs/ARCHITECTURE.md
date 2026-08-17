@@ -1094,6 +1094,50 @@ D:\Dev\pdfce\
                                    own lesson (counters computed with no
                                    shell reading them) applied
                                    immediately rather than repeated.
+                                   **Page-group compositing + blend
+                                   modes (`Pass 90.1`, `bd244d9`,
+                                   2026-08-17; §12 decision 066):** two
+                                   corrections against the SAME §11.3/
+                                   §11.4 machinery `Pass 90.0` had only
+                                   counted. (1) The page pixmap is no
+                                   longer filled opaque white before
+                                   painting — it composites as an
+                                   ISOLATED group over a fully
+                                   transparent backdrop, flattened to
+                                   white ONCE at the end
+                                   (§11.4.7's `Composite` +
+                                   `(1−ag)·W+ag·Cg`), because filling
+                                   white hands every blend function
+                                   `cb=1.0` and only four of Table 136's
+                                   sixteen modes satisfy `B(1.0,cs)=cs`.
+                                   (2) `GraphicsState::blend_mode`
+                                   (saved/restored by `q`/`Q` for free)
+                                   and `gstate::blend_mode_from_name`
+                                   (Table 136/137, single mapping point)
+                                   are threaded to every paint site
+                                   including image painting, which had
+                                   `BlendMode::SourceOver` hard-coded.
+                                   The four non-separable modes (Hue/
+                                   Saturation/Color/Luminosity) are
+                                   measured wrong in tiny-skia 0.11.4
+                                   and REFUSED rather than mapped —
+                                   decision 066 records the general
+                                   dependency-verification policy this
+                                   refusal instantiates; full write-up
+                                   at `D:\dev\rag\rust\tiny_skia_0.11_non_separable_blend_modes_wrong_by_up_to_107_255.md`.
+                                   `/Group` is now read on form
+                                   XObjects (previously not at all):
+                                   flattened as an approximation (187
+                                   groups, Ghent page 2 — each object
+                                   painted in place, blend/alpha applied
+                                   per-object rather than to the
+                                   group's composited result) with
+                                   isolated/knockout groups counted
+                                   separately (47) but not yet
+                                   composited through a real offscreen
+                                   buffer — that remains this project's
+                                   top-priority Ghent render-fidelity
+                                   gap (`ROADMAP.md` *Next up*).
     pdfce-print\                 <- Printing: job planning + spooling. Shipped with
                                    `Pass 55.2` (2026-08-10) but never documented in this
                                    tree until the eighty-fifth filing — a filing gap this
@@ -21582,3 +21626,63 @@ entry — inverting the greatest-`s` root-selection rule left every
 existing fixture green because none had two admissible roots to
 disagree on) — one instance against this project's three-instance
 promotion bar; flagged for a second occurrence, not ruled.
+
+### 2026-08-17 (hundred-and-fifty-seventh filing) — decision 066: **PDFCE DOES NOT ROUTE A SPEC-GOVERNED COMPUTATION TO A DEPENDENCY WHOSE OUTPUT IT HAS NOT VERIFIED AGAINST THE STANDARD — NOT EVEN WHEN THE DEPENDENCY NAMES THE OPERATION CORRECTLY**
+
+**Status: DECIDED.** Prompted by `Pass 90.1` (`bd244d9`): wiring
+`tiny_skia::BlendMode::Hue/Saturation/Color/Luminosity` into pdfce's
+`ExtGState /BM` handling was one line away from shipping — the enum
+variants are literally named after the ISO 32000-1/W3C Compositing-1
+operations pdfce needed — and are measurably wrong against both specs
+(up to 107/255 error on 9.4–15.5% of random colour-pair samples, over
+60,000 measured pixels). Root cause reproduced, not inferred: tiny-skia
+0.11.4's `clip_color` gates its low-gamut rescale on `mx >= 0` (virtually
+always true) where both specs and upstream Skia gate on `mn < 0`, so the
+rescale branch is dead and out-of-gamut channels are hard-clamped rather
+than rescaled at constant luminosity. Canonical demonstration:
+`Luminosity` of a BLACK source over a pure BLUE backdrop must evaluate to
+black under both specs; the crate returns `(0, 0, 227)`.
+
+**The decision, stated once so it generalises past this one crate and
+this one Pass.** A dependency's naming of an operation — a function, an
+enum variant, a constant — is not evidence that the operation conforms
+to the spec that name references. Before routing a spec-governed
+computation (colour, geometry, cryptography — anything ISO/ITU-T/
+ETSI-defined, the same class project rule 1 already names) to a
+third-party implementation, **pdfce verifies the dependency's output
+against the standard on at least one case chosen to distinguish the
+correct definition from a plausible near-miss**, the same evidentiary
+bar rule 1 already sets for pdfce's OWN spec-governed code. **Where
+verification finds a divergence, pdfce refuses and discloses rather than
+shipping a wrong result under a conforming-sounding name** — the four
+non-separable blend modes are REFUSED (counted explicitly, never merged
+into a generic "unsupported" bucket, never silently substituted),
+`FEATURES.md`'s Planned row states the measured error, and the
+dependency defect is written up for other Rust projects at
+`D:\dev\rag\rust\tiny_skia_0.11_non_separable_blend_modes_wrong_by_up_to_107_255.md`.
+
+**Why this earns a decision record rather than staying an incident.**
+Project rule 1 forbids implementing spec-governed behaviour from
+training-data memory; it does not, on its own wording, cover TRUSTING a
+dependency's implementation of the same behaviour — and that gap is
+exactly what let the bug get one line from shipping: the mapping "looked
+obviously right" because the names matched, and nothing in the existing
+discipline asked for a second check once a plausible-sounding library
+call existed. The eleven separable blend modes shipped in the SAME
+commit are the control case: they were also one-line mappings, and they
+are correct — verified against the same reproduction harness, on the
+same day, before being trusted rather than after.
+
+**What this does not do.** It does not indict `tiny-skia` broadly — it
+remains `pdfce-render`'s selected rasterizer (§2, decision record
+2026-07-23), and its separable blend modes, path fill and image
+compositing remain trusted and extensively exercised elsewhere in this
+log. It does not create a blanket "re-verify every dependency call"
+obligation — the bar is spec-GOVERNED computations specifically, not
+general-purpose library behaviour (allocation, string handling, I/O).
+
+**No standing rule minted.** This is an architectural/engineering-
+discipline decision about how pdfce integrates dependencies, not a
+finding about pdfce's own tooling or gates (the Standing rules ledger's
+usual subject) — same disposition as decisions 063/064, both filed
+without a rule. **Ceiling moves 065 → 066; next free 067.**

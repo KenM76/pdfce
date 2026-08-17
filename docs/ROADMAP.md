@@ -96,6 +96,198 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★★★★ Pass 90.1 — `bd244d9` — **BLEND MODES NOW COMPOSITE FOR REAL — AND THE PAGE WAS NEVER SUPPOSED TO BE WHITE TO BEGIN WITH: THE RENDERER'S PAGE-BACKDROP MODEL WAS INVERTED SINCE IT WAS FIRST WRITTEN** — implementation half of `Pass 90.0`'s clause-11 disclosure; closes the blend-mode half of the `85.4` Ghent gap, transparency-GROUP compositing and soft masks remain — filed 2026-08-17 (hundred-and-fifty-seventh filing)
+
+**Origin.** `Pass 90.0` (same session, `ae46e82`) made pdfce's blindness
+to `/BM` and `/SMask` COUNTABLE without implementing either. This Pass
+implements blend-mode compositing, and along the way found and fixed a
+render-model error that predates the blend-mode feature entirely — the
+finding is the more important half.
+
+**★★★★ Finding 1 — the page's own compositing model was wrong, and had
+been since `pdfce-render` existed.** pdfce filled the page pixmap OPAQUE
+WHITE and composited every mark onto it. ISO 32000-1 §11.4.7 says the
+opposite: the page is an ISOLATED transparency group whose initial
+backdrop is fully TRANSPARENT, with white composited in ONCE at the
+end — `⟨Cg, fg, ag⟩ = Composite(U, 0, P)` then `C = (1−ag)·W + ag·Cg` —
+and §11.4.5 adds that blend modes inside a group "shall not be
+influenced by the group's backdrop." Filling white hands every blend
+function `cb = 1.0` at first paint, which is harmless ONLY where
+`B(1.0, cs) = cs` — true for `Normal`, `Compatible`, `Multiply` and
+`Darken`, and no other Table 136 mode. For the other twelve, the first
+object painted at a pixel comes out solid white or inverted under the
+old model. The correction (`flatten_page_group_over_white`) is EXACT,
+not an approximation — that pair of formulas IS §11.4.7's definition of
+a page, not a rendering trick.
+
+**★ For `Normal` the two models coincide algebraically, and that
+coincidence hid the bug from the project's own test suite.** 3,776
+pre-existing tests did not move when the model was corrected, and
+exactly ONE did — a test written an hour earlier, asserting "`Screen`
+over a white page is white." **It was asserting the bug and it
+passed**, because `Normal`-only fixtures cannot distinguish an
+opaque-white-fill model from a transparent-group-composited-to-white
+model; the two are the same output at that one blend mode. Replaced
+with a fixture that paints blue then screens red over it, so the
+magenta result can only arise if the blend actually ran against the
+blue rather than against paper. **Graduated as instance 4 of this
+project's own tracked pattern** — `D:\dev\rag\rust\a_symmetric_fixture_cannot_detect_a_transposition_of_its_own_symmetric_parameters.md`,
+widened this filing from "swapped parameters / missing transform" to
+"two competing implementation MODELS that coincide at one tested
+value," title and frontmatter updated to match.
+
+**★★★★ Finding 2 — THE REFUSAL, and the reason this filing carries a new
+`ARCHITECTURE.md` §12 decision rather than staying an incident.**
+tiny-skia 0.11.4 offers `BlendMode::Hue/Saturation/Color/Luminosity`;
+routing to them was a one-line move, and the enum variants are literally
+named after the ISO 32000-1/W3C-Compositing-1 operations pdfce needed.
+They are MEASURABLY WRONG against both specs — up to **107/255 error on
+9.4–15.5% of random colour pairs**, over 60,000 measured pixels. Root
+cause PROVEN by reproduction, not inferred: the crate's `clip_color`
+gates its low-gamut rescale on `mx >= 0` where both specs and upstream
+Skia gate on `mn < 0`, so the branch is dead and negative channels from
+`SetLum` are hard-clamped instead of rescaled at constant luminosity.
+Canonical demonstration: `Luminosity` of a BLACK source over a pure BLUE
+backdrop must give black under both specs; the crate returns
+`(0, 0, 227)`. **So the four are NOT mapped — they are counted and
+disclosed.** On Ghent page 2 that is exact and visible: **60 blend
+modes applied, 16 refused** (the sixteen being Hue/Saturation/Color/
+Luminosity at four swatches each). Full write-up, reproduction and the
+general "verify before trusting a conforming-sounding dependency"
+policy this motivated: `D:\dev\rag\rust\tiny_skia_0.11_non_separable_blend_modes_wrong_by_up_to_107_255.md`
+and `ARCHITECTURE.md` §12 decision 066 (below).
+
+**★★★ On the destination of this finding — considered against both
+cross-project RAGs, filed at `D:\dev\rag\rust\`, NOT
+`C:\personal_rag\pdf\`, contrary to how it was dispatched.** The
+dispatching engineer framed this as `personal_rag/pdf`'s territory
+("a real-world component diverging from what the standard requires").
+Judged on this librarian's own tier boundary instead: `personal_rag/pdf`
+is for **PDF producers** diverging from spec (Word, LibreOffice, Chrome
+print-to-PDF, scanners, other PDF *tools*) — its own existing entries
+are pdfium findings, a PDF-rendering library proper. tiny-skia is a
+general-purpose 2D rasterizer with no PDF awareness at all; the defect
+fires for any consumer using its non-separable blend modes, PDF-related
+or not (canvas, SVG, games). That is squarely `D:\dev\rag\rust\`'s
+"crate-specific surprise, useful to any future Rust project" scope, and
+this project already has two prior tiny-skia findings filed exactly
+there (`tiny_skia_0.11_pattern_shader_arbitrary_affine_image_placement.md`,
+`tiny_skia_mask_pixmap_size_mismatch_drops_the_paint_silently.md`) —
+this is the third, same shelf, not a new one.
+
+**★★ Finding 3 — a third gap, found by disbelieving a healthy counter.**
+After blend modes were implemented and verified working in isolation
+AND against a coloured backdrop, the Ghent blend panel STILL showed the
+suite's failure crosses while every counter looked clean. Page 2 carries
+148 form XObjects and `pdfce-render` had never read `/Group` at all. The
+swatches are transparency groups (§11.4.7) and their contents were
+painted straight onto the page, applying blend/alpha/mask to each
+object INSIDE the group rather than to the group's own composited
+RESULT. Measured across the file: **187 groups flattened, 47 isolated
+or knockout.** Two new counters — `transparency_groups_flattened`,
+`transparency_groups_special` — both on the CLI stable line, both with
+stderr prose. `/I` (isolated) and `/K` (knockout) are counted
+separately because that is exactly where flattening stops being a good
+approximation: one gets the backdrop wrong, the other the occlusion
+order. **The crosses are still there after this Pass**, and the
+`FEATURES.md`/`ROADMAP.md` entries below say so plainly — group
+compositing and soft masks both need an offscreen-buffer architecture
+this Pass does not build. What it does is make the gap MEASURABLE,
+which is what made it findable at all rather than being read as a
+clean page.
+
+**Finding 4 — the blend-mode implementation itself.**
+`GraphicsState::blend_mode` (so `q`/`Q` save it for free),
+`gstate::blend_mode_from_name` as the single Table 136/137 mapping
+point, threaded to all four `solid()` paint sites AND to image
+painting — which had `BlendMode::SourceOver` hard-coded, found because
+76 applied blend modes on Ghent page 2 changed only 0.37% of its
+pixels before this fix. `blend_modes_applied` (a census) split from
+`blend_modes_ignored` (a shortfall), because those were ONE counter an
+hour before this commit and implementing the feature falsified that
+reading.
+
+**Spec sourcing.** `pdfce-spec-librarian` ingested Tables 136/137
+verbatim into `iso32000__s__11.3.5.md`, plus
+`iso32000__ref__blend_mode_interop.md` (PDF vs. W3C vs. tiny-skia) and
+`iso32000__delta__pdf20_blend_modes.md`. Findings worth carrying past
+this Pass: **four Table 136 symbols are absent from the source PDF's
+text layer** (two missing glyphs, two drawn as PATHS — `D(x)`'s radical
+and `Difference`'s absolute-value bars — invisible even to per-glyph
+extraction, and a naive extraction yields a `Difference` that goes
+negative and a `SoftLight` that is discontinuous with no error
+anywhere); **ISO 32000-1 is the OUTLIER on `ColorDodge`/`ColorBurn`'s
+edge point** against ISO 32000-2, W3C AND tiny-skia, filed as `BM-V1`
+in the ambiguity register; **§11.7.4.2 is stricter than §11.3.5 on spot
+colours** — only separable AND white-preserving modes may blend spot
+components, else `Normal` substitutes PER COMPONENT, so one `/BM` can
+mean two blend functions in one paint on a DeviceN/Separation backdrop.
+It also CORRECTED a wrong premise in `iso32000__s__11.3.md` §6 (derived
+the page render from "the backdrop starts pure white and opaque,"
+contradicting §11.4.7 — Finding 1, above) and a miscount ("14 separable
+modes"; Table 136 has 13 rows, remainder 15) that had propagated
+through four corpus files and into this Pass's own dispatch brief.
+
+**Verification.** 3,770 → **3,777 tests, +7, 0 failures.** Sabotage run
+and SEEN TO FAIL on the group-subtype check. `cargo fmt --check`,
+`cargo clippy -- -D warnings`, `check-fmt-excluded.py`,
+`check-ui-strings.sh`, `check-shipped-assets.py`,
+`check-ledger-numbers.py` all clean. Image-fixture parity unchanged: 0
+unexplained, 4 reference-divergence. `cargo tree -p pdfce-core` /
+`-p pdfce-render` re-verified — no GUI dependency.
+
+**`docs/FEATURES.md`.** Blend modes split into two rows. *Implemented*:
+a new row, `core [x]` · `cli [x]` · `gui [ ]`, for the eleven separable
+modes — explicitly NOT read as "blend modes supported" unqualified; the
+sentence names the page-group model correction and points at the
+non-separable row. *Planned*: the former single "Group transparency"
+row is split in two — a new row for the four refused non-separable
+modes (naming the measured tiny-skia error), and the surviving
+transparency-GROUP row narrowed to isolated/knockout offscreen
+compositing and `/SMask` groups, updated with the 187/47 counts and
+stating plainly that `/Group` is now read but only flattened, not
+composited through a real buffer.
+
+**`ARCHITECTURE.md`.** §12 gains **decision 066** — judged, on this
+librarian's own review rather than the engineer's assertion, to BE
+decision-shaped (unlike the "disagreement with the reference renderer"
+proposal declined earlier this session at the `Pass 85.3` entry, which
+was already covered by existing decision 006 §3.7 machinery): *"pdfce
+does not route a spec-governed computation to a dependency whose output
+it has not verified against the standard, even when the dependency
+names the operation correctly."* Ceiling moves **065 → 066**, next free
+**067**. §2's `pdfce-render` stack-table row gains a matching
+implementation note (page-group model + blend-mode wiring + the
+refusal), dated the same commit.
+
+**RAG graduations, this filing:**
+- `D:\dev\rag\rust\tiny_skia_0.11_non_separable_blend_modes_wrong_by_up_to_107_255.md`
+  — new file, Finding 2, redirected here from the dispatch's suggested
+  `personal_rag/pdf` destination (see the ★★★ note above for the
+  reasoning).
+- `D:\dev\rag\rust\a_symmetric_fixture_cannot_detect_a_transposition_of_its_own_symmetric_parameters.md`
+  — widened to a fourth instance (Finding 1's `Normal`-only test);
+  title, frontmatter and `index.md` bullet all updated to match.
+- **Declined for `C:\personal_rag\pdf\`:** nothing in this Pass is a
+  real-world PDF *producer* diverging from spec — the finding is about
+  a Rust rasterizer dependency (tiny-skia) and pdfce's own prior
+  render-model bug, both already covered above.
+
+**Standing rules.** No new rule minted. Finding 3 (a healthy counter
+sweep coexisting with a persisted visible failure, caused by an
+entirely unmeasured adjacent obligation — `/Group`) is a further
+instance of the already-minted **R192** ("a gate states what it cannot
+see") — cited, not re-minted, consistent with this project's practice
+of citing rather than re-minting repeat shapes (R192 was already cited
+as a fifth instance at `Pass 89.1`, this same session). Ceiling stays
+**R195**, next free **R196**.
+
+**Ledger effects.** Pass family: **90** (sibling `.1`; no new family —
+next free family stays **91**, unaffected). Standing rules: **no new
+rule minted** — R192 cited, full text above; ceiling stays **R195**,
+next free **R196**. Decisions: **decision 066 minted** (full text
+below) — ceiling moves **065 → 066**, next free **067**.
+
 ### ★★★★ Pass 90.0 — `ae46e82` — **THE GHENT QUEUE WAS ORDERED ON AN ASSUMPTION NOBODY HAD MEASURED — CLAUSE-11 TRANSPARENCY (`/BM`, `/SMask`) WAS STRUCTURALLY UNMEASURABLE, AND MEASURING IT REVERSES THE `Pass 85.0`–`85.5` BUILD ORDER** — filed 2026-08-17 (hundred-and-fifty-sixth filing)
 
 **Disclosure only. Nothing in this Pass implements clause-11
@@ -45527,7 +45719,7 @@ built for exactly that (a synthetic function-based-shading page is
 sufficient — the Ghent corpus's own type-1 count is zero, per `Pass
 85.0`'s own measurement).
 
-### ★★★★ Pass 85.0–85.5 — **THE GHENT PDF OUTPUT SUITE GAP INVENTORY** — six render-fidelity gaps, ALL MEASURED (not estimated) from pdfce's own `Pass 84.0` diagnostics against `Ghent_PDF-Output-Test-V50_ALL_X4.pdf` (PDF/X-4, 6 pages) — filed 2026-08-17 (hundred-and-forty-ninth filing) — **★ STATUS CORRECTED 2026-08-17 (`Pass 90.0`, hundred-and-fifty-sixth filing): this heading had read "ALL UNSTARTED" three shipped Passes after it stopped being true. Current status: `85.0` shipped, `85.3` shipped, `85.2` shading half shipped/tiling half unstarted, `85.4` disclosure shipped/implementation unstarted (`Pass 90.0`) — see the table below for the re-derived build order.**
+### ★★★★ Pass 85.0–85.5 — **THE GHENT PDF OUTPUT SUITE GAP INVENTORY** — six render-fidelity gaps, ALL MEASURED (not estimated) from pdfce's own `Pass 84.0` diagnostics against `Ghent_PDF-Output-Test-V50_ALL_X4.pdf` (PDF/X-4, 6 pages) — filed 2026-08-17 (hundred-and-forty-ninth filing) — **★ STATUS CORRECTED 2026-08-17 (`Pass 90.0`, hundred-and-fifty-sixth filing): this heading had read "ALL UNSTARTED" three shipped Passes after it stopped being true. Current status: `85.0` shipped, `85.3` shipped, `85.2` shading half shipped/tiling half unstarted, `85.4` disclosure shipped/implementation unstarted (`Pass 90.0`) — see the table below for the re-derived build order.** **★★ FURTHER CORRECTED 2026-08-17 (`Pass 90.1`, hundred-and-fifty-seventh filing): `85.4` is now SPLIT.** Blend modes (eleven separable, `ExtGState /BM`) are SHIPPED; the four non-separable modes are measured-wrong-in-tiny-skia and REFUSED (not a gap this project can close without an upstream fix); transparency-GROUP compositing (isolated/knockout, offscreen buffer) and `/SMask` soft-mask groups remain UNSTARTED and are now this inventory's **single largest remaining gap** — see the row and build order below.
 
 **Origin.** The operator rendered the Ghent suite and reported pdfce
 "a long way off." The Ghent suite is a formal prepress conformance
@@ -45546,7 +45738,9 @@ and deferred-op counts on that file — not estimated.**
 | `85.1` | mesh shadings, types 4–7 | Ghent page 1: `shadings_mesh=2`, painted 10 of 12 (the 2 mesh shadings are the only unpainted ones left in the `85.0` row). **NOT IN THE SPEC CORPUS** — `iso32000__s__8.7.md`'s own "NOT ingested" list names exactly this range; dispatch `pdfce-spec-librarian` for §8.7.4.5.5–.8 + Tables 82–84 before writing any of it | §8.7.4.5.5–.8, same Table range — **PROMOTED to second in the build order below**, per `Pass 90.0`'s measurement (2026-08-17) |
 | `85.2` | pattern paint — **shading** (`PatternType 2`, §8.7.4) **SHIPPED**; **tiling** (`PatternType 1`, §8.7.3) still not started | shading half: `scn` naming a `PatternType 2` pattern now paints, anchored to the pattern's own base CTM (§8.7.2 NOTE 1/PM5) rather than the current CTM `sh` uses — **SHIPPED 2026-08-17, `5df75dd`, `Pass 85.2` slice 1. See the Shipped entry, top of *Shipped*.** Tiling half: `interpret.rs`'s `/Pattern` fill path still has no `PatternType 1` branch; `patterns_unpainted` now counts only a genuine shortfall (tiling, an unresolvable name, a degenerate matrix, or an unpaintable shading). **★ Measured 2026-08-17 (`Pass 90.0`): `pattern_spaces=0` on all 6 Ghent pages — NOT ONE page uses `scn` naming a pattern of either type. Tiling is real work but NOT Ghent-driven; DEMOTED below `85.4`/`85.1` in the build order.** | §8.7.3 (tiling, NOT STARTED) + §8.7.4 (shading, SHIPPED) — tiling additionally needs the pattern's own content stream run into a tile and replicated on `/XStep`/`/YStep`, a different job from evaluating a function per pixel |
 | ~~`85.3`~~ | closes **`Pass 1.1` item 6.4** — `/Separation`/`/DeviceN`/`Lab` IMAGE colour spaces | **10 images missing page 1, 6 page 4, 2 page 5** — stderr: "image colour space /Separation is not supported", "/DeviceN is not supported" | §8.6.6.4/§8.6.6.5; vector fills already work (`separation_to_rgb`/`device_n_to_rgb` are wired to the §7.10 evaluator) — this is the per-pixel image path only — **SHIPPED 2026-08-17, `1e7a0be` (`CalGray`/`CalRGB` came free from the same delegation). See the `Pass 85.3` Shipped entry, top of *Shipped*.** |
-| `85.4` | group transparency — `ExtGState` `/BM` blend modes, `/SMask` soft-mask GROUPS, transparency groups | `pdfce-render/src/interpret.rs:2161-2211` — **DISCLOSURE SHIPPED 2026-08-17, `Pass 90.0`, `ae46e82`; implementation NOT started.** Measured, per page (1–6): `/BM` ignored 1, **76**, 1, 1, 31, 3 — **total 113 across 6 pages**; `/SMask` ignored 1, **31**, 1, 1, 1, 1 — **total 36 across 6 pages**. Page 2 alone: 76 `/BM` + 31 `/SMask` — the WORST page in the file, and it had looked clean by every other counter until these two existed. **Now the LARGEST measured render-fidelity gap in this inventory — PROMOTED to first in the build order below.** Distinct from the per-IMAGE `/SMask`/`/Mask` shipped in `Pass 48.1` — do not conflate the two `/SMask` meanings when scoping | clause 11 (11.3–11.6.4); the image-level half is §11.6.5.3, already done |
+| ~~`85.4a`~~ | blend modes — `ExtGState /BM`, eleven separable modes | `pdfce-render/src/interpret.rs` — **SHIPPED 2026-08-17, `Pass 90.1`, `bd244d9`.** Ghent page 2: 60 of 76 `/BM` invocations now composite exactly. Required a page-backdrop model correction (opaque-white-fill → isolated group over transparent backdrop, §11.4.7) — see the `Pass 90.1` Shipped entry. | §11.3.5, Table 136/137 — **SHIPPED**, see the `Pass 90.1` Shipped entry |
+| `85.4b` | non-separable blend modes — Hue/Saturation/Color/Luminosity | Ghent page 2: 16 of 76 `/BM` invocations (4 modes × 4 swatches) — **REFUSED, not mapped**: tiny-skia 0.11.4 is measured wrong against both ISO 32000-1 and W3C Compositing-1 (up to 107/255 error) — `D:\dev\rag\rust\tiny_skia_0.11_non_separable_blend_modes_wrong_by_up_to_107_255.md`. Not closeable inside pdfce without an upstream tiny-skia fix or a from-scratch implementation of the four HSL formulas. | §11.3.5.3 — refused, see `ARCHITECTURE.md` §12 decision 066 |
+| `85.4c` | transparency GROUPS — isolated/knockout offscreen compositing, `/SMask` soft-mask groups | `pdfce-render/src/interpret.rs` — **`/Group` now READ (`Pass 90.1`), previously not at all.** Ghent page 2: 187 groups flattened as an approximation (each object painted in place, blend/alpha per-object rather than to the group's composited result — wrong wherever backdrop or occlusion order matters), 47 isolated-or-knockout groups counted separately. `/SMask` groups: 36 occurrences (all pages), still ignored. **NO group is composited through a real offscreen buffer in any shell. Now this inventory's SINGLE LARGEST remaining gap — first in the build order below**, ahead of `85.1` (mesh shadings). | clause 11.4–11.6.4 (groups) + §11.6.5.3-adjacent (soft-mask groups); the per-IMAGE `/SMask`/`/Mask` shipped in `Pass 48.1` is unrelated — do not conflate the two `/SMask` meanings when scoping |
 | `85.5` | overprint compositing | patches GWG 1.0, 1.1, 2.0, 3.0, 3.1, 4.0.1, 4.1, 12.0, 19.0, 19.1, 19.2 — most of pages 1 and 4 | **§8.6.7 says "if overprinting is not supported, the value of the overprint parameter shall be ignored" — pdfce is CONFORMANT TODAY.** Implementing it means compositing into a CMYK buffer; lowest priority, architectural, and partly gated on `iccce` (see `Backlog`, "Colour management (`iccce` coordination)", decision 064) |
 
 **Suggested build order — ★ RE-DERIVED 2026-08-17 (`Pass 90.0`,
@@ -45560,18 +45754,31 @@ finding. Measuring it (`pattern_spaces=0` on all 6 Ghent pages; 113
 `/BM` + 36 `/SMask` occurrences) reverses two placements: tiling
 patterns turn out not to be Ghent-driven at all, and clause-11
 transparency turns out to be the single largest gap in the file.
+**Current order — ★★ RE-DERIVED AGAIN 2026-08-17 (`Pass 90.1`,
+hundred-and-fifty-seventh filing), REPLACING the order below rather
+than appending to it, same discipline as `Pass 90.0`'s own replacement
+above.** `85.4` shipped its blend-mode half (`85.4a`) and hit a hard
+external wall on its non-separable half (`85.4b`, refused — see the
+row above); its group-compositing half (`85.4c`) remains, by itself,
+the largest measured gap in the file — the 113/36 combined figure the
+prior order was ranked on is now known to be almost entirely `85.4c`
+(soft masks, 36, plus most occlusion-order-sensitive `/BM` cases),
+not `85.4a`/`85.4b` (60+16, now resolved one way or the other).
 **Current order:**
-`85.4` (clause-11 transparency, **now first** — largest measured gap)
-→ `85.1` (mesh shadings, **now second** — spec-librarian dispatch
-owed first) → `/Separation /All` re-check (a **question**, not a
-Pass — see the secondary-finding bullet below) → `85.2` slice 2
-(tiling patterns, **demoted** — measured zero Ghent occurrences) →
-`85.5` (overprint, unchanged, last, gated on `iccce`). **Still an
-ordering suggestion, not a dependency graph** — none of `85.1`/`85.2`/
-`85.4`/`85.5` depend on each other. **Three of six fully shipped**
-(`85.0`, `85.2` shading half, `85.3`); **`85.2` tiling half, `85.1`,
-`85.4`, `85.5` remain unstarted** — `85.4` additionally has its
-**disclosure** shipped (`Pass 90.0`), its implementation not.
+`85.4c` (transparency-GROUP compositing + soft masks, **now first** —
+largest measured REMAINING gap, needs an offscreen-buffer
+architecture) → `85.1` (mesh shadings, **second**, unchanged — spec-
+librarian dispatch owed first) → `/Separation /All` re-check (a
+**question**, not a Pass — see the secondary-finding bullet below) →
+`85.2` slice 2 (tiling patterns, **demoted**, unchanged — measured
+zero Ghent occurrences) → `85.5` (overprint, unchanged, last, gated on
+`iccce`). **Still an ordering suggestion, not a dependency graph** —
+none of `85.1`/`85.2`/`85.4c`/`85.5` depend on each other. **Four of
+seven line items now fully shipped or closed** (`85.0`, `85.2` shading
+half, `85.3`, `85.4a`); **`85.4b` is CLOSED-REFUSED** (not a pdfce gap
+to schedule — an upstream tiny-skia defect); **`85.2` tiling half,
+`85.1`, `85.4c`, `85.5` remain unstarted**, with `85.4c` now the single
+highest-priority item in this table.
 
 **★ Two secondary findings from the same measurement run, filed here
 rather than as separate Passes because neither is a fidelity gap:**

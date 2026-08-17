@@ -44170,3 +44170,137 @@ overlay-text-colour Backlog item remains unscoped.
 3. **Watched pattern, instance 1, on record**: an ordering/priority
    claim relayed across filings without being re-derived from a fresh
    measurement. Not an action item until a second instance surfaces.
+
+## 2026-08-17 (hundred-and-fifty-seventh filing) — **`Pass 90.1` (`bd244d9`): BLEND MODES NOW COMPOSITE FOR REAL, AND THE PAGE WAS NEVER SUPPOSED TO BE WHITE — THE RENDERER'S PAGE-BACKDROP MODEL WAS INVERTED SINCE IT WAS FIRST WRITTEN. Decision 066 minted: pdfce does not trust a dependency's spec-governed output without independent verification, even when the API names the operation correctly**
+
+**Shipped:**
+- `Pass 90.1` — `bd244d9`. Implementation half of `Pass 90.0`'s
+  clause-11 disclosure. **Finding 1**: the page pixmap was filled
+  opaque white before painting; §11.4.7 requires an isolated group
+  over a fully transparent backdrop, composited to white ONCE at the
+  end. Filling white hands every blend function `cb=1.0`, harmless
+  only where `B(1.0,cs)=cs` (`Normal`/`Compatible`/`Multiply`/`Darken`
+  — 4 of 16 Table 136 modes). Fixed (`flatten_page_group_over_white`).
+  **The bug was invisible to the test suite because the one existing
+  blend-mode test used `Normal` — the exact coincidence point between
+  the wrong model and the right one** — and it PASSED asserting the
+  bug; caught only when a `Screen`-blend fixture (blue painted, red
+  screened over it, magenta required) was added. Graduated as instance
+  4 of `D:\dev\rag\rust\a_symmetric_fixture_cannot_detect_a_transposition_of_its_own_symmetric_parameters.md`.
+  **Finding 2**: tiny-skia 0.11.4's `BlendMode::Hue/Saturation/Color/
+  Luminosity` are measured WRONG against ISO 32000-1 AND W3C
+  Compositing-1 (up to 107/255 error, 9.4–15.5% of random colour
+  pairs; root cause a `clip_color` sign-condition bug — `mx>=0` gates
+  a branch that should gate on `mn<0`, leaving it dead). REFUSED, not
+  mapped: Ghent page 2, 60 of 76 `/BM` invocations composite exactly,
+  16 (the four non-separable modes) are counted and disclosed as a
+  shortfall. New RAG file:
+  `D:\dev\rag\rust\tiny_skia_0.11_non_separable_blend_modes_wrong_by_up_to_107_255.md`.
+  **Finding 3**: `/Group` was never read on form XObjects at all — a
+  third, independent gap found by disbelieving healthy counters when
+  the Ghent panel kept showing failure crosses. 187 groups flattened
+  as an approximation (per-object blend/alpha, not per-group-result);
+  47 isolated/knockout groups counted separately; both on the CLI
+  stable line. No real offscreen-buffer group compositing exists yet —
+  the crosses remain. Two new counters,
+  `transparency_groups_flattened`/`transparency_groups_special`.
+  **Finding 4**: `GraphicsState::blend_mode` +
+  `gstate::blend_mode_from_name` threaded to all four `solid()` sites
+  AND image painting (which had `BlendMode::SourceOver` hard-coded,
+  found via a 0.37%-pixel-change discrepancy). Tests 3,770 → 3,777
+  (+7, 0 failures); sabotage run and SEEN TO FAIL on the group-subtype
+  check. All seven scripted gates clean; image-fixture parity
+  unchanged (0 unexplained, 4 reference-divergence); `cargo tree`
+  re-verified clean on both headless crates.
+
+**Decisions made this session:**
+- **Decision 066 minted** (`ARCHITECTURE.md` §12, ceiling 065 → 066,
+  next free 067): *pdfce does not route a spec-governed computation to
+  a dependency whose output it has not verified against the standard,
+  even when the dependency names the operation correctly.* Judged
+  decision-shaped on this librarian's own review, not merely accepted
+  on the engineer's assertion — distinguished from the "disagreement
+  with pdfium is a finding" proposal declined earlier this same
+  session (`Pass 85.3` entry), which was already covered by existing
+  decision 006 §3.7 machinery; this one is genuinely new, since
+  project rule 1 covers pdfce's OWN spec-governed code but says
+  nothing about trusting a DEPENDENCY's. §2's `pdfce-render` stack
+  table gained a matching implementation note, same commit.
+- **RAG-destination call, overriding the dispatch's suggested
+  placement.** The engineer proposed `C:\personal_rag\pdf\` for the
+  tiny-skia finding, citing the spec-librarian's steer. Judged instead
+  as `D:\dev\rag\rust\` territory: `personal_rag/pdf` is for real-world
+  PDF *producers* and PDF-aware *tools* (its existing entries are
+  pdfium findings); tiny-skia is a general-purpose 2D rasterizer with
+  no PDF awareness, and the defect fires for any consumer of its
+  non-separable blend modes — this project already has two prior
+  tiny-skia findings filed at `D:\dev\rag\rust\`, and this is the
+  third on the same shelf, not a new one.
+
+**Findings + decisions:**
+- The `85.4` Ghent gap-inventory row is split three ways (`85.4a`
+  blend modes, SHIPPED; `85.4b` non-separable modes, CLOSED-REFUSED;
+  `85.4c` transparency groups + soft masks, UNSTARTED and now the
+  single largest remaining Ghent gap) — `ROADMAP.md`'s build order
+  re-derived again, `85.4c` promoted to first, ahead of `85.1` mesh
+  shadings.
+- `docs/FEATURES.md`: blend modes split into two rows — a new
+  *Implemented* row (`core [x]`/`cli [x]`/`gui [ ]`, eleven separable
+  modes, explicitly NOT read as "blend modes supported" unqualified)
+  and the former single "Group transparency" *Planned* row split into
+  a non-separable-modes row (refused, names the tiny-skia defect) and
+  a narrowed transparency-GROUPS row (187/47 counts, still `[ ]`
+  everywhere — flattening is a disclosed approximation, not the real
+  model).
+- **Standing rules: no new rule minted.** Finding 3 (a healthy counter
+  sweep coexisting with a persisted visible failure, because an
+  adjacent obligation — `/Group` — was entirely unmeasured) is cited
+  as a further instance of the already-minted `R192` ("a gate states
+  what it cannot see"), not re-minted — same disposition `Pass 89.1`
+  used earlier this session for a different case. Ceiling stays R195,
+  next free R196.
+
+**RAG graduations, this filing:**
+- New: `D:\dev\rag\rust\tiny_skia_0.11_non_separable_blend_modes_wrong_by_up_to_107_255.md`.
+- Widened: `D:\dev\rag\rust\a_symmetric_fixture_cannot_detect_a_transposition_of_its_own_symmetric_parameters.md`
+  — title, frontmatter, tags and body all updated to a fourth instance
+  (competing implementation MODELS coinciding at one tested parameter
+  value, distinct from the prior three shapes — swapped parameters,
+  symmetric ranges, missing transform).
+- `D:\dev\rag\rust\index.md` updated for both, same filing.
+- **Declined for `C:\personal_rag\pdf\`**: neither finding is a
+  real-world PDF producer diverging from spec; both are Rust-ecosystem
+  crate/methodology findings, already covered above.
+
+**Still in flight:** `Pass 72.0`, `73.0`, `73.1`, `86.0` remain HIGH
+PRIORITY and unstarted; `Pass 85.1` (mesh shadings, spec-librarian
+dispatch still owed) and `Pass 85.2` slice 2 (tiling, demoted) remain
+unstarted; `Pass 85.4c` (transparency-group compositing + soft masks,
+needs an offscreen-buffer architecture) is now the top-priority
+unstarted Ghent item; `Pass 85.5` (overprint, gated on `iccce`) remains
+last; `Pass 87.0` remains GUI-paused; `bdfd511`'s missing `ROADMAP.md`
+entry remains open; the overlay-text-colour Backlog item remains
+unscoped.
+
+**For next session:**
+1. **Next free Pass family is `91`** (this filing used family `90`,
+   sibling `.1`). Next free decision is **067** (066 minted this
+   filing). Next free filing ordinal is **158**. Next free standing
+   rule is **`R196`**, unchanged — R192 cited, not re-minted.
+2. **`Pass 85.4c` (transparency-group compositing, offscreen buffer,
+   `/SMask` groups) is next in the re-derived Ghent build order** — the
+   single largest measured remaining gap in the operator's file, ahead
+   of `Pass 85.1` mesh shadings (still needs its spec-librarian
+   dispatch for §8.7.4.5.5–.8 + Tables 82–84) and `Pass 85.2` slice 2
+   (tiling, demoted, zero Ghent occurrences).
+3. **`Pass 85.4b` (non-separable blend modes) is CLOSED-REFUSED, not
+   schedulable inside this project** without either an upstream
+   tiny-skia fix or a from-scratch implementation of the four HSL
+   blend formulas — don't re-queue it as ordinary unstarted work
+   without deciding which of those two paths first.
+4. **The operator has authorised releasing builds at the engineer's
+   discretion; `v0.6.0` is expected to be cut off this filing's
+   `HEAD`.** `FEATURES.md`'s blend-mode/transparency rows were written
+   to the release-note bar this implies — verify they still read that
+   way (no unqualified "blend modes supported," transparency groups
+   still clearly `[ ]`) if anything further ships before the tag.
