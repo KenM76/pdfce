@@ -96,6 +96,261 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★★★ Pass 88.0 — `1345663` — **THE ONE UNEXPLAINED DIVERGENCE WAS THE REFERENCE RENDERER BEING WRONG, NOT PDFCE**: an independent, closed-form colour oracle proves pdfium's Lab/CalGray/CalRGB image conversion is wrong by up to 152/255, and the render-parity harness's own explanation keys for `Pass 85.3` had never actually fired — filed 2026-08-17 (hundred-and-fifty-second filing)
+
+**Filed by `pdfce-librarian`, no shell available (hard rule 8) — every
+figure below is RELAYED from the dispatching engineer's report, not
+independently re-run or read via `git show`.**
+
+**Out-of-tree tooling only. No crate source touched** —
+`tools/render-parity/render_parity.py` (modified),
+`tools/check-image-colorspace-truth.py` (new),
+`tools/gen-image-colorspace-fixtures.py` (new). Tests unchanged at
+**3,747, 0 failures**; `cargo fmt --check`, `cargo clippy --workspace
+--all-targets -- -D warnings`, `check-fmt-excluded.py`,
+`check-ui-strings.sh`, `check-shipped-assets.py`,
+`check-ledger-numbers.py` all clean; `cargo tree -p pdfce-core`/
+`-p pdfce-render` re-verified — zero GUI-crate hits.
+
+**Filed as its own Pass, not folded into `Pass 85.3` (below), because it
+is a standalone contribution** — a new, independently-built, closed-form
+measurement instrument sharing no code with either renderer, not a fix
+to the feature `85.3` shipped. Next free Pass family at the start of
+this filing was **88**; minted here.
+
+**The headline finding, and it REVERSES a standing assumption
+`docs/NEXT_SESSION.md` had recorded.** That handoff said `lab.pdf`'s
+`unexplained-divergence` was most likely pdfce's own uncalibrated
+XYZ→sRGB conversion. Measured instead against a closed-form oracle
+(ISO 32000-1 §8.6.5.2–§8.6.5.4 + IEC 61966-2-1 sRGB encode — sharing no
+code with either renderer), over 3,600+ interior texels per space:
+
+| space | pdfce mean / max Δ (8-bit) | pdfium mean / max Δ (8-bit) |
+|---|---|---|
+| Lab | 0.019 / 1 | 40.854 / 152 |
+| CalGray | 0.000 / 0 | 2.000 / 9 |
+| CalRGB | 0.030 / 1 | 3.012 / 9 |
+
+**pdfce is exact to within one 8-bit code on all three. pdfium is the
+divergent renderer.** The render-parity harness, which compares only the
+two renderers, structurally could not have discovered this — it can say
+the two disagree, never which one is right. `/Separation /None`,
+measured the same session: every pdfce pixel `(255,255,255)` vs. every
+pdfium pixel `(0,0,0)`, `frac32 = 1.0` (the harness's maximum reportable
+divergence) — all of it pdfce correctly implementing §8.6.6.4's "shall
+never be painted," per `Pass 85.3`'s finding 1, below.
+
+**Consequence.** `img_uncalibrated` and `img_colorant_none` are now
+classified as REFERENCE-divergences (new `IMAGE_REF_KEYS`), not
+disclosed gaps — a claim about **who is wrong**, now backed by an
+oracle instead of preference. Image-fixture parity run: **1 unexplained
+/ 0 reference-divergence → 0 unexplained / 4 reference-divergence, 0
+skips.** The cost is stated in the code, not hidden: classifying a page
+this way removes it from the bug-candidate pool, so a genuine future
+pdfce defect on a page that also carries a Lab image would be masked by
+the same reclassification. The analytic oracle is the compensating,
+non-comparative control that keeps that reclassification honest.
+
+**Four secondary findings:**
+
+(a) **The two explanation keys were added to explain `lab.pdf` and were
+never read, for a whole session.** `ref_reasons()` was gated on
+`--annots` — correct for annotation-only reason keys, wrong for image
+keys that fire on ordinary content. The bucket COUNT line was gated the
+same way, so even a correctly-classified page would have moved into a
+bucket the report does not print in non-`--annots` mode: **the headline
+number would improve, with nothing on screen saying where the page
+went.** Both gates are now unconditional. **Filed against `R186`** (a
+guard/classifier keyed on a marker fails to cover the adjacent case
+that arrives without it, silently) — see *Standing rules*, below,
+eighth instance. Caught and fully fixed within this same commit, before
+the silent-half state was ever shipped.
+
+(b) `devicen-2.pdf` inlined its tint-transform stream INSIDE the
+colour-space array. §7.3.8.1 requires a stream to be an indirect
+object; pdfce correctly refused the file, and it had been silently
+dropping out of every parity run as a "skip" — a fixture testing
+nothing while reporting success. Now emitted as a numbered object; the
+run has 0 skips. **Note:** the prior session's quoted `devicen-2 mean
+0.000 EXACT` was measuring a file that never loaded.
+
+(c) The parity report crashed with `KeyError: 'mean'` on any run with
+`DeviceCMYK` pages and no clean ones — two independent populations
+behind one guard, not contrived: it is what a small targeted corpus
+looks like once every page is explained, and it took down the whole
+report (including the unexplained tail printed below it) rather than
+degrading one line. Fixed with a second guard stating plainly that the
+`DeviceCMYK` figure is an absolute number, not a ratio, when there is
+no baseline population.
+
+(d) **★ The sabotage check earned its keep again, by failing first.**
+Swapping the `a` and `b` `/Range` pairs in `ColorSpace::component_range`
+left the oracle GREEN. Cause: the fixture used a symmetric `/Range
+[-100 100 -100 100]` (`amin==bmin`, `amax==bmax`), so an a/b
+transposition is arithmetically a no-op. Fixture is now asymmetric
+(`[-100 100 -60 60]`), with `b` varying along the diagonal so no
+component is constant; the identical sabotage now fails loudly (mean
+32.068, max 163, exit 1). **This is the second instance of one shape**
+— see the new `D:\dev\rag\rust\` finding, below.
+
+**Decision question considered and declined.** The dispatching engineer
+proposed a new decision record for "disagreement with the reference
+renderer is a finding, not a failure," citing three measured instances
+(`/Separation /None`; Lab/CalGray/CalRGB; the pre-existing `DeviceCMYK`
+colorimetry gap). **Declined — already covered, not decision-shaped.**
+`ARCHITECTURE.md`'s decision log already treats pdfium as a
+**cross-check, not ground truth** (decision 006 §3.7's explicit
+"additive vs. pdfium's calibrated table" framing, where pdfce is fitted
+TO pdfium deliberately for CMYK) and the render-parity harness's own
+`GAP_KEYS`/reference-divergence machinery — used repeatedly since the
+annotation/form-widget Passes (`FPDF_FFLDraw` widget
+reference-divergences, pdfium synthesizing a no-`/AP` appearance) — **is
+the operationalisation of exactly this principle, already in production
+code**, not a new posture. Decision-record ceiling **unchanged at 065**,
+next free **066**.
+
+**Findings graduated to cross-project RAGs, this filing:**
+- `C:\personal_rag\pdf\`: two new lessons — pdfium's Lab/CalGray/CalRGB
+  image conversion is not a usable oracle (measured divergence up to
+  152/255 against closed-form ISO 32000-1 math); pdfium paints a
+  `/Separation /None` image solid black, violating §8.6.6.4.
+- `D:\dev\rag\rust\`: one new lesson — a fixture whose varied parameters
+  are symmetric cannot detect a transposition of those parameters (two
+  pdfce instances: the `Pass 85.0` radial-shading root-selection
+  sabotage, and finding (d) above).
+- **Declined to graduate:** "Lab's image decode default is the
+  component `/Range`, not `[0,1]`" (`Pass 85.3` finding 2) — this
+  restates ISO 32000-1 Table 89's own default-range rule. It is
+  canonical spec text, not an empirical real-world-producer divergence,
+  so it is `pdfce-spec-librarian`'s territory per hard rule 6, not this
+  librarian's — not written to `personal_rag/pdf`.
+
+**Rule question, deferred to this librarian by the engineer's own
+handoff — answered here.** *Is finding (a) [or the Lab-explained-only-
+on-stderr shape `docs/NEXT_SESSION.md` called "the third instance today
+of a disclosure reaching a human and not a machine"] a third instance of
+`R180`, making `R180` "promotable"?* **No, on both counts.**
+
+- **Not `R180`.** `R180`'s own text requires an accurate disclosure that
+  was TRUE when written and became FALSE through a LATER, separate
+  improvement to the very thing it describes (the founding case: a
+  correct "no rich-text on export" warning, falsified when export later
+  gained `/RV`). Neither `Pass 84.0`'s twelve unread counters (already
+  ruled `R151`, not `R180`, in that entry's own text) nor finding (a)
+  here fit that shape — in both, the disclosure mechanism never worked
+  for the case in question; nothing that used to be true went stale.
+  Finding (a) is closer to `R186`'s shape (a marker-keyed guard silently
+  not reaching the adjacent case) and is filed there, above.
+- **"Promotable" does not apply to an already-minted rule.** `R180`
+  exists since 2026-08-10; instances accumulate as evidence appended to
+  its own entry (as instance 2 already is), the way `R186` has now
+  taken eight. The three-instance bar this project applies is for
+  minting a **new** rule from an unnamed pattern — it does not "promote"
+  an existing one to a different status at three instances, and `R180`'s
+  own instance-2 text says so explicitly ("this is evidence for `R180`
+  itself, not a candidate for a fifth member of the family" — referring
+  to the family of related-but-distinct rules `R93`/`R174`/`R178`/
+  `R180`, not to `R180`'s own instance count).
+- **Do not stretch to reach a number, per the engineer's own
+  instruction.** No new rule minted or proposed by this filing.
+
+**Live ceiling reconciliation, flagged not resolved.** The engineer's
+dispatch reports `check-ledger-numbers.py`, run this session, measuring
+standing rules at **R192 → next free R193** — contradicting every prior
+filing's own "`R192` unchanged, next free `R195` (`R193`/`R194` stay
+claimed)" language, most recently the hundred-and-fifty-first filing
+above. This entry uses the fresher, relayed figure (**R193 next free**)
+rather than the stale in-ledger one, per the engineer's explicit
+instruction, but **does not know why the two disagree** — this
+librarian has no shell to re-run the checker and cannot confirm whether
+the `R193`/`R194` proposals were formally declined, or the checker's own
+detection logic changed. **Flagged for the engineer to reconcile or
+confirm, not resolved here.**
+
+**`docs/FEATURES.md`.** No row change from this entry — it ships no new
+pdfce capability, only corrects how the render-parity harness classifies
+existing reference divergences. See `Pass 85.3`, below, for the row that
+did move.
+
+**Ledger effects.** Pass families: **88 minted**, next free **89**.
+Standing rules: **`R186` gains an eighth instance** (below); ceiling
+**relayed at R192, next free R193** (see reconciliation flag above — not
+independently confirmed by this librarian). Decision records:
+**unchanged at 065**, next free **066** (a new decision considered and
+declined, above).
+
+### ★★★★ Pass 85.3 — `1e7a0be` — **`/Separation`, `/DeviceN`, `Lab`, `CalGray`, `CalRGB` NOW DECODE IN IMAGES — 18 images that had been dropped from the raster entirely, across 3 Ghent pages, now paint** — closes `Pass 1.1` item 6.4 and the `85.3` row of the Ghent gap inventory — filed 2026-08-17 (hundred-and-fifty-second filing)
+
+**Filed by `pdfce-librarian`, no shell available (hard rule 8) — every
+figure below is RELAYED from the dispatching engineer's report, not
+independently re-run or read via `git show`.**
+
+**★ ONE CLAIM IN THIS COMMIT'S OWN MESSAGE IS FALSE, AND THIS ENTRY DOES
+NOT REPEAT IT.** The commit message says it "taught `render_parity.py`
+both" `img_uncalibrated`/`img_colorant_none` keys — it did not: the
+harness half never landed (a patch script aborted before writing). Only
+the CLI/engine half shipped here. The harness half is `Pass 88.0`,
+above, filed separately, later the same session. Scope corrected per
+the dispatching engineer's own flag.
+
+**What shipped.** All five previously-`ImageError::UnsupportedColorSpace`
+image colour spaces now decode: `Separation`, `DeviceN`, `Lab`,
+`CalGray`, `CalRGB`. Measured on
+`Ghent_PDF-Output-Test-V50_ALL_X4.pdf`: page 1 images 10/10 unsupported
+→ 20/0; page 4 6/6 → 12/0; page 5 9/2 → 11/0 — **18 images** that had
+been dropped from the raster entirely now paint.
+
+**Design: delegated to `crate::color::ColorSpace`, not a second
+implementation in the image resolver.** That module already parses all
+five spaces, already runs `/tintTransform` through `pdfce_core::function`,
+already knows `/All` and `/None` — the vector-fill path has used it
+since `Pass 84.0`'s diagnostics slice. A parallel image-side
+implementation would put two answers to "what colour is this tint?" in
+one binary, reached by different content (a filled rectangle vs. an
+image) — a divergence between them would surface as one spot colour
+printing two different ways on one page. **Cost:** conversion is no
+longer closed-form, so `TintCache` memoises on the **pre-decode integer
+samples**, not the decoded floats. That key is exact, not approximate —
+keying on decoded floats would need an epsilon, and an epsilon there
+would be a silent colour approximation. Cache semantics changed speed
+only, nothing else.
+
+**Two defects found by fixtures, not by reasoning:**
+1. **`/Separation /None` was painting WHITE.** §8.6.6.4: such a
+   colorant "shall never be painted on the page." White is
+   indistinguishable from correct on a blank test page and **erases the
+   backdrop** on a real one. Now alpha 0. The conversion's fallback
+   colour changed white→black at the same time, so if the alpha path is
+   ever bypassed a black block gets reported, not a silent white one.
+2. **`Lab`'s image decode default is the component `/Range`, not
+   `[0 1]`.** `L` runs 0–100 and `a`/`b` are routinely negative; the old
+   blanket 0–1 clamp would have flattened such an image to near-black —
+   plausible enough to read as a bad scan rather than a decode bug.
+   (Table 89's default-range rule — spec text pdfce was already
+   required to honour, not a new empirical finding; not filed to
+   `personal_rag/pdf` for that reason, see `Pass 88.0`'s "Declined to
+   graduate" note, above.)
+
+**Gates.** 3,747 tests, 0 failures. `cargo fmt --check` and `cargo
+clippy --workspace --all-targets -- -D warnings` clean. All seven
+scripted gates clean. `cargo tree -p pdfce-core`/`-p pdfce-render` show
+zero GUI-crate hits.
+
+**`docs/FEATURES.md`.** Planned row "`/Separation`/`/DeviceN`/`Lab`
+colour spaces on image XObjects" (closing `Pass 1.1` item 6.4) moves to
+*Implemented*, `core [x]` · `cli [x]` · `gui [ ]` (operator-paused, not
+a shortfall), widened to name `CalGray`/`CalRGB` since both came free
+from the same delegation.
+
+**`ROADMAP.md`'s own Ghent gap inventory (*Next up*, `Pass 85.0`–
+`85.5`).** Row `85.3` struck as SHIPPED; build order updated. See that
+entry's own dated amendment, below.
+
+**Ledger effects.** Pass families: **85** (existing family; sub-Pass
+`85.3` closed) — no new family consumed by this entry (see `Pass 88.0`,
+above, for family **88**). Standing rules: unchanged — this entry
+proposes none. Decision records: unchanged at **065**.
+
 ### ★★★ CORRECTION, NO PASS NUMBER — `docs/FEATURES.md` overclaimed the `Pass 85.0`/`84.0` GUI surface on two rows; a THIRD finding, a genuine GUI honesty regression, was flagged by the engineer in `docs/NEXT_SESSION.md` but never actually filed in this ledger — filed 2026-08-17 (hundred-and-fifty-first filing)
 
 **Why no Pass ID.** No code changed and no commit exists for this entry —
@@ -44775,16 +45030,18 @@ and deferred-op counts on that file — not estimated.**
 | ~~`85.0`~~ | `sh` operator + shading patterns, types 1–3 (function/axial/radial) | page 1 defers 52 ops, page 4 defers 85; `sh` named in both | §8.7.4.5.2–.8, Tables 79–84 (function-based/axial/radial); §7.10 evaluator ALREADY EXISTS (`pdfce_core::function`) — the colour half is done, geometry is not — **SHIPPED 2026-08-17, `33ea830`+`9839d6f` (axial + radial only; function-based and mesh remain, see `85.1`). See the `Pass 85.0` Shipped entry, top of *Shipped*.** |
 | `85.1` | mesh shadings, types 4–7 | subset of the `sh` deferrals above; not separately isolated in this file's corpus | §8.7.4.5.5–.8, same Table range — separate slice, lower priority (rarer in practice) |
 | `85.2` | pattern paint — **both** tiling (`PatternType 1`, §8.7.3) **and shading** (`PatternType 2`, §8.7.4) patterns; widened from "tiling pattern paint" 2026-08-17, hundred-and-fifty-first filing, on discovering `Pass 85.0` shipped `sh`-only shading paint and left `scn`-named shading patterns in the same unpainted state as tiling — same counter, same root cause, not two separate gaps | `patterns_unpainted` (Table 74's own initial `/Pattern` colour "causes nothing to be painted" — current behaviour is deliberate, not accidental, but unpainted either way); `Shading::load` (`interpret.rs:2290`) has exactly one caller, the `sh` handler — the model built for `85.0` is not wired to `scn` | §8.7.3 (tiling) + §8.7.4 (shading) — **coordinate spaces differ**: `sh` is CTM-relative, a shading pattern is base-CTM-relative (§8.7.2 NOTE 1), so `85.0`'s paint path is not a drop-in reuse for this Pass |
-| `85.3` | closes **`Pass 1.1` item 6.4** — `/Separation`/`/DeviceN`/`Lab` IMAGE colour spaces | **10 images missing page 1, 6 page 4, 2 page 5** — stderr: "image colour space /Separation is not supported", "/DeviceN is not supported" | §8.6.6.4/§8.6.6.5; vector fills already work (`separation_to_rgb`/`device_n_to_rgb` are wired to the §7.10 evaluator) — this is the per-pixel image path only |
+| ~~`85.3`~~ | closes **`Pass 1.1` item 6.4** — `/Separation`/`/DeviceN`/`Lab` IMAGE colour spaces | **10 images missing page 1, 6 page 4, 2 page 5** — stderr: "image colour space /Separation is not supported", "/DeviceN is not supported" | §8.6.6.4/§8.6.6.5; vector fills already work (`separation_to_rgb`/`device_n_to_rgb` are wired to the §7.10 evaluator) — this is the per-pixel image path only — **SHIPPED 2026-08-17, `1e7a0be` (`CalGray`/`CalRGB` came free from the same delegation). See the `Pass 85.3` Shipped entry, top of *Shipped*.** |
 | `85.4` | group transparency — `ExtGState` `/BM` blend modes, `/SMask` soft-mask GROUPS, transparency groups | `pdfce-render/src/interpret.rs:2053` still defers both; **distinct from the per-IMAGE `/SMask`/`/Mask` shipped in `Pass 48.1`** — do not conflate the two `/SMask` meanings when scoping | clause 11 (11.3–11.6.4); the image-level half is §11.6.5.3, already done |
 | `85.5` | overprint compositing | patches GWG 1.0, 1.1, 2.0, 3.0, 3.1, 4.0.1, 4.1, 12.0, 19.0, 19.1, 19.2 — most of pages 1 and 4 | **§8.6.7 says "if overprinting is not supported, the value of the overprint parameter shall be ignored" — pdfce is CONFORMANT TODAY.** Implementing it means compositing into a CMYK buffer; lowest priority, architectural, and partly gated on `iccce` (see `Backlog`, "Colour management (`iccce` coordination)", decision 064) |
 
 **Suggested build order** (highest visible-fidelity return first, per
 the operator's own framing of the file as a fidelity yardstick):
-`85.0` → `85.2` → `85.3` → `85.4` → `85.5` → `85.1` last (rarer in
-practice than the other four shading types). **This is an ordering
+~~`85.0`~~ → `85.2` → ~~`85.3`~~ → `85.4` → `85.5` → `85.1` last (rarer
+in practice than the other four shading types). **This is an ordering
 suggestion, not a dependency graph** — `85.2`/`85.3` have no dependency
-on `85.0`.
+on `85.0`. **Two of six now shipped** (`85.0`, `85.3`); remaining:
+`85.2` (pattern paint), `85.4` (group transparency), `85.5` (overprint,
+lowest priority), `85.1` (mesh shadings, last by design).
 
 **★ Two secondary findings from the same measurement run, filed here
 rather than as separate Passes because neither is a fidelity gap:**
@@ -65291,6 +65548,40 @@ and
   hundred-and-seventh's own correction footer (added this instance).
   Not re-numbered, matching the third/fourth/fifth-instance precedent.
   **Ceiling stays `R186`, next free `R187`.**
+
+  **★ EIGHTH INSTANCE (2026-08-17, `1345663`, hundred-and-fifty-second
+  filing) — the marker is a CLI FLAG built for one caller (`--annots`),
+  and it wrapped a classification function's whole body rather than only
+  the branches that flag actually gated.** `render_parity.py`'s
+  `ref_reasons()` explains a page's pixel divergence against a table of
+  known causes; two new entries (`img_uncalibrated`, `img_colorant_none`,
+  added to explain `Pass 85.3`'s Lab/`Separation`-`None` image findings)
+  were added inside the SAME `if args.annots:` block that legitimately
+  gates the annotation-only reason keys, because that was where the
+  function's existing reason keys already lived — correct for every key
+  written before this one, silently unreachable for a key whose hazard
+  (an ordinary image, not an annotation) arrives without the `--annots`
+  marker. **Two-layer instance, both caught in the same commit before
+  either shipped separately:** the classification gate alone would have
+  left the divergence visibly unresolved ("1 unexplained," matching
+  every prior instance's silent-failure shape only loosely — the
+  visible symptom here was a MISCLASSIFICATION, not silence); the bucket
+  **count line** shared the same `--annots` gate, and fixing only the
+  classification while leaving the count line gated would have produced
+  exactly `R186`'s canonical shape — a headline number ("0 unexplained")
+  that looks fixed with **nothing on screen saying where the page
+  went.** Same shape as all seven prior instances (a guard/classifier
+  correct for the case it was built against, silently not reached by the
+  adjacent case that arrives without its marker); the sub-shape worth
+  naming here is that the marker was a **CLI flag scoping an entire
+  function body**, not a type, error variant or implicit length
+  relationship — the previous seven instances' full taxonomy of marker
+  shapes gains a fourth member (enum variant name, error-variant
+  identity, implicit length relationship, now: a caller-scoped CLI
+  flag). Fixed by making both gates unconditional. Full record:
+  `ROADMAP.md`'s `Pass 88.0` *Shipped* entry (this filing), finding (a).
+  Not re-numbered, matching the third-through-seventh-instance
+  precedent. **Ceiling stays `R186`, next free `R187`.**
 
   **★ SEVENTH INSTANCE (2026-08-12, `1f7ef5901faa335efefb6b703801fe7e9eeec086`,
   hundred-and-twenty-ninth filing) — the marker is a `DimensionKind`

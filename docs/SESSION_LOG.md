@@ -43647,3 +43647,105 @@ remains open.
 4. **`Pass 85.2`'s widened scope (tiling + shading patterns) has no
    dependency on `85.0`, `85.1` or either prerequisite dispatch** — still
    pickable next, per the existing suggested build order.
+
+## 2026-08-17 (hundred-and-fifty-second filing) — **TWO COMMITS FILED: `Pass 85.3` (`/Separation`/`/DeviceN`/`Lab`/`CalGray`/`CalRGB` now decode in images, 18 images recovered) and `Pass 88.0` (an independent closed-form colour oracle proves pdfium, not pdfce, was the wrong renderer on the one remaining unexplained Ghent divergence).** `R186` gains an eighth instance; a proposed new decision record is declined as already covered; the engineer's deferred `R180` question is answered NO on both counts
+
+**Shipped:**
+- `Pass 85.3` — `1e7a0be`. Five image colour spaces
+  (`Separation`/`DeviceN`/`Lab`/`CalGray`/`CalRGB`) that were previously
+  `ImageError::UnsupportedColorSpace` now decode, delegated to the
+  existing `crate::color::ColorSpace` module rather than a second
+  implementation. 18 images recovered across 3 Ghent pages. Two defects
+  found by fixtures: `/Separation /None` was painting white (§8.6.6.4
+  says it shall never paint; now alpha 0), and `Lab`'s image decode
+  default is the component `/Range`, not `[0 1]` (Table 89). Corrected
+  scope from the commit's own message, which falsely claimed the parity
+  harness was also taught the explanation keys — it was not; that
+  landed separately in `Pass 88.0`.
+- `Pass 88.0` — `1345663`, tooling-only, no crate source touched. Built
+  an independent closed-form colour oracle (ISO 32000-1 §8.6.5.2–.4 +
+  IEC 61966-2-1, sharing no code with either renderer) and used it to
+  settle `docs/NEXT_SESSION.md`'s own standing assumption that
+  `lab.pdf`'s unexplained divergence was pdfce's own uncalibrated
+  conversion — it was pdfium's: pdfce is exact to within one 8-bit code
+  on Lab/CalGray/CalRGB (mean Δ 0.019/0.000/0.030), pdfium diverges by
+  up to 152/255. Reclassified `img_uncalibrated`/`img_colorant_none` as
+  reference-divergences. Four secondary findings, most notably (a) the
+  two explanation keys added earlier this session had never actually
+  fired — gated on `--annots`, wrong for image-triggered reasons — and
+  (d) a sabotage check on `ColorSpace::component_range`'s a/b transpose
+  passed clean until the fixture's symmetric `/Range` was replaced with
+  an asymmetric one.
+
+**Decisions made this session:** none minted. A new decision record
+("disagreement with the reference renderer is a finding, not a
+failure") was proposed by the dispatching engineer and **declined** —
+judged already covered by decision 006 §3.7 (pdfium as calibration
+target, not ground truth, for CMYK) and by the render-parity harness's
+own existing `GAP_KEYS`/reference-divergence classification machinery,
+in production use since the annotation/form-widget Passes. Ceiling
+unchanged at **065**, next free **066**.
+
+**Findings + decisions:**
+- **`R186` gains an EIGHTH instance** (`ROADMAP.md` Standing rules) —
+  `ref_reasons()`'s classification and its bucket-count line were both
+  gated on `--annots`, a marker built for one caller, silently failing
+  to cover the adjacent image-divergence case. Caught and fixed within
+  the same commit, before either half shipped separately. Sub-shape
+  worth noting: the marker here is a CLI flag scoping a whole function
+  body, a fourth member of the taxonomy of marker shapes this rule has
+  now accumulated (variant name, error-variant identity, implicit
+  length relationship, caller-scoped flag).
+- **The engineer's deferred `R180` question is answered NO, on both
+  counts.** Neither `Pass 84.0`'s twelve unread counters (already ruled
+  `R151`) nor this session's finding (a) fit `R180`'s shape (an
+  accurate disclosure that was true when written and went stale through
+  a LATER, separate improvement) — in both, the mechanism never worked
+  for the case in question; nothing that used to be true went stale.
+  Finding (a) is filed against `R186` instead. Separately: "promotable"
+  does not apply to an already-minted rule — `R180` accumulates
+  instances directly (as `R186` just did, an eighth time), and the
+  three-instance bar governs minting a NEW rule from an unnamed
+  pattern, not promoting an existing one. No new rule minted; per the
+  engineer's own instruction, not stretched to reach one.
+- **Live-ceiling reconciliation flagged, not resolved.** The engineer's
+  relayed `check-ledger-numbers.py` run reports standing rules at
+  **R192 → next free R193**, contradicting every prior filing's
+  in-ledger "next free R195 (`R193`/`R194` stay claimed)" language.
+  This filing uses the fresher relayed figure but cannot explain the
+  discrepancy — no shell available to this librarian to re-run the
+  checker or confirm whether the `R193`/`R194` proposals were formally
+  declined. Left for the engineer.
+
+**RAG graduations, this filing:**
+- `C:\personal_rag\pdf\` — two new lessons: pdfium's Lab/CalGray/CalRGB
+  image conversion diverges from closed-form ISO 32000-1 math by up to
+  152/255 (not a usable oracle for CIE-based image colour); pdfium
+  paints a `/Separation /None` image solid black, violating §8.6.6.4.
+- `D:\dev\rag\rust\` — one new lesson: a fixture whose varied parameters
+  are symmetric cannot detect a transposition of those parameters (two
+  pdfce instances: the `Pass 85.0` radial-shading root-selection
+  sabotage, and this session's Lab `/Range` a/b-swap sabotage).
+- **Declined to graduate:** `Lab`'s image decode default being the
+  component `/Range` rather than `[0,1]` — this restates ISO 32000-1
+  Table 89's own text. Canonical spec content is
+  `pdfce-spec-librarian`'s territory (hard rule 6), not filed to
+  `personal_rag/pdf`.
+
+**Still in flight:** unchanged from the hundred-and-fifty-first
+filing's own list, minus `Pass 85.3` (now shipped) — `Pass 72.0`,
+`73.0`, `73.1`, `86.0` remain HIGH PRIORITY and unstarted; `Pass 85.1`,
+`85.2`, `85.4`, `85.5` remain unstarted; `Pass 87.0` remains GUI-paused;
+`bdfd511`'s missing `ROADMAP.md` entry remains open.
+
+**For next session:**
+1. **Next free Pass family is `89`** (`88.0` used this filing). Next
+   free decision is **066**, unchanged. Next free filing ordinal is
+   **153**. Next free rule: **relayed as `R193`** this session — verify
+   independently before relying on it; see the reconciliation flag
+   above.
+2. **Reconcile the `R192`/`R193`/`R195` ceiling discrepancy** — a
+   genuine open item, not resolved by this filing.
+3. **`Pass 85.2` (pattern paint, both tiling and shading) is next in the
+   suggested Ghent build order** — two of six gap-inventory items now
+   shipped (`85.0`, `85.3`).
