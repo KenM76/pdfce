@@ -540,6 +540,18 @@ pub struct Diagnostics {
     /// definitions and their wording; this struct owns the page-level
     /// aggregation. See [`crate::color::ColorDiagnostics`].
     pub color: crate::color::ColorDiagnostics,
+    /// §8.7.4 shadings — the gradient inventory.
+    ///
+    /// Nested for the same reason `color` is: the counters are defined and
+    /// documented next to the code that increments them, and this struct
+    /// owns the page-level aggregation.
+    ///
+    /// **Every counter in it is currently a "found, not painted" census.**
+    /// The model slice resolves and classifies shadings; the geometry slice
+    /// paints them. That is worth stating here as well as there, because a
+    /// non-zero `encountered` beside a zero `painted` is otherwise easy to
+    /// read as a bug rather than as the honest report it is.
+    pub shading: crate::shading::ShadingDiagnostics,
 }
 
 impl Diagnostics {
@@ -692,6 +704,7 @@ polarity unverifiable (decision 006 R30)",
             *self.annotations_without_ap.entry(subtype).or_insert(0) += count;
         }
         self.color.merge(other.color);
+        self.shading.merge(other.shading);
         for s in other.annotation_notes {
             push_sample(&mut self.annotation_notes, &s);
         }
@@ -1575,8 +1588,20 @@ impl Interpreter<'_> {
             }
             b"EMC" => self.end_marked_content(),
 
+            // `sh` — paint a shading directly in current user space
+            // (§8.7.4.2, Table 77). The MODEL is resolved here and nothing
+            // is painted yet; see `crate::shading`'s module docs for why a
+            // non-painting slice ships on its own.
+            //
+            // It is lifted out of the deferred group below because
+            // "deferred=52, names BDC/sh/BMC" cannot answer how many
+            // gradients a page has, of which types, or whether the next
+            // slice will fix it. Resolving the dictionary answers all
+            // three, and costs one dictionary walk per `sh`.
+            b"sh" => self.shading_operator(op),
+
             // ---- recognized, deferred to later slices ----
-            b"sh" | b"MP" | b"DP" | b"d0" | b"d1" => {
+            b"MP" | b"DP" | b"d0" | b"d1" => {
                 self.diag.deferred_ops += 1;
                 self.diag.note(name);
             }
@@ -2199,6 +2224,86 @@ impl Interpreter<'_> {
                 self.diag.tolerated += 1;
                 self.diag.note(b"EMC(without a matching BMC/BDC)");
             }
+        }
+    }
+
+    /// `sh` — paint a shading directly in current user space
+    /// (ISO 32000-1 §8.7.4.2, Table 77).
+    ///
+    /// # What this does today: resolve and report, do not paint
+    ///
+    /// The shading MODEL is built (`crate::shading::Shading::load`) and
+    /// classified; nothing reaches the pixmap. The geometry that would
+    /// turn a device point into a parametric coordinate — §8.7.4.5, ISO
+    /// 32000-1 Tables 79–84 — is in the spec corpus for the analytic types
+    /// (1, 2, 3) and **not** for the meshes (4–7), so the painting slice
+    /// is scoped to the former. Project rule 1 forbids writing the rest
+    /// from recall. `crate::shading`'s module docs carry the full
+    /// rationale for shipping the model without the paint.
+    ///
+    /// # Why resolving is worth doing before painting can
+    ///
+    /// This operator was previously grouped with `MP`/`DP`/`d0`/`d1` as
+    /// "recognized, deferred", which produced exactly one fact —
+    /// `deferred=52, first names BDC, sh, BMC` — and that fact cannot
+    /// distinguish an axial gradient pdfce is about to be able to draw
+    /// from a type 7 tensor-patch mesh that is a much larger job. Walking
+    /// the dictionary answers it, and the cost is one lookup per `sh`.
+    ///
+    /// # The anchoring note, recorded where the mistake would be made
+    ///
+    /// When this does paint, it paints in **current user space** — the CTM
+    /// in effect right here — and it fills the **current clip region**,
+    /// not a path. That is the opposite of a `PatternType 2` fill, whose
+    /// coordinates are pattern space and therefore immune to a `cm` in
+    /// this stream (§8.7.2 NOTE 1). Table 77 states the contrast itself,
+    /// and also that this route **ignores `/Background`**. The route is
+    /// carried into the model as [`crate::shading::PaintRoute::ShOperator`]
+    /// rather than assumed at the paint site.
+    fn shading_operator(&mut self, op: &Operation<'_>) {
+        let doc = self.doc;
+        let resources = self.resources;
+
+        self.diag
+            .shading
+            .reached(crate::shading::PaintRoute::ShOperator);
+
+        let Some(name) = last_name(op) else {
+            self.diag.shading.refused += 1;
+            self.diag.tolerated += 1;
+            self.diag.note(b"sh(no shading name operand)");
+            return;
+        };
+        let entry = resources
+            .get(b"Shading")
+            .map(|o| doc.resolve(o))
+            .and_then(Object::as_dict)
+            .and_then(|shadings| shadings.get(&name));
+        let Some(entry) = entry else {
+            self.diag.shading.refused += 1;
+            self.diag.tolerated += 1;
+            self.diag.note(b"sh(missing Shading resource)");
+            return;
+        };
+
+        let intent = self.policy.cmyk_intent;
+        let shading = crate::shading::Shading::load(
+            doc,
+            entry,
+            resources,
+            intent,
+            &mut self.diag.color,
+            &mut self.diag.shading,
+        );
+        if let Some(shading) = shading
+            && shading.is_paintable()
+        {
+            // Counted, not painted. The gap between `paintable` and
+            // `painted` IS the disclosure: it says "pdfce understood this
+            // gradient completely and still drew nothing", which is a
+            // different operator situation from a shading it could not
+            // parse, and the two must not collapse into one number.
+            self.diag.shading.paintable += 1;
         }
     }
 

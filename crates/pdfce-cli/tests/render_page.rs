@@ -410,6 +410,24 @@ fn renders_a_single_page_to_png_with_the_stable_stdout_line() {
             "patterns_unpainted",
             "indexed_clamped",
             "indexed_short",
+            // §8.7.4 shadings, appended 2026-08-17 in the SAME change that
+            // added the counters — which is the whole point. The colour
+            // block directly above spent months computed-and-unread
+            // because adding a counter and adding its shell surface were
+            // treated as two separate changes. They are one.
+            //
+            // `shadings` beside `shadings_painted` is the pair that
+            // matters while the geometry slice is outstanding: non-zero
+            // left, zero right, is pdfce saying it found the gradients,
+            // understood them, and drew none. When the geometry lands the
+            // right number moves and nothing else here changes — so this
+            // test can watch the feature arrive rather than be told.
+            "shadings",
+            "shadings_via_sh",
+            "shadings_paintable",
+            "shadings_painted",
+            "shadings_refused",
+            "shadings_mesh",
         ],
         "metrics key order is part of the stable contract"
     );
@@ -1214,5 +1232,240 @@ initial colour and once for `scn`: {line:?}"
     assert!(
         !err.contains("hue is not the document's"),
         "a working transform must not be reported as a hue substitution: {err:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// §8.7.4 shadings — the gradient inventory reaching a shell
+// ---------------------------------------------------------------------------
+
+/// A page carrying three shadings reached by the `sh` operator: one axial
+/// (`ShadingType 2`), one radial (`ShadingType 3`) and one tensor-product
+/// mesh (`ShadingType 7`).
+///
+/// # Why all three types in one fixture
+///
+/// The counter that matters is not "how many shadings" but **the split**:
+/// an operator asking "will an update fix my file?" is asking whether the
+/// shadings on it are analytic or mesh, and those are answered by
+/// different amounts of engineering. A fixture with only axial shadings
+/// would let `shadings_mesh` be hard-wired to zero and still pass.
+///
+/// The mesh is a **stream**, not a dictionary — types 4-7 carry their
+/// geometry in stream data — which also exercises the branch in
+/// `Shading::load` that reads Table 78's entries out of a stream's
+/// dictionary rather than a bare dictionary.
+fn three_shadings_pdf() -> Vec<u8> {
+    // The ShadingType 7 vertex data is deliberately minimal and is NOT
+    // decoded by this slice — the assertion is that pdfce classifies it as
+    // a mesh and declines it by name, not that it reads the patch.
+    let mesh_body = "AB";
+    build_pdf(&[
+        (1, "<< /Type /Catalog /Pages 2 0 R >>".into()),
+        (
+            2,
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 200 100] >>".into(),
+        ),
+        (
+            3,
+            "<< /Type /Page /Parent 2 0 R /Contents 4 0 R /Resources \
+             << /Shading << /Ax 5 0 R /Rad 6 0 R /Mesh 7 0 R >> >> >>"
+                .into(),
+        ),
+        (4, {
+            // `q`/`Q` around each, the way a real producer writes it: `sh`
+            // paints in CURRENT user space, so its anchoring is whatever
+            // the CTM is at that moment.
+            let content = "q /Ax sh Q q /Rad sh Q q /Mesh sh Q";
+            format!(
+                "<< /Length {} >>\nstream\n{content}\nendstream",
+                content.len()
+            )
+        }),
+        // ShadingType 2, axial — ISO 32000-1 Table 80 (NOT 79; the family
+        // is 78 common / 79 type-1 / 80 type-2 / 81 type-3, off by one
+        // from the intuitive guess, and wrong in this crate's own doc
+        // comments until the spec corpus was consulted).
+        (
+            5,
+            "<< /ShadingType 2 /ColorSpace /DeviceRGB /Coords [0 0 200 0] \
+             /Extend [true true] /Function << /FunctionType 2 /Domain [0 1] \
+             /C0 [1 0 0] /C1 [0 0 1] /N 1 >> >>"
+                .into(),
+        ),
+        // ShadingType 3, radial — Table 81. BOTH radii non-zero, which is
+        // exactly the case `tiny_skia::RadialGradient` cannot express (it
+        // has no start radius) and the reason pdfce will evaluate shadings
+        // itself rather than delegate.
+        (
+            6,
+            "<< /ShadingType 3 /ColorSpace /DeviceRGB /Coords [100 50 10 100 50 40] \
+             /Function << /FunctionType 2 /Domain [0 1] /C0 [1 1 0] /C1 [0 1 1] /N 1 >> >>"
+                .into(),
+        ),
+        (
+            7,
+            format!(
+                "<< /ShadingType 7 /ColorSpace /DeviceRGB /BitsPerCoordinate 16 \
+                 /BitsPerComponent 8 /BitsPerFlag 8 /Decode [0 200 0 100 0 1 0 1 0 1] \
+                 /Length {} >>\nstream\n{mesh_body}\nendstream",
+                mesh_body.len()
+            ),
+        ),
+    ])
+}
+
+#[test]
+fn shadings_are_inventoried_by_type_and_reported_as_unpainted() {
+    let dir = TempDir::new("shading");
+    let pdf = dir.write("grad.pdf", &three_shadings_pdf());
+    let png = dir.join("out.png");
+
+    let out = run(&[
+        "render-page",
+        pdf.to_str().unwrap(),
+        "-o",
+        png.to_str().unwrap(),
+    ]);
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+
+    let line = stdout(&out);
+    assert!(
+        line.contains(" shadings=3 "),
+        "all three shadings must be counted: {line:?}"
+    );
+    assert!(
+        line.contains(" shadings_via_sh=3 "),
+        "all three arrived by the `sh` operator: {line:?}"
+    );
+    // The split that answers "will an update fix my file?".
+    assert!(
+        line.contains(" shadings_paintable=2 "),
+        "the axial and radial are paintable once geometry lands; the mesh is not: {line:?}"
+    );
+    // No trailing space: `shadings_mesh` is currently the LAST key on the
+    // line, so it is followed by the newline. Asserted with a leading
+    // space only, which stays correct when a future slice appends a key
+    // after it — the append-never-reorder contract guarantees the leading
+    // space, never the trailing one.
+    assert!(
+        line.contains(" shadings_mesh=1"),
+        "the type 7 must be counted as a mesh: {line:?}"
+    );
+    assert!(
+        line.contains(" shadings_refused=0 "),
+        "three well-formed shadings must not be refused: {line:?}"
+    );
+
+    // The load-bearing assertion of this whole slice. Zero painted, and it
+    // MUST stay asserted rather than dropped as obvious: when the geometry
+    // slice lands, this line is what fails, and a failing test is how the
+    // feature announces its own arrival. A test that omitted it would let
+    // painting ship while the claim that nothing paints went stale.
+    assert!(
+        line.contains(" shadings_painted=0 "),
+        "this slice resolves shadings and paints none of them: {line:?}"
+    );
+
+    let err = stderr(&out);
+    // The prose half has to state the CONSEQUENCE. "3 shadings found" on
+    // its own reads like a success line; what an operator needs to know is
+    // that the page in front of them is missing them.
+    assert!(
+        err.contains("type2=1") && err.contains("type3=1") && err.contains("type7=1"),
+        "stderr must break the inventory down by ShadingType: {err:?}"
+    );
+    assert!(
+        err.contains("0 PAINTED"),
+        "stderr must say plainly that none were drawn: {err:?}"
+    );
+    assert!(
+        err.contains("MESH shadings"),
+        "the mesh types deserve their own sentence — they are a different wait: {err:?}"
+    );
+}
+
+#[test]
+fn a_malformed_shading_is_refused_by_name_and_not_counted_as_paintable() {
+    // The distinction this guards: `refused` means the DOCUMENT is broken
+    // and no amount of pdfce engineering will draw it, while `paintable=0`
+    // with `refused=0` means pdfce simply has not got there yet. Collapsing
+    // the two would tell an operator with a corrupt file to wait for an
+    // update that cannot help them.
+    let dir = TempDir::new("shadbad");
+    let pdf = dir.write(
+        "bad.pdf",
+        &build_pdf(&[
+            (1, "<< /Type /Catalog /Pages 2 0 R >>".into()),
+            (
+                2,
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 200 100] >>".into(),
+            ),
+            (
+                3,
+                "<< /Type /Page /Parent 2 0 R /Contents 4 0 R /Resources \
+                 << /Shading << /Short 5 0 R /NoCs 6 0 R >> >> >>"
+                    .into(),
+            ),
+            (4, {
+                let content = "/Short sh /NoCs sh";
+                format!(
+                    "<< /Length {} >>\nstream\n{content}\nendstream",
+                    content.len()
+                )
+            }),
+            // An axial shading with three /Coords instead of four. NOT
+            // repaired: a missing fourth number is a geometry pdfce cannot
+            // know, and inventing it would paint a plausible wrong
+            // gradient — the failure mode that is worst to debug.
+            (
+                5,
+                "<< /ShadingType 2 /ColorSpace /DeviceRGB /Coords [0 0 200] \
+                 /Function << /FunctionType 2 /Domain [0 1] /C0 [0] /C1 [1] /N 1 >> >>"
+                    .into(),
+            ),
+            // No /ColorSpace at all, which Table 78 requires.
+            (
+                6,
+                "<< /ShadingType 2 /Coords [0 0 200 0] \
+                 /Function << /FunctionType 2 /Domain [0 1] /C0 [0] /C1 [1] /N 1 >> >>"
+                    .into(),
+            ),
+        ]),
+    );
+    let png = dir.join("out.png");
+
+    let out = run(&[
+        "render-page",
+        pdf.to_str().unwrap(),
+        "-o",
+        png.to_str().unwrap(),
+    ]);
+    assert_eq!(code(&out), 0, "a malformed shading is not a fatal error");
+
+    let line = stdout(&out);
+    assert!(
+        line.contains(" shadings=2 "),
+        "both were REACHED, even though neither loaded — otherwise a page \
+whose every shading is broken reports the same zero as a page with no \
+gradients at all: {line:?}"
+    );
+    assert!(
+        line.contains(" shadings_refused=2 "),
+        "both must be refused by name: {line:?}"
+    );
+    assert!(
+        line.contains(" shadings_paintable=0 "),
+        "a refused shading is never paintable: {line:?}"
+    );
+
+    let err = stderr(&out);
+    assert!(
+        err.contains("REFUSED"),
+        "stderr must name the refusal: {err:?}"
+    );
+    assert!(
+        err.contains("the file is malformed"),
+        "stderr must distinguish a broken file from a pending feature: {err:?}"
     );
 }

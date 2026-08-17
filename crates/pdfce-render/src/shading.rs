@@ -1,0 +1,912 @@
+//! # Shadings — gradient fills (ISO 32000-1 §8.7.4)
+//!
+//! The model behind the `sh` operator (§8.7.4.2, Table 77) and behind a
+//! `PatternType 2` shading pattern (§8.7.4.1, Table 76). Spec sources, all
+//! in the PDF-spec RAG at `D:\Dev\Rag-Specialized\PDF_Spec\`:
+//!
+//! | Clause | RAG file | What it governs here |
+//! |---|---|---|
+//! | §8.7.2, §8.7.4.1–.2, Table 76/77/78 | `iso32000__s__8.7.md` | pattern space, the `sh` operator, the entries common to every shading dictionary |
+//! | §7.10 | `iso32000__s__7.10.md` | the `/Function` evaluator |
+//! | §8.6 | `iso32000__s__8.6.md` | `/ColorSpace` |
+//!
+//! ## What this slice does, and what it deliberately does not
+//!
+//! **It does not paint.** This slice builds the *model*: it resolves a
+//! shading dictionary, classifies it, loads its colour space and its
+//! function, pre-samples the colour ramp, and **reports precisely what it
+//! found**. Painting lands in the next slice.
+//!
+//! The geometry it needs — §8.7.4.5, ISO 32000-1 Tables 79–84 — is now in
+//! the corpus **for the analytic types only**
+//! (`iso32000__s__8.7.4.5__analytic.md`, covering types 1, 2 and 3). The
+//! **mesh** stream encodings (types 4–7, Tables 82–84) are still not
+//! ingested, and the corpus index carries an explicit "do not answer from
+//! recall" marker for them. Project rule 1: spec-governed geometry is not
+//! written from training-data recall.
+//!
+//! ### Three things the corpus corrected that this module had wrong
+//!
+//! Recorded rather than silently fixed, because each is a mistake a
+//! reasonable reader would make again.
+//!
+//! 1. **The table numbers are off by one from the obvious guess.** See
+//!    [`Geometry`].
+//! 2. **There is no quadratic in the radial clause.** A whole-document
+//!    search for "quadratic" and "discriminant" returns **zero hits in
+//!    both editions**. §8.7.4.5.4 specifies a *painting process* — paint
+//!    every blend circle in order of increasing parameter, opaquely, so a
+//!    point covered by several takes the colour of the last one painted,
+//!    "corresponding to the greatest value of s". The familiar quadratic
+//!    is an implementer's inversion of that process and **must not be
+//!    written with a §8.7.4.5.4 citation beside it**: the clause supports
+//!    the greatest-parameter rule, not the algebra.
+//! 3. **The axial parameter is `x′`, not `s`.** `s` is the *radial*
+//!    clause's variable. There is no `y′` at all, because an axial shading
+//!    is constant perpendicular to its axis.
+//!
+//! ### Two ambiguities the painting slice inherits
+//!
+//! - **A zero-length axial axis.** ISO 32000-1 is **silent** (the
+//!   projection's denominator is zero); ISO 32000-2's Table 79 **adds
+//!   "nothing shall be painted."** pdfce paints nothing at every version —
+//!   a later edition resolving an earlier silence is a forced default, not
+//!   a free choice, so this is not a settings-register candidate.
+//! - **Radial extension has no stopping rule of its own.** Extension at
+//!   the larger end is bounded by `/BBox`, and `/BBox` is **optional**.
+//!   That makes an unbounded extended radial a **hang risk**, not merely a
+//!   wrong render, and the painting slice must bound it by the clip extent
+//!   rather than trust the dictionary.
+//!
+//! ### Why a non-painting slice is worth shipping on its own
+//!
+//! Before it, a page full of gradients reported this and nothing else:
+//!
+//! ```text
+//! deferred=52 … first distinct names: BDC, sh, BMC
+//! ```
+//!
+//! An anonymous count. It cannot answer "how many gradients?", "which
+//! types?", "would the next slice fix this page?" — and it cannot
+//! distinguish a shading pdfce will soon paint from a type 7 tensor-patch
+//! mesh that is a much larger piece of work. After it, the same page
+//! reports the shadings by type, by colour space, and by whether the model
+//! loaded at all. That is the inventory the next slice is scoped from, and
+//! it is the disclosure project rule 4 asks for in the meantime: *nothing
+//! was painted here, and here is exactly what it was*.
+//!
+//! ## The two paint routes anchor differently — the thing most easily got wrong
+//!
+//! The same shading dictionary reaches the page two ways, and they use
+//! **opposite** coordinate spaces. From `iso32000__s__8.7.md`:
+//!
+//! - **PM7** (§8.7.4.2 + Table 77): `sh` "applies the corresponding
+//!   gradient fill directly to current user space", and "All coordinates in
+//!   the shading dictionary are interpreted relative to the **current user
+//!   space**." So `sh` is **CTM-relative**: a `cm` before it moves the
+//!   gradient.
+//! - **PM2/PM3** (§8.7.2 + NOTE 1): a pattern's `/Matrix` maps pattern
+//!   space to "the **default (initial)** coordinate space of the page", and
+//!   "Changes to the page's transformation matrix that occur within the
+//!   page's content stream, such as rotation and scaling, **have no effect
+//!   on the pattern**." So a `PatternType 2` fill is **base-CTM-relative**:
+//!   a `cm` before it does *not* move the gradient.
+//!
+//! The standard states the contrast itself, in one parenthesis in Table 77.
+//! Two more behavioural differences follow the same split and are recorded
+//! on [`Shading::background`] and in [`PaintRoute`].
+//!
+//! ## Why pdfce will evaluate shadings itself rather than use `tiny_skia`'s gradients
+//!
+//! Recorded here because it shapes the next slice and is not obvious.
+//!
+//! `tiny_skia::LinearGradient` is a faithful two-point model and would map
+//! cleanly onto an axial shading. **`tiny_skia::RadialGradient` cannot
+//! express a PDF radial shading in the general case**: its constructor
+//! takes *one* radius, and its source says in terms *"Unlike Skia, we have
+//! only the Focal radial gradient type"* — i.e. the start radius is fixed at
+//! **0**. §8.7.4.5.4's `/Coords` is `[x0 y0 r0 x1 y1 r1]` with **both radii
+//! free**, and the two configurations the clause describes routinely have
+//! `r0 > 0`.
+//!
+//! The failure that would cause is silent and plausible: passing `r1` and
+//! dropping `r0` renders *a* gradient, with the ramp starting at the centre
+//! instead of at the inner circle. No error, no `None`.
+//!
+//! Neither does any `SpreadMode` express `/Extend [false false]`, which
+//! means **nothing is painted** beyond the ends — `Pad` replicates the edge
+//! colour instead.
+//!
+//! Using the crate for the cases it covers and hand-rolling the rest would
+//! leave **two code paths for one feature**, exercised on different files,
+//! and the one that runs less often is the one that rots. So: one path,
+//! pdfce's own, uniform across types 1–3 and extensible to 4–7. The cost is
+//! a per-pixel evaluation, and [`ColorRamp`] is what makes that cheap —
+//! see its docs. Full write-up in
+//! `D:\dev\rag\rust\tiny_skia_radial_gradient_has_no_start_radius.md`.
+
+use std::sync::Arc;
+
+use pdfce_core::function::PdfFunction;
+use pdfce_core::graph::ObjectGraph;
+use pdfce_core::object::{Dict, Object};
+use pdfce_core::settings::CmykIntent;
+use pdfce_core::view::DocumentView;
+
+use crate::color::{ColorDiagnostics, ColorSpace};
+use crate::gstate::Rgb;
+
+/// Entries in the pre-sampled colour ramp ([`ColorRamp`]).
+///
+/// # Why 256, and why a constant rather than a knob
+///
+/// §10.6.3 gives a renderer explicit latitude over subdivision granularity
+/// (the `/SM` smoothness tolerance bounds the *error*, not the method), so
+/// sampling the `/Function` into a table and interpolating between samples
+/// is a sanctioned implementation, not a corner cut.
+///
+/// 256 is chosen because it is the point past which a further doubling
+/// cannot change an 8-bit-per-channel output for a monotone ramp: the
+/// destination is a `tiny_skia::Pixmap` with 8 bits per channel, so ramp
+/// steps finer than 1/256 of the domain cannot produce a distinguishable
+/// pixel. A knob would therefore expose a setting whose upper half has no
+/// observable effect, which `docs/ARCHITECTURE.md`'s settings discipline
+/// treats as worse than no knob.
+///
+/// It is **not** a fidelity ceiling for non-monotone functions — a type 4
+/// PostScript calculator function can oscillate faster than the sample
+/// rate, and such a ramp is undersampled here. That is disclosed
+/// ([`ShadingDiagnostics::ramps_sampled`] counts every ramp built) rather
+/// than silently assumed away, and the honest fix if it ever matters is
+/// adaptive sampling, not a bigger constant.
+pub const RAMP_SAMPLES: usize = 256;
+
+/// Guard on `/Function` outputs, to bound a malformed file's cost.
+///
+/// A shading's function feeds a colour space, and no colour space pdfce
+/// resolves has more than a handful of components (`DeviceN` is the widest
+/// realistic case). A file declaring thousands would otherwise make ramp
+/// construction allocate proportionally.
+const MAX_FUNCTION_OUTPUTS: usize = 32;
+
+/// Which of the two paint routes a shading arrived by (§8.7.4.2 Table 77
+/// versus §8.7.4.1 Table 76).
+///
+/// This is not cosmetic bookkeeping: the route decides the **coordinate
+/// space** the shading's own geometry is expressed in, and it changes two
+/// further behaviours. Carrying it as a type rather than a `bool` is
+/// deliberate — a `bool` at a call site reads as "is_pattern", and the
+/// three consequences below are not derivable from that name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PaintRoute {
+    /// The `sh` operator (§8.7.4.2, Table 77).
+    ///
+    /// - Coordinates are **current user space** — the CTM in effect when
+    ///   `sh` executes. PM7.
+    /// - `/Background` **is ignored**: "The `Background` entry, if present,
+    ///   is ignored." (Table 77.)
+    /// - The paint area is the **current clip region**, not a path: `sh`
+    ///   "works without reference to the current colour in the graphics
+    ///   state" and takes no path. §8.7.4.2 adds a `should` that it "be
+    ///   applied only to bounded or geometrically defined shadings" —
+    ///   on an unbounded one it fills the whole clip.
+    ShOperator,
+    /// A `PatternType 2` shading pattern named by `scn`/`SCN`
+    /// (§8.7.4.1, Table 76).
+    ///
+    /// - Coordinates are **pattern space**: the pattern dictionary's own
+    ///   `/Matrix` maps them to the *default* coordinate space of the
+    ///   parent content stream, **not** the CTM at paint time. PM2/PM3.
+    /// - `/Background` **applies** (Table 78: "applied only when the
+    ///   shading is used as part of a shading pattern").
+    /// - The paint area is the **path being filled or stroked**.
+    /// - It does **not tile** (§8.7.4.2 NOTE) — a gradient inside a tiling
+    ///   pattern is a `sh` invoked from a `PatternType 1` content stream,
+    ///   which is a different structure entirely.
+    ShadingPattern,
+}
+
+impl PaintRoute {
+    /// Whether `/Background` (Table 78) is honoured on this route.
+    ///
+    /// Exists so the difference is asserted in one place rather than
+    /// re-derived at each use, and so the Table 77 / Table 78 pair that
+    /// establishes it is cited once.
+    #[must_use]
+    pub const fn honours_background(self) -> bool {
+        matches!(self, Self::ShadingPattern)
+    }
+}
+
+/// A shading's geometry — the `ShadingType`-specific half of its
+/// dictionary (§8.7.4.5).
+///
+/// # Why the variants carry no evaluator yet
+///
+/// # ★ The table numbers, because they are off-by-one from the obvious guess
+///
+/// ISO 32000-1 numbers this family **78 common / 79 type 1 / 80 type 2 /
+/// 81 type 3**, with the meshes at 82–84. The intuitive reading — "axial
+/// is Table 79 because axial is the first interesting one" — is wrong by
+/// one all the way down, and every citation in this module carried that
+/// error until the spec corpus was consulted. **ISO 32000-2 renumbers the
+/// whole family again** (77/78/79/80, with `sh` at Table 76); citations
+/// here are to ISO 32000-1, and `iso32000__s__8.7.4.5__analytic.md` opens
+/// with the edition-mapping table.
+///
+/// The mesh stream encodings (Tables 82–84) are still not in the corpus;
+/// the analytic types now are. The raw dictionary values are
+/// captured here because *parsing* them is governed by Table 78 and the
+/// per-type tables' entry lists, which are settled — it is only their
+/// **semantics** that this slice declines to guess at.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Geometry {
+    /// `ShadingType 1` — function-based (§8.7.4.5.2, **Table 79**).
+    FunctionBased {
+        /// `/Domain`, default `[0 1 0 1]`.
+        domain: [f32; 4],
+        /// `/Matrix`, default identity — the domain-to-target mapping.
+        /// Stored as the raw six numbers rather than a `tiny_skia::
+        /// Transform` because it composes with the route's own matrix and
+        /// converting twice invites a transposition bug.
+        matrix: [f32; 6],
+    },
+    /// `ShadingType 2` — axial (§8.7.4.5.3, **Table 80**).
+    Axial {
+        /// `/Coords` — `[x0 y0 x1 y1]`, the axis endpoints. Required.
+        coords: [f32; 4],
+        /// `/Domain`, default `[0 1]`.
+        domain: [f32; 2],
+        /// `/Extend`, default `[false false]`.
+        extend: [bool; 2],
+    },
+    /// `ShadingType 3` — radial (§8.7.4.5.4, **Table 81**).
+    Radial {
+        /// `/Coords` — `[x0 y0 r0 x1 y1 r1]`, two circles. Required.
+        ///
+        /// **Both radii are free.** See the module docs for why this rules
+        /// out `tiny_skia::RadialGradient`.
+        coords: [f32; 6],
+        /// `/Domain`, default `[0 1]`.
+        domain: [f32; 2],
+        /// `/Extend`, default `[false false]`.
+        extend: [bool; 2],
+    },
+    /// `ShadingType` 4, 5, 6 or 7 — a mesh shading whose geometry lives in
+    /// a **stream**, not in the dictionary (§8.7.4.5.5–.8).
+    ///
+    /// Recognised and named, never approximated. These are a materially
+    /// larger piece of work than types 1–3 — a bit-packed vertex stream
+    /// with `/BitsPerCoordinate`, `/BitsPerComponent`, `/BitsPerFlag` and
+    /// a `/Decode` array, plus Coons and tensor patch surfaces — and
+    /// keeping them a distinct variant is what lets the inventory say how
+    /// much of a corpus actually needs them before that work is scoped.
+    Mesh {
+        /// 4, 5, 6 or 7.
+        shading_type: u8,
+    },
+}
+
+impl Geometry {
+    /// The `ShadingType` number this geometry came from (Table 78).
+    #[must_use]
+    pub const fn shading_type(&self) -> u8 {
+        match self {
+            Self::FunctionBased { .. } => 1,
+            Self::Axial { .. } => 2,
+            Self::Radial { .. } => 3,
+            Self::Mesh { shading_type } => *shading_type,
+        }
+    }
+
+    /// Whether pdfce's *painting* slice is expected to handle this type.
+    ///
+    /// Separate from "did the model load", which is [`Shading`]'s business.
+    /// A type 7 mesh can parse perfectly and still not be paintable, and an
+    /// operator asking "will an update fix my file?" is asking this
+    /// question, not that one.
+    #[must_use]
+    pub const fn is_analytic(&self) -> bool {
+        matches!(
+            self,
+            Self::FunctionBased { .. } | Self::Axial { .. } | Self::Radial { .. }
+        )
+    }
+}
+
+/// A shading's `/Function` entry, in either of the two shapes §8.7.4.4
+/// permits.
+///
+/// > The `/Function` entry accepts either a single function with *n*
+/// > outputs, or an array of *n* functions each with one output, and the
+/// > two forms are equivalent.
+///
+/// Modelled as one type with two variants rather than normalised to one
+/// shape at parse time, because the arity mismatch a malformed file
+/// produces is different in each case and pdfce reports which.
+#[derive(Debug, Clone)]
+pub enum ShadingFunction {
+    /// One function, *n* outputs.
+    Single(Arc<PdfFunction>),
+    /// *n* functions, one output each, in colour-component order.
+    PerComponent(Vec<Arc<PdfFunction>>),
+}
+
+impl ShadingFunction {
+    /// How many colour components this function set produces.
+    #[must_use]
+    pub fn outputs(&self) -> usize {
+        match self {
+            Self::Single(f) => f.outputs(),
+            Self::PerComponent(fs) => fs.len(),
+        }
+    }
+
+    /// Evaluate at parametric coordinate(s), appending components to `out`.
+    ///
+    /// Returns `false` if any constituent function failed, leaving `out` in
+    /// an unspecified but safe state — the caller treats a failure as "this
+    /// ramp entry has no colour" rather than substituting one.
+    fn eval(&self, inputs: &[f64], out: &mut Vec<f64>) -> bool {
+        out.clear();
+        match self {
+            Self::Single(f) => f.eval_into(inputs, out).is_ok(),
+            Self::PerComponent(fs) => {
+                let mut scratch = Vec::new();
+                for f in fs {
+                    if f.eval_into(inputs, &mut scratch).is_err() {
+                        return false;
+                    }
+                    // Each is declared 1-out; take the first and tolerate a
+                    // wider one rather than refusing, since a producer
+                    // emitting a 3-out function in an n-function array is
+                    // malformed in a way that is still unambiguous.
+                    match scratch.first() {
+                        Some(v) => out.push(*v),
+                        None => return false,
+                    }
+                }
+                true
+            }
+        }
+    }
+}
+
+/// A colour ramp pre-sampled from a shading's `/Function` over its
+/// parametric domain.
+///
+/// # Why pre-sample rather than evaluate per pixel
+///
+/// A `/Function` evaluation is not cheap — a type 0 sampled function
+/// interpolates a stream, and a type 4 runs a PostScript calculator. A
+/// full-page gradient at 150 DPI is millions of pixels, and evaluating per
+/// pixel would run the calculator millions of times to produce at most 256
+/// distinguishable 8-bit values.
+///
+/// Sampling once into [`RAMP_SAMPLES`] entries turns the inner loop into
+/// arithmetic plus an index. §10.6.3's smoothness tolerance is what makes
+/// this a sanctioned implementation rather than an approximation pdfce
+/// invented — see [`RAMP_SAMPLES`].
+///
+/// **The colour-space conversion is baked in too.** Each entry is already
+/// sRGB, so the per-pixel path never touches [`ColorSpace::to_rgb`] — which
+/// matters most for the spaces that are expensive per call: a `Separation`
+/// or `DeviceN` ramp runs its `/tintTransform` 256 times instead of once
+/// per pixel.
+#[derive(Debug, Clone)]
+pub struct ColorRamp {
+    /// [`RAMP_SAMPLES`] colours, evenly spaced across the parametric
+    /// domain. An entry is `None` where the function or the colour-space
+    /// conversion failed at that sample — recorded rather than filled in,
+    /// so a partially-broken function does not silently gain invented
+    /// colours at the broken end.
+    samples: Vec<Option<Rgb>>,
+    /// The domain the samples span, `[t0, t1]`, as taken from the
+    /// shading's own `/Domain`.
+    domain: [f32; 2],
+}
+
+impl ColorRamp {
+    /// Build a ramp by sampling `function` across `domain` and converting
+    /// each result through `space`.
+    ///
+    /// The parametric input is mapped `t = t0 + (t1 - t0) * i/(N-1)`, so
+    /// both endpoints are sampled exactly — which is what makes a
+    /// two-stop gradient reproduce its declared end colours rather than
+    /// values half a step inside them.
+    #[must_use]
+    pub fn build(
+        function: &ShadingFunction,
+        domain: [f32; 2],
+        space: &ColorSpace,
+        intent: CmykIntent,
+        diag: &mut ColorDiagnostics,
+    ) -> Self {
+        let mut samples = Vec::with_capacity(RAMP_SAMPLES);
+        let mut raw = Vec::new();
+        let mut comps: Vec<f32> = Vec::new();
+        let span = f64::from(domain[1] - domain[0]);
+        for i in 0..RAMP_SAMPLES {
+            #[allow(clippy::cast_precision_loss)]
+            let frac = i as f64 / (RAMP_SAMPLES - 1) as f64;
+            let t = f64::from(domain[0]) + span * frac;
+            if !function.eval(&[t], &mut raw) {
+                samples.push(None);
+                continue;
+            }
+            comps.clear();
+            #[allow(clippy::cast_possible_truncation)]
+            comps.extend(raw.iter().map(|v| *v as f32));
+            samples.push(space.to_rgb(&comps, intent, diag));
+        }
+        Self { samples, domain }
+    }
+
+    /// The colour at parametric coordinate `t`, or `None` where the
+    /// function did not evaluate there.
+    ///
+    /// `t` outside `domain` is **clamped to the nearest end**. That is the
+    /// ramp's own contract and is not a statement about `/Extend`:
+    /// whether anything is painted beyond a shading's ends is a geometry
+    /// question decided before this is called. Clamping here only ensures
+    /// that when the geometry *does* ask for an out-of-domain colour, it
+    /// gets the end colour rather than an index panic.
+    #[must_use]
+    pub fn at(&self, t: f32) -> Option<Rgb> {
+        let [t0, t1] = self.domain;
+        let span = t1 - t0;
+        let frac = if span.abs() < f32::EPSILON {
+            0.0
+        } else {
+            ((t - t0) / span).clamp(0.0, 1.0)
+        };
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let idx = (frac * (RAMP_SAMPLES - 1) as f32).round() as usize;
+        self.samples.get(idx).copied().flatten()
+    }
+
+    /// Whether every sample produced a colour.
+    ///
+    /// A ramp with holes still paints — the holes simply paint nothing —
+    /// but it is a shortfall an operator should be told about, so the
+    /// inventory reports it.
+    #[must_use]
+    pub fn is_complete(&self) -> bool {
+        self.samples.iter().all(Option::is_some)
+    }
+}
+
+/// A resolved shading dictionary (§8.7.4.3, Table 78) plus its geometry.
+#[derive(Debug, Clone)]
+pub struct Shading {
+    /// The `ShadingType`-specific half.
+    pub geometry: Geometry,
+    /// `/ColorSpace` — required by Table 78.
+    ///
+    /// §8.7.4.4 forbids this being a `Pattern` space. A file that does it
+    /// anyway is refused rather than painted, because a pattern-within-a-
+    /// shading has no defined colour at a parametric coordinate.
+    pub color_space: Arc<ColorSpace>,
+    /// `/Function` — optional in Table 78 (types 4–7 may carry colour per
+    /// vertex instead), required in practice for types 1–3.
+    pub function: Option<ShadingFunction>,
+    /// The pre-sampled ramp, when there is a function and a domain to
+    /// sample it over. `None` for a mesh shading with per-vertex colour.
+    pub ramp: Option<ColorRamp>,
+    /// `/Background`, in `color_space`'s components.
+    ///
+    /// **Honoured only on the [`PaintRoute::ShadingPattern`] route** —
+    /// Table 77 says `sh` ignores it. Stored regardless of route so the
+    /// model is a faithful reading of the dictionary and the route
+    /// decision stays at the paint site.
+    pub background: Option<Vec<f32>>,
+    /// `/BBox`, in the shading's own target coordinate space.
+    pub bbox: Option<[f32; 4]>,
+    /// `/AntiAlias`, default `false`.
+    pub anti_alias: bool,
+}
+
+impl Shading {
+    /// Resolve a shading dictionary from an arbitrary object.
+    ///
+    /// Accepts a dictionary or a stream (types 4–7 are streams, and Table
+    /// 78's entries live in the stream dictionary), which is why the
+    /// parameter is an [`Object`] rather than a [`Dict`].
+    ///
+    /// Returns `None` only when the dictionary is unusable — absent, not a
+    /// dictionary, missing `ShadingType`, or carrying a colour space that
+    /// would not resolve. Every such refusal is counted and named in
+    /// `diag`, never silent.
+    #[must_use]
+    pub fn load(
+        doc: &DocumentView<'_>,
+        obj: &Object,
+        resources: &Dict,
+        intent: CmykIntent,
+        color_diag: &mut ColorDiagnostics,
+        diag: &mut ShadingDiagnostics,
+    ) -> Option<Self> {
+        let resolved = doc.resolve(obj);
+        // Table 78's entries live in the dictionary either way; a mesh
+        // shading is a stream whose *dictionary* carries them.
+        let dict = match resolved {
+            Object::Dict(d) => d,
+            Object::Stream(s) => &s.dict,
+            _ => {
+                diag.refused += 1;
+                diag.note("shading object is neither a dictionary nor a stream");
+                return None;
+            }
+        };
+
+        let Some(shading_type) = dict.get(b"ShadingType").and_then(|o| num(doc, o)) else {
+            diag.refused += 1;
+            diag.note("shading dictionary has no /ShadingType (Table 78 requires it)");
+            return None;
+        };
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let shading_type = shading_type.round() as i64;
+
+        let geometry = match shading_type {
+            1 => Geometry::FunctionBased {
+                domain: array_n(doc, dict, b"Domain").unwrap_or([0.0, 1.0, 0.0, 1.0]),
+                matrix: array_n(doc, dict, b"Matrix").unwrap_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]),
+            },
+            2 | 3 => {
+                let domain = array_n(doc, dict, b"Domain").unwrap_or([0.0, 1.0]);
+                let extend = extend_pair(doc, dict);
+                if shading_type == 2 {
+                    let Some(coords) = array_n::<4>(doc, dict, b"Coords") else {
+                        diag.refused += 1;
+                        diag.note(
+                            "axial shading has no usable /Coords (Table 80 requires 4 numbers)",
+                        );
+                        return None;
+                    };
+                    Geometry::Axial {
+                        coords,
+                        domain,
+                        extend,
+                    }
+                } else {
+                    let Some(coords) = array_n::<6>(doc, dict, b"Coords") else {
+                        diag.refused += 1;
+                        diag.note(
+                            "radial shading has no usable /Coords (Table 81 requires 6 numbers)",
+                        );
+                        return None;
+                    };
+                    Geometry::Radial {
+                        coords,
+                        domain,
+                        extend,
+                    }
+                }
+            }
+            4..=7 => Geometry::Mesh {
+                #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                shading_type: shading_type as u8,
+            },
+            other => {
+                diag.refused += 1;
+                diag.note(&format!(
+                    "/ShadingType {other} is not one of the seven §8.7.4.5 types"
+                ));
+                return None;
+            }
+        };
+
+        let Some(cs_obj) = dict.get(b"ColorSpace") else {
+            diag.refused += 1;
+            diag.note("shading dictionary has no /ColorSpace (Table 78 requires it)");
+            return None;
+        };
+        let Some(color_space) =
+            crate::color::resolve_object(doc, doc.resolve(cs_obj), resources, 0, color_diag)
+        else {
+            diag.refused += 1;
+            diag.note("shading /ColorSpace did not resolve");
+            return None;
+        };
+        // §8.7.4.4: a shading's colour space "shall not be a Pattern space".
+        // Refused rather than painted: a pattern has no colour at a
+        // parametric coordinate, so there is nothing to put in the ramp.
+        if matches!(*color_space, ColorSpace::Pattern { .. }) {
+            diag.refused += 1;
+            diag.note("shading /ColorSpace is a Pattern space, which §8.7.4.4 forbids");
+            return None;
+        }
+
+        let function = load_function(doc, dict, diag);
+        if let Some(f) = &function {
+            let want = color_space.components();
+            if f.outputs() != want {
+                diag.function_arity_mismatch += 1;
+                diag.note(&format!(
+                    "shading /Function produces {} component(s) but its colour space takes {want}",
+                    f.outputs()
+                ));
+            }
+        }
+
+        // Only the analytic types have a 1-D parametric domain to sample.
+        // A mesh carries colour per vertex, so building a ramp for one
+        // would be meaningless rather than merely unused.
+        let ramp = match (&geometry, &function) {
+            (Geometry::Axial { domain, .. } | Geometry::Radial { domain, .. }, Some(f)) => {
+                diag.ramps_sampled += 1;
+                let r = ColorRamp::build(f, *domain, &color_space, intent, color_diag);
+                if !r.is_complete() {
+                    diag.ramps_incomplete += 1;
+                    diag.note(
+                        "shading /Function failed at one or more ramp samples; those bands paint nothing",
+                    );
+                }
+                Some(r)
+            }
+            _ => None,
+        };
+
+        if geometry.is_analytic() && function.is_none() {
+            diag.missing_function += 1;
+            diag.note(&format!(
+                "/ShadingType {} has no usable /Function, so it has no colour at any coordinate",
+                geometry.shading_type()
+            ));
+        }
+
+        diag.count(&geometry);
+
+        Some(Self {
+            geometry,
+            color_space,
+            function,
+            ramp,
+            background: components(doc, dict, b"Background"),
+            bbox: array_n(doc, dict, b"BBox"),
+            anti_alias: boolean(doc, dict, b"AntiAlias"),
+        })
+    }
+
+    /// Whether the next slice will be able to paint this shading.
+    ///
+    /// True requires all three of: an analytic type, a function, and a
+    /// ramp. Reported so the inventory can distinguish "pdfce found a
+    /// gradient it will soon draw" from "pdfce found something it will
+    /// still refuse", which is the difference between an operator waiting
+    /// for an update and one who needs a different answer.
+    #[must_use]
+    pub fn is_paintable(&self) -> bool {
+        self.geometry.is_analytic() && self.ramp.is_some()
+    }
+}
+
+/// Load `/Function` in either §8.7.4.4 shape.
+fn load_function(
+    doc: &DocumentView<'_>,
+    dict: &Dict,
+    diag: &mut ShadingDiagnostics,
+) -> Option<ShadingFunction> {
+    let entry = dict.get(b"Function")?;
+    let resolved = doc.resolve(entry);
+    // The array form is *n* one-output functions. It is checked first
+    // because a function may itself be an array-valued object in no other
+    // sense, so there is no ambiguity to resolve.
+    if let Some(items) = resolved.as_array() {
+        let mut fs = Vec::with_capacity(items.len());
+        for item in items {
+            match PdfFunction::load(doc, doc.resolve(item)) {
+                Ok(f) => fs.push(Arc::new(f)),
+                Err(_) => {
+                    diag.function_unloadable += 1;
+                    diag.note("a shading /Function array member did not load");
+                    return None;
+                }
+            }
+        }
+        if fs.is_empty() || fs.len() > MAX_FUNCTION_OUTPUTS {
+            diag.function_unloadable += 1;
+            diag.note("shading /Function array is empty or implausibly wide");
+            return None;
+        }
+        return Some(ShadingFunction::PerComponent(fs));
+    }
+    match PdfFunction::load(doc, resolved) {
+        Ok(f) => {
+            if f.outputs() == 0 || f.outputs() > MAX_FUNCTION_OUTPUTS {
+                diag.function_unloadable += 1;
+                diag.note("shading /Function declares an implausible output count");
+                return None;
+            }
+            Some(ShadingFunction::Single(Arc::new(f)))
+        }
+        Err(_) => {
+            diag.function_unloadable += 1;
+            diag.note("shading /Function did not load");
+            None
+        }
+    }
+}
+
+/// A numeric object as `f64`, resolving a reference first.
+fn num(doc: &DocumentView<'_>, obj: &Object) -> Option<f64> {
+    doc.resolve(obj).as_number()
+}
+
+/// A fixed-length numeric array entry, or `None` if absent, not an array,
+/// the wrong length, or carrying a non-numeric element.
+///
+/// Strict about length on purpose: `/Coords` with three numbers is not an
+/// axial shading missing one value, it is a file whose geometry pdfce
+/// cannot know, and guessing the fourth would paint a plausible wrong
+/// gradient.
+fn array_n<const N: usize>(doc: &DocumentView<'_>, dict: &Dict, key: &[u8]) -> Option<[f32; N]> {
+    let items = doc.resolve(dict.get(key)?).as_array()?;
+    if items.len() != N {
+        return None;
+    }
+    let mut out = [0.0f32; N];
+    for (slot, item) in out.iter_mut().zip(items) {
+        #[allow(clippy::cast_possible_truncation)]
+        {
+            *slot = num(doc, item)? as f32;
+        }
+    }
+    Some(out)
+}
+
+/// A variable-length numeric array entry (`/Background`, whose length is
+/// the colour space's component count rather than a fixed number).
+fn components(doc: &DocumentView<'_>, dict: &Dict, key: &[u8]) -> Option<Vec<f32>> {
+    let items = doc.resolve(dict.get(key)?).as_array()?;
+    let mut out = Vec::with_capacity(items.len());
+    for item in items {
+        #[allow(clippy::cast_possible_truncation)]
+        out.push(num(doc, item)? as f32);
+    }
+    Some(out)
+}
+
+/// A boolean dictionary entry, defaulting to `false` when absent or of the
+/// wrong type.
+///
+/// `Object` has no `as_bool` accessor — booleans are read by matching the
+/// variant, which is the idiom the rest of this crate uses.
+fn boolean(doc: &DocumentView<'_>, dict: &Dict, key: &[u8]) -> bool {
+    matches!(
+        dict.get(key).map(|o| doc.resolve(o)),
+        Some(Object::Boolean(true))
+    )
+}
+
+/// `/Extend`, default `[false false]` (Tables 80 and 81).
+///
+/// **Axial and radial `/Extend` do NOT mean the same thing**, which is why
+/// this returns the raw flags and decides nothing. Axial extension
+/// continues a flat half-plane of the boundary colour indefinitely; radial
+/// extension continues the *linear interpolation of centre and radius*, so
+/// the circles keep moving and growing. Implementing radial extend as
+/// "clamp the parameter to [0,1]" gives the right colour and the wrong
+/// shape (`iso32000__s__8.7.4.5__analytic.md`, SH37).
+fn extend_pair(doc: &DocumentView<'_>, dict: &Dict) -> [bool; 2] {
+    let Some(items) = dict
+        .get(b"Extend")
+        .map(|o| doc.resolve(o))
+        .and_then(Object::as_array)
+    else {
+        return [false, false];
+    };
+    let get = |i: usize| {
+        matches!(
+            items.get(i).map(|o| doc.resolve(o)),
+            Some(Object::Boolean(true))
+        )
+    };
+    [get(0), get(1)]
+}
+
+/// Counted disclosures from shading handling.
+///
+/// Structured to answer the questions an operator actually asks about a
+/// page with a blank gradient on it, in order: *did pdfce see a shading at
+/// all?* (`encountered`), *what kind?* (`by_type`), *will an update fix
+/// it?* (`paintable` vs `mesh`), *or is my file broken?* (`refused` and the
+/// named reasons).
+///
+/// **Every counter here is currently a "found, not painted" census** — this
+/// slice builds the model and paints nothing. `painted` exists and stays at
+/// zero until the geometry slice lands, deliberately: a counter that
+/// appears at the same moment the feature does cannot be used to show the
+/// feature arriving.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct ShadingDiagnostics {
+    /// Shading dictionaries encountered, by either route.
+    pub encountered: usize,
+    /// Of those, how many arrived via the `sh` operator rather than a
+    /// `PatternType 2` pattern. The two anchor differently, so a page that
+    /// renders wrong in only one of them is a different bug.
+    pub via_sh: usize,
+    /// Per-`ShadingType` census, indexed 1..=7 at positions 0..=6.
+    pub by_type: [usize; 7],
+    /// Shadings whose model loaded completely enough to paint once the
+    /// geometry slice lands.
+    pub paintable: usize,
+    /// Shadings actually painted. **Zero in this slice, by construction.**
+    pub painted: usize,
+    /// Shading dictionaries refused outright, with a named reason.
+    pub refused: usize,
+    /// Analytic shadings carrying no usable `/Function`.
+    pub missing_function: usize,
+    /// `/Function` entries that would not load.
+    pub function_unloadable: usize,
+    /// `/Function` output count disagreeing with the colour space's
+    /// component count (§8.7.4.4).
+    pub function_arity_mismatch: usize,
+    /// Colour ramps built.
+    pub ramps_sampled: usize,
+    /// Ramps with at least one sample the function failed to produce.
+    pub ramps_incomplete: usize,
+    /// First few distinct human-readable reasons.
+    pub notes: Vec<String>,
+}
+
+/// Cap on [`ShadingDiagnostics::notes`], matching the other diagnostic
+/// note lists in this crate.
+const MAX_NOTES: usize = 12;
+
+impl ShadingDiagnostics {
+    /// Record a distinct reason.
+    fn note(&mut self, reason: &str) {
+        if self.notes.len() < MAX_NOTES && !self.notes.iter().any(|s| s == reason) {
+            self.notes.push(reason.to_owned());
+        }
+    }
+
+    /// Record a successfully classified geometry in the per-type census.
+    fn count(&mut self, geometry: &Geometry) {
+        let t = geometry.shading_type() as usize;
+        if (1..=7).contains(&t) {
+            self.by_type[t - 1] += 1;
+        }
+    }
+
+    /// Note that a shading was reached, and by which route.
+    ///
+    /// Separate from [`Self::count`] because a shading that is *refused*
+    /// still counts as encountered — otherwise a page whose every shading
+    /// is malformed reports zero shadings, which is the same number a page
+    /// with no gradients reports.
+    pub fn reached(&mut self, route: PaintRoute) {
+        self.encountered += 1;
+        if route == PaintRoute::ShOperator {
+            self.via_sh += 1;
+        }
+    }
+
+    /// Mesh shadings (types 4–7) seen — the share of a corpus that needs
+    /// the stream-decoding work rather than the parametric work.
+    #[must_use]
+    pub fn mesh(&self) -> usize {
+        self.by_type[3..7].iter().sum()
+    }
+
+    /// Fold a nested form XObject's shading diagnostics into this one.
+    pub fn merge(&mut self, other: Self) {
+        self.encountered += other.encountered;
+        self.via_sh += other.via_sh;
+        for (slot, add) in self.by_type.iter_mut().zip(other.by_type) {
+            *slot += add;
+        }
+        self.paintable += other.paintable;
+        self.painted += other.painted;
+        self.refused += other.refused;
+        self.missing_function += other.missing_function;
+        self.function_unloadable += other.function_unloadable;
+        self.function_arity_mismatch += other.function_arity_mismatch;
+        self.ramps_sampled += other.ramps_sampled;
+        self.ramps_incomplete += other.ramps_incomplete;
+        for note in other.notes {
+            self.note(&note);
+        }
+    }
+}

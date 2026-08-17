@@ -109,7 +109,9 @@
 //!               icc_device_fallback=<s> tint_applied=<t> tint_not_applied=<u> \
 //!               sep_all_approximated=<v> sep_none_suppressed=<w> \
 //!               pattern_spaces=<x> patterns_unpainted=<y> \
-//!               indexed_clamped=<z> indexed_short=<aa>
+//!               indexed_clamped=<z> indexed_short=<aa> \
+//!               shadings=<ab> shadings_via_sh=<ac> shadings_paintable=<ad> \
+//!               shadings_painted=<ae> shadings_refused=<af> shadings_mesh=<ag>
 //! ```
 //!
 //! `render-page`'s line is deliberately split by the first `"; "` into a
@@ -6582,7 +6584,8 @@ masks_resampled={} mattes_undone={} mattes_not_undone={} oc_hidden={} \
 cs_unresolved={} colors_not_set={} icc_alternate={} icc_device_fallback={} \
 tint_applied={} tint_not_applied={} sep_all_approximated={} \
 sep_none_suppressed={} pattern_spaces={} patterns_unpainted={} \
-indexed_clamped={} indexed_short={}",
+indexed_clamped={} indexed_short={} shadings={} shadings_via_sh={} \
+shadings_paintable={} shadings_painted={} shadings_refused={} shadings_mesh={}",
         input.display(),
         output.display(),
         rendered.pixmap.width(),
@@ -6683,6 +6686,32 @@ indexed_clamped={} indexed_short={}",
         d.color.patterns_unpainted,
         d.color.indexed_index_clamped,
         d.color.indexed_lookup_short,
+        // ---- §8.7.4 shadings, appended after every pre-existing key ----
+        //
+        // Wired at the same time as the counters themselves, deliberately.
+        // The colour block directly above spent months computed-and-unread
+        // because adding a counter and adding its shell surface were
+        // treated as two changes; they are one, and this is the first
+        // counter block written after that lesson.
+        //
+        // `shadings` beside `shadings_painted` is the load-bearing pair
+        // while the geometry slice is outstanding: a non-zero left number
+        // and a zero right one is the honest statement that pdfce found
+        // the gradients, understood them, and drew none of them. When the
+        // geometry lands the right number moves and nothing else on this
+        // line changes — which is what makes it possible to SHOW the
+        // feature arriving rather than assert it.
+        //
+        // `shadings_paintable` sits between them and answers the question
+        // an operator actually has: *will an update fix MY file?* A page
+        // whose shadings are all type 7 meshes has `paintable=0` and needs
+        // a different answer from one where paintable equals shadings.
+        d.shading.encountered,
+        d.shading.via_sh,
+        d.shading.paintable,
+        d.shading.painted,
+        d.shading.refused,
+        d.shading.mesh(),
     );
     report_diagnostics(d);
 
@@ -6995,6 +7024,106 @@ flag; honoured (not painted) AND disclosed",
         );
     }
     report_color_diagnostics(&d.color);
+    report_shading_diagnostics(&d.shading);
+}
+
+/// The §8.7.4 shading half of the honesty report.
+///
+/// # The sentence this function exists to make possible
+///
+/// *"This page has three gradients on it and pdfce drew none of them."*
+///
+/// Before the shading model slice, a page of gradients produced
+/// `deferred=52, first names BDC, sh, BMC` and nothing else — a count of
+/// anonymous operators, from which neither an operator nor a future
+/// session could tell how much of the page was missing, or why, or
+/// whether an update would fix it.
+///
+/// The per-type breakdown goes here rather than on the stdout line for the
+/// same reason every other breakdown in this file does: a new key on the
+/// machine line can break a parser, and a new stderr sentence cannot.
+///
+/// Silent when a page has no shadings at all, so "stderr had output" stays
+/// a usable batch signal.
+fn report_shading_diagnostics(s: &pdfce_render::ShadingDiagnostics) {
+    if s.encountered == 0 {
+        return;
+    }
+    // The census first: what is on the page, by type. `by_type` is indexed
+    // 1..=7 at positions 0..=6, and only non-zero entries are named, so
+    // the sentence stays short on a page with one gradient.
+    let named: Vec<String> = s
+        .by_type
+        .iter()
+        .enumerate()
+        .filter(|(_, n)| **n > 0)
+        .map(|(i, n)| format!("type{}={n}", i + 1))
+        .collect();
+    eprintln!(
+        "pdfce-cli: note: {} shading(s) found ({}), {} of them via the `sh` operator; \
+{} PAINTED — pdfce resolves gradients but does not yet draw them, so wherever the document \
+shows a gradient this raster shows whatever was underneath it",
+        s.encountered,
+        if named.is_empty() {
+            "none classified".to_owned()
+        } else {
+            named.join(", ")
+        },
+        s.via_sh,
+        s.painted
+    );
+    if s.mesh() > 0 {
+        eprintln!(
+            // 8.7.4.5.5-.8, NOT 9.x — the first version of this string said
+            // 9 and printed a clause that does not exist to the operator.
+            // Same class as the stale DeviceN sentence fixed earlier today:
+            // a wrong fact in a user-visible string, invisible to every
+            // gate, caught only by reading the actual output.
+            "pdfce-cli: note: {} of those are MESH shadings (types 4-7, ISO 32000-1 \
+8.7.4.5.5-.8): their geometry is a bit-packed vertex stream rather than a formula, and they \
+are a materially larger piece of work than the axial and radial types. Counted separately so \
+that waiting for one is not mistaken for waiting for the other",
+            s.mesh()
+        );
+    }
+    if s.refused > 0 {
+        eprintln!(
+            "pdfce-cli: note: {} shading(s) were REFUSED outright — the dictionary itself could \
+not be used (no /ShadingType, unusable /Coords, a /ColorSpace that would not resolve, or a \
+Pattern colour space, which 8.7.4.4 forbids). These will NOT be fixed by the geometry work; \
+the file is malformed",
+            s.refused
+        );
+    }
+    if s.missing_function > 0 {
+        eprintln!(
+            "pdfce-cli: note: {} shading(s) of an analytic type carry no usable /Function, so \
+they have no colour at any coordinate. Nothing can be drawn for them even once the geometry \
+lands",
+            s.missing_function
+        );
+    }
+    if s.function_arity_mismatch > 0 {
+        eprintln!(
+            "pdfce-cli: note: {} shading /Function(s) produce a different number of components \
+than their colour space takes (8.7.4.4); the colours such a shading would paint are not the \
+ones the document specifies",
+            s.function_arity_mismatch
+        );
+    }
+    if s.ramps_incomplete > 0 {
+        eprintln!(
+            "pdfce-cli: note: {} colour ramp(s) have gaps — the /Function failed at one or more \
+sample points, and those bands of the gradient have no colour rather than an invented one",
+            s.ramps_incomplete
+        );
+    }
+    if !s.notes.is_empty() {
+        eprintln!(
+            "pdfce-cli: note: shading divergences: {}",
+            s.notes.join("; ")
+        );
+    }
 }
 
 /// The §8.6 colour half of the honesty report.

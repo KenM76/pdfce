@@ -64,6 +64,7 @@ pub mod interpret;
 pub mod layer_state;
 pub mod mask;
 pub mod profile;
+pub mod shading;
 pub mod text;
 
 use pdfce_core::content::ContentStream;
@@ -93,6 +94,7 @@ pub use color::{ColorDiagnostics, ColorSpace, ColorState, Colorant, DeviceSpace}
 pub use font::{FallbackKey, FontData, FontEnvironment, GlyphSource, RenderOptions, RenderPolicy};
 pub use interpret::Diagnostics;
 pub use layer_state::LayerVisibility;
+pub use shading::{ColorRamp, Geometry, PaintRoute, Shading, ShadingDiagnostics, ShadingFunction};
 // `RenderedPage::pixmap` is a public field of a `tiny_skia` type, so this
 // crate must re-export `tiny_skia` or every consumer has to add its own
 // dependency on it and guess a compatible version — the Rust API

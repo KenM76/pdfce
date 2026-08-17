@@ -1100,7 +1100,14 @@ fn resolve_named(
 /// Resolve a colour space given as an arbitrary object — a name, a
 /// one-element array (`[/DeviceRGB]`, which producers emit), or one of the
 /// parameterised array forms.
-fn resolve_object(
+///
+/// `pub(crate)` rather than private because [`crate::shading`] needs it: a
+/// shading dictionary's `/ColorSpace` (§8.7.4.3, Table 78) is an arbitrary
+/// colour-space object exactly as a `cs` operand's resource entry is, and
+/// resolving it a second way would let the same array produce two different
+/// colours in one document. One resolver, per this module's own rule about
+/// the function evaluator.
+pub(crate) fn resolve_object(
     doc: &DocumentView<'_>,
     obj: &Object,
     resources: &Dict,
