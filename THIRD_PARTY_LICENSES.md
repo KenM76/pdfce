@@ -61,9 +61,9 @@ alongside the other licenses harvested from `Cargo.lock`.
 
 ## License overview
 
-- **Apache License 2.0** — used by 177 crate(s)
+- **Apache License 2.0** — used by 182 crate(s)
 - **Unicode License v3** — used by 19 crate(s)
-- **MIT License** — used by 13 crate(s)
+- **MIT License** — used by 14 crate(s)
 - **ISC License** — used by 4 crate(s)
 - **BSD 3-Clause &quot;New&quot; or &quot;Revised&quot; License** — used by 3 crate(s)
 - **Boost Software License 1.0** — used by 2 crate(s)
@@ -3545,15 +3545,20 @@ limitations under the License.
 
 Used by:
 - [aes 0.9.2](https://github.com/RustCrypto/block-ciphers)
+- [block-buffer 0.10.4](https://github.com/RustCrypto/utils)
 - [block-buffer 0.12.1](https://github.com/RustCrypto/utils)
 - [cbc 0.2.1](https://github.com/RustCrypto/block-modes)
 - [cipher 0.5.2](https://github.com/RustCrypto/traits)
 - [cpubits 0.1.1](https://github.com/RustCrypto/utils)
+- [cpufeatures 0.2.17](https://github.com/RustCrypto/utils)
 - [cpufeatures 0.3.0](https://github.com/RustCrypto/utils)
+- [crypto-common 0.1.7](https://github.com/RustCrypto/traits)
 - [crypto-common 0.2.2](https://github.com/RustCrypto/traits)
+- [digest 0.10.7](https://github.com/RustCrypto/traits)
 - [digest 0.11.3](https://github.com/RustCrypto/traits)
 - [hybrid-array 0.4.14](https://github.com/RustCrypto/hybrid-array)
 - [inout 0.2.2](https://github.com/RustCrypto/utils)
+- [sha2 0.10.9](https://github.com/RustCrypto/hashes)
 - [sha2 0.11.0](https://github.com/RustCrypto/hashes)
 
 ```
@@ -5983,6 +5988,35 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+```
+
+### MIT License
+
+Used by:
+- [generic-array 0.14.7](https://github.com/fizyk20/generic-array.git)
+
+```
+The MIT License (MIT)
+
+Copyright (c) 2015 Bartłomiej Kamiński
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the &quot;Software&quot;), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED &quot;AS IS&quot;, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 ```
 
 ### SIL Open Font License 1.1
