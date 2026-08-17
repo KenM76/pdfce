@@ -3,9 +3,78 @@
 Engineer-owned handoff. Read this **before** `ROADMAP.md` — that says what
 shipped, this says what to do next. Overwrite it once acted on.
 
-**State at handoff (2026-08-13):** branch `main`, three code/doc commits
-past `v0.5.3`, **not pushed, not tagged**. 3,667 tests, 0 failures. Every
-gate clean. Nothing half-built.
+---
+
+## ★ STATE AT HANDOFF — 2026-08-17. THE QUEUE CHANGED; READ THIS FIRST.
+
+**The operator tested the Ghent PDF Output Suite 5.0 X-4 conformance file
+and said pdfce was "a long way off from being compatible."** He was right,
+and that measurement now drives the queue. Everything below the horizontal
+rule further down is the *previous* handoff (OCR, `Pass 71.0`) — **it is
+not wrong, it is no longer first.**
+
+`HEAD` = `9839d6f`. **3,747 tests, 0 failures.** `fmt`/`clippy` clean; all
+seven scripted gates clean; `cargo tree` shows no GUI dependency in
+`pdfce-core` or `pdfce-render`. **Not pushed, not tagged.** Nothing
+half-built.
+
+### What shipped today
+
+| commit | what |
+|---|---|
+| `d0f8c5f` | `Pass 84.0` — twelve `ColorDiagnostics` counters reached a shell for the first time; a false runtime string in `device_n_to_rgb` fixed |
+| `016fc31` | the `iccce` request channel named in this file |
+| `33ea830` | `Pass 85.0` slice 1 — `pdfce_render::shading`, the model + inventory |
+| `9839d6f` | `Pass 85.0` slice 2 — axial and radial shadings **paint** |
+
+### The Ghent gap inventory — this is the queue
+
+Measured from pdfce's own diagnostics on that file, not estimated.
+
+| gap | state | Pass |
+|---|---|---|
+| shadings, axial + radial | **DONE**, 14/16 of the file | `85.0` |
+| shading **patterns** (`PatternType 2`) | not started — **only `sh` paints today** | `85.x` |
+| tiling patterns | not started | `85.x` |
+| `Separation`/`DeviceN` **images** | not started — **18 images missing across the file, the biggest remaining visual gap** | `85.x` |
+| clause-11 transparency (`/BM`, `/SMask`) | not started | `85.x` |
+| Type 3 fonts | not started | `Pass 1.1` item 4 |
+| overprint | not started; **gated on the Acrobat RAG**, see below | `86.0` |
+| `/OutputIntents`, `ICCBased` | **not pdfce's half** — `iccce`, see the channel | — |
+
+### Three things that will bite the next session
+
+1. **`sh` is the ONLY paint route wired.** `crate::shading::Shading::load`
+   has exactly one caller (`interpret.rs`, the `sh` handler). `scn` naming
+   a pattern still increments `patterns_unpainted` and draws nothing. The
+   two routes **anchor to different coordinate spaces** — `sh` is
+   CTM-relative, a pattern is base-CTM-relative (§8.7.2 NOTE 1) — so the
+   unfinished half is the harder one, not the leftover one.
+2. **The GUI's honesty summary regressed, and it is filed rather than
+   fixed.** It sums `deferred_ops + unknown_ops`; lifting `sh` out of the
+   deferred bucket means a page whose shadings pdfce still *cannot* paint
+   (type 1, meshes) now reports clean there. GUI work is operator-paused,
+   so this is a known defect the new GUI project inherits.
+3. **Mesh shading geometry is NOT in the spec corpus** and the index
+   carries an explicit *"do not answer from recall"* marker for it.
+   Dispatch `pdfce-spec-librarian` for §8.7.4.5.5–.8 before any mesh Pass.
+
+### The method that earned its keep today — do this again
+
+**The sabotage check caught a hole nothing else could.** Inverting the
+greatest-`s` radial selection left **all 17 tests green**, on precisely the
+sentence the spec corpus flags as the most-misimplemented in the clause.
+Cause: every fixture had only one admissible root, so the choice never
+arose. Fixed by building geometry where both roots are admissible *and*
+both lie in [0,1].
+
+**A green suite is not evidence until you have seen it go red.** Two
+user-visible strings were also caught today only by *reading the actual
+output* — a wrong clause number and a capability claim that went false the
+moment the feature shipped. No gate can see either.
+
+---
+
 
 > **[APPENDED 2026-08-13 by `pdfce-librarian`, hundred-and-forty-first
 > filing — THE LINE ABOVE IS STALE AND THIS FILE IS ENGINEER-OWNED, so it
@@ -141,12 +210,33 @@ record an inferred one as fact.** It is unambiguous as it stands.
 
 ## ⇢ IF THE OPERATOR JUST SAID "CONTINUE"
 
-**Take §1 — `Pass 71.0`'s engine binding.** `(bl)` is ANSWERED (yes), so
-OCR is now pure engineering with an ordered plan and every figure already
-measured. Nothing in the queue is blocked on him.
+**★ SUPERSEDED 2026-08-17 — this section used to send you to §1 (OCR).**
+It is left standing rather than deleted because §1 is still real work and
+still unblocked; it is simply no longer what the operator is watching.
 
-**Do not ask `(bl)` again.** The one thing still worth a sentence is the
-model-downloader withdrawal, and it is a confirmation, not a blocker.
+**Take the Ghent queue, in this order**, and the order is measured rather
+than assumed:
+
+1. **`Separation`/`DeviceN` images.** The biggest remaining *visual* gap —
+   18 images are missing from the operator's own test file, which is why
+   the reference images beside the now-working gradients are still blank.
+   The §7.10 function evaluator already exists and is already wired for
+   vector fills; this is the per-pixel path only.
+2. **Shading patterns + tiling patterns.** Finishes what `Pass 85.0`
+   started. The pattern-space anchoring is fully sourced in
+   `iso32000__s__8.7.md` (PM1–PM9) — the coordinate-space half is the part
+   most easily got wrong and it is already written down.
+3. **Clause-11 transparency** (`/BM`, `/SMask` in an ExtGState).
+4. **Overprint** LAST. It is architectural — compositing into a CMYK
+   buffer — and it is the one item genuinely gated on outside work: the
+   `iccce` project has to supply a credible CMYK→display conversion before
+   a CMYK buffer means anything. See `open/note_boundary_and_overprint.md`
+   in the channel.
+
+**Do not ask `(bl)` again** — answered, yes. Do not re-raise the `iccce`
+adoption question as an *accuracy* argument either; their own reply
+established it would be a lateral move in evidence class (pdfium
+cross-check → lcms2 cross-check). The defensible case is **conformance**.
 
 ---
 
