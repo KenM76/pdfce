@@ -1,6 +1,6 @@
 ---
 name: windows-paths-need-literal-edits
-description: Never edit text containing Windows paths through a shell heredoc or sed — \b \t \n \f \v \0 are real escapes and silently corrupt D:\builds, D:\temp, \fixtures
+description: Never patch text containing ANY backslash (Windows paths, Rust/C escapes, line continuations) through a heredoc or sed — write a script file or use Edit; also, never `git checkout` to undo a sabotage
 metadata:
   type: feedback
 ---
@@ -31,6 +31,35 @@ after a backslash is a live grenade in a non-raw string.
   double every backslash — and then *verify with `cat -v`*, not by eye.
 - After any bulk rewrite of a document, sweep for control characters:
   `python -c "d=open(F,encoding='utf-8').read(); print([hex(ord(c)) for c in set(d) if ord(c)<32 and c not in '\n\r\t'])"`
+
+**★ WIDENED 2026-08-17 — it is not only PATHS, it is any backslash, and it
+bit me three times in one session on SOURCE CODE.** The rule above scoped
+the hazard to Windows paths; that scoping is what let me walk into it again.
+
+- A Rust string **line-continuation** `\` at the end of a line inside a
+  format string was eaten by a quoted heredoc (`<<'PYEOF'`), so the patch
+  script's anchor never matched and the `assert` fired. Twice.
+- Worse, once it *did* apply: I wrote `\\\n` intending a Rust continuation
+  and produced a **literal `\n` escape** in the source, which Rust then
+  compiled into a real newline. That broke `pdfce-cli render-page`'s
+  one-line stdout contract — caught only because a contract test asserts
+  `line.matches('\n').count() == 1`.
+
+So the trigger is **a backslash in the payload**, whatever it means:
+Windows paths, Rust/C string escapes, regex, LaTeX, `\|` in Markdown tables.
+
+**How to apply, updated:** for any multi-line patch to source, **Write a
+script file and run it**, or use `Edit` directly. Do not fight the heredoc —
+the failure is silent when it is not loud, and the loud version costs a
+build cycle.
+
+**★ A SECOND, UNRELATED TRAP FROM THE SAME SESSION, filed here because it
+also destroys work silently:** `git checkout <file>` to undo a **sabotage
+check** reverts the file to `HEAD` — including the *feature work* you were
+sabotaging, if it is not yet committed. I lost every change to
+`crates/pdfce-render/src/color.rs` that way and had to re-apply them from
+the patch scripts. **Copy the file aside before sabotaging**
+(`cp x D:/Dev/temp/x_backup`) and restore from that copy, never from git.
 
 Related: [[absence-needs-an-unscoped-query]] — same family. Both are cases
 where a tool returned something that *looked* like a normal result, and the

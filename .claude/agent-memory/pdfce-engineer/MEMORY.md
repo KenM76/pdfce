@@ -21,7 +21,8 @@
 - [Editing arc state](project_editing_arc_state.md) — 2026-08-05 snapshot: composite text/re corners/handles/Node rung shipped; per-run text deletion + reflow width still open, with the fix shape known
 - [Keep the error catching](feedback_keep_the_error_catching.md) — Ken rejects changes that trade error-detection for speed; declined splitting into per-crate sessions for that reason
 - [A refusal can guard more than it says](feedback_refusals_guard_their_callers.md) — re-verify a refusal's stated reason (R143); removing one can un-gate a caller relying on it (R144/R147)
-- [Windows paths need literal edits](feedback_windows_paths_need_literal_edits.md) — `\b`/`\t`/`\f` in `D:\builds`, `\temp`, `\fixtures` get eaten by sed/heredocs; use Edit/Write and verify with `cat -v`
+- [Any backslash breaks heredoc patching](feedback_windows_paths_need_literal_edits.md) — paths AND Rust escapes/continuations; write a script file or use Edit. Also: never `git checkout` to undo a sabotage
+- [Priority is a measurement](feedback_priority_is_a_measurement.md) — check the target file actually exercises the feature before spending a Pass; an uncounted gap can't compete
 - [Two modes, one pattern, is one measurement](feedback_two_modes_one_pattern_is_one_measurement.md) — R188; same-pattern agreement isn't verification, and don't override an independently-derived result with a more confident one
 - [Absence needs an unscoped query](feedback_absence_needs_an_unscoped_query.md) — `git log --all -- path` feels exhaustive but is path-scoped; a wrong path reads exactly like a true negative
 - [Gates I owe myself](feedback_gates_i_owe_myself.md) — the cargo-fuzz gate is the one I skip; and a harness enumerating a module's entry points goes stale every Pass
