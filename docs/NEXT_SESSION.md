@@ -57,6 +57,40 @@ between this session and the `pdfceGUI` project (operator instruction,
   `docs/core-api/index.md`. **Keep it current when core changes under
   it** — a stale briefing is worse than none, because it is trusted.
 
+### ★ THERE ARE NOW **TWO** CHANNELS — list both (added 2026-08-17)
+
+**`D:\Dev\FeatureRequests\iccce_FeatureRequests`** — the channel between this
+session and **`D:\Dev\iccce\`**, a from-scratch MIT ICC colour management
+module whose own `README.md` names pdfce as its first consumer. Created
+2026-08-17 at the operator's instruction, same layout and conventions as the
+GUI channel so neither has to be learned twice.
+
+**Two differences from the GUI channel, both load-bearing:**
+
+1. **Requests flow BOTH ways.** `iccce` is a library with its own roadmap and
+   a standing reason to ask pdfce things — *"what shape does a PDF hand you a
+   profile in?"*, *"is this API callable per-pixel?"*. The GUI channel is
+   one-way; this one is not. Expect `request_*.md` written by them.
+2. **A colour claim must carry its oracle and its number.** `iccce`'s project
+   rule 1 is *"a wrong colour looks exactly like a right one"*, and rule 3
+   distinguishes ground truth from a cross-check against another
+   implementation. pdfce's own house style is looser than that; **inside this
+   folder pdfce is bound by theirs.** "The CMYK looks off" is not a finding.
+   Note that pdfce's shipped `cmyk_table.rs` is fitted to **pdfium**, which
+   makes it a cross-check and not ground truth — say so when quoting it.
+
+**Open at time of writing** (three files, all pdfce → iccce, none blocking
+anything on pdfce's critical path): `request_pdf_output_intent_cmyk.md`,
+`request_iccbased_colour_spaces.md`, `note_boundary_and_overprint.md`.
+
+**The boundary, because a shared subject is where one side builds the other's
+half:** iccce owns *conversion* — profile parsing, transform construction,
+intents, ΔE. pdfce owns *compositing* — overprint, blend modes, transparency
+groups — and everything about what a PDF's components mean. **Overprint is
+pdfce's and is the row most likely to be mis-filed**; it is gated on iccce
+only because a CMYK compositing buffer needs a credible CMYK→display
+conversion at the end of it.
+
 ---
 
 ## ⇢ ★ THE STANDING CONSTRAINT — READ THIS BEFORE PLANNING ANYTHING
