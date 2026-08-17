@@ -1598,7 +1598,7 @@ impl Interpreter<'_> {
             // gradients a page has, of which types, or whether the next
             // slice will fix it. Resolving the dictionary answers all
             // three, and costs one dictionary walk per `sh`.
-            b"sh" => self.shading_operator(op),
+            b"sh" => self.shading_operator(op, pixmap),
 
             // ---- recognized, deferred to later slices ----
             b"MP" | b"DP" | b"d0" | b"d1" => {
@@ -2260,7 +2260,7 @@ impl Interpreter<'_> {
     /// and also that this route **ignores `/Background`**. The route is
     /// carried into the model as [`crate::shading::PaintRoute::ShOperator`]
     /// rather than assumed at the paint site.
-    fn shading_operator(&mut self, op: &Operation<'_>) {
+    fn shading_operator(&mut self, op: &Operation<'_>, pixmap: &mut Pixmap) {
         let doc = self.doc;
         let resources = self.resources;
 
@@ -2295,15 +2295,63 @@ impl Interpreter<'_> {
             &mut self.diag.color,
             &mut self.diag.shading,
         );
-        if let Some(shading) = shading
-            && shading.is_paintable()
-        {
-            // Counted, not painted. The gap between `paintable` and
-            // `painted` IS the disclosure: it says "pdfce understood this
-            // gradient completely and still drew nothing", which is a
-            // different operator situation from a shading it could not
-            // parse, and the two must not collapse into one number.
+        let Some(shading) = shading else {
+            return;
+        };
+        if shading.is_paintable() {
             self.diag.shading.paintable += 1;
+        }
+
+        // §8.11.3.1: hidden optional content is not drawn, and everything
+        // else still runs — the shading is still resolved and still
+        // counted above, exactly as a hidden path is still consumed.
+        if self.oc_hidden() || crate::profile::skip_paint() {
+            return;
+        }
+
+        // Table 77: `sh` takes no path and "applies the corresponding
+        // gradient fill directly to current user space". So the paint AREA
+        // is the current clip region, and the ANCHORING is the current
+        // CTM — inverted here, because the painter walks device pixels and
+        // needs to ask where each one lands in the shading's own space.
+        //
+        // A non-invertible CTM is a degenerate transform (a zero scale)
+        // under which nothing has any area to be painted in; skipped
+        // rather than approximated.
+        let ctm = self.gs.current.ctm;
+        let Some(to_target) = ctm.invert() else {
+            self.diag.tolerated += 1;
+            self.diag.note(b"sh(non-invertible CTM)");
+            return;
+        };
+
+        // The region: the clip's own device-space bounds when there is a
+        // clip, the whole pixmap when there is not. §8.7.4.2's `should`
+        // that `sh` "be applied only to bounded or geometrically defined
+        // shadings" is exactly this case — an unbounded shading with no
+        // clip legitimately fills the page.
+        #[allow(clippy::cast_possible_truncation)]
+        let region = match self.gs.current.clip_bbox {
+            Some((l, t, r, b)) => (
+                l.floor() as i32,
+                t.floor() as i32,
+                r.ceil() as i32,
+                b.ceil() as i32,
+            ),
+            None => (0, 0, pixmap.width() as i32, pixmap.height() as i32),
+        };
+
+        let clip = self.gs.current.clip.as_deref();
+        let alpha = self.gs.current.fill_alpha;
+        if let Some(pixels) = shading.paint(to_target, region, clip, alpha, pixmap) {
+            // `painted` counts SHADINGS drawn, not pixels — the pixel
+            // count is the return value and is used only to decide whether
+            // anything landed. A shading that resolved and painted zero
+            // pixels (fully clipped, or `/Extend` false at both ends and
+            // the geometry missing the region) is still a shading pdfce
+            // drew correctly, so it counts.
+            let _ = pixels;
+            self.diag.shading.painted += 1;
         }
     }
 

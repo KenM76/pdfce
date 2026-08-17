@@ -1357,14 +1357,19 @@ fn shadings_are_inventoried_by_type_and_reported_as_unpainted() {
         "three well-formed shadings must not be refused: {line:?}"
     );
 
-    // The load-bearing assertion of this whole slice. Zero painted, and it
-    // MUST stay asserted rather than dropped as obvious: when the geometry
-    // slice lands, this line is what fails, and a failing test is how the
-    // feature announces its own arrival. A test that omitted it would let
-    // painting ship while the claim that nothing paints went stale.
+    // ★ This assertion was `shadings_painted=0` for exactly one commit,
+    // and it DID its job: when the axial and radial painters landed, this
+    // is the line that went red, which is how the feature announced its
+    // own arrival instead of being asserted into existence. It is updated
+    // here rather than deleted, and the history is kept in this comment,
+    // because the same trick works again for the mesh types.
+    //
+    // Two of three painted: the axial and the radial. The type 7 mesh is
+    // not, and `painted` must NOT be allowed to drift up to 3 when a mesh
+    // is merely resolved.
     assert!(
-        line.contains(" shadings_painted=0 "),
-        "this slice resolves shadings and paints none of them: {line:?}"
+        line.contains(" shadings_painted=2 "),
+        "the axial and radial are painted; the mesh is not: {line:?}"
     );
 
     let err = stderr(&out);
@@ -1375,9 +1380,14 @@ fn shadings_are_inventoried_by_type_and_reported_as_unpainted() {
         err.contains("type2=1") && err.contains("type3=1") && err.contains("type7=1"),
         "stderr must break the inventory down by ShadingType: {err:?}"
     );
+    // The headline reports BOTH numbers and lets the reader subtract,
+    // rather than asserting a capability. Its first version read "pdfce
+    // resolves gradients but does not yet draw them" — true for one
+    // commit. A sentence that encodes the roadmap's current state goes
+    // stale silently; two counters cannot.
     assert!(
-        err.contains("0 PAINTED"),
-        "stderr must say plainly that none were drawn: {err:?}"
+        err.contains("2 painted, 1 NOT"),
+        "stderr must state painted AND unpainted, not a capability claim: {err:?}"
     );
     assert!(
         err.contains("MESH shadings"),

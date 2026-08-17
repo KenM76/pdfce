@@ -7059,10 +7059,17 @@ fn report_shading_diagnostics(s: &pdfce_render::ShadingDiagnostics) {
         .filter(|(_, n)| **n > 0)
         .map(|(i, n)| format!("type{}={n}", i + 1))
         .collect();
+    // The headline has to stay TRUE as painting lands type by type, which
+    // is why it states the two numbers and lets the reader subtract rather
+    // than asserting a capability. Its first version read "pdfce resolves
+    // gradients but does not yet draw them" — accurate for exactly one
+    // commit, and false the moment the axial and radial painters shipped.
+    // A sentence that encodes the current state of the roadmap goes stale
+    // silently; a sentence that reports two counters cannot.
+    let unpainted = s.encountered.saturating_sub(s.painted);
     eprintln!(
         "pdfce-cli: note: {} shading(s) found ({}), {} of them via the `sh` operator; \
-{} PAINTED — pdfce resolves gradients but does not yet draw them, so wherever the document \
-shows a gradient this raster shows whatever was underneath it",
+{} painted, {} NOT — an unpainted shading leaves whatever was underneath it showing through",
         s.encountered,
         if named.is_empty() {
             "none classified".to_owned()
@@ -7070,8 +7077,23 @@ shows a gradient this raster shows whatever was underneath it",
             named.join(", ")
         },
         s.via_sh,
-        s.painted
+        s.painted,
+        unpainted
     );
+    // The two kinds pdfce does not paint are named SEPARATELY, because
+    // they are different amounts of remaining work: type 1 is one function
+    // and an inverse matrix, the meshes are a bit-packed stream format.
+    // An operator waiting for one should not be quoted the other's
+    // timeline.
+    if s.by_type[0] > 0 {
+        eprintln!(
+            "pdfce-cli: note: {} of those are FUNCTION-BASED shadings (type 1, ISO 32000-1 \
+8.7.4.5.2), which this build resolves but does not paint. Unlike the axial and radial types it \
+has no /Extend at all — outside its transformed domain rectangle the standard paints the \
+background colour, or nothing",
+            s.by_type[0]
+        );
+    }
     if s.mesh() > 0 {
         eprintln!(
             // 8.7.4.5.5-.8, NOT 9.x — the first version of this string said

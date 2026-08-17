@@ -910,3 +910,890 @@ impl ShadingDiagnostics {
         }
     }
 }
+
+// ===========================================================================
+// PAINTING — §8.7.4.5, the analytic types
+// ===========================================================================
+//
+// Everything below is sourced label-by-label from
+// `iso32000__s__8.7.4.5__analytic.md` in the PDF-spec RAG. Each function
+// names the labels it implements, so a future reader can check the code
+// against the clause without re-deriving anything, and so a claim that is
+// pdfce's own rather than the standard's is visibly marked as such.
+
+/// The parametric coordinate a device point maps to, or the reason it maps
+/// to nothing.
+///
+/// # Why "unpainted" is a value rather than an `Option<f32>` alias
+///
+/// The standard distinguishes two situations that an `Option` would blur,
+/// and they are visibly different on the page:
+///
+/// - **Outside the shading** — SH26's *"t is undefined and the point shall
+///   be left unpainted"*. The backdrop shows through.
+/// - **Inside the shading but the colour did not resolve** — a ramp hole
+///   (the `/Function` failed at that sample). Also unpainted, but it is a
+///   *defect*, and it is counted separately so a gradient with a hole in it
+///   does not report as a gradient that was correctly clipped.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Param {
+    /// Paint this point with the ramp colour at parametric `t`.
+    At(f32),
+    /// Leave this point alone — the standard says so for this geometry.
+    Unpainted,
+}
+
+impl Geometry {
+    /// Map a point in the shading's **target coordinate space** to a
+    /// parametric `t`, or to "leave unpainted".
+    ///
+    /// The target space is current user space under `sh` and pattern space
+    /// under a shading pattern (SH1, SH6) — the caller has already applied
+    /// whichever transform that is, so this function is route-agnostic.
+    ///
+    /// Returns `None` for a geometry this slice does not paint (type 1,
+    /// and the meshes), which the caller distinguishes from
+    /// [`Param::Unpainted`].
+    fn param_at(&self, x: f32, y: f32) -> Option<Param> {
+        match self {
+            // Type 1 is MODELLED but not painted in this slice. It needs a
+            // 2-in function evaluated over an inverse `/Matrix` and has no
+            // `/Extend` at all — outside the transformed domain rectangle
+            // it is `/Background` or nothing (SH21). Deliberately deferred
+            // rather than rushed: the Ghent measurement found **zero**
+            // type-1 shadings against 5 axial and 9 radial, so it is the
+            // cheapest of the three to leave and the least missed.
+            Self::FunctionBased { .. } | Self::Mesh { .. } => None,
+            Self::Axial {
+                coords,
+                domain,
+                extend,
+            } => Some(axial_param(*coords, *domain, *extend, x, y)),
+            Self::Radial {
+                coords,
+                domain,
+                extend,
+            } => Some(radial_param(*coords, *domain, *extend, x, y)),
+        }
+    }
+}
+
+/// §8.7.4.5.3 axial: project a point onto the axis and map to `t`.
+///
+/// # The projection (SH25)
+///
+/// The spec's variable is **`x′`, not `s`** — `s` belongs to the radial
+/// clause, and carrying it here would read as a cross-clause error. There
+/// is no `y′`: *"all points along a line in domain space perpendicular to
+/// the line from (0, 0) to (1, 0) have the same colour, only the new value
+/// of x needs to be computed"*.
+///
+/// ```text
+///         (x1 − x0) × (x − x0)  +  (y1 − y0) × (y − y0)
+/// x′  =  ───────────────────────────────────────────────
+///               (x1 − x0)²  +  (y1 − y0)²
+/// ```
+///
+/// Normalised by **‖axis‖², not ‖axis‖** — `x′` is a fraction of the axis,
+/// not an arc length. It is 0 at `(x0,y0)` and 1 at `(x1,y1)`.
+///
+/// # The `t` mapping and `/Extend` (SH26, SH27)
+///
+/// | `x′` | `t` | painted? |
+/// |---|---|---|
+/// | `0 ≤ x′ ≤ 1` | `t0 + (t1−t0)·x′` | yes |
+/// | `x′ < 0`, `Extend[0]` | `t0` | yes, flat, indefinitely |
+/// | `x′ < 0`, else | undefined | **no** |
+/// | `x′ > 1`, `Extend[1]` | `t1` | yes, flat, indefinitely |
+/// | `x′ > 1`, else | undefined | **no** |
+///
+/// The bounds are **inclusive at both ends**, so `x′` exactly 0 or 1 takes
+/// the interpolation branch rather than an extend branch — no gap and no
+/// double-cover at the joins.
+///
+/// # The degenerate axis (SH29 / AMB-1)
+///
+/// When the endpoints coincide the denominator is 0/0. **ISO 32000-1 is
+/// silent**; **ISO 32000-2 Table 79 adds "If the starting and ending
+/// coordinates are coincident … nothing shall be painted."** pdfce applies
+/// the 2.0 rule at every version: a later edition resolving an earlier
+/// silence is a *forced* default, not a choice between two readings, so
+/// this is not a settings-register candidate. It also happens to be the
+/// only answer that cannot produce NaN pixels.
+fn axial_param(coords: [f32; 4], domain: [f32; 2], extend: [bool; 2], x: f32, y: f32) -> Param {
+    let [x0, y0, x1, y1] = coords;
+    let (dx, dy) = (x1 - x0, y1 - y0);
+    let denom = dx.mul_add(dx, dy * dy);
+    if denom <= f32::EPSILON {
+        return Param::Unpainted;
+    }
+    let x_prime = dx.mul_add(x - x0, dy * (y - y0)) / denom;
+    let [t0, t1] = domain;
+    if x_prime < 0.0 {
+        if extend[0] {
+            Param::At(t0)
+        } else {
+            Param::Unpainted
+        }
+    } else if x_prime > 1.0 {
+        if extend[1] {
+            Param::At(t1)
+        } else {
+            Param::Unpainted
+        }
+    } else {
+        Param::At((t1 - t0).mul_add(x_prime, t0))
+    }
+}
+
+/// §8.7.4.5.4 radial: find the blend circle covering a point and map to `t`.
+///
+/// # The model is a PAINTING ORDER, not a root selection (SH39)
+///
+/// > "Conceptually, all of the blend circles shall be painted in order of
+/// > increasing values of *s* … The painting is opaque, with the colour of
+/// > each circle completely overlaying those preceding it. Therefore, if a
+/// > point lies within more than one blend circle, its final colour shall
+/// > be that of the last of the enclosing circles to be painted,
+/// > corresponding to the **greatest value of s**."
+///
+/// Four `shall`s. The operative consequence (SH40): **the colour is the one
+/// at the greatest admissible `s` whose blend circle encloses the point.**
+///
+/// The blend circles themselves are plain linear interpolations (SH33) —
+/// the radius interpolates **linearly**, not by area:
+///
+/// ```text
+/// xc(s) = x0 + s × (x1 − x0)
+/// yc(s) = y0 + s × (y1 − y0)
+///  r(s) = r0 + s × (r1 − r0)
+/// ```
+///
+/// # ★ The quadratic below is pdfce's derivation, NOT the standard's (AMB-2)
+///
+/// A whole-document search for "quadratic" and "discriminant" returns
+/// **zero hits in both ISO 32000-1 and ISO 32000-2.** The standard never
+/// inverts its own painting model. What follows is the inversion, and it is
+/// written here as pdfce's own algebra so that nobody later attaches a
+/// §8.7.4.5.4 citation to it:
+///
+/// Substituting the SH33 equations into `|P − c(s)| = r(s)` and writing
+/// `px = Px − x0`, `py = Py − y0`, `dr = r1 − r0`:
+///
+/// ```text
+/// a = dx² + dy² − dr²
+/// b = −2 × (px·dx + py·dy + r0·dr)
+/// c = px² + py² − r0²
+/// ```
+///
+/// **The obligation this carries is observational equivalence**: the roots
+/// are only correct insofar as picking the greater admissible one
+/// reproduces the opaque-increasing-`s` painting order. That is the
+/// contract to test against, not the algebra.
+///
+/// `a` is zero exactly when the cone's half-angle is 45° — the two circles'
+/// radii change as fast as their centres separate — and then the equation
+/// is linear, not degenerate. Handled explicitly rather than by an epsilon
+/// nudge, because that case is a *shape*, not a numerical accident.
+///
+/// # The permitted range of `s` (SH40), assembled from four places
+///
+/// ```text
+/// s ∈ [0, 1]                       always
+/// s < 0   admitted iff Extend[0]
+/// s > 1   admitted iff Extend[1]
+/// r(s) ≥ 0 for any admitted s      (SH38 — INFORMATIVE only, AMB-4)
+/// ```
+///
+/// The `r(s) ≥ 0` exclusion appears **only in NOTE 1**, i.e. informative in
+/// both editions. pdfce applies it anyway: a negative radius has no
+/// geometric meaning, and the alternative is painting a circle of imaginary
+/// size. Recorded as a choice, not as compliance.
+///
+/// # Both radii zero (SH34)
+///
+/// > "The radii r0 and r1 shall both be greater than or equal to 0. If one
+/// > radius is 0, the corresponding circle shall be a point… If both are 0,
+/// > nothing shall be painted."
+fn radial_param(coords: [f32; 6], domain: [f32; 2], extend: [bool; 2], x: f32, y: f32) -> Param {
+    let [x0, y0, r0, x1, y1, r1] = coords;
+    // SH34: both radii zero paints nothing at all.
+    if r0 <= 0.0 && r1 <= 0.0 {
+        return Param::Unpainted;
+    }
+    let (dx, dy, dr) = (x1 - x0, y1 - y0, r1 - r0);
+    let (px, py) = (x - x0, y - y0);
+
+    let a = dx.mul_add(dx, dy * dy) - dr * dr;
+    let b = -2.0 * (px.mul_add(dx, py * dy) + r0 * dr);
+    let c = px.mul_add(px, py * py) - r0 * r0;
+
+    // Admissibility, per SH40 plus the informative r(s) >= 0 rule.
+    let admissible = |s: f32| {
+        if s < 0.0 && !extend[0] {
+            return false;
+        }
+        if s > 1.0 && !extend[1] {
+            return false;
+        }
+        dr.mul_add(s, r0) >= 0.0
+    };
+
+    // The greatest admissible root wins (SH39/SH40). Both roots are tried
+    // largest-first, so the first admissible one IS the greatest.
+    let chosen = if a.abs() <= f32::EPSILON {
+        // Linear: b·s + c = 0. Not a degenerate case to be nudged past —
+        // it is the exact-45-degree cone, a real shape a real file can
+        // contain.
+        if b.abs() <= f32::EPSILON {
+            None
+        } else {
+            let s = -c / b;
+            admissible(s).then_some(s)
+        }
+    } else {
+        let disc = b.mul_add(b, -4.0 * a * c);
+        if disc < 0.0 {
+            None
+        } else {
+            let root = disc.sqrt();
+            let s1 = (-b + root) / (2.0 * a);
+            let s2 = (-b - root) / (2.0 * a);
+            let (hi, lo) = if s1 >= s2 { (s1, s2) } else { (s2, s1) };
+            if admissible(hi) {
+                Some(hi)
+            } else if admissible(lo) {
+                Some(lo)
+            } else {
+                None
+            }
+        }
+    };
+
+    let Some(s) = chosen else {
+        return Param::Unpainted;
+    };
+    // SH39: beyond either end the colour is FLAT at that end's t, even
+    // though the geometry keeps moving (SH37 — this is the half that
+    // differs from axial, and clamping `s` here rather than earlier is
+    // what keeps the shape right while the colour flattens).
+    let [t0, t1] = domain;
+    let s_clamped = s.clamp(0.0, 1.0);
+    Param::At((t1 - t0).mul_add(s_clamped, t0))
+}
+
+/// Paint a shading over a device-space region.
+///
+/// # Why per-pixel, and why that is affordable
+///
+/// See the module docs for why `tiny_skia`'s gradients cannot express the
+/// general radial case. The cost that buys is one inverse transform and one
+/// [`ColorRamp::at`] lookup per pixel — arithmetic and an array index. The
+/// `/Function` itself was evaluated [`RAMP_SAMPLES`] times when the model
+/// was built, not once per pixel, which is the difference between running a
+/// PostScript calculator 256 times and running it eight million times.
+///
+/// # The paint area, and the two clips
+///
+/// `region` is the device-space rectangle to consider — for `sh` that is
+/// the current clip's bounds (Table 77: `sh` fills the clip, it takes no
+/// path). Two further restrictions apply inside it:
+///
+/// - `clip`, the current clip mask's per-pixel coverage.
+/// - `/BBox`, which **clips** rather than merely bounds (SH7: *"temporary
+///   clipping boundary … in addition to the current clipping path"*), and
+///   is expressed in the shading's **target** space (SH6), so it is tested
+///   after the inverse transform rather than before it.
+///
+/// # What is deliberately not done here
+///
+/// **Anti-aliasing.** `/AntiAlias` has no algorithm in either edition, 1.7
+/// explicitly permits ignoring it, and 2.0 removes that permission without
+/// adding a duty (AMB-8). Each pixel is tested at its centre and painted
+/// fully or not at all.
+///
+/// **`/Background`.** It applies only on the pattern route (SH3/SH4) and
+/// this slice paints only `sh`, where Table 77 says it is ignored. The
+/// parameter is absent rather than passed-and-unused so that adding the
+/// pattern route is a visible change here.
+fn paint_region(
+    shading: &Shading,
+    ramp: &ColorRamp,
+    to_target: tiny_skia::Transform,
+    region: (i32, i32, i32, i32),
+    clip: Option<&tiny_skia::Mask>,
+    alpha: f32,
+    pixmap: &mut tiny_skia::Pixmap,
+) -> usize {
+    let (x_lo, y_lo, x_hi, y_hi) = region;
+    let width = pixmap.width() as i32;
+    let height = pixmap.height() as i32;
+    let alpha = alpha.clamp(0.0, 1.0);
+    let mut painted = 0usize;
+
+    for py in y_lo.max(0)..y_hi.min(height) {
+        for px in x_lo.max(0)..x_hi.min(width) {
+            // Pixel CENTRE, not corner: a gradient sampled at pixel corners
+            // is a half-pixel shifted against every other paint in this
+            // renderer, which shows up as a seam where a shading abuts a
+            // path filled with the same colour.
+            let mut pt = tiny_skia::Point::from_xy(px as f32 + 0.5, py as f32 + 0.5);
+            to_target.map_point(&mut pt);
+
+            // /BBox clips, in TARGET space (SH6, SH7).
+            if let Some([bx0, by0, bx1, by1]) = shading.bbox
+                && (pt.x < bx0.min(bx1)
+                    || pt.x > bx0.max(bx1)
+                    || pt.y < by0.min(by1)
+                    || pt.y > by0.max(by1))
+            {
+                continue;
+            }
+
+            let Some(Param::At(t)) = shading.geometry.param_at(pt.x, pt.y) else {
+                continue;
+            };
+            let Some(rgb) = ramp.at(t) else {
+                continue;
+            };
+
+            let idx = (py as usize) * (width as usize) + (px as usize);
+            let coverage = match clip {
+                // The clip mask is one byte of coverage per device pixel,
+                // laid out in the same row-major order as the pixmap.
+                Some(mask) => f32::from(mask.data()[idx]) / 255.0,
+                None => 1.0,
+            };
+            let a = alpha * coverage;
+            if a <= 0.0 {
+                continue;
+            }
+
+            // Source-over in PREMULTIPLIED space, which is what the pixmap
+            // stores and therefore the form with no conversion round-trip:
+            //
+            //     out = src·a + dst·(1 − a)
+            //
+            // Done by hand because tiny_skia's blitters take a `Paint`
+            // carrying ONE colour, and the entire point of a shading is
+            // that every pixel has a different one.
+            //
+            // Straight (non-premultiplied) blending was written first and
+            // rejected: it needs a divide by the output alpha, which is a
+            // second place for a 0/0 to appear on exactly the pixels where
+            // nothing should be drawn anyway.
+            let dst = pixmap.pixels()[idx];
+            let inv = 1.0 - a;
+            let out_a = a
+                .mul_add(255.0, f32::from(dst.alpha()) * inv)
+                .round()
+                .clamp(0.0, 255.0) as u8;
+            // Each channel is CLAMPED TO out_a, not merely to 255.
+            //
+            // Algebraically a premultiplied channel can never exceed its
+            // own alpha here — `src·a·255 + dst.c·inv ≤ a·255 +
+            // dst.alpha·inv` because a straight colour is ≤ 1 and `dst.c ≤
+            // dst.alpha` by the premultiplied invariant. But the channels
+            // and the alpha are rounded INDEPENDENTLY, and rounding can
+            // put a channel one unit above alpha. `from_rgba` rejects that
+            // (it validates the invariant), so without this clamp a
+            // scattering of pixels along a gradient would silently fail to
+            // paint — a speckled hole through the gradient, which reads as
+            // a rasteriser bug rather than as a rounding artefact.
+            let mix = |src: f32, d: u8| -> u8 {
+                let v = (src * a)
+                    .mul_add(255.0, f32::from(d) * inv)
+                    .round()
+                    .clamp(0.0, 255.0) as u8;
+                v.min(out_a)
+            };
+            if let Some(c) = tiny_skia::PremultipliedColorU8::from_rgba(
+                mix(rgb.r, dst.red()),
+                mix(rgb.g, dst.green()),
+                mix(rgb.b, dst.blue()),
+                out_a,
+            ) {
+                pixmap.pixels_mut()[idx] = c;
+                painted += 1;
+            }
+        }
+    }
+    painted
+}
+
+impl Shading {
+    /// Paint this shading over a device-space area.
+    ///
+    /// # The two arguments that carry all the anchoring
+    ///
+    /// `to_target` maps **device space to the shading's target coordinate
+    /// space** — the inverse of whatever transform the paint route
+    /// establishes. That single parameter is where the §8.7.2-versus-Table
+    /// 77 distinction lives, and keeping it a parameter rather than
+    /// deriving it here is deliberate: the route knows which transform is
+    /// correct, and this function does not need to.
+    ///
+    /// - `sh` passes the inverse of the **current CTM** (SH1, PM7).
+    /// - A shading pattern passes the inverse of `base_ctm × /Matrix`
+    ///   (PM2/PM3) — the pattern's own matrix concatenated with the
+    ///   *initial* transform of the parent content stream, not the CTM at
+    ///   paint time.
+    ///
+    /// `region` is the device-space `(left, top, right, bottom)` to
+    /// consider. For `sh` that is the current clip's bounding box, because
+    /// Table 77 gives the operator no path: it fills the clip region.
+    ///
+    /// # Returns
+    ///
+    /// The number of device pixels actually written. Zero is a legitimate
+    /// answer — a fully-clipped shading, or one whose `/Extend` is false at
+    /// both ends and whose geometry misses the region entirely — and the
+    /// caller reports it rather than treating it as failure.
+    ///
+    /// `None` means this shading is of a type this build does not paint
+    /// (type 1, and the meshes), which is a different fact from "painted
+    /// zero pixels" and must not collapse into it.
+    #[must_use]
+    pub fn paint(
+        &self,
+        to_target: tiny_skia::Transform,
+        region: (i32, i32, i32, i32),
+        clip: Option<&tiny_skia::Mask>,
+        alpha: f32,
+        pixmap: &mut tiny_skia::Pixmap,
+    ) -> Option<usize> {
+        if !self.geometry.is_analytic() {
+            return None;
+        }
+        // Type 1 is modelled but not painted in this build — see
+        // `Geometry::param_at`. Asked here rather than inside the pixel
+        // loop so a whole-region no-op costs one branch, not W×H of them.
+        if matches!(self.geometry, Geometry::FunctionBased { .. }) {
+            return None;
+        }
+        let ramp = self.ramp.as_ref()?;
+        Some(paint_region(
+            self, ramp, to_target, region, clip, alpha, pixmap,
+        ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -----------------------------------------------------------------
+    // §8.7.4.5.3 — axial (SH25, SH26, SH27, SH29)
+    // -----------------------------------------------------------------
+
+    /// The horizontal reference case: axis from x=50 to x=150 at y=0.
+    const AX: [f32; 4] = [50.0, 0.0, 150.0, 0.0];
+    const D01: [f32; 2] = [0.0, 1.0];
+
+    fn t_of(p: Param) -> Option<f32> {
+        match p {
+            Param::At(t) => Some(t),
+            Param::Unpainted => None,
+        }
+    }
+
+    #[test]
+    fn axial_endpoints_are_exactly_zero_and_one() {
+        // SH25's own anchoring sentence: "(0, 0) and (1, 0) in the domain
+        // correspond respectively to (x0, y0) and (x1, y1) on the axis."
+        assert_eq!(
+            t_of(axial_param(AX, D01, [false, false], 50.0, 0.0)),
+            Some(0.0)
+        );
+        assert_eq!(
+            t_of(axial_param(AX, D01, [false, false], 150.0, 0.0)),
+            Some(1.0)
+        );
+        assert_eq!(
+            t_of(axial_param(AX, D01, [false, false], 100.0, 0.0)),
+            Some(0.5)
+        );
+    }
+
+    #[test]
+    fn axial_bounds_are_inclusive_so_the_ends_are_not_a_gap() {
+        // SH26 writes the interpolation branch as `0 <= x' <= 1`. Exactly 0
+        // and exactly 1 therefore take the INTERPOLATION branch, not an
+        // extend branch. With `/Extend [false false]` a strict `<`/`>` here
+        // would leave a one-parameter-wide hole at each end that no test
+        // sampling the interior would ever notice.
+        assert!(t_of(axial_param(AX, D01, [false, false], 50.0, 0.0)).is_some());
+        assert!(t_of(axial_param(AX, D01, [false, false], 150.0, 0.0)).is_some());
+    }
+
+    #[test]
+    fn axial_ignores_the_perpendicular_coordinate() {
+        // SH25: "all points along a line in domain space perpendicular to
+        // the line from (0, 0) to (1, 0) have the same colour, only the new
+        // value of x needs to be computed". There is no y'.
+        let near = t_of(axial_param(AX, D01, [false, false], 100.0, 0.0));
+        let far = t_of(axial_param(AX, D01, [false, false], 100.0, 9_999.0));
+        assert_eq!(near, far);
+    }
+
+    #[test]
+    fn axial_projection_normalises_by_the_squared_axis_length() {
+        // The discriminating case, and the reason a diagonal axis is in the
+        // fixture set. On a DIAGONAL axis, dividing by ‖axis‖ instead of
+        // ‖axis‖² is off by a factor of ‖axis‖ — here 141.42 — which a
+        // horizontal-axis test cannot see, because a horizontal unit axis
+        // makes the two divisors differ by a factor the endpoints hide.
+        //
+        // Axis (0,0)->(100,100). The point (100, 0) projects to the axis
+        // midpoint: ((100-0)*(100-0) + (100-0)*(0-0)) / (100² + 100²)
+        // = 10000 / 20000 = 0.5. Dividing by ‖axis‖ would give 70.7.
+        let diag = [0.0, 0.0, 100.0, 100.0];
+        assert_eq!(
+            t_of(axial_param(diag, D01, [true, true], 100.0, 0.0)),
+            Some(0.5)
+        );
+        assert_eq!(
+            t_of(axial_param(diag, D01, [true, true], 0.0, 100.0)),
+            Some(0.5)
+        );
+    }
+
+    #[test]
+    fn axial_extend_false_leaves_the_point_unpainted() {
+        // SH26, verbatim: "otherwise, t is undefined and the point shall be
+        // left unpainted." NOT clamped, and NOT painted with the boundary
+        // colour — those are what `/Extend true` does.
+        assert_eq!(
+            axial_param(AX, D01, [false, false], 40.0, 0.0),
+            Param::Unpainted
+        );
+        assert_eq!(
+            axial_param(AX, D01, [false, false], 160.0, 0.0),
+            Param::Unpainted
+        );
+    }
+
+    #[test]
+    fn axial_extend_true_continues_the_boundary_colour_indefinitely() {
+        // SH27: flat t0 / t1, "indefinitely" — so a point far outside gets
+        // the same answer as one just outside.
+        assert_eq!(
+            t_of(axial_param(AX, D01, [true, true], 40.0, 0.0)),
+            Some(0.0)
+        );
+        assert_eq!(
+            t_of(axial_param(AX, D01, [true, true], -1e6, 0.0)),
+            Some(0.0)
+        );
+        assert_eq!(
+            t_of(axial_param(AX, D01, [true, true], 160.0, 0.0)),
+            Some(1.0)
+        );
+        assert_eq!(
+            t_of(axial_param(AX, D01, [true, true], 1e6, 0.0)),
+            Some(1.0)
+        );
+        // Each end is independent.
+        assert_eq!(
+            axial_param(AX, D01, [true, false], 160.0, 0.0),
+            Param::Unpainted
+        );
+        assert_eq!(
+            axial_param(AX, D01, [false, true], 40.0, 0.0),
+            Param::Unpainted
+        );
+    }
+
+    #[test]
+    fn axial_honours_a_non_unit_domain() {
+        // SH26: t = t0 + (t1 - t0) * x'. `/Domain` is NOT required to be
+        // [0 1], and a shading whose function is defined over [2 5] must be
+        // fed values in that range or the ramp is indexed off its own end.
+        let dom = [2.0, 5.0];
+        assert_eq!(
+            t_of(axial_param(AX, dom, [true, true], 50.0, 0.0)),
+            Some(2.0)
+        );
+        assert_eq!(
+            t_of(axial_param(AX, dom, [true, true], 150.0, 0.0)),
+            Some(5.0)
+        );
+        assert_eq!(
+            t_of(axial_param(AX, dom, [true, true], 100.0, 0.0)),
+            Some(3.5)
+        );
+    }
+
+    #[test]
+    fn a_zero_length_axial_axis_paints_nothing() {
+        // AMB-1 / SH29. ISO 32000-1 is SILENT here and the projection's
+        // denominator is 0/0; ISO 32000-2 Table 79 adds "If the starting and
+        // ending coordinates are coincident (x0=x1 and y0=y1) nothing shall
+        // be painted."
+        //
+        // pdfce applies the 2.0 rule at every version. A later edition
+        // resolving an earlier silence is a forced default rather than a
+        // choice between two readings — and it is also the only answer that
+        // cannot emit NaN pixels, which is what an unguarded 0/0 would do.
+        let degenerate = [50.0, 50.0, 50.0, 50.0];
+        assert_eq!(
+            axial_param(degenerate, D01, [true, true], 50.0, 50.0),
+            Param::Unpainted
+        );
+        assert_eq!(
+            axial_param(degenerate, D01, [true, true], 0.0, 0.0),
+            Param::Unpainted
+        );
+    }
+
+    // -----------------------------------------------------------------
+    // §8.7.4.5.4 — radial (SH33, SH34, SH36, SH39, SH40, AMB-3)
+    // -----------------------------------------------------------------
+
+    /// Concentric, r0 = 0 -> r1 = 80, centred at (100,100). The ordinary
+    /// "radial gradient" shape.
+    const CONC: [f32; 6] = [100.0, 100.0, 0.0, 100.0, 100.0, 80.0];
+
+    #[test]
+    fn radial_uses_the_circumference_model_so_the_centre_is_t0() {
+        // ★ The test that decides AMB-3, and the one most worth reading.
+        //
+        // ISO 32000-1 says a point lying "WITHIN more than one blend circle"
+        // takes the colour of the greatest enclosing s; ISO 32000-2 changes
+        // "within" to "ON". Those are discs versus circumferences, and they
+        // are not a shade of meaning — they give opposite answers here.
+        //
+        // Under the DISC reading, the centre of this shading lies inside
+        // every blend circle from s=0 to s=1, so the greatest s is 1 and the
+        // centre paints t1. Worse, so does every other point inside the
+        // outer circle, and the entire shading collapses to a flat t1 disc.
+        // That the disc reading destroys the gradient it is describing is
+        // the argument that it is a wording artefact, not the model.
+        //
+        // Under the CIRCUMFERENCE reading — solve |P - c(s)| = r(s) — only
+        // the s=0 circle (a point, since r0=0) passes through the centre, so
+        // the centre paints t0. That is 2.0's "on", it is what pdfce
+        // implements, and it is what pdfium produces (measured 2026-08-17).
+        assert_eq!(
+            t_of(radial_param(CONC, D01, [false, false], 100.0, 100.0)),
+            Some(0.0)
+        );
+    }
+
+    #[test]
+    fn radial_interpolates_linearly_in_radius_not_in_area() {
+        // SH33: r(s) = r0 + s*(r1 - r0) — a plain linear interpolation. A
+        // by-area interpolation (which "looks more correct" for a glow and
+        // is a real implementer's temptation) would put the midpoint colour
+        // at radius 80/sqrt(2) = 56.6, not at 40.
+        assert_eq!(
+            t_of(radial_param(CONC, D01, [false, false], 140.0, 100.0)),
+            Some(0.5)
+        );
+        assert_eq!(
+            t_of(radial_param(CONC, D01, [false, false], 180.0, 100.0)),
+            Some(1.0)
+        );
+        // Direction is irrelevant — the circles are circles.
+        assert_eq!(
+            t_of(radial_param(CONC, D01, [false, false], 100.0, 140.0)),
+            Some(0.5)
+        );
+        assert_eq!(
+            t_of(radial_param(CONC, D01, [false, false], 60.0, 100.0)),
+            Some(0.5)
+        );
+    }
+
+    #[test]
+    fn radial_extend_false_leaves_the_outside_unpainted() {
+        // Distance 100 needs s = 1.25, which is outside [0,1] and therefore
+        // admissible only under `/Extend[1]`.
+        assert_eq!(
+            radial_param(CONC, D01, [false, false], 200.0, 100.0),
+            Param::Unpainted
+        );
+    }
+
+    #[test]
+    fn radial_extend_true_admits_s_past_one_but_flattens_the_colour() {
+        // SH39: "Blend circles extending beyond the ending circle shall be
+        // painted in the colour defined for the ending circle (t = t1)."
+        //
+        // So the GEOMETRY continues (s > 1 is admitted, the circles keep
+        // growing) while the COLOUR is flat. SH37 is explicit that this is
+        // where radial `/Extend` differs from axial: implementing it as
+        // "clamp s to [0,1]" before the geometry gives the right colour and
+        // the wrong shape. Clamping AFTER admission, as here, gives both.
+        assert_eq!(
+            t_of(radial_param(CONC, D01, [false, true], 200.0, 100.0)),
+            Some(1.0)
+        );
+        assert_eq!(
+            t_of(radial_param(CONC, D01, [false, true], 1e5, 100.0)),
+            Some(1.0)
+        );
+    }
+
+    #[test]
+    fn radial_with_both_radii_zero_paints_nothing() {
+        // SH34, verbatim: "If both are 0, nothing shall be painted."
+        let nothing = [100.0, 100.0, 0.0, 140.0, 100.0, 0.0];
+        assert_eq!(
+            radial_param(nothing, D01, [true, true], 100.0, 100.0),
+            Param::Unpainted
+        );
+        assert_eq!(
+            radial_param(nothing, D01, [true, true], 120.0, 100.0),
+            Param::Unpainted
+        );
+    }
+
+    #[test]
+    fn radial_picks_the_greatest_s_when_two_blend_circles_both_pass_through_the_point() {
+        // ★★ THE SELECTION-RULE TEST, and it exists because the first
+        // version of this suite COULD NOT SEE the rule inverted.
+        //
+        // Sabotage check, 2026-08-17: swapping the greatest-root branch for
+        // the smallest left all 17 tests green. SH39/SH40 is the sentence
+        // the spec corpus singles out as "the single most-misimplemented in
+        // the clause", and the suite was blind to exactly it. The reason was
+        // that every earlier fixture had only ONE admissible root — on a
+        // concentric shading the second root is negative, so hi-vs-lo never
+        // arises and both orderings agree.
+        //
+        // This geometry is chosen so both roots are admissible AND both lie
+        // inside [0,1], so no clamp can mask the difference either:
+        //
+        //   start circle  centre (60,100)  r0 = 10
+        //   end circle    centre (140,100) r1 = 50
+        //   probe point   (70,100)
+        //
+        // The s=0 circle passes through the probe (distance from (60,100) is
+        // 10 = r0). So does the s=0.5 circle: centre (100,100), radius 30,
+        // and the probe is 30 away. Two blend circles, both through the same
+        // point, both admissible.
+        //
+        // SH39: the circles are painted opaquely in increasing s, so "its
+        // final colour shall be that of the LAST of the enclosing circles to
+        // be painted, corresponding to the GREATEST value of s". The answer
+        // is 0.5, not 0.0.
+        let two_roots = [60.0, 100.0, 10.0, 140.0, 100.0, 50.0];
+        assert_eq!(
+            t_of(radial_param(two_roots, D01, [false, false], 70.0, 100.0)),
+            Some(0.5),
+            "the GREATEST admissible s wins (SH39/SH40); 0.0 means the smallest root was taken and the painting order is inverted"
+        );
+    }
+
+    #[test]
+    fn radial_greatest_s_still_wins_when_the_larger_root_needs_extend() {
+        // The same rule one step out: here the larger root is s = 1.0833,
+        // admissible ONLY because `/Extend[1]` is true. With extend false
+        // the answer legitimately falls back to the smaller root, so this
+        // pair also proves the admissibility filter runs BEFORE the
+        // greatest-wins choice rather than after it.
+        let cone = [60.0, 100.0, 25.0, 140.0, 100.0, 45.0];
+        // Extended: the larger root wins, and its colour flattens to t1.
+        assert_eq!(
+            t_of(radial_param(cone, D01, [true, true], 100.0, 100.0)),
+            Some(1.0)
+        );
+        // Not extended: the larger root is inadmissible, so the smaller one
+        // is the greatest ADMISSIBLE s. Not the same number, and not a
+        // contradiction.
+        let unextended = t_of(radial_param(cone, D01, [false, false], 100.0, 100.0));
+        assert!(
+            unextended.is_some_and(|t| (t - 0.15).abs() < 1e-4),
+            "expected the smaller root 0.15 when extension is off, got {unextended:?}"
+        );
+    }
+
+    #[test]
+    fn radial_t_does_not_run_backwards_along_a_cone() {
+        // SH39/SH40, the selection rule. On a cone — neither circle inside
+        // the other — a point can sit on TWO blend circles, and the spec's
+        // opaque increasing-s painting order means the larger s wins.
+        //
+        // Both radii non-zero and centres apart: this is precisely the shape
+        // `tiny_skia::RadialGradient` cannot represent, so it is also the
+        // case that would silently degrade if pdfce ever delegated.
+        let cone = [60.0, 100.0, 25.0, 140.0, 100.0, 45.0];
+        // A point on the axis between the two centres is enclosed by a range
+        // of blend circles; the answer must be the largest admissible one,
+        // so it must exceed what the smallest enclosing circle would give.
+        let mid = t_of(radial_param(cone, D01, [false, false], 100.0, 100.0));
+        assert!(mid.is_some(), "a point inside the cone must be painted");
+        let mid = mid.unwrap();
+        assert!(
+            (0.0..=1.0).contains(&mid),
+            "an unextended cone yields s in [0,1], got {mid}"
+        );
+        // Sanity on ordering: moving toward the ending circle's centre must
+        // not DECREASE t on this configuration.
+        let nearer_end = t_of(radial_param(cone, D01, [false, false], 130.0, 100.0)).unwrap();
+        assert!(
+            nearer_end >= mid,
+            "t must not run backwards along the cone: {mid} -> {nearer_end}"
+        );
+    }
+
+    #[test]
+    fn radial_honours_a_non_unit_domain() {
+        let dom = [10.0, 20.0];
+        assert_eq!(
+            t_of(radial_param(CONC, dom, [false, false], 100.0, 100.0)),
+            Some(10.0)
+        );
+        assert_eq!(
+            t_of(radial_param(CONC, dom, [false, false], 140.0, 100.0)),
+            Some(15.0)
+        );
+        assert_eq!(
+            t_of(radial_param(CONC, dom, [false, false], 180.0, 100.0)),
+            Some(20.0)
+        );
+    }
+
+    // -----------------------------------------------------------------
+    // The ramp
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn a_ramp_samples_both_endpoints_exactly() {
+        // The mapping is t = t0 + (t1-t0)*i/(N-1), so index 0 is exactly t0
+        // and index N-1 is exactly t1. Sampling at bin CENTRES instead would
+        // put the end colours half a step inside the domain, and a two-stop
+        // gradient would never reach either of its declared colours — a
+        // small error that is invisible on a subtle ramp and obvious on a
+        // black-to-white one.
+        let ramp = ColorRamp {
+            samples: (0..RAMP_SAMPLES)
+                .map(|i| {
+                    #[allow(clippy::cast_precision_loss)]
+                    let v = i as f32 / (RAMP_SAMPLES - 1) as f32;
+                    Some(Rgb { r: v, g: v, b: v })
+                })
+                .collect(),
+            domain: [0.0, 1.0],
+        };
+        assert_eq!(ramp.at(0.0).unwrap().r, 0.0);
+        assert_eq!(ramp.at(1.0).unwrap().r, 1.0);
+        // Out-of-domain clamps to the nearest end rather than panicking.
+        // This is the RAMP's contract and says nothing about `/Extend`:
+        // whether a point outside is painted at all was decided by the
+        // geometry before this is ever called.
+        assert_eq!(ramp.at(-5.0).unwrap().r, 0.0);
+        assert_eq!(ramp.at(5.0).unwrap().r, 1.0);
+    }
+
+    #[test]
+    fn a_degenerate_ramp_domain_does_not_divide_by_zero() {
+        let ramp = ColorRamp {
+            samples: vec![Some(Rgb::BLACK); RAMP_SAMPLES],
+            domain: [3.0, 3.0],
+        };
+        assert!(ramp.at(3.0).is_some());
+        assert!(ramp.at(0.0).is_some());
+    }
+}
