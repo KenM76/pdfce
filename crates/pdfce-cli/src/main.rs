@@ -13842,6 +13842,14 @@ fn cmd_redact_apply(input: &Path, output: &Path, acknowledge_residuals: bool) ->
         report.estimated_width_fonts,
         bytes.len(),
     );
+    // The Table 192 overlay-marking ladder. Printed as counters as well as
+    // appearing in `notes` below, because a counter is what a script can
+    // read: `Pass 84.0` exists because twelve colour counters were computed,
+    // merged and unit-tested while no shell ever printed one (R151).
+    println!(
+        "  overlay_text_burned={} overlay_ro_not_drawn={} overlay_transparent={}",
+        report.overlay_text_burned, report.overlay_ro_not_drawn, report.overlay_transparent,
+    );
     println!("  carriers (diligence sweep, ISO 32000-1 §12.5.6.23):");
     for c in &report.carriers {
         println!(

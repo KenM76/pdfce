@@ -6910,40 +6910,6 @@ fn read_rect_array<G: ObjectGraph + ?Sized>(graph: &G, obj: &Object) -> Option<[
     }
 }
 
-/// Map a `/BaseFont` name to the standard-14 face it denotes, for resolving
-/// a field `/DA` font against the AcroForm `/DR` (§12.7.3.3).
-///
-/// Handles the canonical §9.6.2.2 spellings and the common producer
-/// shorthands (`Helv`, `HeBo`, `Cour`, `TiRo`, `Symb`, `ZaDb`) Acrobat's
-/// default `/DR` uses. A subset-prefixed name (`ABCDEF+Helvetica`) is
-/// matched on the suffix. `None` for anything not a standard-14 face — the
-/// caller then falls back to Helvetica (the Base-14 generator cannot lay out
-/// an embedded/CID font).
-fn basefont_to_std14(name: &[u8]) -> Option<Std14> {
-    // Strip a subset prefix `ABCDEF+`.
-    let bare = match name.iter().position(|&b| b == b'+') {
-        Some(i) if i == 6 => name.get(i + 1..).unwrap_or(name),
-        _ => name,
-    };
-    Some(match bare {
-        b"Helvetica" | b"Helv" | b"Arial" | b"ArialMT" => Std14::Helvetica,
-        b"Helvetica-Bold" | b"HeBo" | b"Arial-Bold" | b"Arial-BoldMT" => Std14::HelveticaBold,
-        b"Helvetica-Oblique" | b"Arial-Italic" | b"Arial-ItalicMT" => Std14::HelveticaOblique,
-        b"Helvetica-BoldOblique" | b"Arial-BoldItalic" => Std14::HelveticaBoldOblique,
-        b"Times-Roman" | b"TiRo" | b"TimesNewRoman" | b"TimesNewRomanPSMT" => Std14::TimesRoman,
-        b"Times-Bold" | b"TimesNewRomanPS-BoldMT" => Std14::TimesBold,
-        b"Times-Italic" | b"TimesNewRomanPS-ItalicMT" => Std14::TimesItalic,
-        b"Times-BoldItalic" | b"TimesNewRomanPS-BoldItalicMT" => Std14::TimesBoldItalic,
-        b"Courier" | b"Cour" | b"CourierNew" | b"CourierNewPSMT" => Std14::Courier,
-        b"Courier-Bold" => Std14::CourierBold,
-        b"Courier-Oblique" => Std14::CourierOblique,
-        b"Courier-BoldOblique" => Std14::CourierBoldOblique,
-        b"Symbol" | b"Symb" => Std14::Symbol,
-        b"ZapfDingbats" | b"ZaDb" => Std14::ZapfDingbats,
-        _ => return None,
-    })
-}
-
 impl EditSession {
     /// Refuse a structural change that an **enforced** certification
     /// signature forbids (§12.8.4 Table 258).
@@ -13523,7 +13489,7 @@ impl EditSession {
                     .as_dict()
                     .and_then(|fd| fd.get(b"BaseFont"))
                     .and_then(Object::as_name)
-                    .and_then(|n| basefont_to_std14(n.as_bytes()))
+                    .and_then(|n| crate::fontdata::basefont_to_std14(n.as_bytes()))
                     .unwrap_or(Std14::Helvetica);
                 let nm = name.as_bytes().to_vec();
                 if !out.iter().any(|r| r.name == nm) {

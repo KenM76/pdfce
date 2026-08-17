@@ -835,6 +835,48 @@ pub fn std14_builtin_encoding(font: Std14) -> BaseEncoding {
     }
 }
 
+/// Map a `/BaseFont` name to the standard-14 face it denotes, for resolving
+/// a `/DA` font name against a resource dictionary (§12.7.3.3).
+///
+/// Lives here rather than in `edit` because it is pure font-name data
+/// with no session, document or graph dependency, and it now has two
+/// callers in different layers: form-field appearance regeneration
+/// (`EditSession::resolve_dr_fonts`, against the AcroForm `/DR`) and
+/// redaction overlay text (`redact::overlay_font_resources`, against the
+/// page's own `/Resources`). A second copy would be two answers to
+/// "which face is `/Helv`?" in one binary.
+///
+/// Handles the canonical §9.6.2.2 spellings and the common producer
+/// shorthands (`Helv`, `HeBo`, `Cour`, `TiRo`, `Symb`, `ZaDb`) Acrobat's
+/// default `/DR` uses. A subset-prefixed name (`ABCDEF+Helvetica`) is
+/// matched on the suffix. `None` for anything not a standard-14 face — the
+/// caller then falls back to Helvetica (the Base-14 generator cannot lay out
+/// an embedded/CID font).
+pub(crate) fn basefont_to_std14(name: &[u8]) -> Option<Std14> {
+    // Strip a subset prefix `ABCDEF+`.
+    let bare = match name.iter().position(|&b| b == b'+') {
+        Some(i) if i == 6 => name.get(i + 1..).unwrap_or(name),
+        _ => name,
+    };
+    Some(match bare {
+        b"Helvetica" | b"Helv" | b"Arial" | b"ArialMT" => Std14::Helvetica,
+        b"Helvetica-Bold" | b"HeBo" | b"Arial-Bold" | b"Arial-BoldMT" => Std14::HelveticaBold,
+        b"Helvetica-Oblique" | b"Arial-Italic" | b"Arial-ItalicMT" => Std14::HelveticaOblique,
+        b"Helvetica-BoldOblique" | b"Arial-BoldItalic" => Std14::HelveticaBoldOblique,
+        b"Times-Roman" | b"TiRo" | b"TimesNewRoman" | b"TimesNewRomanPSMT" => Std14::TimesRoman,
+        b"Times-Bold" | b"TimesNewRomanPS-BoldMT" => Std14::TimesBold,
+        b"Times-Italic" | b"TimesNewRomanPS-ItalicMT" => Std14::TimesItalic,
+        b"Times-BoldItalic" | b"TimesNewRomanPS-BoldItalicMT" => Std14::TimesBoldItalic,
+        b"Courier" | b"Cour" | b"CourierNew" | b"CourierNewPSMT" => Std14::Courier,
+        b"Courier-Bold" => Std14::CourierBold,
+        b"Courier-Oblique" => Std14::CourierOblique,
+        b"Courier-BoldOblique" => Std14::CourierBoldOblique,
+        b"Symbol" | b"Symb" => Std14::Symbol,
+        b"ZapfDingbats" | b"ZaDb" => Std14::ZapfDingbats,
+        _ => return None,
+    })
+}
+
 #[cfg(test)]
 // Tests are exempt from the panic-free policy: a panicking assertion IS the
 // test-failure mechanism (see the crate-level lint rationale in lib.rs).

@@ -199,6 +199,37 @@ impl ContentBuilder {
         &self.out
     }
 
+    /// Append already-formed content-stream bytes verbatim.
+    ///
+    /// The composition escape hatch, for splicing in a fragment some other
+    /// generator produced — the case it exists for is baking a
+    /// [`crate::vartext::build_variable_text`] block (a form field's value,
+    /// a redaction's `/OverlayText`) into a larger stream, where
+    /// re-emitting the text through this builder would mean a SECOND text
+    /// layout implementation in the binary.
+    ///
+    /// # Contract
+    ///
+    /// The caller guarantees `bytes` is **self-contained and balanced**:
+    /// every `q` matched by a `Q`, every `BT` by an `ET`, every `BMC`/`BDC`
+    /// by an `EMC`, and no path left open. Nothing is parsed or validated
+    /// here — this is a byte append. Passing an unbalanced fragment
+    /// corrupts every operator that follows it in the stream, which is why
+    /// the intended source is a generator with that guarantee in its own
+    /// contract rather than hand-written bytes.
+    ///
+    /// Wrap the call in [`save_state`](Self::save_state) /
+    /// [`restore_state`](Self::restore_state) if the fragment sets graphics
+    /// state the surrounding content must not inherit.
+    pub fn append_raw(&mut self, bytes: &[u8]) {
+        debug_assert!(
+            !self.in_path,
+            "append_raw with an open path: the fragment would be spliced between a path \
+             construction operator and its paint operator"
+        );
+        self.out.extend_from_slice(bytes);
+    }
+
     // -- graphics state (§8.4.3) — must precede any path (W-E) ----------
 
     /// `w` — set the line width in form-space units (§8.4.3.2). A width of

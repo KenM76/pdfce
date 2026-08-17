@@ -48,6 +48,7 @@
 //! | Prior incremental revisions | **dropped** — apply forces a FULL REWRITE (R35), never incremental |
 //! | Images intersecting a region | **REFUSED, by name** — pdfce does not yet destroy image pixels, and a clip/overlay would be a false redaction (§12.5.6.23) |
 //! | Form-XObject content in-region | **disclosed** — not surgically redacted this cut (verify manually) |
+//! | Overlay marking (Table 192 ladder) | `/OverlayText` **burnt in** (via §12.7.3.3 variable text, `/DA`-formatted, `/Q`-justified); `/IC` filled under it; **absent `/IC` ⇒ TRANSPARENT**, per Table 192; `/RO` **not drawn** — disclosed, falls back to a plain box; `/Repeat` **ignored** — disclosed |
 //! | XFA / file attachments / structure-tree ActualText / thumbnails | **detected + disclosed** (not asserted-absent) |
 //!
 //! ## §3 — the advance-preservation hazard, stated once
@@ -91,6 +92,7 @@ use crate::page_tree::{self, PageTreeError, Rect};
 use crate::settings::UnmappableCode;
 use crate::span::ByteSpan;
 use crate::text_extract::font::ExtractFont;
+use crate::vartext::Quadding;
 use crate::writer::content::{ContentBuilder, Paint, emit_literal_string, emit_number};
 use crate::writer::{SaveOptions, WriteError, save_full};
 
@@ -311,6 +313,15 @@ pub struct RedactionReport {
     /// not standard-14) — affects only advance-preservation cosmetics,
     /// never the removal itself. Disclosed.
     pub estimated_width_fonts: u64,
+    /// Regions whose `/OverlayText` was burnt into the page (Table 192's
+    /// overlay-text regime).
+    pub overlay_text_burned: u64,
+    /// Regions carrying an `/RO` overlay appearance that pdfce could not
+    /// draw, and fell back to a plain box for. Disclosed, never silent.
+    pub overlay_ro_not_drawn: u64,
+    /// Regions left TRANSPARENT because the mark carried no `/RO`,
+    /// `/OverlayText` or `/IC` — Table 192's stated default.
+    pub overlay_transparent: u64,
     /// Per-carrier diligence status (§12.5.6.23's "all content" sweep).
     pub carriers: Vec<CarrierStatus>,
     /// The distinct redacted text strings, for the operator's review and
@@ -1020,25 +1031,232 @@ fn redact_page_content(
     }
 }
 
-/// Build the overlay content bytes for a page's regions: a filled box per
-/// region in the fill colour (default black), wrapped in `q … Q` so it
-/// does not perturb following state. RO/OverlayText burn-in is a named
-/// follow-up (module docs); the `/IC`-fill regime is Acrobat's default.
-fn build_overlay(regions: &[(RegionBox, [f64; 3])]) -> Vec<u8> {
+/// What [`build_overlay`] did, so the caller can DISCLOSE it.
+///
+/// Every field here exists because project rule 4 forbids a silent
+/// inference, and the overlay path makes several: a substituted `/DA`, an
+/// auto-chosen font size, a character with no WinAnsi code, an `/RO` that
+/// could not be drawn. None of those is visible to an operator looking at
+/// the result — a burnt-in overlay looks equally deliberate whether the
+/// size was the author's or pdfce's — and the mark carrying the evidence
+/// is deleted by the same operation, so if this struct does not carry it,
+/// nothing does.
+#[derive(Debug, Default)]
+struct OverlayOutcome {
+    /// The content-stream bytes to append after the redacted content.
+    content: Vec<u8>,
+    /// `/Font` resource entries the content needs, keyed by the resource
+    /// name its `/DA` referenced. Merged into the page's `/Resources`.
+    fonts: Dict,
+    /// Regions whose `/OverlayText` was burnt in.
+    text_regions: u64,
+    /// Regions where `/RO` was present and could not be drawn.
+    ro_regions: u64,
+    /// Regions left transparent because no `/RO`, `/OverlayText` or `/IC`
+    /// was present (Table 192's default).
+    transparent_regions: u64,
+    /// Regions whose `/Repeat true` was ignored.
+    repeat_ignored: u64,
+    /// Regions whose `/OverlayText` was present with no `/DA`, which
+    /// Table 192 makes conditionally required.
+    da_substituted: u64,
+    /// Auto-sizes pdfce chose (`/DA` size 0), in points.
+    autosizes: Vec<f64>,
+    /// Characters with no WinAnsi code, replaced by `?`.
+    unencodable_chars: usize,
+    /// Overlay text that could not be laid out at all, with the reason.
+    text_failures: Vec<String>,
+}
+
+impl OverlayOutcome {
+    /// Accumulate one page's outcome into a document-wide total.
+    ///
+    /// Deliberately does NOT accumulate `content` or `fonts`: those are
+    /// per-page by construction (they are baked into that page's content
+    /// stream and merged into that page's `/Resources`), and summing them
+    /// across pages would produce a document-wide font set that no single
+    /// page's `/DA` names. Only the DISCLOSURE counters are document-wide,
+    /// because the report is.
+    fn absorb(&mut self, other: &Self) {
+        self.text_regions += other.text_regions;
+        self.ro_regions += other.ro_regions;
+        self.transparent_regions += other.transparent_regions;
+        self.repeat_ignored += other.repeat_ignored;
+        self.da_substituted += other.da_substituted;
+        self.unencodable_chars += other.unencodable_chars;
+        self.autosizes.extend_from_slice(&other.autosizes);
+        for f in &other.text_failures {
+            if !self.text_failures.contains(f) {
+                self.text_failures.push(f.clone());
+            }
+        }
+    }
+}
+
+/// Build the overlay content bytes for a page's regions, following the
+/// Table 192 precedence ladder reified in [`OverlayRegime`].
+///
+/// Everything is wrapped in one `q … Q` so the overlay cannot perturb the
+/// state of any content that follows, and each text block gets its own
+/// nested `q … Q` plus a translation, because
+/// [`crate::vartext::build_variable_text`] emits its content in a box-local space
+/// with the origin at the bottom-left — exactly like an appearance stream
+/// `/BBox`. Translating instead of re-laying-out is what keeps ONE text
+/// layout implementation in the binary: the same code lays out a form
+/// field's value, a FreeText annotation, and this. A second layout path
+/// reached only by redaction would be a path only redaction could get
+/// wrong, on the one operation with no undo.
+fn build_overlay(
+    doc: &Document,
+    page_resources: &Dict,
+    regions: &[(RegionBox, OverlayRegime)],
+) -> OverlayOutcome {
+    let mut out = OverlayOutcome::default();
     let mut b = ContentBuilder::new();
     b.save_state();
-    for (region, rgb) in regions {
-        b.set_fill_rgb(rgb[0], rgb[1], rgb[2]);
-        b.rect(
-            region.min_x,
-            region.min_y,
-            region.max_x - region.min_x,
-            region.max_y - region.min_y,
-        );
-        b.paint(Paint::Fill);
+    for (region, regime) in regions {
+        let (x, y) = (region.min_x, region.min_y);
+        let (w, h) = (region.max_x - region.min_x, region.max_y - region.min_y);
+        // The box fill, when the ladder calls for one.
+        let box_fill = match regime {
+            OverlayRegime::Ro { fallback } => {
+                out.ro_regions += 1;
+                Some(*fallback)
+            }
+            OverlayRegime::Text { fill, .. } => *fill,
+            OverlayRegime::Fill(rgb) => Some(*rgb),
+            OverlayRegime::Transparent => {
+                out.transparent_regions += 1;
+                None
+            }
+        };
+        if let Some(rgb) = box_fill {
+            b.set_fill_rgb(rgb[0], rgb[1], rgb[2]);
+            b.rect(x, y, w, h);
+            b.paint(Paint::Fill);
+        }
+        let OverlayRegime::Text {
+            text,
+            da,
+            quad,
+            repeat,
+            ..
+        } = regime
+        else {
+            continue;
+        };
+        if *repeat {
+            out.repeat_ignored += 1;
+        }
+        // Table 192 makes /DA required whenever /OverlayText is present.
+        // A mark without one is malformed — but the content is ALREADY
+        // gone by the time this runs, so refusing would leave the document
+        // redacted and unmarked, which is strictly worse than a disclosed
+        // default. Substitute and say so.
+        let da = if da.is_empty() {
+            out.da_substituted += 1;
+            crate::vartext::default_appearance_string(
+                b"Helv",
+                0.0,
+                crate::vartext::TextColor::Gray(0.0),
+            )
+        } else {
+            da.clone()
+        };
+        let fonts = overlay_font_resources(doc, page_resources, &da);
+        let bbox = Rect {
+            llx: 0.0,
+            lly: 0.0,
+            urx: w,
+            ury: h,
+        };
+        match crate::vartext::build_variable_text(bbox, text, &da, *quad, true, &fonts) {
+            Ok(app) => {
+                if let Some(size) = app.applied_autosize {
+                    out.autosizes.push(size);
+                }
+                out.unencodable_chars += app.unencodable_chars;
+                // Place the box-local content at the region's lower-left.
+                b.save_state();
+                b.concat_matrix(1.0, 0.0, 0.0, 1.0, x, y);
+                b.append_raw(&app.content);
+                b.restore_state();
+                // Merge the font dict this block needs.
+                if let Some(f) = app.resources.get(b"Font").and_then(Object::as_dict) {
+                    for (name, val) in f.iter() {
+                        if out.fonts.get(name.as_bytes()).is_none() {
+                            out.fonts.insert(name.clone(), val.clone());
+                        }
+                    }
+                }
+                out.text_regions += 1;
+            }
+            Err(e) => out.text_failures.push(e.to_string()),
+        }
     }
     b.restore_state();
-    b.into_bytes()
+    out.content = b.into_bytes();
+    out
+}
+
+/// The font resources a redaction overlay's `/DA` may name.
+///
+/// Mirrors `EditSession::resolve_dr_fonts`'s contract for form fields, one
+/// level down: a synthetic `Helv → Helvetica` is ALWAYS present so the
+/// overwhelmingly common `/DA /Helv 0 Tf 0 g` resolves even on a page with
+/// no `/Resources /Font` at all, and every font the page does declare is
+/// added under its own resource name with its `/BaseFont` mapped to a
+/// standard-14 face.
+///
+/// Resolving against the PAGE's resources rather than the AcroForm `/DR`
+/// is deliberate: a `/Redact` annotation is not a form field, its `/DA` is
+/// not scoped by `/DR`, and the overlay is being baked into THIS page's
+/// content stream, so the page is the only dictionary whose names are
+/// guaranteed to mean the same thing after the bake.
+fn overlay_font_resources(
+    doc: &Document,
+    page_resources: &Dict,
+    da: &[u8],
+) -> Vec<crate::vartext::FontResource> {
+    let mut out = vec![crate::vartext::FontResource {
+        name: b"Helv".to_vec(),
+        font: crate::fontdata::Std14::Helvetica,
+    }];
+    if let Some(fonts) = page_resources
+        .get(b"Font")
+        .map(|o| doc.resolve(o))
+        .and_then(Object::as_dict)
+    {
+        for (name, val) in fonts.iter() {
+            let face = doc
+                .resolve(val)
+                .as_dict()
+                .and_then(|fd| fd.get(b"BaseFont"))
+                .and_then(Object::as_name)
+                .and_then(|n| crate::fontdata::basefont_to_std14(n.as_bytes()))
+                .unwrap_or(crate::fontdata::Std14::Helvetica);
+            let nm = name.as_bytes().to_vec();
+            if !out.iter().any(|r| r.name == nm) {
+                out.push(crate::vartext::FontResource {
+                    name: nm,
+                    font: face,
+                });
+            }
+        }
+    }
+    // A /DA naming a font neither the page nor the synthetic default
+    // declares would otherwise fail to resolve and lose the text
+    // entirely. Bind it to Helvetica so the text is DRAWN (disclosed via
+    // the autosize/substitution counters) rather than dropped.
+    if let Ok(parsed) = crate::vartext::parse_default_appearance(da)
+        && !out.iter().any(|r| r.name == parsed.font_name)
+    {
+        out.push(crate::vartext::FontResource {
+            name: parsed.font_name,
+            font: crate::fontdata::Std14::Helvetica,
+        });
+    }
+    out
 }
 
 // ===================================================================
@@ -1050,8 +1268,8 @@ struct PageRedaction {
     page_id: ObjId,
     /// Surgery regions (all quads across all marks on this page).
     boxes: Vec<RegionBox>,
-    /// Overlay boxes with their fill colour (default black).
-    overlay: Vec<(RegionBox, [f64; 3])>,
+    /// Overlay regions with the Table 192 marking regime each mark selected.
+    overlay: Vec<(RegionBox, OverlayRegime)>,
     /// The `/Redact` annotation object ids to remove.
     redact_ids: Vec<ObjId>,
     /// Non-redact annotations intersecting a region — removed (the
@@ -1104,6 +1322,7 @@ pub fn apply_redactions(
     let mut next_num = doc.next_object_number().unwrap_or(1);
     let mut form_intersect_any = false;
     let mut estimated_fonts: BTreeSet<String> = BTreeSet::new();
+    let mut overlay_totals = OverlayOutcome::default();
 
     for (index, red, contents) in &plan {
         let page = pages.get(*index).ok_or(RedactError::NothingToApply)?;
@@ -1117,8 +1336,9 @@ pub fn apply_redactions(
                 page: index + 1,
                 source: e,
             })?;
-        let overlay = build_overlay(&red.overlay);
-        let result = redact_page_content(doc, &page.resources, &red.boxes, &stream, &overlay);
+        let ov = build_overlay(doc, &page.resources, &red.overlay);
+        overlay_totals.absorb(&ov);
+        let result = redact_page_content(doc, &page.resources, &red.boxes, &stream, &ov.content);
 
         // Image intersection → refuse by name (never a false redaction).
         if result.image_intersect {
@@ -1179,7 +1399,7 @@ pub fn apply_redactions(
 
         // Rewrite the page dict: /Contents -> [content_id], /Annots with the
         // removed marks/overlaps gone, /Thumb dropped.
-        let page_write = rewrite_page_dict(doc, red.page_id, content_id, &remove_annots);
+        let page_write = rewrite_page_dict(doc, red.page_id, content_id, &remove_annots, &ov.fonts);
         if let Some((new_dict, thumb)) = page_write {
             dirty.replace(red.page_id, Object::Dict(new_dict));
             if let Some(thumb_id) = thumb {
@@ -1197,6 +1417,82 @@ pub fn apply_redactions(
         ));
     }
     report.estimated_width_fonts = estimated_fonts.len() as u64;
+
+    // --- overlay-marking disclosures (Table 192 ladder, project rule 4) ---
+    //
+    // Every one of these describes something an operator CANNOT see by
+    // looking at the result: a burnt-in overlay looks equally deliberate
+    // whether pdfce chose the size or the author did, a fallback box looks
+    // exactly like an intended box, and a transparent region looks like a
+    // region nothing happened to. The annotation that carried the evidence
+    // is deleted by this same operation, so this report is the only place
+    // the information can still exist.
+    report.overlay_text_burned = overlay_totals.text_regions;
+    report.overlay_ro_not_drawn = overlay_totals.ro_regions;
+    report.overlay_transparent = overlay_totals.transparent_regions;
+    if overlay_totals.text_regions > 0 {
+        report.note(format!(
+            "redaction: overlay text burnt into {} region(s) (ISO 32000-1 Table 192 \
+             /OverlayText, formatted by /DA and justified by /Q)",
+            overlay_totals.text_regions
+        ));
+    }
+    if overlay_totals.ro_regions > 0 {
+        report.note(format!(
+            "redaction: {} region(s) carried an /RO overlay appearance that pdfce does NOT \
+             draw this build — a plain /IC-coloured box (black when no /IC) was painted \
+             instead, so the region IS marked but NOT with the appearance its author \
+             supplied; the content removal itself is unaffected",
+            overlay_totals.ro_regions
+        ));
+    }
+    if overlay_totals.transparent_regions > 0 {
+        report.note(format!(
+            "redaction: {} region(s) were left TRANSPARENT — the mark carried no /RO, \
+             /OverlayText or /IC, and Table 192 says an absent /IC leaves the interior \
+             transparent; the content is removed but the region carries no visible mark",
+            overlay_totals.transparent_regions
+        ));
+    }
+    if overlay_totals.repeat_ignored > 0 {
+        report.note(format!(
+            "redaction: /Repeat true was IGNORED on {} region(s) — the overlay text was \
+             drawn once, not tiled to fill the region",
+            overlay_totals.repeat_ignored
+        ));
+    }
+    if overlay_totals.da_substituted > 0 {
+        report.note(format!(
+            "redaction: {} region(s) had /OverlayText with no /DA, which Table 192 makes \
+             required — pdfce substituted auto-sized Helvetica in black",
+            overlay_totals.da_substituted
+        ));
+    }
+    if !overlay_totals.autosizes.is_empty() {
+        let sizes: Vec<String> = overlay_totals
+            .autosizes
+            .iter()
+            .map(|s| format!("{s:.1}"))
+            .collect();
+        report.note(format!(
+            "redaction: overlay text auto-sized (/DA size 0) to {} pt — pdfce's heuristic, \
+             not a spec formula",
+            sizes.join(", ")
+        ));
+    }
+    if overlay_totals.unencodable_chars > 0 {
+        report.note(format!(
+            "redaction: {} overlay-text character(s) have no WinAnsi code and were drawn as \
+             '?' — the overlay text is Base-14 Latin only this build",
+            overlay_totals.unencodable_chars
+        ));
+    }
+    for failure in &overlay_totals.text_failures {
+        report.note(format!(
+            "redaction: overlay text could NOT be laid out and was not drawn ({failure}); \
+             the region carries only its /IC fill, if any"
+        ));
+    }
 
     // --- carrier sweep (the §12.5.6.23 diligence obligation) ---
     let redacted_text = report.redacted_text.clone();
@@ -1285,10 +1581,10 @@ fn gather_page(doc: &Document, page_id: ObjId) -> Option<PageRedaction> {
             .map(|n| n.as_bytes().to_vec())
             .unwrap_or_default();
         if subtype == b"Redact" {
-            let fill = annot_fill(doc, dict);
+            let regime = annot_overlay(doc, dict);
             for rb in annot_regions(doc, dict) {
                 boxes.push(rb);
-                overlay.push((rb, fill));
+                overlay.push((rb, regime.clone()));
             }
             redact_ids.push(aid);
         } else if let Some(rb) = annot_rect_box(doc, dict) {
@@ -1370,21 +1666,146 @@ fn annot_rect_box(doc: &Document, dict: &Dict) -> Option<RegionBox> {
 /// A `/Redact` mark's fill colour: `/IC` (DeviceRGB, three numbers) or the
 /// default black. `/IC` is ignored if `/RO` is present (Table 192); RO
 /// burn-in is a named follow-up, so this build honours `/IC`/default.
-fn annot_fill(doc: &Document, dict: &Dict) -> [f64; 3] {
-    if let Some(ic) = dict
+fn annot_fill(doc: &Document, dict: &Dict) -> Option<[f64; 3]> {
+    let ic = dict
         .get(b"IC")
         .map(|o| doc.resolve(o))
-        .and_then(Object::as_array)
-    {
-        let n: Vec<f64> = ic
-            .iter()
-            .filter_map(|o| doc.resolve(o).as_number())
-            .collect();
-        if let [r, g, b] = n.as_slice() {
-            return [*r, *g, *b];
-        }
+        .and_then(Object::as_array)?;
+    let n: Vec<f64> = ic
+        .iter()
+        .filter_map(|o| doc.resolve(o).as_number())
+        .collect();
+    match n.as_slice() {
+        [r, g, b] => Some([*r, *g, *b]),
+        _ => None,
     }
-    [0.0, 0.0, 0.0]
+}
+
+/// Which overlay-marking regime a `/Redact` mark selects, per the "ignored
+/// if" chain in ISO 32000-1 Table 192 (§12.5.6.23).
+///
+/// The standard states the precedence as four separate "ignored if"
+/// clauses spread across five table rows rather than as a ladder, which is
+/// why it is reified here as one type: reading those clauses as
+/// independent booleans is how a decoder ends up drawing `/IC` underneath
+/// an `/RO` that was supposed to suppress it. The derived ladder is:
+///
+/// ```text
+/// RO present        -> draw the RO form XObject at the annotation
+///                      rectangle's lower-left; IC/OverlayText/DA/Q ALL ignored
+/// else OverlayText  -> IC fills the region first (IC is "ignored if RO",
+///                      NOT "ignored if OverlayText"), then the text is
+///                      drawn over it, formatted by DA and justified by Q
+/// else IC present   -> fill the region with that DeviceRGB colour
+/// else              -> leave the region TRANSPARENT
+/// ```
+///
+/// The last rung is the one most easily got wrong, and pdfce got it wrong
+/// until this Pass: Table 192's `/IC` row says in as many words that "if
+/// this entry is absent, the interior of the redaction region is left
+/// transparent". Defaulting an absent `/IC` to black paints a box the
+/// standard says not to paint — the same shape of defect as painting a
+/// `/Separation /None` image (§8.6.6.4), where "it looks like what people
+/// expect" is not the same as "the standard permits it".
+#[derive(Debug, Clone)]
+enum OverlayRegime {
+    /// `/RO` is present. This build cannot bake a form XObject into page
+    /// content, so it discloses that and falls back to a visible box: the
+    /// `/IC` colour when one is given, black otherwise.
+    ///
+    /// Falling back to *something visible* rather than to the spec's
+    /// transparent default is deliberate and is a redaction-safety
+    /// judgement, not a spec reading: a mark whose author went to the
+    /// trouble of supplying a custom overlay appearance plainly intended
+    /// the region to be marked, and silently leaving it bare would be the
+    /// one failure mode this feature cannot have.
+    Ro { fallback: [f64; 3] },
+    /// `/OverlayText` is present (and `/RO` is not).
+    Text {
+        /// `/IC`, drawn UNDER the text when present. `None` leaves the
+        /// region transparent behind the glyphs.
+        fill: Option<[f64; 3]>,
+        /// The decoded `/OverlayText` string.
+        text: String,
+        /// `/DA` — conditionally REQUIRED by Table 192 whenever
+        /// `/OverlayText` is present. A mark that omits it is malformed;
+        /// pdfce substitutes a default and discloses rather than refusing,
+        /// because the removal has already happened by this point and
+        /// aborting would leave the document redacted but unmarked.
+        da: Vec<u8>,
+        /// `/Q` justification (default 0, left).
+        quad: Quadding,
+        /// `/Repeat` — tile the text to fill the region. Not implemented;
+        /// disclosed when true.
+        repeat: bool,
+    },
+    /// `/IC` alone.
+    Fill([f64; 3]),
+    /// No `/RO`, no `/OverlayText`, no `/IC` — Table 192's transparent
+    /// default.
+    Transparent,
+}
+
+/// Resolve one `/Redact` annotation dictionary to its [`OverlayRegime`].
+///
+/// Reads, in ladder order, `/RO`, `/OverlayText`, `/IC`, `/DA`, `/Q` and
+/// `/Repeat`. `/OverlayText` is a PDF text string (§7.9.2.2), so it is
+/// decoded through [`crate::textstring::decode_text_string`] rather than
+/// treated as bytes — a producer is free to emit it UTF-16BE, and reading
+/// those bytes as PDFDocEncoding would burn mojibake into the page
+/// permanently, on the one operation that cannot be undone.
+fn annot_overlay(doc: &Document, dict: &Dict) -> OverlayRegime {
+    let fill = annot_fill(doc, dict);
+    if dict.get(b"RO").is_some() {
+        return OverlayRegime::Ro {
+            fallback: fill.unwrap_or([0.0, 0.0, 0.0]),
+        };
+    }
+    let overlay_text = dict
+        .get(b"OverlayText")
+        .map(|o| doc.resolve(o))
+        .and_then(|o| match o {
+            Object::String(s) => Some(s.as_slice()),
+            _ => None,
+        })
+        .map(|s| crate::textstring::decode_text_string(s).text);
+    if let Some(text) = overlay_text {
+        let da = dict
+            .get(b"DA")
+            .map(|o| doc.resolve(o))
+            .and_then(|o| match o {
+                Object::String(s) => Some(s.clone()),
+                _ => None,
+            })
+            .unwrap_or_default();
+        let quad = dict
+            .get(b"Q")
+            .map(|o| doc.resolve(o))
+            .and_then(|o| match o {
+                Object::Integer(i) => Some(*i),
+                _ => None,
+            })
+            .map_or(Quadding::Left, Quadding::from_code);
+        let repeat = dict
+            .get(b"Repeat")
+            .map(|o| doc.resolve(o))
+            .and_then(|o| match o {
+                Object::Boolean(v) => Some(*v),
+                _ => None,
+            })
+            .unwrap_or(false);
+        return OverlayRegime::Text {
+            fill,
+            text,
+            da,
+            quad,
+            repeat,
+        };
+    }
+    match fill {
+        Some(rgb) => OverlayRegime::Fill(rgb),
+        None => OverlayRegime::Transparent,
+    }
 }
 
 /// The appearance/popup child object ids of an annotation (its `/AP`
@@ -1440,6 +1861,7 @@ fn rewrite_page_dict(
     page_id: ObjId,
     content_id: ObjId,
     remove: &[ObjId],
+    overlay_fonts: &Dict,
 ) -> Option<(Dict, Option<ObjId>)> {
     let page = doc
         .get(page_id)
@@ -1450,6 +1872,43 @@ fn rewrite_page_dict(
         Name::from(b"Contents"),
         Object::Array(vec![Object::Reference(content_id)]),
     );
+    // A burnt-in `/OverlayText` block names a font resource, so that name
+    // must resolve from THIS page after the bake.
+    //
+    // The merge writes an explicit `/Resources` onto the page even when the
+    // page previously INHERITED one from an ancestor `/Pages` node (§7.7.3.4).
+    // That is a deliberate, narrow denormalisation: the effective resource
+    // set is preserved exactly (the inherited dictionary is resolved and
+    // copied first), and it is confined to pages that actually gained an
+    // overlay font. Mutating the shared ancestor instead would silently
+    // change every OTHER page that inherits from it — a much larger edit
+    // than the operator asked for, on the one operation that forces a full
+    // rewrite and has no undo.
+    //
+    // An existing binding for the same name is NEVER overwritten: the page's
+    // own font wins, and `overlay_font_resources` has already laid the text
+    // out against that same face, so the two agree.
+    if !overlay_fonts.is_empty() {
+        let mut resources = page
+            .get(b"Resources")
+            .map(|o| doc.resolve(o))
+            .and_then(Object::as_dict)
+            .cloned()
+            .unwrap_or_default();
+        let mut fonts = resources
+            .get(b"Font")
+            .map(|o| doc.resolve(o))
+            .and_then(Object::as_dict)
+            .cloned()
+            .unwrap_or_default();
+        for (name, val) in overlay_fonts.iter() {
+            if fonts.get(name.as_bytes()).is_none() {
+                fonts.insert(name.clone(), val.clone());
+            }
+        }
+        resources.insert(Name::from(b"Font"), Object::Dict(fonts));
+        updated.insert(Name::from(b"Resources"), Object::Dict(resources));
+    }
     // /Annots: drop the removed refs. If it is an indirect array, inline a
     // fresh direct array (simplest correct rewrite for the destructive path).
     if let Some(annots) = page
@@ -2528,5 +2987,198 @@ mod tests {
         assert!(report.info_strings_scrubbed >= 1);
         // The unrelated /Author survives the scrub + decomposition.
         assert!(contains(&out, b"Nobody"));
+    }
+
+    // -- the Table 192 overlay-marking ladder (§12.5.6.23) --------------
+
+    /// A one-page document carrying a hand-built `/Redact` mark over the
+    /// text, with `extra` spliced into the annotation dictionary.
+    ///
+    /// Hand-built rather than authored through `build_redact_mark` on
+    /// purpose: these tests are about what APPLY does with the entries it
+    /// finds in a file, including combinations pdfce's own authoring
+    /// cannot currently produce (`/RO`, `/Repeat`, `/OverlayText` with no
+    /// `/DA`). Driving the reader from the writer would make the pair
+    /// agree with each other while both disagreed with Table 192.
+    fn pdf_with_redact_mark(extra: &str) -> Vec<u8> {
+        let content = b"BT /F1 24 Tf 20 100 Td (SECRET PUBLIC) Tj ET";
+        let stream = format!(
+            "<< /Length {} >>\nstream\n{}\nendstream",
+            content.len(),
+            std::str::from_utf8(content).unwrap()
+        );
+        assemble(
+            &[
+                "<< /Type /Catalog /Pages 2 0 R >>",
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 200] \
+                 /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R \
+                 /Annots [6 0 R] >>",
+                &stream,
+                "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+                &format!(
+                    "<< /Type /Annot /Subtype /Redact /Rect [20 95 200 125] \
+                     /QuadPoints [20 125 200 125 20 95 200 95] {extra} >>"
+                ),
+            ],
+            "",
+        )
+    }
+
+    fn apply_marked(extra: &str) -> (Vec<u8>, RedactionReport) {
+        let doc = Document::from_bytes(pdf_with_redact_mark(extra)).unwrap();
+        apply_redactions(&doc, &SaveOptions::identity()).unwrap()
+    }
+
+    /// THE REPORTED DEFECT. `/OverlayText` reached the file and nothing
+    /// ever drew it: the text was authored into the annotation, the
+    /// annotation was deleted by apply, and the operator's words were gone
+    /// with no runtime word about it.
+    ///
+    /// Asserts BOTH halves, because either alone can pass while the
+    /// feature is broken — the glyphs can be drawn with no disclosure
+    /// (rule 4), or the disclosure can be emitted with nothing drawn.
+    #[test]
+    fn overlay_text_is_burnt_into_the_page_and_disclosed() {
+        let (out, report) =
+            apply_marked("/IC [1 0 0] /OverlayText (CLASSIFIED) /Q 1 /DA (/Helv 10 Tf 0 g)");
+        let doc = Document::from_bytes(out).unwrap();
+        let content = all_decoded_content(&doc);
+        assert!(
+            contains(&content, b"CLASSIFIED"),
+            "overlay text must be drawn into the page content"
+        );
+        assert_eq!(report.overlay_text_burned, 1);
+        assert!(
+            report
+                .notes
+                .iter()
+                .any(|n| n.contains("overlay text burnt")),
+            "the burn-in must be disclosed; notes were {:?}",
+            report.notes
+        );
+        // The redaction itself still happened.
+        assert!(!contains(&content, b"SECRET"));
+    }
+
+    /// Table 192's `/IC` row: "if this entry is absent, the interior of
+    /// the redaction region is left transparent". pdfce painted BLACK.
+    ///
+    /// The same shape of defect as painting a `/Separation /None` image
+    /// (§8.6.6.4): a box that looks like what everyone expects, that the
+    /// standard says not to paint.
+    #[test]
+    fn absent_ic_leaves_the_region_transparent() {
+        let (out, report) = apply_marked("");
+        let doc = Document::from_bytes(out).unwrap();
+        let content = all_decoded_content(&doc);
+        assert_eq!(report.overlay_transparent, 1);
+        assert_eq!(report.overlay_text_burned, 0);
+        assert!(
+            !contains(&content, b" re\n"),
+            "no /IC means no filled box: content was {:?}",
+            String::from_utf8_lossy(&content)
+        );
+        assert!(
+            report.notes.iter().any(|n| n.contains("TRANSPARENT")),
+            "leaving the region unmarked must be disclosed; notes were {:?}",
+            report.notes
+        );
+    }
+
+    /// The rung that already worked, pinned so the transparency fix above
+    /// cannot be over-applied into "never fill anything".
+    #[test]
+    fn present_ic_still_fills_the_region() {
+        let (out, report) = apply_marked("/IC [0 0 1]");
+        let doc = Document::from_bytes(out).unwrap();
+        let content = all_decoded_content(&doc);
+        assert_eq!(report.overlay_transparent, 0);
+        assert!(contains(&content, b"0 0 1 rg"), "the /IC colour is used");
+        assert!(contains(&content, b" re\n"), "a box is filled");
+    }
+
+    /// `/RO` takes precedence over everything and pdfce cannot draw it.
+    /// The requirement is that this is DISCLOSED and that the region is
+    /// still visibly marked — an undrawn overlay on a region whose content
+    /// is already destroyed is the one outcome this feature must not have.
+    #[test]
+    fn ro_is_disclosed_and_falls_back_to_a_visible_box() {
+        let (out, report) = apply_marked("/RO 7 0 R /IC [0 1 0]");
+        let doc = Document::from_bytes(out).unwrap();
+        let content = all_decoded_content(&doc);
+        assert_eq!(report.overlay_ro_not_drawn, 1);
+        assert!(contains(&content, b"0 1 0 rg"), "falls back to the /IC box");
+        assert!(
+            report.notes.iter().any(|n| n.contains("/RO")),
+            "an undrawn /RO must be disclosed; notes were {:?}",
+            report.notes
+        );
+    }
+
+    /// `/OverlayText` present with no `/DA` is malformed — Table 192 makes
+    /// `/DA` required whenever `/OverlayText` is. Refusing is not an option
+    /// (the content is already destroyed by the time the overlay is
+    /// built), so pdfce substitutes and says so.
+    #[test]
+    fn overlay_text_without_da_substitutes_and_discloses() {
+        let (out, report) = apply_marked("/OverlayText (REDACTED)");
+        let doc = Document::from_bytes(out).unwrap();
+        assert!(contains(&all_decoded_content(&doc), b"REDACTED"));
+        assert_eq!(report.overlay_text_burned, 1);
+        assert!(
+            report.notes.iter().any(|n| n.contains("no /DA")),
+            "the substituted /DA must be disclosed; notes were {:?}",
+            report.notes
+        );
+    }
+
+    /// `/Repeat true` is not implemented. Silence here would be a claim
+    /// that the region was tiled when it was not.
+    #[test]
+    fn repeat_is_ignored_and_disclosed() {
+        let (_, report) = apply_marked("/OverlayText (X) /Repeat true /DA (/Helv 8 Tf 0 g)");
+        assert!(
+            report.notes.iter().any(|n| n.contains("/Repeat")),
+            "an ignored /Repeat must be disclosed; notes were {:?}",
+            report.notes
+        );
+    }
+
+    /// The burnt-in text names a font resource, so that name must resolve
+    /// from the page AFTER the annotation carrying the `/DA` is deleted.
+    /// Without the merge the overlay draws with an unresolvable font and a
+    /// viewer shows nothing — the exact "looks like it worked" failure.
+    #[test]
+    fn overlay_font_is_merged_into_the_page_resources() {
+        let (out, _) = apply_marked("/OverlayText (HI) /DA (/Helv 9 Tf 0 g)");
+        let doc = Document::from_bytes(out).unwrap();
+        let pages = page_tree::pages(&doc).unwrap();
+        let fonts = pages[0]
+            .resources
+            .get(b"Font")
+            .map(|o| doc.resolve(o))
+            .and_then(Object::as_dict)
+            .expect("page must still have a /Font dict");
+        assert!(fonts.get(b"Helv").is_some(), "the /DA font must resolve");
+        // The page's pre-existing font is untouched.
+        assert!(fonts.get(b"F1").is_some(), "existing resources survive");
+    }
+
+    /// `/OverlayText` is a PDF text string (§7.9.2.2), so a UTF-16BE one
+    /// must decode rather than being burnt in as mojibake — permanently,
+    /// on the one operation with no undo.
+    #[test]
+    fn utf16be_overlay_text_decodes_before_layout() {
+        // FEFF "NO" in UTF-16BE, as a hex string.
+        let (out, report) = apply_marked("/OverlayText <FEFF004E004F> /DA (/Helv 9 Tf 0 g)");
+        let doc = Document::from_bytes(out).unwrap();
+        let content = all_decoded_content(&doc);
+        assert_eq!(report.overlay_text_burned, 1);
+        assert!(contains(&content, b"NO"), "UTF-16BE must be decoded");
+        assert!(
+            !contains(&content, b"\x00N"),
+            "the raw UTF-16 code units must not reach the page"
+        );
     }
 }

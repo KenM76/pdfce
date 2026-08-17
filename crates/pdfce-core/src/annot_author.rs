@@ -908,12 +908,20 @@ fn emit_squiggle(b: &mut ContentBuilder, left: f64, right: f64, y0: f64, amp: f6
 pub struct RedactSpec {
     /// The quadrilaterals to remove (`/QuadPoints`), default user space.
     pub quads: Vec<Quad>,
-    /// The fill colour `/IC` used **on apply** (default black when
-    /// `None`). Not the preview colour.
+    /// The fill colour `/IC` used **on apply**. Not the preview colour.
+    ///
+    /// `None` writes no `/IC`, and ISO 32000-1 Table 192 is explicit about
+    /// what that means on apply: "if this entry is absent, the interior of
+    /// the redaction region is left transparent". It is NOT a synonym for
+    /// black — pass `Some(Color::gray(0.0))` for a black box.
     pub fill: Option<Color>,
-    /// Optional overlay text `/OverlayText` drawn on apply (recorded;
-    /// this build applies the `/IC` fill and discloses overlay-text
-    /// burn-in as a follow-up).
+    /// Optional overlay text `/OverlayText`, **drawn on apply** over the
+    /// `/IC` fill (Table 192's overlay ladder — `/IC` is ignored only when
+    /// `/RO` is present, not when `/OverlayText` is).
+    ///
+    /// Laid out by [`crate::vartext`] using the `/DA` this authors and the
+    /// [`quadding`](Self::quadding) below, so it wraps, clips to the
+    /// region, and auto-sizes exactly like a form field's value.
     pub overlay_text: Option<String>,
     /// `/Q` justification for the overlay text.
     pub quadding: Quadding,
