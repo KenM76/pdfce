@@ -6595,7 +6595,8 @@ sep_none_suppressed={} pattern_spaces={} patterns_unpainted={} \
 indexed_clamped={} indexed_short={} shadings={} shadings_via_sh={} \
 shadings_paintable={} shadings_painted={} shadings_refused={} shadings_mesh={} \
 img_colorant_none={} img_uncalibrated={} \
-blend_modes_ignored={} soft_masks_ignored={}",
+blend_modes_applied={} blend_modes_ignored={} soft_masks_ignored={} \
+groups_flattened={} groups_special={}",
         input.display(),
         output.display(),
         rendered.pixmap.width(),
@@ -6741,8 +6742,15 @@ blend_modes_ignored={} soft_masks_ignored={}",
         // neither was COUNTED either, so a page composited wrongly said
         // nothing at all. `soft_masks_ignored` is the one to watch: an
         // ignored mask paints MORE than the document asked for.
+        d.blend_modes_applied,
         d.blend_modes_ignored,
         d.soft_masks_ignored,
+        // §11.4.7 transparency groups. Appended after every pre-existing
+        // key. A group is a COMPOSITING SCOPE, so flattening it applies
+        // blend/alpha/mask to each object inside instead of to the group's
+        // result — a difference no blend-mode counter can express.
+        d.transparency_groups_flattened,
+        d.transparency_groups_special,
     );
     report_diagnostics(d);
 
@@ -6877,13 +6885,43 @@ their text was SKIPPED, not approximated{}",
     // can expose content: an ignored blend mode composites the same marks
     // by the wrong rule, while an ignored soft mask paints marks the
     // document asked to be faded or hidden.
-    if d.blend_modes_ignored > 0 {
+    if d.blend_modes_applied > 0 {
         eprintln!(
             "pdfce-cli: note: {} graphics-state(s) selected a non-Normal BLEND MODE (/BM, ISO \
-32000-1 §11.3.5) that pdfce does not implement; those marks were composited as Normal. The page \
-is not blank where they are — it is WRONG there, which is harder to notice: a Multiply that \
-composited as Normal just looks like an ordinary opaque overlay",
+32000-1 §11.3.5) and pdfce APPLIED it. Census, not a problem — reported because a page whose \
+appearance depends on blending is one whose appearance depends on pdfce's compositing being \
+right, and that is worth knowing when comparing against another renderer",
+            d.blend_modes_applied
+        );
+    }
+    if d.blend_modes_ignored > 0 {
+        eprintln!(
+            "pdfce-cli: note: {} graphics-state(s) named a blend mode pdfce does NOT recognise \
+(outside Tables 136 and 137); those marks were composited as Normal. The page is not blank where \
+they are — it is WRONG there, which is harder to notice: a blend that composited as Normal just \
+looks like an ordinary opaque overlay",
             d.blend_modes_ignored
+        );
+    }
+    if d.transparency_groups_flattened > 0 {
+        eprintln!(
+            "pdfce-cli: note: {} TRANSPARENCY GROUP(s) (/Group /S /Transparency, ISO 32000-1 \
+§11.4.7) were FLATTENED — their contents were painted straight onto the page instead of being \
+composited into a buffer and applied as a unit. Blend mode, constant alpha and any soft mask \
+therefore applied to each object INSIDE the group rather than to the group's result. That is \
+exact for a group holding one opaque object and approximate for everything else, so a page whose \
+blending looks wrong while every blend-mode counter looks right is explained by this number",
+            d.transparency_groups_flattened
+        );
+    }
+    if d.transparency_groups_special > 0 {
+        eprintln!(
+            "pdfce-cli: note: {} of those are ISOLATED (/I true) or KNOCKOUT (/K true) groups \
+(Table 96), which is where flattening stops being a good approximation: an isolated group blends \
+against a TRANSPARENT initial backdrop rather than the page, and a knockout group composites each \
+element against the group's INITIAL backdrop rather than the accumulated result. Flattening gets \
+the backdrop wrong in the first case and the occlusion order wrong in the second",
+            d.transparency_groups_special
         );
     }
     if d.soft_masks_ignored > 0 {

@@ -402,8 +402,42 @@ fn render_impl(
     let Some(mut pixmap) = Pixmap::new(width, height) else {
         return Err(RenderError::BadRasterSize { width, height });
     };
-    // Paper: PDF has no background paint — the page is white.
-    pixmap.fill(tiny_skia::Color::WHITE);
+    // §11.4.7 THE PAGE GROUP. The buffer starts fully TRANSPARENT, not
+    // white, and the white paper is composited in ONCE at the end by
+    // `flatten_page_group_over_white` below.
+    //
+    // This is not a refinement — it is the difference between right and
+    // wrong for eleven of the fifteen blend modes, and pdfce had it wrong
+    // until 2026-08-17. §11.4.7:
+    //
+    //   "All of the elements painted directly onto a page … shall be
+    //    treated as if they were contained in a transparency group P …
+    //    called the page group." "Ordinarily … the page group shall be
+    //    treated as an ISOLATED group, whose results shall then be
+    //    composited with a backdrop colour appropriate for the medium.
+    //    The backdrop is nominally white…"
+    //
+    //   ⟨Cg, fg, αg⟩ = Composite(U, 0, P)   then   C = (1 − αg)·W + αg·Cg
+    //
+    // An *isolated* group's initial backdrop is `U` — fully transparent —
+    // and §11.4.5 adds that blend modes inside a group "shall not be
+    // influenced by the group's backdrop". Compositing straight onto opaque
+    // white therefore hands every blend function a backdrop of 1.0, which
+    // is only harmless where `B(1.0, cs) = cs`: `Normal`, `Compatible`,
+    // `Multiply`, `Darken`. For the other eleven the first object painted
+    // at a given pixel comes out solid white or inverted — `Screen` of
+    // anything over white is white, `Difference` inverts, and so on.
+    //
+    // The correction is these two steps and it is EXACT, not an
+    // approximation: the pair of formulas above IS the standard's own
+    // definition of what a page is. For `Normal` the two models coincide
+    // algebraically, which is why almost nothing else in the test suite
+    // moves.
+    //
+    // (`Pixmap::new` already zeroes, so there is no fill to perform here.
+    // The line is kept as a comment rather than deleted because "the page
+    // starts white" is the intuition every reader arrives with, and the
+    // point is that the intuition is wrong.)
 
     // The one scope decision that is not about annotations at all:
     // `FormFieldsOnly` (Acrobat's "Form fields only") prints the widget
@@ -488,10 +522,65 @@ fn render_impl(
         return Err(RenderError::Cancelled);
     }
 
+    // §11.4.7's second formula: composite the isolated page group over the
+    // medium's nominally-white backdrop.
+    flatten_page_group_over_white(&mut pixmap);
+
     Ok(RenderedPage {
         pixmap,
         diagnostics,
     })
+}
+
+/// Composite an isolated page group over an opaque white backdrop —
+/// §11.4.7's `C = (1 − αg) × W + αg × Cg`, with `W = 1` (white).
+///
+/// # Why this is a separate step rather than a white initial fill
+///
+/// Because §11.4.5 says blend modes inside a group "shall not be influenced
+/// by the group's backdrop", and §11.4.7 makes the page group **isolated**,
+/// i.e. its initial backdrop is fully transparent. A white initial fill
+/// hands every blend function `cb = 1.0`, which is only harmless for the
+/// four modes satisfying `B(1.0, cs) = cs`. Doing the white at the END is
+/// what the standard actually specifies.
+///
+/// # The arithmetic, and why it is a plain lerp
+///
+/// The buffer is **premultiplied** (`Cg × αg` is what is stored), so the
+/// formula's `αg × Cg` term is already the stored value and the whole
+/// composite reduces to *"add the uncovered fraction of white"*:
+///
+/// ```text
+///     stored  = αg × Cg                     (premultiplied)
+///     result  = (1 − αg) × 255 + stored
+/// ```
+///
+/// which is then opaque. No division, no unpremultiply round-trip, and no
+/// precision loss on the covered pixels — a fully covered pixel
+/// (`αg = 255`) is returned byte-identical, which is what keeps every
+/// existing pixel assertion in the test suite stable.
+fn flatten_page_group_over_white(pixmap: &mut Pixmap) {
+    for px in pixmap.pixels_mut() {
+        let a = u32::from(px.alpha());
+        if a == 255 {
+            // Fully covered: white contributes nothing. Skipping is not
+            // just an optimisation — it guarantees byte-identical output
+            // for the overwhelmingly common opaque case.
+            continue;
+        }
+        let add = 255 - a;
+        // Saturating because the sum is bounded by 255 by construction
+        // (`stored ≤ a` for a valid premultiplied pixel), but a malformed
+        // buffer must not panic in a release render.
+        let mix = |c: u8| u8::try_from(u32::from(c) + add).unwrap_or(255);
+        *px = tiny_skia::PremultipliedColorU8::from_rgba(
+            mix(px.red()),
+            mix(px.green()),
+            mix(px.blue()),
+            255,
+        )
+        .unwrap_or(*px);
+    }
 }
 
 /// Compute the device pixmap size and base CTM for a page at `scale`

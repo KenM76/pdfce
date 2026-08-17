@@ -1,21 +1,33 @@
-//! # Clause-11 transparency is not implemented — and now it SAYS so
+//! # Clause-11 transparency: what composites, what does not, and what SAYS so
 //!
-//! `/BM` (blend mode, ISO 32000-1 §11.3.5) and `/SMask` (soft mask, §11.6.5)
-//! in an `ExtGState` are not implemented by `pdfce-render`. That is a known
-//! gap. What was NOT acceptable is that `apply_ext_gstate` read `LW`, `LC`,
-//! `LJ`, `ML`, `D`, `ca` and `CA` and silently dropped the rest, so a page
-//! asking for a Multiply blend or a soft mask rendered as though it had
-//! asked for neither and **nothing on the result line said a word about
-//! it**. Project rule 4 forbids exactly that: an inference or a shortfall
-//! the operator cannot see must still be reported.
+//! **This file's premise changed one commit after it was written**, and it
+//! is re-pointed rather than rewritten so the change stays legible. It was
+//! called `transparency_is_disclosed` because NEITHER `/BM` (§11.3.5) nor
+//! `/SMask` (§11.6.5) was implemented and the point was that pdfce at least
+//! said so. Blend modes now composite for real. Soft masks still do not.
 //!
-//! ## Why the two counters are separate, which is the whole design
+//! So the subjects here are now:
 //!
-//! Their failure directions are opposite, and only one of them can expose
-//! content:
+//! - **Soft masks** — still unimplemented, still disclosed. Unchanged.
+//! - **Unrecognised blend-mode names** — a name outside Tables 136/137 is
+//!   composited as `Normal` and counted. Also unchanged in spirit; what
+//!   changed is that "unrecognised" is now a much smaller set than
+//!   "non-Normal".
+//! - **The census/shortfall split** — `blend_modes_applied` counts modes
+//!   pdfce honoured, `blend_modes_ignored` counts names it did not know.
+//!   Those were ONE counter an hour ago, and merging them again would make
+//!   a real shortfall invisible inside an ordinary census.
 //!
-//! - An ignored **blend mode** composites the same marks by the wrong rule.
-//!   The page is not blank where they are, it is *wrong* there — and a
+//! The numeric verification that pdfce's blend modes match ISO 32000-1
+//! Tables 136 and 137 lives in `blend_modes.rs`, not here. This file is
+//! about DISCLOSURE; that one is about arithmetic.
+//!
+//! ## Why the two counters stay separate, which is the design
+//!
+//! Their failure directions are opposite and only one can expose content:
+//!
+//! - An ignored **blend mode** composites the same marks by the wrong
+//!   rule. The page is not blank there, it is *wrong* there — and a
 //!   Multiply that composited as Normal looks like a perfectly ordinary
 //!   opaque overlay. Nobody notices.
 //! - An ignored **soft mask** paints marks the document asked to be faded
@@ -23,19 +35,16 @@
 //!   design relies on a mask to hide something, that is the difference
 //!   between a rendering artefact and showing what was meant to be hidden.
 //!
-//! Folding them into one number would make the second indistinguishable
-//! from the first at exactly the moment the distinction matters.
-//!
 //! ## What this gap actually costs, measured
 //!
 //! On the operator's Ghent PDF Output Suite 5.0 X-4 file, 2026-08-17:
-//! **113 ignored blend modes and 36 ignored soft masks across six pages**,
-//! with page 2 alone accounting for 76 and 31. Page 2 had previously
-//! reported no unsupported images, no unpainted patterns and no refused
-//! shadings — it looked *clean*, and it was compositing wrongly the whole
-//! time. That measurement was impossible to take before these counters
-//! existed, which is the argument for disclosing a gap before implementing
-//! it: it re-ordered the render queue.
+//! **113 blend modes and 36 soft masks across six pages**, with page 2
+//! alone accounting for 76 and 31. Page 2 had previously reported no
+//! unsupported images, no unpainted patterns and no refused shadings — it
+//! looked *clean*, and it was compositing wrongly the whole time. That
+//! measurement was impossible to take before these counters existed, which
+//! is the argument for disclosing a gap before implementing it: it
+//! re-ordered the render queue.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
@@ -101,40 +110,55 @@ fn render(bytes: Vec<u8>) -> RenderedPage {
     render_page_with(&doc, &p, 1.0, &RenderOptions::default()).expect("render")
 }
 
+/// A mode pdfce implements is counted as APPLIED, not as ignored. Getting
+/// this backwards would report a shortfall on a page pdfce rendered
+/// correctly, which is the fastest way to make a diagnostic worthless.
 #[test]
-fn a_non_normal_blend_mode_is_counted() {
+fn an_implemented_blend_mode_is_counted_as_applied() {
     let r = render(page("<< /Type /ExtGState /BM /Multiply >>"));
-    assert_eq!(r.diagnostics.blend_modes_ignored, 1);
+    assert_eq!(r.diagnostics.blend_modes_applied, 1);
+    assert_eq!(r.diagnostics.blend_modes_ignored, 0);
     assert_eq!(r.diagnostics.soft_masks_ignored, 0);
+}
+
+/// A name outside Tables 136 and 137 — the shortfall case. pdfce composites
+/// it as `Normal` and says so; it does NOT refuse to paint, because the
+/// marks belong on the page and only the compositing rule is in doubt.
+#[test]
+fn an_unrecognised_blend_mode_name_is_counted_as_ignored() {
+    let r = render(page("<< /Type /ExtGState /BM /NotARealMode >>"));
+    assert_eq!(r.diagnostics.blend_modes_ignored, 1);
+    assert_eq!(r.diagnostics.blend_modes_applied, 0);
+    // The marks still landed.
+    let p = r.pixmap.pixel(30, 30).expect("in bounds").demultiply();
+    assert!(p.red() > 200, "an unknown /BM must not suppress the paint");
 }
 
 /// Table 58 allows `/BM` to be an ARRAY — "the first blend mode in the
 /// array that the conforming reader supports". Reading only the name form
 /// would miss every producer that writes the array, and miss it silently.
 #[test]
-fn a_blend_mode_given_as_an_array_is_counted() {
+fn a_blend_mode_given_as_an_array_is_honoured() {
     let r = render(page("<< /Type /ExtGState /BM [/Darken /Normal] >>"));
-    assert_eq!(r.diagnostics.blend_modes_ignored, 1);
+    assert_eq!(r.diagnostics.blend_modes_applied, 1);
+    assert_eq!(r.diagnostics.blend_modes_ignored, 0);
 }
 
-/// `/BM /Normal` is what pdfce actually does, so it is NOT a shortfall.
-/// Counting it would put a large number on ordinary documents and train
-/// every reader to ignore the counter — which is how a real signal gets
-/// lost inside a true one.
+/// `Normal` and `Compatible` are what pdfce does anyway, so NEITHER
+/// counter moves. Counting them in the census would put a large number on
+/// ordinary documents — producers emit `/BM /Normal` constantly to reset
+/// inherited state — and train every reader to ignore the counter, which is
+/// how a real signal gets lost inside a true one.
 #[test]
-fn normal_and_compatible_blend_modes_are_not_counted() {
-    assert_eq!(
-        render(page("<< /Type /ExtGState /BM /Normal >>"))
-            .diagnostics
-            .blend_modes_ignored,
-        0
-    );
-    assert_eq!(
-        render(page("<< /Type /ExtGState /BM /Compatible >>"))
-            .diagnostics
-            .blend_modes_ignored,
-        0
-    );
+fn normal_and_compatible_move_neither_counter() {
+    for gs in [
+        "<< /Type /ExtGState /BM /Normal >>",
+        "<< /Type /ExtGState /BM /Compatible >>",
+    ] {
+        let d = render(page(gs)).diagnostics;
+        assert_eq!(d.blend_modes_applied, 0, "{gs}");
+        assert_eq!(d.blend_modes_ignored, 0, "{gs}");
+    }
 }
 
 #[test]
@@ -159,19 +183,206 @@ fn smask_none_is_not_counted() {
 /// Both at once, and the marks still land: the disclosure is about how
 /// they were composited, not about whether anything was drawn. A test that
 /// only checked the counters would pass on a page that drew nothing.
+/// Both gaps at once, and the marks still land: the disclosure is about
+/// HOW they were composited, not about whether anything was drawn. A test
+/// that only checked the counters would pass on a page that drew nothing.
+///
+/// `Multiply` is used rather than `Screen` deliberately. The first version
+/// of this test used `/BM /Screen` and asserted the square was still RED —
+/// which passed only because blend modes were being ignored. Screen of red
+/// over a white page is WHITE, correctly, so implementing the feature broke
+/// the assertion. Multiply of red over white is red, so the assertion
+/// survives for the reason it was written (the paint happened) rather than
+/// for the reason it originally passed (the blend did not).
 #[test]
-fn the_marks_are_still_painted_while_the_gap_is_disclosed() {
+fn the_marks_are_still_painted_while_the_soft_mask_gap_is_disclosed() {
     let r = render(page(
-        "<< /Type /ExtGState /BM /Screen /SMask << /S /Luminosity /G 9 0 R >> >>",
+        "<< /Type /ExtGState /BM /Multiply /SMask << /S /Luminosity /G 9 0 R >> >>",
     ));
-    assert_eq!(r.diagnostics.blend_modes_ignored, 1);
+    assert_eq!(r.diagnostics.blend_modes_applied, 1);
     assert_eq!(r.diagnostics.soft_masks_ignored, 1);
     let p = r.pixmap.pixel(30, 30).expect("in bounds").demultiply();
     assert!(
         p.red() > 200 && p.green() < 55 && p.blue() < 55,
-        "the red square is still painted, got ({}, {}, {})",
+        "Multiply of red over a white page is red, got ({}, {}, {})",
         p.red(),
         p.green(),
         p.blue()
     );
+}
+
+/// **The blend actually changes pixels**, which no counter can tell you —
+/// and it blends against the RIGHT backdrop, which is the harder half.
+///
+/// ★ The first version of this test asserted that `Screen` over the page
+/// came out WHITE, and it passed. It was asserting a BUG. §11.4.7 makes the
+/// page an *isolated* transparency group whose initial backdrop is fully
+/// TRANSPARENT — white is composited once at the end — and §11.4.5 says
+/// blend modes inside a group "shall not be influenced by the group's
+/// backdrop". pdfce was filling the buffer opaque white and handing every
+/// blend function `cb = 1.0`, which is harmless only for the four modes
+/// satisfying `B(1.0, cs) = cs` (`Normal`, `Compatible`, `Multiply`,
+/// `Darken`) and wrong for the other eleven.
+///
+/// So the honest proof needs a real backdrop object underneath. Blue, then
+/// red screened over it: `Screen(cb, cs) = cb + cs − cb·cs`, componentwise
+/// `(0,0,1)` with `(1,0,0)` gives `(1,0,1)` — magenta. That value can only
+/// arise if the blend ran AND saw blue rather than white.
+#[test]
+fn screen_blends_against_the_object_beneath_not_against_the_paper() {
+    // Blue square painted Normal, then a red square screened over it.
+    let content = "0 0 1 rg 10 10 40 40 re f /GS0 gs 1 0 0 rg 10 10 40 40 re f";
+    let stream = format!(
+        "{content}
+"
+    );
+    let bytes = build(&[
+        (1, "<< /Type /Catalog /Pages 2 0 R >>"),
+        (
+            2,
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 60 60] >>",
+        ),
+        (
+            3,
+            "<< /Type /Page /Parent 2 0 R /Contents 4 0 R /Resources              << /ExtGState << /GS0 << /Type /ExtGState /BM /Screen >> >> >> >>",
+        ),
+        (
+            4,
+            &format!(
+                "<< /Length {} >>
+stream
+{stream}endstream",
+                stream.len()
+            ),
+        ),
+    ]);
+    let r = render(bytes);
+    let p = r.pixmap.pixel(30, 30).expect("in bounds").demultiply();
+    assert!(
+        p.red() > 250 && p.green() < 5 && p.blue() > 250,
+        "Screen of red over blue is magenta, got ({}, {}, {}) —          (255,0,0) means the blend never ran, (255,255,255) means it ran          against the paper instead of against the blue square",
+        p.red(),
+        p.green(),
+        p.blue()
+    );
+}
+
+/// The page group's initial backdrop is TRANSPARENT (§11.4.7), so the FIRST
+/// object painted at a pixel is unblended whatever the mode says — there is
+/// nothing to blend with yet. Pinned because it is the exact behaviour the
+/// old white-fill got wrong, and because it looks like a bug until you read
+/// the clause.
+#[test]
+fn the_first_object_at_a_pixel_is_unblended_because_the_page_starts_transparent() {
+    let r = render(page("<< /Type /ExtGState /BM /Screen >>"));
+    let p = r.pixmap.pixel(30, 30).expect("in bounds").demultiply();
+    assert!(
+        p.red() > 250 && p.green() < 5 && p.blue() < 5,
+        "an isolated group's first object survives its own blend mode,          got ({}, {}, {}) — white here means the buffer was pre-filled",
+        p.red(),
+        p.green(),
+        p.blue()
+    );
+    // And the paper still arrives: outside the square is white, not
+    // transparent, because the group is flattened over white at the end.
+    let bg = r.pixmap.pixel(2, 2).expect("in bounds").demultiply();
+    assert_eq!(
+        (bg.red(), bg.green(), bg.blue(), bg.alpha()),
+        (255, 255, 255, 255),
+        "uncovered page must be opaque white after flattening"
+    );
+}
+
+// -- §11.4.7 transparency groups -------------------------------------------
+
+/// A page invoking form `/Fm0`, whose stream dictionary carries `extra`.
+fn page_with_form(extra: &str) -> Vec<u8> {
+    let content = "/Fm0 Do";
+    let stream = format!("{content}\n");
+    let form_body = "1 0 0 rg 10 10 40 40 re f";
+    let form = format!(
+        "<< /Type /XObject /Subtype /Form /BBox [0 0 60 60] {extra} /Length {} >>\n\
+         stream\n{form_body}\nendstream",
+        form_body.len()
+    );
+    build(&[
+        (1, "<< /Type /Catalog /Pages 2 0 R >>"),
+        (
+            2,
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 60 60] >>",
+        ),
+        (
+            3,
+            "<< /Type /Page /Parent 2 0 R /Contents 4 0 R \
+             /Resources << /XObject << /Fm0 5 0 R >> >> >>",
+        ),
+        (
+            4,
+            &format!("<< /Length {} >>\nstream\n{stream}endstream", stream.len()),
+        ),
+        (5, &form),
+    ])
+}
+
+/// **The finding this counter exists for.** A form carrying
+/// `/Group << /S /Transparency >>` is a COMPOSITING SCOPE (§11.4.7,
+/// Table 96): its contents belong in a buffer whose RESULT is then
+/// composited with the blend mode, alpha and soft mask in force at the
+/// `Do`. pdfce paints the contents straight onto the page, which applies
+/// those to each object inside instead.
+///
+/// This was invisible until it was counted, and the way it surfaced is the
+/// argument for counting it: the Ghent X-4 file's blend-mode panel still
+/// showed the suite's failure crosses AFTER blend modes were implemented
+/// and verified correct both in isolation and against a coloured backdrop.
+/// The page carries 148 form XObjects and `/Group` was never read. Measured
+/// across that file: **187 groups flattened, 47 of them isolated or
+/// knockout**, with page 2 alone accounting for 142 and 42.
+#[test]
+fn a_transparency_group_is_counted_as_flattened() {
+    let r = render(page_with_form("/Group << /S /Transparency >>"));
+    assert_eq!(r.diagnostics.transparency_groups_flattened, 1);
+    assert_eq!(r.diagnostics.transparency_groups_special, 0);
+    // Flattening still PAINTS — the approximation is in the compositing,
+    // not in whether the marks arrive.
+    let p = r.pixmap.pixel(30, 30).expect("in bounds").demultiply();
+    assert!(p.red() > 200, "the group's contents are still painted");
+}
+
+/// `/I` (isolated) and `/K` (knockout) are where flattening stops being a
+/// good approximation, so they are counted separately rather than folded
+/// into the total: an isolated group blends against a TRANSPARENT initial
+/// backdrop rather than the page, and a knockout group composites each
+/// element against the group's INITIAL backdrop rather than the accumulated
+/// result. One gets the backdrop wrong, the other the occlusion order.
+#[test]
+fn isolated_and_knockout_groups_are_counted_separately() {
+    for extra in [
+        "/Group << /S /Transparency /I true >>",
+        "/Group << /S /Transparency /K true >>",
+        "/Group << /S /Transparency /I true /K true >>",
+    ] {
+        let d = render(page_with_form(extra)).diagnostics;
+        assert_eq!(d.transparency_groups_flattened, 1, "{extra}");
+        assert_eq!(d.transparency_groups_special, 1, "{extra}");
+    }
+}
+
+/// A form with NO `/Group` is an ordinary reusable content stream and is
+/// not a compositing scope. Counting it would put a large number on
+/// ordinary documents — forms are how every producer factors repeated
+/// content — and bury the real signal.
+#[test]
+fn a_plain_form_xobject_is_not_a_transparency_group() {
+    let d = render(page_with_form("")).diagnostics;
+    assert_eq!(d.transparency_groups_flattened, 0);
+    assert_eq!(d.transparency_groups_special, 0);
+}
+
+/// `/Group` exists for more than transparency — Table 95 allows other
+/// subtypes, and only `/S /Transparency` makes a compositing scope.
+#[test]
+fn a_group_that_is_not_a_transparency_group_is_not_counted() {
+    let d = render(page_with_form("/Group << /S /SomethingElse >>")).diagnostics;
+    assert_eq!(d.transparency_groups_flattened, 0);
 }

@@ -152,6 +152,23 @@ and `pdfminer` installed. Extraction recipe that works:
    - Subscripts land on their **own y-row** (`αr` → `α` then `r`), so bucket
      rows loosely (`round(y/3)*3`) and expect to reassemble subscripts by eye.
 
+   **4a-sexies. ★ SOME MATH SYMBOLS ARE NOT GLYPHS AT ALL — they are PATHS, and
+   the per-glyph pass (4a-bis) cannot see them either.** Established 2026-08-17
+   on ISO 32000-1 Table 136. `D(x)`'s **radical** and `Difference`'s
+   **absolute-value bars** are vector art; the text layer returns `x` and
+   `cb – cs`, both of which are plausible and both of which are wrong (a
+   discontinuous `SoftLight`, a negative `Difference`). **The only in-document
+   tell is an unexplained x-GAP**: `D(x)` branch 1 begins at `x0=201.12`, branch
+   2's lone `x` at `208.45` — 7 pt of nothing; `Difference`'s `=` ends at `202.5`
+   and its first `c` starts at `216.9`, with nothing after the trailing `cs`.
+   **Never treat a formula as transcribed until every operator's spacing is
+   accounted for.** Recover by corroboration, not by extraction: C⁰ continuity at
+   the branch point, **the next edition's clean Unicode text layer** (2.0 prints
+   `√𝑥` and `|𝑐𝑏 − 𝑐𝑠|`), a sibling specification (W3C prints `sqrt(Cb)`,
+   `| Cb - Cs |`), the clause's own NOTE prose, and the behaviour of an
+   implementation. Distinct from 4a-quater (a glyph the font *should* have drawn
+   and did not) — this is content the typesetter never encoded as text.
+
 4a-quinquies. **★ ISO 32000-1's ANNEX HEADINGS ARE `Annex<SPACE><SPACE><LETTER>`
    — `grep "Annex B"` returns ZERO hits in all 756 pages.** Found 2026-08-11
    while re-verifying Annex B (type-4 operators). `grep -n "^Annex"` finds all
@@ -303,6 +320,38 @@ and `pdfminer` installed. Extraction recipe that works:
   the docs repo's `LICENSE` cannot be read ⇒ record `free_primary` per `LEGAL.md`
   §2 but attach a `NEEDS VERIFICATION` on the *redistribution* grant and hold
   quotation to sentence/table-row level (memory item 6, availability ≠ licence).
+- **★★ W3C SPECS ARE FREE, FETCHABLE AND QUOTABLE — `https://www.w3.org/TR/<shortname>/`.**
+  Verified 2026-08-17: `compositing-1` → HTTP 200, `text/html`, 234 781 B. Flatten
+  with a 4-line `re.sub` (`<script|style>` first, then tags, then `html.unescape`)
+  and grep the result; 235 kB of HTML → 58 kB of text. **This is the route for any
+  "how does PDF differ from what browsers/Skia do?" question** — W3C
+  Compositing-and-Blending Level 1 carries the whole rival blend/composite model
+  in reproducible pseudocode. `license_basis: free_primary` (W3C Document
+  Licence permits quotation). **Record the maturity level in the file** — a
+  *Candidate Recommendation Draft* is not a Recommendation. Related free primaries
+  in the same family worth remembering: `css-color-4`, `filter-effects-1`,
+  `svg2`.
+- **★★ COMPILE AND RUN A DEPENDENCY — the strongest evidence class available, ~10
+  minutes.** Established 2026-08-17 on `tiny-skia 0.11.4`. Reading vendored source
+  (below) yields a suspicion; running it yields a measurement.
+  1. `grep -n -A2 'name = "<crate>"' D:/Dev/pdfce/Cargo.lock` → the **exact**
+     version the workspace resolves; pin it (`tiny-skia = "=0.11.4"`).
+  2. `mkdir -p <scratchpad>/bt/src`, a 6-line `Cargo.toml`, a `main.rs` that
+     exercises the API and `println!`s.
+  3. **`cargo run --release --offline`** — the crate is already vendored, so no
+     network and no `cargo update`. First build ~10 s.
+  4. Diff against a f64 reference implemented **from the spec** in Python.
+     Randomise inputs and report **max Δ and the fraction exceeding 1 LSB**, not
+     one example.
+  5. **Isolate the root cause by re-implementing the crate's own variant** and
+     checking it reproduces the crate's measured output. That converts "diverges"
+     into "diverges *because*", and it is what makes the finding actionable.
+  6. Fetch the **upstream original** the crate was ported from (Skia:
+     `https://raw.githubusercontent.com/google/skia/main/src/opts/SkRasterPipeline_opts.h`,
+     HTTP 200, BSD-3) to distinguish a **port defect** from deliberate behaviour.
+  Label everything from steps 2–6 **BEHAVIOUR, NOT SPECIFICATION**, name the
+  version and date, and route the tool-behaviour narrative to
+  `C:\personal_rag\pdf\`.
 - **Vendored Rust crate sources are a legitimate, offline verification route** —
   `~/.cargo/registry/src/index.crates.io-*/​<crate>-<version>/src/`. Used
   2026-08-03 to check `subsetter 0.2.6`'s emitted table set against a decision

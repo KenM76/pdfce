@@ -446,8 +446,14 @@ fn renders_a_single_page_to_png_with_the_stable_stdout_line() {
             // Ghent X-4 file turned out to carry 113 ignored blend modes
             // and 36 ignored soft masks, with the worst page being one
             // that had looked clean by every other counter.
+            "blend_modes_applied",
             "blend_modes_ignored",
             "soft_masks_ignored",
+            // §11.4.7 transparency groups — the third clause-11 gap, and
+            // the one that explained why the Ghent blend-mode panel still
+            // failed after blend modes were implemented and verified.
+            "groups_flattened",
+            "groups_special",
         ],
         "metrics key order is part of the stable contract"
     );

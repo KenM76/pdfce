@@ -179,6 +179,27 @@ pub struct GraphicsState {
     /// and a stroke and a fill in the same operation can legitimately
     /// differ in opacity.
     pub stroke_alpha: f32,
+    /// The current **blend mode** — `/BM` (§11.3.5, Table 58). Initial
+    /// value `Normal`.
+    ///
+    /// Lives here for the same reason the two alphas do: `q`/`Q` must save
+    /// and restore it (§8.4.2), and Table 58's entries are graphics-state
+    /// parameters, not paint parameters.
+    ///
+    /// # Why this is a `tiny_skia::BlendMode` and not a pdfce enum
+    ///
+    /// A pdfce enum would have to be mapped to a `tiny_skia::BlendMode` at
+    /// every paint site — four of them — and a mapping performed four
+    /// times is a mapping that can disagree with itself three ways.
+    /// Resolving ONCE, at the `gs` operator, means every paint site is
+    /// handed a value that is already correct or already refused.
+    ///
+    /// The mapping itself is [`blend_mode_from_name`], and it is the only
+    /// place in the crate that knows a PDF blend-mode name. Its
+    /// correctness against ISO 32000-1 Tables 136 and 137 is asserted
+    /// numerically in `crates/pdfce-render/tests/blend_modes.rs` rather
+    /// than assumed from the two specifications' shared ancestry.
+    pub blend_mode: tiny_skia::BlendMode,
     /// Current clipping path as a device-space mask, `None` = the
     /// initial clip = the entire page (§8.5.4). Stored rasterized
     /// (tiny-skia `Mask`) because PDF only ever intersects clips —
@@ -238,6 +259,9 @@ impl GraphicsState {
             dash: (Vec::new(), 0.0),
             fill_alpha: 1.0,
             stroke_alpha: 1.0,
+            // Table 58's initial value for /BM is `Normal`, which is
+            // Porter-Duff source-over — tiny_skia's own default.
+            blend_mode: tiny_skia::BlendMode::SourceOver,
             clip: None,
             clip_bbox: None,
             text: crate::text::TextState::default(),
@@ -293,4 +317,71 @@ impl GStateStack {
             None => false,
         }
     }
+}
+
+/// Map a PDF `/BM` blend-mode name (§11.3.5, Tables 136 and 137) to the
+/// rasterizer's equivalent, or `None` if pdfce does not implement it.
+///
+/// # Why a table and not a guess
+///
+/// `tiny_skia` implements the W3C *Compositing and Blending Level 1*
+/// model. That model and ISO 32000-1's clause 11 share an ancestry — the
+/// W3C spec's blend functions were taken from PDF's — but "shared
+/// ancestry" is not "identical", and a blend function that is subtly wrong
+/// is invisible on screen and wrong in print. So this mapping is
+/// **verified numerically**, mode by mode, against the standard's own
+/// `B(cb, cs)` formulas in `tests/blend_modes.rs`; it is not asserted from
+/// the names matching.
+///
+/// # The two that are deliberately absent
+///
+/// `Compatible` is Table 136's alias for `Normal` (it exists for PDF 1.3
+/// compatibility and means exactly source-over), so it maps to the same
+/// value rather than being refused.
+///
+/// Anything else — an unknown name, or a name from a later extension —
+/// returns `None`, and the caller counts it and paints `Normal`. Refusing
+/// to paint at all would be worse: the marks belong on the page, and only
+/// the compositing rule is in doubt.
+#[must_use]
+pub fn blend_mode_from_name(name: &[u8]) -> Option<tiny_skia::BlendMode> {
+    use tiny_skia::BlendMode as B;
+    Some(match name {
+        b"Normal" | b"Compatible" => B::SourceOver,
+        b"Multiply" => B::Multiply,
+        b"Screen" => B::Screen,
+        b"Overlay" => B::Overlay,
+        b"Darken" => B::Darken,
+        b"Lighten" => B::Lighten,
+        b"ColorDodge" => B::ColorDodge,
+        b"ColorBurn" => B::ColorBurn,
+        b"HardLight" => B::HardLight,
+        b"SoftLight" => B::SoftLight,
+        b"Difference" => B::Difference,
+        b"Exclusion" => B::Exclusion,
+        // ★ THE FOUR NON-SEPARABLE MODES (Table 137) ARE DELIBERATELY
+        // ABSENT, and this is the opposite of an oversight.
+        //
+        // `tiny_skia` 0.11.4 HAS `BlendMode::Hue`/`Saturation`/`Color`/
+        // `Luminosity`, and routing to them is the obvious one-line move.
+        // They are MEASURABLY WRONG against both ISO 32000-1 and W3C
+        // Compositing-1 — up to 107/255 error on 9.4–15.5% of random colour
+        // pairs, measured over 60,000 pixels on 2026-08-17.
+        //
+        // Root cause, proven by reproduction rather than inferred: the
+        // crate's `clip_color` gates its low-gamut rescale on `mx >= 0`
+        // where the standard (and upstream Skia) use `mn < 0`, so the
+        // branch is dead and negative channels produced by `SetLum` are
+        // hard-clamped instead of rescaled at constant luminosity.
+        // Canonical demonstration: `Luminosity` of a BLACK source over pure
+        // blue must give black; the crate returns `(0, 0, 227)`.
+        //
+        // Returning `None` costs a correct rendering of four modes. Routing
+        // to the crate would cost a WRONG one, silently, in exactly the
+        // colours print work cares about. The caller counts and discloses.
+        // See `iso32000__ref__blend_mode_interop.md` §3.3; implementing
+        // them properly means compositing Table 137 by hand against
+        // §11.3.6 NOTE 2, which is a Pass of its own.
+        _ => return None,
+    })
 }

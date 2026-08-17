@@ -57,6 +57,7 @@ heading (`**<N>. `).**
 | 44 | ★ **THE SECOND NULL-DELTA — a dispatch RE-ASKS an already-RULED question.** The residue is your own EVIDENCE, not the answer: re-extract the quotes anyway and say so · **re-run term-frequency counts (a clause span bounded by a non-existent next heading silently runs to EOF ⇒ 6 vs the true 4); and ask whether the TERM was right — search the MODALITY (`shall not` = 11, none on point) not the noun** · **separate what a source PROVES from what you claimed (an ERRATA record's silence ≠ "the edition did not change it") ⇒ restate PERMANENT on the weaker basis** · **an edition map stranded in a sibling `ref` file is a GAP — duplicate it into the section a decision will cite; split self-inconsistent VERIFIED rows** · **reader behaviour from permissive source is 2 curls and can land on the OTHER SIDE of your ruling (pdf.js = naive order) ⇒ fence it as BEHAVIOUR NOT SPEC and warn that a "match other readers" tiebreak pushes away** · **a MEASURED behaviour can contradict a claim you graded SOURCED — file both, retract neither, and register the ambiguity on the DOMAIN of the quantifier** |
 | 45 | ★ **THE PAYWALL-FALLS DISPATCH — a licensed PRIMARY arrives.** A new source tier needs a NEW `license_basis`, not a stretched one · **state the ALGORITHM-vs-EXPRESSION distinction explicitly because the consumer writes PUBLIC code** · quote the licence terms and REFUSE to interpret them (escalate) · **the errata may be ANNOTATIONS ⇒ `extract_text()` yields the UNCORRECTED standard, and an erratum's review `/State` is provenance** · **expect the primary to correct YOUR OWN file — a file that warns about a trap is not immune to it** · discharge `NEEDS VERIFICATION` and record the outcome · **"verify what shipped" is a distinct deliverable and the honest answer may be "this source cannot verify that"** · **one trap did not survive: check the MODAL VERB separately from the mechanics** · close the gap and open the RIGHT residue (derived resolution + an empirical settling route) · a "cheap" item closes SHALLOWLY only with an explicit DEFERRED section — and **a uniform table-number off-by-one between structurally identical tables is the worst cross-edition trap there is** |
 | 37 | ADJUDICATING A CLAUSE-NUMBER CONFLICT: rule from the source's own enumeration, never from your heading (headings are RECONSTRUCTED); "the sub-clause does not exist" beats "the other one is right"; status leaks to anywhere the PRODUCT NAME appears, not just to headings and the index |
+| 47 | ★ **THE VERBATIM-FORMULA-TABLE + CROSS-SPEC-COMPARISON dispatch.** A THIRD glyph-dropout class: **PATH-DRAWN symbols** (`√`, `| |`) are invisible even to the per-glyph pass — detect by an unexplained x-GAP, license by C⁰ continuity + the newer edition's clean Unicode + a sibling spec · **a COUNT in the corpus is a hypothesis** ("the other 18 blend modes" was wrong by 3, in 4 files, and the DISPATCH inherited it) · **a correct CONCLUSION can rest on a WRONG PREMISE** — confirm the premise separately, because that is what the next Pass generalises · **a cross-spec "how does PDF differ from W3C/Skia?" question IS answerable from free primaries — don't refuse it** · **★ COMPILE AND RUN THE DEPENDENCY** (a 15-line `cargo` project pinned to the lockfile version, `--offline`, 60 000 measured pixels) and **isolate the root cause by re-implementing the crate's own variant and reproducing its output** · a dependency can be measurably WRONG against BOTH specs ⇒ defect, not ambiguity, never a setting · **every divergence the dispatch PREDICTED was absent and the real one was unpredicted** · two properties with similar names selecting different sets must be separated by name · three files, split on LICENCE and on SPEC-vs-BEHAVIOUR |
 
 ---
 
@@ -2591,3 +2592,122 @@ were wrong, and the most valuable finding was WHERE THE SPEC STOPS.**
   "presumably known" into **unreported**, and it is filed **NEEDS VERIFICATION
   against the figure image** — which a text-layer dump cannot read. **State when
   a finding is bounded by the extraction method.**
+
+
+---
+
+**47. THE VERBATIM-FORMULA-TABLE + CROSS-SPEC-COMPARISON DISPATCH** (2026-08-17,
+ISO 32000-1 Tables 136/137 blend modes, pdfce Pass 90.1). The dispatch asked for
+two things at once: *"ingest these formulas verbatim"* and *"how does this differ
+from the model my rasterizer implements?"* Ten findings, several of which
+generalise well beyond blend modes.
+
+- **★ A THIRD GLYPH-DROPOUT CLASS: PATH-DRAWN SYMBOLS.** Item 4a-quater covers
+  *missing* glyphs. This dispatch found symbols that were never glyphs at all:
+  `D(x)`'s **radical** and `Difference`'s **absolute-value bars** are drawn as
+  **vector art**, so they are invisible to `pypdf`, to `pdfminer`, and to the
+  per-glyph `(x0,y0,size)` pass. **Detection: an unexplained x-GAP.** Branch 1 of
+  `D(x)` starts at `x0=201.12`; branch 2's lone `x` starts at `208.45` — 7 pt of
+  nothing. `Difference`'s `=` ends at `202.5` and its first `c` starts at `216.9`.
+  **A naive extraction of ISO 32000-1 Table 136 yields a `Difference` that goes
+  negative and a `SoftLight` that is discontinuous, with no error anywhere.**
+  License the repair with **three or more independent corroborations** — here:
+  C⁰ continuity at the branch point (`((16·0.25−12)·0.25+4)·0.25 = 0.5 = √0.25`,
+  whereas a plain `x` gives 0.25), ISO 32000-2's clean Unicode `√𝑥` / `|𝑐𝑏 − 𝑐𝑠|`,
+  W3C's `sqrt(Cb)` / `| Cb - Cs |`, the NOTE's own prose ("subtracts the darker
+  … from the lighter" *requires* an absolute value), and the crate's `m.sqrt()`.
+  Two other dropouts in the same table were ordinary missing glyphs (the trailing
+  `1`/`0` in `ColorDodge`/`ColorBurn`'s second branch), licensed by **branch
+  complementarity** (`cs < 1` ∪ `cs = 1` must partition `[0,1]`).
+
+- **★ A COUNT IN THE CORPUS IS A HYPOTHESIS** — extends items 15/18/21 (clause
+  numbers, flag values, named rules, table cross-refs) to **cardinalities**.
+  `iso32000__s__11.3.md` said "the other **14** separable blend modes" and
+  `index.md` / `iso32000__s__8.4.5.md` said "the other **18** blend modes". Table
+  136 has **13** rows and Table 137 has **4** ⇒ 17 named modes ⇒ the remainder was
+  **15** (11 separable). Wrong by 3, in four files, **and the dispatch brief
+  inherited it** (it asked for "the other 14" and then listed 13 names). Nothing
+  was missing because of it — the count was descriptive, not a work list — but
+  **recount from the source before quoting a corpus figure back at anyone**, and
+  file the fix as a `CORRECTION` with the wrong figure retained.
+
+- **★ A CORRECT CONCLUSION CAN REST ON A WRONG PREMISE, AND THE PREMISE IS WHAT
+  THE NEXT PASS GENERALISES.** `iso32000__s__11.3.md` §6 derived "an ordinary
+  page render is a plain source-over lerp" from *"the backdrop starts pure white
+  and fully opaque (§11.2) ⇒ αb = 1 everywhere"*. **§11.4.7 says the page group
+  is an ISOLATED group** and §11.4.5 says an isolated group's initial backdrop is
+  **fully transparent** (`α0 = 0`); §11.2's white is `W` in §11.4.7's *second*
+  formula, applied after the whole page. At `αb = 0` the blend term vanishes; at
+  `αb = 1` with `B = Cs` it gives the same answer — **the two models coincide for
+  `Normal` and for nothing else.** The conclusion survived; the reasoning would
+  have made 11 of 15 blend modes render as solid white or inverted. **When you
+  confirm a derivation's result, check its premise separately** — a premise is
+  reused, a result is not.
+
+- **★ A CROSS-SPEC "HOW DOES X DIFFER FROM Y?" QUESTION IS OFTEN ANSWERABLE FROM
+  FREE PRIMARIES. Do not fall back on "cannot be established, verify
+  empirically".** The dispatch pre-authorised that fallback and it was not
+  needed: **W3C Compositing and Blending Level 1** is at
+  `https://www.w3.org/TR/compositing-1/` (HTTP 200, 234 781 B, CR Draft
+  2024-03-21), quotable, and contains the whole rival model. Flatten the HTML
+  with a 4-line `re.sub` and grep it. **Record the maturity level** (a CR Draft
+  is not a Recommendation).
+
+- **★★ COMPILE AND RUN THE DEPENDENCY. This is now the strongest evidence class
+  the corpus can produce, and it costs ~10 minutes.** Reading vendored source
+  (item 24) gives a suspicion; *running* it settles the question. Recipe: a
+  throwaway `cargo` project in the scratchpad with the crate pinned to the
+  **lockfile's exact version** (`tiny-skia = "=0.11.4"`), `cargo run --release
+  --offline` (the crate is already vendored ⇒ no network), 15 lines of `main.rs`
+  that exercise the API and print, then diff against a f64 reference implemented
+  from the spec in Python. Here: **60 000 measured pixels** across 15 modes and
+  4 000 random colour pairs. It converted "the separable modes probably match"
+  into "**≤ 2 LSB, four of them exact**" and "the non-separable ones look wrong"
+  into "**wrong by up to 107/255 on 9.4–15.5 % of random colour pairs**".
+  **Then isolate the ROOT CAUSE by re-implementing the crate's own variant and
+  reproducing its output** — emulating `tiny_skia`'s `mx >= 0` gate (where the
+  spec and upstream Skia use `mn < 0`) reproduced its measured output to ≤ 1 LSB
+  on all 4 000 samples, which turns "it diverges" into "it diverges **because**".
+  Fetch the upstream original too (Skia's `SkRasterPipeline_opts.h` from
+  `raw.githubusercontent.com/google/skia/main`, HTTP 200) to show the divergence
+  is a **port defect**, not a deliberate behaviour.
+
+- **A DEPENDENCY THAT IS WRONG AGAINST BOTH SPECS IS A DEFECT, NOT AN AMBIGUITY.**
+  Do not mint a setting for it, do not "register the ambiguity". The corpus
+  records the requirement and the measurement; the *tool-behaviour narrative and
+  the upstream issue belong in `C:\personal_rag\pdf\`* (`pdfce-librarian`).
+  Same boundary as item 12, applied to a crate instead of a producer.
+
+- **EVERY DIVERGENCE THE DISPATCH PREDICTED WAS ABSENT, AND THE REAL ONE WAS
+  UNPREDICTED.** Predicted: `SoftLight`'s `D(x)`, the luminosity coefficients,
+  behaviour at α < 1. All three are **identical** across ISO 32000-1, ISO 32000-2,
+  W3C and the crate (coefficients `0.3/0.59/0.11` everywhere; the compositing
+  models agree to 2.2 × 10⁻¹⁶ over 200 000 samples). The real divergence was
+  **`ColorDodge`/`ColorBurn` at exactly one point each**, which nobody named.
+  **Write a "what the dispatch expected vs what is the case" table** — it is the
+  single most useful paragraph for the engineer, and it disarms the predictions
+  so they are not re-derived next session.
+
+- **A LATER EDITION CAN CHANGE AN ANSWER, NOT JUST RENUMBER IT.** ISO 32000-2
+  reformulated `ColorDodge`/`ColorBurn` **and says so in its own NOTEs**, naming
+  the changed points and the rationale (continuity in `cs`). Verify the claim
+  rather than repeating it: implement both forms and enumerate a grid — **exactly
+  one disagreeing point per mode**, and 2.0 ≡ W3C with **zero**. File it in the
+  ambiguity register as an **EDITION DIFFERENCE that presents like an ambiguity**,
+  explicitly *not* an ambiguity, with the note that it is a setting only if the
+  product chooses to offer back-compatibility.
+
+- **TWO PROPERTIES WITH SIMILAR NAMES SELECTING DIFFERENT SETS MUST BE SEPARATED
+  BY NAME, LOUDLY.** ISO 32000-2 defines **`white-preserving`** as `B(1,1) = 1`
+  (everything except `Difference`/`Exclusion`). The property that actually governs
+  "is an opaque-white page pixmap safe?" is `B(1, cs) = cs` **for all `cs`** —
+  much stronger, **derived, in no standard**, and true of only four modes. Both
+  live in the same corpus; without an explicit "these are different" sentence the
+  next reader substitutes one for the other and ships 11 broken modes.
+
+- **THREE FILES, SPLIT ON TWO AXES AT ONCE.** Licence (`free_primary` ISO 32000-1
+  vs `licensed_primary_private_rag` ISO 32000-2) **and** spec-vs-behaviour
+  (normative text vs a measured crate). Item 15's "is it in ISO 32000-1?" test
+  handles the first; the second needs its own file because a `ref` file mixing
+  W3C quotation with crate measurements must state **per section** what each
+  source is allowed to prove. Lead such a file with a §0 table doing exactly that.

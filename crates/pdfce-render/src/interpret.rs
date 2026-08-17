@@ -133,8 +133,8 @@ use pdfce_core::object::{Dict, ObjId, Object, Stream};
 use pdfce_core::span::ByteSpan;
 use pdfce_core::view::DocumentView;
 use tiny_skia::{
-    BlendMode, FillRule, FilterQuality, LineCap as SkCap, LineJoin as SkJoin, Mask, Paint, Path,
-    PathBuilder, Pattern, Pixmap, Rect, SpreadMode, Stroke, StrokeDash, Transform,
+    FillRule, FilterQuality, LineCap as SkCap, LineJoin as SkJoin, Mask, Paint, Path, PathBuilder,
+    Pattern, Pixmap, Rect, SpreadMode, Stroke, StrokeDash, Transform,
 };
 
 use crate::cancel::RenderCancel;
@@ -223,15 +223,61 @@ pub struct Diagnostics {
     /// (spec-sanctioned skips, §7.8.2 Table 32).
     pub compat_skipped: usize,
     /// `gs` operators that selected a **non-Normal blend mode** (`/BM`,
-    /// ISO 32000-1 §11.3.5) which pdfce does not implement — the marks
-    /// were composited as `Normal` instead.
+    /// ISO 32000-1 §11.3.5) which pdfce APPLIED. A census, not a
+    /// shortfall.
+    ///
+    /// Separate from [`Self::blend_modes_ignored`] because those two
+    /// numbers answer different questions and used to be one. Before
+    /// blend modes were implemented, "ignored" and "used" were the same
+    /// quantity; implementing them made that reading false, and silently
+    /// redefining the counter would have left an operator diffing two runs
+    /// unable to tell which number moved or why.
+    pub blend_modes_applied: usize,
+    /// `gs` operators naming a blend mode pdfce does NOT recognise — a
+    /// name outside Tables 136 and 137. Those marks were composited as
+    /// `Normal`.
     ///
     /// Counted because the result is WRONG rather than missing, and
-    /// wrongness of this shape is invisible: a Multiply that composited as
+    /// wrongness of this shape is invisible: a blend that composited as
     /// Normal produces a perfectly ordinary-looking opaque overlay. A
-    /// missing image leaves a hole somebody notices; a missing blend mode
-    /// just looks like a different document.
+    /// missing image leaves a hole somebody notices; a wrong compositing
+    /// rule just looks like a different document.
     pub blend_modes_ignored: usize,
+    /// Form XObjects carrying `/Group << /S /Transparency >>` (§11.4.7,
+    /// Table 96) that pdfce painted **straight onto the page** instead of
+    /// compositing as a unit.
+    ///
+    /// # Why this is its own counter and not folded into the blend one
+    ///
+    /// A transparency group is a *compositing scope*: its contents are
+    /// rendered into a separate buffer, and the group's RESULT is then
+    /// composited onto the backdrop with the blend mode, alpha and soft
+    /// mask in force at the `Do`. Painting the contents directly applies
+    /// those to each object INSIDE the group instead — which gives the
+    /// same answer for a group holding one opaque object and a different
+    /// answer for almost anything else.
+    ///
+    /// That distinction is invisible in every other counter. It was found
+    /// only by rendering the operator's Ghent X-4 file and seeing its
+    /// blend-mode panel still show the suite's failure crosses AFTER blend
+    /// modes were implemented and verified correct both in isolation and
+    /// against a coloured backdrop. The page carries 148 form XObjects;
+    /// `/Group` was never read.
+    ///
+    /// Non-zero here means the page's transparency is approximate in a way
+    /// no blend-mode counter can express.
+    pub transparency_groups_flattened: usize,
+    /// Of those, the ones that are **isolated** (`/I true`) or
+    /// **knockout** (`/K true`) — Table 96.
+    ///
+    /// Tracked separately because these two flags are exactly where
+    /// flattening stops being a good approximation. An ISOLATED group
+    /// blends against a transparent initial backdrop rather than the page,
+    /// so flattening it makes every non-Normal blend inside it composite
+    /// against the wrong thing. A KNOCKOUT group has each element
+    /// composite against the group's *initial* backdrop rather than the
+    /// accumulated result, so flattening reverses the intended occlusion.
+    pub transparency_groups_special: usize,
     /// `gs` operators that selected a **soft mask** (`/SMask`, §11.6.5)
     /// which pdfce does not implement — the marks were painted
     /// unmasked.
@@ -709,6 +755,9 @@ polarity unverifiable (decision 006 R30)",
         self.oc_sections_hidden += other.oc_sections_hidden;
         self.unknown_ops += other.unknown_ops;
         self.compat_skipped += other.compat_skipped;
+        self.transparency_groups_flattened += other.transparency_groups_flattened;
+        self.transparency_groups_special += other.transparency_groups_special;
+        self.blend_modes_applied += other.blend_modes_applied;
         self.blend_modes_ignored += other.blend_modes_ignored;
         self.soft_masks_ignored += other.soft_masks_ignored;
         self.tolerated += other.tolerated;
@@ -1990,7 +2039,11 @@ impl Interpreter<'_> {
         // run, so a layer toggle would move the rest of the line.
         let skip_paint = crate::profile::skip_paint() || self.oc_hidden();
         if !skip_paint && self.gs.current.text.fills() && self.color.paints(false) {
-            let paint = solid(self.gs.current.fill_color, self.gs.current.fill_alpha);
+            let paint = solid(
+                self.gs.current.fill_color,
+                self.gs.current.fill_alpha,
+                self.gs.current.blend_mode,
+            );
             // Glyph outlines are filled with the NONZERO winding rule
             // (§9.3.6: filling has "the same effects for a text object
             // as… for a path object"; counters in `o`/`e` are wound in
@@ -1998,7 +2051,11 @@ impl Interpreter<'_> {
             pixmap.fill_path(&path, &paint, FillRule::Winding, ctm, clip);
         }
         if !skip_paint && self.gs.current.text.strokes() && self.color.paints(true) {
-            let paint = solid(self.gs.current.stroke_color, self.gs.current.stroke_alpha);
+            let paint = solid(
+                self.gs.current.stroke_color,
+                self.gs.current.stroke_alpha,
+                self.gs.current.blend_mode,
+            );
             pixmap.stroke_path(&path, &paint, &self.stroke_params(), ctm, clip);
         }
     }
@@ -2181,18 +2238,35 @@ impl Interpreter<'_> {
                     .map(|n| n.as_bytes().to_vec()),
                 _ => None,
             };
-            if let Some(name) = first
-                && name != b"Normal"
-                && name != b"Compatible"
-            {
-                self.diag.blend_modes_ignored += 1;
-                self.diag.note(
-                    format!(
-                        "gs /BM /{}: blend mode not implemented; composited as Normal",
-                        String::from_utf8_lossy(&name)
-                    )
-                    .as_bytes(),
-                );
+            if let Some(name) = first {
+                match crate::gstate::blend_mode_from_name(&name) {
+                    Some(mode) => {
+                        self.gs.current.blend_mode = mode;
+                        // Census counts the modes that CHANGE something.
+                        // Counting `Normal` too would put a large number on
+                        // ordinary documents — producers emit `/BM /Normal`
+                        // constantly to reset inherited state — and train
+                        // every reader to ignore the counter.
+                        if mode != tiny_skia::BlendMode::SourceOver {
+                            self.diag.blend_modes_applied += 1;
+                        }
+                    }
+                    None => {
+                        // An unknown name is NOT a reason to refuse the
+                        // paint: the marks belong on the page and only the
+                        // compositing rule is in doubt. Fall back to
+                        // Normal, and say so.
+                        self.gs.current.blend_mode = tiny_skia::BlendMode::SourceOver;
+                        self.diag.blend_modes_ignored += 1;
+                        self.diag.note(
+                            format!(
+                                "gs /BM /{}: unrecognised blend mode; composited as Normal",
+                                String::from_utf8_lossy(&name)
+                            )
+                            .as_bytes(),
+                        );
+                    }
+                }
             }
         }
         // `/SMask /None` is the RESET — it turns a soft mask off, which is
@@ -2893,6 +2967,37 @@ impl Interpreter<'_> {
             }
         };
 
+        // §11.4.7 / Table 96: a `/Group` with `/S /Transparency` makes this
+        // form a COMPOSITING SCOPE, not merely a reusable content stream.
+        // pdfce has no offscreen-buffer machinery, so the contents are
+        // painted straight onto the page — an approximation that is exact
+        // only for a group holding one opaque object. Counted, never
+        // silent, because no other counter can express it.
+        if let Some(group) = stream
+            .dict
+            .get(b"Group")
+            .map(|o| doc.resolve(o))
+            .and_then(Object::as_dict)
+        {
+            let is_transparency = group
+                .get(b"S")
+                .map(|o| doc.resolve(o))
+                .and_then(Object::as_name)
+                .is_some_and(|n| n.as_bytes() == b"Transparency");
+            if is_transparency {
+                self.diag.transparency_groups_flattened += 1;
+                let flag = |k: &[u8]| {
+                    matches!(
+                        group.get(k).map(|o| doc.resolve(o)),
+                        Some(Object::Boolean(true))
+                    )
+                };
+                if flag(b"I") || flag(b"K") {
+                    self.diag.transparency_groups_special += 1;
+                }
+            }
+        }
+
         let mut active = self.active.clone();
         if let Some(id) = id {
             active.push(id);
@@ -3104,7 +3209,15 @@ impl Interpreter<'_> {
                 1.0,
                 image_to_user,
             ),
-            blend_mode: BlendMode::SourceOver,
+            // §11.3.5 applies to an IMAGE exactly as it does to a path
+            // fill — Table 58's `/BM` is a graphics-state parameter, not a
+            // path-painting one. This was hard-coded `SourceOver` when
+            // blend modes first landed, and the symptom was precise and
+            // misleading: the operator's Ghent page 2 reported 76 blend
+            // modes APPLIED while only 0.37% of its pixels changed, because
+            // the marks those modes govern are drawn by images, not paths.
+            // A counter said the feature worked; the pixels said otherwise.
+            blend_mode: self.gs.current.blend_mode,
             anti_alias: true,
             force_hq_pipeline: false,
         };
@@ -3336,7 +3449,11 @@ impl Interpreter<'_> {
             && let Some(rule) = fill_rule
         {
             if self.color.paints(false) {
-                let paint = solid(self.gs.current.fill_color, self.gs.current.fill_alpha);
+                let paint = solid(
+                    self.gs.current.fill_color,
+                    self.gs.current.fill_alpha,
+                    self.gs.current.blend_mode,
+                );
                 pixmap.fill_path(&path, &paint, rule, ctm, clip);
             } else {
                 // `paints` is false for a Pattern space as well as for
@@ -3349,7 +3466,11 @@ impl Interpreter<'_> {
             }
         }
         if !skip_paint && stroke && self.color.paints(true) {
-            let paint = solid(self.gs.current.stroke_color, self.gs.current.stroke_alpha);
+            let paint = solid(
+                self.gs.current.stroke_color,
+                self.gs.current.stroke_alpha,
+                self.gs.current.blend_mode,
+            );
             pixmap.stroke_path(&path, &paint, &self.stroke_params(), ctm, clip);
         }
 
@@ -3692,7 +3813,7 @@ fn last_name(op: &Operation<'_>) -> Option<Vec<u8>> {
 /// tiny-skia composites a non-opaque paint correctly on its own, so
 /// constant alpha needs nothing beyond passing the number through — which
 /// is what made the omission cheap to fix and expensive to have shipped.
-fn solid(c: Rgb, alpha: f32) -> Paint<'static> {
+fn solid(c: Rgb, alpha: f32, blend: tiny_skia::BlendMode) -> Paint<'static> {
     let mut paint = Paint::default();
     paint.set_color_rgba8(
         (c.r * 255.0) as u8,
@@ -3701,6 +3822,11 @@ fn solid(c: Rgb, alpha: f32) -> Paint<'static> {
         (alpha.clamp(0.0, 1.0) * 255.0).round() as u8,
     );
     paint.anti_alias = true;
+    // §11.3.5's `/BM`. Carried on the paint rather than applied at the
+    // call site because every paint site — path fill, path stroke, glyph
+    // fill, glyph stroke — needs it identically, and a rule applied four
+    // times is a rule that can disagree with itself three ways.
+    paint.blend_mode = blend;
     paint
 }
 
