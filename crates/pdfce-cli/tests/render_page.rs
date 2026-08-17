@@ -1095,8 +1095,13 @@ fn shading_pattern_pdf() -> Vec<u8> {
         // PatternType 2 = shading pattern (§8.7.4.1, Table 76), wrapping a
         // ShadingType 2 axial shading (§8.7.4.5.3, Table 79) that runs a
         // type-2 exponential function from red to blue across the page.
-        // Every part of this is well-formed: the point of the test is that
-        // a CONFORMANT gradient paints nothing today.
+        //
+        // This comment used to end "the point of the test is that a
+        // CONFORMANT gradient paints nothing today", and the test asserted
+        // exactly that. It is now painted, so both the sentence and the
+        // assertions below were falsified by the Pass that implemented the
+        // feature — the R180 shape, caught here by the suite rather than by
+        // a reader, because the counter it pinned moved.
         (
             5,
             "<< /PatternType 2 /Shading << /ShadingType 2 /ColorSpace /DeviceRGB \
@@ -1108,7 +1113,16 @@ fn shading_pattern_pdf() -> Vec<u8> {
 }
 
 #[test]
-fn a_gradient_that_paints_nothing_is_disclosed_on_stdout_and_stderr() {
+fn a_shading_pattern_gradient_is_painted_and_counted_on_stdout() {
+    // WAS `a_gradient_that_paints_nothing_is_disclosed_on_stdout_and_stderr`.
+    //
+    // It asserted `patterns_unpainted=1` and a stderr sentence containing
+    // "NOTHING was painted" — both correct when written, both false the
+    // moment `PatternType 2` fills shipped. Kept as a test of the SAME
+    // fixture with inverted expectations rather than deleted, because the
+    // fixture is the interesting part (a fully conformant axial gradient
+    // reached through a pattern) and because the pair of counters is
+    // exactly what a regression would move back.
     let dir = TempDir::new("pattern");
     let pdf = dir.write("gradient.pdf", &shading_pattern_pdf());
     let png = dir.join("out.png");
@@ -1123,43 +1137,42 @@ fn a_gradient_that_paints_nothing_is_disclosed_on_stdout_and_stderr() {
 
     let line = stdout(&out);
 
-    // The counters. `pattern_spaces` counts the `cs` selection,
-    // `patterns_unpainted` the `scn` that named a pattern and produced no
-    // marks. Both are ColorDiagnostics fields that crossed no crate
-    // boundary before this test existed.
+    // `pattern_spaces` still counts the `cs` selection — selecting the
+    // space and painting the pattern are different events and the first
+    // one did not stop happening.
     assert!(
         line.contains(" pattern_spaces=1 "),
         "the /Pattern cs selection must be counted: {line:?}"
     );
+    // `patterns_unpainted` now counts only a SHORTFALL. A painted shading
+    // pattern is not one.
     assert!(
-        line.contains(" patterns_unpainted=1"),
-        "the unpainted pattern fill must be counted: {line:?}"
+        line.contains(" patterns_unpainted=0 "),
+        "a painted shading pattern is not an unpainted pattern: {line:?}"
+    );
+    // The shading counters are how a shell can tell WHICH route painted.
+    // `shadings_via_sh=0` is the load-bearing half: it says this gradient
+    // arrived as a pattern, not through the `sh` operator, and the two
+    // anchor to different coordinate spaces (§8.7.2 NOTE 1 vs Table 77).
+    assert!(
+        line.contains(" shadings=1 "),
+        "the shading must be counted: {line:?}"
+    );
+    assert!(
+        line.contains(" shadings_via_sh=0 "),
+        "it arrived via a pattern, not via `sh`: {line:?}"
+    );
+    assert!(
+        line.contains(" shadings_painted=1 "),
+        "the gradient must be painted: {line:?}"
     );
 
-    // The prose. This is the half an operator reads, and the sentence has
-    // to name the CONSEQUENCE (nothing was painted), not just the feature,
-    // because a page that renders blank where a gradient belongs is
-    // otherwise indistinguishable from one that rendered correctly onto
-    // white.
-    let err = stderr(&out);
-    assert!(
-        err.contains("patterns_unpainted") || err.contains("PATTERN"),
-        "stderr must name the unpainted pattern: {err:?}"
-    );
-    assert!(
-        err.contains("NOTHING was painted"),
-        "stderr must state the consequence, not just the feature: {err:?}"
-    );
-
-    // And the fact the disclosure is ABOUT: the fill really is absent.
-    // Without this the test would pass just as well if pdfce had painted
-    // the gradient correctly and reported a stale counter — which is the
-    // failure mode a counter-only assertion cannot see.
+    // And the fact the counters are ABOUT: pixels really changed. Without
+    // this the test would pass on a stale counter over a blank page, which
+    // is the failure mode a counter-only assertion cannot see — the same
+    // reasoning the original test used, pointed the other way.
     let png_bytes = std::fs::read(&png).unwrap();
-    assert!(
-        !png_bytes.is_empty(),
-        "a page with no paintable marks still writes a PNG"
-    );
+    assert!(!png_bytes.is_empty(), "a PNG is written");
     assert_eq!(png_dimensions(&png), (200, 100));
 }
 

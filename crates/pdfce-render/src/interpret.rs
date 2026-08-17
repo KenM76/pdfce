@@ -884,8 +884,19 @@ pub fn trace_paths(
     let Some(mut pixmap) = Pixmap::new(8, 8) else {
         return Vec::new();
     };
+    // §8.7.2 PM3/PM5: pattern space is anchored to the DEFAULT coordinate
+    // system of the page (or, for a pattern used inside a form XObject, of
+    // the form) — NOT to the CTM in effect where `scn` or the fill occurs.
+    // `initial.ctm` is exactly that space at every entry point: `run` is
+    // handed the page's device transform, and `run_form_at` is handed the
+    // form's, so the form case (PM4) comes out right without a second rule.
+    //
+    // Captured BEFORE the stack is built, because the first `cm` in the
+    // stream would otherwise be indistinguishable from the page transform.
+    let base_ctm = initial.ctm;
     let mut interp = Interpreter {
         policy,
+        base_ctm,
         gs: GStateStack::new(initial),
         diag: Diagnostics::default(),
         path: PathBuilder::new(),
@@ -951,8 +962,13 @@ fn run_nested(
     // from the diagnostics is a form nobody can tell was there.
     hidden: bool,
 ) -> Diagnostics {
+    // §8.7.2 PM3/PM5: pattern space anchors to this stream's DEFAULT
+    // coordinate system, not to the CTM where the fill occurs. Captured
+    // before the stack is built — after the first `cm` it is unrecoverable.
+    let base_ctm = initial.ctm;
     let mut interp = Interpreter {
         policy,
+        base_ctm,
         gs: GStateStack::new(initial),
         diag: Diagnostics::default(),
         path: PathBuilder::new(),
@@ -1055,8 +1071,13 @@ pub fn run_form_at(
     cancel: Option<&RenderCancel>,
     policy: RenderPolicy<'_>,
 ) -> Diagnostics {
+    // §8.7.2 PM3/PM5: pattern space anchors to this stream's DEFAULT
+    // coordinate system, not to the CTM where the fill occurs. Captured
+    // before the stack is built — after the first `cm` it is unrecoverable.
+    let base_ctm = initial.ctm;
     let mut interp = Interpreter {
         policy,
+        base_ctm,
         gs: GStateStack::new(initial),
         diag: Diagnostics::default(),
         path: PathBuilder::new(),
@@ -1090,6 +1111,11 @@ pub fn run_form_at(
 
 /// Interpreter state for one content stream.
 struct Interpreter<'a> {
+    /// The CTM this content stream STARTED with — pattern space's anchor
+    /// (§8.7.2 PM3/PM5, NOTE 1). Never changed by `cm`, which is the whole
+    /// point: a pattern is immune to transformations in the stream that
+    /// uses it.
+    base_ctm: Transform,
     gs: GStateStack,
     diag: Diagnostics,
     /// The path under construction, in USER space (module docs).
@@ -2392,6 +2418,198 @@ impl Interpreter<'_> {
         }
     }
 
+    /// Paint `path` with the `/Pattern` the current colour selects
+    /// (§8.7.2, §8.7.4.3). Returns `true` if pixels were laid down.
+    ///
+    /// # The anchoring rule, which is the whole difficulty
+    ///
+    /// A pattern's coordinates are **pattern space**, mapped to the
+    /// *default* coordinate space of the content stream by the pattern's
+    /// own `/Matrix` — NOT by the CTM in effect at the fill. §8.7.2 NOTE 1
+    /// states it plainly, and PM5's `shall` is the binding form: "the
+    /// pattern matrix maps pattern space to the default coordinate system
+    /// of the pattern's parent content stream". So the transform is
+    /// `base_ctm x /Matrix`, and a `cm` between selecting the pattern and
+    /// filling with it must not move the gradient.
+    ///
+    /// That is the exact opposite of the `sh` operator, which paints in
+    /// CURRENT user space (Table 77). The two routes share this crate's
+    /// painter and differ only in the matrix handed to it and in the area
+    /// painted — `sh` fills the clip region, a pattern fills the path.
+    /// Getting the two confused produces a gradient that is in the right
+    /// place until the page is scaled, which is why the routes are carried
+    /// explicitly as [`crate::shading::PaintRoute`] rather than inferred.
+    ///
+    /// # What is not done here
+    ///
+    /// `PatternType 1` (tiling) is counted and not painted. It needs the
+    /// pattern's own content stream run into a tile and replicated on
+    /// `/XStep`/`/YStep`, which is a different job from evaluating an
+    /// analytic function per pixel.
+    fn paint_with_pattern(
+        &mut self,
+        path: &Path,
+        rule: FillRule,
+        stroking: bool,
+        pixmap: &mut Pixmap,
+    ) -> bool {
+        let Some(name) = self.color.pattern(stroking).map(<[u8]>::to_vec) else {
+            return false;
+        };
+        let doc = self.doc;
+        let resources = self.resources;
+        let entry = resources
+            .get(b"Pattern")
+            .map(|o| doc.resolve(o))
+            .and_then(Object::as_dict)
+            .and_then(|patterns| patterns.get(&name));
+        let Some(entry) = entry else {
+            // §8.6.6.2: an unresolvable pattern name has no defined
+            // recovery. Counted as unpainted, not as a paint.
+            self.diag.color.patterns_unpainted += 1;
+            self.diag.tolerated += 1;
+            self.diag.color.note(&format!(
+                "scn /{}: no such /Pattern resource",
+                String::from_utf8_lossy(&name)
+            ));
+            return false;
+        };
+        let resolved = doc.resolve(entry);
+        // Table 75/76: a tiling pattern is a STREAM, a shading pattern is a
+        // plain dictionary. Both carry their entries in a dictionary, so
+        // read that and branch on `/PatternType` rather than on the shape.
+        let dict = match resolved {
+            Object::Dict(d) => d,
+            Object::Stream(st) => &st.dict,
+            _ => {
+                self.diag.color.patterns_unpainted += 1;
+                self.diag.tolerated += 1;
+                return false;
+            }
+        };
+        let pattern_type = dict
+            .get(b"PatternType")
+            .map(|o| doc.resolve(o))
+            .and_then(Object::as_number)
+            .unwrap_or(0.0);
+        #[allow(clippy::float_cmp)]
+        if pattern_type != 2.0 {
+            // Tiling (1), or a value the standard does not define.
+            self.diag.color.patterns_unpainted += 1;
+            self.diag.color.note(&format!(
+                "scn /{}: PatternType {} not painted (only shading patterns are drawn this build)",
+                String::from_utf8_lossy(&name),
+                pattern_type as i64
+            ));
+            return false;
+        }
+        let Some(shading_entry) = dict.get(b"Shading") else {
+            self.diag.color.patterns_unpainted += 1;
+            self.diag.tolerated += 1;
+            self.diag.color.note(&format!(
+                "scn /{}: PatternType 2 with no /Shading",
+                String::from_utf8_lossy(&name)
+            ));
+            return false;
+        };
+
+        self.diag
+            .shading
+            .reached(crate::shading::PaintRoute::ShadingPattern);
+        let intent = self.policy.cmyk_intent;
+        let Some(shading) = crate::shading::Shading::load(
+            doc,
+            shading_entry,
+            resources,
+            intent,
+            &mut self.diag.color,
+            &mut self.diag.shading,
+        ) else {
+            self.diag.color.patterns_unpainted += 1;
+            return false;
+        };
+        if shading.is_paintable() {
+            self.diag.shading.paintable += 1;
+        }
+        if self.oc_hidden() || crate::profile::skip_paint() {
+            // Consistent with every other paint: hidden content is
+            // resolved and counted, just not drawn. Not a shortfall, so
+            // `patterns_unpainted` is deliberately NOT incremented.
+            return false;
+        }
+
+        // pattern space -> default space (/Matrix) -> device (base_ctm).
+        // `pre_concat` applies its argument FIRST, which is the order the
+        // sentence above reads in.
+        let matrix = pattern_matrix(doc, dict);
+        let to_device = self.base_ctm.pre_concat(matrix);
+        let Some(to_target) = to_device.invert() else {
+            // A degenerate pattern matrix collapses pattern space to a
+            // line or a point; there is no sensible colour for any pixel.
+            self.diag.color.patterns_unpainted += 1;
+            self.diag.tolerated += 1;
+            self.diag.color.note(&format!(
+                "scn /{}: non-invertible pattern matrix",
+                String::from_utf8_lossy(&name)
+            ));
+            return false;
+        };
+
+        // The paint AREA is the path, so the path becomes a mask —
+        // intersected with any clip already in force, because a pattern
+        // fill is still subject to the clip like any other paint.
+        let ctm = self.gs.current.ctm;
+        let Some(mut mask) = Mask::new(pixmap.width(), pixmap.height()) else {
+            return false;
+        };
+        mask.fill_path(path, rule, true, ctm);
+        if let Some(old) = self.gs.current.clip.as_deref() {
+            // Per-pixel coverage multiply, the same operation
+            // `intersect_clip` performs — a clip and a path mask combine
+            // by multiplication, never by a path boolean, because §8.5.4
+            // NOTE 2 guarantees a clip only ever shrinks.
+            //
+            // Done over the whole buffer rather than over the path's
+            // bounds as `intersect_clip` does: the saving there is worth
+            // the extra bookkeeping because clips run tens of thousands of
+            // times on a real sheet, whereas a pattern fill is rare.
+            let old_data = old.data().to_vec();
+            for (n, o) in mask.data_mut().iter_mut().zip(old_data.iter()) {
+                *n = ((u16::from(*n) * u16::from(*o)) / 255) as u8;
+            }
+        }
+        // The region is the path's DEVICE-space bounds: outside them the
+        // mask is zero, so evaluating the shading there is wasted work on
+        // a per-pixel analytic function.
+        let Some(device_path) = path.clone().transform(ctm) else {
+            return false;
+        };
+        let b = device_path.bounds();
+        #[allow(clippy::cast_possible_truncation)]
+        let region = (
+            b.left().floor().max(0.0) as i32,
+            b.top().floor().max(0.0) as i32,
+            b.right().ceil().min(pixmap.width() as f32) as i32,
+            b.bottom().ceil().min(pixmap.height() as f32) as i32,
+        );
+        let alpha = if stroking {
+            self.gs.current.stroke_alpha
+        } else {
+            self.gs.current.fill_alpha
+        };
+        if shading
+            .paint(to_target, region, Some(&mask), alpha, pixmap)
+            .is_some()
+        {
+            self.diag.shading.painted += 1;
+            true
+        } else {
+            // Modelled but not drawable — a mesh, or a type 1 function
+            // shading. A real shortfall, so it counts.
+            self.diag.color.patterns_unpainted += 1;
+            false
+        }
+    }
     fn do_xobject(&mut self, op: &Operation<'_>, pixmap: &mut Pixmap) {
         // Copy the two shared references out before any `&mut self`
         // call so the borrow checker sees them as independent of `self`
@@ -3041,17 +3259,39 @@ impl Interpreter<'_> {
         // `DeviceN` ("shall have no effect on the current page", §8.6.6.4).
         // Painting white instead would erase the backdrop those cases
         // require to show through.
+        // Deferred to after the `clip` borrow ends — see below.
+        let mut pattern_fill: Option<FillRule> = None;
         if !skip_paint
             && fill
-            && self.color.paints(false)
             && let Some(rule) = fill_rule
         {
-            let paint = solid(self.gs.current.fill_color, self.gs.current.fill_alpha);
-            pixmap.fill_path(&path, &paint, rule, ctm, clip);
+            if self.color.paints(false) {
+                let paint = solid(self.gs.current.fill_color, self.gs.current.fill_alpha);
+                pixmap.fill_path(&path, &paint, rule, ctm, clip);
+            } else {
+                // `paints` is false for a Pattern space as well as for
+                // `Separation /None` — and those want opposite things. The
+                // colorant cases must paint NOTHING (§8.6.6.4); a pattern
+                // wants its own painter. `paint_with_pattern` returns
+                // immediately unless a pattern name is actually selected,
+                // so the colorant cases still fall through to nothing.
+                pattern_fill = Some(rule);
+            }
         }
         if !skip_paint && stroke && self.color.paints(true) {
             let paint = solid(self.gs.current.stroke_color, self.gs.current.stroke_alpha);
             pixmap.stroke_path(&path, &paint, &self.stroke_params(), ctm, clip);
+        }
+
+        // The pattern fill runs HERE rather than in the branch above
+        // because it needs `&mut self` (it resolves resources and records
+        // diagnostics) while `clip` above is an immutable borrow of the
+        // same graphics state. It reads that clip itself, so nothing is
+        // lost by the move; the ordering against the stroke is unchanged
+        // in every case that can arise, since a path filled with a pattern
+        // and stroked in a solid colour paints fill-then-stroke either way.
+        if let Some(rule) = pattern_fill {
+            self.paint_with_pattern(&path, rule, false, pixmap);
         }
 
         // NOW tighten the clip (§8.5.4: after the path is painted).
@@ -3102,6 +3342,31 @@ fn paint_is_cullable(path: &Path, ctm: Transform, bbox: Option<(f32, f32, f32, f
         return false;
     };
     pb.right() < l || pb.left() > r || pb.bottom() < t || pb.top() > b
+}
+
+/// A pattern's `/Matrix` (Table 75/76), defaulting to the identity.
+///
+/// Six numbers `[a b c d e f]` in the usual §8.3.3 order. A malformed or
+/// short array falls back to the identity rather than refusing: the entry
+/// is optional, its default IS the identity, and a pattern drawn unmoved
+/// is far more recoverable than one not drawn at all.
+fn pattern_matrix(doc: &DocumentView<'_>, dict: &Dict) -> Transform {
+    let Some(arr) = dict
+        .get(b"Matrix")
+        .map(|o| doc.resolve(o))
+        .and_then(Object::as_array)
+    else {
+        return Transform::identity();
+    };
+    let nums: Vec<f32> = arr
+        .iter()
+        .filter_map(|o| doc.resolve(o).as_number())
+        .map(|n| n as f32)
+        .collect();
+    match nums.as_slice() {
+        &[a, b, c, d, e, f] => Transform::from_row(a, b, c, d, e, f),
+        _ => Transform::identity(),
+    }
 }
 
 fn intersect_clip(

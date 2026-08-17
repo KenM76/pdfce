@@ -457,7 +457,8 @@ impl ColorSpace {
     /// Would painting in this space put marks on the page at all?
     ///
     /// `false` only where the standard or pdfce's own limits say nothing is
-    /// drawn: a `Pattern` space (pdfce does not paint patterns), a
+    /// drawn: a `Pattern` space (which has no solid colour to paint — the
+    /// pattern itself is drawn by the interpreter's own route), a
     /// `Separation /None` ("shall have no effect on the current page"), and
     /// a `DeviceN` whose components are **all** `/None` ("shall always
     /// discard its output … shall never revert to the alternate colour
@@ -721,7 +722,7 @@ pub struct ColorDiagnostics {
 
 impl ColorDiagnostics {
     /// Record a distinct reason for the notes list.
-    fn note(&mut self, reason: &str) {
+    pub(crate) fn note(&mut self, reason: &str) {
         if self.notes.len() < MAX_NOTES && !self.notes.iter().any(|s| s == reason) {
             self.notes.push(reason.to_owned());
         }
@@ -767,6 +768,22 @@ struct Half {
     /// ([`ColorSpace::paints`]). Part of the graphics state, so it is saved
     /// and restored by `q`/`Q` along with everything else here.
     paints: bool,
+    /// The `/Pattern` resource name the last `scn`/`SCN` named, if any
+    /// (§8.6.6.2, Table 74).
+    ///
+    /// Kept as the NAME rather than a resolved pattern for two reasons.
+    /// The resource dictionary a name resolves against belongs to the
+    /// content stream being interpreted, and a form XObject's `scn` names
+    /// the FORM's `/Pattern` sub-dictionary — resolving eagerly here would
+    /// bind the name against whichever resources happened to be current
+    /// when the colour was set. And a pattern that is set and never used
+    /// costs nothing this way, which matters because setting a pattern
+    /// colour is cheap and common while resolving one is neither.
+    ///
+    /// It lives in `Half` so `q`/`Q` save and restore it with the rest of
+    /// the colour state, which is what §8.4.2 requires of the colour and
+    /// therefore of the pattern that stands in for it.
+    pattern: Option<std::sync::Arc<[u8]>>,
 }
 
 impl Default for Half {
@@ -777,6 +794,7 @@ impl Default for Half {
         Self {
             space: Some(Arc::new(ColorSpace::DeviceGray)),
             paints: true,
+            pattern: None,
         }
     }
 }
@@ -856,6 +874,18 @@ impl ColorState {
         }
     }
 
+    /// The `/Pattern` resource name selected in one half, if the current
+    /// colour is a pattern (§8.6.6.2).
+    ///
+    /// `Some` here and [`ColorState::paints`] `false` are the same fact
+    /// seen from two sides: there is no solid colour to fill with, and
+    /// there is a pattern the paint site should try to draw instead.
+    #[must_use]
+    pub fn pattern(&self, stroking: bool) -> Option<&[u8]> {
+        let half = if stroking { &self.stroke } else { &self.fill };
+        half.pattern.as_deref()
+    }
+
     /// The current space of one half, for tests and diagnostics surfaces.
     #[must_use]
     pub fn space(&self, stroking: bool) -> Option<&ColorSpace> {
@@ -884,6 +914,12 @@ impl ColorState {
         };
         half.space = Some(resolved);
         half.paints = true;
+        // A new space replaces any pattern selection (§8.6.8: the operator
+        // "shall also set the current colour to its initial value"). Not
+        // clearing this is how a `scn /P1` followed by a `cs` naming a
+        // NON-painting space (`Separation /None`) would paint the old
+        // gradient where the standard requires nothing at all.
+        half.pattern = None;
     }
 
     /// `cs` / `CS` — select a colour space by name and install its initial
@@ -924,7 +960,11 @@ impl ColorState {
         };
         if matches!(*space, ColorSpace::Pattern { .. }) {
             diag.pattern_spaces_selected += 1;
-            diag.note("Pattern colour space selected; pdfce does not paint patterns");
+            // NOT "pdfce does not paint patterns" — it does, for
+            // `PatternType 2`. Selecting the SPACE is all this sees; which
+            // kind of pattern gets named, and whether it is drawn, is
+            // decided at the paint site and counted there.
+            diag.note("Pattern colour space selected");
         }
         let initial = space.initial_color();
         let paints = space.paints();
@@ -944,6 +984,7 @@ impl ColorState {
         };
         half.space = Some(Arc::clone(&space));
         half.paints = paints;
+        half.pattern = None;
         space.to_rgb(&initial, intent, diag)
     }
 
@@ -969,17 +1010,24 @@ impl ColorState {
         // to an uncoloured tiling pattern's underlying space, and pdfce
         // paints neither kind.
         if let Some(name) = pattern {
-            diag.patterns_unpainted += 1;
-            diag.note(&format!(
-                "scn named pattern /{}: not painted (patterns are later work)",
-                String::from_utf8_lossy(name)
-            ));
             let half = if stroking {
                 &mut self.stroke
             } else {
                 &mut self.fill
             };
+            // `paints` stays FALSE. It gates the SOLID-colour paint, and a
+            // pattern has no solid colour to paint — letting it stay true
+            // would fill the path with whatever RGB happened to be current,
+            // which is the one outcome worse than painting nothing.
+            //
+            // The `patterns_unpainted` counter used to be incremented right
+            // here, which meant it counted patterns SELECTED rather than
+            // patterns that failed to paint. Now that a shading pattern can
+            // actually be drawn, those are different numbers and only the
+            // second one is a shortfall, so the count moved to the paint
+            // site (`Interpreter::fill_with_pattern`).
             half.paints = false;
+            half.pattern = Some(std::sync::Arc::from(name));
             return None;
         }
 
@@ -1028,6 +1076,7 @@ impl ColorState {
         };
         half.space = None;
         half.paints = true;
+        half.pattern = None;
     }
 
     /// Resolve a `cs`/`CS` name to a space, memoized per resource name.
@@ -2680,12 +2729,20 @@ mod tests {
 
     // ---- Pattern (§8.6.6.2) --------------------------------------------
 
-    /// `scn` may name a **pattern**. pdfce does not paint patterns yet, so
-    /// it paints nothing and counts it — rather than drawing a solid fill in
-    /// a stale colour, which is what the deferred arm used to do and is
-    /// worse than a gap.
+    /// `scn` may name a **pattern**, and a pattern pdfce cannot draw paints
+    /// NOTHING and is counted — rather than drawing a solid fill in a stale
+    /// colour, which is what the deferred arm used to do and is worse than
+    /// a gap.
+    ///
+    /// The pattern here is unpaintable for a specific reason: its shading
+    /// carries no `/Function`, which §8.7.4.5.3 requires of a type-2
+    /// shading, so the model refuses to load. That is deliberate now that
+    /// `PatternType 2` fills ARE painted (see
+    /// `crates/pdfce-render/tests/shading_pattern_anchoring.rs`) — this
+    /// test's subject is the REFUSAL path, and it would silently stop
+    /// testing that if the fixture were ever made well-formed.
     #[test]
-    fn a_pattern_name_is_recognised_and_left_unpainted() {
+    fn an_unpaintable_pattern_is_recognised_and_left_unpainted() {
         let rendered = render(
             &format!("0 g 20 20 60 60 re f /Pattern cs /P0 scn\n{RECT}"),
             "<< /Pattern << /P0 5 0 R >> >>",
