@@ -5,6 +5,90 @@ shipped, this says what to do next. Overwrite it once acted on.
 
 ---
 
+## ⇢⇢ RESUME HERE — the operator typed "continue" (paused 2026-08-17, mid-task)
+
+**The session was cut short: the operator's mouse became unusable and he
+restarted.** Nothing was abandoned mid-edit. Read this block, then go
+straight to *"The one thing left open"*.
+
+**`HEAD` = `1e7a0be`. Working tree CLEAN for `crates/` and `tools/`.
+3,747 tests, 0 failures. `fmt`/`clippy` clean. All seven scripted gates
+clean. `cargo tree` shows no GUI dependency in `pdfce-core` or
+`pdfce-render`. Not pushed, not tagged.**
+
+`docs/` may carry uncommitted librarian output — that is normal, the
+librarian does not commit. Check `git status` and commit it if so.
+
+### ★ THE ONE THING LEFT OPEN — do this first, it is small
+
+The image colour-space fixtures at **`D:\Dev\temp\img-fixtures\`**
+(regenerate with `python D:\Dev\temp\gen_img.py <dir>` if the temp folder
+was cleaned) still produce **one `unexplained-divergence`** in the parity
+harness:
+
+```
+python tools/render-parity/render_parity.py D:\Dev\temp\img-fixtures \
+    --pages-per-file 0 --dpi 150 --out D:\Dev\temp\img-parity --band 0.0294
+```
+
+The fixture is **`lab.pdf`** — mean Δ 15.175, `frac32` 0.121. Two stdout
+keys (`img_uncalibrated`, `img_colorant_none`) and matching `GAP_KEYS`
+entries in `render_parity.py` were added specifically to explain it, and
+**the last run still showed 1 unexplained.** That run happened *before*
+the CLI half of those keys was actually applied (a patch script aborted
+before writing; see the commit message), so **the most likely answer is
+simply that it was measured with a binary that did not emit the keys.**
+
+**Re-run it first.** If it is now explained, the work is done and the
+only remaining task is the roadmap filing. If it is *still* unexplained,
+that is a real signal and worth chasing: sampled pixels were pdfce
+`(0,47,21)` vs pdfium `(0,51,18)` at one corner and `(120,119,119)` vs
+`(117,118,118)` at the centre — small, but `dmax` reached 156 somewhere,
+so **find where**, the way the axial-plain divergence was chased to two
+specific columns.
+
+**Do not assume it is benign because the sampled pixels were close.**
+That assumption was wrong once already today.
+
+### Not yet filed with the librarian
+
+`Pass 85.x` (the image colour spaces, commit `1e7a0be`) has **not** been
+dispatched to `pdfce-librarian`. It needs: the Shipped entry, a
+`FEATURES.md` row (`core [x] · cli [x] · gui [ ]`, naming the five
+spaces), and the two findings below.
+
+**Two things worth a decision record or a rule when you file it:**
+
+1. **pdfium paints a `/Separation /None` image BLACK; pdfce paints
+   nothing.** §8.6.6.4 says such a colorant "shall never be painted on
+   the page", so pdfce is deliberately right and the reference renderer
+   is wrong. Any parity run containing one will show a maximal
+   divergence that is pdfce's *correctness*. Same shape as `iccce`'s own
+   rule 7 (*disagreement with the reference is a finding, not a
+   failure*).
+2. **The third instance in one session of a disclosure that reached a
+   human and not a machine.** `Pass 84.0` was twelve counters no shell
+   read; the `Pass 85.0` GUI regression was `R180`'s second instance;
+   this one was a `Lab` explanation that existed only on stderr while the
+   parity harness reads stdout. The librarian judged instance 2 to be
+   `R180`, not `R151` — **ask it whether this is a third instance of
+   `R180` and therefore promotable.** Its three-instance bar was
+   previously unmet. `R195` is next free.
+
+### Also owed
+
+- **`docs/FEATURES.md` may need the two shading rows re-checked.** They
+  were corrected once today after claiming shading patterns work (they
+  do not — only the `sh` operator paints).
+- The `pdfce-acrobat-librarian` overprint dispatch **completed**. Key
+  finding for the overprint Pass: Acrobat's Overprint Preview defaults to
+  **"Only for PDF/X files"**, so a PDF/X-4 file gets accurate overprint
+  rendering with no user action — meaning the Ghent file's *expected*
+  appearance includes overprint. Evidence class: third-party, not
+  Adobe-primary.
+
+---
+
 ## ★ STATE AT HANDOFF — 2026-08-17. THE QUEUE CHANGED; READ THIS FIRST.
 
 **The operator tested the Ghent PDF Output Suite 5.0 X-4 conformance file
@@ -217,11 +301,11 @@ still unblocked; it is simply no longer what the operator is watching.
 **Take the Ghent queue, in this order**, and the order is measured rather
 than assumed:
 
-1. **`Separation`/`DeviceN` images.** The biggest remaining *visual* gap —
-   18 images are missing from the operator's own test file, which is why
-   the reference images beside the now-working gradients are still blank.
-   The §7.10 function evaluator already exists and is already wired for
-   vector fills; this is the per-pixel path only.
+1. ~~**`Separation`/`DeviceN` images.**~~ **DONE 2026-08-17, commit
+   `1e7a0be`** — all 18 now decode, plus `Lab`/`CalGray`/`CalRGB` which
+   came free. Struck rather than deleted so the ordering argument stays
+   legible. **Its roadmap filing is still owed** — see the RESUME block
+   at the top of this file.
 2. **Shading patterns + tiling patterns.** Finishes what `Pass 85.0`
    started. The pattern-space anchoring is fully sourced in
    `iso32000__s__8.7.md` (PM1–PM9) — the coordinate-space half is the part

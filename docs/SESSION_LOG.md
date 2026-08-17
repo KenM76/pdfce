@@ -43259,3 +43259,391 @@ graduation: the A1->A3 label fix described above.
 2. **The `/P` corpus gap is now a Backlog entry paired with the `/Rotate`
    one.** They are the two cases the synthetic corpus **structurally cannot
    exercise**; a single `tools/gen-*-fixtures.py` Pass could close both.
+
+## 2026-08-17 (hundred-and-forty-ninth filing) — **TWELVE COLOUR COUNTERS SHIPPED, ZERO OF THEM WERE PRINTED — CLOSED AS `Pass 84.0`, and the GHENT PDF OUTPUT SUITE turns that fix into a MEASURED SIX-ITEM RENDER-FIDELITY GAP INVENTORY, `Pass 85.0`–`85.5` + `Pass 86.0`.** A second cross-project channel opens, to the new `iccce` colour-management project — decisions 063 and 064 minted
+
+**Filed by `pdfce-librarian`, no shell available (hard rule 8) — every
+figure in this entry is RELAYED from the dispatching engineer's report,
+not independently re-run or read via `git show`.** The predicted
+next-session pointers left by the hundred-and-forty-eighth filing
+(Pass family `84`, decision `063`, filing ordinal `149`, rule `R195`)
+were checked against this filing's own work and **matched exactly** —
+recorded because that agreement is itself evidence the ledger is
+consistent, not assumed.
+
+**Shipped:**
+
+- **`Pass 84.0`** (`d0f8c5f`) — colour-diagnostics disclosure. Twelve
+  `ColorDiagnostics` counters existed in `pdfce-render` since the
+  colour-space slice shipped, exported from the crate root, unit-tested
+  — and never read by any shell. `render-page` now prints all twelve on
+  its stable stdout line, plus eight stderr sentences via a new
+  `report_color_diagnostics` (per decision 006 §4.4, pure-census
+  counters stay silent; `sep_none_suppressed` prints per `R183`). A
+  stale runtime string (`device_n_to_rgb`'s fallback note claiming the
+  §7.10 evaluator "not evaluated yet", when it has existed for some
+  time) is fixed, along with four doc comments carrying the same false
+  claim. Two new tests. **3,726 tests, 0 failures**; full gate list
+  clean. **Filed as an `R151` INSTANCE, not a new rule** — this
+  dispatch's own framing proposed a new rule (`R193`) on a claimed
+  two-occurrence bar; both the number (claimed, not free — `R195` is
+  free) and the bar (three instances, not two, per this project's own
+  ruling against the `R193`/`R194` proposals the prior filing declined)
+  were corrected in the *Shipped* entry itself.
+- **★ `check-bypass-paths.sh` found RED AT `HEAD`, pre-existing, not
+  introduced by `Pass 84.0`** (verified by the dispatching engineer via
+  stashing — identically red at `718d1e9`). `pdfce-core::ocr::layer`
+  (`Pass 71.0` slice 2) bypasses `EditSession` at three sites, neither
+  fixed nor exception-listed. Filed as `Pass 86.0`, HIGH PRIORITY,
+  *Next up* — the same writer-discipline shape `Pass 73.0` already
+  names for redaction, now measured on a second subsystem.
+
+**Decisions made this session:**
+
+- **Decision 063 — render-side shading split out of decision 007's
+  edit-side fold-in.** Decision 007 (2026-07-31) was right to route
+  shading-pattern *editing* into the unscoped "Vector graphics editing
+  (Inkscape-parity)" Backlog bucket ("implementing them twice is
+  waste"), but that routing had the side effect of blocking shading
+  *rendering* behind a bucket with no Pass IDs. The operator hit the
+  render gap first, on a real PDF/X-4 file, not while editing anything.
+  `Pass 85.0`–`85.2` (paint the existing `sh`/pattern operators
+  correctly) are scoped independently now; the editable-gradient-object
+  half stays exactly where decision 007 put it, for decision 007's own
+  reason. `ROADMAP.md`'s Vector-editing bucket carries a dated
+  amendment; `ARCHITECTURE.md` §12 carries the full decision.
+- **Decision 064 — the `iccce` boundary.** The operator created
+  `D:\Dev\iccce\` (MIT, from-scratch ICC colour management) and opened
+  `D:\Dev\FeatureRequests\iccce_FeatureRequests\`, mirroring the
+  existing `pdfceGUI` channel. Boundary: **iccce converts, pdfce
+  composites** — overprint, blend modes and transparency groups stay
+  pdfce's; profile parsing, transform construction and rendering
+  intents are iccce's. `Pass 85.5` (overprint) is the item most likely
+  to be mis-filed across this line. **The `/OutputIntents` legal
+  calculus differs from `cmyk_table.rs`'s own redistribution objection**
+  — an embedded destination profile arrives inside the operator's own
+  document, so the constraint that forced pdfce's baked CMYK table does
+  not apply to it. **`cmyk_table.rs` is flagged as a cross-check against
+  measured pdfium output, not a colorimetric ground truth**, under
+  iccce's own evidence-class ranking — a qualifier this project's own
+  citations of it (notably the "3.0× the clean-page mean" residual
+  behind `Pass 49.0`) have been omitting. Nothing is built; a new
+  `ROADMAP.md` Backlog bucket and `ARCHITECTURE.md` §12 decision 064
+  record the boundary and the two blocked consumers
+  (`/OutputIntents`-aware CMYK, real-profile `/ICCBased`).
+
+**Findings + decisions:**
+
+- **The Ghent PDF Output Suite (`Ghent_PDF-Output-Test-V50_ALL_X4.pdf`,
+  PDF/X-4, 6 pages) is a formal prepress conformance corpus, not an
+  ad-hoc file** — each patch draws an **X** a correctly-rendering engine
+  *covers*; a visible X is a recorded failure. Every gap in `Pass
+  85.0`–`85.5` is **measured**, per page, from pdfce's own diagnostics
+  against it, not estimated: shading/pattern deferred-op counts (52 ops
+  page 1, 85 page 4), `Separation`/`DeviceN` image failures (10/6/2
+  across pages 1/4/5), `unsupported_type3=2` page 3 (one measured
+  counter-example against `Pass 1.1` item 4's "near-zero corpus
+  presence," flagged not re-prioritized), and overprint patches covering
+  most of pages 1 and 4 — the last of which is **confirmed conformant
+  today** per §8.6.7's "ignore if unsupported" fallback, not a defect.
+- **Two prerequisite RAG dispatches (`pdfce-spec-librarian` for §8.7.4.5
+  shading geometry Tables 79–84; `pdfce-acrobat-librarian` for prepress
+  rendering behaviour) died on an API weekly limit before writing
+  anything, this session.** Both are still owed and block `Pass 85.0`
+  and `Pass 85.5` from starting — project rules 1 and 12 forbid
+  implementing spec-governed geometry or Acrobat-parity acceptance
+  criteria from training-data recall.
+- **A `Pass 1.1` sub-item, "Lab/Separation/DeviceN colour spaces for
+  images," already existed, unscoped, matching the Ghent image-colour-
+  space gap exactly** — `Pass 85.3` closes it rather than duplicating
+  it. Found by reading the existing corpus-validation record before
+  minting anything, per hard rule 4.
+- **`bdfd511` ("the boundary check I reported as evidence was passing
+  because nothing calls the crate") is a genuine ledger gap, not this
+  filing's to close.** It sits in `git log` between `a84bdc3` (`Pass
+  81.0`, hundred-and-forty-seventh filing) and `e8e9881` (`Pass 83.0`,
+  hundred-and-forty-eighth filing), and the hundred-and-forty-eighth
+  filing's own measured backup-bundle record places it 2 commits behind
+  that filing's `HEAD` — but no `ROADMAP.md` entry exists for it under
+  either its hash or a matching description, and the hundred-and-forty-
+  eighth filing's own header states only two commits were filed that
+  day (`e8e9881`, `a19e54d`). Flagged for the engineer; this dispatch's
+  brief did not include its content, so nothing is fabricated to fill
+  the gap.
+
+**Still in flight:**
+
+- **`Pass 72.0`, `73.0`, `73.1` remain HIGH PRIORITY and unstarted.**
+  Now joined by `Pass 86.0` (also HIGH PRIORITY — a currently-red
+  safety gate) and `Pass 85.0`–`85.5` (blocked on the two RAG dispatches
+  above, `85.5` additionally gated on decision 064's `iccce` boundary
+  maturing).
+- **`bdfd511`'s missing `ROADMAP.md` entry** — open, not investigated
+  further this filing (see *Findings* above).
+- **`R193`/`R194` remain unruled proposals; `R195` stays the next
+  genuinely free rule number.** Unaffected by this filing — no rule
+  proposed or minted (`Pass 84.0`'s finding is filed as an `R151`
+  instance).
+
+**For next session:**
+
+1. **Next free Pass family is `87`** — `84` (this filing), `85.0`–
+   `85.5` and `86` all taken this filing. **Next free decision is
+   `065`** — `063`, `064` taken this filing. **Next free filing ordinal
+   is `150`. Next genuinely free rule is still `R195`.** Not
+   independently re-verified against `tools/check-ledger-numbers.py`
+   (no shell) — derived by reading this file's own edits, and the
+   `R193` mistrust note from the prior filing still applies to that
+   tool's rule-ceiling line.
+2. **Two RAG dispatches are the literal blocker on `Pass 85.0` and
+   `85.5` starting** — retry `pdfce-spec-librarian` (§8.7.4.5 Tables
+   79–84) and `pdfce-acrobat-librarian` (prepress rendering behaviour)
+   before either Pass is picked up.
+3. **`Pass 86.0`** (`check-bypass-paths.sh` red) is cheap and
+   independent of everything else filed this session — a reasonable
+   first pick if a small, self-contained fix is wanted before the
+   larger Ghent-suite work.
+
+## 2026-08-17 (hundred-and-fiftieth filing) — **`Pass 85.0` SHIPPED IN TWO SLICES — SHADING PAINTS AXIAL AND RADIAL, GHENT SHADING COVERAGE 0/16 → 14/16.** AMB-3 resolved (decision 065); a sabotage check failed on its first run and is flagged, not ruled
+
+**Filed by `pdfce-librarian`, no shell available (hard rule 8) — every
+figure in this entry is RELAYED from the dispatching engineer's report,
+not independently re-run or read via `git show`.** The hundred-and-
+forty-ninth filing's predicted next-session pointers (Pass family `87`
+free, decision `065` free, filing ordinal `150`, rule `R195` free) were
+checked against this filing's own work: **Pass ID matched** (`85.0` was
+already assigned, not freshly minted); **decision `065` matched and is
+used here**; **filing ordinal `150` matched**; **`R195` was NOT used** —
+this filing's own sabotage-check finding is one instance, below the
+project's three-instance promotion bar, so no rule is minted and `R195`
+stays free for whoever earns it next.
+
+**Shipped:**
+
+- **`Pass 85.0`** (`33ea830` model + `9839d6f` paint) — the `sh`
+  operator and shading patterns now paint for axial (type 2) and radial
+  (type 3) shadings, per-pixel, anchored to current user space (Table
+  77). New `pdfce_render::shading` module; six new CLI counters
+  (`shadings`/`shadings_via_sh`/`shadings_paintable`/`shadings_painted`/
+  `shadings_refused`/`shadings_mesh`) landed in the same change as the
+  model, not after it. Measured against the Ghent PDF Output Suite:
+  shading coverage **0/16 → 14/16** (page 1: 0/12→10/12, page 4:
+  0/4→4/4); the 2 remaining are tensor-product meshes (type 7), named
+  as such. Type 1 (function-based) is modelled but not painted — zero
+  occurrences in the corpus. pdfium cross-check on six synthetic
+  single-shading fixtures: mean per-pixel diff 0.921–2.211, all below
+  the `Pass 11` parity band (0.0294). **3,747 tests, 0 failures**; full
+  gate list clean; `cargo tree -p pdfce-core`/`-p pdfce-render` both
+  zero GUI-crate hits. `check-bypass-paths.sh` still RED at `HEAD`, the
+  pre-existing `Pass 86.0` finding, untouched — not a regression. See
+  `ROADMAP.md`'s `Pass 85.0` Shipped entry for the full build record.
+
+**Decisions made this session:**
+
+- **Decision 065 — AMB-3 resolved: radial shading circles paint on
+  their circumference, not as filled discs.** ISO 32000-1 describes the
+  painted circles as regions colour is painted "within"; ISO 32000-2
+  restates the same clause with the circle read "on" its boundary.
+  pdfce implements the circumference reading (`|P−c(s)|=r(s)`) because
+  the disc reading is self-defeating regardless of edition: circles
+  paint in increasing `s` order, so the last one painted (`s=1`) would,
+  as a filled disc, cover every circle inside it and collapse the whole
+  gradient to one flat colour. pdfium agrees, measured. A second,
+  independent finding from the same measurement run is recorded in the
+  same decision: `axial-plain`'s divergence (834 pixels, exactly two
+  device columns at the non-extended axis end) is a pixel-CENTRE
+  sampling-convention difference from pdfium, not anti-aliasing — first
+  suspected as AA, corrected before being written down. See
+  `ARCHITECTURE.md` §12 decision 065 and its §3 `pdfce-render\` module
+  entry (new `shading.rs`).
+
+**Findings + decisions:**
+
+- **★ A sabotage check failed the first time it ran, on the exact
+  clause the spec corpus flags as the most-misimplemented sentence in
+  §8.7.4.5 (`SH39`/`SH40`, the greatest-`s` root selection).** Inverting
+  the selection rule to smallest-root left all 17 existing tests green
+  — not because the rule was untested, but because every existing
+  fixture had only one admissible root, so the two rules never had
+  occasion to disagree. Two fixtures added where both roots are
+  admissible and in [0,1]; re-sabotaged, both failed; restored, green.
+  **Not minted as a standing rule** — this project's own promotion bar
+  is three instances (per the ruling against the `R193`/`R194`
+  proposals, `Pass 84.0`'s Shipped entry, hundred-and-forty-ninth
+  filing), and this is a first occurrence of a specific shape: a
+  selection rule whose sabotage is powerless until a fixture exists
+  where the alternatives actually diverge — distinct from `R96`'s
+  "guard clause behind an unreachable filter" and the "sabotage passed,
+  was the mutation reachable" rule already on record (`Pass 19.2`).
+  Flagged here for a second occurrence to promote against; `R195`
+  remains the next genuinely free rule number.
+- **The `pdfce-spec-librarian` half of the two prerequisite dispatches
+  the hundred-and-forty-ninth filing recorded as owed has landed** —
+  `iso32000__s__8.7.4.5__analytic.md` (types 1–3, 45 `SH` labels, 10
+  `AMB` items). It corrected three premises already sitting in the
+  code before this Pass touched them: the shading table numbers were
+  off by one (78 common / 79 type-1 / 80 type-2 / 81 type-3, meshes
+  82–84); no quadratic formula exists anywhere in the radial clause —
+  the standard states a painting *process* and pdfce's quadratic is a
+  labelled derivation from it (`AMB-2`); the axial parameter is `x′`,
+  not `s`. Mesh types 4–7 remain not ingested — a prerequisite for
+  `Pass 85.1`.
+- **The `pdfce-acrobat-librarian` half of the same prerequisite pair is
+  NOT confirmed run for `Pass 85.0` by anything that reached this
+  filing.** The hundred-and-forty-ninth filing named it as a
+  prerequisite for the `85.0`–`85.5` family's acceptance criteria under
+  project rule 12. This dispatch's report named only the spec-librarian
+  delivery. Not asserted either way here — flagged in both this entry
+  and the `ROADMAP.md` `Pass 85.0` Shipped entry for the engineer to
+  confirm or close; `Pass 85.0`'s actual acceptance evidence used this
+  session (Ghent-suite X-coverage measurement, pdfium cross-check, the
+  spec corpus) is independently sourced regardless of the answer.
+- **`tiny_skia::RadialGradient` cannot express a PDF radial shading** —
+  confirmed already filed at
+  `D:\dev\rag\rust\tiny_skia_radial_gradient_has_no_start_radius.md`;
+  not duplicated.
+
+**Still in flight:**
+
+- **`Pass 72.0`, `73.0`, `73.1`, `86.0` remain HIGH PRIORITY and
+  unstarted**, unaffected by this filing.
+- **`Pass 85.1`–`85.5` remain unstarted.** `85.1` (mesh) additionally
+  needs the still-not-ingested Table 82–84 spec range; `85.5`
+  (overprint) still needs the `pdfce-acrobat-librarian` dispatch,
+  unaffected by this session, plus decision 064's `iccce` boundary
+  maturing.
+- **The open acrobat-librarian scoping question above** (was it run for
+  `85.0`) is unresolved, flagged for the engineer.
+- **`bdfd511`'s missing `ROADMAP.md` entry**, carried over from the
+  hundred-and-forty-ninth filing, remains open and untouched by this
+  filing.
+
+**For next session:**
+
+1. **Next free Pass family is `87`** (unchanged — `85.0` used an
+   already-assigned ID, not a fresh one). **Next free decision is
+   `066`** — `065` taken this filing. **Next free filing ordinal is
+   `151`. Next genuinely free rule is still `R195`** — not used this
+   filing (one instance only, below the three-instance bar). Not
+   independently re-verified against `tools/check-ledger-numbers.py`
+   (no shell) — derived by reading this file's own edits.
+2. **Confirm whether `pdfce-acrobat-librarian` ran for `Pass 85.0`** —
+   see *Findings* above; if it did not and rule 12 is read as binding on
+   this Pass, that is a compliance gap worth closing even after the
+   fact, not a reason to revert shipped code.
+3. **`Pass 85.2` (tiling pattern paint) and `85.3` (`/Separation`/
+   `/DeviceN`/`Lab` image colour spaces) have no dependency on `85.0`
+   or on either prerequisite dispatch** — both are pickable next,
+   per the suggested build order already on record in `ROADMAP.md`.
+4. **`Pass 86.0`** (`check-bypass-paths.sh` red, pre-existing) is still
+   the cheapest independent pick if a small fix is wanted first.
+
+## 2026-08-17 (hundred-and-fifty-first filing) — **CORRECTION DISPATCH: two `FEATURES.md` rows overclaimed the GUI surface; a THIRD finding — a genuine GUI honesty regression the engineer had already named but never filed — is now properly filed as `Pass 87.0`.** `R180` gains a second instance; no new rule minted
+
+**Predicted next-session pointers, checked against this filing's own
+work** (per the hundred-and-fiftieth filing's own "For next session"):
+Pass family **87** — **used**, for `Pass 87.0` below (not freshly
+predicted-wrong; this was the number waiting). Decision **066** —
+**not used**, no architectural decision made this filing, stays at 065/
+next-free-066. Filing ordinal **151** — **matched**. Rule **`R195`** —
+**not used**; this filing's finding is `R180`'s SECOND instance, not a
+new rule, so `R195` stays the next genuinely free number, unchanged for
+the third filing running.
+
+**This is a correction dispatch, not new engineering work.** The
+operator's own message identified two `docs/FEATURES.md` rows that
+overclaimed what `Pass 85.0`/`84.0` actually shipped, plus a third,
+more consequential finding: `docs/NEXT_SESSION.md` already named a GUI
+honesty regression from `Pass 85.0` slice 1 and said it was "filed
+rather than fixed" — **it was not, in fact, filed anywhere in
+`ROADMAP.md`.** This librarian verified all three directly against
+`HEAD` via `Read`/`Grep` on live source (not relayed — a source-tree
+read needs no shell, distinct from the git/backup-state claims hard
+rule 8 governs) before writing anything.
+
+**Shipped (documentation only — no commit, no Pass ID for the
+correction itself):**
+
+- **`docs/FEATURES.md` row 152 corrected.** "Colour spaces and PDF
+  functions" claimed `gui [x]` and "disclosed in the GUI." Verified
+  false: `crates/pdfce-gui/src/main.rs`'s diagnostics status bar
+  (lines 15749–15773) sums `fonts_unsupported + deferred_ops +
+  unknown_ops + images_unsupported` and checks `glyphs_substituted`/
+  `glyphs_supplied` — none of `Pass 84.0`'s twelve colour counters.
+  Flipped to `gui [ ]`, worded as operator-paused, matching the
+  shading row's own convention.
+- **`docs/FEATURES.md` row 153 corrected.** "Paint shading" claimed
+  the paint route was "via both the `sh` operator and shading
+  patterns." Verified false: `crate::shading::Shading::load`
+  (`pdfce-render/src/interpret.rs:2290`) has exactly one caller, the
+  `sh` handler; `scn` naming a pattern lands on `color.rs:972`, which
+  counts `patterns_unpainted` and draws nothing. Reworded to name `sh`
+  only; a new Planned row added for shading patterns (`PatternType 2`),
+  next to the existing tiling-pattern row.
+- **`Pass 87.0` filed under *Next up*, `ROADMAP.md`** — the GUI
+  honesty regression itself: `Pass 85.0` slice 1 lifted `sh` out of the
+  `deferred_ops` bucket the GUI's clean-render check sums, into six new
+  counters the GUI never reads. A page with an unpainted type-1 or mesh
+  shading now reports **clean** in the GUI where it correctly reported
+  not-clean before `Pass 85.0`. Marked GUI-paused/low-priority per the
+  operator's own standing pause (2026-08-13), inherited by whichever GUI
+  survives (`crates/pdfce-gui` or `D:\dev\pdfceGUI`).
+- **`Pass 85.2`'s gap-table description widened** (`ROADMAP.md`, *Next
+  up*) from "tiling pattern paint" to "pattern paint — both tiling
+  (`PatternType 1`) and shading (`PatternType 2`)" — same root cause
+  (`patterns_unpainted`), same unfixed code path, not two separate
+  gaps. No new Pass ID consumed.
+
+**Decisions made this session:** none — a documentation/ledger
+correction, not an architectural decision. Decision-record ceiling
+unchanged at 065.
+
+**Findings + decisions:**
+
+- **`R180` gains its second instance.** `R180`'s own text: an accurate
+  disclosure can be falsified by a later improvement to the very thing
+  it describes. Instance 1 was a static help string (`b8f96b1`+
+  `252ffde`+`62ba5ac`, 2026-08-07/10). Instance 2, filed here, is a
+  *computed boolean* rather than a sentence — the GUI's clean-render
+  check — falsified by `Pass 85.0` slice 1's genuine, correct
+  improvement to the CLI side of the same signal. Two instances is
+  below this project's own three-instance bar for minting a new rule;
+  this is evidence appended to `R180`, not a proposal.
+- **The gap between "named in `docs/NEXT_SESSION.md`" and "filed in
+  `ROADMAP.md`" is itself worth naming.** The engineer's own handoff
+  said the regression was "filed rather than fixed" — accurate about
+  intent, inaccurate about what actually reached the ledger. Grepping
+  `ROADMAP.md` for the regression's own description ("honesty summary
+  regressed", the GUI's `deferred_ops + unknown_ops` sum) returned zero
+  hits before this filing. Not assigned a rule number here — first
+  occurrence of this specific shape (an engineer-side note believed
+  filed that never crossed into the librarian-owned ledger); flagged
+  for a second occurrence.
+- **`pdfce-acrobat-librarian` re-dispatch status for `Pass 85.0`–`85.5`
+  cannot be confirmed from a source-tree read.** The operator's own
+  message says a re-dispatch was started this session and died on an
+  API weekly limit before writing anything, and that it is being
+  re-run. This librarian has no way to verify that outcome; the open
+  item stands as flagged in the `ROADMAP.md` `Pass 85.0` Shipped entry,
+  unresolved by this filing.
+
+**Still in flight:** unchanged from the hundred-and-fiftieth filing's
+own list — `Pass 72.0`, `73.0`, `73.1`, `86.0` remain HIGH PRIORITY and
+unstarted; `Pass 85.1`–`85.5` remain unstarted; `Pass 87.0` (new, this
+filing) joins them, GUI-paused; `bdfd511`'s missing `ROADMAP.md` entry
+remains open.
+
+**For next session:**
+
+1. **Next free Pass family is `88`** (`87.0` used this filing). **Next
+   free decision is `066`**, unchanged. **Next free filing ordinal is
+   `152`. Next genuinely free rule is still `R195`.**
+2. **Confirm the `pdfce-acrobat-librarian` re-dispatch outcome** for the
+   `85.0`–`85.5` family — the operator's message says it is in flight;
+   this librarian cannot verify from a source-tree read alone.
+3. **`Pass 87.0` is GUI-paused, not urgent** — pick it up only when GUI
+   work resumes, or hand it to `D:\dev\pdfceGUI` if that project
+   inherits `crates/pdfce-gui`'s territory.
+4. **`Pass 85.2`'s widened scope (tiling + shading patterns) has no
+   dependency on `85.0`, `85.1` or either prerequisite dispatch** — still
+   pickable next, per the existing suggested build order.

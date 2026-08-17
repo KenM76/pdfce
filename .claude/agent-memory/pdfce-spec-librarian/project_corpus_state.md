@@ -2494,3 +2494,100 @@ generalise to any "the source you could not get is now on disk" session.
   explicit **WHAT WAS DEFERRED** section — "do not read this as '2.0 is
   unchanged'" — because a partial close that looks total is worse than an open
   gap.
+
+---
+
+**46. ★ THE DELIBERATELY-NARROWED DISPATCH — a prior attempt died on an API
+limit, so the brief cut the scope in half. Three of the brief's own assertions
+were wrong, and the most valuable finding was WHERE THE SPEC STOPS.**
+(2026-08-17, `iso32000__s__8.7.4.5__analytic.md` — analytic shadings, types 1/2/3.)
+
+- **A NARROWED BRIEF IS A CONTRACT, AND "do not start X even if you have budget
+  left" MEANS IT.** The dispatch banned mesh shadings (types 4–7) by name
+  because the previous run had tried all seven and died mid-work having written
+  **nothing**. Finishing 1/2/3 completely — with the index updated and the
+  pointer in the older file amended — beats half-covering all seven. **Partial
+  coverage that is LABELLED is an asset; partial coverage that is silent is the
+  failure mode this corpus exists to prevent.** Every artifact says so in three
+  places: the new file's header, the old file's amended "NOT ingested" table,
+  and an index trigger row that says **"NOT IN THE CORPUS — say so; do not
+  answer from recall."**
+
+- **★ THE BRIEF'S TABLE NUMBERS WERE OFF BY ONE ACROSS A WHOLE FAMILY — and the
+  CORPUS was right.** It asserted "type 2 → Table 79, type 3 → Table 80". ISO
+  32000-1 is **78 common / 79 type-1 / 80 type-2 / 81 type-3**. The existing
+  `iso32000__s__8.7.md` had already cited "§8.7.4.5.2, Table 79" correctly.
+  Generalises item "everything a dispatch asserts is a hypothesis": **when a
+  dispatch and an existing corpus file disagree on an identifier, check the
+  source and expect the CORPUS to win** — it was written against the source; the
+  brief was written from a reading of the corpus.
+
+- **★★ THE HEADLINE FINDING WAS A NEGATIVE: THE RADIAL QUADRATIC IS NOT IN THE
+  STANDARD.** The brief demanded "the quadratic in `s` and its coefficients …
+  verbatim" and called the selection rule "the single most-misimplemented
+  sentence". `grep 'quadratic\|discriminant'` → **0 hits in ISO 32000-1 (756 pp)
+  and 0 in ISO 32000-2 (1023 pp)**, whole-document counts. §8.7.4.5.4 specifies a
+  **painting PROCESS** — paint every blend circle in increasing `s`, opaquely,
+  therefore the greatest enclosing `s` wins — and never an inverse solve. The
+  quadratic every implementation uses is a **derived inversion of that process**.
+  Two obligations that fall out and are worth reusing verbatim: (i) the
+  implementation must be *observationally equivalent* to the stated painting
+  order (greatest admissible root, not the first, not the `+` branch by habit);
+  (ii) **do not put a clause citation next to a formula the clause does not
+  contain** — that manufactures a spec claim. **When a brief asks for something
+  "verbatim" and it does not exist, THAT is the deliverable**, evidenced with a
+  term-frequency count, not a shrug.
+
+- **★ THE PREDICTED AMBIGUITY EXISTED — AND THE NEXT EDITION HAD ALREADY CLOSED
+  IT.** The brief guessed the zero-length axial axis (`(x0,y0)==(x1,y1)`) would
+  be spec-silent and become a settings-register entry. **1.7 is silent** — the
+  projection denominator is 0/0, and no clause/table/note addresses it. **ISO
+  32000-2:2020 Table 79 adds "…nothing shall be painted."** So the register entry
+  ships with a **forced default** rather than a genuine choice. Same shape as the
+  2026-08-11 XFA finding: **a question one document still asks is often already
+  answered in another — check the newer edition before filing an ambiguity.** The
+  licensed 2.0 copy keeps paying dividends of exactly this kind.
+
+- **A NOTE IN ONE EDITION CAN BE A `shall` IN THE NEXT — check the MODALITY per
+  edition, not just the sentence.** `/Background` is ignored by `sh`: in **1.7
+  that sentence is a NOTE (informative)** in the common-entries table, and the
+  normative leg lives in the *`sh` operator table row*; **2.0 promotes it to body
+  text with `shall`.** Cite a different leg depending on the edition. (2.0 also
+  *states* the radial model outright — "as if an infinite number of such circles
+  are painted in turn, each with an infinitely narrow stroke" — and flips "a
+  point lies **within**" to "lies **on**" more than one blend circle: discs vs
+  circumferences, a real edge-case divergence.)
+
+- **THE SAME KEY NAME CAN HAVE DIFFERENT ARITY IN SIBLING TABLES.** `/Domain` is
+  **four** numbers `[xmin xmax ymin ymax]` for type 1 and **two** `[t0 t1]` for
+  types 2/3 — and the four-number form is **NOT** ordered like a `rectangle`
+  (`/BBox` is `[left bottom right top]`). Two four-number arrays, one dictionary,
+  different orderings. Item "key-name overloading" now has a second instance.
+
+- **A NORMATIVE FORMULA'S CROSS-CHECK CAN BE THE OTHER EDITION.** 1.7 returns
+  equations in draw order (the known artifact); **2.0's text layer renders the
+  same equations in clean Unicode**, so the reassembly is confirmed by an
+  independent typesetting rather than only by an algebraic property. Still do the
+  algebraic check (item 4a-ter) — here: the axial projection normalises by
+  **‖axis‖², not ‖axis‖**, and yields 0 at P0 / 1 at P1; the blend equations
+  yield `(x0,y0,r0)` at `s=0`. **Three-way agreement (1.7 scramble ↔ 2.0 clean ↔
+  property) is the strongest transcription evidence available offline.**
+
+- **AN INFORMATIVE NOTE CAN BE THE ONLY STATEMENT OF A LOAD-BEARING RULE.** The
+  radial `r(s) ≥ 0` exclusion and the entire stopping rule for extension exist
+  **only in NOTE 1**, in both editions. File that as "spec-silent-but-forced"
+  rather than as a free choice — there is no competing candidate — but *say* it
+  is a NOTE, because a future session citing "§8.7.4.5.4" for it would be
+  claiming normativity the clause does not have. Related: the larger-end stopping
+  rule is bounded by `/BBox`, **which is OPTIONAL** — so with no `/BBox` there is
+  no stopping rule at all, which is a **hang risk**, not merely a render bug.
+
+- **CHECK THE ERRATA COLLECTION FOR A CLAUSE FAMILY, AND RECORD THE MISS.**
+  `pdf-issues.pdfa.org/32000-2-2020/clause08.html` (HTTP 200, 79 601 B) lists
+  exactly **one** §8.7.4 entry — `8.7.4.5.8`. ⇒ **no published erratum against
+  §8.7.4.3/.4.4/.4.5.2–.4.** That converts a self-contradiction found in 2.0's
+  own text (its axial figure NOTE says "not extended" while its own figure
+  caption says `Extend = [true true]`, and 1.7 says "is extended") from
+  "presumably known" into **unreported**, and it is filed **NEEDS VERIFICATION
+  against the figure image** — which a text-layer dump cannot read. **State when
+  a finding is bounded by the extraction method.**
