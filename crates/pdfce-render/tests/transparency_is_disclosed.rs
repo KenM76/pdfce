@@ -121,9 +121,9 @@ fn an_implemented_blend_mode_is_counted_as_applied() {
     assert_eq!(r.diagnostics.soft_masks_ignored, 0);
 }
 
-/// A name outside Tables 136 and 137 — the shortfall case. pdfce composites
-/// it as `Normal` and says so; it does NOT refuse to paint, because the
-/// marks belong on the page and only the compositing rule is in doubt.
+/// A name pdfce does not apply — the shortfall case. It composites as
+/// `Normal` and says so; it does NOT refuse to paint, because the marks
+/// belong on the page and only the compositing rule is in doubt.
 #[test]
 fn an_unrecognised_blend_mode_name_is_counted_as_ignored() {
     let r = render(page("<< /Type /ExtGState /BM /NotARealMode >>"));
@@ -385,4 +385,27 @@ fn a_plain_form_xobject_is_not_a_transparency_group() {
 fn a_group_that_is_not_a_transparency_group_is_not_counted() {
     let d = render(page_with_form("/Group << /S /SomethingElse >>")).diagnostics;
     assert_eq!(d.transparency_groups_flattened, 0);
+}
+
+/// The FOUR NON-SEPARABLE modes are recognised names that pdfce
+/// deliberately declines to composite, so they land in the shortfall
+/// counter rather than the census — the same bucket as a typo, for a
+/// completely different reason.
+///
+/// Pinned because the alternative is worse in a way that is easy to talk
+/// yourself into: `tiny_skia` HAS these four modes and mapping to them is
+/// one line. They are wrong by up to 107/255 on 9.4–15.5% of colour pairs
+/// (its `clip_color` gates the low-gamut rescale on `mx >= 0` where the
+/// standard uses `mn < 0`, leaving the branch dead). A wrong rendering
+/// that looks plausible is worse than a disclosed one that does not.
+#[test]
+fn the_non_separable_modes_are_refused_not_silently_wrong() {
+    for name in ["Hue", "Saturation", "Color", "Luminosity"] {
+        let d = render(page(&format!("<< /Type /ExtGState /BM /{name} >>"))).diagnostics;
+        assert_eq!(d.blend_modes_ignored, 1, "/BM /{name} must be refused");
+        assert_eq!(
+            d.blend_modes_applied, 0,
+            "/BM /{name} must not count as applied"
+        );
+    }
 }

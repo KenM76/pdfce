@@ -233,9 +233,23 @@ pub struct Diagnostics {
     /// redefining the counter would have left an operator diffing two runs
     /// unable to tell which number moved or why.
     pub blend_modes_applied: usize,
-    /// `gs` operators naming a blend mode pdfce does NOT recognise — a
-    /// name outside Tables 136 and 137. Those marks were composited as
-    /// `Normal`.
+    /// `gs` operators naming a blend mode pdfce did NOT apply. Those marks
+    /// were composited as `Normal`.
+    ///
+    /// **Two distinct reasons reach this counter**, and conflating them
+    /// would misdescribe the commoner one:
+    ///
+    /// 1. A name outside Tables 136 and 137 — a typo, or a mode from an
+    ///    extension pdfce does not know.
+    /// 2. One of the four NON-SEPARABLE modes of Table 137 (`Hue`,
+    ///    `Saturation`, `Color`, `Luminosity`), which pdfce recognises
+    ///    perfectly well and **deliberately declines to composite**,
+    ///    because the available implementation is measurably wrong (see
+    ///    [`crate::gstate::blend_mode_from_name`]).
+    ///
+    /// Reason 2 is by far the likelier on a real print-oriented file, so
+    /// a reader who assumes this counter means "malformed PDF" will draw
+    /// the wrong conclusion about their document.
     ///
     /// Counted because the result is WRONG rather than missing, and
     /// wrongness of this shape is invisible: a blend that composited as
@@ -2260,7 +2274,7 @@ impl Interpreter<'_> {
                         self.diag.blend_modes_ignored += 1;
                         self.diag.note(
                             format!(
-                                "gs /BM /{}: unrecognised blend mode; composited as Normal",
+                                "gs /BM /{}: blend mode not applied; composited as Normal",
                                 String::from_utf8_lossy(&name)
                             )
                             .as_bytes(),
