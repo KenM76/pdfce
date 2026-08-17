@@ -96,6 +96,83 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★ `abe6c97` — VERSION BUMP `0.5.3` → `0.6.0`, MINOR NOT PATCH — both binaries confirmed to report it; **★ `v0.6.0`'s TAG/CI/PUBLISH ARE NOT YET DONE AS OF THIS FILING — see the caveat below, this is a version-bump record, not a release record** — filed 2026-08-17 (hundred-and-fifty-eighth filing)
+
+**What shipped, verified.** `Cargo.toml` + `Cargo.lock` bumped `0.5.3` →
+`0.6.0` at `abe6c97`. Both binaries confirmed to report it: `pdfce-cli
+--version` → `pdfce-cli 0.6.0`, `pdfce-gui --version` → `pdfce-gui
+0.6.0` (relayed from the dispatching engineer's own run; this librarian
+has no shell in this session, hard rule 8).
+
+**Why MINOR, not PATCH — a behavioural judgement, not a feature count.**
+Two changes in this release change what an existing `0.5.x` consumer's
+OUTPUT looks like for the same input, without either being a fix to a
+previously-broken result:
+1. `RedactSpec::fill = None` now means TRANSPARENT (`Pass 89.0`,
+   `a705d14`) where `0.5.x` painted it black — ISO 32000-1 Table 192's
+   own default, but a silent behaviour change for any caller relying on
+   the old fallback.
+2. The page is now modelled as the isolated transparency group §11.4.7
+   actually specifies (`Pass 90.1`, `bd244d9`), so any file using the
+   eleven now-correct separable blend modes composites differently —
+   correctly — than it did under `0.5.3`.
+A consumer pinning `0.5.x` in a script or a regression baseline should
+not cross either silently; that is what the MINOR bump discloses.
+
+**Release contents, as scoped by the engineer for this cut.** `Pass
+85.2` slice 1 (shading patterns), `Pass 89.0` (redaction fill default +
+Table 192 overlay ladder), `Pass 89.1` (`RedactAppearance` type), `Pass
+90.0` (clause-11 disclosure), `Pass 90.1` (blend-mode compositing +
+page-backdrop-model correction), `Pass 90.2` (this filing's correction,
+immediately below) — plus the colour-oracle tooling work from earlier
+this session.
+
+**★ CAVEAT — this is a version-bump record, not a release record, and
+the two must not be conflated.** As of this filing the engineer has
+stated intent to push `main`, wait for CI, tag `v0.6.0` and publish a
+GitHub release, but none of that had happened yet at dispatch time — no
+tag, no CI run against the tagged commit, no published asset. Per hard
+rule 8, this librarian does not assert git/release state it has not had
+reported as *already true*. **A dedicated release-record entry — tag
+hash, `verify-release.py`'s seven-check output, CI run ID(s), asset
+name and byte count, backup-bundle verification — is still owed once
+the tag/CI/publish actually complete**, matching the shape every prior
+release entry in this file has taken (see the `v0.5.3` entry,
+hundred-and-thirty-first filing, for the template). File it as its own
+entry when that evidence exists; do not backdate this one to claim it.
+
+**Operator authorisation on record for this release.** Verbatim, this
+session: *"release new builds when it seems like a good time."*
+Broader than the prior narrow authorisation ("post the latest versions
+to git so I can try them on my laptop at home," 2026-08-11) — this one
+covers publishing at the engineer's own discretion, not merely building
+for personal testing. Recorded here because project rule 8 requires the
+authorisation on record per release, and this is the authorisation this
+release relies on.
+
+**Housekeeping, flagged not actioned.** `v0.1.0`, `v0.4.0` and
+`v0.5.0`-era releases were flagged in an earlier filing
+(hundred-and-thirty-third) as having no release record of either shape.
+Still owed; not backfilled here per the engineer's own instruction not
+to bundle it into this filing unless cheap, and it is not.
+
+**Ledger effects.** No Pass family, standing-rule or decision ledger
+changes from this entry — recorded because publishing/version-bump
+authorisation history is part of this project's audit trail even where
+no Pass ID is minted.
+
+### ★★★ Pass 90.2 — `9463afa` — **A COUNTER THAT MEANS TWO THINGS HAS TO SAY BOTH — `PASS 90.1`'S OWN `blend_modes_ignored` DISCLOSURE NAMED ONLY THE RARER REASON, AND WAS FALSE FROM THE SAME COMMIT THAT WROTE IT** — correction to `Pass 90.1`; fifth instance of `R180` — filed 2026-08-17 (hundred-and-fifty-eighth filing)
+
+**What was wrong.** `blend_modes_ignored`'s disclosure — the `Diagnostics` field doc on `pdfce-render::interpret::Diagnostics`, the per-mode note on `gstate::blend_mode_from_name`, and `pdfce-cli`'s stderr prose in `render-page` — read *"a blend mode pdfce does NOT recognise (outside Tables 136 and 137)"*. True up to the instant `bd244d9` (`Pass 90.1`) shipped, and false from that same commit onward: `bd244d9` wired a SECOND path into the identical counter — the four non-separable modes (`Hue`, `Saturation`, `Color`, `Luminosity`), which pdfce recognises perfectly well and refuses to composite because the available implementation (tiny-skia's `clip_color`) is measurably wrong against both ISO 32000-1 and W3C Compositing-1 (decision 066, `Pass 90.1` entry above). The sentence went false at the moment of its own commit, not through any later, separate improvement — the shape `R180`'s own mint text calls the harder case ("through no defect in how it was written... purely as a side effect of the very code it describes getting better") is here compressed to zero elapsed time.
+
+**Why the reason outweighs the fix.** On a print-oriented file — precisely the class this counter exists to protect, per `Pass 90.1`'s own reasoning — refusal is the LIKELIER of the two reasons reaching this counter, not the rarer. A reader told "outside Tables 136/137" would read a non-zero count as a malformed or exotic PDF; the more likely cause is pdfce declining a name it knows perfectly well. Corrected in all three surfaces to name both reasons and state which is likelier on a real file. A new test, `the_non_separable_modes_are_refused_not_silently_wrong` (`crates/pdfce-render/tests/transparency_is_disclosed.rs`), pins all four non-separable modes into the shortfall counter rather than the census and asserts none of the four is ever miscounted as applied.
+
+**Verification.** 3,777 → **3,778 tests, +1, 0 failures.** `cargo fmt --check` / `cargo clippy -- -D warnings` clean.
+
+**Standing rules.** `R180`'s **fifth instance**, and the tightest falsifying-change-to-false-disclosure interval on record for this family — full text in *Standing rules*, below; not proposed as a new rule.
+
+**Ledger effects.** Pass family: **90** (sub-Pass `.2`; family unaffected, next free family stays **91**). Standing rules: **no new rule minted** — `R180` gains its **fifth instance** (full text below); ceiling stays **R195**, next free **R196**. Decisions: **none** — ceiling stays **066**, next free **067**.
+
 ### ★★★★★ Pass 90.1 — `bd244d9` — **BLEND MODES NOW COMPOSITE FOR REAL — AND THE PAGE WAS NEVER SUPPOSED TO BE WHITE TO BEGIN WITH: THE RENDERER'S PAGE-BACKDROP MODEL WAS INVERTED SINCE IT WAS FIRST WRITTEN** — implementation half of `Pass 90.0`'s clause-11 disclosure; closes the blend-mode half of the `85.4` Ghent gap, transparency-GROUP compositing and soft masks remain — filed 2026-08-17 (hundred-and-fifty-seventh filing)
 
 **Origin.** `Pass 90.0` (same session, `ae46e82`) made pdfce's blindness
@@ -65819,6 +65896,36 @@ and
   gate — but recorded plainly as a frequency signal for whoever next
   reviews this section's health. Full record: `ROADMAP.md`'s `5df75dd`
   `Pass 85.2` slice 1 *Shipped* entry, top of *Shipped*.**
+  *Instance 5 (`Pass 90.1`'s own `blend_modes_ignored` disclosure,
+  corrected at `9463afa`, 2026-08-17, hundred-and-fifty-eighth filing —
+  the falsifying change and the false disclosure are the SAME COMMIT,
+  the tightest interval recorded for this family.* `bd244d9` (`Pass
+  90.1`) wrote *"a blend mode pdfce does NOT recognise (outside Tables
+  136 and 137)"* for `blend_modes_ignored`, and in that same commit wired
+  a second, likelier reason into the identical counter — the four
+  non-separable modes, refused by name though fully recognised (decision
+  066). The sentence was false at the moment of its own commit, not
+  merely stale by the time anyone reread it. **Interval, stated
+  honestly rather than as a clean monotonic sequence**: three days
+  (Instance 1) → a session-crossing gap of a different shape — already
+  flagged by the engineer who made the change, just not yet filed here
+  (Instance 2) → roughly an hour, same session (Instance 3) → same
+  session (Instance 4) → same commit, zero elapsed time (this one).
+  Four of the five instances now on record — 2 through 5 — landed on a
+  single calendar day, 2026-08-17, across five consecutive filings
+  (hundred-and-fifty-first, -fourth, -fifth, -seventh→-eighth).
+  **Recorded as an observation, not a rule change and not a proposal**:
+  the project's earlier shorthand for `R180` — "roughly once per
+  feature-completing Pass" — undercounts this session specifically, and
+  the zero-interval shape of this instance means `R180`'s own practical
+  form (grep for the falsified sentence when a Pass lifts a limitation)
+  cannot catch a same-commit case by acting at a Pass boundary, because
+  there is no boundary between the change and the sentence to act at —
+  only re-reading the disclosure's own fresh output against the diff
+  that just produced it catches this shape, which is how it was in fact
+  caught, the same method as every prior instance. Full record:
+  `ROADMAP.md`'s `9463afa` `Pass 90.2` *Shipped* entry, top of
+  *Shipped*.**
 
 - **R181 — A disclosure COUNT must be computed from the same predicate
   the write path it describes actually uses, never a proxy predicate

@@ -44304,3 +44304,109 @@ unscoped.
    to the release-note bar this implies — verify they still read that
    way (no unqualified "blend modes supported," transparency groups
    still clearly `[ ]`) if anything further ships before the tag.
+
+## 2026-08-17 (hundred-and-fifty-eighth filing) — **`Pass 90.2` (`9463afa`): `blend_modes_ignored`'s disclosure named only the RARER of its two reasons, false from the same commit that wrote it — `R180` gains a fifth instance, zero-interval this time. Plus a `v0.6.0` VERSION-BUMP record (`abe6c97`) — the actual tag/CI/publish are still owed as a follow-up filing**
+
+**Shipped:**
+- `Pass 90.2` — `9463afa`. `blend_modes_ignored`'s disclosure (the
+  `Diagnostics` field doc, the per-mode note on
+  `gstate::blend_mode_from_name`, and `pdfce-cli`'s `render-page`
+  stderr prose) read *"outside Tables 136 and 137"* — true until
+  `bd244d9` (`Pass 90.1`) wired a second, likelier path into the SAME
+  commit: the four non-separable modes, refused by name though fully
+  recognised (decision 066). False from the moment of its own commit.
+  Corrected in all three surfaces to name both reasons and state which
+  is likelier on a real print-oriented file. New test
+  (`the_non_separable_modes_are_refused_not_silently_wrong`) pins all
+  four non-separable modes into the shortfall counter. 3,777 → **3,778
+  tests, +1, 0 failures.** fmt/clippy clean.
+- Version bump `abe6c97` — `0.5.3` → `0.6.0`. Both binaries confirmed
+  reporting it. **Filed as MINOR, not PATCH**, for two behavioural
+  reasons: `RedactSpec::fill=None` now means transparent, not black
+  (`Pass 89.0`); the page's corrected transparency-group model
+  (`Pass 90.1`) changes how eleven blend modes composite. A `0.5.x`
+  consumer should not cross either silently.
+
+**Decisions made this session:** None new this filing — decision
+ceiling stays **066**, next free **067**.
+
+**Findings + decisions:**
+- **`R180` gains a FIFTH instance, and the interval to the falsifying
+  change has closed to zero** — the falsifying commit and the falsified
+  sentence are the SAME commit (`bd244d9`), not merely the same session.
+  Recorded, honestly, as a non-monotonic-but-shrinking sequence rather
+  than a clean trend: 3 days (Instance 1) → a session-crossing gap of a
+  different shape, already flagged but not yet filed (Instance 2) → ~1
+  hour, same session (Instance 3) → same session (Instance 4) → same
+  commit, zero elapsed (Instance 5, this one). Four of five instances
+  landed on 2026-08-17 alone, across five consecutive filings. The
+  project's earlier shorthand — "`R180` fires roughly once per
+  feature-completing Pass" — undercounts this session; and the
+  zero-interval shape means `R180`'s own practical form (grep the
+  falsified sentence when a Pass lifts a limitation) cannot catch a
+  same-commit case by acting at a Pass boundary, because there is no
+  boundary to act at — only re-reading the disclosure's own fresh
+  output against the diff that just produced it catches this shape.
+  **Not proposed as a new rule** — recorded as an observation per the
+  engineer's own framing of the request. Full text: `ROADMAP.md`'s
+  *Standing rules*, `R180` entry, fifth instance.
+- **`docs/FEATURES.md` re-reviewed specifically as a release artefact**
+  (the engineer's explicit ask: would a user who reads it and tries
+  transparency in `v0.6.0` end up misled?). Reviewed rows 157
+  (separable blend modes), 159 (per-image `/SMask`/`/Mask`/`/Matte`),
+  219 (non-separable modes, refused) and 220 (transparency GROUPS,
+  flattened) together. **No change made** — row 220 already
+  disambiguates itself from row 159 by name ("distinct from the
+  per-image `/SMask`/`/Mask` already shipped"), and row 157's own
+  "GUI surface deliberately paused" qualifier sits beside the
+  non-separable forward-pointer that was added in the same Pass 90.1
+  filing that split these rows. A reader crossing rows 157 and 220
+  together — the two a "does blending work" question actually spans —
+  is told plainly that blend MATH is now correct but blending applied
+  INSIDE a flattened transparency group is still an approximation.
+  Judged sufficient; not expanded further, per this file's own
+  concision contract.
+- **Version-bump vs. release-record distinction made explicit.** The
+  engineer's dispatch described intent to push/tag/publish `v0.6.0`,
+  not a completed release — no tag, CI run, or asset existed at
+  dispatch time. Filed only what was true (the version bump, verified
+  by both `--version` outputs) rather than a fabricated release record;
+  the dedicated release entry (tag hash, `verify-release.py` output, CI
+  run ID(s), asset name/size, backup-bundle check) is flagged as still
+  owed, to be filed once that evidence exists — hard rule 8.
+- **Broader release authorisation now on record.** Operator, verbatim,
+  this session: *"release new builds when it seems like a good time."*
+  Wider than the 2026-08-11 authorisation ("post the latest versions...
+  so I can try them on my laptop"), which was scoped to personal
+  testing builds; this one covers publishing at the engineer's own
+  discretion. Recorded in `ROADMAP.md`'s version-bump entry per project
+  rule 8.
+
+**Still in flight:** The actual `v0.6.0` tag/CI/publish sequence — owed
+as a follow-up `ROADMAP.md` release-record entry once the engineer
+reports the tag hash, CI run ID(s), asset name/byte-count and
+`verify-release.py`'s output. The `v0.1.0`/`v0.4.0`/`v0.5.0`-era
+release-record backfill remains owed, explicitly deferred again this
+filing at the engineer's own instruction (not cheap enough to bundle
+in). Everything else unchanged from the hundred-and-fifty-seventh
+filing's own "Still in flight": `Pass 72.0`/`73.0`/`73.1`/`86.0` HIGH
+PRIORITY unstarted; `Pass 85.1` (mesh shadings) and `85.2` slice 2
+(tiling) unstarted; `Pass 85.4c` (transparency-group compositing +
+soft masks) top-priority unstarted Ghent item; `Pass 85.5` last;
+`Pass 87.0` GUI-paused; `bdfd511`'s missing `ROADMAP.md` entry still
+open; overlay-text-colour Backlog item still unscoped.
+
+**For next session:**
+1. **Next free Pass family is `91`** (this filing used family `90`,
+   sibling `.2`). Next free decision is **067**. Next free filing
+   ordinal is **159**. Next free standing rule is **`R196`**,
+   unchanged — `R180` cited at its fifth instance, not re-minted.
+2. **File the `v0.6.0` release record** as soon as the tag/CI/publish
+   sequence actually completes — tag hash, `verify-release.py`'s
+   seven-check output, CI run ID(s), asset name and byte count, backup
+   bundle re-verified. Do not infer any of those from this filing.
+3. `Pass 85.4c` remains next in the re-derived Ghent build order, ahead
+   of `Pass 85.1` and `Pass 85.2` slice 2.
+4. The `v0.1.0`/`v0.4.0`/`v0.5.0` release-record backfill is still
+   owed whenever a session has a cheap window for it — not urgent, but
+   now flagged for a third time.
