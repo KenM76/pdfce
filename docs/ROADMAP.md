@@ -96,6 +96,64 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `1bc4564` — **`DroppedProperty::BorderEffect`'S DOC COMMENT NARROWED, NOT REVERSED: THE DROP SURVIVED `Pass 82.0`, BUT ITS SUBJECT CHANGED FROM "WHAT PDFCE CAN DRAW" TO "WHAT SURVIVES A ROUND TRIP THROUGH A SPEC" — no Pass ID, no decision minted; commit `1bc4564` touches `crates/pdfce-core/src/edit.rs` only and is cited here to satisfy `check-commits-filed.py`** — filed 2026-08-18 (hundred-and-seventy-eighth filing)
+
+**Filed by `pdfce-librarian` WITHOUT a shell this session.** Test/lint
+results below are RELAYED from the dispatching engineer's report
+(1,826 core tests green, `cargo fmt --all` applied, `cargo clippy -p
+pdfce-core --all-targets -- -D warnings` clean), not independently
+re-run. The source-text claim is independently verified by `Read`
+against the live file: `crates/pdfce-core/src/edit.rs:2833–2861`.
+
+**This is the survivor the 177th filing's own Hard Rule 11 sweep
+found and reported as owed, now closed.** `DroppedProperty::
+BorderEffect`'s doc comment read *"pdfce authors straight edges only,
+so a regenerated appearance is a plain outline."* The first clause
+stopped being true the moment `Pass 82.0` shipped `MarkupSpec::Cloud`
+and `Square { border_effect }` in the same session.
+
+**The fix narrows rather than reverses, and that is the interesting
+part.** The drop is still real — it just changed subject:
+
+- Reconstructing a `MarkupSpec` from an existing annotation
+  deliberately does not read `/BE` back (`annot_author.rs:479–486`,
+  a decision made when the reader was written, not an oversight —
+  *"Read support for a foreign `/BE` is a separate concern from
+  authoring one"*). So a **foreign** cloudy annotation (one Acrobat
+  authored) comes back a plain outline when pdfce regenerates it via
+  `set_markup_style`.
+- A cloud pdfce authored itself is unaffected — its intensity is in
+  the spec it was built from, not read back from the file.
+- Independently, `MarkupStyle` (the restyle path's input) carries
+  colour and width and has no `border_effect` field, so
+  `set_markup_style` cannot express one regardless. `Pass 82.0`
+  deliberately made restyling PRESERVE an existing intensity rather
+  than clear it (cloudiness is geometry, not style), so this variant
+  now fires only for a foreign `/BE` that was never in a pdfce spec —
+  never for a pdfce-authored cloud being flattened by its own restyle.
+
+Also corrects the clause citation from §12.5.6.8 (where `/BE` is
+*listed* for Square/Circle) to §12.5.4 (where Table 167 itself lives)
+— confirmed against `annot_author.rs`'s own citations, which already
+had it right in three other places, making this doc comment the one
+holdout.
+
+**Worth recording: the disclosure mechanism did its job.**
+`DroppedProperty` exists so a cloudy border cannot vanish while pdfce
+reports "colour changed." The variant is still needed after `Pass
+82.0` — for a smaller population (foreign `/BE` only) than before.
+
+**Hard Rule 11 re-sweep, this filing:** grepped for
+`"straight edges only"` and `§12.5.6.8` project-wide. The only other
+hit on the first string is inside the fixed comment's own ★ NARROWED
+paragraph, quoting the old wording by design (the project's
+established correction idiom, same as decision 062's amendment). The
+two other `§12.5.6.8` hits are for `/Square` and `/RD`, genuinely
+citing that clause — not survivors. No further survivors found.
+
+**Terminology (rule 15):** nothing here touches **ce dimensions** or
+**pdf dimensions**.
+
 ### Pass 82.0 — `2094ad9` — **REVISION CLOUDS: `MarkupSpec::Cloud` AND `Square { border_effect }`, BOTH BAKING A REAL SCALLOPED `/AP` THROUGH `add_markup` — NO NEW ENTRY POINT — AND THE PASS'S OWN ACCEPTANCE CRITERION 2 WAS WRONG, CORRECTED IN PLACE BELOW** — filed 2026-08-18 (hundred-and-seventy-seventh filing)
 
 `MarkupSpec::Cloud { vertices, border, interior, width, intensity }` and
@@ -60534,6 +60592,29 @@ nothing gets forgotten, not as a commitment to build in this order.
   bucket's domain:** whether a **`/Popup`** (§12.5.6.14) is independently
   draggable or follows its parent, and what a **`/Link`** resize discloses,
   given that it changes a click target with no visible artwork.
+  **★ AMENDMENT (2026-08-18, hundred-and-seventy-eighth filing) —
+  `Pass 98.0`, small, well-bounded: read a foreign `/BE` back into
+  `MarkupSpec` instead of dropping it.** Flagged by the engineer against
+  `1bc4564`'s fix to `DroppedProperty::BorderEffect`'s doc comment (this
+  file's own Shipped entry, above): the one thing standing between pdfce
+  and full revision-cloud round-trip fidelity is that `annot_author.rs`'s
+  spec reader (`read_spec`, `~line 479`) already parses the `/Square` and
+  `/Polygon` dictionaries it reconstructs a spec from — it just doesn't
+  populate `border_effect`/`intensity` from an existing `/BE << /S /C /I
+  n >>` when one is present. Today an Acrobat-authored cloud, opened in
+  pdfce and then restyled (colour/width change via `set_markup_style`),
+  comes back a plain outline — silently correct per rule 4 (disclosed via
+  `DroppedProperty::BorderEffect`), but a rediscoverable "why did my cloud
+  go flat?" report waiting to happen. **Not scoped as urgent** — the
+  disclosure already covers it and the drop is well-understood — but
+  cheap enough (parse an already-open dictionary's one existing key) that
+  it should not need rediscovering from scratch. Acceptance sketch: read
+  `/BE`'s `/I` when present on a `/Square` or `/Polygon` annotation being
+  reconstructed; on `/Polygon` with `/S /C`, populate `MarkupSpec::Cloud`
+  rather than plain `MarkupSpec::Polygon` so the shape survives as a
+  cloud, not just its colour; a round-trip test (author a cloud via
+  `pdfce-cli annotate --cloud`, open, restyle, verify `/BE` survives)
+  would be the acceptance gate.
 - **Text extraction / structured content** — **SHIPPED 2026-08-01 as
   Pass 4 — see the Shipped entry at top** (sourced total 99.78% over
   281,516 codes; rung 3 zero; bidi deferred-not-half-done). Earlier

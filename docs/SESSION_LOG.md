@@ -47010,3 +47010,93 @@ verified by `Read`/`Grep` against the live files this filing.
    176th filing.
 5. Read and answer (or file to `ROADMAP.md` Backlog) the two owed
    `iccce` requests.
+
+## 2026-08-18 (hundred-and-seventy-eighth filing) — `1bc4564` CLOSES THE 177TH FILING'S OWN HARD-RULE-11 SURVIVOR: `DroppedProperty::BorderEffect`'S DOC COMMENT NARROWED, NOT REVERSED — PLUS A NEW `Pass 98.0` FILED TO BACKLOG FOR THE `/BE` ROUND-TRIP READ-BACK GAP THE FIX EXPOSED
+
+**Filed by `pdfce-librarian` WITHOUT a shell this session.** Test/lint
+results (1,826 core tests green, `cargo fmt --all`, `cargo clippy -p
+pdfce-core --all-targets -- -D warnings` clean) are RELAYED from the
+dispatching engineer's report, not independently re-run. The source-
+text claim and the Hard Rule 11 re-sweep are independently verified by
+`Read`/`Grep` against the live files this filing: `crates/pdfce-core/
+src/edit.rs:2833–2861`, `crates/pdfce-core/src/annot_author.rs:217,
+294, 1240` (the three other `§12.5.6.8`/`§12.5.4` citations), and a
+project-wide grep for `"straight edges only"` and `§12.5.6.8`.
+
+**Shipped:**
+- `1bc4564` — no Pass ID, cited in `ROADMAP.md` Shipped to satisfy
+  `check-commits-filed.py`. `DroppedProperty::BorderEffect`'s doc
+  comment corrected: the claim *"pdfce authors straight edges only"*
+  went false the moment `Pass 82.0` shipped, four commits earlier.
+  Fixed as a **narrowing, not a reversal** — the drop is real, but its
+  subject changed from *what pdfce can draw* to *what survives a round
+  trip through a spec*. Clause citation also corrected, §12.5.6.8 →
+  §12.5.4 (where Table 167 actually lives).
+
+**Decisions made this session:**
+- **The engineer's own judgement call — narrow, don't reverse — is
+  recorded as the right one, and worth naming as the general shape.**
+  A `DroppedProperty` disclosure describes a SHORTFALL, not a
+  capability census; `Pass 82.0` closed the capability gap (pdfce now
+  authors clouds) without closing the disclosure's reason (restyle
+  still can't carry a `/BE` forward, and reading a foreign one back was
+  never in scope). Two different questions — "can pdfce draw this?"
+  and "does this code path preserve it?" — sharing one sentence is what
+  made the old comment go stale on a Pass that didn't touch its actual
+  subject.
+- **New `Pass 98.0` filed to Backlog**, under "Comments & markup" (the
+  bucket revision clouds already live in): read a foreign `/BE` back
+  into `MarkupSpec` on reconstruction, so an Acrobat-authored cloud
+  survives a pdfce restyle instead of coming back a plain outline. My
+  call on the engineer's question, with a stated warrant: this earns an
+  entry rather than resting on the `DroppedProperty` variant alone,
+  because the variant documents a symptom but is not itself a forcing
+  function to fix it, and the fix is genuinely small — `annot_author.rs`
+  already parses the dictionary it reconstructs from; it just doesn't
+  populate the field. **Not urgent** (the drop is disclosed, not
+  silent) but cheap enough that letting it sit undiscovered is the
+  worse trade — this is exactly the shape flagged as likely to resurface
+  as "why did my cloud go flat?" if left as a comment nobody tracks.
+
+**Findings + decisions:**
+- **Hard Rule 11 re-sweep, zero further survivors.** Grepped project-
+  wide for the old claim's wording (`"straight edges only"`) and the
+  wrong clause (`§12.5.6.8`). The only other hit on the first string is
+  inside the fixed comment's own ★ NARROWED paragraph, quoting the old
+  wording by design — the project's established correction idiom (same
+  as decision 062's amendment, same as `Pass 82.0`'s own criterion-2
+  correction). The two other `§12.5.6.8` hits (`annot_author.rs:217`
+  for `/Square`, `:1240`-area for `/RD`) genuinely cite that clause and
+  are not survivors.
+- **`FEATURES.md` — verified, no row change owed.** Row 115 (Revision
+  clouds) reads `[x] [x] [ ] [x]`, matching what the 177th filing shipped
+  and what this filing's fix touches. `1bc4564` corrects a doc comment
+  about a shortfall in an existing capability; it does not change what
+  any shell can do, so no row edit follows.
+
+**Still in flight:**
+- `Pass 98.0` (this filing) — small, unscoped-in-detail beyond the
+  acceptance sketch filed to Backlog; not started.
+- `Pass 75.0` (reusable parsed handle), `Pass 80.0` (note text on
+  markup) and `Pass 81.1` (markup opacity write half) remain the three
+  `pdfceGUI`-sourced *Next up* Passes — untouched by this filing.
+- The two owed `iccce` requests
+  (`request_profile_population_census.md`,
+  `request_header_tag_channel_disagreement.md`) — still unread.
+- `Pass 97.0`/`97.1`/`97.2` remain the best-scoped, highest-leverage
+  queued work, untouched by this filing.
+- The stale decision-ledger parenthetical in `ARCHITECTURE.md` §3
+  (flagged 175th filing) — still untouched.
+
+**For next session:**
+
+1. **Ledger update from this filing**: next free Pass family **99**
+   (`98` now claimed, Backlog only — not yet built or renumbered as
+   *Next up*). Next free decision **071**, next free standing rule
+   **R196** — both unchanged, this filing minted neither.
+   **Next free filing ordinal: 179.**
+2. Build `Pass 97.0`, pick up one of the three remaining `pdfceGUI`
+   Passes (`75.0`/`80.0`/`81.1`), or take `Pass 98.0` (small, now
+   scoped) — unchanged priority order otherwise from the 177th filing.
+3. Read and answer (or file to `ROADMAP.md` Backlog) the two owed
+   `iccce` requests.
