@@ -25,6 +25,11 @@ requests have been demonstrating the same thing for three filings. `ls` both
 channels at session start — it costs nothing and it is the only thing that
 works.
 
+**Filed as `Pass 102.0` / `102.1` / `103.0` / `103.1` / `103.2` / `103.3`.**
+`102.0` (the orphan count) is the one to do first: it is small, it is ruled
+**permanent rather than interim**, and it turns a consuming project's
+currently-false disclosure into a true one.
+
 ### What it says, in one paragraph
 
 `insert_pages` (`Pass 99.0`, `38c0ef2`) copies everything reachable from a
@@ -84,11 +89,25 @@ partiality gets found by a user rather than by us.
 
 **No reply has been written into the channel.** That is owed, and it is owed
 deliberately rather than forgotten — it was not worth doing badly at the end of
-a long session.
+a long session. `ROADMAP.md` carries a standing box under *Next up*
+enumerating the five things the reply must cover.
+
+### What was fixed on our side already, so the reply can say so
+
+- `edit.rs`'s `insert_pages` doc comment — which was **the source of their
+  wrong disclosure** — now states the widget/field split in full, with the
+  measured counts and an explicit instruction not to paraphrase it as "form
+  fields did not come across".
+- `docs/core-api/02-editing-and-saving.md` **never mentioned `insert_pages` at
+  all**, which is why a chat reply was their only source. It was **eight verbs
+  behind**; all eight are now documented and the stated count is corrected
+  108 → 116.
+- `tools/check-core-api-verbs.py` (new) re-derives the verb list from
+  `edit.rs` and fails if the doc omits one or states a wrong count.
 
 ---
 
-## §1 — WHAT SHIPPED 2026-08-18 (this session, 4 commits)
+## §1 — WHAT SHIPPED 2026-08-18 (this session)
 
 | commit | |
 |---|---|
@@ -96,6 +115,8 @@ a long session.
 | `6af5655` | **`Pass 75.0`** — the display list |
 | `6b797db` | poster printing fixed (it failed outright above ~2× magnification) |
 | `2aa1066` | **`Pass 101.0`** build stamp · string-gap gate · guard discharge |
+| `85c9cb4` | librarian filings 182–183 · the widened ledger anchor |
+| `e194b46` | three sweep survivors · `docs/core-api` was 8 verbs behind · new gate |
 
 ### `Pass 75.0` — the numbers, so nobody re-derives them
 
@@ -145,25 +166,36 @@ Reference file is still not on this machine.
 
 ---
 
-## §3 — ONE THING HELD BACK FROM A COMMIT, ON PURPOSE
+## §3 — THE LEDGER ANCHOR: DONE, and what it found on the way
 
-`tools/check-ledger-numbers.py` is **modified in the working tree and not
-committed.** Its Pass-heading anchor was widened from `(?:★ )?` to `(?:★+ )?`.
+`tools/check-ledger-numbers.py`'s Pass-heading anchor was widened from
+`(?:★ )?` to `(?:★+ )?` and is **committed** (`85c9cb4`). Nothing is held back.
 
-Why it is uncommitted: widening it immediately surfaced a **real, pre-existing
-`Pass 85.5` duplicate** that the single-star anchor had never been able to see,
-which turned the gate red. The librarian ruled on the collision in the same
-session, and the gate is green again — but the widening was kept out of
-`2aa1066` so that **no commit ships a red gate**. Commit it once you have
-confirmed the gate is still clean.
+Widening it immediately surfaced a **real, pre-existing `Pass 85.5`
+duplicate** the single-star anchor had never been able to see. Ruled by the
+librarian as **one Pass in two stages** — now `Pass 85.5 (compositing)` and
+`Pass 85.5 (Table 149 logic)` — on evidence that predates the gate being able
+to read those lines: `bd9d5ef` already calls itself *"slice 1 of the 85.5
+simulation half"*, and the two commits are 29 minutes apart. Unlike the
+`Pass 75.0` ruling, this one moves no number and creates no immutable-history
+debt.
 
 **The transferable finding:** this is the *second* time this anchor's blind
 spot was found, and **both times it was found by somebody predicting the gate's
-output and disagreeing with it** — never by the gate reporting anything. The
-first fix repaired the one spelling that had been seen (`★`) rather than the
-class, so a convention that uses one to three stars by weight stayed half
-invisible. **A gate anchored on a decorative prefix must accept every spelling
-of that decoration.**
+output and disagreeing with it** — never by the gate reporting anything. **A
+gate that under-reports is byte-indistinguishable from a green one**, so the
+only detector is an independent forecast, which is the exact labour a gate
+exists to remove. The first fix repaired the one spelling that had been seen
+(`★`) rather than the class, so a convention that uses one to three stars by
+weight stayed half invisible.
+
+★ **And the same shape turned up in a document the same day**, which is why it
+is worth carrying rather than filing under "regex". `docs/core-api/` asserted
+`**Count: 108.**` *and showed its derivation* while being eight verbs behind.
+**A stated derivation reads exactly like a maintained derivation** — a precise,
+sourced, stale number is more durable than a vague one, because it deters the
+check that would catch it. Both cases: something that looked audited, wasn't,
+and nothing could tell the difference from outside.
 
 ---
 
@@ -211,13 +243,16 @@ of that decoration.**
 
 ## §6 — STATE AT HANDOFF
 
-- Gates **all clean**: `string-gaps` (new), `ui-strings`, `ledger-numbers`,
-  `disclosure-channel`, `passes-filed`, `commits-filed`,
-  `one-commit-per-command`. `cargo fmt --check`, `clippy --all-targets
-  --workspace -D warnings`, `cargo test --workspace`, and the wasm32
-  cross-check are green.
-- Working tree: **only `tools/check-ledger-numbers.py`** (§3), plus whatever
-  the librarian is holding in `docs/`.
+- Gates **all clean**: `string-gaps` (new), `core-api-verbs` (new),
+  `ui-strings`, `ledger-numbers`, `disclosure-channel`, `passes-filed`,
+  `commits-filed`, `one-commit-per-command`. `cargo fmt --check`,
+  `clippy --all-targets --workspace -D warnings`, `cargo test --workspace`,
+  and the wasm32 cross-check are green.
+- **Two new gates landed today**, both because a defect was found by hand that
+  a grep could have found: `tools/check-string-gaps.sh` (ported from
+  `pdfceGUI`) and `tools/check-core-api-verbs.py`. Both have been verified
+  against sabotaged input; neither has ever been seen only to pass.
+- Working tree: clean apart from whatever the librarian is holding in `docs/`.
 - **v0.7.0 is bumped but NOT tagged.** The operator gave a standing go-ahead
   for builds/releases on 2026-08-17. Verify CI green on `HEAD`, then
   `verify-release.py` → tag → portable package → GitHub release → librarian
@@ -225,11 +260,23 @@ of that decoration.**
   a CI-built release would report `revision: unknown` unless that workflow
   gets `fetch-depth: 0` (depth-1 checkout has no tags).
 - **`MAX_DISPLAY_LIST_BYTES` veraPDF discharge: DONE this session** —
-  `examples/guard_probe.rs`, 3,245 files, 0 firings. The *firing* half is
-  demonstrated only synthetically; no real file reaches 256 MiB, and the
-  largest observed list is **41.9 MiB** (a §6.1.12 conformance file, not the
-  CAD sheet — which corrected a headroom claim from 8.5× to 6×).
-- Ledger after the librarian's filings: next free Pass family **102**,
-  decision **072**, standing rule **R196**, filing ordinal **184**.
-  **Re-measure with `tools/check-ledger-numbers.py` rather than trusting this
-  line** — that is what it is for.
+  `examples/guard_probe.rs`, 3,245 files, 0 firings. The largest observed list
+  is **41.9 MiB** (a §6.1.12 conformance file, **not** the CAD sheet), so real
+  headroom is **6.1×**, correcting a claim of 8.5×. The librarian **widened the
+  standing rule** rather than waiving it: the "fire on a real file" half is
+  undischargeable for a ceiling no real input reaches, and a **measured
+  non-zero maximum** defeats the reading that half exists to defeat. Successor
+  obligation recorded: re-sweep whenever per-op cost changes, and **re-derive
+  headroom from the maximum, never from a reference document.**
+- **The `iccce` channel holds 16 files, not the 2 or the 5 previously claimed**
+  — 5 requests / 6 replies / 5 notes, direction read from each file's own
+  header. The two owed requests were the right count with the wrong
+  description. **★ `note_gray_black_routing_is_yours.md` (newest, 13.5 KB) is a
+  boundary ruling handing pdfce the four-way gray/CMYK/Separation/DeviceN black
+  equivalence — the highest-value unread file in that channel, and not a
+  request.** Also: one stray duplicate reply to delete, three answered
+  exchanges awaiting archival.
+- Ledger: next free Pass family **104**, decision **072**, standing rule
+  **R197**, filing ordinal **185**. **Re-measure with
+  `tools/check-ledger-numbers.py` rather than trusting this line** — that is
+  what it is for, and this line has been wrong before.
