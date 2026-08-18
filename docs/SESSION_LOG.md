@@ -48058,3 +48058,388 @@ filing — not relayed from the previous filing's stated ceilings.)*
 
 **Terminology (rule 15):** nothing in this filing touches **ce
 dimensions** or **pdf dimensions**.
+
+---
+
+## 2026-08-18 (hundred-and-eighty-fourth filing) — **THE veraPDF §6.1.12 DISCHARGE WAS RUN AFTER THE DISPATCH THAT SAID IT WAS OWED, AND THE RUN CORRECTED THE HEADROOM CLAIM IT WAS SENT TO VALIDATE — 8.5× → 6.1×, because the CAD sheet was never the largest thing measured. Plus `R196` minted from TWO stale claims about directories no pdfce gate can see, six Pass IDs from an inbound `pdfceGUI` correctness report, and an `R151` qualifier written by somebody else's operator.**
+
+**Filing type:** correction + new-request intake. **No Pass shipped by
+this filing.** Everything described is committed through **`85c9cb4`**;
+`git status --short` was **empty** before this filing's own edits
+(checked, hard rule 8).
+
+---
+
+### ★ PART A — A STATUS THIS ROLE RECORDED AS OWED WAS DISCHARGED WHILE THE RECORD WAS BEING WRITTEN
+
+**The 183rd filing named the veraPDF §6.1.12 run for
+`MAX_DISPLAY_LIST_BYTES` as *"still owed, undischarged, highest
+priority."*** That was filed faithfully from a dispatch that said, in
+the engineer's own words, *"the engineer has not run it in this session
+and is not claiming to have."* **He then ran it, in the same session,
+after sending the dispatch.**
+
+**★★ NOTE THE SHAPE, BECAUSE IT IS THE SAME ONE THIS ROLE HIT IN THE
+OTHER DIRECTION THE SAME DAY.** The 183rd filing's own `Pass 101.0`
+commit hash was recorded, then corrected in place, for the identical
+reason: **a status was true when it was written and stopped being true
+while it was being written down.** Twice in one day, in both directions —
+once over-reporting owed work, once under-reporting a commit. ***"I
+checked" decays, and a dispatch is a snapshot too.*** That sentence is
+now `R196`'s corollary.
+
+#### What was actually run
+
+`crates/pdfce-render/examples/guard_probe.rs`, committed in `2aa1066` —
+**a reusable two-sided discharge harness**, not a one-off script. It
+takes corpus directories and classifies every page as recorded /
+TOO-LARGE / refused-for-capability / unloadable.
+
+| outcome | files | of 3,245 |
+|---|---:|---:|
+| recorded | **3,145** | 96.9 % |
+| **TOO-LARGE (the guard firing)** | **0** | **0 %** |
+| refused — **capability, not the guard** | **77** | **2.4 %** |
+| unloadable | 23 | 0.7 % |
+
+**Coverage:** the whole `fixtures/external/veraPDF-corpus` — **both the
+Isartor and veraPDF §6.1.12 implementation-limits suites, 32 files
+between them** — plus every synthetic fixture and this project's working
+documents in `D:/Dev/temp/pdfce`. **3,245 files against the standing
+rule's 44 is 73.8× its bar.**
+
+#### The ruling this role was asked to make, and made
+
+**The engineer explicitly did not claim the firing half** and asked this
+role to rule on whether the standing rule's two-sided bar is satisfied.
+**It is, by a substituted instrument, and the substitution is named
+rather than glossed.**
+
+The firing half exists to defeat one reading, quoted from the
+2026-08-07 `MAX_REWRITE_OBJECT_NUMBER` discharge: ***"0 refused" is
+indistinguishable from "the guard cannot fire."*** **Two instruments
+defeat it:**
+
+- **(a) the guard refusing a real file** — what `bug_455199.pdf`
+  supplied in 2026-08-07;
+- **(b) a measured non-zero MAXIMUM of the guarded quantity**, which
+  proves the accumulator counts real magnitudes rather than sitting near
+  zero.
+
+**`guard_probe.rs` supplies (b): 41.9 MiB, 16.4 % of the ceiling.** The
+2026-08-07 run *could not* have supplied (b) — its counter was an object
+number, not a running total — **which is why the bar generalised from a
+single case, and why it needed WIDENING rather than waiving.**
+**Instrument (b) is strictly more informative than (a): a ratio, not a
+boolean.**
+
+**What (b) does not establish, stated so nobody over-reads the
+discharge:** that the per-op accounting is accurate *at* 256 MiB. A
+counter under-reporting by 10× fires at a small injected `max_bytes` and
+stays silent forever at the real bound. **(b) bounds that risk to the
+16.4 % of the ceiling it reached; it does not eliminate it.**
+
+**The alternative reading is named so a future filing can overturn this
+without re-deriving it:** if the rule is read as *both halves against
+real files*, this guard is **not dischargeable by anyone** — no
+conformant or hostile file in any corpus pdfce owns builds a 256 MiB
+display list — **and a standing rule cannot demand a demonstration
+nobody can produce.** A rule like that gets quietly ignored, which is
+worse than one that names the evidence it will accept.
+
+#### ★★ THE RUN CORRECTED THE CLAIM IT WAS SENT TO VALIDATE
+
+| | ops | held |
+|---|---:|---:|
+| reference A3 CAD sheet | 127,267 | 29.5 MiB |
+| **`veraPDF … 6.1.12 … t03-fail-c.pdf`** | — | **41.9 MiB** |
+
+`MAX_DISPLAY_LIST_BYTES` was justified in three documents as *"~8.5× the
+reference A3 CAD sheet's ~30 MiB."* **Not an arithmetic error — a wrong
+choice of denominator.** Both forms, with the denominator (hard rule 10):
+**256 MiB ÷ 41.9 MiB = 6.1×** against the largest list measured anywhere;
+**÷ 29.5 MiB = 8.7×** against the CAD sheet, which is not the maximum.
+**The ceiling did not move; the claim about it did.**
+
+**★ WHICH FILE SUPPLIED THE MAXIMUM IS NOT LUCK.** A §6.1.12
+*implementation-limits* conformance file is built to stress exactly this
+class of ceiling, and **the suite whose job is to find a resource guard
+found the biggest input to one.** That is the standing rule's own
+argument arriving **as evidence rather than as assertion**, on its fourth
+use. Filed into the rule's text.
+
+#### One capability figure, filed because a consuming shell needs it
+
+**77 of 3,222 loadable pages (2.4 %, about one in forty) refuse to record
+for a CAPABILITY reason** — a shading, an overprint composite, a soft
+mask — and fall back to `render_page_region`. **The other thirty-nine in
+forty get a display list.** Now in `FEATURES.md`'s display-list row.
+
+---
+
+### ★★ PART B — AN INBOUND REQUEST, AND THE STALE CLAIM THAT HID IT
+
+**`D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\` IS NOT EMPTY.**
+`docs/NEXT_SESSION.md` said it was; that sentence was relayed to this
+role in the 182nd filing's dispatch and filed. **Both wrong.** It holds
+`request_insert_pages_leaves_orphaned_widgets_and_has_no_route_back_for_outlines.md`
+(pdfceGUI, 2026-08-18 15:19), about `Pass 99.0` / `38c0ef2` — **which
+shipped the same day.**
+
+**The claim was TRUE when written.** The channel genuinely emptied at the
+164th filing and that was recorded as a first. It then decayed, silently,
+with nothing anywhere capable of contradicting it.
+
+#### Part 1 of the request — a CORRECTNESS report, not a feature request
+
+Measured by the requester through their own build linking `d51e0d96`:
+
+| | fields | outline items | annots | widgets |
+|---|---:|---:|---:|---:|
+| SOURCE (`…/input/compression/acroform.pdf`) | `Some(12)` | 1 | — | — |
+| TARGET after `insert_pages(&sview, &[0], End)` | **`None`** | 0 | 13 | **13** |
+
+**`insert_pages` copies everything reachable from a page, and a page's
+`/Annots` reaches its widgets. So widgets DO arrive while `/AcroForm`
+does not.** The result is not *"the form fields did not come across"*.
+It is, in their words:
+
+> **boxes that draw exactly like form fields, that an operator will click
+> on, and that nothing can fill, because no field claims them.**
+
+**A visible control that is silently inert, arriving through a document
+instead of through a ribbon.** They wrote their user-facing disclosure
+from an earlier pdfce reply without checking it, and **they own that** —
+but their point survives it and is worth repeating back verbatim: ***a
+disclosure that names the wrong failure is worse than none, because it
+is believed.*** That is `CLAUDE.md` rule 4's own argument arriving from a
+consumer.
+
+**★ THE RULING, filed as the engineer's reading rather than as a
+decision, and it SHARPENS their framing rather than accepting it.** They
+offered four options and preferred **(3) report a count now, (1) carry
+the field definitions later**, treating (3) as the cheap interim.
+
+**(3) IS PERMANENT AND (1) IS A LAYER ON TOP OF IT.** A field's widgets
+can be **split** across inserted and non-inserted pages; (1) cannot carry
+such a field without either fracturing it or dragging in widgets nobody
+inserted. **A residue of orphans survives (1) by construction, so the
+count has to exist forever.**
+
+**(2) and (4) refused by name:** (2) strips content the operator can
+**see in the source**; (4) turns a disclosable condition into a refusal,
+which is the opposite of rule 4's direction of travel.
+
+#### Part 2 — four API additions, and the R151 argument that came with them
+
+`add_outline_item` (no verb exists at all), **adopt an existing widget
+into a field** (every current verb authors a *new* widget), **page labels
+for inserted pages**, and **named destinations**.
+
+**★★ THE PART THAT BEARS ON OUR OWN RULES.** Their draft **declined** to
+ask for the last two, citing **`R151`** by name plus pdfce's own reason
+for not shipping `markup_rects`. **Their operator overruled it:**
+
+> *"not adding such things just because they weren't explicitly asked for
+> i think is how we end up with partially finished features."*
+
+**The distinction their draft had collapsed is a good one, and it is now
+in `R151`'s own text as a qualifier.** `markup_rects` was a **convenience
+query duplicating something already reachable** — `page_annotations` gave
+the same answer — so *no caller* meant *no value*. **Page labels and
+named destinations are not a separate feature; they are the missing
+MEMBERS OF ONE.** Shipping insertion with two of four document-level
+structures handled makes insertion **permanently partial**, and the
+partiality gets found by a user rather than by us.
+
+**Note the direction, because it is unusual:** `R151` was cited
+**accurately** by a party outside this repository, to **withhold** work,
+and produced the wrong answer. **A rule cited accurately that still gives
+the wrong answer needs a qualifier, not a reprimand.**
+
+---
+
+### ★ HARD RULE 11 SWEEP — TWO SURVIVORS, BOTH FOUND BY READING FOR THE CLAIM RATHER THAN GREPPING FOR THE STRING
+
+**Reported, not edited — `crates/` is outside this role's remit.**
+
+1. **★★ `crates/pdfce-render/examples/guard_probe.rs:41–46` — THE
+   HARNESS THAT DISPROVED THE RATIO STILL STATES IT.** Under a heading
+   reading *"# Reading the result honestly"*:
+   > *"the largest sheet this project has measured holds ~29.5 MiB, which
+   > is 8.5× under the ceiling, so a suite of small conformance files was
+   > never going to reach it."*
+
+   **Doubly falsified by its own run:** the ratio is 6.1×, and **a small
+   conformance file is exactly what produced the maximum.** The engineer
+   corrected `display_list.rs` (lines 165–188, now carrying the corrected
+   table) and **missed the sibling file in the same commit.** ***This is
+   the 183rd filing's `PageNotRecordable` / `DisplayListStale` shape,
+   exactly: two places written together, one got the check.*** It is also
+   `R195`'s shape — a doc comment making a claim about measured reality
+   that measured reality has moved past.
+
+2. **★ `crates/pdfce-core/src/edit.rs:16796–16809` — the doc comment that
+   is the SOURCE of the requester's false disclosure.** Its section
+   heading is *"# What it deliberately does NOT do"* and it lists *"the
+   AcroForm field tree"* among the structures not merged. **It never says
+   the widgets arrive anyway.** Four lines later it asserts **"Disclosed
+   rather than silent (rule 4)"** — and the one thing rule 4 exists to
+   catch, an inert control the operator cannot see is inert, is the thing
+   left undisclosed. **A doc comment claiming rule-4 compliance while
+   being the origin of a downstream false disclosure in another project.**
+
+3. **★ STRUCTURAL, and arguably the root cause of both: `docs/core-api/`
+   does not mention `insert_pages` AT ALL.** That directory is, by the
+   sibling channel's own README, *"the briefing its GUI consumer reads."*
+   The consumer wired a verb three Passes after it shipped **with no
+   entry in the document written for them**, so their only source was a
+   chat reply — which is how the false disclosure got written from an
+   accurate-but-incomplete sentence. **Owed to the engineer;
+   `docs/core-api/` is not this role's file.**
+
+---
+
+### `R196` — MINTED, AND FROM TWO INSTANCES IN ONE DAY
+
+**R196 — A sentence about a directory OUTSIDE this repository is
+unfalsifiable by every gate this project owns; list the out-of-tree
+request channels at the top of every session and again in every filing
+that describes them, and state the `ls` as the source.**
+
+**The structural argument:** `check-passes-filed.py`,
+`check-commits-filed.py`, `check-ledger-numbers.py`,
+`check-disclosure-channel.sh`, `check-string-gaps.sh`, `cargo test`, the
+wasm32 gate — **every omission-detector pdfce owns points INWARD.** A
+directory in another project's tree is invisible to all of them and to
+`git status`. **A false sentence about one can be written, committed,
+relayed to a subagent, repeated in a handoff, and carried across filings
+with nothing capable of contradicting it.**
+
+**Both minting instances were false in the direction of "nothing is
+owed", and both were true when written.** Deliberately **not a gate**,
+same warrant as hard rule 11's: a checker would have to read another
+project's tree, and a gate that goes red because a sibling project has
+unanswered mail enforces nothing about pdfce. **Checkable after the fact:
+a reader asks whether the filing shows an `ls`.**
+
+The engineer has already put the per-session `ls` in his own agent
+memory; this puts it where a future librarian and a future engineer both
+see it.
+
+---
+
+### ★ THE `iccce` CHANNEL — RE-ESTABLISHED BY `ls`, NOT INHERITED (`R196`'s first exercise)
+
+The dispatch said **five files, three `note_*` and two `request_*`**, and
+flagged it as unverified rather than asserting it. **The standing box had
+carried "2" for three filings.** `ls`:
+
+| class | count | direction (from each file's own `**from:**` header) |
+|---|---:|---|
+| `request_*` | **5** | 2 from `iccce` (**pdfce owes both**), 3 from pdfce |
+| `reply_*` | **6** | 5 from `iccce`, 1 from pdfce |
+| `note_*` | **5** | 4 from `iccce`, 1 from pdfce |
+| **total** | **16** | |
+
+**★ THE OWED COUNT WAS RIGHT; THE FILE COUNT WAS WRONG BY 8×.** The two
+pdfce genuinely owes are the same two already tabled —
+`request_profile_population_census.md` and
+`request_header_tag_channel_disagreement.md`, both from `iccce`, both
+still unread — because **every other `request_*` has a name-matching
+`reply_*` beside it.** Worth separating: a wrong file count in a standing
+box is cheap; a wrong *owed* count would not have been.
+
+**Three findings from the enumeration that the old two-row table could
+not have shown:**
+
+- **`reply_ghent_render_harness.md` is a STRAY DUPLICATE.** Its pair is
+  already closed in `archive/`; the reply was **copied rather than
+  moved**. One deletion, pure housekeeping — and it inflates the
+  directory's apparent liveness.
+- **Three answered pdfce→iccce exchanges are awaiting ARCHIVAL, not
+  answers.** The channel's protocol closes an exchange by moving **both**
+  files; these three were answered and never moved.
+- **★ `note_gray_black_routing_is_yours.md`** (2026-08-18 01:37, 13.5 KB,
+  the newest file in the channel) is **a boundary ruling arriving from
+  outside, against the sender's own prior framing, in pdfce's favour on
+  one patch**: the four-way `DeviceGray`/`DeviceCMYK`/`Separation`/
+  `DeviceN` black equivalence is **PDF device routing, therefore
+  pdfce's**, not colour conversion. Its status line says *"no reply owed;
+  one question at the end is worth answering if you already know it."*
+  **It is the highest-value unread file in the channel and it is not a
+  request** — exactly what a "requests owed" count cannot see.
+
+Also reconciled: **`note_ask_priority.md` ranks "iccce's three open
+asks"** while today's count is two. **They agree** — the third was
+`request_ghent_render_harness.md`, closed and archived at 22:25 that
+evening, after the note was written.
+
+---
+
+**Still in flight / owed:**
+
+1. **★ A REPLY TO pdfceGUI IS OWED**, and is recorded as owed rather than
+   written badly at the end of a long session (the engineer's framing and
+   the right call). File:
+   `D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\request_insert_pages_leaves_orphaned_widgets_and_has_no_route_back_for_outlines.md`.
+   The five things it must cover are enumerated in the new **`pdfceGUI`
+   INBOX** box under *Next up*.
+2. **★ Two hard-rule-11 survivors in `crates/`** —
+   `examples/guard_probe.rs:41–46` (the 8.5× claim, inside the harness
+   that refuted it) and `edit.rs:16796–16809` (the incomplete
+   `insert_pages` disclosure). **Plus `docs/core-api/` having no
+   `insert_pages` entry at all.**
+3. **Two `iccce` requests still unread**, unchanged, plus the
+   `reply_ghent_render_harness.md` stray and three exchanges awaiting
+   archival.
+4. **`Pass 101.1`** — BLOCKED on `iccce` becoming a real dependency.
+   `(bo)` and `(bp)` are both for Ken. **Unchanged.**
+5. **`R192` blind spot (d)** — unchanged.
+6. **Successor obligation from the guard discharge:** re-run
+   `guard_probe.rs` whenever the recorder's per-op cost changes, and
+   **re-derive the headroom ratio from the measured maximum, never from a
+   reference document.**
+
+**Ledger effects.** **Six Pass IDs minted** — `102.0`, `102.1`, `103.0`,
+`103.1`, `103.2`, `103.3`; family ceiling **101 → 103**, next free
+**104**. **One standing rule minted** — **`R196`**; ceiling `R195` →
+`R196`, next free **`R197`** (`R193`/`R194` remain claimed by their
+declined-but-intact proposals). **Two standing rules AMENDED, neither
+renumbered** — `R151` (the missing-member qualifier) and the *"every
+resource guard is validated against veraPDF's §6.1.12
+implementation-limits suite"* bullet (instrument (b) admitted). **No
+decision record minted** — **071**, next free **072**. SESSION_LOG filing
+**183 → 184**, next free **185**. *(All read from
+`tools/check-ledger-numbers.py --stats`, run against this filing's own
+edits — not relayed from the 183rd filing's stated ceilings.)*
+
+**`FEATURES.md` rows changed — FIVE:**
+- **Display list** (*Implemented*) — headroom restated as **6.1× the
+  largest list measured in 3,245 files (41.9 MiB)**, and the capability
+  refusal rate added: **77 of 3,222 loadable pages, 2.4 %, one in
+  forty.** Boxes unchanged.
+- **True in-place page insertion** (*Planned*) — the sentence rewritten,
+  not appended to, per this file's own rule: **widgets DO arrive while
+  `/AcroForm` does not; 13 measured with `fields=None`, drawn but
+  unfillable, count not reported (`Pass 102.0`).** Boxes unchanged
+  (`[x]` core, no shell).
+- **Links and bookmarks authoring** (*Planned*) — extended to state that
+  **no `EditSession` outline verb exists at all** (`Pass 103.0`,
+  `103.3`).
+- **NEW row — adopt an existing widget into an `/AcroForm` field**
+  (`Pass 103.1`), all boxes `[ ]`, Acrobat `[x]`.
+- **NEW row — page labels carried from a source on insert** (`Pass
+  103.2`), all boxes `[ ]`, **Acrobat `?` and deliberately not `[x]`** —
+  nobody has measured what Acrobat does here, and the legend says `?`
+  means *not looked up*, never absence.
+
+**`ARCHITECTURE.md` edits — TWO, both corrections, no new decision
+record.** §10.1's `MAX_DISPLAY_LIST_BYTES` bullet (ratio corrected,
+discharge recorded) and §12's decision-071 entry (same, in its
+decision-log form). **The strikethrough of the superseded wording is
+kept legible rather than silently rewritten**, per this project's
+standing practice on amendments.
+
+**Terminology (rule 15):** nothing in this filing touches **ce
+dimensions** or **pdf dimensions**.

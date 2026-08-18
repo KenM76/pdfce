@@ -16808,6 +16808,46 @@ impl EditSession {
     /// A follow-up Pass can add the document-level halves one at a time,
     /// each with its own name in the undo log.
     ///
+    /// # ★ THE WIDGETS DO ARRIVE. Only their FIELDS do not — and the
+    /// paragraph above was read as saying the opposite
+    ///
+    /// This matters more than the omission it qualifies, and it is written
+    /// out because a consuming shell shipped a wrong disclosure derived from
+    /// the wording above.
+    ///
+    /// A widget annotation is **page-level**: it lives in the page's
+    /// `/Annots`. A field definition is **document-level**: it lives in
+    /// `/AcroForm` `/Fields`. This method copies everything reachable from
+    /// the page, so **the widgets come across and their fields do not.**
+    ///
+    /// Measured by the `pdfceGUI` session, 2026-08-18, inserting one page of
+    /// `pdfbox/…/acroform.pdf` into a blank document:
+    ///
+    /// ```text
+    /// SOURCE  fields=Some(12)
+    /// TARGET  fields=None   annots=13   widgets=13
+    /// ```
+    ///
+    /// So the outcome is **not** "the form fields did not come across". It
+    /// is **boxes that draw exactly like form fields, that an operator will
+    /// click on, and that nothing can fill, because no field claims them.**
+    /// That is worse than absence, and it is worse in a specific way this
+    /// project already has a name for: a visible control that is silently
+    /// inert — arriving through a document instead of through a ribbon.
+    ///
+    /// A caller MUST NOT paraphrase this as "form fields did not come
+    /// across". The two fates are different and an operator meeting the
+    /// wrong one goes looking for missing fields instead of at the inert
+    /// ones in front of them. **A disclosure that names the wrong failure is
+    /// worse than none, because it is believed.**
+    ///
+    /// `Pass 102.0` adds a count of the widgets left orphaned so a shell can
+    /// say this precisely rather than unconditionally; `Pass 102.1` carries
+    /// the field definitions for fields whose widgets are *wholly* on
+    /// inserted pages. Note that 102.1 does not retire 102.0: a field whose
+    /// widgets are **split** across inserted and non-inserted pages leaves a
+    /// residue no merge can absorb, so the count is permanent.
+    ///
     /// # Errors
     ///
     /// - [`EditError::CertificationForbidsChange`] — inserting a page is a

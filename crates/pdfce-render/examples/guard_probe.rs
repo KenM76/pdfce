@@ -15,7 +15,16 @@
 //!
 //! `MAX_DISPLAY_LIST_BYTES` (`Pass 75.0`) shipped without the discharge, and
 //! the completion report said so rather than implying otherwise. This is the
-//! instrument that discharges it.
+//! instrument that discharged it: 3,245 files, 0 firings.
+//!
+//! It also widened the rule. The "fire on a real file" half is
+//! **undischargeable** for a ceiling no real input reaches, and a rule cannot
+//! demand evidence nobody can produce. What that half exists to defeat is one
+//! specific reading — *"0 refused" is indistinguishable from "the guard
+//! cannot fire"* — and a **measured non-zero maximum** defeats it just as
+//! well, by proving the accumulator counts real magnitudes. This harness
+//! reports that maximum for exactly that reason; it is not a convenience
+//! statistic.
 //!
 //! # What it reports, and why "silent" is the half that needs a corpus
 //!
@@ -39,11 +48,40 @@
 //!
 //! A run where nothing is `TOO-LARGE` discharges the silent half **for the
 //! files it walked, at the scale it used**, and nothing more. It is not
-//! evidence that no document anywhere reaches 256 MiB — the largest sheet
-//! this project has measured holds ~29.5 MiB, which is 8.5× under the
-//! ceiling, so a suite of small conformance files was never going to reach
-//! it. Say that when reporting, rather than letting a clean run read as a
-//! stronger claim than it is.
+//! evidence that no document anywhere reaches 256 MiB. Say that when
+//! reporting, rather than letting a clean run read as a stronger claim than
+//! it is.
+//!
+//! # ★ THIS FILE'S OWN FIRST RUN FALSIFIED THIS FILE
+//!
+//! The paragraph above used to continue: *"the largest sheet this project
+//! has measured holds ~29.5 MiB, which is 8.5× under the ceiling, so a suite
+//! of small conformance files was never going to reach it."*
+//!
+//! **Both halves were wrong, and the harness disproved them the first time it
+//! ran.** The largest list is not the CAD sheet's 29.5 MiB — it is
+//! **41.9 MiB**, and it is produced by exactly one of those "small
+//! conformance files":
+//! `veraPDF test suite 6-1-12-t03-fail-c.pdf`. Real headroom is **6.1×**,
+//! not 8.5×.
+//!
+//! It should not be a surprise in hindsight. A **§6.1.12
+//! implementation-limits** file is *built* to stress this class of ceiling,
+//! so the suite whose job is to find a resource guard found the biggest
+//! consumer in the corpus. The sentence dismissed the one input most likely
+//! to falsify it, on the strength of a document that merely happened to be
+//! the largest one anybody had looked at.
+//!
+//! **The transferable rule, and the reason this correction is kept rather
+//! than quietly edited out: derive headroom from the MEASURED MAXIMUM, never
+//! from a reference document.** A reference document is chosen for being
+//! representative; a ceiling is threatened by whatever is extreme, and those
+//! are different files.
+//!
+//! (Recorded here for a second reason. The 8.5× claim was corrected in
+//! `display_list.rs` and missed *here* — in a file written in the same
+//! commit, by the same author, in the same hour. That is the third instance
+//! in one day of correcting an instance instead of a class.)
 
 use std::path::{Path, PathBuf};
 
@@ -120,7 +158,7 @@ fn main() {
     );
     if largest.0 > 0 {
         println!(
-            "headroom     {:.0}x",
+            "headroom     {:.1}x   <- derive this from the MAXIMUM, never from a reference document",
             pdfce_render::MAX_DISPLAY_LIST_BYTES as f64 / largest.0 as f64
         );
     }

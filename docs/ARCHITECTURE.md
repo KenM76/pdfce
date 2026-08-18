@@ -5995,15 +5995,37 @@ this. Concretely:
   name** (`RenderError::PageNotRecordable`) once the running total
   crosses the ceiling, and the caller falls back to
   `render_page_region`, which is bounded by `MAX_PIXMAP_EDGE` as before.
-  **The value is calibrated, not guessed: ~8.5× the measured 29.5 MiB of
-  the A3 CAD reference sheet (148,517 paints, 127,267 recorded ops,
-  ~240 B per op).** The asymmetry is deliberate and is the whole
+  **The value is calibrated, not guessed** — ~~*"~8.5× the measured
+  29.5 MiB of the A3 CAD reference sheet"*~~ **★ CORRECTED 2026-08-18:
+  the CAD sheet (148,517 paints, 127,267 recorded ops, ~240 B per op,
+  29.5 MiB) is NOT the largest list measured.** Real headroom against
+  the largest observed input is **6.1×** — 256 MiB ÷ **41.9 MiB**, the
+  list built by `veraPDF … 6.1.12 … t03-fail-c.pdf`, across 3,245 files.
+  Against the CAD sheet it is 8.7×. **The ceiling did not move; the
+  claim about it did.** The asymmetry is deliberate and is the whole
   justification — **a false refusal costs a fallback that is merely
-  slower; a ceiling set too high costs the process.** **★ The §6.1.12
-  implementation-limits run this bullet's own standing rule requires is
-  OWED for this guard** — neither half of the two-sided bar (fires on a
-  real file / silent across all 44) is on record. Fourth guard to face
-  that suite; **first to ship ahead of it.**
+  slower; a ceiling set too high costs the process.**
+  **★★ The §6.1.12 implementation-limits run this bullet's own standing
+  rule requires is DISCHARGED 2026-08-18** by
+  `crates/pdfce-render/examples/guard_probe.rs` (`2aa1066`): **3,245
+  files walked — 3,145 recorded, 0 TOO-LARGE, 77 refused for a
+  CAPABILITY reason (2.4 %: shading / overprint composite / soft mask,
+  not the guard), 23 unloadable** — covering the whole
+  `fixtures/external/veraPDF-corpus` (both the Isartor and veraPDF
+  §6.1.12 suites, 32 files between them), every synthetic fixture, and
+  `D:/Dev/temp/pdfce`. **The SILENT half is discharged at 73.8× the
+  rule's 44-file bar. The FIRING half is NOT shown against a real file
+  and is not claimed to be** — it fires only through
+  `display_list.rs`'s injectable `max_bytes`, because no real file
+  reaches 256 MiB. **Non-vacuity is instead established by the measured
+  MAXIMUM (41.9 MiB, 16.4 % of the ceiling), which proves the
+  accumulator counts real magnitudes** — an instrument the 2026-08-07
+  `MAX_REWRITE_OBJECT_NUMBER` run could not have used, since its counter
+  was an object number rather than a running total. Full ruling and the
+  named alternative reading: `ROADMAP.md`'s `Pass 75.0` Shipped entry,
+  hundred-and-eighty-fourth filing. Fourth guard to face that suite;
+  **first to ship ahead of it, and first discharged by a ratio rather
+  than by a refusal.**
 
 ### 10.2 Fuzz-testing (required, not optional, before Pass 1 ships)
 
@@ -22838,18 +22860,33 @@ arrives as a HANG rather than as an error**, the same failure shape
 reason: *"it looks like progress the whole way down, so a liveness or
 progress check cannot detect this class."*
 
-**256 MiB is ~8.5× the reference sheet's measured 29.5 MiB, and the
-asymmetry is deliberate:** *a false refusal costs a fallback that is
+~~**256 MiB is ~8.5× the reference sheet's measured 29.5 MiB**~~, **and
+the asymmetry is deliberate:** *a false refusal costs a fallback that is
 merely slower; a ceiling set too high costs the process.*
 
-**★ OWED and named:** the `ROADMAP.md` standing rule that **every new
-resource guard is run against the veraPDF §6.1.12 implementation-limits
-suite before shipping** — the rule that caught `MAX_TOKEN_LEN` and
-`MAX_XOBJECT_DEPTH`, and that `MAX_REWRITE_OBJECT_NUMBER` discharged
-two-sidedly on 2026-08-07 (**fires on a real file, silent across all
-44**) — **has NOT been discharged for `MAX_DISPLAY_LIST_BYTES`.** Neither
-half is on record. This is the fourth guard to face that suite and the
-first to ship ahead of it.
+**★ RATIO CORRECTED 2026-08-18 (hundred-and-eighty-fourth filing).**
+**256 MiB ÷ 41.9 MiB = 6.1×** against the largest display list measured
+anywhere in 3,245 files (`veraPDF … 6.1.12 … t03-fail-c.pdf`); ÷ 29.5 MiB
+= 8.7× against the A3 CAD reference sheet, **which is not the maximum.**
+Not an arithmetic error — a wrong choice of denominator, carried into
+three documents from one Pass entry.
+
+~~**★ OWED and named:** … **has NOT been discharged for
+`MAX_DISPLAY_LIST_BYTES`.** Neither half is on record.~~
+
+**★★ DISCHARGED 2026-08-18** by
+`crates/pdfce-render/examples/guard_probe.rs` (`2aa1066`): **3,245 files
+— 3,145 recorded, 0 TOO-LARGE, 77 refused for capability (2.4 %), 23
+unloadable** — the whole veraPDF corpus including both §6.1.12 suites,
+every synthetic fixture, and `D:/Dev/temp/pdfce`. **Silent half in full,
+at 73.8× the rule's 44-file bar. Firing half NOT shown against a real
+file** (no real file reaches 256 MiB; it fires only through
+`display_list.rs`'s injectable `max_bytes`), **and non-vacuity is
+instead carried by the measured MAXIMUM — 41.9 MiB, 16.4 % of the
+ceiling.** This is the fourth guard to face that suite, the first to
+ship ahead of it, and the first discharged by a ratio rather than by a
+refusal. Full ruling: §10.1's bullet and `ROADMAP.md`'s `Pass 75.0`
+entry.
 
 ---
 

@@ -61,13 +61,37 @@ Five consequences a GUI author must internalise before writing any code:
 
 ---
 
-## 1. Verb index — all 108 public `EditSession` methods
+## 1. Verb index — all 116 public `EditSession` methods
 
-**Count: 108.** Established by brace-matched extraction of the four
-`impl EditSession` blocks at `edit.rs:3360`, `edit.rs:6947`, `edit.rs:15356`,
-`edit.rs:17355`, matching `pub fn` / `pub const fn` (41 + 46 + 20 + 1 = 108).
+**Count: 116.** Established by brace-matched extraction of the four
+`impl EditSession` blocks at `edit.rs:4196`, `edit.rs:8135`, `edit.rs:17525`,
+`edit.rs:19592`, matching `pub fn` / `pub const fn` (43 + 51 + 21 + 1 = 116).
 There are no `EditSession` methods in any other file
 (`grep -rn "impl EditSession" crates/pdfce-core/src/` returns those four lines only).
+
+> ### ★ THIS COUNT SAID 108 AND HAD DRIFTED BY EXACTLY EIGHT
+>
+> Corrected 2026-08-18. The eight verbs this index had never mentioned:
+> `set_media_box`, `set_media_boxes`, `set_markup_style`,
+> `mark_redactions_by_search_styled`, `mark_redactions_by_pattern_styled`,
+> `flatten_refusal`, `insert_pages`, `widget_rects`.
+>
+> **How it was found, and why that matters more than the correction.** The
+> `pdfceGUI` session wired `insert_pages` and shipped a **wrong operator
+> disclosure** derived from it. They did not misread this document — *this
+> document never mentioned the verb*, so a chat reply was the only
+> description of it in existence, and a chat reply is not reviewable, not
+> versioned, and not something a second reader can check.
+>
+> **A consumer-facing API document that omits a verb is worse than one that
+> describes it badly**, because a bad description gets argued with and a
+> missing one gets replaced by whatever the consumer was told once.
+>
+> This is now checkable rather than hoped for: `tools/check-core-api-verbs.py`
+> re-derives the list from `edit.rs` and fails if this file omits any public
+> method or states a count that does not match. The drift was possible for as
+> long as it was because nothing compared the two artefacts — the count was
+> *stated* as derived, which reads exactly like being *kept* derived.
 
 Read the columns as: **I want to…** → **call this** → **returns / what that means**.
 
@@ -139,7 +163,7 @@ undo stack or the dirty set. Neither writes to disk.
 `/Producer` (R41 fingerprint rule) and `/CreationDate`/`/ModDate` (§7.9.4 dates
 need their own policy).
 
-### 1.8 Page rotation and organisation (6)
+### 1.8 Page rotation, geometry and organisation (9)
 
 | I want to… | Call | Line | Returns |
 |---|---|---|---|
@@ -149,6 +173,45 @@ need their own policy).
 | Delete pages, answering the pre-separation question | `delete_pages_with(&mut self, indices, separations: SeparationPolicy) -> Result<DeleteOutcome, EditError>` | 14663 | |
 | Reorder pages | `reorder_pages(&mut self, new_order: &[usize]) -> Result<(), EditError>` | 14944 | `NotAPermutation` if `new_order` is not one. ONE undo entry. |
 | Rotate several pages | `rotate_pages(&mut self, indices: &[usize], delta: i32) -> Result<usize, EditError>` | 15063 | Count of pages turned. ONE undo entry. |
+| Set one page's `/MediaBox` | `set_media_box(&mut self, page_index: usize, rect: page_tree::Rect) -> Result<MediaBoxChange, EditError>` | 5013 | |
+| Set several pages' `/MediaBox` | `set_media_boxes(&mut self, indices: &[usize], rect: page_tree::Rect) -> Result<Vec<MediaBoxChange>, EditError>` | 5061 | |
+| **Insert pages from another document** | `insert_pages(&mut self, source: &DocumentView<'_>, source_pages: &[usize], position: pageops::InsertPosition) -> Result<usize, EditError>` | 16861 | Count of pages that arrived. **Read the warning below before writing a disclosure about it.** |
+
+> #### ★★ `insert_pages`: THE WIDGETS ARRIVE, THEIR FIELDS DO NOT — and one
+> consumer has already shipped the wrong sentence about it
+>
+> `insert_pages` copies everything **reachable from the page**, and a page's
+> `/Annots` reaches its widget annotations. A **field definition** is not
+> reachable from the page — it lives in the document-level `/AcroForm`
+> `/Fields`. So the two halves of a form field separate:
+>
+> ```text
+> SOURCE  fields=Some(12)
+> TARGET  fields=None   annots=13   widgets=13
+> ```
+>
+> The result is **not** *"the form fields did not come across"*. It is
+> **boxes that draw exactly like form fields, that an operator will click on,
+> and that nothing can fill, because no field claims them.** That is worse
+> than absence, and worse in a way this project already has a name for: a
+> visible control that is silently inert — arriving through a document
+> instead of through a ribbon.
+>
+> **Do not paraphrase this as "form fields did not come across."** An
+> operator given that sentence goes looking for missing fields instead of at
+> the inert ones in front of them. *A disclosure that names the wrong failure
+> is worse than none, because it is believed.*
+>
+> Also not merged, and these ARE plain absences: outlines, named
+> destinations, page labels, optional-content configuration.
+> [`pageops::insert`] merges all of it and returns a new document; the
+> difference is the cost of staying incremental.
+>
+> `Pass 102.0` adds a count of orphaned widgets so a shell can say this
+> precisely; `Pass 102.1` carries field definitions for fields whose widgets
+> are *wholly* on inserted pages. **102.1 does not retire 102.0** — a field
+> whose widgets are split across inserted and non-inserted pages leaves a
+> residue no merge can absorb, so the count is permanent.
 
 ### 1.9 Page-text editing (5) — detail in part 3
 
@@ -297,7 +360,7 @@ only creation verb whose successful result is a control that does not work"*
 | Regenerate appearances, clear `/NeedAppearances` | `regenerate_appearances(&mut self) -> Result<RegenOutcome, EditError>` | 13600 | ONE undo entry. |
 | Flatten fields into page content | `flatten_fields(&mut self, names: Option<&[&str]>) -> Result<FlattenOutcome, EditError>` | 13730 | **Destructive.** ONE undo entry. Burns by overlay-append (§5.8). |
 
-### 1.14 Form refusal preflights (3) — see §6.4 for whether they are load-bearing
+### 1.14 Form refusal preflights (5) — see §6.4 for whether they are load-bearing
 
 | I want to… | Call | Line | Returns |
 |---|---|---|---|
@@ -310,7 +373,10 @@ deletion is refused.** They are not rare — a certified fillable form is the
 ordinary case."* Gating a Delete control on `fill_refusal` ships a button that
 always errors.
 
-### 1.15 Annotations (7) — detail in part 3
+| Why a flatten would refuse, before attempting it | `flatten_refusal(&self) -> Option<EditError>` | 13915 | `None` when a flatten would proceed. |
+| Where a page's widgets are | `widget_rects(&self, page_index: usize) -> Vec<(ObjId, [f64; 4])>` | 17893 | Annotation id and `/Rect`. A **query**, not an edit — useful for hit-testing and for reporting orphans (see `insert_pages`). |
+
+### 1.15 Annotations (8) — detail in part 3
 
 | I want to… | Call | Line | Returns |
 |---|---|---|---|
@@ -322,13 +388,18 @@ always errors.
 | Preview an annotation deletion | `annotation_deletion_preview(&self, annot_id) -> Result<AnnotationDeletion, EditError>` | 11316 | Pure `&self` query. |
 | Ask whether annotation deletion is refused document-wide | `annotation_deletion_refusal(&self) -> Option<EditError>` | 11492 | ⚠️ Takes no `annot_id`, so it cannot see the three per-annotation refusals. |
 
-### 1.16 Search-driven redaction marking (3)
+| Restyle an existing markup annotation | `set_markup_style(&mut self, annot_id: ObjId, style: &MarkupStyle) -> Result<MarkupStyleChange, EditError>` | 12372 | Rebuilds the baked `/AP`. |
+
+### 1.16 Search-driven redaction marking (5)
 
 | I want to… | Call | Line | Returns |
 |---|---|---|---|
 | Mark every literal occurrence | `mark_redactions_by_search(&mut self, query, case_insensitive) -> Result<Vec<ObjId>, EditError>` | 11512 | Created mark ids. **Matches LITERALLY.** |
 | …with full options | `mark_redactions_by_search_with(&mut self, query, &TextSearchOptions) -> Result<Vec<ObjId>, EditError>` | 11556 | |
 | Mark by simple pattern | `mark_redactions_by_pattern(&mut self, pattern, case_insensitive) -> Result<Vec<ObjId>, EditError>` | 11584 | `#` = ASCII digit, `?` = any char, everything else literal. `###-##-####` ⇒ SSN-shaped runs. |
+
+| Mark by search, choosing the mark's appearance | `mark_redactions_by_search_styled(&mut self, query: &str, options: &TextSearchOptions, appearance: &annot_author::RedactAppearance) -> Result<Vec<ObjId>, EditError>` | 13201 | Ids of the marks created. |
+| Mark by regex, choosing the mark's appearance | `mark_redactions_by_pattern_styled(&mut self, pattern: &str, case_insensitive: bool, appearance: &annot_author::RedactAppearance) -> Result<Vec<ObjId>, EditError>` | 13254 | |
 
 ### 1.17 Text search (2)
 
