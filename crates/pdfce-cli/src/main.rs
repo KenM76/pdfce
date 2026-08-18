@@ -9148,6 +9148,7 @@ impl PrintScaleArg {
 // kept in step with the derive — the same reasoning `interpret::run`
 // carries for its decomposed render inputs.
 #[allow(clippy::too_many_arguments)]
+#[cfg(windows)]
 fn cmd_print(
     input: &Path,
     printer: Option<&str>,
@@ -10099,6 +10100,55 @@ fn cmd_print_preview(
 
 /// The non-Windows arm — reports rather than vanishing, for the reason
 /// given on `cmd_list_printers`.
+///
+/// Added 2026-08-18. `cmd_print` had been portable until the driver-sourced
+/// `DEVMODE` work gave it four `#[cfg(windows)]` callees; the Windows build
+/// stayed green and the Linux one stopped compiling. Every sibling in this
+/// file already had its non-Windows arm, which is why the omission was
+/// invisible locally — the pattern was established and simply not extended
+/// to the one function that changed.
+#[allow(clippy::too_many_arguments)]
+#[cfg(not(windows))]
+fn cmd_print(
+    _input: &Path,
+    _printer: Option<&str>,
+    _scale: PrintScaleArg,
+    _scale_percent: Option<u32>,
+    _pages_spec: &str,
+    _send: bool,
+    _dpi_cap: u32,
+    _to_file: Option<PathBuf>,
+    _copies: u16,
+    _uncollated: bool,
+    _subset: SubsetArg,
+    _reverse: bool,
+    _orientation: OrientationArg,
+    _duplex: DuplexArg,
+    _pick_tray: bool,
+    _paper: Option<&str>,
+    _paper_size: Option<&str>,
+    _printer_config: Option<&Path>,
+    _comments: CommentsArg,
+    _n_up: Option<u32>,
+    _n_up_border: bool,
+    _booklet: bool,
+    _poster: bool,
+    _poster_scale: f64,
+    _poster_overlap: f64,
+    _poster_large_only: bool,
+    _poster_max_tiles: u32,
+    _binding: BindingArg,
+    _booklet_subset: BookletSubsetArg,
+) -> u8 {
+    eprintln!(
+        "pdfce-cli: printing is available on Windows only in this build \
+         (docs/decisions/003-distribution-posture.md §4.1)"
+    );
+    exit::EDIT_REFUSED
+}
+
+/// The non-Windows arm — reports rather than vanishing, for the reason
+/// given on `cmd_list_printers`.
 #[cfg(not(windows))]
 fn cmd_print_preview(
     _input: &Path,
@@ -10161,7 +10211,7 @@ fn cmd_list_printers() -> u8 {
 #[cfg(not(windows))]
 fn cmd_list_printers() -> u8 {
     eprintln!(
-        "pdfce-cli: printing is available on Windows only in this build          (docs/decisions/003-distribution-posture.md §4.1)"
+        "pdfce-cli: printing is available on Windows only in this build \n         (docs/decisions/003-distribution-posture.md §4.1)"
     );
     exit::EDIT_REFUSED
 }
