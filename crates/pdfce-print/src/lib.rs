@@ -103,6 +103,20 @@
 // three CI jobs without telling anyone.
 pub mod imposition;
 
+// The `DEVMODE` model — the driver's own settings structure, sourced
+// from the driver rather than synthesised. Also deliberately NOT
+// `cfg`-gated: the amend-a-DEVMODE logic is where the bugs are, it is
+// pure byte arithmetic over a documented ABI, and gating it would delete
+// its coverage on two of three CI jobs. Only ACQUIRING and USING a
+// configuration is Windows-only. See the module's own docs for the
+// three-defects-one-cause history that produced it.
+mod devmode;
+
+pub use devmode::{
+    ConfigurationError, ConfigurationSummary, MAX_CUSTOM_SHEET_TENTHS_MM, PaperForm,
+    PaperSelection, PrinterConfiguration,
+};
+
 // Un-gated: `PrintError`'s Display impl needs it on every platform. See
 // that type's own note for why the error type is not Windows-only.
 use std::fmt;
@@ -181,8 +195,46 @@ pub enum PrintError {
     Blit,
     /// A page's pixel dimensions exceed what GDI accepts.
     PageTooLarge,
+    /// `DocumentProperties` would not report a device's own settings.
+    ///
+    /// Distinct from [`PrintError::OpenDevice`]: the printer resolved
+    /// and the SPOOLER declined to describe it, which is what a
+    /// disconnected network printer does. A job can still be sent — see
+    /// [`SettingsSource::Synthesised`] for what is lost when it is.
+    DriverSettings {
+        /// The printer whose settings could not be read.
+        printer: String,
+    },
+    /// A [`PrinterConfiguration`] was not usable. Carries the specific
+    /// reason rather than a generic parse failure, because the reasons
+    /// send an operator somewhere different — see [`ConfigurationError`].
+    Configuration(ConfigurationError),
     /// Printing is not available on this platform.
     Unsupported,
+}
+
+impl From<ConfigurationError> for PrintError {
+    fn from(err: ConfigurationError) -> Self {
+        Self::Configuration(err)
+    }
+}
+
+/// Not derived, because [`PrintError`] predates it and hand-rolls
+/// [`fmt::Display`]; and not omitted, because a public error type that
+/// does not implement [`std::error::Error`] cannot be boxed, cannot be a
+/// `source()`, and does not compose with `?` in a caller that uses
+/// `Box<dyn Error>` — Rust API Guidelines `C-GOOD-ERR`. It was missing
+/// from this crate's only error type until 2026-08-18; `ImpositionError`
+/// in the sibling module has had it all along via `thiserror`, so the
+/// two halves of one crate disagreed about whether their errors were
+/// errors.
+impl std::error::Error for PrintError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Configuration(err) => Some(err),
+            _ => None,
+        }
+    }
 }
 
 // Un-gated for the same reason as the enum: a non-Windows caller that gets
@@ -229,6 +281,13 @@ impl fmt::Display for PrintError {
                 "the driver for {name:?} reports a resolution of zero dots per inch, \
                  which pdfce cannot lay a page out against"
             ),
+            Self::DriverSettings { printer } => write!(
+                f,
+                "the spooler would not report {printer:?}'s own settings, so pdfce cannot \
+                 start from them — a disconnected network printer does this. The job can \
+                 still be sent, but only the settings pdfce sets itself will apply"
+            ),
+            Self::Configuration(err) => write!(f, "{err}"),
         }
     }
 }
@@ -1576,7 +1635,28 @@ pub struct DeviceSettings {
     /// The operator-facing companion to a document's own
     /// `/PickTrayByPDFSize` viewer preference: this is the per-job
     /// override of the same idea.
+    ///
+    /// Reaches the driver as `dmDefaultSource = DMBIN_FORMSOURCE`,
+    /// which is answered by the driver's own Form-to-Tray Assignment
+    /// table. A device that does not list that bin cannot honour it —
+    /// [`DeviceFeatures::supports_form_source_bin`] is what a shell
+    /// consults before offering the control (R83), because a job that
+    /// silently came out of the default tray looks identical to one
+    /// where the request was never made.
     pub pick_tray_by_page_size: bool,
+    /// Which sheet to feed.
+    ///
+    /// [`PaperSelection::DeviceDefault`] says nothing, and the device
+    /// prints on whatever its own Windows preferences are set to — which
+    /// was pdfce's ONLY behaviour until 2026-08-18, and left an operator
+    /// no route to a different sheet but to leave pdfce, open Devices
+    /// and Printers, change the default, and come back.
+    ///
+    /// [`crate::printer_forms`] enumerates what a device actually
+    /// offers; nothing here validates a form id against that list,
+    /// deliberately — the driver is the authority on its own forms and a
+    /// second opinion in this crate would be one more thing to drift.
+    pub paper: PaperSelection,
 }
 
 /// The orientation a page will actually print at.
@@ -1809,6 +1889,74 @@ pub struct DeviceFeatures {
     /// used — and reporting it is what lets a later decision be made on
     /// evidence instead of assumption.
     pub max_copies: u16,
+    /// Whether the driver LISTS `DMBIN_FORMSOURCE` among its input bins.
+    ///
+    /// `DMBIN_FORMSOURCE` is the value that means "choose the tray from
+    /// the sheet size", and it is what
+    /// [`DeviceSettings::pick_tray_by_page_size`] sends. Read
+    /// [`FormSourceSupport`] before using this to gate a control: unlike
+    /// [`Self::supports_duplex`], "not listed" is **not** a refusal, and
+    /// this was measured rather than assumed.
+    pub form_source_bin: FormSourceSupport,
+}
+
+/// Whether a device offers `DMBIN_FORMSOURCE` — "choose the tray from
+/// the sheet size".
+///
+/// # ★ Three states, because two would encode a claim that is false
+///
+/// The natural design here is a `bool` mirroring
+/// [`DeviceFeatures::supports_duplex`], and it was written that way
+/// first. Then it was measured against the four drivers on the
+/// developer's machine on 2026-08-18, and the `bool` turned out to state
+/// something untrue:
+///
+/// | device | what `DC_BINS` said | its OWN default `dmDefaultSource` |
+/// |---|---|---|
+/// | Microsoft Print to PDF | **would not answer at all** | **15** — `DMBIN_FORMSOURCE` |
+/// | Microsoft XPS Document Writer | listed 15 | 15 |
+/// | EPSON ET-16600 (network) | answered, no 15 | 7 (`DMBIN_AUTO`) |
+/// | EPSON SC-F100 (network) | answered, no 15 | 258 (vendor-defined) |
+///
+/// The first row is the one that decides the shape, and it decides it
+/// twice over. "Microsoft Print to PDF" — the commonest printer on any
+/// Windows machine — returns NO bin list, and its own default
+/// configuration is already `DMBIN_FORMSOURCE`. A `bool` would have
+/// collapsed "the driver said nothing" into "no" and reported "this
+/// device cannot pick a tray by size" about a device that does exactly
+/// that by default. Windows' Form-to-Tray Assignment is a spooler-level
+/// feature and a driver is under no obligation to advertise it as a
+/// selectable bin.
+///
+/// So the three-way distinction is real and an `Option`-shaped or
+/// `bool`-shaped answer hides the disagreeing case inside the negative
+/// one.
+///
+/// # What a shell should do with each
+///
+/// - [`Self::Listed`] — offer the control plainly.
+/// - [`Self::NotListed`] — **still offer it**, and disclose that the
+///   driver does not advertise it, so the request may be ignored. Hiding
+///   it here would remove a working capability from the operator on the
+///   commonest Windows printer there is.
+/// - [`Self::Unknown`] — same as `NotListed`, with the honest reason:
+///   nothing was learned either way.
+///
+/// The R83 rule this looks like — "never offer an affordance the
+/// hardware cannot honour" — is not in play, because `DC_BINS` does not
+/// establish that it cannot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FormSourceSupport {
+    /// `DC_BINS` includes `DMBIN_FORMSOURCE`. The driver advertises it.
+    Listed,
+    /// `DC_BINS` answered and did not include it. **Not a refusal** —
+    /// see the type's own table.
+    NotListed,
+    /// `DC_BINS` did not answer. Nothing is known either way, which is
+    /// a different fact from `NotListed` and is kept distinct for that
+    /// reason.
+    #[default]
+    Unknown,
 }
 
 #[cfg(windows)]
@@ -1818,7 +1966,7 @@ pub struct DeviceFeatures {
 ///
 /// [`PrintError::OpenDevice`] if the printer name does not resolve.
 pub fn device_features(printer: &str) -> Result<DeviceFeatures, PrintError> {
-    use windows::Win32::Storage::Xps::{DC_COPIES, DC_DUPLEX, DeviceCapabilitiesW};
+    use windows::Win32::Storage::Xps::{DC_BINS, DC_COPIES, DC_DUPLEX, DeviceCapabilitiesW};
     use windows::core::PCWSTR;
 
     let wide: Vec<u16> = printer.encode_utf16().chain(std::iter::once(0)).collect();
@@ -1834,7 +1982,20 @@ pub fn device_features(printer: &str) -> Result<DeviceFeatures, PrintError> {
     if duplex < 0 && copies < 0 {
         return Err(PrintError::OpenDevice(printer.to_owned()));
     }
+    // `DC_BINS` fills an array of WORDs with the `DMBIN_*` values this
+    // device offers. The two-call pattern is the same as everywhere else
+    // in this crate: the first asks how many, the second fills. A driver
+    // that will not answer leaves the list empty, which reads as "does
+    // not support it" — the safe direction, stated in the field's docs.
+    let bins = device_capability_words(&wide, DC_BINS);
     Ok(DeviceFeatures {
+        form_source_bin: if bins.is_empty() {
+            FormSourceSupport::Unknown
+        } else if bins.contains(&DMBIN_FORMSOURCE_VALUE) {
+            FormSourceSupport::Listed
+        } else {
+            FormSourceSupport::NotListed
+        },
         // `DC_DUPLEX` returns 1 when the device supports it. A driver
         // that will not answer is treated as NOT supporting it — the
         // safe direction, because the cost of being wrong the other way
@@ -1844,6 +2005,459 @@ pub fn device_features(printer: &str) -> Result<DeviceFeatures, PrintError> {
     })
 }
 
+/// `DMBIN_FORMSOURCE` as a bare `u16`, for comparing against the
+/// `DC_BINS` array.
+///
+/// Duplicated from the `devmode` module's `i16` copy rather than shared,
+/// because `DC_BINS` reports unsigned words and `dmDefaultSource` is a
+/// signed member. The `devmode` module's `#[cfg(windows)]` ABI guard
+/// asserts its copy against the real constant; this one is asserted in
+/// `dmbin_formsource_agrees_across_its_two_representations`.
+#[cfg(windows)]
+const DMBIN_FORMSOURCE_VALUE: u16 = 15;
+
+/// Run a `DeviceCapabilities` query that returns an array of WORDs.
+///
+/// # Why the two-call pattern is required rather than defensive
+///
+/// `DeviceCapabilitiesW` with a null output buffer returns the ENTRY
+/// COUNT — not a byte count, which is the trap: `DC_PAPERSIZE` returns
+/// the same count for entries that are eight bytes each. Guessing a
+/// buffer size instead would either truncate a plotter's form list
+/// silently or over-allocate on every call.
+///
+/// An empty `Vec` means "the driver would not say", which every caller
+/// treats as an absent capability rather than an error, for the reason
+/// [`DeviceFeatures::supports_form_source_bin`] states.
+#[cfg(windows)]
+fn device_capability_words(
+    printer_wide: &[u16],
+    capability: windows::Win32::Storage::Xps::PRINTER_DEVICE_CAPABILITIES,
+) -> Vec<u16> {
+    use windows::Win32::Storage::Xps::DeviceCapabilitiesW;
+    use windows::core::{PCWSTR, PWSTR};
+
+    // SAFETY: `printer_wide` is NUL-terminated and outlives the call; a
+    // null output buffer is the documented "how many?" form.
+    let count = unsafe {
+        DeviceCapabilitiesW(
+            PCWSTR(printer_wide.as_ptr()),
+            PCWSTR::null(),
+            capability,
+            None,
+            None,
+        )
+    };
+    let Ok(count) = usize::try_from(count) else {
+        return Vec::new();
+    };
+    if count == 0 {
+        return Vec::new();
+    }
+    let mut buffer = vec![0u16; count];
+    // SAFETY: `buffer` holds exactly the `count` words the call above
+    // asked for. The parameter is typed `PWSTR` by the `windows` crate
+    // because the Win32 signature reuses one pointer for every
+    // capability's payload; for `DC_BINS` and `DC_PAPERS` that payload
+    // is an array of WORDs, not a string.
+    let written = unsafe {
+        DeviceCapabilitiesW(
+            PCWSTR(printer_wide.as_ptr()),
+            PCWSTR::null(),
+            capability,
+            Some(PWSTR(buffer.as_mut_ptr())),
+            None,
+        )
+    };
+    match usize::try_from(written) {
+        Ok(n) => {
+            buffer.truncate(n.min(count));
+            buffer
+        }
+        // A driver that answered the count and then failed the fill is
+        // reporting nothing, not reporting `count` zeroes.
+        Err(_) => Vec::new(),
+    }
+}
+
+/// The paper sizes a device offers.
+///
+/// # ★ Three parallel arrays related only by index
+///
+/// Win32 answers this in three separate calls — `DC_PAPERS` for the
+/// `dmPaperSize` ids, `DC_PAPERNAMES` for 64-character names, and
+/// `DC_PAPERSIZE` for the dimensions — and nothing but the INDEX relates
+/// them. A driver that returns different counts for the three (which
+/// happens: a `DC_PAPERNAMES` implementation can be missing while
+/// `DC_PAPERS` works) would, zipped naively, produce forms whose name
+/// belongs to a different sheet. So this zips to the SHORTEST array and
+/// fills what is missing rather than pairing across a gap:
+///
+/// - no id → the form is dropped entirely, because an id is what
+///   [`PaperSelection::Form`] needs and a form that cannot be selected
+///   is an affordance for something that cannot happen (R83);
+/// - no name → the id is used as the name (`"form 9"`), which is ugly
+///   and true;
+/// - no size → `(0.0, 0.0)`, and a shell showing sizes must treat that
+///   as "the driver would not say" rather than as a zero-area sheet.
+///
+/// # Errors
+///
+/// [`PrintError::OpenDevice`] when the printer name does not resolve —
+/// i.e. when even `DC_PAPERS` refuses. An empty list from a device that
+/// DID answer is not an error, for the same reason
+/// [`list_printers`] treats an empty machine as normal.
+///
+/// # Example
+///
+/// ```no_run
+/// # fn main() -> Result<(), pdfce_print::PrintError> {
+/// for form in pdfce_print::printer_forms("Microsoft Print to PDF")? {
+///     println!("{}: {} ({:.0}x{:.0} pt)", form.id, form.name, form.size_pt.0, form.size_pt.1);
+/// }
+/// # Ok(())
+/// # }
+/// ```
+#[cfg(windows)]
+pub fn printer_forms(printer: &str) -> Result<Vec<PaperForm>, PrintError> {
+    use windows::Win32::Storage::Xps::{
+        DC_PAPERNAMES, DC_PAPERS, DC_PAPERSIZE, DeviceCapabilitiesW,
+    };
+    use windows::core::{PCWSTR, PWSTR};
+
+    let wide: Vec<u16> = printer.encode_utf16().chain(std::iter::once(0)).collect();
+    let ids = device_capability_words(&wide, DC_PAPERS);
+    if ids.is_empty() {
+        // Distinguish "no such printer" from "this printer offers no
+        // forms": ask something every device answers.
+        // SAFETY: `wide` is NUL-terminated and outlives the call.
+        let probe = unsafe {
+            DeviceCapabilitiesW(
+                PCWSTR(wide.as_ptr()),
+                PCWSTR::null(),
+                DC_PAPERNAMES,
+                None,
+                None,
+            )
+        };
+        if probe < 0 {
+            return Err(PrintError::OpenDevice(printer.to_owned()));
+        }
+        return Ok(Vec::new());
+    }
+
+    // `DC_PAPERNAMES` writes fixed 64-WCHAR records, NUL-padded, NOT
+    // NUL-terminated when the name fills the field — which is why the
+    // decode below takes exactly 64 units per record rather than reading
+    // to a terminator.
+    const NAME_UNITS: usize = 64;
+    let mut names: Vec<String> = Vec::new();
+    {
+        let mut buffer = vec![0u16; ids.len() * NAME_UNITS];
+        // SAFETY: `buffer` holds `ids.len()` records of `NAME_UNITS`
+        // words, which is the layout `DC_PAPERNAMES` documents for a
+        // list of that length.
+        let written = unsafe {
+            DeviceCapabilitiesW(
+                PCWSTR(wide.as_ptr()),
+                PCWSTR::null(),
+                DC_PAPERNAMES,
+                Some(PWSTR(buffer.as_mut_ptr())),
+                None,
+            )
+        };
+        if let Ok(n) = usize::try_from(written) {
+            for record in buffer.chunks_exact(NAME_UNITS).take(n) {
+                let end = record.iter().position(|&c| c == 0).unwrap_or(NAME_UNITS);
+                names.push(String::from_utf16_lossy(
+                    record.get(..end).unwrap_or_default(),
+                ));
+            }
+        }
+    }
+
+    // `DC_PAPERSIZE` writes an array of `POINT` — two `i32` — in TENTHS
+    // OF A MILLIMETRE. Not points, despite the name of the structure;
+    // the collision between Win32's "POINT" and PDF's "point" is exactly
+    // the kind of unit confusion this crate converts at the boundary so
+    // nothing downstream has to know.
+    let mut sizes: Vec<(f64, f64)> = Vec::new();
+    {
+        let mut buffer = vec![0i32; ids.len() * 2];
+        // SAFETY: `buffer` holds `ids.len()` POINT records. The `PWSTR`
+        // parameter is Win32's one-pointer-for-every-payload convention,
+        // as in `device_capability_words`.
+        let written = unsafe {
+            DeviceCapabilitiesW(
+                PCWSTR(wide.as_ptr()),
+                PCWSTR::null(),
+                DC_PAPERSIZE,
+                Some(PWSTR(buffer.as_mut_ptr().cast::<u16>())),
+                None,
+            )
+        };
+        if let Ok(n) = usize::try_from(written) {
+            for point in buffer.chunks_exact(2).take(n) {
+                let tenths_mm_to_pt = |v: i32| {
+                    if v > 0 {
+                        f64::from(v) * 72.0 / 254.0
+                    } else {
+                        0.0
+                    }
+                };
+                sizes.push((
+                    tenths_mm_to_pt(*point.first().unwrap_or(&0)),
+                    tenths_mm_to_pt(*point.get(1).unwrap_or(&0)),
+                ));
+            }
+        }
+    }
+
+    Ok(ids
+        .into_iter()
+        .enumerate()
+        .map(|(i, id)| PaperForm {
+            id,
+            name: names
+                .get(i)
+                .filter(|n| !n.is_empty())
+                .cloned()
+                .unwrap_or_else(|| format!("form {id}")),
+            size_pt: sizes.get(i).copied().unwrap_or((0.0, 0.0)),
+        })
+        .collect())
+}
+
+/// Open a printer handle, run `f`, and close it on every path.
+///
+/// `DocumentProperties` needs a spooler handle, not a device context,
+/// and a leaked printer handle holds a spooler object open. The closure
+/// shape is the same one [`spool`] uses for its device context, and for
+/// the same reason: Rust has no `finally`.
+#[cfg(windows)]
+fn with_printer_handle<T>(
+    printer: &str,
+    f: impl FnOnce(windows::Win32::Graphics::Printing::PRINTER_HANDLE) -> T,
+) -> Result<T, PrintError> {
+    use windows::Win32::Graphics::Printing::{ClosePrinter, OpenPrinterW, PRINTER_HANDLE};
+    use windows::core::PCWSTR;
+
+    let wide: Vec<u16> = printer.encode_utf16().chain(std::iter::once(0)).collect();
+    let mut handle = PRINTER_HANDLE::default();
+    // SAFETY: `wide` is NUL-terminated and outlives the call; `handle`
+    // is a live local the spooler writes into.
+    unsafe { OpenPrinterW(PCWSTR(wide.as_ptr()), &raw mut handle, None) }
+        .map_err(|_| PrintError::OpenDevice(printer.to_owned()))?;
+    let out = f(handle);
+    // SAFETY: `handle` was opened above and is closed exactly once.
+    unsafe {
+        let _ = ClosePrinter(handle);
+    }
+    Ok(out)
+}
+
+/// Ask a driver for its current settings.
+///
+/// This is the base every job now starts from: `DocumentProperties` with
+/// `DM_OUT_BUFFER` returns a FULLY-POPULATED `DEVMODE` — every field the
+/// driver knows about, including the private tail Win32 has no names
+/// for — where pdfce previously synthesised one from zero. See the
+/// `devmode` module's own docs for what that cost.
+///
+/// # Errors
+///
+/// [`PrintError::OpenDevice`] if the name does not resolve;
+/// [`PrintError::DriverSettings`] if the spooler will not describe the
+/// device, which a disconnected network printer does;
+/// [`PrintError::Configuration`] if what the driver wrote is not a
+/// `DEVMODE` pdfce can amend — re-validated rather than trusted, because
+/// a driver's output is untrusted input in exactly the way a file is.
+#[cfg(windows)]
+pub fn printer_configuration(printer: &str) -> Result<PrinterConfiguration, PrintError> {
+    document_properties(printer, Prompt::No, None, None)?.ok_or_else(|| {
+        PrintError::DriverSettings {
+            printer: printer.to_owned(),
+        }
+    })
+}
+
+/// Let the operator edit a device's settings in the DRIVER's own dialog.
+///
+/// # ★ Why a UI call lives in a crate with no UI dependency
+///
+/// It is arguable, so here is the reasoning rather than an assertion.
+///
+/// **Against:** `DocumentProperties` with `DM_IN_PROMPT` opens a modal
+/// window, and windowing code in a non-windowing crate is the wrong
+/// direction. This crate exists partly BECAUSE `pdfce-core` and
+/// `pdfce-render` must stay platform-free.
+///
+/// **For, and it decides it:** the dialog's OUTPUT is a `DEVMODE`, and a
+/// `DEVMODE` is meaningless to anything but [`spool_with_config`]. A
+/// shell that opened this dialog itself and could not hand the result
+/// anywhere would let an operator configure settings that are then
+/// discarded — which is exactly the defect
+/// [`DeviceSettings::pick_tray_by_page_size`] was, rebuilt deliberately.
+/// And `pdfce-cli` prints too: a properties dialog living only in the
+/// GUI would be a capability the CLI could not reach, which is the same
+/// boundary error in the other direction.
+///
+/// No windowing dependency is added — `parent` is a raw window handle
+/// the caller already owns, passed as an integer, and this crate never
+/// creates a window.
+///
+/// # The handle argument
+///
+/// `parent` is an `HWND` as `isize`. `None` passes a null owner, which
+/// Windows accepts: the dialog is then unowned and can fall behind the
+/// application's window. A GUI should always pass its own handle; a CLI
+/// has none to pass and `None` is correct there.
+///
+/// # Returns
+///
+/// `Ok(None)` when the operator pressed **Cancel**. That is not an
+/// error and must not be reported as one — it is the operator declining,
+/// and a shell that showed an error for it would be scolding them for
+/// using the dialog correctly.
+///
+/// # Errors
+///
+/// The same three as [`printer_configuration`].
+#[cfg(windows)]
+pub fn edit_printer_configuration(
+    printer: &str,
+    parent: Option<isize>,
+    start_from: Option<&PrinterConfiguration>,
+) -> Result<Option<PrinterConfiguration>, PrintError> {
+    document_properties(printer, Prompt::Yes, parent, start_from)
+}
+
+/// Whether [`document_properties`] shows the driver's dialog.
+///
+/// An enum rather than a `bool` because the two callers are the whole
+/// difference between "read the device's settings" and "open a modal
+/// window on the operator's screen", and a bare `true` at a call site
+/// does not say which of those it is asking for.
+#[cfg(windows)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Prompt {
+    /// Read the driver's settings; show nothing.
+    No,
+    /// Open the driver's own properties dialog.
+    Yes,
+}
+
+/// The one `DocumentProperties` call site, in both its modes.
+///
+/// # The three-step protocol, and why each step is required
+///
+/// 1. `fMode = 0` returns the BYTE SIZE of this driver's `DEVMODE`,
+///    which is `dmSize + dmDriverExtra` and is driver-specific. There is
+///    no way to ask for it any other way, and a fixed-size buffer would
+///    truncate the private tail of every vendor driver.
+/// 2. A buffer of that size is allocated **aligned**, via
+///    `PrinterConfiguration::to_aligned_words`: `DEVMODEW` contains
+///    `u32` members and a `Vec<u8>` does not guarantee 4-byte alignment.
+/// 3. The real call fills it. With `DM_IN_PROMPT` the return is a dialog
+///    result (`IDOK` = 1, `IDCANCEL` = 2); without it, `IDOK` on success.
+///    A negative return is failure.
+///
+/// # ★ `DM_IN_PROMPT` and `DM_PAPERLENGTH` are the same number
+///
+/// Win32 has two unrelated families of `DM_*` constants — the `fMode`
+/// flags for this function, and the `dmFields` flags inside the
+/// structure — and the `windows` crate gives BOTH the type
+/// `DEVMODE_FIELD_FLAGS`. `DM_IN_PROMPT` is 4 and so is
+/// `DM_PAPERLENGTH`; `DM_OUT_BUFFER` is 2 and so is `DM_PAPERSIZE`.
+/// Passing the wrong one compiles, type-checks, and silently means
+/// something else. They are spelled out at this one call site for that
+/// reason, and never mixed with the `devmode` module's `dmFields` bits.
+#[cfg(windows)]
+fn document_properties(
+    printer: &str,
+    prompt: Prompt,
+    parent: Option<isize>,
+    start_from: Option<&PrinterConfiguration>,
+) -> Result<Option<PrinterConfiguration>, PrintError> {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::Graphics::Gdi::{DEVMODEW, DM_IN_BUFFER, DM_IN_PROMPT, DM_OUT_BUFFER};
+    use windows::Win32::Graphics::Printing::DocumentPropertiesW;
+    use windows::core::PCWSTR;
+
+    /// `IDOK` — the dialog was accepted, or the buffer-only call
+    /// succeeded.
+    const IDOK: i32 = 1;
+
+    if let Some(config) = start_from {
+        config.ensure_device(printer)?;
+    }
+    let name: Vec<u16> = printer.encode_utf16().chain(std::iter::once(0)).collect();
+    let hwnd = parent.map(|h| HWND(h as *mut core::ffi::c_void));
+
+    with_printer_handle(printer, |handle| {
+        // Step 1 — how big is this driver's DEVMODE?
+        // SAFETY: `name` is NUL-terminated and outlives the call; null
+        // buffers with `fMode = 0` are the documented size query.
+        let needed =
+            unsafe { DocumentPropertiesW(None, handle, PCWSTR(name.as_ptr()), None, None, 0) };
+        let Ok(needed) = usize::try_from(needed) else {
+            return Err(PrintError::DriverSettings {
+                printer: printer.to_owned(),
+            });
+        };
+        if needed == 0 {
+            return Err(PrintError::DriverSettings {
+                printer: printer.to_owned(),
+            });
+        }
+
+        // Step 2 — an ALIGNED buffer of exactly that size, never
+        // smaller than the public structure this Windows defines so
+        // that the pointer handed over is fully in bounds either way.
+        let words = needed.max(devmode::DEVMODE_PUBLIC_BYTES).div_ceil(4);
+        let mut out = vec![0u32; words];
+        let input = start_from.map(PrinterConfiguration::to_aligned_words);
+
+        // `DM_IN_BUFFER` means "start from the DEVMODE I am supplying";
+        // `DM_IN_PROMPT` means "show the dialog". They compose, and the
+        // combination is how a shell reopens the dialog on the settings
+        // the operator chose last time rather than resetting them.
+        let mut mode = DM_OUT_BUFFER.0;
+        if start_from.is_some() {
+            mode |= DM_IN_BUFFER.0;
+        }
+        if prompt == Prompt::Yes {
+            mode |= DM_IN_PROMPT.0;
+        }
+
+        // SAFETY: `out` holds `needed` bytes as just requested; `input`
+        // when present is a validated DEVMODE of its own declared
+        // length; both outlive the call.
+        let result = unsafe {
+            DocumentPropertiesW(
+                hwnd,
+                handle,
+                PCWSTR(name.as_ptr()),
+                Some(out.as_mut_ptr().cast::<DEVMODEW>()),
+                input.as_ref().map(|w| w.as_ptr().cast::<DEVMODEW>()),
+                mode,
+            )
+        };
+        if result < 0 {
+            return Err(PrintError::DriverSettings {
+                printer: printer.to_owned(),
+            });
+        }
+        if result != IDOK {
+            // `IDCANCEL`. The operator declined; not an error.
+            return Ok(None);
+        }
+        PrinterConfiguration::from_aligned_words(&out, needed)
+            .map(Some)
+            .map_err(PrintError::Configuration)
+    })?
+}
+
 #[cfg(not(windows))]
 /// Non-Windows stub. Printing is a Windows capability in this release.
 ///
@@ -1851,6 +2465,40 @@ pub fn device_features(printer: &str) -> Result<DeviceFeatures, PrintError> {
 ///
 /// Always [`PrintError::Unsupported`].
 pub fn device_features(_printer: &str) -> Result<DeviceFeatures, PrintError> {
+    Err(PrintError::Unsupported)
+}
+
+#[cfg(not(windows))]
+/// Non-Windows stub. Printing is a Windows capability in this release.
+///
+/// # Errors
+///
+/// Always [`PrintError::Unsupported`].
+pub fn printer_forms(_printer: &str) -> Result<Vec<PaperForm>, PrintError> {
+    Err(PrintError::Unsupported)
+}
+
+#[cfg(not(windows))]
+/// Non-Windows stub. Printing is a Windows capability in this release.
+///
+/// # Errors
+///
+/// Always [`PrintError::Unsupported`].
+pub fn printer_configuration(_printer: &str) -> Result<PrinterConfiguration, PrintError> {
+    Err(PrintError::Unsupported)
+}
+
+#[cfg(not(windows))]
+/// Non-Windows stub. Printing is a Windows capability in this release.
+///
+/// # Errors
+///
+/// Always [`PrintError::Unsupported`].
+pub fn edit_printer_configuration(
+    _printer: &str,
+    _parent: Option<isize>,
+    _start_from: Option<&PrinterConfiguration>,
+) -> Result<Option<PrinterConfiguration>, PrintError> {
     Err(PrintError::Unsupported)
 }
 
@@ -1956,6 +2604,48 @@ pub struct SpoolReport {
     pub clipped_pages: usize,
     /// The job's spooler ID, when one was started.
     pub job_id: Option<u32>,
+    /// Where the `DEVMODE` this job was sent with came from.
+    ///
+    /// The disclosure that a shell owes the operator under project
+    /// rule 4: pdfce may have had to fall back to a synthesised
+    /// configuration, and that changes what a driver-level setting can
+    /// mean. Silence about it is exactly the shape the `pick_tray`
+    /// defect had — a job that succeeds either way.
+    pub settings_source: SettingsSource,
+}
+
+/// Where the `DEVMODE` a job was sent with came from.
+///
+/// # Why this is reported rather than assumed
+///
+/// pdfce writes at most four members of a `DEVMODE`. Everything else a
+/// device does — media type, quality, stapling, output bin, the whole
+/// vendor-private half — lives in the driver's own configuration, which
+/// pdfce carries through untouched *when it has one*. Whether it had one
+/// is therefore a fact about what the job could possibly honour, and it
+/// is not visible from the printed page.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SettingsSource {
+    /// No `DEVMODE` was sent at all: nothing pdfce controls differs from
+    /// what the device is already set to, so the device's own defaults
+    /// apply in full. The cheapest and most conservative case, and the
+    /// common one.
+    #[default]
+    DeviceDefault,
+    /// The driver's own current settings were fetched and amended. The
+    /// normal case for a job that changes anything.
+    DriverSupplied,
+    /// A configuration the CALLER supplied — from
+    /// [`edit_printer_configuration`] or a stored file — was amended.
+    CallerSupplied,
+    /// ★ The driver would not report its settings, so pdfce sent a
+    /// SYNTHESISED `DEVMODE` carrying only what it sets itself.
+    ///
+    /// The job prints. What is lost is everything the driver holds that
+    /// pdfce does not model, because a synthesised structure has no
+    /// driver-private tail to carry it in. A shell must say so: this is
+    /// pdfce having chosen something the operator did not ask for.
+    Synthesised,
 }
 
 /// Send pages to a printer — **the only function in pdfce that starts a
@@ -1975,7 +2665,6 @@ pub struct SpoolReport {
 /// each shell — a control the operator clicked. Nothing here runs as a
 /// side effect of rendering, previewing, saving or opening.
 #[cfg(windows)]
-#[allow(clippy::too_many_arguments)]
 pub fn spool(
     printer: &str,
     pages: &[PageBitmap],
@@ -1984,7 +2673,51 @@ pub fn spool(
     settings: DeviceSettings,
     first_page_pt: (f64, f64),
 ) -> Result<SpoolReport, PrintError> {
-    use windows::Win32::Graphics::Gdi::{CreateDCW, DeleteDC};
+    spool_with_config(
+        printer,
+        pages,
+        dry_run,
+        output,
+        settings,
+        first_page_pt,
+        None,
+    )
+}
+
+/// [`spool`], starting from a `DEVMODE` the caller supplies.
+///
+/// # Why this is a second function rather than a seventh parameter
+///
+/// [`spool`] is called from both shells and its signature is the one
+/// they compile against. A configuration is an addition that most
+/// callers never need — a caller that has not opened the driver's
+/// properties dialog has nothing to pass — so the common call keeps its
+/// shape and the capability gets its own name. The two share one
+/// implementation below; there is no second copy of the job loop.
+///
+/// `config` is amended, not replaced: the [`DeviceSettings`] still win
+/// for the members they name, exactly as they do over a driver-supplied
+/// base. Everything else in the operator's configuration survives, which
+/// is the entire point of carrying it.
+///
+/// # Errors
+///
+/// The same as [`spool`], plus [`PrintError::Configuration`] when
+/// `config` belongs to a different device — a `DEVMODE`'s private tail
+/// is one driver's private format, so handing it to another is not a
+/// degraded result but an undefined one.
+#[cfg(windows)]
+#[allow(clippy::too_many_arguments)]
+pub fn spool_with_config(
+    printer: &str,
+    pages: &[PageBitmap],
+    dry_run: DryRun,
+    output: Option<&std::path::Path>,
+    settings: DeviceSettings,
+    first_page_pt: (f64, f64),
+    config: Option<&PrinterConfiguration>,
+) -> Result<SpoolReport, PrintError> {
+    use windows::Win32::Graphics::Gdi::{CreateDCW, DEVMODEW, DeleteDC};
     use windows::Win32::Storage::Xps::{AbortDoc, DOCINFOW, EndDoc, EndPage, StartDocW, StartPage};
     use windows::core::PCWSTR;
 
@@ -1997,28 +2730,36 @@ pub fn spool(
     // the DC exists means the printable area already read is wrong.
     //
     // ★ `caps` is the UN-TURNED geometry, and that is exactly what is
-    // wanted here. `build_devmode` needs to know which orientation the
-    // device is in BY DEFAULT so it can tell whether this job needs it
-    // turned; handing it an already-rotated view would make every job
+    // wanted here. `job_configuration` needs to know which orientation
+    // the device is in BY DEFAULT so it can tell whether this job needs
+    // it turned; handing it an already-rotated view would make every job
     // look like it needed no turn. The rotated view is the CALLER's
     // concern — it is what the pages were planned against, and it
     // reaches this function baked into `PageBitmap::placement`.
-    let devmode = build_devmode(
-        &wide,
+    let (devmode, settings_source) = job_configuration(
+        printer,
+        config,
         settings,
         first_page_pt,
         sheet_orientation(caps.physical_pt),
-    );
+    )?;
+    // The buffer must outlive `CreateDC`; a pointer into a dropped
+    // temporary is a dangling one and nothing in the type system catches
+    // it here — the same hazard the `lpszOutput` buffer below carries.
+    let devmode_words = devmode.as_ref().map(PrinterConfiguration::to_aligned_words);
 
     // SAFETY: `wide` is NUL-terminated and outlives the call, and
-    // `devmode` (when present) outlives it too. A null DC is the
+    // `devmode_words` (when present) is an ALIGNED buffer holding a
+    // validated DEVMODE that outlives it too. A null DC is the
     // documented failure and is checked rather than assumed.
     let hdc = unsafe {
         CreateDCW(
             PCWSTR::null(),
             PCWSTR(wide.as_ptr()),
             PCWSTR::null(),
-            devmode.as_ref().map(std::ptr::from_ref),
+            devmode_words
+                .as_ref()
+                .map(|w| w.as_ptr().cast::<DEVMODEW>()),
         )
     };
     if hdc.is_invalid() {
@@ -2039,6 +2780,7 @@ pub fn spool(
         dpi: (caps.dpi_x as i32, caps.dpi_y as i32),
         clipped_pages: pages.iter().filter(|p| p.placement.clipped).count(),
         job_id: None,
+        settings_source,
     };
 
     let outcome: Result<(), PrintError> = (|| {
@@ -2132,36 +2874,44 @@ pub fn spool(
     outcome.map(|()| report)
 }
 
-/// Build the `DEVMODE` that carries the operator's driver settings.
+/// Build the `DEVMODE` that carries the operator's driver settings, and
+/// say where it came from.
 ///
-/// # Why it starts from the driver's own default rather than zeroed
+/// # ★ It starts from the DRIVER's own configuration — and until
+/// # 2026-08-18 the doc comment here said so while the code did not
 ///
-/// A `DEVMODE` is a driver-defined structure with a documented header
-/// and an opaque tail. Handing a zeroed one to `CreateDC` throws away
-/// every setting the driver holds — tray assignments, media type,
-/// quality — and replaces them with nothing. So the driver's current
-/// default is fetched first and only the requested fields are
-/// overwritten, with `dmFields` naming exactly which.
+/// This function's previous documentation carried the heading *"Why it
+/// starts from the driver's own default rather than zeroed"* and the
+/// sentence *"the driver's current default is fetched first and only the
+/// requested fields are overwritten"*. Nothing was fetched. It built a
+/// `DEVMODEW::default()` — a zeroed structure — set `dmOrientation` and
+/// `dmDuplex`, and handed that to `CreateDC`. The parameter that would
+/// have been needed to fetch anything was present and unused, named
+/// `_printer_wide`.
 ///
-/// Returns `None` when there is nothing to say to the driver, in which
-/// case the caller creates the device context with no override and the
-/// device's own defaults apply.
+/// A doc comment describing behaviour the code does not have is worse
+/// than an undocumented function: it is a claim that reads as true, and
+/// it survived review three times because reviewing the claim meant
+/// reading past it to the eight lines underneath. It is recorded here
+/// rather than quietly corrected, because the shape is the point.
 ///
-/// `first_page_pt` decides `Auto` orientation, and it is a PARAMETER
-/// rather than `pages.first().page_pt` deliberately. A `DEVMODE` applies
-/// to the job, so exactly one page can decide it — and the caller has
-/// already resolved which, because it had to pass the same page to
-/// [`DeviceGeometry::for_orientation`] to plan against the right sheet.
-/// Re-deriving it from the bitmaps would let the two answers differ:
-/// the imposition paths hand the spooler one bitmap per SHEET whose
-/// `page_pt` is the printable area, not a source page, so an n-up or
-/// booklet job would resolve its `DEVMODE` from a different input than
-/// its layout. Taking it as an argument makes the two provably the same
-/// value. Per-page orientation within one job needs `ResetDC` between
-/// pages and is not built.
+/// What the synthesised structure cost is set out in the `devmode`
+/// module's own docs; the short version is that a `DEVMODE` carries a
+/// driver-private tail of `dmDriverExtra` bytes holding everything Win32
+/// has no field for, a synthesised one has none of it, and there was
+/// nowhere to put a paper size, a tray, or a configuration returned by
+/// the driver's properties dialog.
 ///
-/// # ★ Why `device_default` is a parameter, and why `Auto` can now build
-/// # a `DEVMODE` on its own
+/// # Returns
+///
+/// `None` for the `DEVMODE` when there is genuinely nothing to say to
+/// the driver, in which case the caller creates the device context with
+/// no override and the device's own defaults apply in full. That is
+/// cheaper than fetching a configuration only to hand back an unmodified
+/// copy, and it is exactly equivalent.
+///
+/// # ★ Why `device_default` is a parameter, and why `Auto` can build a
+/// # `DEVMODE` on its own
 ///
 /// This used to return `None` for any `settings == DeviceSettings::default()`,
 /// which reads as "the operator changed nothing, so disturb nothing".
@@ -2172,11 +2922,11 @@ pub fn spool(
 /// tray control, at which point it switched on as a side effect of an
 /// unrelated setting.
 ///
-/// So the test is no longer "did the operator touch anything" but "will
-/// the device be in the orientation this job needs". `device_default` is
-/// what [`sheet_orientation`] read off the un-turned
-/// [`printer_caps`], and a `DEVMODE` is built whenever the resolved
-/// orientation differs from it.
+/// So the test is not "did the operator touch anything" but "will the
+/// device be in the orientation this job needs". `device_default` is
+/// what [`sheet_orientation`] read off the un-turned [`printer_caps`],
+/// and a `DEVMODE` is built whenever the resolved orientation differs
+/// from it.
 ///
 /// `DM_DUPLEX` stays gated on the OLD condition, deliberately. A
 /// `DEVMODE` naming `DMDUP_SIMPLEX` overrides a driver whose own default
@@ -2184,53 +2934,70 @@ pub fn spool(
 /// duplex default the operator never asked pdfce to touch. So an
 /// `Auto`-driven turn sets `DM_ORIENTATION` alone, and duplex is
 /// asserted only when some setting actually differs from the default.
+///
+/// # `first_page_pt` is a parameter, not `pages.first().page_pt`
+///
+/// A `DEVMODE` applies to the job, so exactly one page can decide
+/// `Auto` — and the caller has already resolved which, because it had to
+/// pass the same page to [`DeviceGeometry::for_orientation`] to plan
+/// against the right sheet. Re-deriving it from the bitmaps would let
+/// the two answers differ: the imposition paths hand the spooler one
+/// bitmap per SHEET whose `page_pt` is the printable area, not a source
+/// page, so an n-up or booklet job would resolve its `DEVMODE` from a
+/// different input than its layout. Taking it as an argument makes the
+/// two provably the same value.
+///
+/// # Errors
+///
+/// [`PrintError::Configuration`] when a caller-supplied configuration
+/// belongs to a different device. A driver that will NOT report its own
+/// settings is not an error here: the job falls back to a synthesised
+/// base and says so through [`SettingsSource::Synthesised`], because
+/// refusing to print at all would be a regression against the behaviour
+/// that shipped for months.
 #[cfg(windows)]
-fn build_devmode(
-    _printer_wide: &[u16],
+fn job_configuration(
+    printer: &str,
+    supplied: Option<&PrinterConfiguration>,
     settings: DeviceSettings,
     first_page_pt: (f64, f64),
     device_default: Orientation,
-) -> Option<windows::Win32::Graphics::Gdi::DEVMODEW> {
-    use windows::Win32::Graphics::Gdi::{
-        DEVMODEW, DM_DUPLEX, DM_ORIENTATION, DMDUP_HORIZONTAL, DMDUP_SIMPLEX, DMDUP_VERTICAL,
-        DMORIENT_LANDSCAPE, DMORIENT_PORTRAIT,
-    };
+) -> Result<(Option<PrinterConfiguration>, SettingsSource), PrintError> {
     let orientation = resolve_orientation(settings.orientation, first_page_pt);
     let explicit = settings != DeviceSettings::default();
-    // Nothing to say to the driver: no setting differs from the default
-    // AND the device is already in the orientation this job wants.
-    if !explicit && orientation == device_default {
-        return None;
-    }
-    let mut dm = DEVMODEW {
-        dmSize: u16::try_from(std::mem::size_of::<DEVMODEW>()).unwrap_or(0),
-        ..Default::default()
-    };
-
-    dm.Anonymous1.Anonymous1.dmOrientation = match orientation {
-        Orientation::Landscape => DMORIENT_LANDSCAPE as i16,
-        // `Auto` is already resolved above; portrait is the remaining
-        // case and the documented default.
-        Orientation::Auto | Orientation::Portrait => DMORIENT_PORTRAIT as i16,
-    };
-    dm.dmFields |= DM_ORIENTATION;
-
-    if explicit {
-        dm.dmDuplex = match settings.duplex {
-            Duplex::Simplex => DMDUP_SIMPLEX,
-            // Long-edge binding is `VERTICAL` in Win32's vocabulary and
-            // short-edge is `HORIZONTAL`, which reads backwards until you
-            // notice the name describes the FLIP AXIS rather than the edge
-            // the pages are bound on. Getting these the wrong way round
-            // produces a booklet whose alternate pages are upside down, and
-            // nothing catches it before the paper.
-            Duplex::LongEdge => DMDUP_VERTICAL,
-            Duplex::ShortEdge => DMDUP_HORIZONTAL,
-        };
-        dm.dmFields |= DM_DUPLEX;
+    // Nothing to say to the driver: no setting differs from the default,
+    // the device is already in the orientation this job wants, and no
+    // caller-supplied configuration has to be carried.
+    if supplied.is_none() && !explicit && orientation == device_default {
+        return Ok((None, SettingsSource::DeviceDefault));
     }
 
-    Some(dm)
+    let (mut config, source) = match supplied {
+        Some(config) => {
+            config.ensure_device(printer)?;
+            (config.clone(), SettingsSource::CallerSupplied)
+        }
+        None => match printer_configuration(printer) {
+            Ok(config) => (config, SettingsSource::DriverSupplied),
+            // A driver that will not describe itself — a disconnected
+            // network printer is the usual cause — degrades to exactly
+            // what this function did before it learned to ask: a
+            // structure carrying only what pdfce sets. The job still
+            // prints; the caller is told, and tells the operator.
+            Err(_) => (
+                PrinterConfiguration::blank(printer),
+                SettingsSource::Synthesised,
+            ),
+        },
+    };
+
+    config.apply(
+        orientation,
+        settings.paper,
+        settings.pick_tray_by_page_size,
+        explicit.then_some(settings.duplex),
+    );
+    Ok((Some(config), source))
 }
 
 /// Blit one page's pixels onto the current page of `hdc`.
@@ -2332,4 +3099,117 @@ pub fn spool(
     _first_page_pt: (f64, f64),
 ) -> Result<SpoolReport, PrintError> {
     Err(PrintError::Unsupported)
+}
+
+/// The Windows-only half of the settings path, tested WITHOUT a device.
+///
+/// # Why these tests are worth having even though a printer is not
+///
+/// Everything in [`job_configuration`] that decides WHAT to send is
+/// reachable without opening a device: the "nothing to say" short
+/// circuit returns before any Win32 call, and a caller-supplied
+/// configuration is used as-is rather than fetched. Only the
+/// driver-fetch branch needs hardware, and that one is verified
+/// end-to-end against a real device instead, through
+/// `pdfce-cli print --to-file`.
+///
+/// The alternative — a test that names a printer and skips when it is
+/// absent — reports success while testing nothing, which is the failure
+/// mode this project has caught repeatedly.
+#[cfg(all(test, windows))]
+mod windows_settings_tests {
+    use super::{
+        DMBIN_FORMSOURCE_VALUE, DeviceSettings, Orientation, PaperSelection, PrintError,
+        PrinterConfiguration, SettingsSource, job_configuration,
+    };
+
+    /// A4 portrait, in points.
+    const A4: (f64, f64) = (595.0, 842.0);
+    /// A4 landscape.
+    const A4_LANDSCAPE: (f64, f64) = (842.0, 595.0);
+
+    /// The cheap path: nothing differs, so no `DEVMODE` is built and no
+    /// driver is consulted. Reached with a printer name that does not
+    /// exist, which PROVES no device call happened.
+    #[test]
+    fn a_job_that_needs_nothing_sends_no_devmode_and_opens_no_device() {
+        let (config, source) = job_configuration(
+            "there is no printer with this name",
+            None,
+            DeviceSettings::default(),
+            A4,
+            Orientation::Portrait,
+        )
+        .expect("the short circuit must not consult a device");
+        assert!(config.is_none());
+        assert_eq!(source, SettingsSource::DeviceDefault);
+    }
+
+    /// A caller-supplied configuration is amended, never replaced, and
+    /// is reported as the caller's. Also reached with a nonexistent
+    /// printer name: a supplied configuration means no fetch.
+    #[test]
+    fn a_caller_supplied_configuration_is_amended_and_reported_as_such() {
+        let base = PrinterConfiguration::blank("phantom");
+        let settings = DeviceSettings {
+            pick_tray_by_page_size: true,
+            ..DeviceSettings::default()
+        };
+        let (config, source) = job_configuration(
+            "phantom",
+            Some(&base),
+            settings,
+            A4_LANDSCAPE,
+            Orientation::Portrait,
+        )
+        .expect("a supplied configuration must not consult a device");
+        assert_eq!(source, SettingsSource::CallerSupplied);
+        let summary = config.expect("a configuration was supplied").summary();
+        assert_eq!(summary.orientation, Some(Orientation::Landscape));
+        assert!(summary.picks_tray_by_size);
+    }
+
+    /// A configuration from a different device is refused rather than
+    /// sent: its private tail is another driver's private format.
+    #[test]
+    fn a_configuration_from_another_device_is_refused() {
+        let foreign = PrinterConfiguration::blank("some other printer");
+        let err = job_configuration(
+            "phantom",
+            Some(&foreign),
+            DeviceSettings::default(),
+            A4,
+            Orientation::Portrait,
+        )
+        .expect_err("a foreign configuration must be refused");
+        assert!(matches!(err, PrintError::Configuration(_)));
+    }
+
+    /// The paper selection reaches the structure, and asking for paper
+    /// is enough on its own to make a job "explicit".
+    #[test]
+    fn selecting_paper_builds_a_devmode_even_at_otherwise_default_settings() {
+        let base = PrinterConfiguration::blank("phantom");
+        let settings = DeviceSettings {
+            paper: PaperSelection::Form(9),
+            ..DeviceSettings::default()
+        };
+        let (config, _) =
+            job_configuration("phantom", Some(&base), settings, A4, Orientation::Portrait)
+                .expect("no device is consulted");
+        assert_eq!(
+            config.expect("a configuration").summary().paper_form_id,
+            Some(9)
+        );
+    }
+
+    /// `DMBIN_FORMSOURCE` is written into a signed member and compared
+    /// against an unsigned capability array, so it exists twice in this
+    /// crate. The `devmode` module asserts its copy against the real
+    /// constant; this asserts the other one against the same source.
+    #[test]
+    fn dmbin_formsource_agrees_across_its_two_representations() {
+        use windows::Win32::Graphics::Gdi::DMBIN_FORMSOURCE;
+        assert_eq!(u32::from(DMBIN_FORMSOURCE_VALUE), DMBIN_FORMSOURCE);
+    }
 }

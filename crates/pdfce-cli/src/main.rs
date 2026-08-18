@@ -8921,6 +8921,11 @@ fn cmd_print(
         orientation: orientation.to_orientation(),
         duplex: duplex.to_duplex(),
         pick_tray_by_page_size: pick_tray,
+        // Paper selection reaches this from `--paper` / `--paper-size`
+        // in the CLI surface that follows this change; until then the
+        // job is planned against whatever sheet the device is set to,
+        // which is what shipped.
+        paper: pdfce_print::PaperSelection::DeviceDefault,
     };
     let mode = match scale_percent {
         Some(pct) => pdfce_print::ScaleMode::Custom(f64::from(pct) / 100.0),
