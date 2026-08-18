@@ -8,6 +8,45 @@ shipped, this says what to do next. Overwrite it once acted on.
 
 ---
 
+## ★★★ SUPERSEDING HEADLINE (2026-08-18, later the same day): ⇢ `docs/compositor-plan.md`
+
+The headline below is still correct and still the sourcing record — but it is
+**one third of the actual build**. A cell-by-cell probe of the five
+transparency-group patches (`tools/ghent-cell-probe.py`, new) found that
+**16 of the 18 failures are the same missing thing**: pdfce has no compositor
+of its own, and delegates every blend to `tiny_skia` (8-bit premultiplied
+sRGB, transparent-initialised, single alpha). Clause 11 needs the group's
+colour space, a non-transparent initial backdrop, backdrop removal, and
+per-colorant planes — **all properties of the buffer, none reachable from a
+call site.**
+
+Two findings that change what to do next:
+
+- **`1_GWG160` fails exactly 3 of 16 cells: `Hue`, `Saturation`, `Color` —
+  and `Luminosity` PASSES.** Those are the nonseparable modes whose K comes
+  from the **backdrop**; `Luminosity`'s comes from the **source**. §11.3.5.3
+  is a one-bit discriminator and it fell on the correct side.
+- **`1_GWG161` / `3_GWG161` / `1_GWG162` are not a knockout bug.** pdfce
+  buffers a group whenever the outer state is non-neutral, and a transparent
+  buffer is **isolated** semantics — so every Ghent transparency cell (they
+  all set `/BM` at the `Do`) silently turns a **non-isolated group into an
+  isolated one**, and every interior blend composites against nothing. The
+  probe sees the X come out as the raw source primary. 14, 15 and 7 cells.
+
+**Staging, so each step ships a number:** Stage A = own compositor, RGB only
+(non-isolated init + §11.4.4 backdrop removal + §11.4.8 two-buffer knockout +
+soft mask on the group **result**) ≈ 7 patches. Stage B = colorant planes
+(§11.3.4 complement, §11.3.5.3 CMYK detour, Table 149 which is already written
+and tested) ≈ 9 patches. **Do not skip A.**
+
+**Also measured and now CLOSED: §2 item 1 below ("the trap detector is
+probably over-counting") is FALSE.** Every trap still firing on the patches
+GWG pre-declares tolerant is at or near **maximal** contrast — a white X on
+green, a black X on cyan. No recalibration consistent with GWG's criterion
+moves any verdict. Table in `compositor-plan.md` §7.
+
+---
+
 ## ★★ THE HEADLINE: THE OVERPRINT WALL HAS A DEFINITIVE, SOURCED ANSWER — BUILD THE N-CHANNEL BUFFER
 
 Ghent went **22 → 25 of 51** this session by implementing
