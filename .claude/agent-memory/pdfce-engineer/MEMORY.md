@@ -34,3 +34,5 @@
 - [No provisional marking](feedback_no_provisional_marking.md) — Ken 2026-08-13: inferred content renders NORMALLY, Save commits, disclosure goes off-canvas; marking = a second render path that drifts
 - [Wrapped string literals lose backslashes](feedback_wrapped_string_literals_lose_backslashes.md) — patching them via heredoc ships error messages with 10-space gaps; grep for it, nothing else catches it
 - [External LLM research gets assessed](feedback_external_llm_research_gets_assessed.md) — Ken pastes Gemini/etc research expecting a graded verdict vs pdfce docs; two of four crate picks violated hard constraints
+- [iccce boundary](project_iccce_boundary.md) — sibling MIT colour project owns ALL colour conversion (decision 064); never propose a CMM crate; check its FeatureRequests channel
+- [Read ARCHITECTURE every session](feedback_read_architecture_every_session.md) — §12 decision log holds cross-project boundaries no gate can catch; a subagent cannot check a constraint the dispatch omits
