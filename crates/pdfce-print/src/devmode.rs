@@ -208,6 +208,10 @@ const DMDUP_HORIZONTAL: i16 = 3;
 /// matches the sheet.
 const DMBIN_FORMSOURCE: i16 = 15;
 /// `DMPAPER_USER` — "the size is in `dmPaperWidth`/`dmPaperLength`".
+// Used by `#[cfg(windows)]` spooling and by tests on every platform;
+// see the module note on why the lint is relaxed rather than the item
+// gated.
+#[cfg_attr(not(windows), allow(dead_code))]
 const DMPAPER_USER: i16 = 256;
 
 /// The size of the public `DEVMODEW` portion this Windows defines.
@@ -658,6 +662,10 @@ impl PrinterConfiguration {
     /// default the operator never asked pdfce to touch. See
     /// `build_devmode`'s own notes and
     /// `D:/dev/rag/rust/a_disturb_nothing_by_default_guard_can_silently_disable_the_default_behaviour_it_is_guarding.md`.
+    // Used by `#[cfg(windows)]` spooling and by tests on every platform;
+    // see the module note on why the lint is relaxed rather than the item
+    // gated.
+    #[cfg_attr(not(windows), allow(dead_code))]
     pub(crate) fn apply(
         &mut self,
         orientation: Orientation,
@@ -725,6 +733,10 @@ impl PrinterConfiguration {
     /// calls it rather than repeating it. Two copies of the
     /// clear-the-other-representation logic below would be two places to
     /// get the `DM_FORMNAME` trap wrong.
+    // Used by `#[cfg(windows)]` spooling and by tests on every platform;
+    // see the module note on why the lint is relaxed rather than the item
+    // gated.
+    #[cfg_attr(not(windows), allow(dead_code))]
     pub(crate) fn apply_paper(&mut self, paper: PaperSelection) {
         let mut fields = self.fields();
         match paper {
@@ -796,6 +808,10 @@ impl PrinterConfiguration {
     }
 
     /// Set `dmFields`.
+    // Used by `#[cfg(windows)]` spooling and by tests on every platform;
+    // see the module note on why the lint is relaxed rather than the item
+    // gated.
+    #[cfg_attr(not(windows), allow(dead_code))]
     fn set_fields(&mut self, value: u32) {
         write_u32(&mut self.bytes, offset::FIELDS, value);
     }
@@ -806,6 +822,10 @@ impl PrinterConfiguration {
     }
 
     /// Write a signed 16-bit member.
+    // Used by `#[cfg(windows)]` spooling and by tests on every platform;
+    // see the module note on why the lint is relaxed rather than the item
+    // gated.
+    #[cfg_attr(not(windows), allow(dead_code))]
     fn set_i16(&mut self, at: usize, value: i16) {
         write_u16(&mut self.bytes, at, value as u16);
     }
@@ -925,6 +945,10 @@ fn write_u16(bytes: &mut [u8], at: usize, value: u16) {
 }
 
 /// Write a little-endian `u32`.
+// Used by `#[cfg(windows)]` spooling and by tests on every platform;
+// see the module note on why the lint is relaxed rather than the item
+// gated.
+#[cfg_attr(not(windows), allow(dead_code))]
 fn write_u32(bytes: &mut [u8], at: usize, value: u32) {
     if let Some(slot) = bytes.get_mut(at..at + 4) {
         slot.copy_from_slice(&value.to_le_bytes());

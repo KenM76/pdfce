@@ -8949,6 +8949,10 @@ enum BindingArg {
 
 impl BindingArg {
     /// The imposition type this maps to.
+    // Consumed only by the `#[cfg(windows)]` `cmd_print`; the arg type
+    // itself is parsed on every platform so `--help` is identical
+    // everywhere, which is why the mapping is relaxed rather than gated.
+    #[cfg_attr(not(windows), allow(dead_code))]
     const fn to_binding(self) -> pdfce_print::imposition::Binding {
         match self {
             Self::Left => pdfce_print::imposition::Binding::Left,
@@ -8972,6 +8976,10 @@ enum BookletSubsetArg {
 
 impl BookletSubsetArg {
     /// The imposition type this maps to.
+    // Consumed only by the `#[cfg(windows)]` `cmd_print`; the arg type
+    // itself is parsed on every platform so `--help` is identical
+    // everywhere, which is why the mapping is relaxed rather than gated.
+    #[cfg_attr(not(windows), allow(dead_code))]
     const fn to_subset(self) -> pdfce_print::imposition::BookletSubset {
         match self {
             Self::BothSides => pdfce_print::imposition::BookletSubset::BothSides,
@@ -8999,6 +9007,10 @@ enum CommentsArg {
 
 impl CommentsArg {
     /// The render type this maps to.
+    // Consumed only by the `#[cfg(windows)]` `cmd_print`; the arg type
+    // itself is parsed on every platform so `--help` is identical
+    // everywhere, which is why the mapping is relaxed rather than gated.
+    #[cfg_attr(not(windows), allow(dead_code))]
     const fn to_scope(self) -> pdfce_render::AnnotationScope {
         match self {
             Self::Document => pdfce_render::AnnotationScope::Document,
@@ -9022,6 +9034,10 @@ enum OrientationArg {
 
 impl OrientationArg {
     /// The core type this maps to.
+    // Consumed only by the `#[cfg(windows)]` `cmd_print`; the arg type
+    // itself is parsed on every platform so `--help` is identical
+    // everywhere, which is why the mapping is relaxed rather than gated.
+    #[cfg_attr(not(windows), allow(dead_code))]
     const fn to_orientation(self) -> pdfce_print::Orientation {
         match self {
             Self::Auto => pdfce_print::Orientation::Auto,
@@ -9044,6 +9060,10 @@ enum DuplexArg {
 
 impl DuplexArg {
     /// The core type this maps to.
+    // Consumed only by the `#[cfg(windows)]` `cmd_print`; the arg type
+    // itself is parsed on every platform so `--help` is identical
+    // everywhere, which is why the mapping is relaxed rather than gated.
+    #[cfg_attr(not(windows), allow(dead_code))]
     const fn to_duplex(self) -> pdfce_print::Duplex {
         match self {
             Self::Simplex => pdfce_print::Duplex::Simplex,
@@ -9066,6 +9086,10 @@ enum SubsetArg {
 
 impl SubsetArg {
     /// The core type this maps to.
+    // Consumed only by the `#[cfg(windows)]` `cmd_print`; the arg type
+    // itself is parsed on every platform so `--help` is identical
+    // everywhere, which is why the mapping is relaxed rather than gated.
+    #[cfg_attr(not(windows), allow(dead_code))]
     const fn to_subset(self) -> pdfce_print::PageSubset {
         match self {
             Self::All => pdfce_print::PageSubset::All,
@@ -9088,6 +9112,10 @@ enum PrintScaleArg {
 }
 
 impl PrintScaleArg {
+    // Consumed only by the `#[cfg(windows)]` `cmd_print`; the arg type
+    // itself is parsed on every platform so `--help` is identical
+    // everywhere, which is why the mapping is relaxed rather than gated.
+    #[cfg_attr(not(windows), allow(dead_code))]
     fn to_mode(self) -> pdfce_print::ScaleMode {
         match self {
             Self::Fit => pdfce_print::ScaleMode::Fit,
@@ -10149,6 +10177,7 @@ fn cmd_print(
 
 /// The non-Windows arm — reports rather than vanishing, for the reason
 /// given on `cmd_list_printers`.
+#[allow(clippy::too_many_arguments)]
 #[cfg(not(windows))]
 fn cmd_print_preview(
     _input: &Path,
