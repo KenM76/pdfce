@@ -96,6 +96,163 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★★★ Pass 85.4d — `b15d7ff` — correction to `Pass 85.4c` — **A GROUP BUFFER STARTS TRANSPARENT, WHICH IS ISOLATED SEMANTICS — MOST GROUPS ARE NON-ISOLATED BY DEFAULT AND `85.4c` BUFFERED THEM ANYWAY, GETTING THE BACKDROP WRONG IN THE OPPOSITE DIRECTION FROM THE FLATTENING IT REPLACED — FOUND BY ASKING WHY A PERFORMANCE NUMBER WAS WRONG, NOT BY LOOKING FOR A BUG** — decision 068 amended, not superseded; `85.4c`'s test-count flag resolved — filed 2026-08-17 (hundred-and-sixty-first filing)
+
+**Sourcing.** No shell tool this dispatch (hard rule 8). Every figure
+below — the 878 ms/230 ms/~600 ms timings, the 142-buffer count, the
+300-file corpus buckets, the test counts, and the gate results — is
+**relayed** from the dispatching engineer's own run, not independently
+re-verified here.
+
+**What was wrong.** `Pass 85.4c` gave every transparency group its own
+offscreen buffer unconditionally. A fresh buffer starts fully
+TRANSPARENT — that is ISOLATED semantics (§11.4.7) — but `/I` defaults
+to **FALSE**, so most groups in real PDFs are **non-isolated**, and a
+non-isolated group's contents are specified to blend against the
+**page's own accumulated backdrop**, exactly what painting the contents
+inline (no buffer at all) already does correctly. `85.4c` bought its
+187→0 fix on `groups_flattened` by making every group behave as though
+`/I true`, which is wrong for the majority case in the **opposite
+direction** from the flattening bug it replaced — flattening skipped
+compositing entirely; unconditional buffering compositing against the
+wrong backdrop. Both are wrong; neither is a smaller wrong than the
+other in the general case.
+
+**How it was found.** Not by testing isolated/non-isolated behaviour —
+by measuring the buffer allocation's own cost. Ghent page 2 measured
+**878 ms** buffered (`85.4c`) against a **230 ms** pre-`85.4c`
+(flattened) baseline. The commit's own subject line names the
+triggering question: *"why 142 buffers cost 600ms"* — 142 being the
+number of groups buffered on that page under the old unconditional
+code. **Per-item form, per hard rule 10a** (division performed at
+filing time, not asserted by the dispatch): 878 ms − 230 ms = 648 ms of
+buffering overhead over 142 buffers ≈ **4.6 ms/buffer** average. Asking
+why that per-buffer cost was what it was — rather than simply accepting
+it as the price of correctness — is what surfaced the backdrop defect;
+the investigation was aimed at a number, not a bug.
+
+**What shipped.** A group buffer is now taken **if and only if**:
+- the outer blend mode (in force at the `Do` invoking the group) is
+  non-Normal, **or** the outer constant alpha is < 1 — the group's
+  RESULT must exist as a separate value before §11.4.5's composite step
+  can apply either to it; **or**
+- the group is itself **ISOLATED** (`/I true`) — its contents must see
+  a transparent backdrop, which painting inline cannot give them.
+
+Otherwise the group's contents paint **inline**, with no buffer, no
+coordinate change, and no correctness loss: for a non-isolated group
+under an outer state that is already `Normal`/alpha 1.0, painting
+inline against the page's accumulated backdrop **is** §11.4.5's answer,
+not an approximation of it. The counter accounting follows the same
+logic — a non-isolated group composited via the inline fast path counts
+as `groups_composited`, **not** `groups_flattened`, because that IS the
+correct §11.4.5 result for it, reached by a cheaper route.
+`groups_flattened` is now reachable only on allocation failure, exactly
+as `85.4c` originally intended before the unconditional-buffering defect
+made the intent wrong.
+
+**★ One fixture proves both halves of the condition, not just one.** A
+page paints solid blue; a group paints solid red with `/BM /Screen` set
+INSIDE the group (not at the `Do` invoking it):
+- `/I true` (isolated) → the group buffers regardless of outer state;
+  its contents see a transparent backdrop; red has nothing to Screen
+  against and the group's own result stays **RED**.
+- `/I false` (default, non-isolated) → the group takes the inline fast
+  path; red Screens directly against the page's blue and the result is
+  **MAGENTA**.
+
+Two `/I` values, one fixture, and the buffering condition cannot be
+broken in either direction (buffer-when-should-inline or
+inline-when-should-buffer) without exactly one of the two assertions
+failing. **Sabotage run:** forcing the buffer unconditionally (reverting
+to `85.4c`'s own shipped behaviour) turns the non-isolated case **RED**
+instead of magenta — the precise wrong answer the diagnosis predicted,
+confirming this test would have caught `85.4c`'s defect had it existed
+before that commit rather than after it.
+
+**Verification.**
+- Ghent page 2: **878 ms → ~600 ms** (baseline pre-`85.4c` was 230 ms;
+  the residual gap over baseline is the buffers still legitimately
+  needed — non-Normal/reduced-alpha outer state or genuine isolation).
+  Its GWG 16.0 panel (the fixture the whole `85.4c` fix was measured
+  against) stays **CLEAN** — the condition change does not regress the
+  case it was built to fix.
+- **300-file corpus sample: buckets IDENTICAL for the THIRD consecutive
+  measurement** — below-band 71, disclosed-gap 24, disclosed-gap-small
+  99, unexplained 8, reference-divergence 1 (sum 203 of 300). No
+  regression against either the immediately-prior run or this session's
+  own starting baseline.
+- **3,780 → 3,781 tests, 0 failures** (+1 net, this commit's own
+  addition — the isolated/non-isolated fixture above).
+- fmt/clippy and all named scripted gates (`check-fmt-excluded`,
+  `check-ui-strings`, `check-shipped-assets`, `check-ledger-numbers`)
+  clean. `cargo tree -p pdfce-core -p pdfce-render`: no GUI dependency —
+  invariant unaffected, this Pass touches `pdfce-render` only.
+
+**★ `Pass 85.4c`'s own test-count flag, RESOLVED, not merely restated.**
+That entry flagged "3,778 → 3,780 tests (+2 net)" against the
+dispatch's separate claim of "four tests," unreconciled for lack of a
+shell. Resolution, relayed this dispatch: **four tests were WRITTEN**,
+but the **net was +2** because two of the four **replaced** existing
+tests rather than adding to the suite —
+`a_transparency_group_is_counted_as_flattened` became
+`a_transparency_group_is_composited_as_a_unit`, and the isolated/
+knockout test was rewritten in place. Both figures were correct answers
+to different questions (tests written vs. net suite growth); the
+arithmetic needed no new measurement, only the breakdown above. Flag
+closed.
+
+**Decisions.** `ARCHITECTURE.md` §12 decision **068 AMENDED IN PLACE,
+NOT SUPERSEDED** — the page-sized-buffer and state-reset-at-entry halves
+are unchanged and still correct; a third sub-decision is added stating
+the buffering CONDITION derived by this Pass, because the decision as
+originally written was silent on when a buffer is taken and so read (and
+was implemented) as "always." Full text: `ARCHITECTURE.md` §12, decision
+068's own entry, amendment dated 2026-08-17. `ARCHITECTURE.md` §3's
+`pdfce-render\interpret.rs` body entry updated in the same filing so the
+living-truth section does not still describe unconditional buffering.
+
+**★ A pattern worth naming, not yet a rule — the operator's own framing,
+carried forward rather than decided unilaterally.** This is the
+**second** time in one session a PERFORMANCE question, asked about a
+measurement taken for an unrelated reason, surfaced a CORRECTNESS bug
+rather than an optimisation opportunity: instance 1 was `Pass 90.1`
+(`bd244d9`) — 76 applied blend modes changing only 0.37% of Ghent
+page 2's pixels led to finding `BlendMode::SourceOver` hard-coded on the
+image-paint path; instance 2 is this entry — a 4.6 ms/buffer average
+cost led to finding the isolated/non-isolated backdrop defect above.
+Both were found by asking "why is this number not what I expected?"
+about a measurement taken for a different reason than bug-hunting. This
+project's own two-occurrence-plus-review bar (see decision-log entry for
+`R192`'s sixth instance, this same day) is a bar for **promotion of an
+existing rule**, not for minting a new one from zero — two instances of
+a genuinely new shape is this project's stated bar for a **proposal**,
+not a mint (operator, this dispatch, verbatim: *"your call, and I am
+genuinely unsure"*). Judgement made: **flagged here as a candidate, not
+minted as a standing rule this filing.** Watch for a third instance; if
+one lands, the promotion review decision-entry 067/`R192` precedent
+above is the template for how to phrase it.
+
+**`docs/FEATURES.md` — no change.** The *Implemented* row for
+transparency-group compositing (Colour, transparency & rendering
+fidelity section) never claimed unconditional buffering — it describes
+outcomes (page-sized buffer, state reset, Ghent GWG 16.0 clean,
+`groups_flattened` 187→0) that are all still true after this correction.
+The capability did not change; its correctness for the non-isolated
+majority case did, and that is a `ROADMAP.md`/`ARCHITECTURE.md` fact,
+not a `FEATURES.md` one.
+
+**Ledger effects.** Pass family: **85** (sub-Pass `85.4d` — correction
+of `85.4c`, same family; no new family, next free stays **92**).
+Standing rules: **no new rule minted** — the performance-surfaces-
+correctness pattern is flagged as a candidate at two instances, not
+proposed as a rule this filing; ceiling stays **R195**, next free
+**R196**. Decisions: **none newly minted** — decision **068 amended in
+place**; ceiling stays **068**, next free **069**. `SESSION_LOG.md`
+filings move **160 → 161**, which is this one.
+
+---
+
 ### ★★★★★ Pass 85.4c — `0d6f4ac` — **THE GHOST CROSSES ARE GONE: TRANSPARENCY GROUPS NOW COMPOSITE THROUGH A REAL OFFSCREEN BUFFER — THIS INVENTORY'S SINGLE LARGEST REMAINING GAP CLOSES FOR THE NON-KNOCKOUT CASE, DECISION 068 MINTED, `R180` GAINS A SIXTH INSTANCE ON A NEW KIND OF ARTEFACT** — filed 2026-08-17 (hundred-and-sixtieth filing)
 
 **Sourcing.** No shell tool this dispatch (hard rule 8). Test counts,
@@ -46316,7 +46473,7 @@ and deferred-op counts on that file — not estimated.**
 | ~~`85.3`~~ | closes **`Pass 1.1` item 6.4** — `/Separation`/`/DeviceN`/`Lab` IMAGE colour spaces | **10 images missing page 1, 6 page 4, 2 page 5** — stderr: "image colour space /Separation is not supported", "/DeviceN is not supported" | §8.6.6.4/§8.6.6.5; vector fills already work (`separation_to_rgb`/`device_n_to_rgb` are wired to the §7.10 evaluator) — this is the per-pixel image path only — **SHIPPED 2026-08-17, `1e7a0be` (`CalGray`/`CalRGB` came free from the same delegation). See the `Pass 85.3` Shipped entry, top of *Shipped*.** |
 | ~~`85.4a`~~ | blend modes — `ExtGState /BM`, eleven separable modes | `pdfce-render/src/interpret.rs` — **SHIPPED 2026-08-17, `Pass 90.1`, `bd244d9`.** Ghent page 2: 60 of 76 `/BM` invocations now composite exactly. Required a page-backdrop model correction (opaque-white-fill → isolated group over transparent backdrop, §11.4.7) — see the `Pass 90.1` Shipped entry. | §11.3.5, Table 136/137 — **SHIPPED**, see the `Pass 90.1` Shipped entry |
 | `85.4b` | non-separable blend modes — Hue/Saturation/Color/Luminosity | Ghent page 2: 16 of 76 `/BM` invocations (4 modes × 4 swatches) — **REFUSED, not mapped**: tiny-skia 0.11.4 is measured wrong against both ISO 32000-1 and W3C Compositing-1 (up to 107/255 error) — `D:\dev\rag\rust\tiny_skia_0.11_non_separable_blend_modes_wrong_by_up_to_107_255.md`. Not closeable inside pdfce without an upstream tiny-skia fix or a from-scratch implementation of the four HSL formulas. | §11.3.5.3 — refused, see `ARCHITECTURE.md` §12 decision 066 |
-| ~~`85.4c`~~ | transparency GROUPS — isolated/knockout offscreen compositing, `/SMask` soft-mask groups | `pdfce-render/src/interpret.rs` — **non-knockout compositing SHIPPED 2026-08-17, `0d6f4ac`.** A group now renders into its own page-sized offscreen buffer with contents-state reset to initial, composited as a unit with the outer blend mode/alpha (§11.4.5; decision 068). Ghent GWG 16.0 (non-knockout) panel renders CLEAN; `groups_flattened` 187 → 0. **Remaining, NOT closed by this Pass:** knockout groups (`/K true`, §11.4.6) still approximated as ordinary groups — `groups_knockout_approx` (47) names the approximation, GWG 16.1 still shows its crosses; `/SMask` soft-mask groups (36 occurrences, all pages) still entirely unread. Both blocked on the `pdfce-spec-librarian` dispatch for §11.4.6/§11.5.2–.3, in flight — see the `Pass 85.4c` Shipped entry, top of *Shipped*. **Now this inventory's remaining top-priority gap** (soft masks + knockout), ahead of `85.1` (mesh shadings). | clause 11.4–11.6.4 (groups) + §11.6.5.3-adjacent (soft-mask groups); the per-IMAGE `/SMask`/`/Mask` shipped in `Pass 48.1` is unrelated — do not conflate the two `/SMask` meanings when scoping |
+| ~~`85.4c`~~ | transparency GROUPS — isolated/knockout offscreen compositing, `/SMask` soft-mask groups | `pdfce-render/src/interpret.rs` — **non-knockout compositing SHIPPED 2026-08-17, `0d6f4ac`.** A group now renders into its own page-sized offscreen buffer with contents-state reset to initial, composited as a unit with the outer blend mode/alpha (§11.4.5; decision 068). Ghent GWG 16.0 (non-knockout) panel renders CLEAN; `groups_flattened` 187 → 0. **Remaining, NOT closed by this Pass:** knockout groups (`/K true`, §11.4.6) still approximated as ordinary groups — `groups_knockout_approx` (47) names the approximation, GWG 16.1 still shows its crosses; `/SMask` soft-mask groups (36 occurrences, all pages) still entirely unread. Both blocked on the `pdfce-spec-librarian` dispatch for §11.4.6/§11.5.2–.3, in flight — see the `Pass 85.4c` Shipped entry, top of *Shipped*. **Now this inventory's remaining top-priority gap** (soft masks + knockout), ahead of `85.1` (mesh shadings). **★ `Pass 85.4d` (`b15d7ff`, same day) CORRECTED `85.4c`'s buffering to be CONDITIONAL** (outer non-Normal/alpha<1 OR isolated, else paint inline) — unconditional buffering had given non-isolated groups (the `/I`-default) a transparent backdrop instead of the page's own, wrong in the opposite direction from the flattening bug `85.4c` fixed. Ghent GWG 16.0 stays clean; the row above is otherwise unaffected. See the `Pass 85.4d` Shipped entry, top of *Shipped*, and decision 068's amendment. | clause 11.4–11.6.4 (groups) + §11.6.5.3-adjacent (soft-mask groups); the per-IMAGE `/SMask`/`/Mask` shipped in `Pass 48.1` is unrelated — do not conflate the two `/SMask` meanings when scoping |
 | `85.5` | overprint compositing | patches GWG 1.0, 1.1, 2.0, 3.0, 3.1, 4.0.1, 4.1, 12.0, 19.0, 19.1, 19.2 — most of pages 1 and 4 | **§8.6.7 says "if overprinting is not supported, the value of the overprint parameter shall be ignored" — pdfce is CONFORMANT TODAY.** Implementing it means compositing into a CMYK buffer; lowest priority, architectural, and partly gated on `iccce` (see `Backlog`, "Colour management (`iccce` coordination)", decision 064) |
 
 **Suggested build order — ★ RE-DERIVED 2026-08-17 (`Pass 90.0`,

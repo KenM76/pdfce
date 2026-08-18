@@ -1129,43 +1129,74 @@ D:\Dev\pdfce\
                                    XObjects (previously not at all).
                                    **Transparency GROUP compositing
                                    (`Pass 85.4c`, `0d6f4ac`, 2026-08-17;
-                                   §12 decision 068):** a group now
-                                   renders into its OWN page-sized
-                                   offscreen buffer, with the graphics
-                                   state RESET to initial (`Normal`
-                                   blend, alpha 1.0) for the group's
-                                   contents — the outer blend mode/
-                                   constant alpha/soft mask belong to
-                                   the group's RESULT once composited
-                                   (§11.4.5), not to the objects inside
-                                   it — then composites as a unit via
-                                   `Pixmap::draw_pixmap` carrying the
-                                   outer blend mode and alpha.
-                                   **Page-sized rather than BBox-sized,
-                                   deliberately** (decision 068): the
-                                   contents draw under the SAME CTM as
-                                   the page, so no per-group coordinate
-                                   translation is threaded through paint
-                                   sites or the clip mask; cost is ~4
-                                   bytes/pixel/nesting-level, and a
+                                   §12 decision 068):** a group renders
+                                   into its OWN page-sized offscreen
+                                   buffer, with the graphics state RESET
+                                   to initial (`Normal` blend, alpha 1.0)
+                                   for the group's contents — the outer
+                                   blend mode/constant alpha/soft mask
+                                   belong to the group's RESULT once
+                                   composited (§11.4.5), not to the
+                                   objects inside it — then composites as
+                                   a unit via `Pixmap::draw_pixmap`
+                                   carrying the outer blend mode and
+                                   alpha. **★ CORRECTED same day (`Pass
+                                   85.4d`, `b15d7ff`; decision 068
+                                   amended, sub-decision 3): the buffer
+                                   is NOT taken unconditionally.** A
+                                   fresh buffer starts fully transparent
+                                   — ISOLATED semantics (§11.4.7) — but
+                                   `/I` defaults FALSE, so most groups
+                                   are non-isolated and must blend
+                                   against the PAGE's accumulated
+                                   backdrop, which unconditional
+                                   buffering got wrong (878 ms measured
+                                   on Ghent page 2 vs. a 230 ms
+                                   pre-`85.4c` baseline, 142 buffers,
+                                   found by asking why the per-buffer
+                                   cost was what it was). The buffer is
+                                   now taken only when the outer blend
+                                   mode is non-Normal or outer alpha < 1
+                                   (the composited RESULT must exist
+                                   before the outer state can apply to
+                                   it), or the group is itself isolated
+                                   (`/I true`); otherwise the group's
+                                   contents paint INLINE, which for a
+                                   non-isolated group under neutral outer
+                                   state is §11.4.5's exact answer, not
+                                   an approximation of it, reached
+                                   cheaper. **Page-sized rather than
+                                   BBox-sized, deliberately** (decision
+                                   068): the contents draw under the SAME
+                                   CTM as the page, so no per-group
+                                   coordinate translation is threaded
+                                   through paint sites or the clip mask;
+                                   cost is ~4 bytes/pixel/nesting-level
+                                   for groups that DO buffer, and a
                                    misalignment bug would read as a
-                                   visible rendering artefact rather
-                                   than fail silently. `groups_composited`
-                                   and `groups_knockout_approx` are
-                                   counted AND PRINTED on `render-page`'s
-                                   stable line; `groups_flattened` now
-                                   survives only as the
-                                   allocation-failure fallback. Ghent
-                                   GWG 16.0 (non-knockout blend-mode
-                                   panel) renders CLEAN on this fix;
-                                   `groups_flattened` on that file
-                                   187 → 0. **NOT correctly composited:
-                                   `/K` knockout groups** (§11.4.6 —
-                                   each element should composite against
-                                   the group's INITIAL backdrop, not the
-                                   accumulated result; pdfce composites
-                                   them as ordinary groups today,
-                                   approximated and counted via
+                                   visible rendering artefact rather than
+                                   fail silently. `groups_composited` and
+                                   `groups_knockout_approx` are counted
+                                   AND PRINTED on `render-page`'s stable
+                                   line; `groups_flattened` survives only
+                                   as the allocation-failure fallback — a
+                                   non-isolated group taking the inline
+                                   fast path under neutral outer state
+                                   counts as `groups_composited`, because
+                                   that IS §11.4.5's result for it, not a
+                                   flattening approximation. Ghent GWG
+                                   16.0 (non-knockout blend-mode panel)
+                                   renders CLEAN on both the original fix
+                                   and the correction; `groups_flattened`
+                                   on that file 187 → 0, unaffected by
+                                   the condition correction. **NOT
+                                   correctly composited: `/K` knockout
+                                   groups** (§11.4.6 — each element
+                                   should composite against the group's
+                                   INITIAL backdrop, not the accumulated
+                                   result; pdfce composites them as
+                                   ordinary groups today, approximated
+                                   and counted via
                                    `groups_knockout_approx` (47) rather
                                    than silently wrong — GWG 16.1 still
                                    shows its crosses, matching the
@@ -21877,3 +21908,48 @@ entry for the implementation description.
 decision, not a finding about pdfce's own tooling or gates — same
 disposition as decisions 063/064/066. **Ceiling moves 067 → 068; next
 free 069.**
+
+> **★ AMENDED 2026-08-17 (`Pass 85.4d`, `b15d7ff`, hundred-and-sixty-first
+> filing) — A THIRD SUB-DECISION IS ADDED. Sub-decisions 1 and 2 above
+> are UNCHANGED and still correct; this amendment states the buffering
+> CONDITION this decision was silent on, which is why `Pass 85.4c`'s own
+> implementation read (and shipped) as "always buffer."**
+>
+> **3. The buffer is taken if and only if the outer state at `Do`
+> requires it, or the group is isolated — never unconditionally.** A
+> fresh offscreen buffer starts fully TRANSPARENT, which is exactly
+> ISOLATED-group semantics (§11.4.7). `/I` defaults to **FALSE**, so
+> most real-world groups are non-isolated, and a non-isolated group's
+> contents are specified to blend against the **page's own accumulated
+> backdrop** — precisely what painting the contents inline, with no
+> buffer at all, already gives for free. Buffering every group
+> unconditionally (`Pass 85.4c`'s original shipped behaviour) therefore
+> gave every group a transparent backdrop regardless of `/I`, which is
+> correct only for the isolated minority and wrong, in the opposite
+> direction from the flattening bug this decision's own sub-decisions 1
+> and 2 replaced, for the non-isolated majority.
+>
+> The condition: a buffer is allocated only when (a) the outer blend
+> mode in force at the `Do` invoking the group is non-Normal, or the
+> outer constant alpha is < 1 — the group's composited RESULT must exist
+> as a distinct value before §11.4.5's outer-state application can act
+> on it — **or** (b) the group is itself isolated (`/I true`) — its
+> contents require a transparent backdrop no inline paint can supply.
+> Otherwise the group paints inline: for a non-isolated group under a
+> neutral (`Normal`/alpha 1.0) outer state, inline painting against the
+> page's accumulated backdrop **is** §11.4.5's answer, reached by a
+> cheaper route, not an approximation of it — so `groups_composited`
+> counts it, not `groups_flattened`.
+>
+> **How it was found:** not by testing isolated/non-isolated behaviour
+> directly, but by measuring the unconditional buffer's own cost — Ghent
+> page 2 at 878 ms buffered vs. a 230 ms pre-`85.4c` baseline, 142
+> buffers involved. Asking why that per-buffer overhead was what it was,
+> rather than accepting it as correctness's price, surfaced the backdrop
+> defect. Full derivation, the isolated/non-isolated fixture that proves
+> both directions of the condition, and the sabotage-run confirmation:
+> `ROADMAP.md`'s `Pass 85.4d` Shipped entry. `ARCHITECTURE.md` §3's
+> `pdfce-render\interpret.rs` body entry is updated in the same filing.
+>
+> No standing rule minted by this amendment either — same disposition as
+> the original entry.

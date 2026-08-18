@@ -44608,3 +44608,100 @@ new "RELEASE HOUSEKEEPING OWED" entry).
 4. `Pass 85.4c`'s "four tests" vs "+2 net test count" discrepancy is
    unreconciled — worth a one-line confirmation next session
    (`cargo test -- --list` diff) rather than left open indefinitely.
+
+## 2026-08-17 (hundred-and-sixty-first filing) — **`Pass 85.4d` (`b15d7ff`): CORRECTS `Pass 85.4c` — UNCONDITIONAL GROUP BUFFERING WAS WRONG FOR NON-ISOLATED GROUPS (THE DEFAULT), FOUND BY ASKING WHY 142 BUFFERS COST WHAT THEY COST. Decision 068 amended in place (sub-decision 3 added), not superseded. `85.4c`'s "four tests"/"+2 net" flag RESOLVED. Two-instance "performance question surfaces correctness bug" pattern flagged as a candidate, not minted.**
+
+**Shipped:**
+- `Pass 85.4d` — `b15d7ff`. A fresh group buffer starts fully
+  TRANSPARENT, which is ISOLATED semantics (§11.4.7); `/I` defaults
+  FALSE, so most groups are non-isolated and their contents must blend
+  against the PAGE's accumulated backdrop — exactly what inline
+  painting already gives for free. `Pass 85.4c` buffered every group
+  unconditionally, getting non-isolated groups' backdrop wrong in the
+  opposite direction from the flattening bug it replaced. Found by
+  measuring the buffer's own cost, not by testing isolated/non-isolated
+  behaviour directly: Ghent page 2 at **878 ms** buffered vs. a
+  **230 ms** pre-`85.4c` baseline, **142 buffers** involved (878 ms −
+  230 ms = 648 ms overhead ÷ 142 buffers ≈ 4.6 ms/buffer, hard rule
+  10a form). A buffer is now taken iff the outer blend mode is
+  non-Normal or outer alpha < 1 (the composited RESULT must exist
+  before the outer state can apply to it), or the group is itself
+  isolated; otherwise contents paint inline — for a non-isolated group
+  under neutral outer state, inline painting against the page's
+  accumulated backdrop IS §11.4.5's answer, not an approximation, and
+  now counts as `groups_composited` rather than `groups_flattened`.
+  **One fixture proves both directions**: page paints blue, group
+  paints red with `/BM /Screen` inside it — `/I true` stays RED
+  (nothing to blend against, isolated backdrop is transparent), `/I
+  false` (default) comes out MAGENTA (Screens against the page's
+  blue). Sabotage run — forcing unconditional buffering — turns the
+  non-isolated case RED instead of magenta, the exact wrong answer
+  predicted, confirming the test would have caught `85.4c`'s defect had
+  it existed before that commit. Verification: Ghent page 2 878 ms →
+  ~600 ms, GWG 16.0 panel stays clean; 300-file corpus buckets
+  IDENTICAL for the third consecutive measurement (71/24/99/8/1, sum
+  203); 3,780 → **3,781 tests, 0 failures** (+1, this commit's own
+  fixture); fmt/clippy/all named gates clean; `cargo tree` unaffected
+  (touches `pdfce-render` only).
+
+**Decisions made this session:**
+- **Decision 068 AMENDED, not superseded.** Sub-decisions 1 (page-sized
+  buffer) and 2 (state-reset-at-entry) unchanged and still correct; a
+  third sub-decision states the buffering CONDITION this decision was
+  originally silent on — non-Normal outer blend/alpha-<1 OR isolated
+  group triggers a buffer, otherwise paint inline. The silence is why
+  `85.4c`'s implementation read, and shipped, as "always buffer."
+  `ARCHITECTURE.md` §12 (decision 068's own entry, amendment block) and
+  §3 (`pdfce-render\interpret.rs` body description) both updated this
+  filing.
+
+**Findings + decisions:**
+- **`Pass 85.4c`'s own test-count flag RESOLVED.** "3,778 → 3,780
+  tests (+2 net)" vs. the dispatch's separate "four tests" claim: FOUR
+  tests were written, NET was +2, because two of the four REPLACED
+  existing tests rather than adding to the suite
+  (`a_transparency_group_is_counted_as_flattened` →
+  `a_transparency_group_is_composited_as_a_unit`; the isolated/knockout
+  test rewritten in place). Both figures were true, answering different
+  questions; the correction needed no new measurement, only the
+  breakdown. Flag closed.
+- **A pattern flagged as a candidate, not minted as a rule — two
+  instances, operator's own call deferred to this filing's judgement.**
+  Twice in one session a PERFORMANCE question, asked about a
+  measurement taken for an unrelated reason, surfaced a CORRECTNESS bug
+  rather than an optimisation: instance 1, `Pass 90.1` (`bd244d9`) — 76
+  applied blend modes changing only 0.37% of Ghent page 2's pixels led
+  to finding `BlendMode::SourceOver` hard-coded on the image-paint
+  path; instance 2, this entry — a 4.6 ms/buffer average cost led to
+  the isolated/non-isolated backdrop defect. Two instances is this
+  project's own stated bar for a PROPOSAL, not a mint (the
+  two-occurrence-plus-review bar cited at `R192`'s sixth instance,
+  decision 067, is for promoting an EXISTING rule with new evidence —
+  a different bar than minting a new one from zero). Judged: flagged as
+  a candidate this filing, not minted. Watch for a third instance.
+
+**Still in flight:** Unchanged from the hundred-and-sixtieth filing's
+own list — `Pass 72.0`/`73.0`/`73.1`/`86.0` HIGH PRIORITY unstarted;
+`85.1` (mesh shadings) and `85.2` slice 2 (tiling) unstarted; `85.4c`'s
+remainder (knockout groups + soft-mask groups) still this inventory's
+top-priority Ghent gap, still blocked on the §11.4.6/§11.5.2–.3 spec
+dispatch (in flight); `85.5` last; `Pass 87.0` GUI-paused; `v0.6.1`
+release-note correction still owed. `Pass 85.4d` does not change any of
+these — it is a correctness correction to already-shipped, unreleased
+work (`0d6f4ac` was never in a tagged release; `v0.6.0` = `3c4c00e`
+predates it).
+
+**For next session:**
+1. **Next free Pass family is still `92`** (this filing used sub-Pass
+   `85.4d`, existing family `85`). Next free decision is still **069**
+   (068 amended, not newly minted). Next free filing ordinal is
+   **162**. Next free standing rule is still **`R196`** — no mint this
+   filing.
+2. If a third "performance question surfaces correctness bug" instance
+   turns up, promote the candidate flagged above per this filing's own
+   citation of the `R192`/decision-067 promotion template.
+3. `85.4c`'s remainder (soft masks, then knockout groups) is still next
+   in the Ghent build order once the spec dispatch lands — unaffected
+   by this correction.
+4. `v0.6.1` release-note correction still owed, unaffected by this
+   filing.
