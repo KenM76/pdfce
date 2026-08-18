@@ -2908,17 +2908,61 @@ impl Interpreter<'_> {
         // `rgb_to_cmyk`/`cmyk_to_rgb` (see their docs), and which CHANNELS
         // that source is entitled to paint is decided from the colorant
         // names by `cmyk_group_rules`, not from these numbers.
-        let source_cmyk: [f32; 4] =
-            if matches!(kind, SourceKind::DeviceCmykDirect) && comps.len() == 4 {
+        let source_cmyk: [f32; 4] = match &kind {
+            SourceKind::DeviceCmykDirect if comps.len() == 4 => {
                 [comps[0], comps[1], comps[2], comps[3]]
-            } else {
+            }
+            // A Separation/DeviceN states its tints DIRECTLY, one operand
+            // per declared colorant, in `names` order (O7, §8.6.6.5:
+            // operands "shall" be interpreted in names-array order). Where
+            // a colorant IS a process colorant, that operand IS the process
+            // tint, and no reconstruction is needed or wanted.
+            //
+            // Deriving it from RGB instead -- which is what this did first
+            // -- is wrong for a space naming a spot ALONGSIDE a process
+            // colorant, because the flattened RGB carries the SPOT's
+            // contribution and reconstructing CMYK from it smears the spot
+            // into the process channels; Table 149 then faithfully paints
+            // the smear. Ghent 2_GWG030 is built entirely from that shape
+            // (`/CS1 cs .5 1 scn` over a two-colorant space).
+            //
+            // Measured honestly: on the Ghent corpus this changes no trap
+            // count, because those patches' remaining failures have a
+            // different cause. It is kept because it is strictly more
+            // faithful to what the file states, and because a value read
+            // from the operands cannot drift the way a reconstruction can.
+            SourceKind::SeparationOrDeviceN { names } => {
+                let mut t = [0.0_f32; 4];
+                for (i, n) in names.iter().enumerate() {
+                    let Some(v) = comps.get(i) else { break };
+                    match n {
+                        crate::color::Colorant::All => t = [*v; 4],
+                        crate::color::Colorant::None => {}
+                        crate::color::Colorant::Named(name) => {
+                            let ch = match name.to_ascii_lowercase().as_str() {
+                                "cyan" => Some(0),
+                                "magenta" => Some(1),
+                                "yellow" => Some(2),
+                                "black" => Some(3),
+                                _ => None,
+                            };
+                            if let Some(ch) = ch {
+                                t[ch] = *v;
+                            }
+                        }
+                    }
+                }
+                t
+            }
+            _ => {
                 let c = if stroking {
                     self.gs.current.stroke_color
                 } else {
                     self.gs.current.fill_color
                 };
                 overprint::rgb_to_cmyk(c.r, c.g, c.b)
-            };
+            }
+        };
 
         let op = if stroking {
             self.gs.current.overprint_stroke
