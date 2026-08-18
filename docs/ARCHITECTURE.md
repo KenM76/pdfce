@@ -1268,6 +1268,109 @@ D:\Dev\pdfce\
                                    model work. Full derivation:
                                    `ROADMAP.md`'s `Pass 85.4e` Shipped
                                    entry.
+                                   **PLANNED, NOT DECIDED, NOT STARTED —
+                                   a CMYK+alpha compositing buffer
+                                   (recorded 2026-08-18, hundred-and-
+                                   sixty-third filing, because it was
+                                   present in `ROADMAP.md` twice and
+                                   `FEATURES.md` once and absent from
+                                   this document — the one whose job is
+                                   the logic).** Two spec obligations
+                                   converge on the SAME buffer and are
+                                   why this is filed as one item, not
+                                   two. **(1) Overprint is inexpressible
+                                   in an RGB buffer, not merely
+                                   unimplemented.** §11.7.4.3's
+                                   `CompatibleOverprint` blend selects
+                                   PER COMPONENT — "the value of the
+                                   blend function shall be the source
+                                   component c_s for any process
+                                   (DeviceCMYK) colour component whose
+                                   … value is nonzero; otherwise … the
+                                   backdrop component c_b" — and an RGB
+                                   buffer has no CMYK components to
+                                   select between. `Pass 85.5`
+                                   (`ROADMAP.md` *Next up*) is gated on
+                                   this. **(2) The SAME buffer is also
+                                   where blending happens correctly at
+                                   all when a group's blending colour
+                                   space is DeviceCMYK** — §11.3/§11.4
+                                   define blending IN the group's BCS,
+                                   and the Ghent corpus's own patches
+                                   declare `TBCS: DeviceCMYK`; pdfce
+                                   blends in RGB today (decision 068),
+                                   so `Difference`/`Exclusion` and the
+                                   non-separable modes are computed in
+                                   the wrong space wherever the BCS is
+                                   CMYK, independent of overprint
+                                   entirely. **Shape, as currently
+                                   understood:** a CMYK+alpha buffer for
+                                   the page group when the blending
+                                   colour space is DeviceCMYK, page-sized
+                                   like decision 068's RGBA group buffer
+                                   (same reasoning: no per-group
+                                   coordinate translation); blend modes
+                                   and `CompatibleOverprint` run IN that
+                                   buffer; ONE conversion to display RGB
+                                   at the end. **The `iccce`/pdfce
+                                   boundary (decision 064) already
+                                   applies: iccce owns the final CMYK→RGB
+                                   conversion, pdfce owns everything that
+                                   happens inside the buffer before that
+                                   conversion runs** (overprint,
+                                   knockout, blend-mode selection — none
+                                   of it is iccce's). **Cost, measured
+                                   (iccce's own bench, 2026-08-12,
+                                   variance-noted): 1.29–1.48 Mpix/s for
+                                   iccce's compiled transform.** An A4
+                                   page at 150 DPI is 2.1 Mpix ⇒ **≈1.5 s
+                                   over 2.1 Mpix = ~0.7 µs/pixel**; at
+                                   300 DPI, 8.4 Mpix ⇒ **≈6 s over
+                                   8.4 Mpix, same per-pixel rate**.
+                                   pdfce renders a full Ghent page in
+                                   ~0.6 s today, so this conversion alone
+                                   would cost 2.5×–10× the entire render
+                                   — fine for export, too slow for
+                                   interactive preview, which is the
+                                   reason an f32/u8 buffer surface
+                                   (not f64) has been asked of iccce
+                                   rather than assumed: f64 at 8.4 Mpix
+                                   is 268 MB in / 201 MB out per page.
+                                   **What is NOT conformance-driven, and
+                                   is therefore a product decision, not a
+                                   spec one:** §8.6.7 says "if
+                                   overprinting is not supported, the
+                                   value of the overprint parameter shall
+                                   be ignored" — pdfce is CONFORMANT
+                                   TODAY without this buffer — and
+                                   ISO 32000-1 never describes overprint
+                                   PREVIEW on a non-separating device (0
+                                   hits in 756 pages of corpus). The
+                                   justification for building it anyway
+                                   is Acrobat-parity: Acrobat enables
+                                   Overprint Preview automatically for
+                                   PDF/X, so a PDF/X-4 file's EXPECTED
+                                   on-screen appearance includes it.
+                                   **No decision-log entry minted for
+                                   this** (§12 stays at decision 068,
+                                   next free 069) — nothing here has been
+                                   CHOSEN yet in the sense §12 records:
+                                   no buffer type has been committed to
+                                   code, no tradeoff between the shapes
+                                   above has been picked over an
+                                   alternative, and decision 068's own
+                                   page-sized-buffer choice was corrected
+                                   the SAME DAY it was made (`Pass
+                                   85.4d`) once real measurement arrived
+                                   — recording a CMYK equivalent as
+                                   DECIDED before a line of it exists
+                                   would very plausibly need the same
+                                   kind of correction. This paragraph is
+                                   the planned-direction record §2/§3
+                                   exist for; `ROADMAP.md` `Pass 85.5`
+                                   carries the Pass; decision 064 already
+                                   carries the iccce boundary this plan
+                                   sits inside.
     pdfce-print\                 <- Printing: job planning + spooling. Shipped with
                                    `Pass 55.2` (2026-08-10) but never documented in this
                                    tree until the eighty-fifth filing — a filing gap this
@@ -21719,6 +21822,16 @@ outright rather than merely qualify it.
 
 **No standing rule minted.** This is a project-boundary decision, not a
 finding about pdfce's own tooling or gates.
+
+**★ FORWARD POINTER, added 2026-08-18 (hundred-and-sixty-third
+filing).** The compositing buffer this entry gestures at ("a
+compositing buffer pdfce itself must build") now has a stated shape —
+CMYK+alpha, page-sized, blend modes and `CompatibleOverprint` run
+inside it, one conversion to RGB at the end via iccce — recorded in §3
+under the `pdfce-render\` block, immediately before `pdfce-print\`.
+**Not a revision of this decision**, filed as a forward pointer per
+this section's own discipline: the shape is PLANNED, not decided, so
+it carries no decision number of its own.
 
 ### 2026-08-17 (hundred-and-fiftieth filing) — decision 065: **AMB-3 RESOLVED — pdfce paints a radial shading's `s`-circles ON their circumference (`|P−c(s)|=r(s)`, ISO 32000-2's "on"), never as a filled disc (ISO 32000-1's "within")**
 

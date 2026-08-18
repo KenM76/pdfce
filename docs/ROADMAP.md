@@ -96,6 +96,162 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★★★ Pass 93.0 — `a342354` — **THE ELEVEN UNADJUDICATED GHENT PATCHES NOW HAVE A CALIBRATION SOURCE, AND A GUARD THAT COST FOUR APPARENT PASSES IS THE REASON TO TRUST THE REST** — `ghent-check --reference-dir` adjudicates against 51 Acrobat Pro captures — filed 2026-08-18 (hundred-and-sixty-third filing)
+
+**Filed by `pdfce-librarian`, no shell available (hard rule 8) — every
+figure below is RELAYED from the dispatching engineer's report, not
+independently re-run or read via `git show`.** Sibling entry to `Pass
+92.0`, immediately below, same session.
+
+**What shipped.** `ghent-check --reference-dir` adjudicates the
+reference-strip patches — the ones the corrected X-detector (`Pass
+92.0`) alone cannot score, because they need a KNOWN-GOOD render to
+compare against, not just a clean-square judgement — against renders
+from a reference engine. **51 Acrobat Pro captures**, taken at the
+operator's own suggestion, are that reference.
+
+**★ The guard, and why it is the reason to trust the rest of this
+Pass's output, not an incidental fix.** Before it existed, **four
+16-bit-image patches "PASSED"** at a pdfce/reference correlation score
+of **0.054 against Acrobat's own 0.064** — both numbers low, both far
+from a real match, and the comparison logic read "pdfce is at least as
+close as Acrobat" as agreement rather than as **both engines failing
+against the reference strip for an unrelated reason**. Root cause:
+this suite's band splitter fails on image-heavy layouts, corrupting
+BOTH renders' band boundaries before either is scored — not a pdfce
+rendering defect at all. **The fix:** a comparison is now only made
+when the REFERENCE ENGINE's own render matches its own reference strip
+(correlation ≥ 0.50); below that threshold the patch is reported
+**UNRESOLVED**, not PASS, regardless of how close pdfce's score sits to
+Acrobat's. **Four patches move from a false PASS to UNRESOLVED** by
+this change alone.
+
+**Measurement, both engines through the same code, at `a342354`:**
+
+| engine | FAIL | pass | UNRESOLVED | total |
+|---|---|---|---|---|
+| pdfce | 21 | 22 | 8 | 51 |
+| Acrobat Pro | 1 (GWG 16.1, `ICCBasedRGB`) | — | — | 51 |
+
+**pdfce's 21 failures, by cause (sums to 21 of 21):** overprint **10**,
+transparency-in-CMYK-space **5**, softmasks **3**, mesh shadings **1**,
+colour management **2**. **Overprint is the single largest cause,
+grounding the `85.5` re-priority this filing also records** (see the
+gap-inventory table update, *Next up*, below).
+
+**Gates (relayed, state at `HEAD` after both this commit and `Pass
+92.0`, same run):** **3,781 tests, 0 failures.** `cargo fmt --check`
+and `cargo clippy --workspace --all-targets -- -D warnings` clean.
+`cargo tree -p pdfce-core` / `-p pdfce-render` — zero GUI-crate hits
+(egui/eframe/winit/wgpu grep count 0), GUI-core separation invariant
+holds.
+
+**Not this filing's to independently verify — flagged, not asserted.**
+The 0.054-vs-0.064 figures, the 21/22/8 split and the 51-Acrobat-Pro
+capture count are all relayed; this librarian has no shell this
+dispatch and cannot re-run `ghent-check` to confirm them.
+
+**`FEATURES.md`.** No row change — this is test-harness/calibration
+tooling (`ghent-check`), not a shipped operator-facing capability, and
+`FEATURES.md`'s own header scopes it to "what can pdfce do," not to
+pdfce's own verification tooling.
+
+**`ARCHITECTURE.md` §12.** No new decision-log entry — this is a
+test-harness correction, not a crate boundary, invariant, or library
+choice.
+
+**Ledger effects.** Pass family: **92 → 93** (this Pass), next free
+family **94**. Standing rules: **no new rule minted** — checked against
+`R191` (verification-harness-fabricated-a-pass shape) and found not a
+clean match: `R191`'s canonical incident and its three measured
+instances are all about a CLI/gate reporting a pass on an EMPTY or
+absent signal (a token omitted, "no run found" read as success); this
+guard's false-agreement failure mode is a DIFFERENT shape — two
+non-empty, both-low scores read as agreement — so it is recorded here
+as its own finding rather than force-fit onto `R191`. Flagged for the
+engineer to judge whether it merits its own proposal; not proposed by
+this filing. Ceiling stays **R195**, next free **R196**. Decisions:
+**none minted** — ceiling stays **068**, next free **069** (see `Pass
+92.0`'s entry, below, and the `ARCHITECTURE.md` §3 addition this
+filing also makes, for the related but explicitly UN-minted CMYK
+compositing buffer item).
+
+### ★★★★ Pass 92.0 — `8caada6` — **OVERPRINT IS TRACKED AND DISCLOSED, AND THE GHENT X-DETECTOR WAS COUNTING MARKS NOBODY CAN SEE** — `/OP`/`/op`/`/OPM` read, carried, counted, printed; three detector defects fixed, one of them the detector being STRICTER THAN THE STANDARD IT IMPLEMENTS — filed 2026-08-18 (hundred-and-sixty-third filing)
+
+**Filed by `pdfce-librarian`, no shell available (hard rule 8) — every
+figure below is RELAYED from the dispatching engineer's report, not
+independently re-run or read via `git show`.**
+
+**What shipped, overprint tracking.** `/OP`, `/op`, `/OPM` are now read
+from `ExtGState`, carried in `GraphicsState`, and counted
+(`overprint_requested`, `overprint_mode1_requested`), printed on the
+CLI stable line with prose. **Table 58's rule implemented as stated:
+`/OP` sets BOTH overprint parameters unless `/op` is present in the
+SAME dictionary**, in which case `/op` governs non-stroking
+independently. **Measured: overprint fires on 20 of 51 Ghent patches,
+up to 19 times on one page.**
+
+**What shipped, the Ghent X-detector fix — three defects, each found
+by disbelieving the tool rather than trusting a passing run:**
+
+1. **A single diagonal stroke scored a perfect X.** The test asked "is
+   there ink near EITHER diagonal," which a single stroke alone
+   satisfies.
+2. **Two opposite wedges also passed.** An X's two arms must CROSS —
+   the fix requires the bounding-box CENTRE itself to be inked, not
+   just points along either diagonal.
+3. **★ The detector was STRICTER THAN THE STANDARD IT IMPLEMENTS.**
+   Exact-intensity pixel segmentation found "real" X marks in all eight
+   swatches of an Acrobat render that reads, to the eye, as ten clean
+   green squares. The Ghent suite's own criterion is "a CLEAR X,"
+   judged by a human at arm's length — counting sub-perceptual
+   intensity variation is its own wrong answer, not a stricter-is-safer
+   improvement. **Fix: a mark must now differ from its surround by
+   ≥12/255** before it counts as an X at all.
+
+**★ Also found, not yet corrected — flagged for the operator, not
+this librarian's file to edit.** The Acrobat installed on this machine
+is **Acrobat PRO, not Reader** — the window title states it directly.
+This project's own `C:\Users\Ken\.claude\projects\D--Dev-pdfce\memory\MEMORY.md`
+entry (`acrobat-reader-is-available-pro-is-not.md`, global user memory,
+not this librarian's) currently states the opposite and that the
+"Acrobat DC" folder name does not imply Pro. **That memory entry is
+wrong** — recorded here because a librarian filing is the mechanism
+this project uses to surface an error rather than silently carry it,
+even one outside this librarian's own write scope (global user memory,
+not `D:\Dev\pdfce\.claude\agent-memory\pdfce-librarian\`).
+
+**Gates.** See `Pass 93.0`'s entry, immediately above (filed first in
+this listing per reverse-chronological order, but landed second in the
+session) — **3,781 tests, 0 failures**, fmt/clippy clean, `cargo tree`
+GUI-core separation holds, state at `HEAD` after both commits.
+
+**`FEATURES.md`.** New *Implemented* row under "Fonts & rendering":
+overprint tracking/disclosure, `core [x] · cli [x] · gui [ ]`
+(GUI paused). The existing *Planned* "Overprint simulation" row is
+narrowed to name only the visual-compositing half that remains, with
+a cross-reference to the new *Implemented* row so the two are not read
+as the same capability.
+
+**`ARCHITECTURE.md` §12.** No new decision-log entry for this Pass
+itself — Table 58's rule is a spec-conformance read, not a crate
+boundary, invariant, or library choice. **A related but SEPARATE
+architecture gap is closed this same filing**: the planned CMYK
+compositing buffer that overprint SIMULATION (not this Pass's tracking)
+will eventually need had been recorded twice in `ROADMAP.md` and once
+in `FEATURES.md` and nowhere in `ARCHITECTURE.md`. See §3's
+`pdfce-render\` block, new paragraph immediately before `pdfce-print\`,
+for the planned-direction record — **explicitly NOT a decision-log
+entry**, since nothing about the buffer's shape has been committed to
+code or chosen over a stated alternative yet (see that paragraph's own
+closing note for the full reasoning).
+
+**Ledger effects.** Pass family: **91 → 92** (this Pass); `93` also
+minted this filing (see the entry above) — next free family **94**.
+Standing rules: **no new rule minted**; ceiling stays **R195**, next
+free **R196**. Decisions: **none minted** — ceiling stays **068**, next
+free **069**.
+
 ### ★★★★★ Pass 85.4e — `fee42e8` — correction to `Pass 85.4d`, landing the `§11.4.6`/`§11.5.2–.3` spec dispatch — **THE DISPATCH IT REQUESTED FOUND TWO DEFECTS IN THE CODE THAT REQUESTED IT, AND REFRAMES KNOCKOUT FROM "42 GROUPS ON ONE FILE" TO EVERY `B`/`b` OPERATOR AND EVERY TEXT OBJECT IN THE CORPUS** — decision 068 amended again (sub-decision 4); `LUM-A1` registered as a new spec-ambiguity-register entry; degenerate-fixture RAG file gains a fifth, PREDICTED instance — filed 2026-08-17 (hundred-and-sixty-second filing)
 
 **Sourcing.** No shell tool this dispatch (hard rule 8). Test count,
@@ -46632,7 +46788,7 @@ and deferred-op counts on that file — not estimated.**
 | ~~`85.4a`~~ | blend modes — `ExtGState /BM`, eleven separable modes | `pdfce-render/src/interpret.rs` — **SHIPPED 2026-08-17, `Pass 90.1`, `bd244d9`.** Ghent page 2: 60 of 76 `/BM` invocations now composite exactly. Required a page-backdrop model correction (opaque-white-fill → isolated group over transparent backdrop, §11.4.7) — see the `Pass 90.1` Shipped entry. | §11.3.5, Table 136/137 — **SHIPPED**, see the `Pass 90.1` Shipped entry |
 | `85.4b` | non-separable blend modes — Hue/Saturation/Color/Luminosity | Ghent page 2: 16 of 76 `/BM` invocations (4 modes × 4 swatches) — **REFUSED, not mapped**: tiny-skia 0.11.4 is measured wrong against both ISO 32000-1 and W3C Compositing-1 (up to 107/255 error) — `D:\dev\rag\rust\tiny_skia_0.11_non_separable_blend_modes_wrong_by_up_to_107_255.md`. Not closeable inside pdfce without an upstream tiny-skia fix or a from-scratch implementation of the four HSL formulas. | §11.3.5.3 — refused, see `ARCHITECTURE.md` §12 decision 066 |
 | ~~`85.4c`~~ | transparency GROUPS — isolated/knockout offscreen compositing, `/SMask` soft-mask groups | `pdfce-render/src/interpret.rs` — **non-knockout compositing SHIPPED 2026-08-17, `0d6f4ac`.** A group now renders into its own page-sized offscreen buffer with contents-state reset to initial, composited as a unit with the outer blend mode/alpha (§11.4.5; decision 068). Ghent GWG 16.0 (non-knockout) panel renders CLEAN; `groups_flattened` 187 → 0. **★ `Pass 85.4d` (`b15d7ff`, same day) CORRECTED `85.4c`'s buffering to be CONDITIONAL** (outer non-Normal/alpha<1 OR isolated, else paint inline). **★★ `Pass 85.4e` (`fee42e8`, hundred-and-sixty-second filing) LANDS the §11.4.6/§11.5.2–.3 spec dispatch and fixes two defects it found: a citation error (`/K`/`/I`/`/CS` are Table 147, not 96 — table numbers shift −2 between ISO 32000-1 and -2) and a buffering gap (knockout groups now buffer UNCONDITIONALLY, not gated on `85.4d`'s outer-state test — a knockout group has no initial backdrop to composite against when painted inline at all).** Knockout groups are now correctly **buffered** (the container); they are still **NOT correctly composited** (the contents' occlusion order) — `groups_knockout_approx` still counts every one, GWG 16.1 still shows its crosses. **The dispatch also reframes the population this gap covers**: no `/K` key is required for a knockout group at all — §9.3.8's `/TK` defaults `true` (every text object), §11.7.4.4 makes `B`/`B*`/`b`/`b*` and text render modes 2/6 knockout (its own NOTE 2: a double border on semi-transparent fill-then-stroke IS this bug), and §11.6.7 makes shading patterns knockout. Ranked by likely frequency, `B`/`b` ≫ `/TK` > explicit `/K` ≈ shading patterns — the 47-group `groups_knockout_approx` figure measures only the last, smallest tier. **Representability is now known, not assumed:** isolated knockout is bit-exact representable in pdfce's single premultiplied-alpha buffer; non-isolated knockout (the common case, since `/K` defaults false the same way `/I` does) is NOT, pending buffer-model work. `/SMask` soft-mask groups (36 occurrences, all pages) remain entirely unread; a new spec ambiguity, `LUM-A1` (`DeviceCMYK` soft-mask luminosity — ISO 32000-1 self-contradicts, divergence `K·S` max 0.25), is registered against them, below, for whenever they are built. See the `Pass 85.4e` Shipped entry, top of *Shipped*, and decision 068's second amendment. **Now this inventory's remaining top-priority gap, RE-RANKED within itself** — see the build order below for this filing's ruling on isolated-knockout vs. soft masks vs. non-isolated knockout. | clause 11.4–11.6.4 (groups) + §11.6.5.3-adjacent (soft-mask groups); the per-IMAGE `/SMask`/`/Mask` shipped in `Pass 48.1` is unrelated — do not conflate the two `/SMask` meanings when scoping |
-| `85.5` | overprint compositing | patches GWG 1.0, 1.1, 2.0, 3.0, 3.1, 4.0.1, 4.1, 12.0, 19.0, 19.1, 19.2 — most of pages 1 and 4 | **§8.6.7 says "if overprinting is not supported, the value of the overprint parameter shall be ignored" — pdfce is CONFORMANT TODAY.** Implementing it means compositing into a CMYK buffer; lowest priority, architectural, and partly gated on `iccce` (see `Backlog`, "Colour management (`iccce` coordination)", decision 064) |
+| `85.5` | overprint compositing | patches GWG 1.0, 1.1, 2.0, 3.0, 3.1, 4.0.1, 4.1, 12.0, 19.0, 19.1, 19.2 — most of pages 1 and 4. **★ MEASURED AGAINST A REAL REFERENCE ENGINE 2026-08-18 (`Pass 93.0`, `a342354`): overprint is the SINGLE LARGEST cause of pdfce's failures against 51 Acrobat Pro reference renders — 10 of pdfce's 21 measured FAILs (transparency-in-CMYK-space 5, softmasks 3, mesh shadings 1, colour management 2 make up the rest; Acrobat Pro itself shows 1 FAIL of 51, GWG 16.1 `ICCBasedRGB`).** Tracking/disclosure of `/OP`/`/op`/`/OPM` SHIPPED `Pass 92.0` (`8caada6`) — fires on 20 of 51 patches, up to 19 times on one page; this row is the remaining SIMULATION half only | **§8.6.7 says "if overprinting is not supported, the value of the overprint parameter shall be ignored" — pdfce is CONFORMANT TODAY.** Implementing SIMULATION means compositing into a CMYK+alpha buffer (planned direction, `ARCHITECTURE.md` §3, `pdfce-render\` block — no decision-log entry, nothing chosen yet); architectural and gated on `iccce` for the final CMYK→display conversion (see `Backlog`, "Colour management (`iccce` coordination)", decision 064) — **but now measured, not merely reasoned, as the highest-impact remaining gap in this table; see the build-order re-derivation below** |
 
 **Suggested build order — ★ RE-DERIVED 2026-08-17 (`Pass 90.0`,
 hundred-and-fifty-sixth filing), REPLACING the order below rather than
@@ -46717,6 +46873,39 @@ two, and interleave —
 (mesh shadings) — finding 3 makes the remainder's true footprint larger
 than previously measured, not smaller, so nothing in this re-derivation
 weakens that ranking; only the order **within** the remainder changes.
+
+**★★★★★ RE-DERIVED A FIFTH TIME 2026-08-18 (`Pass 93.0`, `a342354`,
+hundred-and-sixty-third filing) — `85.5` (overprint) MOVES OUT OF LAST
+PLACE, the first change to this table's ranking driven by a comparison
+against a REAL reference engine rather than by Ghent patch-count
+breadth alone.** Every prior re-derivation (first through fourth,
+above) ranked `85.5` last on the same stated grounds — "lowest
+priority, architectural, gated on `iccce`" — inferred from spec
+breadth and patch counts, never measured against how often it is the
+actual CAUSE of a wrong render. `Pass 93.0`'s reference-dir
+adjudication is the first measurement of causes, not just occurrences:
+run against 51 Acrobat Pro captures, **overprint accounts for 10 of
+pdfce's 21 measured failures — 48%, more than the next three causes
+combined** (transparency-in-CMYK-space 5, softmasks 3, colour
+management 2, mesh shadings 1). **This does not un-gate `85.5` from
+`iccce`** — the CMYK compositing buffer's final conversion step still
+needs iccce's sRGB destination and, ideally, its f32/u8 buffer surface
+(both requested, `request_cmyk_buffer_destination_and_width.md`,
+*Backlog* below) — so `85.5` cannot START before that lands, same as
+every prior re-derivation stated. **What changes is RANK, not
+READINESS**: `85.5` moves from last to co-first with `85.4c`'s
+remainder in the priority ordering, so that whichever of the two
+unblocks (the spec dispatch for `85.4c`, or iccce's response for
+`85.5`) first is the one actually started next, instead of `85.5`
+waiting behind `85.1` and the tiling-pattern demotion on a ranking that
+was never measured against real causes of failure. **Current order:**
+`85.4c` remainder (soft masks + knockout, blocked on the landed spec
+dispatch's own sub-ordering above) AND `85.5` (overprint, blocked on
+`iccce`) — **whichever unblocks first, first** — → `85.1` (mesh
+shadings) → `/Separation /All` re-check (question, not a Pass) → `85.2`
+slice 2 (tiling patterns, demoted, unchanged — zero Ghent occurrences).
+**Still an ordering suggestion, not a dependency graph**, unchanged
+from every prior re-derivation's own caveat.
 
 **★ Two secondary findings from the same measurement run, filed here
 rather than as separate Passes because neither is a fidelity gap:**
@@ -54501,6 +54690,38 @@ nothing gets forgotten, not as a commitment to build in this order.
   **Nothing in this bucket is built.** No Pass ID assigned — scoping
   waits on iccce shipping a consumable API; do not scope a Pass against
   a moving target on the far side of a channel neither party controls.
+
+  **★★★ AMENDMENT 2026-08-18 (hundred-and-sixty-third filing) — A
+  FOURTH REQUEST FILED, AND OVERPRINT IS NOW MEASURED, NOT ONLY
+  REASONED, AS THE ROW THIS BUCKET GATES MOST.** `Pass 93.0`'s
+  reference-dir adjudication (`a342354`, above) measures overprint as
+  10 of pdfce's 21 failures against 51 Acrobat Pro reference renders —
+  the single largest cause, ahead of transparency-in-CMYK-space (5),
+  softmasks (3), colour management (2) and mesh shadings (1) combined.
+  See `ROADMAP.md`'s `85.5` gap-inventory row and its fifth
+  build-order re-derivation, both above, for the full figure and the
+  resulting re-priority.
+
+  **Fourth item filed pdfce → iccce**:
+  `request_cmyk_buffer_destination_and_width.md`, asking for the two
+  things standing between iccce and pdfce's overprint-simulation work,
+  both already self-identified by iccce itself: **(a) an sRGB
+  destination** — iccce's transform machinery exists, the destination
+  does not, and pdfce would rather iccce own the single definition of
+  sRGB in the pipeline than maintain a second one; **(b) an f32/u8
+  buffer surface**, explicitly marked a PERFORMANCE ask, not a blocker
+  — f64 at an 8.4 Mpix (300 DPI A4) page is 268 MB in / 201 MB out,
+  and iccce's own measured throughput (1.29–1.48 Mpix/s, their bench,
+  2026-08-12) puts the conversion step alone at ≈6 s over that page —
+  2.5×–10× pdfce's own ~0.6 s whole-page render time — fine for
+  export, too slow for interactive preview. Full shape of what this
+  buffer becomes: `ARCHITECTURE.md` §3, `pdfce-render\` block,
+  planned-direction paragraph (no decision-log entry — nothing chosen
+  yet, see that paragraph's own closing note).
+
+  **The boundary this row sits inside is unchanged**: conversion is
+  iccce's, compositing (overprint, blend-mode selection, knockout) is
+  entirely pdfce's — decision 064, unaffected by this amendment.
 
 - **★★ RULING OWED, filed 2026-08-13 (hundred-and-forty-fourth filing) —
   `R13` CLAUSE 5 (*"never executes anything it fetched"*) IS A DIRECT

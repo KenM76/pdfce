@@ -44806,3 +44806,125 @@ librarian`'s territory, same pattern as `AD-A1`/`AD-A3`).
    soft-mask implementation starts, not silently baked in.
 4. `v0.6.1` release-note correction still owed, unaffected by this
    filing.
+
+## 2026-08-18 (hundred-and-sixty-third filing) — **`Pass 92.0` (`8caada6`) + `Pass 93.0` (`a342354`): OVERPRINT IS TRACKED AND DISCLOSED, THE GHENT X-DETECTOR WAS COUNTING MARKS NOBODY CAN SEE, AND A REFERENCE-ENGINE GUARD MOVES `85.5` OUT OF LAST PLACE — PLUS THE `ARCHITECTURE.md` GAP THE OPERATOR'S OWN QUESTION EXPOSED IS CLOSED**
+
+**Shipped:**
+- `Pass 92.0` — `8caada6`. `/OP`/`/op`/`/OPM` read, carried in
+  `GraphicsState`, counted (`overprint_requested`,
+  `overprint_mode1_requested`), printed on the CLI stable line.
+  Table 58 implemented as stated: `/OP` sets both parameters unless
+  `/op` is in the SAME dictionary. Fires on 20 of 51 Ghent patches, up
+  to 19 times on one page. Three Ghent X-detector defects fixed: a
+  lone diagonal stroke scoring a perfect X; two opposite wedges also
+  passing (an X's arms must CROSS — the bbox centre must be inked);
+  and the detector being STRICTER than the standard it implements —
+  exact-intensity segmentation found "X marks" in a render that reads,
+  to a human at arm's length, as ten clean squares, so a ≥12/255
+  contrast floor now applies before a mark counts.
+- `Pass 93.0` — `a342354`. `ghent-check --reference-dir` adjudicates
+  the eleven previously-unadjudicated reference-strip patches against
+  51 Acrobat Pro captures. Guard added: a comparison is only made when
+  the REFERENCE engine's own render matches its own strip
+  (corr ≥ 0.50); below that, UNRESOLVED, not PASS. Without the guard,
+  four 16-bit-image patches had "PASSED" at pdfce 0.054 vs. Acrobat
+  0.064 — both low, both wrong, for the same unrelated cause (the
+  band splitter failing on image-heavy layouts), read as agreement.
+  Measured at `a342354`: **pdfce 21 FAIL · 22 pass · 8 UNRESOLVED (51
+  total); Acrobat Pro 1 FAIL of 51 (GWG 16.1, `ICCBasedRGB`).** pdfce's
+  21 failures: overprint 10, transparency-in-CMYK-space 5, softmasks 3,
+  mesh shadings 1, colour management 2.
+
+**Decisions made this session:**
+- **No decision-log entry minted for either Pass** — both are
+  spec-conformance/test-harness fixes, not crate-boundary or
+  library-choice decisions.
+- **The `ARCHITECTURE.md` gap.** The operator asked whether pdfce had
+  been "informed about the CMYK buffer thing." Checked rather than
+  answered from memory: the planned CMYK compositing buffer was in
+  `ROADMAP.md` twice and `FEATURES.md` once, and in `ARCHITECTURE.md`
+  **zero** times — backwards, since `ARCHITECTURE.md` is the document
+  whose stated job is "the logic." Closed by adding a planned-direction
+  paragraph to §3's `pdfce-render\` block (immediately before
+  `pdfce-print\`), plus a forward pointer from decision 064 (the
+  existing iccce-boundary decision, which had already gestured at "a
+  compositing buffer pdfce itself must build" without stating its
+  shape). **Ruled NOT a new decision-log entry** — nothing about the
+  buffer's shape has been committed to code or chosen over a stated
+  alternative; decision 068's own page-sized-buffer choice was
+  corrected the SAME DAY it was made once real measurement arrived,
+  and recording a CMYK equivalent as DECIDED before a line of it
+  exists risks the identical correction. Decision ceiling stays
+  **068**, next free **069**.
+- **Build order re-derived a fifth time**: `85.5` (overprint) moves
+  from last place to co-first with `85.4c`'s remainder. Every prior
+  re-derivation ranked it last on spec-breadth/patch-count reasoning
+  alone; `Pass 93.0` is the first measurement of actual FAILURE
+  CAUSES against a real reference engine, and overprint is 10 of 21 —
+  the single largest cause. This does not un-gate `85.5` from `iccce`
+  (still needs the sRGB destination + buffer-surface asks below); it
+  changes RANK, not READINESS: whichever of `85.4c`'s remainder or
+  `85.5` unblocks first is now the one to start next.
+
+**Findings + decisions:**
+- **A fourth item filed pdfce → iccce**:
+  `request_cmyk_buffer_destination_and_width.md`, asking for (a) an
+  sRGB destination (iccce's transform machinery exists, the
+  destination does not) and (b) an f32/u8 buffer surface (performance
+  ask, not a blocker — f64 at 8.4 Mpix is 268 MB in / 201 MB out).
+  Cost, measured: iccce's own compiled-transform bench (2026-08-12,
+  their variance note) runs 1.29–1.48 Mpix/s; an A4 page at 150 DPI
+  (2.1 Mpix) ⇒ ≈1.5 s; at 300 DPI (8.4 Mpix) ⇒ ≈6 s — pdfce renders a
+  whole Ghent page in ~0.6 s today, so the conversion alone would be
+  2.5×–10× the entire render. Fine for export, too slow for
+  interactive preview — the reason the f32/u8 ask exists.
+- **What is NOT conformance-driven.** §8.6.7 says "if overprinting is
+  not supported, the value of the overprint parameter shall be
+  ignored" — pdfce is conformant today without simulation — and
+  ISO 32000-1 never describes overprint PREVIEW on a non-separating
+  device (0 hits in 756 pages). Simulating it anyway is a PRODUCT
+  decision, justified by Acrobat parity: Acrobat enables Overprint
+  Preview automatically for PDF/X, so a PDF/X-4 file's EXPECTED
+  appearance includes it.
+- **Checked, not asked about — the R191 question.** The reference-dir
+  guard's false-agreement failure mode (two non-empty, both-low scores
+  read as agreement) was checked against `R191` (verification-harness-
+  fabricated-a-pass) and found NOT a clean match: `R191`'s three
+  instances are all about an EMPTY/absent signal read as success. Not
+  proposed as a new rule; flagged for the engineer to judge.
+- **Acrobat is Pro, not Reader — confirmed again, and a stale global
+  memory entry named.** The window title states Pro directly. This
+  project's own global user-memory entry
+  (`acrobat-reader-is-available-pro-is-not.md`) currently says the
+  opposite and is wrong — flagged, not corrected here (outside this
+  librarian's write scope; it lives in global user memory, not
+  `D:\Dev\pdfce\.claude\agent-memory\pdfce-librarian\`).
+- **Verification (relayed, no shell this dispatch — hard rule 8):**
+  3,781 tests, 0 failures, state at `HEAD` after both commits.
+  `cargo fmt --check`/`cargo clippy --workspace --all-targets -- -D
+  warnings` clean. `cargo tree -p pdfce-core`/`-p pdfce-render` — zero
+  GUI-crate hits, GUI-core separation holds.
+
+**Still in flight:** `Pass 72.0`/`73.0`/`73.1`/`86.0` HIGH PRIORITY
+unstarted; `85.4c` remainder (isolated-knockout → soft masks →
+non-isolated knockout) and `85.5` (overprint simulation) now co-first
+in the Ghent build order, both blocked on external dependencies
+(landed spec dispatch's own sub-order; `iccce`'s response to the
+fourth request file); `85.1` (mesh shadings) third; `85.2` slice 2
+(tiling) still demoted, zero Ghent occurrences; `v0.6.1` release-note
+correction still owed; `LUM-A1`'s spec-corpus back-fill still owed.
+
+**For next session:**
+1. **Next free Pass family is `94`** (`92`/`93` both spent this
+   filing). Next free decision is still **069** (none minted). Next
+   free filing ordinal is **164**. Next free standing rule is still
+   **`R196`** — no mint this filing.
+2. `85.5` (overprint simulation) cannot start until `iccce` answers
+   `request_cmyk_buffer_destination_and_width.md`; `85.4c`'s
+   remainder can start now per its own sub-order (isolated-knockout
+   first). Whichever unblocks first, start it first.
+3. The stale `acrobat-reader-is-available-pro-is-not.md` global-memory
+   entry needs correcting by whoever owns global user memory — not
+   this librarian's file.
+4. `v0.6.1` release-note correction and `LUM-A1` spec-corpus back-fill
+   both still owed, unaffected by this filing.
