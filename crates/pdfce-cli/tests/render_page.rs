@@ -459,6 +459,9 @@ fn renders_a_single_page_to_png_with_the_stable_stdout_line() {
             // the shortfall inside it.
             "groups_composited",
             "groups_knockout_approx",
+            // §8.6.7 overprint — tracked and reported, not simulated.
+            "overprint_requested",
+            "overprint_opm1",
         ],
         "metrics key order is part of the stable contract"
     );

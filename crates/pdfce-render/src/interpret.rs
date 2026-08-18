@@ -281,6 +281,39 @@ pub struct Diagnostics {
     /// Non-zero here means the page's transparency is approximate in a way
     /// no blend-mode counter can express.
     pub transparency_groups_flattened: usize,
+    /// `gs` operators that turned OVERPRINT on (`/OP` or `/op`, §8.6.7)
+    /// while pdfce does not simulate it.
+    ///
+    /// # Why this is counted and not applied
+    ///
+    /// Overprint is a SUBTRACTIVE-device behaviour: an overprinting object
+    /// leaves the backdrop's other colorants in place instead of replacing
+    /// them, which only means anything if the device HAS separable
+    /// colorants. §8.6.7 says overprint mode 1 "shall not apply if the
+    /// device's native colour space is not `DeviceCMYK`", and pdfce
+    /// composites in additive RGB — so on the shipped path there is no
+    /// per-colorant state for overprint to preserve.
+    ///
+    /// ISO 32000-1 never describes overprint PREVIEW on a non-separating
+    /// device (`overprint preview`: 0 hits in the 756-page source), so
+    /// simulating it is a product decision rather than a conformance
+    /// obligation. It is one pdfce intends to take — Acrobat enables
+    /// Overprint Preview automatically for PDF/X files, so a PDF/X-4
+    /// document's EXPECTED appearance includes it — and it needs an
+    /// n-channel compositing buffer, which is an architectural Pass of its
+    /// own. Until then the number is here so a page whose ink model pdfce
+    /// is not honouring says so.
+    pub overprint_requested: usize,
+    /// Of those, the ones that also selected **overprint mode 1** (`/OPM 1`,
+    /// the "nonzero overprint mode").
+    ///
+    /// Separated because mode 1 is where overprint stops being a
+    /// component-set question and becomes a per-component VALUE question:
+    /// a zero DeviceCMYK component leaves the backdrop unchanged. It is
+    /// also the mode §8.6.7 explicitly makes inert off DeviceCMYK, so a
+    /// non-zero count here is the clearest signal that a document expects
+    /// an ink model pdfce is not providing.
+    pub overprint_mode1_requested: usize,
     /// Transparency groups rendered into their own buffer and composited
     /// as a UNIT — the §11.4.5 behaviour. A census, not a shortfall.
     pub transparency_groups_composited: usize,
@@ -788,6 +821,8 @@ polarity unverifiable (decision 006 R30)",
         self.oc_sections_hidden += other.oc_sections_hidden;
         self.unknown_ops += other.unknown_ops;
         self.compat_skipped += other.compat_skipped;
+        self.overprint_requested += other.overprint_requested;
+        self.overprint_mode1_requested += other.overprint_mode1_requested;
         self.transparency_groups_composited += other.transparency_groups_composited;
         self.transparency_groups_knockout_approximated +=
             other.transparency_groups_knockout_approximated;
@@ -2317,6 +2352,44 @@ impl Interpreter<'_> {
         }
         if let Some(v) = ext.get(b"CA").and_then(Object::as_number) {
             self.gs.current.stroke_alpha = (v as f32).clamp(0.0, 1.0);
+        }
+        // §8.6.7 OVERPRINT. Table 58's own rule, which is the easy thing to
+        // get wrong: `/OP` sets BOTH the stroking and non-stroking overprint
+        // parameters, UNLESS `/op` appears in the SAME dictionary — in which
+        // case `/op` takes the non-stroking one. So the order below is
+        // load-bearing, not stylistic.
+        let bool_of = |k: &[u8]| {
+            matches!(
+                ext.get(k).map(|o| self.doc.resolve(o)),
+                Some(Object::Boolean(true))
+            )
+        };
+        let has = |k: &[u8]| ext.get(k).is_some();
+        if has(b"OP") {
+            let v = bool_of(b"OP");
+            self.gs.current.overprint_stroke = v;
+            if !has(b"op") {
+                self.gs.current.overprint_fill = v;
+            }
+        }
+        if has(b"op") {
+            self.gs.current.overprint_fill = bool_of(b"op");
+        }
+        if let Some(v) = ext
+            .get(b"OPM")
+            .map(|o| self.doc.resolve(o))
+            .and_then(|o| match o {
+                Object::Integer(i) => Some(*i),
+                _ => None,
+            })
+        {
+            self.gs.current.overprint_mode = v;
+        }
+        if self.gs.current.overprint_stroke || self.gs.current.overprint_fill {
+            self.diag.overprint_requested += 1;
+            if self.gs.current.overprint_mode == 1 {
+                self.diag.overprint_mode1_requested += 1;
+            }
         }
         // Remaining Table 58 keys (BM/SMask/Font/…): still deferred.
     }

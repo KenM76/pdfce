@@ -85,6 +85,7 @@ AREA_MIN = 200      # px; below this a mark is a glyph, not a swatch trap
 EDGE_MIN, EDGE_MAX = 16, 90
 FILL_LO, FILL_HI = 0.15, 0.60
 DIAG_MIN = 0.85
+CONTRAST_MIN = 12.0   # 8-bit levels; below this the X is not "clear"
 
 
 def cli_path():
@@ -142,9 +143,54 @@ def find_traps(png):
             yy, xx = np.nonzero(m)
             u = xx / max(w - 1, 1)
             vv = yy / max(h - 1, 1)
-            on = (np.abs(u - vv) < 0.25) | (np.abs(u + vv - 1) < 0.25)
-            diag = float(on.mean())
+            d1 = np.abs(u - vv) < 0.25          # top-left -> bottom-right
+            d2 = np.abs(u + vv - 1) < 0.25      # top-right -> bottom-left
+            diag = float((d1 | d2).mean())
             if diag < DIAG_MIN:
+                continue
+            # ★ BOTH diagonals must carry real mass. Without this a SINGLE
+            # diagonal stroke scores 1.00 -- every one of its pixels is
+            # "near a diagonal" -- and the detector reports an X wherever a
+            # slash, a chart rule or an anti-aliased corner appears. That
+            # false positive is not hypothetical: it put 8 phantom traps on
+            # an Acrobat render of GWG 2.0 whose ten swatches are provably
+            # clean, and it inflated pdfce's own failure count too. An X has
+            # two arms; requiring each to hold at least a quarter of the
+            # mark is what makes it an X rather than a line.
+            if float(d1.mean()) < 0.25 or float(d2.mean()) < 0.25:
+                continue
+            # ★ AND THE ARMS MUST ACTUALLY CROSS. A real X has mass at the
+            # centre of its bounding box, where the two strokes meet. A
+            # hollow ring, an anti-aliased corner, or two opposite corner
+            # wedges all satisfy "both diagonals carry mass" while having
+            # nothing in the middle -- which is what still fired on
+            # Acrobat's anti-aliased screen renders after the both-arms
+            # constraint. Cheap, and it is the difference between "shaped
+            # like a cross" and "shaped like anything on two diagonals".
+            cy0, cy1 = int(h * 0.40), int(h * 0.60) + 1
+            cx0, cx1 = int(w * 0.40), int(w * 0.60) + 1
+            centre = m[cy0:cy1, cx0:cx1]
+            if centre.size == 0 or centre.mean() < 0.55:
+                continue
+            # ★ AND IT MUST BE A *CLEAR* X. The suite's own wording is "a
+            # clear X indicates the improper handling of a file", judged by
+            # a human at 0.5 m -- so a mark that is geometrically an X but
+            # only a shade away from its surround is a PASS by the suite's
+            # criterion even though it is present in the pixels.
+            #
+            # This is not a convenience threshold. Segmenting on exact
+            # intensity found genuine X marks in all eight swatches of an
+            # Acrobat render of GWG 2.0 that is, to the eye, ten clean green
+            # squares: Acrobat leaves a sub-perceptual difference. Counting
+            # those made the detector STRICTER than the standard it is
+            # implementing, which is its own kind of wrong answer.
+            band = im[y:y + h, x:x + w]
+            inside = float(band[m].mean())
+            outside_mask = ~m
+            if outside_mask.sum() < 20:
+                continue
+            outside = float(band[outside_mask].mean())
+            if abs(inside - outside) < CONTRAST_MIN:
                 continue
             found.append((x, y, w, h, round(fill, 2), round(diag, 2)))
     found.sort(key=lambda t: -t[2] * t[3])

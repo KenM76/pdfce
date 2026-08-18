@@ -200,6 +200,24 @@ pub struct GraphicsState {
     /// numerically in `crates/pdfce-render/tests/blend_modes.rs` rather
     /// than assumed from the two specifications' shared ancestry.
     pub blend_mode: tiny_skia::BlendMode,
+    /// Overprint for **stroking** operations — `/OP` (§8.6.7, Table 58).
+    /// Initial value `false`.
+    pub overprint_stroke: bool,
+    /// Overprint for **non-stroking** operations — `/op` (Table 58).
+    /// Initial value `false`.
+    ///
+    /// Table 58 makes `/OP` set BOTH parameters unless `/op` appears in the
+    /// SAME ExtGState dictionary, which is why these are set together at
+    /// the operator rather than independently here.
+    pub overprint_fill: bool,
+    /// Overprint mode — `/OPM` (§8.6.7). `0` or `1`; initial value `0`.
+    ///
+    /// Mode 1 is the "nonzero overprint mode" in which a zero DeviceCMYK
+    /// component leaves the backdrop alone. §8.6.7 says it "shall not apply
+    /// if the device's native colour space is not `DeviceCMYK`" — pdfce
+    /// renders to an additive RGB display, so on the shipped path this is
+    /// tracked and reported rather than applied.
+    pub overprint_mode: i64,
     /// Current clipping path as a device-space mask, `None` = the
     /// initial clip = the entire page (§8.5.4). Stored rasterized
     /// (tiny-skia `Mask`) because PDF only ever intersects clips —
@@ -262,6 +280,10 @@ impl GraphicsState {
             // Table 58's initial value for /BM is `Normal`, which is
             // Porter-Duff source-over — tiny_skia's own default.
             blend_mode: tiny_skia::BlendMode::SourceOver,
+            // Table 58 initial values: overprint off, overprint mode 0.
+            overprint_stroke: false,
+            overprint_fill: false,
+            overprint_mode: 0,
             clip: None,
             clip_bbox: None,
             text: crate::text::TextState::default(),

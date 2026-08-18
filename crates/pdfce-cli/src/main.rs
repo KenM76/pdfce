@@ -6597,7 +6597,8 @@ shadings_paintable={} shadings_painted={} shadings_refused={} shadings_mesh={} \
 img_colorant_none={} img_uncalibrated={} \
 blend_modes_applied={} blend_modes_ignored={} soft_masks_ignored={} \
 groups_flattened={} groups_special={} \
-groups_composited={} groups_knockout_approx={}",
+groups_composited={} groups_knockout_approx={} \
+overprint_requested={} overprint_opm1={}",
         input.display(),
         output.display(),
         rendered.pixmap.width(),
@@ -6759,6 +6760,12 @@ groups_composited={} groups_knockout_approx={}",
         // wrong.
         d.transparency_groups_composited,
         d.transparency_groups_knockout_approximated,
+        // §8.6.7 overprint. Tracked and reported, not simulated: pdfce
+        // composites in additive RGB and there is no per-colorant state
+        // for overprint to preserve. Non-zero means the document expects
+        // an ink model pdfce is not providing.
+        d.overprint_requested,
+        d.overprint_mode1_requested,
     );
     report_diagnostics(d);
 
@@ -6913,6 +6920,20 @@ deliberately DECLINES to composite because the available implementation is measu
 there, which is harder to notice: a blend composited as Normal looks like an ordinary opaque \
 overlay",
             d.blend_modes_ignored
+        );
+    }
+    if d.overprint_requested > 0 {
+        eprintln!(
+            "pdfce-cli: note: {} graphics-state(s) enabled OVERPRINT (/OP or /op, ISO 32000-1 §8.6.7){}; pdfce does NOT simulate it. Overprint is a subtractive-device behaviour — an overprinting object leaves the backdrop's other colorants in place instead of replacing them — and pdfce composites in additive RGB, where there are no separable colorants to preserve. On a PDF/X file this matters: Acrobat turns Overprint Preview ON automatically for PDF/X, so the document's EXPECTED appearance includes overprint and pdfce's does not",
+            d.overprint_requested,
+            if d.overprint_mode1_requested > 0 {
+                format!(
+                    ", {} of them with overprint MODE 1 (/OPM 1)",
+                    d.overprint_mode1_requested
+                )
+            } else {
+                String::new()
+            }
         );
     }
     if d.transparency_groups_flattened > 0 {
