@@ -122,6 +122,43 @@ already computed, whereas during interpretation they are not known until the
 path has been built, which is the expensive part. **So culling belongs in the
 replay path and is not an alternative to the handle.**
 
+
+#### ★ Where inside the 89 % — a second measurement, because "interpretation" was still a bucket not a location
+
+**Measured 2026-08-18**, same session, by timing `Interpreter::paint` directly
+(the single chokepoint every path fill and stroke funnels through) rather than
+by ablation.
+
+```
+FLOOR 742.4 ms   of which paint() = 126.6 ms   = 17.1 %
+```
+
+⇒ **`paint()` is ~17 % of the floor; ~83 % is spent OUTSIDE it.**
+
+The 83 % is content-stream tokenizing, operator dispatch, graphics-state
+handling and — the part that is easy to mis-locate — **`PathBuilder` pushes**.
+A path is built **incrementally by the `m` / `l` / `c` / `re` operators**, so
+its construction cost is spread across the operator loop and is *not* inside
+`paint()`; only `builder.finish()` is.
+
+**Why this matters for `Pass 75.0`'s shape rather than just its funding.** The
+expensive thing is producing a finished `Path`, and it is expensive *before*
+the paint call, distributed over thousands of operators. So the display list
+must store **finished paths**, and the natural recording point is `paint()`,
+where the finished path first exists as a value. A cache keyed anywhere
+earlier would have to cache the operator stream and rebuild the path — which
+is most of the cost it was supposed to avoid.
+
+⚠️ **Read the first number of a run and discard it.** The counter accumulates
+across renders, so a report taken after the FULL cases attributes their
+`paint()` time to the FLOOR case and can exceed 100 %. The figure above is the
+**second** FLOOR iteration, after the counter was zeroed. Recorded because the
+first reading said *164 %*, which is obviously wrong and would have been
+quietly halved into something plausible by anyone in a hurry.
+
+**Both instrumentations were reverted.** They are measurement hacks; the tree
+is byte-clean against `HEAD` apart from this document.
+
 #### ★ A cull at the PAINT site was already measured and correctly rejected
 
 `paint_is_cullable` exists in `interpret.rs` and feeds **only** a counter. That
