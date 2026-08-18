@@ -1,0 +1,695 @@
+//! `CompatibleOverprint` — ISO 32000-1 §11.7.4.3, Table 149.
+//!
+//! # What this module is
+//!
+//! Overprint is the prepress behaviour where painting one ink does **not**
+//! erase the inks already on the sheet. Paint cyan, then paint magenta over
+//! it with overprint on, and the press lays magenta ink on top of cyan ink:
+//! the result is blue. With overprint **off** — the normal PDF model — the
+//! magenta paint *replaces* all four colorants, so the cyan is knocked out
+//! and the result is magenta.
+//!
+//! In the transparent imaging model the standard expresses this not as a
+//! special case in the painting code but as a **blend mode**:
+//! `CompatibleOverprint`, whose per-component blend function
+//! `B(c_b, c_s)` is given by Table 149. That is the formulation implemented
+//! here, and it is the useful one, because it puts overprint on exactly the
+//! same footing as `Multiply` or `Darken` — a function of the backdrop
+//! component and the source component, evaluated per colour component.
+//!
+//! # Why pdfce implements this at all, when the standard says it need not
+//!
+//! **pdfce is not obliged to do any of this.** The spec RAG's consolidator
+//! (`iso32000__ref__spot_colour_overprint.md`) records two sourced facts
+//! that between them make overprint simulation entirely optional:
+//!
+//! - **`OP-N1` (a negative result, not a gap):** ISO 32000-1 *never
+//!   describes* overprint preview or simulation on a non-separating device.
+//!   The phrase "overprint preview" has **zero** occurrences in the 756-page
+//!   source.
+//! - **§8.6.7 directly:** *"If overprinting is not supported, the value of
+//!   the overprint parameter shall be ignored."* Ignoring `/OP` and `/op`
+//!   is **conformant**, and it is what pdfce did until this module existed.
+//!
+//! So this is `C2` in that document's obliged-vs-choosing table: a **policy
+//! choice**, deliberately made, to render what a press would produce rather
+//! than what the standard's floor permits. Two reasons:
+//!
+//! 1. The Ghent PDF Output Suite's overprint patches are authored so that a
+//!    renderer which ignores overprint shows a visible trap X. Ten of the
+//!    suite's 51 patches test overprint directly. A conformant renderer that
+//!    ignores it fails all ten, and the operator sees ten red Xs.
+//! 2. The operator's stated goal is prepress-credible output. "Conformant"
+//!    and "correct on a press" are different bars here, and the second is
+//!    the one that matters for the files this project is aimed at.
+//!
+//! Because it is a choice rather than an obligation, it is **disclosable**
+//! under project rule 4 and is reported through the render diagnostics
+//! rather than applied silently.
+//!
+//! # The polarity trap, stated once so it is not re-derived
+//!
+//! Table 149 is written in **subtractive tint** values: `0.0` means *no
+//! colorant* (lightest) and `1.0` means *full colorant* (darkest). That is
+//! the opposite of the additive convention used for RGB.
+//!
+//! The standard is explicit that this is a presentational convenience:
+//!
+//! > "Colour component values are represented in these tables as
+//! > **subtractive tint values**… In reality, however, `CompatibleOverprint`
+//! > (like all blend modes) shall treat colour components as **additive**
+//! > values; subtractive components shall be **complemented before and
+//! > after** application of the blend function." — §11.7.4.5
+//!
+//! **This module works in TINT throughout**, matching the table as written,
+//! and does not complement anything. That is a deliberate simplification and
+//! it is safe *only* because every function in Table 149 is one of
+//! `c_s`, `c_b`, or the constant `0.0` — a selection among existing values,
+//! never an arithmetic combination of them. Complementing before and after a
+//! function that merely *chooses* an operand yields the identical choice.
+//! If a future edit makes any cell arithmetic (it will not; the table is
+//! closed), the complement steps become mandatory.
+//!
+//! # What Table 149 keys on
+//!
+//! Three inputs decide each cell:
+//!
+//! 1. **The source colour space** — specifically whether it is `DeviceCMYK`
+//!    named *directly* (not via an image sample), some other process space,
+//!    a `Separation`/`DeviceN`, or a **transparency group** rather than an
+//!    elementary object.
+//! 2. **The affected component** of the **group's** colour space — process
+//!    or spot, and if spot, whether the source space *names* it.
+//! 3. **The overprint parameters** — `OP`/`op` (a boolean) and `OPM`
+//!    (`0` or `1`).
+//!
+//! Note the second input carefully, because it is the subtlest thing in the
+//! clause and the standard spends a whole NOTE on it: in **Table 148** (the
+//! opaque model) the components are *actual device colorants*; in **Table
+//! 149** they are the components of the **group's** colour space, which
+//! "is not necessarily the same as that of the output device (and can even
+//! be something like `CalRGB` or `ICCBased`)". Consequently "the process
+//! colour components of the group colour space **cannot** be treated as if
+//! they were spot colours".
+//!
+//! # The group row, and why it is not a shortcut
+//!
+//! The final row of Table 149 — a source that is itself a transparency
+//! group — evaluates to `c_s` in **every** column, i.e. `CompatibleOverprint`
+//! degenerates to `Normal`. This is not an omission to be improved upon
+//! later. The standard's reasoning:
+//!
+//! > "Since no information is retained about which components were actually
+//! > painted within the group, compatible overprinting is not possible in
+//! > this case; the `CompatibleOverprint` blend mode **reverts to Normal**,
+//! > with no consideration of the overprint and overprint mode parameters."
+//!
+//! # Known ambiguity, surfaced rather than decided here
+//!
+//! **`OP-A3`:** the standard defines *two* overprint parameters (stroking
+//! and non-stroking) but never says which one indexes the `OP` column of
+//! Tables 148/149. The consolidator records this as unresolved in **both**
+//! §8.6.7 and §11.7.4. This module therefore takes `op` as an explicit
+//! argument and refuses to guess: the caller — which knows whether it is
+//! filling or stroking — supplies the matching parameter. See
+//! [`ComponentRule`] for where that choice is made visible.
+
+use crate::color::{ColorSpace, Colorant};
+
+/// Which of Table 149's source-space rows applies.
+///
+/// This is deliberately a *classification of the row*, not of the colour
+/// space, because Table 149's rows do not partition colour spaces cleanly:
+/// `DeviceCMYK` appears in two different rows depending on **how** it was
+/// specified, and a transparency group is not a colour space at all.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SourceKind {
+    /// `DeviceCMYK`, specified directly and **not** in a sampled image.
+    ///
+    /// The "not in a sampled image" qualifier is load-bearing and is the
+    /// reason this variant exists separately from [`Self::OtherProcess`]:
+    /// it is the **only** row where `OPM 1` behaves differently from
+    /// `OPM 0`. A CMYK *image* falls into the other row, where the two
+    /// overprint modes are identical.
+    DeviceCmykDirect,
+    /// Any other process colour space — including `DeviceCMYK` reached any
+    /// other way (an image sample, an `ICCBased` with four components,
+    /// `DeviceRGB`, `DeviceGray`, `CalRGB`, `Lab`).
+    OtherProcess,
+    /// A `Separation` or `DeviceN` space, carrying the colorant names it
+    /// actually specifies.
+    ///
+    /// The names matter because Table 149 splits spot components into
+    /// *named in the source space* (painted normally) and *not named*
+    /// (left to the backdrop under overprint). A `Separation` names
+    /// exactly one colorant; a `DeviceN` names several.
+    SeparationOrDeviceN {
+        /// The colorants, in the order the space declares them.
+        ///
+        /// Held as [`Colorant`] rather than raw names so `/All` keeps its
+        /// meaning. §8.6.6.4 says `/All` "shall refer collectively to all
+        /// colorants available on an output device", which for Table 149's
+        /// "named in source space" test means it names EVERY component --
+        /// a distinction a bare name string would erase.
+        names: Vec<Colorant>,
+    },
+    /// The source is a transparency **group**, not an elementary object.
+    ///
+    /// Reverts to `Normal` in every column — see the module docs.
+    Group,
+}
+
+/// Which component of the **group's** colour space is being computed.
+///
+/// "Of the group's colour space" is the whole subtlety of Table 149 versus
+/// Table 148; see the module documentation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Component {
+    /// One of cyan, magenta, yellow or black.
+    ///
+    /// Distinguished from [`Self::OtherProcess`] because the
+    /// `DeviceCMYK`-direct row treats *only* these four specially under
+    /// `OPM 1`.
+    ProcessCmyk,
+    /// A process component that is not one of C, M, Y, K — for instance a
+    /// red, green or blue component of an RGB group colour space.
+    OtherProcess,
+    /// A spot colorant, identified by name so the "named in source space"
+    /// test can be applied.
+    Spot(String),
+}
+
+/// The value `B(c_b, c_s)` selects, before it is applied.
+///
+/// Returned rather than a bare `f32` so a caller can *report* what overprint
+/// did without having to compare numbers and infer it — a paint that
+/// happens to leave a component unchanged because `c_s == c_b` is not the
+/// same event as one that deliberately preserved the backdrop, and rule 4's
+/// disclosure needs to tell them apart.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ComponentRule {
+    /// Paint the source tint: `B = c_s`. The ordinary, non-overprint result.
+    Source,
+    /// Preserve the backdrop tint: `B = c_b`. This is overprint *acting* —
+    /// the component survives because the source did not claim it.
+    Backdrop,
+    /// Paint zero tint: `B = 0.0`. An explicit erase, not a no-op.
+    ///
+    /// This cell surprises people and is **not** a spec defect. `SP-N2` in
+    /// the consolidator records it as a confirmed negative result: a
+    /// `Separation` paint with overprint **off** *erases* the process
+    /// colorants it does not name, and the standard states this twice
+    /// (Table 148, and Table 149's `c_s (= 0.0)` notation). Recorded so it
+    /// is not "fixed" by a later reader who assumes it must be a typo.
+    Zero,
+}
+
+impl ComponentRule {
+    /// Resolve the rule to an actual tint value given the two operands.
+    ///
+    /// Kept separate from [`compatible_overprint`] so the *decision* can be
+    /// tested against Table 149 without threading sample values through
+    /// every case — the table specifies which operand wins, and that is the
+    /// part worth pinning.
+    #[must_use]
+    pub fn apply(self, backdrop: f32, source: f32) -> f32 {
+        match self {
+            Self::Source => source,
+            Self::Backdrop => backdrop,
+            Self::Zero => 0.0,
+        }
+    }
+
+    /// Whether this rule leaves the backdrop showing through.
+    ///
+    /// The predicate a caller uses to answer "did overprint change what the
+    /// operator sees here?" without re-deriving the table.
+    #[must_use]
+    pub const fn preserves_backdrop(self) -> bool {
+        matches!(self, Self::Backdrop)
+    }
+}
+
+/// Evaluate Table 149 for one component.
+///
+/// # Arguments
+///
+/// * `source` — which row of Table 149 the painting operation falls in.
+/// * `component` — which component of the **group** colour space is being
+///   computed (not of the output device; see the module docs).
+/// * `op` — the overprint parameter. **Which** of the two parameters
+///   (stroking or non-stroking) this is, is the caller's decision: the
+///   standard does not say, and that silence is recorded as `OP-A3`.
+/// * `opm` — the overprint mode, `0` or `1`. Values other than these two
+///   have **no specified behaviour** (`OP-N2`); this function treats any
+///   non-`1` value as mode `0`, which is the conservative reading because
+///   mode 0 is the mode that changes less.
+///
+/// # Returns
+///
+/// The [`ComponentRule`] Table 149 selects. Call [`ComponentRule::apply`]
+/// with the actual backdrop and source tints to get the blended value.
+///
+/// # Examples
+///
+/// Overprint off is always just the source, for a process component:
+///
+/// ```
+/// use pdfce_render::overprint::{compatible_overprint, Component, ComponentRule, SourceKind};
+///
+/// let rule = compatible_overprint(
+///     &SourceKind::DeviceCmykDirect,
+///     &Component::ProcessCmyk,
+///     false,
+///     0,
+/// );
+/// assert_eq!(rule, ComponentRule::Source);
+/// ```
+///
+/// Mode 1 is where `DeviceCMYK` starts preserving the backdrop — and only
+/// for components whose source tint is zero, which is why the source tint
+/// is an input here:
+///
+/// ```
+/// use pdfce_render::overprint::{compatible_overprint_cmyk, Component, ComponentRule, SourceKind};
+///
+/// // Source cyan is 0.0 under OPM 1 => the backdrop's cyan survives.
+/// let rule = compatible_overprint_cmyk(
+///     &SourceKind::DeviceCmykDirect,
+///     &Component::ProcessCmyk,
+///     true,
+///     1,
+///     0.0,
+/// );
+/// assert_eq!(rule, ComponentRule::Backdrop);
+///
+/// // A non-zero source cyan paints normally even under OPM 1.
+/// let rule = compatible_overprint_cmyk(
+///     &SourceKind::DeviceCmykDirect,
+///     &Component::ProcessCmyk,
+///     true,
+///     1,
+///     0.6,
+/// );
+/// assert_eq!(rule, ComponentRule::Source);
+/// ```
+#[must_use]
+pub fn compatible_overprint(
+    source: &SourceKind,
+    component: &Component,
+    op: bool,
+    opm: u8,
+) -> ComponentRule {
+    // The `OPM 1` cell of the `DeviceCMYK`-direct row is the ONLY cell in
+    // the whole table that depends on the source tint value, so the
+    // tint-free entry point routes through the tint-aware one with a
+    // non-zero placeholder. Any non-zero value gives the same answer for
+    // every other cell, and for that one cell it gives the "paint source"
+    // half — which is the correct default for a caller that has not told us
+    // the tint.
+    compatible_overprint_cmyk(source, component, op, opm, 1.0)
+}
+
+/// Evaluate Table 149 for one component, given the source tint.
+///
+/// Identical to [`compatible_overprint`] except that the `DeviceCMYK`-direct
+/// / `OPM 1` cell — the single cell in Table 149 whose result depends on a
+/// *value* rather than only on a classification — can be resolved.
+///
+/// That cell reads:
+///
+/// > `c_s` if `c_s` ≠ 0.0 / `c_b` if `c_s` = 0.0
+///
+/// which is the rule that makes `OPM 1` ("nonzero overprint mode") useful:
+/// a `DeviceCMYK` paint with a zero in some channel leaves that channel's
+/// backdrop alone instead of erasing it, so `0 0 0 1 k` prints black text
+/// **over** a coloured background rather than knocking a black-shaped hole
+/// in it.
+#[must_use]
+pub fn compatible_overprint_cmyk(
+    source: &SourceKind,
+    component: &Component,
+    op: bool,
+    opm: u8,
+    source_tint: f32,
+) -> ComponentRule {
+    // Table 149's last row, taken first because it overrides everything:
+    // a group source reverts to Normal "with no consideration of the
+    // overprint and overprint mode parameters".
+    if matches!(source, SourceKind::Group) {
+        return ComponentRule::Source;
+    }
+
+    match (source, component) {
+        // --- Row 1: DeviceCMYK, specified directly, not in a sampled image.
+        (SourceKind::DeviceCmykDirect, Component::ProcessCmyk) => {
+            if op && opm == 1 {
+                // The one value-dependent cell in the table.
+                if source_tint == 0.0 {
+                    ComponentRule::Backdrop
+                } else {
+                    ComponentRule::Source
+                }
+            } else {
+                // OP false, and OP true / OPM 0, are both plain `c_s`.
+                ComponentRule::Source
+            }
+        }
+        // Row 1, second line: a process component that is not C, M, Y or K
+        // — e.g. painting DeviceCMYK into an RGB group. Always the source.
+        (SourceKind::DeviceCmykDirect, Component::OtherProcess) => ComponentRule::Source,
+
+        // --- Row 2: any other process colour space, process component.
+        (SourceKind::OtherProcess, Component::ProcessCmyk | Component::OtherProcess) => {
+            // Note there is NO OPM distinction here. This is exactly why
+            // `DeviceCmykDirect` is a separate variant: a CMYK image lands
+            // in this row and must NOT get the mode-1 behaviour.
+            ComponentRule::Source
+        }
+
+        // --- Spot components under a process source space (rows 1 and 2,
+        //     third line). A process paint does not name any spot colorant,
+        //     so with overprint off it erases them and with overprint on it
+        //     leaves them alone.
+        (SourceKind::DeviceCmykDirect | SourceKind::OtherProcess, Component::Spot(_)) => {
+            if op {
+                ComponentRule::Backdrop
+            } else {
+                ComponentRule::Zero
+            }
+        }
+
+        // --- Row 3: Separation / DeviceN.
+        (
+            SourceKind::SeparationOrDeviceN { .. },
+            Component::ProcessCmyk | Component::OtherProcess,
+        ) => {
+            // A process component under a Separation/DeviceN source. With
+            // overprint OFF this is `c_s (= 0.0)` -- the erase that `SP-N2`
+            // records as deliberate and twice-stated.
+            if op {
+                ComponentRule::Backdrop
+            } else {
+                ComponentRule::Zero
+            }
+        }
+        (SourceKind::SeparationOrDeviceN { names }, Component::Spot(name)) => {
+            // `/All` names every colorant by definition (§8.6.6.4), so it
+            // satisfies "named in source space" for any component. `/None`
+            // never paints at all and is suppressed upstream, so it names
+            // nothing here.
+            let named = names.iter().any(|n| match n {
+                Colorant::All => true,
+                Colorant::None => false,
+                Colorant::Named(n) => n == name,
+            });
+            if named {
+                // Named in the source space: painted normally in every
+                // column, overprint or not.
+                ComponentRule::Source
+            } else if op {
+                ComponentRule::Backdrop
+            } else {
+                ComponentRule::Zero
+            }
+        }
+
+        // Unreachable: `Group` returned above.
+        (SourceKind::Group, _) => ComponentRule::Source,
+    }
+}
+
+/// Classify a [`ColorSpace`] into its Table 149 row.
+///
+/// `in_image_sample` distinguishes the two `DeviceCMYK` rows: the standard
+/// separates "`DeviceCMYK`, specified directly, **not in a sampled image**"
+/// from "any process colour space (**including other cases of
+/// `DeviceCMYK`**)", and the difference is real — only the first gets
+/// `OPM 1` behaviour.
+///
+/// # Returns
+///
+/// [`None`] when the space cannot be classified — a `Pattern` space, whose
+/// colour comes from the pattern's own content stream rather than from a
+/// colour operand, so there is no single source colour for Table 149 to
+/// key on. The caller should paint normally and, if overprint was
+/// requested, disclose that it could not be honoured.
+#[must_use]
+pub fn classify(space: &ColorSpace, in_image_sample: bool) -> Option<SourceKind> {
+    match space {
+        ColorSpace::DeviceCmyk => Some(if in_image_sample {
+            SourceKind::OtherProcess
+        } else {
+            SourceKind::DeviceCmykDirect
+        }),
+        ColorSpace::DeviceGray | ColorSpace::DeviceRgb => Some(SourceKind::OtherProcess),
+        ColorSpace::Separation { colorant, .. } => Some(SourceKind::SeparationOrDeviceN {
+            names: vec![colorant.clone()],
+        }),
+        ColorSpace::DeviceN { names, .. } => Some(SourceKind::SeparationOrDeviceN {
+            names: names.to_vec(),
+        }),
+        _ => Some(SourceKind::OtherProcess),
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests {
+    use super::*;
+
+    fn spot(name: &str) -> Component {
+        Component::Spot(name.to_owned())
+    }
+
+    fn sep(names: &[&str]) -> SourceKind {
+        SourceKind::SeparationOrDeviceN {
+            names: names
+                .iter()
+                .map(|n| Colorant::Named((*n).to_owned()))
+                .collect(),
+        }
+    }
+
+    /// ★ Table 149, transcribed cell by cell.
+    ///
+    /// The whole point of this module is to be Table 149 and nothing else,
+    /// so the test IS the table: every row, every one of the three columns.
+    /// A cell that disagrees with the standard is a wrong pixel on a press,
+    /// and no downstream test would localise it.
+    ///
+    /// The `DeviceCMYK` / `OPM 1` row is covered separately below because
+    /// it is the one cell that depends on a value rather than a class.
+    #[test]
+    fn table_149_transcribed() {
+        // (source, component, OP false, OP+OPM0, OP+OPM1)
+        let cases: Vec<(
+            SourceKind,
+            Component,
+            ComponentRule,
+            ComponentRule,
+            ComponentRule,
+        )> = vec![
+            // Row 1: DeviceCMYK direct.
+            (
+                SourceKind::DeviceCmykDirect,
+                Component::OtherProcess,
+                ComponentRule::Source,
+                ComponentRule::Source,
+                ComponentRule::Source,
+            ),
+            (
+                SourceKind::DeviceCmykDirect,
+                spot("PANTONE 185 C"),
+                ComponentRule::Zero,
+                ComponentRule::Backdrop,
+                ComponentRule::Backdrop,
+            ),
+            // Row 2: any other process space.
+            (
+                SourceKind::OtherProcess,
+                Component::ProcessCmyk,
+                ComponentRule::Source,
+                ComponentRule::Source,
+                ComponentRule::Source,
+            ),
+            (
+                SourceKind::OtherProcess,
+                Component::OtherProcess,
+                ComponentRule::Source,
+                ComponentRule::Source,
+                ComponentRule::Source,
+            ),
+            (
+                SourceKind::OtherProcess,
+                spot("Varnish"),
+                ComponentRule::Zero,
+                ComponentRule::Backdrop,
+                ComponentRule::Backdrop,
+            ),
+            // Row 3: Separation / DeviceN.
+            (
+                sep(&["Spot1"]),
+                Component::ProcessCmyk,
+                ComponentRule::Zero,
+                ComponentRule::Backdrop,
+                ComponentRule::Backdrop,
+            ),
+            (
+                sep(&["Spot1"]),
+                spot("Spot1"),
+                ComponentRule::Source,
+                ComponentRule::Source,
+                ComponentRule::Source,
+            ),
+            (
+                sep(&["Spot1"]),
+                spot("Spot2"),
+                ComponentRule::Zero,
+                ComponentRule::Backdrop,
+                ComponentRule::Backdrop,
+            ),
+            // Last row: a group source reverts to Normal everywhere.
+            (
+                SourceKind::Group,
+                Component::ProcessCmyk,
+                ComponentRule::Source,
+                ComponentRule::Source,
+                ComponentRule::Source,
+            ),
+            (
+                SourceKind::Group,
+                spot("Spot1"),
+                ComponentRule::Source,
+                ComponentRule::Source,
+                ComponentRule::Source,
+            ),
+        ];
+
+        for (src, comp, off, on0, on1) in cases {
+            assert_eq!(
+                compatible_overprint(&src, &comp, false, 0),
+                off,
+                "Table 149 OP-false column, source {src:?}, component {comp:?}",
+            );
+            assert_eq!(
+                compatible_overprint(&src, &comp, true, 0),
+                on0,
+                "Table 149 OP-true/OPM-0 column, source {src:?}, component {comp:?}",
+            );
+            assert_eq!(
+                compatible_overprint(&src, &comp, true, 1),
+                on1,
+                "Table 149 OP-true/OPM-1 column, source {src:?}, component {comp:?}",
+            );
+        }
+    }
+
+    /// ★ The one value-dependent cell: DeviceCMYK direct, CMYK component,
+    /// OP true, OPM 1 — `c_s` if `c_s` ≠ 0, else `c_b`.
+    ///
+    /// This is the cell that makes `0 0 0 1 k` overprinting black text work,
+    /// and getting it backwards produces the exact opposite of the intended
+    /// effect (a knockout hole instead of an overprint), which is why it is
+    /// pinned separately rather than folded into the table above.
+    #[test]
+    fn opm_one_preserves_the_backdrop_only_where_the_source_is_zero() {
+        let s = SourceKind::DeviceCmykDirect;
+        let c = Component::ProcessCmyk;
+
+        assert_eq!(
+            compatible_overprint_cmyk(&s, &c, true, 1, 0.0),
+            ComponentRule::Backdrop,
+            "a zero source component under OPM 1 must leave the backdrop alone — \
+             this is the whole purpose of nonzero overprint mode",
+        );
+        for tint in [0.001_f32, 0.5, 1.0] {
+            assert_eq!(
+                compatible_overprint_cmyk(&s, &c, true, 1, tint),
+                ComponentRule::Source,
+                "a nonzero source component ({tint}) must paint normally even under OPM 1",
+            );
+        }
+
+        // And OPM 0 does NOT get this behaviour, which is the distinction
+        // between the two modes.
+        assert_eq!(
+            compatible_overprint_cmyk(&s, &c, true, 0, 0.0),
+            ComponentRule::Source,
+            "OPM 0 paints all four components regardless of value — if this ever \
+             returns Backdrop, mode 0 and mode 1 have been conflated",
+        );
+    }
+
+    /// A CMYK **image** is not the same row as a CMYK fill.
+    ///
+    /// `classify`'s `in_image_sample` flag exists solely for this, and it is
+    /// easy to drop: both are "DeviceCMYK", and only the standard's phrase
+    /// "not in a sampled image" separates them. Getting it wrong gives
+    /// images a mode-1 behaviour they must not have.
+    #[test]
+    fn a_cmyk_image_sample_does_not_get_mode_one_behaviour() {
+        let direct = classify(&ColorSpace::DeviceCmyk, false).unwrap();
+        let sampled = classify(&ColorSpace::DeviceCmyk, true).unwrap();
+        assert_eq!(direct, SourceKind::DeviceCmykDirect);
+        assert_eq!(sampled, SourceKind::OtherProcess);
+
+        assert_eq!(
+            compatible_overprint_cmyk(&direct, &Component::ProcessCmyk, true, 1, 0.0),
+            ComponentRule::Backdrop,
+        );
+        assert_eq!(
+            compatible_overprint_cmyk(&sampled, &Component::ProcessCmyk, true, 1, 0.0),
+            ComponentRule::Source,
+            "a sampled CMYK image falls in the 'any other process space' row, where \
+             OPM 1 and OPM 0 are identical",
+        );
+    }
+
+    /// `OP-N2`: values of `OPM` other than 0 and 1 have no specified
+    /// behaviour. This pins the conservative reading rather than leaving it
+    /// to whatever the `match` happens to do.
+    #[test]
+    fn an_unspecified_overprint_mode_falls_back_to_mode_zero() {
+        let s = SourceKind::DeviceCmykDirect;
+        let c = Component::ProcessCmyk;
+        for opm in [2_u8, 3, 255] {
+            assert_eq!(
+                compatible_overprint_cmyk(&s, &c, true, opm, 0.0),
+                ComponentRule::Source,
+                "OPM {opm} is unspecified (OP-N2); mode 0 is the conservative reading \
+                 because it is the mode that changes less",
+            );
+        }
+    }
+
+    /// `SP-N2`, guarded explicitly: a `Separation` paint with overprint OFF
+    /// **erases** process colorants. Stated twice in the standard and
+    /// recorded as a confirmed negative result precisely so nobody "fixes"
+    /// it into `Source`.
+    #[test]
+    fn a_separation_paint_without_overprint_erases_process_colorants() {
+        assert_eq!(
+            compatible_overprint(&sep(&["Spot1"]), &Component::ProcessCmyk, false, 0),
+            ComponentRule::Zero,
+            "SP-N2: this cell is 'paint 0.0', not 'paint source' and not 'do not \
+             paint'. It is stated in both Table 148 and Table 149 and is NOT a typo",
+        );
+    }
+
+    /// `apply` resolves a rule to the right operand.
+    #[test]
+    fn rules_resolve_to_the_operand_they_name() {
+        assert!((ComponentRule::Source.apply(0.25, 0.75) - 0.75).abs() < f32::EPSILON);
+        assert!((ComponentRule::Backdrop.apply(0.25, 0.75) - 0.25).abs() < f32::EPSILON);
+        assert!(ComponentRule::Zero.apply(0.25, 0.75).abs() < f32::EPSILON);
+
+        assert!(ComponentRule::Backdrop.preserves_backdrop());
+        assert!(!ComponentRule::Source.preserves_backdrop());
+        assert!(
+            !ComponentRule::Zero.preserves_backdrop(),
+            "Zero ERASES the backdrop; reporting it as preserved would invert the \
+             disclosure the operator reads",
+        );
+    }
+}
