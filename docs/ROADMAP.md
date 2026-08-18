@@ -96,6 +96,172 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 100.0 — `d51e0d9` — **ABUTTING IMAGE TILES NO LONGER LEAVE A ONE-DEVICE-PIXEL BACKGROUND SEAM: `anti_alias` ON AN IMAGE'S UNIT-SQUARE FILL IS NOW CONDITIONAL ON CTM AXIS-ALIGNMENT, NOT ALWAYS ON — CLOSES THE 179TH FILING'S OWN HIGHEST-PRIORITY "STILL OWED" ITEM, THE SAME DAY IT WAS FLAGGED** — filed 2026-08-18 (hundred-and-eightieth filing)
+
+**Filed by `pdfce-librarian` WITHOUT a shell this session.** Test/lint
+results below are RELAYED from the dispatching engineer's report (25
+render test binaries green; `cargo fmt --all` clean; `cargo clippy
+--workspace --all-targets -- -D warnings` clean), not independently
+re-run. The source-text claims below (the predicate itself, its call
+site, its seven unit tests, and the regression test's own doc comment
+explaining why an earlier draft was vacuous) are independently
+verified by `Read`/`Grep` against the live files:
+`crates/pdfce-render/src/interpret.rs:4202–4243` (call site),
+`:4937–5012` (`image_edge_needs_antialiasing` + its doc comment),
+`:5014–5089` (the seven unit tests, including the negative-scale one
+at `:5083`), and
+`crates/pdfce-render/tests/abutting_image_tiles_have_no_seam.rs` (the
+regression test, present in its widened, page-spanning form with the
+doc comment explaining its own earlier vacuous draft).
+
+**Origin — the same item the 179th filing's own "Still owed" list
+named first and highest-priority, discharged the day after it was
+flagged.** Relayed verbatim from the `pdfceGUI` session, via the
+shared channel (`D:\Dev\FeatureRequests\pdfce_FeatureRequests\`):
+
+> *"why do our shaded views have banding? in Acrobat they show fine."*
+
+Reproduced here before anything was changed, on
+`R:\Products\TR-0456\TR-0456.pdf` p2: a flat `RGB(195,38,38)` panel
+crossed by single rows of `(206,78,78)` and `(210,93,93)` every ~30.5
+device pixels.
+
+**Cause: conflation.** An image is painted as an antialiased fill of
+its unit square, unconditionally. Where two tiles abut, source-over
+compositing of two partial coverages does not reach 1 —
+`coverage = a + b(1−a)`, `a = b = 0.5` ⇒ `0.75` — so a quarter of the
+white page showed through a join that should have been seamless. The
+19–25 % measured is exactly that arithmetic.
+
+**The decisive measurement, re-run rather than trusted.** At half
+scale the seams keep the same colours and the same one-device-pixel
+thickness while spacing halves. Source-image texels could not do
+that — they would have merged. The seam is made at composite time, in
+device space, not in the source content.
+
+**The fix.** `anti_alias` on the image's unit-square fill
+(`image_edge_needs_antialiasing`, a pure predicate over the CTM
+alone) is now:
+
+- **Off** when the CTM is axis-aligned — upright (`kx = ky = 0`) *and*
+  quarter-turn (`sx = sy = 0`). Abutting tiles then tile the device
+  grid exactly.
+- **On** for rotation or skew, where the outline really is a diagonal
+  across the pixel grid and a hard edge would stair-step every
+  rotated image to cure an artefact that needs abutting *rotated*
+  tiles to appear at all.
+- **On** for anything under one device pixel in either axis — without
+  AA a shape covering no pixel centre paints nothing, so a sub-pixel
+  image would vanish rather than render faintly, a worse and silent
+  failure compared to the seam.
+- Decided on the **CTM alone, never texel count** — two abutting
+  tiles of different resolutions must not disagree about their
+  shared edge, or the seam returns on exactly the boundary that
+  matters.
+
+**Why this is correct rather than a tuning choice:** §8.9.4 samples at
+device pixels whose centres fall inside the mapped unit square, so an
+image's edge is where sampling stops, not a curve that needs
+smoothing. That is why Acrobat has no seam.
+
+**Measured.** 15,253 seam-coloured pixels → 0 in the sampled panel
+region, p2 of the reporting drawing; pages 1 and 3 also 0. Render-
+parity A/B over the same 100-file sample, predicate forced to old
+behaviour and back: buckets identical (below-band 33, disclosed-gap-
+small 43, disclosed-gap 9, unexplained 3, reference-divergence 1) — no
+parity regression.
+
+**★ The regression test was vacuous, and only running it against the
+old behaviour found that.** The first draft placed two abutting tiles
+inset from the left with the join on a half-pixel device row and
+asserted no lighter row at the join — **it passed with the fix
+reverted**, because the sampling column landed on the tiles' right
+*edge* and read an all-white line rather than the join. Widened to
+span the page (present form, `crates/pdfce-render/tests/
+abutting_image_tiles_have_no_seam.rs`), it now fails without the fix
+(reporting `(210,92,92)`, matching the reported `(210,93,93)`) and
+passes with it. A regression test that cannot fail is not a
+regression test. Seven unit tests pin the predicate itself, including
+one on **negative scale** — a flip is axis-aligned, and testing sign
+rather than magnitude would have seamed every `/Decode`-flipped image
+in the corpus.
+
+**No new standing rule minted for the vacuous-test finding, declined
+rather than silently skipped.** The pattern — a test that passes
+against the very bug it exists to catch, caught only by deliberately
+running it against pre-fix code — is already established project
+practice, recorded repeatedly and specifically: *"the sabotage
+passed" demands a second question — was the mutation reachable?* and
+*"a regression test never seen to fail is a regression test nobody
+has tested"* (both quoted verbatim from earlier *Shipped* entries in
+this file). This is another instance of that discipline, not a new
+one; a citation, not a mint.
+
+**Deliberately not changed.** Path fills keep antialiasing — a path
+edge genuinely *is* a shape edge. The reporter noted abutting path
+fills likely show the same seam and that for paths it is arguably
+unavoidable; agreed, untouched, recorded here as a known and accepted
+difference rather than a gap.
+
+**Hard Rule 11 sweep — searched for the claim, not the string; no
+survivor found.** The capability that changed: *"an image's unit-
+square fill is always antialiased."* `interpret.rs:4937`'s own doc
+comment already states the change correctly, in past tense (*"was
+unconditionally antialiased"*), because it is the doc comment
+introduced by this very fix. Grepped `conflation`/`banding`/
+`abutting` project-wide: the only other hits are unrelated uses of
+"banding" (a UI rubber-band gesture in `canvas.rs`/`main.rs`, a zoom-
+range bucketing comment in `render_worker.rs`) and unrelated uses of
+"conflation" (`ui_text.rs`'s font-trust-level model, `form_script/
+disclose.rs`, `attachments.rs`'s `null`-vs-missing-parameter note) —
+none describe this predicate or image painting.
+
+**`docs/FEATURES.md`: verified, no row change.** This is a rendering-
+fidelity fix to an already-shipped capability (image painting), not a
+new capability. The relevant row ("Rasterize vector paths, text and
+images; `render-page` writes a PNG.", *Fonts & rendering*) makes no
+seam-free-tiling claim to correct, and no row in that section claims
+image-tile compositing behavior specifically enough to need a
+qualifier. Nothing ticked, nothing reworded.
+
+**Channel (`D:\Dev\FeatureRequests\pdfce_FeatureRequests\`).** Reply
+already filed at `archive/2026-08-18-image-tile-seam-reply.md`;
+request moved to `archive/2026-08-18-image-tile-seam-request.md`.
+`INDEX.md` row added (top, newest-first). **`open/` is now empty
+again.**
+
+**Terminology (rule 15):** nothing here touches **ce dimensions** or
+**pdf dimensions** — this Pass changes how an image XObject's edge is
+rasterised, not any dimension object.
+
+**Still owed, carried forward rather than worked this filing:**
+- **`crates/pdfce-core/src/pageops/mod.rs`'s module header (lines
+  1–48), flagged as a Hard Rule 11 survivor in the 179th filing, is
+  STILL NOT FIXED.** Line 38 still reads *"The GUI's in-place Insert
+  waits for the overlay-aware render path"* — false since `Pass 99.0`
+  shipped `EditSession::insert_pages` via session-buffer re-staging,
+  not an overlay-aware renderer. Reported again as owed; not edited
+  here (hard rule 11's scope excludes `crates/`).
+- The two owed `iccce` requests (`request_profile_population_census.md`,
+  `request_header_tag_channel_disagreement.md`) — still unread.
+- `pdfceGUI`-sourced *Next up* Passes `75.0` (reusable parsed handle),
+  `80.0` (note text on markup) and `81.1` (markup opacity write half)
+  — untouched by this filing.
+- `Pass 97.0`/`97.1`/`97.2` (the compositor) and `Pass 98.0` (foreign
+  `/BE` round-trip read-back) — untouched by this filing.
+
+**Ledger effects.** Pass family: **99 → 100** (`Pass 100.0`, new
+family; confirmed free by grep — no prior `Pass 100` citation anywhere
+in this file). Standing rules: **no new rule minted** — see the
+declined-candidate note above; ceiling stays **R195**, next free
+**R196**. Decisions: **no new decision minted** — this is a spec-
+grounded (§8.9.4) correctness fix to already-shipped rendering
+behavior, not a new architectural call; ceiling stays **070**, next
+free **071**. `SESSION_LOG.md` filings move **179 → 180**, which is
+this one.
+
+---
+
 ### Pass 99.0 — `38c0ef2` — **`EditSession::insert_pages`: PAGE INSERTION JOINS THE `delete_pages`/`reorder_pages`/`rotate_pages` FAMILY — REQUESTED AND SHIPPED IN THE SAME FILING, BECAUSE THE REQUESTER DECLINED TO WIRE A FEATURE THAT WOULD HAVE SILENTLY DISCARDED UNDO HISTORY** — filed 2026-08-18 (hundred-and-seventy-ninth filing)
 
 **Filed by `pdfce-librarian` WITHOUT a shell this session.** Test/lint

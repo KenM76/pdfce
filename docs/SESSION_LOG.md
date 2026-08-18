@@ -47216,3 +47216,89 @@ below).
 4. Otherwise unchanged priority order from the 178th filing: `Pass
    97.0`, one of the three remaining `pdfceGUI` Passes, `Pass 98.0`, or
    the two `iccce` requests.
+
+## 2026-08-18 (hundred-and-eightieth filing) — `Pass 100.0` (`d51e0d9`): ABUTTING IMAGE TILES STOP LEAVING A ONE-DEVICE-PIXEL SEAM — CLOSES THE 179TH FILING'S OWN HIGHEST-PRIORITY OWED ITEM THE DAY AFTER IT WAS FLAGGED; A VACUOUS REGRESSION TEST FOUND ONLY BY RUNNING IT AGAINST THE PRE-FIX CODE
+
+**Shipped:**
+- `Pass 100.0` — `anti_alias` on an image's unit-square fill
+  (`crates/pdfce-render/src/interpret.rs`'s `paint_image`) is now
+  conditional on CTM axis-alignment (`image_edge_needs_antialiasing`),
+  not always on. Closes the `pdfceGUI`-reported defect: every
+  SolidWorks shaded view banded, because a shaded view is dozens of
+  small masked image XObjects laid edge to edge and antialiasing their
+  shared boundary let a partially-covered white page show through
+  (`coverage = a + b(1−a)`, 19–25 % measured). Off for upright/quarter-
+  turn CTMs; on for rotation/skew (a real diagonal edge) and for
+  anything under one device pixel (so a sub-pixel image cannot vanish
+  silently). Decided on the CTM alone, never texel count.
+
+**Decisions made this session:**
+- **None minted.** A spec-grounded (§8.9.4: an image's edge is a
+  sampling boundary, not a shape edge) correctness fix to already-
+  shipped rendering behavior, not a new architectural call. Decision
+  ceiling stays **070**, next free **071**.
+- **No new standing rule minted**, declined with a stated warrant
+  rather than skipped silently. The vacuous-regression-test finding
+  below is another instance of already-established project practice
+  ("the sabotage passed" demands a second question; "a regression test
+  never seen to fail is a regression test nobody has tested"), not a
+  novel pattern. Rule ceiling stays **R195**, next free **R196**.
+
+**Findings + decisions:**
+1. **Conflation, confirmed by the decisive measurement rather than
+   assumed.** At half render scale the seams kept identical colours
+   and identical one-device-pixel thickness while spacing halved —
+   proof the seam is made at composite time, in device space, not
+   carried in the source image texels (which would have merged at the
+   new scale).
+2. **★ The regression test was vacuous, and only running it against the
+   pre-fix code found that.** An earlier draft placed two abutting
+   tiles inset from the left with the join on a half-pixel device row;
+   it passed with the fix reverted, because the sampling column landed
+   on the tiles' right *edge* and read an all-white line instead of the
+   join. Widened to span the page, it now fails without the fix
+   (`(210,92,92)`, matching the operator's own measured `(210,93,93)`)
+   and passes with it. **A regression test that cannot fail is not a
+   regression test** — the only way to know which kind you have is to
+   run it against the old behaviour.
+3. **Seven unit tests pin the predicate**, including one on negative
+   scale — a flip is axis-aligned, and testing the sign rather than the
+   magnitude would have seamed every `/Decode`-flipped image in the
+   corpus.
+4. **Path fills deliberately left untouched.** A path edge genuinely
+   *is* a shape edge; the reporter's own note that abutting path fills
+   likely show the same, arguably-unavoidable seam is recorded, not
+   acted on.
+5. **Hard Rule 11 sweep: no survivor found.** Searched for the claim
+   ("an image's unit-square fill is always antialiased"), not the
+   string. `interpret.rs:4937`'s own doc comment already states the
+   change correctly (introduced by this fix). Grepped `conflation`/
+   `banding`/`abutting` project-wide; all other hits are unrelated (a
+   UI rubber-band gesture, a zoom-range bucketing comment, unrelated
+   `null`-vs-missing-parameter and font-trust-level "conflation" notes).
+6. **`docs/FEATURES.md` verified, no row change** — a rendering-
+   fidelity fix to an already-shipped capability, not a new one; no row
+   makes a seam-free-tiling claim to correct.
+
+**Still in flight:**
+- **`pageops/mod.rs`'s module-header survivor (flagged 179th filing) is
+  STILL NOT FIXED.** Line 38 still says *"The GUI's in-place Insert
+  waits for the overlay-aware render path"* — false since `Pass 99.0`.
+  Carried forward again; not this role's remit to edit `crates/`.
+- The two owed `iccce` requests, `pdfceGUI` Passes `75.0`/`80.0`/`81.1`,
+  `Pass 97.0`/`97.1`/`97.2`, `Pass 98.0` — all untouched by this filing.
+- Channel `open/` is empty again — the seam exchange closed the same
+  day it opened.
+
+**For next session:**
+1. **Ledger update from this filing**: Pass family **99 → 100** (`Pass
+   100.0` shipped). Next free Pass family **101**. Decisions and
+   standing rules both unchanged this filing (next free decision
+   **071**, next free standing rule **R196** — neither independently
+   re-verified via the checker, no shell this filing). **Next free
+   filing ordinal: 181.**
+2. Fix the `pageops/mod.rs` module-header survivor (Hard Rule 11, owed
+   since the 179th filing, carried again this filing).
+3. Otherwise unchanged priority order: `Pass 97.0`, one of the three
+   remaining `pdfceGUI` Passes, `Pass 98.0`, or the two `iccce`
+   requests.

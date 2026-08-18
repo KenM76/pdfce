@@ -35,9 +35,40 @@
 //!
 //! Shipping insert as a document producer delivers the capability in
 //! `pdfce-core` and `pdfce-cli` now, with no undo stack to mislead anyone
-//! and no half-rendered pages. The GUI's in-place Insert waits for the
-//! overlay-aware render path. Recorded as a deviation with its reason, as
+//! and no half-rendered pages. Recorded as a deviation with its reason, as
 //! the spec's own preamble requires.
+//!
+//! ## ★ THE BLOCKER ABOVE WAS SOLVED DIFFERENTLY — corrected 2026-08-18
+//!
+//! This section used to end *"The GUI's in-place Insert waits for the
+//! overlay-aware render path."* **That is no longer true, and the wait was
+//! never actually necessary.** `Pass 99.0` shipped
+//! [`crate::edit::EditSession::insert_pages`], which sidesteps both
+//! prerequisites rather than building them: imported stream payloads are
+//! **re-staged into the session's own buffer** (R45), so they live in the
+//! coordinate system the writer and the renderer already read. No
+//! per-object source buffer, no overlay-aware renderer.
+//!
+//! Note the shape, because it is the reusable part: the paragraph above
+//! correctly identified *two things this Pass does not build* and then
+//! silently promoted them from **"what an overlay-based insert would
+//! need"** to **"what any in-place insert must wait for."** The first is a
+//! fact about one design; the second is a claim about all of them, and it
+//! was never tested. A named blocker outlives the design that motivated it
+//! unless someone re-asks whether it still binds.
+//!
+//! **This module's `insert` is NOT superseded.** It still owns the half
+//! the session method deliberately does not do — merging document-level
+//! structures (outlines, the AcroForm field tree, named destinations, page
+//! labels, optional-content configuration) through [`assemble`]'s
+//! policies. The two are different operations with different costs:
+//!
+//! | you want | use |
+//! |---|---|
+//! | an editor gesture, undo history intact | [`crate::edit::EditSession::insert_pages`] |
+//! | a batch merge carrying document-level structures | this module's [`insert`] |
+//!
+//! `pdfce-cli insert-pages` correctly stays on this one.
 //!
 //! ## What every operation in this module has in common
 //!
