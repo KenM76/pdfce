@@ -96,6 +96,161 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `83c85ec` + `138a3c0` — **THE 172ND FILING'S CITATION FLAG WAS RIGHT: `blend_modes_applied` CANNOT REACH THE FOUR NONSEPARABLE MODES — A PROPER CTM-TRACKING CELL-MAPPING TOOL REPLACES CELL-PITCH GUESSING, AND A THIRTEEN-ENGINE COLLAPSE-MODEL SURVEY ANSWERS `docs/compositor-plan.md` §4 STAGE C — THEN PDFCE'S OWN SPEC CORPUS CORRECTS BOTH RESEARCH PASSES THAT PRODUCED IT** — no Pass ID, no decision minted; commit `83c85ec` touches `crates/` and `tools/` and is cited here to satisfy `check-commits-filed.py`; `138a3c0` (docs-only, new `docs/collapse-model-survey.md`) is exempt from that gate but is the more consequential of the two and is narrated in the same filing, per the dispatch's own instruction — filed 2026-08-18 (hundred-and-seventy-third filing)
+
+**Filed by `pdfce-librarian` WITHOUT a shell this session.** Test/lint
+results below are RELAYED from the dispatching engineer's report, not
+independently re-run. **Every source-text claim about `docs/
+collapse-model-survey.md` is independently verified by `Read` against
+the live file**, not carried from the dispatch summary — the same
+discipline the 171st/172nd filings used.
+
+#### `83c85ec` — the citation was checkable, and checking it found it false
+
+**What the 172nd filing flagged, unresolved.** That filing's seventh
+finding noted `blend_modes_applied`'s corrected field doc attributed
+§11.3.5.3's nonseparable-mode/K-selection shortfall to *that* counter,
+while `gstate.rs`'s `blend_mode_from_name` returns `None` for all four
+nonseparable names — meaning the evidence cited could not reach the
+counter it was cited for. **This commit settles it, and settles it the
+harder way — by measurement, not by re-reading:** every Ghent
+transparency patch reports `blend_modes_applied=11, blend_modes_ignored=4`.
+pdfce **declines** the four nonseparable modes outright and composites
+them as `Normal`. `1_GWG160`'s Hue/Saturation/Color failures are because
+those modes are **NOT IMPLEMENTED**, not because K is read from the wrong
+operand. The clause was correctly quoted, the cells were correctly
+identified, and the sentence joining them was false — a citation makes a
+claim look checked, not be checked.
+
+**New tool: `tools/ghent-cellmap.py`.** The original cell→mode mapping
+came from cell-pitch arithmetic — one method, no cross-check, right about
+*positions* while the causal story built on it was wrong. The tool now
+walks the content stream, tracks the CTM through `q`/`Q`/`cm`, and pushes
+each form XObject's `/BBox` through its `/Matrix` into device space
+against the governing `/ExtGState`, resolving cells properly instead of
+by pitch.
+
+**What it found once the guessing stopped:**
+- `Hue`, `Saturation`, `Color` trap in **both** `1_GWG160` and `3_GWG164`.
+  **`Luminosity` is declined identically and comes out CLEAN in both** —
+  "declined" does not imply "visibly wrong," and that clean cell must not
+  be read as evidence `Luminosity` works.
+- **`3_GWG164`'s `Difference` cell** is the actual §11.3.4 evidence: an
+  *applied*, separable mode still failing on ICCBased CMYK. `Difference`
+  is `|cb − cs|`, the mode most sensitive to whether operands were
+  complemented first. One cell, reported as one cell.
+
+**Stated limitation, not discovered later:** the tool flattens resource
+names into one namespace, so a file defining `/GS1` in several resource
+dictionaries reports `?`. `1_GWG161` and `1_GWG162` do exactly that and
+are **UNMAPPED** — `?` means the tool could not tell, not that no blend
+mode is set.
+
+**Also closes the SIXTH surviving copy of the stale-disclosure claim**
+the 172nd filing found — the CLI's blend-mode note still reading "Census,
+not a problem." A wrapped literal with backslash continuations; patched
+with the editor and the built binary's actual stdout read back to confirm
+no continuation was eaten.
+
+Verification (relayed): `cargo fmt --all` clean; `cargo clippy
+--workspace --all-targets -- -D warnings` clean; `pdfce-cli` and
+`pdfce-render` tests green; `check-ui-strings.sh` and
+`check-disclosure-channel.sh` clean.
+
+**Note for the record:** `83c85ec` also swept in this librarian's own
+172nd-filing docs edits (`FEATURES.md`/`ROADMAP.md`/`SESSION_LOG.md`) via
+a broad `git add`. Nothing was lost; flagged here rather than silently
+absorbed, since a docs-tier commit carrying an engineering commit's diff
+is exactly the shape `check-commits-filed.py` exists to catch.
+
+#### `138a3c0` — `docs/collapse-model-survey.md`: the N-plane → sRGB collapse, sourced
+
+Answers the question `docs/compositor-plan.md` §4 Stage C left open.
+Thirteen engines, every claim URL-cited, PRIMARY separated from
+SECONDARY, clean-room note attached (Ghostscript/MuPDF/Poppler are
+AGPL/GPL — **behavioural descriptions only, no code, no implementation
+guidance**, per `LEGAL.md` §6.1 and R61).
+
+**Headline: the absence is documented, not merely unfound.** Hans
+Bärfuss (founder, PDF Tools AG; ISO TC171 participant) writes that ISO
+says nothing about computing a preview colour and that *"the method
+Acrobat uses is not publicly documented"* — he obtained a functional
+diagram only via an ISO working group, then matched Acrobat **by eye**.
+The ICC separately states Acrobat *"should not be used as a guide"* for
+spot inks. **"Match Acrobat" is not an available specification.**
+
+**The disagreement is sharper than assumed:** Harlequin documents
+per-colorant **`max()`** (the Darken blend mode); Mako documents
+**multiply-of-complements**. Same parent company, two products, two
+answers. Artifex states one file can produce **three different
+appearances** across their own `tiff24nc`/`tiff32nc`/`tiffsep` devices and
+classifies that as **conformant**.
+
+**Third independent confirmation of the N-plane architecture**, from
+vendor docs: Harlequin says overprinting *"is disabled by default"* if
+spots are converted to process first; Ghostscript says it *"is not
+allowed"*. Tint-transform-early and overprint-correctly are mutually
+exclusive — now established by pdfce's own ablation (`ac15158`), the
+Artifex paper, **and** two vendors independently.
+
+**Decided (this survey's own word — read against the note below):**
+per-colorant `/Separation` tint transform (preferred over the DeviceN
+collective one), accumulate by multiply-of-complements, one ICC hop to
+sRGB. **Five settings enumerated**, including one nobody had noticed:
+**which OutputIntent to use when the array has ≥2 entries** (MuPDF takes
+`[0]` ignoring `/S`; Poppler refuses to act).
+
+**★ WHERE PDFCE'S OWN SPEC CORPUS CORRECTS THE RESEARCH (survey §6.5):**
+- A second research pass claimed `/MixingHints` lives in the
+  **OutputIntent** dictionary. It is in the **`DeviceN` ATTRIBUTES**
+  dictionary — §8.6.6.5 Table 73, PDF 1.6 (`color__devicen.md`).
+- **`DN-N1`, marked PERMANENT in the corpus:** *"No blending algorithm is
+  defined to consume `/MixingHints`; it is inputs to an unspecified
+  algorithm by design."* ⇒ consuming them is pdfce **inventing** a model,
+  not implementing one. Allowed under exceed-the-reference, but **must be
+  disclosed as pdfce's own and must be a setting.**
+- **`OI-N2`:** *"the standard states NO relationship between output
+  intents and overprint, trapping, or `Separation` alternate spaces."* ⇒
+  "destination profile = the OutputIntent" is what every vendor does and
+  what no clause requires — a **product decision**, not a conformance
+  answer.
+- The corpus had **already measured** that ISO 32000-1 *"never describes
+  overprint preview"* (0 hits across 756 pages). Two independent web
+  research passes with no access to it reached the same conclusion from
+  vendor documentation — the gap is now established from two directions.
+
+**Recorded honestly, per this librarian's own persistent-memory feedback
+note from the 172nd filing:** both research passes that produced §6.5's
+corrections came from the **same agent**, so their mutual agreement is a
+repeated measurement, not two independent ones — R188's distinction,
+applied to the survey's own sourcing rather than to a code claim.
+
+**`moxcms`** (BSD-3-Clause OR Apache-2.0, pure Rust, ≤16 inks) is the ICC
+candidate that clears the wasm32 gate `lcms2` fails (a C binding).
+**NOT ADDED to any `Cargo.toml`** — rule 13 requires a `docs/PRIOR_ART.md`
+entry first. **Added by this filing**, below, classified permissive,
+recorded as the candidate of record for `Pass 97.2` and for the separate
+`3_GWG130` ICC work.
+
+**`Pass 97.2`'s own Backlog entry updated by this filing** — see
+*Backlog*, below — to name the decided default, the five settings, and
+`docs/collapse-model-survey.md` by name (it was not previously named
+anywhere in this file — the cross-RAG-deliverable-referenced-nowhere
+failure shape the dispatch flagged, now closed).
+
+**`FEATURES.md` — verified directly, not assumed: no row changes owed by
+either commit.** `83c85ec` is a citation correction plus a diagnostic
+tool; `138a3c0` is a sourcing survey. Neither builds or removes a
+capability. The *Blend modes* row (already amended by the 172nd filing
+with the §11.3.4 colour-space caveat) and the *Per-colorant compositing
+buffer* / non-separable-modes Planned rows were re-read and remain
+accurate as written.
+
+**Ledger, unchanged.** Next free Pass family **98**. Next free decision
+**071**. Next free standing rule **R196**. Next free filing ordinal:
+**174**. Not re-run through `tools/check-ledger-numbers.py` this filing —
+no shell; carried forward from the 172nd filing's own statement.
+
 ### `dbec60a` — **CLOSES THE FIFTH SURVIVOR `3e3019a` LEFT (`transparency_groups_composited`'S FIELD DOC), AND THE AUDIT IT TRIGGERED FINDS TWO MORE GENUINE OVER-CLAIMS — `blend_modes_applied` AND `soft_masks_applied` BOTH SAID "A CENSUS, NOT A SHORTFALL" AND BOTH ARE FALSE, MEASURED THIS SESSION. A SIXTH SURVIVOR FOUND BY THIS FILING, INSIDE THE SAME COMMIT, STILL UNFIXED** — no Pass ID, no decision minted; commit `dbec60a` touches `crates/pdfce-render/src/interpret.rs` and is cited here to satisfy `check-commits-filed.py` — filed 2026-08-18 (hundred-and-seventy-second filing)
 
 **Filed by `pdfce-librarian` WITHOUT a shell this session.** Test/lint
@@ -57094,6 +57249,63 @@ nothing gets forgotten, not as a commitment to build in this order.
   project rule 4 (fuzzy, never sneaky) applies to the collapse choice
   itself, not only to content inference.
 
+  **★ SOURCED 2026-08-18 (hundred-and-seventy-third filing, `138a3c0`):
+  `docs/collapse-model-survey.md`, a thirteen-engine sourcing survey
+  commissioned specifically to answer this Pass's open question**
+  (`docs/compositor-plan.md` §4 Stage C). Read that file in full before
+  building this Pass; summarised here so the Pass's own scope does not
+  depend on a document nothing else names it from. **The absence is
+  documented, not merely unfound** — PDF Tools AG's founder states in
+  print that Acrobat's own collapse method is undocumented even to an ISO
+  TC171 participant, and the ICC states Acrobat should not be used as a
+  guide for spot inks. "Match Acrobat" is not an available specification;
+  any default pdfce ships here is a **product decision**, and the survey
+  argues it should be recorded as one.
+
+  **Planned default (survey §6 — a research recommendation, NOT a
+  `ARCHITECTURE.md` §12 decision; nothing here is committed to code, same
+  discipline §4's CMYK+alpha-buffer paragraph already uses for
+  planned-but-unbuilt compositor work):**
+  1. Composite in the N-plane buffer; never tint-transform on the paint
+     path (three independent sources now confirm this is load-bearing,
+     not stylistic — pdfce's own ablation `ac15158`, the Artifex paper,
+     and Harlequin's/Ghostscript's own docs).
+  2. At collapse, resolve each spot plane via its own `/Separation` tint
+     transform (preferred over the DeviceN collective one — PDF Tools AG
+     states this explicitly), accumulate by **multiply-of-complements**
+     (`new = 1 − (1 − eq·tint)(1 − cur)`, Mako's documented formula,
+     preferred over Harlequin's `max()` because `max()` is Harlequin's own
+     *degraded* path).
+  3. One ICC transform, colorant space → sRGB, through the OutputIntent
+     when present — see the OutputIntent-selection setting below for what
+     "when present" leaves open.
+
+  **Five settings the survey enumerates (confidence HIGH — textbook
+  "spec leaves it open"; none built yet, IDs not yet minted — see the
+  `DN-N1`/`OI-N2` register cross-reference immediately below for why
+  minting is deferred to the Pass that builds them):**
+
+  | Setting | Values | Why |
+  |---|---|---|
+  | Collapse blend | `multiply` (default) / `max` (Harlequin-compatible) / `additive` | No vendor consensus — same parent company (Global Graphics) ships both `max()` and multiply in different products |
+  | Spot equivalent source | `separation-tint-transform` (default) / `devicen-collective` / `lab-alternate` | Acrobat/InDesign already surface an equivalent lever ("Use Standard Lab Values For Spots") — parity, not invention |
+  | Destination profile | `output-intent` (default) / explicit simulation profile / working CMYK | Mirrors callas' documented precedence chain; **`OI-N2`-backed** — the standard states no relationship exists, so this is a default, not a conformance answer |
+  | OutputIntent selection when ≥2 entries | pick one, document it | MuPDF takes `[0]` ignoring `/S`; Poppler refuses. A second settings-shaped ambiguity the survey's §3 item 6 identifies |
+  | Overprint mode | `off` / `enable` / `simulate` | Ghostscript's tri-state is the right shape and vocabulary; recommend defaulting to simulate-when-the-page-uses-overprint, disclosed off-canvas per rule 4 |
+
+  **Cheap win, gated on `DN-N1` (see register cross-reference below):**
+  reading `DeviceN /Attributes/MixingHints` (`/Solidities`,
+  `/PrintingOrder`) to make overprint correctly non-commutative is a real,
+  cited win — but it is pdfce **inventing** an algorithm the standard
+  explicitly declines to define, not implementing one, so it must ship
+  disclosed as pdfce's own and behind its own setting, not folded silently
+  into the "spec-mandated" default above.
+
+  **ICC dependency candidate recorded in `docs/PRIOR_ART.md`, this
+  filing:** `moxcms` (BSD-3-Clause OR Apache-2.0, pure Rust, ≤16 inks) —
+  clears the wasm32 gate `lcms2` (a C binding) cannot. Not yet added to
+  any `Cargo.toml`.
+
   **Scope guard binding on all three sub-Passes:** engage the colorant
   path only for subtrees that need it, **not page-wide by default** —
   Poppler #1565 (still open upstream) is the precedent: enabling
@@ -57117,6 +57329,49 @@ nothing gets forgotten, not as a commitment to build in this order.
   concision convention (rewritten 2026-08-11) omits Pass-ID citations by
   design, so no edit is owed there for scoping alone — only for a
   checkbox change, which nothing in this filing earns.
+
+  **★ `DN-N1`/`OI-N2` — cross-referenced into pdfce's own tracking, NOT
+  promoted to SETTING-bucket register IDs — filed 2026-08-18
+  (hundred-and-seventy-third filing) with `Pass 97.2`'s scoping (no Pass
+  number of its own; blocked on `97.0`/`97.1`, which are not built).**
+  Same shape as `LUM-A1` above: a spec-RAG finding that has become
+  load-bearing for a scoped Pass before it was formally promoted into the
+  register's own numbered ranking. **`DN-N1` and `OI-N2` are already
+  findings in `D:\Dev\Rag-Specialized\PDF_Spec\` (`color__devicen.md` and
+  the OutputIntent file respectively) — they are NOT this librarian's to
+  write or re-word** (hard rule 6). What this entry does is the
+  cross-reference LUM-A1 modelled: record here that they are now
+  load-bearing, so the register-worthiness question is not re-derived
+  from scratch when `Pass 97.2` is actually scoped.
+
+  **Why "cross-referenced" rather than "minted" — deliberate, and matches
+  this project's own established discipline, not a gap.**
+  `ARCHITECTURE.md` §4's CMYK+alpha-buffer paragraph states the rule
+  explicitly: *"no decision-log entry minted for this… nothing here has
+  been CHOSEN yet in the sense §12 records"* — a decision (or, by the
+  same reasoning, a settings-register ID) is minted once code exists to
+  commit to, not at the research/direction stage. `docs/
+  collapse-model-survey.md` §6 enumerates five settings-shaped choices
+  (this file's own updated `Pass 97.2` entry, above, lists all five); two
+  of them are now directly evidenced by these two spec findings —
+  **`OI-N2`** backs the "Destination profile" setting's default
+  (output-intent-as-destination is a product choice, not a conformance
+  requirement, per the corpus), and **`DN-N1`** backs the "cheap win"
+  `MixingHints` item's classification as pdfce-invented rather than
+  spec-implemented. **Neither finding is itself a new ambiguity needing a
+  register row** — `DN-N1` records a genuine spec SILENCE (no algorithm
+  exists to pick a side of), and `OI-N2` records an absent RELATIONSHIP,
+  not two competing readings. The register-worthy items are the five
+  settings the survey enumerates, which get minted with real IDs
+  (following the `cmyk_intent`/`IM-A1` precedent — minted by the Pass
+  that builds them) when `Pass 97.2` actually ships, not now.
+
+  **Owed to `pdfce-spec-librarian`, flagged not performed:** confirm
+  `DN-N1`/`OI-N2` are already promoted into
+  `iso32000__ref__ambiguity_settings_register.md`'s own numbered §3.1–§3.3
+  ranking table (same pattern as `AD-A1`/`AD-A3`'s back-fill note,
+  earlier in this file) — this librarian has no access to that RAG to
+  check (hard rule 6) and did not assume either way.
 
 - **★★★ NETWORK, filed 2026-08-13 (hundred-and-forty-fourth filing) —
   `pdfce-fetch`: THE ONE FETCH PRIMITIVE, IN A SIBLING CRATE, STRIPPABLE

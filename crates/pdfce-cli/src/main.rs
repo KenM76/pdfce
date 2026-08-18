@@ -7025,10 +7025,26 @@ overprint_composited={} overprint_refused={} overprint_pixels={}",
         d.images_colorant_none,
         d.images_uncalibrated_colorimetry,
         // §11.3.5 blend modes and §11.6.5 soft masks. Appended after every
-        // pre-existing key. Neither is implemented; before these existed
-        // neither was COUNTED either, so a page composited wrongly said
-        // nothing at all. `soft_masks_ignored` is the one to watch: an
-        // ignored mask paints MORE than the document asked for.
+        // pre-existing key.
+        //
+        // ★ SEVENTH copy of the stale-shortfall claim, corrected
+        // 2026-08-18. This read "Neither is implemented; before these
+        // existed neither was COUNTED either" — the second half is still
+        // true and worth keeping, the first half stopped being true when
+        // blend modes landed and again when soft masks landed (`cb20770`).
+        //
+        // Where they actually stand, and neither is "implemented" without
+        // a qualifier:
+        //  * BLEND MODES — the 11 separable modes are applied, but in
+        //    device sRGB rather than the group's colour space (§11.3.4).
+        //    The 4 NONSEPARABLE modes are recognised and DECLINED, so they
+        //    land in `blend_modes_ignored`, not here.
+        //  * SOFT MASKS — built correctly, but folded into the clip rather
+        //    than applied to the group's RESULT (§11.4.5), and `/TR` is
+        //    counted and never evaluated.
+        //
+        // `soft_masks_ignored` is still the one to watch: an ignored mask
+        // paints MORE than the document asked for.
         d.blend_modes_applied,
         d.blend_modes_ignored,
         d.soft_masks_ignored,

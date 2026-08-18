@@ -46371,3 +46371,145 @@ mentioned in the dispatch.
    times running. Not a recommendation to mint a rule — the RAG file's
    own reasoning against a mechanical gate is unchanged — but a data
    point for whoever next reconsiders that call.
+
+## 2026-08-18 (hundred-and-seventy-third filing) — **`83c85ec` CLOSES THE 172ND FILING'S SEVENTH FINDING BY MEASUREMENT (NONSEPARABLE MODES CANNOT REACH `blend_modes_applied`), SHIPS A CTM-TRACKING CELL-MAPPING TOOL, AND CLOSES THE SIXTH SURVIVOR — `138a3c0` ADDS A THIRTEEN-ENGINE COLLAPSE-MODEL SURVEY THAT PDFCE'S OWN SPEC CORPUS THEN CORRECTS**
+
+**Filed by `pdfce-librarian` WITHOUT a shell this session.** Test/lint
+results are RELAYED from the dispatching engineer's report. **Every
+source-text claim about `docs/collapse-model-survey.md` and the Pass
+97.2 entry it informs is independently verified by `Read`**, not carried
+from the dispatch summary.
+
+**Shipped:**
+
+- `83c85ec` filed — no Pass ID, touches `crates/` and `tools/`. Settles
+  the 172nd filing's own seventh finding (flagged, not resolved, that
+  session): `blend_mode_from_name` returns `None` for all four
+  nonseparable modes, so they land in `blend_modes_ignored`, never
+  `blend_modes_applied` — confirmed by measurement, every Ghent
+  transparency patch reports `blend_modes_applied=11,
+  blend_modes_ignored=4`. New `tools/ghent-cellmap.py` replaces
+  cell-pitch-arithmetic cell mapping with real CTM tracking through
+  `q`/`Q`/`cm` and form-XObject `/BBox`×`/Matrix` resolution. Found with
+  it: `Luminosity` is declined identically to `Hue`/`Saturation`/`Color`
+  but renders CLEAN in both `1_GWG160` and `3_GWG164` — "declined" does
+  not imply "wrong." `3_GWG164`'s `Difference` cell is the real §11.3.4
+  evidence (an applied, separable mode failing on ICCBased CMYK).
+  `1_GWG161`/`1_GWG162` are UNMAPPED (`?`) — the tool's own stated
+  limitation, multi-resource-dict `/GS1` names collide in its flattened
+  namespace. Also closes the SIXTH surviving copy of the stale
+  "Census, not a problem" blend-mode disclosure, at `pdfce-cli`'s
+  `eprintln!` — verified against the built binary's actual stdout.
+- `138a3c0` filed — docs-only (new `docs/collapse-model-survey.md`),
+  exempt from `check-commits-filed.py` but narrated in the same entry per
+  the dispatch's instruction, being the more consequential of the two.
+  Answers `docs/compositor-plan.md` §4 Stage C: thirteen engines
+  surveyed, URL-cited, clean-room note for the three copyleft engines
+  (behavioural description only). Headline: PDF Tools AG's founder
+  states in print that Acrobat's own collapse method is undocumented
+  even to an ISO TC171 participant; the ICC says Acrobat should not be
+  used as a guide for spot inks — "match Acrobat" is not an available
+  specification. Harlequin and Mako (same parent company) document two
+  different collapse formulas. Third independent confirmation (from
+  vendor docs) that tint-transforming early and overprinting correctly
+  are mutually exclusive. **Survey's own recommended default:**
+  per-colorant `/Separation` tint transform, multiply-of-complements
+  accumulation, one ICC hop to sRGB — plus five settings-shaped choices
+  enumerated. **`§6.5` — pdfce's own spec corpus corrects the survey
+  itself**, on two claims (`/MixingHints` location; whether
+  "OutputIntent = destination profile" is spec-required) — both research
+  passes came from the same agent, so the agreement between them is a
+  repeated measurement, not two independent ones (R188, applied to the
+  survey's own sourcing).
+
+**Decisions made this session:**
+
+- **No `ARCHITECTURE.md` §12 decision minted.** The survey's own
+  "Decided:" language names a planned default, not a code commitment —
+  matching this project's own established discipline (`ARCHITECTURE.md`
+  §4's CMYK+alpha-buffer paragraph: no decision-log entry until
+  something is actually committed to code). Recorded as a **planned
+  default** in `Pass 97.2`'s own `ROADMAP.md` entry instead. Decision
+  071 stays next free.
+- **`Pass 97.2`'s Backlog entry updated** with the planned default, the
+  five settings (as a table), and an explicit citation to `docs/
+  collapse-model-survey.md` — previously unnamed anywhere in
+  `ROADMAP.md`, the exact cross-RAG-deliverable-referenced-nowhere
+  failure shape the dispatch flagged.
+- **`DN-N1`/`OI-N2` cross-referenced, not promoted to register IDs.**
+  Both are already spec-RAG findings (not this librarian's to write —
+  hard rule 6); recorded in `Pass 97.2`'s bucket, same shape as the
+  existing `LUM-A1` cross-reference, so their now-load-bearing status for
+  this Pass is not re-derived from scratch. Neither is itself a new
+  ambiguity needing a register row — `DN-N1` is a genuine spec silence
+  (no algorithm to pick a side of), `OI-N2` an absent relationship, not
+  two competing readings. The five settings the survey enumerates are
+  the register-worthy items, to be minted with real IDs by the Pass that
+  builds them (the `cmyk_intent`/`IM-A1` precedent), not now.
+  Back-fill into `iso32000__ref__ambiguity_settings_register.md`'s own
+  ranking table flagged as owed to `pdfce-spec-librarian`, not performed
+  (no access to that RAG).
+- **`docs/PRIOR_ART.md` gains a new Colour management (ICC) table.**
+  `moxcms` (BSD-3-Clause OR Apache-2.0, pure Rust, ≤16 inks) recorded as
+  the ICC-hop candidate — clears the wasm32 gate `lcms2` (a C binding)
+  fails. **Not added to any `Cargo.toml`**, classification only, per
+  rule 13. Decision-log bullet appended to that file's own tail.
+
+**Findings + decisions:**
+
+- **A citation can look checked without being checked.** The 172nd
+  filing's correction to `blend_modes_applied`'s field doc quoted the
+  right spec clause and named the right failing cells, but joined them
+  with a false sentence — the clause could not reach the counter it was
+  cited for. Caught only by building a proper measurement tool
+  (`ghent-cellmap.py`) rather than re-reading the prose.
+- **"Declined" does not imply "visibly wrong."** `Luminosity` is refused
+  by the exact same code path as `Hue`/`Saturation`/`Color`, and renders
+  clean on both patches that exercise it. A shortfall counter measures
+  what pdfce did, not what the operator will see wrong.
+- **Both research passes behind the survey's §6.5 corrections came from
+  the same agent** — recorded honestly as a repeated measurement rather
+  than independent corroboration, per the operator's own attached caveat
+  from the 172nd filing (agent-memory note): disagree with a finding
+  when warranted, confirm its claims rather than accepting them on
+  say-so. This librarian applied that caveat to the survey's own
+  internal agreement, not only to its individual claims.
+- **`FEATURES.md` — verified, no row changes owed.** Neither commit
+  builds or removes a capability; the *Blend modes* row (already amended
+  172nd filing) and the *Per-colorant compositing buffer*/non-separable
+  Planned rows were re-read and remain accurate.
+
+**Still in flight:**
+
+- `Pass 97.0`/`97.1`/`97.2` remain the best-scoped, highest-leverage
+  queued work — `97.2` now has a sourced default and five named settings
+  to build against, none of it built yet.
+- **Self-correction, same filing:** a draft of this entry claimed a
+  stale developer-comment copy of the blend-mode census claim survived
+  at `main.rs:7057`–`7060`, reasoning from the 170th filing's line
+  numbers for a DIFFERENT disclosure (the overprint note) without
+  re-reading the current file. **Checked by `Read` before filing:**
+  `7057`–`7060` today is `transparency_groups_composited`'s comment,
+  already correctly rewritten (`3e3019a`/`dbec60a`), and it was never the
+  blend-mode site. There is a genuinely stale, still-unfixed developer
+  comment at `main.rs:7027`–`7031` ("Neither is implemented" for blend
+  modes and soft masks, both now partially implemented) — found while
+  checking the false claim, not part of this filing's mandate to fix,
+  flagged for the engineer's next commit touching that file.
+
+**For next session:**
+
+1. **Ledger.** Next free Pass family **98** (unchanged). Next free
+   decision **071** (unchanged). Next free standing rule **`R196`**
+   (unchanged). Not re-run through `tools/check-ledger-numbers.py` this
+   filing — no shell. **Next free filing ordinal: 174.**
+2. **Build `Pass 97.0`** — best-scoped, highest-leverage, unchanged.
+3. **When `Pass 97.2` is actually scoped for building**, mint real
+   register IDs for its five settings and confirm the
+   `DN-N1`/`OI-N2`/`iso32000__ref__ambiguity_settings_register.md`
+   back-fill with `pdfce-spec-librarian` rather than assuming it already
+   happened.
+4. **Fix `main.rs:7027`–`7031`** — stale "neither is implemented"
+   developer comment for blend modes/soft masks (see "Still in flight,"
+   above; found by this filing's own self-correction, not by the
+   dispatch).

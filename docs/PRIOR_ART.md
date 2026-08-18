@@ -294,6 +294,19 @@ into a *document* only — NOT bundling with an application.
 | `vello` / `vello_cpu` / `vello_hybrid` | Apache-2.0 OR MIT | reference, re-evaluate ~2027 | GPU-compute-centric, Linebender's own description: alpha overall, vello_hybrid "beta, usable," vello_cpu newer/less-proven. Not yet the right fit. |
 | `raqote` | MPL-2.0 | skip | Community consensus: "barely maintained." Dead prior art. |
 
+### Colour management (ICC)
+
+| Crate | License | Verdict | Why |
+|---|---|---|---|
+| `moxcms` | BSD-3-Clause OR Apache-2.0 | **candidate, not adopted** — recorded 2026-08-18 for `Pass 97.2` and the separate `3_GWG130` ICC work | Pure Rust, no C. Supports "almost any to any Display Class ICC profiles up to 16 inks," including CMYK⇄RGB and CMYK⇄Lab — clears the wasm32 gate the alternative below fails. Sourcing: `docs/collapse-model-survey.md` §7. |
+| `lcms2` | MIT (Rust bindings) around **C** Little-CMS | **rejected for `pdfce-core`/`pdfce-render`** | Rust bindings to a C library — cannot cross the wasm32 gate, same category of rejection as `ring` above. `docs/compositor-plan.md` §6 records this rejection first; `moxcms` is recorded here as the replacement candidate. Not added to the table as an "avoid" row because it was never a live candidate for the core crates, only ever considered for the `iccce` sibling project (whose own boundary is `ARCHITECTURE.md` §12 decision 064 — `iccce` owns ICC conversion, pdfce owns compositing). |
+
+**Not yet added to any `Cargo.toml`.** Rule 13 requires this
+classification entry (done above: dual permissive, clean per `LEGAL.md`
+§6.1) before either crate enters a workspace member's dependencies;
+`THIRD_PARTY_LICENSES.md` must be regenerated via `cargo-about` when one
+does.
+
 ### Cryptography (Standard Security Handler + PAdES)
 
 | Crate | License | Verdict | Why |
@@ -503,3 +516,12 @@ the same way, in minutes, whenever they next matter.
   signature-safe byte-preserving incremental-save gap remains
   ecosystem-wide (lopdf #305 still open); pdfce's differentiation
   stands.
+- **2026-08-18 (hundred-and-seventy-third librarian filing, `138a3c0`)**
+  — new **Colour management (ICC)** table added under Supporting crates.
+  `moxcms` (BSD-3-Clause OR Apache-2.0, pure Rust, ≤16 inks) recorded as
+  the ICC-hop candidate for `Pass 97.2`'s N-plane→sRGB collapse and the
+  separate `3_GWG130` ICC work — it clears the wasm32 gate that rules out
+  `lcms2` (a C binding). **Not added to any `Cargo.toml`** by this entry;
+  classification only, per rule 13. Sourcing: `docs/
+  collapse-model-survey.md` §7, itself commissioned to answer
+  `docs/compositor-plan.md` §4 Stage C.
