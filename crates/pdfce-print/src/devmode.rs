@@ -675,10 +675,61 @@ impl PrinterConfiguration {
             },
         );
         fields |= field::ORIENTATION;
+        self.set_fields(fields);
 
+        self.apply_paper(paper);
+        let mut fields = self.fields();
+
+        if pick_tray_by_page_size {
+            self.set_i16(offset::DEFAULT_SOURCE, DMBIN_FORMSOURCE);
+            fields |= field::DEFAULT_SOURCE;
+        }
+
+        if let Some(duplex) = assert_duplex {
+            self.set_i16(
+                offset::DUPLEX,
+                match duplex {
+                    Duplex::Simplex => DMDUP_SIMPLEX,
+                    // Long-edge binding is `VERTICAL` in Win32's
+                    // vocabulary and short-edge is `HORIZONTAL`, which
+                    // reads backwards until you notice the name describes
+                    // the FLIP AXIS rather than the edge the pages are
+                    // bound on. Getting these the wrong way round
+                    // produces a booklet whose alternate pages are upside
+                    // down, and nothing catches it before the paper.
+                    Duplex::LongEdge => DMDUP_VERTICAL,
+                    Duplex::ShortEdge => DMDUP_HORIZONTAL,
+                },
+            );
+            fields |= field::DUPLEX;
+        }
+
+        self.set_fields(fields);
+    }
+
+    /// Overwrite the paper members alone, leaving everything else —
+    /// orientation included — exactly as it was.
+    ///
+    /// # Why this is separable from [`Self::apply`]
+    ///
+    /// [`crate::printer_caps_for`] has to open an information device
+    /// context for the sheet a job will use, so that placement is
+    /// computed against the right rectangle. It must NOT also apply the
+    /// job's orientation: [`crate::DeviceGeometry::for_orientation`] is
+    /// the one place rotation is written, it works from the un-turned
+    /// geometry, and a second rotation applied here would eventually
+    /// disagree with it — which is the defect that function's own docs
+    /// exist to describe.
+    ///
+    /// So the paper amend is a piece on its own, and [`Self::apply`]
+    /// calls it rather than repeating it. Two copies of the
+    /// clear-the-other-representation logic below would be two places to
+    /// get the `DM_FORMNAME` trap wrong.
+    pub(crate) fn apply_paper(&mut self, paper: PaperSelection) {
+        let mut fields = self.fields();
         match paper {
             // Say nothing; whatever the driver's own base holds survives.
-            PaperSelection::DeviceDefault => {}
+            PaperSelection::DeviceDefault => return,
             PaperSelection::Form(id) => {
                 self.set_i16(offset::PAPER_SIZE, i16::try_from(id).unwrap_or(0));
                 fields |= field::PAPER_SIZE;
@@ -706,31 +757,6 @@ impl PrinterConfiguration {
                 fields &= !field::FORM_NAME;
             }
         }
-
-        if pick_tray_by_page_size {
-            self.set_i16(offset::DEFAULT_SOURCE, DMBIN_FORMSOURCE);
-            fields |= field::DEFAULT_SOURCE;
-        }
-
-        if let Some(duplex) = assert_duplex {
-            self.set_i16(
-                offset::DUPLEX,
-                match duplex {
-                    Duplex::Simplex => DMDUP_SIMPLEX,
-                    // Long-edge binding is `VERTICAL` in Win32's
-                    // vocabulary and short-edge is `HORIZONTAL`, which
-                    // reads backwards until you notice the name describes
-                    // the FLIP AXIS rather than the edge the pages are
-                    // bound on. Getting these the wrong way round
-                    // produces a booklet whose alternate pages are upside
-                    // down, and nothing catches it before the paper.
-                    Duplex::LongEdge => DMDUP_VERTICAL,
-                    Duplex::ShortEdge => DMDUP_HORIZONTAL,
-                },
-            );
-            fields |= field::DUPLEX;
-        }
-
         self.set_fields(fields);
     }
 

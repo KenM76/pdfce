@@ -489,16 +489,88 @@ pub struct PrinterCaps {
 /// failed rather than reporting a generic failure.
 #[cfg(windows)]
 pub fn printer_caps(name: &str) -> Result<PrinterCaps, PrintError> {
+    printer_caps_for(name, None, PaperSelection::DeviceDefault)
+}
+
+/// A printer's capabilities **for the sheet a specific job will use**.
+///
+/// # ★ Why selecting paper without this would be a new instance of an
+/// # old bug
+///
+/// [`printer_caps`] opens an information device context with the
+/// device's DEFAULT `DEVMODE` and reports the geometry of whatever sheet
+/// that names. Every placement pdfce computes — [`place_page`],
+/// [`plan_job`], every `imposition` layout, the GUI preview — is
+/// computed against that geometry.
+///
+/// So a job that asks for A3 while the device's default is Letter would,
+/// without this function, be PLANNED for Letter and PRINTED on A3: the
+/// two halves describing different sheets, with no clip reported and
+/// nothing to explain it. That is exactly the defect
+/// [`DeviceGeometry::for_orientation`] exists to make unrepresentable,
+/// in a new dimension — it is written out in full there, and the same
+/// reasoning applies here without restating it.
+///
+/// A caller that changes the sheet must therefore read its geometry
+/// through this function and plan against THAT. `config` covers the same
+/// hazard for a configuration an operator edited in the driver's own
+/// dialog, where the sheet may have been changed by hand.
+///
+/// # What is deliberately NOT applied
+///
+/// Orientation. This reports the sheet as the driver holds it, un-turned,
+/// because [`DeviceGeometry::from_caps`] is the one place rotation is
+/// written and a second rotation here would eventually disagree with it.
+///
+/// # Errors
+///
+/// The same as [`printer_caps`], plus [`PrintError::Configuration`] when
+/// `config` belongs to a different device.
+#[cfg(windows)]
+pub fn printer_caps_for(
+    name: &str,
+    config: Option<&PrinterConfiguration>,
+    paper: PaperSelection,
+) -> Result<PrinterCaps, PrintError> {
     use windows::Win32::Graphics::Gdi::{
-        CreateDCW, DeleteDC, GetDeviceCaps, HORZRES, LOGPIXELSX, LOGPIXELSY, PHYSICALHEIGHT,
-        PHYSICALOFFSETX, PHYSICALOFFSETY, PHYSICALWIDTH, VERTRES,
+        CreateDCW, DEVMODEW, DeleteDC, GetDeviceCaps, HORZRES, LOGPIXELSX, LOGPIXELSY,
+        PHYSICALHEIGHT, PHYSICALOFFSETX, PHYSICALOFFSETY, PHYSICALWIDTH, VERTRES,
     };
     use windows::core::HSTRING;
 
+    // Nothing changes the sheet, so nothing needs a `DEVMODE` — the
+    // cheap path, and the one every existing caller takes.
+    let configured = if config.is_none() && paper == PaperSelection::DeviceDefault {
+        None
+    } else {
+        let mut base = match config {
+            Some(config) => {
+                config.ensure_device(name)?;
+                config.clone()
+            }
+            None => printer_configuration(name)?,
+        };
+        base.apply_paper(paper);
+        Some(base)
+    };
+    // The buffer must outlive `CreateDC`; a pointer into a dropped
+    // temporary is a dangling one.
+    let words = configured
+        .as_ref()
+        .map(PrinterConfiguration::to_aligned_words);
+
     let wide = HSTRING::from(name);
-    // SAFETY: `wide` outlives the call. A null return is the documented
-    // failure signal, checked immediately below.
-    let hdc = unsafe { CreateDCW(None, &wide, None, None) };
+    // SAFETY: `wide` outlives the call, as does `words` when present. A
+    // null return is the documented failure signal, checked immediately
+    // below.
+    let hdc = unsafe {
+        CreateDCW(
+            None,
+            &wide,
+            None,
+            words.as_ref().map(|w| w.as_ptr().cast::<DEVMODEW>()),
+        )
+    };
     if hdc.is_invalid() {
         return Err(PrintError::OpenDevice(name.to_owned()));
     }
@@ -2525,6 +2597,20 @@ pub fn list_printers() -> Result<Vec<Printer>, PrintError> {
 ///
 /// Always [`PrintError::Unsupported`].
 pub fn printer_caps(_name: &str) -> Result<PrinterCaps, PrintError> {
+    Err(PrintError::Unsupported)
+}
+
+#[cfg(not(windows))]
+/// Non-Windows stub. Printing is a Windows capability in this release.
+///
+/// # Errors
+///
+/// Always [`PrintError::Unsupported`].
+pub fn printer_caps_for(
+    _name: &str,
+    _config: Option<&PrinterConfiguration>,
+    _paper: PaperSelection,
+) -> Result<PrinterCaps, PrintError> {
     Err(PrintError::Unsupported)
 }
 

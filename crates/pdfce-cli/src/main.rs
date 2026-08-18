@@ -1547,6 +1547,31 @@ enum Command {
         /// size rather than using its default tray.
         #[arg(long)]
         pick_tray: bool,
+        /// Which sheet to print on: a form ID or a form NAME, as
+        /// `list-paper-sizes` reports them.
+        ///
+        /// A name is matched case-insensitively — exactly first, then as
+        /// a unique prefix — and the ID pdfce settled on is printed,
+        /// because choosing a form from a name is pdfce inferring
+        /// something the operator did not type.
+        #[arg(long, value_name = "ID-OR-NAME", conflicts_with = "paper_size")]
+        paper: Option<String>,
+        /// Print on a custom sheet, `WIDTHxHEIGHT` in PDF points.
+        ///
+        /// The driver's own unit is tenths of a millimetre, so the
+        /// request is rounded; the sheet that will actually be fed is
+        /// printed. Sizes past the DEVMODE ceiling of about 3.28 m are
+        /// refused rather than clamped.
+        #[arg(long, value_name = "WxH")]
+        paper_size: Option<String>,
+        /// Print with driver settings saved by `printer-properties`.
+        ///
+        /// Everything in the file applies except the members pdfce sets
+        /// itself — orientation, duplex, tray and paper still come from
+        /// the flags above, so a saved configuration adds the settings
+        /// pdfce has no flag for rather than overriding the ones it has.
+        #[arg(long, value_name = "PATH")]
+        printer_config: Option<PathBuf>,
         /// Which annotation classes print.
         #[arg(long, value_enum, default_value_t = CommentsArg::Document)]
         comments: CommentsArg,
@@ -1636,6 +1661,80 @@ enum Command {
         /// must not do.
         #[arg(long, value_enum, default_value_t = OrientationArg::Auto)]
         orientation: OrientationArg,
+        /// Which sheet to plan against: a form ID or NAME, exactly as
+        /// `print` takes it.
+        ///
+        /// Here for the same reason `--orientation` is: paper CHANGES
+        /// THE SHEET, so the printable area a page is placed on is a
+        /// different rectangle. A preview that ignored it would report a
+        /// scale the real print would not use.
+        #[arg(long, value_name = "ID-OR-NAME", conflicts_with = "paper_size")]
+        paper: Option<String>,
+        /// Plan against a custom sheet, `WIDTHxHEIGHT` in PDF points.
+        #[arg(long, value_name = "WxH")]
+        paper_size: Option<String>,
+    },
+
+    /// **List the paper sizes a printer offers** (Windows only).
+    ///
+    /// The forms the DRIVER enumerates, with the ID `print --paper`
+    /// takes and the sheet size in PDF points. Read-only; it starts no
+    /// job and opens no document.
+    ///
+    /// The size is the PHYSICAL sheet, not the printable area — the
+    /// hardware's unprintable margins are smaller than the sheet and are
+    /// reported by `print-preview` instead, because they depend on the
+    /// job's orientation and this list does not.
+    ListPaperSizes {
+        /// Printer name, as `list-printers` reports it. Defaults to the
+        /// system default printer.
+        #[arg(long)]
+        printer: Option<String>,
+    },
+
+    /// **Open the printer driver's own properties dialog** (Windows only).
+    ///
+    /// The settings a generic API cannot model — media type, output bin,
+    /// stapling, quality, the whole vendor-specific half — live behind
+    /// the driver's own dialog, and this is the route to it. What the
+    /// dialog returns is a driver `DEVMODE`, which `--save` writes to a
+    /// file for `print --printer-config` to use.
+    ///
+    /// # It opens a window
+    ///
+    /// The one subcommand in `pdfce-cli` that does. That is deliberate
+    /// rather than accidental: the dialog is the driver's, pdfce cannot
+    /// reproduce it, and a capability the GUI could reach and the CLI
+    /// could not would be the same boundary error in the other
+    /// direction. Pressing Cancel is not a failure — it reports
+    /// `changed=0` and exits 0.
+    PrinterProperties {
+        /// Printer name, as `list-printers` reports it. Defaults to the
+        /// system default printer.
+        #[arg(long)]
+        printer: Option<String>,
+        /// Write the resulting configuration here, for
+        /// `print --printer-config`.
+        ///
+        /// Without it the dialog still opens and the result is still
+        /// summarised, but nothing is kept — which is a legitimate way
+        /// to read what a device is currently set to.
+        #[arg(long, value_name = "PATH")]
+        save: Option<PathBuf>,
+        /// Open the dialog on a configuration saved earlier rather than
+        /// on the device's current settings.
+        #[arg(long, value_name = "PATH")]
+        from: Option<PathBuf>,
+        /// **Do not open the dialog** — read the device's current
+        /// settings and report or save them as they stand.
+        ///
+        /// The scriptable half. A command that always opens a modal
+        /// window cannot run from a batch file, cannot run over a remote
+        /// session with no desktop, and cannot be tested without a
+        /// person to click it — so the capture and the editing are
+        /// separable, and only the editing needs the operator.
+        #[arg(long, conflicts_with = "from")]
+        no_dialog: bool,
     },
 
     /// **List the printers this machine can reach** (Windows only).
@@ -5022,6 +5121,9 @@ fn run() -> ExitCode {
             orientation,
             duplex,
             pick_tray,
+            paper,
+            paper_size,
+            printer_config,
             comments,
             n_up,
             n_up_border,
@@ -5049,6 +5151,9 @@ fn run() -> ExitCode {
             orientation,
             duplex,
             pick_tray,
+            paper.as_deref(),
+            paper_size.as_deref(),
+            printer_config.as_deref(),
             comments,
             n_up,
             n_up_border,
@@ -5068,6 +5173,8 @@ fn run() -> ExitCode {
             pages,
             scale_percent,
             orientation,
+            paper,
+            paper_size,
         } => cmd_print_preview(
             &input,
             printer.as_deref(),
@@ -5075,6 +5182,20 @@ fn run() -> ExitCode {
             scale_percent,
             &pages,
             orientation,
+            paper.as_deref(),
+            paper_size.as_deref(),
+        ),
+        Command::ListPaperSizes { printer } => cmd_list_paper_sizes(printer.as_deref()),
+        Command::PrinterProperties {
+            printer,
+            save,
+            from,
+            no_dialog,
+        } => cmd_printer_properties(
+            printer.as_deref(),
+            save.as_deref(),
+            from.as_deref(),
+            no_dialog,
         ),
         Command::FindText {
             input,
@@ -8856,6 +8977,9 @@ fn cmd_print(
     orientation: OrientationArg,
     duplex: DuplexArg,
     pick_tray: bool,
+    paper: Option<&str>,
+    paper_size: Option<&str>,
+    printer_config: Option<&Path>,
     comments: CommentsArg,
     n_up: Option<u32>,
     n_up_border: bool,
@@ -8875,24 +8999,9 @@ fn cmd_print(
             return exit_code_for_doc(&err);
         }
     };
-    let all = match pdfce_print::list_printers() {
-        Ok(p) => p,
-        Err(err) => {
-            eprintln!("pdfce-cli: {err}");
-            return exit::IO_ERROR;
-        }
-    };
-    let name = match printer {
-        Some(name) => name.to_owned(),
-        None => match all.iter().find(|p| p.is_default) {
-            Some(p) => p.name.clone(),
-            None => {
-                eprintln!(
-                    "pdfce-cli: no default printer is set — pass --printer with one of the names from `pdfce-cli list-printers`"
-                );
-                return exit::EDIT_REFUSED;
-            }
-        },
+    let name = match print_target(printer) {
+        Ok(name) => name,
+        Err(code) => return code,
     };
     let session = pdfce_core::edit::EditSession::new(doc);
     let page_list = match session.pages() {
@@ -8909,23 +9018,65 @@ fn cmd_print(
             return exit::RUNTIME_ERROR;
         }
     };
-    let caps = match pdfce_print::printer_caps(&name) {
+    let config = match printer_config {
+        Some(path) => match load_printer_config(path, &name) {
+            Ok(config) => Some(config),
+            Err(code) => return code,
+        },
+        None => None,
+    };
+    let (selected_paper, requested_sheet_pt) = match resolve_paper(&name, paper, paper_size) {
+        Ok(paper) => paper,
+        Err(code) => return code,
+    };
+    // ★ The geometry must be read for the sheet THIS JOB will use, not
+    // the device's default one. Planning against the default while
+    // printing on another is the same defect `for_orientation` exists to
+    // prevent, in a second dimension: the two halves would describe
+    // different sheets, with no clip reported and nothing to explain it.
+    let caps = match pdfce_print::printer_caps_for(&name, config.as_ref(), selected_paper) {
         Ok(c) => c,
         Err(err) => {
             eprintln!("pdfce-cli: {err}");
             return exit::EDIT_REFUSED;
         }
     };
+    report_sheet_mismatch(&name, requested_sheet_pt, &caps);
+
+    // R83 — a control the device may not honour is disclosed rather than
+    // left to be discovered from the paper. Both of these produce a job
+    // that succeeds and comes out wrong, which is the only kind the
+    // operator cannot diagnose.
+    if let Ok(features) = pdfce_print::device_features(&name) {
+        if duplex.to_duplex() != pdfce_print::Duplex::Simplex && !features.supports_duplex {
+            eprintln!(
+                "pdfce-cli: {name:?} does not report duplex support, so this job will very \
+                 likely print single-sided. pdfce never simulates duplex by reordering pages."
+            );
+        }
+        if pick_tray {
+            match features.form_source_bin {
+                pdfce_print::FormSourceSupport::Listed => {}
+                // NOT a refusal. Measured 2026-08-18: "Microsoft Print to
+                // PDF" reports no bin list at all and its own default is
+                // already DMBIN_FORMSOURCE, so treating silence as "no"
+                // would deny a working capability.
+                pdfce_print::FormSourceSupport::NotListed
+                | pdfce_print::FormSourceSupport::Unknown => eprintln!(
+                    "pdfce-cli: {name:?} does not advertise a size-matched input tray. The \
+                     request is sent anyway — Windows' Form-to-Tray Assignment is a spooler \
+                     feature and several drivers honour it without listing it — but if the \
+                     paper comes from the usual tray, that is why."
+                ),
+            }
+        }
+    }
 
     let device_settings = pdfce_print::DeviceSettings {
         orientation: orientation.to_orientation(),
         duplex: duplex.to_duplex(),
         pick_tray_by_page_size: pick_tray,
-        // Paper selection reaches this from `--paper` / `--paper-size`
-        // in the CLI surface that follows this change; until then the
-        // job is planned against whatever sheet the device is set to,
-        // which is what shipped.
-        paper: pdfce_print::PaperSelection::DeviceDefault,
+        paper: selected_paper,
     };
     let mode = match scale_percent {
         Some(pct) => pdfce_print::ScaleMode::Custom(f64::from(pct) / 100.0),
@@ -9414,13 +9565,14 @@ untiled; {tiled_pages} page(s) were tiled."
     // bitmaps would resolve `--orientation auto` from the sheet in those
     // paths and from a source page in this one — two answers where the
     // job has room for only one.
-    let report = match pdfce_print::spool(
+    let report = match pdfce_print::spool_with_config(
         &name,
         &bitmaps,
         dry,
         to_file.as_deref(),
         device_settings,
         spec.first_page_pt(&page_sizes),
+        config.as_ref(),
     ) {
         Ok(r) => r,
         Err(err) => {
@@ -9452,14 +9604,33 @@ untiled; {tiled_pages} page(s) were tiled."
         );
     }
 
+    // Rule 4: where the driver settings came from is not visible on the
+    // paper, and it decides what a driver-level request could possibly
+    // honour. `synthesised` in particular means the driver would not
+    // describe itself and everything it holds that pdfce does not model
+    // was NOT carried.
+    if report.settings_source == pdfce_print::SettingsSource::Synthesised {
+        eprintln!(
+            "pdfce-cli: {name:?} would not report its own settings, so this job carried only \
+             the settings pdfce sets itself. Anything configured in the driver — media type, \
+             output bin, quality, stapling — was not included."
+        );
+    }
     println!(
-        "print {} printer={name:?} pages={} printed={} dpi={}x{} clipped={} mode=raster job={}",
+        "print {} printer={name:?} pages={} printed={} dpi={}x{} clipped={} mode=raster \
+         settings={} job={}",
         input.display(),
         report.pages,
         u8::from(report.printed),
         report.dpi.0,
         report.dpi.1,
         report.clipped_pages,
+        match report.settings_source {
+            pdfce_print::SettingsSource::DeviceDefault => "device-default",
+            pdfce_print::SettingsSource::DriverSupplied => "driver",
+            pdfce_print::SettingsSource::CallerSupplied => "file",
+            pdfce_print::SettingsSource::Synthesised => "synthesised",
+        },
         report
             .job_id
             .map_or_else(|| "-".to_owned(), |j| j.to_string()),
@@ -9489,6 +9660,12 @@ untiled; {tiled_pages} page(s) were tiled."
 /// (`Acrobat_Features/printing__scaling_modes.md`). pdfce names the pages
 /// that would lose content, and the exit code reflects it, so a scripted
 /// caller can refuse to print rather than discover the loss on paper.
+// Eight arguments, one over clippy's bound, and for the same reason
+// `cmd_print` carries the allow at twenty-nine: they are `clap`'s own
+// parsed flags handed straight through, and bundling them into a struct
+// would mean a second definition of the command's surface that has to be
+// kept in step with the derive.
+#[allow(clippy::too_many_arguments)]
 #[cfg(windows)]
 fn cmd_print_preview(
     input: &Path,
@@ -9497,6 +9674,8 @@ fn cmd_print_preview(
     scale_percent: Option<u32>,
     pages: &str,
     orientation: OrientationArg,
+    paper: Option<&str>,
+    paper_size: Option<&str>,
 ) -> u8 {
     let doc = match open_document(input) {
         Ok(doc) => doc,
@@ -9509,33 +9688,27 @@ fn cmd_print_preview(
     // Resolve the printer: the named one, else the system default. An
     // unnamed preview on a machine with no default is a real dead end,
     // so it says which of the two problems it is.
-    let all = match pdfce_print::list_printers() {
-        Ok(p) => p,
-        Err(err) => {
-            eprintln!("pdfce-cli: {err}");
-            return exit::IO_ERROR;
-        }
+    let chosen = match print_target(printer) {
+        Ok(name) => name,
+        Err(code) => return code,
     };
-    let chosen = match printer {
-        Some(name) => name.to_owned(),
-        None => match all.iter().find(|p| p.is_default) {
-            Some(p) => p.name.clone(),
-            None => {
-                eprintln!(
-                    "pdfce-cli: no default printer is set — pass --printer with one of the names from `pdfce-cli list-printers`"
-                );
-                return exit::EDIT_REFUSED;
-            }
-        },
+    let (selected_paper, requested_sheet_pt) = match resolve_paper(&chosen, paper, paper_size) {
+        Ok(paper) => paper,
+        Err(code) => return code,
     };
 
-    let caps = match pdfce_print::printer_caps(&chosen) {
+    // Read for the sheet the JOB will use, for the same reason
+    // `--orientation` is honoured here: paper changes the printable
+    // rectangle, and a preview planned against a different sheet than
+    // the print would agree with the wrong answer instead of catching it.
+    let caps = match pdfce_print::printer_caps_for(&chosen, None, selected_paper) {
         Ok(c) => c,
         Err(err) => {
             eprintln!("pdfce-cli: {err}");
             return exit::EDIT_REFUSED;
         }
     };
+    report_sheet_mismatch(&chosen, requested_sheet_pt, &caps);
 
     // Through a session, matching every other page-addressing command:
     // `pages()` lives on `EditSession`, and reading through the same
@@ -9672,6 +9845,8 @@ fn cmd_print_preview(
     _scale_percent: Option<u32>,
     _pages: &str,
     _orientation: OrientationArg,
+    _paper: Option<&str>,
+    _paper_size: Option<&str>,
 ) -> u8 {
     eprintln!(
         "pdfce-cli: printing is available on Windows only in this build \
@@ -9725,6 +9900,483 @@ fn cmd_list_printers() -> u8 {
 fn cmd_list_printers() -> u8 {
     eprintln!(
         "pdfce-cli: printing is available on Windows only in this build          (docs/decisions/003-distribution-posture.md §4.1)"
+    );
+    exit::EDIT_REFUSED
+}
+
+/// The printer a print-path subcommand should target.
+///
+/// Factored out because three subcommands now need it and a fourth copy
+/// of "find the default, or explain that there isn't one" would be a
+/// fourth place for the message to drift.
+///
+/// # Errors
+///
+/// An exit code, ready to return: [`exit::IO_ERROR`] when the spooler
+/// cannot be queried at all, [`exit::EDIT_REFUSED`] when the machine has
+/// no default and none was named.
+#[cfg(windows)]
+fn print_target(printer: Option<&str>) -> Result<String, u8> {
+    if let Some(name) = printer {
+        return Ok(name.to_owned());
+    }
+    let all = match pdfce_print::list_printers() {
+        Ok(p) => p,
+        Err(err) => {
+            eprintln!("pdfce-cli: {err}");
+            return Err(exit::IO_ERROR);
+        }
+    };
+    all.iter()
+        .find(|p| p.is_default)
+        .map(|p| p.name.clone())
+        .ok_or_else(|| {
+            eprintln!(
+                "pdfce-cli: no default printer is set — pass --printer with one of the names from `pdfce-cli list-printers`"
+            );
+            exit::EDIT_REFUSED
+        })
+}
+
+/// Turn `--paper` / `--paper-size` into a [`pdfce_print::PaperSelection`],
+/// **printing what pdfce inferred on the way past**.
+///
+/// # Why this discloses rather than resolving quietly
+///
+/// Project rule 4. Two of the three paths here are pdfce choosing a
+/// value the operator did not type:
+///
+/// - `--paper a4` picks a form ID out of a name, and the driver's names
+///   are not uniform (`"A4"` on one device, `"A4 (8.2 x 11.7 in; 210 x
+///   297 mm)"` on the next), so the match is a judgement;
+/// - `--paper-size 595x842` is rounded into the driver's own tenths of a
+///   millimetre, so the sheet that gets fed is not exactly the one that
+///   was asked for.
+///
+/// Both are stated on stderr. The invocation IS the commit in the CLI —
+/// there is no session and no undo — so printing it on the way past is
+/// the whole of the obligation (rule 11).
+///
+/// # Errors
+///
+/// An exit code. A form name that matches nothing, or matches more than
+/// one form, is [`exit::EDIT_REFUSED`] naming the candidates rather than
+/// a guess: picking one would be pdfce deciding which sheet to consume.
+#[cfg(windows)]
+fn resolve_paper(
+    printer: &str,
+    paper: Option<&str>,
+    paper_size: Option<&str>,
+) -> Result<(pdfce_print::PaperSelection, Option<(f64, f64)>), u8> {
+    if let Some(spec) = paper_size {
+        // `WxH`, in PDF points. `x` or `X`; nothing more elaborate,
+        // because a unit-suffix grammar invented here would be a second
+        // parser for something the crate already measures in points.
+        let (w, h) = spec
+            .split_once(['x', 'X'])
+            .ok_or_else(|| {
+                eprintln!(
+                    "pdfce-cli: --paper-size wants WIDTHxHEIGHT in PDF points, for example 595x842"
+                );
+                exit::RUNTIME_ERROR
+            })
+            .and_then(
+                |(w, h)| match (w.trim().parse::<f64>(), h.trim().parse::<f64>()) {
+                    (Ok(w), Ok(h)) => Ok((w, h)),
+                    _ => {
+                        eprintln!(
+                            "pdfce-cli: --paper-size {spec:?} is not two numbers separated by x"
+                        );
+                        Err(exit::RUNTIME_ERROR)
+                    }
+                },
+            )?;
+        let selection = pdfce_print::PaperSelection::custom_from_points((w, h)).ok_or_else(|| {
+            eprintln!(
+                "pdfce-cli: a custom sheet of {w}x{h} pt cannot be requested — a DEVMODE stores \
+                 the size in tenths of a millimetre as a signed 16-bit number, so the largest \
+                 sheet it can name is about 3.28 m ({} pt) on each axis, and the smallest is \
+                 one tenth of a millimetre. Refused rather than clamped, because a silently \
+                 shortened sheet looks like a pdfce scaling fault.",
+                f64::from(pdfce_print::MAX_CUSTOM_SHEET_TENTHS_MM) * 72.0 / 254.0,
+            );
+            exit::EDIT_REFUSED
+        })?;
+        if let Some((aw, ah)) = selection.size_pt() {
+            eprintln!(
+                "pdfce-cli: custom sheet {w:.2}x{h:.2} pt requested; the driver's unit is tenths \
+                 of a millimetre, so the sheet fed will be {aw:.2}x{ah:.2} pt."
+            );
+        }
+        let asked = selection.size_pt();
+        return Ok((selection, asked));
+    }
+
+    let Some(wanted) = paper else {
+        return Ok((pdfce_print::PaperSelection::DeviceDefault, None));
+    };
+
+    // A form whose size the driver declined to state is reported as
+    // (0, 0) — see `printer_forms`. Passing that on as an EXPECTATION
+    // would make every such form look like the driver had refused the
+    // request, so it becomes "nothing was stated" instead.
+    let stated = |form: &pdfce_print::PaperForm| {
+        (form.size_pt.0 > 0.0 && form.size_pt.1 > 0.0).then_some(form.size_pt)
+    };
+
+    let forms = match pdfce_print::printer_forms(printer) {
+        Ok(forms) => forms,
+        Err(err) => {
+            eprintln!("pdfce-cli: {err}");
+            return Err(exit::EDIT_REFUSED);
+        }
+    };
+    if forms.is_empty() {
+        eprintln!(
+            "pdfce-cli: {printer:?} reports no paper forms at all, so --paper cannot be \
+             resolved against anything. Use --paper-size to name a sheet by size."
+        );
+        return Err(exit::EDIT_REFUSED);
+    }
+
+    // A bare number is an ID. Checked against the list rather than
+    // trusted: an ID the driver does not offer would be sent, ignored,
+    // and print on the default sheet — a request that appears accepted
+    // and was not, which is the defect class this whole change exists
+    // to close.
+    if let Ok(id) = wanted.parse::<u16>() {
+        return match forms.iter().find(|f| f.id == id) {
+            Some(form) => {
+                eprintln!(
+                    "pdfce-cli: paper form {} {:?}, {:.1}x{:.1} pt.",
+                    form.id, form.name, form.size_pt.0, form.size_pt.1
+                );
+                Ok((pdfce_print::PaperSelection::Form(form.id), stated(form)))
+            }
+            None => {
+                eprintln!(
+                    "pdfce-cli: {printer:?} does not offer paper form {id} — run \
+                     `pdfce-cli list-paper-sizes --printer {printer:?}` for the ones it does."
+                );
+                Err(exit::EDIT_REFUSED)
+            }
+        };
+    }
+
+    // Exact first, then unique prefix. Substring matching is
+    // deliberately NOT tried: on a driver whose names carry dimensions,
+    // "A4" is a substring of half the list.
+    let lowered = wanted.to_lowercase();
+    let exact: Vec<&pdfce_print::PaperForm> = forms
+        .iter()
+        .filter(|f| f.name.eq_ignore_ascii_case(wanted))
+        .collect();
+    let candidates: Vec<&pdfce_print::PaperForm> = if exact.is_empty() {
+        forms
+            .iter()
+            .filter(|f| f.name.to_lowercase().starts_with(&lowered))
+            .collect()
+    } else {
+        exact
+    };
+    match candidates.as_slice() {
+        [form] => {
+            eprintln!(
+                "pdfce-cli: --paper {wanted:?} resolved to form {} {:?}, {:.1}x{:.1} pt.",
+                form.id, form.name, form.size_pt.0, form.size_pt.1
+            );
+            Ok((pdfce_print::PaperSelection::Form(form.id), stated(form)))
+        }
+        [] => {
+            eprintln!(
+                "pdfce-cli: {printer:?} offers no paper form named {wanted:?} — run \
+                 `pdfce-cli list-paper-sizes` to see the {} it does offer.",
+                forms.len()
+            );
+            Err(exit::EDIT_REFUSED)
+        }
+        many => {
+            eprintln!(
+                "pdfce-cli: --paper {wanted:?} matches {} forms on {printer:?}; name one exactly \
+                 or use its ID:",
+                many.len()
+            );
+            for form in many {
+                eprintln!("  {} {:?}", form.id, form.name);
+            }
+            Err(exit::EDIT_REFUSED)
+        }
+    }
+}
+
+/// Say so when the driver did not give the sheet that was asked for.
+///
+/// # ★ Why this exists: a paper request can be ignored in silence
+///
+/// Measured on this machine, 2026-08-18, with `--paper-size 1000x1400`:
+///
+/// - **Microsoft Print to PDF** ignored it completely and reported its
+///   own 612x792. Its form list has no user-defined entry, and a driver
+///   that only supports enumerated forms is under no obligation to
+///   honour `DMPAPER_USER` — it simply does not.
+/// - **EPSON ET-16600** honoured the LENGTH (1399.9 pt) and clamped the
+///   WIDTH to 595.2 pt, its maximum media width. A partial honour, which
+///   is the worse case: the sheet is neither what was asked for nor
+///   obviously wrong.
+///
+/// Neither reported an error. `spool` would have returned `Ok`, the
+/// summary line would have said `printed=1`, and the paper would have
+/// been the wrong size — which is the exact shape of the `pick_tray`
+/// defect this whole change set is about, in a new place.
+///
+/// pdfce's own arithmetic stays correct either way, because
+/// [`pdfce_print::printer_caps_for`] reads the geometry the device
+/// ACTUALLY reports after the request, so placement is right for the
+/// sheet that will really be fed. What is wrong is only the operator's
+/// expectation, and that is exactly what a disclosure is for.
+///
+/// # Why the comparison is orientation-blind
+///
+/// `DC_PAPERSIZE` states a form portrait-first while `printer_caps`
+/// reports the sheet in the DEVICE's default orientation, which is
+/// landscape on plotters and label printers. Comparing the sorted pair
+/// avoids a false alarm on every job sent to one of those.
+#[cfg(windows)]
+fn report_sheet_mismatch(
+    printer: &str,
+    requested_pt: Option<(f64, f64)>,
+    caps: &pdfce_print::PrinterCaps,
+) {
+    let Some((rw, rh)) = requested_pt else {
+        return;
+    };
+    let unordered = |(a, b): (f64, f64)| if a <= b { (a, b) } else { (b, a) };
+    let (r_short, r_long) = unordered((rw, rh));
+    let (g_short, g_long) = unordered(caps.physical_pt);
+    // A point and a half — comfortably more than the tenth-of-a-
+    // millimetre (0.28 pt) rounding a DEVMODE imposes, comfortably less
+    // than any real difference between two named forms.
+    const TOLERANCE_PT: f64 = 1.5;
+    if (r_short - g_short).abs() <= TOLERANCE_PT && (r_long - g_long).abs() <= TOLERANCE_PT {
+        return;
+    }
+    eprintln!(
+        "pdfce-cli: {printer:?} did not give the sheet that was asked for. Requested \
+         {rw:.1}x{rh:.1} pt; the device reports {:.1}x{:.1} pt and that is what will be fed. \
+         The job is planned against what the device reports, so the placement below is correct \
+         for the REAL sheet — but the paper will not be the one requested. A driver that only \
+         supports its enumerated forms ignores a custom size outright, and one that has a \
+         maximum media width clamps to it.",
+        caps.physical_pt.0, caps.physical_pt.1,
+    );
+}
+
+/// Load a saved driver configuration and check it belongs to this device.
+///
+/// # Errors
+///
+/// An exit code. The device check is [`exit::EDIT_REFUSED`] rather than a
+/// warning: a `DEVMODE`'s private tail is one driver's private format,
+/// so handing it to another is undefined at the driver level rather than
+/// merely wrong.
+#[cfg(windows)]
+fn load_printer_config(
+    path: &Path,
+    printer: &str,
+) -> Result<pdfce_print::PrinterConfiguration, u8> {
+    let bytes = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", path.display());
+            return Err(exit::IO_ERROR);
+        }
+    };
+    let config = pdfce_print::PrinterConfiguration::from_bytes(&bytes).map_err(|err| {
+        eprintln!("pdfce-cli: {}: {err}", path.display());
+        exit::EDIT_REFUSED
+    })?;
+    config.ensure_device(printer).map_err(|err| {
+        eprintln!("pdfce-cli: {}: {err}", path.display());
+        exit::EDIT_REFUSED
+    })?;
+    Ok(config)
+}
+
+/// Print, on stderr, everything a driver configuration says that pdfce
+/// can read.
+///
+/// pdfce carries the whole structure and interprets a handful of members
+/// of it, so this is a partial view BY CONSTRUCTION — and it says how
+/// partial, in bytes, rather than implying it saw everything.
+#[cfg(windows)]
+fn report_configuration(config: &pdfce_print::PrinterConfiguration) {
+    let s = config.summary();
+    let word = |o: Option<pdfce_print::Orientation>| match o {
+        Some(pdfce_print::Orientation::Landscape) => "landscape".to_owned(),
+        Some(pdfce_print::Orientation::Portrait | pdfce_print::Orientation::Auto) => {
+            "portrait".to_owned()
+        }
+        None => "-".to_owned(),
+    };
+    let duplex = match s.duplex {
+        Some(pdfce_print::Duplex::LongEdge) => "long-edge",
+        Some(pdfce_print::Duplex::ShortEdge) => "short-edge",
+        Some(pdfce_print::Duplex::Simplex) => "simplex",
+        None => "-",
+    };
+    println!(
+        "settings device={:?} orientation={} paper_form={} form_name={} custom_pt={} \
+         duplex={duplex} tray={} pick_tray_by_size={} driver_private_bytes={}",
+        s.device,
+        word(s.orientation),
+        s.paper_form_id
+            .map_or_else(|| "-".to_owned(), |v| v.to_string()),
+        s.form_name.clone().unwrap_or_else(|| "-".to_owned()),
+        s.custom_paper_pt
+            .map_or_else(|| "-".to_owned(), |(w, h)| format!("{w:.1}x{h:.1}")),
+        s.input_tray
+            .map_or_else(|| "-".to_owned(), |v| v.to_string()),
+        u32::from(s.picks_tray_by_size),
+        s.driver_extra,
+    );
+}
+
+/// `list-paper-sizes` — the forms a device offers.
+///
+/// # Why the ID is on every line
+///
+/// It is what `print --paper` takes, and it is stable where the NAME is
+/// not: the same A4 is `"A4"` on one driver and
+/// `"A4 (8.2 x 11.7 in; 210 x 297 mm)"` on the next, measured on this
+/// machine. A script that pins a form should pin the ID.
+///
+/// # Exit code
+///
+/// `0` even for a device that offers none — that is a successful query
+/// of an unusual device, and a non-zero exit would make it
+/// indistinguishable from "no such printer", which is the one
+/// distinction a caller needs.
+#[cfg(windows)]
+fn cmd_list_paper_sizes(printer: Option<&str>) -> u8 {
+    let name = match print_target(printer) {
+        Ok(name) => name,
+        Err(code) => return code,
+    };
+    let forms = match pdfce_print::printer_forms(&name) {
+        Ok(forms) => forms,
+        Err(err) => {
+            eprintln!("pdfce-cli: {err}");
+            return exit::EDIT_REFUSED;
+        }
+    };
+    for form in &forms {
+        println!(
+            "paper id={} name={:?} size_pt={:.1}x{:.1}",
+            form.id, form.name, form.size_pt.0, form.size_pt.1
+        );
+    }
+    if forms
+        .iter()
+        .any(|f| f.size_pt.0 <= 0.0 || f.size_pt.1 <= 0.0)
+    {
+        // A zero is the driver declining to state a size, not a sheet of
+        // no area. Said plainly, because a shell that plotted it would
+        // draw nothing and blame pdfce.
+        eprintln!(
+            "pdfce-cli: some forms report a size of 0x0 — that is the driver declining to \
+             state one, not a sheet with no area."
+        );
+    }
+    println!("list-paper-sizes printer={name:?} count={}", forms.len());
+    exit::SUCCESS
+}
+
+/// `printer-properties` — the driver's own settings dialog.
+///
+/// # Exit codes
+///
+/// `0` whether the operator accepted or cancelled. Cancelling is the
+/// operator declining, and reporting an error for it would be scolding
+/// them for using the dialog correctly — `changed=` on the summary line
+/// is what a script branches on.
+#[cfg(windows)]
+fn cmd_printer_properties(
+    printer: Option<&str>,
+    save: Option<&Path>,
+    from: Option<&Path>,
+    no_dialog: bool,
+) -> u8 {
+    let name = match print_target(printer) {
+        Ok(name) => name,
+        Err(code) => return code,
+    };
+    let start_from = match from {
+        Some(path) => match load_printer_config(path, &name) {
+            Ok(config) => Some(config),
+            Err(code) => return code,
+        },
+        None => None,
+    };
+    let edited = if no_dialog {
+        pdfce_print::printer_configuration(&name).map(Some)
+    } else {
+        pdfce_print::edit_printer_configuration(&name, None, start_from.as_ref())
+    };
+    let edited = match edited {
+        Ok(edited) => edited,
+        Err(err) => {
+            eprintln!("pdfce-cli: {err}");
+            return exit::EDIT_REFUSED;
+        }
+    };
+    let Some(config) = edited else {
+        println!("printer-properties printer={name:?} changed=0 saved=-");
+        return exit::SUCCESS;
+    };
+    report_configuration(&config);
+    let saved = match save {
+        Some(path) => {
+            if let Err(err) = std::fs::write(path, config.as_bytes()) {
+                eprintln!("pdfce-cli: {}: {err}", path.display());
+                return exit::IO_ERROR;
+            }
+            path.display().to_string()
+        }
+        None => {
+            eprintln!(
+                "pdfce-cli: nothing was saved — pass --save PATH to keep these settings for \
+                 `print --printer-config`."
+            );
+            "-".to_owned()
+        }
+    };
+    println!("printer-properties printer={name:?} changed=1 saved={saved:?}");
+    exit::SUCCESS
+}
+
+/// The non-Windows arm — see `cmd_list_printers` for why this reports
+/// rather than vanishing.
+#[cfg(not(windows))]
+fn cmd_list_paper_sizes(_printer: Option<&str>) -> u8 {
+    eprintln!(
+        "pdfce-cli: printing is available on Windows only in this build \
+         (docs/decisions/003-distribution-posture.md §4.1)"
+    );
+    exit::EDIT_REFUSED
+}
+
+/// The non-Windows arm — see `cmd_list_printers` for why this reports
+/// rather than vanishing.
+#[cfg(not(windows))]
+fn cmd_printer_properties(
+    _printer: Option<&str>,
+    _save: Option<&Path>,
+    _from: Option<&Path>,
+    _no_dialog: bool,
+) -> u8 {
+    eprintln!(
+        "pdfce-cli: printing is available on Windows only in this build \
+         (docs/decisions/003-distribution-posture.md §4.1)"
     );
     exit::EDIT_REFUSED
 }
