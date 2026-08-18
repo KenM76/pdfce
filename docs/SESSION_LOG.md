@@ -46513,3 +46513,126 @@ from the dispatch summary.
    developer comment for blend modes/soft masks (see "Still in flight,"
    above; found by this filing's own self-correction, not by the
    dispatch).
+
+## 2026-08-18 (hundred-and-seventy-fourth filing) — `bd861a0` CLOSES THE SEVENTH COPY (`main.rs:7027`, FOUND BY THE 173RD FILING'S OWN SELF-CORRECTION), AND THE ENGINEER ASKS FOR A JUDGMENT ON A NARROWER PROCEDURAL COMMITMENT
+
+**Filed by `pdfce-librarian` WITHOUT a shell this session.** Test/lint
+results are RELAYED from the dispatching engineer's report
+(`cargo fmt --all`, `cargo clippy -p pdfce-cli --all-targets -- -D
+warnings`, `cargo test -p pdfce-cli --test render_page` 15/15). **The
+source-text claim is independently verified by `Read`** against
+`crates/pdfce-cli/src/main.rs:7027`–`7047` before this entry was
+written, not carried from the commit message.
+
+**Shipped:**
+
+- `bd861a0` filed — no Pass ID, touches `crates/pdfce-cli/src/main.rs`
+  only, a developer comment. Closes the seventh copy in this chain: the
+  comment at `main.rs:7027`–`7031` read *"Neither is implemented"* for
+  blend modes and soft masks. Kept: the still-true second half ("before
+  these existed neither was counted either"). Replaced: the first half,
+  with the same qualified truth `FEATURES.md`'s *Blend modes*/*Soft
+  masks* rows already state — 11 separable modes applied in the wrong
+  colour space (§11.3.4), 4 nonseparable modes declined and routed to
+  `blend_modes_ignored` (never reaching `blend_modes_applied`), soft
+  masks folded into the clip instead of the group's result (§11.4.5),
+  `/TR` counted and never evaluated. Full account: top of `ROADMAP.md`
+  *Shipped*.
+
+**Decisions made this session:**
+
+- **No decision minted.** Decisions 068/069 already document the
+  architecture correctly; this commit brings one more comment site into
+  agreement with disclosures that were already right elsewhere. Next
+  free decision stays **071**.
+- **Standing-rule candidacy assessed a fourth time, still not minted** —
+  same disposition as the 171st/172nd/173rd filings: no mechanical gate
+  can distinguish a legitimate claim from a stale one, because that
+  distinction is "does current behaviour match the claim," exactly the
+  fact each disclosure exists to report. Next free standing rule stays
+  **R196**.
+
+**Findings + decisions — the procedural-commitment judgment call:**
+
+The dispatch asked something narrower and different from the
+standing-rule question already declined three times, and it deserves its
+own answer rather than being folded into that refusal by reflex.
+
+**The candidate:** *"When a Pass changes what a counter or capability
+means, the filing librarian reads every doc comment, `eprintln!` and
+struct-field rustdoc that names that counter — searching for the claim,
+not the string — and reports the survivors back to the engineer as owed
+work."*
+
+**This is accepted, and accepted as categorically different from the
+declined standing-rule question, for a reason worth stating precisely.**
+The three prior refusals were about a **code-level gate** — something
+`cargo test`/`clippy`/a CI script could enforce mechanically against
+every future commit, and the RAG file's own "THIRD OCCURRENCE" section
+already proves no such gate can exist, because a content-comparison gate
+would need to know "current behaviour," which is exactly the fact each
+disclosure exists to report. **The candidate above is not that.** It
+names an action on **this librarian's own filing process** — Read every
+named site, report survivors — not a check on the engineer's code. It is
+the exact same species as this agent's own existing Hard Rule 8 (check
+git/backup state before asserting it, don't infer from documents) and
+Hard Rule 10 (file every figure in a form that disagrees with something)
+— both are already procedural commitments on THIS agent's behavior, not
+mechanical gates, and both are already numbered rules in
+`pdfce-librarian.md`. A rule that says "read X, report Y" is checkable in
+exactly the sense those two are: after the fact, "did the filing report
+survivors" is a yes/no a reader can verify against the entry, the same
+way "did the filing check `git remote -v` before asserting remote state"
+is.
+
+**It is also not new — it is what the last four filings have already
+been doing, and naming it is what makes it durable.** The 171st, 172nd,
+173rd, and this filing all independently verified source text by `Read`
+rather than trusting the dispatch report, and three of those four found
+something the dispatch missed BECAUSE of that check (the fifth survivor,
+the sixth survivor, the seventh copy respectively). The candidate
+converts an ad hoc habit that has already paid for itself four times
+running into a named, checkable step of the filing process, so it
+survives a session where the librarian is in a hurry or is a different
+instance that never independently formed the habit.
+
+**Where it should live: this librarian's own agent file
+(`D:\Dev\pdfce\.claude\agents\pdfce-librarian.md`), as a new Hard Rule,
+not this file.** Not made here — editing that file is outside what a
+docs-only filing dispatch authorizes, and Hard Rule 8's own amendment
+history shows that file's rules get restated/amended by explicit
+instruction, not unilaterally by the agent mid-task. **Flagged to the
+engineer/operator as the recommended next edit**, phrased close to the
+candidate above: *"When a filing changes what a counter or capability
+means, read every doc comment, `eprintln!`, and struct-field rustdoc
+naming that counter — search for the claim, not the string — and report
+survivors as owed work."* Until that edit lands, this librarian commits
+to following it as adopted practice starting with this entry.
+
+- **`FEATURES.md` — verified, no row changes owed.** Comment-only commit;
+  no capability, counter, or shell surface changed. The *Blend modes*
+  and *Soft masks* rows already state the qualified truth the corrected
+  comment now also states.
+- **`docs/PRIOR_ART.md`'s `moxcms` entry** re-verified present (line 301)
+  — added by the 173rd filing, nothing further owed there.
+
+**Still in flight:**
+
+- `Pass 97.0`/`97.1`/`97.2` remain the best-scoped, highest-leverage
+  queued work, untouched by this filing.
+- No known survivor of this specific claim-family remains flagged and
+  unfixed as of this filing — the seventh copy was the last one on
+  record.
+
+**For next session:**
+
+1. **Ledger.** Next free Pass family **98** (unchanged). Next free
+   decision **071** (unchanged). Next free standing rule **`R196`**
+   (unchanged). Not re-run through `tools/check-ledger-numbers.py` this
+   filing — no shell. **Next free filing ordinal: 175.**
+2. **Build `Pass 97.0`** — best-scoped, highest-leverage, unchanged.
+3. **If the operator agrees**, add the new Hard Rule to
+   `pdfce-librarian.md` per the judgment above — this librarian does not
+   self-edit its own agent file without that go-ahead.
+4. **`check-commits-filed.py`** should be green as of `bd861a0` — the
+   engineer's stated end-of-session goal for this filing.

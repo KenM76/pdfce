@@ -96,6 +96,92 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `bd861a0` — **THE SEVENTH COPY: `main.rs:7027` STILL SAID "NEITHER IS IMPLEMENTED" FOR BLEND MODES AND SOFT MASKS, FOUND BY THE 173RD FILING'S OWN SELF-CORRECTION, NOW REPLACED WITH THE QUALIFIED TRUTH** — no Pass ID, no decision minted; commit `bd861a0` touches `crates/pdfce-cli/src/main.rs` only (a developer comment) and is cited here to satisfy `check-commits-filed.py` — filed 2026-08-18 (hundred-and-seventy-fourth filing)
+
+**Filed by `pdfce-librarian` WITHOUT a shell this session.** Test/lint
+results below are RELAYED from the dispatching engineer's report, not
+independently re-run. **The source-text claim is independently verified
+by `Read` against the live file**, not carried from the commit message —
+`crates/pdfce-cli/src/main.rs:7027`–`7047` today carries the corrected
+comment, confirmed before this entry was written.
+
+**What this closes.** The 173rd filing's own self-correction (recorded in
+that filing's "Still in flight" section) found, but had no code-edit
+mandate to fix, a developer comment at `main.rs:7027`–`7031` reading
+*"Neither is implemented"* about blend modes and soft masks — found not
+by the dispatch, but by checking a DRAFT claim of this filing's own
+against the live file and discovering the draft was wrong (it reasoned
+from the 170th filing's line numbers for a DIFFERENT disclosure and had
+not re-read the current file). This commit is that fix, landing one
+filing later.
+
+**What changed.** The second half of the old sentence — *"before these
+existed neither was COUNTED either, so a page composited wrongly said
+nothing at all"* — is still true and is kept verbatim. The first half is
+replaced, because "implemented" without a qualifier is exactly the shape
+that keeps going stale in this chain (a bare yes/no where the true answer
+is partial):
+
+- **Blend modes** — the 11 separable modes ARE applied, but in device
+  sRGB rather than the transparency group's own colour space (§11.3.4);
+  the 4 nonseparable modes (Hue/Saturation/Color/Luminosity) are
+  recognised and **declined**, so they land in `blend_modes_ignored` and
+  never reach `blend_modes_applied` at all — the measurement `83c85ec`
+  made directly (every Ghent transparency patch: `blend_modes_applied=11,
+  blend_modes_ignored=4`).
+- **Soft masks** — built correctly, but folded into the clip instead of
+  applied to the group's RESULT (§11.4.5); `/TR` is counted and never
+  evaluated.
+
+Both clauses match what `FEATURES.md`'s *Blend modes* and *Soft masks*
+rows already state (amended by the 172nd/173rd filings) — this commit
+brings a developer comment into agreement with disclosures that were
+already correct elsewhere, the same shape as every fix in this chain
+since `e11b4f8`.
+
+**Swept the neighbourhood for the CLAIM, not the STRING, this time** —
+per the engineer's dispatch note. The remaining `grep -rn "not
+implemented"` hits in `crates/` are all legitimate: stub subcommands, the
+knockout comment (still genuinely unimplemented per the *Planned* row),
+structure-tree subsetting.
+
+**Also carries the librarian's 173rd filing's own self-correction as part
+of the record, not a separate item:** that filing's draft claimed a stale
+copy survived at `main.rs:7057`–`7060`; checked against the live file
+before filing and found wrong — `7057`–`7060` is
+`transparency_groups_composited`'s already-corrected comment. Checking
+that false claim is what turned up the real one at `7027`, which this
+commit now closes. Both the error and the check that caught it are on
+record in the 173rd filing's own entry, unedited.
+
+**`docs/PRIOR_ART.md`'s `moxcms` entry** was added by the 173rd filing
+(`83c85ec`/`138a3c0`), not this commit — re-verified present at line 301
+before writing this entry; nothing further owed there.
+
+**`FEATURES.md` — verified, no row changes owed.** This commit corrects
+comment text only; no capability, counter, or shell surface changed. The
+*Blend modes* and *Soft masks* rows already state the same qualified
+truth this comment now states (confirmed by `Read` before filing).
+
+Verification (relayed): `cargo fmt --all` clean; `cargo clippy -p
+pdfce-cli --all-targets -- -D warnings` clean; `cargo test -p pdfce-cli
+--test render_page` 15/15 green. Ghent standing carried forward
+unchanged: **25 pass / 18 FAIL / 8 UNRESOLVED of 51** — this commit is
+comments only in `crates/`, not re-run.
+
+**Ledger, unchanged.** Next free Pass family **98**. Next free decision
+**071**. Next free standing rule **R196**. Next free filing ordinal:
+**175**. Not re-run through `tools/check-ledger-numbers.py` this filing —
+no shell; carried forward from the 173rd filing's own statement.
+
+**On the standing-rule/procedural-commitment question the dispatch
+raised** (a defined-trigger, defined-action sweep obligation rather than
+a "be careful" restatement) — **accepted as adopted librarian practice,
+not minted as a numbered engineering standing rule** (those remain
+`R196`, unchanged, per the same reasoning the 171st/172nd/173rd filings
+already gave three times). Full reasoning in `SESSION_LOG.md`, this
+filing.
+
 ### `83c85ec` + `138a3c0` — **THE 172ND FILING'S CITATION FLAG WAS RIGHT: `blend_modes_applied` CANNOT REACH THE FOUR NONSEPARABLE MODES — A PROPER CTM-TRACKING CELL-MAPPING TOOL REPLACES CELL-PITCH GUESSING, AND A THIRTEEN-ENGINE COLLAPSE-MODEL SURVEY ANSWERS `docs/compositor-plan.md` §4 STAGE C — THEN PDFCE'S OWN SPEC CORPUS CORRECTS BOTH RESEARCH PASSES THAT PRODUCED IT** — no Pass ID, no decision minted; commit `83c85ec` touches `crates/` and `tools/` and is cited here to satisfy `check-commits-filed.py`; `138a3c0` (docs-only, new `docs/collapse-model-survey.md`) is exempt from that gate but is the more consequential of the two and is narrated in the same filing, per the dispatch's own instruction — filed 2026-08-18 (hundred-and-seventy-third filing)
 
 **Filed by `pdfce-librarian` WITHOUT a shell this session.** Test/lint
