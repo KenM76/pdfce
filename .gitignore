@@ -79,3 +79,26 @@ tools/fontfile-census/target/
 # / untracked-output split as the corpus-harness out-* rules above.
 __pycache__/
 *.py[cod]
+
+# ---------------------------------------------------------------------------
+# Stray web-fetch artefacts at the repo root.
+#
+# Research subagents fetch pages with `curl -o <name>` and, unless told
+# otherwise, land the output in the working directory — which is this
+# repository. Two batches reached the root in a single session on 2026-08-18:
+# an `out.html` Anubis anti-bot interstitial, and `vp.txt` / `vp4.txt` /
+# `pdfa4.txt` (veraPDF wiki pages and an ELOT login page). The second batch
+# was COMMITTED, by a `git add -A` that swept the root.
+#
+# This repository is PUBLIC (CLAUDE.md rule 8), so a stray fetch riding along
+# in a commit is a disclosure surface, not untidiness — the fetched page can
+# be anything, including an authenticated view. The tidy habit is the
+# security control here.
+#
+# These patterns are deliberately root-anchored (`/`) so a legitimately
+# tracked `out.html` or `vp.txt` deeper in the tree is unaffected.
+/out.html
+/out.htm
+/vp*.txt
+/pdfa*.txt
+/curl-*.txt
