@@ -133,11 +133,12 @@ use pdfce_core::object::{Dict, ObjId, Object, Stream};
 use pdfce_core::span::ByteSpan;
 use pdfce_core::view::DocumentView;
 use tiny_skia::{
-    FillRule, FilterQuality, LineCap as SkCap, LineJoin as SkJoin, Mask, Paint, Path, PathBuilder,
-    Pattern, Pixmap, Rect, SpreadMode, Stroke, StrokeDash, Transform,
+    FillRule, FilterQuality, LineCap as SkCap, LineJoin as SkJoin, Mask, Path, PathBuilder, Pixmap,
+    Rect, Stroke, StrokeDash, Transform,
 };
 
 use crate::cancel::RenderCancel;
+use crate::canvas::{BrushSpec, Canvas, LayerPaint};
 use crate::font::program::FontProgram;
 use crate::font::{FontEnvironment, RenderPolicy};
 use crate::gstate::{GStateStack, GraphicsState, LineCap, LineJoin, Rgb};
@@ -1122,13 +1123,48 @@ pub fn run(
     cancel: Option<&RenderCancel>,
     policy: RenderPolicy<'_>,
 ) -> Diagnostics {
+    run_on(
+        doc,
+        content,
+        resources,
+        fonts,
+        initial,
+        &mut Canvas::paint(pixmap),
+        cancel,
+        policy,
+    )
+}
+
+/// [`run`], against an arbitrary drawing target rather than a pixmap.
+///
+/// This is the form the renderer itself uses. It exists separately from
+/// [`run`] for one reason worth stating: `Canvas` is a crate-internal
+/// type, and making the public entry point demand one would drag the
+/// display-list machinery into every caller's field of view — including
+/// this crate's own integration tests, which legitimately want "render
+/// this content stream into these pixels" and nothing more.
+///
+/// So the public signature stays the one it has always been, and the
+/// extra capability arrives as an additional door rather than as a
+/// breaking change to the existing one.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn run_on(
+    doc: &DocumentView<'_>,
+    content: &ContentStream,
+    resources: &Dict,
+    fonts: &FontEnvironment,
+    initial: GraphicsState,
+    canvas: &mut Canvas<'_>,
+    cancel: Option<&RenderCancel>,
+    policy: RenderPolicy<'_>,
+) -> Diagnostics {
     run_nested(
         doc,
         content,
         resources,
         fonts,
         initial,
-        pixmap,
+        canvas,
         0,
         Vec::new(),
         cancel,
@@ -1246,7 +1282,7 @@ pub fn trace_paths(
         cancel: None,
     };
     for op in content.operations() {
-        interp.execute(&op, content, &mut pixmap);
+        interp.execute(&op, content, &mut Canvas::paint(&mut pixmap));
     }
     interp.trace.unwrap_or_default()
 }
@@ -1268,7 +1304,7 @@ fn run_nested(
     resources: &Dict,
     fonts: &FontEnvironment,
     initial: GraphicsState,
-    pixmap: &mut Pixmap,
+    canvas: &mut Canvas<'_>,
     depth: usize,
     active: Vec<ObjId>,
     cancel: Option<&RenderCancel>,
@@ -1330,7 +1366,7 @@ fn run_nested(
         if interp.cancel.is_some_and(RenderCancel::is_cancelled) {
             break;
         }
-        interp.execute(&op, content, pixmap);
+        interp.execute(&op, content, canvas);
     }
     interp.diag
 }
@@ -1393,6 +1429,33 @@ pub fn run_form_at(
     cancel: Option<&RenderCancel>,
     policy: RenderPolicy<'_>,
 ) -> Diagnostics {
+    run_form_at_on(
+        doc,
+        stream,
+        id,
+        resources_fallback,
+        fonts,
+        initial,
+        &mut Canvas::paint(pixmap),
+        cancel,
+        policy,
+    )
+}
+
+/// [`run_form_at`], against an arbitrary drawing target — see
+/// [`run_on`] for why the pair exists.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn run_form_at_on(
+    doc: &DocumentView<'_>,
+    stream: &Stream,
+    id: Option<ObjId>,
+    resources_fallback: &Dict,
+    fonts: &FontEnvironment,
+    initial: GraphicsState,
+    canvas: &mut Canvas<'_>,
+    cancel: Option<&RenderCancel>,
+    policy: RenderPolicy<'_>,
+) -> Diagnostics {
     // §8.7.2 PM3/PM5: pattern space anchors to this stream's DEFAULT
     // coordinate system, not to the CTM where the fill occurs. Captured
     // before the stack is built — after the first `cm` it is unrecoverable.
@@ -1427,7 +1490,7 @@ pub fn run_form_at(
         // is where the poll actually lives.
         cancel,
     };
-    interp.do_form(id, stream, pixmap, false);
+    interp.do_form(id, stream, canvas, false);
     interp.diag
 }
 
@@ -1547,7 +1610,7 @@ struct Interpreter<'a> {
 }
 
 impl Interpreter<'_> {
-    fn execute(&mut self, op: &Operation<'_>, content: &ContentStream, pixmap: &mut Pixmap) {
+    fn execute(&mut self, op: &Operation<'_>, content: &ContentStream, canvas: &mut Canvas<'_>) {
         let Some(name) = op.operator_name(&content.buf) else {
             // The only non-operator "operation" the projection yields is
             // a complete inline image (§8.9.7) — one indivisible
@@ -1562,7 +1625,7 @@ impl Interpreter<'_> {
                     // gives no inline form for JPX, so the same
                     // dictionary that is legal as an XObject is not
                     // legal here.
-                    Some(raw) => self.draw_image(params, raw, pixmap, ImageOrigin::Inline),
+                    Some(raw) => self.draw_image(params, raw, canvas, ImageOrigin::Inline),
                     None => self.diag.tolerated += 1,
                 }
             } else {
@@ -1638,7 +1701,7 @@ impl Interpreter<'_> {
             }
             b"d" => self.set_dash(op),
             b"i" | b"ri" => {} // flatness / rendering intent: recognized no-ops in Pass 1
-            b"gs" => self.apply_ext_gstate(op, pixmap),
+            b"gs" => self.apply_ext_gstate(op, canvas),
 
             // ---- device colours (Table 74, §8.6.4) ----
             //
@@ -1813,24 +1876,24 @@ impl Interpreter<'_> {
             }
 
             // ---- path painting (Table 60) + clipping (Table 61) ----
-            b"S" => self.paint(pixmap, false, true, None),
+            b"S" => self.paint(canvas, false, true, None),
             b"s" => {
                 self.path.close();
-                self.paint(pixmap, false, true, None);
+                self.paint(canvas, false, true, None);
             }
-            b"f" | b"F" => self.paint(pixmap, true, false, Some(FillRule::Winding)),
-            b"f*" => self.paint(pixmap, true, false, Some(FillRule::EvenOdd)),
-            b"B" => self.paint(pixmap, true, true, Some(FillRule::Winding)),
-            b"B*" => self.paint(pixmap, true, true, Some(FillRule::EvenOdd)),
+            b"f" | b"F" => self.paint(canvas, true, false, Some(FillRule::Winding)),
+            b"f*" => self.paint(canvas, true, false, Some(FillRule::EvenOdd)),
+            b"B" => self.paint(canvas, true, true, Some(FillRule::Winding)),
+            b"B*" => self.paint(canvas, true, true, Some(FillRule::EvenOdd)),
             b"b" => {
                 self.path.close();
-                self.paint(pixmap, true, true, Some(FillRule::Winding));
+                self.paint(canvas, true, true, Some(FillRule::Winding));
             }
             b"b*" => {
                 self.path.close();
-                self.paint(pixmap, true, true, Some(FillRule::EvenOdd));
+                self.paint(canvas, true, true, Some(FillRule::EvenOdd));
             }
-            b"n" => self.paint(pixmap, false, false, None),
+            b"n" => self.paint(canvas, false, false, None),
             b"W" => self.pending_clip = Some(FillRule::Winding),
             b"W*" => self.pending_clip = Some(FillRule::EvenOdd),
 
@@ -1931,15 +1994,15 @@ impl Interpreter<'_> {
             // ---- text showing (Table 109) ----
             b"Tj" => {
                 if let Some(s) = last_string(op) {
-                    self.show_string(&s, pixmap);
+                    self.show_string(&s, canvas);
                 }
             }
-            b"TJ" => self.show_array(op, pixmap),
+            b"TJ" => self.show_array(op, canvas),
             b"'" => {
                 // "the same effect as: T*, then string Tj".
                 if let Some(s) = last_string(op) {
                     self.next_line();
-                    self.show_string(&s, pixmap);
+                    self.show_string(&s, canvas);
                 }
             }
             b"\"" => {
@@ -1950,14 +2013,14 @@ impl Interpreter<'_> {
                     self.gs.current.text.word_spacing = aw;
                     self.gs.current.text.char_spacing = ac;
                     self.next_line();
-                    self.show_string(&s, pixmap);
+                    self.show_string(&s, canvas);
                 } else {
                     self.diag.tolerated += 1;
                 }
             }
 
             // ---- external objects (Table 87, §8.8) ----
-            b"Do" => self.do_xobject(op, pixmap),
+            b"Do" => self.do_xobject(op, canvas),
 
             // ---- marked content, for optional content only (§14.6) ----
             //
@@ -1987,7 +2050,7 @@ impl Interpreter<'_> {
             // gradients a page has, of which types, or whether the next
             // slice will fix it. Resolving the dictionary answers all
             // three, and costs one dictionary walk per `sh`.
-            b"sh" => self.shading_operator(op, pixmap),
+            b"sh" => self.shading_operator(op, canvas),
 
             // ---- recognized, deferred to later slices ----
             b"MP" | b"DP" | b"d0" | b"d1" => {
@@ -2132,7 +2195,7 @@ impl Interpreter<'_> {
     /// `TJ` — "each element of `array` shall be either a string or a
     /// number. If a string, show it. If a number, adjust the text
     /// position by that amount" (Table 109).
-    fn show_array(&mut self, op: &Operation<'_>, pixmap: &mut Pixmap) {
+    fn show_array(&mut self, op: &Operation<'_>, canvas: &mut Canvas<'_>) {
         let items = op.operands.iter().rev().find_map(|t| match &t.kind {
             ContentTokenKind::Operand(Object::Array(a)) => Some(a.clone()),
             _ => None,
@@ -2143,7 +2206,7 @@ impl Interpreter<'_> {
         };
         for item in &items {
             match item {
-                Object::String(s) => self.show_string(s, pixmap),
+                Object::String(s) => self.show_string(s, canvas),
                 other => {
                     if let Some(tj) = other.as_number() {
                         let tx = self.gs.current.text.adjustment(tj as f32);
@@ -2162,7 +2225,7 @@ impl Interpreter<'_> {
     /// `Arc`-held bytes, and skrifa's parse is lazy/zero-copy, so this
     /// is the cheap end of the tradeoff — the expensive part of font
     /// setup (the §9.6.6 encoding ladder) already happened at `Tf`.
-    fn show_string(&mut self, string: &[u8], pixmap: &mut Pixmap) {
+    fn show_string(&mut self, string: &[u8], canvas: &mut Canvas<'_>) {
         // Cheap early outs, in the order that keeps the diagnostics
         // meaningful.
         let Some(font) = self.gs.current.text.font.clone() else {
@@ -2207,7 +2270,7 @@ impl Interpreter<'_> {
                     0
                 }
             };
-            self.paint_glyph(&font, program.as_ref(), gid, pixmap);
+            self.paint_glyph(&font, program.as_ref(), gid, canvas);
 
             // §9.4.4's advance, applied whether or not anything was
             // painted — mode 3 (invisible) and a missing glyph both
@@ -2236,7 +2299,7 @@ impl Interpreter<'_> {
         font: &LoadedFont,
         program: Option<&FontProgram<'_>>,
         gid: u32,
-        pixmap: &mut Pixmap,
+        canvas: &mut Canvas<'_>,
     ) {
         let ts = &self.gs.current.text;
         // Mode 3 (invisible — the OCR text-layer mode) and mode 7
@@ -2321,7 +2384,7 @@ impl Interpreter<'_> {
             // (§9.3.6: filling has "the same effects for a text object
             // as… for a path object"; counters in `o`/`e` are wound in
             // the opposite direction by the font, not by even-odd).
-            pixmap.fill_path(&path, &paint, FillRule::Winding, ctm, clip);
+            canvas.fill(&path, &paint, FillRule::Winding, ctm, clip);
         }
         if !skip_paint && self.gs.current.text.strokes() && self.color.paints(true) && !op_stroke {
             let paint = solid(
@@ -2329,12 +2392,12 @@ impl Interpreter<'_> {
                 self.gs.current.stroke_alpha,
                 self.gs.current.blend_mode,
             );
-            pixmap.stroke_path(&path, &paint, &self.stroke_params(), ctm, clip);
+            canvas.stroke(&path, &paint, &self.stroke_params(), ctm, clip);
         }
 
         // After the `clip` borrow ends, for the same reason `paint_path`
         // defers its composites: `paint_overprint` needs `&mut self`.
-        if op_fill && !self.paint_overprint(&path, Some(FillRule::Winding), false, pixmap) {
+        if op_fill && !self.paint_overprint(&path, Some(FillRule::Winding), false, canvas) {
             self.diag.overprint_refused += 1;
             let paint = solid(
                 self.gs.current.fill_color,
@@ -2342,9 +2405,9 @@ impl Interpreter<'_> {
                 self.gs.current.blend_mode,
             );
             let clip = self.gs.current.clip.as_deref();
-            pixmap.fill_path(&path, &paint, FillRule::Winding, ctm, clip);
+            canvas.fill(&path, &paint, FillRule::Winding, ctm, clip);
         }
-        if op_stroke && !self.paint_overprint(&path, None, true, pixmap) {
+        if op_stroke && !self.paint_overprint(&path, None, true, canvas) {
             self.diag.overprint_refused += 1;
             let paint = solid(
                 self.gs.current.stroke_color,
@@ -2352,7 +2415,7 @@ impl Interpreter<'_> {
                 self.gs.current.blend_mode,
             );
             let clip = self.gs.current.clip.as_deref();
-            pixmap.stroke_path(&path, &paint, &self.stroke_params(), ctm, clip);
+            canvas.stroke(&path, &paint, &self.stroke_params(), ctm, clip);
         }
     }
 
@@ -2420,7 +2483,7 @@ impl Interpreter<'_> {
     /// `gs` — apply an ExtGState by name from the resource dictionary
     /// (Table 58; the honored subset per the RAG's triage: LW, LC, LJ,
     /// ML, D; everything else recognized-and-deferred).
-    fn apply_ext_gstate(&mut self, op: &Operation<'_>, pixmap: &Pixmap) {
+    fn apply_ext_gstate(&mut self, op: &Operation<'_>, canvas: &Canvas<'_>) {
         let name = op.operands.iter().rev().find_map(|t| match &t.kind {
             ContentTokenKind::Operand(Object::Name(n)) => Some(n.as_bytes()),
             _ => None,
@@ -2593,7 +2656,7 @@ impl Interpreter<'_> {
                 }
                 self.gs.current.clips_since_smask = 0;
             } else if let Some(dict) = sm.as_dict().cloned() {
-                match self.build_soft_mask(&dict, pixmap) {
+                match self.build_soft_mask(&dict, canvas) {
                     Some(mask) => {
                         // Fold into the clip, which every paint site in
                         // this renderer already honours. A soft mask
@@ -2863,7 +2926,7 @@ impl Interpreter<'_> {
     /// and also that this route **ignores `/Background`**. The route is
     /// carried into the model as [`crate::shading::PaintRoute::ShOperator`]
     /// rather than assumed at the paint site.
-    fn shading_operator(&mut self, op: &Operation<'_>, pixmap: &mut Pixmap) {
+    fn shading_operator(&mut self, op: &Operation<'_>, canvas: &mut Canvas<'_>) {
         let doc = self.doc;
         let resources = self.resources;
 
@@ -2941,12 +3004,21 @@ impl Interpreter<'_> {
                 r.ceil() as i32,
                 b.ceil() as i32,
             ),
-            None => (0, 0, pixmap.width() as i32, pixmap.height() as i32),
+            None => (0, 0, canvas.width() as i32, canvas.height() as i32),
         };
 
         let clip = self.gs.current.clip.as_deref();
         let alpha = self.gs.current.fill_alpha;
-        if let Some(pixels) = shading.paint(to_target, region, clip, alpha, pixmap) {
+        // A shading is evaluated PER DESTINATION PIXEL, so it needs the
+        // destination itself rather than a recordable draw. See
+        // `Canvas::pixmap_mut`: a target that cannot hand one over is one
+        // that cannot reproduce this operator, and the honest answer there
+        // is to refuse the whole recording rather than to drop the shading.
+        let Some(dest) = canvas.pixmap_mut() else {
+            self.diag.shading.refused += 1;
+            return;
+        };
+        if let Some(pixels) = shading.paint(to_target, region, clip, alpha, dest) {
             // `painted` counts SHADINGS drawn, not pixels — the pixel
             // count is the return value and is used only to decide whether
             // anything landed. A shading that resolved and painted zero
@@ -3090,7 +3162,7 @@ impl Interpreter<'_> {
     /// function machinery threaded into the render crate; until then a
     /// document that inverts its mask through `/TR` gets the un-inverted
     /// mask and **says so** rather than looking correct.
-    fn build_soft_mask(&mut self, sm: &Dict, pixmap: &Pixmap) -> Option<Mask> {
+    fn build_soft_mask(&mut self, sm: &Dict, canvas: &Canvas<'_>) -> Option<Mask> {
         let doc = self.doc;
         let subtype = match doc.resolve(sm.get(b"S")?) {
             Object::Name(n) => n.as_bytes().to_vec(),
@@ -3121,7 +3193,7 @@ impl Interpreter<'_> {
         let bytes = filters::decode_stream(&g_dict, raw).ok()?;
         let content = ContentStream::parse(bytes).ok()?;
 
-        let mut buf = Pixmap::new(pixmap.width(), pixmap.height())?;
+        let mut buf = Pixmap::new(canvas.width(), canvas.height())?;
         if luminosity {
             // §11.5.3's opaque backdrop. This fill is ALSO what makes
             // "outside the BBox" correct, so it is not merely an
@@ -3144,7 +3216,7 @@ impl Interpreter<'_> {
             if rect.width() <= 0.0 || rect.height() <= 0.0 {
                 // A degenerate BBox paints nothing, so the mask is the
                 // backdrop everywhere — which `buf` already holds.
-                return Self::mask_from_buffer(&buf, luminosity, pixmap);
+                return Self::mask_from_buffer(&buf, luminosity, canvas);
             }
             let path = PathBuilder::from_rect(rect);
             let form_ctm = inner.ctm;
@@ -3153,7 +3225,7 @@ impl Interpreter<'_> {
                 &path,
                 FillRule::Winding,
                 form_ctm,
-                pixmap,
+                canvas,
                 &mut self.clip_cache,
             );
         }
@@ -3173,7 +3245,7 @@ impl Interpreter<'_> {
             resources,
             self.fonts,
             inner,
-            &mut buf,
+            &mut Canvas::paint(&mut buf),
             self.depth + 1,
             // The mask group's own recursion guard set. Cloned rather than
             // borrowed because `self` is already mutably borrowed here; a
@@ -3187,7 +3259,7 @@ impl Interpreter<'_> {
             false,
         );
         self.diag.merge(nested);
-        Self::mask_from_buffer(&buf, luminosity, pixmap)
+        Self::mask_from_buffer(&buf, luminosity, canvas)
     }
 
     /// Turn a rendered mask-group buffer into per-pixel mask coverage.
@@ -3195,8 +3267,8 @@ impl Interpreter<'_> {
     /// Split out so the degenerate-`/BBox` path and the ordinary path
     /// cannot disagree about the conversion — the two differ only in
     /// whether anything was painted into the buffer.
-    fn mask_from_buffer(buf: &Pixmap, luminosity: bool, pixmap: &Pixmap) -> Option<Mask> {
-        let mut mask = Mask::new(pixmap.width(), pixmap.height())?;
+    fn mask_from_buffer(buf: &Pixmap, luminosity: bool, canvas: &Canvas<'_>) -> Option<Mask> {
+        let mut mask = Mask::new(canvas.width(), canvas.height())?;
         let data = mask.data_mut();
         for (i, px) in buf.pixels().iter().enumerate() {
             let a = f32::from(px.alpha()) / 255.0;
@@ -3327,7 +3399,7 @@ impl Interpreter<'_> {
         path: &Path,
         rule: Option<FillRule>,
         stroking: bool,
-        pixmap: &mut Pixmap,
+        canvas: &mut Canvas<'_>,
     ) -> bool {
         use crate::overprint::{self, SourceKind};
 
@@ -3432,7 +3504,7 @@ impl Interpreter<'_> {
         // Using the same rasteriser is what keeps an overprinted edge
         // identical in shape to a non-overprinted one.
         let ctm = self.gs.current.ctm;
-        let Some(mut coverage) = Mask::new(pixmap.width(), pixmap.height()) else {
+        let Some(mut coverage) = Mask::new(canvas.width(), canvas.height()) else {
             return false;
         };
         if let Some(r) = rule {
@@ -3469,8 +3541,8 @@ impl Interpreter<'_> {
         let region = (
             (b.left() - pad).floor().max(0.0) as u32,
             (b.top() - pad).floor().max(0.0) as u32,
-            ((b.right() + pad).ceil().max(0.0) as u32).min(pixmap.width()),
-            ((b.bottom() + pad).ceil().max(0.0) as u32).min(pixmap.height()),
+            ((b.right() + pad).ceil().max(0.0) as u32).min(canvas.width()),
+            ((b.bottom() + pad).ceil().max(0.0) as u32).min(canvas.height()),
         );
         if region.0 >= region.2 || region.1 >= region.3 {
             // Entirely off-page. The composite ran correctly and touched
@@ -3483,8 +3555,15 @@ impl Interpreter<'_> {
         } else {
             self.gs.current.fill_alpha
         };
+        // §11.7.4.3's composite reads the destination back, so like `sh`
+        // it needs real pixels. `false` here means "could not run", and the
+        // caller's documented response is to paint normally AND disclose —
+        // never to paint nothing.
+        let Some(dest) = canvas.pixmap_mut() else {
+            return false;
+        };
         let changed = overprint::composite(
-            pixmap,
+            dest,
             &coverage,
             rules,
             source_cmyk,
@@ -3501,7 +3580,7 @@ impl Interpreter<'_> {
         path: &Path,
         rule: FillRule,
         stroking: bool,
-        pixmap: &mut Pixmap,
+        canvas: &mut Canvas<'_>,
     ) -> bool {
         let Some(name) = self.color.pattern(stroking).map(<[u8]>::to_vec) else {
             return false;
@@ -3609,7 +3688,7 @@ impl Interpreter<'_> {
         // intersected with any clip already in force, because a pattern
         // fill is still subject to the clip like any other paint.
         let ctm = self.gs.current.ctm;
-        let Some(mut mask) = Mask::new(pixmap.width(), pixmap.height()) else {
+        let Some(mut mask) = Mask::new(canvas.width(), canvas.height()) else {
             return false;
         };
         mask.fill_path(path, rule, true, ctm);
@@ -3639,16 +3718,20 @@ impl Interpreter<'_> {
         let region = (
             b.left().floor().max(0.0) as i32,
             b.top().floor().max(0.0) as i32,
-            b.right().ceil().min(pixmap.width() as f32) as i32,
-            b.bottom().ceil().min(pixmap.height() as f32) as i32,
+            b.right().ceil().min(canvas.width() as f32) as i32,
+            b.bottom().ceil().min(canvas.height() as f32) as i32,
         );
         let alpha = if stroking {
             self.gs.current.stroke_alpha
         } else {
             self.gs.current.fill_alpha
         };
+        let Some(dest) = canvas.pixmap_mut() else {
+            self.diag.color.patterns_unpainted += 1;
+            return false;
+        };
         if shading
-            .paint(to_target, region, Some(&mask), alpha, pixmap)
+            .paint(to_target, region, Some(&mask), alpha, dest)
             .is_some()
         {
             self.diag.shading.painted += 1;
@@ -3660,7 +3743,7 @@ impl Interpreter<'_> {
             false
         }
     }
-    fn do_xobject(&mut self, op: &Operation<'_>, pixmap: &mut Pixmap) {
+    fn do_xobject(&mut self, op: &Operation<'_>, canvas: &mut Canvas<'_>) {
         // Copy the two shared references out before any `&mut self`
         // call so the borrow checker sees them as independent of `self`
         // (both are `&'a`, i.e. tied to the document, not to the
@@ -3728,10 +3811,10 @@ impl Interpreter<'_> {
         match subtype {
             Some(b"Image") => {
                 if !oc_hidden_here {
-                    self.do_image(&stream.dict, stream.data_span, pixmap);
+                    self.do_image(&stream.dict, stream.data_span, canvas);
                 }
             }
-            Some(b"Form") => self.do_form(id, stream, pixmap, oc_hidden_here),
+            Some(b"Form") => self.do_form(id, stream, canvas, oc_hidden_here),
             // §8.8.2: ignored by a conforming non-PostScript reader.
             Some(b"PS") => {}
             _ => {
@@ -3743,10 +3826,10 @@ impl Interpreter<'_> {
                 self.diag.note(b"Do(XObject without /Subtype)");
                 if stream.dict.contains_key(b"Width") && stream.dict.contains_key(b"Height") {
                     if !oc_hidden_here {
-                        self.do_image(&stream.dict, stream.data_span, pixmap);
+                        self.do_image(&stream.dict, stream.data_span, canvas);
                     }
                 } else if stream.dict.contains_key(b"BBox") {
-                    self.do_form(id, stream, pixmap, oc_hidden_here);
+                    self.do_form(id, stream, canvas, oc_hidden_here);
                 }
             }
         }
@@ -3772,7 +3855,13 @@ impl Interpreter<'_> {
     /// current state and its stack is discarded, so an unbalanced `Q`
     /// inside the form cannot pop the caller's state (§8.4.2's balance
     /// requirement is per content stream, and producers break it).
-    fn do_form(&mut self, id: Option<ObjId>, stream: &Stream, pixmap: &mut Pixmap, oc_off: bool) {
+    fn do_form(
+        &mut self,
+        id: Option<ObjId>,
+        stream: &Stream,
+        canvas: &mut Canvas<'_>,
+        oc_off: bool,
+    ) {
         // --- recursion guards (module docs, ARCHITECTURE.md §10.1) ---
         if self.depth >= MAX_XOBJECT_DEPTH {
             self.diag.xobject_depth_overflows += 1;
@@ -3840,7 +3929,7 @@ impl Interpreter<'_> {
                     &path,
                     FillRule::Winding,
                     form_ctm,
-                    pixmap,
+                    canvas,
                     &mut self.clip_cache,
                 );
             }
@@ -3968,70 +4057,93 @@ impl Interpreter<'_> {
         // same picture; it is the non-knockout picture.
         let needs_buffer =
             is_transparency_group && (!outer_is_neutral || group_flag(b"I") || is_knockout);
-        let mut group_buf = if needs_buffer {
-            Pixmap::new(pixmap.width(), pixmap.height())
+        // A group that needs its own buffer is drawn through
+        // `Canvas::layer` — which allocates the buffer, runs the contents
+        // into it and performs §11.4.5's composite. Buffer and composite
+        // used to be written out here; they moved because an annotation's
+        // `/CA` compositing is the SAME operation, and two copies of it are
+        // two places for the "no mask on the composite" rule to be
+        // forgotten.
+        //
+        // Everything the nested run needs is read out of `self` FIRST, so
+        // the closure below captures plain values rather than a borrow of
+        // an interpreter whose `diag` the caller is about to write to.
+        let fonts = self.fonts;
+        let depth = self.depth + 1;
+        let cancel = self.cancel;
+        let policy = self.policy;
+        let hidden_here = self.oc_hidden() || oc_off;
+        // §11.4.5: the blend mode, constant alpha and soft mask in force at
+        // the `Do` apply to the GROUP'S RESULT, not to the objects inside
+        // it. So the group's own contents start with the initial values —
+        // otherwise the blend is applied twice, once per object and again
+        // to the composite. `inner` is CLONED rather than mutated in place
+        // because the could-not-start fallback below must run with the
+        // ORIGINAL state, exactly as the previous code did.
+        let layered = if needs_buffer {
+            let mut group_state = inner.clone();
+            group_state.blend_mode = tiny_skia::BlendMode::SourceOver;
+            group_state.fill_alpha = 1.0;
+            group_state.stroke_alpha = 1.0;
+            let paint = LayerPaint {
+                opacity: self.gs.current.fill_alpha.clamp(0.0, 1.0),
+                blend: self.gs.current.blend_mode,
+            };
+            let nested_active = active.clone();
+            canvas.layer(paint, |sub| {
+                run_nested(
+                    doc,
+                    &content,
+                    form_resources,
+                    fonts,
+                    group_state,
+                    sub,
+                    depth,
+                    nested_active,
+                    cancel,
+                    policy,
+                    hidden_here,
+                )
+            })
         } else {
             None
         };
-        if group_buf.is_some() {
-            // §11.4.5: the blend mode, constant alpha and soft mask in
-            // force at the `Do` apply to the GROUP'S RESULT, not to the
-            // objects inside it. So the group's own contents start with
-            // the initial values — otherwise the blend is applied twice,
-            // once per object and again to the composite.
-            inner.blend_mode = tiny_skia::BlendMode::SourceOver;
-            inner.fill_alpha = 1.0;
-            inner.stroke_alpha = 1.0;
-        }
-        let nested = run_nested(
-            doc,
-            &content,
-            form_resources,
-            self.fonts,
-            inner,
-            group_buf.as_mut().unwrap_or(pixmap),
-            self.depth + 1,
-            active,
-            self.cancel,
-            self.policy,
-            self.oc_hidden() || oc_off,
-        );
-        self.diag.merge(nested);
-        match group_buf {
-            Some(buf) => {
-                // The composite §11.4.5 describes: the group's result,
-                // through the outer blend mode and constant alpha.
-                pixmap.draw_pixmap(
-                    0,
-                    0,
-                    buf.as_ref(),
-                    &tiny_skia::PixmapPaint {
-                        opacity: self.gs.current.fill_alpha.clamp(0.0, 1.0),
-                        blend_mode: self.gs.current.blend_mode,
-                        quality: tiny_skia::FilterQuality::Nearest,
-                    },
-                    Transform::identity(),
-                    // No mask: the group's contents were already clipped by
-                    // `inner.clip` while being drawn, so re-applying the
-                    // clip here would double-multiply its anti-aliased edge
-                    // and darken every clipped boundary by one pass.
-                    None,
+        match layered {
+            Some(nested) => {
+                self.diag.merge(nested);
+                self.diag.transparency_groups_composited += 1;
+            }
+            None => {
+                // Either no buffer was wanted, or one was wanted and the
+                // layer could not be started. In both cases the contents
+                // paint inline, under the UNMODIFIED outer state.
+                let nested = run_nested(
+                    doc,
+                    &content,
+                    form_resources,
+                    fonts,
+                    inner,
+                    canvas,
+                    depth,
+                    active,
+                    cancel,
+                    policy,
+                    hidden_here,
                 );
-                self.diag.transparency_groups_composited += 1;
+                self.diag.merge(nested);
+                if needs_buffer {
+                    // The layer could not be started. Painting inline rather
+                    // than dropping the content, and counting it as the
+                    // shortfall it is.
+                    self.diag.transparency_groups_flattened += 1;
+                } else if is_transparency_group {
+                    // A non-isolated group under a neutral outer state.
+                    // Painting inline IS the §11.4.5 answer here, not an
+                    // approximation of it, so this counts as composited
+                    // rather than flattened.
+                    self.diag.transparency_groups_composited += 1;
+                }
             }
-            None if needs_buffer => {
-                // Allocation failed. Fall back to painting inline rather
-                // than dropping the content, and count it as the shortfall
-                // it is.
-                self.diag.transparency_groups_flattened += 1;
-            }
-            None if is_transparency_group => {
-                // A non-isolated group under a neutral outer state. Painting
-                // inline IS the §11.4.5 answer here, not an approximation of
-                // it, so this counts as composited rather than flattened.
-                self.diag.transparency_groups_composited += 1;
-            }
-            None => {}
         }
         self.diag.forms_rendered += 1;
 
@@ -4040,7 +4152,7 @@ impl Interpreter<'_> {
 
     /// `Do` on an image XObject: pull the still-encoded sample bytes out
     /// of the file and hand them to the shared image path.
-    fn do_image(&mut self, dict: &Dict, data: ByteSpan, pixmap: &mut Pixmap) {
+    fn do_image(&mut self, dict: &Dict, data: ByteSpan, canvas: &mut Canvas<'_>) {
         // See `run_form`: resolved through the view, so an image XObject
         // staged this session resolves too (decision 018 §4).
         let doc = self.doc;
@@ -4048,7 +4160,7 @@ impl Interpreter<'_> {
             self.diag.tolerated += 1;
             return;
         };
-        self.draw_image(dict, raw, pixmap, ImageOrigin::XObject);
+        self.draw_image(dict, raw, canvas, ImageOrigin::XObject);
     }
 
     /// Decode and paint one sampled image — the single path shared by
@@ -4060,7 +4172,13 @@ impl Interpreter<'_> {
     /// (§8.9.6.2: an image mask "designates places where the current
     /// colour shall be painted"), which is why the decode cannot be
     /// cached across graphics states without keying on the colour.
-    fn draw_image(&mut self, dict: &Dict, raw: &[u8], pixmap: &mut Pixmap, origin: ImageOrigin) {
+    fn draw_image(
+        &mut self,
+        dict: &Dict,
+        raw: &[u8],
+        canvas: &mut Canvas<'_>,
+        origin: ImageOrigin,
+    ) {
         // ★ THE IMAGE GATE, WHICH SHIPPED MISSING.
         //
         // §8.11.3.1's "shall not be drawn" is not media-typed, but the
@@ -4100,7 +4218,7 @@ impl Interpreter<'_> {
                     dict.get(b"Interpolate").map(|o| doc.resolve(o)),
                     Some(Object::Boolean(true))
                 );
-                self.paint_image(&decoded.pixmap, interpolate, pixmap);
+                self.paint_image(&decoded.pixmap, interpolate, canvas);
                 self.diag.images_rendered += 1;
             }
             Err(err) => {
@@ -4199,7 +4317,7 @@ impl Interpreter<'_> {
     /// here: the consequence of being slightly wrong at the boundary is
     /// one filter rather than another on an image that is very nearly
     /// 1:1, where the two agree anyway.
-    fn paint_image(&self, texels: &Pixmap, interpolate: bool, pixmap: &mut Pixmap) {
+    fn paint_image(&self, texels: &Pixmap, interpolate: bool, canvas: &mut Canvas<'_>) {
         let (w, h) = (texels.width(), texels.height());
         if w == 0 || h == 0 {
             return;
@@ -4218,37 +4336,30 @@ impl Interpreter<'_> {
         } else {
             FilterQuality::Nearest
         };
-        let paint = Paint {
-            shader: Pattern::new(
-                texels.as_ref(),
-                SpreadMode::Pad,
-                quality,
-                1.0,
-                image_to_user,
-            ),
-            // §11.3.5 applies to an IMAGE exactly as it does to a path
-            // fill — Table 58's `/BM` is a graphics-state parameter, not a
-            // path-painting one. This was hard-coded `SourceOver` when
-            // blend modes first landed, and the symptom was precise and
-            // misleading: the operator's Ghent page 2 reported 76 blend
-            // modes APPLIED while only 0.37% of its pixels changed, because
-            // the marks those modes govern are drawn by images, not paths.
-            // A counter said the feature worked; the pixels said otherwise.
-            blend_mode: self.gs.current.blend_mode,
-            // ★ NOT unconditionally true — see `image_edge_needs_antialiasing`.
-            // An image's edge is a SAMPLING boundary, not a shape edge, and
-            // antialiasing it is what bands abutting tiles.
-            anti_alias: image_edge_needs_antialiasing(self.gs.current.ctm),
-            force_hq_pipeline: false,
-        };
+        // §11.3.5 applies to an IMAGE exactly as it does to a path
+        // fill — Table 58's `/BM` is a graphics-state parameter, not a
+        // path-painting one. This was hard-coded `SourceOver` when
+        // blend modes first landed, and the symptom was precise and
+        // misleading: the operator's Ghent page 2 reported 76 blend
+        // modes APPLIED while only 0.37% of its pixels changed, because
+        // the marks those modes govern are drawn by images, not paths.
+        // A counter said the feature worked; the pixels said otherwise.
+        let blend = self.gs.current.blend_mode;
+        // ★ NOT unconditionally true — see `image_edge_needs_antialiasing`.
+        // An image's edge is a SAMPLING boundary, not a shape edge, and
+        // antialiasing it is what bands abutting tiles.
+        let anti_alias = image_edge_needs_antialiasing(self.gs.current.ctm);
         let Some(unit) = Rect::from_ltrb(0.0, 0.0, 1.0, 1.0) else {
             return;
         };
         let path = PathBuilder::from_rect(unit);
-        pixmap.fill_path(
+        canvas.fill_image(
             &path,
-            &paint,
-            FillRule::Winding,
+            texels,
+            quality,
+            image_to_user,
+            blend,
+            anti_alias,
             self.gs.current.ctm,
             self.gs.current.clip.as_deref(),
         );
@@ -4362,7 +4473,7 @@ impl Interpreter<'_> {
     /// (§8.5.3), then apply any pending clip (§8.5.4's deferred rule).
     fn paint(
         &mut self,
-        pixmap: &mut Pixmap,
+        canvas: &mut Canvas<'_>,
         fill: bool,
         stroke: bool,
         fill_rule: Option<FillRule>,
@@ -4379,7 +4490,7 @@ impl Interpreter<'_> {
             // clip over an empty path clips everything out — model
             // that with an empty mask.
             if pending_clip.is_some()
-                && let Some(mask) = Mask::new(pixmap.width(), pixmap.height())
+                && let Some(mask) = Mask::new(canvas.width(), canvas.height())
             {
                 self.gs.current.clip = Some(std::sync::Arc::new(mask));
                 // An all-zero mask admits nothing, so the bbox is EMPTY —
@@ -4502,7 +4613,7 @@ impl Interpreter<'_> {
                         self.gs.current.fill_alpha,
                         self.gs.current.blend_mode,
                     );
-                    pixmap.fill_path(&path, &paint, rule, ctm, clip);
+                    canvas.fill(&path, &paint, rule, ctm, clip);
                 }
             } else {
                 // `paints` is false for a Pattern space as well as for
@@ -4523,7 +4634,7 @@ impl Interpreter<'_> {
                     self.gs.current.stroke_alpha,
                     self.gs.current.blend_mode,
                 );
-                pixmap.stroke_path(&path, &paint, &self.stroke_params(), ctm, clip);
+                canvas.stroke(&path, &paint, &self.stroke_params(), ctm, clip);
             }
         }
 
@@ -4535,7 +4646,7 @@ impl Interpreter<'_> {
         // in every case that can arise, since a path filled with a pattern
         // and stroked in a solid colour paints fill-then-stroke either way.
         if let Some(rule) = pattern_fill {
-            self.paint_with_pattern(&path, rule, false, pixmap);
+            self.paint_with_pattern(&path, rule, false, canvas);
         }
 
         // The overprint composites run here, after the `clip` borrow ends,
@@ -4543,7 +4654,7 @@ impl Interpreter<'_> {
         // matching the order the ordinary paints above would have used.
         if overprint_fill_pending
             && let Some(rule) = fill_rule
-            && !self.paint_overprint(&path, Some(rule), false, pixmap)
+            && !self.paint_overprint(&path, Some(rule), false, canvas)
         {
             // Could not composite -- paint normally rather than paint
             // nothing, and SAY SO. A silent fallback here would leave the
@@ -4557,9 +4668,9 @@ impl Interpreter<'_> {
             );
             let ctm = self.gs.current.ctm;
             let clip = self.gs.current.clip.as_deref();
-            pixmap.fill_path(&path, &paint, rule, ctm, clip);
+            canvas.fill(&path, &paint, rule, ctm, clip);
         }
-        if overprint_stroke_pending && !self.paint_overprint(&path, None, true, pixmap) {
+        if overprint_stroke_pending && !self.paint_overprint(&path, None, true, canvas) {
             self.diag.overprint_refused += 1;
             let paint = solid(
                 self.gs.current.stroke_color,
@@ -4568,7 +4679,7 @@ impl Interpreter<'_> {
             );
             let ctm = self.gs.current.ctm;
             let clip = self.gs.current.clip.as_deref();
-            pixmap.stroke_path(&path, &paint, &self.stroke_params(), ctm, clip);
+            canvas.stroke(&path, &paint, &self.stroke_params(), ctm, clip);
         }
 
         // NOW tighten the clip (§8.5.4: after the path is painted).
@@ -4578,7 +4689,7 @@ impl Interpreter<'_> {
                 &path,
                 rule,
                 ctm,
-                pixmap,
+                canvas,
                 &mut self.clip_cache,
             );
         }
@@ -4651,7 +4762,7 @@ fn intersect_clip(
     path: &Path,
     rule: FillRule,
     ctm: Transform,
-    pixmap: &Pixmap,
+    canvas: &Canvas<'_>,
     cache: &mut crate::clip_cache::ClipCache,
 ) {
     // MEASUREMENT ABLATION — always false without the `profile` feature,
@@ -4698,8 +4809,8 @@ fn intersect_clip(
         path,
         matches!(rule, FillRule::EvenOdd),
         ctm,
-        pixmap.width(),
-        pixmap.height(),
+        canvas.width(),
+        canvas.height(),
         state.clip.as_ref().map(std::sync::Arc::as_ptr),
     );
 
@@ -4714,14 +4825,14 @@ fn intersect_clip(
     // `clip_bbox` are only ever written as a pair, so a given mask
     // always carries the same bbox. See `ClipCache::get`.
     let key =
-        crate::clip_cache::ClipCache::build_key(path, rule, ctm, pixmap.width(), pixmap.height());
+        crate::clip_cache::ClipCache::build_key(path, rule, ctm, canvas.width(), canvas.height());
     if let Some((cached, bbox)) = cache.get(key, state.clip.as_ref()) {
         // Still counted: the census measures how often a clip is
         // APPLIED, and a served application is an application. Leaving
         // it out would make the very repetition this cache exploits
         // vanish from the instrument that found it.
         if let Some((l, t, r, b)) = bbox {
-            let (w, h) = (pixmap.width() as f32, pixmap.height() as f32);
+            let (w, h) = (canvas.width() as f32, canvas.height() as f32);
             let page_area = w * h;
             let indiv = ((r - l).max(0.0) * (b - t).max(0.0)) / page_area;
             crate::profile::note_clip(indiv, indiv);
@@ -4734,7 +4845,7 @@ fn intersect_clip(
 
     let timed = crate::profile::timing_enabled();
     let t0 = timed.then(std::time::Instant::now);
-    let Some(mut mask) = Mask::new(pixmap.width(), pixmap.height()) else {
+    let Some(mut mask) = Mask::new(canvas.width(), canvas.height()) else {
         return;
     };
     let t1 = timed.then(std::time::Instant::now);
@@ -4899,21 +5010,13 @@ fn last_name(op: &Operation<'_>) -> Option<Vec<u8>> {
 /// tiny-skia composites a non-opaque paint correctly on its own, so
 /// constant alpha needs nothing beyond passing the number through — which
 /// is what made the omission cheap to fix and expensive to have shipped.
-fn solid(c: Rgb, alpha: f32, blend: tiny_skia::BlendMode) -> Paint<'static> {
-    let mut paint = Paint::default();
-    paint.set_color_rgba8(
-        (c.r * 255.0) as u8,
-        (c.g * 255.0) as u8,
-        (c.b * 255.0) as u8,
-        (alpha.clamp(0.0, 1.0) * 255.0).round() as u8,
-    );
-    paint.anti_alias = true;
-    // §11.3.5's `/BM`. Carried on the paint rather than applied at the
-    // call site because every paint site — path fill, path stroke, glyph
-    // fill, glyph stroke — needs it identically, and a rule applied four
-    // times is a rule that can disagree with itself three ways.
-    paint.blend_mode = blend;
-    paint
+fn solid(c: Rgb, alpha: f32, blend: tiny_skia::BlendMode) -> BrushSpec {
+    // The quantisation itself moved to `BrushSpec::solid`, unchanged, so
+    // that the recorder and the painter cannot come to disagree about what
+    // a colour is. This function stays because every call site reads
+    // `solid(colour, alpha, blend)` and renaming forty of them would bury
+    // the one change that matters.
+    BrushSpec::solid(c, alpha, blend)
 }
 
 /// The last string operand of a text-showing operator.

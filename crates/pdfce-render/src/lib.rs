@@ -53,6 +53,7 @@
 
 pub mod annot;
 pub mod cancel;
+pub(crate) mod canvas;
 /// Reuse of identical clip masks within one render — see the module's
 /// own docs for the census that justified it.
 pub(crate) mod clip_cache;
@@ -446,65 +447,77 @@ fn render_impl(
     // workflow is printing onto a pre-printed paper form where the page
     // background already physically exists. See `AnnotationScope`.
     let scope = options.effective_annotation_scope();
-    let mut diagnostics = if scope.paints_page_content() {
-        let content = ContentStream::from_page(doc, page)?;
-        let initial = gstate::GraphicsState::default_with_ctm(base_ctm);
-        let mut diagnostics = interpret::run(
+    // ONE canvas for the whole page — content first, then annotations over
+    // it. Scoped in a block so the mutable borrow of `pixmap` ends before
+    // the page-group flatten below, which needs the buffer back.
+    //
+    // Why a canvas rather than the pixmap itself: `Canvas` is the seam a
+    // display list replaces the pixmap at (Pass 75.0, `crate::canvas`). In
+    // paint mode it forwards everything, so this call chain is byte-for-byte
+    // what it was.
+    let diagnostics = {
+        let mut canvas = canvas::Canvas::paint(&mut pixmap);
+        let mut diagnostics = if scope.paints_page_content() {
+            let content = ContentStream::from_page(doc, page)?;
+            let initial = gstate::GraphicsState::default_with_ctm(base_ctm);
+            let mut diagnostics = interpret::run_on(
+                doc,
+                &content,
+                &page.resources,
+                &options.fonts,
+                initial,
+                &mut canvas,
+                options.cancel.as_ref(),
+                options.policy(),
+            );
+            // Carry the page-level omission into the render diagnostics. The
+            // interpreter cannot observe it — the streams it never received
+            // leave no trace in the operator stream — so the count is copied
+            // from the page here, where the two facts meet. Without this the
+            // raster of a page with a dangling `/Contents` would be silently
+            // blank, which is exactly the "sneaky" outcome the project forbids.
+            diagnostics.contents_streams_unresolved = page.contents_unresolved;
+            diagnostics
+        } else {
+            // Content streams are not merely skipped at paint time — they are
+            // never decoded. Two consequences worth stating rather than
+            // discovering:
+            //
+            // - A page whose `/Contents` fails to decode still renders under
+            //   this scope, because nothing asked it to. That is correct for
+            //   the pre-printed-form workflow (the operator wants the field
+            //   values, not the page) and it is the reason this branch cannot
+            //   return `RenderError::Content`.
+            // - `contents_streams_unresolved` stays 0, because pdfce did not
+            //   look. Reporting a page-level incompleteness it never measured
+            //   would be an invented fact; the honest disclosure is the
+            //   suppression flag itself.
+            Diagnostics {
+                page_content_suppressed: true,
+                ..Diagnostics::default()
+            }
+        };
+
+        // Pass 6.0: survey the page's annotations (ISO 32000-1 §12.5;
+        // docs/decisions/008) and paint their appearances OVER the page content
+        // (their natural z-order). The survey always COUNTS; painting is gated
+        // by the effective scope, so `--no-annotations` still discloses how
+        // many annotations exist while reproducing the pre-6.0 content-only
+        // raster byte-for-byte — and a narrowed scope ("Document", "Document
+        // and Stamps") discloses how many annotations it withheld.
+        annot::survey_page_annotations(
             doc,
-            &content,
-            &page.resources,
+            page,
+            base_ctm,
             &options.fonts,
-            initial,
-            &mut pixmap,
+            scope,
+            &mut diagnostics,
+            &mut canvas,
             options.cancel.as_ref(),
             options.policy(),
         );
-        // Carry the page-level omission into the render diagnostics. The
-        // interpreter cannot observe it — the streams it never received
-        // leave no trace in the operator stream — so the count is copied
-        // from the page here, where the two facts meet. Without this the
-        // raster of a page with a dangling `/Contents` would be silently
-        // blank, which is exactly the "sneaky" outcome the project forbids.
-        diagnostics.contents_streams_unresolved = page.contents_unresolved;
         diagnostics
-    } else {
-        // Content streams are not merely skipped at paint time — they are
-        // never decoded. Two consequences worth stating rather than
-        // discovering:
-        //
-        // - A page whose `/Contents` fails to decode still renders under
-        //   this scope, because nothing asked it to. That is correct for
-        //   the pre-printed-form workflow (the operator wants the field
-        //   values, not the page) and it is the reason this branch cannot
-        //   return `RenderError::Content`.
-        // - `contents_streams_unresolved` stays 0, because pdfce did not
-        //   look. Reporting a page-level incompleteness it never measured
-        //   would be an invented fact; the honest disclosure is the
-        //   suppression flag itself.
-        Diagnostics {
-            page_content_suppressed: true,
-            ..Diagnostics::default()
-        }
     };
-
-    // Pass 6.0: survey the page's annotations (ISO 32000-1 §12.5;
-    // docs/decisions/008) and paint their appearances OVER the page content
-    // (their natural z-order). The survey always COUNTS; painting is gated
-    // by the effective scope, so `--no-annotations` still discloses how
-    // many annotations exist while reproducing the pre-6.0 content-only
-    // raster byte-for-byte — and a narrowed scope ("Document", "Document
-    // and Stamps") discloses how many annotations it withheld.
-    annot::survey_page_annotations(
-        doc,
-        page,
-        base_ctm,
-        &options.fonts,
-        scope,
-        &mut diagnostics,
-        &mut pixmap,
-        options.cancel.as_ref(),
-        options.policy(),
-    );
 
     // THE ONE PLACE A CANCELLED RENDER BECOMES AN ERROR.
     //

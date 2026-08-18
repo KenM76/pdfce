@@ -66,7 +66,9 @@ use pdfce_core::graph::ObjectGraph;
 use pdfce_core::object::{Dict, ObjId, Object};
 use pdfce_core::page_tree::{Page, Rect};
 use pdfce_core::view::DocumentView;
-use tiny_skia::{Pixmap, Point, Transform};
+use tiny_skia::{Point, Transform};
+
+use crate::canvas::Canvas;
 
 use crate::font::{FontEnvironment, RenderPolicy};
 use crate::gstate::GraphicsState;
@@ -511,7 +513,7 @@ pub(crate) fn survey_page_annotations(
     fonts: &FontEnvironment,
     scope: AnnotationScope,
     diag: &mut Diagnostics,
-    pixmap: &mut Pixmap,
+    canvas: &mut Canvas<'_>,
     cancel: Option<&crate::cancel::RenderCancel>,
     policy: RenderPolicy,
 ) {
@@ -598,7 +600,7 @@ pub(crate) fn survey_page_annotations(
                 // `annotations_out_of_scope` alone.
                 if in_scope {
                     paint_appearance(
-                        doc, page, base_ctm, fonts, annot, *stream_id, diag, pixmap, cancel, policy,
+                        doc, page, base_ctm, fonts, annot, *stream_id, diag, canvas, cancel, policy,
                     );
                 }
             }
@@ -631,7 +633,7 @@ fn paint_appearance(
     annot: &Annotation,
     stream_id: Option<ObjId>,
     diag: &mut Diagnostics,
-    pixmap: &mut Pixmap,
+    canvas: &mut Canvas<'_>,
     cancel: Option<&crate::cancel::RenderCancel>,
     policy: RenderPolicy,
 ) {
@@ -698,14 +700,14 @@ fn paint_appearance(
     let alpha = annot.constant_alpha.unwrap_or(1.0);
     #[allow(clippy::float_cmp)]
     let sub = if alpha >= 1.0 {
-        interpret::run_form_at(
+        interpret::run_form_at_on(
             doc,
             stream,
             Some(id),
             &page.resources,
             fonts,
             initial,
-            pixmap,
+            canvas,
             cancel,
             policy,
         )
@@ -716,39 +718,40 @@ fn paint_appearance(
         // border meeting its fill -- where per-operator alpha would darken
         // every seam and the correct result is uniform.
         //
-        // The scratch is TRANSPARENT (tiny_skia's `Pixmap::new` zero-fills),
-        // deliberately: the page pixmap is white-filled, and a white scratch
-        // would composite an opaque rectangle over the page.
-        let Some(mut scratch) = Pixmap::new(pixmap.width(), pixmap.height()) else {
+        // That is precisely `Canvas::layer`, and it is precisely what
+        // §11.4.5's transparency-group composite does in `do_form`. The two
+        // were separate implementations of one operation until Pass 75.0;
+        // the scratch buffer, its TRANSPARENT initial state and the
+        // no-mask-on-the-composite rule now live in one place.
+        //
+        // `PixmapPaint::default()`'s blend mode is `SourceOver`, which is
+        // what this composite has always used -- stated rather than
+        // defaulted, because `LayerPaint` makes it an argument.
+        #[allow(clippy::cast_possible_truncation)]
+        let paint = crate::canvas::LayerPaint {
+            opacity: alpha as f32,
+            blend: tiny_skia::BlendMode::SourceOver,
+        };
+        let painted = canvas.layer(paint, |sub_canvas| {
+            interpret::run_form_at_on(
+                doc,
+                stream,
+                Some(id),
+                &page.resources,
+                fonts,
+                initial,
+                sub_canvas,
+                cancel,
+                policy,
+            )
+        });
+        let Some(sub) = painted else {
             diag.annotations_placement_degenerate += 1;
             diag.note_annotation(
                 "annotation /CA compositing buffer could not be allocated - painted opaque",
             );
             return;
         };
-        let sub = interpret::run_form_at(
-            doc,
-            stream,
-            Some(id),
-            &page.resources,
-            fonts,
-            initial,
-            &mut scratch,
-            cancel,
-            policy,
-        );
-        #[allow(clippy::cast_possible_truncation)]
-        pixmap.draw_pixmap(
-            0,
-            0,
-            scratch.as_ref(),
-            &tiny_skia::PixmapPaint {
-                opacity: alpha as f32,
-                ..tiny_skia::PixmapPaint::default()
-            },
-            tiny_skia::Transform::identity(),
-            None,
-        );
         sub
     };
     diag.merge(sub);
@@ -959,6 +962,8 @@ mod tests {
             .collect();
         (n[0], n[1], n[2], n[3])
     }
+
+    use tiny_skia::Pixmap;
 
     fn pixel(pm: &Pixmap, x: u32, y: u32) -> (u8, u8, u8) {
         let p = pm.pixel(x, y).unwrap();
