@@ -1268,6 +1268,26 @@ D:\Dev\pdfce\
                                    model work. Full derivation:
                                    `ROADMAP.md`'s `Pass 85.4e` Shipped
                                    entry.
+                                   **★★ SOFT MASKS SHIP 2026-08-18 (`cb20770`, hundred-and-
+                                   sixty-seventh filing; decision 070) — THE "REMAIN ENTIRELY
+                                   UNREAD" CLAUSE ABOVE IS NOW FALSE AND IS KEPT ONLY AS
+                                   HISTORY.** `ExtGState /SMask` `/Alpha` and `/Luminosity`
+                                   mask groups are BUILT and APPLIED (§11.6.5), multiplied into
+                                   the clip so every existing paint site honours them. `/TR` is
+                                   read, counted and disclosed but NOT evaluated
+                                   (`soft_mask_tr_ignored`) — it is where a mask gets inverted,
+                                   so an ignored one can leave visible exactly what a document
+                                   meant to hide. **The knockout half of this cell is
+                                   UNCHANGED**, and soft masks now share its remaining defect
+                                   rather than being a separate gap: folding into the clip
+                                   attenuates each element INSIDE the scope, whereas §11.4.5
+                                   applies the mask to the group's RESULT. Construction is
+                                   correct (mask groups and folded clips dumped to PNG, both
+                                   correct soft gradients); application is not. Strip
+                                   correlation moved on all three measurable Ghent soft-mask
+                                   patches and NONE passes — Ghent standing UNCHANGED at
+                                   25/18/8 of 51. Full derivation: decision 070 in §12, and
+                                   `ROADMAP.md`'s `cb20770` Shipped entry.
                                    **★ AMENDED 2026-08-18
                                    (hundred-and-sixty-sixth filing, `Pass
                                    85.5`, `bd9d5ef`+`bf75351`+`ac15158`) —
@@ -22320,3 +22340,104 @@ sentence to test the next such blocker against.
 disposition as 063/064/066/068. **Ceiling moves 068 → 069; next free
 070.**
 
+### 2026-08-18 (hundred-and-sixty-seventh filing) — decision 070: **A SOFT MASK IS MULTIPLIED INTO THE CLIP, NOT THREADED AS A SECOND MASK THROUGH EVERY PAINT SITE — AND THE PRICE IS PAID IN ONE PLACE, DISCLOSED, RATHER THAN SPREAD ACROSS TEN**
+
+**Status: DECIDED.** `cb20770` implements ISO 32000-1 §11.6.5 `/Alpha` and
+`/Luminosity` soft masks in `pdfce-render`. Until it landed, `gs /SMask`
+was parsed, counted and **honestly disclosed** as *"not implemented; marks
+painted unmasked"* (`soft_masks_ignored`, `Pass 90.0`). Three
+sub-decisions.
+
+**1. The mask is FOLDED INTO THE CLIP.** A soft mask attenuates coverage
+in exactly the way a clip does, and **every paint site in this renderer
+already honours the clip** — fills, strokes, glyphs, images, shadings,
+patterns. Multiplying the mask into `GraphicsState::clip` therefore reaches
+all of them with **one** change instead of threading a second `Mask`
+argument through ten call sites and relying on each of them to remember it.
+The alternative was rejected on the same reasoning decision 069's
+"same rasteriser" clause used: **a second attenuation path is a second
+thing that can drift**, and the drift shows up as content that is masked in
+one operator and unmasked in another.
+
+**2. The price, named: `/SMask /None` cannot DIVIDE the mask back out.**
+Multiplication is not invertible against an unknown prior clip, so the
+pre-mask clip is **snapshotted** (`GraphicsState::clip_before_smask`,
+`crates/pdfce-render/src/gstate.rs:269`) and restored on reset. `q`/`Q`
+covers the common document shape, where a mask is established inside a
+saved state and discarded with it. **The uncovered shape is a `W n` that
+lands while a mask is in force** — the snapshot is then stale, because the
+document has intersected a new clip that the snapshot predates. That case
+is **COUNTED, not silently mis-clipped**: `soft_masks_reset_stale`
+(`interpret.rs:2481`), on `render-page`'s stable stdout line. This is
+project rule 4's forbidden half again — the fallback is allowed, the
+silence is not.
+
+**3. `/TR` is READ, COUNTED AND DISCLOSED — and NOT EVALUATED.** Table 144
+applies the transfer function last, once, after the luminosity or alpha
+computation. Evaluating it needs the PDF-function machinery threaded into
+the render crate, which this commit did not do. A `/TR` that is anything
+other than `/Identity` (or `null`) increments
+`soft_mask_transfer_ignored` — printed as **`soft_mask_tr_ignored`**, note
+that the field name and the stdout key differ — and emits a diagnostic
+note. **This is the counter to watch, and the reason it exists is a
+correctness argument, not a bookkeeping one: `/TR` is the natural place to
+INVERT a mask, so an ignored `/TR` can leave visible exactly the content a
+document meant to hide.** A shortfall that renders as a plausible page is
+the kind rule 4 was written for.
+
+**★ WHAT THIS DECISION DOES NOT DECIDE, and it is the load-bearing half.**
+Folding into the clip applies the mask to **each element painted inside**
+the masked scope. §11.4.5 applies a soft mask to a transparency group's
+**RESULT**. Those differ whenever elements overlap inside the group, and
+that difference is the **entire remaining residue** — diagnosed, not
+guessed: the mask groups and the folded clips were dumped to PNG and
+**both are correct, properly placed soft gradients**, so construction is
+right and application is wrong. Fixing it is **the same offscreen-buffer
+work as isolated/knockout groups** (decision 068's territory) and belongs
+with them, not here. Concretely: **strip correlation against Acrobat
+reference strips moved on every measurable Ghent patch and NOT ONE of them
+passes** — `1_GWG1610` 0.515 → 0.575 (reference engine 0.966), `1_GWG168`
+0.661 → 0.725 (0.981), `1_GWG169` 0.884 → 0.905 (0.983). **Ghent standing
+is unchanged at 25 pass / 18 FAIL / 8 UNRESOLVED of 51.**
+
+**★★ THE SOURCED CONTRACT, recorded because three clauses are traps a
+re-implementation would fall into.** All four are in code doc comments at
+`crates/pdfce-render/src/interpret.rs`.
+
+- **Table 144 — `/BC` defaults to the colour space's INITIAL VALUE,
+  "representing black", not to all-zeros.** Table 74 gives that value per
+  space: all-zeros for RGB and Gray, `[0 0 0 1]` for `DeviceCMYK`. A
+  renderer that defaults to "all components zero" gets black in RGB and
+  **PURE WHITE in CMYK** — a mask wide open exactly where it should be
+  shut. pdfce defaults to black **as a colour**, so the CMYK case is right
+  by construction rather than by a special case someone can delete. **The
+  trap is in the wild in the very test file that exercises this code**: its
+  masks carry `/BC [1.0 1.0 1.0 1.0]` in `DeviceCMYK`.
+- **§11.6.5.2 — outside the group's `/BBox` the mask is NEITHER 0 NOR 1**,
+  it is `TR(lum(BC))`. Implemented by **pre-filling the buffer with the
+  backdrop before rendering the group into it**, so "outside the BBox"
+  reduces to "where the group did not paint" and needs no case of its own.
+- **§11.5.3 — the group composites over a FULLY OPAQUE backdrop** (α₀ = 1).
+  Easy to miss and it changes the answer.
+- **§11.5.3 NOTE 3 — luminosity is `0.30 R + 0.59 G + 0.11 B` with NO
+  gamma compensation.** Deliberately **not** Rec.709 and deliberately not
+  linearised; both "corrections" are tempting and both are wrong here.
+- **§11.6.5.2 — the mask's coordinate system is `/Matrix` × the CTM AT THE
+  MOMENT `gs` ESTABLISHES IT**, not at paint time. Building the mask
+  eagerly inside the `gs` handler makes that true by construction; a lazy
+  mask would silently use the wrong matrix under any later `cm`.
+
+**★★★ `LUM-A1` IS NOW A LIVE CODE PATH AND WAS RESOLVED BY CONSTRUCTION —
+see the amended register entry in `ROADMAP.md`.** That entry's own warning
+was *"tracked here so the setting is not re-derived from scratch, or worse,
+silently hard-coded one way, when soft-mask implementation starts."* Soft
+masks started and no setting was built. The resolution is not wrong — the
+mask group renders through pdfce's ordinary paint path, so a `DeviceCMYK`
+mask becomes sRGB **before** luminosity is taken — but it is a **third**
+reading, neither of the two analytic forms `LUM-A1` enumerated, and
+`LUM-A1`'s `K·S ≤ 0.25` divergence bound was derived for those two and does
+**not** bound this one. **Flagged, not corrected.**
+
+**No standing rule minted.** Architectural/rendering-model decision, same
+disposition as 063/064/066/068/069. **Ceiling moves 069 → 070; next free
+071.**

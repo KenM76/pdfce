@@ -3169,16 +3169,29 @@ impl Interpreter<'_> {
             self.diag
                 .note(b"gs /SMask /BC without group /CS (Required, Table 147)");
         }
-        let (r, g, b) = match *comps.as_slice() {
-            [v] => (v, v, v),
-            [r, g, b] => (r, g, b),
-            // Subtractive: the naive complement is right for the polarity
-            // question, which is all this is used for.
-            [c, m, y, k] => (
-                (1.0 - c) * (1.0 - k),
-                (1.0 - m) * (1.0 - k),
-                (1.0 - y) * (1.0 - k),
-            ),
+        // THE SAME CONVERSION ROUTE THE PAINT PATH USES, and this is a
+        // correction: `/BC` originally went through an inline naive
+        // complement `(1−c)(1−k)`, justified by a comment claiming the
+        // naive form "is right for the polarity question, which is all
+        // this is used for".
+        //
+        // That justification was FALSE, and falsely reassuring, which is
+        // the worse half. §11.6.5.2 makes this backdrop's *magnitude* the
+        // mask value everywhere outside the group's `/BBox` — that is
+        // exactly what the pre-fill in `build_soft_mask` implements — so
+        // the number matters, not just its polarity. Meanwhile painted
+        // content inside the same mask group reached luminosity through
+        // `Rgb::from_cmyk`'s calibrated 6⁴ grid. One mask, one luminosity
+        // computation, two different CMYK→sRGB routes feeding it.
+        //
+        // Found by the librarian while filing the commit that introduced
+        // it. The lesson is not "use the calibrated table" — it is that a
+        // comment asserting why a shortcut is safe is a claim, and this
+        // one was never checked against the clause it was standing in.
+        let Rgb { r, g, b } = match *comps.as_slice() {
+            [v] => Rgb::from_gray(v),
+            [r, g, b] => Rgb::from_rgb(r, g, b),
+            [c, m, y, k] => Rgb::from_cmyk(self.policy.cmyk_intent, c, m, y, k),
             _ => {
                 self.diag.tolerated += 1;
                 self.diag

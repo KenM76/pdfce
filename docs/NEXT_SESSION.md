@@ -211,6 +211,15 @@ rules are the backstop, not the cure — stage narrowly.** One of the
 committed files was literally a login page.
 
 **Owed, small:**
+- **★ `LUM-A1` was resolved BY CONSTRUCTION and needs a decision.** Its
+  register entry warned it might be *"silently hard-coded one way, when
+  soft-mask implementation starts"* — which is exactly what happened.
+  `grep -rn "LUM-A1" crates/` returns nothing. The shipped path is a
+  **third** reading, neither analytic form the register enumerated: the mask
+  group renders through the ordinary paint path, so `DeviceCMYK` becomes
+  sRGB *before* luminosity. The behaviour is defensible; the point is that
+  `LUM-A1`'s stated `K·S ≤ 0.25` bound **does not bound the shipped path**.
+  Decide it deliberately or record the third reading as the answer.
 - A **`/P 2` fixture carrying page content.** The new OCR certification test
   uses `certified-locked.pdf`, which is `/P 1`, so it cannot prove the
   refusal is tier-independent — which is what the guard claims. The `/P 2`
@@ -225,6 +234,15 @@ committed files was literally a login page.
 - **GWG030 cell e/k** backdrop and **GWG041's epsilon** (0.2% vs 0.02%) are
   both unresolved in GWG's own documentation; each is ~10 minutes of
   content-stream reading. See `docs/ghent-patch-reference.md`.
+
+- **`Pass 85.1` (mesh shadings) and the `85.4c` remainder (§11.4.6) were
+  both recorded as BLOCKED on spec-corpus gaps that are now FILLED** by this
+  session's spec-librarian pass. Nobody has re-scoped them. Same shape as
+  the XFA bullet in `CLAUDE.md`: the answer was sourced in one document while
+  another still said it was blocked.
+- Cosmetic but confusing: the stdout key is **`soft_mask_tr_ignored`** while
+  the field is **`soft_mask_transfer_ignored`**, so grepping the printed key
+  finds no declaration.
 
 **Mesh shadings (`GWG060`) are now fully ingested** — the spec-librarian
 wrote `iso32000__s__8.7.4.5__mesh.md` (1,014 lines, Tables 82–**86**; the old

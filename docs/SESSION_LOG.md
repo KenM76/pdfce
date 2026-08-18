@@ -45521,3 +45521,282 @@ measurement, not re-run).
    dispatches once they land.
 5. Unchanged carry-overs: `/P 2` certified-content fixture; the ~8
    wrapped-string-literal `assert!` sweep; `LUM-A1` back-fill.
+
+## 2026-08-18 (hundred-and-sixty-seventh filing) — **SOFT MASKS STOP BEING A DISCLOSURE AND START BEING COVERAGE (`cb20770`, decision 070) — AND THE HEADLINE DELIBERATELY DID NOT MOVE: REAL CORRELATION GAIN ON EVERY MEASURABLE PATCH, *NONE* OF THEM PASSING, GHENT UNCHANGED AT 25/18/8 OF 51. Plus the two research deliverables that existed ONLY in a transcript (`8eb0668`), the subagent fetch artefacts a `git add -A` committed into a PUBLIC repository (`2a75be1`), and `LUM-A1` going live and being resolved by construction — the exact outcome its own register entry warned about.**
+
+**Filed by `pdfce-librarian` WITH a shell (hard rule 8).** Every figure is
+labelled **VERIFIED HERE** (with the command that produced it) or
+**RELAYED** (the engineer's measurement, not re-run).
+
+**Shipped:**
+
+- **`cb20770` — ISO 32000-1 §11.6.5 `/Alpha` and `/Luminosity` soft masks,
+  BUILT AND APPLIED in `pdfce-render`.** Matched to the Ghent gap
+  inventory's existing **`85.4c`** row (soft-mask half), following the
+  165th/166th precedent — **claimed, not minted; the row is PARTIAL and
+  does NOT close.** **VERIFIED HERE** (`git show --numstat`, excluding the
+  three stray fetch artefacts `2a75be1` removes): **5 files, 457
+  insertions / 48 deletions** — `interpret.rs` +341/−11, `gstate.rs` +29,
+  `pdfce-cli/src/main.rs` +14/−2, `tests/render_page.rs` +8, engineer
+  agent-memory +65/−35. Previously `gs /SMask` was parsed, counted and
+  **honestly disclosed** as *"not implemented; marks painted unmasked"*
+  (`Pass 90.0`).
+- **`2a75be1` — `.gitignore` for stray subagent fetch artefacts.**
+  **VERIFIED HERE:** 4 files, **23 insertions / 5,531 deletions** —
+  `vp.txt` (3,172 lines), `vp4.txt` (2,341), `pdfa4.txt` (18) removed.
+- **`8eb0668` — two research deliverables persisted to disk.** **VERIFIED
+  HERE:** 3 files, **794 insertions / 274 deletions** —
+  `docs/ghent-patch-reference.md` +375 (new),
+  `docs/overprint-architecture-survey.md` +201 (new),
+  `docs/NEXT_SESSION.md` rewritten (+492/−274) because the prior handoff's
+  queue had been worked.
+
+**Decisions made this session:**
+
+- **decision 070 MINTED** (`ARCHITECTURE.md` §12): **a soft mask is
+  MULTIPLIED INTO THE CLIP, not threaded as a second mask through every
+  paint site.** Three sub-decisions — the fold-into-clip mechanism (every
+  paint site already honours the clip, so one change reaches all of them,
+  and there is no second attenuation path to drift); the named price
+  (`/SMask /None` cannot divide the mask back out, so the pre-mask clip is
+  snapshotted, and a `W n` under a live mask makes that snapshot stale and
+  is **counted**, never silently mis-clipped); and `/TR` **read, counted,
+  disclosed, NOT evaluated**. **Ceiling 069 → 070, next free 071.**
+- **`ARCHITECTURE.md` §4's render-surface cell amended in the same filing**
+  (decision-log/body-section pairing rule): its *"`/SMask` soft-mask groups
+  remain entirely unread"* clause is now false and is kept as history with
+  a banner above it.
+- **`FEATURES.md`: soft masks are a NEW *Implemented* row —
+  `core [x]` `cli [x]` `gui [ ]`.** The `gui` box is **deliberately NOT
+  rounded up**: GUI work is operator-paused and no `pdfce-gui` path reads
+  any of the three counters. The *Planned* knockout row was **rewritten to
+  be knockout-only**, and now names soft-mask-on-group-result as the same
+  defect rather than a separate gap.
+- **No Pass ID minted.** Next free Pass family stays **97**; next free
+  `85.4` sub-letter is **`f`**, and minting it is the engineer's call.
+  **No standing rule minted; `R196` remains next free.**
+
+**Findings + decisions:**
+
+- **★ THE RESULT IS THE CORRELATIONS, AND THE ENGINEER REPORTED IT THAT
+  WAY.** **RELAYED**, same binary, before → after, against Acrobat Pro
+  reference strips: `1_GWG1610_Softmasks_Text_part1_X4` **0.515 → 0.575**
+  (reference engine **0.966**); `1_GWG168_Softmasks_Vector_part1_X4`
+  **0.661 → 0.725** (0.981); `1_GWG169_Softmasks_Vector_part2_X4`
+  **0.884 → 0.905** (0.983). **Real movement on every measurable patch and
+  NOT ONE PASSES. Ghent stands UNCHANGED at 25 pass / 18 FAIL / 8
+  UNRESOLVED of 51.** Filed with the reference column beside each figure
+  (hard rule 10(a)) so the remaining distance needs no second lookup:
+  **`GWG1610`, the TEXT patch, is both furthest from reference and closed
+  the least of its own gap — +0.060 of 0.451 = 13 %, against `GWG169`'s
+  +0.021 of 0.099 = 21 %.** **What changed is the CHARACTER of the 4-patch
+  soft-mask cluster, not its count** — PARTIAL rather than untouched,
+  exactly as the overprint cluster became at `bf75351`. The standing board
+  now says so, because "4 FAILs" reads identically either way.
+- **★★ WHAT IS STILL WRONG WAS DIAGNOSED, NOT GUESSED — and the method is
+  the reusable part.** The engineer **dumped the mask groups and the folded
+  clips to PNG**; **both are correct, properly placed soft gradients.** So
+  **construction is right and the residue is APPLICATION**: §11.4.5 applies
+  a soft mask to a transparency group's **RESULT**, while folding into the
+  clip applies it to **each element inside**. Those differ wherever
+  elements overlap. **That is the same offscreen-buffer work as
+  isolated/knockout groups and belongs with them, not as a separate gap** —
+  the `85.4c` row's two halves have **collapsed into one defect**.
+  **Rendering the intermediate to a file beat reading the code**, and it
+  converted "the numbers moved but not enough" into a named, scoped defect
+  in one step.
+- **★★★ THE SOURCED CONTRACT, three clauses of which are traps.**
+  **Table 144: `/BC` defaults to the colour space's INITIAL VALUE
+  ("representing black"), not to all-zeros** — Table 74 makes those the
+  same in RGB/Gray and **opposite** in `DeviceCMYK`, where all-zeros is
+  **pure white**, so a naive default opens the mask **exactly where it
+  should be shut**. **The trap is in the wild in the very file that
+  exercises this code**: its masks carry `/BC [1.0 1.0 1.0 1.0]` in
+  `DeviceCMYK`. **§11.6.5.2: outside the `/BBox` the mask is neither 0 nor
+  1 but `TR(lum(BC))`** — implemented by pre-filling the buffer with the
+  backdrop, so that case needs no case. **§11.5.3: the group composites
+  over a FULLY OPAQUE backdrop.** **§11.5.3 NOTE 3: luminosity is
+  `0.30R + 0.59G + 0.11B` with NO gamma compensation** — deliberately not
+  Rec.709, deliberately not linearised. **§11.6.5.2: the mask's space is
+  `/Matrix` × the CTM AT `gs`**, baked eagerly so a later `cm` cannot
+  displace it.
+- **★★★★ `/TR` IS THE ONE TO WATCH, and the argument is correctness.**
+  Read and, when not `/Identity`, **counted and disclosed but NOT
+  evaluated** (needs the PDF-function machinery in the render crate).
+  **`/TR` is where a mask gets INVERTED**, so an ignored one can **leave
+  visible exactly the content a document meant to hide** — a shortfall the
+  operator cannot detect by looking at the page, which is the class rule 4
+  exists for.
+- **★★★★★ `LUM-A1` WENT LIVE AND WAS RESOLVED BY CONSTRUCTION — THE EXACT
+  OUTCOME ITS OWN REGISTER ENTRY WARNED ABOUT, IN ITS OWN WORDS.** That
+  entry read *"tracked here so the setting is not re-derived from scratch,
+  **or worse, silently hard-coded one way**, when soft-mask implementation
+  starts."* Soft-mask implementation started; **VERIFIED HERE**,
+  `grep -rn "LUM-A1" crates/` returns **nothing**. The shipped behaviour is
+  **not wrong** — the mask group renders through pdfce's ordinary paint
+  path, so a `DeviceCMYK` mask becomes sRGB (via
+  `crates/pdfce-core/src/color/cmyk_table.rs`'s calibrated 6⁴ grid)
+  **before** luminosity is taken, and §11.5.3's own *"by
+  implementation-defined means"* makes that conformant. **But it is a THIRD
+  reading, neither of the two analytic forms `LUM-A1` enumerated, and that
+  entry's `K·S ≤ 0.25` divergence bound was derived for those two and does
+  NOT bound the shipped path.** Register entry amended; **the setting is
+  still owed.** **Do not read "shipped" as "decided."**
+- **★★★★★★ A SECOND INCONSISTENCY, FOUND BY READING THE CODE AND FLAGGED
+  RATHER THAN CORRECTED.** In a `DeviceCMYK` mask group, **painted content**
+  reaches sRGB through the **calibrated 6⁴ node grid** — described in its
+  own module header as *"the single place in pdfce where a `DeviceCMYK`
+  colour becomes an sRGB one"* — while **`/BC` itself** reaches sRGB
+  through an **inline naive complement** `(1−c)(1−k)`
+  (`interpret.rs:3175`), whose comment says the naive form is *"right for
+  the polarity question, which is all this is used for."* **Polarity is not
+  all it is used for**: §11.6.5.2 makes the backdrop's **magnitude** the
+  mask value everywhere outside the `/BBox`, which is precisely what this
+  commit implements by pre-filling. **So the same CMYK tint yields one mask
+  value outside the BBox and a different one painted inside it.**
+  **Magnitude deliberately NOT estimated** (hard rule 10's corollary: a
+  correction is a claim). One-fixture reproduction is recorded on the
+  Shipped entry.
+- **★ A NAMING TRAP WORTH ONE LINE, because it defeats the obvious grep.**
+  The stdout **key** is `soft_mask_tr_ignored`; the `Diagnostics` **field**
+  is `soft_mask_transfer_ignored`. Grepping `crates/` for the printed key
+  finds **no declaration**. **VERIFIED HERE**: declared `interpret.rs:420`,
+  incremented `:3007`, merged `:908`, printed `main.rs:7042`.
+- **★★ ALL THREE OF THE 166TH FILING'S IN-FLIGHT RESEARCH DISPATCHES HAVE
+  LANDED — AND TWO OF THEM EXISTED ONLY IN THE CONVERSATION TRANSCRIPT.**
+  `8eb0668` persists them. **A `/clear` before that commit would have
+  destroyed both**, leaving the 166th filing's in-flight entry as the only
+  evidence they ever returned, pointing at nothing. **An in-flight dispatch
+  is not a finding; a returned dispatch that lives only in a transcript is
+  not a deliverable either.**
+- **★★★ THE CONSEQUENCE OF THE THIRD DISPATCH THAT NOBODY HAS ACTED ON.**
+  **VERIFIED HERE** (`ls -lt D:/Dev/Rag-Specialized/PDF_Spec/iso32000/`):
+  **six new spec-RAG files timestamped 2026-08-18 05:41–05:47** —
+  `iso32000__s__8.7.4.5__mesh.md` (59,848 B),
+  `iso32000__s__8.7.4.5__analytic.md` (63,903 B), `iso32000__s__11.7.md`,
+  `iso32000__s__11.5.md`, `iso32000__s__11.4.md`, `iso32000__s__11.3.md`.
+  **`Pass 85.1` (mesh shadings) and the `85.4c` remainder (§11.4.6) were
+  both recorded as BLOCKED ON SPEC-CORPUS GAPS. Those gaps are now
+  filled**, and neither row had been re-scoped to say so. **This is exactly
+  the shape `CLAUDE.md`'s XFA bullet records** — *the answer was already
+  sourced in one document while another still asked the question.* Written
+  into *Next up* rather than left to be rediscovered.
+- **★★★★ THE N-CHANNEL BUFFER NOW HAS THREE INDEPENDENT CONFIRMATIONS, AND
+  ONE OF THEM WAS ALREADY INSIDE THIS PROJECT.** (1) pdfce's own ablation
+  (`ac15158`); (2) a **seven-engine** research survey — unanimous
+  convergence, **no published alternative, no published approximation
+  covering spot colorants**, plus a peer-reviewed Artifex paper stating
+  that collapsing colour before compositing *"is not possible"* because of
+  overprint, and Poppler documenting pdfce's exact bug in its own words;
+  (3) **pdfce's own spec RAG's 2026-08-08 "stage 10" note**, which said it
+  before either of the others existed. `docs/overprint-architecture-survey.md`
+  is now **named from `ROADMAP.md`'s standing board**, per the engineer's
+  request, so it is findable without `git log`.
+- **★★★★★ TWO GHENT *HARNESS* FINDINGS — THE INSTRUMENT MAY BE WRONG BEFORE
+  THE RENDERER IS.** Filed as their own *Next up* entry. (1) **GWG's own
+  stated criterion is that a FAINT X DOES NOT INDICATE A FAILURE**, judged
+  by a human at 0.5 m, while `tools/ghent-check.py`'s threshold was
+  **calibrated against pdfce's own output** — *a threshold derived from the
+  thing it measures is not a measurement*, and the likely direction is
+  **over-counting failures**. (2) **The suite ships a Reference file pdfce
+  is not using as an oracle**, while pdfce compares against strips it
+  generated itself. **This bears on EVERY render figure filed for four
+  filings**, which is why it is an entry rather than a footnote — a
+  miscalibrated harness moves all of them in the same direction at once and
+  they would never disagree with one another. **Caution recorded in both
+  directions:** re-calibrating invalidates the before/after deltas filed
+  against the old threshold unless both sides are re-run.
+- **★ THE PUBLIC-REPOSITORY DISCLOSURE SURFACE, and the half `.gitignore`
+  cannot fix.** `vp.txt`/`vp4.txt`/`pdfa4.txt` — veraPDF wiki pages and, in
+  one case, **literally an ELOT login page** — were fetched by a research
+  subagent with `curl -o` into its working directory (this repository) and
+  **committed by a `git add -A` over the root**. `2a75be1` removes them and
+  adds root-anchored ignore rules. **Second batch in one session; the
+  librarian caught the first (`out.html`) before it was committed, and two
+  occurrences is this project's own promotion bar**, which is why it got a
+  rule rather than a second cleanup. **VERIFIED HERE:** `git fetch origin`
+  then `git rev-list --count origin/main..main` = **0**, so **`cb20770` is
+  PUSHED and all three files remain in the PUBLIC repository's HISTORY** —
+  an ignore rule does not remove them from `origin`. Noted, not escalated,
+  because the engineer's own assessment is that nothing sensitive landed;
+  recorded so a *future* incident is triaged against history rather than
+  against `.gitignore`. **The ignore list is the backstop; narrower staging
+  is the cure** — the next subagent will pick a different filename.
+- **★★ THE STRING-LITERAL CORRUPTION RECURRED FOR THE FOURTH TIME IN ONE
+  SESSION, AND THE NEW FACT IS THAT THE FIX CARRIED THE BUG.** One of the
+  four was in a message *"repaired"* earlier the same day — **the heredoc
+  fix re-introduced the bug it was fixing.** `cargo build`, `clippy` and
+  `fmt` are **all silent**; **only the stable-stdout-line test catches it.**
+  Escalated as a dated footer on the existing cross-project finding
+  (`D:\dev\rag\rust\a_multiline_string_literal_that_loses_its_trailing_backslash_bakes_a_visible_gap_mid_sentence.md`)
+  rather than as a new file, per hard rule 4 — **grepping for the original
+  shape would never have caught this instance, because the shape appeared
+  in the remediation.**
+
+**Still in flight:**
+
+- **Ghent standing board: 25 pass / 18 FAIL / 8 UNRESOLVED / 0 render
+  errors, of 51 patches (49.0 / 35.3 / 15.7 %) — UNCHANGED by this
+  filing.** Acrobat Pro's own score on the same corpus is **1 FAIL of 51**,
+  so the reachable ceiling is **50** and pdfce is **25 of a reachable 50**.
+  Clusters: overprint 7, transparency groups 5, **soft masks 4 (now
+  PARTIAL)**, shading 1, ICC 1. **And read all of it against the two
+  harness findings above.**
+- **The `85.4c` row's two halves are now ONE defect** — knockout occlusion
+  order (§11.4.6) and soft-mask-on-group-result (§11.4.5) are the same
+  offscreen-buffer work. That is the next render item, alongside the
+  n-channel buffer for the overprint cluster.
+- **`Pass 85.1` (mesh shadings) is NO LONGER BLOCKED on spec corpus** —
+  `iso32000__s__8.7.4.5__mesh.md` exists as of today. Row not yet
+  re-scoped.
+- **`v0.7.0` is bumped on disk and NOT tagged, NOT released. VERIFIED
+  HERE:** newest tag **`v0.6.0`**; `git describe --tags` =
+  **`v0.6.0-37-g8eb0668`** — **37 commits, nothing released since
+  `v0.6.0`**; `git rev-list --count origin/main..main` = **0** (all
+  pushed); working tree clean before this filing's doc edits. **VERIFIED
+  HERE before filing:** `python tools/check-commits-filed.py` named exactly
+  **`cb20770`** and nothing else. **`tools/commits-filed-baseline.txt` was
+  NOT touched**, per the dispatch and the gate's own docstring.
+- **`LUM-A1`'s setting is owed and now overdue** — the code path is live.
+  Choosing the recommended ISO 32000-2 additive form now also means
+  deciding whether a `DeviceCMYK` mask group should bypass the calibrated
+  table.
+- **The `/BC`-vs-painted-content CMYK→sRGB inconsistency** is unmeasured
+  and unfixed; one-fixture reproduction recorded.
+- Carried forward, unchanged: the `/P 2` certified-content fixture; the ~8
+  wrapped-string-literal `assert!` defects; the stale
+  `acrobat-reader-is-available-pro-is-not.md` global-memory entry.
+
+**For next session:**
+
+1. **Ledger.** Next free Pass family **97** (`85.4c`'s soft-mask half was
+   **claimed**, not minted, and the row is **PARTIAL**; next free `85.4`
+   sub-letter is **`f`**). Next free decision **071** (**070 minted** this
+   filing). Next free filing ordinal **168**. Next free standing rule
+   **`R196`** — none minted, none cited.
+2. **`check-commits-filed.py` reads the WORKING TREE, not `HEAD`** — it
+   goes green the moment these doc edits exist, **but CI reads a commit.**
+   Commit this filing before expecting CI green.
+3. **Fix the HARNESS before the renderer**, or at minimum decide
+   explicitly not to. Re-derive `tools/ghent-check.py`'s threshold from
+   GWG's stated *"faint X is not a failure"* criterion instead of from
+   pdfce's own output; wire in the suite's shipped Reference as the oracle;
+   re-run and re-file the board **naming both thresholds**, so four
+   filings of history stay readable.
+4. **Then the one architectural item, which is now TWO items that share a
+   buffer**: (a) the **n-channel per-colorant buffer** for the 7-patch
+   overprint cluster — sourced in `docs/overprint-architecture-survey.md`,
+   **do NOT re-attempt the spot-multiplier shortcut** (`ac15158`'s
+   ablation); (b) **compositing a group's RESULT** — which fixes knockout
+   occlusion order **and** soft-mask application together.
+5. **Before cutting `v0.7.0`, check the release notes for BOTH stale
+   sentence classes**: *"overprint is not simulated"* **and** *"soft masks
+   are not implemented."* Both halves of the published `v0.6.0` sentence
+   are now false. The honest replacement is **not** "soft masks are
+   implemented" either — it is *"built and applied; `/TR` disclosed but not
+   evaluated; applied per element rather than to a group's result, so no
+   Ghent soft-mask patch passes yet."* **Overstating it would be `R180`'s
+   eighth instance and the first self-inflicted one.**
+6. **Answer `LUM-A1`** — it is a live code path now, not a hypothetical.
+7. Unchanged carry-overs: `/P 2` certified-content fixture; the ~8
+   wrapped-string-literal `assert!` sweep.

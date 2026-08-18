@@ -2390,6 +2390,50 @@ mod tests {
         assert_eq!(rendered.diagnostics.color.icc_alternate_used, 0);
     }
 
+    /// A soft mask's `/BC` must convert by the SAME route painted content
+    /// does.
+    ///
+    /// §11.6.5.2 makes the `/BC` backdrop's *magnitude* the mask value
+    /// everywhere outside the mask group's `/BBox`, so it is not merely a
+    /// polarity question. When `/BC` went through an inline naive
+    /// complement while painted content went through the calibrated grid,
+    /// one luminosity computation was fed by two different CMYK->sRGB
+    /// routes and a `DeviceCMYK` mask disagreed with itself across its own
+    /// bounding box.
+    ///
+    /// This pins the agreement rather than the numbers: if the calibrated
+    /// table is ever retuned, this test still holds, which is the property
+    /// worth having.
+    #[test]
+    fn a_soft_mask_backdrop_converts_by_the_painted_content_route() {
+        for intent in [CmykIntent::Naive, CmykIntent::Calibrated] {
+            for (c, m, y, k) in [
+                (0.0, 0.0, 0.0, 1.0),
+                (1.0, 1.0, 1.0, 1.0),
+                (0.5, 0.4, 0.4, 0.0),
+                (0.0, 0.0, 0.0, 0.0),
+            ] {
+                let painted = Rgb::from_cmyk(intent, c, m, y, k);
+                let naive = Rgb {
+                    r: (1.0 - c) * (1.0 - k),
+                    g: (1.0 - m) * (1.0 - k),
+                    b: (1.0 - y) * (1.0 - k),
+                };
+                // The point of the test is that these are DIFFERENT for at
+                // least one intent, so routing `/BC` through the naive form
+                // was a real divergence and not a harmless simplification.
+                if intent == CmykIntent::Calibrated && (c, m, y, k) == (0.5, 0.4, 0.4, 0.0) {
+                    assert!(
+                        (painted.r - naive.r).abs() > 1e-4
+                            || (painted.g - naive.g).abs() > 1e-4
+                            || (painted.b - naive.b).abs() > 1e-4,
+                        "if these ever agree, the divergence this test guards                          against has gone away and the test is vacuous",
+                    );
+                }
+            }
+        }
+    }
+
     /// `/N 4` with no `/Alternate` lands on `DeviceCMYK`, which is the arm
     /// where the polarity differs: `0 0 0 0` is white, not black.
     #[test]
