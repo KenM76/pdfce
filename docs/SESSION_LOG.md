@@ -47302,3 +47302,104 @@ below).
 3. Otherwise unchanged priority order: `Pass 97.0`, one of the three
    remaining `pdfceGUI` Passes, `Pass 98.0`, or the two `iccce`
    requests.
+
+## 2026-08-18 (hundred-and-eighty-first filing) — `3f8cc1e` CLOSES THE `pageops/mod.rs` SURVIVOR FLAGGED IN THE 179TH AND 180TH FILINGS — AND NAMES THE REUSABLE SHAPE: A DOCUMENTED BLOCKER OUTLIVES THE ONE DESIGN THAT NEEDED IT UNLESS SOMEONE RE-ASKS WHETHER IT STILL BINDS
+
+**Docs-only filing, dispatched directly** (not via the engineer's usual
+Pass-completion channel) with the diff already described and the
+survivor's history summarized. **Filed by `pdfce-librarian` WITHOUT a
+shell this session.** Test/lint results (`cargo fmt --all` applied,
+`cargo clippy -p pdfce-core --all-targets -- -D warnings` clean, 141
+doctests green) are RELAYED, not independently re-run. The source-text
+claim and the Hard Rule 11 re-sweep are independently verified by
+`Read`/`Grep` against the live file: `crates/pdfce-core/src/pageops/
+mod.rs:1–89`.
+
+**Shipped:**
+- `3f8cc1e` — no Pass ID, cited in `ROADMAP.md` Shipped to satisfy
+  `check-commits-filed.py`. `pageops/mod.rs`'s module header corrected:
+  removed the claim *"The GUI's in-place Insert waits for the
+  overlay-aware render path,"* false since `Pass 99.0` shipped
+  `EditSession::insert_pages` by re-staging imported stream payloads
+  into the session buffer (R45) instead of building either of the two
+  prerequisites the paragraph above it had named. The header now also
+  states plainly what `pageops::insert` still owns — merging
+  document-level structures via `assemble` — with a two-row table
+  saying which entry point to reach for.
+
+**Findings + decisions:**
+- **★ The reusable finding, and the reason this filing records it as
+  more than a routine correction.** The paragraph that produced the
+  stale sentence did nothing wrong on its own terms — it correctly
+  named two things an *overlay-based* insert would need (a per-object
+  source buffer threaded through the writer, and an overlay-aware
+  renderer). The sentence that followed silently promoted those two
+  facts from *"what that design would need"* to *"what any in-place
+  insert must wait for."* The first is a fact about one design; the
+  second is a claim about all designs, and nobody tested it before
+  writing it down. `Pass 99.0` shipped a design that needed neither
+  prerequisite, and the blocker — real for the design that named it —
+  had never actually bound the problem. Stated as the reusable rule:
+  **a named blocker outlives the design that motivated it unless
+  someone re-asks whether it still binds.** This is now in the
+  module's own doc comment, not only here.
+- **Declined to name this as a standing pattern, with a stated
+  warrant — asked to judge, not told.** The dispatching engineer
+  offered three candidate instances of "a constraint's scope widened
+  without evidence, invisible because the narrow reading stayed true":
+  this finding, the `moxcms` boundary-decision error (175th filing),
+  and `Pass 82.0`'s `/I` criterion (a continuous range misread as an
+  enumeration, corrected in the same filing it shipped). Examined
+  individually, the three are different failure shapes — a design
+  rationale's scope silently widening past its own design; a boundary
+  decision cited without being re-read; a spec table's idiom
+  misidentified at authoring time. They share only the generic lesson
+  "re-check a stale premise," which is already the animating idea
+  behind Hard Rule 11 and several declined-candidate notes already in
+  this file. Collapsing three distinct shapes into one name because
+  they rhyme would produce a rule too broad to apply precisely.
+  Recommendation: watch for a **second true instance of this specific
+  shape** — a documented blocker outliving the one design that needed
+  it — before proposing a name for it alone. Hard rule ceiling
+  unchanged; nothing minted.
+- **Hard Rule 11 sweep, this filing: no further survivor found.**
+  Grepped project-wide for `"waits for the overlay-aware render path"`
+  and `"overlay-aware renderer"`. The only other hits are inside the
+  fixed comment's own explanation of what changed (the project's
+  established correction idiom — same as `1bc4564`, decision 062's
+  amendment, `Pass 82.0`'s own criterion-2 correction) and the
+  unaffected, still-true statement that `pdfce-render` resolves
+  content streams against the base document (that is *why* the
+  overlay-based design would have needed a renderer change — it never
+  claimed the in-place design needed one).
+- **`FEATURES.md` — verified, no row change owed.** Row 58
+  (`pageops::insert`) and row 252 (`EditSession::insert_pages`, `Pass
+  99.0`) already state the two-way split accurately, including row
+  252's existing *"deliberately does not merge document-level
+  structures, unlike `pageops::insert` above"* clause. A doc-comment-
+  only change touches no shell capability, so no row edit follows.
+
+**Still in flight:**
+- **`pageops/mod.rs` survivor — CLOSED.** Off the carry-forward list as
+  of this filing.
+- The two owed `iccce` requests
+  (`request_profile_population_census.md`,
+  `request_header_tag_channel_disagreement.md`) — still unread.
+- `pdfceGUI`-sourced *Next up* Passes `75.0` (reusable parsed handle),
+  `80.0` (note text on markup) and `81.1` (markup opacity write half)
+  — untouched by this filing.
+- `Pass 97.0`/`97.1`/`97.2` (the compositor) and `Pass 98.0` (foreign
+  `/BE` round-trip read-back) — untouched by this filing.
+
+**For next session:**
+1. **Ledger update from this filing**: no Pass ID assigned (a
+   correction, like `1bc4564`) — Pass family ceiling stays **100**,
+   next free **101**. Decisions and standing rules both unchanged this
+   filing (next free decision **071**, next free standing rule
+   **R196** — neither independently re-verified via the checker, no
+   shell this filing). **Next free filing ordinal: 182.**
+2. Unchanged priority order from the 180th filing: `Pass 97.0`, one of
+   the three remaining `pdfceGUI` Passes, `Pass 98.0`, or the two
+   `iccce` requests. Nothing new queued by this filing beyond the
+   declined standing-rule recommendation above (watch for a second
+   instance of the blocker-outlives-its-design shape).

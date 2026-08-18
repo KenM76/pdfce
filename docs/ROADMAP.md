@@ -96,6 +96,99 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `3f8cc1e` — **`pageops/mod.rs`'S MODULE HEADER CORRECTED: THE "WAITS FOR THE OVERLAY-AWARE RENDER PATH" BLOCKER WAS SOLVED A DIFFERENT WAY BY `Pass 99.0` — no Pass ID, no decision minted; commit `3f8cc1e` touches `crates/pdfce-core/src/pageops/mod.rs` only and is cited here to satisfy `check-commits-filed.py`** — filed 2026-08-18 (hundred-and-eighty-first filing)
+
+**This is the survivor the 179th and 180th filings' own Hard Rule 11
+sweep found and reported as owed twice, now closed.** It was out of
+this librarian's remit (`crates/`) both times it was flagged, so it
+stayed on the carry-forward list rather than being fixed here.
+
+**Filed by `pdfce-librarian` WITHOUT a shell this session.** Test/lint
+results below are RELAYED from the dispatching engineer's report
+(`cargo fmt --all` applied, `cargo clippy -p pdfce-core --all-targets
+-- -D warnings` clean, 141 doctests green — the change is entirely in
+doc comments, so the doctest run is the relevant gate), not
+independently re-run. The source-text claim is independently verified
+by `Read` against the live file:
+`crates/pdfce-core/src/pageops/mod.rs:1–89`.
+
+**What was wrong.** The module header said *"The GUI's in-place Insert
+waits for the overlay-aware render path."* `Pass 99.0` shipped that
+insert (`EditSession::insert_pages`) without building an overlay-aware
+renderer at all — it re-stages imported stream payloads into the
+session's own buffer (R45) instead, landing them in the coordinate
+system the writer and renderer already read.
+
+**★ The reusable finding is HOW the sentence went false, not just
+that it did.** The paragraph above it correctly identified two things
+an *overlay-based* insert would need (a per-object source buffer
+threaded through the writer, and an overlay-aware renderer), then
+silently promoted them from *"what that design would need"* to *"what
+any in-place insert must wait for."* The first is a fact about one
+design; the second is a claim about all of them, and nobody ever
+tested it. `Pass 99.0` sidestepped both prerequisites by choosing a
+different design, and the blocker — real for the design that named it
+— never bound the problem itself. Stated as the reusable rule: **a
+named blocker outlives the design that motivated it unless someone
+re-asks whether it still binds.** Now recorded in the module's own doc
+comment (§"★ THE BLOCKER ABOVE WAS SOLVED DIFFERENTLY").
+
+**The fix also states what the module still owns**, so the correction
+doesn't read as a deprecation: `pageops::insert` still merges
+document-level structures (outlines, AcroForm field tree, named
+destinations, page labels, optional-content configuration) via
+`assemble`'s policies, which `EditSession::insert_pages` deliberately
+does not do. A two-row table now says which to reach for; `pdfce-cli
+insert-pages` correctly stays on the module's `insert`.
+
+**On naming this as a pattern — declined, with a stated warrant.**
+The dispatching engineer offered three candidate instances of "a
+constraint's scope was widened without evidence, invisibly because the
+narrow version stayed true": this one, the `moxcms` boundary decision
+this session, and `Pass 82.0`'s `/I` criterion (a continuous range
+misread as an enumeration). Read closely, the three are different
+failure shapes — this one is a *design rationale's scope silently
+widening from "this approach" to "any approach"*; the `moxcms` one is a
+*boundary decision nobody re-read before citing it*; `Pass 82.0`'s is a
+*spec table's idiom misidentified at authoring time*. They share only
+the generic lesson "re-check a stale premise before trusting it," which
+is already the animating idea behind Hard Rule 11 and several declined-
+candidate notes in this file. Unifying three distinct shapes under one
+name because they rhyme would produce a rule too broad to apply
+precisely. Recommend watching for a **second true instance of this
+specific shape** — a documented blocker outliving the one design that
+needed it — before proposing a name for it alone.
+
+**Hard Rule 11 sweep, this filing: no further survivor found.**
+Grepped project-wide for `"waits for the overlay-aware render path"`
+and `"overlay-aware renderer"`. The only other hits are inside the
+fixed comment's own explanation of what changed and why (the
+established correction idiom — same as `1bc4564`, decision 062's
+amendment, `Pass 82.0`'s own criterion-2 correction) and the
+unaffected mention of `pdfce-render` resolving content streams against
+the base document (still true — that's *why* the overlay-based design
+would have needed the renderer change; it does not claim the in-place
+insert needs it).
+
+**`docs/FEATURES.md` — verified, no row change owed.** Row 58
+(`pageops::insert`) and row 252 (`EditSession::insert_pages`, `Pass
+99.0`) already state the two-way split accurately — row 252 already
+reads *"deliberately does not merge document-level structures, unlike
+`pageops::insert` above"* — matching what this commit's doc-comment fix
+makes explicit in the source. This is a doc-comment-only change; it
+does not alter what any shell can do.
+
+**Terminology (rule 15):** nothing here touches **ce dimensions** or
+**pdf dimensions**.
+
+**Ledger effects.** Pass family: unchanged, no Pass ID assigned (a
+correction, like `1bc4564`) — ceiling stays **100**, next free **101**.
+Standing rules: no new rule minted — see the declined-candidate note
+above; ceiling stays **R195**, next free **R196**. Decisions: no new
+decision minted — a doc-comment correction, not an architectural call;
+ceiling stays **070**, next free **071**. `SESSION_LOG.md` filings move
+**180 → 181**, which is this one.
+
 ### Pass 100.0 — `d51e0d9` — **ABUTTING IMAGE TILES NO LONGER LEAVE A ONE-DEVICE-PIXEL BACKGROUND SEAM: `anti_alias` ON AN IMAGE'S UNIT-SQUARE FILL IS NOW CONDITIONAL ON CTM AXIS-ALIGNMENT, NOT ALWAYS ON — CLOSES THE 179TH FILING'S OWN HIGHEST-PRIORITY "STILL OWED" ITEM, THE SAME DAY IT WAS FLAGGED** — filed 2026-08-18 (hundred-and-eightieth filing)
 
 **Filed by `pdfce-librarian` WITHOUT a shell this session.** Test/lint
