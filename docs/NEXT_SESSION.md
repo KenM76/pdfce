@@ -8,6 +8,96 @@ shipped, this says what to do next. Overwrite it once acted on.
 
 ---
 
+## ★★★★ READ THIS FIRST — 2026-08-18, END OF SESSION
+
+**Ghent standing is UNCHANGED at 25 pass / 18 FAIL / 8 UNRESOLVED of 51.**
+Nothing this session was expected to move it. Everything below the two
+headlines that follow is still accurate; this block is what changed after
+them.
+
+### 1. The build is scoped. `Pass 97.0 / 97.1 / 97.2` are minted.
+
+⇢ **`docs/compositor-plan.md`** is the plan of record. **16 of the 18
+failures are one missing thing** — pdfce has no compositor of its own.
+Stage A (RGB, own f32 buffer, non-isolated init + §11.4.4 backdrop removal +
+§11.4.8 two-buffer knockout + soft mask on the group RESULT) ≈ 7 patches.
+Stage B (colorant planes) ≈ 9 more. **Do not skip A.**
+
+### 2. ★ THE ICC HOP IS `iccce`'S. I got this wrong today; do not repeat it.
+
+⇢ **`docs/collapse-model-survey.md`** — thirteen engines, every claim
+URL-cited, and §7 is the correction. I recommended **`moxcms`** as the ICC
+candidate **against `ARCHITECTURE.md` decision 064**, which had assigned all
+colour CONVERSION to `iccce` the day before. Root cause: **I did not read
+`ARCHITECTURE.md` this session**, which `CLAUDE.md` requires. No gate could
+have caught it — cross-project boundaries live only in the §12 decision log.
+
+`iccce` already ships what Stage C needs:
+`Chain::with_destination(&src, Destination::None, intent)`, built-in sRGB
+**constructed from published constants** — no shipped `.icc`, so no
+redistribution question. Verified in `crates/iccce-cmm/src/transform.rs`.
+
+**Two obligations that travel with it, both non-optional:**
+- **`Destination::None` is NOT `Option::None`.** It asserts you looked and
+  there is none. A declared output intent that **fails to parse** must become
+  a **propagated refusal**, never a fallback — a PDF/X page silently rendered
+  to substituted sRGB looks completely normal. Surface
+  `destination_provenance()`.
+- **~1.4 Mpix/s ≈ 6 s/page vs our ~0.6 s render — about 10×.** A `u8` surface
+  fixes memory (4× in, 8× out) and **nothing** for time. So the collapse
+  **cannot be an unconditional per-frame step**: export-only, cached, or
+  scoped to pages that actually use overprint. Not decided.
+
+### 3. Two things owed to `iccce`, not read and not drafted
+
+`D:\Dev\FeatureRequests\iccce_FeatureRequests\open\` —
+`request_profile_population_census.md` (an ICC-profile census over the ~6,000
+-file organic Dropbox corpus; precedent exists, the 2,500-file censuses in
+`ROADMAP.md`) and the narrower
+`request_header_tag_channel_disagreement.md` (one extra field in the same
+scan). **That channel is outside the repo, so no pdfce gate will ever remind
+you it exists.** The census would also tell us what `3_GWG130` needs.
+
+### 4. Small, flagged, unfixed
+
+- `ARCHITECTURE.md` §3's `pdfce-render\` block still says *"next free
+  [decision] 069"*. **Ledger is at 071.** Librarian flagged it as out of
+  scope; it is a one-token fix for whoever next dispatches a filing.
+- `moxcms` legitimately appears in `DEPENDENCIES.md` /
+  `THIRD_PARTY_LICENSES.md` — **transitively, via the `image` crate**. That
+  is an unrelated already-decided fact, **not** a survivor of the withdrawn
+  recommendation. Do not "clean it up".
+
+### 5. Two methodological findings that cost real time today
+
+- **A citation makes a claim look checked.** I cited §11.3.5.3 and the right
+  Ghent cells as proof that *applied* blend modes use the wrong colour space.
+  The clause was correctly quoted, the cells correctly identified, and **the
+  sentence joining them was false** — those modes are DECLINED and never
+  reach that counter (`applied=11, ignored=4` on every transparency patch).
+  Caught by the librarian checking whether the evidence could reach the
+  counter.
+- **Grepping for the wording you remember is not a sweep.** One stale claim
+  lived in **seven** places across two crates; three were found by the
+  librarian reading for the *claim*, none by my greps. This is now the
+  librarian's **hard rule 11**, and it found a survivor on its first use — in
+  `ROADMAP.md`, the one file my own correction commit could not reach.
+
+### 6. Still true from before, and still owed
+
+**v0.7.0 is bumped but NOT tagged.** `git describe` is now
+`v0.6.0-56-gf45583d` — **nothing released in 56 commits.** Operator gave a
+standing go-ahead for builds/releases on 2026-08-17. Verify CI green on HEAD,
+then `verify-release.py` → tag → portable package → GitHub release →
+librarian release record.
+
+**The GWG Reference file is NOT on this machine** —
+`Ghent_PDF-Output-Test-V50_ALL_REFERENCE.pdf`, the only oracle bearing on the
+8 UNRESOLVED patches. The patches and ReadMes were kept from the 126 MB
+download; it was not. Re-fetching is an operator call (`LEGAL.md` §5).
+
+---
+
 ## ★★★ SUPERSEDING HEADLINE (2026-08-18, later the same day): ⇢ `docs/compositor-plan.md`
 
 The headline below is still correct and still the sourcing record — but it is
