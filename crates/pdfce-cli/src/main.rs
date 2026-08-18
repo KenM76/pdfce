@@ -9578,8 +9578,10 @@ fn cmd_print(
             tile_only_large_pages: poster_large_only,
             max_tiles: poster_max_tiles,
         };
-        let px = |pt: f64| (pt * f64::from(resolution.dpi) / 72.0).round().max(1.0) as u32;
-        let (sw, sh) = (px(device.printable_pt.0), px(device.printable_pt.1));
+        // The sheet raster size now lives in `poster_sheets_for_page`, which
+        // is where the sheets are actually composed. It used to be computed
+        // here and threaded in, which is how a whole-page raster ended up
+        // being the thing that scaled with magnification.
         let mut sheets: Vec<pdfce_print::PageBitmap> = Vec::new();
         let mut tiled_pages = 0usize;
         let mut untiled_pages = 0usize;
@@ -9635,57 +9637,40 @@ fn cmd_print(
                     }
                 };
             tiled_pages += 1;
-            // The page is rendered ONCE at the tile scale and each tile
-            // copies its own window out of it. Rendering per tile would
-            // re-rasterise the whole page for every sheet — on a 4x5
-            // poster, twenty times the work for identical pixels.
-            let render_scale = (f64::from(resolution.dpi) / 72.0) * spec_p.tile_scale;
             let options =
                 pdfce_render::RenderOptions::default().with_annotation_scope(comments.to_scope());
-            let rendered = match pdfce_render::render_page_with_view(
+            match poster_sheets_for_page(
                 &session.view(),
                 page,
-                render_scale as f32,
+                &layout,
+                spec_p.tile_scale,
+                resolution.dpi,
+                device.printable_pt,
                 &options,
             ) {
-                Ok(r) => r,
+                Ok((tile_sheets, route)) => {
+                    if matches!(route, PosterRoute::PerTile) {
+                        // Rule 11 / rule 4: the CLI prints what it had to
+                        // do differently. A page the recorder refuses is
+                        // re-interpreted once per sheet, which on a 4x5
+                        // poster is twenty walks of the content stream —
+                        // slow enough that an operator wondering why should
+                        // be told rather than left to guess.
+                        eprintln!(
+                            "pdfce-cli: page {}: this page cannot be cached for tiling \
+                             (it uses a shading, an overprint composite or a soft mask), \
+                             so each of its {} sheets re-reads the page. Output is \
+                             unaffected; this is a speed note.",
+                            index + 1,
+                            tile_sheets.len()
+                        );
+                    }
+                    sheets.extend(tile_sheets);
+                }
                 Err(err) => {
                     eprintln!("pdfce-cli: page {}: {err}", index + 1);
                     return exit::RUNTIME_ERROR;
                 }
-            };
-            for tile in &layout.tiles {
-                let Some(mut sheet) = pdfce_render::tiny_skia::Pixmap::new(sw, sh) else {
-                    eprintln!("pdfce-cli: a sheet of {sw}x{sh} pixels is too large to compose");
-                    return exit::RUNTIME_ERROR;
-                };
-                sheet.fill(pdfce_render::tiny_skia::Color::WHITE);
-                // `source_pt` is in the page's own points; the rendered
-                // pixmap is at `render_scale`, so the window is scaled by
-                // exactly that. Dividing by `tile_scale` here would undo
-                // the magnification the operator asked for.
-                let sx = px(tile.source_pt.x * spec_p.tile_scale) as i32;
-                let sy = px(tile.source_pt.y * spec_p.tile_scale) as i32;
-                sheet.draw_pixmap(
-                    px(tile.sheet_pt.x) as i32 - sx,
-                    px(tile.sheet_pt.y) as i32 - sy,
-                    rendered.pixmap.as_ref(),
-                    &pdfce_render::tiny_skia::PixmapPaint::default(),
-                    pdfce_render::tiny_skia::Transform::identity(),
-                    None,
-                );
-                sheets.push(pdfce_print::PageBitmap {
-                    width: sheet.width(),
-                    height: sheet.height(),
-                    rgba: sheet.data().to_vec(),
-                    placement: pdfce_print::Placement {
-                        scale: 1.0,
-                        offset_x_pt: 0.0,
-                        offset_y_pt: 0.0,
-                        clipped: false,
-                    },
-                    page_pt: device.printable_pt,
-                });
             }
             eprintln!(
                 "pdfce-cli: page {}: poster of {} x {} tiles ({} sheet(s)), assembled size \
@@ -9990,6 +9975,454 @@ untiled; {tiled_pages} page(s) were tiled."
             .map_or_else(|| "-".to_owned(), |j| j.to_string()),
     );
     exit::SUCCESS
+}
+/// Which route [`poster_sheets_for_page`] took to rasterise a poster's tiles.
+///
+/// Reported rather than inferred because the two differ by an order of
+/// magnitude in speed on a big poster, and the operator is entitled to know
+/// which one their document got.
+#[cfg(windows)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PosterRoute {
+    /// The page was interpreted **once** into a display list and each tile
+    /// replayed from it.
+    Recorded,
+    /// The page could not be recorded (module docs of
+    /// `pdfce_render::display_list` §3), so each tile was rendered as an
+    /// independent region — correct, but one content-stream walk per sheet.
+    PerTile,
+}
+
+/// Rasterise one tiled page into its poster sheets.
+///
+/// # ★ Why this does NOT render the whole page and crop it
+///
+/// It used to, with a comment explaining that rendering per tile "would
+/// re-rasterise the whole page for every sheet — on a 4x5 poster, twenty
+/// times the work for identical pixels." That reasoning was correct about
+/// cost and it shipped a **bug**:
+///
+/// ```text
+/// $ pdfce-cli print --poster --poster-scale 8 <A3 CAD drawing>
+/// pdfce-cli: page 1: requested raster size 39685x28063 is empty or
+///            exceeds MAX_PIXMAP_EDGE
+/// ```
+///
+/// A poster's whole point is magnifying one page across many sheets, so its
+/// full raster is *by construction* larger than any single sheet — and past
+/// a modest magnification, larger than `MAX_PIXMAP_EDGE` allows. Poster
+/// printing therefore failed outright on exactly the documents people make
+/// posters of. Memory scaled with the assembled poster instead of with the
+/// paper in the printer.
+///
+/// The fix is per-tile **regions**, which bounds memory by the sheet — and
+/// what makes it affordable is `Pass 75.0`'s display list: the page is
+/// still interpreted **once**, and each tile replays from that. The original
+/// comment's cost argument is honoured; only its implementation changed.
+///
+/// A page the recorder refuses falls back to an independent region render
+/// per tile. That is the old cost the comment warned about, so it is
+/// **disclosed** by the caller rather than absorbed silently — but it is
+/// still strictly better than today's behaviour, which was to fail.
+///
+/// # Geometry
+///
+/// `tile.source_pt` is the window of the source page this tile shows, in the
+/// page's own points, top-left origin, `+y` down, already clipped to the
+/// page. Multiplying by `tile_scale × dpi/72` puts it in the page's DEVICE
+/// space — which is the same arithmetic the previous implementation used to
+/// index into the whole-page pixmap, so the two select the same pixels.
+///
+/// That device rectangle is mapped back through the inverse page CTM to get
+/// the user-space region to ask for. Going through the real transform rather
+/// than deriving the flip by hand is what keeps `/Rotate` 90/270 correct: a
+/// hand-written mapping is right for the unrotated case and transposed for
+/// the odd quarter-turns.
+///
+/// # Errors
+///
+/// A human-readable message when the page CTM is not invertible, a sheet
+/// cannot be allocated, or a tile fails to rasterise.
+#[cfg(windows)]
+fn poster_sheets_for_page(
+    view: &pdfce_core::view::DocumentView<'_>,
+    page: &pdfce_core::page_tree::Page,
+    layout: &pdfce_print::imposition::PosterLayout,
+    tile_scale: f64,
+    dpi: u32,
+    printable_pt: (f64, f64),
+    options: &pdfce_render::RenderOptions,
+) -> Result<(Vec<pdfce_print::PageBitmap>, PosterRoute), String> {
+    let device_scale = f64::from(dpi) / 72.0;
+    #[allow(clippy::cast_possible_truncation)]
+    let render_scale = (device_scale * tile_scale) as f32;
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let px = |pt: f64| (pt * device_scale).round().max(1.0) as u32;
+    let (sw, sh) = (px(printable_pt.0), px(printable_pt.1));
+
+    let (_, _, page_ctm) = pdfce_render::page_device_geometry(page, render_scale);
+    let Some(inverse) = page_ctm.invert() else {
+        return Err("the page transform is not invertible, so it cannot be tiled".to_owned());
+    };
+
+    // One interpretation for the whole poster when the page allows it.
+    let list = pdfce_render::record_page(view, page, render_scale, 0, options).ok();
+    let route = if list.is_some() {
+        PosterRoute::Recorded
+    } else {
+        PosterRoute::PerTile
+    };
+
+    let mut sheets: Vec<pdfce_print::PageBitmap> = Vec::new();
+    for tile in &layout.tiles {
+        let Some(mut sheet) = pdfce_render::tiny_skia::Pixmap::new(sw, sh) else {
+            return Err(format!(
+                "a sheet of {sw}x{sh} pixels is too large to compose"
+            ));
+        };
+        sheet.fill(pdfce_render::tiny_skia::Color::WHITE);
+
+        // The tile's window in the page's DEVICE space. `+ 1` of slack on
+        // each side before inverting, so a sub-ULP round trip through the
+        // inverse cannot land the region a fraction inside the window and
+        // clip a column. Over-rendering costs pixels nobody reads; under-
+        // rendering loses content at a tile seam, which is the defect a
+        // poster shows most visibly.
+        #[allow(clippy::cast_possible_truncation)]
+        let (dx0, dy0) = (
+            (tile.source_pt.x * tile_scale * device_scale) as f32 - 1.0,
+            (tile.source_pt.y * tile_scale * device_scale) as f32 - 1.0,
+        );
+        #[allow(clippy::cast_possible_truncation)]
+        let (dx1, dy1) = (
+            ((tile.source_pt.x + tile.source_pt.width) * tile_scale * device_scale) as f32 + 1.0,
+            ((tile.source_pt.y + tile.source_pt.height) * tile_scale * device_scale) as f32 + 1.0,
+        );
+        let mut corners = [
+            pdfce_render::tiny_skia::Point::from_xy(dx0, dy0),
+            pdfce_render::tiny_skia::Point::from_xy(dx1, dy0),
+            pdfce_render::tiny_skia::Point::from_xy(dx1, dy1),
+            pdfce_render::tiny_skia::Point::from_xy(dx0, dy1),
+        ];
+        inverse.map_points(&mut corners);
+        let (mut lo_x, mut lo_y) = (f64::INFINITY, f64::INFINITY);
+        let (mut hi_x, mut hi_y) = (f64::NEG_INFINITY, f64::NEG_INFINITY);
+        for c in corners {
+            lo_x = lo_x.min(f64::from(c.x));
+            hi_x = hi_x.max(f64::from(c.x));
+            lo_y = lo_y.min(f64::from(c.y));
+            hi_y = hi_y.max(f64::from(c.y));
+        }
+        let region = pdfce_core::page_tree::Rect::from_corners(lo_x, lo_y, hi_x, hi_y);
+
+        // Where the region's own pixel (0,0) sits in page-device space —
+        // read from the SAME function the renderer uses to place it, never
+        // recomputed here, so the two cannot disagree about the origin.
+        let Some((_, _, rx0, ry0)) = pdfce_render::region_device_geometry(page_ctm, region) else {
+            return Err("a tile's region does not map onto the page".to_owned());
+        };
+
+        let rendered = match &list {
+            Some(list) => list.replay_region(list.key(), region),
+            None => pdfce_render::render_page_region(view, page, render_scale, region, options),
+        }
+        .map_err(|e| format!("tile r{} c{}: {e}", tile.row, tile.column))?;
+
+        // The page-device pixel the tile's top-left corner shows, in the
+        // rounding the previous implementation used — kept identical so the
+        // content lands on the same sheet pixel it always has.
+        #[allow(clippy::cast_possible_wrap)]
+        let sx = px(tile.source_pt.x * tile_scale) as i32;
+        #[allow(clippy::cast_possible_wrap)]
+        let sy = px(tile.source_pt.y * tile_scale) as i32;
+        #[allow(clippy::cast_possible_truncation)]
+        let (ox, oy) = (rx0 as i32, ry0 as i32);
+        #[allow(clippy::cast_possible_wrap)]
+        sheet.draw_pixmap(
+            px(tile.sheet_pt.x) as i32 - (sx - ox),
+            px(tile.sheet_pt.y) as i32 - (sy - oy),
+            rendered.pixmap.as_ref(),
+            &pdfce_render::tiny_skia::PixmapPaint::default(),
+            pdfce_render::tiny_skia::Transform::identity(),
+            None,
+        );
+        sheets.push(pdfce_print::PageBitmap {
+            width: sheet.width(),
+            height: sheet.height(),
+            rgba: sheet.data().to_vec(),
+            placement: pdfce_print::Placement {
+                scale: 1.0,
+                offset_x_pt: 0.0,
+                offset_y_pt: 0.0,
+                clipped: false,
+            },
+            page_pt: printable_pt,
+        });
+    }
+    Ok((sheets, route))
+}
+
+/// The poster tiler's differential oracle.
+///
+/// # Why a second implementation lives here, when this project treats "two
+/// paths for one thing" as a trap
+///
+/// Because this is the *test* side of a differential, not a second shipping
+/// path — the same shape `crates/pdfce-render/tests/region_matches_full_page.rs`
+/// uses, where a region render is proved against a crop of a full-page one.
+///
+/// The change being tested replaced "render the whole page, crop each tile
+/// out of it" with "render each tile as a region". The only oracle worth
+/// having is the implementation it replaced, held byte-for-byte — so it is
+/// kept, verbatim, behind `#[cfg(test)]`, and the new one has to match it on
+/// a page small enough that the old one still works.
+///
+/// It cannot drift into production: it is unreachable outside `cargo test`,
+/// and if it ever stops compiling that is a signal the geometry it encodes
+/// changed and the assertion below needs re-deriving rather than deleting.
+#[cfg(all(test, windows))]
+mod poster_tiling_tests {
+    use super::{PosterRoute, poster_sheets_for_page};
+
+    /// The PREVIOUS implementation, kept verbatim as the oracle: render the
+    /// whole page once at tile scale, then copy each tile's window out of it.
+    fn whole_page_reference(
+        view: &pdfce_core::view::DocumentView<'_>,
+        page: &pdfce_core::page_tree::Page,
+        layout: &pdfce_print::imposition::PosterLayout,
+        tile_scale: f64,
+        dpi: u32,
+        printable_pt: (f64, f64),
+        options: &pdfce_render::RenderOptions,
+    ) -> Vec<Vec<u8>> {
+        let px = |pt: f64| (pt * f64::from(dpi) / 72.0).round().max(1.0) as u32;
+        let (sw, sh) = (px(printable_pt.0), px(printable_pt.1));
+        let render_scale = (f64::from(dpi) / 72.0) * tile_scale;
+        let rendered =
+            pdfce_render::render_page_with_view(view, page, render_scale as f32, options)
+                .expect("the reference implementation must be able to render this page whole");
+        let mut out = Vec::new();
+        for tile in &layout.tiles {
+            let mut sheet = pdfce_render::tiny_skia::Pixmap::new(sw, sh).expect("sheet");
+            sheet.fill(pdfce_render::tiny_skia::Color::WHITE);
+            let sx = px(tile.source_pt.x * tile_scale) as i32;
+            let sy = px(tile.source_pt.y * tile_scale) as i32;
+            sheet.draw_pixmap(
+                px(tile.sheet_pt.x) as i32 - sx,
+                px(tile.sheet_pt.y) as i32 - sy,
+                rendered.pixmap.as_ref(),
+                &pdfce_render::tiny_skia::PixmapPaint::default(),
+                pdfce_render::tiny_skia::Transform::identity(),
+                None,
+            );
+            out.push(sheet.data().to_vec());
+        }
+        out
+    }
+
+    fn fixture(rel: &str) -> std::path::PathBuf {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/synthetic")
+            .join(rel)
+    }
+
+    /// ★ Per-tile regions produce byte-identical sheets to cropping a
+    /// whole-page render.
+    ///
+    /// Run over several magnifications, because the tile grid changes shape
+    /// with `tile_scale` and a geometry error that cancels on a 2x2 grid
+    /// will not on a 3x3.
+    #[test]
+    fn tiles_rendered_as_regions_match_the_whole_page_crop() {
+        let doc = pdfce_core::document::Document::load(&fixture("addtext/plain.pdf"))
+            .expect("fixture loads");
+        let page = pdfce_core::page_tree::pages(&doc)
+            .expect("page tree")
+            .remove(0);
+        let size = (
+            page.crop_box.urx - page.crop_box.llx,
+            page.crop_box.ury - page.crop_box.lly,
+        );
+        // An A4 printable area, near enough — the exact paper does not
+        // matter, only that the page needs more than one sheet of it.
+        let printable_pt = (560.0, 770.0);
+        let options = pdfce_render::RenderOptions::default();
+
+        for tile_scale in [1.5_f64, 2.0, 3.0] {
+            let spec = pdfce_print::imposition::PosterSpec {
+                tile_scale,
+                overlap_pt: 12.0,
+                cut_marks: false,
+                labels: false,
+                tile_only_large_pages: false,
+                max_tiles: 64,
+            };
+            let layout = pdfce_print::imposition::plan_poster(printable_pt, size, &spec)
+                .expect("poster plans");
+            assert!(
+                layout.tiles.len() > 1,
+                "a tile_scale of {tile_scale} must actually tile, or this proves nothing"
+            );
+
+            let expected = whole_page_reference(
+                &doc.view(),
+                &page,
+                &layout,
+                tile_scale,
+                150,
+                printable_pt,
+                &options,
+            );
+            let (got, route) = poster_sheets_for_page(
+                &doc.view(),
+                &page,
+                &layout,
+                tile_scale,
+                150,
+                printable_pt,
+                &options,
+            )
+            .expect("tiles rasterise");
+
+            assert_eq!(
+                route,
+                PosterRoute::Recorded,
+                "a plain text page must take the recorded route, or this test is \
+                 measuring the fallback and not the change"
+            );
+            assert_eq!(got.len(), expected.len(), "sheet count at {tile_scale}x");
+            for (i, (sheet, want)) in got.iter().zip(expected.iter()).enumerate() {
+                let differing = sheet
+                    .rgba
+                    .iter()
+                    .zip(want.iter())
+                    .filter(|(a, b)| a != b)
+                    .count();
+                assert_eq!(
+                    differing,
+                    0,
+                    "{tile_scale}x sheet {i}: rendering a tile as a REGION must give \
+                     the same bytes as cropping it out of a whole-page render; \
+                     {differing} of {} bytes differ. A count in the thousands with \
+                     the right sheet size means the window is offset, not that the \
+                     drawing is wrong.",
+                    want.len()
+                );
+            }
+        }
+    }
+
+    /// The bug this change exists to fix: a magnification whose whole-page
+    /// raster exceeds `MAX_PIXMAP_EDGE` now tiles instead of failing.
+    ///
+    /// The control matters as much as the case — the reference implementation
+    /// is asserted to FAIL here, so the test cannot pass because the numbers
+    /// happened to stay small.
+    #[test]
+    fn a_magnification_too_large_to_raster_whole_still_tiles() {
+        let doc = pdfce_core::document::Document::load(&fixture("addtext/plain.pdf"))
+            .expect("fixture loads");
+        let page = pdfce_core::page_tree::pages(&doc)
+            .expect("page tree")
+            .remove(0);
+        let size = (
+            page.crop_box.urx - page.crop_box.llx,
+            page.crop_box.ury - page.crop_box.lly,
+        );
+        let printable_pt = (560.0, 770.0);
+        let options = pdfce_render::RenderOptions::default();
+        // 612 x 792 pt at 150 DPI is 1275 x 1650 px; x30 magnification is
+        // 38,250 x 49,500 -- comfortably past MAX_PIXMAP_EDGE (16,384).
+        let tile_scale = 30.0;
+        let spec = pdfce_print::imposition::PosterSpec {
+            tile_scale,
+            overlap_pt: 0.0,
+            cut_marks: false,
+            labels: false,
+            tile_only_large_pages: false,
+            max_tiles: 4096,
+        };
+        let layout =
+            pdfce_print::imposition::plan_poster(printable_pt, size, &spec).expect("poster plans");
+
+        // THE CONTROL: the old route cannot even produce the raster.
+        let render_scale = ((150.0 / 72.0) * tile_scale) as f32;
+        assert!(
+            matches!(
+                pdfce_render::render_page_with_view(&doc.view(), &page, render_scale, &options),
+                Err(pdfce_render::RenderError::BadRasterSize { .. })
+            ),
+            "this test is only meaningful while a whole-page raster at this \
+             magnification is impossible; if that changed, re-derive the numbers"
+        );
+
+        // Rasterise a few tiles rather than all 1,000-odd: the assertion is
+        // about REACHABILITY, and byte-identity is already covered above.
+        //
+        // Which tiles is not a free choice, and two guesses were wrong before
+        // this comment existed. Tile 0 is the page's top-left margin; the
+        // middle of the grid is the middle of a text page's leading. Both are
+        // legitimately blank, and asserting ink on a blank tile tests the
+        // fixture's layout rather than the code.
+        //
+        // So the inked tile is LOCATED rather than guessed: a cheap scale-1
+        // render gives the page's ink bounding box, and the tiles chosen are
+        // the ones whose source window contains its centre.
+        let probe = pdfce_render::render_page_with_view(&doc.view(), &page, 1.0, &options)
+            .expect("a scale-1 render of a text page");
+        let (mut ix0, mut iy0, mut ix1, mut iy1) = (u32::MAX, u32::MAX, 0_u32, 0_u32);
+        for y in 0..probe.pixmap.height() {
+            for x in 0..probe.pixmap.width() {
+                let px = probe.pixmap.pixel(x, y).expect("in bounds");
+                if px.red() != 255 || px.green() != 255 || px.blue() != 255 {
+                    ix0 = ix0.min(x);
+                    iy0 = iy0.min(y);
+                    ix1 = ix1.max(x);
+                    iy1 = iy1.max(y);
+                }
+            }
+        }
+        assert!(ix0 <= ix1, "the fixture must have ink on page 1");
+        // Scale 1 is one device pixel per point, and the device frame is
+        // already top-left-origin -- the same frame `source_pt` uses.
+        let ink_cx = f64::from(ix0 + ix1) / 2.0;
+        let ink_cy = f64::from(iy0 + iy1) / 2.0;
+        let inked: Vec<_> = layout
+            .tiles
+            .iter()
+            .filter(|t| {
+                t.source_pt.x <= ink_cx
+                    && ink_cx < t.source_pt.x + t.source_pt.width
+                    && t.source_pt.y <= ink_cy
+                    && ink_cy < t.source_pt.y + t.source_pt.height
+            })
+            .cloned()
+            .collect();
+        assert!(
+            !inked.is_empty(),
+            "the tile grid must cover the page ink at ({ink_cx}, {ink_cy})"
+        );
+
+        let mut trimmed = layout.clone();
+        trimmed.tiles = inked;
+        let wanted = trimmed.tiles.len();
+        let (sheets, route) = poster_sheets_for_page(
+            &doc.view(),
+            &page,
+            &trimmed,
+            tile_scale,
+            150,
+            printable_pt,
+            &options,
+        )
+        .expect("tiles that no whole-page raster could hold must still rasterise");
+        assert_eq!(route, PosterRoute::Recorded);
+        assert_eq!(sheets.len(), wanted);
+        assert!(
+            sheets.iter().any(|s| s.rgba.iter().any(|&b| b != 255)),
+            "the tile covering the page ink must carry ink at 30x, or the region path is producing blank paper and the reachability claim is empty"
+        );
+    }
 }
 
 /// `print-preview` — what a print WOULD do, without doing it.
