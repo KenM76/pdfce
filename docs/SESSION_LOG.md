@@ -44927,4 +44927,156 @@ correction still owed; `LUM-A1`'s spec-corpus back-fill still owed.
    entry needs correcting by whoever owns global user memory — not
    this librarian's file.
 4. `v0.6.1` release-note correction and `LUM-A1` spec-corpus back-fill
+
+## 2026-08-18 (hundred-and-sixty-fourth filing) — **TEN UNFILED COMMITS, TWO PARALLEL WORKTREE STREAMS: `Pass 95.0`/`96.0` CLOSE ALL FIVE OUTSTANDING `pdfceGUI` REQUESTS — THE CHANNEL IS EMPTY FOR THE FIRST TIME — PLUS `Pass 92.1`, `Pass 94.0` (filed out of order), a gate fix (`89f28ca`, `R192`'s SEVENTH instance), and `v0.6.1`'s version bump recorded as OWED, not released**
+
+**Shipped:**
+- `Pass 96.0` — CORE STREAM (merge + `ddeb815`+`72dcc11`+`a8381ea`).
+  `/MediaBox` write verbs + `pdfce_core::paper` + `set-page-size` CLI
+  (three-way write mirroring `rotation_write`; a target equal to the
+  inherited value removes the page's own entry). `set_markup_style` —
+  colour, interior, width, opacity, arrowheads on seven subtypes —
+  refuses a ce dimension by name (its `/AP` carries label/witness lines
+  a style-only regeneration would strip). A `ForeignAppearance`
+  false-positive (fired on markup pdfce itself just authored) fixed and
+  measured, not merely suspected. Six shipped error messages found with
+  ragged mid-sentence gaps from a wrapped-Rust-string-literal defect —
+  two have shipped since `95c3416`; ~8 more remain in `assert!`
+  messages, flagged not swept. `pdfce-spec-librarian` dispatch closed a
+  §14.11.2 gap and returned two unasked corrections (Annex C is
+  NORMATIVE in ISO 32000-1; ISO 32000-2 deletes the 3×3–14400 pt
+  page-size range). 34 sabotage checks; one found a coverage gap (no
+  test asserts an existing border WIDTH survives a colour-only
+  restyle) — flagged, disposition as live-bug-vs-test-gap-only not
+  stated by the dispatch. Declined the request's own proposed hit-test
+  ownership (the padding is already baked into the stored `/Rect` at
+  authoring time).
+- `Pass 95.0` — PRINT STREAM (merge + `c75a17c`+`c5d3ae8`+`cdac4e7`).
+  All three original `pdfceGUI` print requests traced to ONE defect:
+  `build_devmode` synthesised an empty `DEVMODEW`. Fixed by making
+  `build_devmode` genuinely fetch the driver's own default via
+  `DocumentProperties`, discharging its own doc comment's standing
+  false claim. Measured `dmDriverExtra`: 5,208 B (MS Print to PDF),
+  7,972 B (both tested EPSONs), 920 B (XPS) — up to 97% of a real
+  DEVMODE a synthesised struct always discarded. Declined the cheap
+  fix (correct the doc comment) in favour of making the code match the
+  promise: `ResetDC` between pages, ONE spooler job. Tray selection now
+  a three-state `FormSourceSupport` (not a bool — `DC_BINS` returns
+  nothing on MS Print to PDF despite a real default source existing).
+  **Found while testing, not requested:** the print path ignored
+  `/Rotate` entirely (337×238 vs the correct 595×842 for a rotated A4)
+  — distinct from `Pass 64.0`'s earlier preview-only fix. Nine
+  sabotage checks; four RAG findings confirmed already written and
+  indexed in `D:\dev\rag\rust\`. **All five `pdfceGUI` requests are now
+  CLOSED — the channel is empty for the first time this project.**
+  Two long-standing `ROADMAP.md` Backlog items discharged (tray-DEVMODE,
+  doc-comment-vs-code).
+- `Pass 92.1` — `4b58c98`. `overprint_effective` predicate (§11.7.4.3):
+  counts where honouring overprint would actually change the result,
+  distinct from `overprint_requested`'s "how often is it on." Needed a
+  CMYK-buffer prerequisite — `Half` and `set_device` now retain DEVICE
+  components, not just sRGB; `g`/`rg`/`k` (the three commonest colour
+  operators in any PDF) previously bypassed `ColorState::set` entirely
+  and were invisible to overprint. **Finding that reprioritises `85.5`
+  further**: overprint is effective on the GWG 16.x TRANSPARENCY
+  patches too (19 each), not only the classic overprint set — the
+  n-channel buffer is worth more of the corpus than the failure-cause
+  table alone suggested. A false "N out of M" subset claim (painted
+  objects vs `gs` operators — neither is a subset of the other) caught
+  and corrected before shipping.
+- `Pass 94.0` — `47e4d37`, **filed out of strict chronological order**
+  (predates `Pass 92.0`/`93.0`, already filed above it in *Shipped*).
+  `tools/ghent-check.py` — automates the Ghent suite's own criterion
+  (a pre-swapped X-trap), not a pdfium diff. First run reported 29/51;
+  the honest figure was lower, caught before being reported as final —
+  13 of 51 patches use reference strips, not X-traps, and needed the
+  `--reference-dir` mode `Pass 93.0` shipped last filing.
+- `89f28ca` — hash-headed, no Pass number (tooling fix, per the
+  `b902ea0`+`b1ee1cf` precedent). `tools/check-settings-consumed.py`
+  widened through THREE fixes, each looking sufficient until sabotage
+  disagreed: (1) scope widened from one struct/file/crate to a new
+  `OPTION_STRUCTS` list; (2) a GUI checkbox binding (`&mut
+  pending.device.pick_tray_by_page_size`, no `=`) was counted as a
+  READER — the producer counted as the consumer, the exact shape of the
+  original defect, reproduced inside the gate itself; (3) **`CONSUMER_ROOTS`
+  never included `pdfce-print` at all** — a third of the codebase was
+  never in the gate's own search space, so no regex could ever have
+  found a reader in the one crate the setting actually lived in.
+  Reproducing the original defect went RED only under the final fix.
+  **Ruled: cite `R192`, do not mint** — this is its SEVENTH instance
+  (table in *Standing rules* updated; the table itself was found stale,
+  never extended past instance 4 despite instances 5/6 existing in
+  prose elsewhere — noted in place, not silently continued). Fix 2
+  (producer-counted-as-consumer) judged a DIFFERENT shape from `R192`
+  and written to `D:\dev\rag\rust\` as its own finding instead.
+- `9433032` — hash-headed, no Pass number (version-bump record, per the
+  `abe6c97` precedent). `0.6.0` → `0.6.1`, `fuzz/Cargo.lock` bumped in
+  the SAME commit this time. **★ NOT a release record — no tag, no CI
+  run against a tagged commit, no GitHub release, `verify-release.py`
+  has not run.** The engineer was redirected mid-release by the
+  operator. Recorded as OWED.
+
+**Decisions made this session:** none minted. Ceiling stays **068**,
+next free **069** — none of today's six items redraws a crate boundary,
+picks a library, or defines/refines an invariant; all are conformance
+fixes, a gate widening, a version bump, and a harness build.
+
+**Findings + decisions:**
+- The `pdfceGUI` request channel being EMPTY is recorded as a first,
+  not a housekeeping footnote — every prior filing this session that
+  touched the channel described it mid-exchange.
+- `R192`'s own instance-enumeration table (*Standing rules*) was
+  discovered stale — it stopped at instance 4 while the surrounding
+  prose already referenced instances 5 and 6 (`Pass 87.0`, `Pass
+  91.0`). Fixed with pointer rows rather than silently adding instance
+  7 on top of a table that undercounted itself; a stale enumeration
+  table under a rule ABOUT enumeration gaps is exactly the shape `R192`
+  names.
+- Two RAG findings written this filing (see below) — the
+  wrapped-string-literal defect (Rust, generalises past pdfce) and the
+  producer-counted-as-consumer gate shape (Rust/tooling methodology,
+  distinct from `R192`'s "cannot see" shape — this is "misclassifies
+  what it does see").
+- Confirmed, not merely trusted: the print stream's claimed "four RAG
+  findings written to `D:\dev\rag\rust\`" — grepped, all four (plus
+  five further sibling findings from the same stream) present on disk
+  and indexed in that directory's own `index.md`.
+
+**Verification (relayed, no shell this dispatch — hard rule 8):**
+**3,781 → 3,868 tests, +87, 0 failures**, state at `HEAD` after the
+whole merged tree (both worktree streams plus this session's own render
+work). `cargo fmt --check` / `cargo clippy --workspace --all-targets --
+-D warnings` clean. `tools/check-settings-consumed.py` /
+`check-ui-strings` / `check-fmt-excluded` / `check-shipped-assets` /
+`check-ledger-numbers` all clean. `cargo tree -p pdfce-core` /
+`-p pdfce-render` — zero GUI-crate hits, GUI-core separation holds.
+
+**Still in flight:** `Pass 72.0`/`73.0`/`73.1`/`86.0` HIGH PRIORITY
+still unstarted; `85.4c` remainder + `85.5` (now co-first, and `85.5`
+measured worth more of the corpus than previously ranked, per `Pass
+92.1`) both still blocked on the `iccce` CMYK-buffer request; `85.1`
+(mesh shadings) third; **`v0.6.1`'s tag/CI/publish still owed** (this
+filing records the version bump only); `LUM-A1` spec-corpus back-fill
+still owed; **~8 wrapped-string-literal doc-comment/assert-message
+defects remain unswept** (flagged by `Pass 96.0`'s dispatch, not this
+filing's to fix); the stale `acrobat-reader-is-available-pro-is-not.md`
+global-memory entry (flagged 163rd filing) still needs correcting by
+whoever owns global user memory.
+
+**For next session:**
+1. **Next free Pass family is `97`** (`92.1`/`94`/`95`/`96` all spent
+   this filing). Next free decision is still **069** (none minted).
+   Next free filing ordinal is **165**. Next free standing rule is
+   still **`R196`** — `R192` gained a seventh instance, no new rule
+   minted.
+2. `85.5`/`85.4c` remainder both still gated on `iccce`'s reply to
+   `request_cmyk_buffer_destination_and_width.md` — whichever unblocks
+   first, start it.
+3. Complete the `v0.6.1` release (tag, CI, `verify-release.py`,
+   GitHub release) — the version bump exists on disk, nothing past it
+   has happened yet.
+4. Sweep the remaining ~8 wrapped-string-literal defects in `assert!`
+   messages — a mechanical, low-risk cleanup flagged but not actioned
+   this session.
+5. `LUM-A1` spec-corpus back-fill still owed.
    both still owed, unaffected by this filing.

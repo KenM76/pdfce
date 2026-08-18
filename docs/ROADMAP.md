@@ -96,6 +96,449 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★★★ Pass 96.0 — CORE STREAM — merge commit + `ddeb815`+`72dcc11`+`a8381ea` — **A PAGE'S OWN `/MediaBox` IS NOW WRITABLE, AND A PLACED MARKUP CAN BE RESTYLED WITHOUT REGENERATING ITS `/AP` FROM SCRATCH** — the ce-dimension refusal, a false-positive disclosure now measured, and two more instances of the wrapped-string-literal defect — filed 2026-08-18 (hundred-and-sixty-fourth filing)
+
+**Filed by `pdfce-librarian`, no shell available (hard rule 8) — every
+figure below is RELAYED from the dispatching engineer's report, not
+independently re-run or read via `git show`.** Ran in an isolated
+worktree, concurrent with this session's render work (`Pass 92.0`/
+`92.1`/`93.0`) and with `Pass 95.0` below, scope hard-partitioned by
+crate. This entry bundles TWO capabilities landed together across the
+same three commits; this librarian cannot attribute which specific
+commit implements which without `git show`, so both are recorded under
+one family rather than guessing a split.
+
+**What shipped, capability 1 — page size.** `/MediaBox` write verbs plus
+`pdfce_core::paper` and a `set-page-size` CLI verb, mirroring the
+existing `rotation_write` three-way write because both mutate an
+INHERITABLE Table 30 page attribute. **The load-bearing clause:** a
+target size equal to the page's own INHERITED value REMOVES the page's
+own `/MediaBox` entry rather than writing a redundant one — writing to
+the ancestor `/Pages` node then resizes every sibling page at once, a
+consequence invisible to a one-page fixture. Proven in bytes, per the
+dispatch (not independently re-verified this filing).
+
+**What shipped, capability 2 — markup style.** `set_markup_style` —
+colour, interior fill, line width, opacity and arrowheads, across seven
+markup subtypes.
+
+**★ The refusal, by name.** A ce dimension is, structurally, a `/Line`
+annotation with `/IT /LineDimension` — it passes every existing "is this
+a markup pdfce can author" test. Restyling it through the same code path
+as an ordinary line would have regenerated its `/AP` from style alone,
+which is not what a ce dimension's appearance is: the label and witness
+lines would vanish from an operator request that only asked to recolour
+the annotation. `set_markup_style` refuses a ce dimension by name rather
+than silently degrading it.
+
+**★ A disclosure that cried wolf, now measured rather than merely
+suspected.** `ForeignAppearance` fired on every regeneration —
+including recolouring a square pdfce itself had authored seconds
+earlier — warning about shadows and gradients that were never present.
+**Caught by running the binary, not by a unit test.** Fixed alongside
+the style work.
+
+**Six shipped error messages had ragged mid-sentence gaps**, traced to
+Rust multiline string literals that lost the trailing `\` line-
+continuation character somewhere in the wrap/reformat history — the
+literal then bakes in a literal newline-plus-indentation as visible
+whitespace mid-sentence. **Two of the six have shipped since `95c3416`**;
+nothing in the toolchain (`rustfmt`, `clippy`) catches this class.
+Roughly **8 more instances remain in `assert!` messages**, reported by
+the dispatch as found, **not swept this session** — see the RAG finding
+below and the follow-up flag in *Next up*.
+
+**Spec grounding.** Dispatched `pdfce-spec-librarian` for the styling
+authority (§14.11.2-adjacent), which closed a genuine gap in the spec
+corpus and returned two corrections the dispatch had not asked for:
+**Annex C is NORMATIVE in ISO 32000-1** (the corpus previously recorded
+it as informative — retracted), and **ISO 32000-2 deletes the
+3×3–14400 pt page-size range entirely** (relevant to capability 1's own
+bounds-checking, since a page-size write verb needs a real ceiling).
+
+**Sabotage.** 34 checks; one surfaced a genuine coverage gap rather than
+a confirmed live defect — **no existing test asserted that a placed
+markup's border WIDTH survives a colour-only restyle**, so (per the
+dispatch's own wording) a 7 pt border *would have* silently thinned to
+the default 1 pt had the write path been wrong in that one dimension.
+Flagged as found; whether the underlying behaviour is actually broken
+or only untested is not stated in the dispatch — do not read this as a
+confirmed live bug without independent verification.
+
+**Where the request was wrong, and the pushback that mattered.** The
+originating request argued pdfce should own hit-testing for a restyled
+markup, reasoning that a consuming shell would otherwise have to
+re-implement `bounds_of`'s pen-half-width padding itself. The dispatch
+declined: that padding is applied at AUTHORING time, so the stored
+`/Rect` already contains it — a shell re-deriving it would be
+duplicating work already done, not filling a real gap.
+
+**`FEATURES.md`.** Two new *Implemented* rows: "Set a page's size
+(`/MediaBox`)" under *Document & pages*, and "Restyle a placed markup
+annotation" under *Annotations & markup* — both `core [x] · cli [x] ·
+gui [ ]` (GUI paused, per operator instruction, not built this session).
+
+**`ARCHITECTURE.md` §12.** No new decision-log entry — a three-way
+inheritable-attribute write mirroring an existing pattern
+(`rotation_write`) is not a new crate boundary, invariant, or library
+choice.
+
+**Gates (relayed).** See this filing's combined verification note at
+the foot of `Pass 95.0`'s entry, below — **3,868 tests, 0 failures**
+at the fully-merged tree, fmt/clippy clean, `cargo tree` GUI-core
+separation holds.
+
+**Ledger effects.** Pass family: **95 → 96** (this Pass); next free
+family **97**. Standing rules: no new rule minted this entry. Decisions:
+none minted — ceiling stays **068**, next free **069**.
+
+### ★★★★ Pass 95.0 — PRINT STREAM — merge commit + `c75a17c`+`c5d3ae8`+`cdac4e7` — **THREE `pdfceGUI` PRINT REQUESTS WERE ONE DEFECT: `build_devmode` SYNTHESISED AN EMPTY DEVMODE, AND A FOURTH BUG — A PRINT PATH THAT IGNORED `/Rotate` ENTIRELY — WAS FOUND WHILE TESTING THE FIX** — the `pdfceGUI` request channel is now EMPTY for the first time — filed 2026-08-18 (hundred-and-sixty-fourth filing)
+
+**Filed by `pdfce-librarian`, no shell available (hard rule 8) — every
+figure below is RELAYED from the dispatching engineer's report, not
+independently re-run or read via `git show`.** Ran in an isolated
+worktree, concurrent with `Pass 96.0` above and this session's render
+work, scope hard-partitioned by crate.
+
+**Root cause, one defect behind three separate `pdfceGUI` requests.**
+`build_devmode` synthesised a bare `DEVMODEW::default()` and handed it
+to `CreateDC` — every driver-specific field a real printer's own
+default carries was silently discarded before a job was ever planned.
+**Measured: `dmDriverExtra` — the driver-private tail a synthesised
+struct has none of — is 5,208 B on MS Print to PDF, 7,972 B on both
+tested EPSON devices, 920 B on the XPS driver.** On the EPSONs, **97%
+of a real DEVMODE is that driver-private tail.**
+
+**★ A doc comment found lying about its own function, the same defect
+this ROADMAP already had flagged as unfixed** (Backlog, "`build_devmode`'s
+own doc comment describes code that is not there", filed 2026-08-11).
+The comment's heading read *"Why it starts from the driver's own default
+rather than zeroed"* and claimed *"the driver's current default is
+fetched first"* — **nothing was fetched; the parameter existed,
+underscore-prefixed, unused.** Fixed by making the code do what the
+comment always claimed: `build_devmode` now genuinely fetches the
+driver's own default via `DocumentProperties` before building the job's
+DEVMODE, rather than starting from zero.
+
+**What shipped, capability 1 — printer paper selection.** The paper
+size/source fields encoded in the driver's own real default now reach
+the job at all, since they are no longer discarded by a zeroed struct
+before the job is ever planned.
+
+**What shipped, capability 2 — printer properties dialog.** Every OTHER
+driver-configured setting the operator has already chosen through the
+device's own properties (colour mode, quality, and whatever else lives
+in `dmDriverExtra`) now survives into the job too — not only the fields
+pdfce itself sets — because the whole real DEVMODE is fetched, not one
+field patched onto a blank one.
+
+**What shipped, capability 3 — input-tray selection, discharging the
+matching Backlog item** (filed 2026-08-11, "`DeviceSettings::pick_tray_by_page_size`
+sets no DEVMODE field"). **Declined the request's own proposed design**
+— a bare `bool` "is this tray supported" check would have stated
+something false, because `DC_BINS` returns NOTHING on MS Print to PDF
+even though that device's `dmDefaultSource` already names
+`DMBIN_FORMSOURCE`. Shipped instead as a three-state `FormSourceSupport`
+(`Supported` / `NotListed` / `Unsupported`) — `NotListed` is explicitly
+NOT a refusal.
+
+**What shipped, capability 4 — per-page print orientation, found while
+TESTING the fix, not requested.** The print path ignored a page's own
+`/Rotate` entirely: `render-page` reported **337×238** for an A4 page
+carrying `/Rotate 90`, while `print-preview` reported **595×842** for
+the same page — wrong scale, wrong orientation, a wrong clip verdict,
+and a landscape pixmap stretched into a portrait rect. **Distinct from
+the already-shipped `Pass 64.0` fix** (the print PREVIEW reflecting the
+operator's Portrait/Landscape RADIO) — this is the render/print engine
+itself honouring the page's OWN rotation, a different bug in a
+different layer, found by testing the DEVMODE fix rather than by the
+original requests.
+
+**Mechanism, single-job printing.** Declined the request's own cheap
+option — *"correct the documentation and I'll take it"* — because
+per-job DEVMODE reconstruction is wrong for the documents this operator
+actually prints; the code moved to match the promise instead of the
+promise being lowered to match the code. `ResetDC` between pages, ONE
+spooler job for a multi-page print, not one job per page.
+
+**Sabotage + RAG.** Nine sabotage checks. New public API and CLI surface
+listed in the merge commit (not independently enumerated this filing —
+no shell). **Four RAG findings written to `D:\dev\rag\rust\`** by the
+print-stream session itself — confirmed present and indexed by this
+librarian: `resetdc_between_endpage_and_startpage_gives_per_page_orientation_in_one_spooler_job.md`,
+`a_driver_accepts_a_devmode_paper_request_and_ignores_or_clamps_it_without_error.md`,
+`devmode_held_as_a_devmodew_value_silently_truncates_the_drivers_private_tail.md`,
+and `windows_dmduplex_flag_names_the_flip_axis_not_the_binding_edge.md`
+(plus several sibling findings from the same stream already indexed:
+`windows_rs_collapses_fmode_and_dmfields_dm_constants_into_one_type_so_dm_in_prompt_equals_dm_paperlength.md`,
+`a_caller_supplied_disambiguator_must_be_a_parameter_not_rederived_from_a_sometimes_equal_proxy.md`,
+`a_disturb_nothing_by_default_guard_can_silently_disable_the_default_behaviour_it_is_guarding.md`,
+`win32_landscape_device_space_rotates_the_whole_margin_ring_not_just_width_and_height.md`,
+`an_infallible_from_impl_that_drops_a_required_parameter_is_a_trap_not_a_convenience.md`).
+
+**★ The `pdfceGUI` request channel is EMPTY for the first time.** All
+five outstanding `pdfceGUI` feature requests are now CLOSED with
+replies archived in `D:\Dev\FeatureRequests\pdfce_FeatureRequests\archive\`
+— worth recording as a first, not merely a housekeeping note, since
+every prior filing this session that touched the channel described it
+mid-exchange, never empty.
+
+**Backlog discharge.** See the *Backlog* section, immediately below —
+two long-standing items closed by this Pass: "`DeviceSettings::pick_tray_by_page_size`
+sets no DEVMODE field" and "`build_devmode`'s own doc comment describes
+code that is not there."
+
+**`FEATURES.md`.** Four new *Implemented* rows under *Reading,
+navigation & printing*: "Printer paper selection," "Printer properties
+dialog," "Input-tray selection," "Per-page print orientation" — all
+`core [x] · cli [x] · gui [ ]` (GUI deliberately paused; do not round
+the GUI box up).
+
+**`ARCHITECTURE.md` §12.** No new decision-log entry — this is a
+bug-fix/correctness Pass against an existing crate (`pdfce-print`), not
+a crate-boundary or library-choice decision.
+
+**Verification (relayed, whole merged tree, both streams plus this
+session's render work).** **3,781 → 3,868 tests, +87, 0 failures.**
+`cargo fmt --check` and `cargo clippy --workspace --all-targets -- -D
+warnings` clean. `tools/check-settings-consumed.py`, `check-ui-strings`,
+`check-fmt-excluded`, `check-shipped-assets`, `check-ledger-numbers` all
+clean. `cargo tree -p pdfce-core` / `-p pdfce-render` — zero GUI-crate
+hits, GUI-core separation invariant holds.
+
+**Ledger effects.** Pass family: **93 → 95** (this Pass; `94` reserved
+by the Ghent-harness entry below, filed the same session out of strict
+commit order — see that entry's own note); next free family **96**
+(consumed immediately by `Pass 96.0`, above). Standing rules: no new
+rule minted this entry. Decisions: none minted — ceiling stays **068**,
+next free **069**.
+
+### `89f28ca` — **THE GATE WRITTEN FOR AN INERT SETTING COULD NOT SEE THE INERT SETTING THAT SHIPPED — THREE FIXES DEEP, EACH ONE LOOKING SUFFICIENT UNTIL SABOTAGE SAID OTHERWISE** — `tools/check-settings-consumed.py` widened; `R192` gains a SEVENTH instance — filed 2026-08-18 (hundred-and-sixty-fourth filing)
+
+**Filed by `pdfce-librarian`, no shell available (hard rule 8) — every
+figure below is RELAYED from the dispatching engineer's report.**
+
+**Fix 1 — scope.** The gate was hard-bound to one struct, in one file,
+in one crate (`Settings`), while the defect class it exists to catch —
+*a `pub` option field nobody reads* — is not scoped to that struct at
+all. Widened with a new `OPTION_STRUCTS` list (consume-only; an option
+struct, unlike `Settings`, has no on-disk file format to round-trip).
+This immediately flagged `RenderOptions.annotation_scope` as unread —
+**a defect in the WIDENED RULE, not the code**: the original convention
+(ignore reads inside the struct's own owning module, since `Settings`
+consumes itself) was carried over uncritically, but an option struct is
+an INPUT to its OWN crate, so an in-module read is a real consumer, not
+a false positive to suppress.
+
+**Fix 2 — read vs write, the producer counted as the consumer.**
+`pdfce-gui` binds a checkbox with `&mut pending.device.pick_tray_by_page_size`
+— no `=` anywhere in that call — so a textual `.field` search matched it
+and the gate counted the GUI's own SETTER as a reader. **This is the
+exact shape of the original defect the gate exists to catch, reproduced
+inside the gate itself**: the code that PRODUCES a value read as the
+code that CONSUMES it.
+
+**★ Fix 3 — `CONSUMER_ROOTS` never included `pdfce-print` at all.** Four
+of six crates were scanned. **No regex could ever have found a reader
+in the one crate the setting actually lives in and is consumed by**,
+because the gate never opened its files — not a false negative from
+imperfect matching, but files never in the search space to begin with.
+
+**Verification.** The original defect was reproduced exactly and
+watched go RED under the final gate; it had stayed GREEN through both
+of the first two "fixes."
+
+**★ Ruling requested on standing-rule shape — CITED, not minted, as the
+SEVENTH instance of `R192`** ("a gate states what it cannot see").
+Fixes 1 and 3 are both, precisely, an obligation ("every `pub` option
+field is read somewhere," "every crate that could consume a setting is
+in the search space") whose GATE's own input set was narrower than the
+obligation — `R192`'s canonical shape, restated in its own words: *"a
+gate's scope is defined by what a tool can SEE rather than by what the
+rule COVERS."* **This instance is sharper than several of the prior
+six**, worth noting in the table rather than only the count: `Fix 3`'s
+blind spot was not merely undocumented, it was STRUCTURALLY incapable
+of catching the one defect the gate was written for — a third of the
+codebase was never in its own input set. Ceiling stays **R195**; the
+instance count is what moves, sixth → seventh.
+
+**Fix 2 is a DIFFERENT shape, not folded into `R192`.** It is not "the
+gate cannot see X," it is "the gate MISCLASSIFIES a write as a read" —
+a false categorisation, not an absent enumeration. Not proposed as a
+standing rule this filing (bar is three confirmed instances before
+proposing); see the RAG finding written below, `D:\dev\rag\rust\`,
+which is this librarian's judgement call that it generalises past
+pdfce.
+
+**`FEATURES.md`.** No row change — a static-analysis gate over
+`pdfce`'s own settings surface is tooling, not an operator-facing
+capability.
+
+**`ARCHITECTURE.md` §12.** No new decision-log entry.
+
+**Ledger effects.** No Pass number (tooling fix, hash-headed entry, per
+this file's own established convention for gate/tooling commits — see
+`b902ea0`+`b1ee1cf`, hundred-and-twenty-fourth filing). Standing rules:
+`R192` cited, SEVENTH instance; ceiling stays **R195**, next free
+**R196**. Decisions: none — ceiling stays **068**, next free **069**.
+
+### `9433032` — VERSION BUMP `0.6.0` → `0.6.1`, PATCH — bumped alongside `fuzz/Cargo.lock` in the SAME commit this time (the prior release let it go stale, costing a tag delete/recreate); **★ `v0.6.1`'s TAG/CI/PUBLISH ARE NOT DONE AS OF THIS FILING — this is a version-bump record, not a release record** — filed 2026-08-18 (hundred-and-sixty-fourth filing)
+
+**Filed by `pdfce-librarian`, no shell available (hard rule 8) —
+relayed, not independently confirmed via `git show` or a binary
+`--version` check.**
+
+**What this commit does, as reported.** `Cargo.toml`/`Cargo.lock` bump
+`0.6.0` → `0.6.1`, and — learning from the prior release, where
+`fuzz/Cargo.lock` was left stale and cost a tag delete/recreate —
+`fuzz/Cargo.lock` is bumped in the SAME commit this time.
+
+**★ CAVEAT, load-bearing.** The dispatch is explicit: the engineer was
+**redirected mid-release by the operator** and did not return to finish
+it. **No tag exists, no CI run has been made against a tagged commit, no
+GitHub release has been published, and `tools/verify-release.py` has
+not run.** Per hard rule 8, this librarian does not assert release state
+it has not had reported as already true — and the dispatch itself
+reports the opposite. **This entry is NOT a release record and must not
+be read as one**; a dedicated release-record entry — tag hash,
+`verify-release.py`'s output, CI run ID(s), asset details, backup-bundle
+verification — is still owed once tag/CI/publish actually complete,
+matching the shape every prior release entry in this file takes (see
+the `v0.5.3` entry, hundred-and-thirty-first filing, for the template).
+
+**What this discharges, once actually released.** The correction owed
+to the `v0.6.0` release note since the hundred-and-sixtieth filing —
+`Pass 85.4c`'s unconditional-buffering claim, corrected the same day by
+`Pass 85.4d` — plus everything shipped this session and last:
+`Pass 85.4e`, `Pass 90.2`, `Pass 91.0`, `Pass 92.0`, `Pass 92.1`,
+`Pass 93.0`, `Pass 94.0`, `Pass 95.0`, `Pass 96.0`, and `89f28ca`.
+
+**Housekeeping.** Recorded here rather than silently left as a bare
+"still owed" line in *Still in flight*, per this librarian's own
+discipline that a version-bump commit gets its own record the moment it
+exists on disk, distinct from the release it will eventually anchor —
+see `abe6c97`'s entry (hundred-and-fifty-eighth filing) for the
+precedent this one follows.
+
+**Ledger effects.** No Pass number (version-bump record, hash-headed,
+per the `abe6c97` precedent). No standing rule, no decision.
+
+### ★★★ Pass 94.0 — `47e4d37` — **A GHENT CONFORMANCE HARNESS, AND THE FIRST NUMBER IT GAVE WAS ONE THIS SESSION NEARLY REPORTED AS FINAL** — `tools/ghent-check.py`, automating the suite's own criterion (a clean X-shaped trap, authored pre-swapped); first run reported 29/51, the honest figure was lower because 13 patches use reference strips, not X traps — filed 2026-08-18 (hundred-and-sixty-fourth filing, filed out of strict commit order)
+
+**Filed by `pdfce-librarian`, no shell available (hard rule 8) — every
+figure below is RELAYED from the dispatching engineer's report.**
+
+**★ Filed out of strict chronological order, by name.** This commit
+(`47e4d37`) predates `Pass 92.0` (`8caada6`) and `Pass 93.0` (`a342354`)
+— both already filed above this entry, in the hundred-and-sixty-third
+filing — because `Pass 92.0`'s own X-detector fixes presuppose this
+harness already exists. It was reported to this librarian as "still
+unfiled from earlier" in this filing's dispatch. Rather than
+renumbering or reordering the two already-published entries above
+(this file's Shipped section is append-only in the same sense as the
+session log — a published entry does not move), this entry is inserted
+here, at the point it was actually filed, with this note as the
+record of the wrinkle. Read `Pass 92.0`'s entry for the harness's own
+X-detector defects and fixes; this entry is about the harness's own
+creation and its first, since-corrected headline number.
+
+**What shipped.** `tools/ghent-check.py` — a Ghent PDF Output Suite
+conformance harness that automates the suite's OWN pass/fail criterion:
+each patch's trap is authored as a clean X-mark, PRE-SWAPPED so a
+correctly-rendering implementation shows a clean shape and an incorrect
+one shows the trap. **This is not a pdfium diff** — pdfium fails many
+of these same patches; the oracle is the suite's own printed criterion,
+not agreement with a second renderer.
+
+**★ The number that almost shipped.** The harness's first run reported
+**29 of 51 patches passing**. **The honest figure was lower**, discovered
+before this number was reported as final: **13 of the 51 patches use
+REFERENCE STRIPS, not X-shaped traps**, and the harness's X-detector
+alone cannot adjudicate them — they need a comparison against a
+known-good render, which did not exist yet (that gap is what `Pass
+93.0`'s `--reference-dir` mode, shipped last filing, was built to
+close). Counting those 13 as passing was the reporting bug this
+librarian would have compounded had the corrected figure not been
+caught first.
+
+**`FEATURES.md`.** No row change — test-harness/calibration tooling, not
+an operator-facing capability (same disposition as `Pass 93.0`,
+immediately above in the file).
+
+**`ARCHITECTURE.md` §12.** No new decision-log entry.
+
+**Ledger effects.** Pass family: this session's own next-free reading of
+**94** is consumed by this entry — but note the entry itself is
+chronologically EARLIEST among today's batch, filed last. Next free
+family after this whole batch (`94`, `95`, `96` all now spent this
+session) is **97**. Standing rules: no new rule; ceiling stays **R195**,
+next free **R196** — this session's net change is `R192`'s SEVENTH
+instance only (see the `89f28ca` entry, above), no new rule minted.
+Decisions: none minted this whole batch — ceiling stays **068**, next
+free **069**.
+
+**★ FINAL STATE, this whole batch (six entries: `Pass 96.0`, `Pass
+95.0`, `89f28ca`, `9433032`, `Pass 94.0`, plus `Pass 92.1` immediately
+below).** Pass family ceiling **96**, next free **97**. Standing rules
+ceiling **R195**, next free **R196** (`R192` now has seven instances).
+Decisions ceiling **068**, next free **069**. Filing ordinal: this is
+the **hundred-and-sixty-fourth**.
+
+### ★★★ Pass 92.1 — `4b58c98` — **OVERPRINT NOW SAYS HOW MUCH IT WOULD ACTUALLY CHANGE, WHICH IS A DIFFERENT NUMBER FROM HOW OFTEN IT IS ON** — new `overprint_effective` predicate implementing §11.7.4.3; the CMYK-buffer prerequisite (`Half` and `set_device` now retain device components, not just sRGB); overprint measured effective on the TRANSPARENCY patches too — filed 2026-08-18 (hundred-and-sixty-fourth filing)
+
+**Filed by `pdfce-librarian`, no shell available (hard rule 8) — every
+figure below is RELAYED from the dispatching engineer's report.**
+
+**The CMYK-buffer prerequisite.** `Half` (the internal colour-state
+carrier) now retains the source colour's DEVICE COMPONENTS, not only
+its sRGB conversion result. §11.7.4.3 selects per COMPONENT, and pdfce
+had been converting to sRGB at colour-set time, destroying the exact
+information overprint's own predicate needs, three operators upstream
+of where `Pass 92.0` reads it.
+
+**★ `set_device` gaining components mattered more than the `scn` path.**
+`g`, `rg` and `k` set BOTH colour space and colour value in one
+operator and never routed through `ColorState::set` at all — so the
+three COMMONEST colour operators in any PDF were exactly the ones
+overprint's predicate could not see, until this Pass.
+
+**What shipped — `overprint_effective`.** A new counter: paints where
+honouring overprint would actually CHANGE the rendered result,
+implementing §11.7.4.3 as a PREDICATE (pdfce cannot yet perform the
+blend itself — that remains `85.5`, unchanged by this Pass).
+Deliberately excludes a full DeviceCMYK source at overprint mode 0,
+which specifies all four components and is therefore identical to
+Normal painting regardless of the overprint flag.
+
+**★ A false sentence caught before shipping.** A draft note for this
+Pass said overprint paints N "out of" M graphics states, implying a
+subset relationship. **They count DIFFERENT UNITS** — painted OBJECTS
+vs `gs` OPERATORS — and neither is a subset of the other. Corrected
+before this filing.
+
+**★ Finding that changes scope.** Overprint is measured EFFECTIVE on the
+TRANSPARENCY patches too, not only the classic overprint set — **GWG
+16.0/16.1/16.2 each report 19 effective occurrences.** The n-channel
+CMYK+alpha buffer the eventual `85.5` simulation needs is therefore
+worth MORE patches than the overprint bucket in `Pass 93.0`'s failure
+table alone suggested — that table counted overprint's cause of FAILURE
+(10 of 21), not its full reach across the corpus.
+
+**`FEATURES.md`.** The existing "Overprint tracked and disclosed"
+*Implemented* row (added last filing, `Pass 92.0`) is UPDATED in place
+(replaced, not appended, per this file's own rule) to name the
+effective-vs-requested distinction — see the edit to that row, this
+filing.
+
+**`ARCHITECTURE.md` §12.** No new decision-log entry — this extends
+`Pass 92.0`'s existing tracking with a further predicate over the same
+already-decided data model; no new crate boundary or library choice.
+
+**Ledger effects.** Pass family: sub-Pass `92.1`, family unaffected
+(ceiling stays at the reading set by the rest of this batch — see
+`Pass 94.0`'s "FINAL STATE" note, immediately above). Standing rules: no
+new rule. Decisions: none — ceiling stays **068**, next free **069**.
+
 ### ★★★★ Pass 93.0 — `a342354` — **THE ELEVEN UNADJUDICATED GHENT PATCHES NOW HAVE A CALIBRATION SOURCE, AND A GUARD THAT COST FOUR APPARENT PASSES IS THE REASON TO TRUST THE REST** — `ghent-check --reference-dir` adjudicates against 51 Acrobat Pro captures — filed 2026-08-18 (hundred-and-sixty-third filing)
 
 **Filed by `pdfce-librarian`, no shell available (hard rule 8) — every
@@ -46788,7 +47231,7 @@ and deferred-op counts on that file — not estimated.**
 | ~~`85.4a`~~ | blend modes — `ExtGState /BM`, eleven separable modes | `pdfce-render/src/interpret.rs` — **SHIPPED 2026-08-17, `Pass 90.1`, `bd244d9`.** Ghent page 2: 60 of 76 `/BM` invocations now composite exactly. Required a page-backdrop model correction (opaque-white-fill → isolated group over transparent backdrop, §11.4.7) — see the `Pass 90.1` Shipped entry. | §11.3.5, Table 136/137 — **SHIPPED**, see the `Pass 90.1` Shipped entry |
 | `85.4b` | non-separable blend modes — Hue/Saturation/Color/Luminosity | Ghent page 2: 16 of 76 `/BM` invocations (4 modes × 4 swatches) — **REFUSED, not mapped**: tiny-skia 0.11.4 is measured wrong against both ISO 32000-1 and W3C Compositing-1 (up to 107/255 error) — `D:\dev\rag\rust\tiny_skia_0.11_non_separable_blend_modes_wrong_by_up_to_107_255.md`. Not closeable inside pdfce without an upstream tiny-skia fix or a from-scratch implementation of the four HSL formulas. | §11.3.5.3 — refused, see `ARCHITECTURE.md` §12 decision 066 |
 | ~~`85.4c`~~ | transparency GROUPS — isolated/knockout offscreen compositing, `/SMask` soft-mask groups | `pdfce-render/src/interpret.rs` — **non-knockout compositing SHIPPED 2026-08-17, `0d6f4ac`.** A group now renders into its own page-sized offscreen buffer with contents-state reset to initial, composited as a unit with the outer blend mode/alpha (§11.4.5; decision 068). Ghent GWG 16.0 (non-knockout) panel renders CLEAN; `groups_flattened` 187 → 0. **★ `Pass 85.4d` (`b15d7ff`, same day) CORRECTED `85.4c`'s buffering to be CONDITIONAL** (outer non-Normal/alpha<1 OR isolated, else paint inline). **★★ `Pass 85.4e` (`fee42e8`, hundred-and-sixty-second filing) LANDS the §11.4.6/§11.5.2–.3 spec dispatch and fixes two defects it found: a citation error (`/K`/`/I`/`/CS` are Table 147, not 96 — table numbers shift −2 between ISO 32000-1 and -2) and a buffering gap (knockout groups now buffer UNCONDITIONALLY, not gated on `85.4d`'s outer-state test — a knockout group has no initial backdrop to composite against when painted inline at all).** Knockout groups are now correctly **buffered** (the container); they are still **NOT correctly composited** (the contents' occlusion order) — `groups_knockout_approx` still counts every one, GWG 16.1 still shows its crosses. **The dispatch also reframes the population this gap covers**: no `/K` key is required for a knockout group at all — §9.3.8's `/TK` defaults `true` (every text object), §11.7.4.4 makes `B`/`B*`/`b`/`b*` and text render modes 2/6 knockout (its own NOTE 2: a double border on semi-transparent fill-then-stroke IS this bug), and §11.6.7 makes shading patterns knockout. Ranked by likely frequency, `B`/`b` ≫ `/TK` > explicit `/K` ≈ shading patterns — the 47-group `groups_knockout_approx` figure measures only the last, smallest tier. **Representability is now known, not assumed:** isolated knockout is bit-exact representable in pdfce's single premultiplied-alpha buffer; non-isolated knockout (the common case, since `/K` defaults false the same way `/I` does) is NOT, pending buffer-model work. `/SMask` soft-mask groups (36 occurrences, all pages) remain entirely unread; a new spec ambiguity, `LUM-A1` (`DeviceCMYK` soft-mask luminosity — ISO 32000-1 self-contradicts, divergence `K·S` max 0.25), is registered against them, below, for whenever they are built. See the `Pass 85.4e` Shipped entry, top of *Shipped*, and decision 068's second amendment. **Now this inventory's remaining top-priority gap, RE-RANKED within itself** — see the build order below for this filing's ruling on isolated-knockout vs. soft masks vs. non-isolated knockout. | clause 11.4–11.6.4 (groups) + §11.6.5.3-adjacent (soft-mask groups); the per-IMAGE `/SMask`/`/Mask` shipped in `Pass 48.1` is unrelated — do not conflate the two `/SMask` meanings when scoping |
-| `85.5` | overprint compositing | patches GWG 1.0, 1.1, 2.0, 3.0, 3.1, 4.0.1, 4.1, 12.0, 19.0, 19.1, 19.2 — most of pages 1 and 4. **★ MEASURED AGAINST A REAL REFERENCE ENGINE 2026-08-18 (`Pass 93.0`, `a342354`): overprint is the SINGLE LARGEST cause of pdfce's failures against 51 Acrobat Pro reference renders — 10 of pdfce's 21 measured FAILs (transparency-in-CMYK-space 5, softmasks 3, mesh shadings 1, colour management 2 make up the rest; Acrobat Pro itself shows 1 FAIL of 51, GWG 16.1 `ICCBasedRGB`).** Tracking/disclosure of `/OP`/`/op`/`/OPM` SHIPPED `Pass 92.0` (`8caada6`) — fires on 20 of 51 patches, up to 19 times on one page; this row is the remaining SIMULATION half only | **§8.6.7 says "if overprinting is not supported, the value of the overprint parameter shall be ignored" — pdfce is CONFORMANT TODAY.** Implementing SIMULATION means compositing into a CMYK+alpha buffer (planned direction, `ARCHITECTURE.md` §3, `pdfce-render\` block — no decision-log entry, nothing chosen yet); architectural and gated on `iccce` for the final CMYK→display conversion (see `Backlog`, "Colour management (`iccce` coordination)", decision 064) — **but now measured, not merely reasoned, as the highest-impact remaining gap in this table; see the build-order re-derivation below** |
+| `85.5` | overprint compositing | patches GWG 1.0, 1.1, 2.0, 3.0, 3.1, 4.0.1, 4.1, 12.0, 19.0, 19.1, 19.2 — most of pages 1 and 4. **★ MEASURED AGAINST A REAL REFERENCE ENGINE 2026-08-18 (`Pass 93.0`, `a342354`): overprint is the SINGLE LARGEST cause of pdfce's failures against 51 Acrobat Pro reference renders — 10 of pdfce's 21 measured FAILs (transparency-in-CMYK-space 5, softmasks 3, mesh shadings 1, colour management 2 make up the rest; Acrobat Pro itself shows 1 FAIL of 51, GWG 16.1 `ICCBasedRGB`).** Tracking/disclosure of `/OP`/`/op`/`/OPM` SHIPPED `Pass 92.0` (`8caada6`) — fires on 20 of 51 patches, up to 19 times on one page; this row is the remaining SIMULATION half only. **★★ `Pass 92.1` (`4b58c98`, same session): overprint's `overprint_effective` predicate measures effective on the GWG 16.0/16.1/16.2 TRANSPARENCY patches too (19 each), not only the classic overprint set** — the n-channel CMYK+alpha buffer this row needs is worth more of the corpus than the `85.5`-labelled patches alone suggest | **§8.6.7 says "if overprinting is not supported, the value of the overprint parameter shall be ignored" — pdfce is CONFORMANT TODAY.** Implementing SIMULATION means compositing into a CMYK+alpha buffer (planned direction, `ARCHITECTURE.md` §3, `pdfce-render\` block — no decision-log entry, nothing chosen yet); architectural and gated on `iccce` for the final CMYK→display conversion (see `Backlog`, "Colour management (`iccce` coordination)", decision 064) — **but now measured, not merely reasoned, as the highest-impact remaining gap in this table; see the build-order re-derivation below** |
 
 **Suggested build order — ★ RE-DERIVED 2026-08-17 (`Pass 90.0`,
 hundred-and-fifty-sixth filing), REPLACING the order below rather than
@@ -55575,6 +56018,14 @@ nothing gets forgotten, not as a commitment to build in this order.
   comparison that decides whether a `DEVMODE` gets built at all, so
   choosing a specific tray currently has zero effect on which tray the
   driver actually pulls from. Not yet scoped to a Pass.
+  **★ SHIPPED 2026-08-18 (`Pass 95.0`, hundred-and-sixty-fourth filing,
+  merge commit + `c75a17c`+`c5d3ae8`+`cdac4e7`) — a three-state
+  `FormSourceSupport` (`Supported`/`NotListed`/`Unsupported`) replaces
+  the bare-bool design the original request proposed, because `DC_BINS`
+  reports nothing on MS Print to PDF even though that device's
+  `dmDefaultSource` already names a tray. See the `Pass 95.0` Shipped
+  entry, top of *Shipped*, for the full build record. Retained here,
+  not deleted, per this section's own append-adjacent discipline.**
 - **`build_devmode`'s own doc comment describes code that is not
   there** (filed 2026-08-11, `Pass 64.0`'s hundred-and-third filing —
   flagged by the implementer, not fixed). The doc comment claims the
@@ -55586,6 +56037,16 @@ nothing gets forgotten, not as a commitment to build in this order.
   necessarily a behaviour change (the zeroed-then-populated approach
   may be the right one; the comment is what's wrong). Not yet scoped
   to a Pass.
+  **★ SHIPPED 2026-08-18 (`Pass 95.0`, hundred-and-sixty-fourth filing) —
+  the CODE was moved to match the doc comment's promise instead of the
+  comment being lowered to match the code: `build_devmode` now genuinely
+  fetches the driver's own current default via `DocumentProperties`
+  before building the job's `DEVMODE`. `dmDriverExtra` measured 5,208 B
+  (MS Print to PDF) / 7,972 B (both tested EPSON devices) / 920 B
+  (XPS) — up to 97% of a real DEVMODE that a synthesised struct always
+  discarded. See the `Pass 95.0` Shipped entry, top of *Shipped*.
+  Retained here, not deleted, per this section's own append-adjacent
+  discipline.**
 - **Document-wide OCG/layers panel — distinct from the existing
   ce-dimension-group layer toggle (filed 2026-08-10, Reader-parity
   sweep).** pdfce can already toggle the OCG visibility of its OWN
@@ -67884,7 +68345,12 @@ and
   scope is defined by what a tool can SEE rather than by what the rule
   COVERS, name the gap and write the gate that spans it.
 
-  **The four instances, all in this project:**
+  **The first four instances, all in this project** (this table was
+  never extended when instances 5 and 6 landed — they are recorded only
+  in prose, at their own Pass entries, per the pointer rows below; noted
+  here rather than silently continued, since a stale enumeration table
+  under a rule ABOUT enumeration gaps is exactly the failure this rule
+  names):
 
   | # | the tool(s), each correct | the obligation nobody held | closed by |
   |---|---|---|---|
@@ -67892,6 +68358,9 @@ and
   | 2 | `cargo fmt --all` **+** the twelve crates it structurally cannot reach | *every crate's formatting is checked* | `tools/check-fmt-excluded.py` (`b902ea0`) |
   | 3 | `cargo-about` over `Cargo.lock` **+** the files pdfce redistributes that are not Cargo deps | *every REDISTRIBUTED file states its licence* | `tools/check-shipped-assets.py` (`e3fb7e0`) |
   | 4 | **`tools/check-ledger-numbers.py` ALONE** | *no Pass number is lost and no claimed number is re-issued* | **not closed — owed as a Backlog item, see below** |
+  | 5 | `tools/check-ui-strings`-class gate scoped to one binary's strings module | *a hardcoded-UI-string gate covers every shell's user-visible text* | see `Pass 87.0`'s Shipped entry (hundred-and-fifty-first filing) and `D:\dev\rag\rust\a_gate_states_what_it_cannot_see.md`'s own 5th-instance note — not detailed in this table |
+  | 6 | the cross-target `cargo check` portability job | *the job's own docstring's claim ("needs no linker, no platform SDK") holds for every dependency, not only pdfce's own source* | `Pass 91.0` (`969a3bf`, decision 067) — see that Shipped entry, hundred-and-fifty-ninth filing; not detailed in this table |
+  | 7 | **`tools/check-settings-consumed.py` ALONE, `CONSUMER_ROOTS`** | *every crate that could consume a setting is inside the gate's search space* | `89f28ca` widens `CONSUMER_ROOTS` to include `pdfce-print`, the crate the specific inert setting actually lived in — **a third of the codebase was never in the gate's own input set, so it was structurally incapable of catching the defect it was written for**, 2026-08-18, hundred-and-sixty-fourth filing |
 
   **★ INSTANCE 4 IS WHY THE RULE IS WORDED AROUND ONE TOOL RATHER THAN
   TWO, and it widens the shape the first three showed.** It is not only
