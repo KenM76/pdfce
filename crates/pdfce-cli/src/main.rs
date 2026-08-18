@@ -7232,9 +7232,14 @@ their text was SKIPPED, not approximated{}",
     if d.blend_modes_applied > 0 {
         eprintln!(
             "pdfce-cli: note: {} graphics-state(s) selected a non-Normal BLEND MODE (/BM, ISO \
-32000-1 §11.3.5) and pdfce APPLIED it. Census, not a problem — reported because a page whose \
-appearance depends on blending is one whose appearance depends on pdfce's compositing being \
-right, and that is worth knowing when comparing against another renderer",
+32000-1 §11.3.5) and pdfce APPLIED it. ★ APPLIED IS NOT APPLIED CORRECTLY, and this note said \
+\"Census, not a problem\" until 2026-08-18: §11.3.4 requires blending in the GROUP'S colour \
+space with subtractive components complemented before and after, and pdfce blends in device \
+sRGB — so on CMYK content these composited by the wrong rule. Measured: the Difference cell of \
+Ghent 3_GWG164 fails, and Difference is |cb - cs|, the mode most sensitive to whether its \
+operands were complemented first. Reported because a page whose appearance depends on blending \
+is one whose appearance depends on pdfce's compositing being right, and that is worth knowing \
+when comparing against another renderer",
             d.blend_modes_applied
         );
     }

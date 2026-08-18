@@ -96,6 +96,212 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `dbec60a` — **CLOSES THE FIFTH SURVIVOR `3e3019a` LEFT (`transparency_groups_composited`'S FIELD DOC), AND THE AUDIT IT TRIGGERED FINDS TWO MORE GENUINE OVER-CLAIMS — `blend_modes_applied` AND `soft_masks_applied` BOTH SAID "A CENSUS, NOT A SHORTFALL" AND BOTH ARE FALSE, MEASURED THIS SESSION. A SIXTH SURVIVOR FOUND BY THIS FILING, INSIDE THE SAME COMMIT, STILL UNFIXED** — no Pass ID, no decision minted; commit `dbec60a` touches `crates/pdfce-render/src/interpret.rs` and is cited here to satisfy `check-commits-filed.py` — filed 2026-08-18 (hundred-and-seventy-second filing)
+
+**Filed by `pdfce-librarian` WITHOUT a shell this session.** Test/lint
+results below are RELAYED from the dispatching engineer's report. **Every
+source-text claim in this entry is independently verified by `Read`
+against the live files**, not carried from the report — the same
+discipline the 171st filing used, and the reason is the same: it is what
+found the sixth survivor below, which the dispatch's own report did not
+mention.
+
+**What this closes.** The hundred-and-seventy-first filing found, but had
+no mandate to fix, a fifth stale copy of the claim `3e3019a` had just
+corrected at its print site: `transparency_groups_composited`'s own
+struct-field rustdoc at `crates/pdfce-render/src/interpret.rs:386`–`388`
+still read, verbatim, "A census, not a shortfall." Confirmed by `Read`:
+**closed**. The field doc now carries the corrected narrative — a
+`tiny_skia::Pixmap` starts transparent, which is isolated semantics
+(§11.4.7), so a group buffered for an outer-state reason (not its own
+`/I`) silently becomes isolated regardless; wrong on **14, 15 and 7 of 16**
+Ghent transparency-patch cells (`1_GWG161`/`3_GWG161`/`1_GWG162`), all
+counted as successes until `Pass 97.0` lands — matching the print-site
+text `3e3019a` already fixed, word for word in substance.
+
+**The audit this closure triggered, and what it found.** One field doc
+turning out to say something false was reason to suspect the phrase
+itself in the neighbouring counters of the same struct, not just the one
+flagged copy. Two more over-claims, both falsified by THIS session's own
+measurements rather than by re-reading:
+
+1. **`blend_modes_applied`** (`interpret.rs:225`–`253`) said "A census,
+   not a shortfall." False on two independent clauses. **§11.3.4**
+   requires blending in the transparency GROUP's own colour space, with
+   subtractive components complemented before and after
+   (`blend_subtractive(cb, cs) = 1 − B(1 − cb, 1 − cs)`) — pdfce blends
+   in device sRGB unconditionally, so a CMYK-space group's blend runs in
+   the wrong space regardless of which mode fired. **§11.3.5.3**
+   separately requires a CMYK detour for the four NONSEPARABLE modes,
+   where K is **selected** by mode (backdrop's K for Hue/Saturation/
+   Color, source's K for Luminosity) rather than blended — pdfce omits
+   the detour, K is never touched. Ghent `1_GWG160` **fails exactly the
+   first three cells and passes Luminosity** — the one-bit confirmation
+   that the missing clause, not something else, is the cause. `Pass
+   97.1` is the fix; the doc now says so.
+2. **`soft_masks_applied`** (`interpret.rs`, near the `SMask` field
+   cluster) said the same. Falsified differently: construction is
+   genuinely correct — mask groups and folded clips were dumped to PNG
+   and inspected as correct, properly placed soft gradients. Application
+   is not: **§11.4.5** applies a soft mask to a transparency group's
+   **RESULT**; pdfce folds the mask into the clip, which applies it to
+   each element **inside** the group instead. The two diverge wherever
+   the group's elements overlap. Measured against the reference engine on
+   the same Ghent strip: `1_GWG1610` **0.575 vs 0.966**, `1_GWG168`
+   **0.725 vs 0.981**, `1_GWG169` **0.905 vs 0.983** — all three improved
+   by the soft-mask work, none passing. `Pass 97.0` is the fix (the same
+   Pass as the group-compositing fix above — there is nowhere to apply a
+   mask to a group's result until that result is a value pdfce owns).
+
+Both field docs now quote the sentence they replace and name the Pass
+that closes the gap, same discipline as every correction in this chain.
+
+**★★ Found by this filing, NOT by the dispatching engineer's report, and
+NOT fixed here — a SIXTH survivor of the identical pattern, inside the
+very commit whose stated purpose was fixing it.** `dbec60a`'s own audit
+checked the STRUCT-FIELD docs for the two newly found counters and
+stopped there. It did not re-run the original sweep discipline (grep the
+CLAIM across the whole workspace) against the two claims it had just
+corrected. Confirmed by `Read`: `crates/pdfce-cli/src/main.rs:7232`–
+`7239`, an `eprintln!` fired whenever `blend_modes_applied > 0`, still
+reads:
+
+> *"pdfce APPLIED it. Census, not a problem — reported because a page
+> whose appearance depends on blending is one whose appearance depends
+> on pdfce's compositing being right, and that is worth knowing when
+> comparing against another renderer."*
+
+This is the **operator-facing** print site for the exact counter whose
+struct-field doc this commit corrected two files over, and it asserts
+the opposite of what the corrected doc now says: the compositing is NOT
+right for a CMYK-space group, and 3 of 4 nonseparable modes are wrong by
+construction. No equivalent uncorrected copy exists for
+`soft_masks_applied` — it has no `eprintln!` of its own, only the
+metrics-line developer comment, which does not claim correctness and
+was left alone correctly. Nothing in this librarian's brief includes
+editing crate source; reported, not patched — flagged for the engineer's
+next commit touching `pdfce-cli/src/main.rs`.
+
+**★ A seventh finding, this one an inconsistency inside the fix itself,
+not a missed copy — flagged, not resolved.** `blend_modes_applied`'s
+corrected field doc (point 2 above) attributes §11.3.5.3's nonseparable-
+mode/K-selection shortfall, and the Ghent `1_GWG160` evidence, to THIS
+counter. Confirmed by `Read` of `crates/pdfce-render/src/gstate.rs:415`–
+`455`: `blend_mode_from_name` returns `None` for all four nonseparable
+names (`Hue`/`Saturation`/`Color`/`Luminosity`) unconditionally — no
+other call site in `pdfce-render` maps them to a `tiny_skia::BlendMode`.
+Per `interpret.rs:2502`–`2513`, `None` always increments
+`blend_modes_ignored`, never `blend_modes_applied`. So a nonseparable
+mode cannot reach `blend_modes_applied` through any path this librarian
+found, which means the §11.3.5.3/`1_GWG160` evidence the corrected doc
+cites belongs to `blend_modes_ignored`'s own shortfall — where, in fact,
+it is *also* documented correctly, at `interpret.rs:254`–`268` ("one of
+the four NON-SEPARABLE modes … which pdfce recognises perfectly well and
+deliberately declines to composite"). §11.3.4 (the colour-space clause)
+is unaffected by this and stands on its own — it applies to every
+blended mode, separable included, whenever the group's blend space is
+CMYK, independent of which counter increments. **Not corrected here**
+(same no-code-edit-mandate reasoning as the sixth survivor above);
+flagged for the engineer to confirm and, if this reading holds, move the
+§11.3.5.3/`1_GWG160` sentence from `blend_modes_applied`'s doc to
+`blend_modes_ignored`'s, where a version of it already lives. This
+librarian's own ROADMAP/FEATURES filing above relays the corrected doc's
+text faithfully rather than silently resolving the discrepancy itself —
+flagging beats guessing which of "the doc" or "the code" is the one that
+still needs a fix.
+
+**FEATURES.md — one row amended, checked rather than assumed.** The
+*Blend modes* row (separable modes) claimed the eleven separable modes
+"composite exactly per ISO 32000-1 Table 136," which is now known false
+for a CMYK-space group per §11.3.4 above — that defect is not confined to
+the non-separable-modes row, which is where the prior caveat lived.
+Amended with the colour-space caveat and a `Pass 97.1` pointer. The
+*Transparency GROUP compositing* row (amended by the 171st filing) and
+the *Soft masks* row (already carrying the §11.4.5 application caveat and
+the same Ghent correlation numbers cited above, added by an earlier
+filing) were checked and found already accurate — no change needed to
+either.
+
+**"Census" audit of the remaining unaudited grep hits the dispatch
+flagged.** Four sites were named as unaudited: `color.rs:690`
+(`separation_none_suppressed`), the YCCK "benign census" cluster
+(`interpret.rs`, `main.rs`, `image.rs`, `dct.rs`, `image_codec/mod.rs`,
+tests), the shading "found, not painted" census (`shading.rs`,
+`interpret.rs`), and the annotations census block
+(`interpret.rs:676`–`719` in the pre-`dbec60a` line numbering). All four
+checked by `Read`: **legitimate** in every case — each names the
+evidence backing the label (§8.6.6.4 conformance for
+`separation_none_suppressed`; decision 006 §4.4's 9-file pixel-match
+against pdfium for the YCCK cluster; an explicit "model resolves, paints
+nothing yet, `painted` stays 0 until the geometry slice lands" for
+shading; "counted under EVERY scope regardless of what is shown" for
+annotations). None asserts correctness without naming how it was
+verified — the distinguishing test the RAG amendment below proposes,
+confirmed against real examples on both sides of the line.
+
+**RAG amendment, this filing.** `D:\dev\rag\rust\
+disclosure_text_must_be_tested_against_producing_branch.md` — new
+"FIFTH occurrence" section: closes the survivor, records the two new
+falsified counters with their evidence, records the sixth survivor found
+here, and distils a practical heuristic for the next audit — *"census" in
+this codebase is a claim requiring evidence, not a neutral category
+label; a legitimate use names the verification, an illegitimate one
+asserts the label alone*. Frontmatter `last_verified` updated. Index
+bullet unchanged (still accurate, generic).
+
+**Standing-rule candidacy — third time flagged, still not minted, and
+the disposition does not change.** Same reasoning as the 171st filing's:
+no mechanical gate can distinguish a legitimate census from a stale one,
+because the distinction is "does current behaviour match the claim,"
+which is exactly the fact each disclosure exists to report — a rule would
+add a written commitment, not enforcement. The engineer's/operator's
+call, not this librarian's to mint. Next free standing rule stays
+`R196`.
+
+**Agent-memory note, this filing.** Ken's 2026-08-18 direction — offload
+web research to keep his own token budget for code, with the caveat he
+attached himself: *disagree with a research finding when warranted, and
+confirm its claims rather than accepting them on the researching agent's
+say-so* — saved to this librarian's persistent memory
+(`D:\Dev\pdfce\.claude\agent-memory\pdfce-librarian\`) as a feedback
+memory, since it is guidance about *how* to collaborate across sessions,
+not a fact about pdfce's own state.
+
+**Verification (RELAYED, not re-run here).** `cargo fmt --all` applied;
+`cargo clippy --workspace --all-targets -- -D warnings` clean; `cargo
+test -p pdfce-render` green — **269** tests in the main binary, plus the
+integration suites (denominator for the integration suites not given in
+the relayed report, so not totalled here per the file-a-total-beside-
+its-per-item-form discipline — better an incomplete figure stated as
+incomplete than a total invented to fill the gap). No `cargo tree`
+re-check reported and none needed: this commit touches only
+`crates/pdfce-render/src/interpret.rs` doc comments, no `Cargo.toml`, no
+executable logic. Ghent standing not re-run this filing (doc-only commit,
+same reasoning `3e3019a` used) — carried forward unchanged at **25 pass /
+18 FAIL / 8 UNRESOLVED of 51**.
+
+**Occurrence count, updated.** One shortfall-phrase now needed correcting
+at **six** separate sites across three counters
+(`transparency_groups_composited`; the four `overprint_*` sites from the
+FOURTH-occurrence RAG entry; `blend_modes_applied`; `soft_masks_applied`),
+across **four consecutive commits**, and **at least twice** — now
+confirmed three times counting this filing's own find — the commit
+written to fix one copy left a sibling standing. The RAG entry above
+carries the full tally; not restated further here.
+
+**Ledger, unchanged.** Next free Pass family **98**. Next free decision
+**071**. Next free standing rule **R196**. Next free filing ordinal:
+**173**. None of these were re-run through `tools/check-ledger-numbers.py`
+this filing — no shell; carried forward from the 171st filing's own
+statement, same as that filing carried forward from the 170th.
+
+**Still owed, for the next session.** The sixth survivor
+(`main.rs:7232`–`7239`) is now the seventh flagged site awaiting a
+code-edit mandate, same shape as the closed `interpret.rs:386`–`388` item
+this filing just resolved. `97.0`/`97.1` remain the best-scoped,
+highest-leverage queued work — unchanged from prior filings, not touched
+by this one.
+
 ### `3e3019a` — **CORRECTS THE OTHER THREE COPIES OF `e11b4f8`'S OVERPRINT CLAIM (FOUND BY SWEEPING FOR THE CLAIM, NOT THE STRING), PLUS A SEPARATE STALE CLAIM ON `transparency_groups_composited` — AND LEAVES A FIFTH SURVIVOR, FOUND BY THIS FILING, UNFIXED** — no Pass ID, no decision minted; commit `3e3019a` touches `crates/pdfce-cli/src/main.rs`, `crates/pdfce-render/src/gstate.rs`, `crates/pdfce-render/src/interpret.rs` and is cited here to satisfy `check-commits-filed.py` — filed 2026-08-18 (hundred-and-seventy-first filing)
 
 **Filed by `pdfce-librarian` WITHOUT a shell this session.** Test/lint/gate

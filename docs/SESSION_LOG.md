@@ -46222,3 +46222,152 @@ trusting the description, would catch that.
    found by the 171st) — worth weighing alongside the standing-rule
    candidacy question above rather than as a separate item, since both
    are instances of the same underlying claim-vs-string gap.
+
+**Amendment 2026-08-18 (hundred-and-seventy-second filing).** Item 2
+above (close the `interpret.rs:386`–`388` survivor) is **done** —
+`dbec60a`. Closing it triggered an audit that found two MORE genuine
+over-claims on neighbouring counters, and that audit's own fix left a
+sixth survivor standing, plus a seventh, differently-shaped finding (a
+freshly corrected doc citing evidence for the wrong counter). Full
+account below, this same date.
+
+## 2026-08-18 (hundred-and-seventy-second filing) — **`dbec60a` CLOSES THE FIFTH SURVIVOR, THE AUDIT IT TRIGGERS FINDS TWO MORE GENUINE OVER-CLAIMS ON `blend_modes_applied`/`soft_masks_applied`, AND THIS FILING FINDS A SIXTH SURVIVOR PLUS A SEVENTH FINDING — A CORRECTED DOC CITING EVIDENCE FOR THE WRONG COUNTER — BOTH INSIDE THE VERY COMMIT MEANT TO FIX THE PATTERN**
+
+**Filed by `pdfce-librarian` WITHOUT a shell this session.** Test/lint
+results are RELAYED from the dispatching engineer's report
+(`cargo fmt --all`, `cargo clippy --workspace --all-targets -- -D
+warnings`, `cargo test -p pdfce-render`). **Every source-text claim in
+this entry is independently verified by `Read` against the live files**,
+not carried from the report — same discipline as the 171st filing, and
+it is what surfaced the sixth and seventh findings below, neither
+mentioned in the dispatch.
+
+**Shipped:**
+
+- `dbec60a` filed — no Pass ID, a correction commit touching
+  `crates/pdfce-render/src/interpret.rs` only. Closes the fifth survivor
+  the 171st filing found and flagged but had no mandate to fix:
+  `transparency_groups_composited`'s struct-field rustdoc
+  (`interpret.rs:386`–`388`) still read "A census, not a shortfall" after
+  its CLI print-site twin had already been corrected by `3e3019a`. Now
+  closed — the field doc carries the same corrected narrative (14/15/7
+  wrong Ghent cells, `Pass 97.0`).
+
+**Decisions made this session:**
+
+- **No decision minted.** Decisions 068/069 already document the
+  architecture correctly; this commit brings two more field-doc sites
+  into agreement with them. Next free decision stays **071**.
+- **Standing-rule candidacy flagged a third time, still not minted** —
+  same reasoning as the 171st filing: no mechanical gate can distinguish
+  a legitimate "census" claim from a stale one, because the distinction
+  is "does current behaviour match the claim," exactly the fact each
+  disclosure exists to report. The engineer's/operator's call. Next free
+  standing rule stays **R196**.
+
+**Findings + decisions:**
+
+- **The audit that closing the fifth survivor triggered found two more
+  genuine over-claims, both falsified by THIS session's own
+  measurements.** `blend_modes_applied` said "A census, not a
+  shortfall" — false per §11.3.4 (blending runs in device sRGB, not the
+  transparency group's own colour space, wrong for a CMYK-space group
+  regardless of mode) and, per the corrected doc's own text, §11.3.5.3
+  (the four nonseparable modes need a CMYK detour selecting K by mode,
+  which pdfce omits). `soft_masks_applied` said the same — false per
+  §11.4.5 (construction is correct; application folds the mask into the
+  clip instead of applying it to the group's RESULT — Ghent `1_GWG1610`
+  correlates 0.575 against a 0.966 reference). Both field docs now quote
+  what they used to say and name the Pass that fixes the gap (`97.1`,
+  `97.0` respectively).
+- **★★ Found by this filing, not the dispatch: a sixth survivor of the
+  identical pattern, inside the very commit that fixed the fifth.**
+  `dbec60a`'s audit corrected `blend_modes_applied`'s STRUCT-FIELD doc
+  but did not then re-sweep the workspace for that same claim at its
+  OTHER sites. `crates/pdfce-cli/src/main.rs:7232`–`7239` — an
+  `eprintln!` fired whenever `blend_modes_applied > 0` — still reads
+  *"pdfce APPLIED it. Census, not a problem"*, the operator-facing print
+  site for the exact counter whose field doc was just corrected two
+  files over. No equivalent survivor exists for `soft_masks_applied` (it
+  has no `eprintln!`, only a metrics-line comment that does not claim
+  correctness and needed no fix). Not fixed here (no code-edit mandate);
+  flagged for the engineer's next commit touching
+  `pdfce-cli/src/main.rs`.
+- **★ A seventh, differently-shaped finding: a freshly corrected doc
+  citing evidence for the WRONG counter, not a missed copy.**
+  `blend_modes_applied`'s corrected doc attributes the §11.3.5.3/
+  `1_GWG160` evidence to itself, but `gstate.rs:415`–`455`
+  (`blend_mode_from_name`) returns `None` for all four nonseparable mode
+  names unconditionally, and `None` always increments the SIBLING
+  counter `blend_modes_ignored` (`interpret.rs:2502`–`2513`) — which
+  already documents this exact shortfall correctly, at its own
+  definition. §11.3.4 (colour space) is unaffected and genuinely belongs
+  to `blend_modes_applied`; the nonseparable/K-selection sentence
+  appears misattributed. Flagged for the engineer to confirm, not
+  resolved here — this librarian relays the corrected doc's text
+  faithfully into `ROADMAP.md`/`FEATURES.md` rather than silently
+  picking a side between "the doc" and "the code."
+- **"Census" audit of the four remaining flagged sites — all
+  legitimate.** `color.rs:690` (`separation_none_suppressed`, §8.6.6.4
+  conformance), the YCCK "benign census" cluster (decision 006 §4.4,
+  9-file pixel-match against pdfium), the shading "found, not painted"
+  census (`shading.rs`/`interpret.rs`, explicit "model resolves, paints
+  nothing yet"), the annotations census block (counted under every
+  scope by design). Each names its evidence; none asserts correctness
+  bare. Distilled into a greppable heuristic for future audits: *"census"
+  is a claim requiring evidence, not a neutral category label — a
+  legitimate use names the verification, an illegitimate one asserts the
+  label alone.*
+- **`FEATURES.md` — one row amended.** *Blend modes* (separable) claimed
+  the eleven modes "composite exactly per ISO 32000-1 Table 136," now
+  known false for a CMYK-space group per §11.3.4 — amended with the
+  colour-space caveat and a `Pass 97.1` pointer. *Transparency GROUP
+  compositing* (amended by the 171st filing) and *Soft masks* (already
+  carrying the §11.4.5 caveat and the Ghent correlation numbers) were
+  checked and found already accurate.
+- **RAG amendment, this filing.** `D:\dev\rag\rust\
+  disclosure_text_must_be_tested_against_producing_branch.md` — new
+  "FIFTH occurrence" section (closes the survivor, records the two new
+  falsified counters, records the sixth survivor, distils the "census is
+  a claim" heuristic) plus a short addendum recording the seventh
+  finding as a new failure shape (a freshly written correction
+  internally inconsistent with the producing branch it describes, not a
+  missed copy). Frontmatter `last_verified` updated. Index bullet
+  unchanged, still accurate.
+- **Agent-memory note.** Ken's 2026-08-18 direction to offload web
+  research to preserve his own token budget for code, with his own
+  attached caveat — disagree with a finding when warranted, confirm its
+  claims rather than accepting them on say-so — saved to this
+  librarian's persistent memory as a feedback memory.
+
+**Still in flight:**
+
+- The sixth survivor (`main.rs:7232`–`7239`) and the seventh finding
+  (misattributed evidence) are both now owed, same shape as every prior
+  "flagged, not fixed" item in this chain.
+- Ghent standing carried forward unchanged: **25 pass / 18 FAIL / 8
+  UNRESOLVED of 51**, not re-run this filing (doc-only commit).
+- `97.0`/`97.1` remain the best-scoped, highest-leverage queued work,
+  untouched by this filing.
+
+**For next session:**
+
+1. **Ledger.** Next free Pass family **98** (unchanged). Next free
+   decision **071** (unchanged). Next free standing rule **`R196`**
+   (unchanged). **Both carried forward from the 171st filing's own
+   statement, not re-run through `tools/check-ledger-numbers.py` — no
+   shell.** **Next free filing ordinal: 173.**
+2. **Close the sixth survivor** — `main.rs:7232`–`7239`'s `eprintln!`
+   still asserts "Census, not a problem" for `blend_modes_applied`.
+3. **Resolve the seventh finding** — confirm whether the §11.3.5.3/
+   `1_GWG160` sentence in `blend_modes_applied`'s doc belongs on
+   `blend_modes_ignored` instead, where an equivalent already exists.
+4. **`97.0`/`97.1` remain the best-scoped, highest-leverage items** —
+   unchanged, this filing did not touch either.
+5. **Running tally, worth weighing at the next standing-rule-health
+   review:** one shortfall-phrase has now needed correcting at six
+   separate sites across three counters, across four consecutive
+   commits, with the fix-commit-leaves-a-sibling shape confirmed three
+   times running. Not a recommendation to mint a rule — the RAG file's
+   own reasoning against a mechanical gate is unchanged — but a data
+   point for whoever next reconsiders that call.

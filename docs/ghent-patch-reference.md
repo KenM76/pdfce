@@ -461,11 +461,21 @@ ColorDodge, Overlay, SoftLight, HardLight, Hue, Color, Luminosity, Saturation,
 | `GWG161` | **14** | X emerges as the raw source primary in nearly every cell |
 | `GWG162` | **7** | same signature, fewer cells |
 
-**`GWG160` is §11.3.5.3.** Those three are exactly the nonseparable modes
-whose **K component is taken from the backdrop**; `Luminosity`'s is taken from
-the **source**. The clause makes K **selected, not blended** — and a renderer
-compositing in device RGB has no K to select. `Luminosity` passing is the
-one-bit confirmation.
+**★ `GWG160` is NOT §11.3.5.3 — corrected 2026-08-18, same day.** This
+paragraph originally said those three were "exactly the nonseparable modes
+whose K component is taken from the backdrop" and called `Luminosity` passing
+"the one-bit confirmation". Measured: every transparency patch reports
+`blend_modes_applied=11, blend_modes_ignored=4`, and pdfce **declines all four
+nonseparable modes outright**, compositing them as `Normal`. They fail because
+they are **not implemented**, not because they are computed with the wrong K.
+`Luminosity` is declined identically and still comes out clean — so "declined"
+does not imply "visibly wrong", and that clean cell is **not** evidence
+`Luminosity` works.
+
+§11.3.5.3 is still what implementing them correctly requires. It was simply
+not the explanation for the failures. Cell identities are now resolved by
+`tools/ghent-cellmap.py` (CTM walk + `/Matrix`/`/BBox` into device space
+against the governing `/ExtGState`) rather than by cell-pitch arithmetic.
 
 **`GWG161`/`GWG162` are §11.4.7, not knockout.** A `tiny_skia::Pixmap` starts
 transparent, and a transparent initial backdrop **is** isolated semantics.

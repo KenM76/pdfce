@@ -52,11 +52,55 @@ Cell index derived from the patch's own content stream: the row-2 labels are
 Opacity (0%)`, the cells are `22.678 pt` squares on a `31.68 pt` pitch, and
 the render is at scale 2.0.
 
-Those three are **exactly the nonseparable blend modes whose K component is
-taken from the BACKDROP**. `Luminosity` — the fourth nonseparable mode, whose
-K comes from the **source** — **passes**. That is not a coincidence and it is
-not a coarse signal; it is a one-bit discriminator falling on the correct
-side.
+**★ CORRECTED 2026-08-18, later the same day.** This section originally read
+that those three are *"exactly the nonseparable blend modes whose K component
+is taken from the BACKDROP"*, that `Luminosity` passing was *"a one-bit
+discriminator falling on the correct side"*, and therefore that §11.3.5.3's
+K-selection rule was the cause. **That inference was wrong, and it was wrong
+in the most persuasive direction — it fit.**
+
+What the counters actually say, measured with `pdfce-cli render-page` on all
+four transparency patches: **`blend_modes_applied=11, blend_modes_ignored=4`**
+in every one. `blend_mode_from_name` returns `None` for all four nonseparable
+modes, so pdfce **declines them outright** and composites them as `Normal`.
+They never reach the applied path at all, so nothing about them can be
+evidence for *how* the applied path computes. Caught by the librarian while
+filing, from the code rather than from the pixels.
+
+The corrected reading, and the cell identities are now **resolved** rather
+than inferred — `tools/ghent-cellmap.py` walks the content stream, tracks the
+CTM through `q`/`Q`/`cm`, and maps each form XObject's `/Matrix` and `/BBox`
+into device space against its governing `/ExtGState`:
+
+| patch | `Hue` | `Saturation` | `Color` | `Luminosity` | applied modes |
+|---|---|---|---|---|---|
+| `1_GWG160` | trap | trap | trap | **clean** | all 11 clean |
+| `3_GWG164` | trap | trap | trap | **clean** | **`Difference` traps** |
+
+**Three separate facts fall out, and the first two are different bugs:**
+
+1. **`Hue`/`Saturation`/`Color` fail because they are not implemented** —
+   declined, not miscomputed. `Luminosity` is declined *identically* and still
+   comes out clean, which means "declined" does not imply "visibly wrong": on
+   this artwork its correct result and its `Normal` stand-in coincide closely
+   enough to stay under the suite's clear-X threshold. **Do not read that
+   clean cell as evidence `Luminosity` works.**
+2. **`3_GWG164`'s `Difference` cell is the real §11.3.4 evidence** — an
+   *applied*, separable mode, failing on ICCBased CMYK. `Difference` is
+   `|cb − cs|`, the mode most sensitive to whether its operands were
+   complemented first, so it is where a wrong blending space surfaces
+   soonest. One cell, not a cluster — reported as such.
+3. §11.3.5.3's K-selection rule is still **required to implement** the
+   nonseparable modes correctly. It is just not the explanation for today's
+   failures. The clause was right; the attribution was not.
+
+**The methodological lesson, since it cost a wrong entry in three documents
+and a commit message:** the original mapping came from cell-pitch arithmetic
+(`22.678 pt` squares on a `31.68 pt` pitch at scale 2.0) — one method, no
+cross-check — and it produced a story so clean it discouraged looking further.
+The pitch arithmetic turned out to be *right about positions* and the
+*causal attribution built on it* was wrong, which is the combination that
+survives a sanity check.
 
 `iso32000__s__11.3.5.md` §4.8 quotes the governing `shall` verbatim:
 

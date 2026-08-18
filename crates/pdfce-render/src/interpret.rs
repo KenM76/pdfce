@@ -226,23 +226,32 @@ pub struct Diagnostics {
     /// ISO 32000-1 §11.3.5) which pdfce APPLIED.
     ///
     /// **★ "Applied" is not "applied correctly", and this doc said "A
-    /// census, not a shortfall" until 2026-08-18.** Two clauses are not
-    /// honoured, both measurable on the Ghent corpus:
+    /// census, not a shortfall" until 2026-08-18.** **§11.3.4** requires
+    /// blending in the **group's colour space**, with subtractive
+    /// components complemented before and after
+    /// (`blend_subtractive(cb, cs) = 1 − B(1 − cb, 1 − cs)`). pdfce blends
+    /// in device sRGB, so a CMYK group's blends are computed in the wrong
+    /// space. `Pass 97.1` is the fix.
     ///
-    /// * **§11.3.4** — blending happens in the **group's colour space**,
-    ///   with subtractive components complemented before and after
-    ///   (`blend_subtractive(cb, cs) = 1 − B(1 − cb, 1 − cs)`). pdfce
-    ///   blends in device sRGB, so a CMYK group's blends are computed in
-    ///   the wrong space.
-    /// * **§11.3.5.3** — the four NONSEPARABLE modes need a CMYK detour:
-    ///   complement CMY to RGB, blend, complement back, and **select** K
-    ///   by mode (backdrop's K for `Hue`/`Saturation`/`Color`, source's K
-    ///   for `Luminosity`). K is not blended at all. Ghent `1_GWG160`
-    ///   fails exactly those first three cells and **passes
-    ///   `Luminosity`** — the one-bit confirmation.
+    /// **Measured evidence, and it is one cell rather than a cluster:**
+    /// Ghent `3_GWG164` (ICCBased CMYK) fails its **`Difference`** cell —
+    /// an applied, separable mode. `Difference` is `|cb − cs|`, the mode
+    /// most sensitive to whether its operands were complemented first, so
+    /// it is exactly where a wrong blending space shows up soonest. The
+    /// cell was identified by resolving the form XObject's `/Matrix` and
+    /// `/BBox` into device space against the governing `/ExtGState`, not
+    /// by cell-pitch arithmetic.
     ///
-    /// `Pass 97.1` is the fix. Until then read this as "a blend function
-    /// ran", not "the right number came out".
+    /// **★ CORRECTION, same day.** An earlier revision of this doc also
+    /// blamed §11.3.5.3 here and cited `1_GWG160`'s `Hue`/`Saturation`/
+    /// `Color` failures as proof. **Those cannot reach this counter.**
+    /// [`crate::gstate::blend_mode_from_name`] returns `None` for all four
+    /// nonseparable modes, so they land in
+    /// [`Self::blend_modes_ignored`] — which already documents the
+    /// shortfall correctly. Caught by the librarian on filing. The
+    /// evidence was real and the counter it was attached to was wrong,
+    /// which is the harder error to notice: a citation makes a claim look
+    /// checked.
     ///
     /// Separate from [`Self::blend_modes_ignored`] because those two
     /// numbers answer different questions and used to be one. Before
@@ -274,6 +283,32 @@ pub struct Diagnostics {
     /// Normal produces a perfectly ordinary-looking opaque overlay. A
     /// missing image leaves a hole somebody notices; a wrong compositing
     /// rule just looks like a different document.
+    ///
+    /// **★ MEASURED CONSEQUENCE, 2026-08-18 — this is where `1_GWG160`'s
+    /// failures actually live**, not on [`Self::blend_modes_applied`]
+    /// where they were briefly mis-filed. Every Ghent transparency patch
+    /// reports `applied=11, ignored=4`, and the 4 are these modes. Cells
+    /// resolved from each form XObject's `/Matrix` and `/BBox` against its
+    /// governing `/ExtGState`:
+    ///
+    /// | patch | `Hue` | `Saturation` | `Color` | `Luminosity` |
+    /// |---|---|---|---|---|
+    /// | `1_GWG160` | trap | trap | trap | **clean** |
+    /// | `3_GWG164` | trap | trap | trap | **clean** |
+    ///
+    /// **Three of four declined modes trap and the fourth does not**, in
+    /// both patches independently. So "declined" does not imply "visibly
+    /// wrong" — on this artwork `Luminosity`'s correct result and its
+    /// Normal stand-in coincide closely enough to stay under the suite's
+    /// clear-X threshold. Do not read the clean cell as evidence
+    /// `Luminosity` is implemented; it is declined exactly like the other
+    /// three.
+    ///
+    /// Implementing them needs Table 137's formulas **and** §11.3.5.3's
+    /// CMYK detour, in which K is **selected** by mode rather than blended
+    /// — backdrop's K for `Hue`/`Saturation`/`Color`, source's K for
+    /// `Luminosity`. Both need a backdrop this crate can read, which is
+    /// `Pass 97.0`'s buffer.
     pub blend_modes_ignored: usize,
     /// Form XObjects carrying `/Group << /S /Transparency >>` (§11.4.7,
     /// Table 147) that pdfce painted **straight onto the page** instead of
