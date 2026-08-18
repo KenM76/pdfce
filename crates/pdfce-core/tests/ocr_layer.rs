@@ -92,6 +92,40 @@ fn page0_text(bytes: &[u8]) -> String {
         .collect::<String>()
 }
 
+/// ★ A certified document that forbids change does not get an OCR layer.
+///
+/// Writing the layer creates a content stream and a font and rewrites the
+/// page dict's `/Contents` and `/Resources` — a structural page change.
+/// §12.8.4 Table 258 requires a consumer to enforce the permissions a
+/// `/Perms` → `/DocMDP` certification carries, and Table 254's
+/// permitted-change lists contain no operation pdfce can perform, so the only
+/// correct answer is a refusal.
+///
+/// WHY THIS TEST EXISTS RATHER THAN BEING ASSUMED: `add_ocr_layer` shipped
+/// (commit 49af8fb) with no certification check at all, while its structural
+/// twin `add_text` had refused since it was written. The two paths do the
+/// same thing to a page and disagreed about whether a signature could stop
+/// them. `tools/check-bypass-paths.sh` surfaced it — the function is an
+/// `EditSession` bypass, and the exception list's warrant for sanctioning
+/// that shape is precisely that such a function "honours the certification
+/// gate". It did not.
+#[test]
+fn a_certified_document_refuses_the_ocr_layer() {
+    let doc = load("certified-locked.pdf");
+    let err = add_ocr_layer(&doc, 0, &sample_page(), &OcrLayerOptions::new())
+        .expect_err("a certified, change-forbidding document must refuse");
+
+    assert!(
+        matches!(
+            err,
+            OcrLayerError::CertificationForbidsChange { permission: 1 }
+        ),
+        "expected a certification refusal carrying the DocMDP /P value, got {err:?} \
+         — a refusal that does not name the permission leaves the operator \
+         unable to tell a locked document from a broken one",
+    );
+}
+
 /// ★ The words go in and the words come out.
 ///
 /// If this fails, nothing else about the feature matters — the layer is

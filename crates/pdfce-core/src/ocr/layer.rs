@@ -386,6 +386,23 @@ pub enum OcrLayerError {
     /// The document has no free object numbers left.
     #[error("no free object numbers remain")]
     ObjectNumbersExhausted,
+    /// The document is certified and its enforced DocMDP forbids the change.
+    ///
+    /// The [`crate::text_edit::add_text`] sibling of this refusal, for the
+    /// same reason and by the same machinery: writing an OCR layer creates a
+    /// content stream and a font and rewrites the page dict, and §12.8.4
+    /// Table 258 requires a consumer to enforce `/Perms` -> `/DocMDP`.
+    /// Deliberately conservative -- every enforced certification is treated
+    /// as forbidding -- because over-refusal is fail-clean and the
+    /// alternative is a silently-invalidated signature.
+    #[error(
+        "the document is certified with DocMDP permission {permission}, which forbids adding an OCR layer"
+    )]
+    CertificationForbidsChange {
+        /// The `/P` value from the DocMDP transform parameters (Table 254
+        /// default 2 when absent).
+        permission: u8,
+    },
     /// The incremental save failed.
     #[error(transparent)]
     Write(#[from] WriteError),
@@ -610,6 +627,21 @@ pub fn add_ocr_layer(
         return Err(OcrLayerError::Encrypted);
     }
 
+    // §12.8.4 Table 258: a consumer "shall enforce the permissions" a
+    // certification carries. This mirrors `add_text`'s
+    // `refuse_if_certification_forbids` exactly -- same `census` +
+    // `forbids_structural_change` machinery, same "/P absent => default 2"
+    // rule (Table 254) -- and yields an `OcrLayerError` because that is this
+    // path's error type. It is here rather than deeper because refusing
+    // before doing any work is the difference between a clean refusal and a
+    // half-built plan thrown away.
+    let census = crate::signature::census(doc);
+    if census.forbids_structural_change() {
+        return Err(OcrLayerError::CertificationForbidsChange {
+            permission: census.certification_permission.unwrap_or(2),
+        });
+    }
+
     let pages = page_tree::pages(doc)?;
     let page = pages
         .get(page_index)
@@ -658,6 +690,16 @@ pub fn add_ocr_layer(
     resources.insert(Name::from(b"Font"), Object::Dict(font_subdict));
     new_page.insert(Name::from(b"Resources"), Object::Dict(resources));
 
+    // A SANCTIONED WRITER BYPASS — a one-shot standalone API, exception 7's
+    // shape exactly (see `tools/check-bypass-paths.sh`)
+    // — `add_ocr_layer(doc, ..) -> bytes`, called by the CLI against a
+    // `Document` that is not in an edit session, so there is no undo stack to
+    // join and nothing to disclose to a later command. It refuses an
+    // encrypted document and, as of this commit, an enforced-certified one;
+    // that second refusal is what makes this exemption honest, and it was
+    // MISSING when the function shipped. Do not copy this marker to a new
+    // writer caller without first checking the same two refusals are present.
+    //
     // Stage the content bytes into the dirty set's buffer, with the new
     // stream's span in the `base.len() + local` combined coordinate system
     // (R45). The image and the original content stream are NOT in the dirty
@@ -668,6 +710,10 @@ pub fn add_ocr_layer(
     dirty.replace(content_id, make_raw_stream(span, content_data.len()));
     dirty.replace(font_id, Object::Dict(standard14_font_dict(opts.font)));
     dirty.replace(page.id, Object::Dict(new_page));
+    // bypass-exempt: see the note above this block. The token sits HERE, in
+    // the middle of the three writer calls, because the gate's window is
+    // eight lines either side of each hit and the calls span eight lines —
+    // above the block it covers the first two and misses `save_incremental`.
     dirty.set_staging(content_data);
 
     let (bytes, _) = save_incremental(doc, &dirty, &SaveOptions::identity())?;
