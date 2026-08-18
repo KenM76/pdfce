@@ -304,7 +304,7 @@ fn a_widget_without_a_p_entry_is_still_found() {
     assert_eq!(
         rects.len(),
         1,
-        "★ a widget with NO /P must still be found. /P is Optional (§12.5.2          Table 164) and commonly absent; a /P-based filter returns nothing          here and nothing on a large class of real forms, with no error."
+        "★ a widget with NO /P must still be found. /P is Optional (§12.5.2 Table 164) and commonly absent; a /P-based filter returns nothing here and nothing on a large class of real forms, with no error."
     );
     assert_eq!(rects[0].1, [10.0, 20.0, 110.0, 60.0]);
 }

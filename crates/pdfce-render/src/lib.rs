@@ -203,8 +203,13 @@ pub enum RenderError {
     /// reporting success is strictly worse than no cache at all. The
     /// mismatch is therefore refused by name, with both keys in the
     /// message, so a log line says which half drifted.
+    // ONE LINE, no backslash continuation. The continuation form was used
+    // here and shipped ten literal spaces into the message (6af5655):
+    // `rustfmt` and patch tooling both eat the backslash, and nothing but
+    // reading the RENDERED string catches it. `rustfmt` leaves a long
+    // literal alone, so the long line IS the safe form.
     #[error(
-        "display list is for epoch {recorded_epoch} at scale {recorded_scale},          but was replayed as epoch {expected_epoch} at scale {expected_scale}"
+        "display list is for epoch {recorded_epoch} at scale {recorded_scale}, but was replayed as epoch {expected_epoch} at scale {expected_scale}"
     )]
     DisplayListStale {
         /// The epoch the caller believed it held.

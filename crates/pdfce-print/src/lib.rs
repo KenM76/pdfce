@@ -263,11 +263,11 @@ impl fmt::Display for PrintError {
             ),
             Self::DeviceContext { printer } => write!(
                 f,
-                "the printer {printer:?} was found but its driver would not open a device;                  this is usually a driver problem rather than a wrong name"
+                "the printer {printer:?} was found but its driver would not open a device; this is usually a driver problem rather than a wrong name"
             ),
             Self::JobStart { printer } => write!(
                 f,
-                "{printer:?} refused the print job. Nothing was queued, so there is nothing                  to cancel"
+                "{printer:?} refused the print job. Nothing was queued, so there is nothing to cancel"
             ),
             Self::PageStart => write!(f, "the printer refused a page; the job was cancelled"),
             Self::SheetSetup => write!(
@@ -278,7 +278,7 @@ impl fmt::Display for PrintError {
             Self::PageEnd => write!(f, "a page failed to finish; the job was cancelled"),
             Self::JobEnd => write!(
                 f,
-                "the job did not close cleanly. Some pages may already have reached the                  printer — check the queue rather than reprinting blind"
+                "the job did not close cleanly. Some pages may already have reached the printer — check the queue rather than reprinting blind"
             ),
             Self::Blit => write!(f, "the page image could not be drawn to the printer"),
             Self::Unsupported => write!(

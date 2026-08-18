@@ -2427,7 +2427,7 @@ mod tests {
                         (painted.r - naive.r).abs() > 1e-4
                             || (painted.g - naive.g).abs() > 1e-4
                             || (painted.b - naive.b).abs() > 1e-4,
-                        "if these ever agree, the divergence this test guards                          against has gone away and the test is vacuous",
+                        "if these ever agree, the divergence this test guards against has gone away and the test is vacuous",
                     );
                 }
             }

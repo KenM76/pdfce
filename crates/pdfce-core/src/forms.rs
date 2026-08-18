@@ -2345,7 +2345,7 @@ mod tests {
         };
         assert!(
             radio.flags.has(FieldFlags::RICH_TEXT),
-            "precondition: the RAW bit is set — this is exactly why the bare              flag test is unsafe, and asserting it keeps this test honest"
+            "precondition: the RAW bit is set — this is exactly why the bare flag test is unsafe, and asserting it keeps this test honest"
         );
         assert!(
             !radio.is_rich_text(),

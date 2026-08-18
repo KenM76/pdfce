@@ -704,7 +704,7 @@ fn print_block(name: &str, a: &Agg) {
     println!();
     println!("  (a) REACHABILITY — three denominators, loose and strict");
     println!(
-        "      denominator                       loose (simple font)   strict (+ has code 32)"
+        " denominator loose (simple font) strict (+ has code 32)"
     );
     println!(
         "      by document  (n={:>6})           {}              {}",
@@ -728,7 +728,7 @@ fn print_block(name: &str, a: &Agg) {
     println!();
     println!("  document font mix (of {} text-bearing)", a.text_bearing);
     println!(
-        "      all-simple {:>6} ({})   all-composite {:>6} ({})   MIXED {:>6} ({})",
+        " all-simple {:>6} ({}) all-composite {:>6} ({}) MIXED {:>6} ({})",
         a.all_simple,
         pct(a.all_simple, a.text_bearing),
         a.all_composite,

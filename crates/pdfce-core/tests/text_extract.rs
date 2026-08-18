@@ -378,7 +378,7 @@ fn the_unmappable_sentinel_changes_the_characters_but_never_the_count() {
         .count();
     assert_eq!(
         glyphs, 0,
-        "an all-unmappable page under `omit` yields no runs at all — if          this starts failing, `close_run` changed and the setting's docs          need updating with it"
+        "an all-unmappable page under `omit` yields no runs at all — if this starts failing, `close_run` changed and the setting's docs need updating with it"
     );
 }
 

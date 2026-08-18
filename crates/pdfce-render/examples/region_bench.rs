@@ -182,11 +182,13 @@ fn main() {
                     total += t.elapsed();
                     frames += 1;
                 }
+                // string-gap-exempt: aligned with the FLOOR/REGION/RECORD case labels
                 Err(e) => println!("PAN    scale {scale:>5}  frame {i} ERR {e}"),
             }
         }
         if frames > 0 {
             println!(
+                // string-gap-exempt: aligned with the FLOOR/REGION/RECORD case labels
                 "PAN    scale {scale:>5}  {frames} frames  {:?} total  {:?} per frame",
                 total,
                 total / frames

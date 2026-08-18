@@ -179,7 +179,7 @@ fn node_move_on_a_rectangle_corner_expands_it_and_says_so() {
     );
     assert!(
         !text.contains("rectangle"),
-        "the disclosure belongs on stderr; stdout is the machine-readable          record: {text}"
+        "the disclosure belongs on stderr; stdout is the machine-readable record: {text}"
     );
     let _ = std::fs::remove_file(&out_path);
 }

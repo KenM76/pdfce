@@ -3532,7 +3532,7 @@ pub fn theme_preset_note(preset: crate::theme::Preset) -> &'static str {
 /// does not "fix" it by overwriting a preference that will work again.
 pub fn setting_theme_unknown(token: &str) -> String {
     format!(
-        "This settings file asks for a theme named \"{token}\", which this version does not have.          Using Quiet for now. The name is kept, not overwritten."
+        "This settings file asks for a theme named \"{token}\", which this version does not have. Using Quiet for now. The name is kept, not overwritten."
     )
 }
 

@@ -467,7 +467,7 @@ mod tests {
             for earlier in &TOKENS[..i] {
                 assert!(
                     !later.starts_with(earlier),
-                    "{earlier:?} comes before {later:?} and is a prefix of it,                      so {later:?} can never match"
+                    "{earlier:?} comes before {later:?} and is a prefix of it, so {later:?} can never match"
                 );
             }
         }

@@ -350,7 +350,7 @@ fn main() -> ExitCode {
         eprintln!("  Walks each directory for *.pdf and proves the ARCHITECTURE.md §5");
         eprintln!("  round-trip invariant over every loadable file, in four modes:");
         eprintln!("  incremental (identity), append-identity, full rewrite, and mutation.");
-        eprintln!("  --mutate N   cap the mutation mode at the first N files (sorted order)");
+        eprintln!("  --mutate N cap the mutation mode at the first N files (sorted order)");
         eprintln!("  --no-mutate  skip the mutation mode entirely");
         eprintln!("  Writes <dir>-roundtrip.tsv next to each directory.");
         return ExitCode::from(2);

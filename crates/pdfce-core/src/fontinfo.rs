@@ -3070,7 +3070,7 @@ mod tests {
         assert!(inv.fonts.is_empty());
         assert!(
             inv.diagnostics.page_scan_failed,
-            "an empty list from an unwalkable page tree must be flagged, not              presented as an answer"
+            "an empty list from an unwalkable page tree must be flagged, not presented as an answer"
         );
         assert!(!inv.diagnostics.is_clean());
     }

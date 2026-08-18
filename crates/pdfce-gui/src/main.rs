@@ -25041,7 +25041,7 @@ mod tests {
         assert_eq!(
             pending_disposition(Some(&p), 7),
             PendingDisposition::Rebuild,
-            "the caret is in run 7, so typing must build a pending for run 7              — keeping run 3's is what put the operator's text in the wrong              paragraph"
+            "the caret is in run 7, so typing must build a pending for run 7 — keeping run 3's is what put the operator's text in the wrong paragraph"
         );
     }
 
@@ -25074,7 +25074,7 @@ mod tests {
         assert_eq!(
             pending_disposition(Some(&p), 7),
             PendingDisposition::RefuseExtend,
-            "typing must not reach run 3 while the caret is in run 7, and the              typed text must not be thrown away either"
+            "typing must not reach run 3 while the caret is in run 7, and the typed text must not be thrown away either"
         );
     }
 
@@ -25103,7 +25103,7 @@ mod tests {
         // the writer checks it.
         assert_eq!(
             opt.export, opt.display,
-            "a blank export must make the two coincide, which is what makes              `add_choice_field` emit §12.7.4.4's single-string form instead              of repeating the word twice as a pair"
+            "a blank export must make the two coincide, which is what makes `add_choice_field` emit §12.7.4.4's single-string form instead of repeating the word twice as a pair"
         );
         assert_eq!(opt.display, "Canada");
     }
@@ -25121,7 +25121,7 @@ mod tests {
         assert_eq!(opt.display, "Mexico");
         assert_eq!(
             opt.export, "MX",
-            "the EXPORT is what the form submits — collapsing it to the              display would submit the wrong value while looking correct"
+            "the EXPORT is what the form submits — collapsing it to the display would submit the wrong value while looking correct"
         );
     }
 
@@ -25291,14 +25291,14 @@ mod tests {
         assert_eq!(
             app.pane_subject,
             ribbon::PaneSubject::Properties,
-            "the ribbon route must actually reach Properties, or this test              proves nothing about returning from it"
+            "the ribbon route must actually reach Properties, or this test proves nothing about returning from it"
         );
 
         app.apply_for_test(Action::SelectCanvasTool(Some(CanvasTool::TextEdit)));
         assert_eq!(
             app.pane_subject,
             ribbon::PaneSubject::ArmedTool,
-            "arming a tool must return the pane to the tool compartment —              otherwise the tool is armed and its options are invisible, and              Properties appears to be stuck on screen permanently"
+            "arming a tool must return the pane to the tool compartment — otherwise the tool is armed and its options are invisible, and Properties appears to be stuck on screen permanently"
         );
 
         // Disarming stays ONE-WAY on purpose: it must NOT drag the pane
@@ -25336,7 +25336,7 @@ mod tests {
             let assigned = format!("pane_subject = ribbon::PaneSubject::{subject:?}");
             assert!(
                 outside.contains(&opened) || outside.contains(&assigned),
-                "{subject:?} is only ever set inside `raw_input_hook` — the diagnostic                  harness can open that panel and an operator cannot. A `match` arm that                  DRAWS it does not count; something has to SET it. Give it a control."
+                "{subject:?} is only ever set inside `raw_input_hook` — the diagnostic harness can open that panel and an operator cannot. A `match` arm that DRAWS it does not count; something has to SET it. Give it a control."
             );
         }
     }
@@ -26221,20 +26221,20 @@ mod tests {
         let note_at_open = app.recovery_note.clone();
         assert!(
             note_at_open.is_some(),
-            "the fixture chosen must actually load via recovery, or this test              proves nothing"
+            "the fixture chosen must actually load via recovery, or this test proves nothing"
         );
 
         app.open_path(fixture("hello.pdf"));
         assert!(
             app.recovery_note.is_none(),
-            "a cleanly-loaded document must not inherit the previous one's              recovery banner"
+            "a cleanly-loaded document must not inherit the previous one's recovery banner"
         );
 
         // Back to the recovered one. THIS is the regression.
         app.switch_to_parked(0);
         assert_eq!(
             app.recovery_note, note_at_open,
-            "switching back to a recovery-loaded document must restore its              disclosure — clearing it hides a live warning about a document              that is still recovery-loaded"
+            "switching back to a recovery-loaded document must restore its disclosure — clearing it hides a live warning about a document that is still recovery-loaded"
         );
     }
 
@@ -27704,7 +27704,7 @@ mod tests {
         );
         assert!(
             big.starts_with(ui_text::vector_object_deleted()),
-            "and it EXTENDS the existing sentence rather than replacing it,              so an operator's existing habit still reads: {big}",
+            "and it EXTENDS the existing sentence rather than replacing it, so an operator's existing habit still reads: {big}",
         );
 
         // Three objects of one part each: nothing to add.
@@ -27734,7 +27734,7 @@ mod tests {
         assert_eq!(
             moves,
             vec![(0, pt(3.0, 4.0)), (1, pt(13.0, 4.0)), (2, pt(13.0, 14.0)),],
-            "every selected anchor keeps its offset from the grabbed one — a              drag translates the selection, it does not distort it",
+            "every selected anchor keeps its offset from the grabbed one — a drag translates the selection, it does not distort it",
         );
         assert!(
             !moves.iter().any(|(n, _)| *n == 3),
@@ -28013,7 +28013,7 @@ mod tests {
         assert_eq!(
             app.pending_question_cancel(),
             Some(Action::CancelClose),
-            "Escape over the close question must CANCEL it — never discard              unsaved work, which is the other button"
+            "Escape over the close question must CANCEL it — never discard unsaved work, which is the other button"
         );
         app.apply_for_test(Action::CancelClose);
         assert!(!app.pending_close);
@@ -28065,7 +28065,7 @@ mod tests {
         app.apply_for_test(Action::CloseDocument);
         assert!(
             !app.pending_close,
-            "a second confirmation must not be raisable while one is up — if              this ever fails, neither dialog can be dismissed and the window              is wedged"
+            "a second confirmation must not be raisable while one is up — if this ever fails, neither dialog can be dismissed and the window is wedged"
         );
 
         // And the one that IS up still answers.
@@ -28108,7 +28108,7 @@ mod tests {
         assert_eq!(
             b,
             Action::CancelClose,
-            "the close question's Escape must CANCEL, never save-and-close or              discard — both of those are irreversible from the operator's seat"
+            "the close question's Escape must CANCEL, never save-and-close or discard — both of those are irreversible from the operator's seat"
         );
         app.apply_for_test(b);
         assert!(!app.pending_close, "and it must actually take effect");
@@ -28582,7 +28582,7 @@ mod tests {
         );
         assert!(
             canvas::tool_builds_markup(doc.active_tool()),
-            "and the predicate that gates both the gesture and the property              bar must agree, or one of the two silently does not appear"
+            "and the predicate that gates both the gesture and the property bar must agree, or one of the two silently does not appear"
         );
     }
 }

@@ -637,10 +637,12 @@ fn report(rows: &[Row]) {
     println!("  files still missing something   {files_still_missing}");
     println!();
     println!(
+        // string-gap-exempt: aligned report column in the sweep summary
         "render after embedding      ok={render_ok} broken={render_failed} \
 already-broken={render_failed_already}   (broken must be 0)"
     );
     println!(
+        // string-gap-exempt: aligned report column in the sweep summary
         "★ pixel-identical raster    yes={identical_yes} no={identical_no}   (bundled-donor rows \
 only; `no` must be 0)"
     );

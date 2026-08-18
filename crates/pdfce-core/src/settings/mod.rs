@@ -1864,7 +1864,7 @@ mod probe_race_tests {
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(
             bad, 0,
-            "{bad} of 8000 probes called a WRITABLE directory unwritable. In              production this does not error -- it silently relocates settings,              layout and the recent list out of the portable userdata/ directory."
+            "{bad} of 8000 probes called a WRITABLE directory unwritable. In production this does not error -- it silently relocates settings, layout and the recent list out of the portable userdata/ directory."
         );
     }
 
@@ -1921,7 +1921,7 @@ mod probe_race_tests {
         });
         assert!(
             all_same.load(std::sync::atomic::Ordering::Relaxed),
-            "two callers in one process resolved DIFFERENT stores — this is              the defect that put the layout file and the recent-file list in              different directories"
+            "two callers in one process resolved DIFFERENT stores — this is the defect that put the layout file and the recent-file list in different directories"
         );
     }
 

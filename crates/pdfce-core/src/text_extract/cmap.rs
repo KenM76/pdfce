@@ -138,7 +138,7 @@ pub enum NotInjective {
     /// A code maps to more than one character — a ligature or a decomposed
     /// sequence.
     #[error(
-        "code {code} maps to {text:?}, which is more than one character, so there is no single          code that means just one of them"
+        "code {code} maps to {text:?}, which is more than one character, so there is no single code that means just one of them"
     )]
     MultiCharDestination { code: u32, text: String },
     /// Two codes map to the same character.

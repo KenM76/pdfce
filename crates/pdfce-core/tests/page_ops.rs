@@ -958,6 +958,7 @@ fn measure_guard_headroom_against_a_corpus() {
 
     println!("--- Pass 3.2 guard headroom over {files} corpus file(s) ---");
     println!(
+        // string-gap-exempt: aligned guard-report column
         "outline items      observed max {max_outline:>8}  guard {:>8}",
         pdfce_core::pageops::references::MAX_OUTLINE_ITEMS
     );
@@ -966,10 +967,12 @@ fn measure_guard_headroom_against_a_corpus() {
         pdfce_core::pageops::references::MAX_NAME_TREE_NODES
     );
     println!(
+        // string-gap-exempt: aligned guard-report column
         "page-tree depth    observed max {max_tree_depth:>8}  guard {:>8}",
         pdfce_core::page_tree::MAX_TREE_DEPTH
     );
     println!(
+        // string-gap-exempt: aligned guard-report column
         "pages              observed max {max_pages:>8}  guard {:>8}",
         pdfce_core::page_tree::MAX_PAGES
     );

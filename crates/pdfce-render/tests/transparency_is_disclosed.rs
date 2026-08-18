@@ -260,7 +260,7 @@ stream
     let p = r.pixmap.pixel(30, 30).expect("in bounds").demultiply();
     assert!(
         p.red() > 250 && p.green() < 5 && p.blue() > 250,
-        "Screen of red over blue is magenta, got ({}, {}, {}) —          (255,0,0) means the blend never ran, (255,255,255) means it ran          against the paper instead of against the blue square",
+        "Screen of red over blue is magenta, got ({}, {}, {}) — (255,0,0) means the blend never ran, (255,255,255) means it ran against the paper instead of against the blue square",
         p.red(),
         p.green(),
         p.blue()
@@ -278,7 +278,7 @@ fn the_first_object_at_a_pixel_is_unblended_because_the_page_starts_transparent(
     let p = r.pixmap.pixel(30, 30).expect("in bounds").demultiply();
     assert!(
         p.red() > 250 && p.green() < 5 && p.blue() < 5,
-        "an isolated group's first object survives its own blend mode,          got ({}, {}, {}) — white here means the buffer was pre-filled",
+        "an isolated group's first object survives its own blend mode, got ({}, {}, {}) — white here means the buffer was pre-filled",
         p.red(),
         p.green(),
         p.blue()
@@ -587,12 +587,12 @@ stream
     let (ir, ig, ib) = render_with("/I true");
     assert!(
         ir > 250 && ig < 5 && ib < 5,
-        "an ISOLATED group's contents see a transparent backdrop, so the          red survives its own Screen: expected red, got ({ir}, {ig}, {ib})"
+        "an ISOLATED group's contents see a transparent backdrop, so the red survives its own Screen: expected red, got ({ir}, {ig}, {ib})"
     );
 
     let (nr, ng, nb) = render_with("");
     assert!(
         nr > 250 && ng < 5 && nb > 250,
-        "a NON-isolated group's contents see the page, so the red screens          against blue: expected magenta, got ({nr}, {ng}, {nb})"
+        "a NON-isolated group's contents see the page, so the red screens against blue: expected magenta, got ({nr}, {ng}, {nb})"
     );
 }

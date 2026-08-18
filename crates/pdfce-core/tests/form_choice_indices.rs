@@ -421,7 +421,7 @@ fn a_taller_list_box_scrolls_less_for_the_same_selection() {
     assert_eq!(
         short_ti,
         Some(2),
-        "option 2 is below the fold of a one-row box, so it scrolls to the top          of the window"
+        "option 2 is below the fold of a one-row box, so it scrolls to the top of the window"
     );
     assert_eq!(
         tall_ti, None,

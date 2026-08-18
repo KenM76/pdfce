@@ -1053,7 +1053,7 @@ endobj
         // object's header would corrupt whatever re-parses this span.
         let Provenance::RecoveredFile(span) = io.provenance else {
             panic!(
-                "a terminator-less definition must be RecoveredFile, so the writer                     re-serializes instead of copying bytes that lack an endobj"
+                "a terminator-less definition must be RecoveredFile, so the writer re-serializes instead of copying bytes that lack an endobj"
             );
         };
         assert!(span.end() <= buf.windows(7).position(|w| w == b"3 0 obj").unwrap());

@@ -74,6 +74,16 @@
 pub mod annot;
 pub mod annot_author;
 pub mod attachments;
+/// Build provenance — what this binary is and when it was made
+/// (`Pass 101.0`; see the module's own docs for the `iccce` question).
+pub mod build;
+/// Unix timestamp to RFC 3339 UTC, shared with this crate's BUILD SCRIPT via
+/// `include!` so the calendar arithmetic exists once and stays testable.
+///
+/// Private: it exists to serve [`build`], and a general-purpose date
+/// formatter is not something `pdfce-core` should be offering. The file's own
+/// header comments carry the reasoning and the leap-year cases.
+mod civil_time;
 pub mod color;
 pub mod content;
 pub mod crypto;

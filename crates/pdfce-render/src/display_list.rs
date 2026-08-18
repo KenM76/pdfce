@@ -162,13 +162,31 @@ use crate::{RenderError, RenderedPage};
 /// same 100 KB file into an unbounded allocation — the shape §10 exists to
 /// refuse, and one that arrives as a hang rather than as an error.
 ///
-/// # Where the number comes from
+/// # Where the number comes from, and a correction to how it was first
+/// justified
 ///
-/// Measured: the reference A3 CAD sheet — 127,267 recorded ops, among the
-/// densest real drawings this project has — occupies **~30 MiB**. The ceiling
-/// is **256 MiB**, roughly 8.5× that, which leaves ample room for a
-/// legitimately heavier document while keeping a hostile one from taking the
-/// process down.
+/// The ceiling is **256 MiB**.
+///
+/// It was originally justified as *"~8.5× the reference A3 CAD sheet's
+/// ~30 MiB"*, and **that ratio was wrong — not arithmetically, but because
+/// the CAD sheet is not the largest thing measured.** Running the guard
+/// across 3,245 files (`examples/guard_probe.rs`; the whole veraPDF corpus,
+/// every synthetic fixture, and this project's working documents) found a
+/// larger one:
+///
+/// | | ops | held |
+/// |---|---:|---:|
+/// | reference A3 CAD sheet | 127,267 | 29.5 MiB |
+/// | ★ `veraPDF … 6.1.12 … t03-fail-c.pdf` | — | **41.9 MiB** |
+///
+/// So the real headroom against the largest **observed** input is **6×**,
+/// not 8.5×. The ceiling did not move; the claim about it did.
+///
+/// Worth noting *which* file it was, because it is not an accident: a
+/// §6.1.12 *implementation-limits* conformance file is built to stress
+/// exactly this kind of ceiling. The suite whose job is to find a
+/// resource guard found the biggest one, which is the standing rule's whole
+/// argument for running new guards against it.
 ///
 /// It is deliberately generous rather than tight, and the asymmetry is the
 /// argument: a false refusal costs a fallback to
@@ -178,6 +196,25 @@ use crate::{RenderError, RenderedPage};
 ///
 /// A caller that hits it gets [`RenderError::PageNotRecordable`] with
 /// [`PoisonReason::TooLarge`], and should render that page directly.
+///
+/// # Two-sided discharge, and the half that could not be demonstrated
+///
+/// `ROADMAP.md`'s standing rule requires a new resource guard to be shown
+/// both to **fire** and to stay **silent**.
+///
+/// - **Silent: discharged, and well past what the rule asks.** 3,245 files
+///   walked, **0** refused as `TooLarge`. Beside it, a figure a shell wants:
+///   **77 pages (2.4 %) were refused for a *capability* reason** — a
+///   shading, an overprint composite, a soft mask — so roughly one page in
+///   forty falls back to [`crate::render_page_region`], and the other
+///   thirty-nine get a display list.
+/// - **Firing: demonstrated only synthetically.** The unit tests in this
+///   module drive the ceiling directly with a small limit. **No real file
+///   was found that reaches 256 MiB**, and the reason is the table above:
+///   the largest observed list is 6× under it. Recorded plainly rather than
+///   dressed up — a clean sweep means the ceiling does not trip on
+///   legitimate documents, and says nothing about whether a hostile one
+///   could be constructed to.
 pub const MAX_DISPLAY_LIST_BYTES: usize = 256 * 1024 * 1024;
 
 /// Index of a [`ClipDef`] in a [`DisplayList`]'s clip table.

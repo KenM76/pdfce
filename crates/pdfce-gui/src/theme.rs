@@ -584,7 +584,7 @@ mod tests {
         assert_eq!(
             Preset::from_key(&core_default),
             Some(Preset::default()),
-            "pdfce-core defaults to theme {core_default:?}, which this shell does not resolve              to its own default preset"
+            "pdfce-core defaults to theme {core_default:?}, which this shell does not resolve to its own default preset"
         );
     }
 

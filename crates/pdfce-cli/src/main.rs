@@ -391,10 +391,60 @@ mod exit {
 }
 
 /// pdfce — a scriptable PDF toolkit (open-source Acrobat-Pro-parity engine).
+/// The multi-line provenance banner behind `pdfce-cli --version`.
+///
+/// # Why this is a leaked `String` rather than a `const`
+///
+/// `clap`'s `long_version` wants a `&'static str`, and the banner is
+/// *formatted* from [`pdfce_core::build::BuildInfo`] rather than being a
+/// literal. Leaking one small allocation, once, in a process that is about to
+/// print it and exit is the honest trade; the alternatives are a `OnceLock`
+/// whose value can never be dropped anyway, or duplicating the format string
+/// as a `const` that would then have to be kept in step with `BuildInfo`'s
+/// own `Display`.
+///
+/// # What it prints, and why the second timestamp earns its line
+///
+/// The crate version, the build time, the git revision, the *commit* time,
+/// and the `iccce` line. Build time and commit time together say how stale
+/// the source was when the binary was made — a build from today off a
+/// six-week-old commit is a different situation from one off this morning's,
+/// and only the pair distinguishes them.
+///
+/// The `iccce` line reports `not-linked` today because pdfce does not depend
+/// on `iccce`. It is printed anyway, with the reason, because the operator
+/// asked for that revision by name: an omitted line reads as an oversight, a
+/// stated absence answers the question.
+fn build_banner() -> &'static str {
+    let b = pdfce_core::build::BuildInfo::current();
+    // The FIRST line is the version alone, because clap already prints the
+    // binary name in front of whatever this returns -- rendering `BuildInfo`
+    // directly gave "pdfce-cli pdfce 0.7.0", the product named twice. The
+    // remaining lines mirror `BuildInfo`'s own `Display` on purpose, so a
+    // stamp copied out of `--version` and one copied out of a crash report
+    // read the same.
+    let mut text = format!(
+        "{}\n  built:     {}\n  revision:  {}\n  committed: {}\n  iccce:     {}",
+        b.version, b.built_at, b.revision, b.committed_at, b.iccce
+    );
+    if b.iccce == "not-linked" {
+        text.push_str(" (pdfce does not depend on iccce; see ARCHITECTURE.md decision 064)");
+    }
+    if b.is_dirty() {
+        text.push_str(
+            "\n  NOTE: built from a MODIFIED working tree - this binary is not the commit it names",
+        );
+    }
+    Box::leak(text.into_boxed_str())
+}
+
 #[derive(Debug, Parser)]
 #[command(
     name = "pdfce-cli",
     version,
+    // `-V` stays the bare crate version, which is what a script parses;
+    // `--version` is what a HUMAN reads and is where the provenance goes.
+    long_version = build_banner(),
     about = "pdfce command-line batch shell — scriptable PDF operations.",
     long_about = "pdfce-cli is the command-line front end to the pdfce PDF \
 engine. Pass 0 implements `inspect`; the remaining subcommands are stubs \
@@ -11648,6 +11698,7 @@ fn cmd_recompute(
             Skip::NotAValueField => "not_a_value_field",
         };
         println!(
+            // string-gap-exempt: aligned status column in a machine-readable report
             "skip   field={:?} reason={reason} detail={:?}",
             skipped.field,
             skipped.reason.to_string(),
@@ -11806,10 +11857,12 @@ fn cmd_reset_form(
     let mut clearing = 0usize;
     for row in &preview {
         if let Some(reason) = row.ineligible {
+            // string-gap-exempt: aligned status column in a machine-readable report
             println!("skip   field={:?} reason={}", row.field, reason.token());
             continue;
         }
         if !row.would_change {
+            // string-gap-exempt: aligned status column in a machine-readable report
             println!("ok     field={:?} reason=already_default", row.field);
             continue;
         }

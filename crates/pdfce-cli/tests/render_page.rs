@@ -875,7 +875,7 @@ fn decrypting_reproduces_the_plaintext_document_exactly() {
         let got = render(&borrowed, &dir.join("enc.png"));
         assert_eq!(
             got, plain,
-            "{label}: the decrypted document must render byte-identically to              the plaintext it was made from. A difference here means the key              derivation produced something the parser could still walk, which              is the failure mode no load test can see."
+            "{label}: the decrypted document must render byte-identically to the plaintext it was made from. A difference here means the key derivation produced something the parser could still walk, which is the failure mode no load test can see."
         );
     }
 }

@@ -156,12 +156,12 @@ fn a_cancelled_render_paints_nothing() {
     assert_ne!(
         painted_pixmap.data(),
         blank.data(),
-        "the fixture must paint something when NOT cancelled, or this test          cannot distinguish a working cancellation from an empty page"
+        "the fixture must paint something when NOT cancelled, or this test cannot distinguish a working cancellation from an empty page"
     );
 
     assert_eq!(
         cancelled_pixmap.data(),
         blank.data(),
-        "a pre-cancelled render painted pixels — the interpreter ran          operators after the flag was set, so cancellation is only          changing the return value while the machine does the whole          render. Measured cost of exactly this bug: 10,227 ms against          322 ms on a real CAD page."
+        "a pre-cancelled render painted pixels — the interpreter ran operators after the flag was set, so cancellation is only changing the return value while the machine does the whole render. Measured cost of exactly this bug: 10,227 ms against 322 ms on a real CAD page."
     );
 }

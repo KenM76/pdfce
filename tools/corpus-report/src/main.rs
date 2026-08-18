@@ -687,7 +687,7 @@ fn print_summary(dir: &Path, rows: &[(String, Outcome)]) -> usize {
     let mut ordered: Vec<(&str, usize)> = counts.into_iter().collect();
     ordered.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
 
-    println!("\n  category            count      %");
+    println!("\n  category count %");
     println!("  ------------------  -----  -----");
     for (name, n) in &ordered {
         #[allow(clippy::cast_precision_loss)] // corpus sizes are tiny vs f64 mantissa

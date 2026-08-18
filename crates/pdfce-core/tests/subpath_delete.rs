@@ -181,7 +181,7 @@ fn deleting_before_an_implicitly_reopened_subpath_is_refused_by_name() {
     let path = only_path(&cs);
     assert!(
         path.subpaths.len() >= 2,
-        "the fixture must actually produce an implicit subpath, or this tests          nothing: got {} subpath(s)",
+        "the fixture must actually produce an implicit subpath, or this tests nothing: got {} subpath(s)",
         path.subpaths.len()
     );
     assert!(
