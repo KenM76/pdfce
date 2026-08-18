@@ -34,6 +34,11 @@
 //! - `rotate-page <in> -o <out> --page N --degrees D [--relative]`
 //!   (Pass 3.1): sets one page's `/Rotate` (Table 30). See
 //!   [`cmd_rotate_page`].
+//! - `set-page-size <in> -o <out> --pages SPEC (--size NAME [--landscape]
+//!   | --width W --height H)`: sets a page's `/MediaBox` — the sheet size
+//!   (§7.7.3.3). Named sizes come from `pdfce_core::paper`, so the CLI,
+//!   the GUI and any future shell all quote the same numbers. See
+//!   [`cmd_set_page_size`].
 //! - Every other subcommand is a **documented stub** that exits with
 //!   [`exit::UNIMPLEMENTED`]. The real bodies land alongside each feature's
 //!   own Pass (docs/ROADMAP.md "CLI batch operations"). Stubs are listed
@@ -789,6 +794,55 @@ enum Command {
         /// effective rotation rather than an absolute value.
         #[arg(long)]
         relative: bool,
+        /// Output path. Never the input path by default — see
+        /// `--in-place`.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Which save path to use.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Also verify that undoing the edit reproduces the input file
+        /// byte for byte (ARCHITECTURE.md §11.1). Costs one extra save.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+
+    /// Set one or more pages' sheet size (ISO 32000-1 §7.7.3.3
+    /// `/MediaBox`).
+    ///
+    /// Writes the entry on each page object itself, which overrides any
+    /// value inherited from an ancestor page-tree node — so resizing one
+    /// page never disturbs its siblings (§7.7.3.4). Content is neither
+    /// moved nor scaled: only the sheet boundary changes.
+    ///
+    /// Either `--size` (with optional `--landscape`) or an explicit
+    /// `--width`/`--height` pair in points. `--size` accepts:
+    /// `a0`…`a6`, `letter`, `legal`, `tabloid`, `executive`,
+    /// `ansi-a`…`ansi-e`.
+    SetPageSize {
+        /// Input PDF.
+        input: PathBuf,
+        /// Which pages, 1-based: `3`, `1,4,7`, `2-5`, or `all`.
+        #[arg(long, default_value = "1", value_name = "SPEC")]
+        pages: String,
+        /// A standard sheet size by name (`a1`, `ansi-d`, `letter`, …).
+        #[arg(
+            long,
+            value_name = "NAME",
+            required_unless_present = "width",
+            conflicts_with_all = ["width", "height"]
+        )]
+        size: Option<String>,
+        /// Use `--size` rotated to landscape (wider than tall) — the
+        /// normal orientation for a drawing sheet.
+        #[arg(long, requires = "size")]
+        landscape: bool,
+        /// Custom sheet width in points (1/72 inch). Requires `--height`.
+        #[arg(long, requires = "height", value_name = "PT")]
+        width: Option<f64>,
+        /// Custom sheet height in points (1/72 inch). Requires `--width`.
+        #[arg(long, requires = "width", value_name = "PT")]
+        height: Option<f64>,
         /// Output path. Never the input path by default — see
         /// `--in-place`.
         #[arg(short, long)]
@@ -2398,6 +2452,65 @@ enum Command {
         #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
         mode: SaveMode,
         /// Also verify that undoing the rename reproduces the input byte
+        /// for byte.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+
+    /// Restyle an EXISTING markup annotation in place (ISO 32000-1
+    /// §12.5.6), keeping its object identity.
+    ///
+    /// ADDRESSED BY `--page` + `--index`, the same pair
+    /// `list-annotations` prints and `delete-annotation` takes.
+    ///
+    /// The appearance stream is **regenerated** from the annotation's own
+    /// declared geometry, not just its `/C` — pdfce paints from `/AP` or
+    /// not at all, so setting the colour without redrawing would leave the
+    /// change invisible. Anything the original appearance expressed that
+    /// pdfce does not model (a cloudy `/BE` border, a dashed `/BS`, an
+    /// exotic arrowhead) is reported on stderr as it is dropped.
+    ///
+    /// Refuses, by name: a ce dimension (use `set-dimension-style`), a
+    /// subtype pdfce cannot author an appearance for (`FreeText`,
+    /// `Stamp`, `Widget`, `Link`), an annotation whose geometry keys are
+    /// missing, and a `Locked` annotation (§12.5.3 Table 165 bit 8).
+    SetMarkupStyle {
+        /// Input PDF.
+        input: PathBuf,
+        /// Page, 1-BASED — the `page=` value `list-annotations` prints.
+        #[arg(long)]
+        page: usize,
+        /// Index within that page's `/Annots`, 0-BASED — the `index=`
+        /// value `list-annotations` prints.
+        #[arg(long)]
+        index: usize,
+        /// Stroke/border colour as `RRGGBB` hex, or `none` to remove it
+        /// (§12.5.6 spells "no border" as an ABSENT `/C`, not as a
+        /// colour). On a `/Line`, `/Ink`, `/PolyLine` or text markup the
+        /// stroke is unconditional, so `none` there means black.
+        #[arg(long, value_name = "RRGGBB|none")]
+        color: Option<String>,
+        /// Interior (fill) colour as `RRGGBB` hex, or `none` for a
+        /// transparent interior. `Square`, `Circle` and `Polygon` only.
+        #[arg(long, value_name = "RRGGBB|none")]
+        interior: Option<String>,
+        /// Border width in points. On every subtype except `Square` and
+        /// `Circle` this also moves `/Rect`, because the rectangle is
+        /// derived from the geometry plus a margin containing the stroke.
+        #[arg(long, value_name = "PT")]
+        width: Option<f64>,
+        /// Constant opacity `/CA`, 0.0–1.0 (§12.5.2), or `none` to
+        /// remove the entry — which is fully opaque, and is a different
+        /// fact about the file from an explicit `1.0`.
+        #[arg(long, value_name = "0.0-1.0|none")]
+        opacity: Option<String>,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Which save path to use.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Also verify that undoing the restyle reproduces the input byte
         /// for byte.
         #[arg(long)]
         verify_undo: bool,
@@ -5404,6 +5517,31 @@ fn run() -> ExitCode {
             mode,
             verify_undo,
         } => cmd_delete_form_field(&input, &name, Some(index), &output, mode, verify_undo),
+        Command::SetMarkupStyle {
+            input,
+            page,
+            index,
+            color,
+            interior,
+            width,
+            opacity,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_set_markup_style(
+            &input,
+            page,
+            index,
+            &MarkupStyleArg {
+                color: color.as_deref(),
+                interior: interior.as_deref(),
+                width,
+                opacity: opacity.as_deref(),
+            },
+            &output,
+            mode,
+            verify_undo,
+        ),
         Command::DeleteAnnotation {
             input,
             page,
@@ -6062,6 +6200,29 @@ fn run() -> ExitCode {
             mode,
             verify_undo,
         } => cmd_rotate_page(&input, page, degrees, relative, &output, mode, verify_undo),
+        Command::SetPageSize {
+            input,
+            pages,
+            size,
+            landscape,
+            width,
+            height,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_set_page_size(
+            &input,
+            &pages,
+            &SheetArg {
+                size: size.as_deref(),
+                landscape,
+                width,
+                height,
+            },
+            &output,
+            mode,
+            verify_undo,
+        ),
         Command::SetInfo {
             input,
             title,
@@ -12523,6 +12684,227 @@ appended={} out_bytes={} undo_verified={} undo_identical={} delinearized={}",
     finish_edit(input, &outcome)
 }
 
+/// The four mutually-constrained flags that name `set-page-size`'s target
+/// sheet, bundled so [`cmd_set_page_size`] stays inside clippy's
+/// seven-argument limit.
+///
+/// A struct rather than an `#[allow(clippy::too_many_arguments)]`: these
+/// four ARE one argument conceptually — "which sheet" — and clap already
+/// enforces that exactly one of the two routes through them is populated,
+/// so grouping them costs nothing and makes the constraint visible in the
+/// type.
+#[derive(Debug, Clone, Copy)]
+struct SheetArg<'a> {
+    /// `--size NAME`, a [`pdfce_core::paper::PaperSize`] identifier.
+    size: Option<&'a str>,
+    /// `--landscape`; meaningful only alongside `size`.
+    landscape: bool,
+    /// `--width PT`, the custom route's width.
+    width: Option<f64>,
+    /// `--height PT`, the custom route's height.
+    height: Option<f64>,
+}
+
+/// Implement `pdfce-cli set-page-size`.
+///
+/// # How the target rectangle is worked out
+///
+/// Exactly one of two routes, enforced by clap rather than here:
+///
+/// * `--size NAME [--landscape]` → [`pdfce_core::paper::PaperSize`],
+///   which is in `pdfce-core` precisely so this shell does not carry its
+///   own copy of the numbers. An unknown name is a **named refusal**, not
+///   a nearest match — resolving a typo to a plausible sheet size would
+///   hand the operator a working file of the wrong size with no signal.
+/// * `--width W --height H` in points, origin at `(0, 0)`.
+///
+/// # Why `--pages` rather than `--page`
+///
+/// A drawing set is resized as a set. `--pages` takes the same spec
+/// every other multi-page subcommand takes (`3`, `1,4,7`, `2-5`, `all`),
+/// which also means the 1-based/0-based conversion and the past-the-end
+/// refusal are the shared, already-tested ones.
+///
+/// # What it prints, and why the counters are counters
+///
+/// Each page produces a [`pdfce_core::edit::MediaBoxChange`], and three
+/// of its fields are consequences the operator cannot see in the file:
+/// a crop box the new sheet no longer contains, a sheet that lost area,
+/// and a size outside Annex C.2's recommended range. Under rule 4 the
+/// CLI **prints** those on the way past — the invocation is the commit,
+/// there is no session to disclose into.
+///
+/// They are reported **twice on purpose**: as counters on the machine
+/// line (so a script can branch on them) and as a per-page note on
+/// stderr (so a human running one file sees which page). A counter alone
+/// is easy to miss in a wall of `=0`s; a note alone is unparseable.
+fn cmd_set_page_size(
+    input: &Path,
+    pages: &str,
+    sheet: &SheetArg<'_>,
+    output: &Path,
+    mode: SaveMode,
+    verify_undo: bool,
+) -> u8 {
+    use pdfce_core::paper::{Orientation, PaperSize};
+
+    let &SheetArg {
+        size,
+        landscape,
+        width,
+        height,
+    } = sheet;
+
+    // Resolve the rectangle BEFORE opening the file: a mistyped size
+    // should not cost a parse, and the refusal reads better without a
+    // preceding "opened 40 MB" delay.
+    let rect = match (size, width, height) {
+        (Some(name), _, _) => {
+            let Some(paper) = PaperSize::from_id(name) else {
+                eprintln!(
+                    "pdfce-cli: `{name}` is not a known sheet size; try one of: {}",
+                    PaperSize::ALL
+                        .iter()
+                        .map(|s| s.id())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+                return exit::EDIT_REFUSED;
+            };
+            paper.rect_with(if landscape {
+                Orientation::Landscape
+            } else {
+                Orientation::Portrait
+            })
+        }
+        (None, Some(w), Some(h)) => pdfce_core::page_tree::Rect::from_corners(0.0, 0.0, w, h),
+        // clap's `required_unless_present` + `requires` make this
+        // unreachable; it is spelled out rather than `unreachable!()`
+        // because a panic-free binary must not depend on an argument
+        // parser's configuration staying correct.
+        _ => {
+            eprintln!("pdfce-cli: give either --size, or both --width and --height");
+            return exit::EDIT_REFUSED;
+        }
+    };
+
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    let count = match session.pages() {
+        Ok(pages) => pages.len(),
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit::EDIT_REFUSED;
+        }
+    };
+    let targets = match parse_pages(pages, count) {
+        Ok(list) => list,
+        Err(msg) => {
+            eprintln!("pdfce-cli: {}: --pages: {msg}", input.display());
+            return exit::EDIT_REFUSED;
+        }
+    };
+
+    // One command for the whole selection, not one per page: §11.3 makes
+    // one operator gesture one undo entry. The CLI has no undo stack, but
+    // the verb it calls is the one the GUI will call, and the granularity
+    // is the verb's, not the shell's.
+    let changes = match session.set_media_boxes(&targets, rect) {
+        Ok(changes) => changes,
+        Err(err) => return report_edit_error(input, &err),
+    };
+
+    let (mut lost_area, mut crop_outside, mut advisories) = (0_usize, 0_usize, 0_usize);
+    let (mut explicit, mut base_kept, mut inherited_removed) = (0_usize, 0_usize, 0_usize);
+    for change in &changes {
+        match change.entry {
+            pdfce_core::edit::MediaBoxEntry::ExplicitWritten => explicit += 1,
+            pdfce_core::edit::MediaBoxEntry::BaseSpellingKept => base_kept += 1,
+            pdfce_core::edit::MediaBoxEntry::InheritedSoOwnEntryRemoved => inherited_removed += 1,
+            // `MediaBoxEntry` is #[non_exhaustive]; a future variant must
+            // not silently vanish from the counters.
+            _ => {}
+        }
+        let human = change.page_index + 1;
+        if change.lost_area {
+            lost_area += 1;
+            eprintln!(
+                "pdfce-cli: note: page {human}: the sheet lost area. pdfce removed no content, \
+                 but §14.11.2.1 lets any other tool discard content outside the media box \
+                 \"without affecting the meaning of the PDF file\" — so the loss becomes \
+                 permanent on the first round trip through one."
+            );
+        }
+        if let Some(crop) = change.crop_box_outside {
+            crop_outside += 1;
+            eprintln!(
+                "pdfce-cli: note: page {human}: /CropBox [{:.4} {:.4} {:.4} {:.4}] is no longer \
+                 inside the sheet. It is left as-is (§5); every conforming reader intersects it \
+                 with the media box (§14.11.2.1), so the visible region is now the smaller of \
+                 the two.",
+                crop.llx, crop.lly, crop.urx, crop.ury
+            );
+        }
+        if let Some(advice) = change.size_advisory {
+            advisories += 1;
+            let which = match (advice.below_minimum, advice.above_maximum) {
+                (true, true) => {
+                    "below the recommended minimum on one edge and above the \
+                                 recommended maximum on the other"
+                }
+                (true, false) => "below the recommended 3-unit minimum",
+                _ => "above the recommended 14 400-unit maximum",
+            };
+            eprintln!(
+                "pdfce-cli: note: page {human}: the sheet is {which} (ISO 32000-1 Annex C.2, \
+                 which says \"should\" and which ISO 32000-2 dropped entirely). Written as \
+                 asked; some readers may not handle it."
+            );
+        }
+    }
+
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+
+    let r = &outcome.report;
+    println!(
+        "set-page-size {} pages {pages} mode={} -> {}; \
+size={:.4}x{:.4} pages_set={} explicit={explicit} base_kept={base_kept} \
+inherited_removed={inherited_removed} lost_area={lost_area} crop_outside={crop_outside} \
+size_advisory={advisories} changed={} objects={} verbatim={} reserialized={} promoted={} \
+appended={} out_bytes={} undo_verified={} undo_identical={} delinearized={}",
+        input.display(),
+        mode.name(),
+        output.display(),
+        rect.width(),
+        rect.height(),
+        changes.len(),
+        outcome.changed,
+        r.objects_written,
+        r.objects_verbatim,
+        r.objects_reserialized,
+        r.promoted.len(),
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+        u32::from(r.delinearized),
+    );
+    finish_edit(input, &outcome)
+}
+
 /// Implement `pdfce-cli set-info`.
 ///
 /// `sets` is every `(field, Option<value>)` pair the flags produced;
@@ -17378,6 +17760,279 @@ fn cmd_move_widget(
         r.objects_written,
         r.bytes_appended,
         r.bytes_written,
+    );
+    finish_edit(input, &outcome)
+}
+
+/// The style flags `set-markup-style` accepts, bundled so
+/// [`cmd_set_markup_style`] stays inside clippy's seven-argument limit.
+///
+/// Strings rather than parsed values because each one is tri-state —
+/// absent, a value, or the literal `none` — and parsing them at the same
+/// place keeps the three "what does `none` mean here" answers in one
+/// readable block instead of three clap attributes.
+#[derive(Debug, Clone, Copy)]
+struct MarkupStyleArg<'a> {
+    /// `--color RRGGBB|none`.
+    color: Option<&'a str>,
+    /// `--interior RRGGBB|none`.
+    interior: Option<&'a str>,
+    /// `--width PT`.
+    width: Option<f64>,
+    /// `--opacity 0.0-1.0|none`.
+    opacity: Option<&'a str>,
+}
+
+/// Parse a `RRGGBB`-or-`none` colour flag into a
+/// [`StyleEdit`](pdfce_core::edit::StyleEdit).
+///
+/// `None` back means the flag was absent, i.e. leave the property alone.
+/// The literal `none` becomes [`StyleEdit::Clear`], which is a real markup
+/// style and not a way of spelling black — §12.5.6 has no transparent
+/// value in a colour array, so "no border" IS an absent `/C`.
+///
+/// # Errors
+///
+/// A message naming the flag, for the caller to print.
+fn parse_color_edit(
+    flag: &str,
+    value: Option<&str>,
+) -> Result<Option<pdfce_core::edit::StyleEdit<pdfce_core::annot_author::Color>>, String> {
+    use pdfce_core::edit::StyleEdit;
+    match value {
+        None => Ok(None),
+        Some(v) if v.eq_ignore_ascii_case("none") => Ok(Some(StyleEdit::Clear)),
+        Some(v) => parse_color(v)
+            .map(|c| Some(StyleEdit::Set(c)))
+            .map_err(|e| format!("--{flag}: {e}")),
+    }
+}
+
+/// Implement `pdfce-cli set-markup-style`.
+///
+/// ## Addressing, and why it matches `delete-annotation` exactly
+///
+/// `--page` + `--index`, resolved against the SAME `page_annotations`
+/// walk `list-annotations` prints from. The core verb takes an `ObjId`,
+/// because object identity is the only handle that stays correct while a
+/// session mutates — but the operator's source of truth is the list
+/// command's output, which deliberately does not print object numbers.
+/// Resolving here is what makes "list it, then restyle that index"
+/// reliable rather than approximately right.
+///
+/// ## What it prints
+///
+/// One machine-readable line carrying `subtype=`, how the appearance was
+/// written (`ap=in-place|created|copied`), whether `/Rect` moved, and how
+/// many properties the regeneration dropped — **plus a prose sentence on
+/// stderr naming each dropped property**. The same twice-over the deletion
+/// verb uses, for the same reason: the counter is for a script, the
+/// sentence is for the person who would otherwise wonder later why their
+/// cloudy border went straight.
+///
+/// Under rule 4 the CLI invocation IS the commit — there is no session and
+/// no undo — so what pdfce could not carry over is printed on the way
+/// past rather than offered for confirmation.
+fn cmd_set_markup_style(
+    input: &Path,
+    page: usize,
+    index: usize,
+    style: &MarkupStyleArg<'_>,
+    output: &Path,
+    mode: SaveMode,
+    verify_undo: bool,
+) -> u8 {
+    use pdfce_core::edit::{AppearanceWrite, DroppedProperty, MarkupStyle, StyleEdit};
+
+    if page == 0 {
+        eprintln!(
+            "pdfce-cli: {}: --page is 1-based; 0 is not a page",
+            input.display()
+        );
+        return exit::RUNTIME_ERROR;
+    }
+
+    // Parse the flags BEFORE opening the file: a mistyped colour should
+    // not cost a parse of a large document.
+    let (stroke, interior) = match (
+        parse_color_edit("color", style.color),
+        parse_color_edit("interior", style.interior),
+    ) {
+        (Ok(a), Ok(b)) => (a, b),
+        (Err(msg), _) | (_, Err(msg)) => {
+            eprintln!("pdfce-cli: {msg}");
+            return exit::EDIT_REFUSED;
+        }
+    };
+    let opacity = match style.opacity {
+        None => None,
+        Some(v) if v.eq_ignore_ascii_case("none") => Some(StyleEdit::Clear),
+        Some(v) => match v.parse::<f64>() {
+            Ok(a) if (0.0..=1.0).contains(&a) => Some(StyleEdit::Set(a)),
+            _ => {
+                eprintln!("pdfce-cli: --opacity: `{v}` is not a number in 0.0..=1.0, or `none`");
+                return exit::EDIT_REFUSED;
+            }
+        },
+    };
+    let wanted = MarkupStyle {
+        stroke,
+        interior,
+        width: style.width,
+        opacity,
+        endings: None,
+    };
+
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    // Resolved inside a block so the session borrow ends before the
+    // mutable call below.
+    let (annot_id, subtype) = {
+        let slots = match session.page_slots() {
+            Ok(slots) => slots,
+            Err(err) => {
+                eprintln!("pdfce-cli: {}: {err}", input.display());
+                return exit::RUNTIME_ERROR;
+            }
+        };
+        let Some(slot) = slots.get(page - 1) else {
+            eprintln!(
+                "pdfce-cli: {}: no page {page} — the document has {} page(s)",
+                input.display(),
+                slots.len()
+            );
+            return exit::RUNTIME_ERROR;
+        };
+        let annots = pdfce_core::annot::page_annotations(&session.graph(), slot.id);
+        let Some(annot) = annots.get(index) else {
+            eprintln!(
+                "pdfce-cli: {}: page {page} has no annotation at index {index} — it has {} \
+                 (indices 0..{})",
+                input.display(),
+                annots.len(),
+                annots.len().saturating_sub(1)
+            );
+            return exit::RUNTIME_ERROR;
+        };
+        let Some(id) = annot.id else {
+            eprintln!(
+                "pdfce-cli: {}: page {page} index {index} is a direct dictionary inside /Annots, \
+                 not an indirect object — it has no identity to restyle",
+                input.display()
+            );
+            return exit::EDIT_REFUSED;
+        };
+        (id, String::from_utf8_lossy(&annot.subtype).into_owned())
+    };
+
+    let change = match session.set_markup_style(annot_id, &wanted) {
+        Ok(change) => change,
+        Err(err) => return report_edit_error(input, &err),
+    };
+
+    // The prose half of the disclosure. One sentence per dropped
+    // property, each naming what the appearance no longer draws AND that
+    // the dictionary key survived — because "it is still in the file" and
+    // "it is still on the page" are different, and only the second is
+    // what the operator sees.
+    for dropped in &change.dropped {
+        // NOTE the trailing \-continuations: without them a wrapped Rust
+        // string literal carries every leading space of the next SOURCE
+        // line into the message, which is how the first live run of this
+        // command printed a sentence with ragged gaps in the middle of it.
+        let note = match dropped {
+            DroppedProperty::BorderEffect => {
+                "the /BE cloudy border effect: the regenerated appearance draws a \
+                 straight outline. The /BE key is still in the dictionary, but pdfce \
+                 paints from /AP."
+            }
+            DroppedProperty::BorderStyle => {
+                "the /BS /S border style (dashed, beveled, inset or underline): pdfce \
+                 authors solid strokes only."
+            }
+            DroppedProperty::DashPattern => {
+                "the /BS /D dash array: the regenerated stroke is continuous."
+            }
+            DroppedProperty::RectDifferences => {
+                "the /RD rectangle differences: pdfce draws from /Rect (or the \
+                 explicit geometry keys) directly."
+            }
+            DroppedProperty::LineEnding => {
+                "a /LE line ending outside None/OpenArrow/ClosedArrow: it regenerates \
+                 as no ending."
+            }
+            _ => {
+                "the previous appearance stream was NOT one pdfce would have drawn \
+                 from this annotation's own properties (compared byte for byte), so \
+                 anything it drew beyond the shape — a shadow, a gradient, a raster, \
+                 text — is not in the new one."
+            }
+        };
+        eprintln!("pdfce-cli: {}: dropped — {note}", input.display());
+    }
+    let rect_moved = change.rect_before != Some(change.rect_after);
+    if rect_moved {
+        eprintln!(
+            "pdfce-cli: {}: /Rect moved. For every subtype except Square and Circle the \
+             rectangle is derived from the geometry plus a margin that contains the stroke and \
+             any arrowheads, so changing the width resizes the box. This is correct, not drift.",
+            input.display()
+        );
+    }
+
+    let ap = match change.appearance {
+        AppearanceWrite::InPlace(_) => "in-place",
+        AppearanceWrite::Created(_) => "created",
+        AppearanceWrite::CopiedOnWrite { .. } => "copied",
+        // `AppearanceWrite` is #[non_exhaustive]; a future variant must
+        // print SOMETHING rather than fail to compile a shell.
+        _ => "other",
+    };
+    if matches!(change.appearance, AppearanceWrite::CopiedOnWrite { .. }) {
+        eprintln!(
+            "pdfce-cli: {}: the appearance stream was SHARED with another annotation \
+             (§12.5.2 permits it), so it was copied rather than rewritten — the other \
+             annotation keeps the look it had.",
+            input.display()
+        );
+    }
+
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+
+    let r = &outcome.report;
+    println!(
+        "set-markup-style {} page {page} index {index} mode={} -> {}; \
+subtype={subtype} ap={ap} rect_moved={} dropped={} changed={} objects={} verbatim={} \
+reserialized={} promoted={} appended={} out_bytes={} undo_verified={} undo_identical={} \
+delinearized={}",
+        input.display(),
+        mode.name(),
+        output.display(),
+        u32::from(rect_moved),
+        change.dropped.len(),
+        outcome.changed,
+        r.objects_written,
+        r.objects_verbatim,
+        r.objects_reserialized,
+        r.promoted.len(),
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+        u32::from(r.delinearized),
     );
     finish_edit(input, &outcome)
 }

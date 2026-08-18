@@ -109,6 +109,7 @@ pub mod ocr;
 pub mod outline;
 pub mod page_tree;
 pub mod pageops;
+pub mod paper;
 pub mod parser;
 pub mod recover;
 pub mod redact;

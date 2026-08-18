@@ -2813,3 +2813,123 @@ GAP markers that three existing clause-11 files had been carrying since
   `/CS`**. **An uningested clause's one-line summary in a neighbouring file is a
   claim with no source, and it is exactly what a lookup will hit first.** Sweep
   for it and mark it corrected in place.
+
+
+---
+
+## 49. The MODALITY-DECISION dispatch — "shall or should? the answer IS the engineering decision" (2026-08-18, §14.11.2 page boundaries)
+
+Shape: the engineer is blocked on **one modal verb**, has said so explicitly, and
+has named the two behaviours the verb selects between (clamp vs disclose). Every
+item below cost something or changed an answer.
+
+- **★ THE ANSWER CAN BE VERSION-GATED — the MODALITY itself, not just the clause
+  number or the feature.** ISO 32000-1 §14.11.2.1: crop/bleed/trim/art "**shall
+  not ordinarily** extend beyond … If they do, **they are effectively reduced
+  to** their intersection". ISO 32000-2:2020: "**should not ordinarily** … **a
+  processor shall treat the box as its intersection**". **2.0 demoted the writer
+  clause and promoted the reader clause in the same edit.** Item 43 said a clause
+  can *renumber* across editions; this is stronger — **the modal verb changed, so
+  a corpus file citing only 1.7 gives a different engineering answer than one
+  citing 2.0.** Always check both editions when the dispatch turns on `shall` vs
+  `should`; the delta may BE the finding.
+- **★ THE 2.0 EDIT IS ISO'S OWN READING OF WHAT 1.7 MEANT.** 1.7 conflated two
+  obligations in one sentence: a hedged writer `shall` and a reader consequence
+  stated in the **plain indicative with no modal verb at all** ("are effectively
+  reduced to"). 2.0 split them onto named actors. **When a later edition
+  disambiguates rather than changes, cite the split as evidence for how to read
+  the earlier text** — this is the cleanest kind of adjudication available and it
+  costs one grep.
+- **★ A HEDGED `shall` is a THIRD modality class, distinct from the hollow
+  `shall`.** `shall not **ordinarily**` has a real requirement with an escape
+  clause whose trigger is **never defined**. Not the hollow `shall` (outcome
+  named, method deferred) and not a `should`. **Practical consequence: a
+  validator reporting the violation as a conformance ERROR is over-reading.** Add
+  it to the modality ladder alongside the hollow and outcome-bound `shall`s.
+- **★ "MUST THE WRITER CLAMP X?" IS ANSWERED BY THE READER'S OBLIGATION, NOT THE
+  WRITER'S.** The decisive argument was not the writer modality at all: because
+  every conforming reader **`shall`** intersect, the clamped file and the
+  unclamped file **render identically** ⇒ clamping is a byte-diff on an unnamed
+  object for **zero** behavioural gain ⇒ minimal-diff (rule 3) settles it
+  outright. **When a dispatch frames a question as writer-side, look for the
+  paired reader-side obligation — it often makes the writer question moot.**
+- **DEFAULT-VALUE CHAINS AND CONTAINMENT CHAINS ARE DIFFERENT GRAPHS, and the
+  plausible confusion of the two is exactly what recall produces.** Defaults
+  chain `Bleed/Trim/Art → CropBox → MediaBox`; the containment sentence chains
+  all four **directly to `MediaBox`**. And the clause says in as many words that
+  the crop box "has **no defined relationship with any of the other
+  boundaries**". "Bleed box must be inside the crop box" is a fluent invention.
+  **Check whether a relationship you are about to assert is an INITIALISATION
+  rule or a CONSTRAINT.**
+- **★ A FIGURE CAN ILLUSTRATE MORE STRUCTURE THAN ANY CLAUSE REQUIRES — measure
+  it, then say so.** Figure 86's four outlines are strictly nested (measured with
+  `pdfminer` `LTRect`: media `[143.04 341.88 486.12 756.96]` ⊋ `[168.18 427.02
+  412.66 736.64]` ⊋ `[211.40 470.23 370.04 686.24]` ⊋ `[218.60 477.43 362.84
+  635.83]`, plus the annotation `Bleed: 10.75x8.25 Trim: 10.5x8` proving bleed ⊋
+  trim). **None of that nesting is stated normatively.** Item 25 said a figure is
+  readable as geometry; the corollary is that a *readable* figure is a tempting
+  source of **invented validation rules**. Measure it, publish the numbers, and
+  label it illustrative.
+- **A NEGATIVE RESULT ABOUT A MISSING *OPERATION* NEEDS A DOCUMENT-WIDE
+  CO-OCCURRENCE REGEX, not a clause-scoped term count.** "Does the spec say how
+  to CHANGE a box?" is not answered by counting `chang|modif` inside §14.11.2 (0
+  in both editions) — that only proves the clause is silent. The decisive run was
+  a regex pairing **any mutation verb** with **any box name within ±160 chars
+  across all 756 + 1023 pages**: exactly **one** hit in 1.7 (an informative NOTE,
+  "typically **alters the crop box**") and **zero** in 2.0, because **2.0 deleted
+  the NOTE**. Do both; the second is what makes the negative publishable.
+- **★★ A DISPATCH'S "please just confirm this quote" ITEM IS WHERE THE CORPUS
+  ERROR WAS.** The brief asked only that Annex C.2's `3×3`/`14,400×14,400` be
+  confirmed as a `should`. It is (and the governing sentence is `should` in both
+  directions). But reading Annex C to confirm it exposed **two** unasked facts:
+  (a) `iso32000__annex__c.md` opened with "**Annex C is INFORMATIVE, not
+  normative**" and **ISO 32000-1's Annex C is `(normative)`** — TOC *and* body
+  heading, with `(informative)` correctly present on A and G in the same block,
+  so not a mis-parse; (b) **ISO 32000-2 deleted the page-size range entirely**
+  (`3 by 3`/`minimum page`/`14 400`/`14,400`/`14400` → **0 hits in 1023 pp**) and
+  demoted the whole annex to `(informative)`, retitled "Advice on maximising
+  portability". **The confirmation item is cheap and is exactly where a stale
+  claim hides — never skip it, and never confirm it by re-reading your own
+  corpus file.**
+- **When retracting a status claim, separate WHAT SURVIVES from what falls.**
+  The Annex C retraction changed the annex's normative standing but **not** the
+  modality of any limit quoted in it — a `should` in a normative annex is still
+  an ISO recommendation, so "warn, never reject" was unaffected. What *did*
+  change: Annex C's genuine `shall`s (the 10^10-byte xref-table file limit) are
+  **normative in 1.7** and may now be cited as such. **State both halves, or the
+  next reader over-corrects.**
+- **The plausible ORIGIN of a status error is worth recording next to the
+  correction.** Annex C is `(normative)` in 1.7 and `(informative)` in 2.0 — an
+  edition split is a far likelier source of the wrong claim than carelessness,
+  and naming it stops a future session from "re-fixing" it in the wrong
+  direction.
+- **Item 48's three-things rule fired again, and the third thing was again a
+  neighbouring file's one-line paraphrase.** `iso32000__s__7.9.5.md` said
+  "§14.11.2 says `CropBox` etc. **should** be within `MediaBox`, and a reader
+  **'shall'** intersect them" — written without having read §14.11.2, and it had
+  silently **merged the two editions' wordings into one sentence that matches
+  neither**. This is now **two dispatches in a row** where the uningested
+  clause's summary in a neighbour was wrong. **Grep the corpus for the clause
+  number BEFORE writing the new file, and fix every paraphrase you find.**
+- **A "PERMANENT ambiguity" label still needs its two-source evidence, and both
+  are cheap here.** For a 2.0-era clause: (1) scan the staged EC3 PDF for markup
+  annotations on the clause's pages (`/StrikeOut`, `/Caret`, `/Text`; skip
+  `/Link`/`/Widget`/`/Popup`) — pp. 828–838 carried only `Issue #222` re Table
+  394; (2) fetch `pdf-issues.pdfa.org/32000-2-2020/clause14.html` (HTTP 200,
+  146 839 B) and grep for the sub-clause **and for the key names** — errata for
+  14.11.5/14.11.7 only, **0** `MediaBox`/`CropBox` hits. Two commands, and the
+  label stops being an assumption.
+- **Cross-check the load-bearing sentence with the OTHER extractor.** The whole
+  decision rested on one word, so both the 1.7 and 2.0 containment sentences were
+  re-extracted with `pdfminer` `extract_text(page_numbers=[N])` after the cached
+  `pypdf` dump. They agreed verbatim. **~20 s; do it whenever a single modal verb
+  is the deliverable** — the 1.7 sentence also straddles a page break, which is
+  precisely the shape that item 3 warns produces artifacts.
+- **A REGISTER ENTRY CAN BE "DETERMINATE VIA THE NEXT EDITION".** Four of the
+  five `PB-*` findings went to the ambiguity register's **bucket 2 (determinate)**
+  rather than bucket 1 (setting), because 2.0 resolves them; only the
+  empty/degenerate-intersection case is genuinely open, **and it is still not a
+  setting** ("nobody wants a knob that chooses *fail to open*"). **Bump the
+  bucket header count AND the §2 summary table, and leave the roadmap-facing
+  prose legible with a note that it reads on the old base** rather than silently
+  restating it.

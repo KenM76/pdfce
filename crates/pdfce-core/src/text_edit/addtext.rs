@@ -507,7 +507,8 @@ pub enum AddTextError {
     /// (R93). Emitting a CID the font lacks would draw `.notdef` boxes in a
     /// document that reported success.
     #[error(
-        "internal: the embedded font plan has no glyph for {ch:?}, so the text could not be          written. This is a pdfce bug — the plan and the text disagree."
+        "internal: the embedded font plan has no glyph for {ch:?}, so the text could not be \
+         written. This is a pdfce bug — the plan and the text disagree."
     )]
     EmbeddedPlanIncomplete { ch: char },
     /// No page at the requested index.
@@ -544,7 +545,9 @@ pub enum AddTextError {
     /// citation, same `/P` field) — reused, not reinvented; a parity test
     /// asserts the two `Display` strings are byte-identical.
     #[error(
-        "this document carries a certification signature whose permissions are enforced          (ISO 32000-1 §12.8.4, /Perms /DocMDP, P={permission}); structural page changes are          not among the changes it permits, so pdfce refuses rather than silently breaking it"
+        "this document carries a certification signature whose permissions are enforced (ISO \
+         32000-1 §12.8.4, /Perms /DocMDP, P={permission}); structural page changes are not \
+         among the changes it permits, so pdfce refuses rather than silently breaking it"
     )]
     CertificationForbidsChange {
         /// The certification's `/P` access permission (Table 254: 1–3).
