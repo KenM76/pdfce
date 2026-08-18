@@ -61,6 +61,27 @@ sabotaging, if it is not yet committed. I lost every change to
 the patch scripts. **Copy the file aside before sabotaging**
 (`cp x D:/Dev/temp/x_backup`) and restore from that copy, never from git.
 
+**★★ AND I DID IT AGAIN ON 2026-08-18 — the scoping is what let me.** The
+paragraph above says *"to undo a **sabotage** check"*, so when I wanted to
+undo a **half-applied patch script**, the rule did not feel like it applied.
+It is the same command with the same effect. I ran `git checkout -- crates/`
+and lost three uncommitted edits to tracked files.
+
+**The detail that makes this dangerous rather than merely annoying: it
+spared every UNTRACKED file.** Three brand-new modules survived untouched
+while three small edits to existing files vanished, so the tree looked ~90 %
+intact and `cargo build` still nearly worked. Nothing announced the loss —
+it surfaced as a compile error about a missing module, which reads like a
+forgotten `mod` line, not like data loss.
+
+**How to apply — the rule with no scope on it: NEVER use `git checkout`,
+`git restore` or `git stash` to undo anything while uncommitted work is in
+the tree.** Not for sabotage, not for a bad patch, not for "just this one
+file". Undo by *editing the change back*, or by restoring from a copy you
+made first. If a bulk revert genuinely seems necessary, commit the good work
+first — a throwaway commit costs nothing and is reversible; a checkout is
+not.
+
 Related: [[absence-needs-an-unscoped-query]] — same family. Both are cases
 where a tool returned something that *looked* like a normal result, and the
 only defence was checking with an instrument rather than with a glance.

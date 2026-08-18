@@ -35,4 +35,6 @@
 - [Wrapped string literals lose backslashes](feedback_wrapped_string_literals_lose_backslashes.md) — patching them via heredoc ships error messages with 10-space gaps; grep for it, nothing else catches it
 - [External LLM research gets assessed](feedback_external_llm_research_gets_assessed.md) — Ken pastes Gemini/etc research expecting a graded verdict vs pdfce docs; two of four crate picks violated hard constraints
 - [iccce boundary](project_iccce_boundary.md) — sibling MIT colour project owns ALL colour conversion (decision 064); never propose a CMM crate; check its FeatureRequests channel
+- [Verify each instance, not the class](feedback_verify_each_instance_not_the_class.md) — an oracle run on one of two new variants shipped a defect beside a verified twin
+- [Check BOTH FeatureRequests channels every session](project_feature_request_channels.md) — they live outside the repo, so no gate can contradict a stale "it's empty" claim
 - [Read ARCHITECTURE every session](feedback_read_architecture_every_session.md) — §12 decision log holds cross-project boundaries no gate can catch; a subagent cannot check a constraint the dispatch omits
