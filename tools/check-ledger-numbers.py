@@ -188,7 +188,21 @@ def collect_passes(lines: list[str], secs):
         # one was a `★` heading. A gate whose blind spot is only discovered by
         # someone independently forecasting its output is a gate that has been
         # reporting less than it appeared to — the R53-R57 shape.
-        if not re.match(r"^#{2,4} (?:★ )?Pass ", ln):
+        #
+        # ★★ IT RECURRED ON 2026-08-18, THE SAME SHAPE ONE STAR WIDER. The
+        # anchor above accepted EXACTLY ONE star, so `★★ Pass ...` and
+        # `★★★ Pass ...` were invisible — and the librarian filing Pass 101.0
+        # wrote three such headings and watched the gate report the ceiling
+        # unchanged at 100. Same discovery route as last time: somebody
+        # predicted the delta and the gate disagreed.
+        #
+        # Widened to `★+`. Note what the first fix got wrong, because it is
+        # the transferable part: it repaired the ONE spelling that had been
+        # seen rather than the CLASS, so the emphasis convention this project
+        # uses everywhere (one to three stars by weight) was still half
+        # invisible. A gate anchored on a decorative prefix must accept every
+        # spelling of that decoration, not the one in front of it that day.
+        if not re.match(r"^#{2,4} (?:★+ )?Pass ", ln):
             continue
         prefix = ln.split("—")[0]
         # A STAGED-SHIP QUALIFIER makes two entries for one Pass legitimate.

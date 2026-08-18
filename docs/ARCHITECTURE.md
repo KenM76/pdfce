@@ -4195,6 +4195,145 @@ PDF format by a consuming project before it was caught. See `ROADMAP.md`'s
 `a19e54d` *Shipped* entry (hundred-and-forty-eighth filing) and the
 `R182` amendment for the general finding.
 
+### (Z) `e13f8ed` + `6af5655` + `6b797db` — `pdfce_render`'s DISPLAY-LIST surface, a new `Canvas` seam behind 18 signatures, and `region_device_geometry()` extracted so byte-identity is STRUCTURAL rather than tested-for — 2026-08-18
+
+**`Pass 75.0`.** A `pdfce-render` entry, filed in this §4.1 sync for the
+same reason (W) was: **this section is where the actual shipped surface of
+the headless crates is kept true, and a downstream project
+(`D:\dev\pdfceGUI`) builds against it.** Architectural positions:
+**decision 071** (§12).
+
+#### New public surface
+
+```rust
+// crates/pdfce-render/src/display_list.rs
+pub const MAX_DISPLAY_LIST_BYTES: usize = 256 * 1024 * 1024;
+
+pub struct ClipId(u32);
+pub struct DisplayListKey { /* page, epoch, scale */ }
+pub enum PoisonReason { /* + `as_str()` */ }
+
+pub struct DisplayList { /* … */ }
+impl DisplayList {
+    pub const fn key(&self) -> DisplayListKey;
+    pub const fn page_device_size(&self) -> (u32, u32);
+    pub const fn diagnostics(&self) -> &Diagnostics;
+    pub const fn memory_bytes(&self) -> usize;
+    pub fn op_count(&self) -> usize;
+    pub fn clip_count(&self) -> usize;
+    pub fn replay_region(&self, key: DisplayListKey, region: /* … */)
+        -> Result<RenderedPage, RenderError>;
+}
+
+pub fn record_page(/* … */) -> Result<DisplayList, RenderError>;
+
+// crates/pdfce-render/src/lib.rs
+pub fn region_device_geometry(/* … */) -> Option<(u32, u32, i32, i32)>;
+
+pub enum RenderError {
+    // … existing variants …
+    PageNotRecordable { reason: PoisonReason },
+    DisplayListStale { /* expected_epoch, recorded_epoch,
+                          expected_scale, recorded_scale */ },
+}
+```
+
+#### The `Canvas` seam — an internal change with an external contract
+
+`crates/pdfce-render/src/canvas.rs` introduces `Canvas`, which **replaces
+`&mut Pixmap` in 16 interpreter signatures and 2 annotation
+signatures**. Two modes: **paint** (byte-for-byte the previous
+behaviour) and **record**.
+
+**The interpreter no longer knows what it draws onto.** That is the
+architectural statement, and it is what makes recording possible without
+a second interpreter — the alternative (a parallel "recording
+interpreter") would have been the exact duplication (W) avoided when
+`render_page_region` shared `render_page_with_view`'s implementation.
+
+**The transparency claim was proved by DIFFERENTIAL, not by inspection:**
+a git worktree built at the previous `HEAD`, **742 documents × 2 scales =
+1,383 renders**, byte-compared as PNGs, **1,383 identical / 0
+differing**, run twice (after the plumbing commit and again after the
+recorder). Population: all 210 synthetic fixtures, every 8th external
+corpus file, and the 30 working documents in `D:/Dev/temp/pdfce`.
+
+#### ★ `region_device_geometry()` — why a private helper became public API
+
+Extracted so **a replay lands on EXACTLY the rectangle a fresh region
+render lands on**. It is **shared code, not a second copy**: byte-identity
+between the two paths is not a property that can be tested into
+existence if each path computes its own device rectangle — **it is a
+property you get by there being ONE computation.**
+
+Same discipline as (W)'s *"it SHARES `render_page_with_view`'s
+implementation rather than duplicating it, so … cannot drift"*, and the
+same discipline decision 071 clause 1 invokes when it refuses a scale
+mismatch rather than re-deriving device-dependent decisions at replay
+time. **Three instances of one rule now, all in `pdfce-render`.**
+
+#### The cost model this surface replaces — read it against (W)
+
+(W) told every caller: *"expect ~0.7–1.1 s per zoom step until a display
+list exists."* **It exists.** Measured on the same A3 CAD sheet
+(148,517 paints · 24,128 clip ops; recorded as **127,267 ops · 40
+distinct clips · ~29.5 MiB**), medians of three release runs:
+
+| case (**median of 3, release, A3 CAD sheet**) | from stream | replayed | ratio |
+|---|---:|---:|---:|
+| **FLOOR** — 1 × 1 pt region, 2 px | **636 ms** | **1.06 ms** | **600×** |
+| region 400 × 300 pt, scale 1 (120,701 px) | 680 ms | 83.5 ms | 8.1× |
+| region 400 × 300 pt, scale 8 | 819 ms | **10.5 ms** | **78×** |
+| recording the page itself | — | 618 ms | — |
+
+**Per-item forms, so the figures can disagree with each other:**
+**~8.3 ns per op walked-and-culled** (1.06 ms / 127,267 ops); **~4.9 µs
+per op recorded** (618 ms / 127,267); **~240 B per op**
+(29.5 MiB / 127,267); **~4.3 µs per paint interpreted**
+(636 ms / 148,517).
+
+**The FLOOR row is the one that states the result** — a 2-pixel region
+contains almost no fill, so it measures **interpretation and nothing
+else**, and interpretation is gone from the second render. **The 83.5 ms
+scale-1 figure is FILL for the ~12 % of the page in view, not a
+shortfall**: the cost model is now proportional to **what is displayed**
+rather than to the page.
+
+**Consequences for any caller, replacing (W)'s three:** **do** hold a
+list per page and replay per frame; **panning at fixed zoom is free**; a
+**zoom step costs one rebuild**; a **continuous zoom gesture should scale
+the existing texture and rebuild on settle**; **parallelising region
+fills across cores is now worth revisiting** (it was N× the work for ~1×
+the throughput without a list, because each worker paid the full
+interpretation floor).
+
+#### What this surface REFUSES, and it is not a gap list
+
+`sh`, shading patterns, overprint composites and soft masks **read the
+destination back** and have **no recordable formulation**. `record_page`
+returns `PageNotRecordable { reason }`; the caller falls back to
+`render_page_region`. **It never returns a list that renders the page
+nearly right** — decision 071 clause 2 for the argument. **The refusal
+set is pdfce's current compositing frontier and will shrink**, so treat
+the fallback as a live path, not a legacy one.
+
+#### First real consumer — and it was found by disbelieving a prediction
+
+`pdfce-cli`'s **poster printing** (`cmd_print`) rasterises each tile as a
+**region replayed from one display list**. `Pass 75.0`'s acceptance
+criterion 7 predicted the CLI column would be `—` (*"a one-shot
+invocation has nothing to hold it across"*); **reading the code to
+confirm that turned up a verb that renders one page 156 times in a single
+run, and running it turned up a live bug** — poster printing rendered the
+whole page at tile scale and cropped, so it failed above a modest
+magnification. **156 sheets in 29 s = ~186 ms per sheet** after the fix.
+
+**`pdfce-gui` calls NONE of this** — verified: no call to
+`render_page_region`, `record_page` or `replay_region` exists anywhere in
+`crates/pdfce-gui/src/`. GUI work is paused at the operator's
+instruction. `R151`'s callable-and-uncalled hazard applies to the GUI
+half of this surface and is recorded rather than smoothed over.
+
 ### (I) What this sync did NOT cover — stated so the edges are honest
 
 **A partial sync that names its edges is worth more than a
@@ -5841,6 +5980,30 @@ this. Concretely:
   before it, `MAX_TOKEN_LEN` and `MAX_XOBJECT_DEPTH`, were intuition-chosen;
   this one came from Annex C Table C.1). See §12's seventeenth 2026-08-07
   entry for the owed record and the eighteenth for the discharge.
+- **★ Concrete instance (added 2026-08-18, `6af5655`, `Pass 75.0`,
+  decision 071) — the first guard on a RETAINED structure rather than a
+  transient one: `display_list::MAX_DISPLAY_LIST_BYTES` = 256 MiB.**
+  Every guard above bounds something **produced and consumed** — a
+  decoded stream, a pixmap, a rewrite pass. **A display list is HELD
+  ACROSS FRAMES by design; that is the entire feature.** So a recorder
+  retains every path, every clip and every image reference the page
+  names, and a hostile 100 KB file becomes an **unbounded allocation that
+  arrives as a HANG rather than as an error** — the same shape
+  `MAX_REWRITE_OBJECT_NUMBER` was minted for (*"it looks like progress
+  the whole way down, so a liveness or progress check cannot detect this
+  class"*), reached by a different route. `record_page` refuses **by
+  name** (`RenderError::PageNotRecordable`) once the running total
+  crosses the ceiling, and the caller falls back to
+  `render_page_region`, which is bounded by `MAX_PIXMAP_EDGE` as before.
+  **The value is calibrated, not guessed: ~8.5× the measured 29.5 MiB of
+  the A3 CAD reference sheet (148,517 paints, 127,267 recorded ops,
+  ~240 B per op).** The asymmetry is deliberate and is the whole
+  justification — **a false refusal costs a fallback that is merely
+  slower; a ceiling set too high costs the process.** **★ The §6.1.12
+  implementation-limits run this bullet's own standing rule requires is
+  OWED for this guard** — neither half of the two-sided bar (fires on a
+  real file / silent across all 44) is on record. Fourth guard to face
+  that suite; **first to ship ahead of it.**
 
 ### 10.2 Fuzz-testing (required, not optional, before Pass 1 ships)
 
@@ -22542,3 +22705,154 @@ Fixed one commit later, in the same session — full account in
 `ROADMAP.md`'s `75fa497` Shipped entry. **Not a revision of this
 decision**: the fix restores agreement with what this decision already
 specified, and mints no decision number of its own.
+
+
+### 2026-08-18 (hundred-and-eighty-second filing) — decision 071: **A DISPLAY LIST IS KEYED ON `(page, epoch, SCALE)` AND REFUSES A MISMATCH BY NAME; A PAGE IT CANNOT RECORD EXACTLY IS REFUSED RATHER THAN APPROXIMATED — BOTH ARE REFUSALS TO BUILD A SECOND RENDERING PATH**
+
+**Status: DECIDED.** `e13f8ed` + `6af5655` + `6b797db` (`Pass 75.0`)
+implement the reusable parsed handle in `pdfce-render`:
+`crates/pdfce-render/src/canvas.rs` (the `Canvas` seam, replacing
+`&mut Pixmap` in 16 interpreter and 2 annotation signatures) and
+`crates/pdfce-render/src/display_list.rs` (`record_page`,
+`DisplayList::replay_region`, `DisplayListKey`, `ClipId`,
+`PoisonReason`, `MAX_DISPLAY_LIST_BYTES`).
+
+**Why this is a decision and not merely a Pass.** Both clauses are
+**divergences from what the consumer asked for**, taken by the engineer
+inside the Pass, on a **public surface that a downstream project
+(`D:\dev\pdfceGUI`) builds against**. That is the threshold §12 exists
+for — not the size of the change, but whether a future contributor could
+reasonably re-open it without knowing why it went this way. Decision
+**060** already recorded the display list as *"the next investment,
+deliberately NOT BUILT"*; this entry records **what it became when it
+was**.
+
+---
+
+#### 1. THE KEY INCLUDES SCALE — the consumer asked for `(page, epoch)`
+
+`DisplayListKey` is **`(page, epoch, scale)`**. A replay whose key does
+not match returns `RenderError::DisplayListStale`, **naming both keys**
+so a log line says which half drifted.
+
+The `pdfceGUI` session's request was explicit and well-reasoned:
+*"the consumer already tracks a document `edit_epoch` and re-decomposes
+on `(page, epoch)`, so a handle keyed the same way drops into their
+existing invalidation with no new invalidation concept on either side."*
+**That reasoning is correct about invalidation and silent about
+rendering**, and rendering is where scale bites.
+
+**Two reasons, and they are of different kinds — one is about
+duplication, one is about arithmetic:**
+
+**(a) Half the interpreter's decisions are DEVICE-DEPENDENT.** Whether a
+stroke is a hairline; whether an image is minified; whether an image edge
+is anti-aliased; **and the size of every clip mask**. All of these are
+resolved against the device resolution at interpretation time. Replaying
+a recorded list at a *different* scale would require **re-deriving all of
+them at replay time** — which is a **second implementation of rules that
+already exist in the interpreter**. This is the same objection that made
+`region_device_geometry()` a shared function rather than a copy: **two
+implementations of one rule drift, and the drift is invisible until a
+document renders differently depending on how it was asked for.**
+
+**(b) Composing the transform in a different order is NOT ASSOCIATIVE in
+`f32`.** The Pass's acceptance criterion 3 is **byte-identity** with a
+fresh render, not near-identity. `(record at s₁, replay at s₂)` and
+`(record at s₂)` compose the page CTM, the region offset and the scale in
+different orders, and IEEE-754 single precision does not guarantee those
+agree. **A scale-agnostic list could not satisfy criterion 3 even in
+principle**, so the choice was between dropping the criterion and putting
+scale in the key.
+
+**★ THE CONSEQUENCE FOR THE CONSUMER, recorded here because it is the
+part they must design around and it is not obvious from the type:**
+
+| their case | cost |
+|---|---|
+| **panning at fixed zoom** (their stated per-frame case) | **fully served** — the region changes, the key does not |
+| **a zoom STEP** | **one rebuild** (618 ms on the A3 CAD sheet; ~0.4 ms on a plain page) |
+| **continuous zoom** (a gesture) | **scale the existing texture during the gesture, rebuild when it settles** |
+
+The third row is not a workaround — it is the **same technique the
+current shell already uses to pan for free**, applied to the other axis.
+The handle makes the *settled* state cheap; it was never going to make an
+*in-flight* gesture free, because an in-flight gesture is by definition a
+sequence of distinct scales.
+
+**What this does NOT decide, stated so it is not read as settled:**
+whether the handle should ever grow a *scale-tolerant* replay for the
+gesture case (e.g. replaying at a nearby scale with an explicitly relaxed
+correctness contract). That would be a **new, differently-named entry
+point** with a different guarantee — not a loosening of this key — and
+nobody has asked for it.
+
+---
+
+#### 2. THE RECORDER REFUSES RATHER THAN APPROXIMATING
+
+`sh`, shading **patterns**, overprint composites (ISO 32000-1 §11.7.4.3
+Table 149) and soft masks (§11.6.5) all **READ THE DESTINATION BACK**.
+A display list records *what to draw*; these operators' output is a
+function of *what is already there*. **They have no recordable
+formulation** — not "no cheap one", none.
+
+Each poisons the recording **BY NAME** (`PoisonReason`), `record_page`
+returns `RenderError::PageNotRecordable { reason }`, and the caller falls
+back to `render_page_region`.
+
+**It does NOT return a list that renders the page nearly right**, and the
+reason is the argument `CLAUDE.md` rule 4's 2026-08-13 narrowing makes in
+a different context: **an approximation here would be invisible at the
+call site** — the call returns `Ok`, the page looks plausible — **and
+would surface as a document that CHANGES WHEN YOU PAN**, because the
+approximate replay and the exact fallback would disagree over the same
+pixels. **A recorder that approximates IS a second rendering path**,
+selected silently, per page. Deleting the second path removes a bug
+class; that is the same reasoning, one layer down from the GUI.
+
+**★ The refusal set is the CURRENT FRONTIER, not a legacy gap**, and this
+matters for how the list is read a month from now. Overprint simulation
+(`Pass 96.x`) and soft masks (`cb20770`, decision 070) both shipped
+**within the preceding week**. `Pass 97.x` — the real per-colorant
+compositor — is scoped and will change what is recordable. **A page the
+recorder refuses today may be recordable later**, which is an argument for
+keeping the **fallback cheap and disclosed**, not for widening the
+recorder to cover what it cannot represent. The disclosure obligation is
+rule 4 in the GUI's direction and rule 11 in the CLI's: `pdfce-cli`'s
+poster path **prints on stderr** when it takes the fallback.
+
+---
+
+#### 3. `MAX_DISPLAY_LIST_BYTES` = 256 MiB — §10's ceiling applied to a NEW hazard shape
+
+Filed in full at §10.1. Recorded here because the *reason* is
+architectural rather than a tuning choice:
+
+**A render is TRANSIENT; a recorder RETAINS every path.** Every guard in
+§10.1 before this one bounds something that is produced and consumed. A
+display list is **held across frames by design** — that is the entire
+feature — so a hostile 100 KB file becomes an **unbounded allocation that
+arrives as a HANG rather than as an error**, the same failure shape
+`save::MAX_REWRITE_OBJECT_NUMBER` was minted for and for the same stated
+reason: *"it looks like progress the whole way down, so a liveness or
+progress check cannot detect this class."*
+
+**256 MiB is ~8.5× the reference sheet's measured 29.5 MiB, and the
+asymmetry is deliberate:** *a false refusal costs a fallback that is
+merely slower; a ceiling set too high costs the process.*
+
+**★ OWED and named:** the `ROADMAP.md` standing rule that **every new
+resource guard is run against the veraPDF §6.1.12 implementation-limits
+suite before shipping** — the rule that caught `MAX_TOKEN_LEN` and
+`MAX_XOBJECT_DEPTH`, and that `MAX_REWRITE_OBJECT_NUMBER` discharged
+two-sidedly on 2026-08-07 (**fires on a real file, silent across all
+44**) — **has NOT been discharged for `MAX_DISPLAY_LIST_BYTES`.** Neither
+half is on record. This is the fourth guard to face that suite and the
+first to ship ahead of it.
+
+---
+
+**No standing rule minted.** Architectural/rendering-model decision, same
+disposition as 063/064/066/068/069/070. **Ceiling moves 070 → 071; next
+free 072.**

@@ -96,6 +96,782 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★ Pass 101.0 — `2aa1066` — **THE BUILD PROVENANCE STAMP SHIPS, AND ITS MOST LOAD-BEARING FIELD IS THE `-dirty` MARKER — but the defect worth recording is that the FIRST CUT PRINTED TWO TIMESTAMPS IN TWO DIFFERENT TIME ZONES, which is the one thing that makes printing both of them pointless** — core + CLI; GUI `[ ]` and honestly so. **`FEATURES.md`: the build-provenance row moves *Planned* → *Implemented* as `[x]` core / `[x]` cli / `[ ]` gui.** Also filed here: **the `Pass 85.5` duplicate RULED** (Part A) and **the string-gap gate PORTED with a 44-repair sweep** (Part C) — filed 2026-08-18 (hundred-and-eighty-third filing)
+
+**Filed by `pdfce-librarian` WITH a shell (hard rule 8).**
+
+> **★ THIS ENTRY WAS DRAFTED NAMING NO HASH, AND THE DRAFT WAS WRONG —
+> CORRECTED IN PLACE BEFORE PUBLICATION, WITH THE REASONING KEPT BECAUSE
+> THE MISTAKE IS THE INSTRUCTIVE PART.** The draft argued that the hash
+> **could not exist yet**: `git status --short` showed 30+ modified paths
+> uncommitted, including `crates/pdfce-core/build.rs` **and this file**,
+> so the filing appeared to be *inside* the commit it would have to name
+> — a genuine deadlock, with the hundred-and-twenty-first filing's
+> `uncommitted at HEAD c44d833` entry as precedent.
+>
+> **The premise was false.** The engineer committed **code only** as
+> **`2aa1066`** (2026-08-18 18:26:25 −0400, **34 files, 1,166
+> insertions, 52 deletions**, by `git show --stat`), leaving `docs/`
+> uncommitted for this filing — **`git show --name-only 2aa1066 | grep
+> ^docs/` returns ZERO files.** Splitting the code commit from the docs
+> commit dissolves the deadlock entirely, and it is the better discipline.
+>
+> **★ THE LESSON, WHICH IS THE ONE HARD RULE 8 IS ABOUT: the draft
+> reasoned about disk state from a `git status` taken EARLIER IN THE SAME
+> FILING, and treated it as still true.** The repository moved while the
+> filing was being written. **A snapshot is not a state**, and *"I checked"*
+> decays — the check must be re-run at the moment the claim is made, not
+> merely performed once somewhere upstream of it. **The correction was
+> found by `tools/check-commits-filed.py` going red on an unfiled commit**,
+> not by re-reading anything.
+>
+> **The binary's banner still reads `v0.6.0-74-g6b797db-dirty`**, because
+> it was built from the working tree *before* `2aa1066` existed. **That is
+> not an inconsistency — it is the `-dirty` marker doing precisely the job
+> criterion 1 exists for**, and the most direct possible demonstration of
+> it.
+
+#### What shipped
+
+- **`crates/pdfce-core/build.rs`** (new) — build script emitting four
+  `cargo::rustc-env` variables: `PDFCE_BUILD_TIMESTAMP`,
+  `PDFCE_BUILD_REVISION`, `PDFCE_BUILD_COMMIT_TIMESTAMP`,
+  `PDFCE_ICCCE_PROVENANCE`. Re-runs on `.git/HEAD`, the index, or
+  `SOURCE_DATE_EPOCH` changing, and **handles the git-worktree case**
+  (`.git` as a *file* holding a `gitdir:` pointer) — which matters here
+  specifically, because this project verifies changes against worktrees.
+- **`crates/pdfce-core/src/build.rs`** (new) — `pub struct BuildInfo`
+  with `version`, `built_at`, `revision`, `committed_at`, `iccce`, plus
+  `current()`, `is_complete()`, `is_dirty()` and a `Display`.
+- **`crates/pdfce-core/src/civil_time.rs`** (new) — Unix timestamp →
+  RFC 3339 UTC. **`include!`d by the build script AND `mod`-ed by the
+  crate**, and the reason is the interesting part: **a build script's own
+  `#[cfg(test)]` module is never run by `cargo test`**, so arithmetic
+  living only in `build.rs` is arithmetic **nobody can assert**. Moving it
+  into the crate is what makes it testable at all.
+- **`crates/pdfce-cli/src/main.rs`** — `--version` prints the full stamp;
+  **`-V` stays the bare `pdfce-cli 0.7.0`** that a script parses. Two
+  surfaces, deliberately: the long form is for humans and bug reports,
+  the short form is a parseable contract that must not grow lines.
+
+**Actual output, relayed from the engineer's run today:**
+
+```
+pdfce-cli 0.7.0
+  built:     2026-08-18T22:08:20Z
+  revision:  v0.6.0-74-g6b797db-dirty
+  committed: 2026-08-18T21:39:04Z
+  iccce:     not-linked (pdfce does not depend on iccce; see ARCHITECTURE.md decision 064)
+  NOTE: built from a MODIFIED working tree - this binary is not the commit it names
+```
+
+#### Acceptance criteria — all five MET, against what the 182nd filing filed
+
+| # | criterion | result |
+|---:|---|---|
+| 1 | UTC build time + `git describe` revision **including `-dirty`** | **MET** |
+| 2 | degrades to a named `unknown`, never a plausible wrong value | **MET** |
+| 3 | build script re-runs when `HEAD` moves | **MET** |
+| 4 | `fmt` / `clippy -D warnings` clean; rule 2 and rule 13 respected | **MET** (see *Gates*, below) |
+| 5 | `--version` states `iccce` is NOT LINKED | **MET** (line 4 of the banner above) |
+
+**Criterion 1's `-dirty` marker is the load-bearing half**, and it is
+worth saying why rather than just ticking it: **a build from an edited
+tree is not the commit it names**, and *ruling that out* is the entire
+reason somebody reads a version string. Criterion 1 would have been
+trivially satisfiable without it and would have been **worth nothing**.
+
+#### ★ THE DEFECT FOUND AND FIXED IN FLIGHT: two timestamps, two time zones
+
+**The first cut used git's `%cI` for the commit time.** `%cI` carries
+**the committer's local UTC offset** — so `built:` was UTC and
+`committed:` was whatever zone the commit was made in. **The two instants
+were therefore not comparable at a glance, and comparing them at a glance
+is the entire reason both are printed.** Fixed by switching to **`%ct`
+(Unix seconds)** and formatting it through **the same function** that
+formats the build time — one formatter, one zone, by construction rather
+than by discipline.
+
+**Note the shape**, because it is this project's recurring one: nothing
+was *wrong* in either field on its own terms. Both were correct
+timestamps, correctly obtained. The defect existed **only in the
+relationship between two records** — which is exactly the class hard rule
+10 exists for, arriving here in a version banner instead of a benchmark
+table.
+
+#### ★ VERIFIED BY MEASUREMENT, NOT BY INSPECTION
+
+The calendar arithmetic was checked **end-to-end via `SOURCE_DATE_EPOCH`,
+cross-computed in Python**, against **six known instants — six for six**:
+
+| instant | what it probes |
+|---|---|
+| the epoch | the base case |
+| 2024-02-29 | a leap day |
+| 2024-03-01 | the day *after* a leap day |
+| 2000-02-29 | leap **because of** the 400-rule |
+| 2100-03-01 | **not** leap — the 100-rule |
+| a year boundary | December→January rollover |
+
+All six are now a **permanent test** in `civil_time.rs`, plus a
+**pre-epoch case** covering the Euclidean division (negative timestamps,
+where truncating division silently gives the wrong day). **Three tests
+total** on a module that, had it stayed in `build.rs`, would have carried
+**zero**.
+
+#### ★ ONE OPERATIONAL FINDING — for the release runbook, and its failure is SILENT
+
+**`actions/checkout@v4` defaults to a DEPTH-1 clone**, which has **no
+tags and no history** — so `git describe` finds nothing and a CI-built
+binary reports **`revision: unknown`**. **Harmless today**: pdfce releases
+are built locally, and CI jobs test rather than ship. **But if a release
+build ever moves into CI, that workflow needs `fetch-depth: 0`.**
+
+**The reason this is filed rather than left in a comment:** the failure
+mode is that **the build SUCCEEDS and only the banner is empty.** No gate
+goes red, no test fails, nothing is reported — it would be discovered
+*from a release*, by someone holding a binary that cannot say what it is.
+Recorded in the build script's own docs; recorded here so it is not
+learned the expensive way.
+
+#### Open question `(bo)` stays escapable
+
+**`SOURCE_DATE_EPOCH` is honoured**, so the reproducibility trade the
+182nd filing filed as `(bo)` — *embedding a build timestamp makes builds
+non-reproducible by construction* — **remains answerable either way at no
+cost.** `(bo)` is **NOT closed by this ship**; the implementation simply
+declined to foreclose it.
+
+#### `Pass 101.1` — UNCHANGED, still *Next up*, still BLOCKED
+
+Its unblocking condition is unchanged and remains a single event:
+**`iccce` appears in a `Cargo.toml` in this workspace.** It has not.
+Open questions **`(bo)`** and **`(bp)`** both remain open for the
+operator.
+
+#### Ledger effects
+
+**No Pass ID minted** (`Pass 101.0` was minted by the 182nd filing).
+Family ceiling stays **101**; next free family is **102**. **No standing
+rule minted** — ceiling stays **`R195`**, next free **`R196`**. **No
+decision record minted** — ceiling stays **071**, next free **072**.
+SESSION_LOG filing ordinal **182 → 183**. *(All read from
+`tools/check-ledger-numbers.py` run at the top and bottom of this filing,
+not relayed.)*
+
+**Terminology (rule 15):** nothing in this Pass touches **ce dimensions**
+or **pdf dimensions**.
+
+---
+
+### ★ Pass 75.0 — ★★★ `e13f8ed` + `6af5655` + `6b797db` — **THE REUSABLE PARSED HANDLE (display list) SHIPS: a 1 × 1 pt region falls from 636 ms to 1.06 ms, a 600× drop on the row that measures INTERPRETATION AND NOTHING ELSE** — ★ **and reading the code to confirm that `pdfce-cli` was `—` turned up a LIVE BUG instead: poster printing failed on exactly the documents people make posters of.** Two engineer divergences from the request, one new resource guard, **decision 071 minted**. **`FEATURES.md`: the display-list row moves *Planned* → *Implemented* as `[x]` core / `[x]` cli / `[ ]` gui; the region row's "no shell calls it" sentence REPLACED; the imposition row's poster clause AMENDED** — filed 2026-08-18 (hundred-and-eighty-second filing)
+
+**Filed by `pdfce-librarian` WITH a shell this session (hard rule 8).**
+Every structural claim below was independently checked against the live
+tree, and the commands are named where the claim is load-bearing. The
+**timing figures are RELAYED** from the engineer's report and from
+`docs/render-region-measurements.md` (engineer-owned, already committed) —
+this role did not re-run a release benchmark. Working tree **clean** at
+filing (`git status --short`, empty); `git remote -v` shows
+`origin https://github.com/KenM76/pdfce.git` — **the repository is public
+(rule 8), so everything in this filing is published by default.**
+
+#### Where the number came from, and the collision that is now closed
+
+`Pass 75.0` was minted in the hundred-and-forty-fifth filing (`de089f6`)
+when the *Backlog* entry *"A DISPLAY-LIST CACHE IN `pdfce-render`"* had
+its own written promotion trigger fire — *"promote it the moment a
+shell's zoom loop depends on the second render being fast"* — because the
+`pdfceGUI` session said in writing that its stage **S6** does.
+
+**★ The number-collision ruling from the hundred-and-forty-sixth filing
+STANDS and is now permanent.** `d24c1df`'s commit message calls **itself**
+`Pass 75.0`; it is not this Pass — it is `Pass 76.0` (object identity
+across edits / `remap_index_after_delete`), already in *Shipped*. That
+claim is **VOID and, being immutable history, can never be corrected in
+place**, which is why the note is carried on both sides of the collision
+and is repeated here, at the top of the entry a future reader will
+actually land on. The ruling went against the obvious reading on **cost
+counted in the right ledger**: 27 lines cited `Pass 75.0` as the display
+list across three documents against 1 for `d24c1df`. **Renumbering the
+unstarted Pass was the expensive option, not the cheap one.** The
+mechanism that allowed it — a Pass ID minted inside a **commit-message
+body**, where `check-ledger-numbers.py` (reads no git),
+`check-passes-filed.py` (reads subject lines only) and
+`check-commits-filed.py` (has no concept of a Pass ID) are **all three
+structurally blind** — remains filed as `R192` blind spot **(d)** in
+*Backlog*. It is not fixed by this filing.
+
+---
+
+#### What shipped, by file — verified by `Read`/`Grep` against the live tree
+
+| file | what | verified |
+|---|---|---|
+| `crates/pdfce-render/src/canvas.rs` (**new**, 24,351 B) | `Canvas` — the seam the interpreter draws onto. Replaces `&mut Pixmap` in **16 interpreter signatures and 2 annotation signatures**. Two modes: **paint** (byte-for-byte the old behaviour) and **record**. | file present; `ls -la` |
+| `crates/pdfce-render/src/display_list.rs` (**new**, 49,707 B) | `DisplayList`, `DisplayListKey`, `ClipId`, `PoisonReason`, `MAX_DISPLAY_LIST_BYTES`, `record_page()`, `DisplayList::replay_region()`, `memory_bytes()`, `op_count()`, `clip_count()`, `page_device_size()`, `diagnostics()`, `key()` | every symbol confirmed by `grep -n "pub fn \|pub struct \|pub enum \|pub const "` |
+| `crates/pdfce-render/src/lib.rs` | new public `region_device_geometry()` (line 637), **factored out** so a replay lands on **exactly** the rectangle a fresh region render lands on — **shared code rather than a second copy**; two new `RenderError` variants, `PageNotRecordable { reason }` (line 193) and `DisplayListStale { .. }` (line 209) | line numbers read directly |
+| `crates/pdfce-render/src/gstate.rs` | `GraphicsState::clip_id` and `clip_ref()`, so `q`/`Q` carry the clip's **recorded identity** exactly as they already carry its **mask** | relayed |
+| `crates/pdfce-cli/src/main.rs` | poster printing rasterises each tile as a **region replayed from a display list** instead of rendering the whole page and cropping | `record_page` at 10069, `replay_region` at 10126, doc comment at 9991 |
+
+**The `region_device_geometry()` factoring is the part worth naming.**
+Byte-identity between a replayed region and a fresh one is not a property
+you can test into existence if the two paths compute their own device
+rectangles; it is a property you get by there being **one** computation.
+This is the same discipline `Pass 74.0` used when `render_page_region`
+shared `render_page_with_view`'s implementation rather than duplicating
+it — and for the same stated reason: **two implementations of one rule
+drift, and the drift is invisible until a document renders differently
+depending on how it was asked for.**
+
+---
+
+#### THE ACCEPTANCE MEASUREMENT — three runs, medians, release build
+
+Harness: `crates/pdfce-render/examples/region_bench.rs`, **extended**
+(not replaced) with `RECORD` / `MEMORY` / `PFLOOR` / `PAN` cases.
+Document: the A3 CAD sheet, **148,517 paints · 24,128 clip ops**,
+recorded as **127,267 ops · 40 distinct clips · ~29.5 MiB held**.
+
+| case (**median of 3, release, A3 CAD sheet**) | from stream | replayed | ratio |
+|---|---:|---:|---:|
+| **FLOOR** — 1 × 1 **pt** region, **2 px** | **636 ms** | **1.06 ms** | **600×** |
+| region 400 × 300 pt, scale 1 (**120,701 px**) | 680 ms | **83.5 ms** | 8.1× |
+| region 400 × 300 pt, **scale 8** | 819 ms | **10.5 ms** | **78×** |
+| recording the page itself | — | **618 ms** | — |
+
+**The FLOOR row is the one that states the result, and it is the only
+row that states it cleanly.** A 1 × 1 point region contains almost no
+fill, so it measures **interpretation and nothing else** — and
+interpretation is **gone from the second render**. The 1.06 ms that
+remains is the op walk plus the bounding-box cull over 127,267 recorded
+ops.
+
+**Per hard rule 10(a), the same facts in per-item form so the two can
+disagree with each other:**
+
+- **1.06 ms over 127,267 recorded ops = ~8.3 ns per op walked-and-culled.**
+- **618 ms recording over 127,267 ops = ~4.9 µs per op recorded** (which
+  includes interpreting the stream that produced it).
+- **~29.5 MiB over 127,267 ops = ~240 B per op** — the figure a shell
+  holding one list per page needs, and the one criterion 4 exists for.
+- **636 ms floor over 148,517 paints = ~4.3 µs per paint interpreted**,
+  against **~8.3 ns per op replayed**: the ratio the whole Pass buys is
+  **~515× at the per-item level**, consistent with the 600× measured
+  end-to-end at the floor.
+
+**★ The 83.5 ms scale-1 figure is NOT a shortfall and must not be quoted
+as one.** Those 83.5 ms are **fill** for the ~12 % of the page inside the
+viewport — real paints, doing real work. The cost model has changed
+shape: it is now **proportional to what is displayed** rather than to the
+page. That is precisely the property the requester asked for, and it is
+why the same handle gives **10.5 ms at scale 8** (deep zoom culls almost
+everything) and **1.06 ms at the floor**.
+
+Full write-up: `docs/render-region-measurements.md` (engineer-owned,
+already committed; the 636 / 1.06 / 83.5 / 618 / 127,267 / 29.5 MiB
+figures were confirmed present in that file by `grep` during this filing).
+
+---
+
+#### Acceptance criteria, one by one
+
+| # | criterion (abridged) | verdict | evidence |
+|---|---|---|---|
+| 1 | second-and-subsequent region renders fall from ~700 ms to approximately fill cost | **MET** | **1.06 ms** at the floor, **10.5 ms** at scale 8. Scale-1's 83.5 ms is fill, not interpretation — see above |
+| 2 | invalidation keyed, stale handle impossible to use silently | **MET** | keyed on **(page, epoch, scale)**; a mismatch returns `RenderError::DisplayListStale` **naming both keys**. Tested (`a_stale_epoch_is_refused_by_name`, `a_different_scale_is_refused_by_name`) |
+| 3 | byte-identical output, test **extended not duplicated** | **MET** | `crates/pdfce-render/tests/region_matches_full_page.rs` — **12 `#[test]` functions counted in the live file**: 3 fixtures × 2 scales × 4 regions byte-identical, plus clip+layer, cull, both refusals, size report, hash-map key round-trip |
+| 4 | memory bounded **and stated** | **MET** | **~29.5 MiB / 127,267 ops ≈ 240 B per op**, reported at runtime by `memory_bytes()` — a live accessor, not a doc claim |
+| 5 | the text-page case does not regress | **MET** | recording is **cheaper** than rendering (no mask builds, no fills): `plain.pdf` floor **416 µs** vs recording **394 µs**; a PDF 2.0 example **12.8 µs** vs **14.4 µs**. **No document found where the first frame gets materially slower** |
+| 6 | GUI-core separation; fmt/clippy/test/gates | **MET** | `cargo tree -p pdfce-render` and `-p pdfce-core` free of GUI **and network** deps; `cargo fmt --check` and `clippy --all-targets -D warnings` clean; `cargo test --workspace` green (**101 suites**); `ui-strings`, `ledger-numbers`, `disclosure-channel`, `one-commit-per-command` gates clean. **NO NEW DEPENDENCY**, so no `PRIOR_ART.md` or `THIRD_PARTY_LICENSES.md` change |
+| 7 | decide the `pdfce-cli` column, **with a reason written down** | **ANSWERED — and the criterion's own prediction was WRONG** | see immediately below |
+
+*(Criterion 6's gate results are **RELAYED** from the engineer's report,
+not re-run by this role. Criterion 3's test count and criteria 1–5's
+figures were checked as described.)*
+
+##### ★★ Criterion 7 — the prediction was `—`, the answer is `[x]`, and the difference cost a bug
+
+The criterion as written in the *Next up* entry said a display list is an
+*"in-process, across-frames object"*, that *"a one-shot CLI invocation
+has nothing to hold it across"*, and that the answer *"likely resolves to
+`—` (not applicable) rather than to a gap."* It then added the clause
+that saved it: *"**unless** a multi-page or multi-region batch verb can
+demonstrably use one within a single run"*, and *"**decide it in the
+Pass, with a reason written down**."*
+
+**Reading the code to confirm `—` is what turned up `cmd_print`'s poster
+path — which renders ONE page MANY times in a single run.** So the
+premise (*"nothing to hold it across"*) was **false for a verb that
+already existed**, and running that verb turned up a **live bug** (below).
+`pdfce-cli` is therefore a **real consumer**, it **now uses the display
+list in its real code path** (not a demo verb), and the `FEATURES.md` box
+is ticked **on evidence rather than on judgement**.
+
+**★ The reusable shape, and it is not "the prediction was wrong."** The
+criterion was written carefully: it hedged (*"likely"*), it named the
+condition that would falsify it, and it required the answer be *decided
+in the Pass*. **All three of those did their job.** What the episode
+actually shows is that **a well-hedged prediction still has to be
+CHECKED against the code, because the check is where the second finding
+lives.** Confirming `—` by inspection would have been cheap and would
+have been *wrong*; confirming it by reading found a broken feature. This
+is the same species as `R182` and as the 181st filing's *"a named blocker
+outlives the design that motivated it"* — **a claim about the code that
+nobody re-derived from the code.**
+
+---
+
+#### ★★ A BUG FIXED ON DISCOVERY — `6b797db` (Ken's standing rule: never file a found bug for later)
+
+Before `6b797db`:
+
+```
+$ pdfce-cli print --poster --poster-scale 8 <A3 CAD drawing>
+pdfce-cli: page 1: requested raster size 39685x28063 is empty or
+           exceeds MAX_PIXMAP_EDGE
+```
+
+**Poster printing rendered the WHOLE PAGE at tile scale and cropped tiles
+out of it**, so memory scaled with the **assembled poster** rather than
+with **the paper in the printer**. A poster's full raster is, *by
+construction*, larger than any single sheet — that is what a poster **is**
+— so the feature **failed on exactly the documents people make posters
+of.** The failure was not a rare edge: it is the feature's own definition
+turned into a resource ceiling.
+
+**Now:** each tile is a **region replayed from one display list**.
+**156 sheets in 29 s = ~186 ms per sheet**, one interpretation plus 156
+replays (hard rule 10(a): the total and the per-item form, with the
+denominator).
+
+**A page the recorder REFUSES falls back to a per-tile region render and
+SAYS SO on stderr** — rule 4 (fuzzy, never sneaky: the CLI **prints** what
+it did on the way past, because the invocation *is* the commit) and
+rule 11 (the CLI is a first-class shell, not a debug tool). It does not
+silently take the slow path.
+
+**Interaction with `MAX_PIXMAP_EDGE`'s changed subject** — `Pass 74.0`,
+§4.1 entry (W): that constant now bounds **the returned pixmap**, so
+memory became *"a function of viewport AREA"* and *"stops scaling with
+zoom at all."* The poster path is the case where the **old** subject was
+still in force inside `pdfce-cli` after `pdfce-render` had moved on.
+**A guard's semantics changed in one crate and a caller in another crate
+kept the old shape** — worth naming because it is a *cross-crate* instance
+of the stale-premise pattern this project keeps meeting.
+
+---
+
+#### TWO DELIBERATE DIVERGENCES FROM THE REQUEST — both engineer decisions taken inside the Pass
+
+Both are recorded here in full **and** promoted to **decision 071**
+(`ARCHITECTURE.md` §12), because between them they fix the shape of a
+public API that a **downstream project builds against** — which is the
+threshold §12 exists for, not the size of the change.
+
+##### D1 — THE KEY INCLUDES **SCALE**. The consumer asked for `(page, epoch)`; it shipped as `(page, epoch, scale)`
+
+Refuses a scale mismatch **by name** (`DisplayListStale`, both keys in
+the message). Two reasons, and the second is the one that makes it a
+correctness argument rather than a convenience one:
+
+1. **Half the interpreter's decisions are device-dependent** — hairline
+   or not, image minified or not, image edge anti-aliased or not, and
+   **every clip mask's size**. Replaying at another scale would mean
+   **re-deriving all of them**, i.e. writing a **second implementation of
+   rules that already exist**. That is the same objection that made
+   `region_device_geometry()` shared code rather than a copy, one level up.
+2. **Composing the transform in a different order is not associative in
+   `f32`**, and the acceptance criterion is **byte-identity**, not
+   near-identity. A scale-agnostic list could not satisfy criterion 3 even
+   in principle.
+
+**★ THE CONSEQUENCE THE CONSUMER MUST BE TOLD, stated as a shipped fact
+rather than left for them to discover:**
+
+- **Panning at fixed zoom — their stated per-frame case — is FULLY
+  SERVED.** The region changes, the key does not.
+- **A zoom STEP costs one rebuild** (618 ms on the A3 sheet; ~0.4 ms on a
+  plain page).
+- **Continuous zoom should scale the EXISTING TEXTURE during the gesture
+  and rebuild when it settles.** This is the same technique the current
+  shell already uses to pan for free, applied to the other axis.
+
+This closes, in the direction of *more* refusal rather than less, the
+*Next up* entry's own note that the public surface still owed a
+`rust-style-guide-and-api-guidelines.md` pass *"including whether the
+handle borrows or owns, and what happens to a handle held across a
+document mutation."*
+
+##### D2 — THE RECORDER **REFUSES** RATHER THAN APPROXIMATING
+
+`sh`, shading **patterns**, overprint composites (ISO 32000-1 §11.7.4.3)
+and soft masks all **READ THE DESTINATION BACK** and therefore have **no
+recordable formulation** — a display list records *what to draw*, and
+these operators' output is a function of *what is already there*.
+
+Each poisons the recording **BY NAME** (`PoisonReason`), `record_page`
+returns `RenderError::PageNotRecordable { reason }`, and the caller falls
+back to `render_page_region`.
+
+**It does NOT return a list that renders the page nearly right.** Stated
+as the engineer's reason, and it is the correct one: an approximation
+here **would be invisible at the call site** and **would surface as a
+document that changes when you pan** — the same second-rendering-path
+argument that `CLAUDE.md` rule 4's 2026-08-13 narrowing makes about
+provisional-state marking. **Two rendering paths for the same content
+drift; deleting the second one removes a bug class.** A recorder that
+approximates *is* a second rendering path, chosen silently, per page.
+
+**Note which features are on that list**: overprint simulation and soft
+masks both **shipped in the last week** (`Pass 96.x`, `cb20770`,
+decision 070). The recorder's refusal set is therefore **not a legacy
+gap** — it is the current frontier of pdfce's own compositing model, and
+it will shrink as `Pass 97.x` (the real compositor) lands. **A page the
+recorder refuses today may be recordable later**, which is an argument for
+the fallback being cheap and disclosed rather than for widening the
+recorder.
+
+---
+
+#### A NEW RESOURCE GUARD — `MAX_DISPLAY_LIST_BYTES` = 256 MiB
+
+`ARCHITECTURE.md` §10's output-size ceiling, applied to a **display
+list** — and it is a genuinely new *shape* of the same hazard, not a
+copy of an existing guard:
+
+**A render is TRANSIENT; a recorder RETAINS every path.** So a hostile
+100 KB file becomes an **unbounded allocation that arrives as a HANG
+rather than as an error** — the same failure mode
+`save::MAX_REWRITE_OBJECT_NUMBER` was minted for (§10.1, `0df6158`),
+where the giveaway was that *"it looks like progress the whole way down,
+so a liveness or progress check cannot detect this class."*
+
+**256 MiB is ~8.5× the reference sheet's 29.5 MiB, and the asymmetry is
+deliberate and stated:** *a false refusal costs a fallback that is merely
+slower; a ceiling set too high costs the process.* Filed to §10.1 in this
+same filing.
+
+**★ OWED, and named rather than glossed:** the `ROADMAP.md` standing rule
+that **every new resource guard is run against the veraPDF §6.1.12
+implementation-limits suite before shipping** — the rule that caught
+`MAX_TOKEN_LEN` and `MAX_XOBJECT_DEPTH`, and that
+`MAX_REWRITE_OBJECT_NUMBER` discharged on 2026-08-07 — **has not been
+discharged for `MAX_DISPLAY_LIST_BYTES`.** The engineer's report does not
+claim it was. Two-sided verification (**fires on a real file, silent
+across all 44**) is what that discharge requires, and neither half is on
+record. **Carried forward as owed work.**
+
+---
+
+#### METHOD NOTES — the transferable half
+
+##### Every new test was run against SABOTAGED code to prove it can fail
+
+Three sabotages, three different tests caught them. **The important
+result is the negative one: the broad byte-identity test did NOT catch a
+too-tight cull** — which is exactly why the dedicated
+`culling_never_drops_a_mark` case exists as its own test rather than
+being folded into the general comparison. A test suite's *breadth* is not
+its *sensitivity*, and only running it against a known-bad build tells
+you which you have.
+
+##### ★★ A REGRESSION THE HARNESS CAUGHT THAT WOULD OTHERWISE HAVE SHIPPED — and it is the most reusable finding in the Pass
+
+The first working recorder pushed **one clip definition per `W n`
+(24,128 of them)** instead of deduplicating, so a replay built **24,128
+region-sized masks per frame.**
+
+Measured at that point:
+
+| case | direct | through the cache | verdict |
+|---|---:|---:|---|
+| scale 8 (the motivating case) | — | — | **88× FASTER** |
+| **scale 1** | **706 ms** | **1.79 s** | **2.5× SLOWER** |
+
+**The motivating case looked excellent while the feature was a NET LOSS.**
+
+**Why the motivating case cannot see it:** at deep zoom **almost every op
+culls before its clip is ever requested**, so the expensive path is
+**never taken**. The cache's *win* and the cache's *cost* live in
+**different cases**, and the case that motivates a cache is — reliably —
+the one that exercises its cost **least**.
+
+**Fixed by deduplicating on the SAME `ClipCache::build_key` the painting
+path already uses** — not a new key invented for the recorder. Same
+principle as `region_device_geometry()`: **one definition of identity, or
+the two paths disagree about what "the same clip" means.**
+
+**GENERALISABLE LESSON, and it is about caching and benchmark design
+rather than about PDF:** ***measure the case where the cache does the
+MOST work, not the case that motivated it.*** Graduated this filing to
+`D:\dev\rag\rust\a_caches_win_and_its_cost_live_in_different_cases_so_the_motivating_benchmark_cannot_see_the_regression.md`.
+It sits directly beside the existing
+`a_single_input_benchmark_measures_the_input_class_not_the_code_path.md`
+(filed from `Pass 74.0`'s own measurements) — **the same harness, the same
+two documents, and now the second distinct way a single-case benchmark
+misleads.**
+
+##### Paint-mode transparency was proved by an A/B RASTER DIFFERENTIAL, not by inspection
+
+Against a **git worktree built at the previous `HEAD`**:
+**742 documents × 2 scales = 1,383 renders**, byte-compared as PNGs —
+**1,383 identical / 0 differing.** Run **twice**: after the plumbing
+commit (`e13f8ed`) and again after the recorder (`6af5655`).
+
+Sample composition, stated because a differential's authority is entirely
+its population: **all 210 synthetic fixtures**, **every 8th external
+corpus file**, and **the 30 working documents in `D:/Dev/temp/pdfce`**
+including the A3 CAD benchmark.
+
+**This is the right oracle for the change's actual risk.** `Canvas`
+replaced `&mut Pixmap` in **18 signatures**; the claim that needed proving
+was not *"the recorder is correct"* but *"the interpreter still paints
+identically when it is not recording."* A differential over 742 documents
+tests that claim directly. `1,383 / 1,383` also carries its own
+denominator, per hard rule 10(a).
+
+##### A test that guesses WHERE content is tests the FIXTURE, not the code
+
+The poster reachability test asserted ink on **tile 0** (the page's
+top-left margin at 30×), then on **the middle of the grid** (the middle of
+a text page's leading). **Both are legitimately blank.** It now **LOCATES
+the inked tile from a cheap scale-1 render** and asserts there.
+
+The reusable form: **an assertion whose subject is chosen by the test
+author's mental model of the document is an assertion about that model.**
+Same family as the 180th filing's vacuous regression test — found only by
+running it against the pre-fix code.
+
+##### ★ NOT DONE — stated rather than glossed
+
+**The poster change was NOT verified by producing a real spool file.**
+`--send --to-file` starts a print job **through the printer driver** — a
+side effect **outside the working tree**, and therefore **the operator's
+call, not the engineer's** (`CLAUDE.md`: side effects outside the working
+tree need asking).
+
+**The oracle used instead:** the previous implementation kept **verbatim
+behind `#[cfg(test)]`** and asserted **byte-for-byte at three
+magnifications**. That is a strong oracle for *"the new path produces the
+same tiles"* and **no oracle at all** for *"the driver accepts them"* —
+which is exactly the distinction `D:\dev\rag\rust\a_driver_accepts_a_devmode_paper_request_and_ignores_or_clamps_it_without_error.md`
+was written about. **The gap is real and is recorded as a gap**, not as a
+formality.
+
+##### A `\` line-continuation lost its backslash again — and the promotion question is answered, but not the way it was asked
+
+A `\` line-continuation inside a string literal **lost its backslash
+during patching** and produced an operator-facing message with **fourteen
+literal spaces** in it. Caught by grepping for 3+ space runs inside
+literals; the surviving message was verified by **RUNNING the binary**
+against a synthetic shading page and reading the output.
+
+**The engineer's dispatch asked whether this "second occurrence" now
+clears the two-occurrence promotion bar for a standing rule or a tooling
+gate. It does not need to — see the *Standing rules* disposition below.
+The premise is wrong in the direction that matters: this is not the
+second occurrence, it is at least the SEVENTH**, and **a working gate for
+it already exists in the sibling repository.** Full account, with a
+measured sweep of pdfce's own tree, under *Owed work* below.
+
+---
+
+#### `FEATURES.md` in this filing — three rows, and the one box deliberately NOT ticked
+
+1. **The display-list row moves *Planned* → *Implemented*** as
+   **`[x]` core · `[x]` cli · `[ ]` gui**, sentence replaced (never
+   appended — that file's own rule).
+2. **The region-rasterisation row's sentence REPLACED.** It said *"**No
+   shell calls it.**"* and *"Every render re-interprets the page; nothing
+   is cached between calls."* **Both are now false**, and its `cli` box
+   moves `[ ]` → `[x]`: `pdfce-cli`'s poster path is a real caller of the
+   region surface, through the display list and through
+   `render_page_region` on the fallback.
+3. **The imposition row's poster clause AMENDED.** Its `cli` box was
+   already ticked and stays ticked — **no checkbox changes** — but the
+   sentence implied poster worked. It did not, above a modest
+   magnification. The row now says so.
+
+**★ `gui` stays `[ ]` and this must NOT be rounded up.** Verified this
+filing, not assumed: `grep -rn "render_page_region\|record_page\|replay_region" crates/pdfce-gui/src/`
+returns **nothing** — `pdfce-gui` contains **no call to
+`render_page_region` at all**, let alone to the display list. GUI work is
+**PAUSED at the operator's instruction** (2026-08-13, *In progress*), so
+the gap is expected and honest. **`R151` exists precisely because an API
+sat callable-and-uncalled for eight Passes**, and a `[x]` core / `[x]` cli
+/ `[ ]` gui row is the signal that rule wants preserved, not an
+embarrassment to smooth over.
+
+---
+
+#### ★★ STANDING-RULE DISPOSITION — `R196` DECLINED, and the warrant is that the RULE ALREADY LOST ITS ARGUMENT TO A GATE THAT EXISTS
+
+**Ceiling stays `R195`; next free is `R196`. Nothing minted this filing.**
+
+The engineer asked whether the dropped-backslash string-literal failure
+*"now clears the two-occurrence promotion bar for a standing rule or a
+tooling gate."* **Both halves of the question rest on a premise that is
+false, and the correction is more useful than the answer.**
+
+##### 1. It is not the second occurrence. It is at least the SEVENTH, and the record was already on disk
+
+`D:\dev\rag\rust\a_multiline_string_literal_that_loses_its_trailing_backslash_bakes_a_visible_gap_mid_sentence.md`
+— read this filing — records, in order:
+
+| # | where | what |
+|---|---|---|
+| 1–4 | pdfce, `Pass 96.0` (CORE STREAM), 2026-08-18 | **six shipped error messages**; two had been in a release since `95c3416` |
+| 4 (again) | pdfce, same day | **the FIX carried the bug** — a heredoc repair re-introduced the defect into the literal it was repairing |
+| 5–6 | **pdfceGUI `6dc6749`**, 2026-08-18 | **36 instances across 22 files**, swept |
+| **7** | **pdfce, THIS Pass** | the fourteen-space message the engineer found and fixed |
+
+**This is `R182`'s shape again, and it is the third time this project has
+hit it in two weeks: the answer was already sourced in one document while
+another still asked the question.** Nothing contradicted anything — the
+finding simply never propagated to the place that needed it. **Grep the
+corpus before recording something as a first or second occurrence.**
+
+##### 2. A GATE ALREADY EXISTS, WORKS, AND IS NOT IN THIS REPOSITORY
+
+`tools/gates/check-string-gaps.sh` was built in **pdfceGUI** (`6dc6749`),
+runs in **one `awk` pass** (0.4 s self-test, **1.0 s full scan** over a
+~50k-line workspace), has a self-test, and ships in that project's
+`run-all.sh` with **14/14 gates green**. Its detection pattern is the
+**post-`rustfmt`** shape, which is the one that actually survives into a
+tree:
+
+```bash
+grep -rn '"[^"]*[a-zA-Z,.:;)] \{3,\}[a-zA-Z]' crates/ --include=*.rs
+```
+
+*(Three spaces, not two — two after a full stop is a typographic
+convention somebody may hold deliberately, and a whitespace check should
+not adjudicate that. Both sides anchored so the run must sit **inside** a
+sentence.)*
+
+**`D:\Dev\pdfce\tools\` has no `gates\` directory and no
+`check-string-gaps.sh`** — verified by `ls` this filing.
+
+> **★ DISCHARGED 2026-08-18 (hundred-and-eighty-third filing). The
+> sentence above was true when written and is now FALSE — kept in place,
+> per hard rule 1, rather than rewritten.** `tools/check-string-gaps.sh`
+> exists in this repository, verified by `ls -la` this filing (**10,377
+> bytes, executable**). **It was ported FLAT, as
+> `tools/check-string-gaps.sh`, NOT into `tools/gates/`** as the
+> recommendation below asks — pdfce's `tools/` is flat
+> (`check-ledger-numbers.py`, `check-ui-strings.sh`,
+> `check-shipped-assets.py` all sit at that level), and pdfceGUI's
+> `gates/` subdirectory is that project's convention, not this one's.
+> **Only the `ROOT=` line differs from the source.** Its `--self-test`
+> passes, **including the exemption-leak case**, and the gate now
+> **PASSES over `crates/` and `tools/`** after the sweep recorded below.
+
+##### 3. So the disposition is ADOPT, not MINT — and that is a real distinction, not a dodge
+
+**A rule and a gate are not two strengths of the same thing.** Hard rule
+11's own text explains why three earlier requests to mint a standing rule
+were declined: *"no mechanical gate can content-check a disclosure"*,
+because such a gate would need to know the very fact the disclosure
+reports. **That warrant does not apply here, and its non-application is
+the whole point.** This defect is **purely syntactic** — three spaces
+inside a string literal — so a gate **can** decide it, deterministically,
+in a second, forever. **Writing a standing rule for something a gate
+already decides is how a project accumulates rules nobody reads while the
+defect keeps shipping.**
+
+**Recommended, and filed as owed work rather than done here** (`tools/`
+and `crates/` are outside this role's remit):
+
+1. **Port `check-string-gaps.sh` from pdfceGUI `6dc6749` into
+   `D:\Dev\pdfce\tools\gates\`** and add it to the gate set. It is
+   written, tested and free.
+2. **Fix the five operator-facing survivors below first**, so the gate
+   lands green rather than red — a gate red at baseline enforces nothing
+   (`D:\dev\rag\rust\ci_gate_red_at_baseline_enforces_nothing.md`).
+
+##### 4. ★★ THE SWEEP — RUN THIS FILING, and one survivor was shipped BY THIS PASS
+
+`grep -rn '"[^"]*[a-zA-Z,.:;)]   \+[a-zA-Z]' crates/ --include=*.rs`
+over `D:\Dev\pdfce` at `6b797db`: **51 hits total — 15 in `tests/`
+directories, 36 in `src/`.** Most of the `src/` hits are `assert!`
+messages and doc-comment tables (real, low-severity). **Five are
+operator-facing strings**, and those are the ones that matter:
+
+| file:line | string | severity |
+|---|---|---|
+| **`crates/pdfce-render/src/lib.rs:207`** | **`DisplayListStale`'s `#[error(...)]`** — *"display list is for epoch … at scale …,          but was replayed as …"* | ★★ **SHIPPED BY THIS PASS, in the error message criterion 2 exists to make legible** |
+| `crates/pdfce-print/src/lib.rs:266` | `DeviceContext` — *"…would not open a device;                  this is usually a driver problem…"* | ★ operator-facing print failure |
+| `crates/pdfce-print/src/lib.rs:270` | `JobStart` — *"…nothing was queued, so there is nothing                  to cancel"* | ★ operator-facing print failure |
+| `crates/pdfce-print/src/lib.rs:281` | `JobEnd` — *"…may already have reached the                  printer — check the queue…"* | ★ operator-facing print failure |
+| `crates/pdfce-gui/src/ui_text.rs:3535` | `setting_theme_unknown` — *"…which this version does not have.          Using Quiet for now."* | ★ operator-facing settings message |
+
+**★ The `pdfce-render/src/lib.rs:207` one is the finding.** The engineer's
+report says the surviving message *"was verified by RUNNING the binary
+against a synthetic shading page"* — that verified the **`PageNotRecordable`**
+message. **`DisplayListStale`, the sibling variant added in the same
+commit, twelve lines further down the same file, was not** — and it has
+the defect. **A sweep that verifies one message in a pair verifies one
+message in a pair.** Same shape as this role's own corollary under hard
+rule 11: *checking a draft claim against live source is what turns up the
+real survivor.*
+
+**Reported, not edited — `crates/` is outside this role's remit** (hard
+rule 11: *"Report; do not edit `crates/`"*).
+
+#### Owed work carried out of this filing
+
+- **veraPDF §6.1.12 discharge for `MAX_DISPLAY_LIST_BYTES`** — see above.
+  Highest-priority item from this Pass, because it is a standing rule with
+  a named suite and a two-sided bar, not a judgement call.
+- **Five operator-facing string-literal gaps, one of them
+  (`pdfce-render/src/lib.rs:207`, `DisplayListStale`) shipped BY THIS
+  PASS** — table above. `crates/` is outside this role's remit.
+  > **★ DISCHARGED 2026-08-18 (hundred-and-eighty-third filing).** All
+  > five fixed, including **the `pdfce-render/src/lib.rs:207`
+  > `DisplayListStale` survivor**, and the mechanism this filing predicted
+  > was **confirmed**: the oracle covered `PageNotRecordable` — verified
+  > **by running the binary** — and was generalised to `DisplayListStale`
+  > **without running it**. Two new variants in one commit; one got the
+  > check, the other inherited an assumption.
+- **Port `check-string-gaps.sh` from pdfceGUI `6dc6749` into
+  `D:\Dev\pdfce\tools\gates\`** — written, tested, 1.0 s, and absent
+  here. Fix the five survivors first so it lands green.
+  > **★ DONE 2026-08-18 (hundred-and-eighty-third filing)**, with one
+  > deliberate divergence: ported **flat** to
+  > `tools/check-string-gaps.sh`, matching pdfce's own `tools/`
+  > convention rather than pdfceGUI's `tools/gates/`. **The sweep was
+  > larger than the five survivors this filing predicted: 44 baked gaps
+  > repaired and 10 deliberate alignments marked `string-gap-exempt:`
+  > with reasons — 54 sites, not 5.** The two classes were separated
+  > **BY HAND, not by heuristic**: a heuristic guessing wrong toward
+  > "defect" silently mangles an aligned report, and guessing wrong
+  > toward "deliberate" leaves a real defect marked intentional. The
+  > gate is **green at baseline**.
+- **`R192` blind spot (d)** — a Pass ID minted in a commit-message body
+  is invisible to all three ledger gates. Unchanged by this filing.
+- **★ A NEW ledger-gate blind spot, found by tripping over it while
+  writing this entry:** `check-ledger-numbers.py`'s heading anchor is
+  `^#{2,4} (?:★ )?Pass ` — **exactly ONE `★` is permitted.** This
+  filing's three headings were first written `### ★★★ Pass 75.0` /
+  `### ★★ Pass 101.0` / `### ★★ Pass 101.1` and **all three were
+  invisible to the gate**, which reported the heading ceiling as **100**
+  while three Pass headings sat in the file. Corrected by moving the
+  extra stars past the em dash; the gate now reports **101**. **This is
+  the same class the checker's own source comment describes** — *"TEN
+  headings were invisible to this checker and had never been
+  uniqueness-checked at all"* — and it was found the same way that one
+  was: **by predicting the gate's output before running it.** The regex
+  should accept `★{1,5} `. Filed here as owed work, not fixed (`tools/`
+  is outside this role's remit).
+
+**Terminology (rule 15):** nothing in this Pass touches **ce dimensions**
+or **pdf dimensions**. The A3 CAD benchmark contains **pdf dimensions**
+(exported by the authoring tool); the display list records the *marks*
+that draw them and has no concept of either kind.
+
+---
+
 ### `3f8cc1e` — **`pageops/mod.rs`'S MODULE HEADER CORRECTED: THE "WAITS FOR THE OVERLAY-AWARE RENDER PATH" BLOCKER WAS SOLVED A DIFFERENT WAY BY `Pass 99.0` — no Pass ID, no decision minted; commit `3f8cc1e` touches `crates/pdfce-core/src/pageops/mod.rs` only and is cited here to satisfy `check-commits-filed.py`** — filed 2026-08-18 (hundred-and-eighty-first filing)
 
 **This is the survivor the 179th and 180th filings' own Hard Rule 11
@@ -2212,7 +2988,38 @@ next free Pass family **97**. No standing rule minted or cited; ceiling
 stays **`R195`**, next free **`R196`**. Decision ceiling moves **068 →
 069** (minted against `bf75351`), next free **070**.
 
-### ★★★★★ Pass 85.5 — `bf75351` — **OVERPRINT STOPS BEING A COUNTER AND STARTS BEING PIXELS: 22 → 25 OF 51 ON GHENT — AND THE SECOND HALF IS THE MORE INTERESTING DEFECT, BECAUSE THE GLYPH PAINTER DID NOT MERELY SKIP THE BLEND, IT DID NOT COUNT IT EITHER** — the simulation half of the Ghent gap inventory's `85.5` row; **PARTIAL, the row does not close** — filed 2026-08-18 (hundred-and-sixty-sixth filing)
+### ★★★★★ Pass 85.5 (compositing) — `bf75351` — **OVERPRINT STOPS BEING A COUNTER AND STARTS BEING PIXELS: 22 → 25 OF 51 ON GHENT — AND THE SECOND HALF IS THE MORE INTERESTING DEFECT, BECAUSE THE GLYPH PAINTER DID NOT MERELY SKIP THE BLEND, IT DID NOT COUNT IT EITHER** — the simulation half of the Ghent gap inventory's `85.5` row; **PARTIAL, the row does not close** — filed 2026-08-18 (hundred-and-sixty-sixth filing)
+
+> **★ STAGED-SHIP QUALIFIER `(compositing)` ADDED 2026-08-18 (183rd
+> filing) — this heading was bare `Pass 85.5` when written.** It is the
+> **second** slice of one Pass; slice 1 is `Pass 85.5 (Table 149 logic)`
+> (`bd9d5ef`), below. **HOW IT WAS RULED, and why this is not a
+> renumber.** `tools/check-ledger-numbers.py` reported `DUPLICATE Pass
+> 85.5 declared 2x in section [Shipped] (neither qualified)` the first
+> time it could see these headings at all — the anchor accepted exactly
+> one `★` until it was widened to `★+` this session, and both of these
+> carry four or five. The gate offers two dispositions: distinct
+> staged-ship qualifiers if the entries are one Pass, or a renumber if
+> they are two. **They are one**, and the entries said so before the gate
+> could read them: this one's own body reads *"The compositing surgery is
+> `bf75351`, above; this is the part that can be pinned against the
+> standard exactly, so it was pinned first and separately"*, and
+> `bd9d5ef`'s heading calls itself *"slice 1 of the `85.5` simulation
+> half"*. The commits are **29 minutes apart** (`bd9d5ef` 04:38:56,
+> `bf75351` 05:07:22, both 2026-08-18 −0400, by `git show -s --format=%ci`)
+> and both were filed as the **hundred-and-sixty-sixth filing**. So this is
+> the split R141 exists for — logic pinned against the standard first,
+> rasteriser attached second — not an ID minted twice for unrelated work.
+> **The cost check ran anyway and agreed**, on the same
+> cost-in-the-right-ledger reasoning applied to the `Pass 75.0` collision
+> in the 182nd filing: `Pass 85.5`/`` `85.5` `` appears **117 times** across
+> the docs tree (`ROADMAP.md` 53, `SESSION_LOG.md` 56, `ARCHITECTURE.md`
+> 8, `FEATURES.md` 0, `NEXT_SESSION.md` 0 — by `grep -c` per file), and
+> **one commit message** (`f45583d`) names it. A qualifier costs two
+> headings; a renumber would have cost 117 citations **and** left an
+> uncorrectable commit message naming a number that had moved. **Neither
+> number moves, so no immutable-history debt is created here** — that is
+> the substantive difference from the 75.0 ruling, which did move one.
 
 **Filed by `pdfce-librarian` WITH a shell (hard rule 8).** Labels as above.
 
@@ -2379,7 +3186,23 @@ content and nothing is missing — but a future archaeologist reading
 titled about overprint. Same disposition as the mixed commit recorded in
 the hundred-and-fifty-first filing: **noted, not corrected.**
 
-### ★★★★ Pass 85.5 — `bd9d5ef` — **TABLE 149 AS A PURE FUNCTION, BECAUSE A WRONG CELL IS A WRONG PIXEL ON A PRESS — AND PDFCE IS NOT OBLIGED TO DO ANY OF IT, WHICH IS WHY THE POLICY CHOICE IS RECORDED IN THE MODULE ITSELF** — slice 1 of the `85.5` simulation half: the logic, pinned against the standard, with no rasteriser attached — filed 2026-08-18 (hundred-and-sixty-sixth filing)
+### ★★★★ Pass 85.5 (Table 149 logic) — `bd9d5ef` — **TABLE 149 AS A PURE FUNCTION, BECAUSE A WRONG CELL IS A WRONG PIXEL ON A PRESS — AND PDFCE IS NOT OBLIGED TO DO ANY OF IT, WHICH IS WHY THE POLICY CHOICE IS RECORDED IN THE MODULE ITSELF** — slice 1 of the `85.5` simulation half: the logic, pinned against the standard, with no rasteriser attached — filed 2026-08-18 (hundred-and-sixty-sixth filing)
+
+> **★ STAGED-SHIP QUALIFIER `(Table 149 logic)` ADDED 2026-08-18 (183rd
+> filing) — this heading was bare `Pass 85.5` when written.** It is
+> **slice 1** of one Pass; slice 2 is `Pass 85.5 (compositing)`
+> (`bf75351`), above, which carries the **full ruling and its evidence**.
+> In brief: `tools/check-ledger-numbers.py` reported these two as
+> `DUPLICATE Pass 85.5 ... (neither qualified)` the first time its heading
+> anchor was wide enough to see them, and the ruling was **staged ship,
+> not collision** — this entry's own heading already called itself *"slice
+> 1 of the `85.5` simulation half"*, the two commits are **29 minutes
+> apart** on 2026-08-18, and both were filed as the
+> hundred-and-sixty-sixth filing. **Neither number moves**, so no commit
+> message is left naming a number that changed. The 117 existing `85.5`
+> citations across the docs tree remain correct **for the Pass**, which is
+> what they were referring to; where a citation means one slice
+> specifically, the qualified heading is now the thing to point at.
 
 **Filed by `pdfce-librarian` WITH a shell (hard rule 8).** Labels as above.
 
@@ -49866,6 +50689,76 @@ in the "still open" list. Full build record: this file's own
 
 ## Next up
 
+### ★★★★★ THE `iccce` INBOX — **2 requests OWED AND STILL UNREAD, oldest 2026-08-17** — a standing box, because the channel is OUTSIDE this repository and NO pdfce gate will ever notice it — opened 2026-08-18 (hundred-and-eighty-second filing)
+
+**This box exists for one reason and it is worth stating plainly: every
+other obligation in this project is watched by something.** A missing
+Pass entry trips `check-passes-filed.py`; an unfiled commit trips
+`check-commits-filed.py`; a re-used number trips
+`check-ledger-numbers.py`; a mis-routed disclosure trips
+`check-disclosure-channel.sh`. **The `iccce` request folder is a
+directory on disk in another project's tree. Nothing in pdfce reads it,
+nothing in CI touches it, and no gate will ever go red because a request
+sat there for a week.** It has now been flagged in the *"Still in
+flight"* tail of **three consecutive filings** (179th, 180th, 181st) and
+**nothing was done in any of them** — which is exactly what an obligation
+does when its only home is the transient part of a document.
+
+**Location:** `D:\Dev\FeatureRequests\iccce_FeatureRequests\open\`
+**(outside `D:\Dev\pdfce\`, and therefore outside every gate, every
+`git status`, and every code review.)**
+
+**Standing at this filing — `ls` and `stat` on the directory, not
+inferred from any prior filing (hard rule 8):**
+
+| request file | dated | age at this filing | status |
+|---|---|---:|---|
+| `request_profile_population_census.md` | 2026-08-17 13:11 | **~1 day** | **OPEN — unread** |
+| `request_header_tag_channel_disagreement.md` | 2026-08-17 15:52 | **~1 day** | **OPEN — unread** |
+
+**What each asks, so nobody has to open them to triage:**
+
+1. **`request_profile_population_census.md`** — *"a census of the ICC
+   profiles in your ~6,000-file corpus."* For every PDF and every
+   embedded ICC profile (from `/OutputIntents /DestOutputProfile`, from
+   an `ICCBased` colour space, from an image's `/ColorSpace`, from
+   anywhere), report what is actually there. **Durable home for the
+   answer is `D:\Dev\iccce\docs\NUMERIC_CLAIMS.md`** — i.e. the answer
+   is wanted as a *measured population*, not an opinion.
+2. **`request_header_tag_channel_disagreement.md`** — *"does a
+   header/tag channel-count disagreement actually occur in the wild?"*
+   `iccce` shipped the cross-check and has **zero real-world instances of
+   it firing**, and **cannot get any**, because it has no corpus. Its own
+   note says the cost to pdfce is **one extra field in the corpus scan
+   the first request already needs.**
+
+**★ The two are ONE scan.** Request 2 states in writing that it is *"one
+extra field in a corpus scan you may already be running for
+`request_profile_population_census.md`"*, and is *"deliberately separate
+— different question, and this folder's rule is one topic per file."*
+**So the marginal cost of answering both is very close to the cost of
+answering either.** That is the fact most likely to change the priority
+call, and it is invisible unless someone opens both files — which is why
+it is copied here.
+
+**pdfce is the only party who can answer.** Both requests exist because
+`iccce` has **no PDF corpus** and pdfce has ~6,000 files. This is not a
+favour; it is the one direction in which the sibling-project boundary
+(decision 064) creates a genuine dependency of `iccce` on pdfce.
+
+**Related, and filed the same day: open operator question `(bp)`** — *does
+Ken intend `iccce` to become an actual pdfce dependency at all?* If the
+answer is no, these two requests are still owed (they cost pdfce a corpus
+scan and nothing structural), but the relationship's future changes.
+
+**Discharge condition for this box:** both files moved out of `open\`
+with replies written, at which point the box is deleted from *Next up*
+and the discharge is recorded in the filing that does it. **Until then it
+stays here, in the non-transient part of the document, where it cannot
+scroll off the bottom of a "still in flight" list.**
+
+---
+
 ### ★★★★★ THE GHENT STANDING BOARD — **25 pass / 18 FAIL / 8 UNRESOLVED / 0 render errors, of 51 patches (49.0 % / 35.3 % / 15.7 %)** — the remaining 18 clustered by cause, and the ONE architectural item that unblocks the largest cluster — filed 2026-08-18 (hundred-and-sixty-sixth filing)
 
 **This box exists so the corpus figure has ONE home that is not a
@@ -51124,205 +52017,105 @@ below omits the key for `None` rather than writing `1.0`.
 **Terminology (rule 15):** nothing here touches **ce dimensions** or **pdf
 dimensions**.
 
-### ★ Pass 75.0 — **THE REUSABLE PARSED HANDLE (display list) in `pdfce-render`** — a parsed page representation a shell **holds across frames** and replays against N regions, so the second and subsequent renders of an unchanged page cost roughly **FILL** rather than **INTERPRETATION** — filed 2026-08-13 (hundred-and-forty-fifth filing) — **UNSTARTED · SCHEDULED, NOT URGENT** (the requester says nothing is blocked this week)
+> ### ★ `Pass 75.0` — **SHIPPED 2026-08-18** (`e13f8ed` + `6af5655` + `6b797db`).
+> The reusable parsed handle (display list) is **no longer *Next up***; its
+> full entry — measurements, the seven acceptance criteria one by one, the
+> two engineer divergences, `MAX_DISPLAY_LIST_BYTES`, and the poster-printing
+> bug found while confirming the CLI column — is at the top of ***Shipped***.
+> **This pointer exists because 27 lines across three documents cite
+> `Pass 75.0`**, several in append-only history, and a reader arriving from
+> one of them at *Next up* would otherwise conclude it was never built.
+> The number-collision note (`d24c1df`'s message calls itself `Pass 75.0`
+> and is **VOID**) travels with the Shipped entry.
 
-> **★★ NUMBER-COLLISION NOTE, added 2026-08-13 (hundred-and-forty-sixth
-> filing) — READ THIS IF YOU ARRIVED FROM A COMMIT MESSAGE.**
-> **`d24c1df`'s commit message calls ITSELF `Pass 75.0`.** It is not this
-> Pass. That commit is **object identity across edits /
-> `remap_index_after_delete`**, and it is **`Pass 76.0`** — filed at the
-> top of *Shipped*. **The commit message's claim is VOID and, being
-> immutable history, can never be corrected in place**, which is why this
-> note exists on both sides of the collision.
+---
+
+### ★ Pass 101.0 — ★★ OPERATOR REQUEST 2026-08-18 — **BUILD PROVENANCE STAMP** — ★★ **SHIPPED 2026-08-18 (hundred-and-eighty-third filing); MOVED TO *Shipped*, at the head of that section.**
+
+> **This stub replaces the full *Next up* contract, which has been**
+> **superseded by the delivery record.** All five acceptance criteria are
+> recorded as **MET** in the `Pass 101.0` *Shipped* entry, together with
+> the in-flight timestamp-zone defect, the six-instant calendar
+> verification, and the `actions/checkout@v4` depth-1 runbook finding.
 >
-> **`Pass 75.0` — this entry, the reusable parsed handle — KEEPS the
-> number.** Ruled against the obvious reading (`d24c1df` claimed it 69
-> minutes earlier and was already shipped) for three reasons given in
-> full at the top of *Shipped*, the decisive one being **cost counted in
-> the right ledger**: measured at `19ceb60` with `grep -c`, this entry had
-> **27 lines citing `Pass 75.0` across three documents** (11 `ROADMAP.md`,
-> 15 `SESSION_LOG.md`, 1 `ARCHITECTURE.md`), several in **append-only**
-> history, while `d24c1df` had **1** — filing 145's *owed* list, which
-> records that it is **unfiled**. **27 versus 1: renumbering the unstarted
-> Pass was the expensive option, not the cheap one.**
+> **The operator’s request, verbatim, is retained here because it is the**
+> **thing the Pass is measured against:**
 >
-> **How it happened:** the number was minted **inside a commit-message
-> body**, where `tools/check-ledger-numbers.py` (reads no git),
-> `tools/check-passes-filed.py` (reads **subject lines only**) and
-> `tools/check-commits-filed.py` (has no concept of a Pass ID) **all
-> three** are structurally unable to see it. Filed as `R192` blind spot
-> **(d)** in *Backlog*.
+> > *"whenever you build a new version can you include the build date and
+> > time, and also include the build revision, date, and time for the
+> > version of iccce used in the version?"*
+>
+> **It was two requests in one sentence** — the first shipped as
+> `Pass 101.0`; the second is `Pass 101.1`, **below, still BLOCKED**.
+> **Do not collapse them back together.**
+>
+> **Open question `(bo)` — the reproducibility trade — is NOT closed by**
+> **the ship.** `SOURCE_DATE_EPOCH` is honoured, so it stays answerable
+> either way at no cost. It remains the operator’s call.
 
-**A NEW Pass family.** Ceiling was **74** (`Pass 74.0`); this filing mints
-**`Pass 75.0`** and moves the ceiling **74 → 75**. **Next free family
-number is 76.** *(Measured with `tools/check-ledger-numbers.py`, which
-reported highest ID `74.0` — the dispatch's stated ceiling of 75 was
-wrong and is not carried forward.)* **★ Superseded 2026-08-13: `76` was
-taken by `Pass 76.0` (hundred-and-forty-sixth filing); next free family
-number is now `77`.**
+---
 
-**Promoted, not invented.** The *Backlog* entry
-*"A DISPLAY-LIST CACHE IN `pdfce-render`"* (hundred-and-forty-second
-filing) ended with an explicit condition: **"promote it the moment a
-shell's zoom loop depends on the second render being fast."** The
-`pdfceGUI` session has now said, in writing, that its stage **S6** does.
-**The trigger was written down before it fired and was honoured when it
-did** — that is worth naming, because most conditional Backlog entries
-are never re-read.
+### ★ Pass 101.1 — ★★ **`iccce` BUILD PROVENANCE in pdfce's version output — BLOCKED, and the reason is a MEASURED ABSENCE rather than an oversight** — filed 2026-08-18 (hundred-and-eighty-second filing) — **BLOCKED · NOT STARTED**
 
-#### Why this is a REGRESSION RISK, not an optimisation — the requester's argument, kept in substance
+#### ★ THE BLOCKER: **pdfce DOES NOT DEPEND ON `iccce`.**
 
-This is the sentence that makes it a scheduled Pass rather than a
-Backlog wish, and it came from the consumer, not from here:
+**Measured this session, not assumed:**
 
-> Today's shell **renders the whole page once and pans/zooms over the
-> texture smoothly, and the operator has said explicitly that this feels
-> better than the tiled competitor.** If S6 switches to per-viewport
-> regions to gain the zoom range, it **loses that smoothness** — unless
-> the second and subsequent renders of a page are cheap.
+```
+grep -rn "iccce" Cargo.toml crates/*/Cargo.toml   # ZERO matches
+grep -rln "iccce" crates --include=*.rs           # ZERO matches
+```
 
-So the trade S6 faces without a handle is **zoom range bought with
-smoothness**, on the one axis the operator has already expressed a
-preference about. **A region is a viewport; panning changes the region;
-changing the region re-interprets the page** — ~0.7 s per pan gesture on
-the CAD sheet, on a document that currently pans for free by scrolling an
-existing texture. The handle is what turns region rendering from
-*"correct but sluggish"* into the thing that makes deep zoom usable.
+`iccce` exists as a **sibling project** at `D:\Dev\iccce` (currently
+`v0.1.0-19-g400179b`, `HEAD` `400179b`), and `ARCHITECTURE.md`'s
+**decision 064** records the boundary — **`iccce` owns colour
+conversion** — but **the boundary is a DECISION, not yet a dependency
+edge.** Nothing in pdfce links it, calls it, or vendors it.
 
-#### The evidence — ALREADY MEASURED. Do not re-derive it.
+**So pdfce cannot report "the version of `iccce` used in this build",
+because no version of `iccce` is used in this build.**
 
-From `docs/render-region-measurements.md` (`examples/region_bench.rs`,
-release build, one run per case), on
-`D:\Dev\temp\pdfce\ncored-benchmark-cad-drawing.pdf` — **A3 landscape**,
-1190.55 × 841.89 pt, 148,517 paints · 24,128 clip ops:
+#### Why a plausible value is refused rather than stamped anyway
 
-| case | pixels | time |
-|---|---:|---:|
-| **floor** — a 1 × 1 **point** region | **2** | **691 ms** |
-| region 400 × 300 pt, scale 1 | 120,701 | **699 ms** |
-| full page, scale 1 | 1,002,822 | 877 ms |
+Stamping *some* `iccce` revision — the sibling repo's `HEAD`, say, since
+it is right there on disk and would produce a banner that looks exactly
+like the one requested — **would assert a relationship that does not
+exist.** It is the **claim-bearing-copy rule** from the global
+`CLAUDE.md`, applied to a version banner: *locate the source of truth and
+lift the actual fact; do not generate a plausible-sounding value.*
 
-**A 2-pixel render costs 691 ms; a 120,701-pixel render costs 699 ms.**
-**~99 % of the cost on this document is interpretation**, paid in full
-regardless of how few pixels come out. **Fill is ~0.18 µs per pixel**
-(0.186 ms per 1,000 px at 120,701 px; 0.182 at 4,011,288 — stable across
-a 33× change in pixel count). With a handle, repeat renders drop to
-**roughly fill cost: tens of milliseconds.**
+A version banner is **the most trusted string a program emits** — it is
+what a bug report quotes and what a support conversation starts from. A
+fabricated dependency line there does not merely mislead, it **survives
+into other people's records.**
 
-**And the second document is why the handle is the right answer rather
-than any render-granularity tweak:** `iso32000-2-preview.pdf` (text-heavy
-A4) has a **3.2 ms floor of an 8.97 ms full page (~36 %)** against
-**691 ms of 877 ms (~99 %)** on the CAD sheet. **One document type costs
-~700 ms per render and the other ~9 ms on the same unbranched code
-path** — any fixed strategy is mistuned for one of them. A handle makes
-the expensive case cheap **on the second render** without needing to know
-in advance which case it is holding.
+#### What `Pass 101.0` does instead, so the question is ANSWERED rather than silently unanswered
 
-#### Requested shape — and one shape explicitly declined as less useful
+`Pass 101.0`'s `--version` output **states plainly that `iccce` is not
+linked.** The operator asked; he gets an answer every time he asks,
+and the answer is *"not applicable, and here is why"* rather than
+**silence** — which he would correctly read as the feature having been
+forgotten.
 
-**Keyed on `(page, epoch)`.** The consumer already tracks a document
-`edit_epoch` and re-decomposes on `(page, epoch)`, so a handle keyed the
-same way **drops into their existing invalidation** with no new
-invalidation concept on either side.
+**`Pass 101.1` REPLACES that line with the real revision / date / time
+the moment the dependency lands.** Its unblocking condition is exactly
+one event: **`iccce` appears in a `Cargo.toml` in this workspace.** No
+other trigger, no judgement call.
 
-**NOT a batch call taking N regions.** Stated by the requester as
-*"strictly less useful"*: **their regions arrive one per frame as the
-operator moves, not in batches.** A batch API would be correct and
-unused — the shape of a shell's render loop, not a guess about it.
+#### The prior question this exposes — filed as open question `(bp)`
 
-*(Both are the consumer's stated preference for their own call site, not
-a `pdfce-render` API decision taken here. The public surface still gets
-the `rust-style-guide-and-api-guidelines.md` pass when the Pass is
-built — including whether the handle borrows or owns, and what happens
-to a handle held across a document mutation.)*
-
-#### Acceptance criteria
-
-1. **The measurement IS the criterion, so it cannot ship while still
-   slow.** Second-and-subsequent region renders of an **unchanged** page
-   on the A3 CAD benchmark fall from **~700 ms to approximately fill
-   cost — tens of ms** — verified with the **committed**
-   `crates/pdfce-render/examples/region_bench.rs`, extended with a
-   repeat-render case. **The first render may cost what it costs.**
-2. **Invalidation is keyed on `(page, epoch)`** and a stale handle is
-   **impossible to use silently** — either the type makes it
-   unrepresentable, or the call refuses by name. A display list that
-   renders a document's *previous* state while reporting success is
-   strictly worse than no cache.
-3. **Byte-identical output.** A region rendered *through* a handle is
-   byte-identical to the same region rendered without one, at the same
-   scale — the differential-test discipline `Pass 74.0` established
-   (`crates/pdfce-render/tests/region_matches_full_page.rs`), extended
-   rather than duplicated.
-4. **Memory is bounded and stated.** A held display list for a
-   148,517-paint sheet has a size; it is **measured and documented**, not
-   assumed small. A shell holding one per page needs that number.
-5. **The text-page case does not regress.** On `iso32000-2-preview.pdf`
-   (~9 ms full page) the handle must not make the **first** render
-   materially slower — a build cost that exceeds the saving is a loss on
-   every document where interpretation is already cheap, which is most of
-   them.
-6. **GUI-core separation intact** — `cargo tree -p pdfce-render` shows no
-   GUI/windowing dependency (rule 2). **`cargo fmt --all`,
-   `cargo clippy --all-targets -- -D warnings` clean** (rule 10).
-7. **`pdfce-cli` note (rule 11):** a display list is an **in-process,
-   across-frames** object. A one-shot CLI invocation has nothing to hold
-   it across, so the default *"every Pass ships its CLI subcommand"*
-   likely resolves to **`—` (not applicable)** rather than to a gap —
-   *unless* a multi-page or multi-region batch verb can demonstrably use
-   one within a single run. **Decide it in the Pass, with a reason
-   written down**; do not leave `FEATURES.md` guessing between `—` and
-   `[ ]`, which is the one distinction that file's legend exists to
-   protect.
-
-#### Priority — scheduled, and deliberately not urgent
-
-The requester's own words: **"Not urgent this week — the shell has S5 and
-the rest of S4 to build first, and nothing is blocked today. But S6's
-design assumes it, and I would rather that assumption be a scheduled Pass
-than a hope."**
-
-**Filed under *Next up* rather than left in *Backlog*, and here is the
-reasoning** — the choice was live and is recorded so it can be argued
-with:
-
-- *Backlog* in this file means **not yet scoped to a Pass**. This is
-  scoped: shape, key, acceptance criteria and the measurement that gates
-  it are all fixed. Leaving it in Backlog would misdescribe its state.
-- **The Backlog entry's own promotion condition has fired by name.**
-  Leaving it there after that would make the condition decorative.
-- **"Not urgent" is an ordering statement, not a status statement.**
-  *Next up* already holds unstarted Passes of mixed priority
-  (`Pass 72.0`/`73.0` are marked HIGH PRIORITY; this one is not, and sits
-  below them deliberately).
-- **A scheduled assumption is cheaper than a hoped-for one**, which is
-  precisely what the requester asked for.
-
-**If S6's timeline moves up, the requester says so through the channel
-and this gets re-prioritised** — stated in the outbound reply as a
-cheaper signal than discovering it late.
-
-#### Two consumer confirmations recorded here so they are not re-litigated
-
-- **`MAX_ZOOM` will be set from PERFORMANCE** — not from `f32`
-  precision, not from `MAX_PIXMAP_EDGE` — **and documented with that
-  reasoning rather than as a round figure.** This closes the loop on
-  `Pass 74.0`'s addendum and on decision `060`'s *"what is NOT decided
-  here, and is owed"*: the measured `zoom_ceiling` harness showed
-  sub-pixel accuracy to **~5,000×**, three orders of magnitude past any
-  plausible viewing zoom, so **numerics are not the binding
-  constraint** — the ~0.7–1.1 s per-render floor is. Setting the limit
-  from `f32` would repeat *the same class of error*
-  `MAX_PIXMAP_EDGE`'s original justification made.
-- **The consumer will NOT drive N region calls across cores**, having
-  understood that **without a display list, N workers each pay the full
-  interpretation floor** — N× the work for ~1× the throughput. Recorded
-  in their own roadmap so a future contributor does not try it. **This
-  Pass is also what makes that parallelism worth revisiting**, since
-  region fills are embarrassingly parallel once a display list exists.
+**Does Ken intend `iccce` to become an actual pdfce dependency at all?**
+The request presupposes it already is. Decision 064 planned for it and
+`FEATURES.md` already carries a *Planned* row gated on it
+(`/OutputIntents`-aware CMYK conversion). **But planning a boundary and
+taking a dependency are different acts**, and nobody has taken the
+second. **The engineer has deliberately not answered this.** See `(bp)`.
 
 **Terminology (rule 15):** nothing here touches **ce dimensions** or
 **pdf dimensions**.
+
+---
+
 
 ### Pass 69.0 — ★★ OPERATOR REQUEST 2026-08-12 — **ce-dimension STYLE + TOLERANCE, with a group default and a per-ce-dimension override checkbox, at SolidWorks option breadth** — filed 2026-08-12 (hundred-and-twenty-fifth filing) — **STATUS 2026-08-13: SPLIT AND PARTLY SHIPPED. The heading's original "UNSTARTED" is now FALSE and is struck by the banner below.**
 
@@ -61770,9 +62563,86 @@ nothing gets forgotten, not as a commitment to build in this order.
 
 ## Open operator questions (as of 2026-08-02 — answer any, all default to the stated fallback if not answered)
 
-**NEW this filing (hundred-and-forty-fourth filing, 2026-08-13) — filed
-OPEN, not yet answered. Operator-question ceiling moves `(bm)` → `(bn)`,
-next free `(bo)`:**
+**NEW this filing (hundred-and-eighty-second filing, 2026-08-18) — both
+filed OPEN with `Pass 101.0` / `Pass 101.1`, neither answered by the
+engineer, and both deliberately so. Operator-question ceiling moves
+`(bn)` → `(bp)`, next free `(bq)`:**
+
+- **★★ (bo) Do you accept that build stamping makes pdfce's builds
+  NON-REPRODUCIBLE — two builds of byte-identical source producing
+  byte-different binaries — or should the stamp be suppressible so a
+  reproducible build stays possible?**
+
+  **This is the direct, unavoidable consequence of what you asked for**
+  (*"whenever you build a new version can you include the build date and
+  time"*), not a shortcoming of the implementation. A timestamp inside the
+  binary changes with every build **by definition**; there is no way to
+  have both properties in the same artefact.
+
+  **What each side buys, so this is a real choice rather than a
+  formality:**
+
+  | you keep | you give up |
+  |---|---|
+  | **stamp on** — any binary in the wild can tell you exactly when and from which commit it was built; a bug report is self-identifying | **reproducibility** — nobody (including you) can rebuild a published release and prove byte-for-byte that it matches what was shipped |
+  | **stamp off / `SOURCE_DATE_EPOCH` pinned** | binaries become anonymous again; "which build is this?" goes back to being unanswerable from the binary itself |
+
+  **Why it is yours and not the engineer's.** pdfce is **MIT and already
+  public** (`github.com/KenM76/pdfce`, rule 8). Reproducible builds are a
+  property *other people* rely on to verify that a published binary
+  corresponds to published source — so this trades a convenience you
+  asked for against a trust property your **downstream** would use. That
+  is a project-posture call.
+
+  **The choice stays open either way, at zero cost:** `Pass 101.0`
+  honours **`SOURCE_DATE_EPOCH`**, the standard escape hatch. Setting it
+  in a release build pins the timestamp and restores reproducibility
+  without removing the feature. **Nothing is foreclosed by not answering
+  today.**
+
+  **Default if unanswered: STAMP ON, `SOURCE_DATE_EPOCH` honoured but not
+  set** — i.e. exactly what you asked for, non-reproducible, with the
+  escape hatch present and unused.
+
+- **★★ (bp) Do you intend `iccce` to become an actual pdfce dependency —
+  and if so, is that a Pass someone should scope now?**
+
+  **Your request presupposed it already is one. It is not, and that was
+  MEASURED this filing rather than assumed:**
+  `grep -rn "iccce" Cargo.toml crates/*/Cargo.toml` and
+  `grep -rln "iccce" crates --include=*.rs` both return **ZERO**. `iccce`
+  is a **sibling project** at `D:\Dev\iccce` (`v0.1.0-19-g400179b`);
+  `ARCHITECTURE.md` **decision 064** records the boundary (*iccce owns
+  colour conversion*), and `FEATURES.md` already carries a *Planned* row
+  gated on it (`/OutputIntents`-aware CMYK conversion). **But planning a
+  boundary and taking a dependency are different acts, and only the first
+  has happened.**
+
+  **This is why `Pass 101.1` is BLOCKED rather than merely unbuilt.**
+  pdfce cannot report *"the version of iccce used in this build"* because
+  **no version of iccce is used in this build**, and stamping the sibling
+  repo's `HEAD` anyway would assert a relationship that does not exist —
+  the claim-bearing-copy rule applied to a version banner, which is the
+  most trusted string a program emits.
+
+  **Three live sub-questions**, any of which you can answer alone:
+  1. **Dependency or not?** If pdfce should link `iccce`, that is real
+     engineering work (a crate boundary, a version policy, a build story
+     for a second repo) and wants its own Pass.
+  2. **Vendored, path-dependency, or published crate?** A `path = "../iccce"`
+     dependency **cannot be built by anyone but you** — pdfce is public,
+     so a path dependency would make the published repo unbuildable
+     off your machine.
+  3. **Licence?** `iccce` has not been through the `LEGAL.md` §6.1
+     classification pass (rule 13). MIT pdfce cannot link GPL/AGPL at
+     all, and weak-copyleft needs your call on linking terms.
+
+  **Default if unanswered: pdfce takes NO dependency on `iccce`**, the
+  `/OutputIntents` row stays *Planned* and gated, and `Pass 101.0`'s
+  `--version` continues to state plainly that `iccce` is not linked.
+
+**PRIOR — filed OPEN in the hundred-and-forty-fourth filing (2026-08-13),
+still unanswered:**
 
 - **(bn) Is an automatic update *CHECK AT STARTUP* permitted, or does it
   stay opt-in and off by default?** Filed 2026-08-13 with **decision

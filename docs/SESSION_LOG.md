@@ -47403,3 +47403,658 @@ mod.rs:1–89`.
    `iccce` requests. Nothing new queued by this filing beyond the
    declined standing-rule recommendation above (watch for a second
    instance of the blocker-outlives-its-design shape).
+
+---
+
+## 2026-08-18 (hundred-and-eighty-second filing) — `Pass 75.0` (`e13f8ed` + `6af5655` + `6b797db`): THE DISPLAY LIST SHIPS AT 636 ms → 1.06 ms — AND THE PASS'S OWN PREDICTION THAT `pdfce-cli` WAS "NOT APPLICABLE" WAS CHECKED RATHER THAN ACCEPTED, WHICH IS HOW A BROKEN POSTER FEATURE WAS FOUND. PLUS `Pass 101.0`/`101.1` MINTED FROM A NEW OPERATOR REQUEST, WITH THE SECOND HALF BLOCKED ON A DEPENDENCY THAT DOES NOT EXIST
+
+**Filed by `pdfce-librarian` WITH a shell this session (hard rule 8).**
+Structural claims were checked against the live tree and the commands are
+named below. Timing figures are **RELAYED** from the engineer's report and
+from `docs/render-region-measurements.md`; no release benchmark was re-run
+by this role. `git status --short` **empty**; `git remote -v` →
+`origin https://github.com/KenM76/pdfce.git` — **the repo is public
+(rule 8)**.
+
+**Shipped:**
+- **`Pass 75.0` — THE REUSABLE PARSED HANDLE (display list) in
+  `pdfce-render`.** Moved *Next up* → *Shipped*. Three commits:
+  `e13f8ed` (the `Canvas` seam, proved transparent by 1,383 identical
+  rasters), `6af5655` (the recorder and the measurement), `6b797db`
+  (poster printing rebuilt on it). New files
+  `crates/pdfce-render/src/canvas.rs` and `.../display_list.rs`; new
+  public `region_device_geometry()`; two new `RenderError` variants;
+  `GraphicsState::clip_id`/`clip_ref()`; `pdfce-cli`'s poster path is the
+  first real consumer.
+- **Headline measurement (medians of 3, release, A3 CAD sheet —
+  148,517 paints · 24,128 clip ops, recorded as 127,267 ops · 40 clips ·
+  ~29.5 MiB):** the **1 × 1 pt, 2-pixel FLOOR falls 636 ms → 1.06 ms
+  (600×)**; scale 8 falls 819 ms → 10.5 ms (78×); scale 1 falls 680 ms →
+  83.5 ms (8.1×); recording the page costs 618 ms. **Per-item forms (hard
+  rule 10a): ~8.3 ns per op replayed, ~4.9 µs per op recorded, ~240 B per
+  op held, ~4.3 µs per paint interpreted.**
+- **All seven acceptance criteria MET or ANSWERED.** Criterion 3's
+  test file was checked directly: **12 `#[test]` functions** in
+  `crates/pdfce-render/tests/region_matches_full_page.rs`, extended not
+  duplicated. Criterion 6's gate results relayed (fmt/clippy clean,
+  `cargo test --workspace` green over 101 suites, four project gates
+  clean, **no new dependency** so no `PRIOR_ART`/`THIRD_PARTY_LICENSES`
+  change).
+
+**Decisions made this session:**
+- **★ Decision 071 minted** (`ARCHITECTURE.md` §12) — *"a display list is
+  keyed on `(page, epoch, SCALE)` and refuses a mismatch by name; a page
+  it cannot record exactly is refused rather than approximated — both are
+  refusals to build a second rendering path."* Ceiling **070 → 071**;
+  next free **072**. Two clauses, both **divergences from what the
+  consumer asked for**, on a **public surface a downstream project builds
+  against** — which is the §12 threshold, not the size of the change.
+  - **Clause 1 (scale in the key).** The consumer asked for
+    `(page, epoch)` because it drops into their existing invalidation.
+    Correct about invalidation, **silent about rendering**: half the
+    interpreter's decisions are device-dependent (hairline-or-not,
+    minified-or-not, image-edge AA, **every clip mask's size**), so
+    replaying at another scale means **re-deriving rules that already
+    exist**; and composing the transform in a different order **is not
+    associative in `f32`**, while the acceptance criterion is
+    **byte-identity**. Consumer consequence, recorded so they design
+    around it: **panning at fixed zoom is fully served; a zoom STEP costs
+    one rebuild; continuous zoom should scale the existing texture and
+    rebuild on settle.**
+  - **Clause 2 (refuse, don't approximate).** `sh`, shading patterns,
+    overprint composites (§11.7.4.3) and soft masks (§11.6.5) **read the
+    destination back** and have no recordable formulation. Each poisons
+    the recording **by name** (`PoisonReason`); the caller falls back.
+    The argument is `CLAUDE.md` rule 4's, one layer down: **an
+    approximating recorder IS a second rendering path, chosen silently
+    per page, and it would surface as a document that changes when you
+    pan.**
+  - **Clause 3** records `MAX_DISPLAY_LIST_BYTES` = 256 MiB, also filed
+    to §10.1 as the **first resource guard on a RETAINED structure** —
+    every prior guard bounds something produced and consumed, and a
+    display list is held across frames by design.
+- **★★ `R196` DECLINED — and the warrant is a correction, not a
+  judgement.** The engineer asked whether the dropped-backslash
+  string-literal defect now clears the two-occurrence bar. **Both halves
+  of the question rest on a false premise.** It is **not the second
+  occurrence — the RAG file records at least SEVEN** (six in pdfce at
+  `Pass 96.0`, one where the *fix* re-introduced the bug via a heredoc,
+  **36 across 22 files in pdfceGUI `6dc6749`**, and now this one). And a
+  **gate already exists and works**: `tools/gates/check-string-gaps.sh`
+  in pdfceGUI, one `awk` pass, 1.0 s over a ~50k-line workspace, shipping
+  green there. **`D:\Dev\pdfce\tools\` has no `gates\` directory** (`ls`).
+  So the disposition is **ADOPT, not MINT** — hard rule 11's warrant for
+  declining rules (*"no mechanical gate can content-check a
+  disclosure"*) **does not apply here, and that is the point**: this
+  defect is **purely syntactic**, three spaces inside a literal, so a
+  gate can decide it deterministically forever. **Writing a rule for
+  something a gate already decides is how a project accumulates rules
+  nobody reads while the defect keeps shipping.** Ceiling stays **R195**,
+  next free **R196**.
+
+**Findings + decisions:**
+- **★★ THE POSTER BUG, and why it was found.** Acceptance criterion 7
+  predicted the `pdfce-cli` column would be `—` (*"a one-shot invocation
+  has nothing to hold it across"*). The criterion was **well written** —
+  it hedged (*"likely"*), named the falsifying condition (*"unless a
+  multi-page or multi-region batch verb can demonstrably use one"*), and
+  required the answer be *decided in the Pass*. **All three did their
+  job, and it still would have been wrong if confirmed by inspection.**
+  Reading the code found `cmd_print`'s poster path — **one page rendered
+  many times in a single run** — and running it found a live failure:
+  `pdfce-cli print --poster --poster-scale 8` on the A3 sheet died with
+  *"requested raster size 39685x28063 … exceeds MAX_PIXMAP_EDGE"*.
+  Poster printing **rendered the whole page at tile scale and cropped**,
+  so memory scaled with the **assembled poster** rather than **the paper
+  in the printer** — and a poster's full raster is, by construction,
+  larger than any sheet. **It failed on exactly the documents people make
+  posters of.** Fixed in `6b797db`: **156 sheets in 29 s = ~186 ms per
+  sheet**, one interpretation plus 156 replays, with a **stderr
+  disclosure** when the recorder refuses and the per-tile fallback runs
+  (rule 4 / rule 11). **The transferable shape: a well-hedged prediction
+  still has to be CHECKED AGAINST THE CODE, because the check is where
+  the second finding lives.**
+- **★★ THE REGRESSION THE HARNESS CAUGHT — the most reusable finding in
+  the Pass.** The first working recorder pushed **one clip definition per
+  `W n` (24,128 of them)** instead of deduplicating, so a replay built
+  **24,128 region-sized masks per frame**. Measured then: **scale 8 was
+  88× FASTER while scale 1 was 1.79 s against 706 ms direct — the cache
+  was 2.5× SLOWER than no cache.** **The motivating case looked excellent
+  while the feature was a net loss**, because at deep zoom almost every
+  op culls before its clip is ever requested, so the expensive path is
+  never taken. Fixed by deduplicating on the **same `ClipCache::build_key`
+  the painting path already uses** — one definition of identity, not a
+  second one invented for the recorder. **Generalised: a cache's WIN and
+  a cache's COST live in different cases, and the case that motivates a
+  cache is reliably the one that exercises its cost least. Measure the
+  case where the cache does the MOST work.** Graduated to
+  `D:\dev\rag\rust\a_caches_win_and_its_cost_live_in_different_cases_so_the_motivating_benchmark_cannot_see_the_regression.md`,
+  beside the existing
+  `a_single_input_benchmark_measures_the_input_class_not_the_code_path.md`
+  from `Pass 74.0` — same harness, same two documents, second distinct
+  way a single-case benchmark misleads.
+- **Sabotage testing, and its NEGATIVE result.** Every new test was run
+  against deliberately broken code. Three sabotages, three different
+  tests caught them — and **the broad byte-identity test did NOT catch a
+  too-tight cull**, which is exactly why `culling_never_drops_a_mark`
+  exists as its own case. **A suite's breadth is not its sensitivity, and
+  only a known-bad build tells you which you have.**
+- **A test that guesses WHERE content is tests the FIXTURE.** The poster
+  reachability test asserted ink on tile 0 (a page's top-left margin at
+  30×), then on the middle of the grid (the middle of a text page's
+  leading). **Both legitimately blank.** It now locates the inked tile
+  from a cheap scale-1 render. Same family as the 180th filing's vacuous
+  regression test.
+- **★ NOT DONE, and stated rather than glossed.** The poster change was
+  **not** verified by producing a real spool file: `--send --to-file`
+  starts a job **through the printer driver**, a side effect outside the
+  working tree and therefore the operator's call. The oracle used
+  instead — the previous implementation kept verbatim behind
+  `#[cfg(test)]` and asserted byte-for-byte at three magnifications — is
+  strong for *"the new path produces the same tiles"* and **no oracle at
+  all** for *"the driver accepts them"*, which is the distinction
+  `D:\dev\rag\rust\a_driver_accepts_a_devmode_paper_request_and_ignores_or_clamps_it_without_error.md`
+  exists for.
+- **★★ HARD RULE 11 SWEEP — five operator-facing survivors, ONE OF THEM
+  SHIPPED BY THIS PASS.** `grep -rn '"[^"]*[a-zA-Z,.:;)]   \+[a-zA-Z]' crates/ --include=*.rs`
+  at `6b797db`: **51 hits — 15 in `tests/`, 36 in `src/`**, most being
+  `assert!` messages and doc-comment tables. **Five are operator-facing:**
+  `crates/pdfce-render/src/lib.rs:207` (**`DisplayListStale`'s
+  `#[error(...)]`**), `crates/pdfce-print/src/lib.rs:266`, `:270`, `:281`
+  (three print failures), and `crates/pdfce-gui/src/ui_text.rs:3535`
+  (`setting_theme_unknown`). **★ The first is the finding.** The
+  engineer's report says the surviving message *"was verified by RUNNING
+  the binary against a synthetic shading page"* — that verified
+  **`PageNotRecordable`**. **`DisplayListStale`, the sibling variant added
+  in the same commit twelve lines further down the same file, was not,
+  and it has the defect.** A sweep that verifies one message in a pair
+  verifies one message in a pair. **Reported, not edited — `crates/` is
+  outside this role's remit.**
+- **★ A NEW LEDGER-GATE BLIND SPOT, found by tripping over it.**
+  `tools/check-ledger-numbers.py`'s heading anchor is
+  `^#{2,4} (?:★ )?Pass ` — **exactly ONE `★` is permitted.** This
+  filing's three Pass headings were first written `### ★★★ Pass 75.0`,
+  `### ★★ Pass 101.0`, `### ★★ Pass 101.1`, and **all three were
+  invisible to the gate**, which reported the heading ceiling as **100**
+  with three Pass headings sitting in the file. Corrected by moving the
+  extra stars past the em dash; the gate now reports **101**. **This is
+  the class the checker's own source comment already describes** — *"TEN
+  headings were invisible to this checker and had never been
+  uniqueness-checked at all"* — and it was found the **same way that one
+  was: by predicting the gate's output before running it.** The regex
+  should accept `★{1,5} `. Owed, not fixed (`tools/` is outside remit).
+  Note that **zero multi-star `Pass` headings existed in `ROADMAP.md`
+  before this filing** (`grep -cE "^#{2,4} ★{2,} Pass "` → 0), so the
+  convention was being held by accident, not by the gate.
+- **`R182`'s shape, third instance in two weeks.** The engineer asked
+  whether the backslash defect was a *second* occurrence; the answer —
+  seven, plus a working gate — **was already on disk in
+  `D:\dev\rag\rust\`**, in a file whose own amendment footers record the
+  count. Nothing contradicted anything; the finding simply never
+  propagated to the place asking the question. **Grep the corpus before
+  recording something as a first or second occurrence.**
+
+**New requests filed:**
+- **★ `Pass 101.0` — BUILD PROVENANCE STAMP.** Operator, verbatim:
+  *"whenever you build a new version can you include the build date and
+  time, and also include the build revision, date, and time for the
+  version of iccce used in the version?"* Minted under *Next up*; **the
+  engineer is implementing it in this same session**, so a completion
+  dispatch is expected. Scope: `pdfce-core` gains a build script and a
+  `build` module; `pdfce-cli` surfaces it on `--version`; **`pdfce-gui`
+  is not touched** (GUI paused), so its box ships `[ ]` honestly.
+  Acceptance: UTC build time + `git describe`-style revision **with a
+  dirty marker**; degrades to a **named "unknown"** rather than a
+  plausible wrong value when git is absent; **the build script re-runs
+  when `HEAD` moves** (without `cargo:rerun-if-changed` the stamp
+  silently reports the commit of the last full rebuild — the same
+  stale-and-confident failure by another route).
+- **★ `Pass 101.1` — `iccce` PROVENANCE. BLOCKED, and the reason is a
+  MEASURED ABSENCE.** `grep -rn "iccce" Cargo.toml crates/*/Cargo.toml`
+  and `grep -rln "iccce" crates --include=*.rs` both return **ZERO**.
+  **pdfce does not depend on `iccce`.** It is a sibling project at
+  `D:\Dev\iccce` (`v0.1.0-19-g400179b`); decision 064 records the
+  boundary (*iccce owns colour conversion*), **but a boundary is a
+  DECISION, not a dependency edge.** So pdfce cannot report *"the version
+  of iccce used in this build"* because **no version is used**, and
+  stamping the sibling's `HEAD` anyway would assert a relationship that
+  does not exist — the claim-bearing-copy rule applied to a version
+  banner, **the most trusted string a program emits**. `Pass 101.0`'s
+  output therefore **states plainly that `iccce` is not linked**, so the
+  operator's question is *answered* every time he asks rather than
+  silently unanswered; `101.1` replaces that line the moment the
+  dependency lands. **Unblocking condition: `iccce` appears in a
+  `Cargo.toml` in this workspace.** Nothing else.
+- **Pass family ceiling moves 100 → 101; next free family is 102.**
+
+**Open operator questions minted — `(bn)` → `(bp)`, next free `(bq)`:**
+- **★ `(bo)` — do you accept that build stamping makes builds
+  NON-REPRODUCIBLE?** Two builds of byte-identical source produce
+  byte-different binaries. **This is the direct, unavoidable consequence
+  of what was asked for**, not an implementation shortcoming. It trades
+  *"any binary tells you when it was built"* against *"anyone can rebuild
+  a published release and prove it matches"* — and pdfce is **MIT and
+  already public**, so the second property is one downstream users would
+  rely on. **The engineer deliberately did not decide it.**
+  `SOURCE_DATE_EPOCH` is honoured, so **nothing is foreclosed by not
+  answering.** *Default if unanswered: stamp on, escape hatch present and
+  unused.*
+- **★ `(bp)` — do you intend `iccce` to become an actual pdfce
+  dependency, and if so should someone scope that Pass now?** The request
+  presupposed it already is. Three sub-questions, answerable separately:
+  **dependency or not**; **vendored / path / published crate** (a
+  `path = "../iccce"` dependency **cannot be built by anyone but you**,
+  and pdfce is public); and **licence** — `iccce` has not been through
+  the `LEGAL.md` §6.1 classification pass (rule 13). *Default if
+  unanswered: no dependency; the `/OutputIntents` row stays Planned and
+  gated; `--version` keeps saying `iccce` is not linked.*
+
+**`FEATURES.md` — three rows changed, one box deliberately NOT ticked:**
+1. **Display-list row moved *Planned* → *Implemented***, `[x]` core ·
+   `[x]` cli · `[ ]` gui, sentence replaced (never appended).
+2. **Region-rasterisation row's sentence REPLACED and its `cli` box
+   `[ ]` → `[x]`.** It said *"No shell calls it"* and *"nothing is
+   cached between calls"* — **both now false.**
+3. **Imposition row's poster clause AMENDED, no checkbox changed.** Its
+   `cli` box was already ticked while the capability was broken above a
+   modest magnification; the sentence no longer implies large posters
+   worked before 2026-08-18.
+- **★ `gui` stays `[ ]` and was verified, not assumed:**
+  `grep -rn "render_page_region\|record_page\|replay_region" crates/pdfce-gui/src/`
+  returns **nothing**. `pdfce-gui` contains **no call to
+  `render_page_region` at all**. **`R151` exists because an API sat
+  callable-and-uncalled for eight Passes** — this row is that rule's
+  signal working, not an embarrassment to round up.
+- Two **Planned** rows added for `Pass 101.0` / `101.1`, all boxes
+  unticked, `101.1`'s Acrobat column `—`.
+
+**Still in flight:**
+- **`Pass 101.0` — being implemented by the engineer right now.** Expect
+  a completion dispatch this session.
+- **★★ THE `iccce` INBOX — now a STANDING BOX under *Next up*, not a
+  "still in flight" bullet.** `request_profile_population_census.md`
+  (2026-08-17 13:11) and `request_header_tag_channel_disagreement.md`
+  (2026-08-17 15:52), both **still unread**, both verified present by
+  `ls`/`stat` on
+  `D:\Dev\FeatureRequests\iccce_FeatureRequests\open\`. **They have been
+  flagged in the transient tail of three consecutive filings (179th,
+  180th, 181st) and nothing was done in any of them** — which is what an
+  obligation does when its only home is the part of a document that
+  scrolls off. **Every other obligation in this project is watched by a
+  gate; this channel is a directory in another project's tree, and no
+  pdfce gate will ever go red because it sat.** Promoted to a permanent
+  box with a stated discharge condition. **Load-bearing triage fact
+  copied out of the files so nobody has to open them: request 2 says in
+  writing it is *"one extra field in a corpus scan you may already be
+  running"* for request 1 — the two are ONE scan, so the marginal cost of
+  answering both is close to the cost of answering either.** pdfce is the
+  **only** party who can answer: `iccce` has no PDF corpus and pdfce has
+  ~6,000 files.
+- **veraPDF §6.1.12 discharge for `MAX_DISPLAY_LIST_BYTES`** — the
+  standing rule requires every new resource guard be run against that
+  suite two-sidedly (**fires on a real file, silent across all 44**).
+  **Neither half is on record.** Fourth guard to face the suite; **first
+  to ship ahead of it.** Highest-priority owed item from this Pass.
+- **Five operator-facing string-literal gaps** (table above), one of them
+  shipped by this Pass, plus **porting `check-string-gaps.sh` from
+  pdfceGUI `6dc6749`** into `D:\Dev\pdfce\tools\gates\`. **Fix the five
+  first so the gate lands green** — a gate red at baseline enforces
+  nothing.
+- **`R192` blind spot (d)** (a Pass ID minted in a commit-message body is
+  invisible to all three ledger gates) — unchanged. **A fifth blind spot
+  now sits beside it**: the `(?:★ )?` single-star anchor above.
+- `Pass 97.0`/`97.1`/`97.2` (the compositor), `Pass 98.0` (foreign `/BE`
+  round-trip read-back), and the remaining `pdfceGUI`-sourced Passes
+  `80.0` (note text on markup) and `81.1` (markup opacity write half) —
+  untouched by this filing.
+
+**For next session:**
+1. **Ledger update from this filing.** Pass family ceiling **100 → 101**,
+   **next free 102**. Decisions **070 → 071**, **next free 072**.
+   Standing rules **unchanged at R195**, next free **R196** (`R196`
+   declined with a stated warrant — see above). Operator questions
+   **`(bn)` → `(bp)`**, next free **`(bq)`**. **Next free filing ordinal:
+   183.** All re-verified with `tools/check-ledger-numbers.py` after the
+   edits, not relayed.
+2. **Expect the `Pass 101.0` completion dispatch** — it is in flight as
+   this is written.
+3. **Priority order for what follows:** the veraPDF §6.1.12 discharge for
+   `MAX_DISPLAY_LIST_BYTES` (a standing rule with a named suite and a
+   two-sided bar, not a judgement call); the five string-literal
+   survivors plus the gate port; **the two `iccce` requests, which are
+   one scan**; then `Pass 97.0` or one of the two remaining `pdfceGUI`
+   Passes.
+4. **Tell the `pdfceGUI` consumer three things about `Pass 75.0`,
+   because none are inferable from the type signature:** the key includes
+   **scale** (so pan is free, a zoom step rebuilds, and a gesture should
+   scale the existing texture and rebuild on settle); the recorder
+   **refuses** some pages by name and the caller must handle the fallback;
+   and **parallelising region fills across cores is now worth
+   revisiting**, having been N× work for ~1× throughput before a list
+   existed.
+
+
+---
+
+## 2026-08-18 (hundred-and-eighty-third filing) — **A REAL `Pass 85.5` COLLISION, RULED AS A STAGED SHIP AND NOT A RENUMBER — AND THE FINDING THAT MATTERS MORE THAN THE RULING: BOTH OF THIS GATE'S BLIND SPOTS WERE FOUND BY SOMEBODY PREDICTING ITS OUTPUT AND DISAGREEING, NEVER BY THE GATE REPORTING ANYTHING. Plus `Pass 101.0` (the build provenance stamp) SHIPPED UNCOMMITTED, and the string-gap gate PORTED with 54 sites resolved.**
+
+**Filed by `pdfce-librarian` WITH a shell (hard rule 8).** Every figure
+below was produced by a command named beside it, not relayed, **except
+where explicitly labelled RELAYED**.
+
+**Shipped:**
+- **`Pass 101.0` — build provenance stamp** (core + CLI; GUI `[ ]`) —
+  **`2aa1066`**. Drafted as *"uncommitted, hash cannot exist"* and
+  **corrected before publication**; see the hash note below, which is the
+  part a future reader will want.
+
+---
+
+### PART A — `Pass 85.5` DECLARED TWICE, AND HOW IT WAS RULED
+
+**The gate went RED** the first time it was capable of seeing these
+headings at all:
+
+```
+DUPLICATE Pass 85.5 declared 2x in section [Shipped] (neither qualified):
+  docs/ROADMAP.md:2791: ### ★★★★★ Pass 85.5 — `bf75351` — OVERPRINT STOPS BEING A COUNTER…
+  docs/ROADMAP.md:2958: ### ★★★★  Pass 85.5 — `bd9d5ef` — TABLE 149 AS A PURE FUNCTION…
+```
+
+**RULING: ONE Pass shipped in TWO STAGES. Distinct staged-ship
+qualifiers added; NEITHER NUMBER MOVED.** The headings are now
+`Pass 85.5 (compositing)` (`bf75351`) and
+`Pass 85.5 (Table 149 logic)` (`bd9d5ef`). The gate is **green**, and
+`85.5` now appears beside `23.3` and `32.0` in the staged-ship notes —
+**reported, not silently absorbed**, which is what that note exists for.
+
+**The evidence, and note that all of it PREDATES the gate being able to
+read these lines:**
+
+| fact | source |
+|---|---|
+| `bd9d5ef` heading calls itself *"slice 1 of the `85.5` simulation half"* | the entry's own text |
+| `bf75351` body reads *"The compositing surgery is `bf75351`, above; this is the part that can be pinned against the standard exactly, so it was pinned first and separately"* | the entry's own text |
+| commits are **29 minutes apart** — `bd9d5ef` 04:38:56, `bf75351` 05:07:22, both 2026-08-18 −0400 | `git show -s --format=%ci` |
+| both were filed as the **hundred-and-sixty-sixth filing** | both headings |
+
+So this is the split **R141** exists for — logic pinned against the
+standard first, rasteriser attached second — **not an ID minted twice for
+unrelated work**, which is the hazard the check is actually for.
+
+**THE COST CHECK RAN ANYWAY, AND AGREED** — same
+cost-in-the-right-ledger reasoning the 182nd filing applied to the
+`Pass 75.0` collision. `Pass 85.5` / `` `85.5` `` appears **117 times**
+across the docs tree — **`ROADMAP.md` 53, `SESSION_LOG.md` 56,
+`ARCHITECTURE.md` 8, `FEATURES.md` 0, `NEXT_SESSION.md` 0** (by `grep -c`
+per file) — and **one commit message** (`f45583d`) names it. **A
+qualifier cost two headings; a renumber would have cost 117 citations
+AND left an uncorrectable commit message naming a number that had
+moved.**
+
+**★ THE SUBSTANTIVE DIFFERENCE FROM THE 75.0 RULING: that one moved a
+number and therefore created immutable-history debt. THIS ONE MOVES
+NOTHING, so it creates none.** Both entries carry the ruling and its
+reasoning in place, so neither side of the collision can be read without
+finding out how it was decided.
+
+### ★★ THE FINDING THAT OUTLIVES THE RULING: THIS GATE'S BLIND SPOTS ARE ONLY VISIBLE TO A FORECAST
+
+**Both of `check-ledger-numbers.py`'s heading-anchor blind spots were
+found the same way: somebody predicted the gate's output, disagreed with
+what it printed, and went looking. NEITHER was found by the gate
+reporting something.** The first (the 182nd filing) found that
+`^#{2,4} (?:★ )?Pass ` accepted **exactly one star**; the fix widened it
+to `★+`, and widening it **immediately surfaced a duplicate that had
+never been uniqueness-checked in its entire life.**
+
+**The engineer's own comment on the widening names the deeper error, and
+it is the reusable half:** the first fix **repaired the one spelling that
+had been SEEN rather than the CLASS**, so a project convention that uses
+**one to three stars by weight** stayed half invisible. A blind spot
+fixed at the instance leaves the class.
+
+**★ WHY THIS IS WORSE THAN AN ORDINARY GATE BUG, AND THE REASON IT IS
+FILED AS A FINDING AT ALL: a gate that UNDER-REPORTS is
+indistinguishable from a gate that is GREEN.** There is no failure
+signal, no red, no message — the output looks exactly like success. So
+the only detector is **an independent forecast of what the gate should
+have said**, which is precisely the thing a gate exists to make
+unnecessary. **This gate has now been quietly reporting less than it
+appeared to, twice**, and on both occasions the discrepancy was
+noticeable only to a reader who had already formed an expectation.
+
+**Same species as `ci_gate_red_at_baseline_enforces_nothing.md`, from the
+opposite direction:** that finding is about a gate whose *red* means
+nothing; this is about a gate whose *green* means less than it appears.
+**Both are failures of the signal, not of the check.**
+
+---
+
+### PART B — `Pass 101.0` SHIPPED
+
+**★ THE HASH IS `2aa1066` — AND THIS PARAGRAPH ORIGINALLY ARGUED THAT
+NO HASH COULD EXIST. THE CORRECTION IS KEPT BECAUSE IT IS THE MORE USEFUL
+HALF.**
+
+The draft reasoned: `git status --short` shows 30+ modified paths
+uncommitted, including `crates/pdfce-core/build.rs` **and `ROADMAP.md` /
+`FEATURES.md` / this file** — therefore the filing is **inside the commit
+it would have to name**, the hash **cannot exist before the filing is
+written**, the offered `SendMessage` would deadlock, and the honest move
+is the hundred-and-twenty-first filing's `uncommitted at HEAD` convention.
+**Every step of that follows from the premise. The premise was stale.**
+
+**The engineer committed CODE ONLY as `2aa1066`** — 2026-08-18 18:26:25
+−0400, **34 files, 1,166 insertions, 52 deletions** (`git show --stat`) —
+**and deliberately left `docs/` for this filing**: `git show --name-only
+2aa1066 | grep ^docs/` returns **zero files**. Separating the code commit
+from the docs commit **dissolves the deadlock completely**, and is the
+better discipline than either horn the draft was choosing between.
+
+**★ THE FINDING, AND IT IS SQUARELY HARD RULE 8's TERRITORY — hard rule 8
+says do not assert git state you have not CHECKED, and the trap here is
+that I HAD checked.** The `git status` was real, run by me, in this
+filing. **It simply stopped being true while the filing was being
+written.** A repository is not frozen for the convenience of the person
+describing it, so **a snapshot is not a state, and "I checked" DECAYS.**
+The check must be re-run **at the moment the claim is published**, not
+merely performed once somewhere upstream of it.
+
+**Note how the error surfaced, because it was not by re-reading:**
+`tools/check-commits-filed.py` went **red on one unfiled code commit**,
+which is the only reason the draft's premise was ever revisited. **A gate
+aimed at something else caught it** — and had the engineer committed docs
+and code together, as every prior filing's shape assumed, the gate would
+have stayed green and the wrong claim would have shipped.
+
+**★ The binary's banner still reads `v0.6.0-74-g6b797db-dirty`** — built
+from the working tree *before* `2aa1066` existed. **That is not an
+inconsistency; it is the `-dirty` marker doing exactly the job criterion 1
+exists for**, demonstrated by accident on the Pass's own filing day.
+
+**What shipped** — `crates/pdfce-core/build.rs` (build script, four
+`cargo::rustc-env` vars, re-runs on `.git/HEAD` / index /
+`SOURCE_DATE_EPOCH`, **handles the git-worktree `gitdir:` pointer case**,
+which matters because this project verifies against worktrees);
+`crates/pdfce-core/src/build.rs` (`pub struct BuildInfo` + `current()` /
+`is_complete()` / `is_dirty()` / `Display`);
+`crates/pdfce-core/src/civil_time.rs`; and `pdfce-cli --version`.
+**`-V` deliberately stays the bare `pdfce-cli 0.7.0`** that a script
+parses — two surfaces, one for humans and bug reports, one a parseable
+contract that must not grow lines.
+
+**All five acceptance criteria MET.** Criterion 1's **`-dirty` marker is
+the load-bearing half**: a build from an edited tree **is not the commit
+it names**, and ruling that out is the entire reason anybody reads a
+version string. The criterion was satisfiable without it and would have
+been **worth nothing**.
+
+**★ THE DEFECT FOUND AND FIXED IN FLIGHT — two timestamps in two time
+zones.** The first cut used git's **`%cI`**, which carries **the
+committer's local UTC offset**, so `built:` was UTC and `committed:` was
+not. **The two instants were therefore not comparable at a glance — and
+comparing them at a glance is the entire reason both are printed.** Fixed
+by switching to **`%ct`** (Unix seconds) formatted through **the same
+function** as the build time: one formatter, one zone, **by construction
+rather than by discipline**.
+
+**Note the shape, because it is this project's recurring one:** neither
+field was wrong on its own terms. Both were correct timestamps, correctly
+obtained. **The defect existed ONLY in the relationship between two
+records** — the exact class **hard rule 10** exists for, arriving in a
+version banner instead of a benchmark table.
+
+**★ VERIFIED BY MEASUREMENT, NOT INSPECTION (relayed):** the calendar
+arithmetic was checked end-to-end via `SOURCE_DATE_EPOCH`, cross-computed
+in Python, against **six known instants — six for six**: the epoch,
+2024-02-29 (leap day), 2024-03-01 (day after), 2000-02-29 (leap
+**because of** the 400-rule), 2100-03-01 (**not** leap — the 100-rule),
+and a year boundary. Now a permanent test, plus a **pre-epoch case** for
+the Euclidean division.
+
+**★ AND THE REASON THAT TEST CAN EXIST AT ALL is the reusable finding
+here: a build script's own `#[cfg(test)]` module is NEVER run by
+`cargo test`.** Arithmetic living only in `build.rs` is **arithmetic
+nobody can assert**. `civil_time.rs` is `include!`d by the build script
+**and** `mod`-ed by the crate specifically to escape that — **three tests
+on a module that would otherwise have carried zero.** This generalises to
+any Rust crate with non-trivial logic in a build script.
+
+**★ ONE OPERATIONAL FINDING, FOR THE RELEASE RUNBOOK, WHOSE FAILURE IS
+SILENT.** **`actions/checkout@v4` defaults to a DEPTH-1 clone** — no
+tags, no history — so `git describe` finds nothing and a CI-built binary
+reports **`revision: unknown`**. **Harmless today** (pdfce releases are
+built locally; CI tests rather than ships). **But if a release build ever
+moves into CI, that workflow needs `fetch-depth: 0`.** Filed rather than
+left in a comment **because the build SUCCEEDS and only the banner is
+empty** — no gate red, no test failure, nothing reported. It would be
+discovered **from a release**, by someone holding a binary that cannot
+say what it is.
+
+**Open question `(bo)` is NOT closed by this ship.** `SOURCE_DATE_EPOCH`
+is honoured, so the reproducibility trade stays answerable either way at
+no cost. **`(bp)` also remains open**, and `Pass 101.1` remains
+**BLOCKED** on its single unblocking event — `iccce` appearing in a
+`Cargo.toml` in this workspace. It has not.
+
+---
+
+### PART C — THE STRING-GAP GATE IS PORTED AND GREEN
+
+**VERIFIED HERE, not relayed:**
+
+| check | command | result |
+|---|---|---|
+| gate self-test | `bash tools/check-string-gaps.sh --self-test` | **PASS** (incl. the exemption-leak case) |
+| full scan | `bash tools/check-string-gaps.sh` | **PASS — no baked-in gaps** over `crates/` + `tools/` |
+| file present | `ls -la tools/check-string-gaps.sh` | **10,377 bytes, executable** |
+
+**Ported FLAT as `tools/check-string-gaps.sh`, NOT into `tools/gates/`**
+as the 182nd filing's recommendation asked. **That divergence is
+deliberate and correct:** pdfce's `tools/` is flat
+(`check-ledger-numbers.py`, `check-ui-strings.sh`,
+`check-shipped-assets.py` all sit at that level); `gates/` is
+**pdfceGUI's** convention, not this project's. **Only the `ROOT=` line
+differs from the source.**
+
+**★ THE SURVIVOR THIS ROLE FOUND IS FIXED, AND THE MECHANISM IT
+PREDICTED WAS CONFIRMED.** `pdfce-render/src/lib.rs:207`
+(`DisplayListStale`): **the oracle covered `PageNotRecordable` — verified
+by RUNNING the binary — and was generalised to `DisplayListStale`
+WITHOUT running it.** Two new variants in one commit; **one got the
+check, the other inherited an assumption.** That is the whole finding,
+and it is not about whitespace.
+
+**THE SWEEP, FILED WITH ITS DENOMINATOR (hard rule 10):** **54 sites
+resolved — 44 baked gaps repaired (RELAYED) + 10 deliberate alignments
+marked `string-gap-exempt:` with reasons (VERIFIED HERE).** The exemption
+figure was checked rather than accepted: `grep -rn "string-gap-exempt:"
+crates/ tools/` returns **15** lines, **5 of which are inside
+`check-string-gaps.sh` itself** (its own docs and self-test fixture),
+leaving **10** real exemptions — `pdfce-cli/src/main.rs` 3,
+`pdfce-core/tests/page_ops.rs` 3, `pdfce-render/examples/region_bench.rs`
+2, `tools/embed-sweep/src/main.rs` 2. **Matches the relayed figure
+exactly.**
+
+**A cross-check on the 44, so the number can DISAGREE with something
+rather than merely be recorded:** `git diff -U0 -- crates/ tools/` shows
+**46** removed lines matching the gate's own detection pattern, against
+**44** reported repaired. **The 2-line difference is consistent with the
+two exempted-in-place lines** — a line that keeps its alignment and gains
+a marker is a changed line that still matches the pattern, not a repair.
+**46 and 44 are therefore not in conflict; had the diff shown 20 or 80,
+they would have been.**
+
+**★ THE SEPARATION WAS DONE BY HAND, NOT BY HEURISTIC, AND THE REASON IS
+ASYMMETRIC:** a heuristic guessing wrong toward *"defect"* **silently
+mangles an aligned report**; guessing wrong toward *"deliberate"* **marks
+a real defect as intentional and immunises it from the gate forever.**
+Neither error is recoverable by re-running the gate, which is exactly why
+the gate cannot be the thing that decides.
+
+### ★ FOR THE OPERATOR — A READING PRESENTED AS A READING, NOT AS A RULING
+
+**The repairs touched `crates/pdfce-gui/`** — mostly `assert!` messages
+in `#[cfg(test)]` blocks, plus a few operator-facing strings. **GUI work
+is PAUSED by Ken's instruction of 2026-08-13** (*"continue the planned
+work except for gui related, don't do any more work on the gui until I
+say so"*).
+
+**The engineer's reading is that repairing text which RENDERS WRONGLY is
+defect maintenance rather than GUI development, and that the gate could
+not land green otherwise** (a gate red at baseline enforces nothing —
+`ci_gate_red_at_baseline_enforces_nothing.md`). **That is a reading. It
+is NOT Ken's ruling, and it is surfaced here as a reading rather than
+assumed**, per the global rule that a constraint an agent infers about
+its own environment is not a fact. **If he disagrees, the `pdfce-gui`
+half of the sweep is the part to revert**, and it is separable.
+
+**Gates green after the sweep (relayed):** `cargo fmt --check`,
+`cargo clippy --all-targets --workspace -D warnings`,
+`cargo test --workspace`, and the wasm32 cross-check.
+
+---
+
+**Still in flight / owed:**
+
+1. **★ HIGHEST PRIORITY, AND EXPLICITLY *NOT* DISCHARGED BY
+   `Pass 101.0`'s COMPLETION: the veraPDF §6.1.12 two-sided run for
+   `MAX_DISPLAY_LIST_BYTES`.** It must be shown **to FIRE on a real
+   file** and **to stay SILENT across all 44**. **NEITHER HALF IS ON
+   RECORD.** The engineer confirms it was **not run this session and does
+   not claim otherwise.** This is a standing rule with a named suite and
+   a two-sided bar — not a judgement call — and a Pass shipping in the
+   same filing must not be read as retiring it.
+2. **`Pass 101.1`** — BLOCKED on `iccce` becoming a real dependency.
+   Open questions **`(bo)`** and **`(bp)`** are both **for Ken**.
+3. **`R192` blind spot (d)** — a Pass ID minted in a commit-message body
+   is still invisible to all three ledger gates. **Unchanged.**
+4. **~~The `Pass 101.0` commit itself~~ — DISCHARGED WITHIN THIS FILING.**
+   It is **`2aa1066`** (code only; `docs/` deliberately left for this
+   filing). Both the *Shipped* entry and the hash note above were
+   corrected in place before publication.
+
+**Ledger effects.** **No Pass ID minted** (`101.0` was minted by the
+182nd filing); family ceiling stays **101**, next free **102**. **No
+standing rule minted** — `R195`, next free **`R196`**. **No decision
+record minted** — **071**, next free **072**. SESSION_LOG filing
+**182 → 183**, next free **184**. *(All read from
+`tools/check-ledger-numbers.py`, run at the top and the bottom of this
+filing — not relayed from the previous filing's stated ceilings.)*
+
+**`FEATURES.md` rows changed — TWO:**
+- **Build provenance stamp** — **MOVED** *Planned* → *Implemented →
+  Shell & UX*, ticked **`[x]` core / `[x]` cli / `[ ]` gui**. The gui box
+  is **`[ ]` and NOT `—`**, deliberately: `pdfce_core::build::BuildInfo`
+  is genuinely reachable by any shell and the GUI simply does not surface
+  it yet. **That is a gap, not an inapplicability**, and the legend's
+  distinction is load-bearing.
+- **`iccce` revision/date/time row** — stays *Planned*, all boxes
+  unticked, still BLOCKED. **Its "the build stamp **above**" pointer was
+  corrected**, because the row it pointed at left the section — a
+  dangling cross-reference created by this very filing, caught by hard
+  rule 11's own discipline applied to my own edit.
+
+**Terminology (rule 15):** nothing in this filing touches **ce
+dimensions** or **pdf dimensions**.
