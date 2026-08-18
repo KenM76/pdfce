@@ -3397,6 +3397,34 @@ pub enum EditError {
     /// would be an invisible annotation the operator could not find.
     #[error("the annotation has no geometry to draw")]
     EmptyGeometry,
+    /// A vertex-list subtype was authored with too few vertices to be the
+    /// shape it claims to be.
+    ///
+    /// **Distinct from [`Self::EmptyGeometry`] on purpose (R27).** "Empty
+    /// geometry" is a true statement about a two-point `/Polygon` only in
+    /// the sense that it encloses no area — it reads to a caller as *"you
+    /// passed nothing"*, which is false and sends them looking in the
+    /// wrong place. This variant names the constraint and the numbers, so
+    /// the caller can fix it without reading pdfce's source.
+    ///
+    /// # Why the threshold differs by subtype
+    ///
+    /// A two-point **`/PolyLine`** is a line segment: legitimate, draws
+    /// something, and is refused only below two. A two-point
+    /// **`/Polygon`** is a closed figure that doubles back on itself — the
+    /// appearance stream draws a line pretending to be an area, which
+    /// satisfies a naive "does it draw anything?" guard while being
+    /// exactly the degenerate case that guard exists to catch.
+    #[error("a {subtype} needs at least {needed} vertices, but {given} were given")]
+    TooFewVertices {
+        /// The annotation subtype, as it appears in the PDF (`Polygon`,
+        /// `PolyLine`, `Cloud`).
+        subtype: &'static str,
+        /// The minimum this subtype accepts.
+        needed: usize,
+        /// What the caller actually supplied.
+        given: usize,
+    },
     /// [`EditSession::unembed_fonts`] selected no font it could act on.
     ///
     /// An error rather than a successful no-op, because "nothing happened"
@@ -16799,24 +16827,74 @@ impl EditSession {
 /// An attribute the page already carries itself is never touched: its own
 /// entry wins (§7.7.3.4) and restating it would modify an object pdfce
 /// was not asked to modify (§5).
-/// Refuse a markup spec whose geometry draws nothing
-/// ([`EditError::EmptyGeometry`], Pass 6.1 guard 4). The geometrically
-/// closed subtypes (Square/Circle/Line) always have geometry; the
-/// list-driven ones (Ink/Polygon/PolyLine/text markup) can be handed empty
-/// point lists, which would produce an invisible annotation.
+/// Refuse a markup spec whose geometry cannot draw the shape it claims
+/// ([`EditError::EmptyGeometry`] / [`EditError::TooFewVertices`], Pass 6.1
+/// guard 4).
+///
+/// The geometrically closed subtypes (Square/Circle/Line) always have
+/// geometry; the list-driven ones (Ink/Polygon/PolyLine/Cloud/text markup)
+/// can be handed point lists too short to be the shape they name.
+///
+/// # ★ Why `Polygon` and `PolyLine` do NOT share an arm (`Pass 82.1`)
+///
+/// They did, with a single `vertices.len() < 2`, and **`< 2` is right for
+/// exactly one of them.** A two-point `/PolyLine` is a line segment and
+/// draws something real. A two-point `/Polygon` is a closed figure that
+/// doubles back along itself: the baked appearance draws a line
+/// *pretending to be an area*, so the "does the geometry draw something?"
+/// guard was satisfied by precisely the degeneracy it exists to reject.
+///
+/// **Sharing the arm is what produced the defect**, so the arms are split
+/// even though the bodies are now one line each — the shared arm made the
+/// two thresholds look like one fact, and they are two.
+///
+/// **`Cloud` takes `Polygon`'s rule.** A cloud is a polygon with a border
+/// effect; a two-vertex cloud is the same nonsense wearing a different
+/// `/BE`.
+///
+/// # How this was found, which is the part worth keeping
+///
+/// Not by a test and not by a fuzzer — by the **consuming shell carrying
+/// its own `≥ 3` check**. A shell re-deriving a validity rule the engine
+/// owns is a boundary defect on the engine's side (decision 058), and the
+/// workaround is the symptom rather than the fix.
 fn validate_geometry(spec: &MarkupSpec) -> Result<(), EditError> {
-    let empty = match spec {
+    // Two-stage on purpose: "no points at all" and "too few points to be
+    // this shape" are different facts and a caller acts on them
+    // differently (R27). Collapsing them into one error is what made a
+    // two-vertex polygon report "the annotation has no geometry to draw",
+    // which is false and points the caller at the wrong input.
+    let (subtype, needed, given) = match spec {
+        MarkupSpec::Polygon { vertices, .. } => ("Polygon", 3, vertices.len()),
+        MarkupSpec::PolyLine { vertices, .. } => ("PolyLine", 2, vertices.len()),
         MarkupSpec::Ink { strokes, .. } => {
-            strokes.is_empty() || strokes.iter().all(std::vec::Vec::is_empty)
+            return if strokes.is_empty() || strokes.iter().all(std::vec::Vec::is_empty) {
+                Err(EditError::EmptyGeometry)
+            } else {
+                Ok(())
+            };
         }
-        MarkupSpec::Polygon { vertices, .. } | MarkupSpec::PolyLine { vertices, .. } => {
-            vertices.len() < 2
+        MarkupSpec::TextMarkup { quads, .. } => {
+            return if quads.is_empty() {
+                Err(EditError::EmptyGeometry)
+            } else {
+                Ok(())
+            };
         }
-        MarkupSpec::TextMarkup { quads, .. } => quads.is_empty(),
-        MarkupSpec::Square { .. } | MarkupSpec::Circle { .. } | MarkupSpec::Line { .. } => false,
+        MarkupSpec::Square { .. } | MarkupSpec::Circle { .. } | MarkupSpec::Line { .. } => {
+            return Ok(());
+        }
     };
-    if empty {
+    if given == 0 {
+        // An empty list is genuinely "no geometry", and saying so is more
+        // useful than "needs at least 3, got 0".
         Err(EditError::EmptyGeometry)
+    } else if given < needed {
+        Err(EditError::TooFewVertices {
+            subtype,
+            needed,
+            given,
+        })
     } else {
         Ok(())
     }
@@ -22458,6 +22536,94 @@ endstream",
         };
         assert!(matches!(
             s.add_markup(0, &empty_ink),
+            Err(EditError::EmptyGeometry)
+        ));
+    }
+
+    /// `Pass 82.1` — the boundary, from BOTH sides, for each subtype.
+    ///
+    /// Asserting only the refusal would pass against a validator that
+    /// refuses everything, and asserting only the acceptance would pass
+    /// against the `< 2` rule this Pass replaced. The pair is what pins
+    /// the threshold to a specific number.
+    #[test]
+    fn a_two_vertex_polygon_is_refused_by_name_and_three_is_accepted() {
+        let verts = |n: usize| -> Vec<(f64, f64)> {
+            (0..n).map(|i| (10.0 * i as f64, 10.0 * i as f64)).collect()
+        };
+        let poly = |n: usize| MarkupSpec::Polygon {
+            vertices: verts(n),
+            border: Some(Color::Gray(0.0)),
+            interior: None,
+            width: 1.0,
+        };
+
+        let mut s = session(pdf_without_info());
+        // ★ The refusal NAMES the constraint. `EmptyGeometry` here would be
+        // a true-ish statement that sends the caller looking for a missing
+        // list rather than a short one (R27).
+        assert!(matches!(
+            s.add_markup(0, &poly(2)),
+            Err(EditError::TooFewVertices {
+                subtype: "Polygon",
+                needed: 3,
+                given: 2
+            })
+        ));
+
+        let mut s = session(pdf_without_info());
+        s.add_markup(0, &poly(3))
+            .expect("three vertices is a polygon");
+    }
+
+    #[test]
+    fn a_one_vertex_polyline_is_refused_and_two_is_accepted() {
+        let verts = |n: usize| -> Vec<(f64, f64)> {
+            (0..n).map(|i| (10.0 * i as f64, 10.0 * i as f64)).collect()
+        };
+        let line = |n: usize| MarkupSpec::PolyLine {
+            vertices: verts(n),
+            color: Color::Gray(0.0),
+            width: 1.0,
+        };
+
+        let mut s = session(pdf_without_info());
+        assert!(matches!(
+            s.add_markup(0, &line(1)),
+            Err(EditError::TooFewVertices {
+                subtype: "PolyLine",
+                needed: 2,
+                given: 1
+            })
+        ));
+
+        // ★ THE REGRESSION THIS PAIR EXISTS FOR. A two-point PolyLine is a
+        // line segment and MUST stay legal — the obvious "fix" for the
+        // polygon defect is to raise the shared threshold to 3, which
+        // would silently delete the most ordinary PolyLine there is.
+        let mut s = session(pdf_without_info());
+        s.add_markup(0, &line(2))
+            .expect("two vertices is a line segment");
+    }
+
+    /// An EMPTY list keeps reporting [`EditError::EmptyGeometry`].
+    ///
+    /// `Pass 82.1` split one error into two and this pins the split at the
+    /// right place: "you passed nothing" and "you passed too few" are
+    /// different problems, and the zero case is genuinely the former.
+    /// Without this, the new named error would quietly swallow the empty
+    /// case and the older, better message for it would be dead code.
+    #[test]
+    fn an_empty_vertex_list_is_still_empty_geometry_not_too_few_vertices() {
+        let mut s = session(pdf_without_info());
+        let empty = MarkupSpec::Polygon {
+            vertices: vec![],
+            border: Some(Color::Gray(0.0)),
+            interior: None,
+            width: 1.0,
+        };
+        assert!(matches!(
+            s.add_markup(0, &empty),
             Err(EditError::EmptyGeometry)
         ));
     }
