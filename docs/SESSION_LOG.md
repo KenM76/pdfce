@@ -46792,3 +46792,87 @@ immediately.
 4. Whoever next touches `ARCHITECTURE.md` §3's `pdfce-render\` block:
    the decision-number parenthetical is stale, see "adjacent debris"
    above.
+
+## 2026-08-18 (hundred-and-seventy-sixth filing) — `cbaccb3`: THE TWO SPOOL ENTRY POINTS WERE THE ONLY NON-WINDOWS GAP LEFT IN `pdfce-print` — HARD RULE 11'S SECOND EXERCISE FINDS ZERO SURVIVORS, AND THAT IS ITS OWN RESULT WORTH RECORDING
+
+**Filed by `pdfce-librarian` WITHOUT a shell this session.** Test/lint
+results are RELAYED from the dispatching engineer's report, not
+independently re-run. Every source-text claim (six existing query
+stubs, `spool`'s pre-existing twin, the two new twins, `PrintError`'s
+own doc comment, `pdfce-cli`'s Windows-only messages) is independently
+verified by `Read`/`Grep` against the live files this filing.
+
+**Shipped:**
+- `cbaccb3` — `crates/pdfce-print/src/lib.rs` gains `#[cfg(not(windows))]`
+  twins for `spool_with_config` and `spool_sheets`, matching `spool`'s
+  existing stub. No Pass ID, no decision — a compile-correctness fix,
+  same disposition as `ea5159e` (hundred-and-sixty-fifth filing).
+
+**Decisions made this session:** None.
+
+**Findings + decisions:**
+
+- **The defect had teeth because a shell made the objectively better
+  call.** `pdfceGUI` moved its single spool call from `spool` to
+  `spool_with_config` specifically to avoid two paths to one
+  irreversible operation — *"the rarer one would be the one nobody
+  drove."* That correct engineering choice is exactly what made their
+  only print path Windows-only, because the API's shape (one function
+  stubbed, its sibling not) silently penalised the better call site.
+  **An API that penalises the correct choice is the API's defect, not
+  the caller's** — worth carrying forward as a design lens for any
+  future "two entry points, only one gets full platform coverage" shape.
+- **Same shape as `ea5159e` earlier the same day**, one layer earlier:
+  that commit was an ungated caller (`cmd_print`) reaching gated
+  callees; this one is two ungated-on-non-Windows callees a caller had
+  already started reaching. Both are "Windows stayed green while the
+  platform CI actually builds stopped compiling," and both were caught
+  by someone other than a Windows-only local build — this one by an
+  outside report before it cost a red run, `ea5159e` by CI itself
+  after.
+- **Hard Rule 11's second exercise, and its first CLEAN result.** The
+  174th/175th filings' first two exercises each found survivors (three,
+  then — via the sweep — a fourth). This filing's sweep of the same
+  capability-meaning-changed trigger ("does `pdfce-print` uniformly
+  stub non-Windows") found **none** — the doc comment `cbaccb3` itself
+  wrote already stated the fix accurately, `PrintError`'s general claim
+  was never falsified by the gap (it never enumerated), and no other
+  document made a claim at this granularity. Recording a negative result
+  matters for the same reason a negative result mattered in `Pass 85.5`'s
+  spot-ink-plate finding: **a rule that only ever reports hits looks
+  like it is finding problems that were always there; a rule that
+  sometimes reports "swept, nothing found" is the one worth trusting
+  when it does report something.**
+- **Cross-project channel bookkeeping was already complete before this
+  filing** — reply archived, note moved, `open/` empty, `INDEX.md` row
+  added — all done by the reporting session, not redone here.
+- **`INDEX.md`'s own "★ Index drift" finding (five exchanges closed
+  2026-08-14→08-18 without an index row, all had shipped, found only
+  because the operator asked directly) is a real cross-project process
+  finding, and it is DECLINED as a pdfce-side entry, stated warrant:**
+  it is already fully recorded, dated and self-diagnosed in the one file
+  whose job is to record it; it names no pdfce document, code path, or
+  practice pdfce owns; and nothing in either repository's gates can see
+  that folder, so a pdfce-side note adds no enforcement. Reconsider only
+  if this recurs.
+
+**Still in flight:**
+
+- `Pass 97.0`/`97.1`/`97.2` remain the best-scoped, highest-leverage
+  queued work, untouched by this filing (unchanged from the 175th).
+- The two owed `iccce` requests — `request_profile_population_census.md`,
+  `request_header_tag_channel_disagreement.md` — still unread, per the
+  dispatch's instruction not to draft answers this filing.
+- The stale decision-ledger parenthetical in `ARCHITECTURE.md` §3
+  (flagged 175th filing, not fixed) — untouched.
+
+**For next session:**
+
+1. **Ledger.** Next free Pass family **98** (unchanged). Next free
+   decision **071** (unchanged). Next free standing rule **`R196`**
+   (unchanged). **Next free filing ordinal: 177.**
+2. Build `Pass 97.0` — best-scoped, highest-leverage, unchanged.
+3. Read and answer (or file to `ROADMAP.md` Backlog) the two owed
+   `iccce` requests named above.
+4. Whoever next touches `ARCHITECTURE.md` §3's `pdfce-render\` block:
+   the decision-number parenthetical is stale, see the 175th filing.

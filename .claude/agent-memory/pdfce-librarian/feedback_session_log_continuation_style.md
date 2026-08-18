@@ -74,6 +74,27 @@ time, even when it feels slower.** Muscle memory from `ROADMAP.md`'s
 reverse-chronological Shipped section (where anchoring to a header to
 insert "above it" is correct) is exactly what produces this mistake here.
 
+**RECURRED A THIRD TIME 2026-08-18 (hundred-and-seventy-sixth filing) —
+self-caught, same shape exactly, and this note is WHY it was caught.**
+Anchored the new entry's `old_string` to the hundred-and-seventy-fifth
+filing's header line (habit from the `ROADMAP.md` Shipped-section
+pattern, same root cause named above). Caught immediately after the edit
+by re-grepping `^## ` for the total count and re-`Read`ing near the file's
+reported line total (46878) rather than trusting the edit tool's success
+message — the corrupted insertion put the new entry at line 46640 with
+the old 175th-filing header and body still following it, i.e. NOT at the
+true end. Fixed with the prescribed two-step: (1) `Edit` restoring the
+original 175th-filing header alone as `new_string` against the whole
+inserted block as `old_string`, (2) a second `Edit` anchored to the
+175th filing's own actual trailing text ("...see \"adjacent debris\"
+above.") appending the new entry after it. **Confirms the check that
+catches this cheaply: after any SESSION_LOG append, `Grep` the total `^##
+` count (should be old+1) AND `Read` near the file's own reported total
+line count — if the newest header is not within a few hundred lines of
+that total, the append landed in the wrong place.** Three occurrences now
+(106th pre-existing/108th found, 68th, 176th) — this is the durable
+failure mode for this specific file, not a fluke.
+
 ---
 
 **SUPERSEDED CONTENT BELOW, kept for the historical reasoning only —

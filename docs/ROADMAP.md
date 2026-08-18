@@ -96,6 +96,132 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `cbaccb3` — **THE TWO SPOOL ENTRY POINTS WERE THE ONLY NON-WINDOWS GAP LEFT IN `pdfce-print`, AND A SHELL MOVING TO THE BETTER CALL SITE IS WHAT MADE THE GAP MATTER** — no Pass ID, no decision minted; commit `cbaccb3` touches `crates/pdfce-print/src/lib.rs` only and is cited here to satisfy `check-commits-filed.py` — filed 2026-08-18 (hundred-and-seventy-sixth filing)
+
+**Filed by `pdfce-librarian` WITHOUT a shell this session.** Test/lint
+results below are RELAYED from the dispatching engineer's report, not
+independently re-run. **The source-text claims are independently
+verified by `Read`/`Grep` against the live file**, not carried from the
+dispatch summary: `crates/pdfce-print/src/lib.rs` lines 2677–2753 (the
+six existing query stubs — `device_features`, `printer_forms`,
+`printer_configuration`, `edit_printer_configuration`, `list_printers`,
+`printer_caps`, `printer_caps_for` — all `#[cfg(not(windows))]`),
+`spool` at line 3520 (had a twin already), and the two new twins at
+3534–3588 (`spool_with_config`, `spool_sheets`).
+
+**Reported by the `pdfceGUI` session** via the cross-project channel
+(`D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\`), as a heads-up
+rather than a blocker. It was right on both counts.
+
+**The gap.** The 2026-08-18 print filing (`Pass 95.0`/`Pass 96.0`, this
+file's own hundred-and-sixty-fourth-filing entries) gave every new
+**query** a non-Windows twin, and `spool` has had one since it was
+written. **The two new spool entry points — `spool_with_config` and
+`spool_sheets` — did not.** So the "every stub returns `PrintError`"
+property, which `PrintError`'s own doc comment (line 145) states as
+load-bearing rather than tidy, held everywhere except the two functions
+a shell actually calls to print.
+
+**Why it had teeth rather than being cosmetic, and this is the part
+worth recording.** `pdfceGUI` deliberately moved its single spool call
+from `spool` to `spool_with_config`, giving this reason: *"a shell that
+chose between two spool functions would have two paths to the one
+irreversible operation in the application and the rarer one would be
+the one nobody drove."* That is a better argument than the one the
+API's shape was making — and **taking the better call site is what made
+their only print path Windows-only.** An API that penalises the correct
+choice is the API's defect, not the caller's.
+
+**Same shape as `ea5159e` earlier the same day** (`cmd_print` calling
+four `#[cfg(windows)]` callees while itself ungated — Windows green,
+platform CI red, filed hundred-and-sixty-fifth filing above). This
+report caught the same class one layer earlier, from outside, before it
+cost a red run rather than after.
+
+**Verification (relayed), on the platform that would have broken rather
+than the one the fix was written on:** `cargo check` **and** `cargo
+clippy -- -D warnings`, both against `x86_64-unknown-linux-gnu` — the
+target that actually **compiles the new stub bodies**, so it is a real
+check and not a vacuous one (had `PrinterConfiguration`, `Sheet` or
+`PageBitmap` been Windows-gated it would have failed there; `mod
+devmode` is deliberately un-gated and its own comment says why). Windows
+clippy green, `pdfce-print`'s 111 tests green, `cargo fmt --all`
+applied.
+
+**`FEATURES.md` — verified, no row change owed.** The four *Printing*
+rows (`Print`, `Printer paper selection`, `Printer properties`,
+`Per-page print orientation`) were read and left exactly as they stand
+— same disposition as `ea5159e`: a compile fix for a platform pdfce does
+not print on changes nothing the core/cli/gui/Acrobat columns track.
+Printing's Windows-only posture is a shell-level fact (`pdfce-cli`'s own
+`"printing is available on Windows only in this build"` message,
+`main.rs:10238` etc.), not something `FEATURES.md` represents at the
+stub-function granularity this commit touches.
+
+**Hard Rule 11 sweep (first exercise against a capability-meaning claim
+that turned out to have NO survivors — worth recording as a clean
+result, not only as a positive one).** The capability is "`pdfce-print`'s
+non-Windows stub coverage." Searched for the CLAIM, not the string,
+across `crates/pdfce-print/src/lib.rs`, `crates/pdfce-cli/src/main.rs`,
+`docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/FEATURES.md`:
+
+- The doc comment the commit itself added (line 3542) enumerates the
+  four query functions it says already had twins before this fix
+  (`printer_forms`, `printer_configuration`, `edit_printer_configuration`,
+  `printer_caps_for`) — **verified accurate**; two more (`device_features`,
+  `list_printers`, `printer_caps`) also had twins and were simply not
+  named in that sentence, which is not a false claim (the sentence never
+  said "the complete list").
+- `PrintError`'s own doc comment ("Every non-Windows stub in this file
+  returns `Result<_, PrintError>`") is a **general** claim, not an
+  enumeration — true before this commit (vacuously false in the narrow
+  sense that two functions weren't stubbed *at all*, so there was nothing
+  to check the return type of) and true now in the full sense.
+- `ROADMAP.md`'s own `30b0375`/`ea5159e` entries (hundred-and-sixty-fifth
+  filing, above) name `spool_with_config`/`spool_sheets` as new API but
+  never claimed platform-stub coverage for them — nothing to correct.
+- `crates/pdfce-cli/src/main.rs`'s five *"printing is available on
+  Windows only in this build"* messages are a shell-level statement
+  (the CAPABILITY is Windows-only), unaffected by whether the crate
+  BELOW it compiles cleanly on other platforms — no drift.
+
+**No survivors.** The claim never had more than the two copies the
+dispatch already knew about (the doc comment cbaccb3 itself wrote, and
+the fixed functions), and both were fixed in the same commit that
+introduced the corrected doc comment.
+
+**Channel bookkeeping, already done by the reporting session — recorded
+here, not redone.** Reply filed at
+`D:\Dev\FeatureRequests\pdfce_FeatureRequests\archive\2026-08-18-spool-non-windows-stub-reply.md`;
+note moved to the matching `-note.md`; `open/` confirmed **empty**.
+`INDEX.md` row added at the top (verified present by `Read`) — and that
+same file's own newly-added **"★ Index drift, found 2026-08-18"**
+section, discovered and backfilled by that session, is a genuine
+cross-project process finding but is **declined as a pdfce-side entry**,
+stated warrant: the finding is already fully recorded, dated and
+self-diagnosed in the one file whose job is to record it
+(`INDEX.md`'s own "the rule that was not followed is already written…
+write the row in the same edit as the reply"); it names no pdfce
+document, code path, or engineering practice pdfce owns; and — the
+file's own point — **nothing in either repository's gates can see that
+folder, so a pdfce-side note would not make it any more enforceable than
+it already is.** If this recurs (a second undetected INDEX gap), that
+would be the point to reconsider, not this one instance.
+
+**`ARCHITECTURE.md` §12.** No new decision-log entry — a stub-coverage
+fix inside an existing crate boundary (decision, eighty-fifth filing),
+not a crate-boundary or library-choice change.
+
+**Ledger effects.** No Pass number (compile-correctness fix, hash-headed,
+same disposition as `ea5159e`/`89f28ca`). Standing rules: none minted,
+none cited. Decisions: none minted. Ceilings unchanged: Pass family
+**98**, decision **071**, rule **R196**. Next free filing ordinal:
+**177**.
+
+**Still owed, carried forward unread by this filing** (per the dispatch's
+own instruction not to draft answers): `request_profile_population_census.md`
+and `request_header_tag_channel_disagreement.md`, both from `iccce`.
+
 ### `bd861a0` — **THE SEVENTH COPY: `main.rs:7027` STILL SAID "NEITHER IS IMPLEMENTED" FOR BLEND MODES AND SOFT MASKS, FOUND BY THE 173RD FILING'S OWN SELF-CORRECTION, NOW REPLACED WITH THE QUALIFIED TRUTH** — no Pass ID, no decision minted; commit `bd861a0` touches `crates/pdfce-cli/src/main.rs` only (a developer comment) and is cited here to satisfy `check-commits-filed.py` — filed 2026-08-18 (hundred-and-seventy-fourth filing)
 
 **Filed by `pdfce-librarian` WITHOUT a shell this session.** Test/lint
