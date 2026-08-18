@@ -95,6 +95,25 @@ impl Rect {
     pub fn height(&self) -> f64 {
         self.ury - self.lly
     }
+
+    /// Whether `other` lies wholly inside this rectangle, edges included.
+    ///
+    /// **Inclusive on every edge**, which is the answer the page-boundary
+    /// questions want: §14.11.2's boxes routinely coincide exactly (Table
+    /// 30 makes `CropBox` *default* to `MediaBox`, and the defaulted case
+    /// must not report itself as "outside"), and a page whose crop box
+    /// equals its media box is the overwhelmingly common shape.
+    ///
+    /// Both rectangles are assumed §7.9.5-normalized — true by
+    /// construction for anything from [`Rect::from_corners`] or from the
+    /// page-tree walk, which is every `Rect` pdfce produces.
+    #[must_use]
+    pub fn contains(&self, other: &Self) -> bool {
+        other.llx >= self.llx
+            && other.lly >= self.lly
+            && other.urx <= self.urx
+            && other.ury <= self.ury
+    }
 }
 
 /// One page, fully resolved: every inheritable attribute has its final
@@ -708,7 +727,7 @@ fn contents_from_array<G: ObjectGraph + ?Sized>(
 /// Parse (and resolve) a rectangle attribute: an array of four
 /// numbers, each possibly an indirect reference (§7.3.10
 /// substitutability), normalized per §7.9.5.
-fn parse_rect<G: ObjectGraph + ?Sized>(
+pub(crate) fn parse_rect<G: ObjectGraph + ?Sized>(
     doc: &G,
     obj: &Object,
     attr: &'static str,

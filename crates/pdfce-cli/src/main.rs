@@ -34,6 +34,11 @@
 //! - `rotate-page <in> -o <out> --page N --degrees D [--relative]`
 //!   (Pass 3.1): sets one page's `/Rotate` (Table 30). See
 //!   [`cmd_rotate_page`].
+//! - `set-page-size <in> -o <out> --pages SPEC (--size NAME [--landscape]
+//!   | --width W --height H)`: sets a page's `/MediaBox` — the sheet size
+//!   (§7.7.3.3). Named sizes come from `pdfce_core::paper`, so the CLI,
+//!   the GUI and any future shell all quote the same numbers. See
+//!   [`cmd_set_page_size`].
 //! - Every other subcommand is a **documented stub** that exits with
 //!   [`exit::UNIMPLEMENTED`]. The real bodies land alongside each feature's
 //!   own Pass (docs/ROADMAP.md "CLI batch operations"). Stubs are listed
@@ -789,6 +794,55 @@ enum Command {
         /// effective rotation rather than an absolute value.
         #[arg(long)]
         relative: bool,
+        /// Output path. Never the input path by default — see
+        /// `--in-place`.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Which save path to use.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Also verify that undoing the edit reproduces the input file
+        /// byte for byte (ARCHITECTURE.md §11.1). Costs one extra save.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+
+    /// Set one or more pages' sheet size (ISO 32000-1 §7.7.3.3
+    /// `/MediaBox`).
+    ///
+    /// Writes the entry on each page object itself, which overrides any
+    /// value inherited from an ancestor page-tree node — so resizing one
+    /// page never disturbs its siblings (§7.7.3.4). Content is neither
+    /// moved nor scaled: only the sheet boundary changes.
+    ///
+    /// Either `--size` (with optional `--landscape`) or an explicit
+    /// `--width`/`--height` pair in points. `--size` accepts:
+    /// `a0`…`a6`, `letter`, `legal`, `tabloid`, `executive`,
+    /// `ansi-a`…`ansi-e`.
+    SetPageSize {
+        /// Input PDF.
+        input: PathBuf,
+        /// Which pages, 1-based: `3`, `1,4,7`, `2-5`, or `all`.
+        #[arg(long, default_value = "1", value_name = "SPEC")]
+        pages: String,
+        /// A standard sheet size by name (`a1`, `ansi-d`, `letter`, …).
+        #[arg(
+            long,
+            value_name = "NAME",
+            required_unless_present = "width",
+            conflicts_with_all = ["width", "height"]
+        )]
+        size: Option<String>,
+        /// Use `--size` rotated to landscape (wider than tall) — the
+        /// normal orientation for a drawing sheet.
+        #[arg(long, requires = "size")]
+        landscape: bool,
+        /// Custom sheet width in points (1/72 inch). Requires `--height`.
+        #[arg(long, requires = "height", value_name = "PT")]
+        width: Option<f64>,
+        /// Custom sheet height in points (1/72 inch). Requires `--width`.
+        #[arg(long, requires = "width", value_name = "PT")]
+        height: Option<f64>,
         /// Output path. Never the input path by default — see
         /// `--in-place`.
         #[arg(short, long)]
@@ -5941,6 +5995,29 @@ fn run() -> ExitCode {
             mode,
             verify_undo,
         } => cmd_rotate_page(&input, page, degrees, relative, &output, mode, verify_undo),
+        Command::SetPageSize {
+            input,
+            pages,
+            size,
+            landscape,
+            width,
+            height,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_set_page_size(
+            &input,
+            &pages,
+            &SheetArg {
+                size: size.as_deref(),
+                landscape,
+                width,
+                height,
+            },
+            &output,
+            mode,
+            verify_undo,
+        ),
         Command::SetInfo {
             input,
             title,
@@ -11751,6 +11828,227 @@ appended={} out_bytes={} undo_verified={} undo_identical={} delinearized={}",
         input.display(),
         mode.name(),
         output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.objects_verbatim,
+        r.objects_reserialized,
+        r.promoted.len(),
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+        u32::from(r.delinearized),
+    );
+    finish_edit(input, &outcome)
+}
+
+/// The four mutually-constrained flags that name `set-page-size`'s target
+/// sheet, bundled so [`cmd_set_page_size`] stays inside clippy's
+/// seven-argument limit.
+///
+/// A struct rather than an `#[allow(clippy::too_many_arguments)]`: these
+/// four ARE one argument conceptually — "which sheet" — and clap already
+/// enforces that exactly one of the two routes through them is populated,
+/// so grouping them costs nothing and makes the constraint visible in the
+/// type.
+#[derive(Debug, Clone, Copy)]
+struct SheetArg<'a> {
+    /// `--size NAME`, a [`pdfce_core::paper::PaperSize`] identifier.
+    size: Option<&'a str>,
+    /// `--landscape`; meaningful only alongside `size`.
+    landscape: bool,
+    /// `--width PT`, the custom route's width.
+    width: Option<f64>,
+    /// `--height PT`, the custom route's height.
+    height: Option<f64>,
+}
+
+/// Implement `pdfce-cli set-page-size`.
+///
+/// # How the target rectangle is worked out
+///
+/// Exactly one of two routes, enforced by clap rather than here:
+///
+/// * `--size NAME [--landscape]` → [`pdfce_core::paper::PaperSize`],
+///   which is in `pdfce-core` precisely so this shell does not carry its
+///   own copy of the numbers. An unknown name is a **named refusal**, not
+///   a nearest match — resolving a typo to a plausible sheet size would
+///   hand the operator a working file of the wrong size with no signal.
+/// * `--width W --height H` in points, origin at `(0, 0)`.
+///
+/// # Why `--pages` rather than `--page`
+///
+/// A drawing set is resized as a set. `--pages` takes the same spec
+/// every other multi-page subcommand takes (`3`, `1,4,7`, `2-5`, `all`),
+/// which also means the 1-based/0-based conversion and the past-the-end
+/// refusal are the shared, already-tested ones.
+///
+/// # What it prints, and why the counters are counters
+///
+/// Each page produces a [`pdfce_core::edit::MediaBoxChange`], and three
+/// of its fields are consequences the operator cannot see in the file:
+/// a crop box the new sheet no longer contains, a sheet that lost area,
+/// and a size outside Annex C.2's recommended range. Under rule 4 the
+/// CLI **prints** those on the way past — the invocation is the commit,
+/// there is no session to disclose into.
+///
+/// They are reported **twice on purpose**: as counters on the machine
+/// line (so a script can branch on them) and as a per-page note on
+/// stderr (so a human running one file sees which page). A counter alone
+/// is easy to miss in a wall of `=0`s; a note alone is unparseable.
+fn cmd_set_page_size(
+    input: &Path,
+    pages: &str,
+    sheet: &SheetArg<'_>,
+    output: &Path,
+    mode: SaveMode,
+    verify_undo: bool,
+) -> u8 {
+    use pdfce_core::paper::{Orientation, PaperSize};
+
+    let &SheetArg {
+        size,
+        landscape,
+        width,
+        height,
+    } = sheet;
+
+    // Resolve the rectangle BEFORE opening the file: a mistyped size
+    // should not cost a parse, and the refusal reads better without a
+    // preceding "opened 40 MB" delay.
+    let rect = match (size, width, height) {
+        (Some(name), _, _) => {
+            let Some(paper) = PaperSize::from_id(name) else {
+                eprintln!(
+                    "pdfce-cli: `{name}` is not a known sheet size; try one of: {}",
+                    PaperSize::ALL
+                        .iter()
+                        .map(|s| s.id())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+                return exit::EDIT_REFUSED;
+            };
+            paper.rect_with(if landscape {
+                Orientation::Landscape
+            } else {
+                Orientation::Portrait
+            })
+        }
+        (None, Some(w), Some(h)) => pdfce_core::page_tree::Rect::from_corners(0.0, 0.0, w, h),
+        // clap's `required_unless_present` + `requires` make this
+        // unreachable; it is spelled out rather than `unreachable!()`
+        // because a panic-free binary must not depend on an argument
+        // parser's configuration staying correct.
+        _ => {
+            eprintln!("pdfce-cli: give either --size, or both --width and --height");
+            return exit::EDIT_REFUSED;
+        }
+    };
+
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    let count = match session.pages() {
+        Ok(pages) => pages.len(),
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit::EDIT_REFUSED;
+        }
+    };
+    let targets = match parse_pages(pages, count) {
+        Ok(list) => list,
+        Err(msg) => {
+            eprintln!("pdfce-cli: {}: --pages: {msg}", input.display());
+            return exit::EDIT_REFUSED;
+        }
+    };
+
+    // One command for the whole selection, not one per page: §11.3 makes
+    // one operator gesture one undo entry. The CLI has no undo stack, but
+    // the verb it calls is the one the GUI will call, and the granularity
+    // is the verb's, not the shell's.
+    let changes = match session.set_media_boxes(&targets, rect) {
+        Ok(changes) => changes,
+        Err(err) => return report_edit_error(input, &err),
+    };
+
+    let (mut lost_area, mut crop_outside, mut advisories) = (0_usize, 0_usize, 0_usize);
+    let (mut explicit, mut base_kept, mut inherited_removed) = (0_usize, 0_usize, 0_usize);
+    for change in &changes {
+        match change.entry {
+            pdfce_core::edit::MediaBoxEntry::ExplicitWritten => explicit += 1,
+            pdfce_core::edit::MediaBoxEntry::BaseSpellingKept => base_kept += 1,
+            pdfce_core::edit::MediaBoxEntry::InheritedSoOwnEntryRemoved => inherited_removed += 1,
+            // `MediaBoxEntry` is #[non_exhaustive]; a future variant must
+            // not silently vanish from the counters.
+            _ => {}
+        }
+        let human = change.page_index + 1;
+        if change.lost_area {
+            lost_area += 1;
+            eprintln!(
+                "pdfce-cli: note: page {human}: the sheet lost area. pdfce removed no content, \
+                 but §14.11.2.1 lets any other tool discard content outside the media box \
+                 \"without affecting the meaning of the PDF file\" — so the loss becomes \
+                 permanent on the first round trip through one."
+            );
+        }
+        if let Some(crop) = change.crop_box_outside {
+            crop_outside += 1;
+            eprintln!(
+                "pdfce-cli: note: page {human}: /CropBox [{:.4} {:.4} {:.4} {:.4}] is no longer \
+                 inside the sheet. It is left as-is (§5); every conforming reader intersects it \
+                 with the media box (§14.11.2.1), so the visible region is now the smaller of \
+                 the two.",
+                crop.llx, crop.lly, crop.urx, crop.ury
+            );
+        }
+        if let Some(advice) = change.size_advisory {
+            advisories += 1;
+            let which = match (advice.below_minimum, advice.above_maximum) {
+                (true, true) => {
+                    "below the recommended minimum on one edge and above the \
+                                 recommended maximum on the other"
+                }
+                (true, false) => "below the recommended 3-unit minimum",
+                _ => "above the recommended 14 400-unit maximum",
+            };
+            eprintln!(
+                "pdfce-cli: note: page {human}: the sheet is {which} (ISO 32000-1 Annex C.2, \
+                 which says \"should\" and which ISO 32000-2 dropped entirely). Written as \
+                 asked; some readers may not handle it."
+            );
+        }
+    }
+
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+
+    let r = &outcome.report;
+    println!(
+        "set-page-size {} pages {pages} mode={} -> {}; \
+size={:.4}x{:.4} pages_set={} explicit={explicit} base_kept={base_kept} \
+inherited_removed={inherited_removed} lost_area={lost_area} crop_outside={crop_outside} \
+size_advisory={advisories} changed={} objects={} verbatim={} reserialized={} promoted={} \
+appended={} out_bytes={} undo_verified={} undo_identical={} delinearized={}",
+        input.display(),
+        mode.name(),
+        output.display(),
+        rect.width(),
+        rect.height(),
+        changes.len(),
         outcome.changed,
         r.objects_written,
         r.objects_verbatim,
