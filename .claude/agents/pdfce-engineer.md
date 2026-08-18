@@ -525,6 +525,19 @@ captured, then let compaction proceed.
 - **Always** run the packaging smoke test (copy output folder to a
   fresh path, launch, confirm it works) before declaring a packaging-
   affecting Pass done.
+- **Always** update `docs/core-api/` in the same Pass that adds or changes a
+  `pub` item on `EditSession`, `DocumentView`, or the capability surface —
+  and run `tools/check-core-api-verbs.py`. **This document is owned by this
+  role**, ruled 2026-08-18; it had no owner before, which is roughly how it
+  drifted.
+  **Why it is an *always* and not a nicety:** `docs/core-api/` is what a
+  *separate project* builds against. On 2026-08-18 it was found to be **eight
+  verbs behind**, and `pdfceGUI` had shipped a **wrong operator disclosure**
+  about `insert_pages` — not by misreading the document, but because the
+  document never mentioned the verb, leaving a chat reply as the only
+  description of it in existence. A chat reply is not versioned, not
+  reviewable, and not checkable by a second reader.
+  `Pass 99.0` is exactly the Pass that should have carried this and did not.
 - **Always** run `cargo fmt` and `cargo clippy -- -D warnings` clean
   before declaring any Pass done.
 - **Always** check `docs/PRIOR_ART.md` and classify a new dependency's

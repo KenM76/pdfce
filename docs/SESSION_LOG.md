@@ -48443,3 +48443,248 @@ standing practice on amendments.
 
 **Terminology (rule 15):** nothing in this filing touches **ce
 dimensions** or **pdf dimensions**.
+
+---
+
+## 2026-08-18 (hundred-and-eighty-fifth filing) — **`e194b46` CLOSES ALL THREE SURVIVORS OF THE 184TH FILING'S SWEEP — AND THE THIRD WAS THE ROOT CAUSE OF THE OTHER TWO: THE API DOCUMENT ANOTHER PROJECT BUILDS AGAINST WAS EIGHT VERBS BEHIND, `108 → 116`. `R197` MINTED FROM THE REASON IT LASTED (a stated derivation reads exactly like a maintained one), AND THIS FILING'S OWN SWEEP FINDS A FOURTH SURVIVOR THE NEW GATE STRUCTURALLY CANNOT SEE**
+
+**Filed by `pdfce-librarian` WITH a shell (hard rule 8).** One commit, and
+`tools/check-commits-filed.py` was **RED on exactly that one commit**
+before this filing — verified by running it, not inferred.
+
+**Shipped:**
+- **None.** `e194b46` claims **no Pass ID and mints no decision**, in the
+  established `e11b4f8` / `3e3019a` / `dbec60a` / `bd861a0` shape. The
+  engineer proposed that reading and this filing agrees: nothing gained a
+  capability, nothing was designed, and all eight verbs it documents
+  already existed. Full record: `ROADMAP.md`'s `e194b46` *Shipped* entry
+  (top of section).
+
+**★ Why this commit's diff and its message disagree — recorded so nobody
+later reads the mismatch as evidence of something.** `e194b46` touches
+`docs/ROADMAP.md` (+597), `docs/SESSION_LOG.md` (+385),
+`docs/ARCHITECTURE.md` (+73) and `docs/FEATURES.md` (+8) while discussing
+none of them. **Those are the 184th filing's own edits**, uncommitted when
+the engineer staged this commit and swept up by `git add`. **History was
+deliberately not amended** — the engineer's call, and correct under hard
+rule 1. The docs half of the diff belongs to filing 184; the code and
+`docs/core-api/` half belongs to this one.
+
+### What the three survivors were
+
+1. **`guard_probe.rs` — the harness that disproved the ratio still stated
+   it.** *"~29.5 MiB … 8.5× under the ceiling, so a suite of small
+   conformance files was never going to reach it"* — **both halves
+   falsified by its own first run**: **41.9 MiB over 3,245 files**,
+   headroom **6.1×** of 256 MiB, produced by **exactly one of those
+   "small conformance files"** (a veraPDF §6.1.12 IMPLEMENTATION-LIMITS
+   fixture — a class *built* to stress this kind of ceiling). Corrected
+   with the superseded sentence **quoted, not deleted**, and the header
+   now also records the instrument-widening this role ruled in filing
+   184, so harness and standing rule agree. **Rule kept in the file:
+   derive headroom from the MEASURED MAXIMUM, never from a reference
+   document** — a reference document is chosen for being
+   *representative*, a ceiling is threatened by whatever is *extreme*.
+   ★ The engineer records this as the **third instance in one day of
+   correcting an instance instead of a class**: he fixed the same 8.5×
+   claim in `display_list.rs` and missed the sibling file written in the
+   same commit, in the same hour, by him.
+2. **`edit.rs` — `insert_pages`'s doc comment asserted rule-4 compliance
+   while being the origin of a downstream FALSE disclosure.** Now carries
+   the widget/field split in full: `SOURCE fields=Some(12)` → `TARGET
+   fields=None annots=13 widgets=13` — **13 of 13 widgets orphaned, 12
+   field definitions left behind** — with an explicit instruction **not**
+   to paraphrase it as *"the form fields did not come across"*, plus
+   `Pass 102.0`/`102.1` pointers and why **102.1 does not retire 102.0**
+   (a field straddling inserted and non-inserted pages leaves a residue
+   no merge absorbs, so the count is permanent).
+3. **★ `docs/core-api/02-editing-and-saving.md` had never mentioned
+   `insert_pages` — and checking that found EIGHT missing verbs.**
+   `set_media_box`, `set_media_boxes`, `set_markup_style`,
+   `mark_redactions_by_search_styled`,
+   `mark_redactions_by_pattern_styled`, `flatten_refusal`,
+   `insert_pages`, `widget_rects`. Stated **`Count: 108` (`41 + 46 + 20 +
+   1`)** → actual **116 (`43 + 51 + 21 + 1`)**; §1.8 6→9, §1.14 3→5,
+   §1.15 7→8, §1.16 3→5. The cited `impl EditSession` offsets had also
+   drifted `3360/6947/15356/17355` → `4196/8135/17525/19592`.
+
+### ★★ THE FINDING, AND IT IS WHY `R197` EXISTS
+
+**The document did not merely omit the verbs — it displayed its
+arithmetic.** `Count: 108. (41 + 46 + 20 + 1)`, with block line numbers
+and a `grep` proving no fifth block. Every word true when written, and
+**performed exactly once.**
+
+**A stated derivation reads exactly like a maintained derivation.**
+Anyone auditing completeness found a number that *looked audited*, with
+nothing in the sentence separating *"this is re-run"* from *"this ran
+once, months ago."* Which makes the precision the problem: *"about a
+hundred verbs"* invites verification; **`Count: 108. (41 + 46 + 20 + 1)`
+forecloses it.** ***A precise, sourced, stale figure is more durable than
+a vague one, because it deters the check that would catch it.***
+
+The engineer offered this as a sibling of the 183rd filing's *"a gate
+that under-reports is byte-indistinguishable from a green one"* and left
+the rule question to this role. **Minted as `R197`** — the documentation
+side of the same shape, and cheap enough to be free: a published figure
+names **either** the thing that re-performs it **or** the commit/date it
+was last derived at. **One clause.**
+
+**The counter-example was ten lines away.** `docs/core-api/index.md`'s
+header reads *"Written 2026-08-13, verified against the source at
+`e6609bc`."* **Its numbers are stale too** — but its staleness is
+**legible**, because the anchor dates them. Two figures, same directory,
+same staleness; **only the unanchored one caused an incident.** The good
+form was already in the building, which is what makes `R197` a
+convention to state rather than a practice to invent.
+
+### The gate, and a THIRD limit its header does not state
+
+`tools/check-core-api-verbs.py` (new, 155 lines) re-derives the verb list
+from `edit.rs` by brace-matching the `impl EditSession` blocks; fails if
+the doc **omits a verb** or **states a count that does not match**. Both
+halves verified against sabotaged input **independently**.
+
+Its header names two limits — **presence and arithmetic, not
+correctness**, with the sharpest possible example: ***`insert_pages`
+would have passed this gate on the day it shipped while still lacking the
+warning that caused the incident.*** Recorded as asked, because **a gate
+whose limits are unstated gets trusted past them**.
+
+**★ A third limit, not in the header, and live rather than theoretical:
+the gate's input set is ONE FILE** (`DOC = … "02-editing-and-saving.md"`,
+`check-core-api-verbs.py:67`). **A second file in the same directory
+states the same count and is stale right now.** So its honest scope is
+*"part 2's verb index is complete and its arithmetic holds"*, not *"this
+project's API docs state the right number of verbs"* — and those two read
+identically in a green run. `R192`'s shape exactly.
+
+**Not wired into CI:** `.github/workflows/ci.yml` runs **3 of 16
+`tools/check-*` scripts** (`check-ui-strings.sh`,
+`check-disclosure-channel.sh`, `check-commits-filed.py`).
+`check-core-api-verbs.py` joins `check-passes-filed.py` (already recorded
+as *"not run in CI today"*), `check-ledger-numbers.py`,
+`check-string-gaps.sh`, `check-settings-consumed.py` and the rest in the
+run-when-remembered set. **Recorded, not escalated** — wiring is the
+engineer's act; the ratio is filed so it is visible rather than
+re-derived.
+
+### ★ HARD RULE 11 SWEEP — ONE SURVIVOR, IN THE SAME DIRECTORY AS THE FIX
+
+**Reported, not edited.**
+
+**`docs/core-api/index.md:16` still says `all 108 public verbs`.** That
+row is the directory's front door — the table a consumer reads *before*
+opening part 2 — carrying the exact figure this commit corrected, in the
+one file the new gate does not read. **Found by reading for the CLAIM**
+(*"what else asserts how many verbs there are?"*), **not by grepping the
+corrected string** — which is the entire content of hard rule 11 and its
+fourth consecutive exercise that found something.
+
+Three adjacent figures in the same table are stale by the same mechanism:
+
+| `index.md` states | actual (`wc -l`, this filing) | delta |
+|---|---:|---:|
+| `01-reading-and-model.md` 2,215 lines | **2,223** | +8 |
+| `02-editing-and-saving.md` 1,419 lines · 128 citations | **1,550** · **128** | +131 · 0 |
+| `03-capabilities.md` 1,982 lines | **2,079** | +97 |
+
+**Owed to the engineer, one edit:** `index.md:16` `108` → `116`, the
+three line counts, and (recommended) the as-of anchor moved `e6609bc` →
+`e194b46`.
+
+### `docs/core-api/` OWNERSHIP — DRAFTED AS A PROPOSAL, DELIBERATELY NOT MINTED
+
+The engineer asked whether the directory should be named in the standing
+rules as a maintained artefact with an owner. **A `### PROPOSED …
+AWAITING ENGINEER RULING; NOTHING MINTED, NO NUMBER CLAIMED` entry is now
+in `ROADMAP.md`'s *Standing rules*** — drafted here, not decided here,
+because assigning the engineer a maintenance obligation is his act. Same
+boundary this role held when hard rule 11 was proposed and only became
+binding once he wrote it into the agent file himself.
+
+**The substance, in one line:** the directory is **the only pdfce
+document a DIFFERENT PROJECT builds against**, and its reader **cannot
+see the source**, so the failure mode is **silence rather than
+disagreement**. Recommendation: owner **`pdfce-engineer`** (explicitly,
+not by default — keeping it true needs `edit.rs` read at depth, which is
+engineering, not filing); trigger **any Pass adding or changing a `pub`
+item on `EditSession`/`DocumentView`/the capability surface** — the same
+trigger `FEATURES.md` already carries, pointed at a different file, and
+**`Pass 99.0` is exactly the Pass that should have carried it**. Home if
+accepted: the *Update protocol* plus one line in `pdfce-engineer.md` —
+not a numbered rule, since it is an ownership assignment rather than a
+behaviour with instances to count. **Fallback if declined:** add the
+`R197` as-of anchor to all four files, so a reader can at least date what
+they are trusting.
+
+**Findings + decisions:**
+- **`R197` minted** (above) — the documentation-side sibling of the
+  183rd filing's byte-indistinguishable-green finding.
+- **A gate's INPUT SET is a limit as real as its CHECK**, and it is the
+  one most likely to go unstated: `check-core-api-verbs.py` names two
+  limits carefully and omits the one that is currently being violated in
+  the adjacent file.
+- **Hard rule 11's exercises keep returning non-empty.** 171st, 172nd,
+  173rd, 174th, 184th and now 185th filings each found at least one
+  survivor; the 176th's zero remains the only empty sweep. They keep
+  being found by reading for meaning, never by grepping for text.
+
+**Still in flight / owed:**
+1. **★ `docs/core-api/index.md:16`** — `108` → `116` plus three line
+   counts and an anchor refresh. **One edit; the front door of the only
+   externally-consumed document in the repo.**
+2. **★ A REPLY TO pdfceGUI IS STILL OWED** —
+   `D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\request_insert_pages_leaves_orphaned_widgets_and_has_no_route_back_for_outlines.md`.
+   `e194b46` supplies most of the material (the `edit.rs` comment and the
+   part-2 entry are quotable verbatim) but **is not the reply**.
+   *(Channel state NOT re-`ls`ed this filing — per `R196` this is
+   reported as carried-forward from filing 184, not asserted as current.)*
+3. **Two `iccce` requests still unread**, plus the
+   `reply_ghent_render_harness.md` stray and three exchanges awaiting
+   archival. **Carried forward, not re-verified.**
+4. **`Pass 101.1`** — BLOCKED on `iccce` becoming a real dependency;
+   `(bo)`/`(bp)` are for Ken. Unchanged.
+5. **`R192` blind spot (d)** — unchanged.
+6. **`docs/core-api/` ownership** — PROPOSED, awaiting the engineer.
+7. **CI wiring** — 13 of 16 `check-*` scripts run only when someone
+   remembers. Recorded, not escalated.
+
+**Ledger effects.** **No Pass ID minted** — family ceiling stays **103**
+(highest `103.3`), next free **104**. **No decision record minted** —
+ceiling **071**, next free **072**. **One standing rule minted —
+`R197`**; ceiling `R196` → `R197`, next free **`R198`**; `R193`/`R194`
+remain claimed by their declined-but-intact proposals. **One PROPOSED
+entry filed claiming NO number.** SESSION_LOG filing **184 → 185**, next
+free **186**. *(Read from `tools/check-ledger-numbers.py --stats` plus
+the Standing-rules section's own closing ledger lines — the checker's
+next-free output is known wrong for `PROPOSAL`-claimed numbers, per
+`R195`'s own filing note.)*
+
+**`FEATURES.md` rows changed — NONE, and this was CHECKED per-verb rather
+than assumed.** All eight newly-documented verbs map to rows whose `core`
+box was already `[x]`; the drift was in the *briefing document*, never in
+the *capability*. `set_media_box`/`set_media_boxes` → the `/MediaBox` row;
+`set_markup_style` → *Restyle a placed markup annotation*;
+`mark_redactions_by_search_styled`/`_pattern_styled` → the Table 192
+mark-appearance row, which already reads *"reachable from manual, search
+AND pattern marking alike"*; `flatten_refusal` → a **preflight for**
+*Flatten a form to static page content*, not a capability of its own;
+`insert_pages` → *True in-place page insertion*, restated in filing 184.
+**`widget_rects` was the one genuinely open question and the answer is
+still no** — it is a `&self` query returning `(ObjId, /Rect)` pairs for
+hit-testing and orphan reporting, so it does **not** make *Move and
+resize anything carrying a `/Rect`* (all `[ ]`, *Planned*) true, and a
+shell-support accessor is not an operator-facing capability this file has
+rows for.
+
+**`ARCHITECTURE.md` edits — NONE.** Checked: no verb count, no
+`core-api/` figure, and no decision to record (`grep` for `108` /
+*"public verbs"* returns only unrelated numerics). The correction is
+documentation hygiene inside `docs/core-api/`, not an architectural
+change.
+
+**Terminology (rule 15):** nothing in this filing touches **ce
+dimensions** or **pdf dimensions**. `set_markup_style` **refuses a ce
+dimension by name** — existing behaviour, restated in the verb index, not
+a change.

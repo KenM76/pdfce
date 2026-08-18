@@ -45,15 +45,33 @@ WHAT IT CHECKS
 WHAT IT DOES NOT CHECK, STATED SO "GREEN" IS NOT OVER-READ
 ==========================================================
 
-That the description is **correct**, or current, or that a verb's caveats are
-written down. It checks presence and arithmetic — both purely syntactic,
-which is exactly the kind of thing a gate can do and a reviewer cannot do
-reliably. `insert_pages` would have passed this gate on the day it shipped
-while still lacking the widget warning that caused the incident.
+1. **That the description is CORRECT**, or current, or that a verb's caveats
+   are written down. It checks presence and arithmetic — both purely
+   syntactic, which is what a gate can do and a reviewer cannot do reliably.
+   `insert_pages` would have passed this gate on the day it shipped while
+   still lacking the widget warning that caused the incident.
+2. **Any API surface other than `EditSession`.** `DocumentView`, the free
+   functions, and `pdfce-render`'s surface are all undefended by this.
+3. **★ It used to read ONE FILE, and that was a live defect, not a
+   hypothetical one.** The first version's input was
+   `02-editing-and-saving.md`, because that is the file that was being
+   corrected when the gate was written. It went green while
+   **`index.md` — the front door of the same directory, the table a consumer
+   reads BEFORE opening part 2 — still said "all 108 public verbs".** The
+   gate written to stop a stale count shipped with the stale count ten lines
+   away, in its own directory, outside its own scope.
 
-So this closes the "nobody mentioned it" failure and leaves the "mentioned it
-wrongly" failure to review, where it belongs. Named rather than implied,
-because a gate whose limits are unstated gets trusted past them.
+   That is the fourth instance in one day of repairing the instance in front
+   of you instead of the class, and the most instructive, because the
+   instrument itself inherited the bug it was built to catch. It now scans
+   **every `*.md` under `docs/core-api/`**, and the count check applies to
+   every stated count wherever it appears.
+
+So this closes the "nobody mentioned it" and "the published number drifted"
+failures, and leaves "mentioned it wrongly" to review, where it belongs.
+Named rather than implied, because a gate whose limits are unstated gets
+trusted past them — and because this gate has already demonstrated that its
+own author will trust it past them.
 """
 
 from __future__ import annotations
@@ -64,7 +82,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 EDIT_RS = ROOT / "crates" / "pdfce-core" / "src" / "edit.rs"
-DOC = ROOT / "docs" / "core-api" / "02-editing-and-saving.md"
+DOC_DIR = ROOT / "docs" / "core-api"
+# The verb index lives here; the other files may still state a COUNT, and a
+# stale count in the directory's front door is what this gate missed first
+# time out.
+VERB_INDEX = DOC_DIR / "02-editing-and-saving.md"
 
 
 def derive_methods(lines: list[str]) -> tuple[list[str], list[tuple[int, int, int]]]:
@@ -99,13 +121,14 @@ def derive_methods(lines: list[str]) -> tuple[list[str], list[tuple[int, int, in
 
 
 def main() -> int:
-    if not EDIT_RS.exists() or not DOC.exists():
-        print("check-core-api-verbs: SKIP — edit.rs or the doc is missing")
+    if not EDIT_RS.exists() or not VERB_INDEX.exists():
+        print("check-core-api-verbs: SKIP — edit.rs or the verb index is missing")
         return 0
 
     lines = EDIT_RS.read_text(encoding="utf-8").split("\n")
     names, blocks = derive_methods(lines)
-    doc = DOC.read_text(encoding="utf-8")
+    doc = VERB_INDEX.read_text(encoding="utf-8")
+    others = sorted(f for f in DOC_DIR.glob("*.md") if f != VERB_INDEX)
 
     print(f"check-core-api-verbs: {len(names)} public EditSession method(s) in edit.rs")
     for start, end, n in blocks:
@@ -121,7 +144,7 @@ def main() -> int:
         failed = True
         print()
         print(f"  {len(missing)} verb(s) exist in edit.rs and are absent from")
-        print(f"  {DOC.relative_to(ROOT)}:")
+        print(f"  {VERB_INDEX.relative_to(ROOT)}:")
         for n in missing:
             print(f"      {n}")
 
@@ -129,21 +152,34 @@ def main() -> int:
     if not m:
         failed = True
         print()
-        print("  the document no longer states a `**Count: N.**`, so the")
+        print("  the verb index no longer states a `**Count: N.**`, so the")
         print("  derivation it claims cannot be checked at all")
     elif int(m.group(1)) != len(names):
         failed = True
         print()
-        print(f"  the document states Count: {m.group(1)}, derived count is {len(names)}")
+        print(f"  the verb index states Count: {m.group(1)}, derived count is {len(names)}")
+
+    # EVERY stated verb count in the directory, not just the index's own.
+    # `index.md` is the table a consumer reads first, and it carried a stale
+    # 108 while part 2 was being corrected -- see this file's header.
+    stale = re.compile(r"(?:all\s+)?(\d+)\s+public\s+(?:`EditSession`\s+)?(?:verbs|methods)")
+    for f in [VERB_INDEX, *others]:
+        for n, line in enumerate(f.read_text(encoding="utf-8").split("\n"), 1):
+            for found in stale.finditer(line):
+                if int(found.group(1)) != len(names):
+                    failed = True
+                    print()
+                    print(f"  {f.relative_to(ROOT)}:{n} states {found.group(1)}")
+                    print(f"  public verbs; the derived count is {len(names)}")
 
     if failed:
         print()
         print(
-            "A consuming project builds against this document. A verb missing from\n"
-            "it is a verb whose only description is whatever somebody said once in\n"
-            "chat -- which is how pdfceGUI shipped a wrong disclosure about\n"
-            "`insert_pages`. Add the verb to the relevant section, and update the\n"
-            "stated count and its per-block arithmetic."
+            "A consuming project builds against these documents. A verb missing\n"
+            "from them is a verb whose only description is whatever somebody said\n"
+            "once in chat -- which is how pdfceGUI shipped a wrong disclosure about\n"
+            "`insert_pages`. Add the verb to the relevant section, and update EVERY\n"
+            "stated count, including the one in index.md."
         )
         return 1
 
