@@ -45895,3 +45895,102 @@ this session).
    group-RESULT compositing, harness recalibration, `v0.7.0` release) is
    unchanged and still owed — see that entry, above, for the full list;
    not restated here to avoid forking it.
+
+## 2026-08-18 (hundred-and-sixty-ninth filing) — **A PER-TRAP DIAGNOSTIC (`5ef5498`) COLLAPSES SIXTEEN OF EIGHTEEN GHENT FAILURES INTO ONE MISSING COMPOSITOR; `docs/compositor-plan.md` FILED; PASS FAMILY 97 (THE COMPOSITOR — RGB, COLORANT PLANES, COLLAPSE) STAGED IN *BACKLOG*; `85.1` AND `85.4c`'S REMAINDER RE-SCOPED IN *NEXT UP* AGAINST THE SPEC-CORPUS GAPS THE 167TH FILING FLAGGED AS FILLED-BUT-UNACTED-ON**
+
+**Filed by `pdfce-librarian` WITHOUT a shell this session.** Every figure
+below is RELAYED from the dispatching engineer's own report; none is
+independently re-measured here. Two edits are docs-only (`docs/ROADMAP.md`,
+this file) — per the practice note the 168th filing added to the Update
+protocol, no code rides in this filing's own commit.
+
+**Shipped:**
+
+- `5ef5498` filed — `tools/ghent-cell-probe.py` (per-trap diagnostic),
+  `docs/compositor-plan.md` (new engineer-owned plan of record),
+  `docs/NEXT_SESSION.md` (superseding headline). No Pass ID — diagnosis,
+  not repair. Full account: top of `ROADMAP.md` *Shipped*.
+
+**Decisions made this session:**
+
+- **No decision minted.** Decision 071 stays next free. The two rejected
+  outside dependencies (`lcms2`, `vello`) are refusals under EXISTING
+  rules (the wasm32 CI gate; `ARCHITECTURE.md` §3's no-windowing-surface
+  rule) — restating an existing constraint against a new candidate is not
+  a new decision.
+- **Pass family 97 minted and staged in `ROADMAP.md` *Backlog*** —
+  `97.0` (RGB compositor: backdrop removal, two-buffer knockout, soft
+  mask applied to group result), `97.1` (colorant planes, dependent on
+  `97.0`), `97.2` (the sRGB collapse — a settings-shaped ambiguity per
+  the standing "make spec ambiguity a setting" rule, not a bug to fix
+  silently). Acceptance criteria and per-patch Ghent counts for each are
+  in the `ROADMAP.md` entry, not restated here.
+
+**Findings + decisions:**
+
+- **Two one-bit discriminators, not impressions**, both sourced from the
+  new probe: `1_GWG160` fails exactly its 3 nonseparable-blend cells
+  (Hue/Saturation/Color) while Luminosity passes — the spec RAG had
+  already written the reason (§11.3.5.3, K is *selected* not blended, and
+  pdfce composites in device RGB) before the defect was measured.
+  `1_GWG161`/`3_GWG161`/`1_GWG162` are not a knockout bug — an
+  unconditional group-buffer allocation silently turns every non-isolated
+  Ghent transparency cell isolated, and an existing code comment
+  predicted exactly this in writing.
+- **A hypothesis killed**, cheaper than the finding above: the standing
+  suspicion that `ghent-check.py` over-counts against GWG's own "faint X"
+  tolerance is FALSE — measured contrast on every still-failing tolerance
+  patch is at or near maximal, not faint. A session was about to be spent
+  chasing this; it is now closed.
+- **`GWG191` cell c has two sanctioned correct outcomes** per GWG's own
+  ReadMe (a cross is acceptable if OPM is set to 0 after colour
+  conversion). pdfce converts but leaves `OPM 1` today, so its cross is a
+  genuine failure — but the harness must learn cell c is not binary if a
+  future Pass takes the other sanctioned route deliberately.
+- **`85.1` (mesh shadings) is UNBLOCKED** — its spec-corpus gap was filled
+  four filings ago (`8eb0668`, hundred-and-sixty-seventh filing,
+  `iso32000__s__8.7.4.5__mesh.md`) and the `ROADMAP.md` row was never
+  re-scoped to say so, exactly the shape the 167th filing's own
+  "consequence nobody has acted on yet" note warned about. Re-scoped this
+  filing, in place, with a strikethrough over the stale blocker text per
+  this project's append-don't-delete convention.
+- **`85.4c`'s remainder FLAGGED against `97.0`, not merged.** The
+  non-isolated-knockout blocker `85.4c`'s own text names ("buffer-model
+  work") is what `97.0` is built to deliver. Recorded as an overlap to
+  check when `97.0` ships, not assumed to close it — the acceptance
+  criteria of the two entries were compared and do not fully coincide.
+
+**Still in flight:**
+
+- Pass family 97 is staged, not started. No engineering work has begun
+  on any of `97.0`/`97.1`/`97.2`.
+- Ghent standing carried forward unchanged from the 167th/168th filings:
+  **25 pass / 18 FAIL / 8 UNRESOLVED of 51.** This filing's diagnostic
+  explains 16 of the 18 FAILs; it does not close any of them.
+- Everything the 168th filing's "For next session" queued (n-channel
+  buffer as the next architectural item, `v0.7.0` release sequencing, the
+  `/P 2` certified-content fixture, the wrapped-string-literal `assert!`
+  sweep, `LUM-A1`) is unchanged and still owed — not restated here to
+  avoid forking it. **The n-channel-buffer item is now the scoped `97.1`
+  above rather than an open architectural question.**
+
+**For next session:**
+
+1. **Ledger.** Next free Pass family **98** (**97 minted and staged**
+   this filing, in *Backlog*, not yet started). Next free decision
+   **071** (unchanged — none minted this filing). Next free standing rule
+   **`R196`** (unchanged). **Next free filing ordinal: 170.**
+2. **Start `97.0`** (the RGB compositor) — it is now the best-scoped,
+   highest-leverage item in the render-fidelity family: 7 Ghent patches
+   named, acceptance criteria written, and it may additionally close (or
+   partially close) `85.4c`'s remaining non-isolated-knockout item — see
+   the flag above and re-check on completion rather than assuming either
+   way.
+3. **`85.1` (mesh shadings) is now unblocked and could run independently
+   of `97.x`** — its own spec dispatch already landed; only the
+   `pdfce-acrobat-librarian` prepress-behaviour dispatch's run status is
+   still unconfirmed (carried from the hundred-and-fiftieth filing,
+   unchanged).
+4. `FEATURES.md` needs NO edit from this filing — verified against the
+   file directly (not assumed): both capabilities `97.x` targets are
+   already present in *Planned* with all boxes empty.
