@@ -96,6 +96,128 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `e11b4f8` — **CORRECTS `Pass 85.5` (`bf75351`): THE OVERPRINT NOTE STOPS CONTRADICTING ITS OWN COUNTERS** — no Pass ID, no decision minted; commit `e11b4f8` touches `crates/pdfce-cli/src/main.rs` and is cited here to satisfy `check-commits-filed.py` — filed 2026-08-18 (hundred-and-seventieth filing)
+
+**Filed by `pdfce-librarian` WITHOUT a shell this session.** Test/lint/gate
+results and the commit's diffstat are RELAYED from the dispatching
+engineer's report, not independently re-run. **One claim IS independently
+verified here**, by `Read` against the live file rather than against any
+report: `crates/pdfce-cli/src/main.rs:7229`–`7245`'s operator-facing
+`overprint_requested`-gated `eprintln!` now reads *"pdfce COMPOSITED {} of
+those paints through CompatibleOverprint … and REFUSED {}"*, states that
+the four PROCESS colorants are preserved per pixel while a SPOT colorant
+"has no plane of its own … and cannot be left standing the way a press
+leaves it," and frames the PDF/X auto-preview consequence — all matching
+the engineer's description of the fix.
+
+**What was wrong.** The note this replaces was written before overprint
+simulation existed and was never revisited when it shipped (`Pass 85.5`,
+`bf75351`, *Shipped* below): it told operators *"pdfce does NOT simulate
+[overprint]"* three words from a `overprint_composited=5`-shaped counter
+on the same stdout line — a disclosure contradicting its own numbers. Rule
+4 (fuzzy, never sneaky) exists so an operator can trust what pdfce says
+about what it guessed or skipped; a false shortfall claim teaches an
+operator to discount the true ones the same note carries. It also carried
+the now-wrong half of the truth — *"pdfce composites in additive RGB,
+where there are no separable colorants to preserve"* — which stopped being
+true the moment the four PROCESS colorants became preserved, per pixel,
+through Table 149 (decision 069 §2, `ARCHITECTURE.md` §12). What remains
+genuinely flattened is SPOT, which has no plane of its own and must go
+through its tint transform. **Found the same way this class of bug is
+always found in this project: it printed in full on a Ghent render and
+disagreed with the numbers on the same line.**
+
+**Verification (RELAYED).** `cargo fmt --all -- --check` clean;
+`cargo clippy -p pdfce-cli --all-targets -- -D warnings` clean;
+`cargo test -p pdfce-cli --test render_page` **15 of 15** green (that test
+pins the stdout KEY list, unchanged — only the note's prose moved);
+`tools/check-ui-strings.sh` clean; `tools/check-disclosure-channel.sh`
+clean. **Ghent standing unchanged at 25 pass / 18 FAIL / 8 UNRESOLVED of
+51** — re-measured to confirm rather than assumed, because a stderr note
+cannot move a pixel.
+
+**★ NOT independently verified here, and flagged rather than silently
+carried forward: a second copy of the same stale claim survives.** A
+developer-facing (non-operator) code comment at
+`crates/pdfce-cli/src/main.rs:7057`–`7060`, immediately above the format
+arguments for the stable stdout line, still reads *"Tracked and reported,
+not simulated: pdfce composites in additive RGB and there is no
+per-colorant state for overprint to preserve."* This is the identical
+stale claim `e11b4f8` corrected in the operator-facing note, in a second
+location the commit did not touch. Confirmed present by direct `Read` of
+`main.rs` this filing (2026-08-18) — not carried from the dispatch report,
+since the dispatch made no claim about this line. Left unedited here
+because this librarian's brief is docs, not code; flagged for the
+engineer to close in the next commit touching this file.
+
+**Standing-rule candidacy — assessed, not minted.** The dispatch asked
+whether "a disclosure string outlived the shortfall it described" is a
+standing-rule candidate, correctly noting neither `check-ui-strings.sh`
+(literals live in `ui_text.rs`) nor `check-disclosure-channel.sh` (a note
+reaches the traced setter) can tell whether a note is TRUE. **This is not
+occurrence 1.** `D:\dev\rag\rust\
+disclosure_text_must_be_tested_against_producing_branch.md` already
+records two prior instances of exactly this shape — `add-text
+--embed-font`'s `base_font=Helvetica`/"no glyph embedding (R79)" surviving
+a successful embed (`Pass 21.0`, `eb0bde5`), and a struct-shaped
+disclosure field with a machine-readable emitter but no prose renderer
+(`Pass 20.2`, `834d256`). `e11b4f8` is a **third** instance, now amended
+into that file (below). The pattern is well past this project's own
+two-occurrence promotion bar, and has been since the second instance
+(2026-08-07) — but per that file's own recorded disposition ("rule
+adoption for the numbered ledger is not this librarian's call to make
+solo"; the R107–R110 precedent of librarian-assigned numbers only against
+an existing decision record), minting a new numbered standing rule from
+three RAG-file instances with no decision record behind them is the
+engineer's/operator's call, not this filing's. **Flagged, not decided:**
+three instances across two different gate types (a CLI disclosure, a GUI
+struct-emitter) is a case for a rule, if one is wanted.
+
+**RAG escalation, this filing.** `D:\dev\rag\rust\
+disclosure_text_must_be_tested_against_producing_branch.md` amended with
+a third, dated occurrence (below the existing 2026-08-07 amendment) —
+this is the first instance in that file where the stale claim was not
+merely unmaintained but **actively contradicted a counter printed on the
+same line**, which the amendment records as the sharper failure mode: a
+disclosure that lies about itself in the SAME breath it tells the truth
+is worse than one that is merely silent, because the true half lends the
+false half credibility. Indexed in `D:\dev\rag\rust\index.md` this
+filing (existing entry, description note appended — not a new file).
+
+**`docs/FEATURES.md` — verified, no row/checkbox change.** No capability
+changed; the fix is to prose describing an already-shipped capability.
+Confirmed by reading the file this filing (not taken from the dispatch):
+the *Overprint SIMULATION* row (line 161) and the *Per-colorant (n-channel)
+compositing buffer* Planned row (line 232) **already** state the
+PROCESS-preserved/SPOT-flattened distinction the corrected note now also
+states — `FEATURES.md` was already accurate; only the CLI's own stderr
+disclosure had drifted.
+
+**`ARCHITECTURE.md` §12 — no new decision.** Decision 069 §2/§4 (minted
+`Pass 85.5`, *Shipped* below) already documents the per-pixel-CMYK
+reconstruction and the spot-flattening limit; this commit brings a stderr
+string into agreement with a decision record that was already correct,
+not the other way round.
+
+**Two measured findings, produced while fixing this note, filed against
+`Pass 97.1` (colorant planes) in *Backlog*, below, rather than left only
+in `docs/compositor-plan.md` §7** — see that Pass entry for the full
+text: (1) `/Indexed` colour spaces defeat `overprint::classify`'s colorant
+detection (§8.6.6.3, present in 4 of 7 failing overprint patches), and
+(2) image XObjects never reach `overprint::composite` at all, and the
+`overprint_refused` counter cannot see that gap either — the same
+blind-counter shape `bf75351` already paid for once.
+
+**Ledger effects.** No Pass ID minted or claimed — this is a correction to
+`Pass 85.5`'s existing claim, which stays PARTIAL under the same terms.
+No decision minted — ceiling stays **070**, next free **071**. No
+standing rule minted — three RAG-file instances now on record for
+"disclosure text must be re-verified against the branch that produces
+it" (well past this project's own two-occurrence bar for *that file*),
+but promotion to a numbered rule is flagged, not made, per this entry's
+own "Standing-rule candidacy" paragraph above. Ceiling stays **R195**,
+next free **R196**. **Next free filing ordinal: 171.**
+
 ### `5ef5498` — **A PER-TRAP DIAGNOSTIC SPLITS "PDFCE PAINTED WRONG" FROM "THE HARNESS MEASURED WRONG," AND COLLAPSES SIXTEEN OF EIGHTEEN GHENT FAILURES INTO ONE MISSING COMPOSITOR. `docs/compositor-plan.md` FILED; TWO OUTSIDE-DEPENDENCY SUGGESTIONS ASSESSED AND REJECTED** — no Pass ID, no decision minted; commit `5ef5498` touches `tools/` and is cited here to satisfy `check-commits-filed.py` — filed 2026-08-18 (hundred-and-sixty-ninth filing)
 
 **Filed by `pdfce-librarian` WITHOUT a shell this session.** Every figure
@@ -56560,6 +56682,36 @@ nothing gets forgotten, not as a commitment to build in this order.
   **Dependency: `97.0` first.** Doing colorant-plane arithmetic and
   backdrop removal on the same pixels at the same time is two unknowns
   in one debugging session; `97.0` first isolates the buffer-model half.
+
+  **TWO FINDINGS ADDED 2026-08-18 (hundred-and-seventieth filing), MEASURED
+  against the corpus while fixing `e11b4f8`'s stale disclosure note (see
+  *Shipped*, top) — recorded here, against the Pass that will fix them,
+  rather than only in `docs/compositor-plan.md` §7 where they were first
+  written.**
+  1. **`/Indexed` defeats overprint colorant classification.**
+     `overprint::classify` has no `/Indexed` arm, so an `/Indexed` space
+     falls to `SourceKind::OtherProcess` and its base's colorant list is
+     invisible to Table 149 — §8.6.6.3 puts the colour values in the BASE
+     space. Present in **4 of the 7 failing overprint patches**
+     (`GWG190`, `GWG191`, `GWG192`, `GWG020`); `GWG190`'s corpus text is
+     its own documented a/b-vs-c/d discriminator (`/Indexed [/DeviceN
+     [/Cyan] /DeviceCMYK ...]` vs. `/Indexed [/DeviceN [/Cyan /Yellow
+     /Black] /DeviceCMYK ...]`) — GWG states the colorant LIST, not the
+     tint values, decides what survives, and pdfce currently sees
+     neither list. **Fix has two halves, only the first is small:**
+     `classify` must recurse into the base space, **and** the tints
+     handed to `cmyk_group_rules` must be the palette-looked-up base
+     components, not the raw index the call site passes today.
+  2. **Image XObjects never reach overprint at all.**
+     `overprint::composite` has exactly one call site, in the path/glyph
+     painter — `GWG190`'s only failing cell is `d`, an image. Per-sample
+     overprint needs per-sample colorants, i.e. the colorant buffer this
+     Pass builds, so the fix is not pulled forward. **Before building the
+     buffer, add the missing counter first:** an image that skips
+     overprint is not currently counted as `overprint_refused` either —
+     the same blind-counter shape `bf75351` already paid for once in the
+     glyph painter (a counter blind to a whole object class reports a
+     smaller problem than exists).
 
   **Pass 97.2 — the collapse, and its disclosure.** Collapse N planes to
   sRGB once, at the end. `docs/overprint-architecture-survey.md` §6

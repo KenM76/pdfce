@@ -45994,3 +45994,111 @@ protocol, no code rides in this filing's own commit.
 4. `FEATURES.md` needs NO edit from this filing — verified against the
    file directly (not assumed): both capabilities `97.x` targets are
    already present in *Planned* with all boxes empty.
+
+## 2026-08-18 (hundred-and-seventieth filing) — **`e11b4f8` CORRECTS `Pass 85.5`: THE OVERPRINT NOTE STOPPED CONTRADICTING ITS OWN COUNTERS. TWO MEASURED FINDINGS FILED AGAINST `Pass 97.1`. THIRD RAG OCCURRENCE OF "DISCLOSURE OUTLIVES THE BRANCH IT DESCRIBED," STANDING-RULE CANDIDACY FLAGGED NOT MINTED**
+
+**Filed by `pdfce-librarian` WITHOUT a shell this session.** Diffstat,
+git-history claims, and the four gate/test results below are RELAYED from
+the dispatching engineer's report, not independently re-run. **One claim
+IS independently verified**, by `Read` directly against
+`crates/pdfce-cli/src/main.rs`, not taken from the report: the corrected
+operator-facing note (lines 7229–7245) matches the description given, and
+a second, unfixed copy of the same stale claim survives in a developer
+comment at lines 7057–7060 that the commit did not touch — flagged to the
+engineer, not edited here (docs-only brief).
+
+**Shipped:**
+
+- `e11b4f8` filed — no Pass ID, a correction to `Pass 85.5` (`bf75351`,
+  *Shipped*). The stable `render-page` overprint note stopped saying
+  *"pdfce does NOT simulate"* three words from `overprint_composited=5`
+  on the same line. It has simulated since `bf75351`; the note was
+  written before that and never revisited. Full account: top of
+  `ROADMAP.md` *Shipped*.
+
+**Decisions made this session:**
+
+- **No decision minted.** Decision 071 stays next free. Decision 069
+  §2/§4 (`Pass 85.5`) already documents the PROCESS-preserved/SPOT-
+  flattened distinction the corrected note now also states — this
+  commit brought a stderr string into agreement with an already-correct
+  decision record, not the reverse.
+- **Standing-rule candidacy assessed, NOT minted.** The dispatch asked
+  whether "a disclosure string outlived the shortfall it described" is a
+  standing-rule candidate. It is not occurrence 1: `D:\dev\rag\rust\
+  disclosure_text_must_be_tested_against_producing_branch.md` already
+  carries two prior instances (`Pass 21.0`/`eb0bde5`, `Pass 20.2`/
+  `834d256`), so this is a third RAG occurrence, well past the project's
+  own two-occurrence promotion bar for that FILE — but minting a new
+  NUMBERED standing rule from RAG-file instances with no decision record
+  behind them is the engineer's/operator's call per that file's own
+  recorded disposition, not this librarian's to make solo (the
+  R107–R110 precedent). Flagged in the `ROADMAP.md` entry; **next free
+  standing rule stays `R196`.**
+
+**Findings + decisions:**
+
+- **The self-contradiction is a sharper failure mode than either prior
+  RAG instance, and is now recorded as such.** Occurrence 1 was silently
+  wrong but internally consistent; occurrence 2 never fired at all; this
+  one printed a true counter and a false sentence on the SAME line, and
+  the true half lent the false half credibility. Neither of the
+  project's two disclosure gates (`check-ui-strings.sh` — location;
+  `check-disclosure-channel.sh` — channel) can catch this in principle,
+  because neither reads a string's content against current program
+  behaviour. Amended into the RAG file (below) with the full worked
+  example and the mechanical fix (assert prose against counter
+  agreement, not just individual plausibility).
+- **Two measured findings, produced while fixing the note, filed against
+  `Pass 97.1` (colorant planes) in `ROADMAP.md` *Backlog*, not left only
+  in `docs/compositor-plan.md` §7:**
+  1. `/Indexed` colour spaces defeat `overprint::classify` — no
+     `/Indexed` arm, so the base space's colorant list (§8.6.6.3) is
+     invisible to Table 149. Present in 4 of the 7 failing overprint
+     patches; `GWG190`'s corpus text IS its own documented a/b-vs-c/d
+     discriminator. Fix has two halves — recurse `classify` into the
+     base space, and hand `cmyk_group_rules` the palette-looked-up base
+     components instead of the raw index.
+  2. Image XObjects never reach `overprint::composite` — one call site,
+     in the path/glyph painter only. `GWG190`'s only failing cell is an
+     image. Belongs to the `97.1` colorant buffer, not pulled forward —
+     but the missing counter (an image skipping overprint is not counted
+     as `overprint_refused`) should be added BEFORE the buffer, per the
+     `bf75351` precedent: a counter blind to a whole object class
+     reports a smaller problem than exists.
+- **`FEATURES.md` — verified, no change.** Confirmed by reading the file
+  this filing: both the *Overprint SIMULATION* row and the *Per-colorant
+  (n-channel) compositing buffer* Planned row already state the
+  PROCESS/SPOT distinction the corrected note now also states.
+
+**Still in flight:**
+
+- Everything the 169th filing's "For next session" queued (`97.0` start,
+  `85.1` independent run, ledger numbers) is unchanged and still owed —
+  not restated here to avoid forking it. This filing is a correction
+  commit, not engineering progress on any staged Pass.
+- Ghent standing carried forward unchanged: **25 pass / 18 FAIL / 8
+  UNRESOLVED of 51** — re-measured this filing to confirm a stderr-only
+  change moved no pixel, not assumed.
+- The second, unfixed copy of the stale disclosure claim
+  (`crates/pdfce-cli/src/main.rs:7057`–`7060`, a developer comment) is
+  now flagged and owed — first correction-worthy item for the next
+  commit touching this file.
+
+**For next session:**
+
+1. **Ledger.** Next free Pass family **98** (unchanged — none minted).
+   Next free decision **071** (unchanged). Next free standing rule
+   **`R196`** (unchanged — candidacy flagged, not adopted). **Next free
+   filing ordinal: 171.**
+2. **Close the second stale-comment copy** at `main.rs:7057`–`7060` the
+   next time that file is touched — same claim `e11b4f8` already fixed
+   once, in a location the commit didn't reach.
+3. **`97.0` (the RGB compositor) is still the best-scoped, highest-
+   leverage item** — unchanged from the 169th filing's queue; this
+   filing did not touch it.
+4. **If a numbered standing rule for "disclosure text must be re-
+   verified against current behaviour when the branch that produces it
+   changes" is wanted, this filing is the third instance to cite** —
+   two prior in the RAG file, this one the sharpest (self-contradicting,
+   not merely stale). Operator/engineer call, not filed as `R196` here.
