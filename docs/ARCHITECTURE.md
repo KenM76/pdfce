@@ -1268,6 +1268,70 @@ D:\Dev\pdfce\
                                    model work. Full derivation:
                                    `ROADMAP.md`'s `Pass 85.4e` Shipped
                                    entry.
+                                   **★ AMENDED 2026-08-18
+                                   (hundred-and-sixty-sixth filing, `Pass
+                                   85.5`, `bd9d5ef`+`bf75351`+`ac15158`) —
+                                   THE PARAGRAPH BELOW IS KEPT VERBATIM
+                                   AND ITS OBLIGATION (1) IS NOW HALF
+                                   WRONG. OVERPRINT SIMULATION SHIPPED
+                                   WITHOUT THIS BUFFER, WITHOUT `iccce`,
+                                   AND WITHOUT A REPLY TO
+                                   `request_cmyk_buffer_destination_and_width.md`.**
+                                   It reads "overprint is inexpressible in
+                                   an RGB buffer, not merely unimplemented
+                                   … an RGB buffer has no CMYK components
+                                   to select between." **True of a
+                                   PERMANENT CMYK pipeline; false of a
+                                   PER-PAINT one.**
+                                   `pdfce-render/src/overprint.rs` holds
+                                   Table 149 as pure logic; the paint path
+                                   rasterises an overprinting paint to a
+                                   coverage mask with the SAME rasteriser
+                                   a normal paint uses, reconstructs the
+                                   backdrop's CMYK from the composited
+                                   RGB, blends per pixel, writes back.
+                                   **It works because
+                                   `rgb_to_cmyk`/`cmyk_to_rgb` are EXACT
+                                   inverses (4,913 colours, 1e-5) and
+                                   because each output channel depends on
+                                   a DISJOINT pair of inputs**, so
+                                   overprinting one ink moves exactly one
+                                   channel and leaves the rest at their
+                                   round-tripped — hence original —
+                                   values. The split is not recovered
+                                   (`C=.5 M=.4 Y=.4 K=0` reads back
+                                   `C=.167 M=0 Y=0 K=.4`) and does not
+                                   need to be. **Named limit:** two inks
+                                   overprinting in sequence over a rich
+                                   backdrop can differ from a true
+                                   separated pipeline. **Measured: Ghent
+                                   22 → 25 of 51 patches.** **What the
+                                   amendment does NOT touch:** obligation
+                                   (2) — blending IN a `DeviceCMYK`
+                                   blending colour space — is untouched
+                                   and still needs the buffer, the `iccce`
+                                   boundary (decision 064) still owns the
+                                   final conversion, and the cost figures
+                                   below still stand. **What the remaining
+                                   7 overprint FAILs need is a
+                                   per-COLORANT buffer, not a CMYK one:**
+                                   Table 149's SPOT row preserves the
+                                   backdrop in both modes, and a
+                                   flattened-RGB backdrop cannot say
+                                   whether it was spot or process. **The
+                                   cheap approximation was BUILT AND
+                                   MEASURED: a page-sized spot-ink
+                                   multiplier plate moved 17 traps to 16,
+                                   flipped 0 patches of 51, regressed one
+                                   patch 3 → 6 unexplained, and was
+                                   reverted (`ac15158`).** See decision
+                                   069 and `ROADMAP.md`'s `85.5` row.
+                                   **The durable lesson is about THIS
+                                   DOCUMENT, not about overprint: a
+                                   blocker stated confidently went
+                                   unretested for as long as it was
+                                   written down, and it took someone
+                                   trying it to find out.**
                                    **PLANNED, NOT DECIDED, NOT STARTED —
                                    a CMYK+alpha compositing buffer
                                    (recorded 2026-08-18, hundred-and-
@@ -22165,3 +22229,94 @@ free 069.**
 >
 > No standing rule minted by this amendment either — same disposition as
 > both prior entries.
+
+### 2026-08-18 (hundred-and-sixty-sixth filing) — decision 069: **OVERPRINT IS SIMULATED PER-PAINT, BY RECONSTRUCTING CMYK FROM THE RGB BUFFER THROUGH AN EXACT-INVERSE ROUND TRIP — NOT BY A SEPARATED BUFFER, AND NOT BY THE SPOT-INK MULTIPLIER PLATE THAT WAS BUILT, ABLATED AND REVERTED**
+
+**Status: DECIDED.** `Pass 85.5` (`bd9d5ef` + `bf75351`; `ac15158` for
+the rejected alternative) makes pdfce simulate ISO 32000-1 §11.7.4.3's
+`CompatibleOverprint` blend (Table 149). Four sub-decisions, stated once
+so future prepress work does not re-derive them.
+
+**1. The compositing model is PER-PAINT, not a permanent CMYK pipeline.**
+`tiny_skia` composites in RGBA and no RGBA blend mode can express *"keep
+the backdrop's cyan but take the source's magenta"* — that is exactly what
+`CompatibleOverprint` is for and exactly what a three-channel additive
+pipeline cannot say. So an overprinting paint is rasterised to a **coverage
+mask by the SAME rasteriser a normal paint uses** — a deliberate choice, so
+an overprinted edge is identical in shape and antialiasing to a
+non-overprinted one, with no second edge-generation path to drift — and
+then blended per pixel in CMYK reconstructed from the composited RGB
+backdrop.
+
+**2. The reconstruction is sound because `rgb_to_cmyk`/`cmyk_to_rgb` are
+EXACT inverses (verified over 4,913 colours to within 1e-5) and because
+each output channel depends on a DISJOINT pair of inputs.** Exactness is
+load-bearing rather than tidy: a lossy round trip would shift **every pixel
+an overprint paint merely touched**, including the ones Table 149 says to
+leave alone, and a correctness feature would become a source of drift
+everywhere it was used. Disjointness is what makes the lost component
+**split** harmless — `C=0.5 M=0.4 Y=0.4 K=0` reads back as `C=0.167 M=0
+Y=0 K=0.4`, and overprinting one ink still moves exactly one output channel
+while the rest keep their round-tripped, hence original, values. **Named
+limit:** two inks overprinting in sequence over a rich backdrop can differ
+from a true separated pipeline.
+
+**3. Simulating at all is a POLICY CHOICE, and it is disclosed as one.**
+§8.6.7 says that if overprinting is not supported the parameter **shall be
+ignored** — ignoring it is conformant, and is what pdfce did until now —
+and ISO 32000-1 never describes overprint preview on a non-separating
+device (`OP-N1`, 0 occurrences in 756 pages of corpus; spec item **C2**).
+The justification for building it is Acrobat-parity: Acrobat enables
+Overprint Preview automatically for PDF/X, so a PDF/X-4 file's *expected*
+on-screen appearance includes it. Because it is a choice, **what pdfce
+chose has to be visible**: `overprint_composited`, `overprint_refused` and
+`overprint_pixels` are on `render-page`'s stable stdout line, and **a
+composite that cannot run falls back to a normal paint AND says so**
+(project rule 4 — a silent fallback is the forbidden half). `overprint_
+refused` non-zero means the operator is seeing knocked-out backdrops where
+a press would show ink: a shortfall that **cannot be detected by looking at
+the page**, because the page looks like an ordinary correct render.
+
+**4. ★ THE REJECTED ALTERNATIVE, recorded because it was MEASURED, not
+reasoned about.** Table 149's SPOT row preserves the backdrop under
+overprint in **both** modes; pdfce flattens spots into RGB and so cannot
+tell a spot backdrop from a process one. A **page-sized spot-ink multiplier
+plate** (~150 lines + an `f32` page buffer) was built to recover that:
+divide the multiplier out before Table 149, multiply it back after.
+Ablation on the same binary, one line changed — plate OFF `GWG020`=7,
+`GWG030`=3, `GWG040`=7 (**17 traps, 25 of 51 patches passing**); plate ON
+5, 6, 5 (**16 traps, 25 of 51 passing**). **−1 trap of 17, 0 patches of 51
+flipped, and `2_GWG030` REGRESSED 3 → 6 for a reason the engineer could not
+explain.** Reverted; working copies kept outside the tree so the next
+attempt starts from the measurement. **The deliverable is the negative
+result: the remaining overprint patches need a REAL n-channel buffer — one
+plate per colorant, RGB synthesised only at display — not an approximation
+layered over an RGB pipeline.**
+
+**What this decision does NOT decide.** It does not build, choose or cost
+the n-channel buffer. It does **not** retire §3's planned CMYK+alpha buffer
+— that item's **obligation (2)**, blending IN a `DeviceCMYK` blending
+colour space, is untouched and still needs it, and decision 064's `iccce`
+boundary still owns the final CMYK→display conversion. What it retires is
+the claim that **overprint** was gated on that buffer. §3's block is
+amended in this same filing rather than left standing, per the
+decision-log/body-section pairing rule.
+
+**★★ The generalisable half, which is why this is a decision entry and not
+just a Pass.** The blocker was **stated in two documents and true in
+neither's full generality** — `ARCHITECTURE.md` §3's *"overprint is
+inexpressible in an RGB buffer"* and `ROADMAP.md`'s *"architectural and
+gated on `iccce`"* — and it went unretested for as long as it was written
+down confidently. **Reconstruction can recover PROCESS components, because
+they and RGB are related by an invertible map; it cannot recover WHICH
+COLORANT a value came from, because flattening is not injective in that
+direction.** That is a **representability** distinction, not an effort one
+— the same distinction §11.4.6's isolated-vs-non-isolated knockout turned
+on in `Pass 85.4e`. **Two independent render gaps have now reduced to "the
+buffer model discards a fact the spec's blend rule needs,"** which is the
+sentence to test the next such blocker against.
+
+**No standing rule minted.** Architectural/rendering-model decision, same
+disposition as 063/064/066/068. **Ceiling moves 068 → 069; next free
+070.**
+

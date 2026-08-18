@@ -96,6 +96,370 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `ac15158` — **A SPOT-INK PLATE: BUILT, MEASURED, AND NOT SHIPPED — THE NEGATIVE RESULT IS THE DELIVERABLE. THE REMAINING OVERPRINT PATCHES NEED A REAL N-CHANNEL BUFFER, NOT AN APPROXIMATION LAYERED OVER AN RGB PIPELINE** — `Pass 85.5` slice 3; ships the `/Separation`/`/DeviceN` operand-tint correction (§8.6.6.5 O7) that came out of the attempt, **which moved no number and is kept anyway** — filed 2026-08-18 (hundred-and-sixty-sixth filing)
+
+**Filed by `pdfce-librarian` WITH a shell (hard rule 8).** Every figure
+below is labelled either **VERIFIED HERE** (with the command that produced
+it) or **RELAYED** (from the dispatching engineer, not re-measured).
+
+**★ THIS ENTRY CLAIMS AN EXISTING PASS ID THE DISPATCHING ENGINEER DID NOT
+NAME**, exactly as the hundred-and-sixty-fifth filing did for `Pass 86.0`.
+The dispatch described all three commits of this filing as unnumbered. This
+librarian matched them to **`Pass 85.5`** — the Ghent gap inventory's
+"overprint compositing" row, whose stated scope is *"the remaining
+SIMULATION half only"*, which is precisely and only what these commits
+build. **No Pass ID was minted; next free Pass family remains `97`.**
+`Pass 85.5` is now **PARTIAL, NOT CLOSED** — see the rewritten `85.5` row
+under *Next up*. If the engineer disagrees with the match, amend this
+entry; the ID is not re-usable either way (hard rule 2).
+
+**WHAT SHIPPED — the tint correction, 48 insertions in one file.**
+**VERIFIED HERE** by `git show --stat ac15158`: `crates/pdfce-render/src/
+interpret.rs` only, **48 insertions / 4 deletions, 1 file**. A
+`/Separation` or `/DeviceN` paint now takes its process tints from **its
+own operands**, in names-array order (§8.6.6.5, item O7 — the operands
+*"shall"* be interpreted in that order), instead of reconstructing CMYK
+from the already-flattened RGB.
+
+**Why the reconstruction was wrong, stated so it is not re-introduced.**
+For a space that names a **spot colorant ALONGSIDE a process colorant**,
+the flattened RGB carries the spot's contribution too; converting that RGB
+back to CMYK **smears the spot into the process channels**, and Table 149
+then faithfully paints the smear. Ghent `2_GWG030` is built entirely from
+that shape — `/CS1 cs .5 1 scn` over a two-colorant space. **RELAYED, and
+this is the honest part: it changed NO trap count on the Ghent corpus.**
+It is kept because it is strictly more faithful to what the file states,
+and because a value read from the operands cannot drift the way a
+reconstruction can — **not because it moved a number.** A change kept on
+fidelity grounds with a measured null result is a better record than one
+kept on a number that happened to move.
+
+**★★ WHAT DID NOT SHIP, AND THE MEASUREMENT THAT DECIDED IT.** Table 149's
+SPOT row preserves the backdrop under overprint in **both** overprint
+modes, whereas the process row under `OPM 0` paints `c_s`. pdfce flattens
+spots into RGB before compositing, so **it cannot tell a spot backdrop from
+a process one**. **RELAYED, and visual rather than inferential:** on
+`2_GWG040` Acrobat renders **all six cells clean**; pdfce painted white
+trap Xs in **exactly the three "over spot" cells** and got **the three
+"over CMYK" cells right**. **3 of 6 cells, split precisely along the
+diagnosis** — that is what makes it certain rather than plausible.
+
+So a **page-sized spot-ink multiplier plate** was built: a record of the
+multiplier spot ink applied at each pixel, divided out before Table 149 and
+multiplied back after. **Ablation, RELAYED — same binary, one line
+changed:**
+
+| configuration | `GWG020` | `GWG030` | `GWG040` | traps, 3 patches | patches passing, of 51 |
+|---|---:|---:|---:|---:|---:|
+| **plate OFF** (shipped) | 7 | 3 | 7 | **17** | **25 of 51 = 49.0 %** |
+| **plate ON** (reverted) | 5 | 6 | 5 | **16** | **25 of 51 = 49.0 %** |
+
+**Read the table by its columns, which is why it is a table.** The trap
+total moves **17 → 16 = −1 trap of 17 = −5.9 %**, and the patch column does
+not move **at all**: **0 patches of 51 flipped**. And `2_GWG030`
+**REGRESSES 3 → 6, a doubling, for a reason the engineer could not
+explain.** A page-sized `f32` buffer and ~150 lines are not earned by a net
+of one trap; shipping a change that makes a patch worse **without knowing
+why** is how a renderer accumulates behaviour nobody can justify later.
+**Reverted.** Working copies kept **outside the tree**, deliberately, so
+the next attempt starts from this measurement rather than from scratch.
+
+**★★★ THE DELIVERABLE, and the reason this entry exists at all: the
+remaining overprint patches need a REAL n-channel buffer — one plate per
+colorant, RGB synthesised only at display — NOT an approximation layered
+over an RGB pipeline.** The cheap version was **built, measured, and does
+not pay.** This is recorded here, in the roadmap, and not only in a commit
+message, because **a negative result that lives only in `git log` is one a
+future session re-attempts** — the whole point of it is to be found by
+someone about to spend the same day. It is also carried on the `85.5` row
+under *Next up*, where the next attempt will actually look.
+
+**Note the shape of the finding, because it generalises past overprint.**
+The spot plate is an attempt to recover **per-colorant information that the
+pipeline threw away one stage earlier**. Reconstruction can recover
+*process* components (see `bf75351`, below, where it is exact) because
+process components and RGB are related by an invertible map; it cannot
+recover **which colorant** a value came from, because flattening is not
+injective in that direction. **The distinction is representability, not
+effort** — the same distinction §11.4.6's isolated-vs-non-isolated knockout
+turned on in `Pass 85.4e`. **Two independent render gaps have now reduced
+to "the buffer model discards a fact the spec's blend rule needs."**
+
+**`FEATURES.md`.** No further row change beyond the two already made for
+`bf75351`, below — this commit ships a fidelity correction inside an
+existing capability, not a new one, and a measured null result does not
+tick a box.
+
+**`ARCHITECTURE.md` §12.** Covered by **decision 069**, minted this filing
+against `bf75351` (below); the rejected spot-plate alternative is recorded
+inside it, which is where a decision's rejected alternatives belong.
+
+**Ledger effects.** No Pass ID minted (`Pass 85.5` claimed, see above);
+next free Pass family **97**. No standing rule minted or cited; ceiling
+stays **`R195`**, next free **`R196`**. Decision ceiling moves **068 →
+069** (minted against `bf75351`), next free **070**.
+
+### ★★★★★ Pass 85.5 — `bf75351` — **OVERPRINT STOPS BEING A COUNTER AND STARTS BEING PIXELS: 22 → 25 OF 51 ON GHENT — AND THE SECOND HALF IS THE MORE INTERESTING DEFECT, BECAUSE THE GLYPH PAINTER DID NOT MERELY SKIP THE BLEND, IT DID NOT COUNT IT EITHER** — the simulation half of the Ghent gap inventory's `85.5` row; **PARTIAL, the row does not close** — filed 2026-08-18 (hundred-and-sixty-sixth filing)
+
+**Filed by `pdfce-librarian` WITH a shell (hard rule 8).** Labels as above.
+
+**THE HEADLINE, WITH ITS DENOMINATOR (RELAYED — Ghent PDF Output Suite
+5.0, all 51 patches, against Acrobat Pro reference strips, measured before
+and after):**
+
+| | pass | FAIL | unresolved | of | pass rate |
+|---|---:|---:|---:|---:|---:|
+| **before** (`Pass 93.0` baseline) | 22 | 21 | 8 | **51** | **43.1 %** |
+| **after** (this commit) | **25** | **18** | 8 | **51** | **49.0 %** |
+
+**Δ = +3 patches of 51 = +5.9 points**, `unresolved` unchanged at **8 of
+51 = 15.7 %**, **0 render errors**. Newly passing, named: `2_GWG041_White_
+OP_x3`, `1_GWG010_CMYK_OP_x3`, `2_GWG120_White_OP-KO_X1`. **The remaining
+overprint failures are PARTIAL, not untouched** — trap counts fell on most
+of the rest as well: `2_GWG030` **9 → 3**, `2_GWG040` **9 → 7**, `2_GWG020`
+**9 → 7**. That distinction matters for scoping: a patch at 7 traps and a
+patch at 9 look identical in a pass/fail column and are not the same
+distance from done.
+
+**WHAT IS ON DISK — VERIFIED HERE.** `git show --stat bf75351`: **8 files,
+1,397 insertions / 32 deletions**, of which `crates/pdfce-render/src/
+interpret.rs` **+308** and `crates/pdfce-render/src/overprint.rs` **+428**
+(on top of `bd9d5ef`'s 695 — the module is **1,123 lines at `HEAD`**, by
+`wc -l`). **Three of those eight files are `docs/`** — see the mixed-commit
+note at the end of this entry.
+
+**★ HOW THE BLEND IS DONE, and why it is not the buffer everyone expected.**
+`tiny_skia` composites in RGBA and **there is no RGBA blend mode that
+expresses "keep the backdrop's cyan but take the source's magenta"** —
+which is exactly what `CompatibleOverprint` is for and exactly what a
+three-channel additive pipeline cannot say. So an overprinting paint is
+rasterised to a **coverage mask** by the **SAME rasteriser a normal paint
+uses** (so an overprinted edge is identical in shape to a non-overprinted
+one — no second edge-generation path, no second aliasing behaviour), and
+then blended **per pixel in CMYK**.
+
+**The load-bearing property is that `rgb_to_cmyk` and `cmyk_to_rgb` are
+EXACT inverses — RELAYED as verified over 4,913 colours to within 1e-5.**
+4,913 = 17³, a full 17-step grid per axis. pdfce has **no separated CMYK
+buffer**, so the backdrop's components are **reconstructed** from the
+composited RGB; if that round trip were lossy, **every pixel an overprint
+paint merely touched would shift colour — including the ones Table 149 says
+to leave alone** — and a correctness feature would become a source of drift
+everywhere it was used.
+
+**The reconstruction does NOT recover the original component split**, and
+the reason that is harmless is worth stating because it reads like it
+should not be: `C=0.5 M=0.4 Y=0.4 K=0` reads back as `C=0.167 M=0 Y=0
+K=0.4`. **Each output channel depends on a disjoint pair of inputs**, so
+overprinting one ink moves **exactly one** output channel and leaves the
+others at their round-tripped — hence original — values. **Named
+limitation, documented in the module:** where **two inks overprint in
+sequence over a rich backdrop**, the reconstruction can differ from a true
+separated pipeline.
+
+**★★ TEXT WAS THE SECOND HALF, AND IT IS THE MORE INTERESTING DEFECT.**
+§11.7.4.3 names the elementary objects overprint applies to: *"fills,
+strokes, **text**, images, and shadings."* The glyph painter **did not
+merely skip the overprint blend — it did not COUNT it either.** So
+`overprint_effective` was **under-reporting**, and the shortfall was
+**invisible in the diagnostics as well as on the page**. Wiring text took
+the score **23 → 25 of 51 = +2 patches**, i.e. **two thirds of this
+commit's entire +3 came from the object class the counter was blind to.**
+
+**The generalisable half, and it is a disclosure-rule finding, not a
+rendering one:** *a disclosure counter blind to a whole class of object
+reports a smaller problem than exists, and reads as evidence that the rest
+of the gap is small.* That is worse than no counter, because it is
+**believed**. It is the same failure mode as `Pass 84.0` (twelve counters
+no shell ever read) and `Pass 90.2` (a disclosure naming only the rarer of
+its two reasons) pointed at a third surface — **the population a counter
+walks**. When a spec clause enumerates the objects a rule applies to, that
+enumeration is the counter's test list.
+
+**THREE NEW COUNTERS ON THE STABLE STDOUT LINE — VERIFIED HERE**, declared
+at `crates/pdfce-render/src/interpret.rs:356` / `:365` / `:371`, merged at
+`:881`–`:883`, printed by `crates/pdfce-cli/src/main.rs:6884`, and asserted
+present by `crates/pdfce-cli/tests/render_page.rs:476`–`:478`:
+`overprint_composited`, `overprint_refused`, `overprint_pixels`.
+
+**`overprint_refused` is the one that matters**, and it exists because
+**overprint simulation is a POLICY CHOICE and not an obligation** (spec
+item **C2**; §8.6.7 makes ignoring `/OP` conformant). Non-zero means **the
+operator is seeing knocked-out backdrops where a press would show ink** —
+precisely the shortfall that **cannot be detected by looking at the page**,
+since the page looks like a perfectly ordinary correct render. **A
+composite that cannot run falls back to a normal paint AND says so; a
+silent fallback is what project rule 4 forbids.** Invariant stated by the
+code's own doc comments: `overprint_composited` should equal
+`overprint_effective` minus `overprint_refused` — **a three-counter
+identity a reader can check, which is hard rule 10's shape applied inside
+the diagnostics rather than inside a filing.**
+
+**Two doc comments corrected in place, both of which had become false.**
+
+1. `overprint_effective`'s comment said it *"is the number that says
+   whether the n-channel buffer is worth building."* That buffer now
+   exists **in this reduced form**, so the comment would have sent a future
+   reader off to build something already built.
+2. **★ The `bypass-exempt:` marker in `crates/pdfce-core/src/ocr/layer.rs`
+   claimed `add_ocr_layer` is "called by the CLI". It is not** — there is
+   no OCR subcommand, and the only non-test caller is
+   `pdfce-render/examples/ocr_smoke.rs`. **VERIFIED HERE** by
+   `git show bf75351 -- crates/pdfce-core/src/ocr/layer.rs`: the comment
+   now carries an explicit `CORRECTED:` paragraph naming itself an **R151**
+   instance (a capability with no shell caller) and stating that **the
+   exemption's warrant does not depend on who calls it** — a one-shot API
+   is outside a session whether a shell reaches it or not. **This was
+   caught by this librarian while filing the previous batch**, one commit
+   after the false comment was written, and the engineer recorded the
+   attribution in the commit message unprompted. **A false claim about
+   callers is how a doc comment becomes the reason someone believes a
+   feature ships** — which is exactly the failure R151 exists to name, now
+   found in a comment rather than in a features table.
+
+**★★★ THE PREMISE THIS COMMIT FALSIFIES, and it is one of THIS PROJECT'S
+OWN.** `ARCHITECTURE.md` §3's `pdfce-render\` block states — as the reason
+`Pass 85.5` is gated — that *"overprint is inexpressible in an RGB buffer,
+not merely unimplemented … an RGB buffer has no CMYK components to select
+between,"* and `ROADMAP.md`'s `85.5` row says the work is *"architectural
+and gated on `iccce` for the final CMYK→display conversion."* **Overprint
+simulation has now shipped with NO CMYK buffer, NO `iccce`, and no reply to
+`request_cmyk_buffer_destination_and_width.md`** — it recovers the
+components by an exact-inverse round trip instead. **The blocking premise
+was true of a *permanent* CMYK pipeline and false of a *per-paint*
+one**, and nobody tested it until someone tried. §3 is amended this filing
+rather than left standing; **the gate on `iccce` still holds for
+everything §3 lists under obligation (2)** — blending in a `DeviceCMYK`
+blending colour space, and the final conversion — so the entry is a
+narrowing, not a retraction. **The pattern is the one this project keeps
+paying for: a stated blocker went unretested for as long as it was
+written down confidently.**
+
+**`FEATURES.md` — TWO rows changed this filing.** (1) *Overprint
+simulation* moves from **Planned to Implemented**, `core [x]` `cli [x]`
+`gui [ ]`. **The `gui` box is deliberately NOT rounded up** — GUI work is
+operator-paused (see *In progress*, the GUI-pause box), no `pdfce-gui` code
+path reads any of the three counters, and an unticked `gui` box on a
+shipped core+cli capability is the signal `FEATURES.md` exists to carry.
+(2) The existing *Overprint tracked and disclosed* row's sentence is
+**replaced** (not appended to) — it read *"Visual simulation is a separate
+row, below — refused today, conformant per §8.6.7,"* which this commit
+makes false.
+
+**`ARCHITECTURE.md` §12 — decision 069 MINTED this filing.** Overprint
+composites per-pixel in CMYK reconstructed from the RGB buffer, via an
+exact-inverse round trip, rather than through a separated buffer; the
+spot-multiplier approximation (`ac15158`, above) is recorded as the
+**measured, rejected** alternative. **Ceiling moves 068 → 069; next free
+070.** §3's `pdfce-render\` planned-CMYK-buffer paragraph is amended in the
+same filing, per the librarian's decision-log/body-section pairing rule.
+
+**★ MIXED COMMIT — recorded because `git log` will not say so.** Three of
+this commit's eight files are `docs/` (`ROADMAP.md` **+419**,
+`SESSION_LOG.md` **+214**, `FEATURES.md` **1 row**), and **VERIFIED HERE**
+by `git show bf75351 -- docs/ROADMAP.md`, that content is the
+**hundred-and-sixty-FIFTH** filing — `a3080f0`, `Pass 86.0`/`cb55b6b`,
+`ea5159e`, `30b0375`. **The 165th filing therefore has no commit of its
+own; it rode inside an engineering commit.** Nothing is wrong with the
+content and nothing is missing — but a future archaeologist reading
+`git log` for "when was the 165th filing written" will land on a commit
+titled about overprint. Same disposition as the mixed commit recorded in
+the hundred-and-fifty-first filing: **noted, not corrected.**
+
+### ★★★★ Pass 85.5 — `bd9d5ef` — **TABLE 149 AS A PURE FUNCTION, BECAUSE A WRONG CELL IS A WRONG PIXEL ON A PRESS — AND PDFCE IS NOT OBLIGED TO DO ANY OF IT, WHICH IS WHY THE POLICY CHOICE IS RECORDED IN THE MODULE ITSELF** — slice 1 of the `85.5` simulation half: the logic, pinned against the standard, with no rasteriser attached — filed 2026-08-18 (hundred-and-sixty-sixth filing)
+
+**Filed by `pdfce-librarian` WITH a shell (hard rule 8).** Labels as above.
+
+**What shipped — VERIFIED HERE** by `git show --stat bd9d5ef`: **2 files,
+696 insertions, 0 deletions** — a new `crates/pdfce-render/src/
+overprint.rs` (**695 lines**) plus its one-line `lib.rs` registration.
+ISO 32000-1 §11.7.4.3's `CompatibleOverprint` blend function (**Table
+149**) as **pure logic with no rasteriser attached**. The compositing
+surgery is `bf75351`, above; this is the part that can be pinned against
+the standard **exactly**, so it was pinned **first and separately**.
+
+**★ WHY PDFCE DOES THIS AT ALL — recorded IN THE MODULE because it will be
+questioned later.** **pdfce is NOT obliged to simulate overprint.** The
+spec RAG's consolidator records **`OP-N1`** as a *sourced negative result*
+— ISO 32000-1 **never** describes overprint preview on a non-separating
+device, **0 occurrences of the phrase in 756 pages** — and **§8.6.7** says
+outright that if overprinting is not supported the parameter **shall be
+ignored**. **Ignoring it is conformant, and is what pdfce did until now.**
+This is item **C2** in that document's obliged-vs-choosing table: **a
+deliberate policy choice** to render what a **press** would produce rather
+than what the standard's **floor** permits. The justification is
+Acrobat-parity — Acrobat enables Overprint Preview **automatically for
+PDF/X**, so a PDF/X-4 file's *expected* on-screen appearance includes it —
+and the corpus agrees: **10 of the Ghent suite's 51 patches test overprint
+directly and every one of them showed a trap X without it.**
+
+**A choice recorded where the code is** is the durable half here. C2 items
+are the ones a future reader is most likely to mistake for obligations and
+"fix" in the wrong direction — or, worse, to delete as gold-plating.
+
+**★★ THE POLARITY TRAP IS HANDLED BY NOT NEEDING TO BE.** Table 149 is
+written in **subtractive tint**, but §11.7.4.5 says blend modes operate on
+**additive** values with subtractive components complemented before and
+after. This module **works in tint throughout and complements nothing** —
+which is safe **ONLY** because **every cell in Table 149 is one of `c_s`,
+`c_b`, or the constant `0.0`**: a **selection among existing operands**,
+never arithmetic on them, and **complementing either side of a choice
+yields the same choice**. **The condition under which that stops being
+true is stated in the module docs**, which is the part that makes it a
+sound shortcut rather than a lucky one. A future cell that computes rather
+than selects breaks it.
+
+**Three spec facts ENCODED rather than left to be rediscovered:**
+
+1. **`SP-N2` — a `Separation` paint with overprint OFF paints `0.0`, i.e.
+   it ERASES process colorants.** This looks like a typo. **It is stated
+   twice in the standard**, and it has its own test **whose failure message
+   says not to "fix" it.** A test that defends a counter-intuitive spec
+   rule against a future reader's correction instinct is doing work no
+   comment can.
+2. **The last row: a source that is itself a transparency group reverts to
+   `Normal` in every column**, because **no information is retained about
+   which components the group painted**. **Not an omission to improve on
+   later** — the information genuinely is not there, which is the same
+   representability boundary `ac15158`'s spot plate ran into from the other
+   side.
+3. **`OPM 1` applies to `DeviceCMYK` specified DIRECTLY and NOT in a
+   sampled image.** A CMYK **image** falls in the other row, where the two
+   modes are identical — so `classify()` carries an **`in_image_sample`
+   flag** and a test pins the difference.
+
+**A type-level finding worth carrying:** the "named in source space" test
+takes a **`Colorant`, not raw name bytes**. The first draft assumed
+`Vec<u8>`; the real type **distinguishes `/All`**, which **names every
+colorant by definition** and therefore satisfies the test **for any
+component**. A byte comparison silently gets `/All` wrong in the direction
+that under-paints.
+
+**★★★ `OP-A3` IS SURFACED, NOT DECIDED.** The standard **never says which
+of the two overprint parameters indexes the OP column**, so `op` is an
+**explicit argument** and the **caller supplies** the one matching fill or
+stroke. This is the correct disposition under the operator's standing
+instruction *"never hard-code a choice the standard leaves open"* — the
+ambiguity is pushed to the call site, where the caller has the information
+the standard omits, rather than resolved by fiat inside a pure function.
+
+**TESTS — VERIFIED HERE** by `grep -c "#\[test\]" crates/pdfce-render/src/
+overprint.rs` at `HEAD`: **12**. **The main test IS the table** — every
+row × all three columns — plus the one value-dependent cell separately.
+**RELAYED: sabotage-verified** — removing the `OPM 1` backdrop preservation
+turns **2 tests red**, including the image cross-check. **A table-shaped
+spec rule gets a table-shaped test**; the sabotage check is what says the
+table is load-bearing rather than decorative.
+
+**`FEATURES.md`.** No row change for this commit on its own — it ships pure
+logic that **no paint path calls yet**, which is an **R151** shape by
+construction and correctly untickable. The rows move with `bf75351`, above,
+where a shell reaches it. **Filing a slice that deliberately ticks nothing
+is the honest form of R151, not a gap in the filing.**
+
+**`ARCHITECTURE.md` §12.** Covered by decision **069** (minted against
+`bf75351`).
+
 ### `a3080f0` — **SIX HELPERS WINDOWS USES AND LINUX CANNOT SEE, SO ONLY LINUX CALLED THEM DEAD — AND THE TIDIER-LOOKING FIX WOULD HAVE DELETED THE ONLY COVERAGE THE CI PLATFORM RUNS** — follow-on to `ea5159e`; `#[cfg_attr(not(windows), allow(dead_code))]`, not `#[cfg(windows)]` — filed 2026-08-18 (hundred-and-sixty-fifth filing)
 
 **Filed by `pdfce-librarian` WITH a shell (hard rule 8).** Every figure
@@ -47484,6 +47848,92 @@ in the "still open" list. Full build record: this file's own
 
 ## Next up
 
+### ★★★★★ THE GHENT STANDING BOARD — **25 pass / 18 FAIL / 8 UNRESOLVED / 0 render errors, of 51 patches (49.0 % / 35.3 % / 15.7 %)** — the remaining 18 clustered by cause, and the ONE architectural item that unblocks the largest cluster — filed 2026-08-18 (hundred-and-sixty-sixth filing)
+
+**This box exists so the corpus figure has ONE home that is not a
+per-Pass entry.** Before this filing the number lived only inside
+`Pass 93.0`'s and `Pass 85.5`'s prose, which is how "22/51" ended up being
+quoted three filings after it stopped being true. **Carry the denominator
+every time (hard rule 10): the figure is `X of 51`, never bare `X`.**
+
+**Standing at `HEAD` (`ac15158`) — RELAYED from the engineer's own
+measurement against Acrobat Pro reference strips, not re-measured here:**
+
+| outcome | count | of 51 |
+|---|---:|---:|
+| pass | **25** | **49.0 %** |
+| FAIL | **18** | **35.3 %** |
+| UNRESOLVED | **8** | **15.7 %** |
+| render errors | **0** | **0 %** |
+
+**Previous standing, for the delta:** 22 / 21 / 8 (43.1 %) at `Pass 93.0`
+(`a342354`). **Δ this filing: +3 pass, −3 FAIL, unresolved unchanged.**
+**Acrobat Pro's own score on the same 51 is 1 FAIL** (`GWG 16.1`,
+`ICCBasedRGB`) — the ceiling is 50, not 51, and pdfce is **25 of a
+reachable 50**.
+
+**The 18 remaining FAILs, clustered by cause (RELAYED):**
+
+| cluster | patches | named |
+|---|---:|---|
+| overprint | **7** | `GWG011`, `GWG190`, `GWG191`, `GWG192`, `GWG020`, `GWG030`, `GWG040` |
+| transparency groups | **5** | `1_GWG160`, `1_GWG161`, `1_GWG162`, `3_GWG161`, `3_GWG164` |
+| soft masks | **4** | `GWG1610`, `GWG1611`, `GWG168`, `GWG169` |
+| shading | **1** | `GWG060` |
+| ICC | **1** | `GWG130` |
+| **total** | **18** | **= the FAIL count above** |
+
+**★ ONE DISCREPANCY, FLAGGED RATHER THAN SILENTLY RESOLVED — for the
+engineer to confirm.** The dispatch labelled the overprint cluster **"6"**
+and then **named seven patches**. Seven is what makes the clusters sum to
+the FAIL total (**7+5+4+1+1 = 18**); six would sum to 17 and contradict the
+headline. **This filing records SEVEN**, on the arithmetic, and flags it
+here because **the arithmetic is the only reason to prefer one over the
+other** — the names were not re-verified against the harness output.
+This is hard rule 10 doing exactly its job: the cluster table and the
+outcome table are the same fact in two forms, so the set-property became a
+single-claim property and one division caught it.
+
+**★★ THE ONE ARCHITECTURAL ITEM, and it is now a MEASURED requirement
+rather than a guess: a REAL n-CHANNEL BUFFER — one plate per colorant, RGB
+synthesised only at display.** It is what the **7-patch overprint cluster**
+needs, and plausibly what part of the 5-patch transparency-group cluster
+needs too (§3's obligation (2): blending in a `DeviceCMYK` blending colour
+space, which the Ghent patches declare). **DO NOT RE-ATTEMPT THE CHEAP
+VERSION.** A page-sized spot-ink multiplier plate was built and ablated in
+`ac15158`: **−1 trap of 17, 0 patches of 51 flipped, and `2_GWG030`
+regressed 3 → 6 unexplained.** Working copies are kept **outside the tree**
+so the next attempt starts from that measurement. Full account: the
+`ac15158` Shipped entry and the rewritten `85.5` row, below.
+
+**No Pass ID minted for it here** — next free Pass family is **97**, and
+the engineer assigns. The work is carried on the `85.5` row until it is
+scoped.
+
+### ★★★ THREE RESEARCH DISPATCHES IN FLIGHT AS OF THIS FILING — findings NOT yet in hand, and NOTHING is filed from them — filed 2026-08-18 (hundred-and-sixty-sixth filing)
+
+**Recorded so a later filing can tell "not yet reported" from "reported and
+dropped."** The engineer dispatched three agents that had not returned when
+this filing was written. **No conclusion from any of them appears anywhere
+in this filing**, and none should be inferred from the fact that they were
+asked.
+
+1. **Overprint-simulation architecture** — feeds the n-channel-buffer item
+   above.
+2. **Transparency groups + soft masks + mesh shadings** — feeds the 5-patch
+   and 4-patch clusters and the 1-patch `GWG060` shading FAIL.
+3. **`pdfce-spec-librarian` on §8.7.4.5.5–.8 (mesh shading geometry),
+   §11.6.5's `/BC` default, and §11.4.6 backdrop removal** — the corpus
+   gaps `85.1` and `85.4c`/`85.4e` both name as blocking. `LUM-A1`
+   (`DeviceCMYK` soft-mask luminosity, ISO 32000-1 self-contradictory) is
+   the registered ambiguity these should be read against.
+
+**When they land, they are filings of their own** — this entry is then
+struck through and pointed at them, per the roadmap's own append-only
+convention. **An in-flight dispatch is not a finding**, and this project
+has a standing lesson about documents asserting facts nobody measured
+(rule 8's corrected-remote incident, `LEGAL.md` §1.1).
+
 ### ★★★ RELEASE HOUSEKEEPING OWED — `v0.6.1` needed to correct a now-stale sentence in the PUBLISHED `v0.6.0` release notes — filed 2026-08-17 (hundred-and-sixtieth filing), `R180` sixth instance
 
 The `v0.6.0` GitHub release, under a heading titled *"Not implemented —
@@ -47514,6 +47964,18 @@ and this filing's build fixes). **Sequence: CI green first** — it was red
 on `ea5159e`/`cb55b6b`/`a3080f0` until they landed — then tag, then CI
 green *at the tagged commit*, then `verify-release.py`, then the GitHub
 release.
+
+**★★ RE-MEASURED 2026-08-18 (hundred-and-sixty-sixth filing), because a
+distance figure goes stale the moment anything lands.** **VERIFIED HERE:**
+`git tag --sort=-creatordate` newest is still **`v0.6.0`**; `git describe
+--tags` now reads **`v0.6.0-33-gac15158`** — **33 commits, no release since
+`v0.6.0`**, up from 30 three commits ago. `git rev-list --count
+origin/main..main` = **0**, so all three of this filing's commits are
+**pushed**. **`v0.7.0` is bumped on disk and NOT tagged, NOT released** —
+unchanged in substance from the 165th filing, and now carrying `Pass 85.5`
+as well, which makes the release notes' *"overprint is not simulated"*
+class of sentence something to check before publishing rather than after
+(`R180`'s standing lesson, seventh candidate surface).
 
 ### ✅ Pass 86.0 — **SHIPPED 2026-08-18 (`cb55b6b`), MOVED TO *Shipped*** — closed by its own **route (2)**, with the mechanism upgraded to a call-site `bypass-exempt:` marker; `check-bypass-paths.sh` verified clean at `HEAD`. **★ Checking route 2's stated WARRANT exposed a real correctness defect** (`add_ocr_layer` had no `/DocMDP` certification gate while its twin `add_text` did) — so route 2 shipped a behaviour change after all. Full account: top of *Shipped*, hundred-and-sixty-fifth filing. **The original entry text is preserved below unchanged, as the record of what was asked for.**
 
@@ -47588,7 +48050,7 @@ built for exactly that (a synthetic function-based-shading page is
 sufficient — the Ghent corpus's own type-1 count is zero, per `Pass
 85.0`'s own measurement).
 
-### ★★★★ Pass 85.0–85.5 — **THE GHENT PDF OUTPUT SUITE GAP INVENTORY** — six render-fidelity gaps, ALL MEASURED (not estimated) from pdfce's own `Pass 84.0` diagnostics against `Ghent_PDF-Output-Test-V50_ALL_X4.pdf` (PDF/X-4, 6 pages) — filed 2026-08-17 (hundred-and-forty-ninth filing) — **★ STATUS CORRECTED 2026-08-17 (`Pass 90.0`, hundred-and-fifty-sixth filing): this heading had read "ALL UNSTARTED" three shipped Passes after it stopped being true. Current status: `85.0` shipped, `85.3` shipped, `85.2` shading half shipped/tiling half unstarted, `85.4` disclosure shipped/implementation unstarted (`Pass 90.0`) — see the table below for the re-derived build order.** **★★ FURTHER CORRECTED 2026-08-17 (`Pass 90.1`, hundred-and-fifty-seventh filing): `85.4` is now SPLIT.** Blend modes (eleven separable, `ExtGState /BM`) are SHIPPED; the four non-separable modes are measured-wrong-in-tiny-skia and REFUSED (not a gap this project can close without an upstream fix); transparency-GROUP compositing (isolated/knockout, offscreen buffer) and `/SMask` soft-mask groups remain UNSTARTED and are now this inventory's **single largest remaining gap** — see the row and build order below. **★★★ CORRECTED AGAIN 2026-08-17 (`Pass 85.4c`, `0d6f4ac`, hundred-and-sixtieth filing): non-knockout transparency-GROUP compositing SHIPS.** A group now composites through a real page-sized offscreen buffer (decision 068). Knockout groups (`/K true`) remain approximated, not correct; `/SMask` soft-mask groups remain unread. See the `85.4c` row and the re-derived build order, both below. **★★★★ CORRECTED A FOURTH TIME 2026-08-17 (`Pass 85.4e`, `fee42e8`, hundred-and-sixty-second filing): the §11.4.6/§11.5.2–.3 spec dispatch LANDED — knockout groups are now correctly BUFFERED (the transparent-container half), still NOT correctly COMPOSITED (occlusion order), and the population this gap actually covers is far larger than "42 explicit `/K` groups": §9.3.8's `/TK` defaults `true` (every text object), §11.7.4.4 makes `B`/`B*`/`b`/`b*` knockout, and §11.6.7 makes shading patterns knockout — no `/K` key required for any of the three.** See the `85.4c` row (rewritten) and the build order (fourth re-derivation), both below.
+### ★★★★ Pass 85.0–85.5 — **THE GHENT PDF OUTPUT SUITE GAP INVENTORY** — six render-fidelity gaps, ALL MEASURED (not estimated) from pdfce's own `Pass 84.0` diagnostics against `Ghent_PDF-Output-Test-V50_ALL_X4.pdf` (PDF/X-4, 6 pages) — filed 2026-08-17 (hundred-and-forty-ninth filing) — **★ STATUS CORRECTED 2026-08-17 (`Pass 90.0`, hundred-and-fifty-sixth filing): this heading had read "ALL UNSTARTED" three shipped Passes after it stopped being true. Current status: `85.0` shipped, `85.3` shipped, `85.2` shading half shipped/tiling half unstarted, `85.4` disclosure shipped/implementation unstarted (`Pass 90.0`) — see the table below for the re-derived build order.** **★★ FURTHER CORRECTED 2026-08-17 (`Pass 90.1`, hundred-and-fifty-seventh filing): `85.4` is now SPLIT.** Blend modes (eleven separable, `ExtGState /BM`) are SHIPPED; the four non-separable modes are measured-wrong-in-tiny-skia and REFUSED (not a gap this project can close without an upstream fix); transparency-GROUP compositing (isolated/knockout, offscreen buffer) and `/SMask` soft-mask groups remain UNSTARTED and are now this inventory's **single largest remaining gap** — see the row and build order below. **★★★ CORRECTED AGAIN 2026-08-17 (`Pass 85.4c`, `0d6f4ac`, hundred-and-sixtieth filing): non-knockout transparency-GROUP compositing SHIPS.** A group now composites through a real page-sized offscreen buffer (decision 068). Knockout groups (`/K true`) remain approximated, not correct; `/SMask` soft-mask groups remain unread. See the `85.4c` row and the re-derived build order, both below. **★★★★ CORRECTED A FOURTH TIME 2026-08-17 (`Pass 85.4e`, `fee42e8`, hundred-and-sixty-second filing): the §11.4.6/§11.5.2–.3 spec dispatch LANDED — knockout groups are now correctly BUFFERED (the transparent-container half), still NOT correctly COMPOSITED (occlusion order), and the population this gap actually covers is far larger than "42 explicit `/K` groups": §9.3.8's `/TK` defaults `true` (every text object), §11.7.4.4 makes `B`/`B*`/`b`/`b*` knockout, and §11.6.7 makes shading patterns knockout — no `/K` key required for any of the three.** See the `85.4c` row (rewritten) and the build order (fourth re-derivation), both below. **★★★★★ CORRECTED A FIFTH TIME 2026-08-18 (`Pass 85.5`, `bd9d5ef`+`bf75351`+`ac15158`, hundred-and-sixty-sixth filing): OVERPRINT SIMULATION SHIPS — the row that was ranked highest-impact and gated on `iccce` turned out not to need the gate. `85.5` is now PARTIAL, not unstarted: 22 → 25 of 51 Ghent patches (43.1 % → 49.0 %). **The remainder is a MEASURED negative result rather than an open question** — the cheap spot-multiplier approximation was built, ablated and reverted (−1 trap of 17, 0 patches of 51 flipped, one patch REGRESSED), and what the remaining patches need is a real n-channel buffer. See the rewritten `85.5` row and the three Shipped entries, top of *Shipped*. **Corpus standing after this filing: 25 pass / 18 FAIL / 8 UNRESOLVED / 0 render errors, of 51 patches.**
 
 **Origin.** The operator rendered the Ghent suite and reported pdfce
 "a long way off." The Ghent suite is a formal prepress conformance
@@ -47610,7 +48072,7 @@ and deferred-op counts on that file — not estimated.**
 | ~~`85.4a`~~ | blend modes — `ExtGState /BM`, eleven separable modes | `pdfce-render/src/interpret.rs` — **SHIPPED 2026-08-17, `Pass 90.1`, `bd244d9`.** Ghent page 2: 60 of 76 `/BM` invocations now composite exactly. Required a page-backdrop model correction (opaque-white-fill → isolated group over transparent backdrop, §11.4.7) — see the `Pass 90.1` Shipped entry. | §11.3.5, Table 136/137 — **SHIPPED**, see the `Pass 90.1` Shipped entry |
 | `85.4b` | non-separable blend modes — Hue/Saturation/Color/Luminosity | Ghent page 2: 16 of 76 `/BM` invocations (4 modes × 4 swatches) — **REFUSED, not mapped**: tiny-skia 0.11.4 is measured wrong against both ISO 32000-1 and W3C Compositing-1 (up to 107/255 error) — `D:\dev\rag\rust\tiny_skia_0.11_non_separable_blend_modes_wrong_by_up_to_107_255.md`. Not closeable inside pdfce without an upstream tiny-skia fix or a from-scratch implementation of the four HSL formulas. | §11.3.5.3 — refused, see `ARCHITECTURE.md` §12 decision 066 |
 | ~~`85.4c`~~ | transparency GROUPS — isolated/knockout offscreen compositing, `/SMask` soft-mask groups | `pdfce-render/src/interpret.rs` — **non-knockout compositing SHIPPED 2026-08-17, `0d6f4ac`.** A group now renders into its own page-sized offscreen buffer with contents-state reset to initial, composited as a unit with the outer blend mode/alpha (§11.4.5; decision 068). Ghent GWG 16.0 (non-knockout) panel renders CLEAN; `groups_flattened` 187 → 0. **★ `Pass 85.4d` (`b15d7ff`, same day) CORRECTED `85.4c`'s buffering to be CONDITIONAL** (outer non-Normal/alpha<1 OR isolated, else paint inline). **★★ `Pass 85.4e` (`fee42e8`, hundred-and-sixty-second filing) LANDS the §11.4.6/§11.5.2–.3 spec dispatch and fixes two defects it found: a citation error (`/K`/`/I`/`/CS` are Table 147, not 96 — table numbers shift −2 between ISO 32000-1 and -2) and a buffering gap (knockout groups now buffer UNCONDITIONALLY, not gated on `85.4d`'s outer-state test — a knockout group has no initial backdrop to composite against when painted inline at all).** Knockout groups are now correctly **buffered** (the container); they are still **NOT correctly composited** (the contents' occlusion order) — `groups_knockout_approx` still counts every one, GWG 16.1 still shows its crosses. **The dispatch also reframes the population this gap covers**: no `/K` key is required for a knockout group at all — §9.3.8's `/TK` defaults `true` (every text object), §11.7.4.4 makes `B`/`B*`/`b`/`b*` and text render modes 2/6 knockout (its own NOTE 2: a double border on semi-transparent fill-then-stroke IS this bug), and §11.6.7 makes shading patterns knockout. Ranked by likely frequency, `B`/`b` ≫ `/TK` > explicit `/K` ≈ shading patterns — the 47-group `groups_knockout_approx` figure measures only the last, smallest tier. **Representability is now known, not assumed:** isolated knockout is bit-exact representable in pdfce's single premultiplied-alpha buffer; non-isolated knockout (the common case, since `/K` defaults false the same way `/I` does) is NOT, pending buffer-model work. `/SMask` soft-mask groups (36 occurrences, all pages) remain entirely unread; a new spec ambiguity, `LUM-A1` (`DeviceCMYK` soft-mask luminosity — ISO 32000-1 self-contradicts, divergence `K·S` max 0.25), is registered against them, below, for whenever they are built. See the `Pass 85.4e` Shipped entry, top of *Shipped*, and decision 068's second amendment. **Now this inventory's remaining top-priority gap, RE-RANKED within itself** — see the build order below for this filing's ruling on isolated-knockout vs. soft masks vs. non-isolated knockout. | clause 11.4–11.6.4 (groups) + §11.6.5.3-adjacent (soft-mask groups); the per-IMAGE `/SMask`/`/Mask` shipped in `Pass 48.1` is unrelated — do not conflate the two `/SMask` meanings when scoping |
-| `85.5` | overprint compositing | patches GWG 1.0, 1.1, 2.0, 3.0, 3.1, 4.0.1, 4.1, 12.0, 19.0, 19.1, 19.2 — most of pages 1 and 4. **★ MEASURED AGAINST A REAL REFERENCE ENGINE 2026-08-18 (`Pass 93.0`, `a342354`): overprint is the SINGLE LARGEST cause of pdfce's failures against 51 Acrobat Pro reference renders — 10 of pdfce's 21 measured FAILs (transparency-in-CMYK-space 5, softmasks 3, mesh shadings 1, colour management 2 make up the rest; Acrobat Pro itself shows 1 FAIL of 51, GWG 16.1 `ICCBasedRGB`).** Tracking/disclosure of `/OP`/`/op`/`/OPM` SHIPPED `Pass 92.0` (`8caada6`) — fires on 20 of 51 patches, up to 19 times on one page; this row is the remaining SIMULATION half only. **★★ `Pass 92.1` (`4b58c98`, same session): overprint's `overprint_effective` predicate measures effective on the GWG 16.0/16.1/16.2 TRANSPARENCY patches too (19 each), not only the classic overprint set** — the n-channel CMYK+alpha buffer this row needs is worth more of the corpus than the `85.5`-labelled patches alone suggest | **§8.6.7 says "if overprinting is not supported, the value of the overprint parameter shall be ignored" — pdfce is CONFORMANT TODAY.** Implementing SIMULATION means compositing into a CMYK+alpha buffer (planned direction, `ARCHITECTURE.md` §3, `pdfce-render\` block — no decision-log entry, nothing chosen yet); architectural and gated on `iccce` for the final CMYK→display conversion (see `Backlog`, "Colour management (`iccce` coordination)", decision 064) — **but now measured, not merely reasoned, as the highest-impact remaining gap in this table; see the build-order re-derivation below** |
+| `85.5` | overprint compositing — **SIMULATION SHIPS 2026-08-18 (`bd9d5ef` + `bf75351`, hundred-and-sixty-sixth filing); THE ROW IS PARTIAL, NOT CLOSED** | **Ghent, all 51 patches, Acrobat Pro reference strips: 22 pass / 21 FAIL / 8 unresolved (43.1 %) → 25 pass / 18 FAIL / 8 unresolved (49.0 %), 0 render errors — Δ +3 of 51 = +5.9 points.** Newly passing `2_GWG041_White_OP_x3`, `1_GWG010_CMYK_OP_x3`, `2_GWG120_White_OP-KO_X1`; trap counts fell on the rest too (`2_GWG030` 9→3, `2_GWG040` 9→7, `2_GWG020` 9→7) — the remaining overprint failures are **partial, not untouched**. Table 149 is a pure function in `crates/pdfce-render/src/overprint.rs` (1,123 lines, 12 tests, the main test IS the table); the paint path rasterises an overprinting paint to a coverage mask with the SAME rasteriser a normal paint uses, then blends per pixel in CMYK **reconstructed from the RGB buffer** (`rgb_to_cmyk`/`cmyk_to_rgb` exact inverses over 4,913 colours to 1e-5). **Text was the second half and the more interesting defect** — the glyph painter did not merely skip the blend, it did not COUNT it, so `overprint_effective` under-reported; wiring text took 23 → 25. Three counters on the stable stdout line: `overprint_composited`, `overprint_refused`, `overprint_pixels`. **★ WHAT REMAINS, and it is a MEASURED NEGATIVE RESULT, not an estimate (`ac15158`):** the remaining overprint patches need a **REAL n-channel buffer — one plate per colorant, RGB synthesised only at display** — NOT an approximation layered over an RGB pipeline. The cheap version (a page-sized spot-ink multiplier plate, ~150 lines + an f32 page buffer) was **built and ablated on the same binary**: plate OFF `GWG020`=7/`GWG030`=3/`GWG040`=7 = **17 traps, 25 of 51 pass**; plate ON 5/6/5 = **16 traps, 25 of 51 pass** — **−1 trap of 17, 0 patches of 51 flipped, and `2_GWG030` REGRESSES 3 → 6 for a reason the engineer could not explain.** **Reverted; working copies kept OUTSIDE the tree so the next attempt starts from the measurement.** Do not re-attempt the multiplier shortcut. The root cause is representability: pdfce flattens spots into RGB, so it cannot tell a spot backdrop from a process one, and Table 149's SPOT row preserves the backdrop in BOTH modes — visible on `2_GWG040`, where Acrobat renders all six cells clean and pdfce got exactly the three "over CMYK" cells right and exactly the three "over spot" cells wrong. **Also shipped in `ac15158`:** a `/Separation`/`/DeviceN` now takes its process tints from its own OPERANDS (§8.6.6.5 O7, names-array order) rather than reconstructing CMYK from flattened RGB — **changed NO trap count, kept for fidelity, filed honestly as a null result.** **Prior history of this row, unchanged and still true: ★ MEASURED AGAINST A REAL REFERENCE ENGINE 2026-08-18 (`Pass 93.0`, `a342354`): overprint was the SINGLE LARGEST cause of pdfce's failures (10 of 21 measured FAILs; Acrobat Pro itself shows 1 FAIL of 51). Tracking/disclosure SHIPPED `Pass 92.0` (`8caada6`) — fires on 20 of 51 patches; `Pass 92.1` (`4b58c98`) found `overprint_effective` non-zero on the GWG 16.0/16.1/16.2 TRANSPARENCY patches too (19 each).** | **§11.7.4.3 Table 149 + §8.6.7. ★ THE STATED BLOCKER WAS FALSIFIED BY TRYING IT.** This row read *"architectural and gated on `iccce` for the final CMYK→display conversion"*, and `ARCHITECTURE.md` §3 read *"overprint is inexpressible in an RGB buffer, not merely unimplemented."* **Both were true of a PERMANENT CMYK pipeline and false of a PER-PAINT one** — simulation shipped with no CMYK buffer, no `iccce`, and no reply to `request_cmyk_buffer_destination_and_width.md`. §3 is amended (hundred-and-sixty-sixth filing) and **decision 069** records what was chosen. **The `iccce` gate still holds for §3's obligation (2)** — blending in a `DeviceCMYK` blending colour space, and the final conversion — so this is a narrowing, not a retraction. Policy status unchanged: **§8.6.7 makes ignoring `/OP` conformant, so simulating it is a CHOICE (spec item C2), which is why `overprint_refused` is on the stable stdout line.** |
 
 **Suggested build order — ★ RE-DERIVED 2026-08-17 (`Pass 90.0`,
 hundred-and-fifty-sixth filing), REPLACING the order below rather than

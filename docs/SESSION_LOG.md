@@ -45294,3 +45294,230 @@ labelled):**
    on each gate's docstring.
 6. Sweep the remaining ~8 wrapped-string-literal defects in `assert!`
    messages; `LUM-A1` back-fill still owed.
+
+## 2026-08-18 (hundred-and-sixty-sixth filing) — **OVERPRINT STOPS BEING A COUNTER AND STARTS BEING PIXELS: GHENT 22 → 25 OF 51. `Pass 85.5` CLAIMED AND PARTIALLY DISCHARGED, decision 069 MINTED — AND THE BLOCKER TWO PROJECT DOCUMENTS AGREED ON ("gated on the CMYK buffer / gated on `iccce`") WAS FALSIFIED BY SOMEONE TRYING IT. Plus a MEASURED NEGATIVE RESULT that is the filing's most reusable output: the cheap spot-ink plate was built, ablated and reverted.**
+
+**Filed by `pdfce-librarian` WITH a shell (hard rule 8).** Every figure is
+labelled **VERIFIED HERE** (with its command) or **RELAYED** (engineer's
+measurement, not re-run).
+
+**Shipped:**
+
+- **`Pass 85.5` slice 1 — `bd9d5ef`.** ISO 32000-1 §11.7.4.3 Table 149's
+  `CompatibleOverprint` blend as a **pure function with no rasteriser
+  attached**: new `crates/pdfce-render/src/overprint.rs`. **VERIFIED
+  HERE** (`git show --stat`): 2 files, **696 insertions, 0 deletions**;
+  **12 `#[test]`** at `HEAD` (`grep -c`), **the main test IS the table** —
+  every row × all three columns — plus the one value-dependent cell.
+  **RELAYED: sabotage-verified** (removing `OPM 1` backdrop preservation
+  turns 2 tests red, including the image cross-check). Encodes three spec
+  facts rather than leaving them to be rediscovered: **`SP-N2`** (a
+  `Separation` paint with overprint OFF paints `0.0`, i.e. **erases**
+  process colorants — stated twice in the standard, with a test whose
+  message says not to "fix" it), the **transparency-group source row
+  reverting to `Normal`** (no information is retained about which
+  components the group painted — not an omission to improve on later),
+  and the **`OPM 1` "directly, not in a sampled image"** distinction
+  (`classify()` carries an `in_image_sample` flag). **`OP-A3` is
+  SURFACED, NOT DECIDED** — the standard never says which of the two
+  overprint parameters indexes the OP column, so `op` is an explicit
+  argument the caller supplies, which is the operator's standing
+  "never hard-code a choice the standard leaves open" applied correctly.
+  **The polarity trap is handled by not needing to be**: Table 149 is
+  written in subtractive tint, §11.7.4.5 blends additively, and this
+  module complements nothing — safe **only** because every cell is one of
+  `c_s`, `c_b` or `0.0`, a *selection* never *arithmetic*, and the
+  condition under which that stops being true is stated in the module.
+- **`Pass 85.5` slice 2 — `bf75351`.** Wires Table 149 into the paint
+  path. **RELAYED, the headline with its denominator: Ghent PDF Output
+  Suite 5.0, all 51 patches, Acrobat Pro reference strips — 22 pass / 21
+  FAIL / 8 unresolved (43.1 %) → 25 pass / 18 FAIL / 8 unresolved
+  (49.0 %), 0 render errors. Δ +3 of 51 = +5.9 points.** Newly passing:
+  `2_GWG041_White_OP_x3`, `1_GWG010_CMYK_OP_x3`, `2_GWG120_White_OP-KO_X1`;
+  trap counts fell on the rest too (`2_GWG030` 9→3, `2_GWG040` 9→7,
+  `2_GWG020` 9→7) — **the remaining overprint failures are partial, not
+  untouched**, which matters for scoping because 7 traps and 9 traps look
+  identical in a pass/fail column.
+- **`Pass 85.5` slice 3 — `ac15158`.** `/Separation`/`/DeviceN` process
+  tints now come from **the paint's own operands** in names-array order
+  (§8.6.6.5 O7) instead of being reconstructed from flattened RGB —
+  correct for a space naming a spot **alongside** a process colorant,
+  where the flattened RGB carries the spot's contribution and converting
+  back **smears the spot into the process channels** (Ghent `2_GWG030` is
+  exactly that shape, `/CS1 cs .5 1 scn`). **RELAYED and honest: it moved
+  NO trap count.** Kept for fidelity, not for a number. **VERIFIED HERE:**
+  1 file, 48 insertions / 4 deletions.
+
+**Decisions made this session:**
+
+- **decision 069 MINTED** (`ARCHITECTURE.md` §12): overprint is simulated
+  **per-paint**, by reconstructing CMYK from the RGB buffer through an
+  **exact-inverse** round trip, **not** by a separated buffer — with the
+  spot-multiplier plate recorded as the **measured, rejected**
+  alternative. Four sub-decisions: the coverage-mask/same-rasteriser
+  model; why exactness and channel-disjointness make reconstruction
+  sound; simulating-as-policy-choice with `overprint_refused` as its
+  disclosure; and the rejected alternative. **Ceiling 068 → 069, next
+  free 070.**
+- **`Pass 85.5` CLAIMED, not minted.** The dispatch numbered nothing;
+  this librarian matched all three commits to the Ghent gap inventory's
+  existing `85.5` row ("overprint compositing … the remaining SIMULATION
+  half only"), the same move the 165th filing made for `Pass 86.0`.
+  **The row is PARTIAL, NOT CLOSED.** Next free Pass family stays **97**.
+- **`FEATURES.md`: overprint simulation moves Planned → Implemented,
+  `core [x]` `cli [x]` `gui [ ]`.** The `gui` box is **deliberately not
+  rounded up** — GUI work is operator-paused and no `pdfce-gui` path
+  reads any of the three counters. A new *Planned* row is added for the
+  per-colorant n-channel buffer, so the remaining gap has a home. The
+  existing "tracked and disclosed" row's sentence was **replaced** (its
+  "*visual simulation … refused today*" clause had become false).
+
+**Findings + decisions:**
+
+- **★ TEXT WAS THE SECOND HALF AND IS THE MORE INTERESTING DEFECT.**
+  §11.7.4.3 enumerates the objects overprint applies to — *"fills,
+  strokes, **text**, images, and shadings"* — and the glyph painter **did
+  not merely skip the blend, it did not COUNT it**. `overprint_effective`
+  under-reported, so **the shortfall was invisible in the diagnostics as
+  well as on the page**. Wiring text took the score **23 → 25 of 51 —
+  two thirds of the commit's entire +3 came from the object class the
+  counter was blind to.** Generalisable form, and it is a **disclosure**
+  finding not a rendering one: *a disclosure counter blind to a whole
+  class of object reports a smaller problem than exists, and reads as
+  evidence that the rest of the gap is small* — worse than no counter,
+  because it is believed. Third surface of the same failure after
+  `Pass 84.0` (twelve counters no shell read) and `Pass 90.2` (a
+  disclosure naming only the rarer of its two reasons). **When a spec
+  clause enumerates the objects a rule applies to, that enumeration is
+  the counter's test list.**
+- **★★ THE BLOCKER TWO OF THIS PROJECT'S OWN DOCUMENTS AGREED ON WAS
+  FALSE.** `ARCHITECTURE.md` §3: *"overprint is inexpressible in an RGB
+  buffer, not merely unimplemented … an RGB buffer has no CMYK components
+  to select between."* `ROADMAP.md`'s `85.5` row: *"architectural and
+  gated on `iccce`."* **Simulation shipped with no CMYK buffer, no
+  `iccce`, and no reply to `request_cmyk_buffer_destination_and_width.md`.**
+  Both statements were true of a **permanent** CMYK pipeline and false of
+  a **per-paint** one. §3 is amended this filing (kept verbatim, banner
+  above it) and the `85.5` row rewritten. **The gate on `iccce` still
+  holds for §3's obligation (2)** — blending in a `DeviceCMYK` blending
+  colour space, and the final conversion — so this is a narrowing, not a
+  retraction. **The durable half is about the documents: a blocker stated
+  confidently went unretested for exactly as long as it was written down.**
+- **★★★ THE MEASURED NEGATIVE RESULT — the filing's most reusable
+  output.** Table 149's SPOT row preserves the backdrop under overprint in
+  **both** modes; pdfce flattens spots into RGB and cannot tell a spot
+  backdrop from a process one. Diagnosis is **visual and certain**: on
+  `2_GWG040` Acrobat renders **all six cells clean**, pdfce painted white
+  trap Xs in **exactly the three "over spot" cells** and got **the three
+  "over CMYK" cells right**. A page-sized **spot-ink multiplier plate**
+  (~150 lines + an `f32` page buffer) was built and ablated on the same
+  binary, one line changed: **plate OFF 7/3/7 = 17 traps, 25 of 51 pass;
+  plate ON 5/6/5 = 16 traps, 25 of 51 pass.** **−1 trap of 17, 0 patches
+  of 51 flipped, and `2_GWG030` regressed 3 → 6 unexplained.** Reverted;
+  working copies kept **outside the tree** so the next attempt starts from
+  the measurement. **The deliverable: the remaining overprint patches need
+  a REAL n-channel buffer — one plate per colorant, RGB synthesised only
+  at display.** Filed on the `85.5` row and in the Ghent standing board so
+  it is findable from the roadmap, **not only from `git log`** — a
+  negative result that lives in a commit message is one a future session
+  re-attempts.
+- **The representability frame, stated because it now covers two gaps.**
+  Reconstruction recovers **process components** (they and RGB are related
+  by an invertible map — exact over 4,913 colours to 1e-5, and each output
+  channel depends on a **disjoint** pair of inputs, so overprinting one
+  ink moves exactly one channel). It cannot recover **which colorant** a
+  value came from, because flattening is not injective in that direction.
+  **Representability, not effort** — the same distinction
+  isolated-vs-non-isolated knockout turned on in `Pass 85.4e`. **Two
+  independent render gaps have now reduced to "the buffer model discards a
+  fact the spec's blend rule needs."**
+- **Three new counters on the stable stdout line — VERIFIED HERE** at
+  `interpret.rs:356/:365/:371`, merged `:881`–`:883`, printed
+  `pdfce-cli/src/main.rs:6884`, asserted `tests/render_page.rs:476`–`:478`:
+  `overprint_composited`, `overprint_refused`, `overprint_pixels`. They
+  exist **because simulation is a policy choice** (spec item **C2**;
+  §8.6.7 makes ignoring `/OP` conformant, and `OP-N1` records 0
+  occurrences of overprint preview in 756 pages of corpus). **A composite
+  that cannot run falls back to a normal paint AND says so** — rule 4's
+  forbidden half is the silence, not the fallback. Counter identity a
+  reader can check: `overprint_composited` = `overprint_effective` −
+  `overprint_refused`.
+- **★ The librarian's own catch from the previous filing landed in the
+  code.** `bf75351` corrects the `bypass-exempt:` marker in
+  `crates/pdfce-core/src/ocr/layer.rs` that claimed `add_ocr_layer` is
+  *"called by the CLI"* — there is no OCR subcommand, and the only
+  non-test caller is `pdfce-render/examples/ocr_smoke.rs`. **VERIFIED
+  HERE**: the comment now carries an explicit `CORRECTED:` paragraph and
+  names itself an **R151** instance. The exemption's warrant never
+  depended on who calls it; **a false claim about callers is how a doc
+  comment becomes the reason someone believes a feature ships.**
+- **A mixed commit, recorded because `git log` will not say so.**
+  **VERIFIED HERE** (`git show bf75351 -- docs/ROADMAP.md`): three of that
+  commit's eight files are `docs/` — `ROADMAP.md` **+419**,
+  `SESSION_LOG.md` **+214**, `FEATURES.md` 1 row — and the content is the
+  **hundred-and-sixty-FIFTH** filing. **The 165th filing therefore has no
+  commit of its own; it rode inside an engineering commit.** Nothing is
+  missing; noted, not corrected, same disposition as the 151st filing's
+  mixed commit.
+- **★ ONE DISCREPANCY IN THE DISPATCH, FLAGGED NOT SILENTLY RESOLVED.**
+  The failure clusters were labelled *"6 overprint"* and then **seven
+  patches were named** (`GWG011`, `GWG190`, `GWG191`, `GWG192`, `GWG020`,
+  `GWG030`, `GWG040`). **7 + 5 + 4 + 1 + 1 = 18 = the FAIL count; 6 would
+  give 17 and contradict the headline.** This filing records **SEVEN**, on
+  the arithmetic alone — the names were not re-verified against harness
+  output. **Hard rule 10 doing its job:** the cluster table and the
+  outcome table are the same fact in two forms, so one division caught a
+  set-property contradiction that neither claim showed on its own.
+
+**Still in flight:**
+
+- **THREE RESEARCH DISPATCHES, findings NOT in hand, NOTHING filed from
+  them** — recorded in *Next up* so a later filing can distinguish "not
+  yet reported" from "reported and dropped": (1) overprint-simulation
+  architecture; (2) transparency groups + soft masks + mesh shadings;
+  (3) `pdfce-spec-librarian` on §8.7.4.5.5–.8, §11.6.5's `/BC` default,
+  §11.4.6 backdrop removal. **No conclusion from any of them should be
+  inferred from the fact that they were asked.**
+- **Ghent standing board: 25 pass / 18 FAIL / 8 UNRESOLVED / 0 render
+  errors, of 51 patches (49.0 / 35.3 / 15.7 %).** Acrobat Pro's own score
+  on the same corpus is **1 FAIL of 51**, so the reachable ceiling is
+  **50**, and pdfce is **25 of a reachable 50**. Clusters: overprint 7,
+  transparency groups 5, soft masks 4, shading 1, ICC 1.
+- **`v0.7.0` is bumped on disk and NOT tagged, NOT released.** **VERIFIED
+  HERE:** newest tag `v0.6.0`; `git describe --tags` = **`v0.6.0-33-gac15158`**
+  (33 commits since the last release, up from 30); working tree **clean**;
+  `git rev-list --count origin/main..main` = **0**, so all three commits
+  are **pushed**. **VERIFIED HERE** before this filing:
+  `python tools/check-commits-filed.py` named exactly `bd9d5ef`,
+  `bf75351`, `ac15158` and nothing else. **`tools/commits-filed-baseline.txt`
+  was NOT touched**, per the dispatch and the gate's own docstring.
+- `85.4c`/`85.4e` remainder (knockout occlusion order, soft-mask groups)
+  and `LUM-A1`'s spec-corpus back-fill: unchanged, unaffected by this
+  filing.
+- Carried forward, unchanged: the `/P 2` certified-content fixture; the
+  ~8 wrapped-string-literal `assert!` defects; the stale
+  `acrobat-reader-is-available-pro-is-not.md` global-memory entry.
+
+**For next session:**
+
+1. **Ledger.** Next free Pass family **97** (`85.5` was **claimed**, not
+   minted, and is **PARTIAL**). Next free decision **070** (**069 minted**
+   this filing). Next free filing ordinal **167**. Next free standing rule
+   **`R196`** — none minted, none cited.
+2. **`check-commits-filed.py` reads the WORKING TREE**, not `HEAD`
+   (`p.read_text` at `tools/check-commits-filed.py:209`), so it goes green
+   the moment these doc edits exist — **but CI reads a commit.** Commit
+   this filing before expecting CI green.
+3. **Then get CI green and cut `v0.7.0`** — tag, CI green *at the tagged
+   commit*, `verify-release.py`, GitHub release. **Check the release notes
+   for "overprint is not simulated"-class sentences before publishing**;
+   `R180`'s standing lesson is that a published note is the one place a
+   stale sentence cannot be quietly edited.
+4. **The n-channel buffer is the next architectural item** and is now a
+   **measured** requirement — it unblocks the 7-patch overprint cluster
+   and plausibly part of the 5-patch group cluster. **Do not re-attempt
+   the spot-multiplier shortcut** (`ac15158`'s ablation). Start from the
+   working copies kept outside the tree, and from the three research
+   dispatches once they land.
+5. Unchanged carry-overs: `/P 2` certified-content fixture; the ~8
+   wrapped-string-literal `assert!` sweep; `LUM-A1` back-fill.
