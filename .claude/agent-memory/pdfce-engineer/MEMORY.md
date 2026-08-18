@@ -32,3 +32,4 @@
 - [GUI work paused](project_gui_work_paused.md) — Ken, 2026-08-13: no pdfce-gui work until he says so; core/CLI/docs continue, ship gui [ ] honestly
 - [pdfceGUI request channel](project_gui_request_channel.md) — CHECK D:\Dev\FeatureRequests\pdfce_FeatureRequests EVERY SESSION; requests from the new GUI project land there
 - [No provisional marking](feedback_no_provisional_marking.md) — Ken 2026-08-13: inferred content renders NORMALLY, Save commits, disclosure goes off-canvas; marking = a second render path that drifts
+- [Wrapped string literals lose backslashes](feedback_wrapped_string_literals_lose_backslashes.md) — patching them via heredoc ships error messages with 10-space gaps; grep for it, nothing else catches it
