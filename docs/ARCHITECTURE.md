@@ -5075,6 +5075,17 @@ instances (`delete_object`, `delete_redaction_mark`, and now
   (rule R9). See `docs/decisions/003-distribution-posture.md` for the
   full reasoning, the macOS/Linux gating triggers, and the
   CLI-first-via-musl rule if Linux ever ships.
+  **★ NARROWED 2026-08-17 (decision 067).** The cross-target check's
+  guarantee covers Rust source, not every build script a dependency
+  runs under it — `cargo check` still executes build scripts, and one
+  can compile platform-sensitive C. `pdfce-fetch` (`ureq` → `rustls` →
+  `ring`) is **excluded** from this job because `ring`'s build script
+  fails cross-compiling to `aarch64-apple-darwin` from the Linux
+  runner; the exclusion is safe only while `pdfce-fetch` has **zero
+  workspace dependents** (verify with `cargo tree -i pdfce-fetch`
+  across all four member crates) — the moment that changes, the
+  exclusion silently widens and needs re-scoping. `pdfce-core` +
+  `pdfce-render`'s own wasm32 check is unaffected.
 - No installer. Build produces `pdfce.exe` (Windows first target) plus
   whatever DLLs/assets are needed, all in one output folder.
 - **Payload/user-state partition (decision 003 R15, binding from the
@@ -21686,3 +21697,77 @@ discipline decision about how pdfce integrates dependencies, not a
 finding about pdfce's own tooling or gates (the Standing rules ledger's
 usual subject) — same disposition as decisions 063/064, both filed
 without a rule. **Ceiling moves 065 → 066; next free 067.**
+
+### 2026-08-17 (hundred-and-fifty-ninth filing) — decision 067: **THE CROSS-TARGET COMPILE-CHECK GATE'S OWN GUARANTEE IS NARROWED TO WHAT IT ACTUALLY TYPE-CHECKS — `pdfce-fetch` IS EXCLUDED, BECAUSE `cargo check` STILL RUNS A DEPENDENCY'S BUILD SCRIPT, AND A BUILD SCRIPT CAN COMPILE C**
+
+**Status: DECIDED.** Corrects decision 003 §4.1's cross-target `cargo
+check` invariant (`ARCHITECTURE.md` §6, this file), not the platform
+scope decision 003 itself.
+
+**What was found.** CI's `cross-target compile check (macOS / wasm32)`
+job had been failing since before 2026-08-15 — through every push of
+this session and the one before it — on `pdfce-fetch`'s dependency
+chain (`pdfce-fetch` → `ureq` → `rustls` → `ring`). `ring`'s build
+script compiles C, and cross-compiling that C from the Linux CI runner
+to `aarch64-apple-darwin` fails with `cc: error: unrecognized debug
+output level 'full'` — the runner's GCC rejecting a Clang-flavoured
+debug-info flag `ring`'s build script hands it. This is a toolchain
+mismatch in a transitive dependency's build script, not a defect in
+`pdfce-fetch`, `pdfce-core`, `pdfce-render`, or pdfce's own portability
+posture — confirmed by checking the rest of the workspace type-checks
+for macOS cleanly with `pdfce-fetch` excluded, so `ring` was the sole
+blocker.
+
+**The gate's own comment stated a false premise, and had since before
+this defect existed.** The job carried: *"`cargo check` needs no linker
+and no platform SDK"* — true of ordinary Rust source, **false of build
+scripts**, which `cargo check` still executes to determine the crate
+graph. `pdfce-fetch` is the first crate in this workspace whose
+transitive dependency tree includes a build script that compiles
+platform-sensitive C, so the premise was never exercised as false until
+`Pass 77.0` (`7393473`, 2026-08-13) added the crate — the comment was
+written for a workspace where it happened to be true of everything, not
+because it was true in general. **Graduated as the SIXTH instance of
+this project's own tracked pattern**, `D:\dev\rag\rust\
+a_gate_states_what_it_cannot_see.md` — a gate's own stated guarantee
+was narrower, in a way its own docstring did not enumerate, than the
+input set it was actually run against.
+
+**The decision, stated once so it survives the next dependency
+addition.** `pdfce-fetch` is excluded from the `cross-target compile
+check (macOS / wasm32)` job's crate list. The exclusion is safe **only**
+because `pdfce-fetch` has **zero dependents** in the workspace as of
+this decision (`cargo tree -p pdfce-core -p pdfce-render -p pdfce-gui
+-p pdfce-cli -i pdfce-fetch` returns nothing) — nothing else in the
+shipped binaries pulls `ring`'s build script in, so the exclusion does
+not weaken the invariant decision 003 actually cares about (`pdfce-core`
++ `pdfce-render` compile for `wasm32-unknown-unknown`, unaffected and
+unexcluded). **The trigger to re-open this decision, named so it is not
+forgotten:** the moment any workspace member takes `pdfce-fetch` as a
+dependency, the exclusion silently widens to cover that member too,
+and the cross-target check needs either a `ring`-free TLS backend for
+`pdfce-fetch` or a scoped re-inclusion. The job's own comment is
+corrected in place (not deleted) to state exactly this — what is
+unchecked, and the condition that changes it — per the
+`a_gate_states_what_it_cannot_see` pattern's own remedy: enumerate the
+blind spot before, or instead of, widening around it.
+
+**§6 body text updated** (this file, "Packaging: single-folder
+portable") to name the exclusion and its trigger, alongside the
+existing decision-003 cross-target-check description.
+
+**Relation to decision 043.** Decision 043 (hundred-and-seventh filing)
+established that a dependency-graph check (`cargo tree`) and a
+cross-target `cargo check` verify different properties, and that
+graph-cleanliness does not imply cross-target buildability. This
+decision is the same family one layer down: **the cross-target check
+ITSELF has an input set narrower than its own stated guarantee** — it
+type-checks Rust source, but a build script it must still run is not
+Rust source in the sense the guarantee described. Decision 043 is not
+superseded; this is the next turn of the same distinction.
+
+**No standing rule minted.** `R192` ("a gate states what it cannot see")
+already covers this shape and gains its sixth instance here — an
+existing rule with new evidence, not a new rule, per this project's
+own two-occurrence-plus-review bar for promotion. **Ceiling moves
+066 → 067; next free 068.**

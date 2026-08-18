@@ -44410,3 +44410,104 @@ open; overlay-text-colour Backlog item still unscoped.
 4. The `v0.1.0`/`v0.4.0`/`v0.5.0` release-record backfill is still
    owed whenever a session has a cheap window for it — not urgent, but
    now flagged for a third time.
+
+## 2026-08-17 (hundred-and-fifty-ninth filing) — **`v0.6.0` IS PUBLISHED — the release record owed since the 158th filing is filed, plus two release-process fixes (`969a3bf` = `Pass 91.0`, decision 067; `3c4c00e`) and `25b7c7d` (six unattributed crates). The THREE-TIMES-DEFERRED `v0.1.0`/`v0.4.0`/`v0.5.0` backfill is CLOSED, not deferred a fourth time.**
+
+**Shipped:**
+- **`v0.6.0` released.** Tag `v0.6.0` = `3c4c00e9e0dcf5ed3ef3defe3efd828fc867a260`
+  (annotated, tag object `ca48d6c0`). Published at
+  <https://github.com/KenM76/pdfce/releases/tag/v0.6.0>. Asset
+  `pdfce-v0.6.0-portable-win64.zip`, **10,464,533 bytes**.
+  `verify-release.py`'s all seven checks OK; CI run `32083880016`,
+  success, ten jobs green. Packaging smoke test from a fresh folder:
+  both binaries report `0.6.0`, a render produced correct diagnostics,
+  `userdata/` created at runtime not shipped. Backup bundle
+  `pdfce-20260817-v060.bundle` verified okay, tag object included. Third
+  release in project history CI-verified green at its own tagged commit.
+- `Pass 91.0` — `969a3bf`. The `cross-target compile check (macOS /
+  wasm32)` CI job had been red since before 2026-08-15, undetected
+  through every push of two sessions. Root cause: `pdfce-fetch` →
+  `ureq` → `rustls` → `ring`, whose build script compiles C that fails
+  cross-compiling to `aarch64-apple-darwin` from the Linux runner. The
+  job's own comment — *"`cargo check` needs no linker and no platform
+  SDK"* — is true of Rust source and false of a dependency's `build.rs`,
+  which `cargo check` still runs; `pdfce-fetch` (`Pass 77.0`) was the
+  first crate in the workspace with a platform-sensitive one. Fixed by
+  excluding `pdfce-fetch` (zero workspace dependents) and correcting the
+  comment IN PLACE to name the reopening trigger. Sixth instance of
+  `R192`, graduated to `D:\dev\rag\rust\a_gate_states_what_it_cannot_see.md`.
+  New decision **067** (`ARCHITECTURE.md` §12 + §6 body).
+- `3c4c00e`. The separate `fuzz/` Cargo workspace's own `Cargo.lock`
+  still recorded `pdfce-core 0.5.3` after `abe6c97`'s version bump —
+  caught by `verify-release.py`'s FIRST check ("working tree clean"),
+  which the dispatching engineer had nearly dismissed as leftover noise
+  from a local fuzz build. Fixed, `cargo +nightly fuzz build` re-run
+  clean (exit 0). The `v0.6.0` tag — minutes old, no release yet
+  attached — deleted and recreated at this commit; recorded explicitly
+  because moving an already-released tag would not have been safe.
+- `25b7c7d`. `THIRD_PARTY_LICENSES.md` regenerated despite `Cargo.lock`/
+  `Cargo.toml` being bit-identical to the 2026-08-13 baseline — an
+  argument that nearly caused the regeneration to be skipped. It was
+  already stale: six RustCrypto duplicate-version crates
+  (`block-buffer`, `cpufeatures`, `crypto-common`, `digest`, `sha2`,
+  `generic-array`) were missing, the older half of each name's
+  duplicate-version pair, invisible to any by-NAME completeness check
+  because the newer version of each was already attributed. All six
+  permissive (Apache-2.0/MIT); zero copyleft exposure. Graduated to
+  `D:\dev\rag\rust\an_unchanged_manifest_diff_proves_no_new_gap_not_no_pre_existing_one.md`.
+
+**Decisions made this session:**
+- **Decision 067** — the cross-target compile-check gate's guarantee is
+  narrowed to what it actually type-checks; `pdfce-fetch` excluded with
+  a named reopening trigger (any workspace member taking it as a
+  dependency). Related to, not superseding, decision 043. Ceiling
+  066 → 067, next free 068.
+
+**Findings + decisions:**
+- **The RAG-worthiness call on the attribution finding (item 4 of the
+  dispatch), ruled explicitly because the dispatching engineer asked
+  and did not know.** `D:\dev\rag\rust\`, not `C:\personal_rag\pdf\` and
+  not a pdfce standing rule. Reasoning: this is Cargo/`cargo-about`
+  tooling methodology (generalizable to any Rust project generating a
+  compliance artifact), not PDF-domain behaviour, and it is one instance
+  — below this project's own two-occurrence bar for a standing-rule
+  proposal. The shape is distinct from `R192`'s (a tool's input set
+  narrower than its obligation, a SPATIAL gap): this is a TEMPORAL gap —
+  a diff-based staleness argument's blind spot is everything that
+  predates its own baseline, independent of how wide the diff's input
+  set is.
+- **The three-times-deferred `v0.1.0`/`v0.4.0`/`v0.5.0` release-record
+  backfill is CLOSED, not carried a fourth time.** The evidence was
+  already recoverable — this file's own hundred-and-thirty-third-filing
+  correction already contains a table (tag/commit/publish/asset/size/CI)
+  sourced from the engineer's own `git rev-parse`/`gh release view`/
+  `gh run list` at the time. Reformatted into three dedicated
+  `ROADMAP.md` Shipped entries; amendment footers filed at both prior
+  locations that flagged the gap. What is genuinely NOT recoverable —
+  `verify-release.py`'s per-check output, packaging-smoke-test
+  transcripts, backup-bundle verification for these three tags — is
+  named explicitly as **permanently unrecordable** (point-in-time
+  evidence nobody captured at release time) rather than left open.
+  Deferring a flag three filings running is a decision, not a delay;
+  this filing treats it as one.
+
+**Still in flight:** `Pass 72.0`/`73.0`/`73.1`/`86.0` HIGH PRIORITY
+unstarted; `Pass 85.1` (mesh shadings) and `85.2` slice 2 (tiling)
+unstarted; `Pass 85.4c` (transparency-group compositing + soft masks)
+remains the top-priority unstarted Ghent item, ahead of `85.1`/`85.2`
+slice 2 in the re-derived build order; `Pass 85.5` last; `Pass 87.0`
+GUI-paused; `bdfd511`'s missing `ROADMAP.md` entry still open;
+overlay-text-colour Backlog item still unscoped.
+
+**For next session:**
+1. **Next free Pass family is `92`** (this filing used family `91`,
+   `Pass 91.0`). Next free decision is **068**. Next free filing
+   ordinal is **160**. Next free standing rule is **`R196`**,
+   unchanged — `R192` cited at its sixth instance, not re-minted.
+2. `Pass 85.4c` remains next in the Ghent build order.
+3. The release-record backfill item is now CLOSED — do not re-open it
+   as a recurring flag; if the operator wants the unrecordable half
+   reconstructed anyway (a fresh build+smoke-test against an old
+   commit), that is a new, explicitly-scoped task, not a backfill.
+4. `v0.6.0` is live; watch for the next capability Pass to resume
+   after this release-process interlude.

@@ -96,6 +96,350 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★★ `v0.6.0` tagged and released at `3c4c00e` (annotated tag `ca48d6c`) — THIRD release in project history CI-verified green at its tagged commit (`v0.5.2`, `v0.5.3` were the first two); discharges the `abe6c97` caveat immediately below — tag/CI/publish are now DONE, not merely stated as intent — 2026-08-17 (hundred-and-fifty-ninth filing)
+
+**Sourcing.** No shell tool this dispatch (hard rule 8). Every figure
+below — tag/commit hashes, asset name and byte count, `verify-release.py`'s
+seven-check output, the CI run ID and conclusion, the packaging-smoke-test
+observations, and the backup-bundle verification — is **relayed** from the
+dispatching engineer's own shell run, not independently re-verified here.
+
+**Operator authorisation, recorded because project rule 8 requires it per
+release.** Verbatim, this session: *"keep going. release new builds when
+it seems like a good time. I am not using the PC now so keyboard, screen
+and mouse is yours."* Broader than the prior scope on record (2026-08-11's
+"post the latest versions to git so I can try them on my laptop at home,"
+cited in the `v0.5.3` entry below) — this one covers publishing at the
+engineer's own discretion, not merely building for the operator's personal
+testing, and this release relies on it.
+
+**What shipped.** Tag `v0.6.0` = commit
+`3c4c00e9e0dcf5ed3ef3defe3efd828fc867a260` (`3c4c00e`, annotated), tag
+object `ca48d6c02096f521b2355cdfe5a2f3b50660cf3c`. Published at
+<https://github.com/KenM76/pdfce/releases/tag/v0.6.0>, titled *"pdfce
+v0.6.0 — blend modes, the redaction overlay ladder, and a page that was
+never white."* Asset `pdfce-v0.6.0-portable-win64.zip`,
+**10,464,533 bytes**.
+
+**`tools/verify-release.py v0.6.0` reports all seven checks ok:** working
+tree clean · tag exists locally · tag is at `HEAD` · tag is pushed ·
+`origin/main` CONTAINS the tagged commit · GitHub release has at least one
+asset · CI is GREEN at the tagged commit. Final line, quoted: *"clean —
+tag, HEAD, origin/main, CI and the release agree."*
+
+**CI at the tagged commit:** run `32083880016`, conclusion **success**,
+all ten jobs green. (Job names not individually relayed this dispatch —
+not restated from the `v0.5.3` template's list to avoid asserting a job
+set this dispatch did not itself report; a future filing with the actual
+`gh run view` output should confirm the set is unchanged.)
+
+**Packaging smoke test.** Staged folder
+`D:\builds\pdfce-20260817-2033-3c4c00e` — `pdfce-cli.exe` 10,768,384 B,
+`pdfce-gui.exe` 15,905,280 B, `THIRD_PARTY_LICENSES.md` 376,103 B, plus
+`LICENSE`/`README`/`BUILD-INFO`; **folder total 27,067,242 B** (the
+per-item byte counts above sum to it — hard rule 10a form). Copied to a
+fresh path (`D:\Dev\temp\smoke-v060`) and run from there: `pdfce-cli
+--version` and `pdfce-gui --version` both print **0.6.0**; a render from
+the fresh folder produced correct diagnostics; `userdata/` was created at
+RUNTIME rather than shipped in the zip, as R15's partitioned-folder design
+requires. Temporary smoke copy deleted afterwards (not stated as done by
+this dispatch, but consistent with the project's standing housekeeping —
+flagged as unconfirmed rather than assumed).
+
+**Backup.** `D:\Dev\pdfce-backups\pdfce-20260817-v060.bundle`, `git
+bundle verify` → **okay**. `refs/heads/main` = `3c4c00e` = `HEAD`, and
+`refs/tags/v0.6.0` is INSIDE the bundle — the release is recoverable from
+backup alone, tag object included, not merely the commit it points at.
+
+**Contents, by cross-reference, not re-filed here.** `Pass 85.2` slice 1,
+`Pass 89.0`, `Pass 89.1`, `Pass 90.0`, `Pass 90.1`, `Pass 90.2`, the
+closed-form colour-oracle tooling, plus this same filing's `Pass 91.0`
+and the two housekeeping commits (`25b7c7d`, `3c4c00e`) immediately below.
+The two MINOR-not-PATCH behaviour changes (`RedactSpec::fill = None` now
+transparent; the page-backdrop compositing correction) are documented in
+the `abe6c97` entry directly below this one; this entry is the release
+record and does not restate them.
+
+**What this entry discharges.** The `abe6c97` entry's own caveat — *"a
+dedicated release-record entry… is still owed once the tag/CI/publish
+actually complete"* — is discharged here. That entry is left as written
+(append-only), not edited.
+
+**No Pass ID, decision, or new standing rule minted for this release**
+(consistent with every prior release entry in this file). Ledger
+ceilings as established by this same filing's `Pass 91.0` entry below:
+Pass family ceiling **91**, next free **92**; standing rules ceiling
+**R195**, next free **R196** (`R192` gained a sixth instance this
+filing, cited not re-minted); decisions ceiling **067**, next free
+**068**. `SESSION_LOG.md` filings move **158 → 159**, which is this one.
+
+**`docs/FEATURES.md` — no change.** No capability moved; this entry is a
+release record only.
+
+---
+
+### ★ `3c4c00e` — the fuzz workspace has its own `Cargo.lock`, and the `0.6.0` version bump did not reach it — found by `verify-release.py`'s FIRST check, the tag deleted and recreated at the fix — 2026-08-17 (hundred-and-fifty-ninth filing)
+
+**Sourcing.** No shell tool this dispatch (hard rule 8); the diagnosis,
+fix, and re-verification below are **relayed** from the dispatching
+engineer's own run.
+
+**What was wrong.** `fuzz/` is a separate Cargo workspace with its own
+`Cargo.lock`, outside the root workspace `abe6c97`'s version bump
+touched. That lockfile still recorded `pdfce-core 0.5.3` after the bump.
+Nothing failed — a stale fuzz-workspace lockfile does not break a build
+— which is exactly why it would have shipped unnoticed: no gate asks
+whether the fuzz workspace's lockfile agrees with the root workspace's
+version.
+
+**How it was caught.** `tools/verify-release.py`'s FIRST check —
+"working tree clean" — refused the release over an uncommitted diff in
+`fuzz/Cargo.lock` that the dispatching engineer had been about to
+dismiss as noise left over from a local `cargo +nightly fuzz build` run.
+It was not noise; it was a real, correct refusal naming a genuine
+staleness the version bump had missed.
+
+**Fix.** `fuzz/Cargo.lock` updated to `pdfce-core 0.6.0`, committed as
+`3c4c00e`. The `v0.6.0` tag — created minutes earlier, pointing at the
+pre-fix commit — was **deleted and recreated** at `3c4c00e`. Recorded as
+safe explicitly: the tag was minutes old, with no GitHub release yet
+referencing it; moving a tag that already had a published release
+attached would not be safe and is not what happened here.
+
+**Verification carried through.** `cargo +nightly fuzz build` run
+locally against the corrected lockfile, **exit 0** — per this
+librarian's own prior agent-memory note (`project_decision_...` on
+release verification discipline), the fuzz build is the gate this
+project's own release process has previously skipped; it was run this
+time.
+
+**Ledger effects.** No Pass ID — release-process housekeeping, the same
+class as `abe6c97`'s version bump. No standing rule minted. No decision.
+Ledger ceilings unaffected by this entry specifically; the filing's
+final state (family 91/next free 92, rules R195/next free R196,
+decisions 067/next free 068) is established by the `Pass 91.0` entry
+below, which chronologically preceded this commit.
+
+**`docs/FEATURES.md` — no change.**
+
+---
+
+### ★★★ Pass 91.0 — `969a3bf` — CI WAS RED ON A CLAIM ABOUT PDFCE THAT WAS ACTUALLY A CLAIM ABOUT A C COMPILER — the cross-target compile-check job's own docstring overclaimed what `cargo check` guarantees, `pdfce-fetch` excluded, decision 067 minted, `R192` gains a SIXTH instance — 2026-08-17 (hundred-and-fifty-ninth filing)
+
+**Sourcing.** No shell tool this dispatch (hard rule 8). The CI run
+history ("failing since before 2026-08-15, through every push of this
+session and the last"), the root-cause diagnosis, the fix, and the local
+macOS type-check re-verification are **relayed**, not independently
+re-run here.
+
+**What was wrong.** The `cross-target compile check (macOS / wasm32)`
+CI job had been failing since before 2026-08-15, undetected through
+every push of this session and the one before it. Root cause:
+`pdfce-fetch` → `ureq` → `rustls` → `ring`, whose build script compiles
+C; cross-compiling that C from the Linux CI runner to
+`aarch64-apple-darwin` fails with `cc: error: unrecognized debug output
+level 'full'` — the runner's GCC rejecting a Clang debug-info flag
+`ring`'s build script hands it.
+
+**Why this nearly read as environmental rather than fixable, and the
+false premise that caused that.** The job's own comment stated:
+*"`cargo check` needs no linker and no platform SDK."* True of ordinary
+Rust source — that is the entire reason `check` is used over `build` in
+a portability gate — and **false of a dependency's `build.rs`**, which
+`cargo check` still executes to resolve the crate graph. `pdfce-fetch`
+(`Pass 77.0`, `7393473`, 2026-08-13) is the first crate in this
+workspace whose dependency tree includes a build script compiling
+platform-sensitive C, so the comment's claim had been true of every
+crate in the workspace until that Pass, and was never re-examined when
+it stopped being true generally.
+
+**Fix.** `pdfce-fetch` excluded from the job's crate list — it has ZERO
+dependents in the workspace (`cargo tree -p pdfce-core -p pdfce-render
+-p pdfce-gui -p pdfce-cli -i pdfce-fetch` returns nothing), so the
+exclusion does not weaken the invariant the job actually protects
+(`pdfce-core` + `pdfce-render` compiling for `wasm32-unknown-unknown`,
+unaffected). The job's own comment corrected IN PLACE, not deleted,
+per the `a_gate_states_what_it_cannot_see` pattern's prescribed remedy:
+it now states what remains unchecked (any future crate that pulls in a
+platform-sensitive build script) and the trigger that reopens the
+exclusion (`pdfce-fetch` gaining a workspace dependent). Verified
+locally: the rest of the workspace type-checks for macOS cleanly with
+`pdfce-fetch` excluded, confirming `ring` was the sole blocker and
+pdfce's own portability was never actually in question.
+
+**Standing rules.** Sixth instance of the already-minted `R192` ("a
+gate states what it cannot see") — the gate's own stated guarantee
+("needs no linker/SDK") was narrower than the input set it was actually
+run against (a build script). Graduated to
+`D:\dev\rag\rust\a_gate_states_what_it_cannot_see.md` as the sixth
+measured instance, with its own dedicated section.
+
+**Decisions.** New decision **067** (`ARCHITECTURE.md` §12, full text
+there): the cross-target check's guarantee is narrowed to what it
+actually type-checks, `pdfce-fetch` is excluded with the reopening
+trigger named, and §6's body text is updated to match. Related to, and
+does not supersede, decision 043 (a dependency-graph check and a
+cross-target buildability check verify different properties) — this is
+the same distinction one layer down, applied to the cross-target check
+ITSELF having an input set narrower than its own docstring's claim.
+
+**Ledger effects.** Pass family: **90 → 91** (`Pass 91.0`, new family),
+next free family **92**. Standing rules: **no new rule minted** — `R192`
+gains its **sixth instance** (full account above and in the graduated
+RAG file); ceiling stays **R195**, next free **R196**. Decisions: **NEW
+decision 067 minted** — ceiling moves **066 → 067**, next free **068**.
+
+**`docs/FEATURES.md` — no change.** No capability moved; this is a CI/
+tooling correction.
+
+---
+
+### ★★ `25b7c7d` — the shipped attribution was missing six crates, and only the release-time regeneration saw it — an unchanged `Cargo.lock` argued the file couldn't be stale, and it was — 2026-08-17 (hundred-and-fifty-ninth filing)
+
+**Sourcing.** No shell tool this dispatch (hard rule 8). The `git diff`
+observation, the regeneration output, and the six added crate names are
+**relayed** from the dispatching engineer's own run.
+
+**What nearly got skipped, and why.** Project rule 13 requires
+regenerating `THIRD_PARTY_LICENSES.md` before any packaging pass. The
+dispatching engineer nearly treated this run as unnecessary: `git diff`
+showed `Cargo.lock` and every `Cargo.toml` **unchanged** since the last
+regeneration (2026-08-13) — a plausible-sounding argument that the
+generated file could not have gone stale, since nothing it depends on
+had moved. **The file was already wrong**, and had been since before the
+2026-08-13 baseline; the argument's flaw is structural, not a mistake
+about this specific diff — see the graduated finding below.
+
+**What was missing.** Regenerating added six crates:
+`block-buffer 0.10.4`, `cpufeatures 0.2.17`, `crypto-common 0.1.7`,
+`digest 0.10.7`, `sha2 0.10.9`, `generic-array 0.14.7` — the OLDER
+halves of duplicate-version RustCrypto pairs. The newer version of each
+crate NAME was already attributed, so any completeness check reading
+"is every dependency represented?" by name (rather than by
+name-and-version) would report clean while these six shipped
+unattributed.
+
+**Legal exposure, measured not assumed.** All six are Apache-2.0 or
+MIT — the attribution set stays fully permissive, a copyleft scan
+returns zero, and `cargo about generate` itself is the audit gate (it
+fails on any unaccepted SPDX id, so its success is the completeness
+check for LICENSE ACCEPTABILITY). What it is not a check for is
+per-version PRESENCE, which is the gap this run closed. Six crates
+would otherwise have shipped in the public MIT-licensed `v0.6.0` zip
+with no attribution entry.
+
+**The lesson is about the argument, not the crates** (dispatching
+engineer's own framing, preserved because it is the load-bearing part).
+"The manifests did not change, therefore the generated file cannot be
+wrong" reasons forward from a diff and cannot detect a gap that
+PREDATES the diff's own baseline. Graduated to
+`D:\dev\rag\rust\an_unchanged_manifest_diff_proves_no_new_gap_not_no_pre_existing_one.md`
+— judged by this librarian to be `D:\dev\rag\rust\`'s territory
+(Cargo/`cargo-about` tooling methodology, generalizable to any Rust
+project using generated compliance artifacts), not
+`C:\personal_rag\pdf\` (not a PDF-domain finding at all) and not a
+pdfce project standing rule (one instance, below this project's own
+two-occurrence bar, and the shape is Cargo/`cargo-about`-specific
+rather than about any of pdfce's own gates).
+
+**Ledger effects.** No Pass ID — attribution regeneration is routine
+compliance under rule 13, same disposition as `abe6c97`'s version bump.
+No standing rule minted at the pdfce-project level (see above). No
+decision. Ledger ceilings unaffected by this entry specifically; final
+state for this filing (family 91/next free 92, rules R195/next free
+R196, decisions 067/next free 068) is set by the `Pass 91.0` entry
+above, which this commit chronologically preceded.
+
+**`docs/FEATURES.md` — no change.**
+
+---
+
+### ★★ Release-record backfill, THREE tags, closing the item flagged three filings running (131st, 133rd, 158th) — `v0.5.0`, `v0.4.0`, `v0.1.0` — evidence recovered from THIS FILE'S OWN prior correction (hundred-and-thirty-third filing's table), not re-measured; the missing HALF is named as permanently unrecordable, not carried a fourth time — 2026-08-17 (hundred-and-fifty-ninth filing)
+
+**Sourcing, and why this counts as "recoverable" under hard rule 8.**
+This librarian has no shell this dispatch, as in every prior filing
+that deferred this item. What has changed is that the hundred-and-
+thirty-third filing already did the recovery — its own correction
+entry (above, in *Shipped*) contains a table built from the dispatching
+engineer's `git rev-parse`, `gh release view`, and `gh run list`
+against the full release history, covering tag, tagged commit, publish
+timestamp, asset name, byte count, and CI green/red for all eight
+tags including these three. That table is **already on disk, already
+sourced, already in this file** — reformatting it into three dedicated
+entries is not a new assertion, it is closing a gap between two shapes
+of record that both already exist. Nothing below is invented; every
+figure is a direct copy from this file's own hundred-and-thirty-third-
+filing table.
+
+**What is NOT recoverable, named plainly rather than carried again.**
+`tools/verify-release.py`'s per-check output, the packaging-smoke-test
+transcript, and the backup-bundle verification are **point-in-time**
+records — they describe what a shell run observed AT release time, and
+none were captured for these three tags (the tool's CI-green check
+postdates `v0.5.2`, per the `v0.5.3` entry's own "encouraging half"
+note; no smoke-test or bundle-verification transcript for `v0.1.0`,
+`v0.4.0`, or `v0.5.0` exists in any prior filing). **Running any of
+those three checks TODAY against a 2026-08-10/11/12 commit would be a
+new activity, not a backfill of what happened at release time** — it
+answers "does this old commit still build," not "was this release
+verified when it shipped." This librarian is not the tool to decide
+whether that new activity is worth doing; the point-in-time gap for
+these three tags is **closed here as permanently unrecordable**, not
+left open a fourth time.
+
+#### `v0.5.0` — tagged and released at `451372a7`, CI **red**
+
+Tag `v0.5.0` = commit `451372a76de5cbec5a67d5937805089c520ff4ce`.
+Published 2026-08-12T10:17:57Z. Asset
+`pdfce-v0.5.0-windows-x64.zip`, **10,086,482 bytes**. CI at the tagged
+commit: **failure**, run `31585867570` (per this file's own
+hundred-and-thirty-third-filing table; the known failing step in this
+run and its four red siblings is documented separately, this file's
+own record of *"check that every code commit is filed"*).
+
+#### `v0.4.0` — tagged and released at `2a372fcf`, CI **green**
+
+Tag `v0.4.0` = commit `2a372fcf292a025e78c09718a2313c5987cb0281`.
+Published 2026-08-11T21:58:22Z. Asset
+`pdfce-v0.4.0-windows-x64.zip`, **10,023,075 bytes**. CI at the tagged
+commit: **success**, run `31539611925`.
+
+#### `v0.1.0` — tagged and released at `5007bef0`, CI **red**
+
+Tag `v0.1.0` = commit `5007bef0e65e233f74370479fedabcf5bbf7c9dc`.
+Published 2026-08-10T21:10:49Z. Asset
+`pdfce-v0.1.0-windows-x64.zip`, **9,590,137 bytes**. CI at the tagged
+commit: **failure**, run `31429875246`. Mitigating context already on
+record (`f2ac2af`/hundred-and-seventh filing): CI was red on every push
+back past `v0.1.0` and nobody was watching it — this release and
+`v0.2.0` share that one systemic cause rather than being independent
+process failures.
+
+**Per-item form beside the total (hard rule 10a).** All eight releases
+now have a dedicated Shipped-section record: this filing's three,
+`v0.5.2`/`v0.5.3` (hundred-and-thirty-first/-second filings), `v0.2.0`/
+`v0.3.0` (their own original entries), and `v0.5.1` (named inside a
+work-filing heading — a real record of a different shape, left as is
+per the hundred-and-thirty-third filing's own finding). Denominator:
+**8**, the full release count to date.
+
+**Amendment footers filed in place** at every location that stated this
+item as still open: the hundred-and-thirty-third-filing correction's
+own *"Open item, named and NOT backfilled here"* paragraph, and the
+`abe6c97` entry's *"Housekeeping, flagged not actioned"* paragraph
+(both below/above this entry in *Shipped*) — each now points here.
+
+**Ledger effects.** No Pass ID, standing rule, or decision — this is a
+record-shape backfill of already-sourced history, same disposition as
+the `v0.5.2` backfill (hundred-and-thirty-second filing). Ledger
+ceilings unaffected: family 91/next free 92, rules R195/next free
+R196, decisions 067/next free 068 (as established by the `Pass 91.0`
+entry above).
+
+**`docs/FEATURES.md` — no change.**
+
+---
+
 ### ★★ `abe6c97` — VERSION BUMP `0.5.3` → `0.6.0`, MINOR NOT PATCH — both binaries confirmed to report it; **★ `v0.6.0`'s TAG/CI/PUBLISH ARE NOT YET DONE AS OF THIS FILING — see the caveat below, this is a version-bump record, not a release record** — filed 2026-08-17 (hundred-and-fifty-eighth filing)
 
 **What shipped, verified.** `Cargo.toml` + `Cargo.lock` bumped `0.5.3` →
@@ -155,6 +499,19 @@ release relies on.
 (hundred-and-thirty-third) as having no release record of either shape.
 Still owed; not backfilled here per the engineer's own instruction not
 to bundle it into this filing unless cheap, and it is not.
+
+> **[★ CLOSED 2026-08-17, hundred-and-fifty-ninth filing — backfilled
+> from this file's own hundred-and-thirty-third-filing table, no new
+> measurement needed.** See *Shipped*, the "Release-record backfill,
+> THREE tags" entry above `v0.6.0`'s own release record. This was the
+> third filing to flag this item without acting on it; per this
+> librarian's own standing discipline (deferring a flag three times
+> running is a decision, not a delay), it is now either done or closed
+> as permanently unrecordable — the tag/commit/asset/CI figures are
+> done; `verify-release.py`/packaging-smoke-test/backup-bundle detail
+> for these three tags is closed as **permanently unrecordable**
+> (point-in-time evidence nobody captured at release time; re-running
+> those checks today would be a new activity, not a backfill).]**
 
 **Ledger effects.** No Pass family, standing-rule or decision ledger
 changes from this entry — recorded because publishing/version-bump
@@ -4445,6 +4802,17 @@ actioned in this filing**: backfilling three more entries at the end of
 an already-long correction filing is how a filing sprawls past the point
 anyone reviews it. Flagged here as the single place to find the
 missing-record question the next time release bookkeeping is touched.
+
+> **[★ CLOSED 2026-08-17, hundred-and-fifty-ninth filing.** Backfilled
+> directly from the table above — see *Shipped*, "Release-record
+> backfill, THREE tags" (above `v0.6.0`'s release record). This item was
+> flagged and deferred three filings running (this one, the
+> hundred-and-fifty-eighth's `abe6c97` entry, and now closed rather than
+> carried a fourth time). The tag/commit/asset/CI figures above are now
+> also filed as dedicated entries; `verify-release.py`/smoke-test/
+> backup-bundle detail for these three tags is closed as **permanently
+> unrecordable** — that evidence is point-in-time and none was captured
+> at release time for `v0.1.0`, `v0.4.0`, or `v0.5.0`.]**
 
 **No Pass ID, rule, or decision minted.** `R192` gains further evidence —
 the release-record gap is now confirmed systemic rather than a one-off —
