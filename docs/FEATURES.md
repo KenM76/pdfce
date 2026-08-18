@@ -111,7 +111,8 @@ provisional; re-verify before any acceptance criterion leans on them.
 | core | cli | gui | Acrobat | Feature |
 |:----:|:---:|:---:|:-------:|---------|
 | [x] | [x] | [x] | [x] | Render and count annotations, honouring the annotation-flag set and an annotation's own `/CA` opacity — composited once as one object, so a shape's own overlaps do not darken at the seams. |
-| [x] | [x] | [x] | [x] | Author geometric markup — Ink, Square, Circle, Line, Polygon. The GUI draws under the pointer as a canvas tool with options in the side pane. **Cannot set note text** (`/Contents`), opacity (`/CA`) or a cloudy border (`/BE`); a two-vertex "polygon" is wrongly accepted; **a placed markup cannot be selected, moved or resized.** |
+| [x] | [x] | [x] | [x] | Author geometric markup — Ink, Square, Circle, Line, Polygon. The GUI draws under the pointer as a canvas tool with options in the side pane. **Cannot set note text** (`/Contents`) or opacity (`/CA`); a two-vertex "polygon" is refused by name (minimum 3 vertices); **a placed markup cannot be selected, moved or resized.** |
+| [x] | [x] | [ ] | [x] | Revision clouds — a scalloped `/BE << /S /C /I n >>` border on Square and Polygon (`pdfce-cli annotate --cloud INTENSITY`), sharing `add_markup`. Not on Line, PolyLine or Circle (no straight edges to scallop, or `/BE` not spec-meaningful on that subtype). **No GUI surface** — `pdfce-gui`'s Square construction currently hard-codes no border effect. |
 | [x] | [x] | [x] | [x] | Author text-bearing annotations — FreeText and Stamp with variable-text appearance. |
 | [x] | [x] | [x] | [x] | Read an annotation's note text, author and modification date. |
 | [x] | [x] | [x] | [x] | Delete an annotation. |
@@ -233,7 +234,6 @@ the model or verb exists and only the named shell is missing. The
 | [ ] | — | — | [x] | `/OutputIntents`-aware CMYK conversion, using a PDF/X file's own embedded destination profile instead of pdfce's baked fallback table. Gated on the sibling `iccce` project (`ROADMAP.md` Backlog). |
 | [ ] | — | — | [x] | `/ICCBased` colour spaces resolved through a real ICC profile instead of the `/Alternate` fallback. Gated on `iccce`. |
 | [ ] | [ ] | [ ] | [x] | **Markup opacity (`/CA`) — the WRITE half only.** Reading shipped first (see the render row above); authoring a markup at reduced opacity does not exist yet, in any shell. |
-| [ ] | [ ] | [ ] | [x] | **Revision clouds** — `/BE << /S /C /I n >>` on a polygon, and the half that matters more, a cloudy border on a dragged rectangle. |
 | [ ] | [ ] | [ ] | ? | **Note text on geometric markup** — `/Contents` with `/T` and `/M` together, since a note listed with no author reads as a broken panel. The read side already ships. **A shell is waiting on this.** |
 | — | [ ] | [ ] | — | **Operator-initiated download** — pinned URL + SHA-256 verified before anything reaches disk, in the sibling crate `pdfce-fetch`; **built and tested, but no shell depends on it**, so nothing is operator-reachable. `core` is `—`: the engine is network-free permanently, so this can never live there. |
 | [ ] | [ ] | [ ] | ◐ | Re-subset an embedded font down to only the glyphs used — no removal, no visual change, works even where unembedding is refused. |

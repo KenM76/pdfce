@@ -46876,3 +46876,137 @@ verified by `Read`/`Grep` against the live files this filing.
    `iccce` requests named above.
 4. Whoever next touches `ARCHITECTURE.md` §3's `pdfce-render\` block:
    the decision-number parenthetical is stale, see the 175th filing.
+
+## 2026-08-18 (hundred-and-seventy-seventh filing) — `Pass 82.0` (`2094ad9`) + `Pass 82.1` (`4993559`): REVISION CLOUDS SHIP, A TWO-VERTEX POLYGON IS NOW REFUSED — AND THE PASS'S OWN ACCEPTANCE CRITERION 2 INVERTED THE STANDARD IT CITED, CORRECTED IN PLACE
+
+**Filed by `pdfce-librarian` WITHOUT a shell this session.** Test/lint
+results (99 test binaries, `clippy`/`fmt`/gate scripts, `cargo tree`) are
+RELAYED from the dispatching engineer's report, not independently
+re-run. `ROADMAP.md`/`ARCHITECTURE.md` cross-references and the
+`crates/pdfce-core/src/edit.rs` survivor below are independently
+verified by `Read`/`Grep` against the live files this filing.
+
+**Shipped:**
+- `Pass 82.0` — `2094ad9`. `MarkupSpec::Cloud { vertices, border,
+  interior, width, intensity }` and `Square { border_effect: Option<f64>
+  }`, both through `add_markup` (no new entry point — the escape hatch
+  decision 062 refused stays refused), both baking a real scalloped
+  `/AP` per R43. `/BE` on `Square`/`Polygon` only — `PolyLine` refused
+  (Table 181: `/BE` is "meaningful only for polygon annotations"),
+  `Circle` refused (no straight edges to scallop). `pdfce-cli annotate
+  --cloud INTENSITY`.
+- `Pass 82.1` — `4993559`. `validate_geometry`'s shared
+  `Polygon`/`PolyLine` arm (`vertices.len() < 2`) split: `Polygon`
+  now requires `>= 3`, `PolyLine` keeps `>= 2`. New
+  `EditError::TooFewVertices { subtype, needed, given }`; `EmptyGeometry`
+  kept distinct for the zero-vertex case. Found because the `pdfceGUI`
+  shell was carrying its own `>= 3` workaround — a decision-058 boundary
+  finding, same class as `Pass 78.0`'s re-derived guard list. `Cloud`
+  (`Pass 82.0`, same session) inherits the split rule with no separate
+  code.
+
+**Decisions made this session:**
+- **`Pass 82.0`'s own filed acceptance criterion 2 was wrong, and is
+  corrected in place in its `ROADMAP.md` Shipped entry, not silently.**
+  It read *"`/I` refused by name outside `{0, 1, 2}`"* — an enumeration.
+  Table 167/169 (identical wording, both ISO editions) types `/I` as
+  `number`, *"in the range 0 to 2"* — a **range**. The sibling `/S` row
+  in the same table uses the enumeration idiom; `/I` uses the range
+  idiom; one table, both idioms, one per row. As shipped, `/I` refuses
+  only outside `0.0..=2.0` (continuous), and a test exists that would
+  have failed against the roadmap's own wrong wording. Flagged as the
+  likely-to-recur error: the sibling key's idiom is the more familiar
+  shape and a future skim-read is likely to re-derive the wrong reading.
+- **`ARCHITECTURE.md` decision 062 amended, not rewritten** — its
+  "Status: DECIDED… Nothing here is built" line and its §4 item 1 (the
+  `/BE`-subtype spec question flagged open) were both stale the moment
+  `Pass 82.0` shipped. Both amended in place with dated ★ footers per
+  the Update protocol's same-filing propagation duty; the refusal ruling
+  itself (§§1–3) is untouched.
+- **The stale `ROADMAP.md` cross-reference at the write-probe race
+  entry** (*"the same one that governs the `add_markup_appearance`
+  refusal filed under `Pass 82.0` in *Next up*"*) corrected in place —
+  `Pass 82.0` is no longer in *Next up*.
+
+**Findings + decisions:**
+- **`BE-A1` — cloud geometry is unspecified by both ISO editions**
+  (arc radius, sweep, segment count, bulge direction, what `/I` scales).
+  `radius = 3 + 3·intensity` is filed as a disclosed pdfce product
+  decision under `CLAUDE.md` rule 4, not spec conformance. `/I 0` reads
+  as MINIMUM cloud, not ABSENT — `/S /C` is itself the cloudiness
+  request, so reading `/I 0` as "no bulge" would make the pair
+  self-cancelling; "no cloud" already has two spellings (`/S /S`, or no
+  `/BE`).
+- **Scallops fit per edge** (not perimeter-spread, which lets one
+  straddle a corner); **orientation from signed area** (bulges go
+  outward regardless of winding); **`/Rect` grows by the bulge**;
+  **`/RD` written for `Square`** (Table 180's `/RD` row is
+  permissive/explanatory, and this keeps the drawn box recoverable —
+  a pdfce rule filling a spec silence), **omitted for `Polygon`** (no
+  `/RD` entry exists for it in either edition).
+- **The mandated `pdfce-spec-librarian` dispatch returned one answer
+  already in the corpus** (`/BE` on Polygon/PolyLine as well as
+  Square/Circle — found by grep before dispatching, saving the trip)
+  **and one finding nobody asked for that changed the code**: Table 181
+  qualifies `/BE` on the polygon subtypes as "meaningful only for
+  polygon annotations," which is what makes `PolyLine` refuse `--cloud`.
+- **Hard Rule 11 sweep — one survivor found, reported as owed, NOT
+  edited** (out of remit — `crates/` is the engineer's).
+  `crates/pdfce-core/src/edit.rs:2836–2841`, `DroppedProperty::
+  BorderEffect`'s doc comment: *"pdfce authors straight edges only, so
+  a regenerated appearance is a plain outline."* That sentence makes a
+  **blanket claim about pdfce**, and it is now false as one — `Pass
+  82.0` added curved/scalloped-border AUTHORING via `add_markup`. The
+  narrower operational fact the comment is actually trying to state
+  remains TRUE and unaffected by this Pass: `MarkupStyle` (the input to
+  `set_markup_style`, the RESTYLE/regeneration path this enum belongs
+  to) has no `border_effect` field, so restyling an existing annotation
+  still drops any `/BE` it carried. **The fix is a narrowing, not a
+  reversal** — something like *"pdfce's restyle-regeneration path does
+  not carry a border effect forward; NEW markup can be authored with
+  one via `add_markup`/`MarkupSpec::Cloud`/`Square{border_effect}`
+  (`Pass 82.0`)."* Swept for the CLAIM, not the string, per the
+  distinction hard rule 11 exists to enforce — a grep for `/BE` alone
+  would have surfaced this line but not told an editor it was wrong;
+  reading the sentence is what did.
+- **A `cargo fmt` defect this session's own agent-memory had already
+  warned about recurred and was caught**: `fmt` collapsed a
+  `\`-continuation in a CLI error literal and baked the line's leading
+  padding in as literal spaces, found only by running the binary and
+  reading the refusal text, fixed and re-verified from the built
+  binary (relayed, not independently re-run here).
+
+**Still in flight:**
+- **Owed to the engineer, not fixed by this filing**:
+  `crates/pdfce-core/src/edit.rs:2836–2841`'s `DroppedProperty::
+  BorderEffect` doc comment needs the narrowing above — a blanket
+  "pdfce authors straight edges only" claim next to code this project's
+  own decision log now contradicts.
+- `Pass 75.0` (reusable parsed handle), `Pass 80.0` (note text on
+  markup) and `Pass 81.1` (markup opacity write half) remain the three
+  other unshipped `pdfceGUI`-sourced *Next up* Passes — untouched by
+  this filing.
+- The two owed `iccce` requests
+  (`request_profile_population_census.md`,
+  `request_header_tag_channel_disagreement.md`) — still unread, per the
+  176th filing.
+- `Pass 97.0`/`97.1`/`97.2` remain the best-scoped, highest-leverage
+  queued work, untouched by this filing.
+- The stale decision-ledger parenthetical in `ARCHITECTURE.md` §3
+  (flagged 175th filing) — still untouched.
+
+**For next session:**
+
+1. **Ledger unchanged by this filing**: next free Pass family **98**,
+   next free decision **071**, next free standing rule **`R196`**.
+   **Next free filing ordinal: 178.**
+2. Fix `DroppedProperty::BorderEffect`'s doc comment (above) — cheap,
+   flagged, not done here.
+3. `D:\Dev\FeatureRequests\pdfce_FeatureRequests\INDEX.md`'s revision-
+   clouds row updated to SHIPPED this filing, with a note telling
+   `pdfceGUI` their own `>= 3` vertex workaround can now be removed.
+4. Build `Pass 97.0`, or pick up one of the three remaining `pdfceGUI`
+   Passes (`75.0`/`80.0`/`81.1`) — unchanged priority order from the
+   176th filing.
+5. Read and answer (or file to `ROADMAP.md` Backlog) the two owed
+   `iccce` requests.

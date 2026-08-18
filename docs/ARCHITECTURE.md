@@ -21760,6 +21760,18 @@ agreeing. Filed as a **Backlog obligation** attached to the
 **Status: DECIDED.** Scopes `Pass 80.0` (note text) and `Pass 82.0`
 (revision clouds) in `ROADMAP.md` *Next up*. **Nothing here is built.**
 
+> **[★ AMENDED 2026-08-18, hundred-and-seventy-seventh filing — the two
+> sentences above describe this decision's status AT THE TIME IT WAS
+> MADE and are stale as a claim about the present.** `Pass 82.0` (`/BE`
+> revision clouds, `2094ad9`) and its companion `Pass 82.1` (the
+> `validate_geometry` vertex-count boundary this decision's §1 did not
+> itself scope but is filed beside) have **shipped** — see the top of
+> `ROADMAP.md`'s *Shipped* section. `Pass 80.0` (note text) remains
+> unstarted in *Next up*. The refusal ruling in §1 and the two
+> consequences in §§2–3 are unaffected by this amendment; only the
+> completion status changes. Same-filing propagation duty: this is the
+> editable mirror correcting itself, per its own rule.]**
+
 #### 1. The refusal, and it was arrived at from both sides independently
 
 A shell (`pdfceGUI`) needed markup subtypes `pdfce-core` does not author —
@@ -21850,7 +21862,14 @@ blank on every pdfce-authored note, and readers blame the reader.
 
 - It does **not** rule on whether `/BE` is honoured on every markup subtype —
   that is a **spec** question, and `pdfce-spec-librarian` is to be dispatched
-  for §12.5.4 Table 167 before `Pass 82.0` starts (rule 1).
+  for §12.5.4 Table 167 before `Pass 82.0` starts (rule 1). **[★ RESOLVED
+  2026-08-18, hundred-and-seventy-seventh filing — the dispatch ran and
+  `Pass 82.0` shipped. Table 181 answers it: `/BE` is *"meaningful only for
+  polygon annotations"* (verbatim, both editions) among the subtypes
+  pdfce authors, so `Square` and `Polygon` accept it and `Circle`/`Line`/
+  `PolyLine` refuse it by name. See the Shipped entry for the full
+  citation, including a correction to the Pass's own filed criterion 2
+  about `/I`'s range.]**
 - It does **not** touch the **read** side. `annot::Annotation::{contents,
   title, modified}` already ship (`Pass 38.4`, `8228f44`) and are the
   differential oracle the write side is tested against.

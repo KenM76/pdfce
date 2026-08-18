@@ -96,6 +96,154 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 82.0 — `2094ad9` — **REVISION CLOUDS: `MarkupSpec::Cloud` AND `Square { border_effect }`, BOTH BAKING A REAL SCALLOPED `/AP` THROUGH `add_markup` — NO NEW ENTRY POINT — AND THE PASS'S OWN ACCEPTANCE CRITERION 2 WAS WRONG, CORRECTED IN PLACE BELOW** — filed 2026-08-18 (hundred-and-seventy-seventh filing)
+
+`MarkupSpec::Cloud { vertices, border, interior, width, intensity }` and
+`Square { border_effect: Option<f64> }`, both through `add_markup` (**no
+new entry point — the escape hatch stays refused**, per the Pass's own
+on-the-record refusal), both baking a real scalloped `/AP` per **R43**
+(render from `/AP`, or not at all).
+
+#### ★★ ACCEPTANCE CRITERION 2 WAS WRONG AS FILED, AND THIS IS THE HEADLINE
+
+`Pass 82.0`'s own criterion 2, as it stood in *Next up*, read:
+
+> ~~"`/I` refused by name outside `{0, 1, 2}` (Table 167 admits 0, 1 and 2
+> — **not a continuous range**)."~~
+
+**That inverts the standard.** Table 167 types `/I` as **`number`** and
+constrains it *"in the range 0 to 2"* — **character-for-character
+identical** in ISO 32000-1:2008 and ISO 32000-2:2020 (renumbered to
+Table 169). The decisive evidence is inside that same four-line table:
+the sibling `/S` row uses the standard's **enumeration** idiom (*"Possible
+values are:"* + a list) while `/I` uses the **range** idiom. One table,
+both idioms, one per row.
+
+⇒ **`/I 1.5` is conformant**, pdfce accepts it, and a test exists that
+would have **failed** against the roadmap's own filed wording. **The
+as-shipped rule: `/I` refused by name only outside `0.0..=2.0`** — a
+continuous range, not a three-member set. Corrected here, in place, with
+this dated ★ note, rather than silently — the wrong reading is the common
+one (the sibling key in the same table uses the enumeration idiom, which
+is the more familiar shape for a small integer-looking field) and a
+future session is otherwise likely to re-propose it.
+
+#### What the mandated spec dispatch returned that nobody asked for
+
+The Pass mandated a `pdfce-spec-librarian` dispatch for two questions.
+**The corpus already answered one** (`/BE` is listed for Polygon/PolyLine
+as well as Square/Circle) — confirmed by grep before the dispatch, saving
+that half. The unasked-for finding that changed the code: **Table 181
+qualifies `/BE` on the polygon subtypes as *"meaningful only for polygon
+annotations"*, verbatim in both editions** — so an open `PolyLine` cannot
+carry one, and `--cloud` refuses `PolyLine` by name.
+
+#### `BE-A1` — cloud geometry is genuinely unspecified
+
+Neither edition states arc radius, sweep, segment count, bulge direction,
+linearity, or what intensity even scales. `/S /C` is a `should`, not a
+`shall`. Because **R43** obliges pdfce to paint from a baked appearance or
+not at all, pdfce cannot defer the choice — `radius = 3 + 3·intensity` is
+a **disclosed product decision under `CLAUDE.md` rule 4** (fuzzy, never
+sneaky), not conformance, and a later session may retune it without
+violating any citation.
+
+One judgement inside it: **`/I 0` is read as MINIMUM cloud, not ABSENT
+cloud.** The standard defaults `/I` to 0 while `/S /C` is an explicit
+request for cloudiness, so reading 0 as "no bulge" would make
+`<< /S /C >>` a request that cancels itself. "No cloud" already has two
+spellings (`/S /S`, or omitting `/BE`).
+
+#### Other decisions filed with the Pass
+
+- **Scallops fit per edge**, not around the perimeter, so a boundary lands
+  exactly on every corner — spreading them lets one straddle a vertex and
+  reads as a dented corner.
+- **Orientation from the signed area**, so bulges go outward whichever way
+  the caller wound the polygon — a caller should not need to know pdfce's
+  winding convention.
+- **`/Rect` grows by the bulge**, or the `/BBox` clips its own content —
+  how a baked cloud renders with its bumps sliced flat.
+- **`/RD` written for `Square`**, although Table 180's `/RD` row is
+  permissive/explanatory rather than directive — the box the operator
+  drew stays recoverable rather than inferable only by un-inflating by a
+  constant this crate happens to use today. A pdfce product rule filling a
+  spec silence. `Polygon` gets none — Polygon has no `/RD` entry in either
+  edition.
+- **`Circle` refuses `--cloud` by name**: `/BE` is legal there per
+  Table 180, but an ellipse has no straight edges to scallop and the
+  standard describes no curve-following cloud.
+- **`pdfce-cli annotate --cloud INTENSITY`** (rule 11) — one flag, not a
+  seventh `--type`, because a cloud writes `/Subtype /Polygon` either way.
+
+#### Verification
+
+99 test binaries green, `cargo clippy --workspace --all-targets -- -D
+warnings` clean, `cargo fmt --all` applied, `check-ui-strings.sh` /
+`check-disclosure-channel.sh` / `check-one-commit-per-command.py` clean,
+`cargo tree -p pdfce-core` / `-p pdfce-render` show **0** GUI deps.
+
+**Rendered, not only tested:** two clouds on one page (`/I 1.5` from a
+`Square`, `/I 2.0` from a `Polygon`), outward bulges, clean corners,
+nothing clipped, coarser scallops visibly on the higher intensity. Written
+`/BE` verified in the bytes: `/S /C /I 1.5` + `/RD [7.5 7.5 7.5 7.5]`
+(`3 + 3×1.5` ✓), and `/S /C /I 2.0` with no `/RD`.
+
+**A defect this dispatch's own agent-memory had already warned about
+recurred, and was caught by running the binary, not by any gate:** `cargo
+fmt` collapsed a `\`-continuation in a CLI error literal and baked the
+padding in as literal spaces. Fixed in both messages and re-read from the
+built binary.
+
+**Terminology (rule 15):** nothing here touches **ce dimensions** or **pdf
+dimensions**.
+
+### Pass 82.1 — `4993559` — **`validate_geometry` SPLIT: A TWO-VERTEX POLYGON IS NOW REFUSED BY NAME, A TWO-VERTEX POLYLINE STILL DRAWS — `Polygon` AND `PolyLine` NO LONGER SHARE ONE THRESHOLD** — filed 2026-08-18 (hundred-and-seventy-seventh filing)
+
+`Polygon` and `PolyLine` previously shared one match arm in
+`validate_geometry` with `vertices.len() < 2`, a threshold right for
+exactly one of them. A two-point `PolyLine` is a line segment and draws
+something real; a two-point `Polygon` is a closed figure doubling back
+along itself, so the baked appearance drew **a line pretending to be an
+area** — `add_markup`'s guard 4 (*"does the geometry draw something?"*)
+was satisfied by precisely the degeneracy it exists to reject.
+
+**Arms split even though each body is now one line** — sharing them is
+what produced the defect: it made two thresholds look like one fact.
+
+**New `EditError::TooFewVertices { subtype, needed, given }`** — *"a
+Polygon needs at least 3 vertices, but 2 were given"* (R27's
+by-name-refusal pattern). **The empty case deliberately still reports
+`EmptyGeometry`**, with a test pinning that split: zero vertices genuinely
+*is* "you passed nothing," and letting the new error swallow it would
+make the older, better message dead code.
+
+Three tests, each asserting the boundary **from both sides** (2 refused /
+3 accepted for `Polygon`; 1 refused / 2 accepted for `PolyLine`). The
+`PolyLine` pair carries the real regression risk: the obvious "fix" is to
+raise the shared threshold to 3, which would silently delete the most
+ordinary `PolyLine` there is.
+
+**How it was found is the finding, filed as a decision-058 boundary
+case**: not a test, not a fuzzer — the consuming `pdfceGUI` shell was
+carrying its own `≥ 3` check as a workaround. A shell re-deriving a
+validity rule the engine owns is a boundary defect on **the engine's**
+side, and the workaround is the symptom rather than the fix — same class
+as `Pass 78.0`'s re-derived guard list, one level down. **`pdfceGUI` can
+now remove its own `≥ 3` check** — the engine enforces it — and has been
+told so via the feature-request channel.
+
+**`Pass 82.0`'s `Cloud` variant (shipped the same session, `2094ad9`)
+inherits the split rule directly**: `Cloud` is a polygon with a border
+effect, so it takes the `Polygon` arm, `>= 3`, with no separate
+implementation.
+
+Verification: `cargo fmt --check`, `cargo clippy -- -D warnings` clean,
+workspace-wide, folded into the same verification pass as `Pass 82.0`.
+
+**Terminology (rule 15):** nothing here touches **ce dimensions** or **pdf
+dimensions**.
+
 ### `cbaccb3` — **THE TWO SPOOL ENTRY POINTS WERE THE ONLY NON-WINDOWS GAP LEFT IN `pdfce-print`, AND A SHELL MOVING TO THE BETTER CALL SITE IS WHAT MADE THE GAP MATTER** — no Pass ID, no decision minted; commit `cbaccb3` touches `crates/pdfce-print/src/lib.rs` only and is cited here to satisfy `check-commits-filed.py` — filed 2026-08-18 (hundred-and-seventy-sixth filing)
 
 **Filed by `pdfce-librarian` WITHOUT a shell this session.** Test/lint
@@ -5379,7 +5527,12 @@ each other do not.
    filesystem does underneath. **That is the difference between fixing an
    instance and closing the class** — the same distinction that governed
    `Pass 78.0` fourteen minutes earlier, and the same one that governs the
-   `add_markup_appearance` refusal filed under `Pass 82.0` in *Next up*.
+   `add_markup_appearance` refusal filed under `Pass 82.0` in *Next up*
+   [★ AMENDED 2026-08-18, hundred-and-seventy-seventh filing — `Pass 82.0`
+   shipped as `2094ad9` and is no longer in *Next up*; see the top of
+   *Shipped* for its entry. Same-filing propagation duty: this is the
+   editable mirror of that fact, corrected in place per the reference in
+   the entry's own text.].
 
 **What the cache deliberately gives up, documented rather than discovered:**
 a directory that becomes writable **mid-run** is not noticed. Accepted,
@@ -50322,51 +50475,6 @@ and sends the next bug report at the writer instead of the reader.
 dimensions** — but note that a **pdf** annotation authored elsewhere is
 exactly what renders wrong today.
 
-### Pass 82.1 — **`validate_geometry` accepts a TWO-VERTEX "polygon"**, and the consuming shell was working around it with its own `≥ 3` rule — a boundary finding under decision 058, and it must be fixed for **`Polygon` as well as `Cloud`** — filed 2026-08-14 (hundred-and-forty-seventh filing) — **UNSTARTED**
-
-> **Small, independent of `Pass 82.0`, and should not wait for it.** It is
-> filed as a slice of the cloud family only because that is where it was
-> found. **Nothing in it depends on clouds existing.**
-
-**Measured in this dispatch**, `crates/pdfce-core/src/edit.rs:15247`:
-
-```rust
-MarkupSpec::Polygon { vertices, .. } | MarkupSpec::PolyLine { vertices, .. } => {
-    vertices.len() < 2
-}
-```
-
-**`Polygon` and `PolyLine` share one arm, and `< 2` is right for exactly
-one of them.** A two-point **PolyLine** is a line segment and draws
-something. A two-point **Polygon** is a degenerate closed figure — pdfce
-authors it, the `/AP` draws a doubled-back line, and **`add_markup`'s
-guard 4 (*"geometry must draw something"*) has been satisfied by
-something that draws a line pretending to be an area.**
-
-**This is a decision-058 boundary finding, filed as one.** 058's rule:
-*"Anything it DOES need is a place the boundary was drawn wrong — a
-finding about THIS repository, to be recorded as one … not quietly
-accommodated."* The `pdfceGUI` session **did** accommodate it — it carries
-its own `≥ 3` check — and **that is the symptom**: a shell re-deriving a
-validity rule the engine owns is the same defect class as `Pass 78.0`'s
-re-derived guard list, one level down.
-
-**Acceptance:**
-1. `Polygon` requires **`vertices.len() >= 3`**; `PolyLine` keeps `>= 2`.
-   **Split the match arm** — sharing it is what produced the defect.
-2. The **same rule applies to `Cloud`** when `Pass 82.0` lands (a cloud is
-   a polygon with a border effect; a two-vertex cloud is the same
-   nonsense).
-3. A refusal **by name**, not `EmptyGeometry` — *"a polygon needs at least
-   three vertices"* tells the caller what to fix; *"empty geometry"* about
-   a two-point list does not (R27).
-4. A test per subtype asserting the boundary **from both sides** (2 refused
-   / 3 accepted for `Polygon`; 1 refused / 2 accepted for `PolyLine`).
-5. `cargo fmt --check`, `cargo clippy -- -D warnings` clean.
-
-**Terminology (rule 15):** nothing here touches **ce dimensions** or **pdf
-dimensions**.
-
 ### Pass 80.0 — **NOTE TEXT ON GEOMETRIC MARKUP — `/Contents` PLUS `/T` AND `/M` TOGETHER**, because a Comments panel that lists a note with no author *"looks like a bug in the panel rather than an absence in the writer"* — filed 2026-08-14 (hundred-and-forty-seventh filing) — **UNSTARTED**
 
 > **A named consumer is waiting.** The `pdfceGUI` session's Comments panel
@@ -50514,115 +50622,6 @@ below omits the key for `None` rather than writing `1.0`.
    other, not each against its own expectation.
 6. `pdfce-cli`'s markup subcommands gain `--opacity` (rule 11).
 7. `cargo fmt --check`, `cargo clippy -- -D warnings` clean.
-
-**Terminology (rule 15):** nothing here touches **ce dimensions** or **pdf
-dimensions**.
-
-### Pass 82.0 — **REVISION CLOUDS — `MarkupSpec::Cloud` and, the more valuable half, `Square { border_effect }`** (`/BE << /S /C /I n >>`, §12.5.4 Table 167). ★ **The general escape hatch `add_markup_appearance` is REFUSED, ON THE RECORD — and the requester declined to ask for it before the engineer could refuse it** — filed 2026-08-14 (hundred-and-forty-seventh filing) — **UNSTARTED**
-
-> **A genuine absence, checked rather than assumed.** The requester
-> searched `ROADMAP.md` and `FEATURES.md` for a cloud entry before asking
-> and found none **in any category** — not a declined item, not a Backlog
-> bullet, **nothing.** Confirmed in this dispatch: `grep -ni "revision
-> cloud\|border effect\|BorderEffect"` over `ROADMAP.md` returns **zero
-> hits.** A `FEATURES.md` row is added by this filing.
-
-#### What is asked for
-
-1. **`MarkupSpec::Cloud { vertices, border, interior, width, intensity }`**
-   — a closed polygon carrying **`/BE << /S /C /I n >>`** (§12.5.4
-   Table 167: `/S /C` = the cloudy border effect, `/I` = intensity,
-   **0, 1 or 2**).
-2. **★ `Square { border_effect }` — and this is the half that carries the
-   value.** *Drag a box, make it cloudy* is **the gesture** reviewers
-   actually perform; a cloud from a free-form vertex list is the rarer
-   case. A `/BE` on `Square` is **one optional key on a subtype pdfce
-   already authors**, and it reaches the common workflow with a fraction
-   of the surface.
-
-#### ★★ THE ESCAPE HATCH IS REFUSED, AND THE REFUSAL IS THE MOST TRANSFERABLE PART OF THIS ENTRY
-
-The obvious way to satisfy a request like this **once and for all** is a
-general `add_markup_appearance` — hand `pdfce-core` a prebuilt annotation
-dictionary and appearance stream and let the shell write whatever subtype
-it likes.
-
-**The requester declined to ask for it**, reasoning that it would let a
-shell write **a dictionary the engine never validated**, bypassing
-`add_markup`'s **four guards**. **The engineer agrees and would have
-refused it.** Both halves are recorded because a refusal that only one
-party arrived at gets re-proposed by the other.
-
-**`add_markup`'s four guards, read from
-`crates/pdfce-core/src/edit.rs:9990–10030` in this dispatch:**
-
-| # | guard | refuses with |
-|---|---|---|
-| 1 | document is **encrypted** | `DocumentEncrypted` |
-| 2 | **certification** (annotation-aware `/P 3` gate, `Pass 38.5`) | `CertificationForbidsChange` |
-| 3 | **`/Size` suppression** — creating objects would expose hidden entries (§7.5.5) | `ObjectCreationWouldExposeHiddenObjects` |
-| 4 | **geometry draws something** | `EmptyGeometry` |
-
-**The principle, stated so it can be cited:** ***a guard that can be
-bypassed by a second entry point is not a guard, it is a convention.***
-Guards 1–3 are **document-safety** properties, not stylistic ones — an
-escape hatch would let a shell author an annotation into an encrypted
-document, into a certified document that forbids it, or into a document
-whose `/Size` is hiding objects, **and every one of those failures is
-silent in the saved file.**
-
-**★ Note the shape: this is `Pass 78.0` seen from the opposite end.** There,
-a **query** re-derived a guard list and drifted from it, so the fix was to
-make the two the same expression. Here, a proposed **second entry point**
-would let a caller skip the list entirely. **Same principle, both
-directions: one guarded operation, one entry point, one expression of the
-guard.**
-
-##### The rule that was NOT minted, and why — recorded so the count is not lost
-
-That principle now has **two instances in one day** (`Pass 78.0`'s
-delegation; this refusal). **A standing rule is NOT minted**, because this
-project's own bar, applied twice this week in declining the `R193` and
-`R194` proposals, is **three instances**, and *"decline on the count, not
-the merits"* is the disposition those rulings established. **`R195`
-remains the next genuinely free rule number** — nothing here claims it.
-**If a third unrelated instance appears, the draft is ready and the
-instances are enumerated here and under `Pass 78.0`.**
-
-#### The correct alternative, which is what this Pass is
-
-**Named subtypes, each validated.** Every new markup shape is a
-`MarkupSpec` variant that goes through the same four guards and the same
-`annot_author::build_appearance` builder. It is more work per subtype and
-it is the reason `add_markup` can be trusted at all.
-
-#### Acceptance
-
-1. `MarkupSpec::Cloud { vertices, border, interior, width, intensity }`,
-   authored through `add_markup` — **no new entry point.**
-2. `/BE` written as `<< /S /C /I n >>`; **`/I` refused by name outside
-   `{0, 1, 2}`** (Table 167 admits 0, 1 and 2 — not a continuous range).
-3. **`Square` gains `border_effect`**, the same `/BE` on the subtype the
-   drag gesture produces. **Ship both in this Pass**; a cloud request
-   answered with only the vertex-list form misses the workflow that
-   motivated it.
-4. A **baked `/AP`** for both, per **R43** (pdfce paints from the
-   appearance stream or not at all) — a cloud whose cloudiness lives only
-   in `/BE` renders as a plain polygon in a viewer that ignores it.
-5. **`Pass 82.1`'s `≥ 3` vertex rule applies to `Cloud`.**
-6. `pdfce-cli` subcommand coverage for both (rule 11).
-7. `cargo fmt --check`, `cargo clippy -- -D warnings`,
-   `cargo tree -p pdfce-core` clean.
-
-#### Sourcing note
-
-`/BE` and Table 167 are cited from the request and confirmed against
-pdfce's existing annotation work. **Before implementation, dispatch
-`pdfce-spec-librarian`** for the §12.5.4 Table 167 entry — in particular
-whether `/BE` is honoured on `Square`/`Circle` only or on the polygon
-subtypes too, and what a conforming reader does with `/I` on a subtype
-that does not support it. **Rule 1: do not implement `/BE`'s byte layout
-from memory.**
 
 **Terminology (rule 15):** nothing here touches **ce dimensions** or **pdf
 dimensions**.
