@@ -96,7 +96,7 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
-### ★★★★ Pass 96.0 — CORE STREAM — merge commit + `ddeb815`+`72dcc11`+`a8381ea` — **A PAGE'S OWN `/MediaBox` IS NOW WRITABLE, AND A PLACED MARKUP CAN BE RESTYLED WITHOUT REGENERATING ITS `/AP` FROM SCRATCH** — the ce-dimension refusal, a false-positive disclosure now measured, and two more instances of the wrapped-string-literal defect — filed 2026-08-18 (hundred-and-sixty-fourth filing)
+### ★★★★ Pass 96.0 — CORE STREAM — merge commit `269e4e0` + `ddeb815`+`72dcc11`+`a8381ea` — **A PAGE'S OWN `/MediaBox` IS NOW WRITABLE, AND A PLACED MARKUP CAN BE RESTYLED WITHOUT REGENERATING ITS `/AP` FROM SCRATCH** — the ce-dimension refusal, a false-positive disclosure now measured, and two more instances of the wrapped-string-literal defect — filed 2026-08-18 (hundred-and-sixty-fourth filing)
 
 **Filed by `pdfce-librarian`, no shell available (hard rule 8) — every
 figure below is RELAYED from the dispatching engineer's report, not
@@ -107,6 +107,19 @@ crate. This entry bundles TWO capabilities landed together across the
 same three commits; this librarian cannot attribute which specific
 commit implements which without `git show`, so both are recorded under
 one family rather than guessing a split.
+
+**Amendment (still hundred-and-sixty-fourth filing).** `merge commit
+269e4e0` added to the header above — the original filing named only
+the three worktree commits, and `tools/check-commits-filed.py` still
+flagged the merge itself as unfiled. The engineer separately reported
+that `269e4e0`'s own commit message was edited post-commit after
+backticks in a shell `-m` string triggered command substitution and
+silently deleted three phrases, including `pdfce_core::paper` and
+`ForeignAppearance`. Both phrases already appear intact above (the
+`/MediaBox`/paper-write paragraph and the false-positive-disclosure
+paragraph respectively), so this entry was not quoting the damaged
+version. The third deleted phrase was not named to this librarian and
+could not be checked — no shell, so `git show 269e4e0` was not run.
 
 **What shipped, capability 1 — page size.** `/MediaBox` write verbs plus
 `pdfce_core::paper` and a `set-page-size` CLI verb, mirroring the
@@ -192,13 +205,19 @@ separation holds.
 family **97**. Standing rules: no new rule minted this entry. Decisions:
 none minted — ceiling stays **068**, next free **069**.
 
-### ★★★★ Pass 95.0 — PRINT STREAM — merge commit + `c75a17c`+`c5d3ae8`+`cdac4e7` — **THREE `pdfceGUI` PRINT REQUESTS WERE ONE DEFECT: `build_devmode` SYNTHESISED AN EMPTY DEVMODE, AND A FOURTH BUG — A PRINT PATH THAT IGNORED `/Rotate` ENTIRELY — WAS FOUND WHILE TESTING THE FIX** — the `pdfceGUI` request channel is now EMPTY for the first time — filed 2026-08-18 (hundred-and-sixty-fourth filing)
+### ★★★★ Pass 95.0 — PRINT STREAM — merge commit `ab3fd25` + `c75a17c`+`c5d3ae8`+`cdac4e7` — **THREE `pdfceGUI` PRINT REQUESTS WERE ONE DEFECT: `build_devmode` SYNTHESISED AN EMPTY DEVMODE, AND A FOURTH BUG — A PRINT PATH THAT IGNORED `/Rotate` ENTIRELY — WAS FOUND WHILE TESTING THE FIX** — the `pdfceGUI` request channel is now EMPTY for the first time — filed 2026-08-18 (hundred-and-sixty-fourth filing)
 
 **Filed by `pdfce-librarian`, no shell available (hard rule 8) — every
 figure below is RELAYED from the dispatching engineer's report, not
 independently re-run or read via `git show`.** Ran in an isolated
 worktree, concurrent with `Pass 96.0` above and this session's render
 work, scope hard-partitioned by crate.
+
+**Amendment (still hundred-and-sixty-fourth filing).** `merge commit
+ab3fd25` added to the header above, for the same reason as `Pass
+96.0`'s amendment immediately above: `tools/check-commits-filed.py`
+flagged the merge itself as unfiled when only the three worktree
+commits (`c75a17c`/`c5d3ae8`/`cdac4e7`) were named.
 
 **Root cause, one defect behind three separate `pdfceGUI` requests.**
 `build_devmode` synthesised a bare `DEVMODEW::default()` and handed it

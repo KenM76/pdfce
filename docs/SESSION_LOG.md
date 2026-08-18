@@ -44931,7 +44931,7 @@ correction still owed; `LUM-A1`'s spec-corpus back-fill still owed.
 ## 2026-08-18 (hundred-and-sixty-fourth filing) — **TEN UNFILED COMMITS, TWO PARALLEL WORKTREE STREAMS: `Pass 95.0`/`96.0` CLOSE ALL FIVE OUTSTANDING `pdfceGUI` REQUESTS — THE CHANNEL IS EMPTY FOR THE FIRST TIME — PLUS `Pass 92.1`, `Pass 94.0` (filed out of order), a gate fix (`89f28ca`, `R192`'s SEVENTH instance), and `v0.6.1`'s version bump recorded as OWED, not released**
 
 **Shipped:**
-- `Pass 96.0` — CORE STREAM (merge + `ddeb815`+`72dcc11`+`a8381ea`).
+- `Pass 96.0` — CORE STREAM (merge `269e4e0` + `ddeb815`+`72dcc11`+`a8381ea`).
   `/MediaBox` write verbs + `pdfce_core::paper` + `set-page-size` CLI
   (three-way write mirroring `rotation_write`; a target equal to the
   inherited value removes the page's own entry). `set_markup_style` —
@@ -44951,7 +44951,7 @@ correction still owed; `LUM-A1`'s spec-corpus back-fill still owed.
   stated by the dispatch. Declined the request's own proposed hit-test
   ownership (the padding is already baked into the stored `/Rect` at
   authoring time).
-- `Pass 95.0` — PRINT STREAM (merge + `c75a17c`+`c5d3ae8`+`cdac4e7`).
+- `Pass 95.0` — PRINT STREAM (merge `ab3fd25` + `c75a17c`+`c5d3ae8`+`cdac4e7`).
   All three original `pdfceGUI` print requests traced to ONE defect:
   `build_devmode` synthesised an empty `DEVMODEW`. Fixed by making
   `build_devmode` genuinely fetch the driver's own default via
