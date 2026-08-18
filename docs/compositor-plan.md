@@ -39,18 +39,10 @@ disagreement localises to one of the two, not to "the cell".
 
 ### 1.1 What the probe found — `1_GWG160` (DeviceCMYK, non-isolated, non-knockout)
 
-Only **3 of 16** cells fail, and they are contiguous:
-
-| trap x | cell index | blend mode |
-|---|---|---|
-| 204 | 3 | **Hue** |
-| 266 | 4 | **Saturation** |
-| 329 | 5 | **Color** |
-
-Cell index derived from the patch's own content stream: the row-2 labels are
-`Hard Light, Difference, Exclusion, Hue, Saturation, Color, Luminosity,
-Opacity (0%)`, the cells are `22.678 pt` squares on a `31.68 pt` pitch, and
-the render is at scale 2.0.
+Only **3 of 16** cells fail: the ones governed by **`Hue`**, **`Saturation`**
+and **`Color`**, at device x = 204, 266 and 329 on the y = 106 row. Cell
+identities resolved by `tools/ghent-cellmap.py` from each form XObject's
+`/Matrix` and `/BBox` against its governing `/ExtGState`.
 
 **★ CORRECTED 2026-08-18, later the same day.** This section originally read
 that those three are *"exactly the nonseparable blend modes whose K component
@@ -102,7 +94,9 @@ The pitch arithmetic turned out to be *right about positions* and the
 *causal attribution built on it* was wrong, which is the combination that
 survives a sanity check.
 
-`iso32000__s__11.3.5.md` §4.8 quotes the governing `shall` verbatim:
+**The clause that Stage B still owes**, quoted so the implementation has it —
+this is what *implementing* the nonseparable modes requires, not a diagnosis
+of why they fail today. `iso32000__s__11.3.5.md` §4.8, verbatim:
 
 > "The formulas in this sub-clause apply to **RGB** spaces. Blending in
 > **CMYK** spaces (including both `DeviceCMYK` and `ICCBased` calibrated CMYK
@@ -114,14 +108,14 @@ survives a sanity check.
 > `Saturation` and `Color` blend modes; it **shall** be the K component of
 > **Cs** for the `Luminosity` blend mode."
 
-⇒ **K is not blended, it is selected**, and the selection differs by mode.
-pdfce composites in device RGB, so it has no K to select and no CMY to
-complement. The same RAG file already anticipated this in writing: *"pdfce
-currently composites in device RGB. If/when a CMYK path lands, this clause is
-the whole rule."*
+⇒ **K is not blended, it is selected**, and the selection differs by mode. The
+same RAG file anticipated the gap in writing: *"pdfce currently composites in
+device RGB. If/when a CMYK path lands, this clause is the whole rule."*
 
-`3_GWG164` (ICCBased **CMYK**) fails **4** cells and is the same defect — the
-clause names calibrated CMYK explicitly.
+`3_GWG164` (ICCBased **CMYK**) fails **4** cells: the same three declined
+nonseparable modes, **plus `Difference`** — and that fourth cell is the only
+direct evidence in the corpus that an *applied* mode is computed in the wrong
+space.
 
 ### 1.2 What the probe found — `1_GWG161` / `3_GWG161` / `1_GWG162` (14 / 15 / 7 cells)
 
@@ -336,12 +330,31 @@ Expected: `1_GWG160`, `3_GWG164`, and the 7 overprint patches — **9 patches**,
 
 ### Stage C — the collapse, and its disclosure (proposed `Pass 97.2`)
 
-Collapse N planes to sRGB **once, at the end**. §6 of the overprint survey
-records that this step is **not standardised**, that vendors disagree
-materially, and that Acrobat does not document its method. That makes it a
-**settings-shaped ambiguity** under the standing rule (never hard-code a
-choice the standard leaves open): pick a default deliberately, expose it, and
-disclose which model produced the pixels.
+Collapse N planes to sRGB **once, at the end**.
+
+**⇢ NOW SOURCED: `docs/collapse-model-survey.md` (2026-08-18).** The
+"vendors disagree" claim is no longer an assertion — it is measured against
+thirteen engines, and the absence of a specification is itself documented by
+an ISO TC171 participant who went looking. Headlines:
+
+- **Harlequin uses per-colorant `max()`; Mako uses multiply-of-complements —
+  two products from the same vendor.** There is no consensus formula to find.
+- **Acrobat's method has never been published**, and the ICC states Acrobat
+  *"should not be used as a guide"* for spot inks. "Match Acrobat" is not an
+  available specification.
+- **Third independent confirmation of the N-plane architecture**, this time
+  from vendor docs: *"overprinting… is disabled"* / *"not allowed"* if spot
+  colorants are tint-transformed first. Tint-transforming early and
+  overprinting correctly are mutually exclusive.
+- **Default decided:** per-colorant `/Separation` tint transform (preferred
+  over the DeviceN collective one), accumulate by multiply-of-complements,
+  one ICC hop to sRGB through the OutputIntent. Five settings enumerated,
+  including a second ambiguity nobody had noticed — **which OutputIntent to
+  use when the array has more than one entry** (MuPDF takes `[0]` ignoring
+  `/S`; Poppler refuses to act at all).
+- **`moxcms`** (BSD-3-Clause OR Apache-2.0, pure Rust, ≤16 inks) is the ICC
+  candidate that clears the wasm32 gate `lcms2` fails. **Not added** — rule 13
+  needs a `PRIOR_ART.md` entry first.
 
 ### Out of scope for 97.x
 
