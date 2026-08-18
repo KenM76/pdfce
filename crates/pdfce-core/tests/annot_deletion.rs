@@ -608,6 +608,7 @@ fn p3_permits_authoring_an_annotation_as_well_as_deleting_one() {
         border: Some(Color::Gray(0.0)),
         interior: None,
         border_width: 1.0,
+        border_effect: None,
     };
     s.add_markup(0, &spec).expect(
         "/P 3 permits ANNOTATION CREATION. Refusing here means pdfce can \

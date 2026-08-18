@@ -983,6 +983,15 @@ enum Command {
         /// Border/stroke width in points.
         #[arg(long, default_value_t = 1.0)]
         width: f64,
+        /// Draw the border CLOUDY (`/BE << /S /C /I n >>`, ISO 32000-1
+        /// §12.5.4 Table 167) at intensity `n` — a revision cloud.
+        ///
+        /// Valid on `square` and `polygon` only. **`n` is a continuous
+        /// value in `0..=2`, not a choice of three**: Table 167 types it
+        /// `number` and constrains it "in the range 0 to 2", so `1.5` is
+        /// conformant and accepted.
+        #[arg(long, value_name = "INTENSITY")]
+        cloud: Option<f64>,
         /// Output path.
         #[arg(short, long)]
         output: PathBuf,
@@ -6261,6 +6270,7 @@ fn run() -> ExitCode {
             color,
             fill,
             width,
+            cloud,
             text,
             font,
             size,
@@ -6283,6 +6293,7 @@ fn run() -> ExitCode {
             color: color.as_deref(),
             fill: fill.as_deref(),
             width,
+            cloud,
             text: text.as_deref(),
             font: &font,
             size,
@@ -13157,6 +13168,7 @@ struct AnnotateArgs<'a> {
     color: Option<&'a str>,
     fill: Option<&'a str>,
     width: f64,
+    cloud: Option<f64>,
     text: Option<&'a str>,
     font: &'a str,
     size: f64,
@@ -15317,8 +15329,19 @@ fn build_markup_spec(
                     border: Some(color),
                     interior,
                     border_width: args.width,
+                    border_effect: args.cloud,
                 })
             } else {
+                // `/BE` is legal on `/Circle` per Table 180, but pdfce does
+                // not author it: an ellipse has no straight edges to
+                // scallop, and the standard describes no curve-following
+                // cloud. Refused by name rather than silently dropped —
+                // a caller who typed --cloud is entitled to know it did
+                // nothing.
+                if args.cloud.is_some() {
+                    return Err("--cloud is not supported on circle: a cloudy border is defined for straight-edged shapes, so use --type square or --type polygon"
+                        .into());
+                }
                 Ok(MarkupSpec::Circle {
                     rect: r,
                     border: Some(color),
@@ -15350,13 +15373,34 @@ fn build_markup_spec(
         AnnotKindArg::Polygon | AnnotKindArg::Polyline => {
             let verts = parse_points(args.points.ok_or("this subtype needs --points")?)?;
             if matches!(args.kind, AnnotKindArg::Polygon) {
-                Ok(MarkupSpec::Polygon {
-                    vertices: verts,
-                    border: Some(color),
-                    interior,
-                    width: args.width,
-                })
+                // `--cloud` turns the polygon into a revision cloud. Same
+                // `/Subtype /Polygon` either way — there is no `/Cloud`
+                // subtype in ISO 32000 — so this is one flag, not a
+                // seventh `--type`.
+                if let Some(intensity) = args.cloud {
+                    Ok(MarkupSpec::Cloud {
+                        vertices: verts,
+                        border: Some(color),
+                        interior,
+                        width: args.width,
+                        intensity,
+                    })
+                } else {
+                    Ok(MarkupSpec::Polygon {
+                        vertices: verts,
+                        border: Some(color),
+                        interior,
+                        width: args.width,
+                    })
+                }
             } else {
+                // Table 181 declares `/BE` on Polygon/PolyLine qualified
+                // "meaningful only for polygon annotations" — verbatim in
+                // both editions. An open polyline cannot carry one.
+                if args.cloud.is_some() {
+                    return Err("--cloud is not supported on polyline: ISO 32000 declares the border effect \"meaningful only for polygon annotations\", so a cloud needs a closed shape (--type polygon or --type square)"
+                        .into());
+                }
                 Ok(MarkupSpec::PolyLine {
                     vertices: verts,
                     color,

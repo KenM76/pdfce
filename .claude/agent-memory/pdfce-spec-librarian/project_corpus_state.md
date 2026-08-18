@@ -1,6 +1,6 @@
 ---
 name: pdf-spec-corpus-state
-description: PDF_Spec RAG conventions NOT recorded in its own index.md — prefix splits, gap/retraction vocabulary, axis re-audits, evidencing negatives, and 43 numbered dispatch-shape findings. Too long to read whole; grep by item number or keyword using the index at the top.
+description: PDF_Spec RAG conventions NOT recorded in its own index.md — prefix splits, gap/retraction vocabulary, axis re-audits, evidencing negatives, and 50 numbered dispatch-shape findings. Too long to read whole; grep by item number or keyword using the index at the top.
 metadata:
   type: project
 ---
@@ -59,6 +59,9 @@ heading (`**<N>. `).**
 | 48 | ★ **THE CLOSE-YOUR-OWN-FLAGGED-GAP dispatch.** An ESTIMATED term-frequency count is not a MEASURED one — `knockout` 21→**61**, and the missed loci WERE the headline (an "implicit-`<feature>`" sweep: three clauses establish a non-isolated knockout group with **no `/K` key in the file**) · "can data-structure X represent clause C?" is answerable — **rewrite the formulas in the structure's terms (premultiply), set the clause's own simplifying condition, watch terms vanish**, and ship a per-case CAPABILITY TABLE whose "no" rows carry a disclosed refusal boundary · **COMPILE-AND-RUN extends to "is my implementation route real?"** — design the probe so ONE number discriminates the rivals, and add the free extra probe (it found that a `tiny_skia::Mask` is a SHAPE input) · **a corpus file's own PREDICTION can be confirmed — record it in the OLD file, next to the simplification it licensed** · a "the spec contradicts itself" finding lives in a DIFFERENT clause, the later edition is the tiebreak, and you must QUANTIFY the divergence (closed form) and check whether the dispatched clause mandates a formula at all ("implementation-defined" ⇒ SETTING, not bug) · the clause answering the dispatch may not be the dispatched one (`/BC` outside the `/BBox` is §11.6.5.2) · **closing a SCOPED gap changes THREE things — banner, GAP line, and the ONE-LINE SUMMARY the old file wrote about the clause it had not read** |
 | 37 | ADJUDICATING A CLAUSE-NUMBER CONFLICT: rule from the source's own enumeration, never from your heading (headings are RECONSTRUCTED); "the sub-clause does not exist" beats "the other one is right"; status leaks to anywhere the PRODUCT NAME appears, not just to headings and the index |
 | 47 | ★ **THE VERBATIM-FORMULA-TABLE + CROSS-SPEC-COMPARISON dispatch.** A THIRD glyph-dropout class: **PATH-DRAWN symbols** (`√`, `| |`) are invisible even to the per-glyph pass — detect by an unexplained x-GAP, license by C⁰ continuity + the newer edition's clean Unicode + a sibling spec · **a COUNT in the corpus is a hypothesis** ("the other 18 blend modes" was wrong by 3, in 4 files, and the DISPATCH inherited it) · **a correct CONCLUSION can rest on a WRONG PREMISE** — confirm the premise separately, because that is what the next Pass generalises · **a cross-spec "how does PDF differ from W3C/Skia?" question IS answerable from free primaries — don't refuse it** · **★ COMPILE AND RUN THE DEPENDENCY** (a 15-line `cargo` project pinned to the lockfile version, `--offline`, 60 000 measured pixels) and **isolate the root cause by re-implementing the crate's own variant and reproducing its output** · a dependency can be measurably WRONG against BOTH specs ⇒ defect, not ambiguity, never a setting · **every divergence the dispatch PREDICTED was absent and the real one was unpredicted** · two properties with similar names selecting different sets must be separated by name · three files, split on LICENCE and on SPEC-vs-BEHAVIOUR |
+| 46 | ★ **THE DELIBERATELY-NARROWED dispatch.** Honour the scope cut and LABEL the skipped half in THREE places (banner, gap line, index) · when a brief and an existing corpus file disagree on an identifier the CORPUS usually wins · **a brief demanding something "verbatim" that returns 0 hits document-wide means the HEADLINE IS THE NEGATIVE** · check the NEWER EDITION before filing an ambiguity · a NOTE in 1.7 can be a `shall` in 2.0 · an informative NOTE can be the ONLY statement of a load-bearing rule · 2.0's clean Unicode cross-checks a 1.7 scrambled equation |
+| 49 | ★ **THE MODALITY-DECISION dispatch — `shall` vs `should` IS the engineering decision.** **The MODALITY ITSELF can be version-gated** (1.7 hedged writer `shall not ORDINARILY` + a bare-indicative reader consequence → 2.0 writer `should` + explicit processor `shall`), and the later edition's SPLIT is ISO's own reading of the earlier text · a hedged `shall` is a THIRD modality class · **a writer-side "must I clamp?" is answered by the READER's obligation** · default-value chains and containment chains are DIFFERENT GRAPHS · a missing-OPERATION negative needs a document-wide CO-OCCURRENCE regex, not a clause-scoped term count · a figure can illustrate more nesting than any clause requires · **the dispatch's cheap "just confirm this quote" item is where the corpus error was** (Annex C is `(normative)`, not informative) |
+| 50 | ★ **THE TWO-SOURCES-DISAGREE dispatch — and the CORPUS'S OWN COMPRESSION is the ancestor of the error.** A one-line table compression is a CLAIM and it propagates (`Intensity 0–2` → a validator refusing conforming `/I 1.5`); **quote the row, never compress it, when a cell is what an implementer will read** · the enumeration-vs-RANGE drafting idiom contrast lives in the SIBLING ROW of the same table · **THREE of my own counts were wrong, all from `head`-truncated grep listings — run `grep -c`, anchor `^KEY` for TABLE ROWS, and add a pre-report re-measure pass** · grep the RECOVERY VERB (`tolerate`, `adjusted to the nearest`) not the key name · **a key name can be overloaded across two unrelated features** (`/BE` = border effect ∪ multimedia "best effort"; second instance after `/AS` ⇒ a pattern) · **the same key in three tables can carry three different normative forces, and only one has the `shall`** · an ABSENT row is a finding · "meaningful only for X" is a verbatim negative whose CONSEQUENCE is still unstated · the 2.0 delta can NARROW an ambiguity without closing it · **the "confirm rather than re-derive" item is where the omission was — third instance** · bucket-5 deferrals must name their destination bucket |
 
 ---
 
@@ -2933,3 +2936,138 @@ item below cost something or changed an answer.
   bucket header count AND the §2 summary table, and leave the roadmap-facing
   prose legible with a note that it reads on the old base** rather than silently
   restating it.
+
+---
+
+## 50. The TWO-SOURCES-DISAGREE dispatch — and the corpus's own COMPRESSION is what was wrong (2026-08-18, `/BE` border effect, `Pass 82.0` revision clouds)
+
+Shape: the engineer names **two documents that contradict each other** — one of
+them a corpus file, one of them `ROADMAP.md` — says a validator is blocked on the
+difference, and asks for verbatim text. The dispatch's framing was *"which of
+these two is right?"* **The answer was "the corpus file is the ancestor of the
+error, and it is not wrong so much as LOSSY."**
+
+- **★★ A ONE-LINE TABLE COMPRESSION IS A CLAIM, AND IT PROPAGATES.** The corpus
+  row read **`| I | number | Valid only if S=C. Intensity 0–2. Default 0. |`**.
+  The standard reads *"A **number** describing the intensity of the effect, **in
+  the range 0 to 2**."* **The en-dash was the RAG author's, not ISO's.** Two
+  documents downstream it had become `ROADMAP.md` `Pass 82.0` acceptance
+  criterion 2: *"`/I` refused by name outside `{0,1,2}` (Table 167 admits 0, 1
+  and 2 — **not a continuous range**)"* — a validator spec that **inverts the
+  standard** and would refuse a conforming `/I 1.5`. Nothing in the corpus was
+  *false*; the summary simply dropped the one word (`range`) that carried the
+  answer. **2026-08-18's other lesson was "*ingested* and *findable* are different
+  states"; this is its twin — *ingested* and *faithfully summarised* are also
+  different states.** When a table cell is the thing an implementer will actually
+  read, **quote the row, do not compress it.** Compressions belong above a
+  verbatim section, never instead of one.
+- **★ THE STRONGEST EVIDENCE FOR "RANGE, NOT ENUMERATION" WAS INSIDE THE SAME
+  FOUR-LINE TABLE.** Table 167's `S` row uses the standard's enumeration idiom —
+  *"Possible values are:"* + a list — and its `I` row uses the range idiom *"in
+  the range 0 to 2"*. **One table, both idioms, one per row.** Look for the
+  contrasting idiom in the SIBLING ROW before reaching for document-wide
+  evidence; it is cheaper and it is decisive. (Generalises the existing
+  sibling-row contrast item from *content* to *drafting idiom*.)
+- **★ THREE OF MY OWN COUNTS WERE WRONG, ALL FROM `head`-TRUNCATED GREP
+  LISTINGS.** I wrote "23 `BE` rows, of which 20 multimedia" (**actual: 9 table
+  rows per edition, split 3 border-effect / 6 multimedia**), "11 clamp loci in
+  2.0" (**actual 12**), "5 `cloud` hits in 2.0" (**actual 7**). Every one came
+  from **counting lines in a `grep -n … | head -30` listing by eye** instead of
+  running `grep -c`. Item 48 said an *estimated* count is not a *measured* one;
+  this adds the specific mechanism: **`head` and eye-counting are the estimator.**
+  **Run `grep -c` for every number that goes in a file, and prefer `^KEY` anchors
+  when counting TABLE ROWS** — `grep -c "BE dictionary"` returns 26 because it
+  counts prose mentions; `grep -c "^BE dictionary"` returns 10, of which one is a
+  wrapped prose line. **All three were caught in a pre-report re-measure pass, so
+  add that pass to every dispatch that ships a count.**
+- **★ A DOCUMENT-WIDE TERM COUNT CAN SETTLE "IS THERE A TOLERANCE CLAUSE?" IN ONE
+  COMMAND.** `grep -c "tolerate"` → **exactly 2 hits in each edition**, one of
+  which is `DamagedRowsBeforeError` and the other is `BS /S`'s *"shall tolerate
+  other border styles … and shall use the default value"*. **⇒ the only
+  annotation-border tolerance clause in either standard sits ONE TABLE ABOVE the
+  one under test and was not carried across.** This is the sharpest available
+  form of the sibling-clause argument, and it took one command. **When the
+  question is "does the spec say what a reader does with a bad value?", grep the
+  RECOVERY VERB (`tolerate`, `adjusted to the nearest`, `shall be ignored`),
+  never the key name.**
+- **★ AND CHECK WHETHER THE SPEC KNOWS HOW TO SAY IT ELSEWHERE.** `grep -c
+  "adjusted to the nearest"` → 8 (1.7) / 12 (2.0), **every one colour-specific**.
+  The standard demonstrably owns the clamping idiom and declines to use it here.
+  **That converts "the spec is silent" from an absence into a positioned fact** —
+  though note the honest limit: it proves the idiom was *available*, not that
+  withholding it was *deliberate*. Say the weaker thing.
+- **★ A KEY NAME CAN BE OVERLOADED ACROSS TWO ENTIRELY UNRELATED FEATURES.**
+  `/BE` is the **border effect** dictionary (§12.5.4, 3 rows) **and** the
+  multimedia **"best effort"** dictionary (§13.2.3 rendition / media clip /
+  media clip section / play params / screen params, 6 rows). **A parser must
+  dispatch on the CONTAINING dictionary, never the key name**, and a `grep /BE`
+  over a real file or over the corpus hits both. This is the `/AS` overload
+  (Table 101 array vs Table 168 name) in a second instance — **it is now a
+  pattern, not an anecdote: check every two-letter key for a second home before
+  writing a lookup.**
+- **★ THE SAME KEY IN THREE TABLES CAN CARRY THREE DIFFERENT NORMATIVE FORCES.**
+  `/RD` appears in exactly three tables per edition. **Square/Circle**: the
+  difference *"**may** occur"* when `BE` inflates `Rect`, `/RD` `(Optional)` ⇒
+  authoring `/BE` obliges nothing. **FreeText**: *"Any border styles and/or
+  border effects … **shall** be applied to the border of the **inner**
+  rectangle"* — the ONLY `shall` binding `BE` to `RD` in either standard, and it
+  points the opposite way (it dictates *where the border is drawn*, not *where
+  the shape is*). **Caret**: same four-number contract, unrelated cause (`/Sy`'s
+  `¶`). **Do not answer "must I write `/RD`?" from the row the dispatch names —
+  enumerate every table the key appears in first.**
+- **★ AN ABSENT ROW IS A FINDING.** Polygon/PolyLine has **no `/RD` at all** in
+  either edition ⇒ a cloudy **Polygon** has no spec mechanism for recording its
+  bulge. The dispatch asked about `/RD` on Square/Circle and the transferable
+  answer was about the table that **lacks** it.
+- **★ "MEANINGFUL ONLY FOR X" IS A VERBATIM NEGATIVE — TAKE IT, DON'T DERIVE IT.**
+  The dispatch asked whether the cloudy effect is defined on an **open PolyLine**
+  and expected an inference. Both editions qualify the row *"(Optional;
+  **meaningful only for polygon annotations**)"*, and §12.5.4's introductory
+  prose independently lists only *"square, circle, and polygon"*. **Two
+  independent statements, both editions, agreeing.** But note the residue: **"not
+  meaningful" is neither "shall be ignored" nor "the file is invalid"** — the
+  restriction is stated and the *consequence* is not, which is its own ambiguity.
+- **★ THE 2.0 DELTA CAN BE "THE ONLY DESCRIPTION THAT EXISTS AT ALL", AND STILL
+  NOT CLOSE THE GAP.** 1.7 says only *"the border should appear 'cloudy'"*. 2.0
+  adds *"that is, the border should be drawn as **a series of convex curved line
+  segments** in a manner that simulates the appearance of a cloud"* — the sole
+  statement of cloud shape in either standard — **and it is still a `should`,
+  still with no arc radius, segment count, or `/I` mapping.** Item 46 said to
+  check the newer edition before filing an ambiguity; this refines it: **the
+  newer edition may NARROW an ambiguity without closing it, and the file should
+  record exactly how much it narrowed.**
+- **A `should` in the value description matters as much as the type.** `/S /C`
+  is *"the border **should** appear 'cloudy'"* ⇒ **a reader that draws a plain
+  border is conforming.** Only *"the width and dash array specified by `BS`
+  **shall** be honored/honoured"* is a `shall`, and it constrains `BS`, not the
+  cloud. **Spelling differs between editions (`honored` 1.7 / `honoured` 2.0) —
+  quote each edition's own spelling; a shared quote that silently picks one is a
+  small infidelity that makes a future `grep` miss.**
+- **ERRATA: check the page, then say so.** Errata Collection 3 carries **no
+  annotation** on the page bearing Table 169 (measured by scanning pages 486–492
+  for markup annots), and `pdf-association/pdf-issues` returns **0** for
+  `"border effect"` and for `cloudy`. **A measured "no errata" is worth a line**;
+  it is what lets a future session skip the check. **Beware the false positive:
+  searching `"Table 169"` on that repo returns issue **#169**.**
+- **BY-CATCH IS WORTH FILING WHEN THE PAGE IS ALREADY OPEN.** Scanning the
+  polygon table's annotations for `/BE` errata surfaced **`Issue #444`**
+  (`/State` **Accepted** — PDF Association TWG only, **not** ISO-ratified),
+  which rewrites 2.0 Table 181's `Vertices`/`Path` interaction: as printed,
+  `Vertices` is conditionally optional and co-presence with `/Path` is
+  **illegal**; corrected, `Vertices` is always **Required** and co-presence is
+  **legal-but-ignored**. Unrelated to the dispatch, one command away, filed with
+  its own `license_basis` label.
+- **A DISPATCH ITEM MARKED "I BELIEVE THIS IS ALREADY SETTLED — CONFIRM RATHER
+  THAN RE-DERIVE" IS WHERE THE OMISSION WAS.** Third instance of this shape (item
+  49's Annex C.2 `should`; item 48's one-line summary). The `/BE`-on-polygon
+  belief was **right**, and the corpus row confirming it was **missing the
+  qualifier that answers the dispatch's actual question**. **Confirm by reading
+  the SOURCE row, never by reading the corpus row that asserts it.**
+- **AMBIGUITY-REGISTER PLACEMENT WHEN THE OWNING PASS IS UNSTARTED:** all three
+  `BE-*` findings went to **bucket 5 DEFERRED**, with an explicit *"bucket ON THE
+  DAY `Pass 82.0` SHIPS"* column naming where each one lands (`BE-A1`/`BE-A2` →
+  bucket 1 SETTING, taking the settings count 18 → 20; `BE-A3` → bucket 4 refusal
+  on write / bucket 2 determinate on read). **Deferring is honest; deferring
+  without naming the destination loses the triage work.** And **a settled
+  negative (`BE-N1`) is deliberately NOT in the register** — it is an answer, not
+  an ambiguity.

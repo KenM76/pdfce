@@ -5614,6 +5614,10 @@ impl PdfceApp {
                     border: Some(color),
                     interior: None,
                     border_width: width,
+                    // Plain box. The cloudy variant is a separate GUI
+                    // affordance and GUI work is paused; this keeps the
+                    // existing gesture compiling against the new field.
+                    border_effect: None,
                 },
                 canvas::MarkupKind::Circle => MarkupSpec::Circle {
                     rect,

@@ -687,6 +687,7 @@ fn markup_annotation_preview_equals_saved() {
             border: Some(Color::Rgb(1.0, 0.0, 0.0)),
             interior: None,
             border_width: 4.0,
+            border_effect: None,
         },
     )
     .expect("add_markup applies");

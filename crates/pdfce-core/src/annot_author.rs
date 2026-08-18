@@ -225,6 +225,24 @@ pub enum MarkupSpec {
         interior: Option<Color>,
         /// Border width `/BS /W` in points.
         border_width: f64,
+        /// Cloudy border effect `/BE` (§12.5.4 Table 167), or `None` for
+        /// an ordinary straight border.
+        ///
+        /// `Some(i)` writes `/BE << /S /C /I i >>` and bakes a scalloped
+        /// appearance; `None` omits `/BE` entirely. There is no third
+        /// state: `/S /S` *is* the "no effect" value and it is the
+        /// default, so writing it would add a key that changes nothing.
+        ///
+        /// **`i` is a continuous intensity in `0.0..=2.0`** — see
+        /// [`Self::Cloud`]'s `intensity` for why that is a range and not
+        /// the enumeration it is often assumed to be.
+        ///
+        /// ★ **This is the half of revision-cloud support that carries the
+        /// value.** *Drag a box, make it cloudy* is the gesture reviewers
+        /// actually perform; a cloud from a free-form vertex list is the
+        /// rarer case. One optional key on a subtype pdfce already authors
+        /// reaches the common workflow.
+        border_effect: Option<f64>,
     },
     /// `/Circle` (§12.5.6.9) — an ellipse inscribed in `rect`.
     Circle {
@@ -271,6 +289,48 @@ pub enum MarkupSpec {
         interior: Option<Color>,
         /// Border width in points.
         width: f64,
+    },
+    /// A **revision cloud** — a `/Polygon` (§12.5.6.9) carrying the cloudy
+    /// border effect `/BE << /S /C /I n >>` (§12.5.4, Table 167).
+    ///
+    /// # Why this is a `/Polygon` and not a subtype of its own
+    ///
+    /// There is no `/Cloud` annotation subtype in ISO 32000. A revision
+    /// cloud **is** a polygon whose border is drawn cloudy, and Table 181
+    /// declares `/BE` on Polygon/PolyLine with the qualifier *"meaningful
+    /// only for polygon annotations"*. So this variant writes `/Subtype
+    /// /Polygon` and differs from [`Self::Polygon`] only by `/BE` and by
+    /// the baked appearance.
+    ///
+    /// # ★ `intensity` is a CONTINUOUS range, and this is worth stating
+    ///
+    /// Table 167's `I` row is typed **`number`** and constrains it *"in
+    /// the range 0 to 2"* — **character-for-character identical in ISO
+    /// 32000-1:2008 and ISO 32000-2:2020** (where the table renumbers to
+    /// 169). It is routinely mis-read as the enumeration `{0, 1, 2}`.
+    ///
+    /// The decisive evidence is inside the same four-line table: the
+    /// sibling `S` row uses the standard's **enumeration** idiom
+    /// (*"Possible values are:"* + a list) while `I` uses the **range**
+    /// idiom. One table, both idioms, one per row. **`/I 1.5` is
+    /// conformant** and pdfce accepts it.
+    ///
+    /// Values outside `0.0..=2.0`, and non-finite values, are refused by
+    /// name at author time — see `EditError::BorderEffectIntensityOutOfRange`.
+    Cloud {
+        /// The vertices in order; the shape closes back to the first.
+        /// **At least three** are required (`Pass 82.1`) — a two-vertex
+        /// cloud is a line pretending to be an area.
+        vertices: Vec<(f64, f64)>,
+        /// Border (stroke) colour `/C`.
+        border: Option<Color>,
+        /// Interior (fill) colour `/IC`.
+        interior: Option<Color>,
+        /// Border width in points.
+        width: f64,
+        /// `/BE /I` — the cloud intensity, a continuous value in
+        /// `0.0..=2.0`.
+        intensity: f64,
     },
     /// `/PolyLine` (§12.5.6.13) — an open multi-segment path (`/Vertices`).
     PolyLine {
@@ -416,6 +476,14 @@ pub fn spec_from_dict<G: ObjectGraph + ?Sized>(
                     border,
                     interior,
                     border_width: width,
+                    // `/BE` is deliberately NOT read back here. This
+                    // function reconstructs a spec for RE-AUTHORING, and
+                    // a round-tripped border effect would have to carry
+                    // the intensity pdfce would then re-bake — see the
+                    // `read_spec` docs on what this reader is for. Read
+                    // support for a foreign `/BE` is a separate concern
+                    // from authoring one.
+                    border_effect: None,
                 }
             })
         }
@@ -686,13 +754,37 @@ pub fn build_appearance(spec: &MarkupSpec) -> AuthoredAppearance {
             border,
             interior,
             border_width,
-        } => rectangle_like(b"Square", *rect, *border, *interior, *border_width, false),
+            border_effect,
+        } => rectangle_like(
+            b"Square",
+            *rect,
+            *border,
+            *interior,
+            *border_width,
+            false,
+            *border_effect,
+        ),
         MarkupSpec::Circle {
             rect,
             border,
             interior,
             border_width,
-        } => rectangle_like(b"Circle", *rect, *border, *interior, *border_width, true),
+        } => rectangle_like(
+            b"Circle",
+            *rect,
+            *border,
+            *interior,
+            *border_width,
+            true,
+            // `/BE` on `/Circle` is legal (Table 180 lists it without the
+            // polygon-only qualifier), but pdfce does not author it: an
+            // ellipse has no straight edges to scallop, so the baked
+            // appearance would have to invent a curve-following cloud
+            // that the standard describes nowhere. Refused by omission
+            // rather than by a runtime error, because the type simply
+            // does not offer it.
+            None,
+        ),
         MarkupSpec::Line {
             start,
             end,
@@ -710,12 +802,40 @@ pub fn build_appearance(spec: &MarkupSpec) -> AuthoredAppearance {
             border,
             interior,
             width,
-        } => polygon_like(b"Polygon", vertices, *border, *interior, *width, true),
+        } => polygon_like(b"Polygon", vertices, *border, *interior, *width, true, None),
+        MarkupSpec::Cloud {
+            vertices,
+            border,
+            interior,
+            width,
+            intensity,
+        } => polygon_like(
+            b"Polygon",
+            vertices,
+            *border,
+            *interior,
+            *width,
+            true,
+            Some(*intensity),
+        ),
         MarkupSpec::PolyLine {
             vertices,
             color,
             width,
-        } => polygon_like(b"PolyLine", vertices, Some(*color), None, *width, false),
+        } => polygon_like(
+            b"PolyLine",
+            vertices,
+            Some(*color),
+            None,
+            *width,
+            false,
+            // Table 181 declares `/BE` on Polygon/PolyLine with the
+            // qualifier "meaningful only for polygon annotations",
+            // verbatim in BOTH editions, and §12.5.4's prose independently
+            // lists only square, circle and polygon. An open polyline
+            // cannot carry one.
+            None,
+        ),
         MarkupSpec::TextMarkup { kind, quads, color } => text_markup(*kind, quads, *color),
     }
 }
@@ -826,8 +946,32 @@ fn rectangle_like(
     interior: Option<Color>,
     border_width: f64,
     inscribe_ellipse: bool,
+    cloud: Option<f64>,
 ) -> AuthoredAppearance {
-    let rect = positive_rect(rect);
+    let shape = positive_rect(rect);
+    // ★ /Rect must CONTAIN the cloud, which bulges outside the square the
+    // caller drew. Table 180's own /RD row names exactly this situation:
+    // "Such a difference may occur in situations where a border effect
+    // (described by BE) causes the size of the Rect to increase beyond
+    // that of the square or circle."
+    //
+    // That row is causal-explanatory and PERMISSIVE — /RD is `(Optional)`
+    // and nothing obliges pdfce to write it. pdfce writes it anyway, so
+    // the square the operator actually drew stays recoverable from the
+    // file rather than being inferable only by un-inflating by a constant
+    // this crate happens to use today. Filed as a pdfce product rule
+    // filling a spec silence, not as a conformance requirement.
+    let bulge = cloud.map_or(0.0, scallop_radius);
+    let rect = if bulge > 0.0 {
+        positive_rect(Rect {
+            llx: shape.llx - bulge,
+            lly: shape.lly - bulge,
+            urx: shape.urx + bulge,
+            ury: shape.ury + bulge,
+        })
+    } else {
+        shape
+    };
     let mut annot = base_annot(subtype, rect);
     if let Some(c) = border {
         annot.insert(Name::from(b"C"), c.to_array());
@@ -836,6 +980,22 @@ fn rectangle_like(
         annot.insert(Name::from(b"IC"), c.to_array());
     }
     annot.insert(Name::from(b"BS"), border_style(border_width));
+    if let Some(i) = cloud {
+        annot.insert(Name::from(b"BE"), border_effect_dict(i));
+        // All four insets are equal, so the left/top/right/bottom ordering
+        // question cannot produce a wrong file here. Stated rather than
+        // relied on silently: a future non-uniform bulge would have to
+        // settle the order first.
+        annot.insert(
+            Name::from(b"RD"),
+            Object::Array(vec![
+                Object::Real(bulge),
+                Object::Real(bulge),
+                Object::Real(bulge),
+                Object::Real(bulge),
+            ]),
+        );
+    }
 
     let mut b = ContentBuilder::new();
     let has_stroke = border.is_some() && border_width > 0.0;
@@ -845,20 +1005,40 @@ fn rectangle_like(
     if let (true, Some(c)) = (has_stroke, border) {
         c.apply_stroke(&mut b);
         b.set_line_width(border_width);
+        if cloud.is_some() {
+            b.set_line_join(LineJoin::Round);
+        }
     }
-    // Inset by half the line width so a stroke of width w is fully inside
-    // BBox (a stroke straddles the path centre line).
-    let inset = if has_stroke { border_width / 2.0 } else { 0.0 };
-    let x = rect.llx + inset;
-    let y = rect.lly + inset;
-    let w = (rect.urx - rect.llx - 2.0 * inset).max(0.0);
-    let h = (rect.ury - rect.lly - 2.0 * inset).max(0.0);
-    if inscribe_ellipse {
-        emit_ellipse(&mut b, x + w / 2.0, y + h / 2.0, w / 2.0, h / 2.0);
+    if let Some(i) = cloud {
+        // Scallop the square the caller drew, not the inflated /Rect —
+        // the inflation exists to make room for the bulge, so scalloping
+        // it too would move the shape outward by the bulge as well.
+        cloud_path(
+            &mut b,
+            &[
+                (shape.llx, shape.lly),
+                (shape.urx, shape.lly),
+                (shape.urx, shape.ury),
+                (shape.llx, shape.ury),
+            ],
+            i,
+        );
+        b.paint(fill_stroke_paint(interior.is_some(), has_stroke));
     } else {
-        b.rect(x, y, w, h);
+        // Inset by half the line width so a stroke of width w is fully
+        // inside BBox (a stroke straddles the path centre line).
+        let inset = if has_stroke { border_width / 2.0 } else { 0.0 };
+        let x = rect.llx + inset;
+        let y = rect.lly + inset;
+        let w = (rect.urx - rect.llx - 2.0 * inset).max(0.0);
+        let h = (rect.ury - rect.lly - 2.0 * inset).max(0.0);
+        if inscribe_ellipse {
+            emit_ellipse(&mut b, x + w / 2.0, y + h / 2.0, w / 2.0, h / 2.0);
+        } else {
+            b.rect(x, y, w, h);
+        }
+        b.paint(fill_stroke_paint(interior.is_some(), has_stroke));
     }
-    b.paint(fill_stroke_paint(interior.is_some(), has_stroke));
 
     AuthoredAppearance {
         annot,
@@ -1057,6 +1237,171 @@ fn ink(strokes: &[Vec<(f64, f64)>], color: Color, width: f64) -> AuthoredAppeara
 }
 
 /// `/Polygon` (closed, fillable) or `/PolyLine` (open, stroke-only).
+/// The border effect dictionary `/BE << /S /C /I n >>` (§12.5.4,
+/// Table 167 in ISO 32000-1; Table 169 in ISO 32000-2 — renumbered, text
+/// identical).
+///
+/// Only the cloudy form is ever written. `/S /S` means "no effect" and is
+/// the **default**, so emitting it would add a key that changes nothing;
+/// callers express that by passing `None` instead.
+fn border_effect_dict(intensity: f64) -> Object {
+    let mut d = Dict::new();
+    d.insert(Name::from(b"S"), Object::Name(Name::from(b"C")));
+    d.insert(Name::from(b"I"), Object::Real(intensity));
+    Object::Dict(d)
+}
+
+/// `4/3·tan(θ/4)` for a 90° arc — the standard cubic-Bézier circle
+/// constant, already used elsewhere in this module for ellipses.
+const KAPPA_90: f64 = 0.552_284_749_830_793_4;
+
+/// pdfce's scallop radius for a given `/BE /I` intensity, in points.
+///
+/// # ★ THIS FUNCTION IS pdfce'S INVENTION, NOT THE STANDARD'S (`BE-A1`)
+///
+/// Everything ISO 32000 says about what a cloud *looks like*: the border
+/// *"**should** appear 'cloudy'"* (1.7), *"a series of convex curved line
+/// segments"* (2.0 — the only shape description in either edition, and
+/// still a `should`), *"the width and dash array specified by `BS` shall
+/// be honoured"*, and that `/I` is *"a number describing the intensity of
+/// the effect, in the range 0 to 2"*.
+///
+/// **Not stated in either edition:** arc radius, arc sweep, segment count,
+/// outward-vs-inward bulge, linearity, interaction with `BS /W`, or —
+/// most consequentially — **what quantity the intensity actually
+/// scales.** Registered as `BE-A1` in the spec corpus's ambiguity
+/// register.
+///
+/// Because `R43` obliges pdfce to paint from a baked appearance stream or
+/// not at all, pdfce cannot defer this to the reader. It must choose. So
+/// this is a **disclosed product decision** under rule 4, not a
+/// conformance behaviour, and a future session is free to retune it
+/// without any spec citation being violated.
+///
+/// # The choice, and the one judgement inside it
+///
+/// `radius = 3 + 3·intensity` points: `/I 0` → 3 pt, `/I 1` → 6 pt,
+/// `/I 2` → 9 pt. Linear, because nothing suggests otherwise and a curve
+/// would be a second invention on top of the first.
+///
+/// **`/I 0` is read as MINIMUM cloud, not ABSENT cloud**, and that is the
+/// judgement. The standard makes `0` the default for `/I` while `/S /C`
+/// is an explicit request for cloudiness — so reading `0` as "no bulge"
+/// would make `<< /S /C >>` a request that cancels itself, which cannot
+/// be what the key is for. "No cloud" already has two spellings that do
+/// not need a third: `/S /S`, and omitting `/BE` altogether.
+fn scallop_radius(intensity: f64) -> f64 {
+    3.0 + 3.0 * intensity
+}
+
+/// Append a cloudy (scalloped) closed path for `vertices` to `b`.
+///
+/// # Algorithm
+///
+/// 1. Determine orientation from the **signed area** so the scallops bulge
+///    *outward* regardless of whether the caller wound the polygon
+///    clockwise or counter-clockwise. A caller should not have to know
+///    pdfce's winding convention to get a cloud that looks like a cloud.
+/// 2. For each edge, fit a whole number of scallops:
+///    `n = max(1, round(edge_length / (2·radius)))`, chord `c = length/n`.
+///    Fitting per **edge** rather than around the whole perimeter is what
+///    keeps a scallop boundary exactly on each corner — spreading them
+///    around the perimeter instead lets a scallop straddle a vertex, which
+///    reads as a dented corner.
+/// 3. Each scallop is a **semicircle on its own chord** (radius `c/2`),
+///    emitted as two 90° cubic Béziers. A semicircle as a *single* cubic
+///    is a poor fit; two is the usual compromise and is what the ellipse
+///    path in this module already does.
+///
+/// The `c/2` radius means the *drawn* bulge depth is set by how the chord
+/// divides, not directly by [`scallop_radius`] — that function sets the
+/// target size, and the rounding to a whole number of scallops adjusts it
+/// per edge so the pattern closes cleanly at every corner.
+fn cloud_path(b: &mut ContentBuilder, vertices: &[(f64, f64)], intensity: f64) {
+    let n = vertices.len();
+    if n < 3 {
+        return;
+    }
+    // Each edge as a (from, to) pair, closing back to the first vertex.
+    // Built by zipping the list against itself rotated by one rather than
+    // by indexing: this crate denies `indexing_slicing`, and a parser that
+    // cannot panic on a malformed vertex list is the reason why.
+    let edges = || {
+        vertices
+            .iter()
+            .copied()
+            .zip(vertices.iter().copied().cycle().skip(1))
+            .take(n)
+    };
+
+    // Shoelace. Positive ⇒ counter-clockwise, in PDF's y-up default user
+    // space. The outward normal of an edge (dx, dy) is (dy, -dx) for a
+    // CCW polygon, and the negation of that for a CW one. Deriving this
+    // rather than requiring a winding convention means a caller cannot
+    // get an inward-scalloped "cloud" by drawing their box the other way
+    // round.
+    let twice_area: f64 = edges()
+        .map(|((x0, y0), (x1, y1))| x0.mul_add(y1, -(x1 * y0)))
+        .sum();
+    let outward = if twice_area >= 0.0 { 1.0 } else { -1.0 };
+
+    let target = scallop_radius(intensity).max(0.25);
+    let Some(&(sx, sy)) = vertices.first() else {
+        return;
+    };
+    b.move_to(sx, sy);
+
+    for ((x0, y0), (x1, y1)) in edges() {
+        let (dx, dy) = (x1 - x0, y1 - y0);
+        let len = dx.hypot(dy);
+        if len <= f64::EPSILON {
+            // A repeated vertex. Skipping keeps the path valid; a
+            // zero-length scallop would put NaN in the control points.
+            continue;
+        }
+        let count = (len / (2.0 * target)).round().max(1.0);
+        let chord = len / count;
+        let (ux, uy) = (dx / len, dy / len);
+        // Outward unit normal.
+        let (nx, ny) = (uy * outward, -ux * outward);
+        let r = chord / 2.0;
+        let k = KAPPA_90 * r;
+
+        let mut t0 = 0.0_f64;
+        while t0 < len - f64::EPSILON {
+            let ax = ux.mul_add(t0, x0);
+            let ay = uy.mul_add(t0, y0);
+            let bx = ux.mul_add(t0 + chord, x0);
+            let by = uy.mul_add(t0 + chord, y0);
+            // Apex of the semicircle: the chord midpoint pushed out by r.
+            let mx = nx.mul_add(r, (ax + bx) / 2.0);
+            let my = ny.mul_add(r, (ay + by) / 2.0);
+
+            // Arc 1: A → apex. Leaves A along the outward normal and
+            // arrives at the apex travelling along the edge.
+            b.curve_to(
+                nx.mul_add(k, ax),
+                ny.mul_add(k, ay),
+                (-ux).mul_add(k, mx),
+                (-uy).mul_add(k, my),
+                mx,
+                my,
+            );
+            // Arc 2: apex → B, the mirror of arc 1.
+            b.curve_to(
+                ux.mul_add(k, mx),
+                uy.mul_add(k, my),
+                nx.mul_add(k, bx),
+                ny.mul_add(k, by),
+                bx,
+                by,
+            );
+            t0 += chord;
+        }
+    }
+    b.close_subpath();
+}
+
 fn polygon_like(
     subtype: &[u8],
     vertices: &[(f64, f64)],
@@ -1064,8 +1409,14 @@ fn polygon_like(
     interior: Option<Color>,
     width: f64,
     closed: bool,
+    cloud: Option<f64>,
 ) -> AuthoredAppearance {
-    let rect = bounds_of(vertices.iter().copied(), (width / 2.0).max(1.0));
+    // ★ The cloud bulges OUTSIDE the vertex hull, so the bounding box has
+    // to grow by the scallop radius or the appearance stream would be
+    // clipped by its own /BBox — the classic way a baked cloud renders
+    // with its bumps sliced flat.
+    let margin = (width / 2.0).max(1.0) + cloud.map_or(0.0, scallop_radius);
+    let rect = bounds_of(vertices.iter().copied(), margin);
     let mut annot = base_annot(subtype, rect);
     annot.insert(
         Name::from(b"Vertices"),
@@ -1083,6 +1434,9 @@ fn polygon_like(
         annot.insert(Name::from(b"IC"), c.to_array());
     }
     annot.insert(Name::from(b"BS"), border_style(width));
+    if let Some(i) = cloud {
+        annot.insert(Name::from(b"BE"), border_effect_dict(i));
+    }
 
     let mut b = ContentBuilder::new();
     let has_stroke = border.is_some() && width > 0.0;
@@ -1092,18 +1446,30 @@ fn polygon_like(
     if let (true, Some(c)) = (has_stroke, border) {
         c.apply_stroke(&mut b);
         b.set_line_width(width);
-        b.set_line_join(LineJoin::Miter);
+        // Round joins on a cloud: the scallops meet at tangent angles and
+        // a miter there spikes. Straight polygons keep the miter they
+        // have always had.
+        b.set_line_join(if cloud.is_some() {
+            LineJoin::Round
+        } else {
+            LineJoin::Miter
+        });
     }
-    let mut pts = vertices.iter();
-    if let Some(&(x0, y0)) = pts.next() {
-        b.move_to(x0, y0);
-        for &(x, y) in pts {
-            b.line_to(x, y);
+    if let Some(i) = cloud {
+        cloud_path(&mut b, vertices, i);
+        b.paint(fill_stroke_paint(interior.is_some(), has_stroke));
+    } else {
+        let mut pts = vertices.iter();
+        if let Some(&(x0, y0)) = pts.next() {
+            b.move_to(x0, y0);
+            for &(x, y) in pts {
+                b.line_to(x, y);
+            }
+            if closed {
+                b.close_subpath();
+            }
+            b.paint(fill_stroke_paint(interior.is_some() && closed, has_stroke));
         }
-        if closed {
-            b.close_subpath();
-        }
-        b.paint(fill_stroke_paint(interior.is_some() && closed, has_stroke));
     }
     AuthoredAppearance {
         annot,
@@ -2432,6 +2798,7 @@ mod tests {
             border: Some(Color::Rgb(0.0, 0.0, 1.0)),
             interior: Some(Color::Rgb(1.0, 1.0, 0.0)),
             border_width: 2.0,
+            border_effect: None,
         });
         // Cosmetic keys present for third-party readers (R44 authoring).
         assert!(a.annot.contains_key(b"C") && a.annot.contains_key(b"IC"));
@@ -2588,6 +2955,7 @@ mod tests {
             border: Some(Color::Gray(0.0)),
             interior: None,
             border_width: 1.0,
+            border_effect: None,
         });
         let bb = bbox(&a);
         assert!(bb[3] - bb[1] >= MIN_EXTENT, "positive height: {bb:?}");
@@ -2600,6 +2968,7 @@ mod tests {
             border: Some(Color::Gray(0.0)),
             interior: None,
             border_width: 1.0,
+            border_effect: None,
         });
         assert_eq!(bbox(&a), vec![10.0, 10.0, 110.0, 60.0]);
     }
@@ -2613,6 +2982,7 @@ mod tests {
                 border: Some(Color::Rgb(1.0, 0.0, 0.0)),
                 interior: Some(Color::Cmyk(0.0, 0.0, 0.0, 0.2)),
                 border_width: 3.0,
+                border_effect: None,
             },
             MarkupSpec::Circle {
                 rect: rect(0.0, 0.0, 40.0, 20.0),

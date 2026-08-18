@@ -2546,11 +2546,16 @@ fn apply_markup_style(
             border,
             interior,
             border_width,
+            border_effect,
         } => MarkupSpec::Square {
             rect,
             border: colour(border, style.stroke),
             interior: colour(interior, style.interior),
             border_width: width(border_width),
+            // Style changes colour and width; cloudiness is GEOMETRY, not
+            // style, so restyling a cloudy box keeps it cloudy and
+            // restyling a plain one does not make it cloudy.
+            border_effect,
         },
         MarkupSpec::Circle {
             rect,
@@ -2595,6 +2600,20 @@ fn apply_markup_style(
             border: colour(border, style.stroke),
             interior: colour(interior, style.interior),
             width: width(w),
+        },
+        MarkupSpec::Cloud {
+            vertices,
+            border,
+            interior,
+            width: w,
+            intensity,
+        } => MarkupSpec::Cloud {
+            vertices,
+            border: colour(border, style.stroke),
+            interior: colour(interior, style.interior),
+            width: width(w),
+            // Intensity is geometry, not style — see the `Square` arm.
+            intensity,
         },
         MarkupSpec::PolyLine {
             vertices,
@@ -3397,6 +3416,34 @@ pub enum EditError {
     /// would be an invisible annotation the operator could not find.
     #[error("the annotation has no geometry to draw")]
     EmptyGeometry,
+    /// A cloudy border effect `/BE /I` was given an intensity outside the
+    /// range the standard defines.
+    ///
+    /// # ★ The range is CONTINUOUS, and this is the field's whole story
+    ///
+    /// ISO 32000-1 §12.5.4 Table 167 (Table 169 in ISO 32000-2 — renumbered,
+    /// text **character-for-character identical**) types `/I` as **`number`**
+    /// and constrains it *"in the range 0 to 2"*. It is routinely mis-read
+    /// as the enumeration `{0, 1, 2}`, including by an earlier draft of
+    /// pdfce's own roadmap.
+    ///
+    /// The decisive evidence is inside that same four-line table: the
+    /// sibling `S` row uses the standard's **enumeration** idiom
+    /// (*"Possible values are:"* + a list) while `I` uses the **range**
+    /// idiom. One table, both idioms, one per row. **`1.5` is
+    /// conformant** and pdfce accepts it.
+    ///
+    /// Refused here rather than clamped: pdfce never writes a value the
+    /// standard does not define, and silently moving `5.0` to `2.0` would
+    /// be pdfce deciding what the operator meant. On the READ path the
+    /// opposite choice applies — a foreign out-of-range `/I` is clamped
+    /// and disclosed, because refusing to display someone else's file is
+    /// not an option pdfce has.
+    #[error("border effect intensity {given} is outside the range 0 to 2 (ISO 32000-1 Table 167)")]
+    BorderEffectIntensityOutOfRange {
+        /// The value that was rejected. Non-finite values reach this too.
+        given: f64,
+    },
     /// A vertex-list subtype was authored with too few vertices to be the
     /// shape it claims to be.
     ///
@@ -16859,6 +16906,20 @@ impl EditSession {
 /// owns is a boundary defect on the engine's side (decision 058), and the
 /// workaround is the symptom rather than the fix.
 fn validate_geometry(spec: &MarkupSpec) -> Result<(), EditError> {
+    // Border-effect intensity first: it is a property of the request, not
+    // of the geometry, and reporting "too few vertices" for a spec that
+    // ALSO carries an impossible intensity would send the caller to fix
+    // the wrong thing.
+    let intensity = match spec {
+        MarkupSpec::Cloud { intensity, .. } => Some(*intensity),
+        MarkupSpec::Square { border_effect, .. } => *border_effect,
+        _ => None,
+    };
+    if let Some(i) = intensity
+        && (!i.is_finite() || !(0.0..=2.0).contains(&i))
+    {
+        return Err(EditError::BorderEffectIntensityOutOfRange { given: i });
+    }
     // Two-stage on purpose: "no points at all" and "too few points to be
     // this shape" are different facts and a caller acts on them
     // differently (R27). Collapsing them into one error is what made a
@@ -16866,6 +16927,9 @@ fn validate_geometry(spec: &MarkupSpec) -> Result<(), EditError> {
     // which is false and points the caller at the wrong input.
     let (subtype, needed, given) = match spec {
         MarkupSpec::Polygon { vertices, .. } => ("Polygon", 3, vertices.len()),
+        // A cloud IS a polygon with a border effect, so it inherits the
+        // rule rather than restating it (`Pass 82.1` acceptance 2).
+        MarkupSpec::Cloud { vertices, .. } => ("Cloud", 3, vertices.len()),
         MarkupSpec::PolyLine { vertices, .. } => ("PolyLine", 2, vertices.len()),
         MarkupSpec::Ink { strokes, .. } => {
             return if strokes.is_empty() || strokes.iter().all(std::vec::Vec::is_empty) {
@@ -16909,6 +16973,10 @@ const fn annot_kind_of(spec: &MarkupSpec) -> AnnotKind {
         MarkupSpec::Line { .. } => AnnotKind::Line,
         MarkupSpec::Ink { .. } => AnnotKind::Ink,
         MarkupSpec::Polygon { .. } => AnnotKind::Polygon,
+        // A cloud writes /Subtype /Polygon, so the undo label says Polygon
+        // too — the label names what landed in the file, and a "Cloud"
+        // label would describe an entry no reader will find there.
+        MarkupSpec::Cloud { .. } => AnnotKind::Polygon,
         MarkupSpec::PolyLine { .. } => AnnotKind::PolyLine,
         MarkupSpec::TextMarkup { kind, .. } => match kind {
             TextMarkupKind::Highlight => AnnotKind::Highlight,
@@ -21258,6 +21326,7 @@ mod tests {
             border: Some(Color::Rgb(1.0, 0.0, 0.0)),
             interior: None,
             border_width: 2.0,
+            border_effect: None,
         }
     }
 
@@ -21920,6 +21989,7 @@ endstream",
                     border: Some(Color::Rgb(1.0, 0.0, 0.0)),
                     interior: Some(Color::Rgb(0.0, 1.0, 0.0)),
                     border_width: 7.0,
+                    border_effect: None,
                 },
             )
             .unwrap();
@@ -22626,6 +22696,161 @@ endstream",
             s.add_markup(0, &empty),
             Err(EditError::EmptyGeometry)
         ));
+    }
+
+    /// `Pass 82.0` — `/I` is a CONTINUOUS range, so a non-integral value
+    /// must be accepted.
+    ///
+    /// This is the test that would have failed against the roadmap's own
+    /// acceptance criterion, which said `/I` was the enumeration
+    /// `{0, 1, 2}`. Table 167 types it `number`, "in the range 0 to 2",
+    /// identically in both editions.
+    #[test]
+    fn a_fractional_cloud_intensity_is_accepted_because_the_range_is_continuous() {
+        let mut s = session(pdf_without_info());
+        s.add_markup(0, &cloud_spec(1.5))
+            .expect("1.5 is in the range 0 to 2");
+    }
+
+    #[test]
+    fn cloud_intensity_outside_zero_to_two_is_refused_by_name() {
+        for bad in [-0.001, 2.001, f64::NAN, f64::INFINITY] {
+            let mut s = session(pdf_without_info());
+            assert!(
+                matches!(
+                    s.add_markup(0, &cloud_spec(bad)),
+                    Err(EditError::BorderEffectIntensityOutOfRange { .. })
+                ),
+                "intensity {bad} should be refused by name"
+            );
+        }
+        // Both endpoints are IN the range — the boundary from the other
+        // side, so this cannot pass against a validator that refuses
+        // everything.
+        for good in [0.0, 2.0] {
+            let mut s = session(pdf_without_info());
+            s.add_markup(0, &cloud_spec(good))
+                .expect("endpoints are inside a closed range");
+        }
+    }
+
+    /// A two-vertex cloud is refused with `Cloud` in the message, not
+    /// `Polygon` — the caller asked for a cloud and should be told about
+    /// the thing they asked for (`Pass 82.1` acceptance 2 + R27).
+    #[test]
+    fn a_two_vertex_cloud_is_refused_by_name() {
+        let mut s = session(pdf_without_info());
+        let spec = MarkupSpec::Cloud {
+            vertices: vec![(0.0, 0.0), (50.0, 0.0)],
+            border: Some(Color::Gray(0.0)),
+            interior: None,
+            width: 1.0,
+            intensity: 1.0,
+        };
+        assert!(matches!(
+            s.add_markup(0, &spec),
+            Err(EditError::TooFewVertices {
+                subtype: "Cloud",
+                needed: 3,
+                given: 2
+            })
+        ));
+    }
+
+    /// ★ The cloud must actually BULGE, and its `/Rect` must contain the
+    /// bulge.
+    ///
+    /// Asserting only that the appearance contains `c` operators would
+    /// pass against a stream that emitted curves along the straight edge
+    /// and drew no cloud at all. This asserts the geometric consequence
+    /// instead: the annotation rectangle is strictly larger than the
+    /// vertex hull, which is only true if something was drawn outside it.
+    /// That is also the defect that makes a baked cloud render with its
+    /// bumps sliced flat — a `/BBox` that clips its own content.
+    #[test]
+    fn a_cloud_rect_grows_to_contain_the_bulge() {
+        use crate::annot_author::build_appearance;
+        let plain = build_appearance(&MarkupSpec::Polygon {
+            vertices: vec![(20.0, 20.0), (120.0, 20.0), (120.0, 90.0)],
+            border: Some(Color::Gray(0.0)),
+            interior: None,
+            width: 1.0,
+        });
+        let cloudy = build_appearance(&cloud_spec(1.0));
+        assert!(
+            cloudy.rect.llx < plain.rect.llx && cloudy.rect.ury > plain.rect.ury,
+            "cloud rect {:?} must exceed the plain polygon rect {:?}",
+            cloudy.rect,
+            plain.rect
+        );
+        // And the appearance is genuinely curved rather than a polyline.
+        assert!(
+            cloudy.ap_content.windows(2).any(|w| w
+                == b"c
+") || cloudy.ap_content.ends_with(b"c"),
+            "a cloud appearance must contain cubic segments"
+        );
+    }
+
+    /// `/BE` and `/RD` land in the annotation dictionary, and `/Subtype`
+    /// stays `/Polygon` — there is no `/Cloud` subtype in ISO 32000.
+    #[test]
+    fn a_cloud_writes_be_on_a_polygon_subtype() {
+        use crate::annot_author::build_appearance;
+        let a = build_appearance(&cloud_spec(2.0));
+        let subtype = a.annot.get(b"Subtype").expect("subtype");
+        assert!(
+            matches!(subtype, Object::Name(n) if n.as_bytes() == b"Polygon"),
+            "a cloud is a Polygon carrying /BE, not its own subtype"
+        );
+        let Some(Object::Dict(be)) = a.annot.get(b"BE") else {
+            panic!("/BE must be written");
+        };
+        assert!(matches!(be.get(b"S"), Some(Object::Name(n)) if n.as_bytes() == b"C"));
+        assert!(matches!(be.get(b"I"), Some(Object::Real(v)) if (*v - 2.0).abs() < 1e-9));
+    }
+
+    /// A cloudy `Square` keeps `/Subtype /Square`, gains `/BE`, and
+    /// records `/RD` so the box the operator drew stays recoverable.
+    #[test]
+    fn a_cloudy_square_records_rd_so_the_drawn_box_is_recoverable() {
+        use crate::annot_author::build_appearance;
+        let rect = Rect {
+            llx: 30.0,
+            lly: 40.0,
+            urx: 130.0,
+            ury: 110.0,
+        };
+        let a = build_appearance(&MarkupSpec::Square {
+            rect,
+            border: Some(Color::Gray(0.0)),
+            interior: None,
+            border_width: 1.0,
+            border_effect: Some(1.0),
+        });
+        assert!(
+            matches!(a.annot.get(b"Subtype"), Some(Object::Name(n)) if n.as_bytes() == b"Square")
+        );
+        let Some(Object::Array(rd)) = a.annot.get(b"RD") else {
+            panic!("/RD must be written alongside /BE");
+        };
+        assert_eq!(rd.len(), 4);
+        let Object::Real(inset) = rd[0] else {
+            panic!("/RD entries are numbers")
+        };
+        // Rect minus RD recovers the square the caller asked for.
+        assert!((a.rect.llx + inset - rect.llx).abs() < 1e-9);
+        assert!((a.rect.ury - inset - rect.ury).abs() < 1e-9);
+    }
+
+    fn cloud_spec(intensity: f64) -> MarkupSpec {
+        MarkupSpec::Cloud {
+            vertices: vec![(20.0, 20.0), (120.0, 20.0), (120.0, 90.0)],
+            border: Some(Color::Gray(0.0)),
+            interior: None,
+            width: 1.0,
+            intensity,
+        }
     }
 
     #[test]

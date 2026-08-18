@@ -709,6 +709,7 @@ mod tests {
             border: Some(Color::Rgb(1.0, 0.0, 0.0)),
             interior: None,
             border_width: 2.0,
+            border_effect: None,
         };
         let expected = crate::annot_author::build_appearance(&spec).ap_content;
         session.add_markup(0, &spec).unwrap();

@@ -794,6 +794,7 @@ fn authoring_onto_a_compressed_page_object_promotes_it_r38_x7() {
                 border: Some(Color::Rgb(1.0, 0.0, 0.0)),
                 interior: None,
                 border_width: 2.0,
+                border_effect: None,
             },
         )
         .unwrap();
