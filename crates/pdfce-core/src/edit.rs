@@ -284,6 +284,15 @@ pub enum CommandKind {
         /// How many pages the one operation removed.
         count: usize,
     },
+    /// Pages from another document were inserted into this one.
+    ///
+    /// Carries a count for the same reason [`Self::ReorderPages`] does: a
+    /// front end labelling the Undo control needs a magnitude, and the
+    /// insertion is **one** undo entry however many pages arrived.
+    InsertPages {
+        /// How many pages the one operation added.
+        count: usize,
+    },
     /// The document's page order changed (Pass 3.2).
     ///
     /// Carries only a count, because §11.3 makes a reorder **one**
@@ -16757,6 +16766,335 @@ impl EditSession {
             trailer: None,
         });
         Ok(())
+    }
+
+    /// Insert pages from **another document** into this session, as
+    /// **one** undoable operation.
+    ///
+    /// # Why this exists alongside [`crate::pageops::insert`]
+    ///
+    /// `pageops::insert` re-assembles two documents into a **new byte
+    /// buffer**. That is the right shape for a batch tool — `pdfce-cli
+    /// insert-pages` uses it — and the wrong shape for an editor: a shell
+    /// that called it would have to replace the whole session, **throwing
+    /// away the undo history**. This method is the session-mutating twin,
+    /// so insertion joins [`Self::delete_pages`], [`Self::reorder_pages`]
+    /// and [`Self::rotate_pages`] as a member of the same family.
+    ///
+    /// **Reported by the `pdfceGUI` session**, which declined to wire the
+    /// assemble-based call rather than ship a feature that silently ate
+    /// undo. That was the right call, and this is the answer to it.
+    ///
+    /// # What it does
+    ///
+    /// Copies every object reachable from each selected source page into
+    /// this document — content streams, resources, fonts, XObjects — at
+    /// **fresh object numbers**, remapping every reference as it goes,
+    /// then splices the new pages into the page tree at `position`.
+    /// Returns how many pages arrived.
+    ///
+    /// # What it deliberately does NOT do
+    ///
+    /// It does not merge the source's **document-level** structures:
+    /// outlines, the AcroForm field tree, named destinations, page labels,
+    /// optional-content configuration. [`crate::pageops::insert`] does
+    /// merge those through [`crate::pageops::assemble`]'s policies, and
+    /// that difference is the honest cost of staying incremental — a
+    /// document-level merge rewrites objects an incremental save exists in
+    /// order not to touch.
+    ///
+    /// **Disclosed rather than silent** (rule 4): a caller wanting merge
+    /// semantics should use `pageops::insert` and accept a new document.
+    /// A follow-up Pass can add the document-level halves one at a time,
+    /// each with its own name in the undo log.
+    ///
+    /// # Errors
+    ///
+    /// - [`EditError::CertificationForbidsChange`] — inserting a page is a
+    ///   structural change, which `/DocMDP` `P=1` forbids.
+    /// - [`EditError::PageOutOfRange`] — a `source_pages` index past the
+    ///   source's last page. Reported against the **source**, because that
+    ///   is the document the index addresses.
+    /// - [`EditError::PageTree`] — either page tree is unwalkable.
+    /// - [`EditError::ObjectNumbersExhausted`] — the copy needs more
+    ///   object numbers than remain.
+    pub fn insert_pages(
+        &mut self,
+        source: &DocumentView<'_>,
+        source_pages: &[usize],
+        position: crate::pageops::InsertPosition,
+    ) -> Result<usize, EditError> {
+        self.check_certification()?;
+        if source_pages.is_empty() {
+            return Ok(0);
+        }
+
+        let source_slots =
+            crate::page_tree::page_slots(source.graph()).map_err(EditError::PageTree)?;
+        let source_count = source_slots.len();
+        if let Some(&past) = source_pages.iter().find(|i| **i >= source_count) {
+            return Err(EditError::PageOutOfRange {
+                index: past,
+                count: source_count,
+            });
+        }
+
+        let target_slots = self.page_slots()?;
+        let target_count = target_slots.len();
+        let at = position.slot(target_count);
+
+        // The node that will own the arrivals, and where in its /Kids they
+        // go. Splicing beside an existing sibling keeps the tree's shape:
+        // minting a new intermediate /Pages node would be a structural
+        // change to objects this operation was not asked to touch.
+        let (parent_id, kids_index) = Self::insertion_point(&target_slots, at)?;
+
+        let mut scratch: BTreeMap<ObjId, Object> = BTreeMap::new();
+        let mut mapping: BTreeMap<ObjId, ObjId> = BTreeMap::new();
+        let mut new_page_ids: Vec<ObjId> = Vec::with_capacity(source_pages.len());
+
+        for index in source_pages {
+            let Some(slot) = source_slots.get(*index) else {
+                continue;
+            };
+            let new_id = self.import_object(source, slot.id, &mut mapping, &mut scratch)?;
+            if let Some(Object::Dict(page)) = scratch.get(&new_id).cloned() {
+                let mut page = page;
+                // Re-point /Parent at the target's node. The source's
+                // parent is meaningless here, and following it during the
+                // copy would have dragged the whole source page tree over.
+                page.insert(Name::from(b"Parent"), Object::Reference(parent_id));
+                // An attribute the source page INHERITED but its new
+                // parent does not supply would silently change the page's
+                // size or resources, so it is written onto the page
+                // itself. Same rule `reorder_pages` applies when a page
+                // changes parent.
+                let landing = crate::page_tree::InheritedRaw::default();
+                for (key, replacement) in preserve_inherited(&page, &slot.inherited, &landing) {
+                    page.insert(Name::from(key), replacement);
+                }
+                scratch.insert(new_id, Object::Dict(page));
+            }
+            new_page_ids.push(new_id);
+        }
+        if new_page_ids.is_empty() {
+            return Ok(0);
+        }
+
+        // Splice into the owning node's /Kids.
+        let parent = scratch
+            .get(&parent_id)
+            .and_then(Object::as_dict)
+            .cloned()
+            .or_else(|| self.value(parent_id).and_then(Object::as_dict).cloned())
+            .ok_or(EditError::PageTree(PageTreeError::NoPageTreeRoot))?;
+        let mut kids = parent
+            .get(b"Kids")
+            .map(|o| self.resolve_value(o))
+            .and_then(Object::as_array)
+            .map(<[Object]>::to_vec)
+            .unwrap_or_default();
+        let cut = kids_index.min(kids.len());
+        for (offset, id) in new_page_ids.iter().enumerate() {
+            kids.insert(cut + offset, Object::Reference(*id));
+        }
+        let mut parent = parent;
+        parent.insert(Name::from(b"Kids"), Object::Array(kids));
+        scratch.insert(parent_id, Object::Dict(parent));
+
+        // /Count on the owning node and every ancestor above it. Nodes off
+        // this chain are untouched, which is what keeps the incremental
+        // save minimal.
+        let added = new_page_ids.len();
+        self.bump_counts(&target_slots, at, parent_id, added, &mut scratch);
+
+        let objects: Vec<ObjectWrite> = scratch
+            .into_iter()
+            .map(|(id, value)| ObjectWrite {
+                id,
+                before: self.state.get(&id).cloned(),
+                after: Some(value),
+            })
+            .collect();
+        self.commit(Command {
+            kind: CommandKind::InsertPages { count: added },
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(added)
+    }
+
+    /// Which `/Pages` node receives the arrivals, and at which `/Kids`
+    /// index.
+    ///
+    /// Three cases, and the empty one is the reason this is a function
+    /// rather than an inline expression: a document with no pages has no
+    /// sibling to splice beside, so the root is the only answer.
+    fn insertion_point(
+        slots: &[crate::page_tree::PageSlot],
+        at: usize,
+    ) -> Result<(ObjId, usize), EditError> {
+        let missing = || EditError::PageTree(PageTreeError::NoPageTreeRoot);
+        if at >= slots.len() {
+            let last = slots.last().ok_or_else(missing)?;
+            return Ok((last.parent.ok_or_else(missing)?, last.index_in_parent + 1));
+        }
+        let slot = slots.get(at).ok_or_else(missing)?;
+        Ok((slot.parent.ok_or_else(missing)?, slot.index_in_parent))
+    }
+
+    /// Add `added` to `/Count` on the owning node and each of its
+    /// ancestors.
+    fn bump_counts(
+        &self,
+        slots: &[crate::page_tree::PageSlot],
+        at: usize,
+        parent_id: ObjId,
+        added: usize,
+        scratch: &mut BTreeMap<ObjId, Object>,
+    ) {
+        let mut chain: Vec<ObjId> = vec![parent_id];
+        let probe = at.min(slots.len().saturating_sub(1));
+        if let Some(slot) = slots.get(probe) {
+            for ancestor in &slot.ancestors {
+                if *ancestor != parent_id && !chain.contains(ancestor) {
+                    chain.push(*ancestor);
+                }
+            }
+        }
+        let delta = i64::try_from(added).unwrap_or(0);
+        for node_id in chain {
+            let node = scratch
+                .get(&node_id)
+                .and_then(Object::as_dict)
+                .cloned()
+                .or_else(|| self.value(node_id).and_then(Object::as_dict).cloned());
+            let Some(mut node) = node else { continue };
+            let current = node
+                .get(b"Count")
+                .map(|o| self.resolve_value(o))
+                .and_then(|o| match o {
+                    Object::Integer(n) => Some(*n),
+                    _ => None,
+                })
+                .unwrap_or(0);
+            node.insert(
+                Name::from(b"Count"),
+                Object::Integer(current.saturating_add(delta)),
+            );
+            scratch.insert(node_id, Object::Dict(node));
+        }
+    }
+
+    /// Copy one source object, and everything it references, into this
+    /// session at fresh object numbers.
+    ///
+    /// Returns the new identity of `id`. Idempotent per object: `mapping`
+    /// is consulted first, so a resource shared by two imported pages is
+    /// copied **once** and both pages point at the same copy — which is
+    /// also what stops a cyclic reference from recursing forever, because
+    /// the mapping entry is inserted **before** the children are walked.
+    ///
+    /// Stream payloads are re-staged into this session's buffer (R45) and
+    /// given a span in the session's coordinate system. A copied stream
+    /// that kept its source span would slice this document's bytes at an
+    /// offset that means nothing here — the classic cross-document span
+    /// mis-slice.
+    fn import_object(
+        &mut self,
+        source: &DocumentView<'_>,
+        id: ObjId,
+        mapping: &mut BTreeMap<ObjId, ObjId>,
+        scratch: &mut BTreeMap<ObjId, Object>,
+    ) -> Result<ObjId, EditError> {
+        if let Some(existing) = mapping.get(&id) {
+            return Ok(*existing);
+        }
+        let new_id = ObjId::new(self.alloc_number()?, 0);
+        // Inserted BEFORE the walk. A page whose resources refer back to
+        // it — legal, and real in the wild — would otherwise recurse until
+        // the stack ran out.
+        mapping.insert(id, new_id);
+
+        let Some(value) = source.graph().value(id) else {
+            // A dangling reference resolves to null (§7.3.10, "shall not
+            // be considered an error"), so it is copied as null rather
+            // than failing the whole insert.
+            scratch.insert(new_id, Object::Null);
+            return Ok(new_id);
+        };
+        let owned = value.clone();
+        let copied = self.import_value(source, &owned, mapping, scratch)?;
+        scratch.insert(new_id, copied);
+        Ok(new_id)
+    }
+
+    /// The value half of [`Self::import_object`] — deep-copies a value,
+    /// replacing every reference with its imported counterpart.
+    fn import_value(
+        &mut self,
+        source: &DocumentView<'_>,
+        value: &Object,
+        mapping: &mut BTreeMap<ObjId, ObjId>,
+        scratch: &mut BTreeMap<ObjId, Object>,
+    ) -> Result<Object, EditError> {
+        Ok(match value {
+            Object::Reference(id) => {
+                Object::Reference(self.import_object(source, *id, mapping, scratch)?)
+            }
+            Object::Array(items) => {
+                let mut out = Vec::with_capacity(items.len());
+                for item in items {
+                    out.push(self.import_value(source, item, mapping, scratch)?);
+                }
+                Object::Array(out)
+            }
+            Object::Dict(dict) => Object::Dict(self.import_dict(source, dict, mapping, scratch)?),
+            Object::Stream(stream) => {
+                let dict = self.import_dict(source, &stream.dict, mapping, scratch)?;
+                // `None` means the span could not be served — a logic
+                // error rather than a data error (see
+                // `StreamSource::slice`). An empty payload keeps the
+                // object well-formed instead of failing the whole insert
+                // on one unreadable stream.
+                let bytes: Vec<u8> = source
+                    .source()
+                    .slice(stream.data_span)
+                    .unwrap_or(&[])
+                    .to_vec();
+                let span = self.stage_bytes(&bytes);
+                Object::Stream(Stream {
+                    dict,
+                    data_span: span,
+                })
+            }
+            other => other.clone(),
+        })
+    }
+
+    /// Dictionary half of the import walk, split out so `/Parent` is
+    /// dropped in exactly one place.
+    fn import_dict(
+        &mut self,
+        source: &DocumentView<'_>,
+        dict: &Dict,
+        mapping: &mut BTreeMap<ObjId, ObjId>,
+        scratch: &mut BTreeMap<ObjId, Object>,
+    ) -> Result<Dict, EditError> {
+        let mut out = Dict::new();
+        for (key, item) in dict.iter() {
+            // /Parent points UP the source's page tree. Following it would
+            // drag that tree across and produce a page owned by a node
+            // this document does not contain. The caller re-points it at
+            // the target's node after the copy.
+            if key.as_bytes() == b"Parent" {
+                continue;
+            }
+            let copied = self.import_value(source, item, mapping, scratch)?;
+            out.insert(key.clone(), copied);
+        }
+        Ok(out)
     }
 
     /// Turn several pages by the same amount, as **one** undoable
