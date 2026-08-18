@@ -206,7 +206,13 @@ def find_traps(png):
 def content_bands(im):
     """Horizontal content bands separated by full-width white gaps."""
     ink = (im < 245).sum(axis=1)
-    rows = ink > im.shape[1] * 0.25
+    # 0.10, not 0.25. An "actual vs reference" patch whose rows are five
+    # small images separated by white gutters never reaches a quarter of the
+    # page width in ink, so a 0.25 gate found ONE band and the comparison
+    # silently returned "unscorable" for seven of the eleven -- which reads
+    # as a tooling limit and is really a threshold picked for a text-heavy
+    # layout and then applied to an image-heavy one.
+    rows = ink > im.shape[1] * 0.10
     segs, start = [], None
     for i, r in enumerate(rows):
         if r and start is None:
@@ -259,6 +265,12 @@ def main():
     ap.add_argument("dir")
     ap.add_argument("--scale", type=float, default=2.0)
     ap.add_argument("--json", action="store_true")
+    ap.add_argument(
+        "--reference-dir",
+        help="directory of renders from a KNOWN-GOOD engine, same filenames. "
+             "Used only to adjudicate the reference-strip patches, which "
+             "carry no trap X and cannot otherwise be judged.",
+    )
     args = ap.parse_args()
 
     cli = cli_path()
@@ -283,10 +295,30 @@ def main():
                              capture_output=True, text=True, errors="replace").stdout.lower()
         ref_style = ("reference image" in txt) or ("match the reference" in txt)
         sim = reference_similarity(png) if ref_style else None
+        ref_sim = None
         if marks:
             verdict = "X"
         elif ref_style:
             verdict = "REF"          # scored, not adjudicated -- see docstring
+            # With a known-good engine's render of the SAME patch, the strip
+            # comparison becomes adjudicable: the reference engine sets what
+            # "matching" scores on this layout, and pdfce is judged against
+            # that rather than against a number somebody chose.
+            if args.reference_dir:
+                cand = os.path.join(args.reference_dir, f.replace(".pdf", "") + ".png")
+                if not os.path.exists(cand):
+                    cand = os.path.join(args.reference_dir, f + ".png")
+                if os.path.exists(cand):
+                    ref_sim = reference_similarity(cand)
+                # ★ THE GUARD THAT MAKES THIS HONEST: if the reference
+                # engine does not match its OWN embedded strip, the band
+                # split is wrong for this layout and the comparison
+                # measures nothing. Say so instead of scoring it. Without
+                # this, four 16-bit-image patches "passed" on scores of
+                # 0.05 vs 0.06 -- pdfce agreeing with Acrobat that neither
+                # resembles the reference, read as success.
+                if ref_sim is not None and sim is not None and ref_sim[0] >= 0.50:
+                    verdict = "REF-PASS" if sim[0] >= ref_sim[0] - 0.05 else "REF-FAIL"
         else:
             verdict = "clean"
         results.append({
@@ -296,31 +328,35 @@ def main():
             "where": [f"{m[0]},{m[1]}" for m in marks[:6]],
             "ref_corr": None if sim is None else round(sim[0], 3),
             "ref_absdiff": None if sim is None else round(sim[1], 1),
+            "ref_engine_corr": None if ref_sim is None else round(ref_sim[0], 3),
         })
 
     if args.json:
         print(json.dumps(results, indent=2))
         return 0
 
-    clean = [r for r in results if r["verdict"] == "clean"]
-    failed = [r for r in results if r["verdict"] == "X"]
+    clean = [r for r in results if r["verdict"] in ("clean", "REF-PASS")]
+    failed = [r for r in results if r["verdict"] in ("X", "REF-FAIL")]
     ref = [r for r in results if r["verdict"] == "REF"]
     broke = [r for r in results if r["verdict"] == "RENDER-FAILED"]
     for r in results:
         mark = {"clean": "  ok  ", "X": " FAIL ", "REF": " ref? ",
+                "REF-PASS": "  ok  ", "REF-FAIL": " FAIL ",
                 "RENDER-FAILED": " ERR  "}[r["verdict"]]
         if r["verdict"] == "X":
             extra = f"  {r['traps']} trap(s) at {' '.join(r['where'])}"
-        elif r["verdict"] == "REF":
-            extra = f"  actual-vs-reference corr={r['ref_corr']} absdiff={r['ref_absdiff']}"
+        elif r["verdict"].startswith("REF"):
+            extra = (f"  strip corr={r['ref_corr']}"
+                     + (f" vs reference-engine {r['ref_engine_corr']}"
+                        if r.get("ref_engine_corr") is not None else ""))
         else:
             extra = ""
         print(f"{mark} {r['patch']}{extra}")
     print()
     print(f"ghent-check: {len(results)} patches -- "
-          f"{len(failed)} FAIL (trap X visible), "
-          f"{len(clean)} clean (X-trap design, no X), "
-          f"{len(ref)} scored only (reference-strip design), "
+          f"{len(failed)} FAIL, "
+          f"{len(clean)} pass, "
+          f"{len(ref)} UNRESOLVED (reference-strip, no usable calibration), "
           f"{len(broke)} render errors")
     print()
     print("A 'clean' verdict is the SUITE's own pass criterion for an X-trap")
