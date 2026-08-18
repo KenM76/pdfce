@@ -6598,7 +6598,7 @@ img_colorant_none={} img_uncalibrated={} \
 blend_modes_applied={} blend_modes_ignored={} soft_masks_ignored={} \
 groups_flattened={} groups_special={} \
 groups_composited={} groups_knockout_approx={} \
-overprint_requested={} overprint_opm1={}",
+overprint_requested={} overprint_opm1={} overprint_effective={}",
         input.display(),
         output.display(),
         rendered.pixmap.width(),
@@ -6766,6 +6766,10 @@ overprint_requested={} overprint_opm1={}",
         // an ink model pdfce is not providing.
         d.overprint_requested,
         d.overprint_mode1_requested,
+        // The subset that is a REAL difference. `overprint_requested` is
+        // enabled far more often than it matters; this is the number that
+        // says whether the n-channel buffer would change this document.
+        d.overprint_effective,
     );
     report_diagnostics(d);
 
@@ -6924,7 +6928,8 @@ overlay",
     }
     if d.overprint_requested > 0 {
         eprintln!(
-            "pdfce-cli: note: {} graphics-state(s) enabled OVERPRINT (/OP or /op, ISO 32000-1 §8.6.7){}; pdfce does NOT simulate it. Overprint is a subtractive-device behaviour — an overprinting object leaves the backdrop's other colorants in place instead of replacing them — and pdfce composites in additive RGB, where there are no separable colorants to preserve. On a PDF/X file this matters: Acrobat turns Overprint Preview ON automatically for PDF/X, so the document's EXPECTED appearance includes overprint and pdfce's does not",
+            "pdfce-cli: note: {} PAINT(s) would render differently if overprint were honoured; {} graphics-state operator(s) enabled it (/OP or /op, ISO 32000-1 §8.6.7){}. pdfce does NOT simulate it. ★ THE TWO NUMBERS COUNT DIFFERENT THINGS and neither is a subset of the other: the first counts PAINTED OBJECTS, the second counts `gs` OPERATORS, and one `gs` governs every paint until the next one — so a single enable can produce many affected paints, or none. The first is the one to read, because a DeviceCMYK fill over a DeviceCMYK backdrop at overprint mode 0 specifies all four components and is IDENTICAL to Normal, and producers enable overprint document-wide. Overprint is a subtractive-device behaviour — an overprinting object leaves the backdrop's other colorants in place instead of replacing them — and pdfce composites in additive RGB, where there are no separable colorants to preserve. On a PDF/X file this matters: Acrobat turns Overprint Preview ON automatically for PDF/X, so the document's EXPECTED appearance includes overprint and pdfce's does not",
+            d.overprint_effective,
             d.overprint_requested,
             if d.overprint_mode1_requested > 0 {
                 format!(

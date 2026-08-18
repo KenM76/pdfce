@@ -314,6 +314,32 @@ pub struct Diagnostics {
     /// non-zero count here is the clearest signal that a document expects
     /// an ink model pdfce is not providing.
     pub overprint_mode1_requested: usize,
+    /// Paints made while overprint was ON **and where honouring it would
+    /// have changed the result** — the subset of `overprint_requested` that
+    /// is a real visual difference rather than a no-op.
+    ///
+    /// # Why the distinction is the whole point of counting
+    ///
+    /// Overprint is enabled far more often than it matters. §11.7.4.3's
+    /// `CompatibleOverprint` picks the SOURCE component for every component
+    /// the current colour space specifies and the BACKDROP component for
+    /// the rest — so a DeviceCMYK fill over a DeviceCMYK backdrop at
+    /// overprint mode 0 specifies all four components, selects the source
+    /// for all four, and is **identical to Normal**. Producers set `/OP
+    /// true` across whole documents as a default; most of those paints are
+    /// that case.
+    ///
+    /// What is NOT a no-op is a source space that specifies FEWER
+    /// components than the backdrop has — a `Separation` or a one-component
+    /// `DeviceN` over CMYK, where the unspecified process components must
+    /// survive — or overprint mode 1, where a zero-valued component leaves
+    /// the backdrop alone.
+    ///
+    /// So this counter, not `overprint_requested`, is the honest measure of
+    /// what pdfce's additive-RGB compositing is currently getting wrong,
+    /// and it is the number that says whether the n-channel buffer is worth
+    /// building for a given document.
+    pub overprint_effective: usize,
     /// Transparency groups rendered into their own buffer and composited
     /// as a UNIT — the §11.4.5 behaviour. A census, not a shortfall.
     pub transparency_groups_composited: usize,
@@ -822,6 +848,7 @@ polarity unverifiable (decision 006 R30)",
         self.unknown_ops += other.unknown_ops;
         self.compat_skipped += other.compat_skipped;
         self.overprint_requested += other.overprint_requested;
+        self.overprint_effective += other.overprint_effective;
         self.overprint_mode1_requested += other.overprint_mode1_requested;
         self.transparency_groups_composited += other.transparency_groups_composited;
         self.transparency_groups_knockout_approximated +=
@@ -1475,25 +1502,28 @@ impl Interpreter<'_> {
                 if let &[v] = nums.as_slice() {
                     self.gs.current.fill_color = Rgb::from_gray(v);
                     self.color
-                        .set_device(crate::color::DeviceSpace::Gray, false);
+                        .set_device(crate::color::DeviceSpace::Gray, &[v], false);
                 }
             }
             b"G" => {
                 if let &[v] = nums.as_slice() {
                     self.gs.current.stroke_color = Rgb::from_gray(v);
-                    self.color.set_device(crate::color::DeviceSpace::Gray, true);
+                    self.color
+                        .set_device(crate::color::DeviceSpace::Gray, &[v], true);
                 }
             }
             b"rg" => {
                 if let &[r, g, b] = nums.as_slice() {
                     self.gs.current.fill_color = Rgb::from_rgb(r, g, b);
-                    self.color.set_device(crate::color::DeviceSpace::Rgb, false);
+                    self.color
+                        .set_device(crate::color::DeviceSpace::Rgb, &[r, g, b], false);
                 }
             }
             b"RG" => {
                 if let &[r, g, b] = nums.as_slice() {
                     self.gs.current.stroke_color = Rgb::from_rgb(r, g, b);
-                    self.color.set_device(crate::color::DeviceSpace::Rgb, true);
+                    self.color
+                        .set_device(crate::color::DeviceSpace::Rgb, &[r, g, b], true);
                 }
             }
             b"k" => {
@@ -1501,14 +1531,15 @@ impl Interpreter<'_> {
                     self.gs.current.fill_color =
                         Rgb::from_cmyk(self.policy.cmyk_intent, c, m, y, kk);
                     self.color
-                        .set_device(crate::color::DeviceSpace::Cmyk, false);
+                        .set_device(crate::color::DeviceSpace::Cmyk, &[c, m, y, kk], false);
                 }
             }
             b"K" => {
                 if let &[c, m, y, kk] = nums.as_slice() {
                     self.gs.current.stroke_color =
                         Rgb::from_cmyk(self.policy.cmyk_intent, c, m, y, kk);
-                    self.color.set_device(crate::color::DeviceSpace::Cmyk, true);
+                    self.color
+                        .set_device(crate::color::DeviceSpace::Cmyk, &[c, m, y, kk], true);
                 }
             }
 
@@ -2699,6 +2730,62 @@ impl Interpreter<'_> {
     /// pattern's own content stream run into a tile and replicated on
     /// `/XStep`/`/YStep`, which is a different job from evaluating an
     /// analytic function per pixel.
+    /// Would honouring overprint have changed this paint?
+    ///
+    /// Implements the §11.7.4.3 selection rule as a PREDICATE rather than
+    /// as a blend, because pdfce cannot yet perform the blend: the answer
+    /// is "yes" exactly when `CompatibleOverprint` would have chosen the
+    /// backdrop component for at least one component of the destination.
+    ///
+    /// Two ways that happens, and both are checked here:
+    ///
+    /// 1. **Overprint mode 1** with a DeviceCMYK source — any component
+    ///    whose value is zero leaves the backdrop unchanged (§8.6.7). A
+    ///    DeviceCMYK fill with a zero in it is the common case, so this is
+    ///    the branch that fires on real prepress files.
+    /// 2. **A source space specifying fewer components than DeviceCMYK** —
+    ///    a `Separation`, or a `DeviceN` with fewer than four colorants.
+    ///    The process components the source does not name must survive, and
+    ///    an RGB composite cannot let them.
+    ///
+    /// A full DeviceCMYK source at mode 0 is deliberately NOT counted: it
+    /// specifies all four components, selects the source for all four, and
+    /// is identical to Normal. Counting it would put a large number on
+    /// ordinary documents and hide the cases that matter.
+    fn overprint_would_change(&self, stroking: bool) -> bool {
+        let on = if stroking {
+            self.gs.current.overprint_stroke
+        } else {
+            self.gs.current.overprint_fill
+        };
+        if !on {
+            return false;
+        }
+        let Some((space, comps)) = self.color.device_color(stroking) else {
+            // No resolvable source colour — a pattern, or a refused
+            // operand count. Not classifiable, so not counted.
+            return false;
+        };
+        match space {
+            crate::color::ColorSpace::DeviceCmyk => {
+                // Mode 1 only: at mode 0 all four components are specified
+                // and the blend degenerates to Normal.
+                self.gs.current.overprint_mode == 1 && comps.contains(&0.0)
+            }
+            // Fewer components than the process set: the ones the source
+            // does not name must survive from the backdrop.
+            crate::color::ColorSpace::Separation { .. } => true,
+            crate::color::ColorSpace::DeviceN { names, .. } => names.len() < 4,
+            // DeviceGray and DeviceRGB over a CMYK backdrop are a
+            // colour-space question this predicate deliberately does not
+            // answer: §11.7.4.3 is about the components of the CURRENT
+            // space, and pdfce has no group colour space to compare
+            // against until the n-channel buffer exists. Not counted, and
+            // that is a known under-count rather than a claim of zero.
+            _ => false,
+        }
+    }
+
     fn paint_with_pattern(
         &mut self,
         path: &Path,
@@ -3662,6 +3749,18 @@ impl Interpreter<'_> {
         // `DeviceN` ("shall have no effect on the current page", §8.6.6.4).
         // Painting white instead would erase the backdrop those cases
         // require to show through.
+        // Would honouring overprint have changed either half of this
+        // paint? Asked here, once per painted object, because that is the
+        // granularity §11.7.4.3 works at — "elementary graphics objects
+        // (fills, strokes, text, images, and shadings)".
+        if !skip_paint {
+            if fill && fill_rule.is_some() && self.overprint_would_change(false) {
+                self.diag.overprint_effective += 1;
+            }
+            if stroke && self.overprint_would_change(true) {
+                self.diag.overprint_effective += 1;
+            }
+        }
         // Deferred to after the `clip` borrow ends — see below.
         let mut pattern_fill: Option<FillRule> = None;
         if !skip_paint

@@ -784,6 +784,27 @@ struct Half {
     /// the colour state, which is what §8.4.2 requires of the colour and
     /// therefore of the pattern that stands in for it.
     pattern: Option<std::sync::Arc<[u8]>>,
+    /// The operands of the last colour-setting operator, in the current
+    /// space's own component order — NOT converted to sRGB.
+    ///
+    /// # Why the components are kept and not just the resulting `Rgb`
+    ///
+    /// Overprint is defined per COMPONENT. §11.7.4.3's `CompatibleOverprint`
+    /// blend chooses, for each colour component independently, between the
+    /// source value and the backdrop value; §8.6.7's overprint mode 1 makes
+    /// that choice depend on whether the component's own value is zero. An
+    /// sRGB triple has no DeviceCMYK components to choose between, so a
+    /// renderer that converts at colour-set time has destroyed the
+    /// information overprint operates on before painting begins.
+    ///
+    /// Kept in `Half` rather than beside the paint so `q`/`Q` save and
+    /// restore them with the rest of the colour state (§8.4.2), which is
+    /// the same argument that puts `space` and `pattern` here.
+    ///
+    /// Empty when the space did not resolve or the operand count disagreed
+    /// with it — in both cases pdfce refused to change the colour, so there
+    /// is no source component to record.
+    components: Vec<f32>,
 }
 
 impl Default for Half {
@@ -795,6 +816,9 @@ impl Default for Half {
             space: Some(Arc::new(ColorSpace::DeviceGray)),
             paints: true,
             pattern: None,
+            // Table 52: the initial colour is black, which in DeviceGray is
+            // the single component 0.0 — not an empty operand list.
+            components: vec![0.0],
         }
     }
 }
@@ -886,6 +910,21 @@ impl ColorState {
         half.pattern.as_deref()
     }
 
+    /// The current space and the source colour's own components for one
+    /// half — what `CompatibleOverprint` needs and `Rgb` cannot supply.
+    ///
+    /// `None` when no colour is resolvable (unresolved space, refused
+    /// operand count, or a pattern selection, which has components in no
+    /// device space at all).
+    #[must_use]
+    pub fn device_color(&self, stroking: bool) -> Option<(&ColorSpace, &[f32])> {
+        let half = if stroking { &self.stroke } else { &self.fill };
+        if half.pattern.is_some() || half.components.is_empty() {
+            return None;
+        }
+        Some((half.space.as_deref()?, &half.components))
+    }
+
     /// The current space of one half, for tests and diagnostics surfaces.
     #[must_use]
     pub fn space(&self, stroking: bool) -> Option<&ColorSpace> {
@@ -901,7 +940,7 @@ impl ColorState {
     /// what this fixes is the *space*, so that a later `sc` is interpreted
     /// in the device space the document just selected rather than in a
     /// `Separation` space three operators upstream.
-    pub fn set_device(&mut self, space: DeviceSpace, stroking: bool) {
+    pub fn set_device(&mut self, space: DeviceSpace, comps: &[f32], stroking: bool) {
         let resolved = Arc::new(match space {
             DeviceSpace::Gray => ColorSpace::DeviceGray,
             DeviceSpace::Rgb => ColorSpace::DeviceRgb,
@@ -914,6 +953,13 @@ impl ColorState {
         };
         half.space = Some(resolved);
         half.paints = true;
+        // `g`/`rg`/`k` set the space AND the colour in one operator, so the
+        // components arrive here rather than through `set`. Recording them
+        // is what lets the paint site answer `CompatibleOverprint`'s
+        // per-component question; without it the commonest colour operators
+        // in any PDF would be exactly the ones overprint could not see.
+        half.components.clear();
+        half.components.extend_from_slice(comps);
         // A new space replaces any pattern selection (§8.6.8: the operator
         // "shall also set the current colour to its initial value"). Not
         // clearing this is how a `scn /P1` followed by a `cs` naming a
@@ -1057,6 +1103,14 @@ impl ColorState {
         let rgb = space.to_rgb(comps, intent, diag);
         if rgb.is_none() {
             diag.colors_not_set += 1;
+        } else {
+            let half = if stroking {
+                &mut self.stroke
+            } else {
+                &mut self.fill
+            };
+            half.components.clear();
+            half.components.extend_from_slice(comps);
         }
         rgb
     }
@@ -2829,7 +2883,7 @@ mod tests {
         let mut state = ColorState::new();
         assert_eq!(state.space(false), Some(&ColorSpace::DeviceGray));
         state.push();
-        state.set_device(DeviceSpace::Cmyk, false);
+        state.set_device(DeviceSpace::Cmyk, &[0.0, 0.0, 0.0, 1.0], false);
         assert_eq!(state.space(false), Some(&ColorSpace::DeviceCmyk));
         state.pop();
         assert_eq!(
@@ -2845,7 +2899,7 @@ mod tests {
     #[test]
     fn the_two_halves_are_independent() {
         let mut state = ColorState::new();
-        state.set_device(DeviceSpace::Cmyk, true);
+        state.set_device(DeviceSpace::Cmyk, &[0.0, 0.0, 0.0, 1.0], true);
         assert_eq!(state.space(true), Some(&ColorSpace::DeviceCmyk));
         assert_eq!(
             state.space(false),

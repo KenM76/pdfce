@@ -462,6 +462,8 @@ fn renders_a_single_page_to_png_with_the_stable_stdout_line() {
             // §8.6.7 overprint — tracked and reported, not simulated.
             "overprint_requested",
             "overprint_opm1",
+            // The subset of enabled overprint that is a real difference.
+            "overprint_effective",
         ],
         "metrics key order is part of the stable contract"
     );
