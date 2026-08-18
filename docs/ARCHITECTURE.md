@@ -1216,7 +1216,58 @@ D:\Dev\pdfce\
                                    render-fidelity gap, narrowed from
                                    "all group compositing" to "knockout
                                    groups + soft masks" (`ROADMAP.md`
-                                   *Next up*).
+                                   *Next up*). **★ CORRECTED (`Pass
+                                   85.4e`, `fee42e8`, 2026-08-17; decision
+                                   068 amended again, sub-decision 4):
+                                   the §11.4.6/§11.5.2–.3 spec dispatch
+                                   landed and fixed two defects this
+                                   entry's own citations and buffering
+                                   condition had.** Citation fix: `/K`,
+                                   `/I`, `/CS` are Table **147**, not 96
+                                   (Table 96 is the COMMON group-
+                                   attributes table every subtype
+                                   shares); Table 147 in ISO 32000-1 is
+                                   Table 145 in ISO 32000-2. Buffering
+                                   fix: knockout groups now buffer
+                                   UNCONDITIONALLY — `85.4d`'s
+                                   outer-state-neutrality test was never
+                                   meant to gate knockout at all, since a
+                                   knockout group has no initial
+                                   backdrop to composite against when
+                                   painted inline, isolated or not; a
+                                   knockout group under a neutral outer
+                                   state had still been taking the
+                                   inline fast path built for the
+                                   non-isolated/non-knockout majority.
+                                   **The dispatch also reframes the
+                                   population this gap covers**, far
+                                   beyond explicit `/K true`: §9.3.8's
+                                   `/TK` defaults `true` (every text
+                                   object is knockout by default),
+                                   §11.7.4.4 makes `B`/`B*`/`b`/`b*` and
+                                   text render modes 2/6 knockout (its
+                                   own NOTE 2 names the double-border
+                                   symptom on a semi-transparent
+                                   fill-then-stroke), and §11.6.7 makes
+                                   shading patterns knockout — no `/K`
+                                   key needed for any of the three.
+                                   **Still not correctly composited**:
+                                   the buffer this fix guarantees is the
+                                   CONTAINER only; §11.4.6's actual
+                                   per-element-against-initial-backdrop
+                                   compositing rule remains unimplemented,
+                                   `groups_knockout_approx` still counts
+                                   every knockout group as approximated.
+                                   **Representability is now known**:
+                                   isolated knockout is bit-exact
+                                   representable in this single
+                                   premultiplied-alpha buffer; non-
+                                   isolated knockout (the common case,
+                                   `/K` defaulting false the same way
+                                   `/I` does) is not, pending buffer-
+                                   model work. Full derivation:
+                                   `ROADMAP.md`'s `Pass 85.4e` Shipped
+                                   entry.
     pdfce-print\                 <- Printing: job planning + spooling. Shipped with
                                    `Pass 55.2` (2026-08-10) but never documented in this
                                    tree until the eighty-fifth filing — a filing gap this
@@ -21953,3 +22004,51 @@ free 069.**
 >
 > No standing rule minted by this amendment either — same disposition as
 > the original entry.
+
+> **★ AMENDED AGAIN 2026-08-17 (`Pass 85.4e`, `fee42e8`, hundred-and-
+> sixty-second filing) — A FOURTH SUB-DECISION IS ADDED. Sub-decisions
+> 1–3 above are UNCHANGED and still correct; this amendment states a
+> condition sub-decision 3 was silent on.**
+>
+> **4. Knockout buffering is unconditional, independent of the
+> outer-state-neutrality test sub-decision 3 introduced.** Sub-decision
+> 3's condition (buffer iff outer blend/alpha is non-neutral, OR the
+> group is isolated) fell out of §11.4.4 NOTE 5's inline fast path,
+> which requires the group to share "the same knockout attribute as its
+> parent" — read too narrowly, that requirement was implemented as one
+> more condition alongside isolation rather than as its own independent
+> trigger, so a knockout group under a neutral outer state still took
+> the inline fast path sub-decision 3 built for the non-isolated,
+> non-knockout majority. A knockout group has **no initial backdrop to
+> composite against at all** when painted inline — that absence is what
+> makes it a knockout group — so "inline is a cheaper route to the same
+> answer," true for the non-isolated/non-knockout case sub-decision 3
+> targets, is false for knockout regardless of isolation or outer
+> state. `needs_buffer` now ORs in `is_knockout` unconditionally.
+>
+> **What this amendment does NOT decide, still.** The buffer this
+> sub-decision guarantees for a knockout group is the CONTAINER only —
+> §11.4.6's actual compositing rule (each element composites against the
+> group's INITIAL backdrop, not the accumulated result) is still not
+> implemented; `groups_knockout_approx` still counts every knockout
+> group as approximated. Isolated knockout is now known to be
+> representable bit-for-bit in pdfce's single premultiplied-alpha
+> buffer; non-isolated knockout is not, pending buffer-model work — see
+> `ROADMAP.md`'s `Pass 85.4e` Shipped entry for the representability
+> finding and the resulting build-order ruling.
+>
+> **A citation error is corrected in the same commit, not itself a
+> decision but recorded so the body section below does not still carry
+> it:** `/K`, `/I` and `/CS` are ISO 32000-1 **Table 147** (the
+> transparency-group-attributes dictionary), not Table 96 (the COMMON
+> group-attributes table every group subtype shares) — `interpret.rs`
+> had cited Table 96 at four sites. Table numbers in clause 11 shift
+> **−2** between editions; Table 147 in ISO 32000-1 is **Table 145** in
+> ISO 32000-2, so a bare number is ambiguous without naming the edition.
+>
+> Full derivation: `ROADMAP.md`'s `Pass 85.4e` Shipped entry.
+> `ARCHITECTURE.md` §3's `pdfce-render\interpret.rs` body entry is
+> updated in the same filing.
+>
+> No standing rule minted by this amendment either — same disposition as
+> both prior entries.

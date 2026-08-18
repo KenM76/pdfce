@@ -96,6 +96,148 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★★★★ Pass 85.4e — `fee42e8` — correction to `Pass 85.4d`, landing the `§11.4.6`/`§11.5.2–.3` spec dispatch — **THE DISPATCH IT REQUESTED FOUND TWO DEFECTS IN THE CODE THAT REQUESTED IT, AND REFRAMES KNOCKOUT FROM "42 GROUPS ON ONE FILE" TO EVERY `B`/`b` OPERATOR AND EVERY TEXT OBJECT IN THE CORPUS** — decision 068 amended again (sub-decision 4); `LUM-A1` registered as a new spec-ambiguity-register entry; degenerate-fixture RAG file gains a fifth, PREDICTED instance — filed 2026-08-17 (hundred-and-sixty-second filing)
+
+**Sourcing.** No shell tool this dispatch (hard rule 8). Test count,
+corpus-bucket, and gate results below are **relayed** from the
+dispatching engineer's own run. **Independently confirmed by this
+filing, via `Read`/`Grep` on `crates/pdfce-render/src/interpret.rs`
+directly** (not relayed): the citation now reads "Table 147" at all
+four sites the dispatch named, with an explicit "NOT Table 96 …
+Table 145 in ISO 32000-2" note at line 300; `needs_buffer` (line
+3099–3100) now reads
+`is_transparency_group && (!outer_is_neutral || group_flag(b"I") ||
+is_knockout)` — `is_knockout` is unconditional, not gated on
+`outer_is_neutral` the way `Pass 85.4d`'s condition gated everything
+else; and the four-clause knockout-scope comment (lines 3041–3050) and
+the degenerate-fixture warning (lines 3052–3056) are present in the
+source exactly as the dispatch reported them. **One thing the code
+itself still says, and is worth stating precisely rather than rounding
+up:** `is_knockout` groups are now **correctly buffered** (they get the
+transparent-backdrop container knockout semantics require) but are
+**still not correctly composited** — the comment at line 3033 reads
+"`/K` (knockout, Table 147) is NOT implemented," and
+`transparency_groups_knockout_approximated` still increments for every
+one. This Pass fixes the CONTAINER; it does not fix the CONTENTS'
+occlusion order inside it.
+
+**Defect 1 — citation.** `/K`, `/I` and `/CS` are ISO 32000-1 **Table
+147** (the transparency-group-attributes dictionary), not Table 96
+(the COMMON group-attributes table every group subtype shares). Table
+numbers in clause 11 shift **−2** between editions — 147 in ISO
+32000-1 is **145** in ISO 32000-2 — so a bare number is ambiguous
+without naming the edition; the fix states both. Corrected at all four
+sites `Pass 85.4c`/`85.4d` had cited Table 96.
+
+**Defect 2 — `needs_buffer` omitted knockout.** `Pass 85.4d`'s
+buffering condition (decision 068 sub-decision 3: buffer iff outer
+state is non-neutral OR the group is isolated) was silent on knockout,
+so a knockout group under a neutral outer state took the inline fast
+path — the same fast path `85.4d` correctly built for the
+non-isolated, non-knockout majority. §11.4.4 NOTE 5's inline shortcut
+requires the group to share "the same knockout attribute as its
+parent"; a knockout group has no INITIAL backdrop to composite against
+when painted inline at all, which is what makes it a knockout group in
+the first place. `needs_buffer` now includes `is_knockout`
+unconditionally, independent of `outer_is_neutral`.
+
+**★★ Finding 3 — non-isolated knockout is not a corner case; it is the
+default population.** Four clauses put a group into knockout state
+with **no `/K` key anywhere in the file**: **§9.3.8's `/TK`, whose
+INITIAL VALUE IS `true`**, making every text object one by default;
+**§11.6.7**, which makes shading patterns knockout (tiling patterns are
+not); and **§11.7.4.4**, which makes `B`/`B*`/`b`/`b*` and text render
+modes 2 and 6 knockout. §11.7.4.4's own NOTE 2 names the visible
+symptom: **the double border on a semi-transparent fill-then-stroke IS
+missing knockout.** Ranked by likely real-world frequency: `B`/`b` ≫
+`/TK` > explicit `/K` ≈ shading patterns. This inverts the prior
+framing — `groups_knockout_approx` (47 on one Ghent file, all
+*explicit* `/K`) was being read as the whole population; it is a small,
+easily-measured slice of it. Fill-then-stroke and default-mode text are
+not counted by that counter at all today.
+
+**★ Finding 4 — the fixture warning arrived BEFORE the fixture.**
+Knockout and non-knockout compositing are algebraically IDENTICAL when
+every element is fully opaque (`q_s = 1` implies `α_s = f_s`), so a
+fixture built entirely of opaque fills cannot distinguish a correct
+implementation from a wrong one — any knockout test must set `/ca <
+1`. This is the **degenerate-fixture trap** this project has now hit
+four times this session (see the `D:\dev\rag\rust\` note below) — the
+first time it arrived as a warning written into the code ahead of the
+test that would need it, rather than as a post-hoc sabotage-run
+discovery.
+
+**Finding 5 — the buffer-model boundary is now sharp, not a guess.**
+Isolated knockout IS representable in pdfce's single premultiplied-
+alpha buffer (`α_0 = 0` kills the backdrop terms in the recurrence; the
+result stays a valid pixmap), and `BlendMode::Source` + paint alpha
+`q_s` + rasterizer coverage `f_s` reproduces it bit-for-bit, measured
+against the spec-librarian's own worked derivation. **Non-isolated
+knockout is NOT representable** in that same model, with three named
+deficits (full detail in the spec dispatch's own output, not repeated
+here). Practical effect: isolated-knockout correctness is buildable
+now; non-isolated-knockout correctness needs buffer-model work first.
+
+**Finding 6 — `LUM-A1`, a new spec-ambiguity-register entry.** ISO
+32000-1 **contradicts itself** on `DeviceCMYK` soft-mask luminosity:
+§11.5.3 NOTE 3 states a multiplicative form, its own §10.3.3 states an
+additive form as a `shall`, and ISO 32000-2 changed §11.5.3 to match
+the §10.3.3 (additive) form. Divergence between the two readings is
+exactly **`K·S`**, maximum **0.25**. Neither reading is normative in
+context — §11.5.3 itself says "by implementation-defined means" — so
+per `CLAUDE.md`'s "make spec ambiguity a setting" rule this is a
+SETTING, not a hard-coded pick, owed when soft masks are implemented.
+Recommended default: the ISO 32000-2 (additive) form. Tracked as a new
+*Next up* item, below, alongside the existing spec-ambiguity-register
+entries (`AD-A1`/`AD-A3`, `QP-A1`, etc.) — see that entry for the full
+statement; this is not built into `Settings` yet, since soft-mask
+groups themselves are not built yet.
+
+**Verification (relayed).** 3,781 tests, 0 failures — same total as
+`Pass 85.4d`'s own closing count; no new test is claimed this dispatch,
+consistent with "no behaviour change beyond knockout buffering" (a
+knockout group that was previously flattened-inline now buffers
+instead, which changes a counter and an internal code path, not an
+externally-observable pixel result on any fixture currently in the
+suite — the fixture that WOULD observe it is finding 4's still-unbuilt
+one). `cargo fmt --check` / `cargo clippy --workspace --all-targets --
+-D warnings` clean.
+
+**Decisions.** `ARCHITECTURE.md` §12 decision **068 AMENDED AGAIN, NOT
+SUPERSEDED** — sub-decisions 1–3 unchanged; a **fourth sub-decision**
+states that knockout buffering is unconditional, independent of the
+outer-state-neutrality test sub-decision 3 introduced. Full text:
+`ARCHITECTURE.md` §12, decision 068's own entry. `ARCHITECTURE.md` §3's
+`pdfce-render\interpret.rs` body entry updated in the same filing so
+the living-truth section reflects the corrected condition and citation.
+
+**`ROADMAP.md`'s own `Pass 85.0`–`85.5` gap-inventory table and build
+order — REWRITTEN this filing, not merely footnoted**, because the
+scope change (finding 3) is large enough to change the ranking, not
+just the description. See that entry, below, for the row rewrite and
+the re-derived order (fourth re-derivation of this build order this
+session) with this filing's own ruling on knockout-vs-soft-masks
+priority and the reasoning behind it.
+
+**`docs/FEATURES.md` — two rows touched, no checkbox changes.** The
+*Implemented* transparency-group-compositing row already said knockout
+groups "still composite as ordinary groups, not correct" — still true,
+unaffected by a buffering-container fix that does not touch occlusion
+order. The *Planned* knockout/soft-mask row is rewritten to state the
+dispatch landed and the scope reframe, not left describing a still-open
+dispatch that has, in fact, returned. See that row, below.
+
+**Ledger effects.** Pass family: **85** (sub-Pass `85.4e` — correction
+of `85.4d`, same family; no new family, next free stays **92**).
+Standing rules: **no new rule minted** — the degenerate-fixture trap's
+fifth (predicted) instance is recorded in its existing RAG file, not as
+a new standing rule; ceiling stays **R195**, next free **R196**.
+Decisions: **none newly minted** — decision **068 amended again**;
+ceiling stays **068**, next free **069**. `SESSION_LOG.md` filings move
+**161 → 162**, which is this one.
+
+---
+
 ### ★★★★ Pass 85.4d — `b15d7ff` — correction to `Pass 85.4c` — **A GROUP BUFFER STARTS TRANSPARENT, WHICH IS ISOLATED SEMANTICS — MOST GROUPS ARE NON-ISOLATED BY DEFAULT AND `85.4c` BUFFERED THEM ANYWAY, GETTING THE BACKDROP WRONG IN THE OPPOSITE DIRECTION FROM THE FLATTENING IT REPLACED — FOUND BY ASKING WHY A PERFORMANCE NUMBER WAS WRONG, NOT BY LOOKING FOR A BUG** — decision 068 amended, not superseded; `85.4c`'s test-count flag resolved — filed 2026-08-17 (hundred-and-sixty-first filing)
 
 **Sourcing.** No shell tool this dispatch (hard rule 8). Every figure
@@ -250,6 +392,22 @@ proposed as a rule this filing; ceiling stays **R195**, next free
 **R196**. Decisions: **none newly minted** — decision **068 amended in
 place**; ceiling stays **068**, next free **069**. `SESSION_LOG.md`
 filings move **160 → 161**, which is this one.
+
+**★ AMENDED 2026-08-17 (`Pass 85.4e`, `fee42e8`, hundred-and-sixty-second
+filing) — this Pass's own buffering condition was itself incomplete,
+left visible rather than silently fixed, per this file's own
+append-only correction discipline.** The condition as filed above
+(buffer iff outer state non-neutral OR the group is isolated) was
+silent on **knockout** — a knockout group under a neutral outer state
+still took the inline fast path this Pass built, which is wrong: a
+knockout group has no initial backdrop to composite against at all
+when painted inline, isolated or not. `Pass 85.4e` adds knockout as a
+**third, unconditional** trigger, independent of the outer-state test
+above. Nothing else in this entry is affected — the page-sized-buffer
+and state-reset-at-entry halves, and the non-isolated/non-knockout
+inline fast path this Pass's own fixture proved, are all still correct
+as filed. See `Pass 85.4e`'s own Shipped entry, top of *Shipped*, and
+decision 068's second amendment.
 
 ---
 
@@ -46452,7 +46610,7 @@ built for exactly that (a synthetic function-based-shading page is
 sufficient — the Ghent corpus's own type-1 count is zero, per `Pass
 85.0`'s own measurement).
 
-### ★★★★ Pass 85.0–85.5 — **THE GHENT PDF OUTPUT SUITE GAP INVENTORY** — six render-fidelity gaps, ALL MEASURED (not estimated) from pdfce's own `Pass 84.0` diagnostics against `Ghent_PDF-Output-Test-V50_ALL_X4.pdf` (PDF/X-4, 6 pages) — filed 2026-08-17 (hundred-and-forty-ninth filing) — **★ STATUS CORRECTED 2026-08-17 (`Pass 90.0`, hundred-and-fifty-sixth filing): this heading had read "ALL UNSTARTED" three shipped Passes after it stopped being true. Current status: `85.0` shipped, `85.3` shipped, `85.2` shading half shipped/tiling half unstarted, `85.4` disclosure shipped/implementation unstarted (`Pass 90.0`) — see the table below for the re-derived build order.** **★★ FURTHER CORRECTED 2026-08-17 (`Pass 90.1`, hundred-and-fifty-seventh filing): `85.4` is now SPLIT.** Blend modes (eleven separable, `ExtGState /BM`) are SHIPPED; the four non-separable modes are measured-wrong-in-tiny-skia and REFUSED (not a gap this project can close without an upstream fix); transparency-GROUP compositing (isolated/knockout, offscreen buffer) and `/SMask` soft-mask groups remain UNSTARTED and are now this inventory's **single largest remaining gap** — see the row and build order below. **★★★ CORRECTED AGAIN 2026-08-17 (`Pass 85.4c`, `0d6f4ac`, hundred-and-sixtieth filing): non-knockout transparency-GROUP compositing SHIPS.** A group now composites through a real page-sized offscreen buffer (decision 068). Knockout groups (`/K true`) remain approximated, not correct; `/SMask` soft-mask groups remain unread. See the `85.4c` row and the re-derived build order, both below.
+### ★★★★ Pass 85.0–85.5 — **THE GHENT PDF OUTPUT SUITE GAP INVENTORY** — six render-fidelity gaps, ALL MEASURED (not estimated) from pdfce's own `Pass 84.0` diagnostics against `Ghent_PDF-Output-Test-V50_ALL_X4.pdf` (PDF/X-4, 6 pages) — filed 2026-08-17 (hundred-and-forty-ninth filing) — **★ STATUS CORRECTED 2026-08-17 (`Pass 90.0`, hundred-and-fifty-sixth filing): this heading had read "ALL UNSTARTED" three shipped Passes after it stopped being true. Current status: `85.0` shipped, `85.3` shipped, `85.2` shading half shipped/tiling half unstarted, `85.4` disclosure shipped/implementation unstarted (`Pass 90.0`) — see the table below for the re-derived build order.** **★★ FURTHER CORRECTED 2026-08-17 (`Pass 90.1`, hundred-and-fifty-seventh filing): `85.4` is now SPLIT.** Blend modes (eleven separable, `ExtGState /BM`) are SHIPPED; the four non-separable modes are measured-wrong-in-tiny-skia and REFUSED (not a gap this project can close without an upstream fix); transparency-GROUP compositing (isolated/knockout, offscreen buffer) and `/SMask` soft-mask groups remain UNSTARTED and are now this inventory's **single largest remaining gap** — see the row and build order below. **★★★ CORRECTED AGAIN 2026-08-17 (`Pass 85.4c`, `0d6f4ac`, hundred-and-sixtieth filing): non-knockout transparency-GROUP compositing SHIPS.** A group now composites through a real page-sized offscreen buffer (decision 068). Knockout groups (`/K true`) remain approximated, not correct; `/SMask` soft-mask groups remain unread. See the `85.4c` row and the re-derived build order, both below. **★★★★ CORRECTED A FOURTH TIME 2026-08-17 (`Pass 85.4e`, `fee42e8`, hundred-and-sixty-second filing): the §11.4.6/§11.5.2–.3 spec dispatch LANDED — knockout groups are now correctly BUFFERED (the transparent-container half), still NOT correctly COMPOSITED (occlusion order), and the population this gap actually covers is far larger than "42 explicit `/K` groups": §9.3.8's `/TK` defaults `true` (every text object), §11.7.4.4 makes `B`/`B*`/`b`/`b*` knockout, and §11.6.7 makes shading patterns knockout — no `/K` key required for any of the three.** See the `85.4c` row (rewritten) and the build order (fourth re-derivation), both below.
 
 **Origin.** The operator rendered the Ghent suite and reported pdfce
 "a long way off." The Ghent suite is a formal prepress conformance
@@ -46473,7 +46631,7 @@ and deferred-op counts on that file — not estimated.**
 | ~~`85.3`~~ | closes **`Pass 1.1` item 6.4** — `/Separation`/`/DeviceN`/`Lab` IMAGE colour spaces | **10 images missing page 1, 6 page 4, 2 page 5** — stderr: "image colour space /Separation is not supported", "/DeviceN is not supported" | §8.6.6.4/§8.6.6.5; vector fills already work (`separation_to_rgb`/`device_n_to_rgb` are wired to the §7.10 evaluator) — this is the per-pixel image path only — **SHIPPED 2026-08-17, `1e7a0be` (`CalGray`/`CalRGB` came free from the same delegation). See the `Pass 85.3` Shipped entry, top of *Shipped*.** |
 | ~~`85.4a`~~ | blend modes — `ExtGState /BM`, eleven separable modes | `pdfce-render/src/interpret.rs` — **SHIPPED 2026-08-17, `Pass 90.1`, `bd244d9`.** Ghent page 2: 60 of 76 `/BM` invocations now composite exactly. Required a page-backdrop model correction (opaque-white-fill → isolated group over transparent backdrop, §11.4.7) — see the `Pass 90.1` Shipped entry. | §11.3.5, Table 136/137 — **SHIPPED**, see the `Pass 90.1` Shipped entry |
 | `85.4b` | non-separable blend modes — Hue/Saturation/Color/Luminosity | Ghent page 2: 16 of 76 `/BM` invocations (4 modes × 4 swatches) — **REFUSED, not mapped**: tiny-skia 0.11.4 is measured wrong against both ISO 32000-1 and W3C Compositing-1 (up to 107/255 error) — `D:\dev\rag\rust\tiny_skia_0.11_non_separable_blend_modes_wrong_by_up_to_107_255.md`. Not closeable inside pdfce without an upstream tiny-skia fix or a from-scratch implementation of the four HSL formulas. | §11.3.5.3 — refused, see `ARCHITECTURE.md` §12 decision 066 |
-| ~~`85.4c`~~ | transparency GROUPS — isolated/knockout offscreen compositing, `/SMask` soft-mask groups | `pdfce-render/src/interpret.rs` — **non-knockout compositing SHIPPED 2026-08-17, `0d6f4ac`.** A group now renders into its own page-sized offscreen buffer with contents-state reset to initial, composited as a unit with the outer blend mode/alpha (§11.4.5; decision 068). Ghent GWG 16.0 (non-knockout) panel renders CLEAN; `groups_flattened` 187 → 0. **Remaining, NOT closed by this Pass:** knockout groups (`/K true`, §11.4.6) still approximated as ordinary groups — `groups_knockout_approx` (47) names the approximation, GWG 16.1 still shows its crosses; `/SMask` soft-mask groups (36 occurrences, all pages) still entirely unread. Both blocked on the `pdfce-spec-librarian` dispatch for §11.4.6/§11.5.2–.3, in flight — see the `Pass 85.4c` Shipped entry, top of *Shipped*. **Now this inventory's remaining top-priority gap** (soft masks + knockout), ahead of `85.1` (mesh shadings). **★ `Pass 85.4d` (`b15d7ff`, same day) CORRECTED `85.4c`'s buffering to be CONDITIONAL** (outer non-Normal/alpha<1 OR isolated, else paint inline) — unconditional buffering had given non-isolated groups (the `/I`-default) a transparent backdrop instead of the page's own, wrong in the opposite direction from the flattening bug `85.4c` fixed. Ghent GWG 16.0 stays clean; the row above is otherwise unaffected. See the `Pass 85.4d` Shipped entry, top of *Shipped*, and decision 068's amendment. | clause 11.4–11.6.4 (groups) + §11.6.5.3-adjacent (soft-mask groups); the per-IMAGE `/SMask`/`/Mask` shipped in `Pass 48.1` is unrelated — do not conflate the two `/SMask` meanings when scoping |
+| ~~`85.4c`~~ | transparency GROUPS — isolated/knockout offscreen compositing, `/SMask` soft-mask groups | `pdfce-render/src/interpret.rs` — **non-knockout compositing SHIPPED 2026-08-17, `0d6f4ac`.** A group now renders into its own page-sized offscreen buffer with contents-state reset to initial, composited as a unit with the outer blend mode/alpha (§11.4.5; decision 068). Ghent GWG 16.0 (non-knockout) panel renders CLEAN; `groups_flattened` 187 → 0. **★ `Pass 85.4d` (`b15d7ff`, same day) CORRECTED `85.4c`'s buffering to be CONDITIONAL** (outer non-Normal/alpha<1 OR isolated, else paint inline). **★★ `Pass 85.4e` (`fee42e8`, hundred-and-sixty-second filing) LANDS the §11.4.6/§11.5.2–.3 spec dispatch and fixes two defects it found: a citation error (`/K`/`/I`/`/CS` are Table 147, not 96 — table numbers shift −2 between ISO 32000-1 and -2) and a buffering gap (knockout groups now buffer UNCONDITIONALLY, not gated on `85.4d`'s outer-state test — a knockout group has no initial backdrop to composite against when painted inline at all).** Knockout groups are now correctly **buffered** (the container); they are still **NOT correctly composited** (the contents' occlusion order) — `groups_knockout_approx` still counts every one, GWG 16.1 still shows its crosses. **The dispatch also reframes the population this gap covers**: no `/K` key is required for a knockout group at all — §9.3.8's `/TK` defaults `true` (every text object), §11.7.4.4 makes `B`/`B*`/`b`/`b*` and text render modes 2/6 knockout (its own NOTE 2: a double border on semi-transparent fill-then-stroke IS this bug), and §11.6.7 makes shading patterns knockout. Ranked by likely frequency, `B`/`b` ≫ `/TK` > explicit `/K` ≈ shading patterns — the 47-group `groups_knockout_approx` figure measures only the last, smallest tier. **Representability is now known, not assumed:** isolated knockout is bit-exact representable in pdfce's single premultiplied-alpha buffer; non-isolated knockout (the common case, since `/K` defaults false the same way `/I` does) is NOT, pending buffer-model work. `/SMask` soft-mask groups (36 occurrences, all pages) remain entirely unread; a new spec ambiguity, `LUM-A1` (`DeviceCMYK` soft-mask luminosity — ISO 32000-1 self-contradicts, divergence `K·S` max 0.25), is registered against them, below, for whenever they are built. See the `Pass 85.4e` Shipped entry, top of *Shipped*, and decision 068's second amendment. **Now this inventory's remaining top-priority gap, RE-RANKED within itself** — see the build order below for this filing's ruling on isolated-knockout vs. soft masks vs. non-isolated knockout. | clause 11.4–11.6.4 (groups) + §11.6.5.3-adjacent (soft-mask groups); the per-IMAGE `/SMask`/`/Mask` shipped in `Pass 48.1` is unrelated — do not conflate the two `/SMask` meanings when scoping |
 | `85.5` | overprint compositing | patches GWG 1.0, 1.1, 2.0, 3.0, 3.1, 4.0.1, 4.1, 12.0, 19.0, 19.1, 19.2 — most of pages 1 and 4 | **§8.6.7 says "if overprinting is not supported, the value of the overprint parameter shall be ignored" — pdfce is CONFORMANT TODAY.** Implementing it means compositing into a CMYK buffer; lowest priority, architectural, and partly gated on `iccce` (see `Backlog`, "Colour management (`iccce` coordination)", decision 064) |
 
 **Suggested build order — ★ RE-DERIVED 2026-08-17 (`Pass 90.0`,
@@ -46523,6 +46681,42 @@ defect); **`85.2` tiling half, `85.1`, `85.4c` remainder, `85.5` remain
 unstarted**, with `85.4c`'s remainder (soft masks first, then
 knockout) the single highest-priority item in this table, both
 sub-items gated on the same not-yet-landed spec dispatch.
+
+**★★★★ RE-DERIVED A FOURTH TIME 2026-08-17 (`Pass 85.4e`, `fee42e8`,
+hundred-and-sixty-second filing), REPLACING the sub-order WITHIN
+`85.4c`'s remainder rather than the table position above — `85.4c`
+remainder stays first overall, unchanged.** The spec dispatch that was
+blocking both halves of the remainder landed this filing, and its own
+finding 3 (this Pass's Shipped entry, above) changes the relative
+order of the two halves it unblocked. **This filing's ruling, and the
+reasoning:** within `85.4c`'s remainder, split knockout itself into
+two, and interleave —
+
+1. **Isolated-knockout correctness, first.** Tractable NOW: the spec
+   dispatch's finding 5 (this Pass's Shipped entry) establishes it is
+   bit-exact representable in pdfce's existing single-alpha buffer
+   model — no architecture change needed, only implementing the
+   per-element-against-initial-backdrop compositing loop inside a
+   buffer this Pass already guarantees gets allocated.
+2. **Soft-mask groups, second**, unchanged in scope (36 Ghent
+   occurrences) but now carrying an owed decision — `LUM-A1`'s default
+   (below) — before implementation, per `CLAUDE.md`'s "make spec
+   ambiguity a setting" rule.
+3. **Non-isolated-knockout correctness, third, and EXPLICITLY NOT
+   "next"** despite finding 3 showing it is, by far, the largest of the
+   three by real-world frequency (every `B`/`b` operator, every
+   default-mode text object). It is blocked on buffer-model work
+   (finding 5's "three named deficits," not detailed in this filing) in
+   a way the other two are not — ranking it first by frequency alone
+   would queue an architecturally-gated item ahead of two tractable
+   ones for a frequency number this filing cannot yet turn into a
+   scoped Pass.
+
+**Net effect on the inventory's OWN priority ranking, one level up:**
+`85.4c` remainder, as a whole, is confirmed to still outrank `85.1`
+(mesh shadings) — finding 3 makes the remainder's true footprint larger
+than previously measured, not smaller, so nothing in this re-derivation
+weakens that ranking; only the order **within** the remainder changes.
 
 **★ Two secondary findings from the same measurement run, filed here
 rather than as separate Passes because neither is a fidelity gap:**
@@ -50118,6 +50312,42 @@ dedicated certification-gate audit, should resolve it. See
 `annotation_deletion_refusal`'s own §12.8.2.2 reasoning
 (`ARCHITECTURE.md` §12, `Pass 38.5` first entry) for the gate shape
 this item's fix would most plausibly mirror.
+
+### ★ `LUM-A1` — new spec-ambiguity register entry, registered by `pdfce-spec-librarian`, not yet a pdfce setting — filed 2026-08-17 with `Pass 85.4e` (no Pass number of its own; blocked on soft-mask groups, which are not built)
+
+**The finding.** ISO 32000-1 self-contradicts on `DeviceCMYK` soft-mask
+luminosity: §11.5.3 NOTE 3 states a **multiplicative** form, its own
+§10.3.3 states an **additive** form as a `shall`, and ISO 32000-2
+changed §11.5.3 to match the §10.3.3 (additive) form — so the later
+edition resolves the self-contradiction in the additive direction, but
+does not make the earlier edition's own multiplicative NOTE non-existent
+history. Divergence between the two readings is exactly **`K·S`**,
+maximum **0.25** (`S` the other three channels' sum, `K` the black
+channel). Neither reading is normative in isolation — §11.5.3 itself
+says "by implementation-defined means" — so per `CLAUDE.md`'s "make
+spec ambiguity a setting, never hard-code a choice the standard leaves
+open" rule, this is register-worthy exactly like `cmyk_intent`
+(`Pass 51.0`) and the 18-row register `Pass 51.3` built settings
+against.
+
+**Recommended default (this filing's own judgement, not yet acted
+on):** the ISO 32000-2 (additive) form — it is the CURRENT edition's
+resolution of its own prior self-contradiction, the same reasoning
+`AMB-3`'s radial-shading resolution used (decision 065: prefer the
+reading that does not destroy the thing it describes; here, prefer the
+edition that resolved its own inconsistency over the one that still
+carries it).
+
+**Not built.** Soft-mask groups (`/SMask` on a transparency group,
+§11.6.5) are themselves unbuilt — `LUM-A1` only becomes a live code
+path once they exist, per the `Pass 85.4c`/`85.4d`/`85.4e` chain's own
+build order, above. Tracked here so the setting is not re-derived from
+scratch, or worse, silently hard-coded one way, when soft-mask
+implementation starts. Not yet back-filed into
+`iso32000__ref__ambiguity_settings_register.md`'s own numbered ranking
+— `pdfce-spec-librarian`'s territory (hard rule 6), flagged here so the
+back-fill is tracked rather than lost between the two RAGs, same
+pattern as `AD-A1`/`AD-A3` immediately below.
 
 ### ★ `AD-A1`/`AD-A3` spec-ambiguity register back-fill owed — filed 2026-08-09 with `Pass 38.5` (no Pass number; a spec-RAG maintenance item, not an engineering one)
 

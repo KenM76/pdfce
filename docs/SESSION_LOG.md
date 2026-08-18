@@ -44705,3 +44705,104 @@ predates it).
    by this correction.
 4. `v0.6.1` release-note correction still owed, unaffected by this
    filing.
+
+## 2026-08-17 (hundred-and-sixty-second filing) — **`Pass 85.4e` (`fee42e8`): THE §11.4.6/§11.5.2–.3 SPEC DISPATCH LANDS AND FINDS TWO DEFECTS IN THE CODE THAT REQUESTED IT — A TABLE-96-VS-147 CITATION ERROR AND AN UNCONDITIONAL-KNOCKOUT-BUFFERING GAP — AND REFRAMES KNOCKOUT FROM "42 GROUPS ON ONE FILE" TO EVERY `B`/`b` OPERATOR AND EVERY TEXT OBJECT IN THE CORPUS. Decision 068 amended a second time (sub-decision 4). `LUM-A1` registered as a new spec-ambiguity-register entry. Degenerate-fixture RAG file gains a fifth instance — the first PREDICTED one, not discovered after the fact.**
+
+**Shipped:**
+- `Pass 85.4e` — `fee42e8`. Two defects, both independently confirmed
+  by this filing via direct `Read`/`Grep` on `interpret.rs`, not only
+  relayed: (1) `/K`/`/I`/`/CS` cited as Table 96 (the COMMON group-
+  attributes table) at four sites; correct citation is Table **147**
+  (ISO 32000-1) / **145** (ISO 32000-2, clause-11 table numbers shift
+  −2 between editions). (2) `needs_buffer` gated knockout on `85.4d`'s
+  outer-state-neutrality test instead of triggering unconditionally —
+  wrong, because a knockout group has no initial backdrop to composite
+  against when painted inline at all, isolated or not. Both fixed;
+  knockout groups now correctly **buffered** (the container), still
+  **not** correctly **composited** (§11.4.6's per-element-against-
+  initial-backdrop occlusion rule remains unimplemented,
+  `groups_knockout_approx` still counts every one).
+
+**Decisions made this session:**
+- **Decision 068 AMENDED AGAIN, not superseded.** Sub-decisions 1–3
+  unchanged; sub-decision 4 states knockout buffering is unconditional,
+  independent of sub-decision 3's outer-state test. `ARCHITECTURE.md`
+  §12 (decision 068) and §3 (`interpret.rs` body entry) both updated
+  this filing.
+- **`LUM-A1` registered** (by `pdfce-spec-librarian`, tracked here per
+  `CLAUDE.md`'s "make spec ambiguity a setting" rule) — ISO 32000-1
+  self-contradicts on `DeviceCMYK` soft-mask luminosity (§11.5.3 NOTE 3
+  multiplicative vs. its own §10.3.3 additive `shall`; ISO 32000-2
+  changed §11.5.3 to the additive form). Divergence `K·S`, max 0.25.
+  Recommended default: the ISO 32000-2 (additive) form, same reasoning
+  `AMB-3` used (decision 065). Not built — soft-mask groups themselves
+  don't exist yet. See `ROADMAP.md`'s new `LUM-A1` *Next up* entry.
+- **Build order re-derived a fourth time, WITHIN `85.4c`'s remainder
+  rather than at the table-position level.** This filing's ruling:
+  isolated-knockout correctness first (tractable now — bit-exact
+  representable in the existing buffer model per the dispatch's own
+  representability finding), soft masks second (scoped, but owes the
+  `LUM-A1` default decision first), non-isolated knockout third
+  DESPITE being the largest by real-world frequency — it is
+  architecture-gated (buffer-model work) in a way the other two are
+  not, so frequency alone would queue a blocked item ahead of two
+  tractable ones. `85.4c` remainder as a whole still outranks `85.1`
+  (mesh shadings); only the order inside it changed.
+
+**Findings + decisions:**
+- **Finding 3 — non-isolated knockout is not a corner case.** Four
+  clauses put a group into knockout state with no `/K` key anywhere in
+  the file: §9.3.8's `/TK` (initial value `true`, every text object);
+  §11.6.7 (shading patterns); §11.7.4.4 (`B`/`B*`/`b`/`b*`, text render
+  modes 2/6 — its own NOTE 2 names the double-border symptom outright).
+  Ranked by likely frequency: `B`/`b` ≫ `/TK` > explicit `/K` ≈ shading
+  patterns. `groups_knockout_approx` (47 on one Ghent file) measures
+  only the smallest, most easily counted tier.
+- **Finding 4 — the degenerate-fixture warning arrived BEFORE the
+  fixture, for the first time.** Knockout and non-knockout compositing
+  are algebraically identical when every element is opaque (`q_s = 1`
+  implies `α_s = f_s`); any knockout test must set `/ca < 1`. Written
+  into the code as a warning ahead of the test that will need it,
+  rather than discovered by a failed sabotage run after one shipped.
+  Recorded as a fifth instance in
+  `D:\dev\rag\rust\a_symmetric_fixture_cannot_detect_a_transposition_of_its_own_symmetric_parameters.md`
+  — same shape as instance 4 there (two formulas coinciding at a
+  parameter value, here `q_s = 1`), but flagged PREDICTED rather than
+  CONFIRMED, since no knockout fixture or sabotage run exists yet to
+  confirm it against. `index.md` bullet updated same filing.
+- **Finding 5 — representability is now known, not assumed.** Isolated
+  knockout is bit-exact representable in pdfce's single premultiplied-
+  alpha buffer (`α_0 = 0` kills the backdrop terms; `BlendMode::Source`
+  + paint alpha + rasterizer coverage reproduces it exactly). Non-
+  isolated knockout is not representable in that same model, three
+  named deficits (full detail in the spec dispatch's own output, not
+  repeated here). This is what makes the build-order ruling above
+  possible rather than a guess.
+- **Test count and gates (relayed, not independently re-run):** 3,781
+  tests, 0 failures — same total as `Pass 85.4d`'s own closing count;
+  no new test claimed this dispatch, consistent with "no behaviour
+  change beyond knockout buffering" on any fixture currently in the
+  suite. `cargo fmt --check`/`cargo clippy -- -D warnings` clean.
+
+**Still in flight:** `Pass 72.0`/`73.0`/`73.1`/`86.0` HIGH PRIORITY
+unstarted; `85.1` (mesh shadings) still second in the Ghent build order,
+behind `85.4c`'s remainder (now itself sub-ordered: isolated-knockout →
+soft masks → non-isolated knockout); `85.2` slice 2 (tiling) unstarted;
+`85.5` last; `Pass 87.0` GUI-paused; `v0.6.1` release-note correction
+still owed; `LUM-A1`'s spec-corpus back-fill still owed (`pdfce-spec-
+librarian`'s territory, same pattern as `AD-A1`/`AD-A3`).
+
+**For next session:**
+1. **Next free Pass family is still `92`** (this filing used sub-Pass
+   `85.4e`, existing family `85`). Next free decision is still **069**
+   (068 amended a second time, not newly minted). Next free filing
+   ordinal is **163**. Next free standing rule is still **`R196`** — no
+   mint this filing.
+2. Build isolated-knockout compositing first (tractable now, per
+   finding 5) — do NOT build a fixture of opaque fills only (finding 4);
+   set `/ca < 1` on at least one element.
+3. `LUM-A1`'s default (ISO 32000-2 additive form, this filing's
+   recommendation) needs the operator's or engineer's sign-off before
+   soft-mask implementation starts, not silently baked in.
+4. `v0.6.1` release-note correction still owed, unaffected by this
+   filing.
