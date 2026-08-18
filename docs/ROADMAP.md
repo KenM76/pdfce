@@ -96,6 +96,187 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 99.0 — `38c0ef2` — **`EditSession::insert_pages`: PAGE INSERTION JOINS THE `delete_pages`/`reorder_pages`/`rotate_pages` FAMILY — REQUESTED AND SHIPPED IN THE SAME FILING, BECAUSE THE REQUESTER DECLINED TO WIRE A FEATURE THAT WOULD HAVE SILENTLY DISCARDED UNDO HISTORY** — filed 2026-08-18 (hundred-and-seventy-ninth filing)
+
+**Filed by `pdfce-librarian` WITHOUT a shell this session.** Test/lint
+results below are RELAYED from the dispatching engineer's report (1,826
+core tests green, six new; `cargo fmt --all` applied; `cargo clippy -p
+pdfce-core --all-targets -- -D warnings` clean; `check-one-commit-per-
+command.py` and `check-ui-strings.sh` clean; `cargo tree` shows 0 GUI
+deps for both engine crates), not independently re-run. The source-text
+claims below (`EditSession::insert_pages`'s own doc comment,
+`CommandKind::InsertPages`, the new test file) are independently
+verified by `Read`/`Grep` against the live files:
+`crates/pdfce-core/src/edit.rs:16771–16920` and
+`crates/pdfce-core/tests/insert_pages_preserves_undo.rs`.
+
+**Origin — a request and its own completion, filed together.** Relayed
+verbatim from the `pdfceGUI` session, via the shared channel
+(`D:\Dev\FeatureRequests\pdfce_FeatureRequests\`):
+
+> *"Insert from file is blocked on a real thing: `pageops::insert`
+> returns new document bytes rather than mutating the session, so
+> wiring it as-is would discard your undo history. The session already
+> has `delete_pages`, `reorder_pages`, `rotate_pages` — insert is the
+> missing member of that family. That's a channel request, and I'd
+> rather ask for it than ship a feature that silently eats undo."*
+
+**Worth recording that they were right to ask rather than ship.** The
+alternative — wiring `pageops::insert` behind the existing UI and
+letting it replace the whole session — would have been **invisible to
+every test that checks page counts**: the page arrives, the count is
+right, and the defect only surfaces when a user presses Ctrl+Z twice
+and finds the insert (and everything before it) gone.
+
+#### What shipped
+
+`EditSession::insert_pages(&source_view, &[indices], InsertPosition)
+-> Result<usize, EditError>`, plus `CommandKind::InsertPages { count }`.
+
+Copies every object reachable from each selected source page — content
+streams, resources, fonts, XObjects — at **fresh object numbers**,
+remapping every reference, re-points `/Parent` into the target's page
+tree, splices into `/Kids`, bumps `/Count` up the ancestor chain, and
+records **one** undoable command however many pages arrive (the same
+shape `reorder_pages` already uses for a multi-page move).
+
+**Three implementation decisions worth the record:**
+
+1. **The id mapping is recorded BEFORE the children are walked**, so a
+   resource that refers back to its own page (legal, and real in the
+   wild) terminates instead of recursing until the stack runs out. It
+   also means a resource shared by two imported pages is copied
+   **once**, and both copies point at the same object.
+2. **Stream payloads are re-staged** into the session buffer (R45)
+   with a span in the session's own coordinate system — a copied
+   stream that kept its source span would slice *this* document's
+   bytes at a meaningless offset (the cross-document span mis-slice,
+   the failure mode this decision avoids).
+3. **`/Parent` is dropped during the copy in exactly one place** and
+   re-pointed after splicing; following it during the copy would drag
+   the whole source page tree across. **Inherited attributes are
+   materialised onto the page** (`/MediaBox`, `/Resources`, `/Rotate`,
+   `/CropBox`) since the new parent may not supply them — the same
+   rule `reorder_pages` already applies when a page changes parent.
+
+**★ What it deliberately does NOT do, and why the wording matters for
+`FEATURES.md`.** It does **not** merge the source's **document-level**
+structures — outlines, the AcroForm field tree, named destinations,
+page labels, optional-content configuration. `pageops::insert` **does**,
+via `assemble`'s policies. That difference is the honest cost of
+staying incremental: a document-level merge rewrites objects an
+incremental save exists in order *not* to touch. **There are now two
+correct answers and they are not interchangeable**: an editor gesture
+with undo intact uses `EditSession::insert_pages`; a batch merge
+carrying outlines/fields uses `pageops::insert` and accepts new bytes.
+`pdfce-cli insert-pages` correctly stays on the latter — it is a batch
+tool, and its own subcommand doc comment already says so ("producing a
+new file").
+
+#### Tests — six, asserting the undo property rather than page counts
+
+Because the report was a correctness claim about undo, the tests
+assert that directly: an edit **before** the insert, then three undos
+(the insert reverses; the earlier rotate is still on the stack; the
+third undo finds nothing); redo; `/Contents` resolving to a stream
+carrying the **source's** bytes (the half a remapping bug breaks
+silently — page arrives, count right, page blank); `/Parent` landing
+in the target's tree; an out-of-range index refused **against the
+source's** page count with the target document left untouched; and,
+end to end, the saved file reloading with the right page count.
+
+#### Verification (relayed, not independently re-run — no shell this filing)
+
+1,826 core tests green (6 new), `cargo fmt --all` applied, `cargo
+clippy -p pdfce-core --all-targets -- -D warnings` clean,
+`check-one-commit-per-command.py` and `check-ui-strings.sh` clean,
+`cargo tree -p pdfce-core` / `-p pdfce-render` show **0** GUI deps.
+
+#### `docs/FEATURES.md`
+
+**Document & pages** section: the *Planned* row *"True in-place page
+insertion, so Insert edits the open document"* ticks its **core** box
+(`[x] [ ] [ ]`) — `EditSession::insert_pages` ships, no shell wires it
+yet. **The Implemented row for `pageops::insert`** ("insert pages from
+another file") is reworded, not re-ticked, to name what it actually
+does (produces a new document, merges document-level structures) now
+that a second, genuinely different API exists under an adjacent name —
+one row could not honestly describe both.
+
+#### Hard Rule 11 sweep — one survivor found, reported as owed, not fixed here
+
+**The capability that changed meaning**: *"pdfce can only insert pages
+by producing a new document."* Searched for the claim, not the string,
+per the rule.
+
+`crates/pdfce-core/src/pageops/mod.rs`'s module header (lines 1–48) is
+the survivor. Its table (line 11) lists `insert` under "Document
+producers … none — nothing changed" with no pointer to the
+session-native alternative that now exists, and its own section
+**"## Where `insert` sits, and the deviation that put it there"**
+(lines 19–40) explains, at length, why in-place insert **could not be
+built** in Pass 3.2 — *"an overlay-based insert needs two things this
+Pass does not build: a per-object source buffer threaded through the
+writer, and an **overlay-aware renderer**"* — and concludes **"The
+GUI's in-place Insert waits for the overlay-aware render path."** That
+conclusion is now false as a blocker: `Pass 99.0` solved the underlying
+problem a different way (re-staging stream payloads into the session
+buffer, decision 2 above), not by building an overlay-aware renderer,
+and a session-native insert exists today. The section is not wrong
+about *why `pageops::insert` still exists* — the document-level-merge
+distinction (above) is a durable, independent reason — but it is wrong
+about *why in-place insert didn't*, and a reader who trusts the module
+doc over the newer function's own doc comment will conclude the wrong
+thing is still true. **Reported to the engineer as owed**; not edited
+here (hard rule 11's scope excludes `crates/`).
+
+No other survivor found — `pdfce-cli`'s own `InsertPages` doc comment
+("producing a new file") remains accurate as a description of that
+specific subcommand and asserts no exclusivity.
+
+#### `D:\Dev\FeatureRequests\pdfce_FeatureRequests\`
+
+`INDEX.md` row added (the exchange closed with a reply already filed at
+`archive/2026-08-18-session-insert-pages-reply.md`, no matching request
+file — the request was relayed verbatim in this dispatch rather than
+filed as a separate `open/request_*.md`). `open/` now holds exactly one
+file: the abutting-image-tile-seam report, flagged below.
+
+#### `docs/ROADMAP.md` Backlog
+
+The `EditSession::insert_pages` Backlog bullet (filed 2026-08-05, Pass
+3.5's ship) is marked **CLOSED**, pointing here — same idiom as the
+redaction-apply-flow entry above it in that section, original framing
+retained (append-only).
+
+**Terminology (rule 15):** nothing here touches **ce dimensions** or
+**pdf dimensions** — this Pass moves page trees and their content, not
+dimension objects.
+
+**Still owed, flagged again rather than worked this filing:**
+- `open/request_abutting_image_tiles_leave_a_one_pixel_background_seam.md`
+  — **high priority**, reproduces via `pdfce-cli render-page` with no
+  GUI involved, bands every SolidWorks shaded view (the operator's own
+  commonest document class). **Not worked, not deprioritised —
+  queued.** Measured as exactly one device pixel at both tested scales
+  (conflation at abutting anti-aliased image edges,
+  `pdfce-render/src/interpret.rs`'s `paint_image`); three candidate
+  fixes offered, none chosen.
+- The two owed `iccce` requests (`request_profile_population_census.md`,
+  `request_header_tag_channel_disagreement.md`) — still unread.
+- `pdfceGUI`-sourced *Next up* Passes `75.0` (reusable parsed handle),
+  `80.0` (note text on markup) and `81.1` (markup opacity write half) —
+  untouched by this filing.
+
+**Ledger effects.** Pass family: **98 → 99** (`Pass 99.0`, new family;
+`98` stays claimed only in *Backlog*, not yet built or renumbered as
+*Next up*). Standing rules: no new rule minted. Decisions: no new
+decision minted (this is an implementation of an already-decided
+command-family pattern, not a new architectural call). `SESSION_LOG.md`
+filings move **178 → 179**, which is this one.
+
+---
+
 ### `1bc4564` — **`DroppedProperty::BorderEffect`'S DOC COMMENT NARROWED, NOT REVERSED: THE DROP SURVIVED `Pass 82.0`, BUT ITS SUBJECT CHANGED FROM "WHAT PDFCE CAN DRAW" TO "WHAT SURVIVES A ROUND TRIP THROUGH A SPEC" — no Pass ID, no decision minted; commit `1bc4564` touches `crates/pdfce-core/src/edit.rs` only and is cited here to satisfy `check-commits-filed.py`** — filed 2026-08-18 (hundred-and-seventy-eighth filing)
 
 **Filed by `pdfce-librarian` WITHOUT a shell this session.** Test/lint
@@ -58859,6 +59040,21 @@ nothing gets forgotten, not as a commitment to build in this order.
   the string. **Do not simply delete the `allow`s** — the reason strings
   that are still TRUE are load-bearing documentation of deliberate
   not-yet-wired substrate (R151's territory).
+- **`EditSession::insert_pages` — in-place page insertion, as a real
+  `EditSession` command (filed 2026-08-05, Pass 3.5's ship, no Pass
+  number assigned). SHIPPED 2026-08-18 as `Pass 99.0` (`38c0ef2`) — see
+  the `Pass 99.0` Shipped entry (top of *Shipped*) for the full build
+  record. This item is CLOSED.** Original framing retained below
+  (append-only). One correction the shipped Pass makes to the framing:
+  `pageops::insert` staying a document producer is no longer only a
+  structural limitation waiting on a Pass — it is now a **deliberate**
+  choice, kept because it merges document-level structures
+  (outlines/AcroForm/named destinations/page labels/OCG) that the
+  session-native command deliberately does not. Both routes are correct
+  for different callers; see `Pass 99.0`'s entry for which is which.
+  **No shell wires `EditSession::insert_pages` yet** — that remains
+  open work, tracked in `docs/FEATURES.md`'s "True in-place page
+  insertion" Planned row (core ticked, cli/gui not).
 - **`EditSession::insert_pages` — in-place page insertion, as a real
   `EditSession` command (filed 2026-08-05, Pass 3.5's ship, no Pass
   number assigned).** Both GUI Insert (Pass 3.5) and CLI `insert`

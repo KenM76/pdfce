@@ -55,7 +55,7 @@ provisional; re-verify before any acceptance criterion leans on them.
 |:----:|:---:|:---:|:-------:|---------|
 | [x] | [x] | [x] | [x] | Open, parse and render a PDF. |
 | [x] | [x] | [x] | [x] | Recover a damaged cross-reference table and tolerate common lenient-PDF defects. |
-| [x] | [x] | [x] | [x] | Rotate, delete, reorder and extract pages; insert pages from another file. |
+| [x] | [x] | [x] | [x] | Rotate, delete, reorder and extract pages; insert pages from another file as a new document (`pageops::insert`, merging outlines/AcroForm/named destinations/page labels/OCG). Distinct from true in-place insertion into an open session — below, Planned. |
 | [x] | [x] | [ ] | [x] | Set a page's size (`/MediaBox`) — writing a value equal to the page's own inherited size removes its own override rather than duplicating it, so a sibling page's size is never silently pinned by an unrelated edit. **No GUI surface.** |
 | [x] | [x] | [x] | [x] | Merge several files into one. |
 | [x] | [x] | [x] | [x] | Split a document — `EveryN` only; no bookmark- or size-based criteria. |
@@ -249,7 +249,7 @@ the model or verb exists and only the named shell is missing. The
 | [ ] | [ ] | [ ] | ? | Drag a ce dimension's extension lines. |
 | [ ] | [ ] | [ ] | [x] | Re-measure a placed ce dimension — change what it measures without losing its id, group and placement. |
 | [ ] | [ ] | [ ] | [x] | Select, move and resize a placed markup annotation on the canvas. |
-| [ ] | [ ] | [ ] | [x] | True in-place page insertion, so Insert edits the open document. |
+| [x] | [ ] | [ ] | [x] | True in-place page insertion, so Insert edits the open document — `EditSession::insert_pages` (`Pass 99.0`) copies each source page's objects at fresh IDs, remaps every reference, splices into the target's page tree as one undoable command; deliberately does not merge document-level structures, unlike `pageops::insert` above. No shell wired yet. |
 | [ ] | [ ] | [ ] | ? | Wide/batch CSV — one row per document, for filling many copies of one form. |
 | [ ] | [ ] | [ ] | ? | Static-XFA hybrid — read and fill the XFA half in step with AcroForm. |
 | [ ] | [ ] | [ ] | [x] | Links and bookmarks authoring — create, edit, reorder, named destinations. |

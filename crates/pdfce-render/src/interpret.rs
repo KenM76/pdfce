@@ -4235,7 +4235,10 @@ impl Interpreter<'_> {
             // the marks those modes govern are drawn by images, not paths.
             // A counter said the feature worked; the pixels said otherwise.
             blend_mode: self.gs.current.blend_mode,
-            anti_alias: true,
+            // ★ NOT unconditionally true — see `image_edge_needs_antialiasing`.
+            // An image's edge is a SAMPLING boundary, not a shape edge, and
+            // antialiasing it is what bands abutting tiles.
+            anti_alias: image_edge_needs_antialiasing(self.gs.current.ctm),
             force_hq_pipeline: false,
         };
         let Some(unit) = Rect::from_ltrb(0.0, 0.0, 1.0, 1.0) else {
@@ -4924,4 +4927,162 @@ fn last_string(op: &Operation<'_>) -> Option<Vec<u8>> {
         ContentTokenKind::Operand(Object::String(s)) => Some(s.clone()),
         _ => None,
     })
+}
+
+/// Whether an image's own outline should be antialiased when it is filled.
+///
+/// # The defect this exists to fix
+///
+/// An image is painted as a fill of its unit square (§8.9.4), and that fill
+/// was unconditionally antialiased. Where two images **abut**, the shared
+/// boundary pixel is partially covered by each, and source-over compositing
+/// of two partial coverages does not reach 1:
+///
+/// ```text
+/// coverage = a + b·(1 − a)      a = b = 0.5  ⇒  0.75
+/// ```
+///
+/// so a quarter of the background shows through a join that should be
+/// seamless. This is **conflation**: antialiased abutting edges failing to
+/// sum to full coverage.
+///
+/// **Measured on a real drawing** (`pdfceGUI` report, 2026-08-18, reproduced
+/// here before changing anything): a SolidWorks shaded view is dozens of
+/// small masked image XObjects laid edge to edge — `images=92`,
+/// `images_masked=92`, `shadings=0` — and a flat `RGB(195,38,38)` panel was
+/// crossed by single rows of `RGB(206,78,78)` and `RGB(210,93,93)` every
+/// ~30.5 device pixels, i.e. **19 %–25 % of the white page bleeding through
+/// an opaque fill**.
+///
+/// **The decisive measurement was that it is device-space, not content.**
+/// Re-rendered at half scale, the seams kept the *same colours* and the
+/// *same one-pixel thickness* while their spacing halved. Lighter rows in
+/// the source images could not do that — texels would have merged and both
+/// colour and thickness would have moved. The seam is created at composite
+/// time.
+///
+/// # Why turning it off is CORRECT here and not merely convenient
+///
+/// §8.9.4 maps the unit square through the CTM and samples the image at
+/// device pixels whose centres fall inside it. **The edge of an image is
+/// where sampling stops, not a curve that needs smoothing.** Two images that
+/// abut therefore tile the device grid exactly, which is why Acrobat has no
+/// seam. Antialiasing an image's *outline* is a rasterizer's embellishment
+/// that the imaging model never asked for.
+///
+/// # The two conditions, and why each is needed
+///
+/// 1. **Axis-aligned CTM.** With rotation or skew the outline really is a
+///    diagonal edge across the pixel grid, and a hard edge there looks worse
+///    than a seam — visible stair-stepping on every rotated image, to cure an
+///    artefact that needs *abutting* rotated tiles to appear at all. Both the
+///    unrotated case (`kx = ky = 0`) and the quarter-turn case
+///    (`sx = sy = 0`) map the unit square to an axis-aligned device
+///    rectangle, so both qualify.
+/// 2. **At least one device pixel in each axis.** Without antialiasing, a
+///    shape covering no pixel centre paints **nothing**. A sub-pixel image
+///    would vanish outright rather than render as a faint smear — a worse
+///    failure than the seam this function exists to remove, and one that
+///    would be silent. Such an image keeps its antialiasing and, being
+///    sub-pixel, cannot show a visible seam anyway.
+///
+/// Both conditions are deliberately checked on the **CTM alone**: the
+/// decision must not depend on the image's texel count, or two abutting
+/// tiles of different resolutions would disagree about whether their shared
+/// edge is antialiased and the seam would come back on exactly the boundary
+/// that matters.
+fn image_edge_needs_antialiasing(ctm: Transform) -> bool {
+    // Exact zero rather than an epsilon: these come from concatenated `cm`
+    // operands, and a CTM that is *nearly* axis-aligned is one that will
+    // produce a *nearly* horizontal edge — precisely the case that still
+    // wants smoothing. Only an exactly axis-aligned mapping tiles the
+    // device grid exactly.
+    let upright = ctm.kx == 0.0 && ctm.ky == 0.0;
+    let quarter_turn = ctm.sx == 0.0 && ctm.sy == 0.0;
+    if !upright && !quarter_turn {
+        return true;
+    }
+    // Device extent of the unit square along each axis.
+    let (wide, tall) = if upright {
+        (ctm.sx.abs(), ctm.sy.abs())
+    } else {
+        (ctm.kx.abs(), ctm.ky.abs())
+    };
+    wide < 1.0 || tall < 1.0
+}
+
+#[cfg(test)]
+mod image_edge_antialiasing_tests {
+    use super::image_edge_needs_antialiasing;
+    use tiny_skia::Transform;
+
+    /// An ordinary upright image tile: no antialiasing, so abutting tiles
+    /// tile the device grid exactly.
+    #[test]
+    fn an_upright_tile_of_several_pixels_is_not_antialiased() {
+        let ctm = Transform::from_row(30.5, 0.0, 0.0, 30.5, 100.0, 200.0);
+        assert!(!image_edge_needs_antialiasing(ctm));
+    }
+
+    /// A quarter-turn still maps the unit square to an axis-aligned device
+    /// rectangle, so it qualifies too. Missing this case would leave every
+    /// rotated-90° page seamed while the upright ones were clean — the kind
+    /// of partial fix that reads as "the bug is back" on one document.
+    #[test]
+    fn a_quarter_turn_is_still_axis_aligned() {
+        let ctm = Transform::from_row(0.0, 20.0, -20.0, 0.0, 50.0, 50.0);
+        assert!(!image_edge_needs_antialiasing(ctm));
+    }
+
+    /// ★ Rotation KEEPS antialiasing. The outline is a genuine diagonal
+    /// across the pixel grid there, and a hard edge would stair-step on
+    /// every rotated image — a visible cost paid on common content to cure
+    /// an artefact that needs abutting ROTATED tiles to appear at all.
+    #[test]
+    fn a_rotated_image_keeps_its_antialiasing() {
+        let ctm = Transform::from_row(20.0, 5.0, -5.0, 20.0, 0.0, 0.0);
+        assert!(image_edge_needs_antialiasing(ctm));
+    }
+
+    /// Skew without rotation is equally not axis-aligned.
+    #[test]
+    fn a_skewed_image_keeps_its_antialiasing() {
+        let ctm = Transform::from_row(20.0, 0.0, 7.0, 20.0, 0.0, 0.0);
+        assert!(image_edge_needs_antialiasing(ctm));
+    }
+
+    /// ★ THE GUARD THAT STOPS A SILENT DISAPPEARANCE. Without
+    /// antialiasing, a shape covering no pixel centre paints NOTHING, so a
+    /// sub-pixel image would vanish outright rather than render faintly.
+    /// That is a worse failure than the seam, and a silent one.
+    #[test]
+    fn a_sub_pixel_image_keeps_its_antialiasing_so_it_cannot_vanish() {
+        let thin = Transform::from_row(40.0, 0.0, 0.0, 0.4, 0.0, 0.0);
+        assert!(
+            image_edge_needs_antialiasing(thin),
+            "a 0.4px-tall image must keep AA or it disappears"
+        );
+        let narrow = Transform::from_row(0.6, 0.0, 0.0, 40.0, 0.0, 0.0);
+        assert!(image_edge_needs_antialiasing(narrow));
+    }
+
+    /// The boundary from both sides, so the threshold is pinned to a
+    /// number rather than to "small".
+    #[test]
+    fn the_one_pixel_threshold_holds_from_both_sides() {
+        let under = Transform::from_row(10.0, 0.0, 0.0, 0.999, 0.0, 0.0);
+        let over = Transform::from_row(10.0, 0.0, 0.0, 1.0, 0.0, 0.0);
+        assert!(image_edge_needs_antialiasing(under));
+        assert!(!image_edge_needs_antialiasing(over));
+    }
+
+    /// A negative scale is a flip, not a rotation — still axis-aligned.
+    /// `/Decode` arrays and flipped CTMs are ordinary in real files, and
+    /// testing on the sign rather than the magnitude would seam every one
+    /// of them.
+    #[test]
+    fn a_flipped_image_is_still_axis_aligned() {
+        let ctm = Transform::from_row(-30.0, 0.0, 0.0, -30.0, 0.0, 0.0);
+        assert!(!image_edge_needs_antialiasing(ctm));
+    }
 }

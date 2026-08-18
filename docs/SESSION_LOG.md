@@ -47100,3 +47100,119 @@ project-wide grep for `"straight edges only"` and `§12.5.6.8`.
    scoped) — unchanged priority order otherwise from the 177th filing.
 3. Read and answer (or file to `ROADMAP.md` Backlog) the two owed
    `iccce` requests.
+
+## 2026-08-18 (hundred-and-seventy-ninth filing) — `Pass 99.0` (`38c0ef2`): `EditSession::insert_pages` SHIPS — REQUESTED AND SHIPPED IN THE SAME FILING, BECAUSE THE REQUESTER DECLINED TO WIRE A FEATURE THAT WOULD HAVE SILENTLY DISCARDED UNDO HISTORY
+
+**Filed by `pdfce-librarian` WITHOUT a shell this session.** Test/lint
+results (1,826 core tests green, 6 new; `cargo fmt --all` applied;
+`cargo clippy -p pdfce-core --all-targets -- -D warnings` clean;
+`check-one-commit-per-command.py` and `check-ui-strings.sh` clean;
+`cargo tree` 0 GUI deps for both engine crates) are RELAYED from the
+dispatching engineer's report, not independently re-run. The doc-
+comment and test-file claims are independently verified by `Read`/
+`Grep` against the live files: `crates/pdfce-core/src/edit.rs:16771–
+16920`, `crates/pdfce-core/tests/insert_pages_preserves_undo.rs`, and
+`crates/pdfce-core/src/pageops/mod.rs:1–48` (the Hard Rule 11 survivor,
+below).
+
+**Shipped:**
+- `Pass 99.0` — `38c0ef2` — `EditSession::insert_pages`, the missing
+  member of the `delete_pages`/`reorder_pages`/`rotate_pages` family.
+  Copies every object reachable from selected source pages at fresh
+  object numbers, remaps every reference, re-points `/Parent`, splices
+  into the target's page tree, records one undoable command however
+  many pages arrive. **Deliberately does not merge document-level
+  structures** (outlines/AcroForm/named destinations/page labels/OCG)
+  — `pageops::insert` still does, via `assemble`, and stays the right
+  call for `pdfce-cli insert-pages` (a batch tool, correctly unchanged).
+
+**Decisions made this session:**
+- **Relayed operator/`pdfceGUI` request, answered in the same filing**:
+  *"Insert from file is blocked on a real thing: `pageops::insert`
+  returns new document bytes rather than mutating the session, so
+  wiring it as-is would discard your undo history … That's a channel
+  request, and I'd rather ask for it than ship a feature that silently
+  eats undo."* Worth recording as the right call: wiring the assemble-
+  based path behind the existing UI would have been invisible to every
+  test that checks page counts — the defect only surfaces on the
+  second Ctrl+Z.
+- **Three implementation decisions, filed to `ROADMAP.md`'s `Pass 99.0`
+  entry**: the id mapping is recorded before children are walked (so a
+  page resource referring back to its own page terminates rather than
+  recursing, and a shared resource copies once); stream payloads are
+  re-staged into the session buffer (R45) rather than kept at their
+  source span (a cross-document span mis-slice otherwise); `/Parent` is
+  dropped during copy and re-pointed after, with inherited attributes
+  materialised onto the page (same rule `reorder_pages` already
+  applies on a parent change).
+- **`docs/ROADMAP.md` Backlog bullet for `EditSession::insert_pages`
+  (filed 2026-08-05, Pass 3.5's ship) marked CLOSED**, pointing at
+  `Pass 99.0` — same idiom as the redaction-apply-flow entry above it,
+  original framing retained (append-only).
+
+**Findings + decisions:**
+- **Hard Rule 11 sweep, one survivor found and reported as owed —
+  not fixed here (out of this role's remit).**
+  `crates/pdfce-core/src/pageops/mod.rs`'s module header (lines 1–48)
+  still explains, at length, why in-place insert **could not be
+  built** at Pass 3.2 (*"an overlay-based insert needs … an
+  overlay-aware renderer"*) and concludes *"The GUI's in-place Insert
+  waits for the overlay-aware render path."* That conclusion is now
+  false as a blocker — `Pass 99.0` solved it a different way (session-
+  buffer re-staging, not an overlay-aware renderer) — though the
+  module's *other* reason for `pageops::insert`'s continued existence
+  (document-level-structure merging) remains true and independent.
+  `pdfce-cli`'s own `InsertPages` doc comment ("producing a new file")
+  was checked and found accurate — no exclusivity claim, no correction
+  needed.
+- **`docs/FEATURES.md`, two rows changed, matching row split rather
+  than a re-tick.** The existing *Implemented* row for `pageops::insert`
+  ("insert pages from another file") reworded to name what it actually
+  does (new document, document-level structures merged) now that a
+  second, materially different API exists under an adjacent name. The
+  *Planned* row *"True in-place page insertion, so Insert edits the
+  open document"* ticks **core** only (`[x] [ ] [ ]`) — no shell wires
+  `EditSession::insert_pages` yet.
+- **Feature-request channel**: `INDEX.md` row added — the exchange
+  closed with a reply at
+  `archive/2026-08-18-session-insert-pages-reply.md` (no separate
+  request file; the operator relayed the request verbatim in this
+  dispatch). `open/` now holds exactly one file: the abutting-image-
+  tile-seam report.
+
+**Still in flight:**
+- **`open/request_abutting_image_tiles_leave_a_one_pixel_background_seam.md`
+  — HIGH PRIORITY, flagged again, not worked this filing.** Reproduces
+  via `pdfce-cli render-page` alone (no GUI). Bands every SolidWorks
+  shaded view — the operator's own commonest document class. Measured
+  as exactly one device pixel at two tested scales (conflation at
+  abutting anti-aliased image edges, `pdfce-render/src/interpret.rs`'s
+  `paint_image`); three candidate fixes offered in the report, none
+  chosen. **Not worked, not deprioritised — queued.**
+- The two owed `iccce` requests
+  (`request_profile_population_census.md`,
+  `request_header_tag_channel_disagreement.md`) — still unread.
+- `pdfceGUI`-sourced *Next up* Passes `75.0` (reusable parsed handle),
+  `80.0` (note text on markup) and `81.1` (markup opacity write half)
+  — untouched by this filing.
+- `Pass 97.0`/`97.1`/`97.2` (the compositor) and `Pass 98.0` (foreign
+  `/BE` round-trip read-back) — untouched by this filing.
+- The `pageops/mod.rs` module-header correction (Hard Rule 11 survivor,
+  above) — reported to the engineer as owed, not yet fixed.
+
+**For next session:**
+
+1. **Ledger update from this filing**: Pass family **98 → 99** (`Pass
+   99.0` shipped; `98` stays Backlog-only, unbuilt). Next free Pass
+   family **100**. Decisions and standing rules both unchanged this
+   filing (next free decision **071**, next free standing rule
+   **R196** — neither independently re-verified via the checker, no
+   shell this filing). **Next free filing ordinal: 180.**
+2. Fix the `pageops/mod.rs` module-header survivor (Hard Rule 11, this
+   filing).
+3. The abutting-image-tile seam is the highest-priority owed item —
+   it's on the operator's own commonest document class and reproduces
+   with the CLI alone.
+4. Otherwise unchanged priority order from the 178th filing: `Pass
+   97.0`, one of the three remaining `pdfceGUI` Passes, `Pass 98.0`, or
+   the two `iccce` requests.
