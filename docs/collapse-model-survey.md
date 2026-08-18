@@ -72,14 +72,14 @@ them behavioural references only.
 | **Ghostscript** ≥9.54 | tint-equivalent + accumulate, **no n-channel ICC** | `pdf14` compositor holds CMYK-or-CMYK+spots; `-dOverprint=/simulate` shows overprint on Gray/RGB devices too. Spot equivalents from the alternate tint transform. `-dMaxSpots` default **64**. | PRIMARY |
 | **Ghostscript** `tiffsep`/`psdcmyk` | **n-channel ICC**, optional | `-sICCOutputColors="Cyan,Magenta,…,Orange"` binds an NCLR profile. **Only** those devices. **15-colorant ceiling.** | PRIMARY |
 | **Ghostscript** `tiffsep` composite | tint-equivalent | Documented as possibly wrong: *"may not produce an accurate preview, if the job uses overprinting."* **Do not copy it.** | PRIMARY |
-| **Adobe Acrobat** | **undocumented** | Simulation Profile defaults to the **OutputIntent**, falls back to the CM working space. No algorithm ever published. | PRIMARY (for the absence) |
+| **Adobe Acrobat** | **undocumented** | Simulation Profile defaults to the **OutputIntent**; the working-CMYK fallback is **SECONDARY in every source found**. No algorithm ever published. **★ This is the WEAKEST row in the table and is graded accordingly:** `helpx.adobe.com` was unreachable across 8 URLs and 4 locales, `web.archive.org` blocked, so the Acrobat claims rest on an Adobe **community-expert post**, not Adobe primary. **That Acrobat resolves spot appearance via the tint transform is INFERENCE** — Adobe never states it; it merely follows that nothing else is machine-readable absent a named-colour library. | **SECONDARY** (PRIMARY only for the absence) |
 | **Adobe APPE 6** | spectral-adjacent, **print only** | *"…uses modern perceptual-based color management to mix the color levels"* + a CxF spectral-spot ingest API. Marketing wording; no algorithm. | PRIMARY (non-technical) |
-| **Poppler** (splash) | tint-equivalent + **hard-coded table** | Opt-in `splashModeDeviceN8`: 4 process + `SPOT_NCOMPS` (**default 4**) spots. At readout: per-spot tint transform → CMYK, **add**, clip, then a **16-corner multilinear CMYK→RGB table inherited from xpdf** — that last hop is **never colour-managed**. | PRIMARY |
+| **Poppler** (splash) | **per-colorant** tint transform + **hard-coded table** | `splashModeDeviceN8`: 4 process + `SPOT_NCOMPS` (**default 4**) spots. **Decomposes a multi-component `DeviceN` at mapping time**, pulling the matching single-colorant `/Separation` out of the DeviceN's own sub-colourspace list — so the plane list is always one-colorant Separations and the **collective DeviceN transform is never consulted** for a multi-ink overprint's screen colour. At readout each spot plane goes through **its own** tint transform into its own alternate, summed into CMYK, each channel clipped independently — then a **16-corner multilinear CMYK→RGB interpolation with fixed xpdf-heritage constants**, which **no** profile reaches (not `-displayprofile`, not `-defaultcmykprofile`, not the OutputIntent). `overprintMask` is a **32-bit colorant bitfield** (bits 0–3 CMYK, 4+ spots); **two write modes** — replace (default) and **additive, selected for spot spaces so two real spot inks accumulate instead of the second erasing the first**. | PRIMARY |
 | **Poppler** (cairo) | **none** | `pdftocairo`, Evince, poppler-glib render knockout only. | PRIMARY |
-| **MuPDF** ≥1.12 | equivalent-colour + ICC assist | Overprint applies **only to a subtractive destination**. For RGB it pushes a group whose process space is **OutputIntent > proof > DeviceCMYK**, composites, collapses on pop. | PRIMARY |
-| **Harlequin RIP** | virtual device; **`max()` fallback** | True path: `/VirtualDeviceSpace` (`/DeviceCMYK` default) — spots render unconverted, convert after. With `OverprintPreview=false`: *"emulated using a technique similar to the **Darken PDF blend mode**… use the **darkest of the foreground and background**"* — per-colorant `max()`. | PRIMARY |
+| **MuPDF** ≥1.12 | **ICC per role**, OutputIntent load-bearing | Overprint applies **only to a subtractive destination**, so for an RGB target it pushes an internal group whose process space is **OutputIntent > proof > DeviceCMYK**, composites there, collapses on pop. `mudraw` **forces overprint simulation on when the intent's channel count differs from the target**, precisely so the intent gets simulated. Process channels go through the **ICC** converter; directly-mappable colorants copy plane-to-plane unconverted; **unmapped colorants take a per-pixel converter lookup** then add-and-clamp (subtractive dst) or subtract-the-complement (additive dst). Loader takes `/OutputIntents[0]` and **ignores `/S`**. **A faster orthogonal path — convert each equivalent once, add at the end — exists in the same file and is COMPILED OFF, with the orthogonality assumption named in the source comment as the thing being traded away. That disabled path is roughly what Poppler does today.** Entirely undocumented. | PRIMARY |
+| **Harlequin RIP** | **architectural**; `max()` fallback | Collapse answer is **architectural, not arithmetic**: the N-channel buffer is a **virtual device** whose `/VirtualDeviceSpace` may be `/DeviceCMYK` (default), **`/DeviceRGB`** or `/DeviceGray` — spots render unconverted, and you collapse to RGB by *setting the virtual device's process space to RGB*. With `OverprintPreview=false`: *"emulated using a technique similar to the **Darken PDF blend mode** (that is, for each colorant… use the **darkest of the foreground and background**)"* — per-colorant `max()`. A Named Colour Database match **replaces** the job's alternate space and tint transform, first match wins. N-colour ICC is the **output/DeviceLink** path, explicitly **not** the preview path. Sourced from Global Graphics' own `documentation.hybridhelix.com`, **not** the vaguer Xitron OEM doc. | PRIMARY |
 | **Mako** (Global Graphics) | **multiply-of-complements** — recipe published | One framebuffer per colorant, then merge scanline-by-scanline: `newVal = 1 − ((1 − eqCMYK[c]·spotVal)·(1 − currentVal))`. Merged CMYK → RGB via ICC. ⭐ | PRIMARY |
-| **callas pdfToolbox** | **= Adobe's** | Built on the Adobe PDF Library. **Not an independent data point.** | PRIMARY |
+| **callas pdfToolbox** | **= Adobe's** | Built on the **Adobe PDF Library** (not APPE), so its overprint preview *is* Adobe's undisclosed model — **not an independent data point**. Plumbing: `simulationprofile`, `nosimulateoverprint` (simulation **on** by default), `colorspace Multichannel`; precedence sim profile → OutputIntent → sRGB / ISO Coated v2. **★ Its entire CxF surface is embed / extract / ANALYZE — no rendering, no appearance computation, no overprint prediction from spectral data.** The vendor most invested in CxF tooling still treats it as **validation metadata**, not a rendering input. | PRIMARY |
 | **Enfocus PitStop** | **= Adobe's** | *"Overprint preview is an Adobe Acrobat function."* | PRIMARY |
 | **PDFium / Chrome** | **none** | Tint transform only. *(pdfce's render-parity oracle — see §5.)* | PRIMARY |
 | **pdf.js** | **none** | Issue #7360, 2016, closed unimplemented. | PRIMARY |
@@ -108,9 +108,20 @@ them behavioural references only.
    changes the **ink percentages** to preserve appearance. (SECONDARY, but
    well-specified in-thread; Adobe staff replied without addressing it.)
 5. **Poppler silently destroys separations** past a 5th distinct spot name
-   (compile-time `SPOT_NCOMPS = 4`): it warns, tint-transforms that ink
-   immediately, **and sets its overprint mask to all colorants**, losing
-   overprint isolation entirely.
+   (compile-time `SPOT_NCOMPS = 4`), **and** when two spaces claim one
+   colorant name with differing tint-transform results: it warns,
+   tint-transforms that ink immediately via the **collective** transform,
+   **and sets its overprint mask to all colorants**, losing overprint
+   isolation entirely.
+   **Version/tooling corrections, both PRIMARY:** the `SPOT_NCOMPS != 4`
+   handling is Poppler **0.66.0 (2018-06-19)**, not 23.08.0 — 23.08.0 is
+   *"Fix GWG 19.2 — DeviceN Overprint (White)"*. And the
+   `-processcolorformat CMYK8` requirement is **`pdftops` only**:
+   `pdftoppm` has its own independent `-overprint` flag (default false)
+   that switches the render to DeviceN8, **present in the source and absent
+   from every manpage**, unconditional since 0.81.0 removed the
+   `SPLASH_CMYK` gate. ⇒ **"Poppler on this machine" is not a stable
+   comparison baseline without checking its build flags.**
 6. **OutputIntent selection is itself ambiguous and resolved differently.**
    MuPDF takes `/OutputIntents[0]` and **ignores `/S`** (so `GTS_PDFA1` and
    `GTS_PDFX` are indistinguishable to it); Poppler acts **only when the array
@@ -264,15 +275,39 @@ operator supplies an NCLR profile.
 
 ## §6.5 — ★ WHAT pdfce'S OWN SPEC CORPUS CORRECTS, AND IT CORRECTS BOTH PASSES
 
-A **second research pass** was returned on the same question. It converged on
-every headline above — same Bärfuss source, same per-colorant-over-collective
-tint-transform rule, same Mako formula, same Ghostscript three-appearances
-statement, same `moxcms`/`lcms2` verdict, same "don't build spectral".
+A **second pass** from the same researcher converged on every headline above —
+same Bärfuss source, same per-colorant-over-collective rule, same Mako formula,
+same Ghostscript three-appearances statement, same `moxcms`/`lcms2` verdict,
+same "don't build spectral". On its own that is a **repeated measurement, not
+two independent ones** (R188), and it was recorded as such.
 
-**Weigh that convergence honestly: both passes came from the SAME agent**, so
-it is a repeated measurement, not two independent ones. Under R188 (same
-pattern twice is one measurement) it raises confidence in the *sourcing*, not
-in the *method*.
+**★ THEN THE INDEPENDENT PASSES ARRIVED, AND THE ROUTING IS ITSELF THE
+FINDING.** Two peer researchers (Poppler/MuPDF; Acrobat/commercial RIPs) had
+been dispatched by the lead and **their results never reached it** — their
+`SendMessage` replies failed with *"No agent named 'general-purpose' is
+reachable"*, so both delivered **to the orchestrator instead**. The lead
+therefore closed out stating, correctly and unprompted, that its briefing
+*"should be filed as single-sourced by me, not as a merged multi-agent
+result"* — while the orchestrator was holding both peer reports.
+
+Two consequences worth separating:
+
+- **The convergence IS independent after all**, for the claims the peers
+  covered — and they did not merely agree, they **corrected the lead** on
+  Poppler's version history, the `pdftops`-vs-`pdftoppm` flag distinction,
+  Harlequin's sourcing, and MuPDF's OutputIntent handling. All of those
+  corrections are folded into §2 and §3 above **in place**, not appended.
+- **A harness fact worth carrying:** a subagent's *grandchildren* report to
+  the **orchestrator**, not to the parent that spawned them. A parent can
+  therefore truthfully report "my peers never returned" while their output is
+  sitting in the orchestrator's queue. **Neither party is wrong and neither
+  can see it** — only the orchestrator can join them.
+
+**And a self-correction from the lead, unprompted and worth the same weight as
+its findings:** it had earlier stated mid-run that the Poppler/MuPDF research
+"is in and is very detailed" when no agent had reported at that point. It
+flagged and withdrew that itself. Same shape as this session's own repeated
+defect — a confident statement about work that had not been checked.
 
 Checking both against `D:\Dev\Rag-Specialized\PDF_Spec\` — which had
 already registered these as ambiguities on 2026-08-08, **before either
