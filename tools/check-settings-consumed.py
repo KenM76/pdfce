@@ -37,6 +37,49 @@ For every ``pub`` field of ``Settings`` in
    not count: round-tripping a value through its own tests proves the
    parser works, not that the program does anything with it.
 
+★ WIDENED 2026-08-18, AFTER IT MISSED THE DEFECT IT EXISTS FOR
+=============================================================
+`DeviceSettings::pick_tray_by_page_size` in ``pdfce-print`` was declared,
+documented, plumbed through ``spool``, **bound to a checkbox that shipped in
+the GUI**, and read by nothing. Exactly R83's failure: the operator ticks a
+box and nothing happens.
+
+This gate did not catch it, and could not have. It was hard-scoped to the
+``Settings`` struct in ``pdfce-core/src/settings/mod.rs`` — one struct, in
+one file, in one crate — while the defect class it was written for is
+"a `pub` option field that no code reads", which is not confined to that
+struct. **A gate scoped to one instance of a class reports clean on the
+class.**
+
+So there are now two checks. The `Settings` one is unchanged and still
+demands parse + write + consume, because a persisted setting has a file
+format to honour. The second demands only **consume**, over a declared list
+of OPTION structs — structs a caller fills in and hands to an API. They have
+no file format, so parse/write do not apply; the only way they fail is by
+having a field nobody reads, which is the whole of what went wrong.
+
+Adding a struct to ``OPTION_STRUCTS`` is how this gate grows. It does not
+discover them, and that is a real limit: a new options struct is invisible
+until someone lists it here.
+
+WHAT THIS GATE STILL CANNOT SEE, enumerated rather than gestured at:
+
+* **A test-only read counts as consumption.** There is no ``#[cfg(test)]``
+  awareness, so a field read only by its own unit test satisfies the check
+  while production ignores it. Narrower than the defect this closed, but the
+  same family.
+* **A field read through a re-borrow it cannot follow** — ``let d =
+  &settings.device; d.field`` — is invisible; the pattern is textual.
+* **It does not check the read is CORRECT**, or that it reaches the spooler.
+  That is a test's job.
+
+Three things had to be right before it caught anything, and each was found
+by sabotage after the previous one looked sufficient: the struct list, the
+read-vs-write distinction (a ``&mut`` borrow handed to a checkbox is the
+PRODUCER, not a consumer), and ``CONSUMER_ROOTS`` — which had never included
+``pdfce-print`` at all, so no pattern could have found a reader in the crate
+the setting lives in.
+
 WHAT IT DELIBERATELY DOES NOT CHECK
 ===================================
 
@@ -86,6 +129,40 @@ CONSUMER_ROOTS = [
     ROOT / "crates" / "pdfce-cli" / "src",
     ROOT / "crates" / "pdfce-render" / "src",
     ROOT / "crates" / "pdfce-core" / "src",
+    # pdfce-print and pdfce-fetch were ABSENT until 2026-08-18, and that
+    # absence — not the pattern, not the struct list — is the deepest reason
+    # `DeviceSettings::pick_tray_by_page_size` shipped inert. The gate did
+    # not scan the crate the setting lives in, so no regex it used could
+    # have found a reader there. A gate's INPUT SET is part of the gate, and
+    # this one silently excluded two of the six crates.
+    ROOT / "crates" / "pdfce-print" / "src",
+    ROOT / "crates" / "pdfce-fetch" / "src",
+]
+
+
+# Option structs: a caller fills one in and hands it to an API. Unlike
+# `Settings` they have no file format, so only the CONSUME half applies.
+#
+# (path relative to repo root, struct name).
+#
+# ★ NOTE WHAT IS *NOT* EXCLUDED HERE, because the first draft got it wrong.
+# The `Settings` check ignores reads inside `settings/` -- round-tripping a
+# value through its own module proves the parser works, not that the program
+# does anything with it. Carrying that rule over to option structs is a
+# mistake: an option struct is an INPUT TO its own crate, so the crate
+# reading it IS the consumption. Excluding `crates/pdfce-render/src` made
+# the gate report `RenderOptions.annotation_scope` unread when
+# `effective_annotation_scope()` reads it three lines from its declaration.
+#
+# So an option field need only be read SOMEWHERE. That is weaker than the
+# Settings rule and it is still exactly strong enough for the defect class:
+# `pick_tray_by_page_size` was passed through `spool` inside a struct and
+# never accessed, so `.pick_tray_by_page_size` appeared nowhere at all. A
+# field declaration is `pub name: Type` and does not match `.name`, so a
+# struct that only declares a field cannot satisfy this check by accident.
+OPTION_STRUCTS = [
+    ("crates/pdfce-print/src/lib.rs", "DeviceSettings"),
+    ("crates/pdfce-render/src/font/mod.rs", "RenderOptions"),
 ]
 
 
@@ -104,6 +181,95 @@ def struct_fields(source: str) -> list[str]:
     # `pub name: Type,` — doc comments and attributes are skipped by the
     # anchor on `pub `.
     return re.findall(r"^\s*pub ([a-z_][a-z0-9_]*):", body, re.MULTILINE)
+
+
+def named_struct_fields(source: str, name: str) -> list[str]:
+    """Every `pub` field of a named struct, in order."""
+    match = re.search(rf"pub struct {re.escape(name)} \{{(.*?)\n\}}", source, re.DOTALL)
+    if not match:
+        return []
+    return re.findall(r"^\s*pub ([a-z_][a-z0-9_]*):", match.group(1), re.MULTILINE)
+
+
+def check_option_structs() -> list[str]:
+    """Every `pub` field of each OPTION_STRUCTS entry must be read somewhere
+    outside its own module.
+
+    Deliberately NOT checking parse/write: these structs have no file
+    format. The only failure mode available to them is the one that shipped
+    an inert GUI checkbox.
+    """
+    problems: list[str] = []
+    for rel, name in OPTION_STRUCTS:
+        path = ROOT / rel
+        if not path.is_file():
+            problems.append(f"`{name}`: {rel} not found — this gate's list is stale")
+            continue
+        fields = named_struct_fields(path.read_text(encoding="utf-8"), name)
+        if not fields:
+            problems.append(
+                f"`{name}`: no `pub` fields found - either the struct moved or "
+                f"this gate's parser is stale. Refusing to report clean."
+            )
+            continue
+        texts: list[str] = []
+        for root in CONSUMER_ROOTS:
+            if not root.is_dir():
+                continue
+            for f in root.rglob("*.rs"):
+                try:
+                    texts.append(f.read_text(encoding="utf-8"))
+                except OSError:
+                    continue
+        for field in fields:
+            # `.field` is enough: these are read through a binding whose
+            # name the gate cannot know (`settings.`, `opts.`, `cfg.`…).
+                        # A READ, NOT AN ASSIGNMENT - and this distinction is the
+            # entire gate. `settings.pick_tray_by_page_size = true` and
+            # `if settings.pick_tray_by_page_size` both contain
+            # `.pick_tray_by_page_size`; the first is the GUI SETTING
+            # the field, the second is the engine HONOURING it.
+            # Counting the first as consumption is exactly how the
+            # original defect stayed invisible - the checkbox wrote the
+            # field, nothing read it, and a naive `.field` search finds
+            # the write and reports clean.
+            #
+            # Verified by sabotage: with every genuine read removed
+            # from `pdfce-print`, the naive pattern still matched
+            # `pdfce-gui/src/print_flow.rs` and the gate PASSED. It
+            # only goes red once assignments are excluded.
+            #
+            # `[^=]` after `=` keeps `==` a read.
+            pattern = re.compile(rf"\.\s*{re.escape(field)}\b\s*(?!=[^=])")
+            # ...and a `&mut` BORROW is a write too, which is the form
+            # the defect actually took. `pdfce-gui` binds its checkbox
+            # with `&mut pending.device.pick_tray_by_page_size` -- no
+            # `=` anywhere, so the assignment filter above sails past
+            # it, and the gate counts it a reader. Handing a field to a
+            # widget by mutable reference is the canonical PRODUCER in
+            # this codebase; it is the thing that made the control
+            # exist, not the thing that honoured it.
+            #
+            # Found the same way as the last two: by sabotage. Removing
+            # every genuine read from `pdfce-print` left the gate GREEN
+            # twice -- once on the raw `.field` pattern and again after
+            # assignments were excluded -- because this one borrow kept
+            # matching.
+            def is_read(text: str) -> bool:
+                for m in pattern.finditer(text):
+                    before = text[max(0, m.start() - 24) : m.start()]
+                    if re.search(r"&\s*mut\s*[A-Za-z_][A-Za-z0-9_.]*$", before):
+                        continue
+                    return True
+                return False
+
+            if not any(is_read(t) for t in texts):
+                problems.append(
+                    f"`{name}.{field}` is a public option field READ BY "
+                    f"NOTHING. R83: a caller who sets it sees no effect. "
+                    f"Wire it to the behaviour it names, or remove it."
+                )
+    return problems
 
 
 def section(source: str, signature: str) -> str:
@@ -181,6 +347,8 @@ def main() -> int:
                 f"of `Settings` and out of the generated file"
             )
 
+    problems.extend(check_option_structs())
+
     if problems:
         fail(f"{len(problems)} problem(s):")
         for problem in problems:
@@ -192,9 +360,15 @@ def main() -> int:
         )
         return 1
 
+    n_opt = sum(
+        len(named_struct_fields((ROOT / rel).read_text(encoding="utf-8"), name))
+        for rel, name in OPTION_STRUCTS
+        if (ROOT / rel).is_file()
+    )
     print(
-        f"settings-consumed: clean - all {len(fields)} setting(s) are "
-        f"parsed, written, and read by at least one caller."
+        f"settings-consumed: clean - {len(fields)} persisted setting(s) "
+        f"parsed, written and read; {n_opt} option field(s) across "
+        f"{len(OPTION_STRUCTS)} struct(s) read by at least one caller."
     )
     return 0
 
