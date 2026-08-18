@@ -223,8 +223,26 @@ pub struct Diagnostics {
     /// (spec-sanctioned skips, §7.8.2 Table 32).
     pub compat_skipped: usize,
     /// `gs` operators that selected a **non-Normal blend mode** (`/BM`,
-    /// ISO 32000-1 §11.3.5) which pdfce APPLIED. A census, not a
-    /// shortfall.
+    /// ISO 32000-1 §11.3.5) which pdfce APPLIED.
+    ///
+    /// **★ "Applied" is not "applied correctly", and this doc said "A
+    /// census, not a shortfall" until 2026-08-18.** Two clauses are not
+    /// honoured, both measurable on the Ghent corpus:
+    ///
+    /// * **§11.3.4** — blending happens in the **group's colour space**,
+    ///   with subtractive components complemented before and after
+    ///   (`blend_subtractive(cb, cs) = 1 − B(1 − cb, 1 − cs)`). pdfce
+    ///   blends in device sRGB, so a CMYK group's blends are computed in
+    ///   the wrong space.
+    /// * **§11.3.5.3** — the four NONSEPARABLE modes need a CMYK detour:
+    ///   complement CMY to RGB, blend, complement back, and **select** K
+    ///   by mode (backdrop's K for `Hue`/`Saturation`/`Color`, source's K
+    ///   for `Luminosity`). K is not blended at all. Ghent `1_GWG160`
+    ///   fails exactly those first three cells and **passes
+    ///   `Luminosity`** — the one-bit confirmation.
+    ///
+    /// `Pass 97.1` is the fix. Until then read this as "a blend function
+    /// ran", not "the right number came out".
     ///
     /// Separate from [`Self::blend_modes_ignored`] because those two
     /// numbers answer different questions and used to be one. Before
@@ -384,7 +402,25 @@ pub struct Diagnostics {
     /// facts that a paint count alone conflates.
     pub overprint_pixels: u64,
     /// Transparency groups rendered into their own buffer and composited
-    /// as a UNIT — the §11.4.5 behaviour. A census, not a shortfall.
+    /// as a UNIT — the §11.4.5 behaviour.
+    ///
+    /// **★ NOT a clean census, despite what this doc said until 2026-08-18
+    /// ("A census, not a shortfall.").** A [`tiny_skia::Pixmap`] starts
+    /// TRANSPARENT, and a transparent initial backdrop **is** isolated
+    /// semantics (§11.4.7). A buffer is allocated whenever the outer
+    /// graphics state is non-neutral — so a **non-isolated** group under a
+    /// `/BM` silently becomes an isolated one, and every blend inside it
+    /// composites against nothing, returning the source colour unchanged.
+    ///
+    /// Measured on the Ghent transparency patches, which set `/BM` at every
+    /// `Do`: **14, 15 and 7** wrong cells out of 16, each counted here as a
+    /// success. **This number over-reports until `Pass 97.0` lands.**
+    ///
+    /// Recorded shape, because it is the fifth time on this one narrative:
+    /// the print-site comment beside this counter was corrected in
+    /// `3e3019a` and **this field's own doc was not** — inside the very
+    /// commit written to fix "a claim duplicated across sites, corrected at
+    /// one of them". Found by the librarian on filing, not by the sweep.
     pub transparency_groups_composited: usize,
     /// Groups carrying `/K true` (knockout, Table 147) that were composited
     /// as ordinary groups.
@@ -424,7 +460,25 @@ pub struct Diagnostics {
     /// to hide something, that is the difference between a rendering
     /// artefact and showing what was meant to be hidden.
     pub soft_masks_ignored: usize,
-    /// Soft masks BUILT and applied (§11.6.5). A census, not a shortfall.
+    /// Soft masks BUILT and applied (§11.6.5).
+    ///
+    /// **★ "Applied" overstates it, and this doc said "A census, not a
+    /// shortfall" until 2026-08-18.** Construction is right — the mask
+    /// groups and the folded clips were dumped to PNG and inspected as
+    /// correct, properly-placed soft gradients. **Application is not**:
+    /// §11.4.5 applies the mask to a transparency group's **RESULT**,
+    /// whereas pdfce folds it into the clip, which applies it to each
+    /// element *inside* the group. Those differ wherever the group's
+    /// elements overlap.
+    ///
+    /// Measured on Ghent after the soft-mask work landed, against the
+    /// reference engine's score on the same strip: `1_GWG1610` 0.575 vs
+    /// 0.966, `1_GWG168` 0.725 vs 0.981, `1_GWG169` 0.905 vs 0.983 — all
+    /// improved, none passing.
+    ///
+    /// See also [`Self::soft_mask_transfer_ignored`], which is the other
+    /// half. `Pass 97.0` is the fix: there is nowhere to apply a mask to a
+    /// group's result until that result is a value pdfce owns.
     pub soft_masks_applied: usize,
     /// Soft masks carrying a `/TR` transfer function that was not applied.
     ///

@@ -33,3 +33,4 @@
 - [pdfceGUI request channel](project_gui_request_channel.md) — CHECK D:\Dev\FeatureRequests\pdfce_FeatureRequests EVERY SESSION; requests from the new GUI project land there
 - [No provisional marking](feedback_no_provisional_marking.md) — Ken 2026-08-13: inferred content renders NORMALLY, Save commits, disclosure goes off-canvas; marking = a second render path that drifts
 - [Wrapped string literals lose backslashes](feedback_wrapped_string_literals_lose_backslashes.md) — patching them via heredoc ships error messages with 10-space gaps; grep for it, nothing else catches it
+- [External LLM research gets assessed](feedback_external_llm_research_gets_assessed.md) — Ken pastes Gemini/etc research expecting a graded verdict vs pdfce docs; two of four crate picks violated hard constraints
