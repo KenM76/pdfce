@@ -112,10 +112,18 @@ call site.**
 
 Two findings that change what to do next:
 
-- **`1_GWG160` fails exactly 3 of 16 cells: `Hue`, `Saturation`, `Color` —
-  and `Luminosity` PASSES.** Those are the nonseparable modes whose K comes
-  from the **backdrop**; `Luminosity`'s comes from the **source**. §11.3.5.3
-  is a one-bit discriminator and it fell on the correct side.
+- ~~**`1_GWG160` fails exactly 3 of 16 cells… §11.3.5.3 is a one-bit
+  discriminator and it fell on the correct side.**~~ **★ FALSIFIED LATER THE
+  SAME DAY — see §2 and §5 of the block at the top of this file.** The cells
+  are right (`Hue`, `Saturation`, `Color` trap; `Luminosity` is clean) and the
+  **attribution was wrong**: all four nonseparable modes are **DECLINED**
+  (`applied=11, ignored=4` on every transparency patch), so they never reach
+  the applied path and cannot be evidence about how it computes. They fail
+  because they are **not implemented**. `Luminosity` is declined identically
+  and still comes out clean, so *declined* does not imply *visibly wrong*.
+  **This paragraph is the EIGHTH copy of a stale claim found today, and it
+  survived a rewrite of this very file's headline** — proof of the top block's
+  §5 finding in the same document that states it.
 - **`1_GWG161` / `3_GWG161` / `1_GWG162` are not a knockout bug.** pdfce
   buffers a group whenever the outer state is non-neutral, and a transparent
   buffer is **isolated** semantics — so every Ghent transparency cell (they
