@@ -46636,3 +46636,159 @@ to following it as adopted practice starting with this entry.
    self-edit its own agent file without that go-ahead.
 4. **`check-commits-filed.py`** should be green as of `bd861a0` — the
    engineer's stated end-of-session goal for this filing.
+
+## 2026-08-18 (hundred-and-seventy-fifth filing) — HARD RULE 11 ADOPTED, THEN EXERCISED IMMEDIATELY: THE 173RD FILING'S OWN `moxcms` RECOMMENDATION NAMED THE WRONG PROJECT, THE ENGINEER'S `38b0330` ALREADY FIXED THREE FILES, AND THIS FILING FINDS THREE MORE SURVIVORS `check-commits-filed.py` DOES NOT COVER
+
+**Filed by `pdfce-librarian` WITHOUT a shell this session.** Commit
+contents for `d9f1aa4`/`38b0330` (docs-only, per the dispatch) are
+RELAYED from the engineer, not independently verified via `git show` —
+per hard rule 8, that claim is stated as relayed, not as checked. Every
+source-text claim below (`crates/iccce-cmm/src/transform.rs`,
+`docs/PRIOR_ART.md`, `docs/compositor-plan.md`,
+`docs/collapse-model-survey.md`, `docs/ROADMAP.md`, `docs/FEATURES.md`,
+`docs/ARCHITECTURE.md`, `D:\Dev\FeatureRequests\iccce_FeatureRequests\
+open\reply_cmyk_buffer_destination_and_width.md`) IS independently
+verified by `Read`/`Grep` this filing.
+
+**First act under the newly-adopted Hard Rule 11 (`pdfce-librarian.md`,
+added this session per the 174th filing's judgment call, accepted by the
+engineer): a filing that changes what a capability means must sweep
+every place that DESCRIBES it — search for the claim, not the string —
+and report survivors.** The capability here is "does iccce have an sRGB
+conversion destination," and it changed meaning today.
+
+**Root cause, mine, stated because it is the reusable half.** The 173rd
+filing (`138a3c0`) added a `docs/PRIOR_ART.md` row recommending `moxcms`
+as the ICC-hop candidate for `Pass 97.2`'s N-plane collapse — **against
+`ARCHITECTURE.md` decision 064 (2026-08-17), which had already assigned
+colour CONVERSION to `iccce`**, the operator's own from-scratch MIT
+project at `D:\Dev\iccce\`, one day before the survey that produced the
+recommendation. `CLAUDE.md` requires reading `docs/ARCHITECTURE.md`
+every session; it was not read before that filing. The research brief
+that produced the `moxcms` recommendation never mentioned `iccce`, so
+the researcher could not have known — a subagent cannot check a
+constraint the dispatch omits, and the dispatch is the engineer's/
+librarian's, never the subagent's fault.
+
+**Already corrected by the engineer, `38b0330` (docs-only, relayed as
+such):** `docs/collapse-model-survey.md` §7 rewritten;
+`docs/compositor-plan.md` Stage C and §6 corrected; `docs/PRIOR_ART.md`'s
+`moxcms` row marked **WITHDRAWN** (kept, not deleted — the technical
+assessment was correct and irrelevant, and a deleted row invites the
+same proposal next time), with a dated decision-log-style bullet naming
+the root cause. Verified present, this filing, by `Read`.
+
+**Separately, and unprompted by the `moxcms` error: iccce retracted its
+own capability claim today.** `reply_cmyk_buffer_destination_and_width.md`
+(iccce, 2026-08-18) opens *"ASK 1 — DONE. It has been done for some time,
+and our own reply is what misinformed you"* — the sentence pdfce had been
+citing, `reply_capability_status.md` §3 ("transform machinery built,
+sRGB destination not"), was stale when quoted. **What exists, verified
+by reading `crates/iccce-cmm/src/transform.rs` (lines 133/168/670/877)
+and its `builtin_srgb_from_cmyk.rs` test, not by trusting iccce's
+prose:** `Chain::with_destination(&src, Destination::None, intent)` — a
+built-in sRGB destination constructed from published BT.709-6/W3C/
+Bradford-D50-PCS constants, no shipped `.icc`, so
+`tools/check-shipped-assets.py` has nothing to refuse and `LEGAL.md`
+§6.1's redistribution objection does not arise. **The safety obligation
+that must travel with any Pass that calls it:** `Destination::None` is a
+caller ASSERTION, not a fallback — a declared `/OutputIntents` profile
+that fails to parse must be propagated as a refusal, never silently
+routed to `Destination::None`, or a page renders to substituted sRGB
+while its declared print condition vanishes with no visible sign
+(project rule 4). **The f32/u8 buffer-surface ask is unaffected**: iccce
+states plainly a narrower surface would cut memory 4×-in/8×-out but do
+**nothing** for the ~6 s/300-DPI-page conversion cost (≈10× pdfce's own
+~0.6 s render) — the `1.4 Mpix/s` figure is the grid-evaluation cost,
+per-pixel regardless of buffer width, so this cannot become an
+unconditional per-frame step.
+
+**Hard Rule 11 sweep — three survivors found and fixed, none of them the
+two the dispatch already knew about turning out to be the whole set:**
+
+1. `ROADMAP.md`'s `85.5` gap-inventory (fifth re-derivation paragraph,
+   dated 2026-08-18/163rd filing) — read "the CMYK compositing buffer's
+   final conversion step still needs iccce's sRGB destination." Corrected
+   in place with a dated ★ paragraph (not silently rewritten — history
+   kept legible, per this file's own append-only discipline extended to
+   `ROADMAP.md`).
+2. `ROADMAP.md`'s `iccce`-coordination Backlog bucket, "Fourth item filed
+   pdfce → iccce" — read "(a) an sRGB destination — iccce's transform
+   machinery exists, the destination does not." Corrected the same way.
+3. **★ Not one of the two the dispatch named — found by the sweep, not
+   the brief.** `ROADMAP.md`'s `Pass 97.2` entry carried its OWN copy of
+   the `moxcms` recommendation ("ICC dependency candidate recorded in
+   `docs/PRIOR_ART.md`, this filing: `moxcms`...") — the 173rd filing's
+   error had a second copy in this librarian's own document that the
+   engineer's `38b0330` correction (scoped to `docs/`, minus `ROADMAP.md`
+   and `ARCHITECTURE.md`, which are this librarian's territory) could not
+   have reached. Marked WITHDRAWN in place, same disposition as
+   `PRIOR_ART.md`'s row.
+
+**`ARCHITECTURE.md` — two forward pointers added, no new decision
+minted.** Decision 064 is unaffected (the boundary itself did not move);
+a second forward pointer was appended to its entry, and the §3
+`pdfce-render\` planned-direction paragraph gained one, both pointing at
+the corrected `ROADMAP.md` entries and the `Destination::None` safety
+obligation. Next free decision stays **071**.
+
+**`FEATURES.md` — verified, no row changes owed.** Grepped for `iccce`:
+two rows (`/OutputIntents`-aware CMYK conversion, `/ICCBased` resolution
+through a real profile), both still correctly `[ ]`/`—`/`—`/`[x]` gated
+on iccce. Nothing shipped to any `Cargo.toml`; the compositing buffer
+must exist before there is anything to convert, and a dependency with no
+caller is the `R151` shape this project already has a name for.
+
+**Judgment calls answered:**
+
+- **Does `Pass 97.2` need re-scoping?** No, not urgently. It is still
+  blocked behind `97.0`/`97.1` (neither built), which are unrelated to
+  iccce's destination status — the destination becoming available
+  changes what `97.2` will be ABLE to call when it starts, not when it
+  starts. Its Backlog entry's own moxcms-candidate line is corrected
+  above (survivor 3); no other acceptance-criteria change identified.
+- **Owed replies to iccce.** `request_profile_population_census.md` and
+  `request_header_tag_channel_disagreement.md` are recorded by iccce's
+  own reply as still awaiting a pdfce answer. **Not read by this
+  filing** — flagged as owed work, per the dispatch's instruction not to
+  draft replies.
+- **Adjacent debris noticed, not fixed (out of the iccce claim family,
+  flagged rather than corrected under scope discipline):**
+  `ARCHITECTURE.md` §3's `pdfce-render\` planned-direction paragraph
+  still parenthetically reads "(§12 stays at decision 068, next free
+  069)" — stale; decisions 069 and 070 have since been minted and
+  `SESSION_LOG.md`'s own 174th filing already records next-free as
+  **071**. A different claim family (decision-ledger state, not iccce
+  capability), so left for whoever next touches that paragraph rather
+  than folded into this filing's scope.
+
+**Decisions made this session:** None minted. Two forward pointers
+against existing decision 064, no new decision.
+
+**Findings + decisions:** Hard Rule 11, adopted at the end of the 174th
+filing, earned its first exercise inside the very next filing — three
+survivors found by the sweep, one of them (survivor 3) in this
+librarian's own document, outside the scope the correcting commit could
+reach. The pattern the rule exists to catch (a stale claim with more
+copies than the person who found the first one expects) reproduced
+immediately.
+
+**Still in flight:**
+
+- `Pass 97.0`/`97.1`/`97.2` remain the best-scoped, highest-leverage
+  queued work, untouched by this filing.
+- The two owed iccce replies above, unread.
+- The stale decision-ledger parenthetical in `ARCHITECTURE.md` §3,
+  flagged not fixed.
+
+**For next session:**
+
+1. **Ledger.** Next free Pass family **98** (unchanged). Next free
+   decision **071** (unchanged). Next free standing rule **`R196`**
+   (unchanged). **Next free filing ordinal: 176.**
+2. **Build `Pass 97.0`** — best-scoped, highest-leverage, unchanged.
+3. Read and answer (or file to `ROADMAP.md` Backlog) the two owed iccce
+   requests named above.
+4. Whoever next touches `ARCHITECTURE.md` §3's `pdfce-render\` block:
+   the decision-number parenthetical is stale, see "adjacent debris"
+   above.

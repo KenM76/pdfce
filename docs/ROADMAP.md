@@ -49585,6 +49585,38 @@ slice 2 (tiling patterns, demoted, unchanged — zero Ghent occurrences).
 **Still an ordering suggestion, not a dependency graph**, unchanged
 from every prior re-derivation's own caveat.
 
+**★ CORRECTED 2026-08-18 (pdfce-librarian, hundred-and-seventy-fifth
+filing) — the sRGB-destination half of this paragraph's gate is now
+false, and separately, `85.5` shipped (PARTIAL) the very same day this
+paragraph was filed, without waiting on any of it — see `Pass 85.5`'s
+own *Shipped* entry (`bd9d5ef`+`bf75351`+`ac15158`) and its own amendment
+narrating the false-premise correction.** For whoever reads this
+paragraph for its GATE STATUS rather than its history: iccce's reply to
+`request_cmyk_buffer_destination_and_width.md`
+(`reply_cmyk_buffer_destination_and_width.md`, 2026-08-18) states its
+sRGB destination was already built — `Chain::with_destination(&src,
+Destination::None, intent)`, constructed from published BT.709-6/W3C/
+Bradford-D50-PCS constants, no shipped `.icc`, verified by reading
+`crates/iccce-cmm/src/transform.rs` (lines 133/168/670/877) and its
+`builtin_srgb_from_cmyk.rs` test, not by trusting iccce's prose. **What
+this changes:** the CMYK+alpha compositing buffer's eventual final
+conversion step is no longer blocked on iccce having *no* destination —
+it is blocked on the buffer itself not existing yet
+(`ARCHITECTURE.md` §3, `pdfce-render\` planned-direction paragraph,
+still PLANNED/NOT DECIDED/NOT STARTED). **What is unaffected:** the
+f32/u8 buffer-surface ask — iccce states plainly that a narrower surface
+would cut memory 4×-in/8×-out but do **nothing** for the ~6 s/300-DPI-page
+conversion cost (≈10× pdfce's own ~0.6 s render), so whatever consumes
+this destination cannot be an unconditional per-frame step; export-only,
+cached, or scoped to pages that actually use overprint remains an open
+design question, not decided here. **Safety obligation that must travel
+with any Pass that calls this, per project rule 4:** `Destination::None`
+is a caller ASSERTION that no destination was declared, not a fallback —
+a PDF/X `/OutputIntents` profile that was declared and failed to parse
+must be propagated as a named refusal, never silently routed to
+`Destination::None`, or a page would render to substituted sRGB while
+its declared print condition vanished with no visible sign.
+
 **★ Two secondary findings from the same measurement run, filed here
 rather than as separate Passes because neither is a fidelity gap:**
 - `Separation /All` conversions: **62 on page 1, 52 on page 4** —
@@ -57387,10 +57419,20 @@ nothing gets forgotten, not as a commitment to build in this order.
   disclosed as pdfce's own and behind its own setting, not folded silently
   into the "spec-mandated" default above.
 
-  **ICC dependency candidate recorded in `docs/PRIOR_ART.md`, this
-  filing:** `moxcms` (BSD-3-Clause OR Apache-2.0, pure Rust, ≤16 inks) —
-  clears the wasm32 gate `lcms2` (a C binding) cannot. Not yet added to
-  any `Cargo.toml`.
+  **★ WITHDRAWN 2026-08-18 (pdfce-librarian, hundred-and-seventy-fifth
+  filing) — this row named the wrong project.** It read: *"ICC dependency
+  candidate recorded in `docs/PRIOR_ART.md`, this filing: `moxcms`
+  (BSD-3-Clause OR Apache-2.0, pure Rust, ≤16 inks) — clears the wasm32
+  gate `lcms2` (a C binding) cannot. Not yet added to any `Cargo.toml`."*
+  **`ARCHITECTURE.md` decision 064 (2026-08-17) already assigned colour
+  CONVERSION to `iccce`**, the operator's own sibling MIT project at
+  `D:\Dev\iccce\`, whose README names pdfce as its first consumer — there
+  was never a candidate slot for a third-party CMM here. `docs/PRIOR_ART.md`
+  carries the full withdrawal (its `moxcms` row is kept, marked WITHDRAWN,
+  not deleted). **iccce already ships the ICC-transform hop this step
+  needs** — see the corrected `85.5`/`iccce`-coordination entries below in
+  this file, and `iccce`'s own reply
+  `reply_cmyk_buffer_destination_and_width.md` (2026-08-18).
 
   **Scope guard binding on all three sub-Passes:** engage the colorant
   path only for subtrees that need it, **not page-wide by default** —
@@ -57653,6 +57695,37 @@ nothing gets forgotten, not as a commitment to build in this order.
   buffer becomes: `ARCHITECTURE.md` §3, `pdfce-render\` block,
   planned-direction paragraph (no decision-log entry — nothing chosen
   yet, see that paragraph's own closing note).
+
+  **★ CORRECTED 2026-08-18 (pdfce-librarian, hundred-and-seventy-fifth
+  filing) — item (a) is now false; item (b) stands unchanged.** iccce's
+  reply, `reply_cmyk_buffer_destination_and_width.md` (2026-08-18),
+  opens *"ASK 1 — DONE. It has been done for some time, and our own
+  reply is what misinformed you"* — the `reply_capability_status.md` §3
+  sentence this bucket's item (a) was sourced from ("transform machinery
+  built, sRGB destination not") was stale when quoted. **What exists,
+  verified by reading `crates/iccce-cmm/src/transform.rs` (lines
+  133/168/670/877) and its `builtin_srgb_from_cmyk.rs` test, not by
+  trusting iccce's prose:** `Chain::with_destination(&src,
+  Destination::None, intent)`, a built-in sRGB destination constructed
+  from published constants (BT.709-6 primaries, W3C transfer-function
+  constants, Bradford-adapted to the D50 PCS per ICC.1:2022 Annex E.3) —
+  **no shipped `.icc`**, so `tools/check-shipped-assets.py` has nothing
+  to refuse and `LEGAL.md` §6.1's profile-redistribution objection does
+  not arise. **Item (b) is unaffected and iccce says so explicitly**: a
+  `u8` buffer surface would cut memory 4×-in/8×-out but do **nothing**
+  for the ~6 s/page (300 DPI) conversion cost, ≈10× pdfce's own ~0.6 s
+  render — the `1.4 Mpix/s` figure is the grid-evaluation cost, which is
+  per-pixel regardless of how the pixel crosses the boundary. **Owed
+  from pdfce's side, not drafted here:** `iccce_FeatureRequests` also
+  records `request_profile_population_census.md` and
+  `request_header_tag_channel_disagreement.md` as still unanswered by
+  pdfce — this librarian has not read either; flagged as owed, not
+  actioned. **Safety obligation for whoever builds the caller:**
+  `Destination::None` is an ASSERTION, not a fallback — a declared
+  `/OutputIntents` profile that fails to parse must be propagated as a
+  refusal, never silently routed to `Destination::None` (project rule 4;
+  full statement in the `85.5` gap-inventory correction, above, this
+  filing).
 
   **The boundary this row sits inside is unchanged**: conversion is
   iccce's, compositing (overprint, blend-mode selection, knockout) is

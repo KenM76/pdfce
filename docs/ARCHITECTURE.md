@@ -1479,6 +1479,37 @@ D:\Dev\pdfce\
                                    carries the Pass; decision 064 already
                                    carries the iccce boundary this plan
                                    sits inside.
+                                   **★ FORWARD POINTER, added 2026-08-18
+                                   (pdfce-librarian, hundred-and-
+                                   seventy-fifth filing) — the "iccce
+                                   owns the final CMYK→RGB conversion"
+                                   half of this plan now has a concrete
+                                   call, not just a boundary.**
+                                   `Chain::with_destination(&src,
+                                   Destination::None, intent)` —
+                                   iccce's built-in sRGB destination,
+                                   constructed from published BT.709-6/
+                                   W3C/Bradford-D50-PCS constants, no
+                                   shipped `.icc` — was already shipped
+                                   when the cost figures above were
+                                   measured; iccce's own reply
+                                   (`reply_cmyk_buffer_destination_and_
+                                   width.md`, 2026-08-18) corrects a
+                                   stale statement of its own that had
+                                   said otherwise. **Does not change
+                                   this paragraph's cost figures or its
+                                   NOT DECIDED/NOT STARTED status** — the
+                                   buffer this call will eventually sit
+                                   inside still does not exist. **Does
+                                   change what "gated on iccce" means
+                                   going forward:** the gate was never on
+                                   iccce having *a* destination, only on
+                                   this buffer being built; full
+                                   correction and the `Destination::None`
+                                   safety obligation: `ROADMAP.md`'s
+                                   `Pass 85.5` gap-inventory and
+                                   `iccce`-coordination Backlog entries,
+                                   both corrected this filing.
     pdfce-print\                 <- Printing: job planning + spooling. Shipped with
                                    `Pass 55.2` (2026-08-10) but never documented in this
                                    tree until the eighty-fifth filing — a filing gap this
@@ -21940,6 +21971,21 @@ under the `pdfce-render\` block, immediately before `pdfce-print\`.
 **Not a revision of this decision**, filed as a forward pointer per
 this section's own discipline: the shape is PLANNED, not decided, so
 it carries no decision number of its own.
+
+**★ SECOND FORWARD POINTER, added 2026-08-18 (hundred-and-seventy-fifth
+filing) — the "one conversion to RGB at the end via iccce" clause above
+now has a concrete call.** iccce's built-in sRGB destination
+(`Chain::with_destination(&src, Destination::None, intent)`) shipped
+before this decision's own dated survey (`docs/collapse-model-survey.md`,
+hundred-and-seventy-third filing) recommended a third-party CMM
+(`moxcms`) for the same conversion step — a recommendation made without
+reading this decision, now WITHDRAWN (`docs/PRIOR_ART.md`, this filing;
+engineer commit `38b0330`). **The boundary itself is unaffected** — this
+is a status update on iccce's side of it, not a revision. Full
+correction, with the `Destination::None` safety obligation: `ROADMAP.md`'s
+`Pass 85.5` gap-inventory and `iccce`-coordination Backlog entries, and
+§3's `pdfce-render\` planned-direction paragraph, all corrected this
+filing.
 
 ### 2026-08-17 (hundred-and-fiftieth filing) — decision 065: **AMB-3 RESOLVED — pdfce paints a radial shading's `s`-circles ON their circumference (`|P−c(s)|=r(s)`, ISO 32000-2's "on"), never as a filled disc (ISO 32000-1's "within")**
 
