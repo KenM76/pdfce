@@ -84,6 +84,73 @@ crate, and this measurement is the evidence for funding it.
 implementation exactly, differing only in pixmap size and a translation on the
 base CTM. Nothing is cached between calls.
 
+
+### 4a. ★ The floor decomposed by ABLATION, and the ~99 % claim is confirmed rather than corrected
+
+**Measured 2026-08-18**, scoping `Pass 75.0`. The claim above — *"the floor is
+interpretation"* — was inferred from an **area** comparison (a 2-pixel render
+costs what a million-pixel one does). That is sound evidence for
+area-independence, but it does not by itself say **what** the area-independent
+work is. Interpretation and `fill_path`'s *setup* are both area-independent:
+tiny-skia builds an edge list per path whether the pixmap is a megapixel or
+two pixels.
+
+So it was measured directly, by **ablation**: every `fill_path` / `stroke_path`
+call in the paint path was env-gated off (8 sites), and the FLOOR case re-run.
+Nothing else changed, so nothing else is confounded.
+
+| FLOOR (1 × 1 pt region, 2 px) | run 1 | run 2 | run 3 | median |
+|---|---:|---:|---:|---:|
+| **normal** | 665 ms | 667 ms | 722 ms | **667 ms** |
+| **every paint call removed** | 591 ms | 580 ms | 611 ms | **591 ms** |
+
+⇒ **Painting is ~11 % of the floor (~76 ms). Interpretation and path
+construction are the other ~89 % (~591 ms).**
+
+**This confirms §4 rather than qualifying it**, and the confirmation is worth
+more than the original inference because it rules out the specific alternative
+that would have sunk the design: had the split been the other way round, a
+cached parse would have removed only a tenth of the cost and `Pass 75.0`'s
+acceptance criterion 1 — *"~700 ms to tens of ms"* — would have been
+unreachable by construction.
+
+**Ceiling this sets on `Pass 75.0`:** a handle that skips interpretation and
+path construction removes ~591 ms of the ~667 ms floor. The residual ~76 ms is
+`fill_path` setup for all 148,517 paints, and **a bbox cull at replay is what
+removes that** — a cull is cheap against a display list because the bounds are
+already computed, whereas during interpretation they are not known until the
+path has been built, which is the expensive part. **So culling belongs in the
+replay path and is not an alternative to the handle.**
+
+#### ★ A cull at the PAINT site was already measured and correctly rejected
+
+`paint_is_cullable` exists in `interpret.rs` and feeds **only** a counter. That
+is deliberate, and `profile.rs` says so at the field:
+
+> *"Measured at 1.34 % on the reference CAD sheet, which is why no such cull
+> was built. Kept as a counter so the next person to propose one gets the
+> number instead of the intuition."*
+
+It worked: this session proposed exactly that cull and got the number instead
+of the intuition. **Recorded because a predicate that gates nothing looks like
+dead code to a reader who has not found its rationale** — and the rationale is
+one file away, in a doc comment on the counter it feeds.
+
+Note also that the two culls are against **different rectangles** and are not
+substitutes: `paint_is_cullable` tests against the **clip's** bbox (1.34 %
+hit rate, because on this sheet clips average 66 % of the page), whereas a
+replay-time cull would test against the **region**, which for a zoomed viewport
+is a small fraction of the page and would hit far more often.
+
+#### Method note, stated because it nearly produced a wrong number
+
+The first ablation run reported the split as **36 % painting**, and that figure
+would have been written down had it not been repeated. The machine was
+concurrently running `cargo build`, and the contention landed unevenly across
+the two cases. **Three runs per case, medians reported, both cases interleaved
+under the same load** is what made the number stable. A single-run ablation
+measures the load as much as the code.
+
 ## ★ A SECOND DOCUMENT, and the caveat below was right
 
 **Measured 2026-08-13 by the `pdfceGUI` session** on `iso32000-2-preview.pdf`
