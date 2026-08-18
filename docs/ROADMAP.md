@@ -96,6 +96,171 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `3e3019a` — **CORRECTS THE OTHER THREE COPIES OF `e11b4f8`'S OVERPRINT CLAIM (FOUND BY SWEEPING FOR THE CLAIM, NOT THE STRING), PLUS A SEPARATE STALE CLAIM ON `transparency_groups_composited` — AND LEAVES A FIFTH SURVIVOR, FOUND BY THIS FILING, UNFIXED** — no Pass ID, no decision minted; commit `3e3019a` touches `crates/pdfce-cli/src/main.rs`, `crates/pdfce-render/src/gstate.rs`, `crates/pdfce-render/src/interpret.rs` and is cited here to satisfy `check-commits-filed.py` — filed 2026-08-18 (hundred-and-seventy-first filing)
+
+**Filed by `pdfce-librarian` WITHOUT a shell this session.** Test/lint/gate
+results are RELAYED from the dispatching engineer's report. **Every
+source-text claim below is independently verified here by `Read` against
+the live files**, not carried from the report — because this filing's own
+finding (below) is that the report's own self-description of what it
+fixed was incomplete on one count.
+
+**What this corrects.** `e11b4f8` (*Shipped*, hundred-and-seventieth
+filing, immediately below) fixed the operator-facing stdout note that had
+claimed *"pdfce does NOT simulate overprint … there is no per-colorant
+state for overprint to preserve"* three words from a
+`overprint_composited=5`-shaped counter on the same line. That filing's
+own "★ NOT independently verified here" paragraph flagged a **second**
+copy of the identical claim, four lines above the first, in a developer
+comment this librarian found by `Read` but had no mandate to fix. This
+commit is the follow-on, and it swept for the CLAIM rather than the
+STRING — the four sites paraphrase the same fact in four different
+wordings, so a search for `e11b4f8`'s exact sentence would have found
+only the copy already known. Two more turned up:
+
+1. **`crates/pdfce-cli/src/main.rs:7069`–`7085`** — the developer comment
+   `e11b4f8`'s own filing had already flagged (previously at
+   `main.rs:7057`–`7060`, shifted by this commit's own edits). Confirmed
+   by `Read`: now carries the corrected narrative, quotes the removed
+   sentence verbatim under a `★` marker (*"That was true when written and
+   false from `bf75351` onward"*), and states what is still genuinely
+   approximate — the four PROCESS colorants are preserved but SPOT is
+   flattened through its tint transform, `Pass 97.1`'s scope.
+2. **`crates/pdfce-render/src/gstate.rs:213`–`237`** —
+   `GraphicsState::overprint_mode`'s own field doc, which had read
+   *"pdfce renders to an additive RGB display, so on the shipped path
+   this is tracked and reported rather than applied."* Confirmed by
+   `Read`: now reads **"APPLIED since `bf75351`"**, and — usefully —
+   preserves the genuine spec nuance the stale wording was reaching for
+   rather than deleting it outright: §8.6.7 does say overprint mode 1
+   "shall not apply if the device's native colour space is not
+   `DeviceCMYK`," and pdfce's raster target *is* additive RGB. The doc
+   now explains why pdfce applies it anyway — it **simulates** a
+   DeviceCMYK device per pixel (reconstruct → Table 149 → convert back),
+   which is Overprint Preview, a product decision ISO 32000-1 never
+   describes for a non-separating device, and the same one Acrobat makes
+   automatically for PDF/X.
+3. **`crates/pdfce-render/src/interpret.rs:284`–`320`** —
+   `overprint_requested`'s field doc, a full "Why this is counted and not
+   applied" section arguing at length for a shortfall that had been fixed
+   at `bf75351` (*Shipped*, `Pass 85.5`, below) and never revisited.
+   Confirmed by `Read`: retitled **"Why this is counted, and what it does
+   NOT mean"**, quotes the old heading and argument under a `★` marker,
+   and restates the section around what remains true — SPOT flattening
+   (as in copy 1) **plus a second gap the old prose never mentioned at
+   all**: image XObjects never reach the overprint composite, and are
+   **not counted as `overprint_refused`** when they skip it — the same
+   blind-counter shape the glyph painter had before `bf75351`. Both are
+   scoped to `Pass 97.1` in the doc.
+
+**Four locations, two crates, one shortfall — three of the four now
+corrected, and each correction names what it used to say** rather than
+silently acquiring the right answer, matching this project's own
+append-only correction discipline applied at the code-comment level.
+
+**A separate, unrelated correction in the same commit.**
+`transparency_groups_composited`'s doc had read *"A census, not a
+shortfall: this is pdfce obeying the standard"* — true when written,
+false since the finding filed this same day (hundred-and-sixty-ninth
+filing, commit `5ef5498`, *Shipped* below): a `tiny_skia::Pixmap` starts
+transparent, a transparent initial backdrop **is** isolated semantics
+(§11.4.7), and pdfce allocates a buffer whenever the OUTER graphics state
+is non-neutral — so a group buffered for that reason (not because its own
+`/I` is true) silently gets isolated compositing regardless, and every
+Ghent transparency-patch cell affected is counted as a success:
+**14, 15 and 7 wrong cells out of 16** on `1_GWG161`/`3_GWG161`/
+`1_GWG162` respectively. `Pass 97.0` (the compositor, *Backlog* below) is
+the fix; until it lands the counter over-reports.
+
+**★★ Found by this filing, NOT by the dispatching engineer's own report,
+and NOT fixed here — flagged for the engineer's next commit touching
+`interpret.rs`.** The commit's own description says this counter's doc
+"now says" it over-reports. Confirmed by `Read` at
+`crates/pdfce-cli/src/main.rs:7050`–`7067`: **true** — the print-site `//`
+comment beside the `eprintln!` call carries the full corrected narrative,
+dated, with the exact wrong-cell counts above. But the counter's own
+**struct-field rustdoc** — `crates/pdfce-render/src/interpret.rs:386`–
+`388`, `pub transparency_groups_composited: usize` — is the location a
+reader consulting the crate's own API documentation would actually see,
+and it still reads, verbatim, unamended, no `★` marker: **"A census, not
+a shortfall."** A fix that closes the claim at its CLI print site left an
+identical, uncorrected copy at its own field definition, one file over —
+the same shape `e11b4f8` left standing for this filing to find, now
+recurring one commit later on a different counter. Nothing in this
+librarian's brief includes editing crate source, so this is reported, not
+patched.
+
+**Verification (RELAYED, not re-run here).** `cargo fmt --all` applied;
+`cargo clippy --workspace --all-targets -- -D warnings` clean; **99** test
+binaries green, 1817 passing in the largest; `cargo check -p pdfce-core -p
+pdfce-render --target wasm32-unknown-unknown` green; `cargo tree` shows
+**0** egui/eframe/winit/wgpu lines for both engine crates — invariant
+unaffected, this commit is doc-comment-only in both engine crates plus
+`pdfce-cli`; `check-ui-strings.sh` and `check-disclosure-channel.sh`
+clean (expected — no operator-facing string or disclosure setter
+changed, only developer-facing rustdoc); **Ghent standing unchanged at
+25 pass / 18 FAIL / 8 UNRESOLVED of 51**, re-run rather than assumed —
+comments cannot move pixels, the same discipline `e11b4f8` applied.
+
+**Occurrence count — the engineer's own question, answered rather than
+left open.** The dispatch asked whether this is a fourth *independent*
+instance of "a disclosure string outlived the shortfall it described"
+(after `eb0bde5`, `834d256`, `e11b4f8`), or a different, arguably worse
+shape — one narrative duplicated four times with no mechanism relating
+the copies. **Both readings are correct, and this filing's own finding
+(the fifth, still-open survivor above) makes the second reading the more
+important one to record**: this is not merely occurrence four of a
+known pattern, it is a demonstration that **fixing the reported copy of
+a stale claim does not find its siblings**, and that this remains true
+even inside the *very filing written to fix that problem* — three of
+four overprint copies were caught, and a still-different counter's own
+sibling copy was missed in the same commit. `D:\dev\rag\rust\
+disclosure_text_must_be_tested_against_producing_branch.md` is amended
+this filing with both the fourth occurrence and this fifth, sharper
+sub-lesson (below).
+
+**Standing-rule candidacy — reassessed, still not minted, disposition
+unchanged from the hundred-and-seventieth filing.** That filing recorded
+three RAG-file instances as past this project's own two-occurrence
+promotion bar, and left minting a numbered rule to the engineer/operator
+per the R107–R110 precedent (librarian-assigned numbers only against an
+existing decision record). This filing does not change that disposition,
+for a specific reason worth stating rather than assuming: **the RAG
+file's own "THIRD OCCURRENCE" section already establishes that no
+mechanical gate can catch this class of bug** — a content-comparison
+check would need to know "current program behaviour," which is exactly
+the fact a disclosure exists to report. A numbered standing rule would
+add a written commitment to grep-for-the-claim-not-the-string at fix
+time; it would not add enforcement `tools/check-*` could run. Whether
+that written commitment is worth a number is still the engineer's/
+operator's call, not this filing's — **flagged again, more sharply,
+given the fifth survivor found here, not decided.**
+
+**`docs/FEATURES.md` — one row corrected, not merely re-verified.** The
+*Transparency GROUP compositing* row (Colour, transparency & rendering
+fidelity section) already caveated knockout groups; it did **not**
+caveat the isolated-forcing defect above, and so read as claiming more
+correctness than the counter now admits to. Amended this filing with the
+same wrong-cell counts (14/15/7 of 16) and a pointer to `Pass 97.0`. This
+is the check the dispatching engineer explicitly asked for ("please
+check rather than assume, and do not round the box up") — the row was
+checked and found to need the caveat, not merely confirmed clean.
+
+**`ARCHITECTURE.md` §12 — no new decision.** Decision 068 (transparency
+group buffering, amended twice in place at `Pass 85.4d`/`85.4e`) and
+decision 069 (overprint simulation) already document the architecture
+correctly; this commit brings four rustdoc/comment sites into agreement
+with decision records that were already right, the same relationship
+`e11b4f8` had to decision 069.
+
+**Ledger effects.** No Pass ID minted or claimed — correction to
+existing prose only. No decision minted — ceiling stays **070**, next
+free **071** (carried forward from the hundred-and-seventieth filing's
+own statement; **not re-run through `tools/check-ledger-numbers.py`
+this filing — no shell**). No standing rule minted — ceiling stays
+**R195**, next free **R196**, same caveat. **Next free filing ordinal:
+172.**
+
 ### `e11b4f8` — **CORRECTS `Pass 85.5` (`bf75351`): THE OVERPRINT NOTE STOPS CONTRADICTING ITS OWN COUNTERS** — no Pass ID, no decision minted; commit `e11b4f8` touches `crates/pdfce-cli/src/main.rs` and is cited here to satisfy `check-commits-filed.py` — filed 2026-08-18 (hundred-and-seventieth filing)
 
 **Filed by `pdfce-librarian` WITHOUT a shell this session.** Test/lint/gate

@@ -46102,3 +46102,123 @@ engineer, not edited here (docs-only brief).
    changes" is wanted, this filing is the third instance to cite** —
    two prior in the RAG file, this one the sharpest (self-contradicting,
    not merely stale). Operator/engineer call, not filed as `R196` here.
+
+## 2026-08-18 (hundred-and-seventy-first filing) — **`3e3019a` CORRECTS THE OTHER THREE COPIES OF `e11b4f8`'S OVERPRINT CLAIM, PLUS `transparency_groups_composited`'S OWN STALE "CENSUS" CLAIM — AND LEAVES A FIFTH SURVIVOR, FOUND BY THIS FILING, UNFIXED**
+
+**Filed by `pdfce-librarian` WITHOUT a shell this session.** Test/lint/gate
+results are RELAYED from the dispatching engineer's report. **Every
+source-text claim in this entry is independently verified by `Read`
+against the live files**, not carried from the report — the finding this
+filing exists to record is that the report's own account of what it
+fixed was incomplete on one count, and only reading the source, not
+trusting the description, would catch that.
+
+**Shipped:**
+
+- `3e3019a` filed — no Pass ID, a correction commit. Three of the four
+  copies of the "pdfce does not simulate overprint / composites in
+  additive RGB" claim `e11b4f8` left standing (the third having been
+  found and flagged by the 170th filing without a fix mandate to close
+  it) are now corrected: a developer comment in
+  `crates/pdfce-cli/src/main.rs`, a struct-field doc in
+  `crates/pdfce-render/src/gstate.rs`
+  (`GraphicsState::overprint_mode`), and a class-level doc section in
+  `crates/pdfce-render/src/interpret.rs` (`overprint_requested`). Each
+  correction quotes the sentence it replaces rather than silently
+  acquiring the right answer. Full account, all three sites cited by
+  line range: top of `ROADMAP.md` *Shipped*.
+- The same commit separately corrects `transparency_groups_composited`'s
+  print-site comment (`pdfce-cli/src/main.rs`), which had read "a census,
+  not a shortfall" and is not one — a transparent-initialised buffer
+  forces isolated compositing semantics on groups buffered for an
+  outer-state reason regardless of the group's own `/I`, wrong on 14, 15
+  and 7 of 16 Ghent transparency-patch cells (`1_GWG161`/`3_GWG161`/
+  `1_GWG162`), all counted as successes until `Pass 97.0` lands.
+
+**Decisions made this session:**
+
+- **No decision minted.** Decision 071 stays next free. Decisions 068
+  (transparency buffering) and 069 (overprint simulation) already
+  document the architecture correctly — this commit brings four rustdoc/
+  comment sites into agreement with decision records that were already
+  right.
+- **Standing-rule candidacy reassessed, still not minted.** The dispatch
+  asked whether four copies of one shortfall (rather than three
+  independent occurrences over time) changes the calculus. It does not
+  change the disposition, for a stated reason: the RAG file's own "THIRD
+  OCCURRENCE" section already establishes no mechanical gate can catch
+  this class of bug (a content-comparison gate would need to know
+  "current behaviour," which is the fact the disclosure exists to
+  report), so a numbered rule would add a written commitment, not
+  enforcement. Flagged again, more sharply, given the fifth survivor
+  below — still the engineer's/operator's call. Next free standing rule
+  stays `R196`.
+
+**Findings + decisions:**
+
+- **★★ Found by this filing, not by the dispatch report: a fifth,
+  still-uncorrected copy of a stale claim, on a DIFFERENT counter, left
+  behind by the SAME commit that reports fixing it.** The commit's own
+  description says `transparency_groups_composited`'s doc "now says" it
+  over-reports. True at its CLI print site
+  (`pdfce-cli/src/main.rs:7050`–`7067`, confirmed by `Read`) — but the
+  counter's own struct-field rustdoc,
+  `crates/pdfce-render/src/interpret.rs:386`–`388`
+  (`pub transparency_groups_composited: usize`), the location a reader
+  of the crate's own API docs would actually see, still reads verbatim,
+  unamended: **"A census, not a shortfall."** Not fixed here (no
+  code-edit mandate); flagged for the engineer's next commit touching
+  `interpret.rs`. This is the exact shape `e11b4f8` left for the 170th
+  filing to find, recurring one commit later on a different counter —
+  evidence that "fixing the reported copy of a stale claim does not find
+  its siblings" holds even inside the commit written to fix that
+  problem.
+- **RAG amendment, this filing.** `D:\dev\rag\rust\
+  disclosure_text_must_be_tested_against_producing_branch.md` amended
+  with the fourth occurrence (the two new overprint copies) and a fifth,
+  sharper sub-lesson (the `interpret.rs` survivor) — the mechanical
+  fix restated: grep for the CLAIM, not the STRING, across the whole
+  workspace, and re-read the field-level doc, not just the call-site
+  comment, since they are different consumers of the same fact. Indexed
+  entry unchanged (one-line, still accurate).
+- **`FEATURES.md` — one row corrected, not merely re-verified.** The
+  *Transparency GROUP compositing* row already caveated knockout groups
+  but not the isolated-forcing defect above, so it read as claiming more
+  correctness than the counter now admits to. Amended with the 14/15/7
+  wrong-cell counts and a `Pass 97.0` pointer — the check the dispatch
+  explicitly asked for ("do not round the box up"), and the row needed
+  it.
+
+**Still in flight:**
+
+- Everything the 169th/170th filings' "For next session" queued (`97.0`
+  start, ledger-number re-verification) is unchanged and still owed —
+  not restated here. This filing is a second consecutive correction
+  commit, not engineering progress on any staged Pass.
+- Ghent standing carried forward unchanged: **25 pass / 18 FAIL / 8
+  UNRESOLVED of 51** — re-run this filing per the relayed report, not
+  assumed.
+- The `interpret.rs:386`–`388` survivor above is now owed, same shape as
+  the closed `main.rs:7057`–`7060` item from the prior filing.
+
+**For next session:**
+
+1. **Ledger.** Next free Pass family **98** (unchanged). Next free
+   decision **071** (unchanged). Next free standing rule **`R196`**
+   (unchanged — candidacy flagged twice now, not adopted). **Both
+   ledger figures carried forward from the 170th filing's own
+   statement, not re-run through `tools/check-ledger-numbers.py` this
+   filing — no shell.** **Next free filing ordinal: 172.**
+2. **Close the `interpret.rs:386`–`388` survivor** — the same
+   "census, not a shortfall" sentence this filing's fixed sibling
+   already corrected at its print site, still stale at its field
+   definition.
+3. **`97.0` (the RGB compositor) is still the best-scoped, highest-
+   leverage item** — unchanged from the 169th filing's queue; this
+   filing did not touch it.
+4. **Two occurrences of "a fix's own commit leaves a sibling copy
+   unfixed" now on record within 24 hours of each other** (`e11b4f8`'s
+   second copy, found by the 170th filing; this commit's fifth copy,
+   found by the 171st) — worth weighing alongside the standing-rule
+   candidacy question above rather than as a separate item, since both
+   are instances of the same underlying claim-vs-string gap.
