@@ -44511,3 +44511,100 @@ overlay-text-colour Backlog item still unscoped.
    commit), that is a new, explicitly-scoped task, not a backfill.
 4. `v0.6.0` is live; watch for the next capability Pass to resume
    after this release-process interlude.
+
+## 2026-08-17 (hundred-and-sixtieth filing) — **`Pass 85.4c` (`0d6f4ac`): TRANSPARENCY GROUPS NOW COMPOSITE THROUGH A REAL OFFSCREEN BUFFER — THE GHENT SUITE'S GWG 16.0 PANEL RENDERS CLEAN, `groups_flattened` 187→0. Decision 068 minted (page-sized buffer + state-reset-at-entry). `R180` gains a sixth instance, the first against a PUBLISHED release note rather than anything in the repository — `v0.6.1` now owed to correct it.**
+
+**Shipped:**
+- `Pass 85.4c` — `0d6f4ac`. §11.4.5: the blend mode/constant alpha/soft
+  mask in force at a `Do` invoking a transparency group apply to the
+  group's RESULT once composited, not to the individual objects inside
+  it. A group now renders into its own page-sized offscreen buffer,
+  contents-state reset to initial (`Normal`/alpha 1.0), then composites
+  as a unit via `Pixmap::draw_pixmap` carrying the outer blend
+  mode/alpha. Page-sized rather than BBox-sized, deliberately (decision
+  068) — contents draw under the same CTM as the page, no per-group
+  coordinate translation needed, ~4 bytes/pixel/nesting-level cost.
+  `groups_composited`/`groups_knockout_approx` counted and PRINTED on
+  the CLI stable line; `groups_flattened` survives only as the
+  allocation-failure fallback. Ghent GWG 16.0 (non-knockout blend-mode
+  panel) renders CLEAN, matching the suite's own reference sheet;
+  `groups_flattened` on that file 187 → 0. **Knockout groups (`/K
+  true`) deliberately NOT implemented** — §11.4.6 flagged as a spec-RAG
+  GAP naming shape/opacity separation as a property a single-alpha
+  buffer may not represent; `pdfce-spec-librarian` dispatched for
+  §11.4.6/§11.5.2–.3, in flight. Composited as ordinary groups instead,
+  approximated and counted (`groups_knockout_approx`, 47) — GWG 16.1
+  still shows its crosses, matching the counter. 3,778 → **3,780
+  tests, 0 failures** (+2 net; dispatch separately says "four tests" —
+  **flagged, not reconciled**, no shell to confirm either figure).
+  Sabotage run failed on `the_outer_blend_mode_does_not_leak_into_the_
+  groups_contents`, as intended. fmt/clippy/all named gates clean.
+  Corpus regression, 300 files: buckets identical to the immediately-
+  prior run (71/24/99/8/1, sum 203) and net one page better than this
+  session's own starting baseline (70/24/99/9/1, same sum 203) — no
+  regressions either comparison. `cargo tree`: GUI-core separation
+  unaffected.
+
+**Decisions made this session:**
+- **Decision 068** — transparency groups composite into a PAGE-sized
+  offscreen buffer (not BBox-sized: avoids threading a second
+  coordinate system through paint sites and the clip mask, at ~4
+  bytes/pixel/nesting-level; a misalignment would be a visible
+  artefact, not a silent one) and the group's contents render with
+  graphics state RESET to initial at entry (§11.4.5 assigns the outer
+  state to the group's RESULT, not its contents). Does NOT decide
+  knockout compositing — left to the spec dispatch in flight. Ceiling
+  067 → 068, next free 069.
+
+**Findings + decisions:**
+- **`R180` gains a SIXTH instance, and it is the first against an
+  artefact outside this repository.** The `v0.6.0` GitHub release notes
+  state *"Transparency-group compositing and soft masks are not
+  implemented"* — published roughly an hour before `Pass 85.4c`, which
+  makes half of that sentence false. Distinct from Instances 1–5 (all
+  falsified something inside the tracked git history — a doc comment,
+  a `--help` string, a test, a disclosed counter): a GitHub Release
+  description is neither reachable by a commit nor covered by this
+  project's own append-only convention. The engineer's intended
+  remedy — cut `v0.6.1` to correct the claim — is the right shape:
+  an additively-published new version supersedes the stale one, the
+  same relationship a dated amendment footer has to a stale
+  `SESSION_LOG.md` entry. Recorded, not fixed, by this librarian (no
+  path to GitHub's release UI). Not proposed as a new rule. Full
+  account: `ROADMAP.md`'s `R180` entry, *Standing rules*.
+- **RAG graduation judged and made:** `C:\personal_rag\pdf\
+  lesson_20260817_conformance_suite_oracle_beats_internal_counters.md`
+  — "a conformance suite's own failure indicator is a better oracle
+  than any counter the project writes for itself" — pdfce's own
+  counters read healthy through three separate rounds of this Ghent
+  investigation while the suite's own crosses stayed visible; the
+  crosses, not the counters, were what kept the work honest. Judged
+  PDF-domain methodology (ties specifically to how conformance suites
+  like Ghent embed self-verifying visual oracles), not Rust/egui
+  ecosystem knowledge — filed to `personal_rag/pdf`, not
+  `D:\dev\rag\rust\`. Subject and master indexes updated same filing.
+
+**Still in flight:** `Pass 72.0`/`73.0`/`73.1`/`86.0` HIGH PRIORITY
+unstarted; `Pass 85.1` (mesh shadings) and `85.2` slice 2 (tiling)
+unstarted; `Pass 85.4c`'s remainder — knockout groups + soft-mask
+groups — now this inventory's top-priority Ghent gap, blocked on the
+§11.4.6/§11.5.2–.3 spec dispatch (in flight, not yet landed); `85.5`
+last; `Pass 87.0` GUI-paused; `bdfd511`'s missing `ROADMAP.md` entry
+still open; overlay-text-colour Backlog item still unscoped;
+**`v0.6.1` release-note correction now owed** (`ROADMAP.md` *Next up*,
+new "RELEASE HOUSEKEEPING OWED" entry).
+
+**For next session:**
+1. **Next free Pass family is `92`** (this filing used sub-Pass
+   `85.4c`, existing family). Next free decision is **069**. Next free
+   filing ordinal is **161**. Next free standing rule is **`R196`**,
+   unchanged — `R180` cited at its sixth instance, not re-minted.
+2. Once the §11.4.6/§11.5.2–.3 spec dispatch lands, `85.4c`'s remainder
+   (soft masks first, then knockout groups) is next in the Ghent build
+   order, ahead of `85.1` (mesh shadings).
+3. Cut `v0.6.1` correcting the stale release-note sentence — no other
+   content is known to be owed for it unless another Pass ships
+   alongside.
+4. `Pass 85.4c`'s "four tests" vs "+2 net test count" discrepancy is
+   unreconciled — worth a one-line confirmation next session
+   (`cargo test -- --list` diff) rather than left open indefinitely.

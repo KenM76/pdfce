@@ -96,6 +96,122 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★★★★ Pass 85.4c — `0d6f4ac` — **THE GHOST CROSSES ARE GONE: TRANSPARENCY GROUPS NOW COMPOSITE THROUGH A REAL OFFSCREEN BUFFER — THIS INVENTORY'S SINGLE LARGEST REMAINING GAP CLOSES FOR THE NON-KNOCKOUT CASE, DECISION 068 MINTED, `R180` GAINS A SIXTH INSTANCE ON A NEW KIND OF ARTEFACT** — filed 2026-08-17 (hundred-and-sixtieth filing)
+
+**Sourcing.** No shell tool this dispatch (hard rule 8). Test counts,
+corpus-regression buckets, the Ghent panel result, and the gate outputs
+below are **relayed** from the dispatching engineer's own run, not
+independently re-verified here.
+
+**What was wrong.** §11.4.5: the blend mode, constant alpha and soft
+mask in force at a `Do` invoking a transparency group apply to the
+GROUP'S RESULT once composited, not to the individual objects inside
+it. Since `Pass 90.1` read `/Group` at all, pdfce painted a group's
+contents straight onto the page and applied the outer state per
+object — correct only for a group holding exactly one opaque object,
+wrong for every occlusion- or backdrop-sensitive case.
+
+**What shipped.** A transparency group now renders into its OWN
+page-sized offscreen buffer, with the graphics state RESET to initial
+(`Normal` blend, alpha 1.0) for the group's contents — the outer
+values belong to the composite, not the contents — then composites as
+a unit via `Pixmap::draw_pixmap` carrying the outer blend mode and
+constant alpha. **Page-sized rather than BBox-sized, deliberately**
+(full rationale: decision 068, `ARCHITECTURE.md` §12): the contents
+draw under the SAME CTM as the page, so no per-group coordinate
+translation is threaded through paint sites or the clip mask; cost is
+~4 bytes/pixel/nesting-level, and a misalignment bug would read as a
+visible rendering artefact rather than fail silently. `groups_composited`
+and `groups_knockout_approx` are both counted AND PRINTED on the CLI
+stable line; `groups_flattened` now survives only as the
+allocation-failure fallback.
+
+**★ The measure that matters is a conformance result, not a counter.**
+The Ghent PDF Output Suite X-4 file's **GWG 16.0 "Transparency Basic
+Blend Modes (DeviceCMYK, Non-Knockout)"** panel — each swatch drawing a
+cross a correctly-rendering engine covers, per the page's own German
+caption *"Fehler sind mit einem Kreuz … zu erkennen"* — now renders
+**CLEAN**, matching the suite's own reference sheet. `groups_flattened`
+on that file: **187 → 0.**
+
+**★ NOT fixed, and counted rather than silently wrong: `/K` knockout
+groups.** In a knockout group each element composites against the
+group's INITIAL backdrop rather than the accumulated result (§11.4.6),
+so later elements REPLACE earlier ones instead of layering. Compositing
+as an ordinary (non-knockout) group gets the outer boundary right and
+the internal occlusion order wrong — strictly better than the prior
+flattening, still incorrect — and `groups_knockout_approx` names it
+rather than hiding it. **The adjacent GWG 16.1 (Knockout) panel still
+shows its crosses**, which is exactly what the counter reports; the
+page and pdfce's own diagnostics now agree.
+
+**★ Knockout was deliberately NOT implemented, and the reason is a
+project-rule-1 save worth recording.** The engineer's own instinct —
+paint each element with a replace-style operator — was checked against
+the spec corpus before being written: `iso32000__s__11.6.4.md` line 269
+flags §11.4.6 as a spec-RAG GAP, naming it *"the only place `f` and `q`
+[shape and opacity] must be treated separately"*. An implementation
+carrying a single premultiplied-alpha channel cannot obviously express
+that separation, so the instinct would have shipped something plausible
+on simple fixtures and wrong on real ones. `pdfce-spec-librarian`
+dispatched instead, for §11.4.6 and §11.5.2/.3, asked explicitly whether
+knockout is representable in pdfce's buffer model at all — **in flight
+as of this filing**, and a real prerequisite, not polish (project rule 1).
+
+**Verification.**
+- **3,778 → 3,780 tests, 0 failures** (+2 net). **★ FLAGGED, NOT
+  RECONCILED:** the dispatch separately states "four tests" were added.
+  This librarian has no shell to run `cargo test -- --list` and confirm
+  either figure; if two of the four are modifications to existing test
+  bodies rather than net-new functions, the arithmetic resolves — not
+  assumed either way, filed as relayed per hard rule 8.
+- The test worth naming by name:
+  `the_outer_blend_mode_does_not_leak_into_the_groups_contents` — without
+  the state reset, a group's first object is blended once going in and
+  again coming out, invisible for `Multiply` against white and glaring
+  for `Screen`. Sabotage run, and reported to fail on exactly that test.
+- fmt, clippy, `check-fmt-excluded`, `check-ui-strings`,
+  `check-shipped-assets`, `check-ledger-numbers` all clean.
+- **Corpus regression check, 300 files.** Buckets IDENTICAL to the
+  immediately-prior run: below-band 71, disclosed-gap 24,
+  disclosed-gap-small 99, unexplained 8, reference-divergence 1 (sum
+  203 of 300). Net ONE PAGE better than this session's own starting
+  baseline (70/24/99/9/1, same sum 203) — no regressions against either
+  comparison point.
+- `cargo tree -p pdfce-core -p pdfce-render`: no GUI dependency —
+  invariant unaffected, this Pass touches `pdfce-render` only.
+
+**Decisions.** New decision **068** (`ARCHITECTURE.md` §12, full text
+there): the page-sized-buffer choice and the graphics-state-reset-at-
+group-entry semantics, both stated once so future group-related work
+does not re-derive them; explicitly does NOT decide knockout
+compositing, left to the spec dispatch in flight.
+
+**Standing rules.** `R180` gains its **sixth instance**, and the first
+where the falsified artefact sits OUTSIDE this repository entirely —
+the published `v0.6.0` GitHub release notes, not a doc comment or
+`--help` string. Full account in *Standing rules*, below; not proposed
+as a new rule. **Still owed, separately from this filing:** a `v0.6.1`
+release correcting the stale release-note sentence — see *Next up*.
+
+**`docs/FEATURES.md`.** New *Implemented* row for non-knockout
+transparency-group compositing (core `[x]`, cli `[x]`, gui `[ ]`); the
+*Planned* transparency-groups row narrowed to name only the remaining
+gap — knockout groups (approximated, counted) and soft-mask groups
+(still unread). Full text: *Implemented*, "Colour, transparency &
+rendering fidelity" section, and *Planned*, in place of the prior
+combined row.
+
+**Ledger effects.** Pass family: **85** (sub-Pass `85.4c` — the ID was
+already reserved in the *Next up* Ghent gap-inventory table; no new
+family, next free stays **92**). Standing rules: **no new rule
+minted** — `R180` gains its **sixth instance** (full text below);
+ceiling stays **R195**, next free **R196**. Decisions: **NEW decision
+068 minted** — ceiling moves **067 → 068**, next free **069**.
+`SESSION_LOG.md` filings move **159 → 160**, which is this one.
+
+---
+
 ### ★★★ `v0.6.0` tagged and released at `3c4c00e` (annotated tag `ca48d6c`) — THIRD release in project history CI-verified green at its tagged commit (`v0.5.2`, `v0.5.3` were the first two); discharges the `abe6c97` caveat immediately below — tag/CI/publish are now DONE, not merely stated as intent — 2026-08-17 (hundred-and-fifty-ninth filing)
 
 **Sourcing.** No shell tool this dispatch (hard rule 8). Every figure
@@ -46093,6 +46209,21 @@ in the "still open" list. Full build record: this file's own
 
 ## Next up
 
+### ★★★ RELEASE HOUSEKEEPING OWED — `v0.6.1` needed to correct a now-stale sentence in the PUBLISHED `v0.6.0` release notes — filed 2026-08-17 (hundred-and-sixtieth filing), `R180` sixth instance
+
+The `v0.6.0` GitHub release, under a heading titled *"Not implemented —
+and now measurable,"* states *"Transparency-group compositing and soft
+masks are not implemented."* `Pass 85.4c` (`0d6f4ac`, same day, later in
+the same operator session) makes half of that sentence false —
+non-knockout transparency-group compositing now ships (Ghent GWG 16.0
+renders clean). Cut `v0.6.1` naming both halves correctly: group
+compositing ships (non-knockout), knockout groups are approximated and
+counted (not correct), soft masks remain unimplemented. Full account:
+`R180`'s sixth-instance entry, *Standing rules*, and the `Pass 85.4c`
+Shipped entry, top of *Shipped*. **No other content is known to be
+owed for `v0.6.1`** — this is a documentation-only release unless
+another Pass ships alongside it.
+
 ### ★★★★ Pass 86.0 — HIGH PRIORITY — **`check-bypass-paths.sh` IS RED AT `HEAD`, PRE-EXISTING, UNFIXED** — the `Pass 71.0` slice-2 OCR sandwich writer bypasses `EditSession` at three sites in `crates/pdfce-core/src/ocr/layer.rs` — filed 2026-08-17 (hundred-and-forty-ninth filing) — **UNSTARTED**
 
 Found as a side effect of `Pass 84.0`'s gate run (verified red both
@@ -46164,7 +46295,7 @@ built for exactly that (a synthetic function-based-shading page is
 sufficient — the Ghent corpus's own type-1 count is zero, per `Pass
 85.0`'s own measurement).
 
-### ★★★★ Pass 85.0–85.5 — **THE GHENT PDF OUTPUT SUITE GAP INVENTORY** — six render-fidelity gaps, ALL MEASURED (not estimated) from pdfce's own `Pass 84.0` diagnostics against `Ghent_PDF-Output-Test-V50_ALL_X4.pdf` (PDF/X-4, 6 pages) — filed 2026-08-17 (hundred-and-forty-ninth filing) — **★ STATUS CORRECTED 2026-08-17 (`Pass 90.0`, hundred-and-fifty-sixth filing): this heading had read "ALL UNSTARTED" three shipped Passes after it stopped being true. Current status: `85.0` shipped, `85.3` shipped, `85.2` shading half shipped/tiling half unstarted, `85.4` disclosure shipped/implementation unstarted (`Pass 90.0`) — see the table below for the re-derived build order.** **★★ FURTHER CORRECTED 2026-08-17 (`Pass 90.1`, hundred-and-fifty-seventh filing): `85.4` is now SPLIT.** Blend modes (eleven separable, `ExtGState /BM`) are SHIPPED; the four non-separable modes are measured-wrong-in-tiny-skia and REFUSED (not a gap this project can close without an upstream fix); transparency-GROUP compositing (isolated/knockout, offscreen buffer) and `/SMask` soft-mask groups remain UNSTARTED and are now this inventory's **single largest remaining gap** — see the row and build order below.
+### ★★★★ Pass 85.0–85.5 — **THE GHENT PDF OUTPUT SUITE GAP INVENTORY** — six render-fidelity gaps, ALL MEASURED (not estimated) from pdfce's own `Pass 84.0` diagnostics against `Ghent_PDF-Output-Test-V50_ALL_X4.pdf` (PDF/X-4, 6 pages) — filed 2026-08-17 (hundred-and-forty-ninth filing) — **★ STATUS CORRECTED 2026-08-17 (`Pass 90.0`, hundred-and-fifty-sixth filing): this heading had read "ALL UNSTARTED" three shipped Passes after it stopped being true. Current status: `85.0` shipped, `85.3` shipped, `85.2` shading half shipped/tiling half unstarted, `85.4` disclosure shipped/implementation unstarted (`Pass 90.0`) — see the table below for the re-derived build order.** **★★ FURTHER CORRECTED 2026-08-17 (`Pass 90.1`, hundred-and-fifty-seventh filing): `85.4` is now SPLIT.** Blend modes (eleven separable, `ExtGState /BM`) are SHIPPED; the four non-separable modes are measured-wrong-in-tiny-skia and REFUSED (not a gap this project can close without an upstream fix); transparency-GROUP compositing (isolated/knockout, offscreen buffer) and `/SMask` soft-mask groups remain UNSTARTED and are now this inventory's **single largest remaining gap** — see the row and build order below. **★★★ CORRECTED AGAIN 2026-08-17 (`Pass 85.4c`, `0d6f4ac`, hundred-and-sixtieth filing): non-knockout transparency-GROUP compositing SHIPS.** A group now composites through a real page-sized offscreen buffer (decision 068). Knockout groups (`/K true`) remain approximated, not correct; `/SMask` soft-mask groups remain unread. See the `85.4c` row and the re-derived build order, both below.
 
 **Origin.** The operator rendered the Ghent suite and reported pdfce
 "a long way off." The Ghent suite is a formal prepress conformance
@@ -46185,7 +46316,7 @@ and deferred-op counts on that file — not estimated.**
 | ~~`85.3`~~ | closes **`Pass 1.1` item 6.4** — `/Separation`/`/DeviceN`/`Lab` IMAGE colour spaces | **10 images missing page 1, 6 page 4, 2 page 5** — stderr: "image colour space /Separation is not supported", "/DeviceN is not supported" | §8.6.6.4/§8.6.6.5; vector fills already work (`separation_to_rgb`/`device_n_to_rgb` are wired to the §7.10 evaluator) — this is the per-pixel image path only — **SHIPPED 2026-08-17, `1e7a0be` (`CalGray`/`CalRGB` came free from the same delegation). See the `Pass 85.3` Shipped entry, top of *Shipped*.** |
 | ~~`85.4a`~~ | blend modes — `ExtGState /BM`, eleven separable modes | `pdfce-render/src/interpret.rs` — **SHIPPED 2026-08-17, `Pass 90.1`, `bd244d9`.** Ghent page 2: 60 of 76 `/BM` invocations now composite exactly. Required a page-backdrop model correction (opaque-white-fill → isolated group over transparent backdrop, §11.4.7) — see the `Pass 90.1` Shipped entry. | §11.3.5, Table 136/137 — **SHIPPED**, see the `Pass 90.1` Shipped entry |
 | `85.4b` | non-separable blend modes — Hue/Saturation/Color/Luminosity | Ghent page 2: 16 of 76 `/BM` invocations (4 modes × 4 swatches) — **REFUSED, not mapped**: tiny-skia 0.11.4 is measured wrong against both ISO 32000-1 and W3C Compositing-1 (up to 107/255 error) — `D:\dev\rag\rust\tiny_skia_0.11_non_separable_blend_modes_wrong_by_up_to_107_255.md`. Not closeable inside pdfce without an upstream tiny-skia fix or a from-scratch implementation of the four HSL formulas. | §11.3.5.3 — refused, see `ARCHITECTURE.md` §12 decision 066 |
-| `85.4c` | transparency GROUPS — isolated/knockout offscreen compositing, `/SMask` soft-mask groups | `pdfce-render/src/interpret.rs` — **`/Group` now READ (`Pass 90.1`), previously not at all.** Ghent page 2: 187 groups flattened as an approximation (each object painted in place, blend/alpha per-object rather than to the group's composited result — wrong wherever backdrop or occlusion order matters), 47 isolated-or-knockout groups counted separately. `/SMask` groups: 36 occurrences (all pages), still ignored. **NO group is composited through a real offscreen buffer in any shell. Now this inventory's SINGLE LARGEST remaining gap — first in the build order below**, ahead of `85.1` (mesh shadings). | clause 11.4–11.6.4 (groups) + §11.6.5.3-adjacent (soft-mask groups); the per-IMAGE `/SMask`/`/Mask` shipped in `Pass 48.1` is unrelated — do not conflate the two `/SMask` meanings when scoping |
+| ~~`85.4c`~~ | transparency GROUPS — isolated/knockout offscreen compositing, `/SMask` soft-mask groups | `pdfce-render/src/interpret.rs` — **non-knockout compositing SHIPPED 2026-08-17, `0d6f4ac`.** A group now renders into its own page-sized offscreen buffer with contents-state reset to initial, composited as a unit with the outer blend mode/alpha (§11.4.5; decision 068). Ghent GWG 16.0 (non-knockout) panel renders CLEAN; `groups_flattened` 187 → 0. **Remaining, NOT closed by this Pass:** knockout groups (`/K true`, §11.4.6) still approximated as ordinary groups — `groups_knockout_approx` (47) names the approximation, GWG 16.1 still shows its crosses; `/SMask` soft-mask groups (36 occurrences, all pages) still entirely unread. Both blocked on the `pdfce-spec-librarian` dispatch for §11.4.6/§11.5.2–.3, in flight — see the `Pass 85.4c` Shipped entry, top of *Shipped*. **Now this inventory's remaining top-priority gap** (soft masks + knockout), ahead of `85.1` (mesh shadings). | clause 11.4–11.6.4 (groups) + §11.6.5.3-adjacent (soft-mask groups); the per-IMAGE `/SMask`/`/Mask` shipped in `Pass 48.1` is unrelated — do not conflate the two `/SMask` meanings when scoping |
 | `85.5` | overprint compositing | patches GWG 1.0, 1.1, 2.0, 3.0, 3.1, 4.0.1, 4.1, 12.0, 19.0, 19.1, 19.2 — most of pages 1 and 4 | **§8.6.7 says "if overprinting is not supported, the value of the overprint parameter shall be ignored" — pdfce is CONFORMANT TODAY.** Implementing it means compositing into a CMYK buffer; lowest priority, architectural, and partly gated on `iccce` (see `Backlog`, "Colour management (`iccce` coordination)", decision 064) |
 
 **Suggested build order — ★ RE-DERIVED 2026-08-17 (`Pass 90.0`,
@@ -46209,21 +46340,32 @@ the largest measured gap in the file — the 113/36 combined figure the
 prior order was ranked on is now known to be almost entirely `85.4c`
 (soft masks, 36, plus most occlusion-order-sensitive `/BM` cases),
 not `85.4a`/`85.4b` (60+16, now resolved one way or the other).
-**Current order:**
-`85.4c` (transparency-GROUP compositing + soft masks, **now first** —
-largest measured REMAINING gap, needs an offscreen-buffer
-architecture) → `85.1` (mesh shadings, **second**, unchanged — spec-
-librarian dispatch owed first) → `/Separation /All` re-check (a
+**★★★ RE-DERIVED A THIRD TIME 2026-08-17 (`Pass 85.4c`, `0d6f4ac`,
+hundred-and-sixtieth filing), REPLACING the order below rather than
+appending to it, same discipline as both prior replacements.** `85.4c`
+shipped its non-knockout half; what remains of it — knockout groups
+(§11.4.6, approximated not correct) and soft-mask groups (unread) — is
+now a NARROWER item than the whole-group-compositing gap the prior
+order was ranked on, and both halves are BLOCKED on the same
+`pdfce-spec-librarian` dispatch (§11.4.6/§11.5.2–.3), in flight as of
+this filing. **Current order:**
+`85.4c` remainder (soft masks + knockout groups, **still first** —
+blocked on the spec dispatch, so effectively paused until it lands,
+but nothing else in this table displaces it once it does) → `85.1`
+(mesh shadings, **second**, unchanged — its own, separate spec-
+librarian dispatch owed) → `/Separation /All` re-check (a
 **question**, not a Pass — see the secondary-finding bullet below) →
 `85.2` slice 2 (tiling patterns, **demoted**, unchanged — measured
 zero Ghent occurrences) → `85.5` (overprint, unchanged, last, gated on
 `iccce`). **Still an ordering suggestion, not a dependency graph** —
-none of `85.1`/`85.2`/`85.4c`/`85.5` depend on each other. **Four of
+none of `85.1`/`85.2`/`85.4c`/`85.5` depend on each other. **Five of
 seven line items now fully shipped or closed** (`85.0`, `85.2` shading
-half, `85.3`, `85.4a`); **`85.4b` is CLOSED-REFUSED** (not a pdfce gap
-to schedule — an upstream tiny-skia defect); **`85.2` tiling half,
-`85.1`, `85.4c`, `85.5` remain unstarted**, with `85.4c` now the single
-highest-priority item in this table.
+half, `85.3`, `85.4a`, `85.4c` non-knockout half); **`85.4b` is
+CLOSED-REFUSED** (not a pdfce gap to schedule — an upstream tiny-skia
+defect); **`85.2` tiling half, `85.1`, `85.4c` remainder, `85.5` remain
+unstarted**, with `85.4c`'s remainder (soft masks first, then
+knockout) the single highest-priority item in this table, both
+sub-items gated on the same not-yet-landed spec dispatch.
 
 **★ Two secondary findings from the same measurement run, filed here
 rather than as separate Passes because neither is a fidelity gap:**
@@ -46264,6 +46406,15 @@ types 1–3, 45 `SH` labels, 10 `AMB` items — and `85.0` shipped on it
 either way here. Mesh types 4–7 (`85.1`) remain uningested by the spec
 RAG. `85.5` (overprint) still needs the acrobat-librarian dispatch
 before it can start, unchanged.
+
+**★ A THIRD prerequisite dispatch, in flight as of 2026-08-17
+(`Pass 85.4c`, hundred-and-sixtieth filing) — `pdfce-spec-librarian` for
+§11.4.6 (knockout groups) and §11.5.2/.3, asked explicitly whether
+knockout compositing is representable in pdfce's single premultiplied-
+alpha buffer model at all.** Not yet landed as of this filing. Blocks
+BOTH remaining halves of `85.4c` (soft-mask groups and knockout groups)
+— see that Pass's own Shipped entry, top of *Shipped*, and the `85.4c`
+row above.
 
 **Decision 063** (`ARCHITECTURE.md` §12, this filing) records why these
 are filed as a NEW family rather than inside the existing
@@ -66294,6 +66445,38 @@ and
   caught, the same method as every prior instance. Full record:
   `ROADMAP.md`'s `9463afa` `Pass 90.2` *Shipped* entry, top of
   *Shipped*.**
+  *Instance 6 (`Pass 85.4c`, `0d6f4ac`, 2026-08-17, hundred-and-sixtieth
+  filing — the first instance where the falsified artefact sits OUTSIDE
+  the repository entirely.* The `v0.6.0` GitHub release notes (published
+  at `3c4c00e`, hundred-and-fifty-ninth filing), under a heading titled
+  *"Not implemented — and now measurable,"* state: *"Transparency-group
+  compositing and soft masks are not implemented."* `Pass 85.4c`, shipped
+  roughly an hour later in the same operator session, makes half of that
+  sentence false — non-knockout transparency-group compositing now
+  ships. **Distinct from every prior instance in the ARTEFACT it
+  falsifies, not merely in timing.** Instances 1–5 all falsified
+  something INSIDE the repository — a doc comment, a `--help` string, a
+  test assertion, a disclosed counter's own prose — reachable and
+  correctable by a commit in this same git history, append-only in the
+  ordinary sense a `SESSION_LOG.md` amendment footer is. A GitHub
+  Release's description is neither: rewriting it in place would be a
+  silent edit to a document readers have already cited, and it is not
+  under this repository's own append-only convention at all — it lives
+  in GitHub's release-object storage, not a tracked file this project
+  controls. **The engineer's own intended remedy — cut `v0.6.1`
+  specifically to correct the claim — is the right shape for exactly
+  this reason**: an additively-published new version supersedes the
+  stale one, the same relationship a dated amendment footer has to a
+  stale `SESSION_LOG.md` entry, without silently editing a document
+  already distributed under a tag. **Recorded here, not fixed here** —
+  this librarian has no path to GitHub's release UI; the correction
+  belongs in the `v0.6.1` release notes themselves, flagged as owed in
+  *Next up* until that release ships (see the `Pass 85.4c` Shipped
+  entry, top of *Shipped*). **Not proposed as a new rule**: the
+  underlying shape — an accurate claim, falsified by the very capability
+  it described as missing — is `R180`'s, unchanged; only the CARRIER of
+  the falsified claim is new, recorded as a boundary case for whoever
+  next corrects a claim that has already left the repository.*
 
 - **R181 — A disclosure COUNT must be computed from the same predicate
   the write path it describes actually uses, never a proxy predicate

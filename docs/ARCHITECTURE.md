@@ -1126,18 +1126,66 @@ D:\Dev\pdfce\
                                    refusal instantiates; full write-up
                                    at `D:\dev\rag\rust\tiny_skia_0.11_non_separable_blend_modes_wrong_by_up_to_107_255.md`.
                                    `/Group` is now read on form
-                                   XObjects (previously not at all):
-                                   flattened as an approximation (187
-                                   groups, Ghent page 2 — each object
-                                   painted in place, blend/alpha applied
-                                   per-object rather than to the
-                                   group's composited result) with
-                                   isolated/knockout groups counted
-                                   separately (47) but not yet
-                                   composited through a real offscreen
-                                   buffer — that remains this project's
-                                   top-priority Ghent render-fidelity
-                                   gap (`ROADMAP.md` *Next up*).
+                                   XObjects (previously not at all).
+                                   **Transparency GROUP compositing
+                                   (`Pass 85.4c`, `0d6f4ac`, 2026-08-17;
+                                   §12 decision 068):** a group now
+                                   renders into its OWN page-sized
+                                   offscreen buffer, with the graphics
+                                   state RESET to initial (`Normal`
+                                   blend, alpha 1.0) for the group's
+                                   contents — the outer blend mode/
+                                   constant alpha/soft mask belong to
+                                   the group's RESULT once composited
+                                   (§11.4.5), not to the objects inside
+                                   it — then composites as a unit via
+                                   `Pixmap::draw_pixmap` carrying the
+                                   outer blend mode and alpha.
+                                   **Page-sized rather than BBox-sized,
+                                   deliberately** (decision 068): the
+                                   contents draw under the SAME CTM as
+                                   the page, so no per-group coordinate
+                                   translation is threaded through paint
+                                   sites or the clip mask; cost is ~4
+                                   bytes/pixel/nesting-level, and a
+                                   misalignment bug would read as a
+                                   visible rendering artefact rather
+                                   than fail silently. `groups_composited`
+                                   and `groups_knockout_approx` are
+                                   counted AND PRINTED on `render-page`'s
+                                   stable line; `groups_flattened` now
+                                   survives only as the
+                                   allocation-failure fallback. Ghent
+                                   GWG 16.0 (non-knockout blend-mode
+                                   panel) renders CLEAN on this fix;
+                                   `groups_flattened` on that file
+                                   187 → 0. **NOT correctly composited:
+                                   `/K` knockout groups** (§11.4.6 —
+                                   each element should composite against
+                                   the group's INITIAL backdrop, not the
+                                   accumulated result; pdfce composites
+                                   them as ordinary groups today,
+                                   approximated and counted via
+                                   `groups_knockout_approx` (47) rather
+                                   than silently wrong — GWG 16.1 still
+                                   shows its crosses, matching the
+                                   counter). `/SMask` soft-mask groups
+                                   (36 occurrences, Ghent) remain
+                                   entirely unread. Both are blocked on
+                                   a `pdfce-spec-librarian` dispatch for
+                                   §11.4.6/§11.5.2–.3, in flight as of
+                                   this filing — deliberately not
+                                   implemented from training-data recall
+                                   (project rule 1), after the spec
+                                   corpus itself flagged §11.4.6 as a GAP
+                                   naming shape/opacity separation as a
+                                   property a single-alpha buffer model
+                                   may not be able to represent at all.
+                                   Now this project's top-priority Ghent
+                                   render-fidelity gap, narrowed from
+                                   "all group compositing" to "knockout
+                                   groups + soft masks" (`ROADMAP.md`
+                                   *Next up*).
     pdfce-print\                 <- Printing: job planning + spooling. Shipped with
                                    `Pass 55.2` (2026-08-10) but never documented in this
                                    tree until the eighty-fifth filing — a filing gap this
@@ -21771,3 +21819,61 @@ already covers this shape and gains its sixth instance here — an
 existing rule with new evidence, not a new rule, per this project's
 own two-occurrence-plus-review bar for promotion. **Ceiling moves
 066 → 067; next free 068.**
+
+### 2026-08-17 (hundred-and-sixtieth filing) — decision 068: **TRANSPARENCY GROUPS COMPOSITE INTO A PAGE-SIZED OFFSCREEN BUFFER, NOT A BBOX-SIZED ONE, AND THE CONTENTS' GRAPHICS STATE RESETS TO INITIAL AT GROUP ENTRY**
+
+**Status: DECIDED.** `Pass 85.4c` (`0d6f4ac`) gives every PDF
+transparency group (`/Group` on a form XObject, ISO 32000-1
+§11.4–§11.6.4) its own offscreen buffer instead of painting its
+contents straight onto the page. Two sub-decisions, both stated once
+here so future group-related work does not re-derive them.
+
+**1. The buffer is PAGE-sized, not BBox-sized.** A BBox-sized buffer
+would need its own coordinate origin, which means every paint site
+inside the group AND the clip-mask machinery would need to carry a
+translation from group-local space to page space — a second coordinate
+system threaded through code that currently assumes exactly one. A
+page-sized buffer instead lets the group's contents paint under the
+EXACT same CTM as the page itself: zero coordinate change, at a cost of
+roughly 4 bytes/pixel per nesting level of groups. The trade is
+deliberate: at ordinary PDF nesting depths (rarely more than two or
+three groups deep in practice) that memory cost is negligible against
+the coordinate-system complexity avoided, and — the sharper argument —
+a misalignment bug in the BBox-sized alternative would look exactly
+like an ordinary rendering defect (content in the wrong place) rather
+than fail loudly. The page-sized choice removes an entire class of
+off-by-one/mistranslation bug at a bounded, predictable memory cost,
+rather than trading a smaller footprint for a harder-to-diagnose defect
+class.
+
+**2. The group's contents render with the graphics state RESET to
+initial** (`Normal` blend mode, alpha 1.0) rather than inheriting the
+state in force at the `Do` operator that invoked the group. §11.4.5
+assigns the blend mode/constant alpha/soft mask in force at `Do` to the
+GROUP'S RESULT once composited — not to the individual objects painted
+inside it. Carrying the outer state into the contents as well
+double-applies it (once per object while painting, again when the
+group composites) — a defect that is invisible for `Multiply` against
+a white backdrop and glaring for `Screen`, pinned by the new test
+`the_outer_blend_mode_does_not_leak_into_the_groups_contents`.
+
+**What this decision does NOT decide.** Knockout-group compositing
+(§11.4.6 — each element composites against the group's INITIAL
+backdrop, not the accumulated result) is explicitly not implemented
+here — `groups_knockout_approx` counts groups approximated as ordinary
+(non-knockout) groups, not correctly composited. A `pdfce-spec-
+librarian` dispatch for §11.4.6 and §11.5.2/.3 is in flight, checking
+whether knockout is representable in pdfce's single premultiplied-alpha
+buffer model at all before any implementation is attempted (project
+rule 1) — `iso32000__s__11.6.4.md` line 269 already flags §11.4.6 as a
+spec-RAG GAP naming shape/opacity separation as the one place a
+single-alpha model may not suffice. Soft-mask groups are similarly out
+of scope for this decision. See the `Pass 85.4c` `ROADMAP.md` Shipped
+entry for the full measurement (Ghent GWG 16.0 clean, GWG 16.1 still
+crossed) and `ARCHITECTURE.md` §3's `pdfce-render\interpret.rs` body
+entry for the implementation description.
+
+**No standing rule minted.** This is an architectural/rendering-model
+decision, not a finding about pdfce's own tooling or gates — same
+disposition as decisions 063/064/066. **Ceiling moves 067 → 068; next
+free 069.**
