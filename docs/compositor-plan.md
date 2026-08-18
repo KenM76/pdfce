@@ -352,9 +352,22 @@ an ISO TC171 participant who went looking. Headlines:
   including a second ambiguity nobody had noticed — **which OutputIntent to
   use when the array has more than one entry** (MuPDF takes `[0]` ignoring
   `/S`; Poppler refuses to act at all).
-- **`moxcms`** (BSD-3-Clause OR Apache-2.0, pure Rust, ≤16 inks) is the ICC
-  candidate that clears the wasm32 gate `lcms2` fails. **Not added** — rule 13
-  needs a `PRIOR_ART.md` entry first.
+- **★ THE ICC HOP IS `iccce`'S — corrected 2026-08-18.** This bullet named
+  `moxcms` as the ICC candidate. **`ARCHITECTURE.md` decision 064 already
+  assigned colour CONVERSION to `iccce`** (the operator's sibling MIT project,
+  which names pdfce as its first consumer), and recommending a third-party CMM
+  against it was a call made without reading the record. `iccce` already
+  ships what Stage C needs: `Chain::with_destination(&src, Destination::None,
+  intent)`, whose built-in sRGB destination is **constructed from published
+  constants** (BT.709-6, W3C transfer constants, Bradford to D50 per
+  ICC.1:2022 Annex E.3) — **no shipped `.icc`, so no redistribution
+  question**. Verified by reading `iccce-cmm/src/transform.rs`, not its prose.
+- **Two things Stage C must carry from that**, both in
+  `docs/collapse-model-survey.md` §7: `Destination::None` is an **assertion**,
+  not `Option::None` — a declared-but-unparseable output intent is a
+  **refusal to propagate**, never a silent fallback; and the conversion costs
+  **~1.4 Mpix/s ≈ 6 s/page against pdfce's ~0.6 s render**, so the collapse
+  cannot be an unconditional per-frame step.
 
 ### Out of scope for 97.x
 
@@ -410,9 +423,16 @@ cannot cross the **wasm32 CI gate** that `pdfce-core` and `pdfce-render` are
 held to (`.github/workflows`, `cargo check --target wasm32-unknown-unknown`),
 and that gate is not negotiable machinery — it is the enforcement of the
 web-fork invariant. The OCR engine decision turned on exactly this constraint.
-If ICC handling needs a library, the candidates are **pure Rust** (`qcms`,
-`moxcms`) and each still needs a licence classification under rule 13 before
-it enters a `Cargo.toml`.
+
+**★ And the follow-on recommendation was ALSO wrong, which is the part worth
+keeping.** This paragraph originally continued *"if ICC handling needs a
+library, the candidates are pure Rust (`qcms`, `moxcms`)"*. **There is no
+candidate slot to fill**: `ARCHITECTURE.md` decision 064 assigns colour
+conversion to **`iccce`**, and that decision predates this document by a day.
+Rejecting the wrong crate for the right reason and then proposing a
+replacement is a *narrower* failure than adopting `lcms2` would have been, and
+it has the same root — the record was not read. See
+`docs/collapse-model-survey.md` §7.
 
 **Rejected — `vello`.** GPU, via `wgpu`. `pdfce-render` may not gain a
 windowing or GPU surface (`ARCHITECTURE.md` §3, project rule 2). This is

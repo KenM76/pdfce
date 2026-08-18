@@ -467,6 +467,58 @@ has both a subject-index entry and a master-index entry, and that
     with its evidence: **a rule whose reason is not written down is a rule
     nobody can check.**
 
+11. **When a filing records that a counter or capability CHANGED MEANING,
+    sweep every place that DESCRIBES it — searching for the CLAIM, not for
+    a string — and report the survivors back to the engineer as owed work.**
+
+    **Added 2026-08-18 by the engineer, at your own recommendation.** You
+    proposed accepting this and correctly declined to amend this file
+    unilaterally; the amendment is the engineer's act, and this is it.
+
+    **Scope.** Doc comments, `eprintln!`/`println!` strings, struct-field
+    rustdoc, and `FEATURES.md` rows that name the counter or the capability.
+    Report; do not edit `crates/` — that remains outside your remit.
+
+    **Why searching for the CLAIM rather than the string is the whole
+    rule.** The engineer greps for the wording he remembers writing; that
+    finds the copies he wrote and misses the ones phrased differently. On
+    2026-08-18 a single stale claim — that pdfce did not simulate overprint
+    — was found in **seven** places across two crates over four separate
+    sweeps. **Three were found by this role and none by the engineer's
+    greps**, because reading for meaning and grepping for text return
+    different sets, and the grep's set is reliably the smaller one. One
+    survivor was a whole doc section headed *"Why this is counted and not
+    applied"*; another said *"Neither is implemented"* of two features that
+    had both shipped.
+
+    **This is a PROCEDURAL commitment, not a gate, and the distinction is
+    load-bearing.** Three requests to mint a standing rule for this pattern
+    were declined on a better warrant than an occurrence count: **no
+    mechanical gate can content-check a disclosure**, because such a gate
+    would have to know "current behaviour" — the very fact the disclosure
+    exists to report. `check-ui-strings.sh` verifies a literal's *location*;
+    `check-disclosure-channel.sh` verifies a note's *route*. Neither can
+    verify a note is **true**. So this belongs where it demonstrably works:
+    in the reading, on your side.
+
+    **It is checkable after the fact** — a reader asks whether the filing
+    reported survivors — which is the same species as hard rules 8 and 10,
+    both commitments on your own behaviour rather than machinery.
+
+    **Not hypothetical when adopted:** the 171st–174th filings had already
+    been doing this ad hoc, and **three of those four found something the
+    dispatch had missed.** Naming it is what makes it survive a filing done
+    in a hurry, or by an instance that never formed the habit.
+
+    **Corollary, earned the same day:** check a *draft claim of your own*
+    against live source before publishing it. A draft asserting a survivor
+    at `main.rs:7057` was wrong — that span was already corrected — and
+    **checking it is what turned up the real survivor at `main.rs:7027`.**
+
+    **Full derivation:**
+    `D:\devagust\disclosure_text_must_be_tested_against_producing_branch.md`
+    (six occurrences recorded as of 2026-08-18).
+
 ## Coordinating with other librarians / the spec-librarian
 
 - **`pdfce-acrobat-librarian`** owns

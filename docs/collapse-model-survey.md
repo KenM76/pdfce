@@ -331,25 +331,96 @@ established from two directions.**
 
 ---
 
-## §7 — Dependency note: the ICC hop, and a correction to earlier advice
+## §7 — ★ THE ICC HOP IS `iccce`'S, AND THIS SECTION WAS WRONG WHEN FIRST WRITTEN
 
-**`moxcms`** — <https://github.com/awxkee/moxcms> — **BSD-3-Clause OR
-Apache-2.0** (permissive; `LEGAL.md` §6.1 clean), **pure Rust, no C**,
-supports *"almost any to any Display Class ICC profiles up to 16 inks"*
-including CMYK⇄RGB and CMYK⇄Lab.
+**CORRECTED 2026-08-18, after the operator said "iccce has been updated, use
+the latest version."** This section originally recommended **`moxcms`**
+(BSD-3-Clause OR Apache-2.0, pure Rust, ≤16 inks) as *"the candidate of
+record"* for the final ICC hop, and the librarian filed a matching
+`docs/PRIOR_ART.md` entry. **Both were wrong, and not marginally.**
 
-**It clears the wasm32 gate that rules out `lcms2`.** `lcms2` is Rust bindings
-to the **C** Little-CMS and cannot cross into the web fork —
-`docs/compositor-plan.md` §6 records that rejection; this is the replacement
-candidate.
+**`ARCHITECTURE.md` decision 064 (2026-08-17) already assigns colour
+CONVERSION to `iccce`** — the operator's own from-scratch MIT colour-management
+project at `D:\Dev\iccce\`, whose README names pdfce as its first consumer:
 
-**NOT ADDED.** Rule 13 requires the licence classification (done above: dual
-permissive) **and** a `docs/PRIOR_ART.md` entry before it enters any
-`Cargo.toml`, and `THIRD_PARTY_LICENSES.md` must be regenerated via
-`cargo-about` when it does. Recorded here as the candidate of record for
-`Pass 97.2` and for the separate `3_GWG130` ICC work.
+> pdfce owns **COMPOSITING** (overprint, blend modes, transparency groups, and
+> what a PDF's colour components mean); `iccce` owns **CONVERSION** (profile
+> parsing, transform construction, rendering intents, ΔE).
 
----
+A third-party CMM crate is not a gap to fill — **the boundary is decided, and
+recommending a competitor to it was a decision made without reading the
+record.** Root cause on the engineer's side: `CLAUDE.md` requires reading
+`docs/ARCHITECTURE.md` every session; it was not read this session, and the
+research brief that produced the `moxcms` recommendation never mentioned
+`iccce`, so the researcher could not have known.
+
+### What `iccce` already provides — verified by reading its source, not its prose
+
+`crates/iccce-cmm/src/transform.rs`:
+
+```rust
+Chain::with_destination(&src, Destination::None, intent)   // line 670
+pub enum Destination<'a>                                    // line 133
+pub enum DestinationProvenance { BuiltInSrgb, .. }          // lines 168–172
+pub fn destination_provenance(&self) -> DestinationProvenance   // line 877
+```
+
+Tests present: `builtin_srgb_destination.rs`, **`builtin_srgb_from_cmyk.rs`**
+(a LUT-based CMYK press profile into the constructed destination — the PCS
+handed over is **Lab, not XYZ**, so it genuinely exercises unification),
+`builtin_srgb_a2b_only_source.rs`.
+
+**The built-in sRGB destination is constructed from published constants** —
+ITU-R BT.709-6 primaries, W3C transfer-function constants, Bradford-adapted
+to the D50 PCS per ICC.1:2022 Annex E.3. **There is no shipped `.icc`**, so
+`tools/check-shipped-assets.py` has nothing to refuse and `LEGAL.md` §6.1's
+profile-redistribution objection does not arise.
+
+### ★★ THE TRAP, and it is rule-4-shaped
+
+`Destination::None` is **not** `Option::None`. It is a caller **assertion**
+that you looked and there genuinely is no destination. The chain then records
+`DestinationProvenance::BuiltInSrgb`, whose own disclosure reads:
+
+> *"…This is NOT the document's declared output intent — if one was declared,
+> it was not passed to iccce."*
+
+**A destination that WAS declared and failed to parse must never reach
+`Destination::None`.** That is a named refusal to propagate, not a fallback to
+take — a PDF/X page rendered to a substituted sRGB while its declared print
+condition was silently dropped would look completely normal. Surface
+`destination_provenance()` in the export log and the substitution can never be
+invisible.
+
+### The cost, which is a Stage C design input and not a footnote
+
+iccce measures its grid evaluation at **~1.4 Mpix/s**, and states plainly that
+a narrower `u8` buffer surface would fix the **memory** (268 MB → 67 MB in,
+201 MB → 25 MB out at 300 DPI) and **do nothing for the time**, because the
+cost is per pixel regardless of how the pixel arrived.
+
+⇒ **~6 s/page against pdfce's ~0.6 s render — roughly 10×.** So the collapse
+cannot be an unconditional per-frame step in an interactive viewer. Options,
+none chosen yet: collapse only on export; cache the converted page; or engage
+it only for pages that actually use overprint or a declared output intent
+(§3.4's scope guard, which already exists for a different reason). iccce has
+committed to answering *"is the grid evaluation inherently this cost?"* **with
+a measurement** when its Pass 6 optimisation work reopens.
+
+### `lcms2` is still rejected, for the same reason as before
+
+C bindings; cannot cross the **wasm32** gate `pdfce-core`/`pdfce-render` are
+held to. **`iccce` gates `wasm32` in its own CI as of 2026-08-17** — build over
+all four library crates, *plus* a separate job asserting every crate in
+`cargo tree` is one of theirs. (Worth stealing: their first version matched
+`^iccce-` and an injection test found a registry crate named `iccce-evil`
+would have passed; the pattern now requires the parenthesised path `cargo tree`
+renders for a path dependency. **Name-based trust is what a typosquat
+exploits.**)
+
+**Nothing is added to any `Cargo.toml` yet, and that is deliberate** — the
+compositor (`Pass 97.0`/`97.1`) has to exist before there is anything to
+convert. A dependency with no caller is the `R151` shape.
 
 ## §8 — Validation corpus
 

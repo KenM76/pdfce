@@ -298,7 +298,7 @@ into a *document* only — NOT bundling with an application.
 
 | Crate | License | Verdict | Why |
 |---|---|---|---|
-| `moxcms` | BSD-3-Clause OR Apache-2.0 | **candidate, not adopted** — recorded 2026-08-18 for `Pass 97.2` and the separate `3_GWG130` ICC work | Pure Rust, no C. Supports "almost any to any Display Class ICC profiles up to 16 inks," including CMYK⇄RGB and CMYK⇄Lab — clears the wasm32 gate the alternative below fails. Sourcing: `docs/collapse-model-survey.md` §7. |
+| `moxcms` | BSD-3-Clause OR Apache-2.0 | **★ WITHDRAWN 2026-08-18, same day it was recorded — NOT a candidate** | Recorded here for `Pass 97.2` before `ARCHITECTURE.md` **decision 064** (2026-08-17) had been read. That decision assigns colour CONVERSION to **`iccce`**, so there is no candidate slot: `iccce` already ships `Chain::with_destination(&src, Destination::None, intent)` with a built-in sRGB destination **constructed from published constants** (BT.709-6, W3C transfer constants, Bradford to D50 per ICC.1:2022 Annex E.3) — no shipped `.icc`, no redistribution question. Kept as a row rather than deleted so the next session does not re-propose it: the technical assessment (pure Rust, no C, ≤16 inks, clears wasm32) was correct and irrelevant. Sourcing and the full correction: `docs/collapse-model-survey.md` §7. |
 | `lcms2` | MIT (Rust bindings) around **C** Little-CMS | **rejected for `pdfce-core`/`pdfce-render`** | Rust bindings to a C library — cannot cross the wasm32 gate, same category of rejection as `ring` above. `docs/compositor-plan.md` §6 records this rejection first; `moxcms` is recorded here as the replacement candidate. Not added to the table as an "avoid" row because it was never a live candidate for the core crates, only ever considered for the `iccce` sibling project (whose own boundary is `ARCHITECTURE.md` §12 decision 064 — `iccce` owns ICC conversion, pdfce owns compositing). |
 
 **Not yet added to any `Cargo.toml`.** Rule 13 requires this
@@ -525,3 +525,25 @@ the same way, in minutes, whenever they next matter.
   classification only, per rule 13. Sourcing: `docs/
   collapse-model-survey.md` §7, itself commissioned to answer
   `docs/compositor-plan.md` §4 Stage C.
+- **★ 2026-08-18, LATER THE SAME DAY — the entry immediately above is
+  WITHDRAWN.** The operator said *"iccce has been updated, please use the
+  latest version"*, which surfaced that **`ARCHITECTURE.md` decision 064
+  (2026-08-17) had already assigned colour CONVERSION to `iccce`** — the
+  sibling MIT project at `D:\Dev\iccce\` whose README names pdfce as its
+  first consumer. There was never a candidate slot for a third-party CMM.
+  `iccce` already ships the exact call Stage C needs,
+  `Chain::with_destination(&src, Destination::None, intent)`, verified by
+  reading `crates/iccce-cmm/src/transform.rs` (lines 133/168/670/877) and
+  its `builtin_srgb_from_cmyk.rs` test, **not** by trusting its prose.
+  - **Root cause, stated because it is the reusable part:** `CLAUDE.md`
+    requires reading `docs/ARCHITECTURE.md` every session, and it was not
+    read. The research brief that produced the `moxcms` recommendation
+    never mentioned `iccce`, so the researcher could not have known — **a
+    subagent cannot check a constraint the dispatch omits.**
+  - The `moxcms` row is **kept, marked withdrawn**, rather than deleted:
+    its technical assessment was correct and irrelevant, and a deleted row
+    invites the same proposal next time.
+  - `lcms2`'s rejection is **unaffected** — still a C binding, still
+    cannot cross wasm32. `iccce` now gates `wasm32` in its own CI
+    (2026-08-17) *and* asserts every crate in its `cargo tree` is one of
+    theirs, so adopting it does not import a supply-chain surface.
