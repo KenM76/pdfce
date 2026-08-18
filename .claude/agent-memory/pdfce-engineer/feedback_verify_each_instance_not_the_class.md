@@ -28,14 +28,46 @@ made twice: the first fix accepted `★ ` because `★ ` was the spelling that
 had been seen, and `★★ ` stayed invisible for another eight months. Repairing
 the instance in front of you is not repairing the class.
 
+**★ FIVE INSTANCES IN ONE SESSION (2026-08-18), same author, same day.** The
+count is the point — this is not an occasional slip, it is the default
+failure mode of fixing things:
+
+1. `PageNotRecordable` verified by running it; `DisplayListStale`, twelve
+   lines away in the same commit, shipped broken.
+2. The 8.5× headroom claim corrected in `display_list.rs`; missed in
+   `guard_probe.rs`, written in the same commit, in the same hour — **by the
+   very harness whose own run had disproved it.**
+3. The ledger gate's star anchor, fixed once to accept `★`, still blind to
+   `★★` — hiding a real duplicate Pass number for months.
+4. **A gate I wrote to catch a stale count read exactly one file** — the one
+   I happened to be editing — and went green while the front door of the same
+   directory carried the stale count ten lines away.
+5. The widened gate's first run then found a **fourth** stale count *inside
+   the file I had already fixed an hour earlier*. Four existed; I had
+   corrected one.
+
+**Four of the five were found by somebody else's sweep or by a widened
+instrument. None was found by me re-reading my own work.** That is the
+argument for gates over care, and it is now a data point rather than an
+opinion.
+
+Instance 4 is the one to remember: **the instrument inherited the bug it was
+built to catch**, because its scope was set by whatever was in front of me
+while I wrote it.
+
 **How to apply:**
 - Ask *"how many of these did I just create?"* before declaring an oracle
   discharged. Two is enough for this to bite.
+- **When writing a gate, set its scope from the CLASS, never from the
+  instance that prompted it.** If the defect was in one file, the gate reads
+  the directory. If it was in one spelling, the gate accepts all of them. The
+  prompting instance is the least interesting member of the set.
 - Prefer a **gate over a habit** when the class is syntactic. Reading each
   message aloud does not scale; `tools/check-string-gaps.sh` does, and it
   found 44 more the same afternoon.
-- When a gate is anchored on a pattern, make the pattern accept every
-  spelling of the thing it matches, not the one in front of you today.
+- **Run the new gate before fixing the thing that prompted it**, so its first
+  output is the full census. Both gates written this day found more than the
+  one defect that motivated them.
 
 Related: [[windows-paths-need-literal-edits]] (the mechanism that eats the
 backslash), [[gates-i-owe-myself]] (the gates I skip), and
