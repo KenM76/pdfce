@@ -3531,6 +3531,62 @@ pub fn spool(
     Err(PrintError::Unsupported)
 }
 
+/// Non-Windows twin of [`spool_with_config`].
+///
+/// # Why this exists, and why its absence was a real defect rather than a
+/// tidiness complaint
+///
+/// **Reported by the `pdfceGUI` session, 2026-08-18**, as a heads-up rather
+/// than a blocker — and it was right that it is not a blocker and right that
+/// it mattered. Every *query* added by the 2026-08-18 print filing shipped
+/// with a `cfg(not(windows))` twin (`printer_forms`, `printer_configuration`,
+/// `edit_printer_configuration`, `printer_caps_for`), and [`spool`] has had
+/// one since it was written. **The two new spool entry points did not**, so
+/// the property held everywhere except the two functions a shell actually
+/// calls to print.
+///
+/// The consequence is specific: `pdfceGUI` deliberately moved its single
+/// spool call from [`spool`] to [`spool_with_config`] — one call site rather
+/// than two branches, because *"a shell that chose between two spool
+/// functions would have two paths to the one irreversible operation in the
+/// application and the rarer one would be the one nobody drove."* That is a
+/// good reason, and it silently made their only print path Windows-only.
+///
+/// This is the same shape as commit `ea5159e` earlier the same day, where
+/// `cmd_print` called four `#[cfg(windows)]` callees while itself ungated:
+/// **Windows stayed green while the platform CI actually builds stopped
+/// compiling.** A stub is how this crate has always prevented that.
+#[cfg(not(windows))]
+pub fn spool_with_config(
+    _printer: &str,
+    _pages: &[PageBitmap],
+    _dry_run: DryRun,
+    _output: Option<&std::path::Path>,
+    _settings: DeviceSettings,
+    _first_page_pt: (f64, f64),
+    _config: Option<&PrinterConfiguration>,
+) -> Result<SpoolReport, PrintError> {
+    Err(PrintError::Unsupported)
+}
+
+/// Non-Windows twin of [`spool_sheets`].
+///
+/// Same rationale as [`spool_with_config`] above — see that doc comment for
+/// why the gap mattered. This is the per-sheet entry point, so a shell that
+/// prints a mixed-size job reaches it rather than [`spool_with_config`], and
+/// it needs the twin for the same reason.
+#[cfg(not(windows))]
+pub fn spool_sheets(
+    _printer: &str,
+    _sheets: &[Sheet<'_>],
+    _dry_run: DryRun,
+    _output: Option<&std::path::Path>,
+    _settings: DeviceSettings,
+    _config: Option<&PrinterConfiguration>,
+) -> Result<SpoolReport, PrintError> {
+    Err(PrintError::Unsupported)
+}
+
 /// The Windows-only half of the settings path, tested WITHOUT a device.
 ///
 /// # Why these tests are worth having even though a printer is not
