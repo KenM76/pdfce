@@ -406,9 +406,37 @@ Carried forward from `NEXT_SESSION.md` §2, unchanged and still unclaimed:
    `Ghent_PDF-Output-Test-V50_ALL_REFERENCE.pdf`, in the same ZIP, with texts
    in Registration so they appear in every separation. pdfce is not using it
    as an oracle and should. This is the one that bears on the 8 UNRESOLVED.
-3. **`/Indexed` over `/DeviceCMYK`:** colorants must be read from the **base**
-   space (§8.6.6.3). Reading them off `/Indexed` yields none. Worth a grep —
-   `GWG010` passes and may be passing for the wrong reason.
+3. **`/Indexed` colorants — MEASURED AND CONFIRMED, 2026-08-18. This is a live
+   defect, not a suspicion.** Colorants must be read from the **base** space
+   (§8.6.6.3). `overprint::classify` has no `Indexed` arm, so an `/Indexed`
+   space falls to `_ => SourceKind::OtherProcess` and its base's colorant list
+   is invisible to Table 149. Extracted from the corpus:
+
+   ```
+   1_GWG190:  /Indexed [/DeviceN [/Cyan]              /DeviceCMYK ...] 255 <lookup>
+   1_GWG190:  /Indexed [/DeviceN [/Cyan /Yellow /Black] /DeviceCMYK ...] 255 <lookup>
+   2_GWG020:  /Indexed /DeviceCMYK 255 <lookup>
+   ```
+
+   The first two **are** GWG190's documented discriminator — the a/b pair's
+   DeviceN **omits** the backdrop's colorants and the c/d pair **includes**
+   them at 0%, and *"the colorant LIST — not the tint values — decides what
+   survives"*. pdfce cannot see either list. `/Indexed` appears in **4 of the
+   7 failing overprint patches** (`GWG190`, `GWG191`, `GWG192`, `GWG020`).
+
+   Two halves to the fix, and only the first is small: `classify` must recurse
+   into the base space, **and** the tints handed to `cmyk_group_rules` must be
+   the palette-**looked-up** base components rather than the index. The call
+   site currently receives `(space, comps)` where `comps` is the raw index.
+
+   **A second, larger gap surfaced while measuring this**, and it is recorded
+   rather than fixed because it belongs to Stage B: `overprint::composite` has
+   exactly **one** call site, in the path/glyph painter. **Image XObjects do
+   not reach it at all** — and `GWG190`'s only failing cell is `d`, an image.
+   Per-sample overprint needs per-sample colorants, which is the colorant
+   buffer. Before building it, add the counter: an image that skips overprint
+   is currently not counted as `overprint_refused`, which is the same
+   blind-counter shape as the glyph painter in `bf75351`.
 
 And one new one, produced while writing this document:
 

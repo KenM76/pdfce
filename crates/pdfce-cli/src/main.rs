@@ -7228,7 +7228,7 @@ overlay",
     }
     if d.overprint_requested > 0 {
         eprintln!(
-            "pdfce-cli: note: {} PAINT(s) would render differently if overprint were honoured; {} graphics-state operator(s) enabled it (/OP or /op, ISO 32000-1 §8.6.7){}. pdfce does NOT simulate it. ★ THE TWO NUMBERS COUNT DIFFERENT THINGS and neither is a subset of the other: the first counts PAINTED OBJECTS, the second counts `gs` OPERATORS, and one `gs` governs every paint until the next one — so a single enable can produce many affected paints, or none. The first is the one to read, because a DeviceCMYK fill over a DeviceCMYK backdrop at overprint mode 0 specifies all four components and is IDENTICAL to Normal, and producers enable overprint document-wide. Overprint is a subtractive-device behaviour — an overprinting object leaves the backdrop's other colorants in place instead of replacing them — and pdfce composites in additive RGB, where there are no separable colorants to preserve. On a PDF/X file this matters: Acrobat turns Overprint Preview ON automatically for PDF/X, so the document's EXPECTED appearance includes overprint and pdfce's does not",
+            "pdfce-cli: note: {} PAINT(s) were affected by OVERPRINT; {} graphics-state operator(s) enabled it (/OP or /op, ISO 32000-1 §8.6.7){}. pdfce COMPOSITED {} of those paints through CompatibleOverprint (§11.7.4.3, Table 149) and REFUSED {}. ★ THE FIRST TWO NUMBERS COUNT DIFFERENT THINGS and neither is a subset of the other: the first counts PAINTED OBJECTS, the second counts `gs` OPERATORS, and one `gs` governs every paint until the next one — so a single enable can produce many affected paints, or none. The first is the one to read, because a DeviceCMYK fill over a DeviceCMYK backdrop at overprint mode 0 specifies all four components and is IDENTICAL to Normal, and producers enable overprint document-wide. ★ WHAT IS STILL APPROXIMATE, because a composited count is not a correct one: pdfce composites in additive RGB with CMYK reconstructed per pixel, so the four PROCESS colorants can be preserved, but a SPOT colorant has no plane of its own — it is flattened through its tint transform and cannot be left standing the way a press leaves it. A REFUSED count above zero is stronger still: those paints knocked the backdrop out where a press would have shown ink. On a PDF/X file this matters: Acrobat turns Overprint Preview ON automatically for PDF/X, so the document's EXPECTED appearance includes overprint",
             d.overprint_effective,
             d.overprint_requested,
             if d.overprint_mode1_requested > 0 {
@@ -7238,7 +7238,9 @@ overlay",
                 )
             } else {
                 String::new()
-            }
+            },
+            d.overprint_composited,
+            d.overprint_refused
         );
     }
     if d.transparency_groups_flattened > 0 {
