@@ -2358,6 +2358,65 @@ enum Command {
         verify_undo: bool,
     },
 
+    /// Restyle an EXISTING markup annotation in place (ISO 32000-1
+    /// §12.5.6), keeping its object identity.
+    ///
+    /// ADDRESSED BY `--page` + `--index`, the same pair
+    /// `list-annotations` prints and `delete-annotation` takes.
+    ///
+    /// The appearance stream is **regenerated** from the annotation's own
+    /// declared geometry, not just its `/C` — pdfce paints from `/AP` or
+    /// not at all, so setting the colour without redrawing would leave the
+    /// change invisible. Anything the original appearance expressed that
+    /// pdfce does not model (a cloudy `/BE` border, a dashed `/BS`, an
+    /// exotic arrowhead) is reported on stderr as it is dropped.
+    ///
+    /// Refuses, by name: a ce dimension (use `set-dimension-style`), a
+    /// subtype pdfce cannot author an appearance for (`FreeText`,
+    /// `Stamp`, `Widget`, `Link`), an annotation whose geometry keys are
+    /// missing, and a `Locked` annotation (§12.5.3 Table 165 bit 8).
+    SetMarkupStyle {
+        /// Input PDF.
+        input: PathBuf,
+        /// Page, 1-BASED — the `page=` value `list-annotations` prints.
+        #[arg(long)]
+        page: usize,
+        /// Index within that page's `/Annots`, 0-BASED — the `index=`
+        /// value `list-annotations` prints.
+        #[arg(long)]
+        index: usize,
+        /// Stroke/border colour as `RRGGBB` hex, or `none` to remove it
+        /// (§12.5.6 spells "no border" as an ABSENT `/C`, not as a
+        /// colour). On a `/Line`, `/Ink`, `/PolyLine` or text markup the
+        /// stroke is unconditional, so `none` there means black.
+        #[arg(long, value_name = "RRGGBB|none")]
+        color: Option<String>,
+        /// Interior (fill) colour as `RRGGBB` hex, or `none` for a
+        /// transparent interior. `Square`, `Circle` and `Polygon` only.
+        #[arg(long, value_name = "RRGGBB|none")]
+        interior: Option<String>,
+        /// Border width in points. On every subtype except `Square` and
+        /// `Circle` this also moves `/Rect`, because the rectangle is
+        /// derived from the geometry plus a margin containing the stroke.
+        #[arg(long, value_name = "PT")]
+        width: Option<f64>,
+        /// Constant opacity `/CA`, 0.0–1.0 (§12.5.2), or `none` to
+        /// remove the entry — which is fully opaque, and is a different
+        /// fact about the file from an explicit `1.0`.
+        #[arg(long, value_name = "0.0-1.0|none")]
+        opacity: Option<String>,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Which save path to use.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Also verify that undoing the restyle reproduces the input byte
+        /// for byte.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+
     /// **Delete an annotation** — any subtype, addressed as `list-annotations`
     /// reports it (ISO 32000-1 §12.5.2).
     ///
@@ -5337,6 +5396,31 @@ fn run() -> ExitCode {
             mode,
             verify_undo,
         } => cmd_delete_form_field(&input, &name, Some(index), &output, mode, verify_undo),
+        Command::SetMarkupStyle {
+            input,
+            page,
+            index,
+            color,
+            interior,
+            width,
+            opacity,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_set_markup_style(
+            &input,
+            page,
+            index,
+            &MarkupStyleArg {
+                color: color.as_deref(),
+                interior: interior.as_deref(),
+                width,
+                opacity: opacity.as_deref(),
+            },
+            &output,
+            mode,
+            verify_undo,
+        ),
         Command::DeleteAnnotation {
             input,
             page,
@@ -16918,6 +17002,279 @@ fn cmd_move_widget(
         r.objects_written,
         r.bytes_appended,
         r.bytes_written,
+    );
+    finish_edit(input, &outcome)
+}
+
+/// The style flags `set-markup-style` accepts, bundled so
+/// [`cmd_set_markup_style`] stays inside clippy's seven-argument limit.
+///
+/// Strings rather than parsed values because each one is tri-state —
+/// absent, a value, or the literal `none` — and parsing them at the same
+/// place keeps the three "what does `none` mean here" answers in one
+/// readable block instead of three clap attributes.
+#[derive(Debug, Clone, Copy)]
+struct MarkupStyleArg<'a> {
+    /// `--color RRGGBB|none`.
+    color: Option<&'a str>,
+    /// `--interior RRGGBB|none`.
+    interior: Option<&'a str>,
+    /// `--width PT`.
+    width: Option<f64>,
+    /// `--opacity 0.0-1.0|none`.
+    opacity: Option<&'a str>,
+}
+
+/// Parse a `RRGGBB`-or-`none` colour flag into a
+/// [`StyleEdit`](pdfce_core::edit::StyleEdit).
+///
+/// `None` back means the flag was absent, i.e. leave the property alone.
+/// The literal `none` becomes [`StyleEdit::Clear`], which is a real markup
+/// style and not a way of spelling black — §12.5.6 has no transparent
+/// value in a colour array, so "no border" IS an absent `/C`.
+///
+/// # Errors
+///
+/// A message naming the flag, for the caller to print.
+fn parse_color_edit(
+    flag: &str,
+    value: Option<&str>,
+) -> Result<Option<pdfce_core::edit::StyleEdit<pdfce_core::annot_author::Color>>, String> {
+    use pdfce_core::edit::StyleEdit;
+    match value {
+        None => Ok(None),
+        Some(v) if v.eq_ignore_ascii_case("none") => Ok(Some(StyleEdit::Clear)),
+        Some(v) => parse_color(v)
+            .map(|c| Some(StyleEdit::Set(c)))
+            .map_err(|e| format!("--{flag}: {e}")),
+    }
+}
+
+/// Implement `pdfce-cli set-markup-style`.
+///
+/// ## Addressing, and why it matches `delete-annotation` exactly
+///
+/// `--page` + `--index`, resolved against the SAME `page_annotations`
+/// walk `list-annotations` prints from. The core verb takes an `ObjId`,
+/// because object identity is the only handle that stays correct while a
+/// session mutates — but the operator's source of truth is the list
+/// command's output, which deliberately does not print object numbers.
+/// Resolving here is what makes "list it, then restyle that index"
+/// reliable rather than approximately right.
+///
+/// ## What it prints
+///
+/// One machine-readable line carrying `subtype=`, how the appearance was
+/// written (`ap=in-place|created|copied`), whether `/Rect` moved, and how
+/// many properties the regeneration dropped — **plus a prose sentence on
+/// stderr naming each dropped property**. The same twice-over the deletion
+/// verb uses, for the same reason: the counter is for a script, the
+/// sentence is for the person who would otherwise wonder later why their
+/// cloudy border went straight.
+///
+/// Under rule 4 the CLI invocation IS the commit — there is no session and
+/// no undo — so what pdfce could not carry over is printed on the way
+/// past rather than offered for confirmation.
+fn cmd_set_markup_style(
+    input: &Path,
+    page: usize,
+    index: usize,
+    style: &MarkupStyleArg<'_>,
+    output: &Path,
+    mode: SaveMode,
+    verify_undo: bool,
+) -> u8 {
+    use pdfce_core::edit::{AppearanceWrite, DroppedProperty, MarkupStyle, StyleEdit};
+
+    if page == 0 {
+        eprintln!(
+            "pdfce-cli: {}: --page is 1-based; 0 is not a page",
+            input.display()
+        );
+        return exit::RUNTIME_ERROR;
+    }
+
+    // Parse the flags BEFORE opening the file: a mistyped colour should
+    // not cost a parse of a large document.
+    let (stroke, interior) = match (
+        parse_color_edit("color", style.color),
+        parse_color_edit("interior", style.interior),
+    ) {
+        (Ok(a), Ok(b)) => (a, b),
+        (Err(msg), _) | (_, Err(msg)) => {
+            eprintln!("pdfce-cli: {msg}");
+            return exit::EDIT_REFUSED;
+        }
+    };
+    let opacity = match style.opacity {
+        None => None,
+        Some(v) if v.eq_ignore_ascii_case("none") => Some(StyleEdit::Clear),
+        Some(v) => match v.parse::<f64>() {
+            Ok(a) if (0.0..=1.0).contains(&a) => Some(StyleEdit::Set(a)),
+            _ => {
+                eprintln!("pdfce-cli: --opacity: `{v}` is not a number in 0.0..=1.0, or `none`");
+                return exit::EDIT_REFUSED;
+            }
+        },
+    };
+    let wanted = MarkupStyle {
+        stroke,
+        interior,
+        width: style.width,
+        opacity,
+        endings: None,
+    };
+
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    // Resolved inside a block so the session borrow ends before the
+    // mutable call below.
+    let (annot_id, subtype) = {
+        let slots = match session.page_slots() {
+            Ok(slots) => slots,
+            Err(err) => {
+                eprintln!("pdfce-cli: {}: {err}", input.display());
+                return exit::RUNTIME_ERROR;
+            }
+        };
+        let Some(slot) = slots.get(page - 1) else {
+            eprintln!(
+                "pdfce-cli: {}: no page {page} — the document has {} page(s)",
+                input.display(),
+                slots.len()
+            );
+            return exit::RUNTIME_ERROR;
+        };
+        let annots = pdfce_core::annot::page_annotations(&session.graph(), slot.id);
+        let Some(annot) = annots.get(index) else {
+            eprintln!(
+                "pdfce-cli: {}: page {page} has no annotation at index {index} — it has {} \
+                 (indices 0..{})",
+                input.display(),
+                annots.len(),
+                annots.len().saturating_sub(1)
+            );
+            return exit::RUNTIME_ERROR;
+        };
+        let Some(id) = annot.id else {
+            eprintln!(
+                "pdfce-cli: {}: page {page} index {index} is a direct dictionary inside /Annots, \
+                 not an indirect object — it has no identity to restyle",
+                input.display()
+            );
+            return exit::EDIT_REFUSED;
+        };
+        (id, String::from_utf8_lossy(&annot.subtype).into_owned())
+    };
+
+    let change = match session.set_markup_style(annot_id, &wanted) {
+        Ok(change) => change,
+        Err(err) => return report_edit_error(input, &err),
+    };
+
+    // The prose half of the disclosure. One sentence per dropped
+    // property, each naming what the appearance no longer draws AND that
+    // the dictionary key survived — because "it is still in the file" and
+    // "it is still on the page" are different, and only the second is
+    // what the operator sees.
+    for dropped in &change.dropped {
+        // NOTE the trailing \-continuations: without them a wrapped Rust
+        // string literal carries every leading space of the next SOURCE
+        // line into the message, which is how the first live run of this
+        // command printed a sentence with ragged gaps in the middle of it.
+        let note = match dropped {
+            DroppedProperty::BorderEffect => {
+                "the /BE cloudy border effect: the regenerated appearance draws a \
+                 straight outline. The /BE key is still in the dictionary, but pdfce \
+                 paints from /AP."
+            }
+            DroppedProperty::BorderStyle => {
+                "the /BS /S border style (dashed, beveled, inset or underline): pdfce \
+                 authors solid strokes only."
+            }
+            DroppedProperty::DashPattern => {
+                "the /BS /D dash array: the regenerated stroke is continuous."
+            }
+            DroppedProperty::RectDifferences => {
+                "the /RD rectangle differences: pdfce draws from /Rect (or the \
+                 explicit geometry keys) directly."
+            }
+            DroppedProperty::LineEnding => {
+                "a /LE line ending outside None/OpenArrow/ClosedArrow: it regenerates \
+                 as no ending."
+            }
+            _ => {
+                "the previous appearance stream was NOT one pdfce would have drawn \
+                 from this annotation's own properties (compared byte for byte), so \
+                 anything it drew beyond the shape — a shadow, a gradient, a raster, \
+                 text — is not in the new one."
+            }
+        };
+        eprintln!("pdfce-cli: {}: dropped — {note}", input.display());
+    }
+    let rect_moved = change.rect_before != Some(change.rect_after);
+    if rect_moved {
+        eprintln!(
+            "pdfce-cli: {}: /Rect moved. For every subtype except Square and Circle the \
+             rectangle is derived from the geometry plus a margin that contains the stroke and \
+             any arrowheads, so changing the width resizes the box. This is correct, not drift.",
+            input.display()
+        );
+    }
+
+    let ap = match change.appearance {
+        AppearanceWrite::InPlace(_) => "in-place",
+        AppearanceWrite::Created(_) => "created",
+        AppearanceWrite::CopiedOnWrite { .. } => "copied",
+        // `AppearanceWrite` is #[non_exhaustive]; a future variant must
+        // print SOMETHING rather than fail to compile a shell.
+        _ => "other",
+    };
+    if matches!(change.appearance, AppearanceWrite::CopiedOnWrite { .. }) {
+        eprintln!(
+            "pdfce-cli: {}: the appearance stream was SHARED with another annotation \
+             (§12.5.2 permits it), so it was copied rather than rewritten — the other \
+             annotation keeps the look it had.",
+            input.display()
+        );
+    }
+
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+
+    let r = &outcome.report;
+    println!(
+        "set-markup-style {} page {page} index {index} mode={} -> {}; \
+subtype={subtype} ap={ap} rect_moved={} dropped={} changed={} objects={} verbatim={} \
+reserialized={} promoted={} appended={} out_bytes={} undo_verified={} undo_identical={} \
+delinearized={}",
+        input.display(),
+        mode.name(),
+        output.display(),
+        u32::from(rect_moved),
+        change.dropped.len(),
+        outcome.changed,
+        r.objects_written,
+        r.objects_verbatim,
+        r.objects_reserialized,
+        r.promoted.len(),
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+        u32::from(r.delinearized),
     );
     finish_edit(input, &outcome)
 }

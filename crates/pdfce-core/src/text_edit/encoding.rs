@@ -285,7 +285,9 @@ impl CompositeEncoding {
                     character: Some(ch),
                     base_font: self.base_font.clone(),
                     message: format!(
-                        "this font has no glyph for {ch:?}, and pdfce cannot add one to a font                          that is already embedded. Keep this edit to characters the font already                          uses, or choose a font that covers it."
+                        "this font has no glyph for {ch:?}, and pdfce cannot add one to a font \
+                         that is already embedded. Keep this edit to characters the font \
+                         already uses, or choose a font that covers it."
                     ),
                 });
             };
@@ -299,7 +301,8 @@ impl CompositeEncoding {
                     character: Some(ch),
                     base_font: self.base_font.clone(),
                     message: format!(
-                        "this font maps {ch:?} to a glyph index pdfce cannot write in this                          encoding."
+                        "this font maps {ch:?} to a glyph index pdfce cannot write in this \
+                         encoding."
                     ),
                 });
             };

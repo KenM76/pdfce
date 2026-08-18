@@ -260,6 +260,14 @@ pub enum CommandKind {
         /// list.
         page_index: usize,
     },
+    /// An existing annotation's style was changed in place — its colour,
+    /// interior, width, opacity or line endings — keeping its object
+    /// identity (`Pass` for `pdfceGUI`'s Format tab).
+    ///
+    /// Distinct from [`Self::AddAnnotation`] because undo means something
+    /// different: undoing an add removes the annotation, undoing a style
+    /// change puts the previous style back on an annotation that stays.
+    SetMarkupStyle,
     /// Several pages were given the same `/MediaBox` in one operation.
     ///
     /// Carries only a count, for the reason [`Self::ReorderPages`] does:
@@ -2466,6 +2474,209 @@ pub struct MediaBoxChange {
     pub size_advisory: Option<PageSizeAdvisory>,
 }
 
+/// Where [`EditSession::set_markup_style`] may put a regenerated
+/// appearance stream. See [`EditSession::appearance_slot`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AppearanceSlot {
+    /// Rewrite this existing stream object in place — nothing is created.
+    Reuse(ObjId),
+    /// A new object number is needed: either there was no `/AP`, or the
+    /// existing one is shared and must be copied rather than rewritten.
+    Allocate,
+}
+
+/// Apply a [`MarkupStyle`] to a [`annot_author::MarkupSpec`], leaving
+/// every property the override did not mention exactly as the file had
+/// it.
+///
+/// A free function taking and returning the spec by value rather than a
+/// method mutating one: the spec came out of a dictionary read and goes
+/// straight into `build_appearance`, so there is no state to keep, and a
+/// pure transformation is what the tests want to exercise without a
+/// document.
+///
+/// # The two shapes that look like bugs and are not
+///
+/// **`interior` on a subtype with no interior is ignored, not an error.**
+/// A `Line` has no `/IC` in §12.5.6.7 and no way to fill anything. A
+/// Format tab that shows one set of controls for every markup type will
+/// send `interior` along with everything else; refusing would make the
+/// colour change fail because an unrelated control had a value.
+///
+/// **`endings` applies only to `Line`.** §12.5.6.7 defines `/LE` for
+/// `Line`, and §12.5.6.13 for `PolyLine` — but pdfce's `PolyLine`
+/// authoring does not emit endings, so accepting them here would set a
+/// field `build_appearance` then ignores, which is worse than not
+/// accepting them. Named rather than silently dropped: it is a real
+/// remainder, not a decision.
+fn apply_markup_style(
+    spec: annot_author::MarkupSpec,
+    style: &MarkupStyle,
+) -> annot_author::MarkupSpec {
+    use annot_author::{Color, MarkupSpec};
+
+    // `None` = leave alone; `Some(Clear)` = remove; `Some(Set(c))` = set.
+    fn colour(current: Option<Color>, edit: Option<StyleEdit<Color>>) -> Option<Color> {
+        match edit {
+            None => current,
+            Some(StyleEdit::Clear) => None,
+            Some(StyleEdit::Set(c)) => Some(c),
+        }
+    }
+    // A required (non-optional) colour cannot be cleared — §12.5.6.7's
+    // `/Line` and §12.5.6.10's text markup draw a stroke unconditionally,
+    // so "no colour" there means black rather than an invisible
+    // annotation the operator cannot find again.
+    fn required(current: Color, edit: Option<StyleEdit<Color>>) -> Color {
+        match edit {
+            None => current,
+            Some(StyleEdit::Clear) => Color::Gray(0.0),
+            Some(StyleEdit::Set(c)) => c,
+        }
+    }
+    // Widths are clamped non-negative: §12.5.4's `/W` is the border width
+    // in points, and a negative pen has no meaning, while
+    // `build_appearance` would happily inset a rectangle by it and
+    // produce a shape larger than its own BBox.
+    let width = |current: f64| style.width.map_or(current, |w| w.max(0.0));
+
+    match spec {
+        MarkupSpec::Square {
+            rect,
+            border,
+            interior,
+            border_width,
+        } => MarkupSpec::Square {
+            rect,
+            border: colour(border, style.stroke),
+            interior: colour(interior, style.interior),
+            border_width: width(border_width),
+        },
+        MarkupSpec::Circle {
+            rect,
+            border,
+            interior,
+            border_width,
+        } => MarkupSpec::Circle {
+            rect,
+            border: colour(border, style.stroke),
+            interior: colour(interior, style.interior),
+            border_width: width(border_width),
+        },
+        MarkupSpec::Line {
+            start,
+            end,
+            color,
+            width: w,
+            endings,
+        } => MarkupSpec::Line {
+            start,
+            end,
+            color: required(color, style.stroke),
+            width: width(w),
+            endings: style.endings.unwrap_or(endings),
+        },
+        MarkupSpec::Ink {
+            strokes,
+            color,
+            width: w,
+        } => MarkupSpec::Ink {
+            strokes,
+            color: required(color, style.stroke),
+            width: width(w),
+        },
+        MarkupSpec::Polygon {
+            vertices,
+            border,
+            interior,
+            width: w,
+        } => MarkupSpec::Polygon {
+            vertices,
+            border: colour(border, style.stroke),
+            interior: colour(interior, style.interior),
+            width: width(w),
+        },
+        MarkupSpec::PolyLine {
+            vertices,
+            color,
+            width: w,
+        } => MarkupSpec::PolyLine {
+            vertices,
+            color: required(color, style.stroke),
+            width: width(w),
+        },
+        MarkupSpec::TextMarkup { kind, quads, color } => MarkupSpec::TextMarkup {
+            kind,
+            quads,
+            color: required(color, style.stroke),
+        },
+    }
+}
+
+/// Everything the original annotation expressed that the regenerated
+/// appearance does not reproduce.
+///
+/// The disclosure half of [`EditSession::set_markup_style`]. Each check
+/// asks the same question — *did the file say something pdfce's authoring
+/// model has no way to draw?* — and every "yes" is named rather than
+/// left for the operator to notice on screen.
+///
+/// Detected from the **dictionary**, never from the appearance stream's
+/// bytes. Interpreting the old stream to see what it drew would be a
+/// content-stream analysis pass in the middle of a style edit, and the
+/// dictionary is where §12.5.4 and §12.5.6 put the properties that a
+/// conforming appearance is supposed to reflect anyway.
+///
+/// [`DroppedProperty::ForeignAppearance`] is the exception: it is decided
+/// by `appearance_was_pdfces`, which the caller computes by rebuilding the
+/// appearance from the annotation's UNMODIFIED properties and comparing
+/// bytes. See that variant for why a blunt always-on flag was replaced.
+fn dropped_properties<G: ObjectGraph + ?Sized>(
+    graph: &G,
+    annot: &Dict,
+    appearance_was_pdfces: bool,
+) -> Vec<DroppedProperty> {
+    let mut out = Vec::new();
+
+    if annot.get(b"BE").is_some() {
+        out.push(DroppedProperty::BorderEffect);
+    }
+    if annot.get(b"RD").is_some() {
+        out.push(DroppedProperty::RectDifferences);
+    }
+    if let Some(Object::Dict(bs)) = annot.get(b"BS").map(|o| graph.resolve(o)) {
+        // Table 166: /S defaults to /S (solid). Anything else — /D /B /I
+        // /U — is a look pdfce does not author.
+        if let Some(Object::Name(n)) = bs.get(b"S").map(|o| graph.resolve(o))
+            && n.as_bytes() != b"S"
+        {
+            out.push(DroppedProperty::BorderStyle);
+        }
+        if bs.get(b"D").is_some() {
+            out.push(DroppedProperty::DashPattern);
+        }
+    }
+    // An /LE naming something outside the three pdfce authors. Checked
+    // against the FILE rather than against the spec, because
+    // `spec_from_dict` has already degraded it to `None` — which is
+    // exactly why the loss has to be detected here and not there.
+    if let Some(Object::Array(items)) = annot.get(b"LE").map(|o| graph.resolve(o))
+        && items.iter().any(|item| {
+            matches!(graph.resolve(item), Object::Name(n)
+                if !matches!(n.as_bytes(), b"None" | b"OpenArrow" | b"ClosedArrow"))
+        })
+    {
+        out.push(DroppedProperty::LineEnding);
+    }
+    // Replacing an appearance whose bytes were NOT what pdfce would have
+    // drawn from these same properties. An appearance pdfce authored
+    // regenerates losslessly and must not be reported — see the variant.
+    if annot.get(b"AP").is_some() && !appearance_was_pdfces {
+        out.push(DroppedProperty::ForeignAppearance);
+    }
+    out
+}
+
 /// Normalize a caller-supplied media box and refuse a degenerate one.
 ///
 /// Shared by [`EditSession::set_media_box`] and
@@ -2507,6 +2718,202 @@ fn rect_array(r: page_tree::Rect) -> Object {
         Object::Real(r.urx),
         Object::Real(r.ury),
     ])
+}
+
+/// A change to one optional style property: set it, or remove it.
+///
+/// `Option<StyleEdit<T>>` gives the three states a partial style override
+/// genuinely has, without the unreadable `Option<Option<T>>`:
+///
+/// | value | meaning |
+/// |---|---|
+/// | `None` | leave this property exactly as the file has it |
+/// | `Some(StyleEdit::Set(v))` | make it `v` |
+/// | `Some(StyleEdit::Clear)` | remove it — no stroke, transparent interior, fully opaque |
+///
+/// The third state has to exist and cannot be folded into the second.
+/// "No border colour" is a real markup style (a filled rectangle with no
+/// outline), and §12.5.6 spells it as an **absent** `/C`, not as a
+/// colour — there is no "transparent" value in a DeviceRGB array. Exactly
+/// the same argument the ce-dimension
+/// [`crate::dimension::style::StyleOverrides`] makes for its `tolerance`
+/// field: inherit and explicitly-none are different requests.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StyleEdit<T> {
+    /// Set the property to this value.
+    Set(T),
+    /// Remove the property, restoring the standard's default for it.
+    Clear,
+}
+
+/// A partial style override for an existing markup annotation, applied by
+/// [`EditSession::set_markup_style`].
+///
+/// Every field is `None` by default, so `MarkupStyle { width: Some(3.0),
+/// ..Default::default() }` changes the border width and nothing else.
+/// That shape is deliberate: a Format tab whose colour picker also had to
+/// restate the current width would overwrite whatever the operator had
+/// set from the other control.
+/// Deliberately **not** `#[non_exhaustive]`, unlike the report types this
+/// module returns. `#[non_exhaustive]` on an INPUT struct makes it
+/// unbuildable from another crate — `pdfce-cli` cannot write
+/// `MarkupStyle { .. }` at all — so it belongs on the outputs a consumer
+/// `match`es, not on the ones it constructs. The house precedent is
+/// [`crate::dimension::style::StyleOverrides`], which is the same kind of
+/// thing and is likewise plain. Adding a field here is a breaking change;
+/// that is the honest cost of a struct callers build.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct MarkupStyle {
+    /// `/C` — the stroke/border colour (§12.5.6).
+    pub stroke: Option<StyleEdit<annot_author::Color>>,
+    /// `/IC` — the interior (fill) colour. Meaningful for `Square`,
+    /// `Circle` and `Polygon`; ignored by the subtypes that have no
+    /// interior, which is a property of the shape and not an error.
+    pub interior: Option<StyleEdit<annot_author::Color>>,
+    /// `/BS` `/W` — the stroke width in points.
+    ///
+    /// ⚠️ For every subtype except `Square` and `Circle` this **moves
+    /// `/Rect`**: the rectangle is derived from the geometry plus a margin
+    /// that contains the stroke and any arrowheads, so a wider pen needs a
+    /// bigger box. Reported in [`MarkupStyleChange::rect_after`].
+    pub width: Option<f64>,
+    /// `/CA` — the annotation's constant opacity, `0.0`–`1.0`
+    /// (§12.5.2, Table 164).
+    ///
+    /// Applied to the annotation **as composited onto the page**, not
+    /// inside its appearance stream — so it does not compound with
+    /// anything, because pdfce's generated appearances leave their own
+    /// graphics-state alpha at 1.0. See
+    /// [`crate::annot::Annotation::constant_alpha`].
+    pub opacity: Option<StyleEdit<f64>>,
+    /// `/LE` — the line-ending styles (§12.5.6.7, Table 176). `Line`
+    /// only.
+    pub endings: Option<(annot_author::LineEnding, annot_author::LineEnding)>,
+}
+
+impl MarkupStyle {
+    /// Whether this override changes nothing.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// A property the original annotation carried that pdfce's regenerated
+/// appearance does **not** reproduce.
+///
+/// The disclosure half of [`EditSession::set_markup_style`], and the
+/// reason that verb regenerates rather than refuses. Regeneration draws
+/// the shape pdfce models; anything the file expressed *outside* that
+/// model is gone from the new appearance even though its dictionary key
+/// survives. Silently dropping a cloudy border while reporting "colour
+/// changed" is exactly what rule 4 forbids, so each one is named.
+///
+/// Note what this is **not**: it is not a warning that the edit failed,
+/// and it is not a gate. The edit happened. This says what it cost.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum DroppedProperty {
+    /// `/BE` — a border effect (§12.5.6.8, Table 167): the "cloudy"
+    /// hand-drawn outline Acrobat offers. pdfce authors straight edges
+    /// only, so a regenerated appearance is a plain outline. The `/BE`
+    /// key is left in the dictionary, so a reader that synthesizes from
+    /// properties still sees it — but pdfce's own `/AP` no longer draws
+    /// it, and under R43 that is what gets painted.
+    BorderEffect,
+    /// `/BS` `/S` named a border style other than solid — `/D` dashed,
+    /// `/B` beveled, `/I` inset or `/U` underline (§12.5.4, Table 166).
+    /// pdfce authors `/S /S` (solid) only.
+    BorderStyle,
+    /// `/BS` `/D` — an explicit dash array. Carried by the dictionary,
+    /// not by the regenerated appearance.
+    DashPattern,
+    /// `/RD` — rectangle differences (§12.5.6.8): an inner rectangle
+    /// inset from `/Rect`. pdfce derives its geometry from `/Rect` (or
+    /// from the explicit geometry keys) directly.
+    RectDifferences,
+    /// `/LE` named a line ending outside the three pdfce authors
+    /// (`/None`, `/OpenArrow`, `/ClosedArrow`) — a `/Butt`, `/Diamond`,
+    /// `/Circle`, `/Square`, `/ROpenArrow`, `/RClosedArrow` or `/Slash`
+    /// (Table 176). It regenerates as no ending.
+    LineEnding,
+    /// The original `/AP` `/N` was **replaced**, and its bytes were not
+    /// what pdfce would have drawn from the annotation's own declared
+    /// properties — so whatever it drew beyond the shape (a shadow, a
+    /// gradient, a raster, text) is not in the new one.
+    ///
+    /// ## This is MEASURED, not assumed, and the measurement is the point
+    ///
+    /// The first cut of this verb raised the flag on **every**
+    /// regeneration, on the reasoning that pdfce cannot tell a faithful
+    /// stroke from an elaborate one without interpreting the stream.
+    /// Driving the CLI showed what that costs: recolouring a square pdfce
+    /// had authored *seconds earlier* printed a warning about shadows and
+    /// gradients. A disclosure that fires on the overwhelmingly common
+    /// path is one an operator learns to skip, which spends the credibility
+    /// the genuinely-lossy case needs.
+    ///
+    /// So it is now decided by **rebuilding the appearance from the
+    /// annotation's UNMODIFIED properties and comparing bytes**. Identical
+    /// bytes mean pdfce (or something byte-equivalent) drew it, and
+    /// regenerating is provably lossless. Anything else — different
+    /// content, a compressed stream, a stream pdfce cannot slice — is
+    /// foreign and is reported. The comparison costs one extra
+    /// [`annot_author::build_appearance`] call over a small stream, which
+    /// is what makes the precise answer affordable.
+    ///
+    /// It still errs toward reporting: a foreign appearance that merely
+    /// *looks* like pdfce's still trips this if a single byte differs.
+    /// Over-reporting on an edge is the safe direction; the fix was to
+    /// stop over-reporting on the CENTRE.
+    ForeignAppearance,
+}
+
+/// How [`EditSession::set_markup_style`] wrote the new appearance stream.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum AppearanceWrite {
+    /// The existing `/AP` `/N` stream object was rewritten **in place**,
+    /// keeping its object number. The minimal-diff best case: no object
+    /// is created, `/Size` does not move, and the annotation's `/AP`
+    /// entry does not change.
+    InPlace(ObjId),
+    /// The annotation had no `/AP` at all, so one was created and wired
+    /// up. The annotation now paints where before R43 meant it did not.
+    Created(ObjId),
+    /// The existing `/AP` `/N` stream was **shared with another
+    /// annotation** (§12.5.2 permits subsidiary objects to be shared),
+    /// so it was copied rather than rewritten: the other annotation keeps
+    /// the appearance it had, and this one points at a new stream.
+    CopiedOnWrite {
+        /// The shared stream that was left alone.
+        from: ObjId,
+        /// The new stream this annotation now points at.
+        to: ObjId,
+    },
+}
+
+/// What [`EditSession::set_markup_style`] did to one annotation.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct MarkupStyleChange {
+    /// The annotation's object id — **unchanged**, which is the whole
+    /// point of the verb. Its `/NM`, its position in `/Annots` (and so
+    /// its z-order), its `/M`, and any `/IRT` reply thread hanging off it
+    /// all survive, which a delete-and-re-add workaround would silently
+    /// break.
+    pub annot_id: ObjId,
+    /// The `/Rect` before, §7.9.5-normalized.
+    pub rect_before: Option<page_tree::Rect>,
+    /// The `/Rect` after. Differs from `rect_before` when the stroke
+    /// width changed on a subtype whose rectangle is derived from its
+    /// geometry — see [`MarkupStyle::width`].
+    pub rect_after: page_tree::Rect,
+    /// How the appearance stream was written.
+    pub appearance: AppearanceWrite,
+    /// Properties the regenerated appearance does not reproduce, in the
+    /// order they were detected. Empty is the common case.
+    pub dropped: Vec<DroppedProperty>,
 }
 
 /// Why an edit could not be performed.
@@ -2599,7 +3006,8 @@ pub enum EditError {
     /// operator is looking at — `list_attachments` reports both, which is
     /// exactly why the distinction is easy to lose.
     #[error(
-        "no document-level attachment is filed under that name (a page-level file          attachment annotation is deleted as an annotation, not as an attachment)"
+        "no document-level attachment is filed under that name (a page-level file attachment \
+         annotation is deleted as an annotation, not as an attachment)"
     )]
     AttachmentNotFound,
     /// A ce-dimension operation named a dimension the sidecar model does not
@@ -2935,7 +3343,9 @@ pub enum EditError {
     /// detection only; those edits proceed and report
     /// [`SignatureImpact::Invalidated`] instead.
     #[error(
-        "this document carries a certification signature whose permissions are enforced          (ISO 32000-1 §12.8.4, /Perms /DocMDP, P={permission}); structural page changes are          not among the changes it permits, so pdfce refuses rather than silently breaking it"
+        "this document carries a certification signature whose permissions are enforced (ISO \
+         32000-1 §12.8.4, /Perms /DocMDP, P={permission}); structural page changes are not \
+         among the changes it permits, so pdfce refuses rather than silently breaking it"
     )]
     CertificationForbidsChange {
         /// The certification's `/P` access permission (Table 254: 1–3).
@@ -3344,6 +3754,62 @@ pub enum EditError {
     /// singular matrix — the same degenerate-transform hole §12.5.5 leaves
     /// for a zero-extent appearance box, and one every reader resolves
     /// differently.
+    /// [`EditSession::set_markup_style`] was pointed at an annotation
+    /// whose appearance pdfce cannot regenerate.
+    #[error(transparent)]
+    MarkupSpec(#[from] annot_author::SpecReadError),
+    /// [`EditSession::set_markup_style`] was pointed at a **ce
+    /// dimension**.
+    ///
+    /// A ce dimension is a `/Line` annotation with `/IT /LineDimension`
+    /// and a fully-baked `/AP` that draws witness lines, terminators and
+    /// a measured label. It passes every "is this a markup pdfce can
+    /// author?" test and would regenerate as a **bare line** — the label
+    /// and the witness lines gone, silently, from something the operator
+    /// asked only to recolour.
+    ///
+    /// Refused by name rather than handled, because the correct verb
+    /// already exists: [`EditSession::set_dimension_style`] restyles a ce
+    /// dimension through the model that knows what one is. This is a
+    /// signpost, not a limitation.
+    #[error(
+        "annotation {id} is a ce dimension (/IT /LineDimension); use set_dimension_style, which \
+         regenerates its label and witness lines — restyling it as plain markup would silently \
+         reduce it to a bare line"
+    )]
+    AnnotationIsCeDimension {
+        /// The annotation that was named.
+        id: ObjId,
+    },
+    /// The annotation's `/AP` `/N` resolves to a **dictionary rather than
+    /// a stream**, so there is no single appearance to regenerate.
+    ///
+    /// Two different files reach this, and the refusal deliberately does
+    /// not claim to know which:
+    ///
+    /// * §12.5.5 Table 168's **appearance-state subdictionary** — a `/N`
+    ///   whose entries are streams selected by `/AS`. Regenerating would
+    ///   have to pick one state to rewrite and leave the others
+    ///   describing a different style, or overwrite them all with the same
+    ///   appearance, destroying whatever the states distinguished.
+    /// * A **malformed** `/N` that is simply not a stream at all — which
+    ///   is how this variant was first reached, by a test fixture whose
+    ///   `<< /Length 0 >>` had no `stream` keyword after it.
+    ///
+    /// Telling them apart would mean inspecting the subdictionary's
+    /// values, and the outcome is identical either way — so the message
+    /// names the structure it found rather than a diagnosis it has not
+    /// made. Markup annotations pdfce authors never have states, so this
+    /// only ever names a foreign file's structure.
+    #[error(
+        "annotation {id}'s /AP /N is a dictionary, not a single appearance stream — either an \
+         /AS-selected state subdictionary (§12.5.5) or a malformed entry; pdfce will not guess \
+         which appearance to regenerate"
+    )]
+    AppearanceHasStates {
+        /// The annotation that was named.
+        id: ObjId,
+    },
     #[error("an image needs a rectangle with area to be placed in ({w} × {h})")]
     ImageRectDegenerate {
         /// The requested width.
@@ -11705,6 +12171,394 @@ impl EditSession {
             group_members_promoted,
             appearance_streams_removed: ap_ids.len(),
         })
+    }
+
+    /// Restyle an **existing** markup annotation in place, keeping its
+    /// object identity.
+    ///
+    /// The verb `pdfceGUI`'s contextual Format tab is built on: an
+    /// operator selects a placed markup and changes its colour, interior,
+    /// width, opacity or arrowheads. Before this existed the annotation
+    /// surface was add and delete with nothing between them.
+    ///
+    /// # Why this is not delete-and-re-add
+    ///
+    /// Re-adding produces a *new object*, and an annotation's object
+    /// identity is load-bearing in four separate ways that a "change the
+    /// colour" button must not quietly break: its `/NM` (§12.5.2 — the
+    /// name uniquely identifying it among the page's annotations), its
+    /// index in the page's `/Annots` array (which is **paint order**, so
+    /// re-adding sends it to the top), its `/M` modification semantics,
+    /// and — the one that would actually cost an operator something — any
+    /// reply thread hung off it as an `/IRT` target. A button that
+    /// silently detaches a reviewer's replies is worse than no button.
+    ///
+    /// So this rewrites the annotation dictionary the file already has,
+    /// and returns the same [`ObjId`] it was given.
+    ///
+    /// # Why it regenerates the appearance rather than just setting `/C`
+    ///
+    /// R43: pdfce paints from `/AP` or not at all. Setting `/C` alone
+    /// would leave the appearance stream drawing the old colour, so the
+    /// operator's change would be **invisible** while the dictionary
+    /// claimed otherwise — a file whose two halves disagree, and a
+    /// control that appears to do nothing. Regeneration is also what
+    /// Acrobat does, and what §12.5.2's *"annotation handlers may …
+    /// provide their own appearances"* anticipates.
+    ///
+    /// The geometry is **read back out of the annotation's own
+    /// dictionary** ([`annot_author::spec_from_dict`]) — `/Vertices`,
+    /// `/L`, `/InkList`, `/QuadPoints`, `/Rect`, exactly where §12.5.6
+    /// puts it. Nothing is inferred; if the geometry is not there, the
+    /// verb refuses rather than invents.
+    ///
+    /// # What it writes, and how little
+    ///
+    /// One object in the best case. The regenerated appearance goes back
+    /// into the **existing** `/AP` `/N` stream object, so no object is
+    /// created, `/Size` does not move, the page's `/Annots` array is not
+    /// touched, and (R47) the page content stream is byte-untouched. The
+    /// annotation dictionary keeps every key this verb did not set:
+    /// `/NM`, `/M`, `/T`, `/Contents`, `/RC`, `/IRT`, `/RT`, `/Popup`,
+    /// `/CreationDate`, `/Subj`, `/F`, `/P`, `/StructParent`, `/OC`.
+    ///
+    /// Two cases write more, both reported in
+    /// [`MarkupStyleChange::appearance`]: an annotation with **no** `/AP`
+    /// gets one created (it now paints, where R43 meant it did not), and
+    /// an `/AP` **shared** with another annotation (§12.5.2 permits
+    /// sharing subsidiary objects) is copied rather than rewritten, so
+    /// the other annotation keeps what it had.
+    ///
+    /// # What it discloses (project rule 4)
+    ///
+    /// Regeneration draws the shape pdfce models. Anything the file
+    /// expressed outside that model — a `/BE` cloudy border, a dashed
+    /// `/BS`, an `/RD` inset, an exotic `/LE`, or simply an elaborate
+    /// hand-authored appearance — is **gone from the new stream** even
+    /// though its dictionary key survives. Each is named in
+    /// [`MarkupStyleChange::dropped`]. This is a report, not a gate:
+    /// there is no confirmation step in front of it, the edit has
+    /// happened, and undo is the escape hatch.
+    ///
+    /// [`DroppedProperty::ForeignAppearance`] is reported for every
+    /// regeneration over an appearance pdfce did not author, without
+    /// trying to judge whether that appearance was elaborate. pdfce
+    /// cannot tell a faithful stroke from a gradient without interpreting
+    /// the stream, and reporting "nothing was lost" without checking
+    /// would be a claim it has not earned.
+    ///
+    /// # Errors
+    ///
+    /// - [`EditError::AnnotationNotFound`] — no page's `/Annots` lists it.
+    /// - [`EditError::AnnotationIsCeDimension`] — use
+    ///   [`EditSession::set_dimension_style`]; see that variant.
+    /// - [`EditError::MarkupSpec`] — an unmodelled subtype (`FreeText`,
+    ///   `Stamp`, `Widget`, `Link`, …) or geometry pdfce will not guess.
+    /// - [`EditError::AppearanceHasStates`] — an `/AS`-selected `/AP`.
+    /// - [`EditError::AnnotationLocked`] — §12.5.3 Table 165 bit 8.
+    /// - [`EditError::DocumentEncrypted`],
+    ///   [`EditError::CertificationForbidsChange`],
+    ///   [`EditError::ObjectCreationWouldExposeHiddenObjects`] (only on
+    ///   the two paths that create an object),
+    ///   [`EditError::ObjectNumbersExhausted`],
+    ///   [`EditError::NotADictionary`], [`EditError::PageTree`].
+    pub fn set_markup_style(
+        &mut self,
+        annot_id: ObjId,
+        style: &MarkupStyle,
+    ) -> Result<MarkupStyleChange, EditError> {
+        // Guards, in the order `add_markup` applies its equivalents: the
+        // ones that are about the DOCUMENT before the ones about this
+        // annotation, so an operator working on an encrypted file is told
+        // about the encryption rather than about a subtype.
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        // §12.8.2.2 Table 254 `P = 3`: "annotation creation, deletion, and
+        // **modification**". Modification is named there explicitly, so
+        // this takes the annotation-aware gate, not the strict one.
+        self.check_certification_for_annotation()?;
+
+        let (target, _all) = self.locate_annotation(annot_id)?;
+        // §12.5.3 Table 165 bit 8 — the same clause `delete_annotation`
+        // honours, and for the same reason: a Locked annotation's
+        // properties may not be changed by the user interface.
+        if target.flags.locked() {
+            return Err(EditError::AnnotationLocked {
+                id: annot_id,
+                subtype: String::from_utf8_lossy(&target.subtype).into_owned(),
+            });
+        }
+
+        let Some(Object::Dict(current)) = self.value(annot_id) else {
+            return Err(EditError::NotADictionary {
+                id: annot_id,
+                key: "Subtype",
+            });
+        };
+        let current = current.clone();
+
+        // A ce dimension is a /Line and would sail through every test
+        // below, regenerating as a bare line with its label and witness
+        // lines gone. Checked BEFORE the spec read so the message names
+        // the real problem rather than a downstream symptom.
+        if matches!(
+            current.get(b"IT").map(|o| self.resolve_value(o)),
+            Some(Object::Name(n)) if n.as_bytes() == b"LineDimension"
+        ) {
+            return Err(EditError::AnnotationIsCeDimension { id: annot_id });
+        }
+
+        // Read the current geometry + style back out.
+        let original = annot_author::spec_from_dict(&self.graph(), &current)?;
+
+        // Was the appearance on disk one pdfce would have drawn from these
+        // same properties? Answered by rebuilding from the UNMODIFIED spec
+        // and comparing bytes, BEFORE the overrides are applied — the
+        // order is the whole trick, and applying them first would compare
+        // the new look against the old bytes and always disagree.
+        let appearance_was_pdfces = self.appearance_matches(
+            &current,
+            &annot_author::build_appearance(&original).ap_content,
+        );
+
+        let spec = apply_markup_style(original, style);
+        let authored = annot_author::build_appearance(&spec);
+
+        // Where does the new appearance go? Three cases, cheapest first.
+        let ap_slot = self.appearance_slot(annot_id, &current)?;
+        let new_ap_id = match ap_slot {
+            AppearanceSlot::Reuse(id) => id,
+            AppearanceSlot::Allocate => {
+                // Only these paths create an object, so only these pay the
+                // /Size guard `set_info_field` established.
+                let suppressed = self.base.suppressed_object_count();
+                if suppressed > 0 {
+                    return Err(EditError::ObjectCreationWouldExposeHiddenObjects {
+                        count: suppressed,
+                    });
+                }
+                ObjId::new(self.alloc_number()?, 0)
+            }
+        };
+
+        // Build the replacement annotation dictionary: start from what the
+        // file has (so every key this verb does not own survives), then
+        // overwrite exactly the keys `build_appearance` owns.
+        let mut updated = current.clone();
+        for key in [
+            &b"Rect"[..],
+            b"C",
+            b"IC",
+            b"BS",
+            b"LE",
+            b"L",
+            b"Vertices",
+            b"InkList",
+            b"QuadPoints",
+            b"BM",
+        ] {
+            updated.remove(key);
+        }
+        for (key, value) in authored.annot.0.iter() {
+            // /Type and /Subtype are re-asserted identically; harmless,
+            // and cheaper than special-casing them out.
+            updated.insert(key.clone(), value.clone());
+        }
+        // /CA is pdfce's to set here and is NOT part of `build_appearance`
+        // (it composites the annotation onto the page rather than
+        // affecting what the appearance draws), so it is applied to the
+        // dictionary directly.
+        match style.opacity {
+            Some(StyleEdit::Set(alpha)) => {
+                updated.insert(Name::from(b"CA"), Object::Real(alpha.clamp(0.0, 1.0)));
+            }
+            Some(StyleEdit::Clear) => {
+                updated.remove(b"CA");
+            }
+            None => {}
+        }
+        let mut ap = Dict::new();
+        ap.insert(Name::from(b"N"), Object::Reference(new_ap_id));
+        updated.insert(Name::from(b"AP"), Object::Dict(ap));
+
+        // The appearance stream object.
+        let mut ap_dict = authored.ap_dict;
+        ap_dict.insert(
+            Name::from(b"Length"),
+            Object::Integer(i64::try_from(authored.ap_content.len()).unwrap_or(i64::MAX)),
+        );
+        let ap_span = self.stage_bytes(&authored.ap_content);
+        let ap_stream = Object::Stream(Stream {
+            dict: ap_dict,
+            data_span: ap_span,
+        });
+
+        let change = MarkupStyleChange {
+            annot_id,
+            rect_before: target.rect,
+            rect_after: authored.rect,
+            appearance: match ap_slot {
+                AppearanceSlot::Reuse(id) => AppearanceWrite::InPlace(id),
+                AppearanceSlot::Allocate => match Self::existing_appearance_id(&current) {
+                    Some(from) => AppearanceWrite::CopiedOnWrite {
+                        from,
+                        to: new_ap_id,
+                    },
+                    None => AppearanceWrite::Created(new_ap_id),
+                },
+            },
+            dropped: dropped_properties(&self.graph(), &current, appearance_was_pdfces),
+        };
+
+        self.commit(Command {
+            kind: CommandKind::SetMarkupStyle,
+            objects: vec![
+                ObjectWrite {
+                    id: annot_id,
+                    before: self.state.get(&annot_id).cloned(),
+                    after: Some(Object::Dict(updated)),
+                },
+                ObjectWrite {
+                    id: new_ap_id,
+                    before: self.state.get(&new_ap_id).cloned(),
+                    after: Some(ap_stream),
+                },
+            ],
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(change)
+    }
+
+    /// Whether `annot`'s current `/AP` `/N` stream holds exactly
+    /// `expected`.
+    ///
+    /// The measurement behind [`DroppedProperty::ForeignAppearance`]. A
+    /// `false` from any of the four ways this can fail to establish
+    /// equality — no `/AP`, a `/N` that is not a stream, a span that
+    /// cannot be sliced, differing bytes — all mean the same thing to the
+    /// caller: pdfce cannot show that regenerating is lossless, so it
+    /// says so.
+    ///
+    /// ## Why raw bytes rather than a decode
+    ///
+    /// Deliberately compares the stream's RAW payload, not a filtered
+    /// one. pdfce authors appearance content unfiltered (WF2), so an
+    /// appearance it wrote compares equal directly; a `FlateDecode`d one
+    /// from another producer will not, and reporting that as foreign is
+    /// the right answer even if the decoded content happened to match —
+    /// pdfce is about to replace it with an unfiltered stream, so the
+    /// file changes either way.
+    ///
+    /// Uses the same base/staging split [`EditSession::view`] uses rather
+    /// than [`EditSession::authored_source`], which memcpys the whole file
+    /// per call.
+    fn appearance_matches(&self, annot: &Dict, expected: &[u8]) -> bool {
+        let Some(ap_id) = Self::existing_appearance_id(annot) else {
+            return false;
+        };
+        let Some(Object::Stream(stream)) = self.value(ap_id) else {
+            return false;
+        };
+        StreamSource::Split {
+            base: self.base.bytes(),
+            staged: &self.staging,
+        }
+        .slice(stream.data_span)
+        .is_some_and(|bytes| bytes == expected)
+    }
+
+    /// The object id of `annot`'s `/AP` `/N`, when it is a direct
+    /// reference to something (stream or otherwise).
+    ///
+    /// A free-standing helper rather than an inline match because
+    /// [`EditSession::set_markup_style`] needs the same answer twice —
+    /// once to choose a slot and once to describe what it did — and two
+    /// copies of a nested-lookup chain is two chances to disagree.
+    fn existing_appearance_id(annot: &Dict) -> Option<ObjId> {
+        match annot.get(b"AP") {
+            Some(Object::Dict(ap)) => ap.get(b"N").and_then(Object::as_reference),
+            _ => None,
+        }
+    }
+
+    /// Decide where a regenerated appearance stream may be written.
+    ///
+    /// Three outcomes, and the middle one is the whole reason this is not
+    /// an inline `if`:
+    ///
+    /// * **Reuse** — the annotation has an `/AP` `/N` naming a stream that
+    ///   no OTHER annotation in the document references. Rewriting it in
+    ///   place creates nothing and leaves `/Annots`, `/Size` and the
+    ///   annotation's own `/AP` entry alone.
+    /// * **Allocate (copy-on-write)** — the stream IS referenced
+    ///   elsewhere. §12.5.2 is explicit that the one-page rule "applies
+    ///   only to the annotation dictionary itself, **not to subsidiary
+    ///   objects, which may be shared among multiple annotations**", so a
+    ///   shared appearance is legal input, not corruption. Rewriting it
+    ///   would restyle an annotation the operator never selected.
+    /// * **Allocate (create)** — there is no `/AP` at all.
+    ///
+    /// The sharing test walks every page's `/Annots` once. That is a
+    /// document-wide walk per restyle, which is affordable because a
+    /// shell calls this on commit rather than per frame, and because
+    /// getting it wrong is silent: the operator recolours one comment and
+    /// a different one changes on another page.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::AppearanceHasStates`] — `/AP` `/N` is a subdictionary
+    /// of appearance states rather than a single stream (§12.5.5).
+    /// [`EditError::PageTree`].
+    fn appearance_slot(&self, annot_id: ObjId, annot: &Dict) -> Result<AppearanceSlot, EditError> {
+        let Some(ap_id) = Self::existing_appearance_id(annot) else {
+            // Either no /AP at all, or an /AP whose /N is inline. An
+            // inline /N cannot be a stream (§7.3.8.1: streams are always
+            // indirect), so there is nothing to reuse either way.
+            return Ok(match annot.get(b"AP") {
+                Some(Object::Dict(ap)) => match ap.get(b"N").map(|o| self.resolve_value(o)) {
+                    // A dictionary that is not a stream IS the
+                    // appearance-state case (Table 168).
+                    Some(Object::Dict(_)) => {
+                        return Err(EditError::AppearanceHasStates { id: annot_id });
+                    }
+                    _ => AppearanceSlot::Allocate,
+                },
+                _ => AppearanceSlot::Allocate,
+            });
+        };
+        if matches!(self.value(ap_id), Some(Object::Dict(_))) {
+            return Err(EditError::AppearanceHasStates { id: annot_id });
+        }
+
+        let slots = self.page_slots()?;
+        let graph = self.graph();
+        for slot in &slots {
+            let Some(Object::Dict(page)) = self.value(slot.id) else {
+                continue;
+            };
+            let Some(Object::Array(annots)) = page.get(b"Annots").map(|o| graph.resolve(o)) else {
+                continue;
+            };
+            for entry in annots {
+                let Some(other_id) = entry.as_reference() else {
+                    continue;
+                };
+                if other_id == annot_id {
+                    continue;
+                }
+                if Some(ap_id)
+                    == self
+                        .value(other_id)
+                        .and_then(Object::as_dict)
+                        .and_then(Self::existing_appearance_id)
+                {
+                    return Ok(AppearanceSlot::Allocate);
+                }
+            }
+        }
+        Ok(AppearanceSlot::Reuse(ap_id))
     }
 
     /// Find an annotation by object id, and hand back the whole document's
@@ -20329,6 +21183,906 @@ mod tests {
         }
     }
 
+    // -- set_markup_style: restyling a PLACED annotation ---------------
+
+    /// The `/AP` `/N` stream id an annotation currently points at.
+    fn ap_of(s: &EditSession, annot_id: ObjId) -> Option<ObjId> {
+        let Some(Object::Dict(annot)) = s.value(annot_id) else {
+            return None;
+        };
+        let Some(Object::Dict(ap)) = annot.get(b"AP") else {
+            return None;
+        };
+        ap.get(b"N").and_then(Object::as_reference)
+    }
+
+    /// Seed an object's value directly, bypassing the command log.
+    /// **Fixture setup only** — it exists so a test can shape an
+    /// annotation the way a foreign producer would have (a `/NM`, a
+    /// shared `/AP`, a `/Locked` flag) without a second authoring verb.
+    fn poke(s: &mut EditSession, id: ObjId, value: Object) {
+        s.state.insert(id, value);
+    }
+
+    /// The raw appearance-stream bytes an annotation currently points at,
+    /// resolved against the session's staging buffer.
+    fn ap_bytes(s: &EditSession, ap_id: ObjId) -> Vec<u8> {
+        let Some(Object::Stream(st)) = s.value(ap_id) else {
+            return Vec::new();
+        };
+        let src = s.authored_source();
+        st.data_span
+            .slice(src.as_ref())
+            .map(<[u8]>::to_vec)
+            .unwrap_or_default()
+    }
+
+    /// The raw `/C` numbers on an annotation.
+    fn color_of(s: &EditSession, annot_id: ObjId) -> Vec<f64> {
+        let Some(Object::Dict(annot)) = s.value(annot_id) else {
+            return Vec::new();
+        };
+        match annot.get(b"C") {
+            Some(Object::Array(items)) => items.iter().filter_map(Object::as_number).collect(),
+            _ => Vec::new(),
+        }
+    }
+
+    #[test]
+    fn restyling_keeps_the_annotation_and_appearance_object_ids() {
+        // The headline contract, and the whole reason this is not
+        // delete-and-re-add: the annotation object survives, so its /NM,
+        // its /Annots index (paint order) and any /IRT reply thread hung
+        // off it survive with it.
+        let mut s = session(pdf_without_info());
+        let annot_id = s.add_markup(0, &square_spec()).unwrap();
+        let ap_before = ap_of(&s, annot_id).expect("authored AP");
+        let annots_before = s.value(ObjId::new(3, 0)).cloned();
+
+        let change = s
+            .set_markup_style(
+                annot_id,
+                &MarkupStyle {
+                    stroke: Some(StyleEdit::Set(Color::Rgb(0.0, 0.0, 1.0))),
+                    ..MarkupStyle::default()
+                },
+            )
+            .unwrap();
+
+        assert_eq!(change.annot_id, annot_id, "same object id");
+        assert_eq!(change.appearance, AppearanceWrite::InPlace(ap_before));
+        assert_eq!(ap_of(&s, annot_id), Some(ap_before), "same AP object");
+        assert_eq!(
+            s.value(ObjId::new(3, 0)).cloned(),
+            annots_before,
+            "the page (and so /Annots order, and so z-order) is untouched"
+        );
+        assert_eq!(color_of(&s, annot_id), vec![0.0, 0.0, 1.0]);
+    }
+
+    #[test]
+    fn restyling_regenerates_the_appearance_not_just_the_dictionary() {
+        // R43 paints from /AP or not at all. A verb that set /C and left
+        // the appearance drawing the old colour would pass a naive
+        // dictionary assertion while doing NOTHING the operator can see.
+        let mut s = session(pdf_without_info());
+        let annot_id = s.add_markup(0, &square_spec()).unwrap();
+        let ap_id = ap_of(&s, annot_id).expect("AP");
+        let bytes_before = ap_bytes(&s, ap_id);
+        assert!(
+            !bytes_before.is_empty(),
+            "the authored AP must have content"
+        );
+
+        s.set_markup_style(
+            annot_id,
+            &MarkupStyle {
+                stroke: Some(StyleEdit::Set(Color::Rgb(0.0, 0.0, 1.0))),
+                ..MarkupStyle::default()
+            },
+        )
+        .unwrap();
+
+        let bytes_after = ap_bytes(&s, ap_id);
+        assert_ne!(
+            bytes_before, bytes_after,
+            "the appearance stream must change, or the edit is invisible"
+        );
+        // The red the square was authored with is gone from the content.
+        assert!(
+            !String::from_utf8_lossy(&bytes_after).contains("1 0 0 RG")
+                && String::from_utf8_lossy(&bytes_after).contains("RG"),
+            "the new stroke colour must be in the appearance: {}",
+            String::from_utf8_lossy(&bytes_after)
+        );
+    }
+
+    #[test]
+    fn restyling_preserves_every_key_it_does_not_own() {
+        // /NM, /T, /Contents, /IRT, /M, /F, /P — the identity-adjacent
+        // keys a re-add would lose. Written onto the annotation directly
+        // so the test does not depend on `add_markup` authoring them.
+        let mut s = session(pdf_without_info());
+        let annot_id = s.add_markup(0, &square_spec()).unwrap();
+        let Some(Object::Dict(annot)) = s.value(annot_id) else {
+            panic!("annot");
+        };
+        let mut seeded = annot.clone();
+        for (k, v) in [
+            (&b"NM"[..], Object::String(b"comment-7".to_vec())),
+            (b"T", Object::String(b"Ken".to_vec())),
+            (b"Contents", Object::String(b"check this".to_vec())),
+            (b"Subj", Object::String(b"Review".to_vec())),
+            (
+                b"CreationDate",
+                Object::String(b"D:20260817120000Z".to_vec()),
+            ),
+            (b"IRT", Object::Reference(ObjId::new(99, 0))),
+            (b"RT", Object::Name(Name::from(b"R"))),
+            (b"StructParent", Object::Integer(4)),
+        ] {
+            seeded.insert(Name(k.to_vec()), v);
+        }
+        poke(&mut s, annot_id, Object::Dict(seeded.clone()));
+
+        s.set_markup_style(
+            annot_id,
+            &MarkupStyle {
+                width: Some(6.0),
+                ..MarkupStyle::default()
+            },
+        )
+        .unwrap();
+
+        let Some(Object::Dict(after)) = s.value(annot_id) else {
+            panic!("annot");
+        };
+        for key in [
+            &b"NM"[..],
+            b"T",
+            b"Contents",
+            b"Subj",
+            b"CreationDate",
+            b"IRT",
+            b"RT",
+            b"StructParent",
+            b"P",
+            b"F",
+        ] {
+            assert_eq!(
+                after.get(key),
+                seeded.get(key),
+                "/{} must survive a restyle",
+                String::from_utf8_lossy(key)
+            );
+        }
+    }
+
+    #[test]
+    fn a_ce_dimension_is_refused_by_name_not_flattened_to_a_line() {
+        // A ce dimension is a /Line with /IT /LineDimension and a baked
+        // /AP that draws witness lines, terminators and a measured label.
+        // It passes every "markup pdfce can author" test and would
+        // regenerate as a BARE LINE — the label silently gone from
+        // something the operator asked only to recolour.
+        let mut s = session(pdf_without_info());
+        let annot_id = s
+            .add_markup(
+                0,
+                &MarkupSpec::Line {
+                    start: (10.0, 10.0),
+                    end: (90.0, 10.0),
+                    color: Color::Rgb(0.0, 0.0, 0.0),
+                    width: 1.0,
+                    endings: (
+                        crate::annot_author::LineEnding::None,
+                        crate::annot_author::LineEnding::None,
+                    ),
+                },
+            )
+            .unwrap();
+        let Some(Object::Dict(annot)) = s.value(annot_id) else {
+            panic!("annot");
+        };
+        let mut dim = annot.clone();
+        dim.insert(
+            Name::from(b"IT"),
+            Object::Name(Name::from(b"LineDimension")),
+        );
+        poke(&mut s, annot_id, Object::Dict(dim));
+
+        let err = s
+            .set_markup_style(
+                annot_id,
+                &MarkupStyle {
+                    stroke: Some(StyleEdit::Set(Color::Rgb(1.0, 0.0, 0.0))),
+                    ..MarkupStyle::default()
+                },
+            )
+            .unwrap_err();
+        assert!(matches!(err, EditError::AnnotationIsCeDimension { .. }));
+    }
+
+    #[test]
+    fn an_unmodelled_subtype_is_refused_rather_than_guessed() {
+        // FreeText, Stamp, Widget, Link — pdfce has no authoring model
+        // for their appearances, so regenerating one would mean inventing
+        // it.
+        let bytes = build(
+            &[
+                "<< /Type /Catalog /Pages 2 0 R >>",
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Resources << >> \
+                 /Annots [4 0 R] >>",
+                "<< /Type /Annot /Subtype /FreeText /Rect [10 10 100 40] /DA (/Helv 0 Tf 0 g) >>",
+            ],
+            "",
+        );
+        let mut s = session(bytes);
+        let err = s
+            .set_markup_style(ObjId::new(4, 0), &MarkupStyle::default())
+            .unwrap_err();
+        assert!(
+            matches!(
+                &err,
+                EditError::MarkupSpec(crate::annot_author::SpecReadError::UnsupportedSubtype {
+                    subtype
+                }) if subtype == "FreeText"
+            ),
+            "got {err:?}"
+        );
+        assert!(!s.is_modified());
+    }
+
+    #[test]
+    fn missing_geometry_is_refused_rather_than_invented() {
+        // A /Polygon with no /Vertices has nothing to draw. Inventing a
+        // shape for it is exactly what rule 4 forbids.
+        let bytes = build(
+            &[
+                "<< /Type /Catalog /Pages 2 0 R >>",
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Resources << >> \
+                 /Annots [4 0 R] >>",
+                "<< /Type /Annot /Subtype /Polygon /Rect [10 10 100 40] /C [1 0 0] >>",
+            ],
+            "",
+        );
+        let mut s = session(bytes);
+        let err = s
+            .set_markup_style(ObjId::new(4, 0), &MarkupStyle::default())
+            .unwrap_err();
+        assert!(
+            matches!(
+                err,
+                EditError::MarkupSpec(crate::annot_author::SpecReadError::BadGeometry {
+                    key: "Vertices"
+                })
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn a_shared_appearance_is_copied_not_rewritten() {
+        // §12.5.2: the one-page rule "applies only to the annotation
+        // dictionary itself, NOT to subsidiary objects, which may be
+        // shared". Rewriting a shared /AP in place would restyle an
+        // annotation the operator never selected — silently, on whichever
+        // page it happens to be.
+        let mut s = session(pdf_without_info());
+        let first = s.add_markup(0, &square_spec()).unwrap();
+        let second = s.add_markup(0, &square_spec()).unwrap();
+        let shared_ap = ap_of(&s, first).expect("AP");
+
+        // Point the second annotation at the first's appearance.
+        let Some(Object::Dict(annot)) = s.value(second) else {
+            panic!("annot");
+        };
+        let mut aliased = annot.clone();
+        let mut ap = Dict::new();
+        ap.insert(Name::from(b"N"), Object::Reference(shared_ap));
+        aliased.insert(Name::from(b"AP"), Object::Dict(ap));
+        poke(&mut s, second, Object::Dict(aliased));
+        let Some(shared_before) = s.value(shared_ap).cloned() else {
+            panic!("shared AP");
+        };
+
+        let change = s
+            .set_markup_style(
+                second,
+                &MarkupStyle {
+                    stroke: Some(StyleEdit::Set(Color::Rgb(0.0, 1.0, 0.0))),
+                    ..MarkupStyle::default()
+                },
+            )
+            .unwrap();
+
+        let AppearanceWrite::CopiedOnWrite { from, to } = change.appearance else {
+            panic!("expected copy-on-write, got {:?}", change.appearance);
+        };
+        assert_eq!(from, shared_ap);
+        assert_ne!(to, shared_ap);
+        assert_eq!(
+            s.value(shared_ap).cloned(),
+            Some(shared_before),
+            "the OTHER annotation's appearance must be untouched"
+        );
+        assert_eq!(
+            ap_of(&s, first),
+            Some(shared_ap),
+            "and it still points at it"
+        );
+        assert_eq!(ap_of(&s, second), Some(to));
+    }
+
+    #[test]
+    fn an_annotation_with_no_appearance_gets_one_created() {
+        // R43 means an annotation with no /AP does not paint at all.
+        // Restyling it is how it starts to.
+        let bytes = build(
+            &[
+                "<< /Type /Catalog /Pages 2 0 R >>",
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Resources << >> \
+                 /Annots [4 0 R] >>",
+                "<< /Type /Annot /Subtype /Square /Rect [10 10 100 40] /C [1 0 0] >>",
+            ],
+            "",
+        );
+        let mut s = session(bytes);
+        let change = s
+            .set_markup_style(
+                ObjId::new(4, 0),
+                &MarkupStyle {
+                    stroke: Some(StyleEdit::Set(Color::Rgb(0.0, 0.0, 1.0))),
+                    ..MarkupStyle::default()
+                },
+            )
+            .unwrap();
+        assert!(matches!(change.appearance, AppearanceWrite::Created(_)));
+        assert!(ap_of(&s, ObjId::new(4, 0)).is_some());
+        assert!(
+            change.dropped.is_empty(),
+            "nothing was replaced, so nothing was lost: {:?}",
+            change.dropped
+        );
+    }
+
+    #[test]
+    fn restyling_discloses_what_the_regeneration_dropped() {
+        // Rule 4: the appearance no longer draws a cloudy border or a
+        // dashed stroke, even though the dictionary keys survive. Named,
+        // not left for the operator to notice.
+        let bytes = build(
+            &[
+                "<< /Type /Catalog /Pages 2 0 R >>",
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Resources << >> \
+                 /Annots [4 0 R] >>",
+                "<< /Type /Annot /Subtype /Square /Rect [10 10 100 40] /C [1 0 0] \
+                 /BE << /S /C /I 2 >> /RD [2 2 2 2] \
+                 /BS << /W 3 /S /D /D [3 2] >> \
+                 /AP << /N 5 0 R >> >>",
+                "<< /Length 1 >>
+stream
+ 
+endstream",
+            ],
+            "",
+        );
+        let mut s = session(bytes);
+        let change = s
+            .set_markup_style(
+                ObjId::new(4, 0),
+                &MarkupStyle {
+                    stroke: Some(StyleEdit::Set(Color::Rgb(0.0, 0.0, 1.0))),
+                    ..MarkupStyle::default()
+                },
+            )
+            .unwrap();
+
+        for expected in [
+            DroppedProperty::BorderEffect,
+            DroppedProperty::RectDifferences,
+            DroppedProperty::BorderStyle,
+            DroppedProperty::DashPattern,
+            DroppedProperty::ForeignAppearance,
+        ] {
+            assert!(
+                change.dropped.contains(&expected),
+                "{expected:?} must be disclosed; got {:?}",
+                change.dropped
+            );
+        }
+    }
+
+    #[test]
+    fn restyling_pdfces_own_markup_reports_no_loss() {
+        // The centre case, and the one a blunt always-on flag got wrong:
+        // recolouring a square pdfce authored seconds earlier must NOT
+        // warn about shadows and gradients. A disclosure that fires on
+        // the common path is one an operator learns to skip, which spends
+        // the credibility the genuinely-lossy case needs.
+        let mut s = session(pdf_without_info());
+        let annot_id = s.add_markup(0, &square_spec()).unwrap();
+        let change = s
+            .set_markup_style(
+                annot_id,
+                &MarkupStyle {
+                    stroke: Some(StyleEdit::Set(Color::Rgb(0.0, 0.0, 1.0))),
+                    ..MarkupStyle::default()
+                },
+            )
+            .unwrap();
+        assert!(
+            change.dropped.is_empty(),
+            "regenerating pdfce's own appearance is provably lossless: {:?}",
+            change.dropped
+        );
+
+        // And restyling the RESULT is still lossless -- the regenerated
+        // stream has to be recognisable on the next pass too, or the
+        // second colour change would suddenly start warning.
+        let again = s
+            .set_markup_style(
+                annot_id,
+                &MarkupStyle {
+                    width: Some(5.0),
+                    ..MarkupStyle::default()
+                },
+            )
+            .unwrap();
+        assert!(again.dropped.is_empty(), "{:?}", again.dropped);
+    }
+
+    #[test]
+    fn restyling_a_foreign_appearance_reports_the_loss() {
+        // The other half of the same measurement: an /AP whose bytes are
+        // not what pdfce would have drawn from these properties IS
+        // reported, so the precise version has not simply gone quiet.
+        let bytes = build(
+            &[
+                "<< /Type /Catalog /Pages 2 0 R >>",
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Resources << >> /Annots \
+                 [4 0 R] >>",
+                "<< /Type /Annot /Subtype /Square /Rect [10 10 100 40] /C [1 0 0] /AP << /N 5 0 \
+                 R >> >>",
+                "<< /Length 22 >>
+stream
+0 0 1 rg 1 1 8 8 re f
+endstream",
+            ],
+            "",
+        );
+        let mut s = session(bytes);
+        let change = s
+            .set_markup_style(
+                ObjId::new(4, 0),
+                &MarkupStyle {
+                    stroke: Some(StyleEdit::Set(Color::Rgb(0.0, 0.0, 1.0))),
+                    ..MarkupStyle::default()
+                },
+            )
+            .unwrap();
+        assert!(
+            change.dropped.contains(&DroppedProperty::ForeignAppearance),
+            "a hand-authored appearance must be reported: {:?}",
+            change.dropped
+        );
+    }
+
+    #[test]
+    fn an_exotic_line_ending_is_disclosed_rather_than_silently_flattened() {
+        // `spec_from_dict` degrades an unmodelled /LE to None so the
+        // recolour can still happen — which is exactly why the loss has
+        // to be detected against the FILE and reported.
+        let bytes = build(
+            &[
+                "<< /Type /Catalog /Pages 2 0 R >>",
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Resources << >> \
+                 /Annots [4 0 R] >>",
+                "<< /Type /Annot /Subtype /Line /Rect [10 10 100 40] /L [10 10 100 40] \
+                 /C [1 0 0] /LE [/Diamond /ClosedArrow] >>",
+            ],
+            "",
+        );
+        let mut s = session(bytes);
+        let change = s
+            .set_markup_style(
+                ObjId::new(4, 0),
+                &MarkupStyle {
+                    width: Some(2.0),
+                    ..MarkupStyle::default()
+                },
+            )
+            .unwrap();
+        assert!(change.dropped.contains(&DroppedProperty::LineEnding));
+        // The ending pdfce DOES author survives.
+        let Some(Object::Dict(after)) = s.value(ObjId::new(4, 0)) else {
+            panic!("annot");
+        };
+        let Some(Object::Array(le)) = after.get(b"LE") else {
+            panic!("/LE");
+        };
+        assert_eq!(le.len(), 2);
+        assert_eq!(
+            le[1].as_name().map(|n| n.as_bytes().to_vec()),
+            Some(b"ClosedArrow".to_vec())
+        );
+    }
+
+    #[test]
+    fn widening_a_line_moves_its_rect_and_that_is_correct() {
+        // For every subtype except Square/Circle the /Rect is DERIVED
+        // from the geometry plus a margin containing the stroke and any
+        // arrowheads. A wider pen needs a bigger box; the change is
+        // reported rather than being a surprise.
+        let mut s = session(pdf_without_info());
+        let annot_id = s
+            .add_markup(
+                0,
+                &MarkupSpec::Line {
+                    start: (10.0, 10.0),
+                    end: (90.0, 10.0),
+                    color: Color::Rgb(0.0, 0.0, 0.0),
+                    width: 1.0,
+                    endings: (
+                        crate::annot_author::LineEnding::None,
+                        crate::annot_author::LineEnding::None,
+                    ),
+                },
+            )
+            .unwrap();
+        let change = s
+            .set_markup_style(
+                annot_id,
+                &MarkupStyle {
+                    width: Some(12.0),
+                    ..MarkupStyle::default()
+                },
+            )
+            .unwrap();
+        let before = change.rect_before.expect("rect");
+        assert!(
+            change.rect_after.height() > before.height(),
+            "a 12pt pen needs a taller box than a 1pt one: {before:?} -> {:?}",
+            change.rect_after
+        );
+        // And a Square's rect is NOT derived, so it does not move.
+        let sq = s.add_markup(0, &square_spec()).unwrap();
+        let change = s
+            .set_markup_style(
+                sq,
+                &MarkupStyle {
+                    width: Some(12.0),
+                    ..MarkupStyle::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(change.rect_before, Some(change.rect_after));
+    }
+
+    #[test]
+    fn clearing_an_optional_colour_removes_the_key() {
+        // "No border" is a real style and §12.5.6 spells it as an ABSENT
+        // /C — there is no transparent value in a DeviceRGB array. This
+        // is why StyleEdit has a Clear variant at all.
+        let mut s = session(pdf_without_info());
+        let annot_id = s.add_markup(0, &square_spec()).unwrap();
+        s.set_markup_style(
+            annot_id,
+            &MarkupStyle {
+                stroke: Some(StyleEdit::Clear),
+                interior: Some(StyleEdit::Set(Color::Rgb(1.0, 1.0, 0.0))),
+                ..MarkupStyle::default()
+            },
+        )
+        .unwrap();
+        let Some(Object::Dict(after)) = s.value(annot_id) else {
+            panic!("annot");
+        };
+        assert!(after.get(b"C").is_none(), "/C must be removed, not zeroed");
+        assert!(after.get(b"IC").is_some());
+    }
+
+    #[test]
+    fn clearing_a_required_colour_falls_back_to_black_not_invisible() {
+        // A /Line's stroke is unconditional (§12.5.6.7). "Clear" there
+        // cannot mean "draw nothing" — that is an annotation the operator
+        // can no longer find.
+        let mut s = session(pdf_without_info());
+        let annot_id = s
+            .add_markup(
+                0,
+                &MarkupSpec::Line {
+                    start: (10.0, 10.0),
+                    end: (90.0, 10.0),
+                    color: Color::Rgb(1.0, 0.0, 0.0),
+                    width: 1.0,
+                    endings: (
+                        crate::annot_author::LineEnding::None,
+                        crate::annot_author::LineEnding::None,
+                    ),
+                },
+            )
+            .unwrap();
+        s.set_markup_style(
+            annot_id,
+            &MarkupStyle {
+                stroke: Some(StyleEdit::Clear),
+                ..MarkupStyle::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(color_of(&s, annot_id), vec![0.0], "DeviceGray black");
+    }
+
+    #[test]
+    fn a_colour_only_restyle_keeps_every_other_property() {
+        // The defect a sabotage found this file blind to: if
+        // `spec_from_dict` ignored /BS /W, changing only the COLOUR would
+        // regenerate the appearance at the default 1pt and silently thin
+        // a 7pt border. Nothing the operator asked for, nothing reported.
+        // The same argument applies to the interior and the endings, so
+        // all three are held here.
+        let mut s = session(pdf_without_info());
+        let annot_id = s
+            .add_markup(
+                0,
+                &MarkupSpec::Square {
+                    rect: Rect {
+                        llx: 20.0,
+                        lly: 20.0,
+                        urx: 120.0,
+                        ury: 70.0,
+                    },
+                    border: Some(Color::Rgb(1.0, 0.0, 0.0)),
+                    interior: Some(Color::Rgb(0.0, 1.0, 0.0)),
+                    border_width: 7.0,
+                },
+            )
+            .unwrap();
+
+        s.set_markup_style(
+            annot_id,
+            &MarkupStyle {
+                stroke: Some(StyleEdit::Set(Color::Rgb(0.0, 0.0, 1.0))),
+                ..MarkupStyle::default()
+            },
+        )
+        .unwrap();
+
+        let Some(Object::Dict(after)) = s.value(annot_id) else {
+            panic!("annot");
+        };
+        let Some(Object::Dict(bs)) = after.get(b"BS") else {
+            panic!("/BS");
+        };
+        assert_eq!(
+            bs.get(b"W").and_then(Object::as_number),
+            Some(7.0),
+            "the border width must survive a colour-only change"
+        );
+        assert_eq!(
+            after.get(b"IC").and_then(Object::as_array).map(|a| a.len()),
+            Some(3),
+            "the interior colour must survive too"
+        );
+        // And the appearance stream is regenerated AT that width, not at
+        // the default -- a dictionary that says 7 over an appearance drawn
+        // at 1 is the R43 disagreement this verb exists to avoid.
+        let ap = ap_of(&s, annot_id).expect("AP");
+        assert!(
+            String::from_utf8_lossy(&ap_bytes(&s, ap)).contains("7 w"),
+            "appearance: {}",
+            String::from_utf8_lossy(&ap_bytes(&s, ap))
+        );
+    }
+
+    #[test]
+    fn a_width_only_restyle_keeps_the_line_endings() {
+        // Same shape, for /LE: `spec_from_dict` has to read the arrowheads
+        // back or a width tweak would silently remove them.
+        let mut s = session(pdf_without_info());
+        let annot_id = s
+            .add_markup(
+                0,
+                &MarkupSpec::Line {
+                    start: (10.0, 10.0),
+                    end: (90.0, 10.0),
+                    color: Color::Rgb(0.0, 0.0, 0.0),
+                    width: 1.0,
+                    endings: (
+                        crate::annot_author::LineEnding::ClosedArrow,
+                        crate::annot_author::LineEnding::OpenArrow,
+                    ),
+                },
+            )
+            .unwrap();
+        s.set_markup_style(
+            annot_id,
+            &MarkupStyle {
+                width: Some(3.0),
+                ..MarkupStyle::default()
+            },
+        )
+        .unwrap();
+        let Some(Object::Dict(after)) = s.value(annot_id) else {
+            panic!("annot");
+        };
+        let Some(Object::Array(le)) = after.get(b"LE") else {
+            panic!("/LE");
+        };
+        assert_eq!(
+            le.iter()
+                .filter_map(|o| o.as_name().map(|n| n.as_bytes().to_vec()))
+                .collect::<Vec<_>>(),
+            vec![b"ClosedArrow".to_vec(), b"OpenArrow".to_vec()]
+        );
+    }
+
+    #[test]
+    fn opacity_sets_and_clears_ca() {
+        let mut s = session(pdf_without_info());
+        let annot_id = s.add_markup(0, &square_spec()).unwrap();
+
+        s.set_markup_style(
+            annot_id,
+            &MarkupStyle {
+                opacity: Some(StyleEdit::Set(0.4)),
+                ..MarkupStyle::default()
+            },
+        )
+        .unwrap();
+        let Some(Object::Dict(after)) = s.value(annot_id) else {
+            panic!("annot");
+        };
+        assert_eq!(after.get(b"CA").and_then(Object::as_number), Some(0.4));
+
+        s.set_markup_style(
+            annot_id,
+            &MarkupStyle {
+                opacity: Some(StyleEdit::Clear),
+                ..MarkupStyle::default()
+            },
+        )
+        .unwrap();
+        let Some(Object::Dict(after)) = s.value(annot_id) else {
+            panic!("annot");
+        };
+        assert!(
+            after.get(b"CA").is_none(),
+            "absent /CA is §12.5.2's fully-opaque, and differs from an explicit 1.0"
+        );
+    }
+
+    #[test]
+    fn restyling_is_one_undo_entry_and_undo_restores_the_bytes() {
+        let mut s = session(pdf_without_info());
+        let annot_id = s.add_markup(0, &square_spec()).unwrap();
+        let before = s.value(annot_id).cloned();
+        let depth = s.undo_depth();
+
+        s.set_markup_style(
+            annot_id,
+            &MarkupStyle {
+                stroke: Some(StyleEdit::Set(Color::Rgb(0.0, 0.0, 1.0))),
+                width: Some(9.0),
+                ..MarkupStyle::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(s.undo_depth(), depth + 1, "one entry for the whole restyle");
+        assert_eq!(s.undo_kind(), Some(CommandKind::SetMarkupStyle));
+        assert!(s.undo().is_some());
+        assert_eq!(s.value(annot_id).cloned(), before);
+    }
+
+    #[test]
+    fn restyling_never_touches_the_page_content_stream() {
+        // R47: annotations live in /Annots and their own appearance
+        // streams. An annotation edit that rewrote page content would be
+        // a minimal-diff violation with no upside.
+        let mut s = session(pdf_without_info());
+        let annot_id = s.add_markup(0, &square_spec()).unwrap();
+        let dirty_before: Vec<ObjId> = s.dirty_set().iter().collect();
+
+        s.set_markup_style(
+            annot_id,
+            &MarkupStyle {
+                stroke: Some(StyleEdit::Set(Color::Rgb(0.0, 0.0, 1.0))),
+                ..MarkupStyle::default()
+            },
+        )
+        .unwrap();
+
+        // The restyle added no object to the dirty set beyond the two it
+        // owns (annotation + its own appearance), both of which the add
+        // had already dirtied.
+        let dirty_after: Vec<ObjId> = s.dirty_set().iter().collect();
+        assert_eq!(
+            dirty_before.len(),
+            dirty_after.len(),
+            "a restyle over pdfce's own markup writes nothing new"
+        );
+    }
+
+    #[test]
+    fn a_locked_annotation_refuses_a_restyle() {
+        // §12.5.3 Table 165 bit 8 — the same clause `delete_annotation`
+        // honours. "Locked" is exactly about the user interface not
+        // changing properties.
+        let mut s = session(pdf_without_info());
+        let annot_id = s.add_markup(0, &square_spec()).unwrap();
+        let Some(Object::Dict(annot)) = s.value(annot_id) else {
+            panic!("annot");
+        };
+        let mut locked = annot.clone();
+        locked.insert(
+            Name::from(b"F"),
+            Object::Integer(i64::from(AnnotFlags::LOCKED)),
+        );
+        poke(&mut s, annot_id, Object::Dict(locked));
+
+        let err = s
+            .set_markup_style(annot_id, &MarkupStyle::default())
+            .unwrap_err();
+        assert!(matches!(err, EditError::AnnotationLocked { .. }));
+    }
+
+    #[test]
+    fn an_appearance_state_subdictionary_is_refused() {
+        // §12.5.5 Table 168: an /AP /N may be a subdictionary of states
+        // selected by /AS. Regenerating would have to pick one to rewrite
+        // and leave the others describing a different style.
+        let bytes = build(
+            &[
+                "<< /Type /Catalog /Pages 2 0 R >>",
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Resources << >> \
+                 /Annots [4 0 R] >>",
+                "<< /Type /Annot /Subtype /Square /Rect [10 10 100 40] /C [1 0 0] \
+                 /AS /On /AP << /N << /On 5 0 R /Off 5 0 R >> >> >>",
+                "<< /Length 0 >>",
+            ],
+            "",
+        );
+        let mut s = session(bytes);
+        let err = s
+            .set_markup_style(ObjId::new(4, 0), &MarkupStyle::default())
+            .unwrap_err();
+        assert!(
+            matches!(err, EditError::AppearanceHasStates { .. }),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn an_empty_style_still_regenerates_and_reports() {
+        // Not a no-op, and deliberately so: an empty override on an
+        // annotation with a foreign /AP is how a caller says "redraw this
+        // from its declared properties". The report says what that cost.
+        let mut s = session(pdf_without_info());
+        let annot_id = s.add_markup(0, &square_spec()).unwrap();
+        let change = s
+            .set_markup_style(annot_id, &MarkupStyle::default())
+            .unwrap();
+        assert_eq!(change.annot_id, annot_id);
+        assert!(MarkupStyle::default().is_empty());
+    }
+
+    #[test]
+    fn set_markup_style_names_an_annotation_that_is_not_there() {
+        let mut s = session(pdf_without_info());
+        let err = s
+            .set_markup_style(ObjId::new(404, 0), &MarkupStyle::default())
+            .unwrap_err();
+        assert!(matches!(err, EditError::AnnotationNotFound { .. }));
+    }
+
     #[test]
     fn adding_a_markup_creates_appearance_annotation_and_patches_annots() {
         // One gesture ⇒ appearance stream + annotation dict + /Annots patch,
@@ -21330,7 +23084,8 @@ endstream",
             &[
                 "<< /Type /Catalog /Pages 2 0 R >>",
                 "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]                  /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << \
+                 /F1 5 0 R >> >> /Contents 4 0 R >>",
                 &stream,
                 "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
             ],
@@ -21700,15 +23455,17 @@ endstream",
             content.len()
         );
         let font = if to_unicode {
-            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica              /Encoding /WinAnsiEncoding /ToUnicode 6 0 R >>"
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding \
+             /ToUnicode 6 0 R >>"
         } else {
-            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica              /Encoding /WinAnsiEncoding >>"
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"
         };
         build(
             &[
                 "<< /Type /Catalog /Pages 2 0 R >>",
                 "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]                  /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << \
+                 /F1 5 0 R >> >> /Contents 4 0 R >>",
                 &stream,
                 font,
                 &cmap_obj,
