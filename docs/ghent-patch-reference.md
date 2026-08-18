@@ -1,4 +1,4 @@
-# Ghent PDF Output Suite 5.0 — per-patch reference (overprint patches)
+# Ghent PDF Output Suite 5.0 — per-patch reference
 
 **Written 2026-08-18** by the engineer, from a commissioned research pass
 that extracted `GhentPDFOutputSuite50_ReadMes.pdf` (82 pp) and the combined
@@ -29,16 +29,45 @@ Subcommittee):**
 > **"Faint X does not indicate a failure!"**
 
 Evaluation is explicitly perceptual and explicitly tolerant — a human at
-0.5 m / 20 in, *"you will not need a loupe"*. **`tools/ghent-check.py` may
-therefore be over-counting**; it has a `CONTRAST_MIN` but that threshold was
-calibrated against pdfce's own output, not against GWG's stated criterion.
-Patches GWG pre-declares tolerant: **all ten cells of GWG020**, and **cell d
-of each DeviceN patch**.
+0.5 m / 20 in, *"you will not need a loupe"*. ~~`tools/ghent-check.py` may
+therefore be over-counting~~; its `CONTRAST_MIN` was calibrated against
+pdfce's own output, not against GWG's stated criterion. Patches GWG
+pre-declares tolerant: **all ten cells of GWG020**, and **cell d of each
+DeviceN patch**.
+
+**★ MEASURED 2026-08-18 — the over-counting suspicion is FALSE, and this
+paragraph is kept rather than deleted so the question is not re-opened.**
+`tools/ghent-cell-probe.py` measured the actual X-versus-surround contrast on
+every still-failing patch those tolerances cover:
+
+| patch | X | surround | GWG's word for it |
+|---|---|---|---|
+| `GWG020` (6 of 7 cells) | `[254,254,253]` **white** | `[141,197,62]` green | *"faint … in slightly darker green"* |
+| `GWG190` cell d | `[0,0,0]` **black** | `[0,158,218]` cyan | *"a **faint** cross in patch d"* |
+| `GWG192` cell b | `[255,255,255]` **white** | `[239,56,62]` red | — |
+
+A white X on green is not "slightly darker green". Every trap still firing is
+at or near **maximal** contrast, so **no recalibration consistent with GWG's
+own criterion moves a single verdict.** The failures are real. §10's caveat
+about strict pixel-diffs still stands in principle; it just does not apply to
+anything pdfce is currently failing.
+
+**Two tolerances that survive, because neither is about contrast:**
+- **`GWG191` cell c has TWO sanctioned correct outcomes** (§9) — a cross there
+  is acceptable *"if the system performs colour conversion and sets the OPM
+  for this patch c to 0"*. pdfce converts but leaves `OPM 1`, so its cross is
+  a genuine failure **today**; a future Pass that takes the other route must
+  teach the harness that cell c is not binary.
+- **The transparency patches are STRICTER, not more tolerant** — see §11:
+  *"A 100% correct rendering does expect a 100% 'X' free output."*
 
 **The suite ships a Reference file** — `Ghent_PDF-Output-Test-V50_ALL_REFERENCE.pdf`,
 in the same ZIP. Its texts are in Registration (`/Separation /All`) so they
 appear in every separation. **pdfce is not currently using it as an oracle
-and should.**
+and should** — but **checked 2026-08-18, the file is not on this machine**;
+`D:\Dev\temp\ghent-patches\` and `ghent-readmes\` were kept from the download
+and it was not. Re-fetching is an operator call (large download, `LEGAL.md`
+§5), so this is **owed, not merely unstarted**.
 
 Composition of the 51: **27 CMYK-only, 8 SPOT, 16 CMS** (ICCBased /
 colour-management). **So the spot axis is only 8 of 51** — that bounds the
@@ -373,3 +402,163 @@ Acrobat and it renders a white square indeed."*
   but it trips if tooling rewrites the file.
 - A strict pixel-diff produces **false failures** on exactly the cells GWG
   pre-declares tolerant (§0).
+
+---
+
+## §11 — GWG160 / 161 / 162 Transparency Basic Blend Modes (DeviceCMYK)
+
+**PRIMARY (GWG ReadMe, "Patch 16.0 – 16.2", © 2012).** Three patches, one
+axis each, over the same 16-cell blend-mode grid:
+
+| Patch | Variant |
+|---|---|
+| `GWG160` | *"without applying 'Knockout' or 'Isolate'"* |
+| `GWG161` | *"with the use of the 'knockout' effect"* |
+| `GWG162` | *"with the use of the 'Isolate' effect"* |
+
+**Evaluation is Method 1 (trap X), and it is STRICT — this is the important
+sentence and it removes a tolerance a reader might assume by analogy with the
+overprint patches:**
+
+> *"It is possible that a faint 'X' may appear, e.g. in case of 16.2 or 16.3.
+> **A 100% correct rendering does expect a 100% 'X' free output though.**"*
+
+⇒ Unlike `GWG020` (§6) and the DeviceN cell d (§9), **no X here is
+pre-forgiven**. Every trap is a real failure.
+
+**One genuine exclusion, and the harness already honours it structurally:**
+
+> *"Only the **fill colour** of a patch element should be evaluated. Because of
+> anti aliasing, it is possible to see a very thin stroke line at the edges of
+> an 'X'. This does per definition **not** indicate a problem. A distinguished
+> coloured **fill** colour does though."*
+
+`ghent-check.py`'s shape test requires `fill` between 0.15 and 0.60 **and**
+mass on both diagonals **and** mass at the crossing centre — an anti-aliased
+outline is hollow and fails all three. So the exclusion is satisfied by
+construction rather than by a threshold, which is the stronger way to satisfy
+it.
+
+### MEASURED cell layout (2026-08-18, `tools/ghent-cell-probe.py`)
+
+16 cells in two rows of 8. Row 2's labels, read from the patch's own content
+stream in order: `Hard Light | Difference | Exclusion | Hue | Saturation |
+Color | Luminosity | Opacity (0%)`. Cells are `22.678 pt` squares on a
+`31.68 pt` pitch; at the harness's default `--scale 2.0` that is a `62.5 px`
+pitch, and row 2 sits at `y ≈ 106 px`.
+
+The `/ExtGState` mapping is recoverable the same way — the object stream
+carries them in a fixed order (`ColorBurn, Multiply, Darken, Lighten, Screen,
+ColorDodge, Overlay, SoftLight, HardLight, Hue, Color, Luminosity, Saturation,
+{CA 0 ca 0}, Difference, Exclusion`), so a `/GSnn gs` immediately before a
+`/Xnn Do` names the cell's mode.
+
+### ★ MEASURED diagnosis of pdfce's failures
+
+| Patch | traps | what the probe shows |
+|---|---|---|
+| `GWG160` | **3** of 16 | `Hue`, `Saturation`, `Color` — and **`Luminosity` passes** |
+| `GWG161` | **14** | X emerges as the raw source primary in nearly every cell |
+| `GWG162` | **7** | same signature, fewer cells |
+
+**`GWG160` is §11.3.5.3.** Those three are exactly the nonseparable modes
+whose **K component is taken from the backdrop**; `Luminosity`'s is taken from
+the **source**. The clause makes K **selected, not blended** — and a renderer
+compositing in device RGB has no K to select. `Luminosity` passing is the
+one-bit confirmation.
+
+**`GWG161`/`GWG162` are §11.4.7, not knockout.** A `tiny_skia::Pixmap` starts
+transparent, and a transparent initial backdrop **is** isolated semantics.
+pdfce allocates a group buffer whenever the outer graphics state is
+non-neutral — and every cell in these patches sets `/BM` at the `Do`. So a
+**non-isolated group silently becomes an isolated one** and every interior
+blend composites against nothing, which returns `cs` unchanged. That is
+precisely the saturated primary the probe reads inside the X.
+
+Full write-up and the staged fix: `docs/compositor-plan.md` §1.2, `Pass 97.0`.
+
+---
+
+## §12 — GWG161 / 164 Transparency Basic Blend Modes (ICCBased)
+
+**PRIMARY (GWG ReadMe, "Patch 16.1, 16.4", GOS 5.0).** Same blend-mode grid,
+ICCBased objects. The ReadMe documents the **object stack**, which §11's
+DeviceCMYK ReadMe never does and which matters for choosing the blending
+colour space:
+
+```
+Upper object       ICCBased, with the transparency effect (Fill)
+Lower object       ICCBased
+Background object  DeviceCMYK        <-- note: CMYK even in the "ICCBased" patch
+```
+
+⇒ The backdrop under an ICCBased blend here is **DeviceCMYK**. A group
+blending in its own colour space (§11.3.4) and a page compositing in sRGB are
+two different spaces in the same cell, which is exactly the seam `Pass 97.0`
+and `97.1` divide between them.
+
+**PRIMARY tolerance, and it is real but narrow:**
+
+> *"A **faint** X is due to differences in the **CMM** and does not indicate a
+> failure."* … *"A **clearly visible** X indicates that this blend mode is not
+> supported properly which **is** a failure."*
+
+**MEASURED, 2026-08-18 — the tolerance does not rescue pdfce.** `3_GWG161`
+shows X `[255,0,255]` against surround `[129,45,156]` (~126 levels) and
+`3_GWG164` shows X `[165,165,165]` against surround `[19,19,19]` (~146
+levels). Neither is a CMM difference; both are "clearly visible" by GWG's own
+wording. Consistent with §11's finding and with §0's measured result that no
+contrast recalibration moves any verdict.
+
+`3_GWG164` fails **4** cells and is the ICCBased-CMYK twin of `GWG160`'s
+nonseparable-mode defect — §11.3.5.3 names *"both `DeviceCMYK` and `ICCBased`
+calibrated CMYK spaces"* explicitly. `3_GWG161` fails **15** and is the
+isolated-group defect.
+
+---
+
+## §13 — GWG166 / 168 / 169 / 1610 / 1611 Soft Masks
+
+**PRIMARY (GWG ReadMe, "Patch 16.6, 16.8, 16.9, 16.10, 16.11", © 2012).**
+
+| Patch | Mask kind |
+|---|---|
+| `16.6` (`GWG166`) | **Image** soft masks — *"a Layer Mask (and transparent gradient or feather effect)"* |
+| `16.8` / `16.9` (`GWG168`/`GWG169`) | **Vector** soft masks — *"Drop Shadows, Outer Glow, Inner Glow"* |
+| `16.10` / `16.11` (`GWG1610`/`GWG1611`) | The same effects applied to **Text** objects |
+
+**Evaluation is Method 2, NOT a trap X:** *"a visual comparison to a reference
+**within the patch**."* This is why `ghent-check.py` scores these by strip
+correlation rather than adjudicating them, and why `GWG166` and `3_GWG167`
+land in the UNRESOLVED bucket rather than the FAIL one.
+
+**PRIMARY failure signatures**, worth having because a correlation number
+alone does not say what went wrong:
+
+> *"A clear black stroked fill is visible at the edge of the image instead of a
+> smoothly softened edge."*
+> *"**Disappearance** of the Image or Vector Soft Masks is one way of how the
+> incorrect rendering can occur. A clearly **different colour** rendering can
+> also be seen as a way of how the patch should not be rendered."*
+> *"In some cases **all** patch elements will be rendered wrong. There are
+> occasions where only just **one or two** patches are rendered differently.
+> Caution may need to be taken while evaluating the rendered result."*
+
+⇒ A partial failure is expected and normal here; do not read "most of it looks
+right" as passing.
+
+**MEASURED (2026-08-18).** Construction is correct — both the mask groups and
+the folded clips were dumped to PNG and inspected as properly-placed soft
+gradients. The defect is **application**: §11.4.5 applies the mask to a
+transparency group's **RESULT**, and pdfce folds it into the clip, which
+applies it to each element *inside*. Correlations after the `cb20770` soft-mask
+work, against the reference engine's own score on the same strip:
+
+| Patch | pdfce | reference engine |
+|---|---|---|
+| `1_GWG1610` Text part 1 | 0.575 | 0.966 |
+| `1_GWG168` Vector part 1 | 0.725 | 0.981 |
+| `1_GWG169` Vector part 2 | 0.905 | 0.983 |
+
+Fix is `Pass 97.0`: there is nowhere to apply a mask to a group result until
+the group result is a value pdfce owns.

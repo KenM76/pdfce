@@ -406,6 +406,14 @@ Carried forward from `NEXT_SESSION.md` §2, unchanged and still unclaimed:
    `Ghent_PDF-Output-Test-V50_ALL_REFERENCE.pdf`, in the same ZIP, with texts
    in Registration so they appear in every separation. pdfce is not using it
    as an oracle and should. This is the one that bears on the 8 UNRESOLVED.
+
+   **Blocked on an input, checked 2026-08-18:** the file is **not on this
+   machine**. `D:\Dev\temp\ghent-patches\` holds the 51 patch PDFs and
+   `D:\Dev\temp\ghent-readmes\` the extracted ReadMes, but the Reference PDF
+   was not among what was kept from the 126 MB download. Re-fetching it is an
+   operator call (a large download, and `LEGAL.md` §5 governs what enters the
+   corpus), so this item is **owed, not merely unstarted** — it should not be
+   picked up as if it were a free afternoon.
 3. **`/Indexed` colorants — MEASURED AND CONFIRMED, 2026-08-18. This is a live
    defect, not a suspicion.** Colorants must be read from the **base** space
    (§8.6.6.3). `overprint::classify` has no `Indexed` arm, so an `/Indexed`
