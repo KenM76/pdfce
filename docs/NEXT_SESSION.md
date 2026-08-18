@@ -3,310 +3,254 @@
 Engineer-owned handoff. Read this **before** `ROADMAP.md` — that says what
 shipped, this says what to do next. Overwrite it once acted on.
 
----
-
-## ★★ THE HEADLINE: THE GHENT QUEUE WAS ORDERED ON AN ASSUMPTION, AND THE MEASUREMENT REVERSED IT
-
-The previous handoff's queue said: shading patterns → tiling patterns →
-clause-11 transparency → overprint. **That ordering was never measured
-against the operator's file.** I measured it, and:
-
-**Not one of the Ghent X-4 file's six pages uses a `scn` pattern at all.**
-`pattern_spaces=0` on every page. The shading-pattern Pass shipped this
-session (`5df75dd`) does not move that file, and **tiling patterns will not
-either.**
-
-What the file actually uses is **transparency**, and pdfce could not see it
-because `apply_ext_gstate` read seven keys and silently dropped `/BM` and
-`/SMask`. With counters added (`ae46e82`):
-
-| page | 1 | 2 | 3 | 4 | 5 | 6 | **total** |
-|---|---|---|---|---|---|---|---|
-| `/BM` ignored | 1 | **76** | 1 | 1 | 31 | 3 | **113** |
-| `/SMask` ignored | 1 | **31** | 1 | 1 | 1 | 1 | **36** |
-
-**Page 2 is the worst page in the file and had looked CLEAN** — no
-unsupported images, no unpainted patterns, no refused shadings. It was
-compositing 76 blend modes by the wrong rule the whole time.
-
-### ⇢ SO: DO CLAUSE-11 TRANSPARENCY NEXT. It is the largest remaining visual gap on the file the operator is watching, by a wide margin.
-
-The revised queue, measured rather than assumed:
-
-1. **Clause-11 transparency** — `/BM` blend modes (§11.3.5) and `/SMask`
-   soft masks (§11.6.5) in an ExtGState. **113 + 36 occurrences.** The
-   disclosure half is shipped; the implementation half is not started.
-2. **Mesh shadings, types 4–7** — 2 on Ghent page 1, currently
-   `shadings_mesh=2`, painted 10 of 12. **★ NOT IN THE SPEC CORPUS**, and
-   the index carries an explicit *"do not answer from recall"* marker.
-   **Dispatch `pdfce-spec-librarian` for §8.7.4.5.5–.8 + Tables 82–84
-   before writing any of it.**
-3. **`/Separation /All`** — 62 conversions on page 1, 52 on page 4,
-   rendered as a neutral of luminance 1−tint. That is pdfce's own
-   documented choice, not a bug; whether it should change is a question,
-   not a defect.
-4. **Tiling patterns** (`PatternType 1`) — real work, but **now known not
-   to be Ghent-driven.** Demote it accordingly.
-5. **Overprint** LAST. Architectural (compositing into a CMYK buffer) and
-   genuinely gated on `iccce` supplying a credible CMYK→display conversion.
-
-Also present on Ghent and already disclosed, not defects: 6 CMYK JPEGs with
-unverifiable polarity (decision 006 / R30), 1 Widget annotation with no
-`/AP` (R43 refuses to synthesise), and 40/81/15 deferred ops that are all
-`BDC`/`BMC`/`MP` marked content.
-
-**The general lesson, which cost nothing to learn and would have cost a
-whole Pass to learn later: a queue item's PRIORITY is a measurement, not a
-reading. `pattern_spaces=0` took thirty seconds to check.**
+**Written 2026-08-18**, replacing the 2026-08-05 handoff (whose queue —
+"do clause-11 transparency next" — has now been worked; see §3).
 
 ---
 
-## STATE AT HANDOFF — 2026-08-17
+## ★★ THE HEADLINE: THE OVERPRINT WALL HAS A DEFINITIVE, SOURCED ANSWER — BUILD THE N-CHANNEL BUFFER
 
-**`HEAD` = `ae46e82`. Working tree CLEAN. 3,770 tests, 0 failures.**
-`fmt`/`clippy` clean; all scripted gates clean (`check-fmt-excluded`,
-`check-ui-strings`, `check-shipped-assets`, `check-ledger-numbers`);
-`cargo tree` shows no GUI dependency in `pdfce-core` or `pdfce-render`.
-**Nothing half-built.** Everything is filed — `check-commits-filed.py` will
-name `ae46e82` only, which is this session's last commit and is owed a
-filing (see *Owed* below).
+Ghent went **22 → 25 of 51** this session by implementing
+`CompatibleOverprint` (Table 149) as a real per-pixel CMYK blend. The
+remaining overprint patches do **not** yield to any further refinement of
+that approach, and this is now established three independent ways:
 
-**Local is 16 commits ahead of `origin/main` (`718d1e9`). Not pushed, not
-tagged.** Stated as a fact — pushing is the operator's act.
+1. **By measurement.** A spot-ink multiplier plate was built and ablated
+   (same binary, one line changed): traps 17 → 16, **patches passing
+   unchanged**, and one patch *regressed* 3 → 6. Reverted (`ac15158`).
+2. **By research.** Seven engines — Ghostscript, MuPDF, Poppler, Harlequin,
+   Mako, PDF Tools AG, Adobe — converge on one architecture. Artifex's
+   colour architect states in a peer-reviewed paper that collapsing colour
+   before compositing *"is not possible"* **specifically because of
+   overprint**. Poppler documents pdfce's exact bug in its own words.
+3. **By pdfce's own spec RAG**, which called this "stage 10, large —
+   architectural, a different project" back on 2026-08-08.
 
-**Backup:** `D:\Dev\pdfce-backups\pdfce-20260817-final.bundle`,
-`git bundle verify` okay, `refs/heads/main` = `ae46e82` = `HEAD`, and
-`refs/tags/v0.5.3` (`b2d0595`) is inside it. **Re-measure anyway** — this
-ledger has carried a wrong backup figure twice.
+**⇢ READ `docs/overprint-architecture-survey.md` FIRST.** It is the sourcing
+record: the architecture, why the cheap route provably cannot work, the
+unstandardised final-collapse step (a settings-shaped ambiguity), three
+places pdfce can **exceed** Ghostscript/Poppler, and the licensing rules for
+follow-up (all those projects are GPL/AGPL — behavioural reference only).
 
-**Live ceilings**, from `check-ledger-numbers.py` this session — but see the
-trap below: Pass families to **89** → next free **90** · standing rules
-**R195** → next free **R196** · decisions **065** → next **066** · filings
-**155** → next **156**.
+### What the build actually is
 
-> **★ THE `R193` TRAP, which bit the librarian this session and it caught
-> itself.** `check-ledger-numbers.py`'s next-free rule output is
-> **known-wrong**: a `### PROPOSAL … claiming R19x` heading is invisible to
-> its pattern, so declined-but-intact proposals do not register.
-> **R193 and R194 are both claimed.** Read the *Standing rules* section's
-> own closing ledger line, not the checker, before minting a rule.
+- One plane per colorant: CMYK + one per spot. **Pre-scan the page's
+  resources to size it exactly** — Ghostscript's docs note this is possible
+  in PDF and impossible in general in PostScript. That is pdfce's advantage.
+- **Keep the tint transform OUT of the paint path** for any colorant that
+  owns a plane. It is retained only to derive that colorant's *equivalent*
+  colour for the final collapse.
+- Apply Table 149 in colorant space (`pdfce_render::overprint` already has
+  it as pure, tested logic — 12 tests, the table transcribed cell by cell).
+- Collapse to RGB **once, at the end**. Pick a collapse model deliberately
+  and disclose it (§6 of the survey; vendors disagree materially and Acrobat
+  does not document its method).
+- **Cap and fall back honestly:** beyond N planes, revert to the tint
+  transform — which is precisely pdfce's current behaviour, so the fallback
+  is already written and already disclosed.
 
-### What shipped this session
-
-| commit | what |
-|---|---|
-| `1345663` | the closed-form colour oracle — **pdfium, not pdfce, is wrong on Lab/CalGray/CalRGB** |
-| `a705d14` | `Pass 89.0` — the redaction overlay ladder (Table 192) |
-| `a7210a4` | `Pass 89.1` — `RedactAppearance`, reaching the find-and-mark path |
-| `5df75dd` | `Pass 85.2` slice 1 — `PatternType 2` shading-pattern fills |
-| `ae46e82` | clause-11 transparency **disclosure** (the measurement above) |
-
-Plus filings 152–155. Both `pdfceGUI` channel requests are closed with
-replies in `archive/`.
-
-### Owed
-
-- **`ae46e82` is not filed.** Dispatch `pdfce-librarian` with its full
-  commit message. It needs a Shipped entry, a `FEATURES.md` note that
-  clause-11 transparency is **disclosed but not implemented** (do not let
-  that read as support), and the queue re-ordering above recorded in the
-  Ghent gap inventory.
-- **Ask the librarian to rule** whether "a queue item's priority was never
-  measured" is a rule-shaped finding. I think it may be — it is adjacent to
-  `R180` but distinct: R180 is about a claim going stale, this is about a
-  claim never having been checked.
+**Scope it, do not make it page-wide by default.** Poppler #1565 (open):
+enabling overprint preview routed the whole page through CMYK and visibly
+shifted unrelated RGB raster content.
 
 ---
 
-## ⇢ ★ FIRST, EVERY SESSION: CHECK BOTH REQUEST CHANNELS
+## §1 — Current Ghent standing (measured 2026-08-18, `2a75be1`)
 
-**`D:\Dev\FeatureRequests\pdfce_FeatureRequests`** — the `pdfceGUI` channel.
-**`D:\Dev\FeatureRequests\iccce_FeatureRequests`** — the `iccce` channel,
-which is **two-way**; expect `request_*.md` written by them.
+```
+25 pass · 18 FAIL · 8 UNRESOLVED (reference-strip) · 0 render errors  of 51
+```
 
-`open/` in the GUI channel currently holds **five**, all print/annotation,
-none touched this session:
+Command:
+```bash
+python tools/ghent-check.py /d/Dev/temp/ghent-patches \
+       --reference-dir /d/Dev/temp/acro-refs
+```
+Corpus at `D:\Dev\temp\ghent-patches\` (51 PDFs); Acrobat reference strips I
+generated at `D:\Dev\temp\acro-refs\` (51 PNGs). **Both are outside the repo
+— test-corpus rules, `LEGAL.md` §5.**
 
-- `request_devicesettings_pick_tray_is_never_read.md`
-- `request_no_paper_size_selection_in_the_print_path.md`
-- `request_no_verb_modifies_an_existing_annotation.md`
-- `request_no_verb_sets_a_pages_media_box.md`
-- `request_orientation_auto_is_per_job_not_per_page.md`
+The 18 failures cluster:
 
-The two redaction requests were **closed this session** — archived with
-replies as `2026-08-17-redaction-overlay-text-*` and
-`2026-08-17-redaction-fill-search-path-*`.
-
-**A request is a FINDING, not a favour** (decision 058). Both of this
-session's were: one was operator-authored content silently dropped, the
-other an unreachable API. **Both were reported by a project that read our
-source, found the surface missing, and STOPPED rather than working around
-it.** That is expensive for them and cheap for us; honour it by fixing
-rather than deflecting.
-
-**The `iccce` channel binds pdfce to THEIR evidence standard inside that
-folder**: a colour claim carries its oracle and its number, and pdfce's
-`cmyk_table.rs` is fitted to pdfium, which makes it a **cross-check, not
-ground truth** — say so when quoting it.
-
----
-
-## ⇢ ★ THE STANDING CONSTRAINT — GUI WORK IS PAUSED
-
-Operator, 2026-08-13: *"continue the planned work except for gui related,
-don't do any more work on the gui until I say so."* Reason given later:
-the shell *"was unusable and I realised it needed a separate project plan
-rather than the current method which just seems to be low priority and a
-patchwork."* A new GUI is being built at `d:\dev\pdfceGUI` and **may replace
-`crates/pdfce-gui` wholesale.**
-
-- Paused: `crates/pdfce-gui/`, `tools/gui-drive.ps1`, `tools/gui-shot.ps1`.
-- Not paused: core, render, CLI, print, docs, RAGs, tests, fuzz, tooling.
-- A Pass whose GUI half is deferred ships `core [x] · cli [x] · gui [ ]`,
-  recorded as an **operator instruction, not an engineering shortfall**.
-- **The objection is to the METHOD, not the priority** — "a well-built new
-  panel" does not answer it. **Do not invest in the current shell.**
-- **If he asks for GUI work, he has lifted it.** Do not quote the pause back
-  at him.
-
----
-
-## ★ THE METHOD THAT KEEPS PAYING — four saves this session
-
-1. **The sabotage check found holes nothing else could, three times.**
-   - A symmetric `/Range [-100 100 -100 100]` made an a/b transposition a
-     **no-op**, so the Lab oracle stayed GREEN under sabotage. Fixed by
-     making the range asymmetric.
-   - Two shading-pattern tests looked like near-duplicates and **only one
-     was load-bearing**: `a_later_solid_colour_replaces_the_pattern` passes
-     with the fix removed. Only the `/Separation /None` sibling sees it.
-   - Every pattern fixture puts a `cm` between `scn` and the fill, because
-     **without one, base-CTM and current-CTM anchoring are arithmetically
-     identical** and the suite would pass while testing nothing.
-
-   These are three instances of ONE shape: **a fixture whose parameters are
-   degenerate cannot distinguish implementations that differ only in those
-   parameters.** Filed in `D:\dev\rag\rust\`.
-
-2. **A green suite is not evidence until you have seen it go red.** Every
-   Pass this session was sabotaged first.
-
-3. **Reading the actual output caught four false claims no gate can see** —
-   `R180`'s third AND fourth instances, both this session. `--help` text,
-   stderr notes, doc comments and even a TEST NAME went false the moment the
-   feature shipped. **`check-ui-strings.sh` reads `pdfce-gui`'s strings
-   module and structurally cannot see `pdfce-cli`'s clap help.** R180 is now
-   firing about once per feature-completing Pass.
-
-4. **Looking at the render, not the counter.** `shadings_painted=1` says
-   nothing about whether the gradient is in the right place. The anchoring
-   was confirmed by rendering, seeing the gradient span the full page under
-   a 0.5× `cm`, and cross-checking against pdfium (mean 1.31, max 2).
-
----
-
-## THE COLOUR ORACLE — a tool that outranks the parity harness for three spaces
-
-`tools/check-image-colorspace-truth.py` computes `/Lab`, `/CalGray` and
-`/CalRGB` in closed form (ISO 32000-1 §8.6.5.2–.4 + the IEC 61966-2-1 sRGB
-encode), sharing no code with either renderer. Use it, **not** the parity
-harness, when the question is whether those conversions are correct.
-
-    python tools/gen-image-colorspace-fixtures.py D:\Dev\temp\img-fixtures
-    python tools/check-image-colorspace-truth.py D:\Dev\temp\img-fixtures
-
-Measured 2026-08-17, 3,600 interior texels per space:
-
-| space | pdfce mean / max | pdfium mean / max |
+| Cluster | n | Patches |
 |---|---|---|
-| lab | 0.019 / **1** | 40.854 / **152** |
-| calgray | 0.000 / **0** | 2.000 / 9 |
-| calrgb | 0.030 / **1** | 3.012 / 9 |
+| **Overprint** | 7 | `GWG011`, `GWG190`, `GWG191`, `GWG192`, `GWG020`, `GWG030`, `GWG040` |
+| **Transparency groups** | 5 | `1_GWG160`, `1_GWG161`, `1_GWG162`, `3_GWG161`, `3_GWG164` |
+| **Soft masks** | 4 | `GWG1610`, `GWG1611`, `GWG168`, `GWG169` |
+| **Shading** | 1 | `GWG060` (mesh) |
+| **ICC** | 1 | `3_GWG130` |
 
-**pdfce is exact; pdfium is not.** The previous handoff had assumed the
-opposite. `img_uncalibrated` and `img_colorant_none` are therefore
-classified as **reference**-divergences in `render_parity.py`, not as pdfce
-gaps — and the cost is stated in that file: it removes those pages from the
-bug-candidate pool, which is exactly why the oracle exists as a separate,
-non-comparative control.
+*(7+5+4+1+1 = 18 ✓. The librarian corrected an earlier "6 overprint" of
+mine by exactly this arithmetic.)*
 
-**`pdfium` paints a `/Separation /None` image SOLID BLACK** in violation of
-§8.6.6.4. pdfce paints nothing and is right.
-
----
-
-## Tooling — corrections that cost time
-
-- **★ A quoted heredoc (`<<'PYEOF'`) through the Bash tool mangles
-  backslashes.** It bit me three times this session: a Rust string
-  continuation `\` got eaten, and a `\\\n` became a literal `\n` that broke
-  the CLI's one-line stdout contract. **For any multi-line patch, Write a
-  script file and run it, or use the Edit tool.** Do not fight the heredoc.
-- **★ `git checkout <file>` to undo a SABOTAGE reverts the whole file to
-  `HEAD`**, including the work you were sabotaging. Copy the file aside
-  first (`cp x D:/Dev/temp/x_backup`) and restore from that copy. I lost all
-  of `color.rs`'s changes this way and had to re-apply them.
-- **A `str.replace()` in a patch script with no `assert` is a silent
-  no-op.** Assert every anchor.
-- **Inserting a method by anchoring on `fn foo(`** lands it between `foo`'s
-  DOC COMMENT and `foo` — the docs then document your new function. clippy
-  catches it as *"empty line after doc comment"*; the real damage is silent.
-- **A malformed fixture does not fail safe** — it fails somewhere else,
-  convincingly. A `/Separation` array wrapped in `<< >>` left the space
-  unresolved with `paints = true`, so the page filled with default BLACK and
-  the test looked like a genuine failure of the code under test.
-- **A hand-counted `/Length` is a `StreamExtentMismatch`** and the test then
-  measures pdfce's refusal of your fixture. Compute it.
-- **A stream inlined in a dictionary or array is invalid** (§7.3.8.1) and
-  pdfce correctly refuses it. This bit me twice in one session — once in the
-  image fixtures, once in a tiling-pattern test.
-- `cargo fuzz` needs the MSVC ASan DLL on PATH; set it **literally**.
-- **`git show <sha> -- <path> | grep` searches the commit MESSAGE too.** Use
-  `git diff A^ A -- <path>`.
-- **`gh run list --commit <SHORT-SHA>` returns an EMPTY LIST, not an error.**
-  Pass a full 40-char SHA.
-- **Resolve every short hash yourself** — librarians have no shell.
-
-`tools/splice.py` · `tools/check-fmt-excluded.py` (run **beside**
-`cargo fmt --all --check`) · `tools/check-shipped-assets.py` ·
-`tools/verify-release.py <tag>` **before** tagging ·
-`tools/check-commits-filed.py` — **file the commit; do NOT extend the
-baseline** · `tools/check-ledger-numbers.py` ·
-`tools/gen-image-colorspace-fixtures.py` + `tools/check-image-colorspace-truth.py` ·
-`tools/render-parity/render_parity.py` · `tools/package-portable.py`.
+**⇢ `docs/ghent-patch-reference.md`** now holds the per-patch expected
+appearance, extracted from GWG's ReadMes — which are **not on the web**,
+they ship inside a 126 MB download. It includes DERIVED per-cell truth
+tables for GWG030 and GWG040, and two corrections to GWG's own prose.
 
 ---
 
-## Release state
+## §2 — Three cheap wins available before the big build
 
-**`v0.5.3` is the current tag and is clean.** Sixteen commits sit past it,
-unpushed and untagged. Nothing this session requires a release.
-
-Keep the order: **FILE → LET CI GO GREEN → TAG**, run
-`tools/verify-release.py` *before* tagging, and **bump the version before
-the tag** (`--version` prints `CARGO_PKG_VERSION`, so tagging a version the
-binary does not report ships a false claim exactly where a user checks it).
+1. **The trap detector is probably over-counting.** GWG's stated criterion
+   is **"Faint X does not indicate a failure!"**, judged by a human at
+   0.5 m. `tools/ghent-check.py`'s `CONTRAST_MIN` was calibrated against
+   pdfce's own output, **not** against that criterion. GWG pre-declares
+   tolerant: **all ten cells of GWG020** and **cell d of every DeviceN
+   patch**. Recalibrating may move the score without touching the renderer —
+   and would make every future measurement more honest.
+2. **The suite ships a Reference file** —
+   `Ghent_PDF-Output-Test-V50_ALL_REFERENCE.pdf`, in the same ZIP, texts in
+   Registration so they show in every separation. **pdfce is not using it as
+   an oracle and should.**
+3. **`/Indexed` over `/DeviceCMYK`:** colorants must be read from the **base**
+   space (§8.6.6.3). Reading them off `/Indexed` yields none and gets
+   **GWG010 and GWG031** wrong. Worth a grep — pdfce may already have this
+   bug latent, since GWG010 passes for possibly the wrong reason.
 
 ---
 
-## Still open, carried forward
+## §3 — What shipped this session (9 commits, `ea5159e`..`2a75be1`)
 
-- **`Pass 71.0` OCR** — engine bound (`ocrs`, default-ON feature), sandwich
-  writer shipped, `(bl)` answered YES. Still owed: the ~12 MB of `.rten`
-  weights (**permanent in a PUBLIC repo's history — worth one sentence to
-  the operator before the commit**), `pdfce-cli ocr`, and the second engine
-  (PaddleOCR, Apache-2.0, 50+ languages, no WASM).
-- **`Pass 67.0` phase C** — re-subset fonts. Lowest-risk remaining phase,
-  needs nothing from the operator.
-- **Backlog, from this session**: overlay-caption legibility — the authored
-  `/DA` hard-codes BLACK text, so a caption on a dark `/IC` fill is
-  illegible. Found by looking at a render. `pdfceGUI` told by name.
-- **A `/Rotate` fixture gap** — no file in `fixtures/synthetic/` carries a
-  `/Rotate` key, so four rotation branches have zero file-level coverage.
-- **A display-list cache in `pdfce-render`** — measured: ~99 % of a render's
-  cost is interpretation, not fill. Highest-value optimisation this crate
-  has (decision 060).
-- **Two escalations still awaiting the operator**, carried with no
-  supporting detail: the broken no-git convention (`iccce`), and agents'
-  in-progress files swept into a public repo. **Get the actual statement;
-  do not resolve them.**
+| Commit | What |
+|---|---|
+| `ea5159e` | **Linux build break.** `cmd_print` called four `#[cfg(windows)]` callees while ungated. Windows green, CI red. Every sibling already had the pattern. |
+| `cb55b6b` | **Real defect: OCR wrote into certified documents.** `add_ocr_layer` had no §12.8.4 certification check; its twin `add_text` always had one. Found by checking whether a gate's *stated warrant* was true. Closes `Pass 86.0`. |
+| `a3080f0` | Cross-platform dead-code fallout. `cfg_attr(not(windows), allow(dead_code))` **not** `cfg(windows)` — gating breaks the tests, which are pure byte arithmetic and are the only coverage on the platform CI actually runs. |
+| `bd9d5ef` | **`pdfce_render::overprint`** — Table 149 as pure logic, 12 tests, the table transcribed. Records `OP-N1`/`SP-N2`/`OP-A3`. |
+| `bf75351` | **Overprint wired: 22 → 25.** Also: the glyph painter wasn't merely skipping overprint, it wasn't **counting** it — a disclosure counter blind to a whole object class reports a smaller problem than exists. Text took it 23 → 25. |
+| `ac15158` | **The spot-plate negative result** (see headline). |
+| `18a0f15` | Librarian filing — decision **069**, Ghent standing board, FEATURES rows. |
+| `cb20770` | **Soft masks** (§11.6.5) implemented. |
+| `2a75be1` | `.gitignore` for stray subagent fetch artefacts (see §6). |
+
+---
+
+## §4 — Soft masks: what's done, and the ONE thing left
+
+Implemented `/Alpha` and `/Luminosity` (`cb20770`). Correlations improved on
+every measurable patch:
+
+| Patch | before → after | reference engine |
+|---|---|---|
+| `1_GWG1610` Text part1 | 0.515 → **0.575** | 0.966 |
+| `1_GWG168` Vector part1 | 0.661 → **0.725** | 0.981 |
+| `1_GWG169` Vector part2 | 0.884 → **0.905** | 0.983 |
+
+**None passes yet, and the headline did not move** — reporting the
+correlations because that is what changed.
+
+**The residue is diagnosed, not guessed.** I dumped the mask groups and the
+folded clips to PNG: **both are correct, properly placed soft gradients**.
+So construction is right. The gap is **application**: §11.4.5 applies the
+mask to a transparency group's **RESULT**, whereas pdfce folds it into the
+clip, which applies it to each element **inside**. **⇢ That is the same
+buffer work as isolated/knockout groups — do them together (§5), not
+separately.**
+
+Sourced contract now honoured (all in the code's doc comments): `/BC`
+default = the colour space's initial value = **black** (all-zeros is black in
+RGB but **pure white in CMYK** — this file's own masks carry
+`[1.0 1.0 1.0 1.0]`, the trap in the wild); outside-BBox = `TR(lum(BC))`,
+neither 0 nor 1; opaque backdrop `α₀ = 1`; luminosity `0.30/0.59/0.11` with
+**no** gamma compensation and deliberately **not** Rec.709; matrix baked at
+`gs` time, not paint time.
+
+**Owed:** `/TR` is read and **counted** (`soft_mask_tr_ignored`) but not
+evaluated — it needs the function machinery in the render crate. `/TR` is
+where a mask gets **inverted**, so an ignored one can leave visible exactly
+what a document meant to hide.
+
+---
+
+## §5 — Transparency groups: the research is in hand
+
+Five patches. A second research pass returned a full formulation — **read it
+in this session's transcript or re-commission it**; the substance not yet
+written to a pdfce doc is:
+
+- **Backdrop removal is in the spec**, §11.4.4 result block:
+  `C = C_n + (C_n − C_0)·(α_0/α_gn − α_0)`, with NOTE 3's equivalent
+  "intuitive" form. Danger is the single `1/α_gn`.
+- **`0/0 = 0` by convention** — a `should` in ISO 32000-1 and a **`shall` in
+  ISO 32000-2** §11.3.2. Adopt unconditionally. The `shall` is on
+  *robustness*, not on the value: never emit NaN/Inf.
+- **Knockout needs TWO buffers, not per-element copies.** §11.4.8 makes it a
+  subscript `b ∈ {0, i−1}`. Memory is O(nesting depth).
+- **The extra per-pixel state is smaller than feared:** un-premultiplied
+  colour + one extra scalar (`α_g`). `α_i = Union(α_0, α_gi)` is derivable
+  and `α_0` is the parent buffer. **f32, not u8** — the correction factor
+  amplifies error by ~`1/α_gn`.
+- **★ These patches may not be a group bug at all.** §11.3.4 requires
+  blending **in the group's colour space**, with subtractive components
+  **complemented before and after**. pdfce blends in RGB. A 14-trap count on
+  `1_GWG161` is far more consistent with "every blend mode computed in the
+  wrong space" than with "knockout mis-implemented". **Check that first — it
+  is cheap and it may explain four patches at once.**
+- **Verified, so don't chase it:** ISO 32000-1's `ColorDodge`/`ColorBurn`
+  formulas are wrong (Adobe never implemented them; PDF 2.0 corrected them)
+  — **but tiny_skia already implements the corrected branches.** I tested
+  both edge cases empirically. Not a pdfce bug.
+
+---
+
+## §6 — Housekeeping, owed items, and one live hazard
+
+**v0.7.0 is bumped but NOT tagged or released.** `git describe` =
+`v0.6.0-36-g2a75be1` — **nothing released in 36 commits.** CI was red on
+`check-commits-filed.py` for most of the session; `18a0f15` is green.
+**Verify CI green on `HEAD`, then: `verify-release.py` → tag → portable
+package → GitHub release → librarian release record.** Operator gave a
+standing go-ahead for builds/releases on 2026-08-17.
+
+**★ LIVE HAZARD — subagent fetch artefacts land in the repo root.** Two
+batches in one session: `out.html` (caught by the librarian), and
+`vp.txt`/`vp4.txt`/`pdfa4.txt` which **were committed** by a `git add -A`.
+The repo is **public**. `.gitignore` now covers the shapes, **but the ignore
+rules are the backstop, not the cure — stage narrowly.** One of the
+committed files was literally a login page.
+
+**Owed, small:**
+- A **`/P 2` fixture carrying page content.** The new OCR certification test
+  uses `certified-locked.pdf`, which is `/P 1`, so it cannot prove the
+  refusal is tier-independent — which is what the guard claims. The `/P 2`
+  fixture exists but is in the *forms* set. (Librarian's catch.)
+- **`LUM-A1` is still open** and is **not** the `/BC` question — that one is
+  settled. `LUM-A1` is the `DeviceCMYK`→luminosity formula split (§11.5.3
+  NOTE 3 vs §10.3.3, diverging by `K·S`, max 0.25). Spec-librarian
+  recommends the 2.0/§10.3.3 form. Needs a decision.
+- **`MSH-A1`** — mesh type 6/7 patch-record byte-padding granularity is
+  unstated in **both** editions. Settings-shaped. Recommended default:
+  per-patch-record padding.
+- **GWG030 cell e/k** backdrop and **GWG041's epsilon** (0.2% vs 0.02%) are
+  both unresolved in GWG's own documentation; each is ~10 minutes of
+  content-stream reading. See `docs/ghent-patch-reference.md`.
+
+**Mesh shadings (`GWG060`) are now fully ingested** — the spec-librarian
+wrote `iso32000__s__8.7.4.5__mesh.md` (1,014 lines, Tables 82–**86**; the old
+"Tables 82–84" was short by two, and 85/86 are exactly the edge-flag
+inheritance rules). The "do not answer from recall" marker is retired. Two
+traps recorded there: implement **type 7 only** and lift type 6 via the four
+closed-form `1/9(…)` interior-point equations (writing two evaluators gives
+two rendering paths for one content type); and `pdftotext -layout`
+**column-jumbles all five mesh tables** in the staged 1.7 source.
+
+---
+
+## §7 — Standing discipline reminders that cost me this session
+
+- **`cargo fmt`/`clippy`/`test` is NOT the gate set.** Run every
+  `tools/check-*.py` and `tools/check-*.sh` **after committing** — the
+  commits-filed gate's input *is* the commit list, so a pre-commit sweep
+  reports clean vacuously. That cost two red CI runs.
+- **Never patch a Rust `\`-line-continuation through a heredoc.** It becomes
+  a literal `\n`. Happened **four times** this session, once while
+  "repairing" the same bug. Build, clippy and fmt are all silent; only the
+  stable-stdout-line test catches it. Use the Edit tool. Grep sweeps are in
+  the agent memory note.
+- **Verify a refusal's stated warrant before extending it.** A gate asked a
+  bookkeeping question, the exception list's warrant said such a function
+  "honours the certification gate", checking that claim found a real
+  correctness defect (`cb55b6b`).
+- **`cargo check --target x86_64-unknown-linux-gnu`** before pushing
+  anything touching `#[cfg]`. Windows green ≠ CI green.
