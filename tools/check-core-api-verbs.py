@@ -69,13 +69,6 @@ WHAT IT DOES NOT CHECK, STATED SO "GREEN" IS NOT OVER-READ
    still lacking the widget warning that caused the incident.
 2. **Any API surface other than `EditSession`.** `DocumentView`, the free
    functions, and `pdfce-render`'s surface are all undefended by this.
-3. **The `path:line` citations, and there are over a thousand of them.** They
-   are anchored to a commit and drift with every edit to the file they point
-   at; one spot-check found a citation off by 2,169 lines, landing on
-   unrelated code. Re-deriving them needs symbol resolution, not a line
-   count, so they are out of scope here and tracked as owed work instead.
-   **They are legibly stale rather than invisibly stale** — the anchor commit
-   is printed beside them, which is exactly the property `R197` asks for.
 3. **★ It used to read ONE FILE, and that was a live defect, not a
    hypothetical one.** The first version's input was
    `02-editing-and-saving.md`, because that is the file that was being
@@ -91,11 +84,37 @@ WHAT IT DOES NOT CHECK, STATED SO "GREEN" IS NOT OVER-READ
    **every `*.md` under `docs/core-api/`**, and the count check applies to
    every stated count wherever it appears.
 
+4. **The `path:line` citations, and there are over a thousand of them.** They
+   are anchored to a commit and drift with every edit to the file they point
+   at; one spot-check found a citation off by 2,169 lines, landing on
+   unrelated code. Re-deriving them needs symbol resolution, not a line
+   count, so they are out of scope here and tracked as owed work instead.
+   **They are legibly stale rather than invisibly stale** — the anchor commit
+   is printed beside them, which is exactly the property `R197` asks for.
+5. **★ Published figures OUTSIDE `docs/core-api/`.** This file's own commit
+   named the class correctly — *published figures nobody re-derives* — and
+   then enforced it only under the directory of the defect that prompted it.
+   The seventh instance of that error in one session, inside the commit that
+   named it.
+
+   It is **not** simply widened to a repo-wide glob, and the reason is a real
+   finding rather than caution. A sweep found **13** `` `x.rs` (N lines) ``
+   claims repo-wide: one live defect (since fixed), **one citing a file that
+   no longer exists**, and **five that are correctly FROZEN** — dated
+   historical records, one off by 7.4× and harmless precisely because its
+   header is dated. A wider glob would go red on all of them and the only
+   way to quiet it would be to falsify the history.
+
+   **The enforceable class is bounded by document LIVENESS, and liveness is
+   not mechanically detectable.** So widening this needs an explicit opt-in
+   list of living documents, not a glob — filed as owed work rather than
+   guessed at here.
+
 So this closes the "nobody mentioned it" and "the published number drifted"
-failures, and leaves "mentioned it wrongly" to review, where it belongs.
-Named rather than implied, because a gate whose limits are unstated gets
-trusted past them — and because this gate has already demonstrated that its
-own author will trust it past them.
+failures within this directory, and leaves "mentioned it wrongly" to review,
+where it belongs. Named rather than implied, because a gate whose limits are
+unstated gets trusted past them — and because this gate has now twice
+demonstrated that its own author will trust it past them.
 """
 
 from __future__ import annotations
@@ -103,6 +122,26 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
+
+# Windows consoles default to a code page that cannot encode the em-dashes
+# and stars this file prints, so Python substitutes a replacement byte for
+# exactly the characters that make a message readable.
+#
+# ★ NOT THEORETICAL, AND NOT FOUND BY READING THE SOURCE. This gate printed
+# `PASS <0x97> every verb documented` on every run of the day it was written
+# — cp1252's em-dash, byte-verified with `od -c` — and its author read that
+# output perhaps twenty times without looking at it. Seven sibling `check-*`
+# scripts already carried this guard; this one was written without it because
+# it was written from scratch rather than from a sibling.
+#
+# The sting is in `check-commits-filed.py`'s own header, which records being
+# fixed for this twice and states the lesson: the fix was "applied where the
+# problem had been SEEN rather than to every stream." It generalised
+# stdout → all streams, and never generalised one file → all files. Which is
+# the same class of error this file's header is otherwise entirely about.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 
 ROOT = Path(__file__).resolve().parent.parent
 EDIT_RS = ROOT / "crates" / "pdfce-core" / "src" / "edit.rs"

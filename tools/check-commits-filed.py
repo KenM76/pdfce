@@ -52,14 +52,32 @@ checked rather than a new one being imposed.
 
 WHAT IS SKIPPED, AND WHY EACH EXCLUSION IS PRINCIPLED
 -----------------------------------------------------
-1. **Commits that touch `docs/`.** Those ARE filings (or carry their own
-   record inline). A filing commit cannot cite its own hash — the hash
-   does not exist until the commit is written — so requiring it would make
-   the gate unsatisfiable by construction.
+1. **Commits that touch NO code** — no `crates/`, `tools/` or `fixtures/`
+   path. A pure filing commit is one of these, and it must be skipped for a
+   structural reason: **a filing commit cannot cite its own hash**, because
+   the hash does not exist until the commit is written. Requiring it would
+   make the gate unsatisfiable by construction.
 
-2. **Commits touching no `crates/`, `tools/` or `fixtures/` path.** Memory
-   snapshots, agent-file edits and CI-only changes are not engineering
-   work the roadmap is meant to narrate.
+   ★ **THIS ITEM USED TO READ "Commits that touch `docs/`", AND THAT IS NOT
+   WHAT THE CODE DOES.** It was true until 2026-08-11, when `b4a66ed` was
+   caught carrying a real CLI/GUI change bundled with a filing of three
+   *other* commits — a mixed commit self-certifying by containing the very
+   record files it was never described in. The logic was corrected that day
+   (see the comment at the `has_code` test); **this summary was not**, and it
+   went on describing an exemption the gate had stopped granting.
+
+   Corrected 2026-08-18, after it misled a librarian filing into planning a
+   mixed code+docs commit on the belief that the code half would be exempt.
+   A gate's prose and a gate's behaviour disagreeing is worse than either
+   being wrong alone, because the prose is what people plan against.
+
+2. Consequently: memory snapshots, agent-file edits and CI-only changes are
+   not engineering work the roadmap is meant to narrate, and are skipped by
+   the same test.
+
+   **A commit with code in it is checked whatever else it touches**, which is
+   the whole of the 2026-08-11 correction: a mixed commit is precisely where
+   code hides.
 
 THE RATCHET, AND WHY IT IS NOT A WEAKENING
 ------------------------------------------

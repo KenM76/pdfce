@@ -81,6 +81,17 @@ import numpy as np
 import pypdfium2 as pdfium
 from PIL import Image
 
+# The encoding guard seven sibling `check-*` scripts carry. This one prints
+# only ASCII today, so it is LATENT rather than live -- and it is added
+# anyway, on 2026-08-18, because the day's lesson was that repairing the
+# instance in front of you is not repairing the class. The live instance was
+# `check-core-api-verbs.py`, which emitted a cp1252 em-dash on every run of
+# the day it was written; this file is the only other gate without the guard,
+# and the cost of closing it now is one line against a future edit that adds
+# an arrow to a failure message and quietly loses it.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 W = H = 64
 PW = 128
 DPI = 150

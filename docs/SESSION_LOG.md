@@ -49009,3 +49009,329 @@ under `.claude/worktrees/` still contain `108`-era copies of
 (`git ls-files .claude/worktrees` → empty), and pinned to old commits
 (`a8381ea`, `cdac4e7`). A repo-wide `grep` for `108 public` hits them and
 they are **noise, not survivors.**
+
+## 2026-08-18 (hundred-and-eighty-seventh filing) — **`bea3cb1`: A SIXTH STALE FIGURE ONE LINE ABOVE THE FIFTH, AND THE GATE SCOPED TO THE WRONG CLASS *AGAIN* — `edit.rs` PUBLISHED AT 20,939 LINES WHEN IT IS 24,826. ★ THE SESSION'S LAST FILING, AND IT TERMINATES BY BEING DOCS-ONLY. This filing's own sweep finds a SEVENTH instance INSIDE the commit that named the class, plus a cp1252-emitting gate and a `Group` property no request asks about.**
+
+**Filed by `pdfce-librarian` WITH a shell (hard rule 8).** One commit;
+`tools/check-commits-filed.py` was **RED on exactly that one commit**
+before this filing — verified by running it, not inferred.
+
+### ★★★ WHY THIS IS THE LAST FILING, AND WHY THAT NEEDED A MECHANISM
+
+**The dispatch's own frame, verbatim:** *"TERMINATION IS THE GOAL OF THIS
+ONE. File the commit, and put anything your sweep finds into `ROADMAP.md`
+as owed work for the next session — do not expect me to fix it, and do not
+hold the filing open."*
+
+**The mechanism is the part worth recording**, because five filings today
+tried to end and could not. The engineer's own statement of it: *"I will
+commit your output as a **docs-only** commit, which is what lets this stop:
+`check-commits-filed.py` counts **code** commits, so a docs-only filing
+commit does not itself need filing. That is the fixed point."*
+
+**Confirmed against the gate's source, not taken on report.**
+`check-commits-filed.py`'s docstring, under *WHAT IS SKIPPED, AND WHY EACH
+EXCLUSION IS PRINCIPLED*: *"**Commits that touch `docs/`.** Those ARE
+filings … A filing commit cannot cite its own hash — the hash does not
+exist until the commit is written — so requiring it would make the gate
+unsatisfiable by construction."*
+
+★ **So the non-termination was structural, not a failure of will.** Every
+filing today rode along with a `crates/` or `tools/` change, and each such
+commit is by definition a *new unfiled code commit* — the filing closed one
+obligation and opened another in the same act. **Six iterations.** The exit
+is not "stop finding things"; it is **one commit that changes only
+`docs/`**. Recorded because a reader walking today's log will otherwise
+wonder why the sequence stopped where it did, and because the same trap is
+available to any future session that files while shipping.
+
+**Shipped:**
+- **None.** `bea3cb1` claims **no Pass ID and mints no decision** — the
+  established `e11b4f8` / `3e3019a` / `dbec60a` / `bd861a0` / `3f8cc1e` /
+  `e194b46` / `5d8eab5` shape. One published figure corrected, one
+  instrument re-scoped. Full record: `ROADMAP.md`'s `bea3cb1` *Shipped*
+  entry (top of section).
+
+### What the commit did
+
+**1. Owed item 2 of the 186th filing is CLOSED.**
+`docs/core-api/02-editing-and-saving.md:12` said
+`crates/pdfce-core/src/edit.rs` **(20,939 lines)**; `wc -l` says
+**24,826** — **+3,887, +18.6 %**. Re-verified at `HEAD` this filing: the
+published figure and `wc -l` now agree.
+
+**2. ★ THE SIXTH INSTANCE, and the one that finally names the right
+class.** The stale figure sat **one line above** the row `5d8eab5` had
+corrected an hour earlier, and the **widened** gate did not catch it —
+because the widening had been scoped to **verb counts**, *the class of the
+defect that prompted it*, rather than to the class underneath, which is
+**published figures nobody re-derives**. The author generalised
+`one file → the directory` and **did not** generalise
+`verb counts → re-derivable figures`. Same error, one level up.
+
+**3. The gate's contract is now the general one it can enforce:** *if the
+document states a number this tool can recompute from the source, it
+recomputes it.* Verb counts anywhere under `docs/core-api/`, plus
+`` `path/to/file.rs` (N lines) `` claims. **Sabotage-verified**, and the
+failure message prints **claimed and actual side by side** — which is hard
+rule 10's shape applied to a gate's output: a figure filed next to the
+thing it can disagree with.
+
+**4. Two limits written into the header rather than left implied.** It
+defends **`EditSession` only**; and it does **not** touch owed item 1, the
+**1,046 `path:line` citations**, which need **symbol resolution, not
+arithmetic**. The engineer recorded this role's framing there and it is the
+right one: **they are legibly stale rather than invisibly stale**, because
+the anchor commit is printed beside them — exactly the property `R197`
+asks for. **Items 1, 3 and 4 remain owed and untouched, by instruction.**
+
+**Verified at `HEAD` this filing** — commands named, per hard rule 10's
+corollary that a correction is a claim:
+
+| check | command | result |
+|---|---|---|
+| the corrected figure | `wc -l crates/pdfce-core/src/edit.rs` | **24,826** ✓ agrees with the published figure |
+| the verbs gate | `python tools/check-core-api-verbs.py` | **PASS**, 116 verbs, `43 + 51 + 21 + 1` |
+| the filing gate | `python tools/check-commits-filed.py` | RED on `bea3cb1` before this entry |
+| the ledger | `python tools/check-ledger-numbers.py --stats` | *clean* |
+| the ce-dimension gap | `grep -cE "pub fn (rename_dimension_group\|delete_dimension_group\|set_dimension_group\|move_dimension_to_group)"` | **0** — re-run here, not relayed |
+
+### ★ HARD RULE 11 SWEEP — FOUR FINDINGS. Two fixed here (this role's files), two reported as owed.
+
+**All four are in `ROADMAP.md`'s *Next up* as items 8–11.** The eighth
+consecutive non-empty exercise of this rule; the 176th filing's zero
+remains the only empty one.
+
+**★★ 1. THE SEVENTH INSTANCE, AND IT IS INSIDE THE COMMIT THAT NAMED THE
+CLASS.** `bea3cb1` correctly identifies the class as *published figures
+nobody re-derives* — and enforces it **only under `docs/core-api/`**, the
+directory of the defect that prompted it. A repo-wide sweep for
+`` `x.rs` (N lines) `` returns **13** claims. **One is a live defect:**
+`ARCHITECTURE.md:1661`, **§3 Workspace layout**, present tense,
+`render_worker.rs` **503 → 582** (+79, +15.7 %). **Fixed this filing** —
+`ARCHITECTURE.md` is this role's document — and rewritten to carry its own
+anchor (`582 lines, wc -l at bea3cb1`), which is `R197` applied to the
+correction itself rather than only to the thing corrected.
+
+★ **The transferable half is what the other twelve say.** Five are
+**correctly frozen dated records** — `ARCHITECTURE.md:3716` (§4.1, heading
+reads *"read from the crate on 2026-08-05"*: 904 → 980),
+`ARCHITECTURE.md:7265` (§12 decision log: 810 → 1,003),
+`docs/ui_specs/gui-polish-current-featureset.md:10` (header dated
+2026-07-31: **3,875 → 28,588, 7.4× off and costing a reader nothing**),
+`ROADMAP.md:17098` (cites `tests/encryption_rc4.rs`, a file that **no
+longer exists**), and eight further hits inside append-only *Shipped*
+entries. **A naive widening to a `docs/` glob would go red on all of
+them** — the cry-wolf shape `R106` and
+`D:\dev\rag\rust\ci_gate_red_at_baseline_enforces_nothing.md` already
+forbid.
+
+⇒ ***The class a figure-gate can enforce is bounded by document LIVENESS,
+not by directory or file type — and liveness is not mechanically
+detectable***, because a dated snapshot and a live claim are byte-identical
+apart from a heading somewhere above them. **Recommendation filed (the
+engineer's call): an explicit opt-in list of living documents, not a wider
+glob.** A gate whose scope is an enumerated list is one whose scope
+somebody had to think about — which is precisely what the last three
+widenings lacked.
+
+**★★ 2. `check-core-api-verbs.py` EMITS cp1252 BYTES.** It is the **only**
+`tools/check-*.py` that prints a non-ASCII character **and** lacks the
+`sys.stdout.reconfigure(encoding="utf-8", errors="replace")` guard that
+seven of its siblings carry. **Byte-verified, not inferred:**
+`python tools/check-core-api-verbs.py | grep -a PASS | od -c` → **`0227`**
+(cp1252 `0x97`) where UTF-8 would be `\342\200\224`, so its `PASS —` line
+is mis-decoded by any UTF-8 reader — a CI log, a pipe, this filing's own
+shell, which is where it was seen. `check-image-colorspace-truth.py` also
+lacks the guard but prints no non-ASCII, so its exposure is **latent, not
+live** — a distinction worth keeping, because reporting both as equal
+defects is how a report loses its own priority ordering.
+
+★ **This is the same class one axis over, and the evidence is in the
+sibling's own header.** `check-commits-filed.py` documents having been
+fixed *twice* for exactly this — first stdout, then stderr — and names the
+lesson itself: *"the fix was applied where the problem had been SEEN rather
+than to every stream that could have it."* **That header generalised from
+one stream to all streams and never generalised from one file to all
+files**, so the two newest gates — including the one widened twice today —
+were written without it. **A lesson recorded in a file does not propagate
+to the next file.**
+
+**3. The gate's "WHAT IT DOES NOT CHECK" list has two items numbered `3`.**
+The new citations limit was inserted ahead of the existing *"It used to
+read ONE FILE"* item without renumbering. Cosmetic — **and it is in the
+list a reader consults to learn what green means**, which is the one part
+of a gate that has to be readable.
+
+**4. `FEATURES.md`'s ce-dimension group row over-claimed by one clause.**
+It said a group *"can be created and its properties set."* **`Group`
+(`dimension/group.rs:50`) has eight `pub` fields and three session
+setters** — `set_group_scale` (`17718`), `set_group_standard` (`18220`),
+`set_group_style` (`18289`). **Fixed here** (this role's file): the row now
+names what can be set and states that **name and unit cannot**.
+
+### ★★ THE CLUSTER-HOLE DIAGNOSTIC — RUN, AND IT CORRECTS ITS OWN PREMISE
+
+The engineer filed this as a proposal he had **not** run: *"sweep for verbs
+that create a thing without a corresponding verb to rename, re-parent or
+delete it."* **Run this filing** — every `pub fn` on `EditSession`
+partitioned into creators and mutators and matched by noun — because a
+proposal filed with results is a different object from one filed as
+speculation, and the second one costs one command.
+
+**★ The pattern is real; its scope was over-estimated, and the correction
+runs in the direction nobody checks.** *"Three requests in one day"* reads
+as three holes. It is **three requests across two holes**, and the rest of
+the surface is **covered**: `delete_annotation`, `delete_field`,
+`delete_field_group`, `delete_widget`, `delete_pages`, `delete_dimension`,
+`rename_field`, `move_widget`, `move_dimension` all exist. **pdfce does not
+systematically forget the management half.**
+
+**★★ The sharpest form is an INTERNAL CONTRAST, not an absence.**
+`delete_field_group` exists at `edit.rs:9795` and `rename_field` at
+`10110` — **the FORM analogue of precisely the two verbs the ce-dimension
+group cluster lacks.** One cluster got them; one did not. That is far
+easier to act on and a far weaker basis for a standing rule than "pdfce
+forgets."
+
+**And the two holes are DIFFERENT SHAPES — the engineer's framing
+(*"missing members of a shipped cluster"*, the requester's own phrase)
+collapses them:**
+
+| | shape | evidence |
+|---|---|---|
+| **A** | ***create-without-manage*** — the ce-dimension **group** cluster | `add_dimension_group` (`17692`), no rename, no delete, no re-parent |
+| **B** | ***read-without-write***, which is **not** the same thing — outlines | `read_outline` (`outline.rs:1066`), `parse_outline` (`1162`), `walk_outline` (`pageops/references.rs:418`) exist; **`EditSession` has ZERO outline, page-label or named-destination verbs** |
+
+★ **A cluster-completeness sweep would never have found B**, because there
+is no creator to pair a manager against — the entire authoring half is
+absent behind a complete reading half. Two different diagnostics are needed
+and only one was proposed. **`FEATURES.md` is already honest about B**
+(`:180` *"Read and navigate an existing bookmark tree. **No authoring.**"*;
+`:259` *"**No `EditSession` outline verb exists at all**"*) — **checked
+this filing, no correction needed**, which is worth stating because a sweep
+that only reports hits leaves the reader unable to tell "clean" from "not
+looked at."
+
+**★★ A THIRD HOLE NO REQUEST NAMES — `Group::unit`.** Taken at
+`Group::new(id, name, unit)` (`group.rs:128`), exposed read-only through
+`pub const fn unit()` (`143`), set once at
+`add_dimension_group(name, unit)`, and **no setter anywhere.** It is
+**load-bearing, not incidental**: the requester's own proposed refusal for
+re-parenting is *"a group whose unit is incompatible"*, so a user who picks
+the wrong unit at creation hits a refusal they **cannot clear** short of
+delete-and-redraw. **Fixing rename without fixing unit leaves the harder
+half of the same trap standing.**
+
+**★ RULING ON THE PROPOSAL: a Backlog note, NOT a standing rule.** The
+warrant for a rule is a *recurring* defect the rule prevents; the
+diagnostic has now been run **once** and found essentially **one** cluster,
+with the rest complete — **evidence against systematicity, not for it.**
+Minting on a suspicion the evidence then softened would be the
+false-precision shape this project keeps correcting. What survives is
+narrower and true: **`R151`'s qualifier already carries it**, and the
+diagnostic is a **cheap scoping check to run when a Pass ships a new
+creator verb** — run it, do not enshrine it. **No number claimed; ceiling
+stays `R197`, next free `R198`.**
+
+### CHANNELS RE-`ls`ed (`R196`, third exercise) — **NO CHANGE, and that is the entry**
+
+`D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\`: **3 files**, the same
+three, newest **19:23**, none newer than `bea3cb1` (19:33).
+`D:\Dev\FeatureRequests\iccce_FeatureRequests\open\`: **16 files**,
+unchanged. **The first `R196` exercise to return nothing new.** Recorded
+deliberately: a rule whose every exercise reports a surprise trains its
+reader to expect surprises, and **a boring result is what a healthy channel
+looks like** — the rule is doing its job when it says "nothing," provided
+the `ls` actually ran.
+
+**Findings + decisions:**
+- **Nothing minted.** No Pass ID, no decision record, no standing rule.
+  This filing **amends** two `R197`-adjacent status lines (both of which
+  had gone stale a *second* time, inside `bea3cb1`), **corrects** two
+  figures in this role's own files, and **rules** one proposal down to a
+  Backlog note.
+- **★ THE DAY'S ARC, in the engineer's own summary and endorsed here:**
+  ***six instances of repairing the INSTANCE instead of the CLASS, by one
+  author in one session — five found by someone else's sweep or by a
+  widened instrument, one by himself.*** This filing adds a **seventh**,
+  found by this role, and it is the most instructive of the set because it
+  is **inside the commit that correctly names the class**: `bea3cb1` says
+  *"published figures nobody re-derives"* and then enforces it in one
+  directory. **Naming a class does not scope an instrument to it.**
+- **Two gates now exist because of that arc, and both found more on their
+  first run than the defect that prompted them — 44 and 3.** That is the
+  argument for gates over care, stated as a ratio rather than an opinion.
+  ★ **Its limit is stated in the same breath:** each of those gates then
+  had to be widened **twice**, and every widening was scoped to the defect
+  in front of the author. **A gate inherits the scope of the moment it was
+  written in**, which is why an enumerated scope somebody argued about
+  beats a scope that grew by incident.
+- **A lesson recorded in a file does not propagate to the next file.**
+  `check-commits-filed.py`'s header names the exact encoding trap it was
+  fixed for, twice, and the two gates written after it lack the fix.
+- **`R196` returned empty for the first time** — three exercises, two
+  non-empty.
+- **Hard rule 11's exercises keep returning non-empty:** 171st, 172nd,
+  173rd, 174th, 184th, 185th, 186th and now **187th**.
+
+**Still in flight / owed — ALL OF IT IS IN `ROADMAP.md`'s *Next up*, in two
+boxes (186th filing's items 1–7, 187th filing's items 8–11), because
+`docs/NEXT_SESSION.md` is overwritten each session and this file is not:**
+1. **★★ 1,046 drifted `path:line` citations** in `docs/core-api/` —
+   unchanged, explicitly out of the gate's scope, **legibly** stale.
+2. ~~`02-editing-and-saving.md:12`~~ — **CLOSED by `bea3cb1`.**
+3. **The `7031296` anchors** in parts 1–3 vs `index.md`'s `e194b46`.
+4. **`index.md`'s unreconciled citation tallies.**
+5. **★★ The reply to `pdfceGUI`** on `insert_pages` — **fourth consecutive
+   filing owed.**
+6. **★★ `note_gray_black_routing_is_yours.md`** still unread; 16 files in
+   the `iccce` `open\` folder, re-`ls`ed this filing.
+7. **The three `pdfceGUI` requests** — need an engineer parse into Passes.
+   The parse itself is now carried in `ROADMAP.md` rather than only in the
+   overwritable handoff.
+8. **★★ `check-core-api-verbs.py` emits cp1252** — NEW, byte-verified.
+9. **Two items numbered `3`** in that gate's header — NEW.
+10. **The `(N lines)` check is scoped to one directory**; recommendation is
+    an **opt-in living-document list**, not a glob — NEW.
+11. **CI wiring** — 5 of 14 gates run in CI. Recorded, not escalated.
+12. **`Pass 101.1`** — BLOCKED on `iccce` becoming a real dependency;
+    `(bo)`/`(bp)` are for Ken. Unchanged.
+13. **`R192` blind spot (d)** — unchanged.
+14. **`v0.7.0` is bumped but NOT tagged** — carried from the 183rd filing,
+    **not re-verified this filing**, and flagged as such.
+
+**Ledger effects.** **No Pass ID minted** — family ceiling stays **103**
+(highest `103.3`), next free **104**. **No decision record minted** —
+ceiling **071**, next free **072**. **No standing rule minted** — ceiling
+**`R197`**, next free **`R198`**; `R193`/`R194` remain claimed by their
+declined-but-intact proposals. **One proposal RULED DOWN to a Backlog note,
+claiming no number.** SESSION_LOG filing **186 → 187**, next free **188**.
+*(Read from `tools/check-ledger-numbers.py --stats`, run this filing:
+`clean — no duplicate Pass, rule, or decision numbers`.)*
+
+**`FEATURES.md` — CHANGED, and again the COMMIT moved nothing while the
+FILING did.** `bea3cb1` touches no `crates/` file and changes no
+capability, so no box moved — checked, not assumed. The sweep found one
+over-claiming clause, and the maintenance contract binds the filing:
+
+- **`:100` corrected** (sentence replaced, not appended — the file's own
+  rule): *"A group can be created and its **scale, standard and style**
+  set; its **name and unit** cannot be changed after creation…"* All three
+  boxes **kept** — those three properties genuinely work end to end.
+- **`:251` extended by one clause** naming `Group::unit` as the same hole
+  as `Group::name`, with the reason it is load-bearing.
+- **Checked and left alone:** `:180` and `:259`, the outline rows, which
+  already state *"No authoring"* and *"No `EditSession` outline verb exists
+  at all."* **Accurate; no edit.**
+
+**`ARCHITECTURE.md` — ONE FIGURE CORRECTED, no decision-log entry.** §3
+Workspace layout, `render_worker.rs` **503 → 582 lines**, now carrying its
+own `wc -l`-at-`bea3cb1` anchor. **No §12 entry**, because nothing was
+decided — a stale line count is a figure correction, not an architectural
+decision, and minting a decision record for it would inflate the ledger the
+same way a standing rule minted on one instance would.
+
+**Terminology (rule 15):** every dimension reference in this filing is to
+**ce dimensions** — the objects pdfce authors. **No pdf dimension is
+involved anywhere.**

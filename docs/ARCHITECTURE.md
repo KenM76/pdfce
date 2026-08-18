@@ -1658,7 +1658,8 @@ D:\Dev\pdfce\
                                    Depends on pdfce-core + pdfce-render.
                                    **★ THREADING LIVES HERE, AND ONLY HERE
                                    (Pass 44.0, 2026-08-07, `7926a78`).**
-                                   `render_worker.rs` (503 lines) owns the
+                                   `render_worker.rs` (582 lines, `wc -l`
+                                   at `bea3cb1` 2026-08-18) owns the
                                    background rasterization thread, the
                                    channel, the `RenderCancel` token and the
                                    generation counter that discards a

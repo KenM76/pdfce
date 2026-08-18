@@ -97,7 +97,7 @@ provisional; re-verify before any acceptance criterion leans on them.
 | core | cli | gui | Acrobat | Feature |
 |:----:|:---:|:---:|:-------:|---------|
 | [x] | [x] | [x] | ◐ | Author a ce dimension with snapping — linear, radius, diameter. |
-| [x] | [x] | [x] | **[ ]** | Groups carrying scale, number format (decimal/fraction) and ANSI/ISO drafting standard. A group can be created and its properties set; it cannot be renamed or deleted, and a placed ce dimension cannot be moved between groups — see the two Planned rows below. |
+| [x] | [x] | [x] | **[ ]** | Groups carrying scale, number format (decimal/fraction) and ANSI/ISO drafting standard. A group can be created and its scale, standard and style set; its **name and unit** cannot be changed after creation, it cannot be deleted, and a placed ce dimension cannot be moved between groups — see the two Planned rows below. |
 | [x] | [x] | [x] | **[ ]** | Switch a placed circular dimension between radius and diameter. |
 | [x] | [x] | [x] | [x] | Reposition by drag, or numerically. |
 | [x] | [x] | [x] | [x] | Toggle a group's OCG layer visibility. |
@@ -248,7 +248,7 @@ the model or verb exists and only the named shell is missing. The
 | [ ] | [ ] | [ ] | [x] | Make ce dimensions and foreign annotations selectable and deletable from the canvas; also gates click-a-comment-to-select. |
 | [ ] | [ ] | [ ] | **[ ]** | ce-dimension tolerance, the ISO 286 fit forms — fit, fit-with-tolerance, fit-tolerance-only, plus block and general tolerance. Every other tolerance form is built; these six need a sourced class/table lookup pdfce does not have. |
 | — | — | [ ] | ? | ce-dimension style AND tolerance in the GUI — **one panel covering both**, showing which values are inherited and which are overridden and letting the override be set. The model and the CLI already do all of it; only the disclosure surface is missing. |
-| [ ] | [ ] | [ ] | ? | Rename or delete a ce-dimension group. Creating one and setting its properties works; there is no session verb for either of these, so a mistyped group name is permanent for the life of the document. The model half already exists (`Group::name`, `DimensionModel::delete_group`). |
+| [ ] | [ ] | [ ] | ? | Rename or delete a ce-dimension group. Creating one and setting its scale, standard and style works; there is no session verb for either of these, so a mistyped group name is permanent for the life of the document. The model half already exists (`Group::name`, `DimensionModel::delete_group`). `Group::unit` is the same hole and no request names it — fixed at `Group::new`, read-only via `unit()`, and the property the proposed re-parent refusal turns on. |
 | [ ] | [ ] | [ ] | ? | Move a placed ce dimension to another group. The group is fixed at creation and carries scale, unit, number format, drafting standard, layer visibility and the inherited style tier, so a mis-assignment is uncorrectable except by delete-and-redraw. |
 | [ ] | [ ] | [ ] | ? | Drag a ce dimension's extension lines. |
 | [ ] | [ ] | [ ] | [x] | Re-measure a placed ce dimension — change what it measures without losing its id, group and placement. |
