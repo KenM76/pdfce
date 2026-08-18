@@ -1288,6 +1288,30 @@ D:\Dev\pdfce\
                                    patches and NONE passes — Ghent standing UNCHANGED at
                                    25/18/8 of 51. Full derivation: decision 070 in §12, and
                                    `ROADMAP.md`'s `cb20770` Shipped entry.
+                                   **★ FIXED 2026-08-18 (hundred-and-
+                                   sixty-eighth filing, `75fa497`) — a
+                                   routing bug this same commit-set
+                                   introduced is closed.** `/BC` was
+                                   converting to sRGB through an inline
+                                   naive complement while painted content
+                                   inside the same mask group used the
+                                   calibrated route above, so a
+                                   `DeviceCMYK` mask disagreed with itself
+                                   across its own bounding box. `/BC` now
+                                   takes the same `Rgb::from_cmyk` route
+                                   for all three component counts, pinned
+                                   by a test that asserts the two routes
+                                   genuinely diverge for at least one input
+                                   (`color.rs`,
+                                   `a_soft_mask_backdrop_converts_by_the_painted_content_route`).
+                                   Does not change this cell's remaining
+                                   defect (mask applied per-element, not to
+                                   the group's RESULT) or `LUM-A1` (still
+                                   open — a different question, which
+                                   CMYK→luminosity FORM, not which
+                                   CMYK→sRGB ROUTE two call sites use).
+                                   Full derivation: `ROADMAP.md`'s
+                                   `75fa497` Shipped entry.
                                    **★ AMENDED 2026-08-18
                                    (hundred-and-sixty-sixth filing, `Pass
                                    85.5`, `bd9d5ef`+`bf75351`+`ac15158`) —
@@ -22441,3 +22465,15 @@ reading, neither of the two analytic forms `LUM-A1` enumerated, and
 **No standing rule minted.** Architectural/rendering-model decision, same
 disposition as 063/064/066/068/069. **Ceiling moves 069 → 070; next free
 071.**
+
+**★ FORWARD POINTER, added 2026-08-18 (hundred-and-sixty-eighth filing,
+`75fa497`).** This decision's own sourced contract (clause 2, §11.6.5.2's
+outside-`/BBox` magnitude rule) was violated by a bug this decision's
+landing commit (`cb20770`) also introduced: `/BC` reached sRGB through an
+inline naive complement while painted content inside the same mask group
+reached it through the calibrated 6⁴ grid described above, so a
+`DeviceCMYK` mask disagreed with itself across its own bounding box.
+Fixed one commit later, in the same session — full account in
+`ROADMAP.md`'s `75fa497` Shipped entry. **Not a revision of this
+decision**: the fix restores agreement with what this decision already
+specified, and mints no decision number of its own.

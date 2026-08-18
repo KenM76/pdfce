@@ -96,6 +96,121 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `75fa497` — **ONE SOFT MASK, ONE LUMINOSITY, TWO CMYK ROUTES — AND A JUSTIFICATION COMMENT THAT MADE A FALSE CLAIM ABOUT §11.6.5.2. THIS COMMIT IS ALSO THE HUNDRED-AND-SIXTY-SEVENTH FILING'S OWN DOC-WRITE, WHICH IS WHY IT NEEDED A FILING OF ITS OWN** — closes a flagged inconsistency inside `85.4c`'s soft-mask half (the row stays PARTIAL — this is a correctness restoration, not new coverage); no Pass ID, no decision minted — filed 2026-08-18 (hundred-and-sixty-eighth filing)
+
+**No shell this filing (hard rule 8).** Diff-stat figures below are
+RELAYED from the commit message; the fix and its test are **VERIFIED
+HERE** by reading `crates/pdfce-render/src/interpret.rs` and
+`crates/pdfce-render/src/color.rs` directly at `HEAD`, cited by line —
+not confirmed against `git show`, which this filing has no way to run.
+
+**Why this commit needs its own citation at all — the structural trap.**
+`75fa497` **is** the hundred-and-sixty-seventh filing: it is the commit
+that wrote the `cb20770`/`2a75be1`/`8eb0668`/decision-070 entries this
+file and `ARCHITECTURE.md` already carry, all filed above and unchanged
+by this entry. A filing commit is normally exempt from
+`check-commits-filed.py` — it cannot cite its own not-yet-existing hash —
+but that exemption is for **docs-only** filings (the gate's own
+docstring: "a commit touching `docs/` used to be skipped outright…that
+exempted MIXED commits — code bundled with a filing — and a mixed commit
+is precisely where code hides"). `75fa497` also carried the
+`crates/pdfce-render/` fix below, so the gate correctly refused to wave
+it through, and CI stayed red on exactly this one commit until now. See
+the Update-protocol addendum below for the practice this motivates.
+
+**THE DEFECT, flagged by the hundred-and-sixty-seventh filing itself but
+not fixed in it** (the `cb20770` entry's "★★ A SECOND, SMALLER
+INCONSISTENCY FOUND WHILE READING THE CODE" paragraph, above). A
+`DeviceCMYK` `ExtGState /SMask /Luminosity` group fed **one** luminosity
+computation from **two** different CMYK→sRGB routes. Painted content
+inside the mask group reached sRGB through `Rgb::from_cmyk`'s calibrated
+6⁴ node grid — the conversion module documents itself as "the single
+place in pdfce where a `DeviceCMYK` colour becomes an sRGB one." `/BC`,
+the group's backdrop, reached sRGB through an inline naive complement
+`(1−c)(1−k)` written the same day, justified by a comment claiming the
+naive form "is right for the polarity question, which is all this is
+used for." **That claim was false, and falsely reassuring, which is the
+worse half.** §11.6.5.2 makes the backdrop's MAGNITUDE the mask value
+everywhere outside the mask group's `/BBox` — exactly what `cb20770`'s
+pre-fill implements — so the number matters, not only its sign. A
+`DeviceCMYK` mask therefore disagreed with itself across its own
+bounding box: one mask value inside, a different one for the same tint
+outside.
+
+**THE FIX. VERIFIED HERE**, `crates/pdfce-render/src/interpret.rs:3172`–
+`3204`: `/BC` now matches on component count exactly as painted content
+does — `[v] => Rgb::from_gray`, `[r, g, b] => Rgb::from_rgb`, and, the
+corrected arm, `[c, m, y, k] => Rgb::from_cmyk(self.policy.cmyk_intent,
+c, m, y, k)`. The doc comment at the fix site keeps the old
+justification's exact wording rather than deleting it, labelled as the
+thing that was wrong: "the lesson is not 'use the calibrated table' — it
+is that a comment asserting why a shortcut is safe is a claim, and this
+one was never checked against the clause it was standing in."
+
+**THE TEST, and the shape that earns it a ledger line.** **VERIFIED
+HERE**, `crates/pdfce-render/src/color.rs:2393`–`2435`,
+`a_soft_mask_backdrop_converts_by_the_painted_content_route`. It pins
+AGREEMENT, not raw numbers — comparing `Rgb::from_cmyk` against the SAME
+naive formula the bug used, for both `CmykIntent::Naive` and
+`CmykIntent::Calibrated`, over four CMYK tuples — so it survives a
+retuning of the calibrated table. It also asserts the two routes
+GENUINELY DIVERGE for the `Calibrated`/`(0.5, 0.4, 0.4, 0.0)` case
+specifically, or it would pass forever without guarding anything: "if
+these ever agree, the divergence this test guards against has gone away
+and the test is vacuous," in the test's own panic message.
+
+**A SELF-INFLICTED WOUND IN THE SAME EDIT, fixed in the same commit.**
+Inserting the new test landed it between a neighbouring test's doc
+comment and its own `fn`, orphaning the neighbour's `#[test]` attribute
+and stripping the doc comment that belonged to it. The clue was the new
+test's name printing twice in one `cargo test` run — skimmed past on the
+way to reading "ok" for the whole crate. **VERIFIED HERE**: both tests
+exist once each, each with its own doc comment intact —
+`a_soft_mask_backdrop_converts_by_the_painted_content_route` at
+`color.rs:2393`–`2435`,
+`iccbased_n4_falls_back_to_cmyk_with_cmyk_polarity` at `color.rs:2437`–
+`2451`.
+
+**Found by the librarian while filing the commit that introduced it** —
+the same filing's own "★★ A SECOND, SMALLER INCONSISTENCY" flag, above.
+The reusable part is not the bug, it is that a doc-reading pass caught a
+comment making a checkable claim about a spec clause, and the claim was
+checkable and wrong. **A comment asserting why a shortcut is safe is a
+claim, not documentation** — escalated to
+`D:\dev\rag\rust\trust_but_verify_doc_comments_are_not_evidence.md` as
+occurrence 11, below.
+
+**What this does NOT change.** `85.4c`'s soft-mask half stays
+**PARTIAL** — the remaining Ghent gap (the mask is applied to each
+element painted INSIDE the group rather than to the group's RESULT,
+§11.4.5) is untouched by this fix, and no Ghent re-measurement is
+reported in this filing (none was relayed; none is invented here).
+`LUM-A1` (which analytic CMYK→luminosity FORM to use, §11.5.3 NOTE 3 vs
+§10.3.3) is a distinct, still-open question from this fix (which
+CMYK→sRGB ROUTE two call sites use) — this commit does not decide it and
+the setting remains owed.
+
+**`ARCHITECTURE.md`.** A short addendum was added to §4's soft-mask cell
+and a non-revising forward-pointer footer to decision 070 in §12 — see
+that entry. **No new decision minted**: decision 070 already stated the
+§11.6.5.2 magnitude requirement this fix restores agreement with;
+nothing here is a new design choice.
+
+**`FEATURES.md`.** No change. Row 163 (soft masks — `core [x]` `cli [x]`
+`gui [ ]`) never claimed the `/BC` route was consistent with painted
+content, so there is nothing there to correct; the checkbox state is
+unaffected by an internal correctness fix.
+
+**Ledger effects.** No Pass ID minted or claimed; `85.4c`'s soft-mask
+half stays PARTIAL under its existing claim. No decision minted —
+ceiling stays **070**, next free **071**. No standing rule minted — the
+structural trap this filing needed is recorded as a practice note in
+*Update protocol*, below, not promoted to a numbered rule: this project's
+own bar is two occurrences before promotion (`2a75be1`'s precedent,
+above), and no earlier instance of a filing commit itself needing filing
+surfaces in this filing's read of the record. Ceiling stays **R195**,
+next free **R196**. **Next free filing ordinal: 169.**
+
 ### `8eb0668` — **TWO RESEARCH DELIVERABLES THAT EXISTED ONLY IN A CONVERSATION TRANSCRIPT ARE NOW ON DISK — `docs/overprint-architecture-survey.md` AND `docs/ghent-patch-reference.md`. A DELIVERABLE RECORDED ONLY WHERE IT WAS PRODUCED HAS BEEN FILED, NOT HANDED OFF** — no Pass ID; a documentation-persistence commit, same disposition as `docs/ocr-engine-survey.md` — filed 2026-08-18 (hundred-and-sixty-seventh filing)
 
 **VERIFIED HERE** (`git show --stat 8eb0668`): 3 files, **794 insertions /
@@ -70585,3 +70700,34 @@ single expression.** Cost: one division at write time.
 **Sibling in this section:** the same-filing propagation duty above — that
 one stops a fact being stated inconsistently **across documents**; this one
 stops a figure being stated in a form that **cannot** be checked at all.
+
+### Librarian filing commits stay docs-only (added 2026-08-18, hundred-and-sixty-eighth filing — FLAGGED PRACTICE, NOT A NUMBERED RULE, FIRST OCCURRENCE)
+
+**The occurrence.** `75fa497` was the hundred-and-sixty-seventh filing's
+own commit — the one that wrote the `cb20770`/`2a75be1`/`8eb0668`/
+decision-070 entries `ROADMAP.md` and `ARCHITECTURE.md` already carry —
+bundled with a `crates/pdfce-render/` correctness fix the same filing
+found while reading the code (the `/BC`-vs-painted-content CMYK route
+bug; see this file's `75fa497` Shipped entry). `check-commits-filed.py`
+exempts a filing commit from citing its own hash **only** because a
+docs-only filing cannot cite a hash that does not exist yet at commit
+time. That exemption correctly does not extend to a commit that also
+touches `crates/`, so this one needed a filing of its own, and CI stayed
+red on exactly it until the hundred-and-sixty-eighth filing gave it one.
+
+**The practice, stated so the regress does not recur: a librarian filing
+commit should touch `docs/` only.** A finding made WHILE filing — reading
+a shipped commit's own code and catching a false claim in a comment — is
+real engineering work and belongs in a SEPARATE commit, made alongside
+whatever else is landing that fix, not folded into the commit that writes
+the filing's prose. Keeping the two apart is what makes the gate's
+docs-only exemption actually exempt every filing commit, rather than
+exempting most of them and creating a small, recurring category of
+filings that must file themselves.
+
+**Not promoted to a numbered rule.** No earlier instance of a filing
+commit needing its own filing surfaces in this filing's read of the
+record — this is the first. This project's own bar is two occurrences
+before a shape earns an `R` number (see `2a75be1`'s ledger effects,
+above, for the same promotion discipline applied to a different shape).
+Watch for a second instance before minting one here.

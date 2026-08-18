@@ -45800,3 +45800,98 @@ labelled **VERIFIED HERE** (with the command that produced it) or
 6. **Answer `LUM-A1`** — it is a live code path now, not a hypothetical.
 7. Unchanged carry-overs: `/P 2` certified-content fixture; the ~8
    wrapped-string-literal `assert!` sweep.
+
+## 2026-08-18 (hundred-and-sixty-eighth filing) — **ONE SOFT MASK, ONE LUMINOSITY, TWO CMYK ROUTES — AND A JUSTIFICATION COMMENT THAT MADE A FALSE CLAIM ABOUT §11.6.5.2. `75fa497` FILED — IT WAS ITSELF THE 167TH FILING'S OWN COMMIT, MIXED WITH CODE, WHICH IS WHY `check-commits-filed.py` WAS RED ON EXACTLY ONE COMMIT**
+
+**Filed by `pdfce-librarian` WITHOUT a shell this session (hard rule 8).**
+Figures below are RELAYED from the dispatch's commit message except where
+marked **VERIFIED HERE** (by reading `crates/pdfce-render/src/
+{interpret.rs,color.rs}` directly at `HEAD` — no `git show` available
+this session).
+
+**Shipped:**
+
+- **`75fa497` — the `/BC`-vs-painted-content CMYK→sRGB routing bug,
+  flagged by the 167th filing and fixed in the same commit that wrote
+  that filing's prose.** A `DeviceCMYK` luminosity soft mask fed one
+  luminosity computation from two different CMYK→sRGB routes — painted
+  content through `Rgb::from_cmyk`'s calibrated 6⁴ grid, `/BC` through an
+  inline naive complement whose justification comment was wrong about
+  what §11.6.5.2 requires (magnitude, not only polarity, outside the
+  `/BBox`). `/BC` now takes the calibrated route for all three component
+  counts. **VERIFIED HERE**: fix at `interpret.rs:3172`–`3204`;
+  pinned-agreement test at `color.rs:2407`
+  (`a_soft_mask_backdrop_converts_by_the_painted_content_route`), which
+  also asserts the two routes genuinely diverge for at least one input so
+  it cannot pass vacuously.
+- Also fixed in the same commit: a test-insertion accident that orphaned
+  a neighbouring test's doc comment and stripped its `#[test]` attribute
+  — caught by the new test's name printing twice in one run. **VERIFIED
+  HERE**: both tests present once each, doc comments intact
+  (`color.rs:2393`–`2451`).
+
+**Decisions made this session:**
+
+- **No decision minted.** Decision 070 already specified the §11.6.5.2
+  magnitude requirement this fix restores agreement with; the fix is a
+  correctness restoration against an existing decision, not a new design
+  choice. A non-revising forward-pointer footer was added to decision 070
+  in `ARCHITECTURE.md` §12, and a short addendum to §4's soft-mask cell.
+- **No Pass ID minted or claimed.** `85.4c`'s soft-mask half stays
+  PARTIAL — this fix does not touch the remaining offscreen-buffer defect
+  (mask applied per-element, not to the group's RESULT).
+- **A practice note added to `ROADMAP.md`'s Update protocol** (not a
+  numbered rule — first occurrence): a librarian filing commit should
+  stay docs-only. `75fa497` was itself the 167th filing's own
+  doc-writing commit, bundled with the code fix above;
+  `check-commits-filed.py`'s docs-only exemption correctly did not apply
+  to it, which is why it was red until this filing.
+
+**Findings + decisions:**
+
+- **The structural trap, named for future sessions.** A filing commit is
+  normally exempt from `check-commits-filed.py` because it cannot cite
+  its own not-yet-existing hash. That exemption is for DOCS-ONLY
+  filings; `75fa497` also carried a `crates/pdfce-render/` fix, so the
+  gate correctly required its own citation. Keeping librarian filing
+  commits docs-only — landing any code fix a filing pass finds in a
+  separate commit — stops the regress at the source rather than needing
+  a second filing every time it recurs.
+- **Escalated to the cross-project RAG as occurrence 11, not a new
+  file.** `D:\dev\rag\rust\trust_but_verify_doc_comments_are_not_evidence.md`
+  already tracks ten prior instances of exactly this shape on this
+  project — a confidently-worded comment asserting a claim nobody
+  checked. This one: a comment claiming a shortcut "is right for the
+  polarity question, which is all this is used for," when the spec
+  clause it was standing in (§11.6.5.2) required the MAGNITUDE, not only
+  the sign.
+
+**Still in flight:**
+
+- `85.4c`'s soft-mask half: still PARTIAL. The offscreen-buffer work
+  (soft mask applied to a group's RESULT, not each element inside it) is
+  unstarted, same as the 167th filing left it.
+- `LUM-A1`: still open, still a distinct question from this fix (which
+  analytic CMYK→luminosity FORM, not which CMYK→sRGB conversion route two
+  call sites use). The setting remains owed.
+- No Ghent re-measurement is reported for this fix; none is invented
+  here. The 25 pass / 18 FAIL / 8 UNRESOLVED of 51 standing from the
+  167th filing is carried forward, unverified against this specific
+  change.
+- Carried forward, unchanged: the `/P 2` certified-content fixture; the
+  ~8 wrapped-string-literal `assert!` sweep; `v0.7.0` bumped, not tagged,
+  not released.
+
+**For next session:**
+
+1. **Ledger.** Next free Pass family **97**; next free `85.4` sub-letter
+   **`f`**. Next free decision **071** (unchanged — none minted this
+   filing). Next free standing rule **`R196`** (unchanged). **Next free
+   filing ordinal: 169.**
+2. **Re-run `python tools/check-commits-filed.py`** after this filing is
+   committed — it reads the working tree, not `HEAD`; commit before
+   trusting green.
+3. Everything else the 167th filing queued (the n-channel buffer,
+   group-RESULT compositing, harness recalibration, `v0.7.0` release) is
+   unchanged and still owed — see that entry, above, for the full list;
+   not restated here to avoid forking it.
