@@ -281,6 +281,19 @@ pub struct Diagnostics {
     /// Non-zero here means the page's transparency is approximate in a way
     /// no blend-mode counter can express.
     pub transparency_groups_flattened: usize,
+    /// Transparency groups rendered into their own buffer and composited
+    /// as a UNIT — the §11.4.5 behaviour. A census, not a shortfall.
+    pub transparency_groups_composited: usize,
+    /// Groups carrying `/K true` (knockout, Table 96) that were composited
+    /// as ordinary groups.
+    ///
+    /// In a knockout group each element composites against the group's
+    /// INITIAL backdrop rather than the accumulated result, so later
+    /// elements REPLACE earlier ones instead of layering over them.
+    /// Compositing the group as a unit gets its outer boundary right and
+    /// its internal occlusion order wrong — strictly better than
+    /// flattening, and still not correct.
+    pub transparency_groups_knockout_approximated: usize,
     /// Of those, the ones that are **isolated** (`/I true`) or
     /// **knockout** (`/K true`) — Table 96.
     ///
@@ -769,6 +782,9 @@ polarity unverifiable (decision 006 R30)",
         self.oc_sections_hidden += other.oc_sections_hidden;
         self.unknown_ops += other.unknown_ops;
         self.compat_skipped += other.compat_skipped;
+        self.transparency_groups_composited += other.transparency_groups_composited;
+        self.transparency_groups_knockout_approximated +=
+            other.transparency_groups_knockout_approximated;
         self.transparency_groups_flattened += other.transparency_groups_flattened;
         self.transparency_groups_special += other.transparency_groups_special;
         self.blend_modes_applied += other.blend_modes_applied;
@@ -2983,32 +2999,45 @@ impl Interpreter<'_> {
 
         // §11.4.7 / Table 96: a `/Group` with `/S /Transparency` makes this
         // form a COMPOSITING SCOPE, not merely a reusable content stream.
-        // pdfce has no offscreen-buffer machinery, so the contents are
-        // painted straight onto the page — an approximation that is exact
-        // only for a group holding one opaque object. Counted, never
-        // silent, because no other counter can express it.
-        if let Some(group) = stream
+        // Its contents are rendered into their own buffer, and the GROUP'S
+        // RESULT is composited with the blend mode, constant alpha and soft
+        // mask in force at the `Do` — §11.4.5. Painting the contents
+        // straight onto the page applies those to each object INSIDE
+        // instead, which is the same answer only for a group holding one
+        // opaque object.
+        let group_dict = stream
             .dict
             .get(b"Group")
             .map(|o| doc.resolve(o))
-            .and_then(Object::as_dict)
-        {
-            let is_transparency = group
-                .get(b"S")
+            .and_then(Object::as_dict);
+        let is_transparency_group = group_dict.is_some_and(|g| {
+            g.get(b"S")
                 .map(|o| doc.resolve(o))
                 .and_then(Object::as_name)
-                .is_some_and(|n| n.as_bytes() == b"Transparency");
-            if is_transparency {
-                self.diag.transparency_groups_flattened += 1;
-                let flag = |k: &[u8]| {
-                    matches!(
-                        group.get(k).map(|o| doc.resolve(o)),
-                        Some(Object::Boolean(true))
-                    )
-                };
-                if flag(b"I") || flag(b"K") {
-                    self.diag.transparency_groups_special += 1;
-                }
+                .is_some_and(|n| n.as_bytes() == b"Transparency")
+        });
+        let group_flag = |k: &[u8]| {
+            group_dict.is_some_and(|g| {
+                matches!(
+                    g.get(k).map(|o| doc.resolve(o)),
+                    Some(Object::Boolean(true))
+                )
+            })
+        };
+        // `/K` (knockout, Table 96) is NOT implemented. In a knockout group
+        // each element composites against the group's INITIAL backdrop
+        // rather than the accumulated result, so later elements REPLACE
+        // earlier ones instead of layering over them. Compositing the group
+        // as a unit gets its outer boundary right and its internal
+        // occlusion order wrong, which is still strictly better than
+        // flattening — but it is not correct, and it is counted.
+        let is_knockout = group_flag(b"K");
+        if is_transparency_group {
+            if is_knockout || group_flag(b"I") {
+                self.diag.transparency_groups_special += 1;
+            }
+            if is_knockout {
+                self.diag.transparency_groups_knockout_approximated += 1;
             }
         }
 
@@ -3016,13 +3045,39 @@ impl Interpreter<'_> {
         if let Some(id) = id {
             active.push(id);
         }
+        // A transparency group gets its OWN page-sized buffer so its result
+        // can be composited as a unit. Anything else paints straight into
+        // the caller's pixmap, exactly as before.
+        //
+        // The buffer is page-sized rather than BBox-sized on purpose: the
+        // group's contents are drawn under the SAME CTM as the page, so a
+        // smaller buffer would need its own translation threaded through
+        // every paint site and the clip mask. Page-sized costs ~4 bytes per
+        // pixel per nesting level and needs no coordinate change at all,
+        // which is the difference between a correct implementation and a
+        // subtly-misaligned one.
+        let mut group_buf = if is_transparency_group {
+            Pixmap::new(pixmap.width(), pixmap.height())
+        } else {
+            None
+        };
+        if group_buf.is_some() {
+            // §11.4.5: the blend mode, constant alpha and soft mask in
+            // force at the `Do` apply to the GROUP'S RESULT, not to the
+            // objects inside it. So the group's own contents start with
+            // the initial values — otherwise the blend is applied twice,
+            // once per object and again to the composite.
+            inner.blend_mode = tiny_skia::BlendMode::SourceOver;
+            inner.fill_alpha = 1.0;
+            inner.stroke_alpha = 1.0;
+        }
         let nested = run_nested(
             doc,
             &content,
             form_resources,
             self.fonts,
             inner,
-            pixmap,
+            group_buf.as_mut().unwrap_or(pixmap),
             self.depth + 1,
             active,
             self.cancel,
@@ -3030,6 +3085,38 @@ impl Interpreter<'_> {
             self.oc_hidden() || oc_off,
         );
         self.diag.merge(nested);
+        match group_buf {
+            Some(buf) => {
+                // The composite §11.4.5 describes: the group's result,
+                // through the outer blend mode and constant alpha.
+                pixmap.draw_pixmap(
+                    0,
+                    0,
+                    buf.as_ref(),
+                    &tiny_skia::PixmapPaint {
+                        opacity: self.gs.current.fill_alpha.clamp(0.0, 1.0),
+                        blend_mode: self.gs.current.blend_mode,
+                        quality: tiny_skia::FilterQuality::Nearest,
+                    },
+                    Transform::identity(),
+                    // No mask: the group's contents were already clipped by
+                    // `inner.clip` while being drawn, so re-applying the
+                    // clip here would double-multiply its anti-aliased edge
+                    // and darken every clipped boundary by one pass.
+                    None,
+                );
+                self.diag.transparency_groups_composited += 1;
+            }
+            None => {
+                if is_transparency_group {
+                    // Allocation failed — the only way to get here. Fall
+                    // back to the old flattening behaviour rather than
+                    // dropping the content, and count it as the shortfall
+                    // it is.
+                    self.diag.transparency_groups_flattened += 1;
+                }
+            }
+        }
         self.diag.forms_rendered += 1;
 
         // --- (e) restore: `self.gs` was never touched ---

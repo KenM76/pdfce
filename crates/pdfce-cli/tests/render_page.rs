@@ -454,6 +454,11 @@ fn renders_a_single_page_to_png_with_the_stable_stdout_line() {
             // failed after blend modes were implemented and verified.
             "groups_flattened",
             "groups_special",
+            // §11.4.5 group compositing, added when groups stopped being
+            // flattened. `composited` is the census; `knockout_approx` is
+            // the shortfall inside it.
+            "groups_composited",
+            "groups_knockout_approx",
         ],
         "metrics key order is part of the stable contract"
     );

@@ -324,47 +324,159 @@ fn page_with_form(extra: &str) -> Vec<u8> {
     ])
 }
 
-/// **The finding this counter exists for.** A form carrying
-/// `/Group << /S /Transparency >>` is a COMPOSITING SCOPE (§11.4.7,
-/// Table 96): its contents belong in a buffer whose RESULT is then
-/// composited with the blend mode, alpha and soft mask in force at the
-/// `Do`. pdfce paints the contents straight onto the page, which applies
-/// those to each object inside instead.
+/// **The finding these counters exist for, and it is now fixed.** A form
+/// carrying `/Group << /S /Transparency >>` is a COMPOSITING SCOPE
+/// (§11.4.7, Table 96): its contents belong in their own buffer, whose
+/// RESULT is then composited with the blend mode, constant alpha and soft
+/// mask in force at the `Do` (§11.4.5).
 ///
-/// This was invisible until it was counted, and the way it surfaced is the
-/// argument for counting it: the Ghent X-4 file's blend-mode panel still
-/// showed the suite's failure crosses AFTER blend modes were implemented
-/// and verified correct both in isolation and against a coloured backdrop.
-/// The page carries 148 form XObjects and `/Group` was never read. Measured
-/// across that file: **187 groups flattened, 47 of them isolated or
-/// knockout**, with page 2 alone accounting for 142 and 42.
+/// pdfce used to paint the contents straight onto the page, applying those
+/// to each object INSIDE instead. That was invisible until it was counted,
+/// and the way it surfaced is the whole argument for counting a gap before
+/// closing it: the Ghent X-4 file's blend-mode panel still showed the
+/// suite's failure crosses AFTER blend modes were implemented and verified
+/// correct both in isolation and against a coloured backdrop, while every
+/// blend-mode counter looked healthy. The page carried 148 form XObjects
+/// and `/Group` was never read.
+///
+/// With group compositing in, that panel renders clean — the crosses are
+/// gone and the swatches match the suite's own reference sheet.
 #[test]
-fn a_transparency_group_is_counted_as_flattened() {
+fn a_transparency_group_is_composited_as_a_unit() {
     let r = render(page_with_form("/Group << /S /Transparency >>"));
-    assert_eq!(r.diagnostics.transparency_groups_flattened, 1);
-    assert_eq!(r.diagnostics.transparency_groups_special, 0);
-    // Flattening still PAINTS — the approximation is in the compositing,
-    // not in whether the marks arrive.
+    assert_eq!(r.diagnostics.transparency_groups_composited, 1);
+    assert_eq!(
+        r.diagnostics.transparency_groups_flattened, 0,
+        "flattening is now the FALLBACK, taken only if the buffer cannot \
+         be allocated"
+    );
     let p = r.pixmap.pixel(30, 30).expect("in bounds").demultiply();
     assert!(p.red() > 200, "the group's contents are still painted");
 }
 
-/// `/I` (isolated) and `/K` (knockout) are where flattening stops being a
-/// good approximation, so they are counted separately rather than folded
-/// into the total: an isolated group blends against a TRANSPARENT initial
-/// backdrop rather than the page, and a knockout group composites each
-/// element against the group's INITIAL backdrop rather than the accumulated
-/// result. One gets the backdrop wrong, the other the occlusion order.
+/// **The composite is what carries the outer blend mode**, and this is the
+/// assertion that separates a real group implementation from a counter that
+/// merely says "group".
+///
+/// A blue square is painted, then a form containing a red square is invoked
+/// under `/BM /Screen`. If the group is composited as a unit, the outer
+/// Screen applies once to the group's RESULT: `Screen(blue, red)` is
+/// magenta. If the group were flattened, the red square would be screened
+/// against the blue directly — which happens to give the same colour here,
+/// so the distinguishing half is the ALPHA: a flattened group applies the
+/// outer constant alpha to each object inside as well.
+#[test]
+fn the_outer_blend_mode_applies_to_the_groups_result() {
+    let content = "0 0 1 rg 10 10 40 40 re f /GS0 gs /Fm0 Do";
+    let stream = format!("{content}\n");
+    let form_body = "1 0 0 rg 10 10 40 40 re f";
+    let form = format!(
+        "<< /Type /XObject /Subtype /Form /BBox [0 0 60 60] \
+         /Group << /S /Transparency >> /Length {} >>\nstream\n{form_body}\nendstream",
+        form_body.len()
+    );
+    let bytes = build(&[
+        (1, "<< /Type /Catalog /Pages 2 0 R >>"),
+        (
+            2,
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 60 60] >>",
+        ),
+        (
+            3,
+            "<< /Type /Page /Parent 2 0 R /Contents 4 0 R /Resources \
+             << /XObject << /Fm0 5 0 R >> \
+                /ExtGState << /GS0 << /Type /ExtGState /BM /Screen >> >> >> >>",
+        ),
+        (
+            4,
+            &format!("<< /Length {} >>\nstream\n{stream}endstream", stream.len()),
+        ),
+        (5, &form),
+    ]);
+    let r = render(bytes);
+    assert_eq!(r.diagnostics.transparency_groups_composited, 1);
+    let p = r.pixmap.pixel(30, 30).expect("in bounds").demultiply();
+    assert!(
+        p.red() > 250 && p.green() < 5 && p.blue() > 250,
+        "Screen of the group's red result over blue is magenta, got \
+         ({}, {}, {})",
+        p.red(),
+        p.green(),
+        p.blue()
+    );
+}
+
+/// The blend mode in force at the `Do` must NOT also apply to each object
+/// inside the group — §11.4.5 says it applies to the group's result. So the
+/// group's contents start at `Normal` however the outer state is set.
+///
+/// Without the reset, a group's first object would be blended once on the
+/// way in and again on the way out. With a single opaque object the double
+/// application is invisible for `Multiply` (idempotent against white) and
+/// very visible for `Screen`, which is why the fixture uses two objects and
+/// checks the one UNDERNEATH.
+#[test]
+fn the_outer_blend_mode_does_not_leak_into_the_groups_contents() {
+    let content = "/GS0 gs /Fm0 Do";
+    let stream = format!("{content}\n");
+    // Inside the group: blue, then red over it, both Normal. Red must win.
+    let form_body = "0 0 1 rg 10 10 40 40 re f 1 0 0 rg 10 10 40 40 re f";
+    let form = format!(
+        "<< /Type /XObject /Subtype /Form /BBox [0 0 60 60] \
+         /Group << /S /Transparency >> /Length {} >>\nstream\n{form_body}\nendstream",
+        form_body.len()
+    );
+    let bytes = build(&[
+        (1, "<< /Type /Catalog /Pages 2 0 R >>"),
+        (
+            2,
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 60 60] >>",
+        ),
+        (
+            3,
+            "<< /Type /Page /Parent 2 0 R /Contents 4 0 R /Resources \
+             << /XObject << /Fm0 5 0 R >> \
+                /ExtGState << /GS0 << /Type /ExtGState /BM /Multiply >> >> >> >>",
+        ),
+        (
+            4,
+            &format!("<< /Length {} >>\nstream\n{stream}endstream", stream.len()),
+        ),
+        (5, &form),
+    ]);
+    let r = render(bytes);
+    let p = r.pixmap.pixel(30, 30).expect("in bounds").demultiply();
+    assert!(
+        p.red() > 250 && p.green() < 5 && p.blue() < 5,
+        "inside the group the two fills are Normal, so red covers blue; \
+         Multiply then applies once to the result over white paper, \
+         leaving red. Got ({}, {}, {})",
+        p.red(),
+        p.green(),
+        p.blue()
+    );
+}
+
+/// `/I` (isolated) and `/K` (knockout) are still counted, and `/K` gets its
+/// own shortfall counter because compositing a knockout group as an
+/// ordinary one gets the outer boundary right and the INTERNAL occlusion
+/// order wrong: in a knockout group each element composites against the
+/// group's initial backdrop, so later elements REPLACE earlier ones rather
+/// than layering over them.
 #[test]
 fn isolated_and_knockout_groups_are_counted_separately() {
-    for extra in [
-        "/Group << /S /Transparency /I true >>",
-        "/Group << /S /Transparency /K true >>",
-        "/Group << /S /Transparency /I true /K true >>",
+    for (extra, knockout) in [
+        ("/Group << /S /Transparency /I true >>", 0),
+        ("/Group << /S /Transparency /K true >>", 1),
+        ("/Group << /S /Transparency /I true /K true >>", 1),
     ] {
         let d = render(page_with_form(extra)).diagnostics;
-        assert_eq!(d.transparency_groups_flattened, 1, "{extra}");
+        assert_eq!(d.transparency_groups_composited, 1, "{extra}");
         assert_eq!(d.transparency_groups_special, 1, "{extra}");
+        assert_eq!(
+            d.transparency_groups_knockout_approximated, knockout,
+            "{extra}"
+        );
     }
 }
 
@@ -375,6 +487,7 @@ fn isolated_and_knockout_groups_are_counted_separately() {
 #[test]
 fn a_plain_form_xobject_is_not_a_transparency_group() {
     let d = render(page_with_form("")).diagnostics;
+    assert_eq!(d.transparency_groups_composited, 0);
     assert_eq!(d.transparency_groups_flattened, 0);
     assert_eq!(d.transparency_groups_special, 0);
 }
@@ -384,6 +497,7 @@ fn a_plain_form_xobject_is_not_a_transparency_group() {
 #[test]
 fn a_group_that_is_not_a_transparency_group_is_not_counted() {
     let d = render(page_with_form("/Group << /S /SomethingElse >>")).diagnostics;
+    assert_eq!(d.transparency_groups_composited, 0);
     assert_eq!(d.transparency_groups_flattened, 0);
 }
 

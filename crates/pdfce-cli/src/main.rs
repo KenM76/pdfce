@@ -6596,7 +6596,8 @@ indexed_clamped={} indexed_short={} shadings={} shadings_via_sh={} \
 shadings_paintable={} shadings_painted={} shadings_refused={} shadings_mesh={} \
 img_colorant_none={} img_uncalibrated={} \
 blend_modes_applied={} blend_modes_ignored={} soft_masks_ignored={} \
-groups_flattened={} groups_special={}",
+groups_flattened={} groups_special={} \
+groups_composited={} groups_knockout_approx={}",
         input.display(),
         output.display(),
         rendered.pixmap.width(),
@@ -6751,6 +6752,13 @@ groups_flattened={} groups_special={}",
         // result — a difference no blend-mode counter can express.
         d.transparency_groups_flattened,
         d.transparency_groups_special,
+        // §11.4.5 group compositing. `composited` is a census — the group
+        // was rendered to its own buffer and applied as a unit.
+        // `knockout_approx` is the shortfall inside that: /K groups get
+        // their outer boundary right and their internal occlusion order
+        // wrong.
+        d.transparency_groups_composited,
+        d.transparency_groups_knockout_approximated,
     );
     report_diagnostics(d);
 
