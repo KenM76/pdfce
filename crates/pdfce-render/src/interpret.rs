@@ -258,7 +258,7 @@ pub struct Diagnostics {
     /// rule just looks like a different document.
     pub blend_modes_ignored: usize,
     /// Form XObjects carrying `/Group << /S /Transparency >>` (§11.4.7,
-    /// Table 96) that pdfce painted **straight onto the page** instead of
+    /// Table 147) that pdfce painted **straight onto the page** instead of
     /// compositing as a unit.
     ///
     /// # Why this is its own counter and not folded into the blend one
@@ -284,7 +284,7 @@ pub struct Diagnostics {
     /// Transparency groups rendered into their own buffer and composited
     /// as a UNIT — the §11.4.5 behaviour. A census, not a shortfall.
     pub transparency_groups_composited: usize,
-    /// Groups carrying `/K true` (knockout, Table 96) that were composited
+    /// Groups carrying `/K true` (knockout, Table 147) that were composited
     /// as ordinary groups.
     ///
     /// In a knockout group each element composites against the group's
@@ -295,7 +295,13 @@ pub struct Diagnostics {
     /// flattening, and still not correct.
     pub transparency_groups_knockout_approximated: usize,
     /// Of those, the ones that are **isolated** (`/I true`) or
-    /// **knockout** (`/K true`) — Table 96.
+    /// **knockout** (`/K true`) — Table 147.
+    ///
+    /// NOT Table 96, which is the COMMON group-attributes table; `/K`, `/I`
+    /// and `/CS` belong to the transparency-group subtype's own table.
+    /// Clause-11 table numbers also shift by −2 across editions — this is
+    /// Table 145 in ISO 32000-2 — so the number alone is ambiguous without
+    /// the edition.
     ///
     /// Tracked separately because these two flags are exactly where
     /// flattening stops being a good approximation. An ISOLATED group
@@ -2997,7 +3003,7 @@ impl Interpreter<'_> {
             }
         };
 
-        // §11.4.7 / Table 96: a `/Group` with `/S /Transparency` makes this
+        // §11.4.7 / Table 147: a `/Group` with `/S /Transparency` makes this
         // form a COMPOSITING SCOPE, not merely a reusable content stream.
         // Its contents are rendered into their own buffer, and the GROUP'S
         // RESULT is composited with the blend mode, constant alpha and soft
@@ -3024,13 +3030,30 @@ impl Interpreter<'_> {
                 )
             })
         };
-        // `/K` (knockout, Table 96) is NOT implemented. In a knockout group
-        // each element composites against the group's INITIAL backdrop
-        // rather than the accumulated result, so later elements REPLACE
-        // earlier ones instead of layering over them. Compositing the group
-        // as a unit gets its outer boundary right and its internal
-        // occlusion order wrong, which is still strictly better than
-        // flattening — but it is not correct, and it is counted.
+        // `/K` (knockout, Table 147) is NOT implemented. In a knockout
+        // group each element composites against the group's INITIAL
+        // backdrop rather than the accumulated result, so later elements
+        // REPLACE earlier ones instead of layering over them. Compositing
+        // the group as a unit gets its outer boundary right and its
+        // internal occlusion order wrong, which is still strictly better
+        // than flattening — but it is not correct, and it is counted.
+        //
+        // ★ IT IS NOT A CORNER CASE, which is the thing to know before
+        // dismissing this counter. FOUR clauses establish a knockout group
+        // with no `/K` key anywhere in the file: §9.3.8's `/TK`, whose
+        // INITIAL VALUE IS `true`, making every text object one; §11.6.7,
+        // which makes shading patterns knockout (tiling patterns are not);
+        // and §11.7.4.4, which makes `B`/`B*`/`b`/`b*` and text render
+        // modes 2 and 6 knockout. §11.7.4.4's NOTE 2 names the visible
+        // symptom outright: the DOUBLE BORDER on a semi-transparent
+        // fill-then-stroke is missing knockout. Ranked by likely frequency
+        // that is `B`/`b` >> `/TK` > explicit `/K`.
+        //
+        // ★ AND THE FIXTURE WARNING, because it is the degenerate-fixture
+        // trap again: knockout and non-knockout are IDENTICAL when every
+        // element is opaque (`q_s = 1` implies `α_s = f_s`). A fixture of
+        // opaque fills cannot tell a correct implementation from a wrong
+        // one. Any knockout test must set `/ca < 1`.
         let is_knockout = group_flag(b"K");
         if is_transparency_group {
             if is_knockout || group_flag(b"I") {
@@ -3066,7 +3089,15 @@ impl Interpreter<'_> {
         // flattening, and costs a page-sized allocation to do it.
         let outer_is_neutral = self.gs.current.blend_mode == tiny_skia::BlendMode::SourceOver
             && self.gs.current.fill_alpha >= 1.0;
-        let needs_buffer = is_transparency_group && (!outer_is_neutral || group_flag(b"I"));
+        // KNOCKOUT is unconditional, and the neutral-outer-state shortcut is
+        // not available to it. §11.4.4 NOTE 5's inline fast path requires
+        // the group to have "the same knockout attribute as its parent" —
+        // a knockout group has no initial backdrop to composite against
+        // when painted inline, which is the whole of what makes it a
+        // knockout group. Painting it inline is not a cheaper route to the
+        // same picture; it is the non-knockout picture.
+        let needs_buffer =
+            is_transparency_group && (!outer_is_neutral || group_flag(b"I") || is_knockout);
         let mut group_buf = if needs_buffer {
             Pixmap::new(pixmap.width(), pixmap.height())
         } else {
