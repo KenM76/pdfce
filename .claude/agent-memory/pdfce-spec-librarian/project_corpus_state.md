@@ -56,6 +56,7 @@ heading (`**<N>. `).**
 | 43 | ★ **THE EDITION-AXIS RESIDUE** — when a `free_primary` clause family is complete, the gap left is "is this clause NUMBER still valid in the next edition?" (build a renumbering map as §1) · **★ in an errata source `[INS]` is a CORRECTION, not the standard as printed — tag every delta, because files in the wild follow the PRINTED text; an erratum can close a corpus ambiguity AND create a read-tolerance requirement at once** · an errata page prints only what CHANGED, so its silence is not evidence · OPEN → PARTIALLY CLOSED by acquiring an algorithm's HARNESS without its KERNEL (restate the refusal as UNCHANGED) · a later edition can WITHDRAW an option the previous session offered · the best find can be an ABSENCE in the edition already held (1.7 lacks 2.0's signature-`/Contents` exception ⇒ pdfce invariant citing 2.0, never §7.6.1) · a new-in-edition-N FEATURE can make a shipped guard fail OPEN (an unencrypted wrapper has no `/Encrypt`) · grade all three sources in a §0 table and mark the slide-only claims "do not act on this" |
 | 44 | ★ **THE SECOND NULL-DELTA — a dispatch RE-ASKS an already-RULED question.** The residue is your own EVIDENCE, not the answer: re-extract the quotes anyway and say so · **re-run term-frequency counts (a clause span bounded by a non-existent next heading silently runs to EOF ⇒ 6 vs the true 4); and ask whether the TERM was right — search the MODALITY (`shall not` = 11, none on point) not the noun** · **separate what a source PROVES from what you claimed (an ERRATA record's silence ≠ "the edition did not change it") ⇒ restate PERMANENT on the weaker basis** · **an edition map stranded in a sibling `ref` file is a GAP — duplicate it into the section a decision will cite; split self-inconsistent VERIFIED rows** · **reader behaviour from permissive source is 2 curls and can land on the OTHER SIDE of your ruling (pdf.js = naive order) ⇒ fence it as BEHAVIOUR NOT SPEC and warn that a "match other readers" tiebreak pushes away** · **a MEASURED behaviour can contradict a claim you graded SOURCED — file both, retract neither, and register the ambiguity on the DOMAIN of the quantifier** |
 | 45 | ★ **THE PAYWALL-FALLS DISPATCH — a licensed PRIMARY arrives.** A new source tier needs a NEW `license_basis`, not a stretched one · **state the ALGORITHM-vs-EXPRESSION distinction explicitly because the consumer writes PUBLIC code** · quote the licence terms and REFUSE to interpret them (escalate) · **the errata may be ANNOTATIONS ⇒ `extract_text()` yields the UNCORRECTED standard, and an erratum's review `/State` is provenance** · **expect the primary to correct YOUR OWN file — a file that warns about a trap is not immune to it** · discharge `NEEDS VERIFICATION` and record the outcome · **"verify what shipped" is a distinct deliverable and the honest answer may be "this source cannot verify that"** · **one trap did not survive: check the MODAL VERB separately from the mechanics** · close the gap and open the RIGHT residue (derived resolution + an empirical settling route) · a "cheap" item closes SHALLOWLY only with an explicit DEFERRED section — and **a uniform table-number off-by-one between structurally identical tables is the worst cross-edition trap there is** |
+| 48 | ★ **THE CLOSE-YOUR-OWN-FLAGGED-GAP dispatch.** An ESTIMATED term-frequency count is not a MEASURED one — `knockout` 21→**61**, and the missed loci WERE the headline (an "implicit-`<feature>`" sweep: three clauses establish a non-isolated knockout group with **no `/K` key in the file**) · "can data-structure X represent clause C?" is answerable — **rewrite the formulas in the structure's terms (premultiply), set the clause's own simplifying condition, watch terms vanish**, and ship a per-case CAPABILITY TABLE whose "no" rows carry a disclosed refusal boundary · **COMPILE-AND-RUN extends to "is my implementation route real?"** — design the probe so ONE number discriminates the rivals, and add the free extra probe (it found that a `tiny_skia::Mask` is a SHAPE input) · **a corpus file's own PREDICTION can be confirmed — record it in the OLD file, next to the simplification it licensed** · a "the spec contradicts itself" finding lives in a DIFFERENT clause, the later edition is the tiebreak, and you must QUANTIFY the divergence (closed form) and check whether the dispatched clause mandates a formula at all ("implementation-defined" ⇒ SETTING, not bug) · the clause answering the dispatch may not be the dispatched one (`/BC` outside the `/BBox` is §11.6.5.2) · **closing a SCOPED gap changes THREE things — banner, GAP line, and the ONE-LINE SUMMARY the old file wrote about the clause it had not read** |
 | 37 | ADJUDICATING A CLAUSE-NUMBER CONFLICT: rule from the source's own enumeration, never from your heading (headings are RECONSTRUCTED); "the sub-clause does not exist" beats "the other one is right"; status leaks to anywhere the PRODUCT NAME appears, not just to headings and the index |
 | 47 | ★ **THE VERBATIM-FORMULA-TABLE + CROSS-SPEC-COMPARISON dispatch.** A THIRD glyph-dropout class: **PATH-DRAWN symbols** (`√`, `| |`) are invisible even to the per-glyph pass — detect by an unexplained x-GAP, license by C⁰ continuity + the newer edition's clean Unicode + a sibling spec · **a COUNT in the corpus is a hypothesis** ("the other 18 blend modes" was wrong by 3, in 4 files, and the DISPATCH inherited it) · **a correct CONCLUSION can rest on a WRONG PREMISE** — confirm the premise separately, because that is what the next Pass generalises · **a cross-spec "how does PDF differ from W3C/Skia?" question IS answerable from free primaries — don't refuse it** · **★ COMPILE AND RUN THE DEPENDENCY** (a 15-line `cargo` project pinned to the lockfile version, `--offline`, 60 000 measured pixels) and **isolate the root cause by re-implementing the crate's own variant and reproducing its output** · a dependency can be measurably WRONG against BOTH specs ⇒ defect, not ambiguity, never a setting · **every divergence the dispatch PREDICTED was absent and the real one was unpredicted** · two properties with similar names selecting different sets must be separated by name · three files, split on LICENCE and on SPEC-vs-BEHAVIOUR |
 
@@ -2711,3 +2712,104 @@ generalise well beyond blend modes.
   handles the first; the second needs its own file because a `ref` file mixing
   W3C quotation with crate measurements must state **per section** what each
   source is allowed to prove. Lead such a file with a §0 table doing exactly that.
+
+**48. THE CLOSE-YOUR-OWN-FLAGGED-GAP dispatch — the corpus flagged the gap, the
+dispatch quotes the corpus's own words back, and the ONE-LINE SUMMARY THE CORPUS
+WROTE ABOUT THE UNINGESTED CLAUSE IS THE THING MOST LIKELY TO BE WRONG.**
+Established 2026-08-17 building `iso32000__s__11.4.md` (§11.4 transparency
+groups / knockout) + `iso32000__s__11.5.md` (§11.5 soft-mask derivations) from
+GAP markers that three existing clause-11 files had been carrying since
+2026-08-08. Eight findings, five new.
+
+- **★ AN ESTIMATED TERM-FREQUENCY COUNT IS NOT A MEASURED ONE, AND THE
+  DIFFERENCE IS WHERE THE HEADLINE LIVES.** I wrote `knockout` = "21 hits, all in
+  §11.4.x / §11.6.6 / §11.7.4.3 / §9.3.8 / Annex L" **from having read those
+  clauses**, then ran the grep before shipping: **61 occurrences on 51 lines**,
+  and the loci I had not visited were **§11.6.7, §11.7.4.4 and §12.5.5** — which
+  together are the file's most important section (§13: shading patterns, `B`/`b`
+  fill-then-stroke, and `/TK` with **initial value `true`** each establish a
+  **non-isolated knockout group implicitly, with no `/K` key in the file**). Same
+  again for `Luminosity` (asserted 7, measured **12**, and the miss was **Table
+  147's `/CS` row**, the best statement of the rule in the standard). **Item 14
+  said "evidence, not assertion" for negatives you set out to prove; this extends
+  it to every count, including ones you feel you have already seen.** The
+  operational rule: **run the grep even when you believe you have read every
+  locus — reading a clause tells you what is IN it, never what is ELSEWHERE.**
+  Record the correction in-file with the wrong number retained (item 3).
+- **★ AN "IMPLICIT <FEATURE>" SWEEP IS A FIRST-CLASS DELIVERABLE, and the term
+  frequency is how you find it.** A feature named by a dictionary key (`/K`)
+  will also be *established without that key* by clauses that say "shall be
+  treated as if it were enclosed in…". Those sites are invisible to a
+  clause-scoped read and invisible to a `Glob` on the key name. **Whenever a
+  dispatch is about a flag, grep the flag's CONCEPT word document-wide and
+  tabulate every site that establishes the thing without the flag.** Here the
+  table (IK-1..IK-4) inverted the dispatch's own framing: the engineer asked
+  about explicit `/K true` groups, and the answer was that the *hard* variant is
+  the *default* for text, shading patterns and `B`/`b`.
+- **★ "CAN DATA-STRUCTURE X REPRESENT CLAUSE C?" IS ANSWERABLE, AND THE ANSWER
+  IS A CAPABILITY TABLE PLUS AN ALGEBRAIC COLLAPSE — not a yes/no.** The move
+  that works: **rewrite the clause's formulas in the structure's own terms**
+  (here: premultiply, `P_i = α_i·C_i`, which turns the spec's normalise-by-alpha
+  colour line into `P_i = (1 − f_s)·P_(i−1) + C_t`, division-free), then **set
+  the clause's own simplifying condition and watch terms vanish** (`α_0 = 0` for
+  an isolated group kills `α_b·C_b` and `α_b·B_i(…)` ⇒ **the blend mode drops out
+  of the group's internal compositing entirely**). What remains is either
+  expressible or not, per case, and the per-case table is the deliverable. **The
+  "no" rows are the valuable ones** — non-isolated knockout needs a frozen
+  `(C_0, α_0)` copy AND `α_g` distinct from `α`, and storing `(P_i, α_gi)` in a
+  premultiplied 8-bit pixmap **fails validity** because `P` can exceed `α_g`.
+  State the refusal boundary in the file (the dispatch explicitly wanted "a
+  disclosed refusal rather than a wrong render").
+- **★ COMPILE-AND-RUN (item 47 / the toolchain memo) EXTENDS FROM "IS THE CRATE
+  CORRECT?" TO "IS MY IMPLEMENTATION ROUTE REAL?"** ~10 minutes, and it converted
+  a derivation into a measurement: a 2×1 `Pixmap`, dst pre-filled, one
+  `fill_rect` covering **half a pixel** so coverage is exactly 0.5, printing raw
+  premultiplied bytes. Result: `tiny_skia 0.11.4` applies coverage as
+  **`lerp(dst, blended, cov)`**, so `BlendMode::Source` + paint alpha `q_s` +
+  rasterizer coverage `f_s` **is** the isolated-knockout recurrence bit for bit,
+  and `SourceOver` + coverage is the non-knockout one. **Design the probe so one
+  number discriminates the rival hypotheses** — if coverage were folded into src
+  alpha instead, `Source` would have returned `(0,32,0,64)` rather than
+  `(128,64,0,191)`. A **second** case in the same run (`Mask` = 128/255 with an
+  opaque source) settled an unasked question that turned out to matter more: **a
+  `tiny_skia::Mask` is a SHAPE input, not an opacity input**, so routing a PDF
+  soft mask through it silently implements `/AIS true`. **Add the extra probe;
+  it is free.**
+- **★ A CORPUS FILE'S OWN PREDICTION CAN BE CONFIRMED, AND SAYING SO IS WORTH A
+  LINE.** `iso32000__s__11.6.4.md` had written that `/AIS` "matters only for
+  (a) knockout groups (§11.4.6)…" and licensed ignoring it for flat image paints.
+  §11.4.6's formulas confirm it exactly (`α_s` is `/AIS`-invariant; **`f_s` is
+  not**, and `f_s` appears alone in the knockout recurrence). **Record the
+  confirmation in the OLD file, next to the simplification it licensed**, with
+  the condition under which the simplification stops being safe — a validated
+  prediction that nobody links back reads as an unverified guess forever.
+- **A "the spec contradicts itself" finding lives in a DIFFERENT CLAUSE than the
+  one dispatched, and the later edition is the tiebreak.** ISO 32000-1 §11.5.3
+  NOTE 3's `DeviceCMYK` luminosity is **multiplicative**; the same standard's
+  **§10.3.3** (a `shall`) is **additive**; ISO 32000-2 replaced the NOTE with
+  §10.3.3's form. **Quantify the divergence rather than asserting one** — here
+  `Δ = K · S` exactly (closed form), **max 0.25**, agreeing iff `K = 0` or
+  `C = M = Y = 0`, which also tells the engineer that the *common* mask (black
+  only) cannot detect the difference. Then check whether the dispatched clause's
+  normative sentence even mandates a formula: it did not
+  ("**by implementation-defined means**"), so **both are conformant** ⇒ a
+  SETTING, not a bug. Extends item 39's "the headline is where the spec stops".
+- **The clause that answers the dispatch's question may not be the dispatched
+  one.** The dispatch asked what `/BC` does outside the group's `/BBox`; §11.5.3
+  never mentions `/BBox`. **The rule is in §11.6.5.2** (`mask_outside =
+  TR(lum(BC))`, and `TR(0.0)` for `/S /Alpha`) — a clause the corpus already had
+  in full. Same shape as item 17/23: follow the artifact, not the clause number.
+  Likewise the best citation for "`/CS` is required on a `/Luminosity` mask
+  group" is **Table 147's `/CS` row** (it explains *why*: a mask group is the
+  canonical **rootless** group), not Table 144's `G` row that says it flatly.
+- **When a SCOPED banner's gap closes, THREE things must change, and the third
+  is the one that gets missed.** (1) the banner (item 9b, `NOT` → `NOW ingested
+  (was "NOT")` + a trimmed `STILL NOT`); (2) the `GAP` line at the file's tail →
+  `GAP CLOSED <date>` with the old text quoted; (3) **the one-line SUMMARY the
+  old file wrote about the clause it had not read.** `iso32000__s__11.6.5.md`
+  said §11.5.2/.3 were "summarised only" and its summary flattened them into a
+  symmetric pair — but `/S /Alpha` needs **no colour, no `/CS`, no `/BC`** while
+  `/S /Luminosity` composites over a **fully opaque** backdrop and **requires
+  `/CS`**. **An uningested clause's one-line summary in a neighbouring file is a
+  claim with no source, and it is exactly what a lookup will hit first.** Sweep
+  for it and mark it corrected in place.

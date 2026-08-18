@@ -352,6 +352,20 @@ and `pdfminer` installed. Extraction recipe that works:
   Label everything from steps 2–6 **BEHAVIOUR, NOT SPECIFICATION**, name the
   version and date, and route the tool-behaviour narrative to
   `C:\personal_rag\pdf\`.
+  **★ 2026-08-17 extension — this route also validates an IMPLEMENTATION ROUTE,
+  not just a crate's correctness, and it is ~10 minutes.** To answer "can I
+  express clause C with API call A?", build the smallest raster whose bytes
+  discriminate the rival hypotheses. Working recipe (`tiny-skia`): a **2×1
+  `Pixmap`**, `pm.fill(known dst)`, then one `fill_rect` covering **exactly half
+  of pixel 0** (`Rect::from_xywh(0.0, 0.0, 0.5, 1.0)`, `anti_alias = true`) so
+  coverage is exactly 0.5, printing `pm.data()` raw (premultiplied RGBA8). Pixel 1
+  is the untouched control. Measured: **`tiny_skia 0.11.4` applies coverage as
+  `lerp(dst, blended, cov)`**, so `BlendMode::Source` returned `[128,64,0,191]`
+  where the rival ("fold coverage into src alpha") predicts `[0,32,0,64]` —
+  one number, decisive. **Always add a second, cheap probe for the adjacent
+  question**: the same run tested a `Mask` of 128/255 with an opaque source and
+  showed **a `tiny_skia::Mask` is a SHAPE/coverage input, never an opacity
+  input**, which mattered more than the thing being tested.
 - **Vendored Rust crate sources are a legitimate, offline verification route** —
   `~/.cargo/registry/src/index.crates.io-*/​<crate>-<version>/src/`. Used
   2026-08-03 to check `subsetter 0.2.6`'s emitted table set against a decision
