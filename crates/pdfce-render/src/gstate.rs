@@ -301,6 +301,23 @@ pub struct GraphicsState {
     /// Maintained today only to feed [`crate::profile`]; it is a `Copy`
     /// 16-byte field, so `q` pays nothing meaningful for it.
     pub clip_bbox: Option<(f32, f32, f32, f32)>,
+    /// The same clip as [`Self::clip`], expressed as an index into a
+    /// display list's clip table instead of as a built mask — `None` while
+    /// rendering, `Some` while recording (`crate::display_list`).
+    ///
+    /// # Why this lives HERE, beside the mask, and not in the recorder
+    ///
+    /// For exactly the reason [`Self::clip_bbox`] does: **`Q` reinstates a
+    /// LARGER clip.** A recorder tracking the current clip on its own stack
+    /// would have to mirror `q`/`Q`, and a second stack that must stay in
+    /// step with the first is a second stack that will not. Kept in the
+    /// graphics state, it is saved and restored by the same `q`/`Q` that
+    /// saves and restores everything else, for free and by construction.
+    ///
+    /// The two are written **as a pair** ([`Self::clip_ref`] reads them as
+    /// one), and the failure mode of letting them diverge is a recorded
+    /// paint that ignores its clip — visible only on replay.
+    pub clip_id: Option<crate::display_list::ClipId>,
     /// The nine §9.3 text-state parameters (module docs: they ARE
     /// graphics-state parameters, so `q`/`Q` save and restore them).
     pub text: crate::text::TextState,
@@ -332,7 +349,20 @@ impl GraphicsState {
             clip_before_smask: None,
             clips_since_smask: 0,
             clip_bbox: None,
+            clip_id: None,
             text: crate::text::TextState::default(),
+        }
+    }
+
+    /// The clip in force, in whichever representation the caller's drawing
+    /// target needs.
+    ///
+    /// The single reader of both fields, so a paint site cannot pass the
+    /// mask and forget the id — see [`Self::clip_id`].
+    pub(crate) fn clip_ref(&self) -> crate::canvas::ClipRef<'_> {
+        crate::canvas::ClipRef {
+            mask: self.clip.as_deref(),
+            id: self.clip_id,
         }
     }
 }

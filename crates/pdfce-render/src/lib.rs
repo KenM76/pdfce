@@ -58,6 +58,7 @@ pub(crate) mod canvas;
 /// own docs for the census that justified it.
 pub(crate) mod clip_cache;
 pub mod color;
+pub mod display_list;
 pub mod font;
 pub mod gstate;
 pub mod image;
@@ -93,6 +94,9 @@ pub use annot::{AnnotationClass, AnnotationScope};
 // reading `diagnostics.color.tint_transform_not_applied` must be able to
 // name its type without knowing which module it lives in.
 pub use color::{ColorDiagnostics, ColorSpace, ColorState, Colorant, DeviceSpace};
+pub use display_list::{
+    ClipId, DisplayList, DisplayListKey, MAX_DISPLAY_LIST_BYTES, PoisonReason, record_page,
+};
 pub use font::{FallbackKey, FontData, FontEnvironment, GlyphSource, RenderOptions, RenderPolicy};
 pub use interpret::Diagnostics;
 pub use layer_state::LayerVisibility;
@@ -176,6 +180,41 @@ pub enum RenderError {
         width: u32,
         /// Requested height in pixels.
         height: u32,
+    },
+    /// The page uses an operator that has no recordable formulation, so
+    /// [`display_list::record_page`] refused rather than returning a list
+    /// that would render the page **nearly** right.
+    ///
+    /// **This is not a rendering failure.** The page renders correctly
+    /// through [`render_page_region`]; it simply cannot be cached. A caller
+    /// that sees this should fall back, once, and remember not to retry the
+    /// recording for that `(page, epoch)`.
+    #[error("page cannot be recorded as a display list: {reason}", reason = reason.as_str())]
+    PageNotRecordable {
+        /// Which operator class refused — see [`PoisonReason`].
+        reason: display_list::PoisonReason,
+    },
+    /// A [`DisplayList`] was replayed with a key it was not recorded for.
+    ///
+    /// # Why this exists rather than a silent re-render
+    ///
+    /// Because `pdfce-render` cannot observe a shell's edit epoch, and a
+    /// display list that renders a document's **previous state** while
+    /// reporting success is strictly worse than no cache at all. The
+    /// mismatch is therefore refused by name, with both keys in the
+    /// message, so a log line says which half drifted.
+    #[error(
+        "display list is for epoch {recorded_epoch} at scale {recorded_scale},          but was replayed as epoch {expected_epoch} at scale {expected_scale}"
+    )]
+    DisplayListStale {
+        /// The epoch the caller believed it held.
+        expected_epoch: u64,
+        /// The epoch the list was recorded at.
+        recorded_epoch: u64,
+        /// The scale the caller believed it held.
+        expected_scale: f32,
+        /// The scale the list was recorded at.
+        recorded_scale: f32,
     },
 }
 
@@ -355,43 +394,12 @@ fn render_impl(
     let (width, height, base_ctm) = match region {
         None => (page_w, page_h, page_ctm),
         Some(r) => {
-            // Map the region's four corners through the page CTM and take
-            // their device-space bounding box. Corners rather than two
-            // opposite points, because `/Rotate` 90/270 swaps the axes — a
-            // two-point mapping is correct for the unrotated case and
-            // silently transposed for the odd quarter-turns, which is the
-            // kind of bug that only shows on landscape scans.
-            let corners = [
-                (r.llx as f32, r.lly as f32),
-                (r.urx as f32, r.lly as f32),
-                (r.urx as f32, r.ury as f32),
-                (r.llx as f32, r.ury as f32),
-            ];
-            let mapped: Vec<(f32, f32)> = corners
-                .iter()
-                .map(|&(x, y)| {
-                    let mut p = [tiny_skia::Point::from_xy(x, y)];
-                    page_ctm.map_points(&mut p);
-                    (p[0].x, p[0].y)
-                })
-                .collect();
-            let min_x = mapped.iter().map(|p| p.0).fold(f32::INFINITY, f32::min);
-            let max_x = mapped.iter().map(|p| p.0).fold(f32::NEG_INFINITY, f32::max);
-            let min_y = mapped.iter().map(|p| p.1).fold(f32::INFINITY, f32::min);
-            let max_y = mapped.iter().map(|p| p.1).fold(f32::NEG_INFINITY, f32::max);
-            if !min_x.is_finite() || !min_y.is_finite() {
+            let Some((w, h, x0, y0)) = region_device_geometry(page_ctm, r) else {
                 return Err(RenderError::BadRasterSize {
                     width: 0,
                     height: 0,
                 });
-            }
-            // Floor the origin and ceil the extent so the requested region is
-            // fully covered rather than cropped by up to a pixel on each edge
-            // — a tiled caller that lost a sub-pixel per tile would show seams.
-            let x0 = min_x.floor();
-            let y0 = min_y.floor();
-            let w = (max_x.ceil() - x0).max(0.0) as u32;
-            let h = (max_y.ceil() - y0).max(0.0) as u32;
+            };
             // Device-space translation. Post-multiplied, so it composes with
             // whatever rotation `page_device_geometry` already encoded.
             (w, h, page_ctm.post_translate(-x0, -y0))
@@ -595,6 +603,70 @@ fn flatten_page_group_over_white(pixmap: &mut Pixmap) {
         )
         .unwrap_or(*px);
     }
+}
+
+/// Map a user-space region onto the page's device grid: the raster size it
+/// needs, and the device-space origin its top-left corner sits at.
+///
+/// Returns `None` when the mapping is not finite — a degenerate or
+/// non-invertible page CTM — which the caller reports as a bad raster size
+/// rather than guessing at a rectangle.
+///
+/// # Why the four corners are mapped rather than two opposite points
+///
+/// Because `/Rotate` 90/270 swaps the axes. A two-point mapping is correct
+/// for the unrotated case and silently **transposed** for the odd
+/// quarter-turns — the kind of bug that only shows up on landscape scans.
+///
+/// # Why the origin floors and the extent ceils
+///
+/// So the requested region is fully **covered** rather than cropped by up
+/// to a pixel on each edge. A tiled caller that lost a sub-pixel per tile
+/// would show seams along every tile boundary.
+///
+/// # ★ Why this is a shared function and not two similar blocks
+///
+/// [`display_list::DisplayList::replay_region`] must land on **exactly**
+/// the same rectangle a fresh region render lands on, or "byte-identical to
+/// a fresh render" would be a claim about two different rasters. A second
+/// implementation of this arithmetic is a second place for the `/Rotate`
+/// axis swap or the floor/ceil convention to drift, and the drift would
+/// surface as a one-pixel offset that looks like a rounding bug rather than
+/// like a duplicated rule.
+#[must_use]
+pub fn region_device_geometry(
+    page_ctm: Transform,
+    region: pdfce_core::page_tree::Rect,
+) -> Option<(u32, u32, f32, f32)> {
+    #[allow(clippy::cast_possible_truncation)]
+    let corners = [
+        (region.llx as f32, region.lly as f32),
+        (region.urx as f32, region.lly as f32),
+        (region.urx as f32, region.ury as f32),
+        (region.llx as f32, region.ury as f32),
+    ];
+    let mapped: Vec<(f32, f32)> = corners
+        .iter()
+        .map(|&(x, y)| {
+            let mut p = [tiny_skia::Point::from_xy(x, y)];
+            page_ctm.map_points(&mut p);
+            (p[0].x, p[0].y)
+        })
+        .collect();
+    let min_x = mapped.iter().map(|p| p.0).fold(f32::INFINITY, f32::min);
+    let max_x = mapped.iter().map(|p| p.0).fold(f32::NEG_INFINITY, f32::max);
+    let min_y = mapped.iter().map(|p| p.1).fold(f32::INFINITY, f32::min);
+    let max_y = mapped.iter().map(|p| p.1).fold(f32::NEG_INFINITY, f32::max);
+    if !min_x.is_finite() || !min_y.is_finite() {
+        return None;
+    }
+    let x0 = min_x.floor();
+    let y0 = min_y.floor();
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let w = (max_x.ceil() - x0).max(0.0) as u32;
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let h = (max_y.ceil() - y0).max(0.0) as u32;
+    Some((w, h, x0, y0))
 }
 
 /// Compute the device pixmap size and base CTM for a page at `scale`

@@ -61,9 +61,15 @@
 //! Not here: anything that knows what a PDF is. `Canvas` has no opinion
 //! about operators, resources or the standard; it is a drawing target.
 
+use std::sync::Arc;
+
 use tiny_skia::{
     BlendMode, FillRule, FilterQuality, Mask, Paint, Path, Pattern, Pixmap, PixmapPaint,
     SpreadMode, Stroke, Transform,
+};
+
+use crate::display_list::{
+    ClipDef, ClipId, Op, PoisonReason, Recorder, fill_bounds, stroke_bounds,
 };
 
 /// What a paint is made of, in **owned** terms.
@@ -90,6 +96,22 @@ pub(crate) enum Brush {
     Solid {
         /// `[r, g, b, a]`, already quantised exactly as the call site did.
         rgba: [u8; 4],
+    },
+    /// An image, sampled through [`Pattern`] over §8.9.4's unit square.
+    ///
+    /// Constructed **only** by the recording branch of
+    /// [`Canvas::fill_image`]: paint mode builds its shader straight off
+    /// the interpreter's borrow, so the texel copy this variant implies is
+    /// paid exactly where something will read it back.
+    Image {
+        /// The decoded texels, owned because the interpreter's own copy
+        /// goes out of scope while a display list outlives the walk.
+        texels: Arc<Pixmap>,
+        /// Nearest or bilinear, as chosen by `/Interpolate` and the
+        /// operator's minification setting (`IM-A1`).
+        quality: FilterQuality,
+        /// Image space to user space (the unit-square flip).
+        transform: Transform,
     },
 }
 
@@ -154,6 +176,22 @@ impl BrushSpec {
                 paint.blend_mode = self.blend;
                 paint
             }
+            Brush::Image {
+                texels,
+                quality,
+                transform,
+            } => Paint {
+                shader: Pattern::new(
+                    texels.as_ref().as_ref(),
+                    SpreadMode::Pad,
+                    *quality,
+                    1.0,
+                    *transform,
+                ),
+                blend_mode: self.blend,
+                anti_alias: self.anti_alias,
+                force_hq_pipeline: false,
+            },
         }
     }
 
@@ -164,8 +202,10 @@ impl BrushSpec {
     /// diagnostic rather than geometric.
     #[cfg(test)]
     pub(crate) const fn solid_rgba(&self) -> Option<[u8; 4]> {
-        let Brush::Solid { rgba } = &self.brush;
-        Some(*rgba)
+        match &self.brush {
+            Brush::Solid { rgba } => Some(*rgba),
+            Brush::Image { .. } => None,
+        }
     }
 }
 
@@ -182,21 +222,78 @@ pub(crate) struct LayerPaint {
     pub blend: BlendMode,
 }
 
+/// The clip in force at a paint, in **both** the representations the two
+/// canvas modes need.
+///
+/// # Why one type rather than two arguments
+///
+/// Because the two are the same fact and must not be able to disagree.
+/// Painting needs a device-sized coverage `Mask`; recording needs an index
+/// into a clip table, because a mask is valid only for the pixmap geometry
+/// that built it (`crate::display_list` module docs §2.2). Threading them
+/// separately would let a call site pass one and forget the other, and the
+/// failure mode of forgetting the id is a recorded paint that **ignores its
+/// clip** — content spilling outside a clipped region, on replay only, on
+/// documents nobody thought to check.
+///
+/// Both are read out of the graphics state together
+/// ([`crate::gstate::GraphicsState::clip_ref`]), so `q`/`Q` carry them as
+/// the pair they are.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct ClipRef<'a> {
+    /// The built coverage mask — always `None` while recording, because a
+    /// recording canvas never builds one.
+    pub mask: Option<&'a Mask>,
+    /// The recorded clip definition — always `None` while painting.
+    pub id: Option<ClipId>,
+}
+
 /// The interpreter's drawing target.
 ///
-/// Paint mode is the only variant that exists as of the plumbing commit;
-/// the recording variant arrives with the display list and slots in here
-/// without touching a single interpreter signature again. That staging is
-/// the point of the type.
+/// The interpreter cannot tell these apart, and that is the whole design:
+/// one content-stream walk serves both rasterising now and recording for
+/// later, so there is no second interpreter to drift.
 pub(crate) enum Canvas<'a> {
-    /// Draw straight into a pixmap — today's behaviour, byte for byte.
+    /// Draw straight into a pixmap — the original behaviour, byte for byte.
     Paint(&'a mut Pixmap),
+    /// Draw nowhere; record what *would* have been drawn, for replay
+    /// against a viewport chosen later (`crate::display_list`).
+    Record(&'a mut Recorder),
 }
 
 impl<'a> Canvas<'a> {
     /// Wrap a pixmap as a paint-mode canvas.
     pub(crate) fn paint(pixmap: &'a mut Pixmap) -> Self {
         Self::Paint(pixmap)
+    }
+
+    /// Wrap a recorder as a recording canvas.
+    pub(crate) fn record(recorder: &'a mut Recorder) -> Self {
+        Self::Record(recorder)
+    }
+
+    /// Refuse the recording, by name, keeping the first reason.
+    ///
+    /// A no-op in paint mode: a painter has nothing to refuse. Callers can
+    /// therefore call it **unconditionally** at a site that cannot be
+    /// recorded, and that is what keeps the refusal impossible to forget —
+    /// the alternative shape, `if recording { poison }`, is a branch
+    /// somebody eventually writes without the poison in it.
+    pub(crate) fn refuse(&mut self, reason: PoisonReason) {
+        if let Self::Record(r) = self {
+            r.poison(reason);
+        }
+    }
+
+    /// Record a clipping path, when recording.
+    ///
+    /// Returns the new clip id, or `None` in paint mode — where the caller
+    /// builds a real mask instead.
+    pub(crate) fn record_clip(&mut self, def: ClipDef) -> Option<ClipId> {
+        match self {
+            Self::Paint(_) => None,
+            Self::Record(r) => Some(r.push_clip(def)),
+        }
     }
 
     /// Device width in pixels.
@@ -208,6 +305,7 @@ impl<'a> Canvas<'a> {
     pub(crate) fn width(&self) -> u32 {
         match self {
             Self::Paint(p) => p.width(),
+            Self::Record(r) => r.width,
         }
     }
 
@@ -215,6 +313,7 @@ impl<'a> Canvas<'a> {
     pub(crate) fn height(&self) -> u32 {
         match self {
             Self::Paint(p) => p.height(),
+            Self::Record(r) => r.height,
         }
     }
 
@@ -225,10 +324,18 @@ impl<'a> Canvas<'a> {
         brush: &BrushSpec,
         rule: FillRule,
         ctm: Transform,
-        clip: Option<&Mask>,
+        clip: ClipRef<'_>,
     ) {
         match self {
-            Self::Paint(p) => p.fill_path(path, &brush.to_paint(), rule, ctm, clip),
+            Self::Paint(p) => p.fill_path(path, &brush.to_paint(), rule, ctm, clip.mask),
+            Self::Record(r) => r.push(Op::Fill {
+                bounds: fill_bounds(path, ctm),
+                path: Arc::new(path.clone()),
+                brush: brush.clone(),
+                rule,
+                ctm,
+                clip: clip.id,
+            }),
         }
     }
 
@@ -240,10 +347,26 @@ impl<'a> Canvas<'a> {
         brush: &BrushSpec,
         stroke: &Stroke,
         ctm: Transform,
-        clip: Option<&Mask>,
+        clip: ClipRef<'_>,
     ) {
         match self {
-            Self::Paint(p) => p.stroke_path(path, &brush.to_paint(), stroke, ctm, clip),
+            Self::Paint(p) => p.stroke_path(path, &brush.to_paint(), stroke, ctm, clip.mask),
+            Self::Record(r) => r.push(Op::Stroke {
+                bounds: stroke_bounds(path, stroke, ctm),
+                path: Arc::new(path.clone()),
+                brush: brush.clone(),
+                // One `Arc<Stroke>` per op rather than an interned table.
+                // A CAD sheet sets a line width once and strokes ten
+                // thousand segments with it, so interning is the obvious
+                // win — and is deliberately NOT taken here, because a key
+                // over a float-bearing struct with a dash `Vec` is a
+                // correctness question, and this Pass's budget is spent on
+                // byte-identity. Named as a follow-on rather than left as a
+                // silent inefficiency.
+                stroke: Arc::new(stroke.clone()),
+                ctm,
+                clip: clip.id,
+            }),
         }
     }
 
@@ -272,9 +395,30 @@ impl<'a> Canvas<'a> {
         blend: BlendMode,
         anti_alias: bool,
         ctm: Transform,
-        clip: Option<&Mask>,
+        clip: ClipRef<'_>,
     ) {
         match self {
+            Self::Record(r) => {
+                r.push(Op::Fill {
+                    bounds: fill_bounds(path, ctm),
+                    path: Arc::new(path.clone()),
+                    brush: BrushSpec {
+                        // HERE is the copy this method's borrow exists to
+                        // defer — paid once, in the only branch that will
+                        // ever read it.
+                        brush: Brush::Image {
+                            texels: Arc::new(texels.clone()),
+                            quality,
+                            transform: image_to_user,
+                        },
+                        blend,
+                        anti_alias,
+                    },
+                    rule: FillRule::Winding,
+                    ctm,
+                    clip: clip.id,
+                });
+            }
             Self::Paint(p) => {
                 let paint = Paint {
                     shader: Pattern::new(
@@ -288,7 +432,7 @@ impl<'a> Canvas<'a> {
                     anti_alias,
                     force_hq_pipeline: false,
                 };
-                p.fill_path(path, &paint, FillRule::Winding, ctm, clip);
+                p.fill_path(path, &paint, FillRule::Winding, ctm, clip.mask);
             }
         }
     }
@@ -310,6 +454,7 @@ impl<'a> Canvas<'a> {
     pub(crate) fn pixmap_mut(&mut self) -> Option<&mut Pixmap> {
         match self {
             Self::Paint(p) => Some(p),
+            Self::Record(_) => None,
         }
     }
 
@@ -365,6 +510,21 @@ impl<'a> Canvas<'a> {
                     // every clipped boundary by one pass.
                     None,
                 );
+                Some(result)
+            }
+            Self::Record(r) => {
+                // A recorded layer is a frame on the op stack: everything
+                // `f` draws lands in it, and popping turns it into one
+                // `Op::Layer` in the parent. No buffer is allocated,
+                // because no pixels exist yet — which is also why this
+                // branch cannot fail the way the paint branch can.
+                r.frames.push(Vec::new());
+                let result = {
+                    let mut sub = Canvas::Record(r);
+                    f(&mut sub)
+                };
+                let ops = r.frames.pop().unwrap_or_default();
+                r.push(Op::Layer { paint, ops });
                 Some(result)
             }
         }

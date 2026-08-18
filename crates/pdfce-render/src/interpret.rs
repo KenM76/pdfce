@@ -138,7 +138,8 @@ use tiny_skia::{
 };
 
 use crate::cancel::RenderCancel;
-use crate::canvas::{BrushSpec, Canvas, LayerPaint};
+use crate::canvas::{BrushSpec, Canvas, ClipRef, LayerPaint};
+use crate::display_list::{ClipDef, PoisonReason};
 use crate::font::program::FontProgram;
 use crate::font::{FontEnvironment, RenderPolicy};
 use crate::gstate::{GStateStack, GraphicsState, LineCap, LineJoin, Rgb};
@@ -2336,16 +2337,19 @@ impl Interpreter<'_> {
         let ctm = self.gs.current.ctm;
         // BORROWED, never cloned — see `paint_path`'s note. A glyph is
         // one more paint under the same page-sized mask.
-        let clip = self.gs.current.clip.as_deref();
+        let clip = self.gs.current.clip_ref();
         crate::profile::note_paint(
-            clip.is_some(),
+            clip.mask.is_some(),
             paint_is_cullable(&path, ctm, self.gs.current.clip_bbox),
         );
         // MEASUREMENT ABLATIONS — see `paint_path`. A glyph is one more
         // paint under the same mask, so it must honour the same switches
         // or the floor would silently include text rasterization.
+        // The ablation drops the MASK and only the mask. A recorded clip
+        // id costs nothing per pixel, so removing it would not isolate
+        // sampling cost — it would change what a recording MEANS.
         let clip = if crate::profile::skip_clip_sample() {
-            None
+            ClipRef { mask: None, ..clip }
         } else {
             clip
         };
@@ -2404,7 +2408,7 @@ impl Interpreter<'_> {
                 self.gs.current.fill_alpha,
                 self.gs.current.blend_mode,
             );
-            let clip = self.gs.current.clip.as_deref();
+            let clip = self.gs.current.clip_ref();
             canvas.fill(&path, &paint, FillRule::Winding, ctm, clip);
         }
         if op_stroke && !self.paint_overprint(&path, None, true, canvas) {
@@ -2414,7 +2418,7 @@ impl Interpreter<'_> {
                 self.gs.current.stroke_alpha,
                 self.gs.current.blend_mode,
             );
-            let clip = self.gs.current.clip.as_deref();
+            let clip = self.gs.current.clip_ref();
             canvas.stroke(&path, &paint, &self.stroke_params(), ctm, clip);
         }
     }
@@ -2483,7 +2487,7 @@ impl Interpreter<'_> {
     /// `gs` — apply an ExtGState by name from the resource dictionary
     /// (Table 58; the honored subset per the RAG's triage: LW, LC, LJ,
     /// ML, D; everything else recognized-and-deferred).
-    fn apply_ext_gstate(&mut self, op: &Operation<'_>, canvas: &Canvas<'_>) {
+    fn apply_ext_gstate(&mut self, op: &Operation<'_>, canvas: &mut Canvas<'_>) {
         let name = op.operands.iter().rev().find_map(|t| match &t.kind {
             ContentTokenKind::Operand(Object::Name(n)) => Some(n.as_bytes()),
             _ => None,
@@ -3014,6 +3018,7 @@ impl Interpreter<'_> {
         // `Canvas::pixmap_mut`: a target that cannot hand one over is one
         // that cannot reproduce this operator, and the honest answer there
         // is to refuse the whole recording rather than to drop the shading.
+        canvas.refuse(PoisonReason::Shading);
         let Some(dest) = canvas.pixmap_mut() else {
             self.diag.shading.refused += 1;
             return;
@@ -3162,7 +3167,7 @@ impl Interpreter<'_> {
     /// function machinery threaded into the render crate; until then a
     /// document that inverts its mask through `/TR` gets the un-inverted
     /// mask and **says so** rather than looking correct.
-    fn build_soft_mask(&mut self, sm: &Dict, canvas: &Canvas<'_>) -> Option<Mask> {
+    fn build_soft_mask(&mut self, sm: &Dict, canvas: &mut Canvas<'_>) -> Option<Mask> {
         let doc = self.doc;
         let subtype = match doc.resolve(sm.get(b"S")?) {
             Object::Name(n) => n.as_bytes().to_vec(),
@@ -3559,6 +3564,7 @@ impl Interpreter<'_> {
         // it needs real pixels. `false` here means "could not run", and the
         // caller's documented response is to paint normally AND disclose —
         // never to paint nothing.
+        canvas.refuse(PoisonReason::Overprint);
         let Some(dest) = canvas.pixmap_mut() else {
             return false;
         };
@@ -3726,6 +3732,7 @@ impl Interpreter<'_> {
         } else {
             self.gs.current.fill_alpha
         };
+        canvas.refuse(PoisonReason::Shading);
         let Some(dest) = canvas.pixmap_mut() else {
             self.diag.color.patterns_unpainted += 1;
             return false;
@@ -4361,7 +4368,7 @@ impl Interpreter<'_> {
             blend,
             anti_alias,
             self.gs.current.ctm,
-            self.gs.current.clip.as_deref(),
+            self.gs.current.clip_ref(),
         );
     }
 
@@ -4492,6 +4499,15 @@ impl Interpreter<'_> {
             if pending_clip.is_some()
                 && let Some(mask) = Mask::new(canvas.width(), canvas.height())
             {
+                // Recorded as a clip with NO path, which is what an empty
+                // clip IS: it admits nothing, and it does not multiply by
+                // whatever was in force before it. See `ClipDef::path`.
+                self.gs.current.clip_id = canvas.record_clip(ClipDef {
+                    path: None,
+                    rule: FillRule::Winding,
+                    ctm,
+                    parent: self.gs.current.clip_id,
+                });
                 self.gs.current.clip = Some(std::sync::Arc::new(mask));
                 // An all-zero mask admits nothing, so the bbox is EMPTY —
                 // not `None`, which means "no clip at all" and is the
@@ -4548,17 +4564,20 @@ impl Interpreter<'_> {
         // was drawn on. Nothing needed the copy — `fill_path`/`stroke_path`
         // take `Option<&Mask>`, and the clip is not mutated until
         // `intersect_clip` below, which is after the last use.
-        let clip = self.gs.current.clip.as_deref();
+        let clip = self.gs.current.clip_ref();
         crate::profile::note_paint(
-            clip.is_some(),
+            clip.mask.is_some(),
             paint_is_cullable(&path, ctm, self.gs.current.clip_bbox),
         );
         // MEASUREMENT ABLATIONS — both fold away without `profile`.
         // `clip-sample` keeps the mask built and drops only the
         // per-pixel sampling, which is what isolates sampling cost from
         // construction cost; skipping construction cannot.
+        // The ablation drops the MASK and only the mask. A recorded clip
+        // id costs nothing per pixel, so removing it would not isolate
+        // sampling cost — it would change what a recording MEANS.
         let clip = if crate::profile::skip_clip_sample() {
-            None
+            ClipRef { mask: None, ..clip }
         } else {
             clip
         };
@@ -4667,7 +4686,7 @@ impl Interpreter<'_> {
                 self.gs.current.blend_mode,
             );
             let ctm = self.gs.current.ctm;
-            let clip = self.gs.current.clip.as_deref();
+            let clip = self.gs.current.clip_ref();
             canvas.fill(&path, &paint, rule, ctm, clip);
         }
         if overprint_stroke_pending && !self.paint_overprint(&path, None, true, canvas) {
@@ -4678,7 +4697,7 @@ impl Interpreter<'_> {
                 self.gs.current.blend_mode,
             );
             let ctm = self.gs.current.ctm;
-            let clip = self.gs.current.clip.as_deref();
+            let clip = self.gs.current.clip_ref();
             canvas.stroke(&path, &paint, &self.stroke_params(), ctm, clip);
         }
 
@@ -4762,9 +4781,42 @@ fn intersect_clip(
     path: &Path,
     rule: FillRule,
     ctm: Transform,
-    canvas: &Canvas<'_>,
+    canvas: &mut Canvas<'_>,
     cache: &mut crate::clip_cache::ClipCache,
 ) {
+    // RECORDING: a clip becomes a DEFINITION, not a mask.
+    //
+    // A `tiny_skia::Mask` is device-sized, so a recorded one would be valid
+    // only for the geometry that built it — and surviving a change of
+    // viewport is the entire point of a display list
+    // (`crate::display_list` module docs §2.2). The bounding box below is
+    // still maintained, in exactly the arithmetic the painting path uses
+    // further down, because it is graphics state `q`/`Q` must carry either
+    // way.
+    //
+    // This branch is also why recording is CHEAPER than rendering rather
+    // than an extra pass on top of one: ~24,000 mask builds and multiplies
+    // do not happen.
+    if let Some(id) = canvas.record_clip(ClipDef {
+        path: Some(std::sync::Arc::new(path.clone())),
+        rule,
+        ctm,
+        parent: state.clip_id,
+    }) {
+        state.clip_id = Some(id);
+        #[allow(clippy::cast_precision_loss)]
+        let (w, h) = (canvas.width() as f32, canvas.height() as f32);
+        if let Some(b) = path.bounds().transform(ctm) {
+            let (nl, nt) = (b.left().max(0.0), b.top().max(0.0));
+            let (nr, nb) = (b.right().min(w), b.bottom().min(h));
+            let accum = match state.clip_bbox {
+                Some((pl, pt, pr, pb)) => (nl.max(pl), nt.max(pt), nr.min(pr), nb.min(pb)),
+                None => (nl, nt, nr, nb),
+            };
+            state.clip_bbox = Some(accum);
+        }
+        return;
+    }
     // MEASUREMENT ABLATION — always false without the `profile` feature,
     // where this folds away entirely.
     //

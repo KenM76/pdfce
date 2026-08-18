@@ -310,3 +310,140 @@ scale and therefore get relatively *thinner* the deeper the zoom, and text
 hinting at extreme sizes. Both are **appearance** questions rather than
 correctness ones, and neither is measured by this harness. Stated so the
 "measured" claim above is not read wider than it is.
+
+
+---
+
+# The display list — `Pass 75.0`, measured
+
+Everything above measures rendering a region **from the content stream**, and
+its conclusion was that interpretation dominates. `Pass 75.0` acts on that:
+[`pdfce_render::record_page`] interprets a page once into a
+`DisplayList`, and `DisplayList::replay_region` rasterises any region of it
+without re-interpreting.
+
+This section is the acceptance measurement, taken **2026-08-18** on the same
+machine, same file, same harness — `crates/pdfce-render/examples/region_bench.rs`
+in `--release`, extended with `RECORD` / `MEMORY` / `PFLOOR` / `PAN` cases:
+
+```bash
+cargo run -q --release -p pdfce-render --example region_bench -- \
+  D:/Dev/temp/pdfce/ncored-benchmark-cad-drawing.pdf
+```
+
+**Three runs, medians reported**, because §"Honest limits" above already
+records what a single run measures: the machine's load as much as the code.
+
+## The numbers
+
+`ncored-benchmark-cad-drawing.pdf` — A3 landscape, 148,517 paints, 24,128 clip
+ops. Recorded: **127,267 ops, 40 distinct clips, ~29.5 MiB held.**
+
+| case | from the content stream | from a display list | ratio |
+|---|---:|---:|---:|
+| **FLOOR** — 1 × 1 pt region, 2 px | **636 ms** | **1.06 ms** | **600×** |
+| region 400 × 300 pt, scale 1 (120,701 px) | 680 ms | 83.5 ms | 8.1× |
+| region 400 × 300 pt, scale 8 (120,701 px) | 819 ms | 10.5 ms | **78×** |
+| recording the page itself | — | 618 ms | — |
+
+## ★ Read the FLOOR row first — it is the one that says what happened
+
+A 1 × 1 point region costs **636 ms to render and 1.06 ms to replay**.
+
+That is the whole claim, stated without any confound: the floor case has
+essentially no fill in it, so what it measures is *interpretation and nothing
+else*, and interpretation is now **gone from the second render**. The 1.06 ms
+that remains is the op walk plus the bounding-box cull over 127,267 recorded
+ops — the only part of a replay that still scales with the **page** rather
+than with the **viewport**.
+
+## Why the two full-size region rows differ so much, and why that is correct
+
+Both render 120,701 pixels. The scale-8 row replays 13× faster than the
+scale-1 row, and the reason is not the raster: at scale 8 the viewport covers
+50 × 37.5 pt of the sheet, at scale 1 it covers 400 × 300 pt — **64× more
+drawing**.
+
+So the cost model has changed shape. It used to be *proportional to the page*;
+it is now *proportional to what is actually in view*. That is exactly what
+acceptance criterion 1 asked for ("cost roughly **fill** rather than
+**interpretation**"), and it is why the scale-1 figure being 83.5 ms rather
+than "tens of ms" is not a shortfall: those 83.5 ms are 15,000-odd real paints
+plus ~40 region-sized clip masks, which a direct render pays too and on top of
+680 ms of interpretation.
+
+## ★ The regression this harness caught, and it would have shipped
+
+The **first** working implementation recorded one clip definition per `W n` —
+24,128 of them — instead of deduplicating. A replay builds one mask per
+*distinct* definition, so it was building 24,128 region-sized masks per frame.
+
+Measured then:
+
+| | direct | replayed | |
+|---|---:|---:|---|
+| region 400 × 300 pt, **scale 1** | 706 ms | **1.79 s** | the cache was **2.5× slower than no cache** |
+| region 400 × 300 pt, **scale 8** | 912 ms | 10.4 ms | 88× faster |
+
+**The scale-8 number was already excellent while the feature was a net loss at
+scale 1**, because at deep zoom almost every op culls before its clip is ever
+requested — so the expensive path was never taken. A harness that measured only
+the motivating case would have reported an 88× win and shipped a regression.
+
+The fix is `RecorderState::push_clip`'s dedup table, keyed on the *same*
+`ClipCache::build_key` the painting path deduplicates on, so recorder and
+painter agree by construction about what "the same clip" is. Result: **40
+definitions**, matching the ~41 the design predicted from the live cache's
+99.83 % hit rate.
+
+**The transferable part:** a cache's win and a cache's cost do not live in the
+same case. Measure the one where the cache does the *most* work, not the one
+that motivated it.
+
+## Cheap documents — criterion 5, no first-render regression
+
+Recording is **cheaper than rendering**: it builds no clip masks and fills no
+spans. On documents where interpretation is already cheap this shows up as
+recording costing about the interpretation floor and nothing more.
+
+| document | interpretation floor | recording | ops |
+|---|---:|---:|---:|
+| `fixtures/synthetic/addtext/plain.pdf` (A4 text) | 416 µs | **394 µs** | 16 |
+| `PDF 2.0 UTF-8 string and annotation.pdf` | 12.8 µs | **14.4 µs** | 1 |
+| the A3 CAD sheet | 636 ms | **618 ms** | 127,267 |
+
+So a first render *through* a handle costs `record + replay` ≈ `interpretation
++ fill` ≈ what a direct render costs. There is no document where adopting the
+handle makes the first frame materially slower, which was the criterion.
+
+*(`iso32000-2-preview.pdf`, the text-heavy document measured in the section
+above, is **not on this machine** — that measurement came from the `pdfceGUI`
+session. The two documents above stand in for it, and the substitution is
+stated rather than glossed.)*
+
+## Memory — criterion 4
+
+**~29.5 MiB for 127,267 ops**, i.e. roughly **240 bytes per op**: the `Op`
+enum itself plus each path's points and verbs.
+
+Reported at runtime by `DisplayList::memory_bytes`, and it is the *same
+accumulated number* that enforces `MAX_DISPLAY_LIST_BYTES` (256 MiB) — a guard
+and a report computed twice are a guard the caller cannot see.
+
+A shell holding one list per open page should budget from that figure. Note
+what it excludes and why: image texels and stroke parameter blocks are
+`Arc`-shared, and attributing a shared buffer wholly to one list would
+overstate the cost of holding a second list for the same page — which is
+precisely the decision the number exists to inform.
+
+## What this does NOT cover
+
+- **Pages the recorder refuses** — shadings, overprint composites, soft masks,
+  tiling patterns. They are refused **by name** and render normally through
+  `render_page_region`; none of the figures above apply to them. The reference
+  CAD sheet contains none (`images=0 shadings=0 patterns_unpainted=0
+  soft_masks_applied=0 groups_composited=0`), which is why it is the
+  motivating case and not a representative one.
+- **A change of scale**, which invalidates a list by design (`display_list`
+  module docs §2.1). Panning at a fixed zoom is what these numbers measure.
+- **Multi-page holding.** Every figure here is one page.
