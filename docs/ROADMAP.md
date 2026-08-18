@@ -96,6 +96,348 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `a3080f0` — **SIX HELPERS WINDOWS USES AND LINUX CANNOT SEE, SO ONLY LINUX CALLED THEM DEAD — AND THE TIDIER-LOOKING FIX WOULD HAVE DELETED THE ONLY COVERAGE THE CI PLATFORM RUNS** — follow-on to `ea5159e`; `#[cfg_attr(not(windows), allow(dead_code))]`, not `#[cfg(windows)]` — filed 2026-08-18 (hundred-and-sixty-fifth filing)
+
+**Filed by `pdfce-librarian` WITH a shell (hard rule 8).** Every figure
+below is labelled either **VERIFIED HERE** (with the command that produced
+it) or **RELAYED** (from the dispatching engineer, not re-measured).
+
+**The defect.** `ea5159e` (below) gated `cmd_print` with `#[cfg(windows)]`
+and a reporting `#[cfg(not(windows))]` twin. That fixed the compile and
+**exposed the next layer**: six arg→core converters in `pdfce-cli`
+(`to_binding`, `to_subset` ×2, `to_scope`, `to_duplex`, `to_mode`,
+`to_orientation`) and six DEVMODE byte helpers in `pdfce-print`
+(`DMPAPER_USER`, `apply`, `apply_paper`, `set_fields`, `set_i16`,
+`write_u32`) now have **no non-test caller on Linux**, so `-D dead_code`
+fires **there and nowhere else**.
+
+**Count, with its denominator — VERIFIED HERE** by
+`grep -n "cfg_attr(not(windows), allow(dead_code))" -r crates/`:
+**13 annotations total = 7 in `crates/pdfce-cli/src/main.rs`
+(lines 8955, 8982, 9013, 9040, 9066, 9092, 9118) + 6 in
+`crates/pdfce-print/src/devmode.rs` (lines 214, 668, 739, 814, 828, 951)**.
+The 7-vs-6 asymmetry is `to_subset` appearing twice, as the commit message
+says. **Ratio worth carrying: one gated function ⇒ thirteen follow-on lint
+failures** — budget the follow-on pass rather than treating the gate fix as
+finished when it compiles.
+
+**★ The durable part is why `#[cfg(windows)]` was REJECTED for these.**
+Gating was tried **first**. It compiles the library and then **breaks the
+TESTS**: `devmode.rs`'s `#[cfg(test)]` module calls `apply`/`apply_paper`,
+and those tests are **pure byte arithmetic with no winapi in them** — they
+run correctly on Linux, and Linux is **the platform CI actually runs
+`cargo test` on**. The tidier-looking fix would have bought a green lint by
+**deleting working coverage from the platform that tests most**, and the
+deletion is silent: the test does not fail, it stops being compiled, and
+the suite goes green with fewer tests while nothing says so.
+
+**The discriminator, stated so it is reusable:** *does the BODY need the
+platform?* — never *is the FEATURE Windows-only?* A Windows-only feature is
+routinely built out of platform-free parts, and those parts are exactly
+where a single-OS project gets its cross-platform test coverage. Relaxing
+the **lint** per-platform rather than removing the **item** per-platform
+also keeps the lint at **full strength on Windows**, where these helpers
+have real callers and the answer is meaningful.
+
+**Also fixed, same family.** The non-Windows `cmd_print_preview` was given
+the `#[allow(clippy::too_many_arguments)]` its Windows twin already
+carried — same signature, same 8 arguments, and only the arm CI compiles
+was missing it. **When a function has two platform arms, every attribute on
+one arm is a question about the other**, and only the arm CI compiles will
+tell you.
+
+**`FEATURES.md`.** No row change and no box change. This is cross-platform
+build correctness, not a capability — the *Printing* rows describe what
+pdfce can do on the platform that prints, and nothing about that moved.
+
+**`ARCHITECTURE.md` §12.** No new decision-log entry. Ceiling stays **068**,
+next free **069** — this redraws no crate boundary, picks no library, and
+defines/refines no invariant.
+
+**Ledger effects.** No Pass number (build-correctness fix, hash-headed
+entry, per the `89f28ca`/`b902ea0`+`b1ee1cf` convention for tooling and
+build fixes). **The dispatching engineer assigned no Pass ID and this
+librarian minted none** — next free Pass family remains **97**. Standing
+rules: none minted, none cited; ceiling stays **R195**, next free **R196**
+(but see the *adopted practice* note at the end of *Standing rules*, filed
+this same filing, which is deliberately unnumbered).
+
+**RAG escalation (this filing).** `D:\dev\rag\rust\cfg_attr_not_windows_allow_dead_code_beats_cfg_windows_when_the_only_non_windows_caller_is_a_cfg_test_module.md`
+— new file, indexed. It **supersedes** the `PrintScaleArg::name`
+`#[cfg(windows)]` treatment recorded in the "Found on" section of the
+existing `cfg_windows_on_a_plain_data_type_referenced_by_a_non_windows_stub_breaks_every_non_windows_build.md`
+(`f2ac2af`, 2026-08-11): that item had no `#[cfg(test)]` caller so nothing
+broke, but the same move applied to `apply`/`apply_paper` **did** break,
+and the `cfg_attr` form is correct for both.
+
+### ★★★★ Pass 86.0 — `cb55b6b` — **OCR WOULD HAVE WRITTEN A TEXT LAYER INTO A CERTIFIED DOCUMENT THAT FORBIDS CHANGES — A REAL CORRECTNESS DEFECT, FOUND BECAUSE A GATE'S EXCEPTION LIST STATED A WARRANT AND SOMEONE CHECKED IT** — closes `Pass 86.0` by its own route (2); `check-bypass-paths.sh` is GREEN at `HEAD` for the first time since `Pass 84.0` flagged it — filed 2026-08-18 (hundred-and-sixty-fifth filing)
+
+**Filed by `pdfce-librarian` WITH a shell (hard rule 8).** Labels as above.
+
+**★ THIS ENTRY CLAIMS AN EXISTING PASS ID THE DISPATCHING ENGINEER DID NOT
+NAME.** The dispatch described `cb55b6b` as an unnumbered correctness fix.
+This librarian matched it to **`Pass 86.0`**, which had been sitting in
+*Next up* as **HIGH PRIORITY, UNSTARTED** since the hundred-and-forty-ninth
+filing, whose subject is *exactly* these three call sites
+(`crates/pdfce-core/src/ocr/layer.rs`, `DirtySet::empty` /
+`dirty.set_staging` / `save_incremental`) and whose stated **acceptance**
+is *"`check-bypass-paths.sh` clean, either by route (1) or by a documented
+exception under route (2)."* **VERIFIED HERE** by
+`bash tools/check-bypass-paths.sh` → `bypass-paths: clean — every document
+mutation goes through EditSession`, exit `0`. No Pass ID was minted; an
+existing one was discharged. **If the engineer disagrees with the match,
+this entry is the thing to amend — the Pass ID is not re-usable for
+anything else either way (hard rule 2).**
+
+**★★ THE CORRECTNESS DEFECT, which is bigger than the Pass that caught
+it.** `pdfce_core::ocr::layer::add_ocr_layer` shipped (in `49af8fb`,
+`Pass 71.0` slice 3) with an **encryption refusal and NO certification
+check at all**. Its structural twin `pdfce_core::text_edit::add_text` has
+refused **since it was written**. Both do the same thing to the same
+dictionary keys — create a content stream, create a font, rewrite the page
+dict's `/Contents` and `/Resources` — and **disagreed about whether a
+signature could stop them**.
+
+ISO 32000-1 **§12.8.4 Table 258** requires a consumer to enforce the
+permissions a `/Perms` → `/DocMDP` certification carries, and **Table
+254's permitted-change lists contain no operation pdfce can perform**. So
+a certified, change-forbidding document handed to the OCR path would have
+had a text layer written into it, **silently invalidating the
+certification** — no error, no warning. **Worst case of the shape, not an
+incidental one:** the layer is authored at §9.3.6 Table 106 render mode 3,
+deliberately invisible under the scan, so the one class of write that most
+needs a permission gate is the one whose effect an operator cannot see.
+*"It looked fine when I opened it"* is not evidence about this operation.
+
+**Fix — VERIFIED HERE** by `grep -n CertificationForbidsChange
+crates/pdfce-core/src/ocr/layer.rs`: new
+`OcrLayerError::CertificationForbidsChange { permission: u8 }` variant at
+`:401`, guard raised at `:640`. It mirrors `add_text`'s **exactly** — same
+`signature::census` + `forbids_structural_change` machinery, same
+*"`/P` absent ⇒ default 2"* rule — and sits **immediately after the
+encryption refusal, before any work**, so a refusal is a clean early
+return rather than a half-built plan discarded.
+
+**★★★ HOW IT SURFACED — the part most worth keeping.**
+`tools/check-bypass-paths.sh` flagged `add_ocr_layer` as an unsanctioned
+`EditSession` bypass. The obvious response was **bookkeeping**: add a ninth
+entry to the exception list. But that list's **entry 7 sanctions exactly
+this shape** — a one-shot standalone API with no session to join — and
+**states as its WARRANT** that such a function *"honours the certification
+gate."* **Checking whether the warrant was actually true is what found the
+defect.**
+
+> **A gate asked a filing question and got a correctness answer** — and
+> only because its exception list carried *reasons*, not just *names*. An
+> allowlist entry that states why an exemption is safe is a **checkable
+> claim about every future member of its class**. Extending such a list
+> without evaluating the warrant converts a live invariant into
+> documentation of an invariant: the same text with none of the force.
+
+**Mechanism of the exemption, and the trap in it.** Recorded with
+exception 9's **call-site `bypass-exempt:` marker** (VERIFIED HERE at
+`crates/pdfce-core/src/ocr/layer.rs:713`) rather than by widening the
+gate's file list — per the gate's own header, and because a listed *file*
+is exempt forever, including for code written into it next year by someone
+who never read the warrant. **The marker had to go in the MIDDLE of the
+three writer calls, not above them:** the gate's window is **eight lines
+either side of each hit** and the three calls span **eight lines**, so a
+marker above the block covers the first two and **misses
+`save_incremental`**. The gate stayed **red through the first attempt and
+said so** — placement derived by *running* the gate, not by reading its
+source, which is faster and cannot be wrong.
+
+**Test — VERIFIED HERE** at `crates/pdfce-core/tests/ocr_layer.rs:113`:
+`a_certified_document_refuses_the_ocr_layer`, using the existing
+`fixtures/synthetic/addtext/certified-locked.pdf` (13 test functions in
+that file now). **★ It earned its result by FAILING first.** Written
+expecting permission **2**, it failed reporting **1** — the fixture's
+actual `/P` — which **proves the guard was reached and reading the real
+document**, a distinction a test written to the right number from the
+start could not have made. Sabotage-verified afterwards by disabling the
+condition and watching it go red, then restored (**RELAYED**).
+
+**Flagged, not fixed — a live limit on what that test proves.** The
+fixture is `/P 1`, which refuses everything, so the test cannot
+distinguish *"content-addition is forbidden at EVERY tier"* (what the
+guard actually claims, per Table 254) from *"this document forbids
+everything."* **This is the same fixture-choice vacuity
+`C:\personal_rag\pdf\lesson_20260807_certification_p_level_fixture_corpus_all_p1_cannot_distinguish_two_gates.md`
+recorded eleven days ago, recurring on a new gate** — and the `/P 2`
+fixture that would settle it already exists
+(`fixtures/synthetic/forms/certified-p2-form.pdf`), just in the *forms*
+fixture set rather than a content-writing one. **Owed:** a `/P 2`
+certified fixture carrying page content, plus the three-fixture matrix
+(`/P 2` / `/P 1` / uncertified) applied to the content writers. Recorded
+as an amendment on that lesson, not silently carried.
+
+**`FEATURES.md`.** ★ **The OCR row's SENTENCE is replaced; NO checkbox
+moved** — and specifically **`cli` stays `[ ]`, against the dispatch.**
+The dispatching engineer asked for `core [x] · cli [x] · gui [ ]`, on the
+grounds that *"the CLI path calls `add_ocr_layer` and surfaces the
+refusal."* **VERIFIED HERE and FALSE at `HEAD`:**
+`grep -rn "ocr" crates/pdfce-cli/src/main.rs` returns **nothing** — there
+is no OCR subcommand, and `grep -rn add_ocr_layer crates/` finds callers
+only in `pdfce-core` tests, `pdfce-render` tests, and the
+`pdfce-render/examples/ocr_smoke.rs` harness. The only mention of a CLI
+caller is a **doc comment inside `layer.rs:695`** describing an intended
+shape (*"called by the CLI against a…"*) — which is `R195`'s exact
+subject: **a doc comment is evidence about the source tree, never evidence
+about what a shell reaches.** `core` also stays `[ ]`, unchanged from the
+deliberate rulings in the `ed05033` and `49af8fb` entries (recognition
+quality is still unproven and no shell has a surface) — a certification
+**refusal** is not the capability the box is about.
+
+**`ARCHITECTURE.md` §12.** No new decision-log entry. Ceiling stays
+**068**, next free **069**. The guard is a spec-conformance fix that makes
+two existing paths agree, not a new decision.
+
+**Ledger effects.** `Pass 86.0` moves *Next up* → *Shipped*, closed by its
+own route (2), with the mechanism upgraded from the route's literal
+wording (*"add the file to the script's exception list"*) to the
+**call-site marker** the gate's header prefers. `Pass 86.0`'s own note
+*"No behaviour change required by route (2) alone"* is worth reading
+against what happened: route 2 was taken **and** a behaviour change
+shipped anyway, because checking route 2's own warrant is what exposed
+one. Standing rules: `R195` **cited**, not extended (the doc-comment-as-
+disclosure shape, in the `FEATURES.md` ruling above); ceiling stays
+**R195**, next free **R196**. Next free Pass family remains **97**.
+
+**RAG escalation (this filing).**
+`D:\dev\rag\rust\an_exception_lists_stated_warrant_is_a_claim_to_check_not_boilerplate_to_extend.md`
+(new, indexed — the warrant-checking finding plus the marker-window trap)
+and
+`C:\personal_rag\pdf\lesson_20260818_every_page_content_writer_needs_its_own_docmdp_gate_the_second_one_inherits_nothing.md`
+(new, indexed in both the subject index and the master index — the PDF-
+domain half: **permission enforcement lives on CALL PATHS, so a writer
+added later inherits none of the earlier one's refusals, and nothing in
+the object model reminds you**). A dated amendment was added to the
+existing `/P`-corpus lesson naming the third gate and the fixture gap.
+
+### `ea5159e` — **THE WINDOWS BUILD STAYED GREEN WHILE THE ONE CI ACTUALLY BUILDS STOPPED COMPILING — THE PATTERN WAS ESTABLISHED, FOLLOWED TWICE, AND NOT EXTENDED TO THE ONE FUNCTION THAT CHANGED** — `cmd_print` gets its `#[cfg(not(windows))]` twin; the `0.7.0` bump had gone out red — filed 2026-08-18 (hundred-and-sixty-fifth filing)
+
+**Filed by `pdfce-librarian` WITH a shell (hard rule 8).** Labels as above.
+**VERIFIED HERE** by `git show --stat ea5159e`: one file changed,
+`crates/pdfce-cli/src/main.rs`, **+51 / −1**.
+
+**The defect.** The print stream gave `cmd_print` four `#[cfg(windows)]`
+callees — `print_target`, `load_printer_config`, `resolve_paper` and
+`pdfce_print::spool_sheets` — and left **`cmd_print` itself ungated**. On
+Windows that compiles. On **Linux, which is what CI builds**, it is **four
+`E0425`s**, and the version bump went out **red**.
+
+**★ The shape, which is the reason this is filed rather than just fixed.**
+Every sibling in the same file **already had the pattern**:
+`cmd_print_preview` and `cmd_list_printers` each pair a `#[cfg(windows)]`
+body with a `#[cfg(not(windows))]` arm that **REPORTS rather than
+vanishing**, so a Linux operator gets a sentence instead of an
+unrecognised subcommand. `cmd_print` now has its twin, with the
+**identical 29-argument signature**. *The convention was written, followed
+twice, and simply not extended to the one function that changed* — and
+**a local Windows build cannot see this defect class at all**, by
+construction: the host only ever compiles the `windows` arm. The gate that
+catches it is a cross-target check, and it is only ever red on someone
+else's machine.
+
+**Also repaired.** The message in `cmd_list_printers`' non-Windows arm had
+a **ten-space gap mid-sentence** — a wrapped Rust string literal that lost
+its continuation backslash. **This is the same defect the hundred-and-
+sixty-fourth filing swept** (`a8381ea`, `Pass 96.0`, six instances found,
+~8 left in `assert!` messages). A sweep for the pattern here found **no
+other operator-facing instance**; the remaining hits are all `assert!`
+messages in tests (**RELAYED** — not re-swept by this librarian). The
+prior filing's *"~8 wrapped-string-literal defects remain unswept"*
+in-flight item is therefore **unchanged in substance and one instance
+better documented**, not discharged.
+
+**`FEATURES.md`.** No row change and no box change — a build fix for a
+platform pdfce does not print on. **Explicitly checked against the
+dispatch's own instruction:** the four *Printing* rows (`Print`, `Printer
+paper selection`, `Printer properties`, `Per-page print orientation`) were
+read and left exactly as they stand.
+
+**`ARCHITECTURE.md` §12.** No new decision-log entry.
+
+**Ledger effects.** No Pass number (build-correctness fix, hash-headed).
+Standing rules: none minted, none cited. Ceilings unchanged: Pass family
+**97**, decision **069**, rule **R196**.
+
+**RAG escalation (this filing).** Recorded as a dated **amendment** on the
+existing
+`D:\dev\rag\rust\cfg_windows_on_a_plain_data_type_referenced_by_a_non_windows_stub_breaks_every_non_windows_build.md`
+rather than as a new file, because it is **the same family with the arrow
+reversed**: 2026-08-11's instance was a `#[cfg(not(windows))]` arm
+referencing a **gated type**; this one is an **ungated caller**
+referencing **gated functions**. Both are *"one side of a `cfg` boundary
+names something the other side does not have"*, and neither is visible to
+any build on a Windows dev box. That file's index entry was amended in the
+same edit.
+
+### `30b0375` — VERSION BUMP `0.6.1` → **`0.7.0`, MINOR NOT PATCH** — **`v0.6.1` IS SKIPPED, NOT RELEASED**; `fuzz/Cargo.lock` bumped in the same commit again; **★ `v0.7.0`'s TAG / CI / PUBLISH ARE NOT DONE AS OF THIS FILING — this is a version-bump record, not a release record** — filed 2026-08-18 (hundred-and-sixty-fifth filing)
+
+**Filed by `pdfce-librarian` WITH a shell (hard rule 8).** This entry
+exists because the hundred-and-sixty-fourth filing left *"`v0.6.1`'s
+tag/CI/publish still owed"* as an in-flight item, and that item is now
+**resolved by supersession rather than by completion** — a state a future
+session would otherwise have to reconstruct.
+
+**Measured, not inferred — every figure VERIFIED HERE:**
+
+| Claim | Command | Result |
+|---|---|---|
+| workspace version | `grep -n "^version" Cargo.toml` | **`0.7.0`** (line 77) |
+| newest tag | `git tag --sort=-creatordate \| head -1` | **`v0.6.0`** |
+| distance from newest tag | `git describe --tags` | **`v0.6.0-30-ga3080f0`** |
+
+So: **`v0.6.1` was never tagged** (the `9433032` bump recorded last filing
+went no further), **`v0.7.0` is not tagged either**, and `HEAD` is **30
+commits past the newest tag**. **No release has happened since `v0.6.0`.**
+
+**Why MINOR and not PATCH** (**RELAYED** from the commit message, which
+states its own reasoning): new public API in two crates —
+`pdfce-print` gained `PrinterConfiguration`, `PaperForm`, `PaperSelection`,
+`FormSourceSupport`, `SheetSetup`, `printer_forms`, `printer_caps_for`,
+`spool_with_config`, `spool_sheets`, `displayed_page_size` and more;
+`pdfce-core` gained the whole `paper` module, `set_media_box`/
+`set_media_boxes`, `set_markup_style`, `spec_from_dict`, and four new
+`EditError` variants. Plus **behaviour changes a 0.6.x consumer must
+read**: the print path now builds its `DEVMODE` from the driver's default
+instead of a zeroed struct (up to **97 %** of a real DEVMODE was
+previously absent — 7,972 B of 8,xxx on the tested EPSONs, per `Pass
+95.0`); `Orientation::Auto` is now per-page as its documentation always
+claimed; and the print path now honours `/Rotate`, which it ignored
+entirely.
+
+**Why `0.6.1` is skipped rather than tagged:** the bump was committed and
+never released — the engineer was redirected mid-release and did not
+return — so the number is free, and the tree has since moved well past a
+patch. **This is a deliberate choice on record, not an oversight**, which
+is precisely why it is filed: a future session reading only the
+hundred-and-sixty-fourth filing would go looking for a `v0.6.1` that will
+never exist.
+
+**★ Still owed, and note that this is now the SECOND consecutive filing
+that records a version bump with no release behind it:** `v0.7.0` needs
+tag → CI green **at the tagged commit** → `verify-release.py` → GitHub
+release. **CI must be green first**, and CI was red on all three of this
+filing's commits before them (that is what `ea5159e` and `a3080f0` fix).
+The `v0.6.0` release-notes correction the *Next up* housekeeping entry
+asks for **rides on `v0.7.0` now**, not on a `v0.6.1` — that entry is
+amended in place.
+
+**`FEATURES.md`.** No row change — a version number is not a capability.
+
+**`ARCHITECTURE.md` §12.** No new decision-log entry.
+
+**Ledger effects.** No Pass number (version-bump record, hash-headed, per
+the `abe6c97`/`9433032` precedent). Note this commit is **invisible to
+`tools/check-commits-filed.py`** (it touches only `Cargo.toml`,
+`Cargo.lock` and `fuzz/Cargo.lock` — no `crates/`, `tools/` or `fixtures/`
+path), so it was never going to be flagged; it is filed because the
+*record* needs it, not because a gate asked. **That asymmetry is itself
+worth knowing: the gate's exclusion list is principled and still leaves
+release-shaped commits entirely to human discipline.**
+
 ### ★★★★ Pass 96.0 — CORE STREAM — merge commit `269e4e0` + `ddeb815`+`72dcc11`+`a8381ea` — **A PAGE'S OWN `/MediaBox` IS NOW WRITABLE, AND A PLACED MARKUP CAN BE RESTYLED WITHOUT REGENERATING ITS `/AP` FROM SCRATCH** — the ce-dimension refusal, a false-positive disclosure now measured, and two more instances of the wrapped-string-literal defect — filed 2026-08-18 (hundred-and-sixty-fourth filing)
 
 **Filed by `pdfce-librarian`, no shell available (hard rule 8) — every
@@ -47157,7 +47499,25 @@ Shipped entry, top of *Shipped*. **No other content is known to be
 owed for `v0.6.1`** — this is a documentation-only release unless
 another Pass ships alongside it.
 
-### ★★★★ Pass 86.0 — HIGH PRIORITY — **`check-bypass-paths.sh` IS RED AT `HEAD`, PRE-EXISTING, UNFIXED** — the `Pass 71.0` slice-2 OCR sandwich writer bypasses `EditSession` at three sites in `crates/pdfce-core/src/ocr/layer.rs` — filed 2026-08-17 (hundred-and-forty-ninth filing) — **UNSTARTED**
+**★ AMENDED 2026-08-18 (hundred-and-sixty-fifth filing) — THIS RIDES ON
+`v0.7.0`; `v0.6.1` WILL NEVER EXIST.** The `9433032` bump to `0.6.1` was
+committed and never tagged; `30b0375` then bumped straight to **`0.7.0`**
+(MINOR — new public API in `pdfce-print` and `pdfce-core`, plus three
+print-path behaviour changes a 0.6.x consumer must read), deliberately
+skipping `0.6.1`. **Verified here, not inferred:** `git tag --sort=-creatordate`
+newest is **`v0.6.0`**; `git describe --tags` reads
+**`v0.6.0-30-ga3080f0`** — 30 commits, no release since `v0.6.0`. The
+release-notes correction described above is **still owed and still
+correct**; it is now `v0.7.0`'s to carry, and `v0.7.0` is **no longer
+documentation-only** (it carries `Pass 92.1`/`94.0`/`95.0`/`96.0`/`86.0`
+and this filing's build fixes). **Sequence: CI green first** — it was red
+on `ea5159e`/`cb55b6b`/`a3080f0` until they landed — then tag, then CI
+green *at the tagged commit*, then `verify-release.py`, then the GitHub
+release.
+
+### ✅ Pass 86.0 — **SHIPPED 2026-08-18 (`cb55b6b`), MOVED TO *Shipped*** — closed by its own **route (2)**, with the mechanism upgraded to a call-site `bypass-exempt:` marker; `check-bypass-paths.sh` verified clean at `HEAD`. **★ Checking route 2's stated WARRANT exposed a real correctness defect** (`add_ocr_layer` had no `/DocMDP` certification gate while its twin `add_text` did) — so route 2 shipped a behaviour change after all. Full account: top of *Shipped*, hundred-and-sixty-fifth filing. **The original entry text is preserved below unchanged, as the record of what was asked for.**
+
+### ~~★★★★ Pass 86.0 — HIGH PRIORITY — **`check-bypass-paths.sh` IS RED AT `HEAD`, PRE-EXISTING, UNFIXED**~~ — the `Pass 71.0` slice-2 OCR sandwich writer bypasses `EditSession` at three sites in `crates/pdfce-core/src/ocr/layer.rs` — filed 2026-08-17 (hundred-and-forty-ninth filing) — ~~**UNSTARTED**~~
 
 Found as a side effect of `Pass 84.0`'s gate run (verified red both
 before and after that commit — this is not a regression it introduced).
@@ -69008,6 +69368,63 @@ proposal), **`R194` claimed by this proposal**; next genuinely free is
   flag: the engineer's relayed "`R193` next free" was the checker's
   known-bad figure, not a fresh reconciliation — `R193` and `R194` were
   already, and remain, claimed.
+
+### ADOPTED AS STANDING PRACTICE 2026-08-18 (hundred-and-sixty-fifth filing) — a gate whose INPUT is git history is run AFTER the commit, never in the pre-commit sweep — **DELIBERATELY NOT A NUMBERED RULE; NO NUMBER CLAIMED. Ceiling stays `R195`, next free is still `R196`.**
+
+**Filed at the dispatching engineer's explicit request, and the engineer's
+own words are the finding.** Reporting his own error in `a3080f0`'s commit
+message:
+
+> *"this CI run also failed `check-commits-filed.py`, and that gate was
+> right. I ran the full local gate set BEFORE committing, so the one gate
+> whose input is the commit list had nothing to look at. A gate that
+> inspects history has to run after history is made; a green sweep taken
+> beforehand is not evidence about it."*
+
+**The practice.** Partition this project's gates by **what they read**, and
+run each no earlier than the moment its input exists:
+
+| Gate input | Earliest run that means anything | Examples here |
+|---|---|---|
+| working tree | pre-commit is correct | `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test`, `check-settings-consumed.py`, `check-ui-strings.sh`, `check-shipped-assets.py`, `check-bypass-paths.sh` |
+| **commit history** | **after `git commit`** | **`check-commits-filed.py`**, `check-passes-filed.py`, `check-ledger-numbers.py` |
+| tag / release metadata | after `git tag` | `verify-release.py`'s tag checks |
+| CI run status | after the push **and** after the run finishes | `verify-release.py`'s CI consultation |
+| published artifact | after the release is published | release-asset checks |
+
+**Why this is worth writing down rather than remembering.** The failure has
+a property that makes it self-concealing: **the gate did not error, did not
+skip, and did not warn — it printed CLEAN.** *"I ran all the gates"* was
+subjectively true and objectively worthless for one of them, and a skip
+would have been *better*, because a skip leaves a hole someone notices while
+a false green closes it. Then the sweep's result gets **quoted into a
+filing** as *"all gates clean"* — an append-only document a later session
+reads as measured fact. Gates whose output is relayed into the record
+deserve the sequencing check most.
+
+**Why unnumbered.** This is one instance, and it is procedural rather than
+about the shape of code or of a gate. It is **adjacent to `R192`** ("a gate
+states what it cannot see") without being an instance of it: `R192`'s
+failure is a gate whose *scope* is narrower than its obligation; this one's
+scope is exactly right and it was **asked at a time when the answer was
+guaranteed to be yes**. It is likewise **not `R191`** (an instrument failing
+open). **Precedent for filing substance without a number:** the *Update
+protocol*'s own *"Same-filing propagation duty"* and *"How a figure is
+filed"*, both accepted as standing practice and deliberately unnumbered.
+**★ The engineer may mint this as `R196` at any time** — the text above is
+the draft; nothing here claims the number, and `tools/check-ledger-numbers.py`
+is unaffected because this heading is not definition-shaped.
+
+**Mechanical form, if wanted:** a `post-commit` hook, plus a one-line label
+on each gate's docstring naming **what it reads**. The docstring label is
+the durable half — hooks get `--no-verify`'d, a docstring does not.
+
+**Ecosystem twin:**
+`D:\dev\rag\rust\a_gate_whose_input_is_the_commit_list_is_vacuous_when_the_pre_commit_sweep_runs_it.md`
+(written this filing, indexed), which also records why it is distinct from
+that tree's existing
+`a_gate_joining_on_a_hash_the_commit_itself_writes_is_unsatisfiable.md` —
+same cause (hashes exist only at commit time), two different failure modes.
 
 ## Update protocol
 

@@ -691,13 +691,26 @@ pub fn add_ocr_layer(
     new_page.insert(Name::from(b"Resources"), Object::Dict(resources));
 
     // A SANCTIONED WRITER BYPASS — a one-shot standalone API, exception 7's
-    // shape exactly (see `tools/check-bypass-paths.sh`)
-    // — `add_ocr_layer(doc, ..) -> bytes`, called by the CLI against a
-    // `Document` that is not in an edit session, so there is no undo stack to
-    // join and nothing to disclose to a later command. It refuses an
-    // encrypted document and, as of this commit, an enforced-certified one;
-    // that second refusal is what makes this exemption honest, and it was
-    // MISSING when the function shipped. Do not copy this marker to a new
+    // shape exactly (see `tools/check-bypass-paths.sh`):
+    // `add_ocr_layer(doc, ..) -> bytes`, operating on a `Document` that is
+    // not in an edit session, so there is no undo stack to join and nothing
+    // to disclose to a later command. It refuses an encrypted document and,
+    // as of this commit, an enforced-certified one; that second refusal is
+    // what makes this exemption honest, and it was MISSING when the function
+    // shipped.
+    //
+    // CORRECTED: this comment said "called by the CLI", and it was written
+    // in the same commit that added the certification guard. There is NO
+    // OCR subcommand — `grep -rn "ocr" crates/pdfce-cli/src/main.rs` returns
+    // nothing. The only non-test caller is
+    // `pdfce-render/examples/ocr_smoke.rs`. So this is an R151 instance: a
+    // capability with no shell caller, and the FEATURES.md row is honestly
+    // unticked for both cli and gui. The exemption's warrant does not depend
+    // on who calls it — a one-shot API is outside a session whether a shell
+    // reaches it or not — but a false claim about callers is how a doc
+    // comment becomes the reason someone believes a feature ships.
+    //
+    // Do not copy this marker to a new
     // writer caller without first checking the same two refusals are present.
     //
     // Stage the content bytes into the dirty set's buffer, with the new

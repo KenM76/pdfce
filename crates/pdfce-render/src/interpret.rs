@@ -336,10 +336,39 @@ pub struct Diagnostics {
     /// the backdrop alone.
     ///
     /// So this counter, not `overprint_requested`, is the honest measure of
-    /// what pdfce's additive-RGB compositing is currently getting wrong,
-    /// and it is the number that says whether the n-channel buffer is worth
-    /// building for a given document.
+    /// which paints need `CompatibleOverprint` rather than `Normal`.
+    ///
+    /// **Amended when overprint simulation shipped.** This doc previously
+    /// ended "…and it is the number that says whether the n-channel buffer
+    /// is worth building for a given document", which was true while the
+    /// counter was purely diagnostic. It now counts the paints that ARE
+    /// composited through Table 149 rather than the ones that are missed,
+    /// so `overprint_effective` and `overprint_composited` should agree
+    /// except where a composite was refused. A disagreement is the signal
+    /// worth chasing.
     pub overprint_effective: usize,
+    /// Paints actually composited through `CompatibleOverprint`
+    /// (§11.7.4.3, Table 149) rather than the ordinary `Normal` blend.
+    ///
+    /// Should equal `overprint_effective` minus `overprint_refused`. Kept
+    /// as its own counter rather than derived, because a derived number
+    /// cannot disagree with reality and therefore cannot report a bug.
+    pub overprint_composited: usize,
+    /// Paints where overprint applied but the composite could not run, so
+    /// the paint fell back to a normal blend.
+    ///
+    /// **Non-zero means the operator is seeing knocked-out backdrops where
+    /// a press would show overprinted ink.** Disclosed rather than silently
+    /// tolerated: rule 4's whole point is that an inference or a shortfall
+    /// the operator cannot see by looking is the kind that must be said out
+    /// loud.
+    pub overprint_refused: usize,
+    /// Pixels whose value the overprint composites actually changed.
+    ///
+    /// The measurement that distinguishes "overprint ran and mattered" from
+    /// "overprint ran and was a no-op on this geometry" — two different
+    /// facts that a paint count alone conflates.
+    pub overprint_pixels: u64,
     /// Transparency groups rendered into their own buffer and composited
     /// as a UNIT — the §11.4.5 behaviour. A census, not a shortfall.
     pub transparency_groups_composited: usize,
@@ -849,6 +878,9 @@ polarity unverifiable (decision 006 R30)",
         self.compat_skipped += other.compat_skipped;
         self.overprint_requested += other.overprint_requested;
         self.overprint_effective += other.overprint_effective;
+        self.overprint_composited += other.overprint_composited;
+        self.overprint_refused += other.overprint_refused;
+        self.overprint_pixels += other.overprint_pixels;
         self.overprint_mode1_requested += other.overprint_mode1_requested;
         self.transparency_groups_composited += other.transparency_groups_composited;
         self.transparency_groups_knockout_approximated +=
@@ -2140,7 +2172,26 @@ impl Interpreter<'_> {
         // the ADVANCE would reflow the visible text around the hidden
         // run, so a layer toggle would move the rest of the line.
         let skip_paint = crate::profile::skip_paint() || self.oc_hidden();
-        if !skip_paint && self.gs.current.text.fills() && self.color.paints(false) {
+        // §11.7.4.3 lists the elementary graphics objects overprint applies
+        // to: "fills, strokes, TEXT, images, and shadings". Text is decided
+        // here, before the paints, so the counter and the behaviour come
+        // from one predicate — the same arrangement as `paint_path`.
+        let op_fill = !skip_paint
+            && self.gs.current.text.fills()
+            && self.color.paints(false)
+            && self.overprint_would_change(false);
+        let op_stroke = !skip_paint
+            && self.gs.current.text.strokes()
+            && self.color.paints(true)
+            && self.overprint_would_change(true);
+        if op_fill {
+            self.diag.overprint_effective += 1;
+        }
+        if op_stroke {
+            self.diag.overprint_effective += 1;
+        }
+
+        if !skip_paint && self.gs.current.text.fills() && self.color.paints(false) && !op_fill {
             let paint = solid(
                 self.gs.current.fill_color,
                 self.gs.current.fill_alpha,
@@ -2152,12 +2203,35 @@ impl Interpreter<'_> {
             // the opposite direction by the font, not by even-odd).
             pixmap.fill_path(&path, &paint, FillRule::Winding, ctm, clip);
         }
-        if !skip_paint && self.gs.current.text.strokes() && self.color.paints(true) {
+        if !skip_paint && self.gs.current.text.strokes() && self.color.paints(true) && !op_stroke {
             let paint = solid(
                 self.gs.current.stroke_color,
                 self.gs.current.stroke_alpha,
                 self.gs.current.blend_mode,
             );
+            pixmap.stroke_path(&path, &paint, &self.stroke_params(), ctm, clip);
+        }
+
+        // After the `clip` borrow ends, for the same reason `paint_path`
+        // defers its composites: `paint_overprint` needs `&mut self`.
+        if op_fill && !self.paint_overprint(&path, Some(FillRule::Winding), false, pixmap) {
+            self.diag.overprint_refused += 1;
+            let paint = solid(
+                self.gs.current.fill_color,
+                self.gs.current.fill_alpha,
+                self.gs.current.blend_mode,
+            );
+            let clip = self.gs.current.clip.as_deref();
+            pixmap.fill_path(&path, &paint, FillRule::Winding, ctm, clip);
+        }
+        if op_stroke && !self.paint_overprint(&path, None, true, pixmap) {
+            self.diag.overprint_refused += 1;
+            let paint = solid(
+                self.gs.current.stroke_color,
+                self.gs.current.stroke_alpha,
+                self.gs.current.blend_mode,
+            );
+            let clip = self.gs.current.clip.as_deref();
             pixmap.stroke_path(&path, &paint, &self.stroke_params(), ctm, clip);
         }
     }
@@ -2784,6 +2858,152 @@ impl Interpreter<'_> {
             // that is a known under-count rather than a claim of zero.
             _ => false,
         }
+    }
+
+    /// Paint one path with `CompatibleOverprint` instead of `Normal`.
+    ///
+    /// Called only where [`Self::overprint_would_change`] is true, which is
+    /// the same predicate that has been *counting* effective overprints
+    /// since the disclosure Pass. That symmetry is deliberate: the number
+    /// the operator was already being shown is exactly the set of paints
+    /// this now renders differently, so the disclosure and the behaviour
+    /// cannot drift apart.
+    ///
+    /// # Returns
+    ///
+    /// `true` if the overprint composite ran and the caller should skip its
+    /// ordinary paint; `false` if it could not run, in which case the caller
+    /// paints normally. A `false` return is **disclosed** by the caller —
+    /// silently falling back to a normal paint is precisely the "sneaky"
+    /// failure rule 4 forbids.
+    fn paint_overprint(
+        &mut self,
+        path: &Path,
+        rule: Option<FillRule>,
+        stroking: bool,
+        pixmap: &mut Pixmap,
+    ) -> bool {
+        use crate::overprint::{self, SourceKind};
+
+        let Some((space, comps)) = self.color.device_color(stroking) else {
+            return false;
+        };
+        let Some(kind) = overprint::classify(space, false) else {
+            return false;
+        };
+
+        // The source colour as SUBTRACTIVE TINTS, which is what Table 149
+        // is written in.
+        //
+        // For a DeviceCMYK source the operands ARE the tints and are used
+        // directly — going via RGB would destroy the very component
+        // identity overprint depends on (a `0 0 0 1 k` black would come
+        // back as C=M=Y=0, K=1 only by luck of the conversion, and an
+        // `OPM 1` decision would then be made on a reconstructed value
+        // rather than the authored one).
+        //
+        // For every other space the pipeline has already resolved the paint
+        // to RGB — including running a Separation/DeviceN tint transform —
+        // so the tints are recovered from that. The recovery is exact under
+        // `rgb_to_cmyk`/`cmyk_to_rgb` (see their docs), and which CHANNELS
+        // that source is entitled to paint is decided from the colorant
+        // names by `cmyk_group_rules`, not from these numbers.
+        let source_cmyk: [f32; 4] =
+            if matches!(kind, SourceKind::DeviceCmykDirect) && comps.len() == 4 {
+                [comps[0], comps[1], comps[2], comps[3]]
+            } else {
+                let c = if stroking {
+                    self.gs.current.stroke_color
+                } else {
+                    self.gs.current.fill_color
+                };
+                overprint::rgb_to_cmyk(c.r, c.g, c.b)
+            };
+
+        let op = if stroking {
+            self.gs.current.overprint_stroke
+        } else {
+            self.gs.current.overprint_fill
+        };
+        let rules = overprint::cmyk_group_rules(
+            &kind,
+            source_cmyk,
+            op,
+            // `/OPM` is stored as the i64 the file carried, because
+            // OP-N2 records that values other than 0 and 1 have NO
+            // specified behaviour and pdfce keeps what it read rather
+            // than normalising it away. Anything that is not exactly 1
+            // is mode 0 -- the conservative reading, pinned by a test.
+            u8::from(self.gs.current.overprint_mode == 1),
+        );
+
+        // Coverage: the path, rasterised exactly as tiny_skia would have
+        // rasterised it for a normal paint, then intersected with the clip.
+        // Using the same rasteriser is what keeps an overprinted edge
+        // identical in shape to a non-overprinted one.
+        let ctm = self.gs.current.ctm;
+        let Some(mut coverage) = Mask::new(pixmap.width(), pixmap.height()) else {
+            return false;
+        };
+        if let Some(r) = rule {
+            coverage.fill_path(path, r, true, ctm);
+        } else {
+            let Some(stroked) = path.clone().stroke(&self.stroke_params(), 1.0) else {
+                return false;
+            };
+            coverage.fill_path(&stroked, FillRule::Winding, true, ctm);
+        }
+        if let Some(old) = self.gs.current.clip.as_deref() {
+            let old_data = old.data().to_vec();
+            for (n, o) in coverage.data_mut().iter_mut().zip(old_data.iter()) {
+                *n = ((u16::from(*n) * u16::from(*o)) / 255) as u8;
+            }
+        }
+
+        // Restrict the scan to the path's device-space bounds; outside them
+        // coverage is zero and the per-pixel CMYK round trip would be pure
+        // waste. A full-page scan is ~8x slower on a typical patch.
+        let Some(device_path) = path.clone().transform(ctm) else {
+            return false;
+        };
+        let b = device_path.bounds();
+        // A stroke extends beyond the path's own bounds by half the line
+        // width, and the join/cap can add more. Padding by the full width
+        // is cheap and cannot under-cover.
+        let pad = if rule.is_some() {
+            1.0
+        } else {
+            self.gs.current.line_width.mul_add(0.5, 2.0)
+        };
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let region = (
+            (b.left() - pad).floor().max(0.0) as u32,
+            (b.top() - pad).floor().max(0.0) as u32,
+            ((b.right() + pad).ceil().max(0.0) as u32).min(pixmap.width()),
+            ((b.bottom() + pad).ceil().max(0.0) as u32).min(pixmap.height()),
+        );
+        if region.0 >= region.2 || region.1 >= region.3 {
+            // Entirely off-page. The composite ran correctly and touched
+            // nothing, which is a success, not a fallback.
+            return true;
+        }
+
+        let alpha = if stroking {
+            self.gs.current.stroke_alpha
+        } else {
+            self.gs.current.fill_alpha
+        };
+        let changed = overprint::composite(
+            pixmap,
+            &coverage,
+            rules,
+            source_cmyk,
+            alpha.clamp(0.0, 1.0),
+            region,
+        );
+        self.diag.overprint_composited += 1;
+        self.diag.overprint_pixels += u64::from(changed);
+        true
     }
 
     fn paint_with_pattern(
@@ -3753,14 +3973,23 @@ impl Interpreter<'_> {
         // paint? Asked here, once per painted object, because that is the
         // granularity §11.7.4.3 works at — "elementary graphics objects
         // (fills, strokes, text, images, and shadings)".
+        let mut overprint_fill = false;
+        let mut overprint_stroke = false;
         if !skip_paint {
             if fill && fill_rule.is_some() && self.overprint_would_change(false) {
                 self.diag.overprint_effective += 1;
+                overprint_fill = true;
             }
             if stroke && self.overprint_would_change(true) {
                 self.diag.overprint_effective += 1;
+                overprint_stroke = true;
             }
         }
+        // Deferred for the same borrow reason as `pattern_fill` below: the
+        // composite needs `&mut self` while `clip` is an immutable borrow
+        // of the same graphics state.
+        let mut overprint_fill_pending = false;
+        let mut overprint_stroke_pending = false;
         // Deferred to after the `clip` borrow ends — see below.
         let mut pattern_fill: Option<FillRule> = None;
         if !skip_paint
@@ -3768,12 +3997,20 @@ impl Interpreter<'_> {
             && let Some(rule) = fill_rule
         {
             if self.color.paints(false) {
-                let paint = solid(
-                    self.gs.current.fill_color,
-                    self.gs.current.fill_alpha,
-                    self.gs.current.blend_mode,
-                );
-                pixmap.fill_path(&path, &paint, rule, ctm, clip);
+                // Overprint replaces the ordinary paint entirely — it is a
+                // different blend mode (§11.7.4.3), not a post-pass over a
+                // normal one. Painting first and overprinting after would
+                // have already knocked out the backdrop this must preserve.
+                if overprint_fill {
+                    overprint_fill_pending = true;
+                } else {
+                    let paint = solid(
+                        self.gs.current.fill_color,
+                        self.gs.current.fill_alpha,
+                        self.gs.current.blend_mode,
+                    );
+                    pixmap.fill_path(&path, &paint, rule, ctm, clip);
+                }
             } else {
                 // `paints` is false for a Pattern space as well as for
                 // `Separation /None` — and those want opposite things. The
@@ -3785,12 +4022,16 @@ impl Interpreter<'_> {
             }
         }
         if !skip_paint && stroke && self.color.paints(true) {
-            let paint = solid(
-                self.gs.current.stroke_color,
-                self.gs.current.stroke_alpha,
-                self.gs.current.blend_mode,
-            );
-            pixmap.stroke_path(&path, &paint, &self.stroke_params(), ctm, clip);
+            if overprint_stroke {
+                overprint_stroke_pending = true;
+            } else {
+                let paint = solid(
+                    self.gs.current.stroke_color,
+                    self.gs.current.stroke_alpha,
+                    self.gs.current.blend_mode,
+                );
+                pixmap.stroke_path(&path, &paint, &self.stroke_params(), ctm, clip);
+            }
         }
 
         // The pattern fill runs HERE rather than in the branch above
@@ -3802,6 +4043,39 @@ impl Interpreter<'_> {
         // and stroked in a solid colour paints fill-then-stroke either way.
         if let Some(rule) = pattern_fill {
             self.paint_with_pattern(&path, rule, false, pixmap);
+        }
+
+        // The overprint composites run here, after the `clip` borrow ends,
+        // for the same reason the pattern fill does. Fill before stroke,
+        // matching the order the ordinary paints above would have used.
+        if overprint_fill_pending
+            && let Some(rule) = fill_rule
+            && !self.paint_overprint(&path, Some(rule), false, pixmap)
+        {
+            // Could not composite -- paint normally rather than paint
+            // nothing, and SAY SO. A silent fallback here would leave the
+            // operator with a knocked-out backdrop and a diagnostic
+            // claiming overprint was honoured.
+            self.diag.overprint_refused += 1;
+            let paint = solid(
+                self.gs.current.fill_color,
+                self.gs.current.fill_alpha,
+                self.gs.current.blend_mode,
+            );
+            let ctm = self.gs.current.ctm;
+            let clip = self.gs.current.clip.as_deref();
+            pixmap.fill_path(&path, &paint, rule, ctm, clip);
+        }
+        if overprint_stroke_pending && !self.paint_overprint(&path, None, true, pixmap) {
+            self.diag.overprint_refused += 1;
+            let paint = solid(
+                self.gs.current.stroke_color,
+                self.gs.current.stroke_alpha,
+                self.gs.current.blend_mode,
+            );
+            let ctm = self.gs.current.ctm;
+            let clip = self.gs.current.clip.as_deref();
+            pixmap.stroke_path(&path, &paint, &self.stroke_params(), ctm, clip);
         }
 
         // NOW tighten the clip (§8.5.4: after the path is painted).

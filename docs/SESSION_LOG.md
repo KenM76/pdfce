@@ -45080,3 +45080,217 @@ whoever owns global user memory.
    this session.
 5. `LUM-A1` spec-corpus back-fill still owed.
    both still owed, unaffected by this filing.
+
+## 2026-08-18 (hundred-and-sixty-fifth filing) — **THREE COMMITS CI CAUGHT AND A LOCAL SWEEP COULD NOT: TWO CROSS-PLATFORM BUILD FIXES AND ONE REAL CORRECTNESS DEFECT — `add_ocr_layer` WOULD HAVE WRITTEN A TEXT LAYER INTO A CERTIFIED DOCUMENT THAT FORBIDS CHANGES, WHICH CLOSES `Pass 86.0`. Plus the `0.6.1` → `0.7.0` bump (`v0.6.1` SKIPPED, nothing released since `v0.6.0`) and the engineer's own sequencing error: a gate whose input is git history was run before the history existed.**
+
+**Shipped:**
+- **`Pass 86.0`** — `cb55b6b`. **A REAL CORRECTNESS DEFECT, now fixed.**
+  `pdfce_core::ocr::layer::add_ocr_layer` shipped (`49af8fb`) with an
+  encryption refusal and **no certification check at all**, while its
+  structural twin `text_edit::add_text` had refused since it was
+  written. Both create a content stream and a font and rewrite the page
+  dict's `/Contents` and `/Resources`; ISO 32000-1 §12.8.4 Table 258
+  requires a consumer to enforce `/Perms` → `/DocMDP` permissions, and
+  Table 254's permitted-change lists contain **no** operation pdfce can
+  perform. A certified, change-forbidding document would have had an OCR
+  text layer written into it, **silently invalidating the
+  certification** — and at render mode 3 the layer is invisible by
+  design, so nothing an operator could see would have said so. New
+  `OcrLayerError::CertificationForbidsChange { permission: u8 }`
+  (`layer.rs:401`), guard at `:640`, placed immediately after the
+  encryption refusal so a refusal is clean rather than a half-built plan
+  discarded. **This closes `Pass 86.0`** (`check-bypass-paths.sh` red at
+  `HEAD` since the 149th filing) by its own **route (2)**, mechanism
+  upgraded to a call-site `bypass-exempt:` marker per the gate's header.
+  Gate verified clean here, exit 0.
+- `ea5159e` — hash-headed, no Pass number (build-correctness fix, per the
+  `89f28ca` convention). `cmd_print` had four `#[cfg(windows)]` callees
+  and was itself **ungated**: compiles on Windows, **four `E0425`s on
+  Linux**, which is what CI builds — the `0.7.0` bump went out red. Both
+  siblings in the same file (`cmd_print_preview`, `cmd_list_printers`)
+  already paired a gated body with a `#[cfg(not(windows))]` arm that
+  **reports** rather than vanishing; `cmd_print` now has its twin, same
+  29-argument signature. Also repaired a ten-space mid-sentence gap in
+  `cmd_list_printers`' non-Windows message — the wrapped-string-literal
+  defect from `a8381ea`, one more operator-facing instance; the sweep
+  found no others outside `assert!` messages.
+- `a3080f0` — hash-headed, no Pass number. Follow-on to `ea5159e`:
+  gating the caller exposed **13 items dead on Linux only** (7
+  annotations in `pdfce-cli`, 6 in `pdfce-print` — verified by grep).
+  Annotated `#[cfg_attr(not(windows), allow(dead_code))]`, **not**
+  `#[cfg(windows)]`, and the reasoning is the durable part: gating was
+  tried first, compiles the library, and **breaks the tests** —
+  `devmode.rs`'s `#[cfg(test)]` module calls `apply`/`apply_paper`,
+  which are pure byte arithmetic with no winapi and are the only
+  automated coverage that encoding gets on the platform CI runs
+  `cargo test` on. The tidier fix would have bought a green lint by
+  deleting working coverage from the platform that tests most. Relaxing
+  per-platform also keeps the lint at full strength on Windows. Also
+  gave the non-Windows `cmd_print_preview` the `too_many_arguments`
+  allow its Windows twin already carried.
+- `30b0375` — hash-headed version-bump record (per the `abe6c97` /
+  `9433032` precedent). `0.6.1` → **`0.7.0`, MINOR**, `v0.6.1`
+  **deliberately skipped** (bumped, never tagged, engineer redirected
+  mid-release). New public API in `pdfce-print` and `pdfce-core` plus
+  three print-path behaviour changes a 0.6.x consumer must read.
+  **★ NOT a release record.** Verified here: newest tag is **`v0.6.0`**
+  (`git tag --sort=-creatordate`), `git describe --tags` reads
+  **`v0.6.0-30-ga3080f0`** — **30 commits, nothing released since
+  `v0.6.0`.** This resolves the 164th filing's "`v0.6.1` tag/CI/publish
+  owed" item **by supersession, not by completion**.
+
+**Decisions made this session:** none minted. Ceiling stays **068**, next
+free **069** — none of these four items redraws a crate boundary, picks a
+library, or defines/refines an invariant.
+
+**Findings + decisions:**
+- **★ THE PROCESS FINDING, reported by the engineer against himself and
+  filed at his request.** The same CI run failed
+  `tools/check-commits-filed.py`, and **the gate was right**. The full
+  local gate set was run **before** committing, so the one gate whose
+  input is the commit list had nothing to look at and printed **clean**.
+  *"A gate that inspects history has to run after history is made; a
+  green sweep taken beforehand is not evidence about it."* Filed as an
+  **adopted standing practice at the end of `ROADMAP.md`'s *Standing
+  rules*, deliberately unnumbered — no number claimed, ceiling stays
+  `R195`, next free still `R196`** — with a gate-input partition table
+  (working tree / commit history / tags / CI status / published
+  artifact). It is adjacent to `R192` without being an instance:
+  `R192`'s gate has a scope narrower than its obligation, this gate's
+  scope is exactly right and it was **asked at a time when the answer
+  was guaranteed to be yes**. The engineer can mint it as `R196`; the
+  drafted text is there for it.
+- **A gate asked a filing question and got a correctness answer.**
+  `check-bypass-paths.sh` flagged `add_ocr_layer`; the obvious response
+  was bookkeeping (a ninth exception entry). But **entry 7 of that list
+  sanctions exactly this shape and states as its WARRANT that such a
+  function "honours the certification gate"** — checking whether the
+  warrant was true is what found the defect. **An allowlist entry that
+  states why an exemption is safe is a checkable claim about every
+  future member of its class**, and extending the list without
+  evaluating it converts a live invariant into documentation of one.
+- **The marker window is not the block.** The `bypass-exempt:` marker had
+  to sit in the **middle** of the three writer calls: the gate's window
+  is eight lines either side of each hit and the three calls span eight
+  lines, so a marker above the block covers the first two and misses
+  `save_incremental`. Placement was derived by **running** the gate (it
+  stayed red and said which hit was unmatched), not by reading its
+  source.
+- **The test earned its result by failing first.**
+  `a_certified_document_refuses_the_ocr_layer` was written expecting
+  `/P 2` and failed reporting **`/P 1`** — the fixture's actual value —
+  which proves the guard was reached and reading the real document, a
+  distinction a test written to the right number could not have made.
+  Sabotage-verified afterwards (relayed).
+- **Flagged, not fixed:** that fixture is `/P 1`, which refuses
+  everything, so the test cannot distinguish "content-addition is
+  forbidden at EVERY tier" (what the guard claims, per Table 254) from
+  "this document forbids everything." **This is the same fixture-choice
+  vacuity `C:\personal_rag\pdf\lesson_20260807_certification_p_level_fixture_corpus_all_p1_cannot_distinguish_two_gates.md`
+  recorded eleven days ago, recurring on a new gate.** The `/P 2`
+  fixture that would settle it already exists, in the *forms* set. Owed:
+  a `/P 2` certified fixture carrying page **content**, plus the
+  three-fixture matrix applied to the content writers.
+- **★ GHENT PDF OUTPUT SUITE 5.0 STANDING, measured this session**
+  (relayed from the engineer, `tools/ghent-check.py` against all **51**
+  patches with `--reference-dir` Acrobat reference strips):
+  **22 PASS + 21 FAIL + 8 UNRESOLVED (reference-strip, no usable
+  calibration) = 51 patches, 0 render errors.** Pass rate **22/51 =
+  43.1 %**; adjudicated (non-UNRESOLVED) pass rate **22/43 = 51.2 %**.
+  **Of the 21 failures: 10 are the overprint family and 4 more are
+  `Transp_Basic_BM_DeviceCMYK_*` = 14 of 21 (66.7 %) needing per-colorant
+  CMYK compositing** — so the CMYK compositing buffer is the next work
+  item and **plausibly addresses up to 14 of the 21**, leaving **7 of 21
+  (33.3 %) unexplained by that hypothesis**. **Do not read 22/51 against
+  `Pass 94.0`'s first-run 29/51 as a regression** — 29/51 was the
+  pre-calibration figure the engineer caught before reporting it as
+  final, and 22/51 is the honest post-`--reference-dir` number. Measured,
+  not assumed.
+- **`FEATURES.md` correction against the dispatch — the `cli` box was NOT
+  ticked.** The engineer asked for the OCR row to move to
+  `core [x] · cli [x] · gui [ ]` on the grounds that the CLI path calls
+  `add_ocr_layer`. Verified here and **false at `HEAD`**:
+  `grep -rn "ocr" crates/pdfce-cli/src/main.rs` returns nothing, and the
+  only callers of `add_ocr_layer` outside `pdfce-core` are tests and the
+  `pdfce-render/examples/ocr_smoke.rs` harness. The sole mention of a CLI
+  caller is a **doc comment** at `layer.rs:695` describing an intended
+  shape — **`R195`'s exact subject**: a doc comment is evidence about the
+  source tree, never about what a shell reaches. `core` also stays `[ ]`,
+  consistent with the deliberate rulings in the `ed05033` and `49af8fb`
+  entries. **Only the row's sentence changed** (it now names the
+  certification refusal); no checkbox moved. The four *Printing* rows
+  were read and left exactly as they stand, per the dispatch.
+
+**Verification (shell available this dispatch — hard rule 8; each figure
+labelled):**
+- **VERIFIED HERE.** `git log --oneline -12` and `git show --stat` on all
+  three hashes — real, in this order, `ea5159e` touching only
+  `crates/pdfce-cli/src/main.rs` (+51 / −1).
+- **VERIFIED HERE.** `python tools/check-commits-filed.py` before this
+  filing: **3 of 3** flagged unfiled (`ea5159e`, `cb55b6b`, `a3080f0`).
+  **Nothing was added to `tools/commits-filed-baseline.txt`** — it stands
+  at **25 lines**, unchanged.
+- **VERIFIED HERE.** `bash tools/check-bypass-paths.sh` → *"clean — every
+  document mutation goes through EditSession"*, exit `0`.
+- **VERIFIED HERE.** `grep` for `CertificationForbidsChange` in
+  `crates/pdfce-core/src/ocr/layer.rs` (`:401` variant, `:640` guard);
+  `bypass-exempt` marker at `:713`; test at
+  `crates/pdfce-core/tests/ocr_layer.rs:113` (13 test fns in that file);
+  13 `cfg_attr(not(windows), allow(dead_code))` annotations across the
+  two crates.
+- **VERIFIED HERE.** `grep -n "^version" Cargo.toml` → `0.7.0`;
+  `git tag --sort=-creatordate` → newest `v0.6.0`; `git describe --tags`
+  → `v0.6.0-30-ga3080f0`.
+- **NOT MEASURED, NOT RELAYED — stated as absent rather than assumed:**
+  a test count for this session. The dispatch supplied none and this
+  librarian did not run `cargo test`. The last measured figure remains
+  the 164th filing's **3,868 tests, 0 failures**; `cb55b6b` adds at
+  least one (`a_certified_document_refuses_the_ocr_layer`), so **3,868 is
+  a floor, not a current count.** Likewise `cargo fmt` / `clippy` /
+  `cargo tree` were **not** re-run here — the GUI-core separation
+  invariant is untouched by these commits (no `Cargo.toml` dependency
+  changed) but that is a reading, not a measurement.
+
+**Still in flight:**
+- **`v0.7.0` needs its tag / CI / `verify-release.py` / GitHub release —
+  and CI must be GREEN FIRST**, which is what this filing's two build
+  fixes are for. **Nothing has been released since `v0.6.0`, 30 commits
+  back.** The `v0.6.0` release-notes correction (`R180`'s sixth
+  instance) now rides on `v0.7.0`; that *Next up* entry was amended in
+  place. **This is the second consecutive filing recording a version bump
+  with no release behind it.**
+- `Pass 72.0` / `73.0` / `73.1` HIGH PRIORITY still unstarted. `Pass
+  87.0` still GUI-paused.
+- `85.4c` remainder + `85.5` still blocked on the `iccce` CMYK-buffer
+  request — **and this filing's Ghent measurement sharpens the case for
+  `85.5`: 14 of 21 current failures (66.7 %) are overprint or
+  `DeviceCMYK` blend-mode patches**. `85.1` (mesh shadings) third.
+- The `/P 2` content-writing certification fixture and its three-fixture
+  matrix (new, this filing).
+- **~8 wrapped-string-literal defects remain unswept** in `assert!`
+  messages (unchanged from the 164th filing; `ea5159e` cleared one more
+  operator-facing instance and found no others outside tests).
+- `LUM-A1` spec-corpus back-fill still owed.
+- The stale `acrobat-reader-is-available-pro-is-not.md` global-memory
+  entry (flagged 163rd filing) still needs correcting by whoever owns
+  global user memory.
+
+**For next session:**
+1. **Next free Pass family is `97`** — `86.0` was **discharged**, not
+   minted, this filing. Next free decision is **069** (none minted).
+   Next free filing ordinal is **166**. Next free standing rule is
+   **`R196`** — nothing minted, nothing claimed; the gate-sequencing
+   practice is filed unnumbered and is available to mint as `R196` if
+   the engineer wants it enforceable by number.
+2. **Get CI green and cut `v0.7.0`.** In that order. The three commits
+   this filing records are the fix; verify, then tag.
+3. **Build the CMYK compositing buffer** (`85.5` / `85.4c` remainder) —
+   now the measured top item, 14 of 21 Ghent failures.
+4. Author the `/P 2` certified **content** fixture and apply the
+   three-fixture matrix to `add_text` and `add_ocr_layer`.
+5. **Rule the gate-sequencing practice** (mint as `R196`, or leave
+   unnumbered) and, either way, decide whether the mechanical form is
+   worth it: a `post-commit` hook plus a one-line "what this reads" label
+   on each gate's docstring.
+6. Sweep the remaining ~8 wrapped-string-literal defects in `assert!`
+   messages; `LUM-A1` back-fill still owed.

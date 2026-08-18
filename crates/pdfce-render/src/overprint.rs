@@ -453,6 +453,283 @@ pub fn classify(space: &ColorSpace, in_image_sample: bool) -> Option<SourceKind>
     }
 }
 
+/// Convert an additive sRGB triple to subtractive CMYK tints.
+///
+/// Uses the standard maximum-GCR ("100% grey component replacement")
+/// formulation: pull as much neutral density as possible into `K`, then
+/// express what remains in `C`, `M`, `Y`.
+///
+/// ```text
+/// K = 1 - max(R, G, B)
+/// C = (1 - R - K) / (1 - K)      (and likewise M from G, Y from B)
+/// ```
+///
+/// # Why a naive conversion is the RIGHT choice here, not a shortcut
+///
+/// This is not a colorimetric transform and does not pretend to be — it
+/// carries no ICC profile, no black generation curve and no ink limit. It is
+/// chosen because of a property that matters far more for overprint than
+/// accuracy would: **it is exactly inverted by [`cmyk_to_rgb`]**.
+///
+/// `cmyk_to_rgb(rgb_to_cmyk(c)) == c` for every colour, because
+/// `R = (1 - C)(1 - K)` reduces to `R` by construction. So a pixel that is
+/// merely *read* and written back is unchanged to the last bit, and only the
+/// components overprint actually alters can move. A "better" conversion that
+/// did not round-trip would smear colour across every pixel an overprint
+/// paint touched, including the ones Table 149 says to leave alone — turning
+/// a correctness feature into a source of drift.
+///
+/// The round trip does **not** preserve the original *component split*: a
+/// backdrop painted `C=0.5 M=0.4 Y=0.4 K=0` reads back as
+/// `C=0.167 M=0 Y=0 K=0.4`, the same colour by a different route. That is
+/// acceptable, and the reason is worth stating because it looks like it
+/// should break: each output channel depends on a disjoint pair of inputs
+/// (`R` on `C` and `K`, `G` on `M` and `K`, `B` on `Y` and `K`), so
+/// overprinting a single ink changes exactly one output channel and leaves
+/// the other two at their round-tripped — hence original — values.
+///
+/// The honest limitation: pdfce has no separated CMYK buffer, so the
+/// backdrop's component split is *reconstructed* from the composite rather
+/// than remembered. Where a document overprints two inks in sequence over a
+/// rich backdrop, the reconstruction can differ from a true separated
+/// pipeline. This is disclosed rather than hidden — see the render
+/// diagnostics — and a real n-channel buffer remains the eventual fix.
+#[must_use]
+pub fn rgb_to_cmyk(r: f32, g: f32, b: f32) -> [f32; 4] {
+    let k = 1.0 - r.max(g).max(b);
+    if k >= 1.0 {
+        // Pure black: the divisions below are 0/0. Every chromatic
+        // component is meaningless here, so report none of them.
+        return [0.0, 0.0, 0.0, 1.0];
+    }
+    let inv = 1.0 - k;
+    [
+        (1.0 - r - k) / inv,
+        (1.0 - g - k) / inv,
+        (1.0 - b - k) / inv,
+        k,
+    ]
+}
+
+/// Convert subtractive CMYK tints back to an additive sRGB triple.
+///
+/// The exact inverse of [`rgb_to_cmyk`]; see that function for why the
+/// round-trip property is the point.
+#[must_use]
+pub fn cmyk_to_rgb(cmyk: [f32; 4]) -> (f32, f32, f32) {
+    let k = 1.0 - cmyk[3];
+    (
+        (1.0 - cmyk[0]) * k,
+        (1.0 - cmyk[1]) * k,
+        (1.0 - cmyk[2]) * k,
+    )
+}
+
+/// Which CMYK channel a colorant name refers to, if any.
+///
+/// `None` for a genuine spot colorant. The comparison is
+/// **case-insensitive** and that is a *choice*, not a rule: `SEP-A1` records
+/// that ISO 32000-1 defines **no** colorant-name matching or normalisation
+/// rule at all (`PANTONE 185 C` vs `185C` is undecidable by the standard).
+/// Matching the four process names case-insensitively is the least
+/// surprising behaviour and is what a press operator would expect; anything
+/// more aggressive would start silently merging real spot inks.
+#[must_use]
+fn process_channel(name: &str) -> Option<usize> {
+    match name.to_ascii_lowercase().as_str() {
+        "cyan" => Some(0),
+        "magenta" => Some(1),
+        "yellow" => Some(2),
+        "black" => Some(3),
+        _ => None,
+    }
+}
+
+/// Resolve Table 149 for all four channels of a `DeviceCMYK` group.
+///
+/// pdfce composites against a `DeviceCMYK` group colour space, so the four
+/// "components of the group colour space" Table 149 speaks of are exactly
+/// C, M, Y and K.
+///
+/// # The `Separation`/`DeviceN` interpretation, stated because it is a choice
+///
+/// Table 149's `Separation`/`DeviceN` row splits components into *process*
+/// and *spot, named in source space*. It has **no** row for a process
+/// component that the source space names — yet naming one is legal and
+/// common: `/DeviceN [/Black] /DeviceCMYK …` is precisely how a document
+/// overprints black. Read literally, `Black` is a process component of the
+/// group, so it would take the process row and be **preserved from the
+/// backdrop** — i.e. a DeviceN black paint would paint nothing at all.
+///
+/// That is plainly not the intent, and the standard knows the area is
+/// unsettled: `DN-A1` records that a CMYK `NChannel` naming `Cyan` "hits two
+/// contradictory rules". pdfce resolves it the way a press does — **a
+/// colorant the source space names is painted, whether or not it happens to
+/// be a process colorant** — which is the same principle as the "spot
+/// colorant named in source space" row, applied to the case the table
+/// omits.
+///
+/// `/All` names every colorant by definition (§8.6.6.4) and therefore paints
+/// every channel.
+#[must_use]
+pub fn cmyk_group_rules(
+    source: &SourceKind,
+    source_cmyk: [f32; 4],
+    op: bool,
+    opm: u8,
+) -> [ComponentRule; 4] {
+    match source {
+        // Reverts to Normal in every column — no consideration of op/opm.
+        SourceKind::Group => [ComponentRule::Source; 4],
+
+        SourceKind::DeviceCmykDirect => {
+            let mut out = [ComponentRule::Source; 4];
+            for (i, rule) in out.iter_mut().enumerate() {
+                *rule = compatible_overprint_cmyk(
+                    source,
+                    &Component::ProcessCmyk,
+                    op,
+                    opm,
+                    source_cmyk[i],
+                );
+            }
+            out
+        }
+
+        // "Any process colour space" — every process component is `c_s`,
+        // in all three columns. Overprint is inert, which is why a
+        // DeviceRGB or DeviceGray paint with /OP true changes nothing.
+        SourceKind::OtherProcess => [ComponentRule::Source; 4],
+
+        SourceKind::SeparationOrDeviceN { names } => {
+            let mut out = [if op {
+                ComponentRule::Backdrop
+            } else {
+                // SP-N2: overprint OFF erases the colorants the source does
+                // not name. Stated twice in the standard; not a typo.
+                ComponentRule::Zero
+            }; 4];
+            for n in names {
+                match n {
+                    Colorant::All => return [ComponentRule::Source; 4],
+                    Colorant::None => {}
+                    Colorant::Named(name) => {
+                        if let Some(ch) = process_channel(name) {
+                            out[ch] = ComponentRule::Source;
+                        }
+                    }
+                }
+            }
+            out
+        }
+    }
+}
+
+/// Composite one overprinting paint into `pixmap` through `coverage`.
+///
+/// # Contract
+///
+/// * `coverage` is the anti-aliased coverage of the path being painted,
+///   already intersected with any clip in force. It must be the same
+///   dimensions as `pixmap`.
+/// * `source_cmyk` is the source colour expressed as subtractive tints.
+/// * `alpha` is the constant alpha (`CA`/`ca`) for this paint.
+/// * `region` is a device-space `(x0, y0, x1, y1)` bounding box, already
+///   clamped to the pixmap, limiting the scan to where coverage can be
+///   non-zero.
+///
+/// # Returns
+///
+/// The number of pixels whose value actually changed — the measurement the
+/// caller discloses. Zero is meaningful and is **not** a failure: it means
+/// overprint was requested and turned out to be a no-op on this geometry,
+/// which is a different fact from "overprint was not applied".
+///
+/// # Why this writes pixels directly rather than going through a `Paint`
+///
+/// `tiny_skia` composites in RGBA. Table 149 selects **per colour
+/// component in a subtractive space**, and there is no RGBA blend mode that
+/// expresses "keep the backdrop's cyan but take the source's magenta" —
+/// that is precisely the operation `CompatibleOverprint` exists to perform
+/// and precisely what a three-channel additive pipeline cannot say. So the
+/// blend is done here, per pixel, in CMYK.
+pub fn composite(
+    pixmap: &mut tiny_skia::Pixmap,
+    coverage: &tiny_skia::Mask,
+    rules: [ComponentRule; 4],
+    source_cmyk: [f32; 4],
+    alpha: f32,
+    region: (u32, u32, u32, u32),
+) -> u32 {
+    let width = pixmap.width();
+    let (x0, y0, x1, y1) = region;
+    let cov = coverage.data();
+    let mut changed = 0_u32;
+
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let idx = (y * width + x) as usize;
+            let c = f32::from(cov[idx]) / 255.0;
+            if c <= 0.0 {
+                continue;
+            }
+            // Coverage and constant alpha both scale HOW MUCH of the
+            // overprint result replaces what is there — antialiased edges
+            // and a `ca` of 0.5 attenuate identically.
+            let t = c * alpha;
+
+            let px = pixmap.pixels()[idx];
+            // `tiny_skia` stores premultiplied; demultiply to get the
+            // colour Table 149 reasons about. A fully transparent pixel
+            // has no meaningful colour, so it is treated as white paper —
+            // which is what an unpainted sheet is.
+            let a = f32::from(px.alpha()) / 255.0;
+            let (br, bg, bb) = if a <= 0.0 {
+                (1.0, 1.0, 1.0)
+            } else {
+                (
+                    f32::from(px.red()) / 255.0 / a,
+                    f32::from(px.green()) / 255.0 / a,
+                    f32::from(px.blue()) / 255.0 / a,
+                )
+            };
+
+            let backdrop = rgb_to_cmyk(br, bg, bb);
+            let mut out = [0.0_f32; 4];
+            for i in 0..4 {
+                out[i] = rules[i].apply(backdrop[i], source_cmyk[i]).clamp(0.0, 1.0);
+            }
+            let (nr, ng, nb) = cmyk_to_rgb(out);
+
+            // Interpolate between the backdrop and the overprint result by
+            // `t`, so partial coverage and partial alpha behave the way
+            // every other paint in the renderer does.
+            let fr = br + (nr - br) * t;
+            let fg = bg + (ng - bg) * t;
+            let fb = bb + (nb - bb) * t;
+            // The paint is opaque where it lands: overprint adds ink, it
+            // does not make the sheet more transparent. Alpha rises toward
+            // full by the same `t`.
+            let fa = a + (1.0 - a) * t;
+
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let enc = |v: f32| -> u8 { (v * fa * 255.0 + 0.5).clamp(0.0, 255.0) as u8 };
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let ea = (fa * 255.0 + 0.5).clamp(0.0, 255.0) as u8;
+
+            if let Some(np) =
+                tiny_skia::PremultipliedColorU8::from_rgba(enc(fr), enc(fg), enc(fb), ea)
+            {
+                if np != px {
+                    changed += 1;
+                }
+                pixmap.pixels_mut()[idx] = np;
+            }
+        }
+    }
+    changed
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
@@ -674,6 +951,157 @@ mod tests {
             ComponentRule::Zero,
             "SP-N2: this cell is 'paint 0.0', not 'paint source' and not 'do not \
              paint'. It is stated in both Table 148 and Table 149 and is NOT a typo",
+        );
+    }
+
+    /// ★ The round trip is EXACT, which is the property the whole
+    /// compositing approach rests on.
+    ///
+    /// pdfce has no separated CMYK buffer, so an overprint paint must
+    /// reconstruct the backdrop's CMYK from the composited RGB, blend, and
+    /// convert back. If that round trip were lossy, every pixel an
+    /// overprint paint merely *touched* would shift colour — including the
+    /// ones Table 149 says to leave alone. The feature would introduce
+    /// drift everywhere it was used.
+    ///
+    /// If this test ever fails, `composite` is unsafe to run and the right
+    /// response is to stop using it, not to widen the tolerance.
+    #[test]
+    fn rgb_survives_a_cmyk_round_trip_exactly() {
+        let mut worst = 0.0_f32;
+        for r in 0..=16 {
+            for g in 0..=16 {
+                for b in 0..=16 {
+                    let (rf, gf, bf) = (r as f32 / 16.0, g as f32 / 16.0, b as f32 / 16.0);
+                    let (or, og, ob) = cmyk_to_rgb(rgb_to_cmyk(rf, gf, bf));
+                    worst = worst
+                        .max((or - rf).abs())
+                        .max((og - gf).abs())
+                        .max((ob - bf).abs());
+                }
+            }
+        }
+        assert!(
+            worst < 1e-5,
+            "RGB -> CMYK -> RGB must be exact; worst error {worst} over 4913 colours. \
+             A lossy round trip would smear colour across every pixel an overprint \
+             paint touched, including the ones Table 149 preserves",
+        );
+    }
+
+    /// Pure black is the singular case of the conversion (the divisions are
+    /// 0/0) and must not produce NaN.
+    #[test]
+    fn pure_black_converts_without_dividing_by_zero() {
+        let cmyk = rgb_to_cmyk(0.0, 0.0, 0.0);
+        assert_eq!(cmyk, [0.0, 0.0, 0.0, 1.0]);
+        assert!(
+            cmyk.iter().all(|v| v.is_finite()),
+            "no NaN from the K=1 case"
+        );
+        let (r, g, b) = cmyk_to_rgb(cmyk);
+        assert!(r.abs() < 1e-6 && g.abs() < 1e-6 && b.abs() < 1e-6);
+    }
+
+    /// ★ The behaviour the whole feature exists for: cyan, then magenta
+    /// overprinted, gives blue rather than magenta.
+    ///
+    /// This is the one-sentence description of overprint, so it is worth
+    /// having as a test in exactly those terms. Without overprint the
+    /// magenta paint replaces all four colorants and the cyan is gone.
+    #[test]
+    fn magenta_over_cyan_gives_blue_only_with_overprint() {
+        let src = SourceKind::DeviceCmykDirect;
+        let backdrop_cyan = [1.0, 0.0, 0.0, 0.0];
+        let source_magenta = [0.0, 1.0, 0.0, 0.0];
+
+        // OPM 1: the source's zero cyan preserves the backdrop's full cyan.
+        let rules = cmyk_group_rules(&src, source_magenta, true, 1);
+        let mut out = [0.0_f32; 4];
+        for i in 0..4 {
+            out[i] = rules[i].apply(backdrop_cyan[i], source_magenta[i]);
+        }
+        assert_eq!(
+            out,
+            [1.0, 1.0, 0.0, 0.0],
+            "cyan + overprinted magenta must retain BOTH inks — that is what a \
+             press does and what the trap X in the Ghent patches detects",
+        );
+
+        // Overprint off: the paint knocks out everything it does not set.
+        let rules = cmyk_group_rules(&src, source_magenta, false, 0);
+        for i in 0..4 {
+            out[i] = rules[i].apply(backdrop_cyan[i], source_magenta[i]);
+        }
+        assert_eq!(
+            out,
+            [0.0, 1.0, 0.0, 0.0],
+            "without overprint the magenta paint replaces the cyan entirely",
+        );
+    }
+
+    /// A `DeviceN` naming a PROCESS colorant paints it, and preserves the
+    /// rest under overprint.
+    ///
+    /// Table 149 has no row for this — it splits only *spot* components by
+    /// whether the source names them — yet `/DeviceN [/Black] /DeviceCMYK`
+    /// is exactly how a file overprints black. Read literally the K channel
+    /// would take the "process component" row and be preserved from the
+    /// backdrop, i.e. the paint would paint nothing. `DN-A1` records the
+    /// area as contradictory. This pins pdfce's resolution so it is a
+    /// decision on record rather than an accident of match order.
+    #[test]
+    fn a_devicen_naming_black_paints_black_and_preserves_the_rest() {
+        let src = SourceKind::SeparationOrDeviceN {
+            names: vec![Colorant::Named("Black".to_owned())],
+        };
+        let rules = cmyk_group_rules(&src, [0.0, 0.0, 0.0, 1.0], true, 0);
+        assert_eq!(
+            rules,
+            [
+                ComponentRule::Backdrop,
+                ComponentRule::Backdrop,
+                ComponentRule::Backdrop,
+                ComponentRule::Source,
+            ],
+            "the named colorant is painted; the three it does not name survive",
+        );
+
+        // Case-insensitively, because SEP-A1 says the standard defines no
+        // matching rule at all and this is the least surprising one.
+        let lower = SourceKind::SeparationOrDeviceN {
+            names: vec![Colorant::Named("black".to_owned())],
+        };
+        assert_eq!(
+            cmyk_group_rules(&lower, [0.0, 0.0, 0.0, 1.0], true, 0),
+            rules
+        );
+    }
+
+    /// A genuine spot name claims no process channel.
+    #[test]
+    fn a_real_spot_colorant_claims_no_process_channel() {
+        let src = SourceKind::SeparationOrDeviceN {
+            names: vec![Colorant::Named("PANTONE 185 C".to_owned())],
+        };
+        assert_eq!(
+            cmyk_group_rules(&src, [0.0, 0.0, 0.0, 0.0], true, 0),
+            [ComponentRule::Backdrop; 4],
+            "a spot ink is not a process channel, so under overprint the whole \
+             CMYK backdrop survives",
+        );
+    }
+
+    /// `/All` paints every channel (§8.6.6.4).
+    #[test]
+    fn separation_all_paints_every_channel() {
+        let src = SourceKind::SeparationOrDeviceN {
+            names: vec![Colorant::All],
+        };
+        assert_eq!(
+            cmyk_group_rules(&src, [0.5; 4], true, 1),
+            [ComponentRule::Source; 4],
+            "/All refers collectively to ALL colorants, so nothing is preserved",
         );
     }
 

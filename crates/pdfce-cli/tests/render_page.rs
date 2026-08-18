@@ -459,11 +459,23 @@ fn renders_a_single_page_to_png_with_the_stable_stdout_line() {
             // the shortfall inside it.
             "groups_composited",
             "groups_knockout_approx",
-            // §8.6.7 overprint — tracked and reported, not simulated.
+            // §8.6.7 / §11.7.4.3 overprint. The comment here used to read
+            // "tracked and reported, not simulated", which stopped being
+            // true when `CompatibleOverprint` shipped — Table 149 is now
+            // applied per colour component rather than approximated by a
+            // Normal blend.
             "overprint_requested",
             "overprint_opm1",
-            // The subset of enabled overprint that is a real difference.
+            // The subset of enabled overprint that is a real difference,
+            // i.e. the set composited through Table 149.
             "overprint_effective",
+            // What ran, what could not, and how far it moved the page.
+            // `overprint_refused` is the shortfall an operator cannot see
+            // by looking at the output, which is why it is on the stable
+            // line rather than only in the verbose report.
+            "overprint_composited",
+            "overprint_refused",
+            "overprint_pixels",
         ],
         "metrics key order is part of the stable contract"
     );

@@ -6880,7 +6880,8 @@ img_colorant_none={} img_uncalibrated={} \
 blend_modes_applied={} blend_modes_ignored={} soft_masks_ignored={} \
 groups_flattened={} groups_special={} \
 groups_composited={} groups_knockout_approx={} \
-overprint_requested={} overprint_opm1={} overprint_effective={}",
+overprint_requested={} overprint_opm1={} overprint_effective={} \
+overprint_composited={} overprint_refused={} overprint_pixels={}",
         input.display(),
         output.display(),
         rendered.pixmap.width(),
@@ -7048,10 +7049,16 @@ overprint_requested={} overprint_opm1={} overprint_effective={}",
         // an ink model pdfce is not providing.
         d.overprint_requested,
         d.overprint_mode1_requested,
-        // The subset that is a REAL difference. `overprint_requested` is
-        // enabled far more often than it matters; this is the number that
-        // says whether the n-channel buffer would change this document.
+        // The subset that is a REAL difference: `overprint_requested` is
+        // enabled far more often than it matters, and this is the set that
+        // is composited through Table 149 rather than blended Normal.
         d.overprint_effective,
+        // What actually ran, what could not, and how much it moved.
+        // `overprint_refused` is the one to watch -- it is a shortfall the
+        // operator cannot detect by looking at the page.
+        d.overprint_composited,
+        d.overprint_refused,
+        d.overprint_pixels,
     );
     report_diagnostics(d);
 
