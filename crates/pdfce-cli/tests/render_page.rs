@@ -449,6 +449,14 @@ fn renders_a_single_page_to_png_with_the_stable_stdout_line() {
             "blend_modes_applied",
             "blend_modes_ignored",
             "soft_masks_ignored",
+            // §11.6.5 soft masks: what was applied, and the two
+            // shortfalls inside that. `soft_mask_tr_ignored` is the
+            // one an operator cannot see by looking — `/TR` is where
+            // a mask gets inverted, so an ignored one can show the
+            // content the document meant to hide.
+            "soft_masks_applied",
+            "soft_mask_tr_ignored",
+            "soft_masks_reset_stale",
             // §11.4.7 transparency groups — the third clause-11 gap, and
             // the one that explained why the Ghent blend-mode panel still
             // failed after blend modes were implemented and verified.

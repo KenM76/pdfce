@@ -109,7 +109,8 @@
 //!               unsupported_unknown_subtype=<e> unsupported_unusable_program=<f> \
 //!               supplied=<g> supplied_registered=<h> contents_unresolved=<i> \
 //!               images_masked=<j> images_mask_unsupported=<k> masks_resampled=<l> \
-//!               mattes_undone=<m> mattes_not_undone=<n> \n//!               oc_hidden=<o> \
+//!               mattes_undone=<m> mattes_not_undone=<n> \
+//!               oc_hidden=<o> \
 //!               cs_unresolved=<p> colors_not_set=<q> icc_alternate=<r> \
 //!               icc_device_fallback=<s> tint_applied=<t> tint_not_applied=<u> \
 //!               sep_all_approximated=<v> sep_none_suppressed=<w> \
@@ -6878,6 +6879,7 @@ indexed_clamped={} indexed_short={} shadings={} shadings_via_sh={} \
 shadings_paintable={} shadings_painted={} shadings_refused={} shadings_mesh={} \
 img_colorant_none={} img_uncalibrated={} \
 blend_modes_applied={} blend_modes_ignored={} soft_masks_ignored={} \
+soft_masks_applied={} soft_mask_tr_ignored={} soft_masks_reset_stale={} \
 groups_flattened={} groups_special={} \
 groups_composited={} groups_knockout_approx={} \
 overprint_requested={} overprint_opm1={} overprint_effective={} \
@@ -7030,6 +7032,15 @@ overprint_composited={} overprint_refused={} overprint_pixels={}",
         d.blend_modes_applied,
         d.blend_modes_ignored,
         d.soft_masks_ignored,
+        // §11.6.5 soft masks that were BUILT and applied, plus the two
+        // shortfalls inside that: a `/TR` transfer function not
+        // evaluated (which can leave visible exactly the content a
+        // document meant to hide, since `/TR` is where a mask is
+        // inverted), and a `/SMask /None` reset that could not restore
+        // the pre-mask clip because a `W n` intervened.
+        d.soft_masks_applied,
+        d.soft_mask_transfer_ignored,
+        d.soft_masks_reset_stale,
         // §11.4.7 transparency groups. Appended after every pre-existing
         // key. A group is a COMPOSITING SCOPE, so flattening it applies
         // blend/alpha/mask to each object inside instead of to the group's
@@ -10247,7 +10258,8 @@ fn cmd_list_printers() -> u8 {
 #[cfg(not(windows))]
 fn cmd_list_printers() -> u8 {
     eprintln!(
-        "pdfce-cli: printing is available on Windows only in this build \n         (docs/decisions/003-distribution-posture.md §4.1)"
+        "pdfce-cli: printing is available on Windows only in this build \
+         (docs/decisions/003-distribution-posture.md §4.1)"
     );
     exit::EDIT_REFUSED
 }

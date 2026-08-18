@@ -410,6 +410,20 @@ pub struct Diagnostics {
     /// to hide something, that is the difference between a rendering
     /// artefact and showing what was meant to be hidden.
     pub soft_masks_ignored: usize,
+    /// Soft masks BUILT and applied (§11.6.5). A census, not a shortfall.
+    pub soft_masks_applied: usize,
+    /// Soft masks carrying a `/TR` transfer function that was not applied.
+    ///
+    /// A shortfall the operator cannot see by looking: `/TR` is the natural
+    /// place to INVERT a mask, so an ignored one can show exactly the
+    /// content that should have been hidden.
+    pub soft_mask_transfer_ignored: usize,
+    /// `gs /SMask /None` resets that could not restore the pre-mask clip
+    /// exactly, because a `W n` intervened while the mask was in force.
+    ///
+    /// See `GraphicsState::clip_before_smask` for why this case exists and
+    /// why it is counted rather than silently mis-clipped.
+    pub soft_masks_reset_stale: usize,
     /// Structural oddities tolerated (unbalanced `Q`, missing current
     /// point, mid-path `cm`, operand type/count mismatches).
     pub tolerated: usize,
@@ -890,6 +904,9 @@ polarity unverifiable (decision 006 R30)",
         self.blend_modes_applied += other.blend_modes_applied;
         self.blend_modes_ignored += other.blend_modes_ignored;
         self.soft_masks_ignored += other.soft_masks_ignored;
+        self.soft_masks_applied += other.soft_masks_applied;
+        self.soft_mask_transfer_ignored += other.soft_mask_transfer_ignored;
+        self.soft_masks_reset_stale += other.soft_masks_reset_stale;
         self.tolerated += other.tolerated;
         self.glyphs_notdef += other.glyphs_notdef;
         self.glyphs_substituted += other.glyphs_substituted;
@@ -1518,7 +1535,7 @@ impl Interpreter<'_> {
             }
             b"d" => self.set_dash(op),
             b"i" | b"ri" => {} // flatness / rendering intent: recognized no-ops in Pass 1
-            b"gs" => self.apply_ext_gstate(op),
+            b"gs" => self.apply_ext_gstate(op, pixmap),
 
             // ---- device colours (Table 74, §8.6.4) ----
             //
@@ -2300,7 +2317,7 @@ impl Interpreter<'_> {
     /// `gs` — apply an ExtGState by name from the resource dictionary
     /// (Table 58; the honored subset per the RAG's triage: LW, LC, LJ,
     /// ML, D; everything else recognized-and-deferred).
-    fn apply_ext_gstate(&mut self, op: &Operation<'_>) {
+    fn apply_ext_gstate(&mut self, op: &Operation<'_>, pixmap: &Pixmap) {
         let name = op.operands.iter().rev().find_map(|t| match &t.kind {
             ContentTokenKind::Operand(Object::Name(n)) => Some(n.as_bytes()),
             _ => None,
@@ -2445,15 +2462,77 @@ impl Interpreter<'_> {
                 }
             }
         }
-        // `/SMask /None` is the RESET — it turns a soft mask off, which is
-        // exactly what pdfce already does, so it is not a shortfall.
-        if let Some(sm) = ext.get(b"SMask").map(|o| self.doc.resolve(o))
-            && !matches!(sm, Object::Name(n) if n.as_bytes() == b"None")
-            && !matches!(sm, Object::Null)
-        {
-            self.diag.soft_masks_ignored += 1;
-            self.diag
-                .note(b"gs /SMask: soft mask not implemented; marks painted unmasked");
+        // §11.6.5's soft mask. `/None` is the RESET (Table 58), and it is
+        // a real state change now that a mask can actually be in force.
+        if let Some(sm) = ext.get(b"SMask").map(|o| self.doc.resolve(o)) {
+            let is_none = matches!(sm, Object::Name(n) if n.as_bytes() == b"None")
+                || matches!(sm, Object::Null);
+            if is_none {
+                // Restore the clip as it stood before the mask was folded
+                // in. See `GraphicsState::clip_before_smask`: the mask was
+                // MULTIPLIED into the clip, so it cannot be divided back
+                // out and the pre-multiplication value has to be kept.
+                if let Some(saved) = self.gs.current.clip_before_smask.take() {
+                    if self.gs.current.clips_since_smask > 0 {
+                        // A `W n` landed while the mask was in force, so
+                        // the snapshot predates it and restoring would
+                        // discard that clip. Counted rather than silently
+                        // producing the wrong clip region.
+                        self.diag.soft_masks_reset_stale += 1;
+                        self.diag.note(
+                            b"gs /SMask /None after an intervening clip; \
+                              pre-mask clip not restored exactly",
+                        );
+                    } else {
+                        self.gs.current.clip = saved;
+                        self.gs.current.clip_bbox = None;
+                    }
+                }
+                self.gs.current.clips_since_smask = 0;
+            } else if let Some(dict) = sm.as_dict().cloned() {
+                match self.build_soft_mask(&dict, pixmap) {
+                    Some(mask) => {
+                        // Fold into the clip, which every paint site in
+                        // this renderer already honours. A soft mask
+                        // multiplies coverage exactly as a clip does, so
+                        // this is the operation, not an approximation of
+                        // it — §8.5.4 NOTE 2 guarantees a clip only ever
+                        // shrinks, and a mask only ever shrinks too.
+                        if self.gs.current.clip_before_smask.is_none() {
+                            self.gs.current.clip_before_smask = Some(self.gs.current.clip.clone());
+                            self.gs.current.clips_since_smask = 0;
+                        }
+                        let combined = match self.gs.current.clip.as_deref() {
+                            Some(old) => {
+                                let mut m = mask;
+                                let old_data = old.data().to_vec();
+                                for (n, o) in m.data_mut().iter_mut().zip(old_data.iter()) {
+                                    *n = ((u16::from(*n) * u16::from(*o)) / 255) as u8;
+                                }
+                                m
+                            }
+                            None => mask,
+                        };
+                        self.gs.current.clip = Some(std::sync::Arc::new(combined));
+                        // The mask covers the whole page, so any cached
+                        // clip bbox is now wrong in the direction that
+                        // culls too much. Dropping it costs a cull, which
+                        // is the safe side.
+                        self.gs.current.clip_bbox = None;
+                        self.diag.soft_masks_applied += 1;
+                    }
+                    None => {
+                        self.diag.soft_masks_ignored += 1;
+                        self.diag.note(
+                            b"gs /SMask: mask group could not be built; marks painted unmasked",
+                        );
+                    }
+                }
+            } else {
+                self.diag.soft_masks_ignored += 1;
+                self.diag
+                    .note(b"gs /SMask: not a dictionary; marks painted unmasked");
+            }
         }
         if let Some(v) = ext.get(b"CA").and_then(Object::as_number) {
             self.gs.current.stroke_alpha = (v as f32).clamp(0.0, 1.0);
@@ -2858,6 +2937,257 @@ impl Interpreter<'_> {
             // that is a known under-count rather than a claim of zero.
             _ => false,
         }
+    }
+
+    /// Build the soft mask a `gs` `/SMask` dictionary describes
+    /// (§11.6.5), or [`None`] if it cannot be built.
+    ///
+    /// # The contract, clause by clause
+    ///
+    /// * **§11.5.3** — a `/Luminosity` mask renders its group `/G` over a
+    ///   **fully opaque** backdrop of colour `/BC` (the spec's `α₀ = 1`),
+    ///   then takes the luminosity of the composite. The opacity of that
+    ///   backdrop is easy to miss and changes the answer for a
+    ///   non-isolated mask group.
+    /// * **Table 144** — `/BC`'s default is *"the colour space's initial
+    ///   value, representing black"*. Table 74 gives that value per space,
+    ///   and the trap is that it is all-zeros for RGB and Gray but
+    ///   `[0 0 0 1]` for `DeviceCMYK`. A renderer that defaults to "all
+    ///   zeros" therefore gets **black in RGB and pure WHITE in CMYK** — a
+    ///   mask wide open exactly where it should be shut. pdfce defaults to
+    ///   black *as a colour*, so the CMYK case is right by construction
+    ///   rather than by a special case that could be forgotten.
+    /// * **§11.6.5.2** — outside the group's bounding box the mask value is
+    ///   neither 0 nor 1: it is `TR(lum(BC))` for `/Luminosity` and
+    ///   `TR(0.0)` for `/Alpha`. Implemented by pre-filling the buffer with
+    ///   the backdrop *before* rendering the group into it, so "outside the
+    ///   bbox" is simply "where the group did not paint" and needs no case
+    ///   of its own. Under the defaults that value is 0 — everything
+    ///   outside a defaulted-`/BC` luminosity mask is fully masked out.
+    /// * **§11.5.3 NOTE 3** — device-space luminosity is
+    ///   `0.30 R + 0.59 G + 0.11 B`, with **no** gamma compensation. It is
+    ///   deliberately *not* Rec.709 (`0.2126/0.7152/0.0722`) and the values
+    ///   are deliberately *not* linearised first; the standard says so in
+    ///   as many words, and both "corrections" are tempting.
+    /// * **§11.6.5.2** — the mask's coordinate system is `/Matrix`
+    ///   concatenated with the CTM **at the moment the mask is established
+    ///   by `gs`**, not the CTM at paint time. Building the mask eagerly,
+    ///   here inside the `gs` handler, is what makes that true by
+    ///   construction. A lazily-evaluated mask would silently use the wrong
+    ///   matrix under any later `cm`.
+    /// * **Table 147** — `/CS` is *Required* in a luminosity mask group's
+    ///   attributes, precisely because such a group is rootless: it does
+    ///   **not** inherit the page group's colour space, and making it do so
+    ///   "for consistency" is a named error.
+    ///
+    /// # Not yet honoured, and counted rather than assumed away
+    ///
+    /// `/TR` (Table 144) is read and, when it is anything other than the
+    /// name `/Identity`, counted and disclosed. Evaluating it needs the
+    /// function machinery threaded into the render crate; until then a
+    /// document that inverts its mask through `/TR` gets the un-inverted
+    /// mask and **says so** rather than looking correct.
+    fn build_soft_mask(&mut self, sm: &Dict, pixmap: &Pixmap) -> Option<Mask> {
+        let doc = self.doc;
+        let subtype = match doc.resolve(sm.get(b"S")?) {
+            Object::Name(n) => n.as_bytes().to_vec(),
+            _ => return None,
+        };
+        let luminosity = subtype == b"Luminosity";
+        if !luminosity && subtype != b"Alpha" {
+            return None;
+        }
+
+        // Table 144: `/TR` is applied LAST, after the luminosity or alpha
+        // computation, once. Not implemented; disclosed.
+        if let Some(tr) = sm.get(b"TR").map(|o| doc.resolve(o))
+            && !matches!(tr, Object::Name(n) if n.as_bytes() == b"Identity")
+            && !matches!(tr, Object::Null)
+        {
+            self.diag.soft_mask_transfer_ignored += 1;
+            self.diag
+                .note(b"gs /SMask /TR: transfer function not applied; mask used untransformed");
+        }
+
+        let g_obj = doc.resolve(sm.get(b"G")?);
+        let Object::Stream(gs_stream) = g_obj else {
+            return None;
+        };
+        let g_dict = gs_stream.dict.clone();
+        let raw = doc.slice(gs_stream.data_span)?;
+        let bytes = filters::decode_stream(&g_dict, raw).ok()?;
+        let content = ContentStream::parse(bytes).ok()?;
+
+        let mut buf = Pixmap::new(pixmap.width(), pixmap.height())?;
+        if luminosity {
+            // §11.5.3's opaque backdrop. This fill is ALSO what makes
+            // "outside the BBox" correct, so it is not merely an
+            // initialisation.
+            buf.fill(self.soft_mask_backdrop(&g_dict, sm));
+        }
+
+        // §11.6.6: inside a group the blend mode is Normal, both alpha
+        // constants are 1.0 and the soft mask is None — "to ensure that
+        // they are not applied twice". That applies with particular force
+        // here, where applying the mask under construction to its own
+        // construction would be circular.
+        let mut inner = GraphicsState::default_with_ctm(self.gs.current.ctm);
+        // §8.10.2 step (b): concatenate /Matrix, THEN clip to /BBox in the
+        // already-transformed space. Same order as `do_form`.
+        if let Some(m) = matrix_entry(doc, &g_dict) {
+            inner.ctm = m.post_concat(inner.ctm);
+        }
+        if let Some(rect) = rect_entry(doc, &g_dict, b"BBox") {
+            if rect.width() <= 0.0 || rect.height() <= 0.0 {
+                // A degenerate BBox paints nothing, so the mask is the
+                // backdrop everywhere — which `buf` already holds.
+                return Self::mask_from_buffer(&buf, luminosity, pixmap);
+            }
+            let path = PathBuilder::from_rect(rect);
+            let form_ctm = inner.ctm;
+            intersect_clip(
+                &mut inner,
+                &path,
+                FillRule::Winding,
+                form_ctm,
+                pixmap,
+                &mut self.clip_cache,
+            );
+        }
+
+        let resources = match g_dict
+            .get(b"Resources")
+            .map(|o| doc.resolve(o))
+            .and_then(Object::as_dict)
+        {
+            Some(own) => own,
+            None => self.resources,
+        };
+
+        let nested = run_nested(
+            doc,
+            &content,
+            resources,
+            self.fonts,
+            inner,
+            &mut buf,
+            self.depth + 1,
+            // The mask group's own recursion guard set. Cloned rather than
+            // borrowed because `self` is already mutably borrowed here; a
+            // mask group is built once per `gs`, not per paint, so the
+            // clone is not on a hot path. It must still be a REAL copy of
+            // the active set, not an empty one, or a form that invokes
+            // itself through a soft mask would recurse unguarded.
+            self.active.clone(),
+            self.cancel,
+            self.policy,
+            false,
+        );
+        self.diag.merge(nested);
+        Self::mask_from_buffer(&buf, luminosity, pixmap)
+    }
+
+    /// Turn a rendered mask-group buffer into per-pixel mask coverage.
+    ///
+    /// Split out so the degenerate-`/BBox` path and the ordinary path
+    /// cannot disagree about the conversion — the two differ only in
+    /// whether anything was painted into the buffer.
+    fn mask_from_buffer(buf: &Pixmap, luminosity: bool, pixmap: &Pixmap) -> Option<Mask> {
+        let mut mask = Mask::new(pixmap.width(), pixmap.height())?;
+        let data = mask.data_mut();
+        for (i, px) in buf.pixels().iter().enumerate() {
+            let a = f32::from(px.alpha()) / 255.0;
+            let v = if luminosity {
+                // Un-premultiply, then §11.5.3 NOTE 3's device formula.
+                // Weights 0.30/0.59/0.11, values NOT linearised — the
+                // standard forbids gamma compensation here explicitly.
+                let (r, g, b) = if a <= 0.0 {
+                    (0.0, 0.0, 0.0)
+                } else {
+                    (
+                        f32::from(px.red()) / 255.0 / a,
+                        f32::from(px.green()) / 255.0 / a,
+                        f32::from(px.blue()) / 255.0 / a,
+                    )
+                };
+                0.30_f32.mul_add(r, 0.59_f32.mul_add(g, 0.11 * b))
+            } else {
+                a
+            };
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            {
+                *data.get_mut(i)? = (v.clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+            }
+        }
+        Some(mask)
+    }
+
+    /// The opaque backdrop colour a `/Luminosity` mask composites over.
+    ///
+    /// Table 144's `/BC`, defaulting to the group colour space's initial
+    /// value — black in every space Table 74 defines, which is why the
+    /// fallback here is literally black rather than "all components zero".
+    /// Those are the same thing in RGB and Gray and **opposite** things in
+    /// `DeviceCMYK`, where all-zeros is white.
+    fn soft_mask_backdrop(&mut self, g_dict: &Dict, sm: &Dict) -> tiny_skia::Color {
+        let doc = self.doc;
+        let black = tiny_skia::Color::BLACK;
+        let Some(arr) = sm
+            .get(b"BC")
+            .map(|o| doc.resolve(o))
+            .and_then(Object::as_array)
+        else {
+            return black;
+        };
+        let comps: Vec<f32> = arr
+            .iter()
+            .filter_map(|o| doc.resolve(o).as_number())
+            .map(|v| v as f32)
+            .collect();
+        if comps.is_empty() {
+            return black;
+        }
+        // Table 147 makes `/CS` Required for a luminosity mask group, and
+        // it is the space `/BC`'s components are expressed in. A mask group
+        // does NOT inherit the page group's space — it is rootless, which
+        // is exactly why `/CS` is Required rather than Optional.
+        //
+        // Resolved by COMPONENT COUNT rather than by loading the space.
+        // `/BC` is optional and rare, its default (black) is already
+        // correct for every space Table 74 lists, and the only thing that
+        // matters when it IS present is the polarity trap: four components
+        // are subtractive, so `[0 0 0 1]` is black and `[0 0 0 0]` is
+        // white. One and three components are additive and zero is black
+        // in both. Anything else is disclosed rather than guessed.
+        let has_cs = g_dict
+            .get(b"Group")
+            .map(|o| doc.resolve(o))
+            .and_then(Object::as_dict)
+            .is_some_and(|g| g.contains_key(b"CS"));
+        if !has_cs {
+            self.diag.tolerated += 1;
+            self.diag
+                .note(b"gs /SMask /BC without group /CS (Required, Table 147)");
+        }
+        let (r, g, b) = match *comps.as_slice() {
+            [v] => (v, v, v),
+            [r, g, b] => (r, g, b),
+            // Subtractive: the naive complement is right for the polarity
+            // question, which is all this is used for.
+            [c, m, y, k] => (
+                (1.0 - c) * (1.0 - k),
+                (1.0 - m) * (1.0 - k),
+                (1.0 - y) * (1.0 - k),
+            ),
+            _ => {
+                self.diag.tolerated += 1;
+                self.diag
+                    .note(b"gs /SMask /BC with unhandled component count - assuming black");
+                return black;
+            }
+        };
+        tiny_skia::Color::from_rgba(r.clamp(0.0, 1.0), g.clamp(0.0, 1.0), b.clamp(0.0, 1.0), 1.0)
+            .unwrap_or(black)
     }
 
     /// Paint one path with `CompatibleOverprint` instead of `Normal`.

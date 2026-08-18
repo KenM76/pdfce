@@ -1,41 +1,71 @@
 ---
 name: wrapped-string-literals-lose-backslashes
-description: Patching Rust multi-line string literals through heredocs/scripts silently drops the trailing backslash, shipping error messages with 10-space gaps mid-sentence
+description: Never patch a Rust line-continuation backslash via a heredoc/python -c — it becomes a literal \n. Use the Edit tool. Happened four times in one session.
 metadata:
   type: feedback
 ---
 
-When a Rust string literal is wrapped across source lines, the trailing
-`\` is what suppresses the next line's indentation. Patch that literal
-through a shell heredoc, a Python string, or any other layer that eats one
-level of escaping, and the `\` disappears — the code still compiles, the
-tests still pass, and the shipped message reads
-`"…enforced          (ISO 32000-1 §12.8.4…"`.
+# Never patch a Rust `\`-continuation through a heredoc. Use Edit.
 
-**Why:** it bit four literals in one session (2026-08-17, pdfce
-`set_markup_style` / `set_media_box`), and a grep then found **two
-pre-existing ones shipped since `95c3416`** — an attachment refusal and
-the DocMDP certification refusal — plus two more in
-`text_edit/encoding.rs`. Nothing caught them for months, because nothing
-*can*: `cargo fmt` does not reflow string contents, clippy has no lint for
-it, and a test that asserts on the message compares it against another
-copy of the same broken string. It surfaced only by **running the CLI and
-reading the output**.
+Rust wraps a long string literal with a **backslash at end of line**, which
+strips the newline and the next line's leading whitespace:
 
-**How to apply:**
+```rust
+"pdfce-cli: printing is available on Windows only in this build \
+ (docs/decisions/003-distribution-posture.md §4.1)"
+```
 
-1. After patching any file containing wrapped literals, grep for the
-   signature before declaring done:
-   `grep -rn '"[^"]*[a-z,.] \{3,\}[a-zA-Z]' crates/ --include=*.rs`
-   Filter out `///` doc lines and deliberate column alignment
-   (`"skip   field="`); everything else is a hit.
-2. Prefer the Write tool over `python - <<'PY'` heredocs when the payload
-   contains backslashes — this is the same hazard as
-   [[windows-paths-need-literal-edits]], which already says *any*
-   backslash breaks heredoc patching, not just path separators. This is
-   the Rust-escape half of that rule, and it was learned again the hard
-   way.
-3. A message duplicated in two modules will have a mirror test
-   (`add_text_certification_message_is_a_verbatim_mirror_of_edit_error`).
-   Fixing one copy turns it red — that is the test working, not a
-   regression. Fix both.
+Patching that construct with `python - <<'PYEOF'` or `sed` **reliably
+corrupts it**, in one of two ways:
+
+1. The backslash is **lost**, so the two fragments concatenate with the
+   second line's indentation baked in — a shipped message with a
+   ten-space gap mid-sentence.
+2. The backslash survives but the newline does not get escaped through the
+   layers, so the source ends up containing a **literal `\n` two-character
+   sequence** in the middle of the format string — which Rust then renders
+   as a REAL newline at runtime.
+
+**Why:** the payload crosses shell → heredoc → Python string literal → file,
+and each layer has its own opinion about `\`. Getting `\\\n` to arrive as
+backslash-plus-newline requires counting escapes correctly through all four,
+and I have now got it wrong four times in a single session.
+
+**How to apply:** the moment a patch touches a `\` at end of line inside a
+Rust string — or any Rust escape at all — **stop and use the Edit tool**, or
+write a script *file* with the Write tool (no shell layer). Never `sed`, never
+`python - <<EOF`, never `echo`.
+
+## The failure is invisible to every gate except one
+
+`cargo build`, `cargo clippy` and `cargo fmt --check` are all **completely
+silent** on both corruptions: the literal is still a valid literal, it just
+says the wrong thing. Nothing type-checks a sentence.
+
+The only thing that has ever caught it is `pdfce-cli`'s
+**stable-stdout-line test**, and only because that test asserts stdout is
+*exactly one LF-terminated line*. Outside that one contract the corruption
+ships.
+
+**So: after any edit to an operator-facing string, grep for it.**
+
+```bash
+# literal \n embedded mid-string (the runtime-newline form)
+grep -rn '\\\\n' crates/*/src/*.rs | grep -v '"\\\\n"'
+# ragged multi-space gap (the lost-backslash form)
+grep -rn '"[^"]*[a-z,.] \{4,\}[a-zA-Z(]' crates/*/src/*.rs
+```
+
+The second sweep's hits are mostly `assert!` messages in tests, which are
+harmless; the ones that matter are anything reachable by an operator.
+
+## The specific trap: a "fix" that re-introduces the bug
+
+On 2026-08-18 I found the ten-space-gap form in `cmd_list_printers`' message,
+fixed it **with a heredoc**, and thereby created the literal-`\n` form in the
+same string. It shipped in that state and was caught hours later by the
+stable-line test failing for an unrelated reason. **Repairing this bug with
+the tool that causes it is the actual trap**, not the original mistake.
+
+Related: [[windows-paths-need-literal-edits]] — same root cause (backslashes
+crossing shell layers), same fix (Edit, or a written script file).

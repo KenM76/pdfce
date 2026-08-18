@@ -244,6 +244,33 @@ pub struct GraphicsState {
     /// `GraphicsState` non-`Send` for a saving of one non-atomic
     /// increment per `q`.
     pub clip: Option<std::sync::Arc<tiny_skia::Mask>>,
+    /// The clip as it stood BEFORE a soft mask was folded into it, or
+    /// [`None`] when no soft mask is in force.
+    ///
+    /// §11.6.5's soft mask multiplies every paint's coverage, which is
+    /// exactly what [`Self::clip`] already does at every paint site in the
+    /// renderer — so a soft mask is applied by multiplying it into the clip
+    /// rather than by threading a second mask through ten call sites.
+    ///
+    /// That leaves one thing to undo: `gs` with `/SMask /None` **resets**
+    /// the soft mask (Table 58), and a mask already multiplied into the
+    /// clip cannot be divided back out. This holds the pre-multiplication
+    /// clip so the reset can restore it exactly.
+    ///
+    /// Saved and restored by `q`/`Q` along with the rest of the state, so
+    /// the common `q … gs … Q` shape needs no help from it at all.
+    ///
+    /// KNOWN LIMIT, disclosed rather than hidden: a `W n` clip established
+    /// **while** a soft mask is in force updates [`Self::clip`] but not
+    /// this snapshot, so a subsequent `/SMask /None` in the same `q` level
+    /// would restore a clip that predates that `W n`. The renderer counts
+    /// that case (`soft_masks_reset_stale`) instead of silently producing
+    /// the wrong clip.
+    pub clip_before_smask: Option<Option<std::sync::Arc<tiny_skia::Mask>>>,
+    /// Number of clips established since the soft mask was set, used only
+    /// to detect the stale-restore case described on
+    /// [`Self::clip_before_smask`].
+    pub clips_since_smask: u32,
     /// Device-space bounding box of [`Self::clip`]'s non-zero region, as
     /// `(left, top, right, bottom)`. `None` exactly when `clip` is.
     ///
@@ -285,6 +312,8 @@ impl GraphicsState {
             overprint_fill: false,
             overprint_mode: 0,
             clip: None,
+            clip_before_smask: None,
+            clips_since_smask: 0,
             clip_bbox: None,
             text: crate::text::TextState::default(),
         }
