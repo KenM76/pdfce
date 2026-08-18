@@ -523,3 +523,76 @@ fn the_non_separable_modes_are_refused_not_silently_wrong() {
         );
     }
 }
+
+/// **Isolated and non-isolated groups differ, and this is the fixture that
+/// can tell them apart.**
+///
+/// The page paints blue. A group then paints red with `/BM /Screen` INSIDE
+/// it. What the red screens against depends entirely on `/I` (Table 96):
+///
+/// - `/I true` (isolated): the group's initial backdrop is TRANSPARENT, so
+///   the red has nothing to blend with and stays red. The group's result is
+///   then composited over the blue normally — still red.
+/// - `/I false` (the DEFAULT, non-isolated): the group's initial backdrop
+///   is the page, so the red screens against BLUE and comes out magenta.
+///
+/// pdfce buffers a group only when buffering changes the answer — a
+/// non-isolated group under a neutral outer state is painted inline, which
+/// IS the non-isolated semantics rather than an approximation of them. That
+/// optimisation and this correctness property are the same decision, so
+/// this test guards both: break the buffering condition in either direction
+/// and one of these two assertions fails.
+#[test]
+fn an_isolated_group_blends_against_transparency_a_non_isolated_one_against_the_page() {
+    let render_with = |iso: &str| {
+        let content = "0 0 1 rg 10 10 40 40 re f /Fm0 Do";
+        let stream = format!(
+            "{content}
+"
+        );
+        let form_body = "/GS0 gs 1 0 0 rg 10 10 40 40 re f";
+        let form = format!(
+            "<< /Type /XObject /Subtype /Form /BBox [0 0 60 60]              /Group << /S /Transparency {iso} >> /Resources              << /ExtGState << /GS0 << /Type /ExtGState /BM /Screen >> >> >>              /Length {} >>
+stream
+{form_body}
+endstream",
+            form_body.len()
+        );
+        let bytes = build(&[
+            (1, "<< /Type /Catalog /Pages 2 0 R >>"),
+            (
+                2,
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 60 60] >>",
+            ),
+            (
+                3,
+                "<< /Type /Page /Parent 2 0 R /Contents 4 0 R /Resources                  << /XObject << /Fm0 5 0 R >> >> >>",
+            ),
+            (
+                4,
+                &format!(
+                    "<< /Length {} >>
+stream
+{stream}endstream",
+                    stream.len()
+                ),
+            ),
+            (5, &form),
+        ]);
+        let r = render(bytes);
+        let p = r.pixmap.pixel(30, 30).expect("in bounds").demultiply();
+        (p.red(), p.green(), p.blue())
+    };
+
+    let (ir, ig, ib) = render_with("/I true");
+    assert!(
+        ir > 250 && ig < 5 && ib < 5,
+        "an ISOLATED group's contents see a transparent backdrop, so the          red survives its own Screen: expected red, got ({ir}, {ig}, {ib})"
+    );
+
+    let (nr, ng, nb) = render_with("");
+    assert!(
+        nr > 250 && ng < 5 && nb > 250,
+        "a NON-isolated group's contents see the page, so the red screens          against blue: expected magenta, got ({nr}, {ng}, {nb})"
+    );
+}

@@ -3056,7 +3056,18 @@ impl Interpreter<'_> {
         // pixel per nesting level and needs no coordinate change at all,
         // which is the difference between a correct implementation and a
         // subtly-misaligned one.
-        let mut group_buf = if is_transparency_group {
+        //
+        // WHEN a buffer is needed, and why "always" is both slower AND less
+        // correct. A buffer starts TRANSPARENT, which is ISOLATED semantics
+        // (§11.4.7). `/I` defaults to FALSE, so most groups are
+        // NON-isolated and their contents are meant to blend against the
+        // page backdrop — precisely what painting inline does. Buffering
+        // unconditionally gets those wrong in the opposite direction from
+        // flattening, and costs a page-sized allocation to do it.
+        let outer_is_neutral = self.gs.current.blend_mode == tiny_skia::BlendMode::SourceOver
+            && self.gs.current.fill_alpha >= 1.0;
+        let needs_buffer = is_transparency_group && (!outer_is_neutral || group_flag(b"I"));
+        let mut group_buf = if needs_buffer {
             Pixmap::new(pixmap.width(), pixmap.height())
         } else {
             None
@@ -3107,15 +3118,19 @@ impl Interpreter<'_> {
                 );
                 self.diag.transparency_groups_composited += 1;
             }
-            None => {
-                if is_transparency_group {
-                    // Allocation failed — the only way to get here. Fall
-                    // back to the old flattening behaviour rather than
-                    // dropping the content, and count it as the shortfall
-                    // it is.
-                    self.diag.transparency_groups_flattened += 1;
-                }
+            None if needs_buffer => {
+                // Allocation failed. Fall back to painting inline rather
+                // than dropping the content, and count it as the shortfall
+                // it is.
+                self.diag.transparency_groups_flattened += 1;
             }
+            None if is_transparency_group => {
+                // A non-isolated group under a neutral outer state. Painting
+                // inline IS the §11.4.5 answer here, not an approximation of
+                // it, so this counts as composited rather than flattened.
+                self.diag.transparency_groups_composited += 1;
+            }
+            None => {}
         }
         self.diag.forms_rendered += 1;
 
