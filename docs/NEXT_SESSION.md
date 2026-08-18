@@ -107,6 +107,59 @@ enumerating the five things the reply must cover.
 
 ---
 
+## ★★ TWO MORE REQUESTS LANDED AT 19:22 AND 19:23 — three minutes after the
+## commit that fixed the first one
+
+```
+request_a_placed_ce_dimension_cannot_be_moved_to_another_group.md
+request_a_dimension_group_can_be_created_and_never_renamed_or_deleted.md
+```
+
+Found by `ls`-ing the channel per `R196`, **not** by inheriting the previous
+filing's "one open request". That is the rule earning its keep within hours of
+being minted, and it is the reason the count in any handoff — including this
+one — is hearsay until re-listed.
+
+**Both verified against the source rather than taken on trust:**
+`grep -cE "pub fn (rename_dimension_group|delete_dimension_group|set_dimension_group|move_dimension_to_group)"`
+returns **0**. `add_dimension_group` exists at `edit.rs:17692`,
+`add_dimension` takes its `GroupId` at creation (`17549`), and nothing ever
+changes it.
+
+### ★ They are the SAME SHAPE as the `insert_pages` request, and that is the story
+
+All three are *"missing members of a shipped cluster"* — the requester's own
+phrase, and precisely the `R151` qualifier their operator articulated. Not
+speculative features; the absent members of clusters pdfce already ships and
+`FEATURES.md` already ticks. Three in one day suggests the pattern is
+systematic rather than coincidental, and the honest question for next session
+is **whether other shipped clusters have the same holes and nobody has hit
+them yet.** A sweep for verbs that create a thing without a verb to rename,
+re-parent or delete it would answer that cheaply.
+
+### My parse, for whoever scopes them
+
+- **`set_dimension_group(DimensionId, GroupId)`** — not a field assignment. A
+  ce dimension's *appearance* derives from its group's scale, precision, units
+  and standard, so re-parenting must **re-measure and re-bake the `/AP`**, and
+  it must be ONE undo entry. The refusal cases are the interesting part: a
+  target group on a different page, and a group whose unit is incompatible.
+- **`rename_dimension_group(GroupId, &str)`** — small, and the only question
+  is whether names must stay unique. If they do, that is a refusal with a
+  name; if not, say so, because a UI listing two identical groups is a
+  discoverability defect the shell cannot fix.
+- **`delete_dimension_group(GroupId, …)`** — ★ **this is the orphan question
+  again, in a second place.** What becomes of the dimensions in the group?
+  Reassign to a default, delete with it, or refuse while non-empty. The
+  `insert_pages` answer generalises: **report and refuse to guess**, with the
+  count, rather than picking a fate silently. Whatever is chosen here should
+  match `Pass 102.0`'s shape so a shell learns one convention rather than two.
+
+The librarian filed all three **unscoped, with no Pass ID claimed** — parsing
+them into Passes is the engineer's act and has not been done.
+
+---
+
 ## §1 — WHAT SHIPPED 2026-08-18 (this session)
 
 | commit | |

@@ -96,6 +96,81 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `5d8eab5` — **THE GATE WRITTEN TO CATCH A STALE COUNT SHIPPED WITH THE STALE COUNT TEN LINES AWAY: `check-core-api-verbs.py` WIDENED FROM ONE FILE TO THE WHOLE DIRECTORY, AND ITS FIRST WIDENED RUN FOUND A *THIRD* STALE FIGURE INSIDE THE FILE ALREADY FIXED. `docs/core-api/` OWNERSHIP RULED TO `pdfce-engineer`** — no Pass ID, no decision minted; commit `5d8eab5` touches `.claude/agents/pdfce-engineer.md`, `docs/core-api/index.md`, `docs/core-api/02-editing-and-saving.md` and `tools/check-core-api-verbs.py` (plus this role's uncommitted `docs/` work, swept in — see the note below), and is cited here to satisfy `check-commits-filed.py` — filed 2026-08-18 (hundred-and-eighty-sixth filing)
+
+**No Pass ID, no decision record.** Same disposition as `e11b4f8` /
+`3e3019a` / `dbec60a` / `bd861a0` / `3f8cc1e` / `e194b46`: nothing gained a
+capability, nothing was designed. An instrument was widened and four
+published figures were corrected.
+
+**What it closed.** The 185th filing's hard-rule-11 sweep reported one
+survivor — `docs/core-api/index.md:16`, still reading `all 108 public
+verbs`, the directory's front door and the one file the new gate did not
+read. That is now `116`, and the gate reads it.
+
+**★ The instrument inherited the bug it was built to catch.**
+`check-core-api-verbs.py`'s input set was a single constant,
+`DOC = … "02-editing-and-saving.md"` — *the file being corrected when the
+gate was written*. It went green while the adjacent file stated the number
+the gate exists to defend. It now scans **every `*.md` under
+`docs/core-api/`** and checks **every stated count wherever it appears**,
+not only the index's own `Count: N`.
+
+**★★ And the widened gate immediately found a THIRD stale figure the
+engineer's own re-reading had missed:** `02-editing-and-saving.md:13`, a
+front-matter table row reading *"all 108 public methods"* — **in the file
+he had corrected an hour earlier.** Four stated counts existed in the
+directory; one had been fixed. All four now read `116`, and
+`tools/check-core-api-verbs.py` is green at `HEAD` (run this filing:
+`116 public EditSession method(s)`, blocks `43 + 51 + 21 + 1`).
+
+**Figures corrected in `index.md`, all re-measured by the engineer with
+`wc -l` rather than relayed from the 185th filing's report** — which is
+the right instinct and is recorded because a relayed measurement is a
+different kind of fact from a performed one:
+
+| `index.md` figure | was | now | verified this filing (`wc -l`) |
+|---|---:|---:|---:|
+| `01-reading-and-model.md` | 2,215 | **2,223** | 2,223 ✓ |
+| `02-editing-and-saving.md` | 1,419 | **1,550** | 1,550 ✓ |
+| `03-capabilities.md` | 1,982 | **2,079** | 2,079 ✓ |
+| verb count | 108 | **116** | 116 ✓ (gate) |
+| derivation anchor | `e6609bc` | **`e194b46`** | — |
+
+`index.md` also gained a short blockquote explaining **why** the count
+lasted, so the next reader meets the reasoning rather than only the new
+number. That is `R197` applied to itself.
+
+**OWNERSHIP RULED — see *Standing rules*.** `docs/core-api/` is owned by
+**`pdfce-engineer`**; the obligation is now an `always` in that role file,
+triggered by any Pass adding or changing a `pub` item on `EditSession` /
+`DocumentView` / the capability surface, and it names
+`tools/check-core-api-verbs.py` as the check. The 185th filing drafted this
+as a proposal and declined to assign the engineer an obligation; the
+engineer accepted it essentially as drafted. The `### PROPOSED …` heading
+in *Standing rules* has been converted to its ruled form, attributed and
+dated.
+
+**A THIRD LIMIT is now stated in the gate's header** (the 185th filing's
+`R192`-shaped finding): **it defends `EditSession` only.** `DocumentView`,
+the free functions and `pdfce-render`'s public surface are undefended, and
+a green run says nothing about them. The header also records that the
+gate's single-file scope was a **live** defect rather than a hypothetical
+one — which is the most instructive instance of the day, because *the
+instrument inherited the bug it was built to catch*.
+
+**★ Why this commit's diff carries `docs/ROADMAP.md` (+364) and
+`docs/SESSION_LOG.md` (+245) while discussing neither.** Those are the
+**185th filing's own uncommitted edits**, swept up by `git add`. The
+engineer confirms he has **not touched `ROADMAP.md`, `FEATURES.md`,
+`SESSION_LOG.md` or `ARCHITECTURE.md` at any point on 2026-08-18** — where
+they appear in his commits it is this role's work being carried along, and
+it happened **twice today** (`e194b46`, `5d8eab5`). History was
+deliberately not amended (hard rule 1). **Recorded once, here, as a shape
+to avoid rather than something to correct in history:** a code commit whose
+diff includes documentation it does not mention invites a future reader to
+infer an authorship that did not happen.
+
 ### `e194b46` — **THE CONSUMER-FACING API DOCUMENT WAS EIGHT VERBS BEHIND AND SAID SO WITH A PRECISE, DERIVED, STALE COUNT — `108 → 116`, PLUS A NEW GATE THAT RE-PERFORMS THE DERIVATION. Closes all three survivors of the 184th filing's hard-rule-11 sweep, and this filing's own sweep finds a FOURTH the new gate structurally cannot see** — no Pass ID, no decision minted; commit `e194b46` touches `crates/pdfce-core/src/edit.rs`, `crates/pdfce-render/examples/guard_probe.rs`, `docs/core-api/02-editing-and-saving.md` and `tools/check-core-api-verbs.py`, and is cited here to satisfy `check-commits-filed.py` — filed 2026-08-18 (hundred-and-eighty-fifth filing)
 
 **Filed by `pdfce-librarian` WITH a shell (hard rule 8).** Every source-text
@@ -51017,6 +51092,93 @@ in the "still open" list. Full build record: this file's own
 
 ## Next up
 
+### ★★★★★ OWED TO THE NEXT SESSION — the 186th filing's convergence list, put HERE because `docs/NEXT_SESSION.md` is OVERWRITTEN each session and this file is not — opened 2026-08-18 (hundred-and-eighty-sixth filing)
+
+**Why this box exists at all.** The dispatching engineer asked explicitly
+that the two channel obligations be carried in `ROADMAP.md` *"since that
+is the document that survives a handoff being overwritten."* He is right,
+and the reasoning generalises past those two: **`docs/NEXT_SESSION.md` is
+a handoff, not a record.** It is rewritten wholesale at the start of each
+session, so anything whose only home is that file has a lifetime of one
+session by construction. Everything below was found by the 186th filing's
+own sweep or carried forward from the 185th, and **none of it was fixed** —
+this is a convergence filing, deliberately closed rather than held open.
+
+**Every item is REPORTED, not edited.** Items 1–3 touch `docs/core-api/`
+and `crates/`, both outside this role's remit.
+
+| # | owed | where | found by | evidence |
+|---|---|---|---|---|
+| **1** | **★★ 1,046 `path:line` citations anchored at `7031296` (2026-08-13) and never re-derived** | `docs/core-api/01-`, `02-`, `03-` | 186th sweep | `grep -o "\.rs:[0-9]\+" \| wc -l` → 458 / 191 / 397. Spot-check: `dimension_model` cited `edit.rs:15361`, actual **17530** (+2,169); that line is unrelated form-field code today. |
+| **2** | **★ `02-editing-and-saving.md:12` states `edit.rs` is 20,939 lines** | that line | 186th sweep | `wc -l crates/pdfce-core/src/edit.rs` → **24,826**. A **fifth** stale figure in the directory, **one line above the row `5d8eab5` corrected**, and the gate cannot see it — it checks verb counts, not file sizes. |
+| **3** | **The three parts still say "Verified against `7031296`" while `index.md` now says `e194b46`** | `01-`/`02-`/`03-` front matter vs `index.md` | 186th sweep | Two files in one directory now disagree about which commit it was derived at. Part 2 was *materially edited* at `e194b46` (eight verbs added) and its own anchor was not moved. |
+| **4** | **`index.md`'s citation tallies do not reconcile with a naive count and state no method** | `index.md:16–17` | 186th sweep | Says *"382 verified citations"* / *"128 citations"*; `grep -o "\.rs:[0-9]\+" \| wc -l` gives **458** / **191**. **NOT asserted as wrong** — "verified citations" may count something narrower. Asserted only as **not re-derivable by a reader**, which is the `R197` failure in its milder form. |
+| **5** | **★★ A REPLY TO `pdfceGUI` IS STILL OWED** — `request_insert_pages_leaves_orphaned_widgets_and_has_no_route_back_for_outlines.md` | `D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\` | carried 184th → 185th → **186th** | Third consecutive filing. `e194b46` supplies most of the material verbatim; **it is not the reply.** Channel re-established by `ls` this filing (`R196`): the file is dated **2026-08-18 15:19** and still open. |
+| **6** | **★★ `note_gray_black_routing_is_yours.md` STILL UNREAD** | `D:\Dev\FeatureRequests\iccce_FeatureRequests\open\` | carried forward | `ls` this filing: dated **2026-08-18 01:37**, 13,543 bytes — **the largest open note in that channel.** Named by the engineer in this dispatch as owed. |
+| **7** | **CI runs 5 of 14 `tools/check-*` gates** | `.github/workflows/*.yml` | 186th sweep | See the correction note below. |
+
+**★ A CORRECTION THIS FILING OWES ITS OWN PREDECESSOR, sourced per hard
+rule 10's corollary (*a correction is a claim, and must name its
+world-source*).** The 185th filing recorded *"CI runs **3 of 16**
+`tools/check-*` scripts."* **Both halves are wrong.** By `ls tools/check-*`
+there are **14** scripts, not 16; by
+`grep -ho "tools/check-[a-z-]*\.\(py\|sh\)" .github/workflows/*.yml | sort -u`
+CI invokes **5**, not 3 — `check-fmt-excluded.py` and
+`check-shipped-assets.py` were missed. **So the ratio is 5 of 14 (36%),
+not 3 of 16 (19%)** — the situation is better than filed, which is the
+direction of error that never gets challenged. The nine not in CI:
+`bypass-paths`, `core-api-verbs`, `image-colorspace-truth`,
+`ledger-numbers`, `one-commit-per-command`, `passes-filed`,
+`settings-consumed`, `string-gaps`, `theme-colors`. **Recorded, not
+escalated** — wiring is the engineer's act.
+
+### ★★ INBOUND FROM `pdfceGUI` 2026-08-18 19:22–19:23 — TWO NEW ce-DIMENSION REQUESTS, ARRIVING *THREE MINUTES AFTER* `5d8eab5` AND UNSEEN BY ANY EARLIER FILING — **NO PASS ID CLAIMED; the parse is the engineer's act. Ceiling stays 103 (highest `103.3`), next free 104.**
+
+**How these were found, which is the point worth carrying.** Not by
+anybody reporting them — by this filing running `ls` on the channel per
+`R196` instead of inheriting the 185th filing's *"one request open"*.
+**The 185th filing explicitly declined to re-`ls` and said so**; that
+honesty is what made the gap findable in one command. Two requests had
+landed in the interval.
+
+**Both are accurate.** Verified against source this filing:
+`grep -n "pub fn .*dimension_group\|pub fn set_dimension_group"
+crates/pdfce-core/src/edit.rs` returns **`add_dimension_group` (17692)**
+and **`dimension_groups_on_page` (17962)** and nothing else. There is no
+`rename_dimension_group`, no `delete_dimension_group`, and no verb taking
+a `(DimensionId, GroupId)` pair.
+
+**(a) `rename_dimension_group` / `delete_dimension_group` are missing.**
+A **ce-dimension group** can be created and then never renamed or deleted.
+The model half already exists — `Group::name` is a `pub String`
+(`dimension/group.rs:54`) and `DimensionModel::delete_group` exists — so
+what is absent is the **session verb** that performs it against the
+document and lands in the undo log. Blocks `measure.manage_groups`, the
+window that would close the style cascade's `gui [ ]`. The requester's
+own framing: the only correction available today is *"delete every ce
+dimension in it, create a second group with the right name, and re-draw
+them — which is not a correction, it is redrawing the sheet."*
+
+**(b) A placed ce dimension cannot be moved to another group.**
+`add_dimension(page_index, group, kind)` takes the group **at creation**
+and there is no setter. `dimension_model()` returns a **snapshot**
+(`03-capabilities.md` §1.6: *"mutating the returned model changes nothing
+in the document"*), so the model's `dimension_mut` is not a route.
+**Group is the carrier of the other six properties** — scale, unit,
+number format, drafting standard, layer visibility and the inherited
+style tier — so a mis-assignment is the most consequential and the
+easiest error in the feature.
+
+**Terminology (rule 15):** both requests concern **ce dimensions**
+throughout — the objects pdfce authors — and the requester used the
+qualified term correctly without prompting. No **pdf dimension** is
+involved.
+
+**`FEATURES.md` was corrected on the strength of these** — see the
+186th filing's `SESSION_LOG.md` entry. The *Groups carrying scale, number
+format … and drafting standard* row read `[x] [x] [x]`, which over-claimed:
+groups can be **created** but not renamed, deleted, or reassigned to.
+
 ### ★★★★★ THE `iccce` INBOX — **2 requests OWED AND STILL UNREAD, oldest 2026-08-17 — of 16 FILES in `open\`, not 2** — a standing box, because the channel is OUTSIDE this repository and NO pdfce gate will ever notice it — opened 2026-08-18 (hundred-and-eighty-second filing), **contents re-established by `ls` 2026-08-18 (hundred-and-eighty-fourth filing)**
 
 **This box exists for one reason and it is worth stating plainly: every
@@ -73960,14 +74122,53 @@ proposal), **`R194` claimed by this proposal**; next genuinely free is
   `108` (reported as owed in the `e194b46` Shipped entry).
   **Ceiling moves `R196` → `R197`; next free `R198`.** `R193`/`R194`
   remain claimed by their existing declined-but-intact proposals.
+  > **AMENDED 2026-08-18 (186th filing) — the rule's own status lines went
+  > stale within one commit, which is the rule happening to the rule.**
+  > Two corrections, both measured this filing, neither changing the rule
+  > itself:
+  > **(1)** *"re-derives the **part-2** verb count"* — `5d8eab5` widened
+  > the gate to **every `*.md` under `docs/core-api/`** and to **every
+  > stated count wherever it appears**. Scope is now the directory.
+  > **(2)** *"Two live instances at minting … `index.md:16`'s uncorrected
+  > `108`"* — **both are now corrected and both are gated**; `5d8eab5`
+  > also caught a **third**, `02-editing-and-saving.md:13`, inside the
+  > file already fixed. Four stated counts existed; all four read `116`
+  > and the gate is green at `HEAD` (run this filing).
+  > **Still ungated and now the rule's largest live instance:** the
+  > **1,046 `path:line` citations** in the directory, all anchored at
+  > `7031296` and drifted (one spot-check: `edit.rs:15361` → **17530**).
+  > **The anchor branch of `R197` is satisfied there** — the files do say
+  > `7031296` — **which is exactly the outcome the rule was designed to
+  > produce:** legibly stale beats invisibly stale, and a reader can now
+  > date what they are trusting instead of being deterred by it. Filed as
+  > owed under *Next up*, not as a defect in the rule.
 
-### PROPOSED 2026-08-18 (hundred-and-eighty-fifth filing) — `docs/core-api/` is named as a MAINTAINED artefact with a declared owner, not one by default — **AWAITING ENGINEER RULING; NOTHING MINTED, NO NUMBER CLAIMED. Ceiling stays `R197`, next free is still `R198`.**
+### RULED 2026-08-18 — `docs/core-api/` is a MAINTAINED artefact owned by `pdfce-engineer`, named rather than owned by default — **ACCEPTED BY THE ENGINEER IN `5d8eab5`, essentially as drafted. STILL NOT A NUMBERED RULE, AND NO NUMBER IS CLAIMED: ceiling stays `R197`, next free is still `R198`.**
+
+> **Provenance of this heading.** Filed by the 185th filing as
+> `### PROPOSED … — AWAITING ENGINEER RULING; NOTHING MINTED, NO NUMBER
+> CLAIMED`, and converted here (186th filing) after the engineer ruled.
+> **The ruling is the engineer's act, recorded by this role, not made by
+> it** — `5d8eab5`, `.claude/agents/pdfce-engineer.md`, 2026-08-18. His
+> words, in that commit message: *"OWNERSHIP RULED: `docs/core-api/` is
+> owned by `pdfce-engineer` … The librarian declined to assign me the
+> obligation and drafted it as awaiting a ruling — correctly; that is my
+> act, not theirs."*
+>
+> **WHAT IS NOW BINDING, in one line:** an **`always`** in
+> `pdfce-engineer.md` — *update `docs/core-api/` in the same Pass that
+> adds or changes a `pub` item on `EditSession`, `DocumentView`, or the
+> capability surface, and run `tools/check-core-api-verbs.py`.*
+> The draft below is kept verbatim as the reasoning behind it.
 
 **Raised by the dispatching engineer, drafted here, and deliberately not
 minted by this role** — assigning a maintenance obligation to the
 engineer is the engineer's act, the same boundary this role observed when
 hard rule 11 was proposed on 2026-08-18 and accepted only when the
-engineer wrote it into the agent file himself.
+engineer wrote it into the agent file himself. ***Both boundaries were
+held on the same day and both were then accepted by the engineer writing
+the obligation himself*** — recorded as consistent practice rather than
+caution, at the engineer's explicit note.
 
 **The observation.** `docs/core-api/` is **engineer-owned today by
 default rather than by decision** — it is not named in `CLAUDE.md`'s
@@ -74005,6 +74206,23 @@ document, wired anyway, wrong disclosure shipped.
    whether a description is *right*. Naming an owner is what covers the
    remainder; **do not let the green gate be read as coverage of the
    directory.**
+   > **AMENDED 2026-08-18 (186th filing), because half of this bullet is
+   > now false and the half that survives got sharper.** `5d8eab5`
+   > **widened the gate to every `*.md` under `docs/core-api/`**, so
+   > *"one file … does not read `index.md`, `01-`, or `03-`"* no longer
+   > holds. **The load-bearing half is unchanged and is now stated in the
+   > gate's own header as a third limit: it defends `EditSession` only**
+   > — `DocumentView`, the free functions and `pdfce-render`'s public
+   > surface are undefended, and it still cannot check whether a
+   > description is *right*. **The remaining, larger exposure is
+   > `path:line` citations:** 1,046 of them across the three parts
+   > (`grep -o "\.rs:[0-9]\+" | wc -l`, this filing — 458 / 191 / 397),
+   > every one anchored at `7031296` (2026-08-13) and **none re-derived
+   > since**. Spot-checked: `03-capabilities.md` cites
+   > `dimension_model` at `edit.rs:15361`; it is at **17530** today
+   > (`grep -n "pub fn dimension_model"`), a **+2,169-line** drift, and
+   > `edit.rs:15361` now lands in unrelated form-field code. **Owed, not
+   > fixed** — see *Next up*.
 
 **Recommended home if accepted:** a bullet in this file's *Update
 protocol*, plus one line in `pdfce-engineer.md`'s owned-artefact list —

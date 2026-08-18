@@ -40,7 +40,24 @@ WHAT IT CHECKS
 
 1. Every `pub fn` / `pub const fn` inside an `impl EditSession` block in
    `crates/pdfce-core/src/edit.rs` is named somewhere in the document.
-2. The `Count: N` the document states equals the number actually derived.
+2. Every stated verb count anywhere under `docs/core-api/` — the verb index's
+   own `Count: N`, and any "N public verbs/methods" prose — equals the number
+   actually derived.
+3. Every `` `path/to/file.rs` (N lines) `` claim resolves to a real file with
+   that many lines.
+
+★ Item 3 was added because of a SIXTH stale figure, found one line above the
+fifth: `02-editing-and-saving.md:12` said `edit.rs` was **20,939 lines** when
+it was **24,826**. The widened gate did not catch it, because widening it had
+been scoped to *verb counts* — the class of the defect that prompted the
+widening, rather than the class of the defect underneath it, which is
+**published figures nobody re-derives**.
+
+That is the same error one level up, so the scope is now the general one this
+gate can actually enforce: **if the document states a number this tool can
+re-compute from the source, it re-computes it.** Anything it cannot re-compute
+(the citation counts, the "verified at <commit>" anchors) is `R197`'s
+territory, not this gate's, and is listed under WHAT IT DOES NOT CHECK.
 
 WHAT IT DOES NOT CHECK, STATED SO "GREEN" IS NOT OVER-READ
 ==========================================================
@@ -52,6 +69,13 @@ WHAT IT DOES NOT CHECK, STATED SO "GREEN" IS NOT OVER-READ
    still lacking the widget warning that caused the incident.
 2. **Any API surface other than `EditSession`.** `DocumentView`, the free
    functions, and `pdfce-render`'s surface are all undefended by this.
+3. **The `path:line` citations, and there are over a thousand of them.** They
+   are anchored to a commit and drift with every edit to the file they point
+   at; one spot-check found a citation off by 2,169 lines, landing on
+   unrelated code. Re-deriving them needs symbol resolution, not a line
+   count, so they are out of scope here and tracked as owed work instead.
+   **They are legibly stale rather than invisibly stale** — the anchor commit
+   is printed beside them, which is exactly the property `R197` asks for.
 3. **★ It used to read ONE FILE, and that was a live defect, not a
    hypothetical one.** The first version's input was
    `02-editing-and-saving.md`, because that is the file that was being
@@ -163,6 +187,9 @@ def main() -> int:
     # `index.md` is the table a consumer reads first, and it carried a stale
     # 108 while part 2 was being corrected -- see this file's header.
     stale = re.compile(r"(?:all\s+)?(\d+)\s+public\s+(?:`EditSession`\s+)?(?:verbs|methods)")
+    # Every re-derivable published figure, not only verb counts -- see item 3
+    # of WHAT IT CHECKS for why the narrower scope was itself the same bug.
+    sized = re.compile(r"`([\w./-]+\.rs)`\s*\((\d[\d,]*) lines\)")
     for f in [VERB_INDEX, *others]:
         for n, line in enumerate(f.read_text(encoding="utf-8").split("\n"), 1):
             for found in stale.finditer(line):
@@ -171,6 +198,21 @@ def main() -> int:
                     print()
                     print(f"  {f.relative_to(ROOT)}:{n} states {found.group(1)}")
                     print(f"  public verbs; the derived count is {len(names)}")
+            for found in sized.finditer(line):
+                target = ROOT / found.group(1)
+                claimed = int(found.group(2).replace(",", ""))
+                if not target.exists():
+                    failed = True
+                    print()
+                    print(f"  {f.relative_to(ROOT)}:{n} cites {found.group(1)},")
+                    print("  which does not exist")
+                    continue
+                actual = len(target.read_text(encoding="utf-8", errors="replace").split("\n")) - 1
+                if actual != claimed:
+                    failed = True
+                    print()
+                    print(f"  {f.relative_to(ROOT)}:{n} says {found.group(1)} is")
+                    print(f"  {claimed:,} lines; it is {actual:,}")
 
     if failed:
         print()
