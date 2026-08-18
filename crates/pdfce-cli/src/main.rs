@@ -7047,17 +7047,42 @@ overprint_composited={} overprint_refused={} overprint_pixels={}",
         // result — a difference no blend-mode counter can express.
         d.transparency_groups_flattened,
         d.transparency_groups_special,
-        // §11.4.5 group compositing. `composited` is a census — the group
-        // was rendered to its own buffer and applied as a unit.
-        // `knockout_approx` is the shortfall inside that: /K groups get
-        // their outer boundary right and their internal occlusion order
-        // wrong.
+        // §11.4.5 group compositing. `composited` counts groups rendered
+        // to their own buffer and applied as a unit.
+        //
+        // ★ NOT a clean census, and this was measured on 2026-08-18 rather
+        // than reasoned: a `tiny_skia::Pixmap` starts TRANSPARENT, and a
+        // transparent initial backdrop IS isolated semantics (§11.4.7).
+        // pdfce allocates a buffer whenever the outer graphics state is
+        // non-neutral — so a NON-isolated group under a `/BM` silently
+        // becomes an isolated one, and every blend inside it composites
+        // against nothing. On the Ghent transparency patches that is 14,
+        // 15 and 7 wrong cells out of 16, and each one is counted here as
+        // a success. `Pass 97.0` is the fix; until it lands this number
+        // over-reports.
+        //
+        // `knockout_approx` is a further shortfall inside that: /K groups
+        // get their outer boundary right and their internal occlusion
+        // order wrong.
         d.transparency_groups_composited,
         d.transparency_groups_knockout_approximated,
-        // §8.6.7 overprint. Tracked and reported, not simulated: pdfce
-        // composites in additive RGB and there is no per-colorant state
-        // for overprint to preserve. Non-zero means the document expects
-        // an ink model pdfce is not providing.
+        // §8.6.7 overprint. SIMULATED since `bf75351`, per-pixel, through
+        // CompatibleOverprint (§11.7.4.3, Table 149) — see
+        // `overprint_composited` below for what actually ran.
+        //
+        // ★ This comment used to read "Tracked and reported, not
+        // simulated: pdfce composites in additive RGB and there is no
+        // per-colorant state for overprint to preserve." That was true
+        // when written and false from `bf75351` onward, and it survived
+        // the fix to the stdout note it sits directly above (`e11b4f8`,
+        // which corrected the prose and missed the comment describing the
+        // same numbers four lines up). Third occurrence of the shape;
+        // recorded because a stale comment is the half nobody re-reads.
+        //
+        // What IS still approximate: the four PROCESS colorants are
+        // preserved, but a SPOT colorant has no plane of its own and goes
+        // through its tint transform, so it cannot be left standing the
+        // way a press leaves it. That is the `Pass 97.1` colorant buffer.
         d.overprint_requested,
         d.overprint_mode1_requested,
         // The subset that is a REAL difference: `overprint_requested` is

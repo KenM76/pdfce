@@ -213,10 +213,27 @@ pub struct GraphicsState {
     /// Overprint mode — `/OPM` (§8.6.7). `0` or `1`; initial value `0`.
     ///
     /// Mode 1 is the "nonzero overprint mode" in which a zero DeviceCMYK
-    /// component leaves the backdrop alone. §8.6.7 says it "shall not apply
-    /// if the device's native colour space is not `DeviceCMYK`" — pdfce
-    /// renders to an additive RGB display, so on the shipped path this is
-    /// tracked and reported rather than applied.
+    /// component leaves the backdrop alone.
+    ///
+    /// **APPLIED since `bf75351`.** This doc used to end "pdfce renders to
+    /// an additive RGB display, so on the shipped path this is tracked and
+    /// reported rather than applied", which stopped being true when
+    /// `overprint::composite` shipped and was not revised then. Third of
+    /// four copies of the same stale narrative found on 2026-08-18.
+    ///
+    /// The spec nuance the old wording was reaching for is real and worth
+    /// keeping: §8.6.7 says mode 1 "shall not apply if the device's native
+    /// colour space is not `DeviceCMYK`", and pdfce's raster target is
+    /// additive RGB. pdfce applies it anyway because it **simulates** a
+    /// DeviceCMYK device per pixel — reconstructing CMYK, applying Table
+    /// 149, converting back. That simulation is Overprint Preview, which
+    /// ISO 32000-1 never describes for a non-separating device, so it is a
+    /// product decision rather than a conformance obligation. Acrobat makes
+    /// the same one automatically for PDF/X.
+    ///
+    /// Stored as the `i64` the file carried rather than a `bool`: `OP-N2`
+    /// records that values other than 0 and 1 have no specified behaviour,
+    /// and pdfce keeps what it read instead of normalising it away.
     pub overprint_mode: i64,
     /// Current clipping path as a device-space mask, `None` = the
     /// initial clip = the entire page (§8.5.4). Stored rasterized

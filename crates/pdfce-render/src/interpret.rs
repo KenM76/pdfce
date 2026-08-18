@@ -284,25 +284,39 @@ pub struct Diagnostics {
     /// `gs` operators that turned OVERPRINT on (`/OP` or `/op`, §8.6.7)
     /// while pdfce does not simulate it.
     ///
-    /// # Why this is counted and not applied
+    /// # Why this is counted, and what it does NOT mean
+    ///
+    /// **★ This heading used to read "Why this is counted and not applied",
+    /// and the section under it argued that pdfce "composites in additive
+    /// RGB — so on the shipped path there is no per-colorant state for
+    /// overprint to preserve". `bf75351` made that false and did not
+    /// revise it.** Fourth copy of the same stale narrative found on
+    /// 2026-08-18; the others were the stdout note, the comment beside its
+    /// format arguments, and [`crate::gstate::GraphicsState::overprint_mode`].
+    /// One shortfall, written in four places, corrected in one.
     ///
     /// Overprint is a SUBTRACTIVE-device behaviour: an overprinting object
     /// leaves the backdrop's other colorants in place instead of replacing
     /// them, which only means anything if the device HAS separable
-    /// colorants. §8.6.7 says overprint mode 1 "shall not apply if the
-    /// device's native colour space is not `DeviceCMYK`", and pdfce
-    /// composites in additive RGB — so on the shipped path there is no
-    /// per-colorant state for overprint to preserve.
+    /// colorants. pdfce gives it some, per pixel, by reconstructing CMYK
+    /// from the raster, applying `CompatibleOverprint` (§11.7.4.3, Table
+    /// 149) and converting back — an exact round trip by construction, so
+    /// only the components Table 149 actually alters can move.
     ///
     /// ISO 32000-1 never describes overprint PREVIEW on a non-separating
     /// device (`overprint preview`: 0 hits in the 756-page source), so
     /// simulating it is a product decision rather than a conformance
-    /// obligation. It is one pdfce intends to take — Acrobat enables
-    /// Overprint Preview automatically for PDF/X files, so a PDF/X-4
-    /// document's EXPECTED appearance includes it — and it needs an
-    /// n-channel compositing buffer, which is an architectural Pass of its
-    /// own. Until then the number is here so a page whose ink model pdfce
-    /// is not honouring says so.
+    /// obligation. Acrobat enables Overprint Preview automatically for
+    /// PDF/X files, so a PDF/X-4 document's EXPECTED appearance includes it.
+    ///
+    /// **What is still missing**, and why this counter is not a success
+    /// measure: the four PROCESS colorants survive, but a SPOT colorant has
+    /// no plane of its own and is flattened through its tint transform, so
+    /// it cannot be left standing the way a press leaves it. Image
+    /// XObjects do not reach the overprint composite at all — and are not
+    /// counted as [`Self::overprint_refused`] when they skip it, which is
+    /// the same blind-counter shape the glyph painter had before
+    /// `bf75351`. Both are `Pass 97.1`, the n-channel compositing buffer.
     pub overprint_requested: usize,
     /// Of those, the ones that also selected **overprint mode 1** (`/OPM 1`,
     /// the "nonzero overprint mode").
