@@ -9087,11 +9087,19 @@ fn cmd_print(
     // come to disagree about where a page lands — the drift whose
     // symptom is a GUI print landing differently from a CLI print of the
     // same document, which nobody thinks to compare.
+    // The DISPLAYED size, not the raw media box: /Rotate is a display
+    // rotation the renderer honours, so a page that is portrait in the
+    // file and landscape on screen must be planned as landscape or the
+    // placement and the pixels describe different shapes. See
+    // `displayed_page_size` for what went wrong before this.
     let page_sizes: Vec<(f64, f64)> = page_list
         .iter()
         .map(|p| {
             let mb = p.media_box;
-            ((mb.urx - mb.llx).abs(), (mb.ury - mb.lly).abs())
+            pdfce_print::displayed_page_size(
+                ((mb.urx - mb.llx).abs(), (mb.ury - mb.lly).abs()),
+                i32::from(p.rotate),
+            )
         })
         .collect();
     let spec = pdfce_print::JobSpec {
@@ -9522,14 +9530,36 @@ untiled; {tiled_pages} page(s) were tiled."
         bitmaps = faces;
     }
 
+    // ★ PER-PAGE geometry in the plain path.
+    //
+    // `plans` above was computed against ONE `device`, turned for the
+    // first page. That is right for the imposition paths, where a sheet
+    // has one shape by construction, and wrong here: a CAD set with a
+    // portrait title sheet and landscape drawings behind it needs each
+    // page placed on the sheet IT will print on. Re-placing per page and
+    // sending the matching setup with each is what makes
+    // `--orientation auto` do what `Orientation`'s documentation has
+    // always claimed.
+    //
+    // The device geometry is derived, not re-read: `from_caps` turns the
+    // reported sheet, so this costs no extra Win32 round trip and — more
+    // importantly — goes through the ONE place rotation is written.
+    let mut setups: Vec<pdfce_print::SheetSetup> = Vec::new();
     if n_up.is_none() && !booklet && !poster {
         for plan in &plans {
             let (Some(page), Some(&size)) = (page_list.get(plan.index), page_sizes.get(plan.index))
             else {
                 continue;
             };
-            let placement = plan.placement;
-            let render_scale = plan.render_scale;
+            let sheet_device =
+                pdfce_print::DeviceGeometry::from_caps(&caps, device_settings.orientation, size);
+            let placement = pdfce_print::place_page(size, sheet_device.printable_pt, mode);
+            // The rasterisation scale follows the same rule `plan_job`
+            // uses, and reads its DPI from the per-page geometry — which
+            // is the same DPI, because `for_orientation` deliberately
+            // does NOT swap it (a 600x300 plotter must not be rendered
+            // as 300x600).
+            let render_scale = (f64::from(resolution.dpi) / 72.0) * placement.scale;
             let options =
                 pdfce_render::RenderOptions::default().with_annotation_scope(comments.to_scope());
             let rendered = match pdfce_render::render_page_with_view(
@@ -9551,6 +9581,10 @@ untiled; {tiled_pages} page(s) were tiled."
                 placement,
                 page_pt: size,
             });
+            setups.push(pdfce_print::SheetSetup {
+                orientation: pdfce_print::resolve_orientation(device_settings.orientation, size),
+                paper: selected_paper,
+            });
         }
     }
 
@@ -9559,19 +9593,33 @@ untiled; {tiled_pages} page(s) were tiled."
     } else {
         pdfce_print::DryRun::Yes
     };
-    // The orientation page is passed EXPLICITLY, and it is the same one
-    // `device` was turned for. The imposition paths hand the spooler one
-    // bitmap per SHEET, so letting `spool` re-derive the page from the
-    // bitmaps would resolve `--orientation auto` from the sheet in those
-    // paths and from a source page in this one — two answers where the
-    // job has room for only one.
-    let report = match pdfce_print::spool_with_config(
+    // The imposition paths hand the spooler one bitmap per SHEET whose
+    // `page_pt` is the printable area rather than a source page, so
+    // `Auto` must NOT be re-derived from it there — it is resolved once,
+    // from the page the layout was planned against, and every sheet
+    // carries that same answer. The plain path above filled `setups`
+    // with a per-page answer instead.
+    let job_orientation = pdfce_print::resolve_orientation(
+        device_settings.orientation,
+        spec.first_page_pt(&page_sizes),
+    );
+    let sheets: Vec<pdfce_print::Sheet<'_>> = bitmaps
+        .iter()
+        .enumerate()
+        .map(|(i, bitmap)| pdfce_print::Sheet {
+            bitmap,
+            setup: setups.get(i).copied().unwrap_or(pdfce_print::SheetSetup {
+                orientation: job_orientation,
+                paper: selected_paper,
+            }),
+        })
+        .collect();
+    let report = match pdfce_print::spool_sheets(
         &name,
-        &bitmaps,
+        &sheets,
         dry,
         to_file.as_deref(),
         device_settings,
-        spec.first_page_pt(&page_sizes),
         config.as_ref(),
     ) {
         Ok(r) => r,
@@ -9609,6 +9657,18 @@ untiled; {tiled_pages} page(s) were tiled."
     // honour. `synthesised` in particular means the driver would not
     // describe itself and everything it holds that pdfce does not model
     // was NOT carried.
+    // A mixed job reconfigures the device part-way, which is invisible
+    // in a page count and is the operator's evidence that `auto` did the
+    // per-page thing rather than reading page 1 and applying it to
+    // everything — the defect this replaced.
+    if report.sheet_setups > 1 {
+        eprintln!(
+            "pdfce-cli: this job uses {} different sheet setups — the pages do not all print \
+             the same way up or on the same paper, so the device is reconfigured part-way \
+             through the job.",
+            report.sheet_setups
+        );
+    }
     if report.settings_source == pdfce_print::SettingsSource::Synthesised {
         eprintln!(
             "pdfce-cli: {name:?} would not report its own settings, so this job carried only \
@@ -9618,7 +9678,7 @@ untiled; {tiled_pages} page(s) were tiled."
     }
     println!(
         "print {} printer={name:?} pages={} printed={} dpi={}x{} clipped={} mode=raster \
-         settings={} job={}",
+         settings={} setups={} job={}",
         input.display(),
         report.pages,
         u8::from(report.printed),
@@ -9631,6 +9691,7 @@ untiled; {tiled_pages} page(s) were tiled."
             pdfce_print::SettingsSource::CallerSupplied => "file",
             pdfce_print::SettingsSource::Synthesised => "synthesised",
         },
+        report.sheet_setups,
         report
             .job_id
             .map_or_else(|| "-".to_owned(), |j| j.to_string()),
@@ -9740,11 +9801,19 @@ fn cmd_print_preview(
     //
     // The orientation page is the FIRST selected page, matching what
     // `print` resolves `auto` from — one `DEVMODE` covers the whole job.
+    // The DISPLAYED size, not the raw media box: /Rotate is a display
+    // rotation the renderer honours, so a page that is portrait in the
+    // file and landscape on screen must be planned as landscape or the
+    // placement and the pixels describe different shapes. See
+    // `displayed_page_size` for what went wrong before this.
     let page_sizes: Vec<(f64, f64)> = page_list
         .iter()
         .map(|p| {
             let mb = p.media_box;
-            ((mb.urx - mb.llx).abs(), (mb.ury - mb.lly).abs())
+            pdfce_print::displayed_page_size(
+                ((mb.urx - mb.llx).abs(), (mb.ury - mb.lly).abs()),
+                i32::from(p.rotate),
+            )
         })
         .collect();
     let first_page_pt = indices
@@ -9793,8 +9862,14 @@ fn cmd_print_preview(
         // be the right input for a viewer, but printing a cropped view
         // and printing the page are different operations, and Reader
         // prints the page.
+        // …and turned by `/Rotate`, for the reason `displayed_page_size`
+        // sets out: the renderer honours it, so planning against the
+        // un-turned box would describe a different shape than the pixels.
         let mb = page.media_box;
-        let size = ((mb.urx - mb.llx).abs(), (mb.ury - mb.lly).abs());
+        let size = pdfce_print::displayed_page_size(
+            ((mb.urx - mb.llx).abs(), (mb.ury - mb.lly).abs()),
+            i32::from(page.rotate),
+        );
         let p = pdfce_print::place_page(size, device.printable_pt, mode);
         if p.clipped {
             clipped += 1;

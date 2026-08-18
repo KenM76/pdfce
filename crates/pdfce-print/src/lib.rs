@@ -185,6 +185,14 @@ pub enum PrintError {
     },
     /// `StartPage` failed part-way through a job. The job is aborted.
     PageStart,
+    /// `ResetDC` failed part-way through a job — the driver refused a
+    /// mid-job change of orientation or paper. The job is aborted.
+    ///
+    /// An error rather than a degradation, deliberately: continuing
+    /// would print every remaining sheet in the previous setup, which is
+    /// silently-wrong output, and silently-wrong output is the failure
+    /// mode this crate's whole settings path was rebuilt to remove.
+    SheetSetup,
     /// `EndPage` failed part-way through a job. The job is aborted.
     PageEnd,
     /// `EndDoc` failed. The job may or may not have reached the device —
@@ -262,6 +270,11 @@ impl fmt::Display for PrintError {
                 "{printer:?} refused the print job. Nothing was queued, so there is nothing                  to cancel"
             ),
             Self::PageStart => write!(f, "the printer refused a page; the job was cancelled"),
+            Self::SheetSetup => write!(
+                f,
+                "the printer refused to change orientation or paper part-way through the job; \
+                 the job was cancelled rather than printing the rest the wrong way up"
+            ),
             Self::PageEnd => write!(f, "a page failed to finish; the job was cancelled"),
             Self::JobEnd => write!(
                 f,
@@ -728,7 +741,7 @@ pub fn place_page(page: (f64, f64), printable: (f64, f64), mode: ScaleMode) -> P
 mod tests {
     use super::{
         Collate, DeviceGeometry, JobSpec, Orientation, PageSubset, Placement, ScaleMode,
-        job_resolution, place_page, plan_job, sheet_orientation,
+        job_resolution, place_page, plan_job, resolve_orientation, sheet_orientation,
     };
 
     /// A4 in points.
@@ -736,6 +749,54 @@ mod tests {
     /// A Letter sheet's printable area with a typical 1/4-inch hardware
     /// margin all round.
     const LETTER_PRINTABLE: (f64, f64) = (612.0 - 36.0, 792.0 - 36.0);
+
+    /// ★ A `/Rotate 90` page is planned LANDSCAPE, because that is what
+    /// the renderer produces.
+    ///
+    /// The two halves of the program disagreed about this until
+    /// 2026-08-18: `render-page` produced a 337x238 pixmap for an A4
+    /// with `/Rotate 90` while `print-preview` reported
+    /// `size_pt=595.0x842.0`. The placement was computed for the wrong
+    /// aspect, `Auto` never turned the sheet, and the blit stretched a
+    /// landscape image into a portrait rectangle.
+    ///
+    /// The assertions that matter are the NEGATIVE ones: 0 and 180 must
+    /// NOT swap. A "rotate means transpose" implementation passes the
+    /// 90 case and fails those, which is why they are here.
+    #[test]
+    fn a_rotated_page_is_planned_at_its_displayed_size() {
+        assert_eq!(super::displayed_page_size(A4, 90), (842.0, 595.0));
+        assert_eq!(super::displayed_page_size(A4, 270), (842.0, 595.0));
+        assert_eq!(super::displayed_page_size(A4, 0), A4);
+        assert_eq!(super::displayed_page_size(A4, 180), A4);
+        // A rotated page's ORIENTATION follows, which is the whole point:
+        // before this, `Auto` read the un-turned box and left the sheet
+        // portrait for a page that displays landscape.
+        assert_eq!(
+            resolve_orientation(Orientation::Auto, super::displayed_page_size(A4, 90)),
+            Orientation::Landscape
+        );
+        assert_eq!(
+            resolve_orientation(Orientation::Auto, super::displayed_page_size(A4, 180)),
+            Orientation::Portrait
+        );
+    }
+
+    /// Angles a file may contain but a parser has not normalized.
+    ///
+    /// `Page::rotate` is normalized to {0, 90, 180, 270}, but this is a
+    /// PUBLIC function and its caller may not be that parser. A negative
+    /// angle is legal in the wild (`/Rotate -90`), and a value that is
+    /// not a multiple of 90 cannot be honoured by an axis swap at all —
+    /// so it is treated as no rotation rather than rounded to a guess.
+    #[test]
+    fn out_of_range_rotations_are_reduced_not_trusted() {
+        assert_eq!(super::displayed_page_size(A4, 450), (842.0, 595.0));
+        assert_eq!(super::displayed_page_size(A4, -90), (842.0, 595.0));
+        assert_eq!(super::displayed_page_size(A4, -180), A4);
+        assert_eq!(super::displayed_page_size(A4, 360), A4);
+        assert_eq!(super::displayed_page_size(A4, 45), A4);
+    }
 
     /// Fit ENLARGES a small page; ShrinkOversized refuses to.
     ///
@@ -1640,13 +1701,34 @@ pub fn plan_job(
 
 /// Which way up the sheet is fed.
 ///
-/// # `Auto` is per-page, not per-job
+/// # `Auto` is per-page — and for a while this said so and was not
 ///
 /// Acrobat's default computes orientation **for each page** within one
-/// job — a document mixing portrait text with a landscape drawing gets
-/// both, from one command. That is the behaviour worth matching, and it
-/// is why this is resolved per page in [`resolve_orientation`] rather
-/// than once when the job starts.
+/// job: a document mixing portrait text with a landscape drawing gets
+/// both, from one command. That is the behaviour worth matching, and
+/// **it is what [`spool_sheets`] does** — one `DEVMODE` per contiguous
+/// run of same-orientation sheets, applied with `ResetDC` between pages.
+///
+/// ★ Until 2026-08-18 this heading made that claim and the code did not
+/// honour it. [`resolve_orientation`] is per-page-capable and was called
+/// twice, both times for the whole job, because a `DEVMODE` handed to
+/// `CreateDC` applies until something changes it and nothing did. A CAD
+/// export — an A4 portrait title sheet followed by A3 landscape
+/// drawings — printed every sheet in whichever orientation page 1
+/// resolved to. It was reported from outside, by the `pdfceGUI` shell,
+/// which noticed the divergence by reading this comment and then the
+/// call sites.
+///
+/// Which entry point a caller uses decides which behaviour it gets, and
+/// that is stated rather than left to be discovered:
+///
+/// - [`spool_sheets`] — per-sheet. The caller supplies each sheet's
+///   resolved orientation, having planned its placement against that
+///   sheet's own geometry.
+/// - [`spool`] and [`spool_with_config`] — per-job, resolved from the
+///   one page the caller nominates. Unchanged, because a caller that
+///   imposes several source pages onto one sheet has exactly one
+///   orientation by construction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Orientation {
     /// Choose per page from its own aspect ratio.
@@ -1729,6 +1811,68 @@ pub struct DeviceSettings {
     /// deliberately — the driver is the authority on its own forms and a
     /// second opinion in this crate would be one more thing to drift.
     pub paper: PaperSelection,
+}
+
+/// The size a page is DISPLAYED at, from its box and its `/Rotate`.
+///
+/// # ★ Why the print path may not use the media box directly
+///
+/// `/Rotate` (ISO 32000-1 Table 30) is a clockwise DISPLAY rotation: a
+/// 595 x 842 portrait page with `/Rotate 90` is shown, and printed, as
+/// an 842 x 595 landscape one. `pdfce-render` honours it and produces a
+/// pixmap with the axes swapped.
+///
+/// Every consumer of a rasterised page in this crate therefore has to
+/// agree with the renderer about which way round the page is, and until
+/// 2026-08-18 the shells did not: they took `page_sizes` straight off
+/// `media_box` and ignored `/Rotate` entirely. Three things went wrong
+/// at once on a rotated page, and only the third is visible:
+///
+/// 1. [`resolve_orientation`] read the UNROTATED box, so
+///    [`Orientation::Auto`] never turned the sheet for a page that
+///    displays landscape;
+/// 2. [`place_page`] computed a scale and an offset for the wrong aspect
+///    ratio, so `clipped` was decided against the wrong rectangle too;
+/// 3. the blit stretched a landscape pixmap into a portrait rectangle,
+///    which comes out of the printer visibly distorted.
+///
+/// Measured on a `/Rotate 90` A4: `pdfce-cli render-page` produced
+/// 337 x 238 px while `print-preview` reported `size_pt=595.0x842.0`.
+/// The two halves of one program disagreed about the shape of the page.
+///
+/// A 180-degree rotation swaps nothing, which is exactly why a
+/// naive "rotate means transpose" is wrong and this takes the angle
+/// rather than a boolean.
+///
+/// ```
+/// use pdfce_print::displayed_page_size;
+///
+/// let a4 = (595.0, 842.0);
+/// assert_eq!(displayed_page_size(a4, 0), a4);
+/// assert_eq!(displayed_page_size(a4, 90), (842.0, 595.0));
+/// assert_eq!(displayed_page_size(a4, 180), a4);
+/// assert_eq!(displayed_page_size(a4, 270), (842.0, 595.0));
+/// // Out-of-range angles are reduced, not trusted: a file may say 450.
+/// assert_eq!(displayed_page_size(a4, 450), (842.0, 595.0));
+/// // And a value that is not a multiple of 90 cannot be honoured by an
+/// // axis swap, so it is treated as no rotation rather than guessed at.
+/// assert_eq!(displayed_page_size(a4, 45), a4);
+/// ```
+#[must_use]
+pub fn displayed_page_size(media_box_pt: (f64, f64), rotate_degrees: i32) -> (f64, f64) {
+    // `Page::rotate` is normalized to {0, 90, 180, 270} by the parser,
+    // but this is a public function and a caller may hand over whatever
+    // a file said. Reducing here rather than trusting the caller keeps
+    // the two from disagreeing, and costs one modulo.
+    let quarter_turns = rotate_degrees.rem_euclid(360) / 90;
+    if rotate_degrees.rem_euclid(90) != 0 {
+        return media_box_pt;
+    }
+    if quarter_turns % 2 == 1 {
+        (media_box_pt.1, media_box_pt.0)
+    } else {
+        media_box_pt
+    }
 }
 
 /// The orientation a page will actually print at.
@@ -2644,6 +2788,50 @@ pub struct PageBitmap {
     pub page_pt: (f64, f64),
 }
 
+/// How ONE sheet is fed: which way up, and on what paper.
+///
+/// # Why these two and not the whole of [`DeviceSettings`]
+///
+/// They are the two that describe the SHEET's shape, and they are the
+/// two a mixed document genuinely varies. Duplex and tray describe how
+/// the job is FED — nothing has asked to vary them mid-job, and a
+/// `DMDUP_SIMPLEX` asserted part-way would silently cancel a driver's
+/// own duplex default, which is a defect this crate has already had
+/// once. They stay job-wide.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct SheetSetup {
+    /// Which way up. [`Orientation::Auto`] is resolved by
+    /// [`spool_sheets`] against the sheet's own `page_pt` — which is
+    /// right for a plain page and WRONG for an imposed one, where
+    /// `page_pt` is the printable area rather than a source page, so an
+    /// n-up or booklet caller resolves it itself.
+    pub orientation: Orientation,
+    /// Which sheet to feed.
+    pub paper: PaperSelection,
+}
+
+/// One sheet of a job: its pixels, and the setup they need.
+///
+/// # Why the bitmap is borrowed
+///
+/// A rasterised page is megabytes — an A4 sheet at 300 DPI is about
+/// 35 MB of RGBA — and [`spool`] builds one of these per page from a
+/// slice it does not own. Owning the bitmap here would make the
+/// compatibility path copy the whole job.
+///
+/// No `PartialEq`: [`PageBitmap`] has none, and deriving one that
+/// compared several megabytes of pixels per call would be a trap wearing
+/// a common trait's name (`C-COMMON-TRAITS` wants the traits that make
+/// sense, not all of them).
+#[derive(Debug, Clone, Copy)]
+pub struct Sheet<'a> {
+    /// The page's pixels and its placement on the sheet, already
+    /// computed by the caller against THIS sheet's geometry.
+    pub bitmap: &'a PageBitmap,
+    /// How this sheet is fed.
+    pub setup: SheetSetup,
+}
+
 /// Whether [`spool`] actually starts a print job.
 ///
 /// # ★ Not a testing convenience — the development mode
@@ -2690,6 +2878,15 @@ pub struct SpoolReport {
     pub clipped_pages: usize,
     /// The job's spooler ID, when one was started.
     pub job_id: Option<u32>,
+    /// How many DISTINCT sheet setups the job used.
+    ///
+    /// `1` for an ordinary job. More means the device was reconfigured
+    /// mid-job — pages that print a different way up, or on different
+    /// paper — which is worth reporting because it is not visible in a
+    /// page count and it is the operator's evidence that
+    /// [`Orientation::Auto`] did the per-page thing its documentation
+    /// promises.
+    pub sheet_setups: usize,
     /// Where the `DEVMODE` this job was sent with came from.
     ///
     /// The disclosure that a shell owes the operator under project
@@ -2803,49 +3000,157 @@ pub fn spool_with_config(
     first_page_pt: (f64, f64),
     config: Option<&PrinterConfiguration>,
 ) -> Result<SpoolReport, PrintError> {
-    use windows::Win32::Graphics::Gdi::{CreateDCW, DEVMODEW, DeleteDC};
+    // ONE setup for the whole job, resolved from the one page the caller
+    // nominated — which is exactly what a single `DEVMODE` has always
+    // meant here, and is what [`spool`]'s callers still get.
+    let setup = SheetSetup {
+        orientation: resolve_orientation(settings.orientation, first_page_pt),
+        paper: settings.paper,
+    };
+    let sheets: Vec<Sheet<'_>> = pages.iter().map(|bitmap| Sheet { bitmap, setup }).collect();
+    spool_sheets(printer, &sheets, dry_run, output, settings, config)
+}
+
+/// Send sheets that do not all print the same way up, or on the same
+/// paper.
+///
+/// # ★ What this exists to fix: `Auto` was documented per-page and was
+/// # per-job
+///
+/// [`Orientation`]'s own documentation said, under a heading that made
+/// the claim the point:
+///
+/// > *"Acrobat's default computes orientation **for each page** within
+/// > one job — a document mixing portrait text with a landscape drawing
+/// > gets both, from one command."*
+///
+/// It did not. [`resolve_orientation`] was called twice, both times for
+/// the whole job, because a `DEVMODE` is handed to `CreateDC` once and
+/// applies until something changes it. A document mixing an A4 portrait
+/// title sheet with A3 landscape drawings — which is what a CAD export
+/// IS — printed every sheet in whichever orientation page 1 resolved to.
+///
+/// The doc comment was the defect, not merely a description of one: it
+/// is a claim that reads as true, and this project's costliest failures
+/// are all that shape.
+///
+/// # The Win32 mechanism, and the trap the old comment already named
+///
+/// `ResetDC` is the documented way to change a device's `DEVMODE`
+/// mid-job, and it must be called BETWEEN pages — after `EndPage` and
+/// before the next `StartPage`. That is what the loop below does.
+///
+/// The trap the previous implementation's comment named is real: a reset
+/// changes the printable area, and everything pdfce computed about where
+/// a page lands was computed against the area read BEFORE. So this
+/// function does not attempt to re-place anything. The caller places
+/// each sheet against ITS OWN geometry — [`DeviceGeometry::from_caps`]
+/// turned for that sheet — and hands the result over already placed, in
+/// [`Sheet::bitmap`]. Placement stays in one place, this function stays
+/// responsible only for telling the driver, and the two cannot come to
+/// disagree because neither does the other's job.
+///
+/// # What does NOT vary per sheet, and why
+///
+/// Duplex and tray. Both are properties of how the job is FED rather
+/// than of a sheet's shape, changing them mid-job is not something any
+/// caller has asked for, and a `DMDUP_SIMPLEX` asserted mid-job would
+/// silently cancel a driver's own duplex default — the defect recorded
+/// in [`job_configuration`]'s notes. They come from `settings` and apply
+/// to the whole job.
+///
+/// # Cost
+///
+/// One `ResetDC` per CHANGE, not per page: identical consecutive setups
+/// share one, and a job whose sheets all agree issues none at all and is
+/// byte-for-byte the same sequence of Win32 calls as before this
+/// function existed. The driver's `DEVMODE` is fetched ONCE and amended
+/// per distinct setup, so a hundred alternating pages cost two
+/// structures, not a hundred.
+///
+/// # Errors
+///
+/// The same as [`spool`], plus [`PrintError::SheetSetup`] when the
+/// driver refuses a mid-job change. That is an error rather than a
+/// degradation: continuing would print the remaining sheets the wrong
+/// way up, which is the silent-wrong-output case this whole change set
+/// exists to remove.
+#[cfg(windows)]
+pub fn spool_sheets(
+    printer: &str,
+    sheets: &[Sheet<'_>],
+    dry_run: DryRun,
+    output: Option<&std::path::Path>,
+    settings: DeviceSettings,
+    config: Option<&PrinterConfiguration>,
+) -> Result<SpoolReport, PrintError> {
+    use windows::Win32::Graphics::Gdi::{CreateDCW, DEVMODEW, DeleteDC, ResetDCW};
     use windows::Win32::Storage::Xps::{AbortDoc, DOCINFOW, EndDoc, EndPage, StartDocW, StartPage};
     use windows::core::PCWSTR;
 
     let caps = printer_caps(printer)?;
     let wide: Vec<u16> = printer.encode_utf16().chain(std::iter::once(0)).collect();
 
-    // The driver settings reach the device through a `DEVMODE` handed to
-    // `CreateDC`, not through anything pdfce computes. Built here so the
-    // device context is created WITH them: changing orientation after
-    // the DC exists means the printable area already read is wrong.
-    //
     // ★ `caps` is the UN-TURNED geometry, and that is exactly what is
-    // wanted here. `job_configuration` needs to know which orientation
-    // the device is in BY DEFAULT so it can tell whether this job needs
-    // it turned; handing it an already-rotated view would make every job
-    // look like it needed no turn. The rotated view is the CALLER's
-    // concern — it is what the pages were planned against, and it
-    // reaches this function baked into `PageBitmap::placement`.
-    let (devmode, settings_source) = job_configuration(
-        printer,
-        config,
-        settings,
-        first_page_pt,
-        sheet_orientation(caps.physical_pt),
-    )?;
-    // The buffer must outlive `CreateDC`; a pointer into a dropped
-    // temporary is a dangling one and nothing in the type system catches
-    // it here — the same hazard the `lpszOutput` buffer below carries.
-    let devmode_words = devmode.as_ref().map(PrinterConfiguration::to_aligned_words);
+    // wanted here. The decision below needs to know which orientation
+    // the device is in BY DEFAULT so it can tell whether a sheet needs
+    // it turned; an already-rotated view would make every sheet look
+    // like it needed no turn. The rotated view is the CALLER's concern —
+    // it is what the pages were planned against, and it reaches this
+    // function baked into `PageBitmap::placement`.
+    let device_default = sheet_orientation(caps.physical_pt);
+
+    let resolved = resolve_sheet_setups(sheets);
+
+    // The cheap path survives: if no sheet needs anything said to the
+    // driver, none is fetched, none is built, and no reset is issued.
+    let needs_devmode = config.is_some()
+        || resolved
+            .iter()
+            .any(|setup| setup_needs_devmode(settings, *setup, device_default));
+    let (base, settings_source) = if needs_devmode {
+        let (base, source) = job_base(printer, config)?;
+        (Some(base), source)
+    } else {
+        (None, SettingsSource::DeviceDefault)
+    };
+
+    // One structure per DISTINCT setup. A mixed CAD set has two.
+    let mut distinct: Vec<(SheetSetup, Vec<u32>)> = Vec::new();
+    if let Some(base) = base.as_ref() {
+        for setup in &resolved {
+            if distinct.iter().any(|(known, _)| known == setup) {
+                continue;
+            }
+            let mut config = base.clone();
+            config.apply(
+                setup.orientation,
+                setup.paper,
+                settings.pick_tray_by_page_size,
+                setup_is_explicit(settings, *setup).then_some(settings.duplex),
+            );
+            distinct.push((*setup, config.to_aligned_words()));
+        }
+    }
+    // The buffer handed to `CreateDC` must outlive the call; a pointer
+    // into a dropped temporary is a dangling one and nothing in the type
+    // system catches it here.
+    let first_words = resolved
+        .first()
+        .and_then(|setup| distinct.iter().find(|(known, _)| known == setup))
+        .map(|(_, words)| words);
 
     // SAFETY: `wide` is NUL-terminated and outlives the call, and
-    // `devmode_words` (when present) is an ALIGNED buffer holding a
-    // validated DEVMODE that outlives it too. A null DC is the
-    // documented failure and is checked rather than assumed.
+    // `first_words` (when present) is an ALIGNED buffer holding a
+    // validated DEVMODE owned by `distinct`, which outlives it too. A
+    // null DC is the documented failure and is checked rather than
+    // assumed.
     let hdc = unsafe {
         CreateDCW(
             PCWSTR::null(),
             PCWSTR(wide.as_ptr()),
             PCWSTR::null(),
-            devmode_words
-                .as_ref()
-                .map(|w| w.as_ptr().cast::<DEVMODEW>()),
+            first_words.map(|w| w.as_ptr().cast::<DEVMODEW>()),
         )
     };
     if hdc.is_invalid() {
@@ -2864,9 +3169,10 @@ pub fn spool_with_config(
         pages: 0,
         printed: false,
         dpi: (caps.dpi_x as i32, caps.dpi_y as i32),
-        clipped_pages: pages.iter().filter(|p| p.placement.clipped).count(),
+        clipped_pages: sheets.iter().filter(|s| s.bitmap.placement.clipped).count(),
         job_id: None,
         settings_source,
+        sheet_setups: distinct.len().max(1),
     };
 
     let outcome: Result<(), PrintError> = (|| {
@@ -2874,7 +3180,7 @@ pub fn spool_with_config(
             // The dry run stops HERE, after the device has been opened
             // and interrogated for real. Everything above this line is
             // the part that fails in practice.
-            report.pages = pages.len();
+            report.pages = sheets.len();
             return Ok(());
         }
 
@@ -2917,14 +3223,42 @@ pub fn spool_with_config(
         report.printed = true;
         report.job_id = u32::try_from(job).ok();
 
-        for page in pages {
+        // The setup the device is currently in. The first sheet's is
+        // already in force: `CreateDC` above was given its `DEVMODE`.
+        let mut current = resolved.first().copied();
+        for (sheet, setup) in sheets.iter().zip(resolved.iter()) {
+            if current != Some(*setup) {
+                // ★ BETWEEN pages, never inside one. `ResetDC` is the
+                // documented mechanism for changing a device's settings
+                // mid-job, and the previous page's `EndPage` has already
+                // run, so no page is open here.
+                let words = distinct
+                    .iter()
+                    .find(|(known, _)| known == setup)
+                    .map(|(_, words)| words);
+                if let Some(words) = words {
+                    // SAFETY: `hdc` is valid with a job open and no page
+                    // open; `words` is an ALIGNED, validated DEVMODE
+                    // owned by `distinct`, which outlives this call.
+                    //
+                    // The return is documented to be a handle to the
+                    // ORIGINAL device context, so `hdc` stays the handle
+                    // this function owns and deletes; a null return is
+                    // the documented failure.
+                    let reset = unsafe { ResetDCW(hdc, words.as_ptr().cast::<DEVMODEW>()) };
+                    if reset.is_invalid() {
+                        return Err(PrintError::SheetSetup);
+                    }
+                }
+                current = Some(*setup);
+            }
             // SAFETY: valid DC, and the page loop always pairs
             // StartPage with EndPage — see the abort path below for the
             // case where it cannot.
             if unsafe { StartPage(hdc) } <= 0 {
                 return Err(PrintError::PageStart);
             }
-            blit_page(hdc, page, (caps.dpi_x as i32, caps.dpi_y as i32))?;
+            blit_page(hdc, sheet.bitmap, (caps.dpi_x as i32, caps.dpi_y as i32))?;
             if unsafe { EndPage(hdc) } <= 0 {
                 return Err(PrintError::PageEnd);
             }
@@ -2960,16 +3294,90 @@ pub fn spool_with_config(
     outcome.map(|()| report)
 }
 
-/// Build the `DEVMODE` that carries the operator's driver settings, and
-/// say where it came from.
+/// Resolve every sheet's setup, deciding [`Orientation::Auto`] against
+/// that sheet's own page size.
+///
+/// # Why this is a separate function from the job loop
+///
+/// It is the whole of the per-page-orientation decision, it is pure, and
+/// it is the property the `pdfceGUI` shell reported as missing — so it
+/// is tested directly rather than only through a spooler that needs
+/// hardware to run. The substitution is stated rather than implied: a
+/// test on this function proves that a mixed document produces two
+/// different setups in the right order; that the DRIVER then honours the
+/// `ResetDC` is verified end-to-end against a real device instead,
+/// because no unit test can establish it.
+///
+/// A caller that imposed several source pages onto one sheet must
+/// resolve `Auto` itself before calling: `page_pt` is then the printable
+/// area rather than a source page, and this function would resolve from
+/// the wrong input. [`spool_with_config`] does exactly that, which is
+/// why the imposition paths keep one orientation for the whole job.
+#[cfg(windows)]
+fn resolve_sheet_setups(sheets: &[Sheet<'_>]) -> Vec<SheetSetup> {
+    sheets
+        .iter()
+        .map(|sheet| SheetSetup {
+            orientation: resolve_orientation(sheet.setup.orientation, sheet.bitmap.page_pt),
+            paper: sheet.setup.paper,
+        })
+        .collect()
+}
+
+/// Does this sheet need anything said to the driver at all?
+///
+/// # ★ Why the test is not "did the operator change something"
+///
+/// It used to be, and that had a consequence nobody had traced.
+/// [`Orientation::Auto`] is the DEFAULT, so at default settings a
+/// landscape page never turned the sheet at all — pdfce's headline
+/// auto-orientation behaviour did nothing unless the operator happened
+/// to also change the duplex or tray control, at which point it switched
+/// on as a side effect of an unrelated setting. Written up as
+/// `D:/dev/rag/rust/a_disturb_nothing_by_default_guard_can_silently_disable_the_default_behaviour_it_is_guarding.md`.
+///
+/// So the test is "will the device be in the state this sheet needs":
+/// `device_default` is what [`sheet_orientation`] read off the un-turned
+/// [`printer_caps`], and a `DEVMODE` is built whenever the resolved
+/// orientation differs from it — or whenever any setting differs from
+/// its default.
+#[cfg(windows)]
+fn setup_needs_devmode(
+    settings: DeviceSettings,
+    setup: SheetSetup,
+    device_default: Orientation,
+) -> bool {
+    setup_is_explicit(settings, setup) || setup.orientation != device_default
+}
+
+/// Did the caller ask for anything beyond the defaults?
+///
+/// Gates `DM_DUPLEX` and nothing else, deliberately. A `DEVMODE` naming
+/// `DMDUP_SIMPLEX` OVERRIDES a driver whose own default is duplex, so an
+/// orientation-only turn — which `Auto` performs at otherwise-default
+/// settings — must not quietly cancel a duplex default the operator
+/// never asked pdfce to touch.
+///
+/// The per-sheet paper is folded in rather than read off `settings`,
+/// because [`spool_sheets`] lets a sheet carry its own and a job whose
+/// only non-default request is that sheet's paper is still explicit.
+#[cfg(windows)]
+fn setup_is_explicit(settings: DeviceSettings, setup: SheetSetup) -> bool {
+    DeviceSettings {
+        paper: setup.paper,
+        ..settings
+    } != DeviceSettings::default()
+}
+
+/// Fetch the `DEVMODE` a job's sheets will be amended from, once.
 ///
 /// # ★ It starts from the DRIVER's own configuration — and until
 /// # 2026-08-18 the doc comment here said so while the code did not
 ///
-/// This function's previous documentation carried the heading *"Why it
-/// starts from the driver's own default rather than zeroed"* and the
-/// sentence *"the driver's current default is fetched first and only the
-/// requested fields are overwritten"*. Nothing was fetched. It built a
+/// The function this replaced carried the heading *"Why it starts from
+/// the driver's own default rather than zeroed"* and the sentence *"the
+/// driver's current default is fetched first and only the requested
+/// fields are overwritten"*. Nothing was fetched. It built a
 /// `DEVMODEW::default()` — a zeroed structure — set `dmOrientation` and
 /// `dmDuplex`, and handed that to `CreateDC`. The parameter that would
 /// have been needed to fetch anything was present and unused, named
@@ -2977,113 +3385,49 @@ pub fn spool_with_config(
 ///
 /// A doc comment describing behaviour the code does not have is worse
 /// than an undocumented function: it is a claim that reads as true, and
-/// it survived review three times because reviewing the claim meant
-/// reading past it to the eight lines underneath. It is recorded here
-/// rather than quietly corrected, because the shape is the point.
+/// it survived review because reviewing the claim meant reading past it
+/// to the eight lines underneath. It is recorded here rather than
+/// quietly corrected, because the shape is the point.
 ///
 /// What the synthesised structure cost is set out in the `devmode`
 /// module's own docs; the short version is that a `DEVMODE` carries a
 /// driver-private tail of `dmDriverExtra` bytes holding everything Win32
-/// has no field for, a synthesised one has none of it, and there was
-/// nowhere to put a paper size, a tray, or a configuration returned by
-/// the driver's properties dialog.
-///
-/// # Returns
-///
-/// `None` for the `DEVMODE` when there is genuinely nothing to say to
-/// the driver, in which case the caller creates the device context with
-/// no override and the device's own defaults apply in full. That is
-/// cheaper than fetching a configuration only to hand back an unmodified
-/// copy, and it is exactly equivalent.
-///
-/// # ★ Why `device_default` is a parameter, and why `Auto` can build a
-/// # `DEVMODE` on its own
-///
-/// This used to return `None` for any `settings == DeviceSettings::default()`,
-/// which reads as "the operator changed nothing, so disturb nothing".
-/// It had a consequence nobody had traced: [`Orientation::Auto`] is the
-/// DEFAULT, so at default settings a landscape page never turned the
-/// sheet at all — pdfce's headline auto-orientation behaviour did
-/// nothing unless the operator happened to also change the duplex or
-/// tray control, at which point it switched on as a side effect of an
-/// unrelated setting.
-///
-/// So the test is not "did the operator touch anything" but "will the
-/// device be in the orientation this job needs". `device_default` is
-/// what [`sheet_orientation`] read off the un-turned [`printer_caps`],
-/// and a `DEVMODE` is built whenever the resolved orientation differs
-/// from it.
-///
-/// `DM_DUPLEX` stays gated on the OLD condition, deliberately. A
-/// `DEVMODE` naming `DMDUP_SIMPLEX` overrides a driver whose own default
-/// is duplex, and an orientation-only turn must not quietly cancel a
-/// duplex default the operator never asked pdfce to touch. So an
-/// `Auto`-driven turn sets `DM_ORIENTATION` alone, and duplex is
-/// asserted only when some setting actually differs from the default.
-///
-/// # `first_page_pt` is a parameter, not `pages.first().page_pt`
-///
-/// A `DEVMODE` applies to the job, so exactly one page can decide
-/// `Auto` — and the caller has already resolved which, because it had to
-/// pass the same page to [`DeviceGeometry::for_orientation`] to plan
-/// against the right sheet. Re-deriving it from the bitmaps would let
-/// the two answers differ: the imposition paths hand the spooler one
-/// bitmap per SHEET whose `page_pt` is the printable area, not a source
-/// page, so an n-up or booklet job would resolve its `DEVMODE` from a
-/// different input than its layout. Taking it as an argument makes the
-/// two provably the same value.
+/// has no field for — 5208 bytes on Microsoft Print to PDF, 7972 on the
+/// EPSON drivers, measured — a synthesised one has none of it, and there
+/// was nowhere to put a paper size, a tray, or a configuration returned
+/// by the driver's properties dialog.
 ///
 /// # Errors
 ///
 /// [`PrintError::Configuration`] when a caller-supplied configuration
 /// belongs to a different device. A driver that will NOT report its own
-/// settings is not an error here: the job falls back to a synthesised
+/// settings is NOT an error here: the job falls back to a synthesised
 /// base and says so through [`SettingsSource::Synthesised`], because
 /// refusing to print at all would be a regression against the behaviour
 /// that shipped for months.
 #[cfg(windows)]
-fn job_configuration(
+fn job_base(
     printer: &str,
     supplied: Option<&PrinterConfiguration>,
-    settings: DeviceSettings,
-    first_page_pt: (f64, f64),
-    device_default: Orientation,
-) -> Result<(Option<PrinterConfiguration>, SettingsSource), PrintError> {
-    let orientation = resolve_orientation(settings.orientation, first_page_pt);
-    let explicit = settings != DeviceSettings::default();
-    // Nothing to say to the driver: no setting differs from the default,
-    // the device is already in the orientation this job wants, and no
-    // caller-supplied configuration has to be carried.
-    if supplied.is_none() && !explicit && orientation == device_default {
-        return Ok((None, SettingsSource::DeviceDefault));
-    }
-
-    let (mut config, source) = match supplied {
+) -> Result<(PrinterConfiguration, SettingsSource), PrintError> {
+    match supplied {
         Some(config) => {
             config.ensure_device(printer)?;
-            (config.clone(), SettingsSource::CallerSupplied)
+            Ok((config.clone(), SettingsSource::CallerSupplied))
         }
         None => match printer_configuration(printer) {
-            Ok(config) => (config, SettingsSource::DriverSupplied),
+            Ok(config) => Ok((config, SettingsSource::DriverSupplied)),
             // A driver that will not describe itself — a disconnected
             // network printer is the usual cause — degrades to exactly
-            // what this function did before it learned to ask: a
-            // structure carrying only what pdfce sets. The job still
-            // prints; the caller is told, and tells the operator.
-            Err(_) => (
+            // what this code did before it learned to ask: a structure
+            // carrying only what pdfce sets. The job still prints; the
+            // caller is told, and tells the operator.
+            Err(_) => Ok((
                 PrinterConfiguration::blank(printer),
                 SettingsSource::Synthesised,
-            ),
+            )),
         },
-    };
-
-    config.apply(
-        orientation,
-        settings.paper,
-        settings.pick_tray_by_page_size,
-        explicit.then_some(settings.duplex),
-    );
-    Ok((Some(config), source))
+    }
 }
 
 /// Blit one page's pixels onto the current page of `hdc`.
@@ -3191,13 +3535,13 @@ pub fn spool(
 ///
 /// # Why these tests are worth having even though a printer is not
 ///
-/// Everything in [`job_configuration`] that decides WHAT to send is
-/// reachable without opening a device: the "nothing to say" short
-/// circuit returns before any Win32 call, and a caller-supplied
-/// configuration is used as-is rather than fetched. Only the
-/// driver-fetch branch needs hardware, and that one is verified
-/// end-to-end against a real device instead, through
-/// `pdfce-cli print --to-file`.
+/// Everything that decides WHAT to send is reachable without opening a
+/// device: resolving each sheet's setup, deciding whether a `DEVMODE` is
+/// needed at all, and amending one are pure. Only the fetch and the
+/// `ResetDC` need hardware, and those are verified end-to-end against a
+/// real device instead — the substitution is stated here rather than
+/// left implicit, because a reader is entitled to know which half a
+/// green suite covers.
 ///
 /// The alternative — a test that names a printer and skips when it is
 /// absent — reports success while testing nothing, which is the failure
@@ -3205,54 +3549,180 @@ pub fn spool(
 #[cfg(all(test, windows))]
 mod windows_settings_tests {
     use super::{
-        DMBIN_FORMSOURCE_VALUE, DeviceSettings, Orientation, PaperSelection, PrintError,
-        PrinterConfiguration, SettingsSource, job_configuration,
+        DMBIN_FORMSOURCE_VALUE, DeviceSettings, Duplex, Orientation, PageBitmap, PaperSelection,
+        Placement, PrintError, PrinterConfiguration, SettingsSource, Sheet, SheetSetup, job_base,
+        resolve_sheet_setups, setup_is_explicit, setup_needs_devmode,
     };
 
     /// A4 portrait, in points.
     const A4: (f64, f64) = (595.0, 842.0);
-    /// A4 landscape.
-    const A4_LANDSCAPE: (f64, f64) = (842.0, 595.0);
+    /// A3 landscape — the drawing sheet behind the title page.
+    const A3_LANDSCAPE: (f64, f64) = (1190.0, 842.0);
 
-    /// The cheap path: nothing differs, so no `DEVMODE` is built and no
-    /// driver is consulted. Reached with a printer name that does not
-    /// exist, which PROVES no device call happened.
-    #[test]
-    fn a_job_that_needs_nothing_sends_no_devmode_and_opens_no_device() {
-        let (config, source) = job_configuration(
-            "there is no printer with this name",
-            None,
-            DeviceSettings::default(),
-            A4,
-            Orientation::Portrait,
-        )
-        .expect("the short circuit must not consult a device");
-        assert!(config.is_none());
-        assert_eq!(source, SettingsSource::DeviceDefault);
+    /// A one-pixel stand-in. The pixels are irrelevant to every decision
+    /// under test; the `page_pt` is not, and that is the point.
+    fn bitmap(page_pt: (f64, f64)) -> PageBitmap {
+        PageBitmap {
+            width: 1,
+            height: 1,
+            rgba: vec![0, 0, 0, 255],
+            placement: Placement {
+                scale: 1.0,
+                offset_x_pt: 0.0,
+                offset_y_pt: 0.0,
+                clipped: false,
+            },
+            page_pt,
+        }
     }
 
-    /// A caller-supplied configuration is amended, never replaced, and
-    /// is reported as the caller's. Also reached with a nonexistent
-    /// printer name: a supplied configuration means no fetch.
+    /// ★ The property the `pdfceGUI` shell reported as missing.
+    ///
+    /// A CAD export — an A4 portrait title sheet followed by A3
+    /// landscape drawings — must resolve to BOTH orientations, in order.
+    /// Before 2026-08-18 every sheet took page 1's answer.
     #[test]
-    fn a_caller_supplied_configuration_is_amended_and_reported_as_such() {
-        let base = PrinterConfiguration::blank("phantom");
-        let settings = DeviceSettings {
-            pick_tray_by_page_size: true,
-            ..DeviceSettings::default()
+    fn auto_resolves_orientation_per_sheet_not_once_for_the_job() {
+        let title = bitmap(A4);
+        let drawing = bitmap(A3_LANDSCAPE);
+        let setup = SheetSetup::default();
+        let sheets = [
+            Sheet {
+                bitmap: &title,
+                setup,
+            },
+            Sheet {
+                bitmap: &drawing,
+                setup,
+            },
+            Sheet {
+                bitmap: &drawing,
+                setup,
+            },
+        ];
+        let resolved = resolve_sheet_setups(&sheets);
+        assert_eq!(
+            resolved
+                .iter()
+                .map(|s| s.orientation)
+                .collect::<Vec<Orientation>>(),
+            vec![
+                Orientation::Portrait,
+                Orientation::Landscape,
+                Orientation::Landscape
+            ],
+            "Auto must read each sheet's own shape"
+        );
+        // And the run is collapsed: two distinct setups, not three.
+        let mut distinct: Vec<SheetSetup> = Vec::new();
+        for setup in &resolved {
+            if !distinct.contains(setup) {
+                distinct.push(*setup);
+            }
+        }
+        assert_eq!(distinct.len(), 2, "one ResetDC, not two");
+    }
+
+    /// An explicit orientation is honoured verbatim on every sheet — a
+    /// landscape page does NOT force a turn when the operator said
+    /// portrait.
+    #[test]
+    fn an_explicit_orientation_is_not_second_guessed_per_sheet() {
+        let drawing = bitmap(A3_LANDSCAPE);
+        let sheets = [Sheet {
+            bitmap: &drawing,
+            setup: SheetSetup {
+                orientation: Orientation::Portrait,
+                paper: PaperSelection::DeviceDefault,
+            },
+        }];
+        assert_eq!(
+            resolve_sheet_setups(&sheets)[0].orientation,
+            Orientation::Portrait
+        );
+    }
+
+    /// ★ The regression guard for the defect written up as
+    /// `a_disturb_nothing_by_default_guard_can_silently_disable_the_default_behaviour_it_is_guarding.md`:
+    /// at DEFAULT settings, a landscape sheet on a portrait-default
+    /// device still needs a `DEVMODE`, because `Auto` resolving to
+    /// landscape IS a change even though nothing was "set".
+    #[test]
+    fn a_landscape_sheet_needs_a_devmode_even_at_default_settings() {
+        let landscape = SheetSetup {
+            orientation: Orientation::Landscape,
+            paper: PaperSelection::DeviceDefault,
         };
-        let (config, source) = job_configuration(
-            "phantom",
-            Some(&base),
-            settings,
-            A4_LANDSCAPE,
-            Orientation::Portrait,
-        )
-        .expect("a supplied configuration must not consult a device");
+        let portrait = SheetSetup::default();
+        assert!(setup_needs_devmode(
+            DeviceSettings::default(),
+            landscape,
+            Orientation::Portrait
+        ));
+        // …and the genuinely-nothing-to-do case still says nothing.
+        assert!(!setup_needs_devmode(
+            DeviceSettings::default(),
+            SheetSetup {
+                orientation: Orientation::Portrait,
+                ..portrait
+            },
+            Orientation::Portrait
+        ));
+        // A landscape-DEFAULT device is the mirror image, and gets the
+        // opposite answers. A test written only on a portrait device
+        // would pass with the comparison hard-coded to portrait.
+        assert!(!setup_needs_devmode(
+            DeviceSettings::default(),
+            landscape,
+            Orientation::Landscape
+        ));
+        assert!(setup_needs_devmode(
+            DeviceSettings::default(),
+            portrait,
+            Orientation::Landscape
+        ));
+    }
+
+    /// `DM_DUPLEX` is gated on something actually differing, so an
+    /// `Auto` turn cannot cancel a driver's own duplex default.
+    #[test]
+    fn an_orientation_only_turn_is_not_explicit() {
+        assert!(!setup_is_explicit(
+            DeviceSettings::default(),
+            SheetSetup {
+                orientation: Orientation::Landscape,
+                paper: PaperSelection::DeviceDefault,
+            }
+        ));
+        // A per-SHEET paper selection makes it explicit even though
+        // `settings` is untouched — the case a whole-struct comparison
+        // against `settings` alone would miss.
+        assert!(setup_is_explicit(
+            DeviceSettings::default(),
+            SheetSetup {
+                orientation: Orientation::Portrait,
+                paper: PaperSelection::Form(9),
+            }
+        ));
+        assert!(setup_is_explicit(
+            DeviceSettings {
+                duplex: Duplex::LongEdge,
+                ..DeviceSettings::default()
+            },
+            SheetSetup::default()
+        ));
+    }
+
+    /// A caller-supplied configuration is used as the base and reported
+    /// as the caller's. Reached with a printer name that does not exist,
+    /// which PROVES no driver call happened on this path.
+    #[test]
+    fn a_caller_supplied_configuration_is_the_base_and_is_reported_as_such() {
+        let supplied = PrinterConfiguration::blank("phantom");
+        let (base, source) =
+            job_base("phantom", Some(&supplied)).expect("a supplied configuration needs no device");
         assert_eq!(source, SettingsSource::CallerSupplied);
-        let summary = config.expect("a configuration was supplied").summary();
-        assert_eq!(summary.orientation, Some(Orientation::Landscape));
-        assert!(summary.picks_tray_by_size);
+        assert_eq!(base, supplied);
     }
 
     /// A configuration from a different device is refused rather than
@@ -3260,33 +3730,33 @@ mod windows_settings_tests {
     #[test]
     fn a_configuration_from_another_device_is_refused() {
         let foreign = PrinterConfiguration::blank("some other printer");
-        let err = job_configuration(
-            "phantom",
-            Some(&foreign),
-            DeviceSettings::default(),
-            A4,
-            Orientation::Portrait,
-        )
-        .expect_err("a foreign configuration must be refused");
+        let err = job_base("phantom", Some(&foreign)).expect_err("a foreign one must be refused");
         assert!(matches!(err, PrintError::Configuration(_)));
     }
 
-    /// The paper selection reaches the structure, and asking for paper
-    /// is enough on its own to make a job "explicit".
+    /// The amend a sheet actually gets: orientation and paper from the
+    /// SHEET, tray from the job.
     #[test]
-    fn selecting_paper_builds_a_devmode_even_at_otherwise_default_settings() {
-        let base = PrinterConfiguration::blank("phantom");
+    fn a_sheet_configuration_carries_the_sheets_own_orientation_and_paper() {
         let settings = DeviceSettings {
-            paper: PaperSelection::Form(9),
+            pick_tray_by_page_size: true,
             ..DeviceSettings::default()
         };
-        let (config, _) =
-            job_configuration("phantom", Some(&base), settings, A4, Orientation::Portrait)
-                .expect("no device is consulted");
-        assert_eq!(
-            config.expect("a configuration").summary().paper_form_id,
-            Some(9)
+        let setup = SheetSetup {
+            orientation: Orientation::Landscape,
+            paper: PaperSelection::Form(8),
+        };
+        let mut config = PrinterConfiguration::blank("phantom");
+        config.apply(
+            setup.orientation,
+            setup.paper,
+            settings.pick_tray_by_page_size,
+            setup_is_explicit(settings, setup).then_some(settings.duplex),
         );
+        let summary = config.summary();
+        assert_eq!(summary.orientation, Some(Orientation::Landscape));
+        assert_eq!(summary.paper_form_id, Some(8));
+        assert!(summary.picks_tray_by_size);
     }
 
     /// `DMBIN_FORMSOURCE` is written into a signed member and compared
