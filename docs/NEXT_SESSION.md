@@ -196,6 +196,22 @@ written to a pdfce doc is:
 
 ## §6 — Housekeeping, owed items, and one live hazard
 
+**⇢ FIRST TASK ON RESUME: `75fa497` is unfiled and CI will be red on
+`check-commits-filed.py` until it is.** It mixes the 167th librarian filing
+with a code fix, so unlike a docs-only filing commit it does need one of its
+own. Dispatch `pdfce-librarian` with its full message
+(`git log -1 --format=%B 75fa497`) — it is short and self-contained: a
+`DeviceCMYK` soft mask converted colour to sRGB by two different routes
+feeding one luminosity computation (`/BC` naive, painted content calibrated),
+with a justification comment that made a false claim about §11.6.5.2. Fixed,
+with a test that pins the agreement and asserts the routes genuinely diverge
+so it cannot go vacuous.
+
+*(Note the structural trap: a filing commit that also touches `crates/`
+needs filing itself. Keep librarian filings docs-only and the regress stops —
+the gate skips docs-only commits.)*
+
+
 **v0.7.0 is bumped but NOT tagged or released.** `git describe` =
 `v0.6.0-36-g2a75be1` — **nothing released in 36 commits.** CI was red on
 `check-commits-filed.py` for most of the session; `18a0f15` is green.
