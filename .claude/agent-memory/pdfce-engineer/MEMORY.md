@@ -29,7 +29,7 @@
 - [Rungs: click-out commits, and the three-rung ladder](project_rung_ladder_state.md) — 2026-08-05: Passes 34.0/36.0/36.1/36.2 shipped; what commits implicitly and what still doesn't
 - [Screenshot when the question is visual](feedback_screenshot_when_the_question_is_visual.md) — `drawn=true` in a trace hid a 680px coordinate-space bug; use gui-shot.ps1 for "I can't see X"
 - [Design system + the Acrobat-GUI rule conflict](project_design_system_and_rule12_conflict.md) — UI_PREFERENCES.md is at the REPO ROOT not docs/ (twice misread as missing); chrome theme-aware vs overlay theme-INVARIANT; handoff vs rule 12
-- [GUI work paused](project_gui_work_paused.md) — Ken, 2026-08-13: no pdfce-gui work until he says so; core/CLI/docs continue, ship gui [ ] honestly
+- [GUI work paused + column re-based](project_gui_work_paused.md) — in-repo GUI is being REMOVED; from 2026-08-19 FEATURES.md's gui column tracks D:\dev\pdfceGUI, not crates/pdfce-gui
 - [pdfceGUI request channel](project_gui_request_channel.md) — CHECK D:\Dev\FeatureRequests\pdfce_FeatureRequests EVERY SESSION; requests from the new GUI project land there
 - [No provisional marking](feedback_no_provisional_marking.md) — Ken 2026-08-13: inferred content renders NORMALLY, Save commits, disclosure goes off-canvas; marking = a second render path that drifts
 - [Wrapped string literals lose backslashes](feedback_wrapped_string_literals_lose_backslashes.md) — patching them via heredoc ships error messages with 10-space gaps; grep for it, nothing else catches it
