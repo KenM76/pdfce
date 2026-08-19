@@ -9,7 +9,7 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 |---|---|
 | **Date** | 2026-08-13 |
 | **Verified against** | `7031296` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
-| **Primary subject** | `crates/pdfce-core/src/edit.rs` (25,463 lines) |
+| **Primary subject** | `crates/pdfce-core/src/edit.rs` (25,544 lines) |
 | **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 120 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
@@ -491,11 +491,45 @@ Both take `&mut self` despite changing nothing (they read `self.view()`).
 | Ask whether embedding is refused | `embed_refusal(&self) -> Option<EditError>` | 16553 | ✅ Load-bearing. |
 | Add missing font programs | `embed_fonts(&mut self, &EmbedRequest) -> Result<EmbedPlan, EditError>` | 16625 | ONE undo entry. **The file gets bigger, and the save mode does not change that.** |
 
-### 1.21 Images (1)
+### 1.21 Images (1 session verb + 3 pure previews on `NewImage`)
 
 | I want to… | Call | Line | Returns |
 |---|---|---|---|
 | Place a raster image | `add_image(&mut self, spec: &NewImage<'_>) -> Result<ImageAuthorOutcome, EditError>` | 17437 | `{ image_id, soft_mask_id, content_id, resource_name, placed_rect, disclosures }`. Image XObject + optional `/SMask` + `q…cm…Do…Q` overlay stream + page patches, ONE undo entry. Additive — originals stay byte-verbatim. |
+
+#### ★ The pure preview trio on `NewImage` — call these, do not re-derive them
+
+`&self`, no session, no side effects. The same relationship
+`preview_group_scale` (§1.19) has to `set_group_scale`: **a front end drawing
+a preview must show the number the edit will produce.**
+
+| I want to preview… | Call | Returns |
+|---|---|---|
+| where the picture lands | `placed_rect(&self) -> Rect` | `rect` under `Stretch`; the largest centred same-aspect sub-rectangle under `Contain`. |
+| the resolution it implies | `effective_dpi(&self) -> (f64, f64)` | Image pixels per **inch of page**, per axis. `0.0` on a degenerate axis — never `inf`. |
+| whether that is soft | `below_screen_resolution(&self) -> bool` | `true` below 72 dpi on either axis. |
+
+★★ **`add_image` computes `ImageAuthorDisclosures::effective_dpi` and
+`below_screen_resolution` BY CALLING these**, and that — not the arithmetic —
+is the property that matters. The `pdfceGUI` session asked for the pair on
+2026-08-19 and was explicit: *"If that is awkward for how the outcome is
+assembled, I would rather have nothing than have two implementations."*
+
+A preview a shell trusts and an outcome that disagrees with it is the defect
+of §1.6 trap (b) — a pane reading `77.5°` while the `/AP` read `77.47 pt`,
+from two independent derivations of one display value. Pinned by
+`the_pure_dpi_preview_equals_what_the_outcome_reports`, which fails if the
+two are ever separated again.
+
+**Measure the PLACED rectangle, not the requested one.** Under `Contain`
+they differ, and the resolution an operator gets is the one over the area the
+picture actually covers. `effective_dpi` already does this; a shell
+re-deriving from `spec.rect` would report a lower number than the truth.
+
+**Not a refusal.** `below_screen_resolution` is a stated boundary with a
+number beside it. A 12 dpi placement is a legitimate deliberate act; the
+requester asked for the number *before* commit, not for something that stops
+them.
 
 ### 1.22 Outcome structs — field reference
 

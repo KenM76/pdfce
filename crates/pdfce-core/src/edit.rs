@@ -19845,6 +19845,86 @@ impl<'a> NewImage<'a> {
         self
     }
 
+    /// The resolution this placement implies — **image pixels per inch of
+    /// page**, horizontally and vertically.
+    ///
+    /// Pure, `&self`, no session: the same relationship
+    /// [`Self::placed_rect`] has to the placement, and
+    /// `preview_group_scale` has to `set_group_scale`. A front end can put
+    /// this beside the size spinner that decides it.
+    ///
+    /// # Why this exists, in the requester's words
+    ///
+    /// [`ImageAuthorDisclosures::effective_dpi`] reports the same number,
+    /// but only on the **outcome** — so an operator learned their logo would
+    /// plot soft *after* placing it, and the corrective was undo plus a
+    /// second guess at the size. The `pdfceGUI` session filed this on
+    /// 2026-08-19 rather than computing it themselves, and quoted
+    /// [`Self::placed_rect`]'s own doc back at me to explain why:
+    /// *"re-deriving the arithmetic in the GUI is how a preview and a result
+    /// drift apart."*
+    ///
+    /// ★ **So the important property is not the arithmetic — it is that
+    /// [`ImageAuthorDisclosures`] is now computed BY CALLING THIS**, not by
+    /// repeating it. A pure preview that a shell trusts and an outcome that
+    /// disagrees with it would be the same defect one layer down, and worse
+    /// for having been introduced by the request that meant to prevent it.
+    /// `03-capabilities.md` §1.6 trap (b) records what that costs: a pane
+    /// reading `77.5°` while the `/AP` read `77.47 pt`, from two independent
+    /// derivations of one display value.
+    ///
+    /// # The number, and what a zero means
+    ///
+    /// `pixels ÷ (points ÷ 72)`, on the **placed** rectangle rather than the
+    /// requested one — under [`ImageFit::Contain`] those differ, and the
+    /// resolution an operator gets is the one over the area the picture
+    /// actually covers.
+    ///
+    /// A degenerate placement (zero width or height) yields `0.0` on that
+    /// axis rather than an infinity. Zero is not a resolution, and it is the
+    /// value the outcome has always reported for the same case; a `NaN` or
+    /// an `inf` reaching a spinner label is a worse answer than an obviously
+    /// impossible one.
+    ///
+    /// The size used is the **displayed** pixel count, so an EXIF-rotated
+    /// photograph is measured by the shape it will appear as — matching
+    /// [`Self::placed_rect`], which fits by the same shape.
+    #[must_use]
+    pub fn effective_dpi(&self) -> (f64, f64) {
+        let placed = self.placed_rect();
+        let (pw, ph) = (placed.urx - placed.llx, placed.ury - placed.lly);
+        let (px_w, px_h) = self.image.display_size_px();
+        // Pixels per inch = pixels / (points / 72).
+        let dpi_x = if pw > 0.0 {
+            f64::from(px_w) * 72.0 / pw
+        } else {
+            0.0
+        };
+        let dpi_y = if ph > 0.0 {
+            f64::from(px_h) * 72.0 / ph
+        } else {
+            0.0
+        };
+        (dpi_x, dpi_y)
+    }
+
+    /// Whether [`Self::effective_dpi`] is below **one image pixel per
+    /// point** on either axis (72 dpi).
+    ///
+    /// A stated boundary with a number beside it, not a refusal: a 12 dpi
+    /// placement is a legitimate thing to do deliberately, and the
+    /// requesting shell asked explicitly for the number rather than a
+    /// threshold that stops them.
+    ///
+    /// 72 is the boundary because below it the page has fewer image pixels
+    /// than PDF points, so the placement cannot be sharp at 100 % zoom on
+    /// any device — it is a property of the geometry, not a taste.
+    #[must_use]
+    pub fn below_screen_resolution(&self) -> bool {
+        let (x, y) = self.effective_dpi();
+        x < 72.0 || y < 72.0
+    }
+
     /// Where the image will actually land — equal to
     /// [`rect`](Self::rect) under [`ImageFit::Stretch`], and the largest
     /// centred sub-rectangle of the same aspect ratio under
@@ -20473,17 +20553,18 @@ impl EditSession {
         let notes = img.notes;
         let (pw, ph) = (placed.urx - placed.llx, placed.ury - placed.lly);
         let (px_w, px_h) = img.display_size_px();
-        // Pixels per inch = pixels / (points / 72).
-        let dpi_x = if pw > 0.0 {
-            f64::from(px_w) * 72.0 / pw
-        } else {
-            0.0
-        };
-        let dpi_y = if ph > 0.0 {
-            f64::from(px_h) * 72.0 / ph
-        } else {
-            0.0
-        };
+        // ★ COMPUTED BY CALLING THE PURE PREVIEW, never re-derived here.
+        //
+        // This block used to hold its own copy of `pixels / (points / 72)`.
+        // `NewImage::effective_dpi` is the same arithmetic, and the whole
+        // point of exposing it was that a shell can show the operator this
+        // number BEFORE they commit — which is worth nothing if the outcome
+        // then quotes a second derivation of it.
+        //
+        // `placed` here is `spec.placed_rect()` (see the caller), so the two
+        // are looking at the same rectangle by construction rather than by
+        // coincidence.
+        let (dpi_x, dpi_y) = spec.effective_dpi();
 
         let requested = spec.rect;
         let (rw, rh) = (requested.urx - requested.llx, requested.ury - requested.lly);
@@ -20510,7 +20591,7 @@ impl EditSession {
             letterboxed,
             aspect_distorted,
             effective_dpi: (dpi_x, dpi_y),
-            below_screen_resolution: dpi_x < 72.0 || dpi_y < 72.0,
+            below_screen_resolution: spec.below_screen_resolution(),
             recompressed: notes.recompressed,
             requested_compression: notes.requested_compression,
             applied_compression: notes.applied_compression,

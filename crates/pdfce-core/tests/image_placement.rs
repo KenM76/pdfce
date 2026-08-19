@@ -33,7 +33,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use pdfce_core::document::Document;
-use pdfce_core::edit::{EditError, EditSession, NewImage};
+use pdfce_core::edit::{EditError, EditSession, ImageFit, NewImage};
 use pdfce_core::graph::ObjectGraph;
 use pdfce_core::image_import::{
     self, ImageCompression, ImageImportError, ImportFilter, ImportOptions, ImportedImage,
@@ -1922,4 +1922,134 @@ fn lossless_keeps_the_exif_orientation() {
         (p.urx - p.llx - 80.0).abs() < 1e-9 && (p.ury - p.lly - 120.0).abs() < 1e-9,
         "the DISPLAYED 4x6 shape still drives the fit: {p:?}"
     );
+}
+
+// ---------------------------------------------------------------------------
+// The pure DPI preview (`pdfceGUI` request, 2026-08-19)
+// ---------------------------------------------------------------------------
+
+/// ★★ THE PROPERTY THE REQUEST WAS ACTUALLY ABOUT: the preview and the
+/// outcome cannot disagree, because they are the same code.
+///
+/// The requesting shell was explicit that the arithmetic was not the ask —
+/// they could have written four lines themselves. What they wanted was that
+/// `add_image` compute its disclosure **by calling** the pure method, so a
+/// number shown beside a size spinner and the number reported after placing
+/// can never drift. Their words: *"If that is awkward for how the outcome is
+/// assembled, I would rather have nothing than have two implementations."*
+///
+/// So this test compares the two across placements chosen to disagree if the
+/// derivations were ever separated — including `Contain`, where the placed
+/// rectangle is **not** the requested one and a second implementation would
+/// plausibly measure the wrong rectangle.
+#[test]
+fn the_pure_dpi_preview_equals_what_the_outcome_reports() {
+    let img = imported("rgba8.png");
+
+    for (label, spec) in [
+        ("stretch, square", {
+            let mut n = NewImage::new(0, rect(0.0, 0.0, 100.0, 100.0), &img);
+            n.fit = ImageFit::Stretch;
+            n
+        }),
+        (
+            // Contain into a rectangle whose aspect differs from the image's:
+            // `placed_rect()` letterboxes, so the placed rectangle is smaller
+            // than the requested one and the DPI is HIGHER than a naive
+            // measurement of `rect` would give.
+            "contain, letterboxed",
+            {
+                let mut n = NewImage::new(0, rect(0.0, 0.0, 400.0, 100.0), &img);
+                n.fit = ImageFit::Contain;
+                n
+            },
+        ),
+        ("tiny box -- very high dpi", {
+            let mut n = NewImage::new(0, rect(10.0, 10.0, 14.0, 14.0), &img);
+            n.fit = ImageFit::Stretch;
+            n
+        }),
+        ("huge box -- below screen resolution", {
+            let mut n = NewImage::new(0, rect(0.0, 0.0, 2000.0, 2000.0), &img);
+            n.fit = ImageFit::Stretch;
+            n
+        }),
+    ] {
+        let preview = spec.effective_dpi();
+        let preview_soft = spec.below_screen_resolution();
+
+        let mut s = session();
+        let out = s.add_image(&spec).expect("placement succeeds");
+
+        assert_eq!(
+            preview, out.disclosures.effective_dpi,
+            "{label}: the pure preview and the outcome must be the SAME number \
+             -- if they differ, `add_image` has stopped calling \
+             `NewImage::effective_dpi` and the drift this request existed to \
+             prevent has been reintroduced one layer down"
+        );
+        assert_eq!(
+            preview_soft, out.disclosures.below_screen_resolution,
+            "{label}: the soft-resolution flag must agree too"
+        );
+    }
+}
+
+/// The preview measures the PLACED rectangle, not the requested one.
+///
+/// Under `Contain` those differ, and a second implementation written from the
+/// request's own sketch (`display_size_px().0 / (placed_width_pt / 72.0)`)
+/// would be right only if it remembered to letterbox first. Pinned so the
+/// distinction is a test rather than a comment.
+#[test]
+fn contain_measures_the_letterboxed_rectangle_not_the_requested_one() {
+    let img = imported("rgba8.png");
+    let wide = rect(0.0, 0.0, 400.0, 100.0);
+    let mut spec = NewImage::new(0, wide, &img);
+    spec.fit = ImageFit::Contain;
+
+    let placed = spec.placed_rect();
+    let placed_w = placed.urx - placed.llx;
+    assert!(
+        placed_w < 399.0,
+        "the fixture must actually letterboxs, or this test proves nothing; \
+         placed width {placed_w}"
+    );
+
+    let (dpi_x, _) = spec.effective_dpi();
+    let naive = {
+        let (px_w, _) = img.display_size_px();
+        f64::from(px_w) * 72.0 / (wide.urx - wide.llx)
+    };
+    assert!(
+        dpi_x > naive * 1.5,
+        "measuring the REQUESTED rectangle gives {naive:.1} dpi; the placed \
+         one gives {dpi_x:.1}. They must not be close, or the test cannot \
+         tell which rectangle was used."
+    );
+}
+
+/// A degenerate placement reports `0.0`, not an infinity.
+///
+/// Zero is not a resolution, but it is a number a spinner label can render;
+/// `inf` is not, and `NaN` compares false against itself, which would make
+/// the agreement test above pass vacuously.
+#[test]
+fn a_zero_area_placement_reports_zero_dpi_rather_than_infinity() {
+    let img = imported("rgba8.png");
+    let spec = {
+        let mut n = NewImage::new(0, rect(10.0, 10.0, 10.0, 10.0), &img);
+        n.fit = ImageFit::Stretch;
+        n
+    };
+    let (x, y) = spec.effective_dpi();
+    assert_eq!(
+        (x, y),
+        (0.0, 0.0),
+        "a zero-area placement has no resolution"
+    );
+    assert!(x.is_finite() && y.is_finite());
+    // And it counts as below screen resolution, which is the honest reading:
+    // it is certainly not sharp.
+    assert!(spec.below_screen_resolution());
 }
