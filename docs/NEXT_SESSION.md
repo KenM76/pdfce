@@ -252,18 +252,61 @@ and nothing could tell the difference from outside.
 
 ---
 
-## §4 — iccce
+## §4 — iccce: PENDING INTEGRATION, not a separate project pdfce merely knows about
 
-- **pdfce does not depend on iccce.** Measured, not assumed: zero matches in
-  any `Cargo.toml` and zero in any source file. Decision 064 records the
-  *boundary*; a boundary is not a dependency edge. `--version` therefore prints
-  `iccce: not-linked` **with the reason**, because the operator asked for that
-  revision by name and an omitted line reads as an oversight.
+**★ THIS SECTION WAS WRONG WHEN FIRST WRITTEN AND THE OPERATOR CORRECTED IT
+THE SAME DAY.** It said *"pdfce does not depend on iccce… a boundary is not a
+dependency edge"* and posed, as an open question for him, *"does he intend
+iccce to become an actual pdfce dependency?"*
+
+**That question is already answered in this repository, and in iccce's.** He
+asked why it was being asked, and he was right to.
+
+- `iccce`'s `README.md`, second sentence: ***"Its first consumer is `pdfce`."***
+  It exists **because of** pdfce.
+- It lists **four capabilities pdfce cannot deliver without it**, none of them
+  a one-time reference: `ICCBased` spaces rendered better than their
+  `/Alternate`; `Separation`/`DeviceN` spot colour through a real colorimetric
+  path instead of a tint approximation; **PDF/X output intents**, "the whole
+  point of PDF/X and currently ignored"; and soft-proofing / separations
+  preview.
+- Decision 064's own status line: **"DECIDED (boundary), NOT STARTED (either
+  consumer)."** Unstarted work — not a decision to stay apart.
+- iccce even maintains a `FEATURES.md` written *for a consumer, principally
+  pdfce*.
+
+**So the absence is a TASK, not an architecture.** The two look identical in a
+one-word banner, which is exactly how the mistake was made: `--version` said
+`iccce: not-linked`, which is true and reads as final. It now says
+**`not-linked-yet (integration pending -- Pass 97.x)`**.
+
+### The lesson, because it is one this project has already written down
+
+The answer was **already sourced in the record while a document still asked
+the question** — the same shape `CLAUDE.md`'s XFA bullet names by example:
+*"Nothing was wrong, nothing contradicted anything — the finding simply never
+propagated to the place that needed it. Grep the corpus before recording
+something as unverified."* Asking the operator something decision 064 answers
+costs him the work of being the memory.
+
+### Where it actually lands
+
+**`Pass 97.x`, the colorant compositor — already the top of §2's queue.**
+`docs/compositor-plan.md` (line ~355) records that the ICC hop is iccce's, and
+iccce has **already shipped the exact call**:
+`Chain::with_destination(&src, Destination::None, intent)`. So the dependency
+edge appears when the compositor does; there is no separate "adopt iccce"
+Pass to schedule, and `Pass 101.1`'s block clears at the same moment.
+
 - iccce is at `D:\Dev\iccce`, `v0.1.0-19-g400179b`.
-- **`D:\Dev\FeatureRequests\iccce_FeatureRequests\open\` holds FIVE files, not
-  the two the last handoff named** — three `note_*` and two `request_*`. I did
-  not read any of them and am not claiming to know which are owed by whom.
-  **Establish that rather than inheriting my count.**
+- **`iccce_FeatureRequests\open\` holds SIXTEEN files** — 5 requests, 6
+  replies, 5 notes, direction read from each file's own header. Two requests
+  are genuinely owed. One stray duplicate reply to delete; three answered
+  exchanges awaiting archival.
+- ★ **`note_gray_black_routing_is_yours.md`** (newest, 13.5 KB) is a boundary
+  ruling handing pdfce the four-way gray/CMYK/`Separation`/`DeviceN` black
+  equivalence. **Not a request — the highest-value unread file in that
+  channel**, and it bears directly on `Pass 97.x`.
 
 ---
 

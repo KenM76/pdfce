@@ -96,6 +96,233 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `3cfc5d4` — **THE SEVENTH INSTANCE WAS INSIDE THE COMMIT THAT NAMED THE CLASS, AND THE GATE'S PROSE DISAGREED WITH THE GATE FOR SEVEN MONTHS: `check-commits-filed.py`'s docstring advertised a `docs/` exemption its code stopped granting on 2026-08-11, and that stale CONTRACT misled a filing's PLAN. Plus a cp1252-emitting gate fixed as a CLASS (zero gates now lack the guard) and a widening correctly REFUSED. ★ `R198` MINTED — the flagged practice that would have prevented the day's six-iteration non-termination was never numbered, and therefore never bound** — no Pass ID, no decision minted; commit `3cfc5d4` touches `tools/check-commits-filed.py`, `tools/check-core-api-verbs.py`, `tools/check-image-colorspace-truth.py` and the 187th filing's `docs/` work, and is cited here to satisfy `check-commits-filed.py` — filed 2026-08-18 (hundred-and-eighty-eighth filing)
+
+**No Pass ID, no decision record.** Same disposition as `e11b4f8` /
+`3e3019a` / `dbec60a` / `bd861a0` / `3f8cc1e` / `e194b46` / `5d8eab5` /
+`bea3cb1`: nothing gained a capability, nothing was designed. Three
+instruments were corrected and one contract was un-staled. **One standing
+rule IS minted (`R198`)** — see *Standing rules*, and see the warrant
+below, which is five occurrences rather than a suspicion.
+
+**Filed by `pdfce-librarian` WITH a shell (hard rule 8).** One commit;
+`tools/check-commits-filed.py` was **RED on exactly that one commit**
+before this filing — verified by running it, not inferred.
+
+#### ★★★★ THE ONE THAT MATTERS: A GATE'S PROSE AND ITS BEHAVIOUR DISAGREED, AND THE PROSE IS WHAT PEOPLE PLAN AGAINST
+
+`check-commits-filed.py`'s *WHAT IS SKIPPED* list, item 1, read
+**"Commits that touch `docs/`."** Its code has not done that since
+**2026-08-11**, when `b4a66ed` was caught carrying a real CLI/GUI change
+bundled with a filing of three *other* commits — a mixed commit
+self-certifying by containing the record files it was never described in.
+**The logic was corrected that day; the summary was not**, and went on
+advertising an exemption the gate had stopped granting.
+
+★ **The damage is a different and worse shape than the other seven
+instances of this session, and that difference is the entry.** The others
+were stale **figures** — a line count, a verb count — and a stale figure
+misleads a *reader*. This was a stale **contract**, and a stale contract
+misleads a ***plan***: the 187th filing designed its whole termination
+strategy around the belief that a mixed code+docs commit would be exempt,
+quoted the docstring as its evidence, and recorded that reasoning in this
+file (see the amendment on the `bea3cb1` entry, below). **Nothing checks
+prose against code.** A figure has a world-source that can contradict it;
+a contract's only source is the code beside it, and no gate reads its own
+neighbours' English.
+
+**The correction is recorded with its supersession and date rather than
+silently rewritten** — `R197`'s shape applied to a docstring: the old
+wording is quoted, the date it stopped being true is named, and the
+incident that falsified it is cited.
+
+**★ And note the recursion, because it is one sentence and it is the
+whole moral: the gate whose docstring was stale is the gate whose header
+already records being fixed TWICE for applying a fix "where the problem
+had been SEEN rather than to every stream."** It generalised
+`stdout → all streams`, and did not generalise `logic → the prose that
+describes the logic`.
+
+#### ★★ THE SEVENTH INSTANCE, ACCEPTED AND NAMED — AND THE WIDENING CORRECTLY REFUSED
+
+The 187th filing reported that `bea3cb1` named the class *published
+figures nobody re-derives* and then enforced it only under
+`docs/core-api/`. **The engineer ran the repo-wide sweep and accepted the
+finding — into `check-core-api-verbs.py`'s header as a fifth stated limit,
+not as a wider glob.** The disposition of the 13 `` `x.rs` (N lines) ``
+claims is in the 187th filing's box under *Next up*; the ruling is:
+
+⇒ ***The enforceable class is bounded by document LIVENESS, and liveness
+is not mechanically detectable*** — five of the thirteen are correctly
+**frozen** dated records (one off by **7.4×** and harmless *precisely
+because* its header carries a date) and one cites a file that no longer
+exists. **A glob would go red on all six, and the only way to quiet it
+would be to falsify history.** So the recommendation was filed as-is: an
+explicit **opt-in list of living documents**, owed rather than guessed at.
+
+★ **This is the first time today that NOT widening a gate was the correct
+answer, and the engineer said so explicitly.** Worth recording, because
+this session's whole arc is "the instrument was scoped too narrowly" and
+the reflex it trains is *widen*. The counter-case has the same evidentiary
+bar as the widenings did — it was **measured** (13 claims, dispositioned
+individually), not asserted from caution. `R106` and
+`D:\dev\rag\rust\ci_gate_red_at_baseline_enforces_nothing.md` are the
+prior art for why a gate red at baseline enforces nothing.
+
+#### ★★ cp1252 FIXED, AND THEN FIXED AS A CLASS — THE ONE PLACE THE DAY'S LESSON WAS APPLIED PROSPECTIVELY
+
+**Byte-verified both ways**, per hard rule 10's corollary that a
+correction is a claim and must name its world-source:
+
+| | command | before (`bea3cb1`) | after (`3cfc5d4`) |
+|---|---|---|---|
+| the `PASS —` em dash | `python tools/check-core-api-verbs.py \| tail -1 \| od -c` | `0227` (cp1252 `0x97`) | **`342 200 224`** (UTF-8) ✓ |
+| gates lacking the guard | `for f in tools/check-*.py; do grep -q reconfigure "$f" \|\| echo "$f"; done` | 2 of 9 | **0 of 9** ✓ |
+
+★ **The detail worth filing is not the bug — it is that its author read
+that mojibake roughly twenty times during the session and never looked at
+it.** `R174`'s shape exactly, and the **second** time in one day that an
+author's own output went unread. A gate's output is the one artefact
+guaranteed to be seen and the one nobody reads, because a green line is
+consumed as a *state*, not as a *sentence*.
+
+★★ **And it was then fixed as a class rather than as the instance.**
+`check-image-colorspace-truth.py` was the only other `.py` gate lacking
+the guard; it prints pure ASCII, so it was **latent rather than live**,
+and **it got the guard anyway** — one line, against a future edit that
+adds an arrow to a failure message and quietly loses it. **Zero gates now
+lack it.** In a session whose entire finding is *seven repairs to the
+instance instead of the class*, this is the one place the lesson was
+applied **prospectively**, and it is recorded here so the arc has a
+counter-example in it rather than only failures.
+
+**Also in the commit:** the two list items both numbered `3` in
+`check-core-api-verbs.py`'s *WHAT IT DOES NOT CHECK* list, and the list's
+order after the renumber. Both corrected — owed item **9**, closed.
+
+#### ★★★ `R198` — WHY A RULE IS MINTED HERE WHEN THE 187TH FILING DECLINED TO MINT ONE
+
+The 168th filing recorded **"Librarian filing commits stay docs-only"** as
+a ***FLAGGED PRACTICE, NOT A NUMBERED RULE, FIRST OCCURRENCE***, and wrote
+its own trigger: *"Watch for a second instance before minting one here."*
+**The trigger has fired four more times, all but one of them today**, and
+this filing pulls it:
+
+| commit | the filing it carried | the code it also carried |
+|---|---|---|
+| `75fa497` | 167th | `crates/pdfce-render/src/color.rs`, `interpret.rs` |
+| `85c9cb4` | 182nd–183rd | `tools/check-ledger-numbers.py` |
+| `5d8eab5` | 186th | `tools/check-core-api-verbs.py` |
+| `bea3cb1` | 187th | `tools/check-core-api-verbs.py` |
+| `3cfc5d4` | 187th (finalisation) | three `tools/check-*.py` |
+
+★ **Five occurrences, and a MEASURED cost rather than a tidiness
+argument.** Each of those commits is by construction *a new unfiled code
+commit*, so each filing closed one obligation and opened another in the
+same act. **That is the mechanism of the day's six-iteration
+non-termination**, which the 187th filing correctly diagnosed as
+*structural, not a failure of will* — it simply attributed the structure
+to the gate's (misdescribed) exemption rather than to the practice that
+was already written down and not binding.
+
+⇒ **The transferable finding is about the record itself, not about
+commits: A FLAGGED PRACTICE IS NOT A RULE, AND THIS PROJECT'S OWN RECORD
+NOW SHOWS WHAT THE DIFFERENCE BUYS.** The practice was correct, was in the
+*Standing rules* section, was written in imperative voice — and was
+violated four times in one session by people who had the file open,
+because an unnumbered paragraph is not something a filing checks itself
+against. **The two-occurrence bar is a bar for MINTING, not a licence to
+leave a known-correct practice unenforceable while the instances
+accumulate.**
+
+#### VERIFIED AT `HEAD` THIS FILING — commands named
+
+| check | command | result |
+|---|---|---|
+| the filing gate | `python tools/check-commits-filed.py` | **RED on `3cfc5d4`** before this entry existed |
+| the verbs gate | `python tools/check-core-api-verbs.py` | **PASS**, 116 verbs, `43 + 51 + 21 + 1`, em dash now UTF-8 |
+| the ledger | `python tools/check-ledger-numbers.py --stats` | *clean — no duplicate Pass, rule, or decision numbers* |
+| encoding guard coverage | `for f in tools/check-*.py; …` | **0 of 9 lacking** |
+| gate inventory | `ls tools/check-* \| wc -l` | **14** (9 `.py`, 5 `.sh`) — agrees with the 186th filing's correction |
+
+#### ★★★★ THIS FILING'S OWN SWEEP (hard rule 11, NINTH consecutive non-empty exercise) — AND IT REFUTES ITS OWN PREDECESSOR TWICE
+
+**All items are in *Next up*, the 188th filing's box (items 12–15).** Two
+were inside this role's remit and are **fixed here**; two are reported.
+
+★★★ **The sharpest one is a claim THIS ROLE made one filing ago, and the
+day's own headline lesson is what catches it.** The engineer's closing
+words to this dispatch were: *"verify the mechanism you are about to
+depend on, especially when someone competent has just described it to
+you."* Applied to the 187th filing's own output, it holds:
+
+> **The 187th filing asserted `Group::unit` has "no setter anywhere" and
+> that a wrong unit is "a refusal the operator CANNOT CLEAR short of
+> delete-and-redraw." BOTH HALVES ARE FALSE.**
+> `set_group_scale(group, scale, format)` (`edit.rs:17718`) takes a whole
+> **`NumberFormat`**, and `NumberFormat.unit` is a `pub Unit` field
+> (`dimension/units.rs:178–180`). The body calls
+> `model.set_group_scale(group, scale, format)` and then **regenerates
+> every wired member's `/AP`** — so a unit change through it is
+> persisted, undoable, and re-renders the members, which is exactly what
+> a unit change should do.
+
+⇒ **`Group::unit` is not a HOLE. It is a DISCOVERABILITY defect**: the
+verb that writes it is named for something else and demands a co-argument
+the operator did not intend to change. That is a materially different
+finding, a materially cheaper fix, and it inverts the priority the 187th
+filing assigned it (*"fixing rename without fixing unit leaves the harder
+half of the same trap standing"* — the unit half is in fact the **easier**
+half, and already reachable).
+
+★ **How the false claim was produced is the reusable part, and it is hard
+rule 11's own failure mode committed by the role that holds hard rule
+11.** The 187th filing searched for **the string** — a `set_group_unit`-
+shaped verb — found none, and concluded absence. **The claim** — *can a
+group's unit be changed after creation?* — is answered `yes` by a verb
+whose name contains neither word. One filing after exercising the rule,
+and reporting three survivors with it, the same instance searched for text
+and not for meaning.
+
+★★ **And the channel reached the same place independently, 16 minutes
+later.** `R196`'s fourth exercise (below) found
+`request_a_dimension_group_can_be_created_and_never_renamed_or_deleted.md`
+**modified at 19:49** — after the 187th filing's `ls` recorded the channel
+unchanged at 19:23 — carrying a new **"★ Addendum, same day — the unit is
+the same hole and I did not name it."** It names `Group::format.unit`, and
+**it also names the route the 187th filing missed**, in the requester's
+own words: *"`set_group_scale` takes a `NumberFormat`, and a
+`NumberFormat` **carries a unit**. So the unit is in fact reachable — by
+recalibrating — which is worse than it being unreachable."*
+
+⇒ So `FEATURES.md:251`'s clause **"and no request names it"** was false
+**16 minutes after it was written**, and the finding it guarded was
+already better-stated in the channel. **`R180`'s shape** — a disclosure
+false from close to the commit that wrote it — **now with the twist that
+the correcting source was a document sitting on disk, unread, at the
+moment the wrong claim was filed.** Both corrected in `FEATURES.md` this
+filing; see the *FEATURES.md* note in the 188th `SESSION_LOG.md` entry.
+
+#### `R196` — FOURTH EXERCISE, AND IT RETURNS NON-EMPTY ONE FILING AFTER THE FIRST EMPTY ONE
+
+`D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\` — **3 files, the same
+three**, but the newest is now **19:49**, not 19:23. The group request was
+**edited after the 187th filing read it** (addendum above). The
+`insert_pages` request is unchanged at **15:19** and **still open**.
+`D:\Dev\FeatureRequests\iccce_FeatureRequests\open\` — **16 files**,
+unchanged.
+
+★ **Two lessons about the rule itself, and the second is the one to keep.**
+First: a channel `ls` that reports *"the same three files"* is not the
+same check as one that reports **timestamps** — a same-count, same-name
+listing hid a substantive edit, and only the mtime caught it. Second, and
+worse: the 187th filing's empty result was recorded with the observation
+that *"a boring result is what a healthy channel looks like."* **True in
+general and wrong that time** — the channel had changed 16 minutes
+earlier and the check was not sharp enough to see it. **A rule that
+returns empty has either found nothing or looked at the wrong thing, and
+the two are indistinguishable from inside the report.**
+
 ### `bea3cb1` — **A SIXTH STALE FIGURE ONE LINE ABOVE THE FIFTH, AND THE GATE SCOPED TO THE WRONG CLASS *AGAIN*: `edit.rs` PUBLISHED AS 20,939 LINES WHEN IT IS 24,826, AND THE WIDENED GATE COULD NOT SEE IT BECAUSE THE WIDENING HAD BEEN SCOPED TO VERB COUNTS. Re-scoped to the class it can actually enforce — *any published figure this tool can recompute.* ★ THE SESSION'S LAST FILING** — no Pass ID, no decision minted; commit `bea3cb1` touches `docs/core-api/02-editing-and-saving.md`, `tools/check-core-api-verbs.py` and the 186th filing's `docs/` work, and is cited here to satisfy `check-commits-filed.py` — filed 2026-08-18 (hundred-and-eighty-seventh filing)
 
 **No Pass ID, no decision record.** Same disposition as `e11b4f8` /
@@ -168,6 +395,35 @@ prior filing today rode along with a code or `tools/` change, so each one
 created a new unfiled commit and the next filing was owed immediately;
 **five iterations of that is what made the day feel non-terminating.** A
 filing that changes nothing but `docs/` closes without opening anything.
+
+> **★★★ AMENDED 2026-08-18 (hundred-and-eighty-eighth filing) — THE
+> PREMISE OF THE PARAGRAPH ABOVE IS FALSE, AND ITS CONCLUSION IS TRUE BY
+> ACCIDENT. It is left standing rather than rewritten**, because it is the
+> clearest surviving specimen of the defect `3cfc5d4` fixes.
+>
+> **`check-commits-filed.py` does NOT "skip any commit touching `docs/`."**
+> It skips any commit touching **no code** (`crates/`, `tools/`,
+> `fixtures/`), which is a *different predicate that happens to agree on
+> the pure-docs case*. It stopped granting the `docs/` exemption on
+> **2026-08-11** — `b4a66ed`, a mixed commit that self-certified by
+> containing the record files it was never described in — and only its
+> **docstring** went on advertising it, for seven months, which is what
+> the sentence above quotes as its authority.
+>
+> **So the conclusion survives** (a docs-only commit has no code, therefore
+> it is skipped) **and the reasoning does not** — and the reasoning is what
+> the next reader would have generalised from. The engineer's own test of
+> this paragraph, verbatim, is the reason it is amended rather than left:
+> *"you designed a commit strategy around an exemption that did not
+> exist."*
+>
+> ⇒ **The transferable half: a quoted docstring is not a verified
+> mechanism.** This entry did the right thing by quoting a source instead
+> of asserting from memory — hard rule 10's discipline exactly — and was
+> wrong anyway, because **the source it quoted was prose, and prose has no
+> world-source to disagree with it.** Verifying the *mechanism* here cost
+> one read of a 20-line function; the engineer did it and found the
+> exemption absent. See the `3cfc5d4` entry, above, and `R198`.
 
 ### `5d8eab5` — **THE GATE WRITTEN TO CATCH A STALE COUNT SHIPPED WITH THE STALE COUNT TEN LINES AWAY: `check-core-api-verbs.py` WIDENED FROM ONE FILE TO THE WHOLE DIRECTORY, AND ITS FIRST WIDENED RUN FOUND A *THIRD* STALE FIGURE INSIDE THE FILE ALREADY FIXED. `docs/core-api/` OWNERSHIP RULED TO `pdfce-engineer`** — no Pass ID, no decision minted; commit `5d8eab5` touches `.claude/agents/pdfce-engineer.md`, `docs/core-api/index.md`, `docs/core-api/02-editing-and-saving.md` and `tools/check-core-api-verbs.py` (plus this role's uncommitted `docs/` work, swept in — see the note below), and is cited here to satisfy `check-commits-filed.py` — filed 2026-08-18 (hundred-and-eighty-sixth filing)
 
@@ -51217,10 +51473,10 @@ below were inside this role's own remit and were therefore FIXED here**
 
 | # | owed | where | evidence |
 |---|---|---|---|
-| **8** | **★★ `check-core-api-verbs.py` EMITS cp1252 BYTES — it is the only `tools/check-*.py` that prints a non-ASCII character AND lacks the `sys.stdout.reconfigure` guard seven of its siblings carry** | `tools/check-core-api-verbs.py` | Byte-verified, not inferred: `python tools/check-core-api-verbs.py \| grep -a PASS \| od -c` → **`0227`** where UTF-8 would be `\342\200\224`. Its `PASS —` em dash is written as the **cp1252** byte `0x97`, so any UTF-8 reader (a CI log, a pipe, this filing's own shell) mis-decodes it. `check-image-colorspace-truth.py` lacks the guard too but prints no non-ASCII, so its exposure is **latent, not live.** |
-| **9** | **The gate's "WHAT IT DOES NOT CHECK" list has TWO items numbered `3`** | `tools/check-core-api-verbs.py`, header | The new citations limit was inserted ahead of the existing *"It used to read ONE FILE"* item without renumbering. Cosmetic, **but it is in the list a reader consults to learn what green means**, which is the one part of a gate that has to be readable. |
-| **10** | **The `(N lines)` re-derivation is scoped to `docs/core-api/` — the directory of the defect that prompted it — and ONE LIVING DOCUMENT OUTSIDE IT CARRIED A STALE ONE** | `docs/ARCHITECTURE.md` §3 | **FIXED HERE — it is this role's file.** §3 Workspace layout stated `render_worker.rs` **(503 lines)** in the present tense; `wc -l` → **582** (+79, +15.7 %). See the scoping note below, which is the part worth reading. |
-| **11** | **`FEATURES.md`'s ce-dimension group row said "its properties set" when TWO of the eight `Group` fields have no setter** | `docs/FEATURES.md:100`, `:251` | **FIXED HERE — this role's file.** See the `Group::unit` finding below. |
+| **8** | ~~**★★ `check-core-api-verbs.py` EMITS cp1252 BYTES**~~ — **CLOSED by `3cfc5d4`, 188th filing**, and closed as a **class**: `check-image-colorspace-truth.py` got the guard too though its exposure was latent. Re-verified at `HEAD`: the `PASS —` em dash is `342 200 224` (UTF-8) by `od -c`, and **0 of 9** `.py` gates lack the guard — it is the only `tools/check-*.py` that prints a non-ASCII character AND lacks the `sys.stdout.reconfigure` guard seven of its siblings carry** | `tools/check-core-api-verbs.py` | Byte-verified, not inferred: `python tools/check-core-api-verbs.py \| grep -a PASS \| od -c` → **`0227`** where UTF-8 would be `\342\200\224`. Its `PASS —` em dash is written as the **cp1252** byte `0x97`, so any UTF-8 reader (a CI log, a pipe, this filing's own shell) mis-decodes it. `check-image-colorspace-truth.py` lacks the guard too but prints no non-ASCII, so its exposure is **latent, not live.** |
+| **9** | ~~**The gate's "WHAT IT DOES NOT CHECK" list has TWO items numbered `3`**~~ — **CLOSED by `3cfc5d4`, 188th filing** (renumbered 1–5, order restored) | `tools/check-core-api-verbs.py`, header | The new citations limit was inserted ahead of the existing *"It used to read ONE FILE"* item without renumbering. Cosmetic, **but it is in the list a reader consults to learn what green means**, which is the one part of a gate that has to be readable. |
+| **10** | **STILL OWED, but no longer UNSTATED — `3cfc5d4` accepted this finding into `check-core-api-verbs.py`'s header as a fifth named limit and DELIBERATELY DID NOT WIDEN THE GLOB** (the 13-claim disposition below is the warrant; the opt-in living-document list remains the engineer's call). Original text: **The `(N lines)` re-derivation is scoped to `docs/core-api/` — the directory of the defect that prompted it — and ONE LIVING DOCUMENT OUTSIDE IT CARRIED A STALE ONE** | `docs/ARCHITECTURE.md` §3 | **FIXED HERE — it is this role's file.** §3 Workspace layout stated `render_worker.rs` **(503 lines)** in the present tense; `wc -l` → **582** (+79, +15.7 %). See the scoping note below, which is the part worth reading. |
+| **11** | **`FEATURES.md`'s ce-dimension group row said "its properties set" when TWO of the eight `Group` fields have no setter** | `docs/FEATURES.md:100`, `:251` | **FIXED HERE — this role's file.** See the `Group::unit` finding below. ⚠ **AND THE FIX WAS ITSELF WRONG — see item 12, 188th filing: `Group::unit` IS reachable through `set_group_scale`, so "two of the eight have no setter" is false; it is ONE (`name`).** |
 
 #### ★★ THE SEVENTH INSTANCE, AND IT IS INSIDE THE COMMIT THAT NAMED THE CLASS
 
@@ -51372,6 +51628,97 @@ three, newest **19:23**, none newer than `bea3cb1` (19:33). `iccce`'s
 nothing new** — which is worth one line, because a rule that only ever
 reports surprises trains its reader to expect surprises, and a boring
 result is what a healthy channel looks like.
+
+> **AMENDED 2026-08-18 (188th filing) — the general claim is right and this
+> instance of it was wrong.** The channel HAD changed: by `ls -l --time-style`
+> at the 188th filing, `request_a_dimension_group_can_be_created_and_never_
+> renamed_or_deleted.md` carries mtime **19:49**, an addendum added *after*
+> this check read it. **Three files, the same three names, the same count —
+> and a substantive edit inside one of them.** The `ls` above reported names
+> and a count; it did not compare timestamps. ⇒ **A channel check must read
+> mtimes, not just the listing** — and *"nothing new"* means *"this check saw
+> nothing new"*, which is a claim about the instrument. See the `3cfc5d4`
+> *Shipped* entry, `R196`'s fourth exercise.
+
+### ★★★★★ OWED TO THE NEXT SESSION — the 188th filing's sweep. **THE SESSION'S LAST BOX**; same rule as the two above: REPORTED, not held open — opened 2026-08-18 (hundred-and-eighty-eighth filing)
+
+**The dispatching engineer's frame, verbatim:** *"★ THIS TERMINATES. I have
+committed to making **no further code changes** this session… Sweep if you
+like, but everything it finds goes to `ROADMAP.md` as owed."* Complied with.
+Items **12** and **13** were inside this role's remit and are **FIXED here**;
+**14** and **15** are reported.
+
+**Numbering continues 1–7 (186th) → 8–11 (187th) → 12–15 (188th)** so a
+reader can cite an owed item without saying which box.
+
+> ### ★★★★★ BLOCKING, AND IT IS NOT AN OWED ITEM — IT IS A PRE-COMMIT CHECK, AND `R198` IS RED RIGHT NOW
+>
+> **`git status --porcelain` at the moment this box was written:**
+>
+> ```
+>  M crates/pdfce-cli/src/main.rs
+>  M crates/pdfce-core/build.rs
+>  M crates/pdfce-core/src/build.rs
+>  M docs/FEATURES.md
+>  M docs/NEXT_SESSION.md
+>  M docs/ROADMAP.md
+>  M docs/SESSION_LOG.md
+> ```
+>
+> **Three `crates/` files are dirty and they are NOT this filing's.** By
+> `git diff --stat` they are the `not-linked` → **`not-linked-yet`** banner
+> correction (+112/−34 across `pdfce-cli/src/main.rs`,
+> `pdfce-core/build.rs`, `pdfce-core/src/build.rs`) — real, substantive,
+> unfiled work from the `Pass 101.0` banner thread.
+>
+> ⇒ **A `git add -A` here produces a MIXED commit, `check-commits-filed.py`
+> goes red on it, and THE SESSION DOES NOT TERMINATE.** That is `R198`'s
+> failure mode arriving within minutes of `R198` being minted, and it is
+> the *same mechanism* as `2a75be1`, where a `git add -A` swept subagent
+> fetch artefacts into a public repository.
+>
+> **The two correct moves, either of which terminates:**
+> 1. `git add docs/` **only** — commit this filing docs-only, leave the
+>    three `crates/` files dirty for the next session to commit and file.
+> 2. `git stash push -- crates/`, commit docs-only, `git stash pop`.
+>
+> **What does NOT terminate:** `git add -A`, or `git commit -a`.
+>
+> ★ **This was found by running `git status` before reporting, not by
+> assuming the tree matched the dispatch's description of it** — the
+> dispatch said *"I have committed to making no further code changes this
+> session"*, which was **true about intent and false about the working
+> tree**, because the changes predate the commitment. **Hard rule 8's whole
+> point:** the disk is checkable in one command, and a document's
+> description of it is not evidence.
+
+| # | owed | where | evidence |
+|---|---|---|---|
+| **12** | **★★★ THE 187TH FILING'S `Group::unit` FINDING IS FALSE — the unit CAN be changed after creation** | `docs/FEATURES.md:100`, `:251` | **FIXED HERE — this role's file, and this role's error.** `set_group_scale(group, scale, format)` (`edit.rs:17718`) takes a whole `NumberFormat`; `NumberFormat.unit` is a `pub Unit` (`dimension/units.rs:178–180`); the body calls `model.set_group_scale(…)` **and regenerates every wired member's `/AP`**. So the write is persisted, undoable and re-renders. ⇒ **not a hole — a DISCOVERABILITY defect** (the verb is named for something else and demands a co-argument). Of the eight `Group` fields, **`name` alone** has no session route. |
+| **13** | **`FEATURES.md:251`'s clause "and no request names it" was false 16 MINUTES after it was written** | `docs/FEATURES.md:251` | **FIXED HERE.** `pdfceGUI` added *"★ Addendum, same day — the unit is the same hole and I did not name it"* to the group request at **19:49**; the 187th filing wrote the clause at ~19:33. `R180`'s shape, with the twist that **the correcting document was already on disk, unread, when the wrong claim was filed.** |
+| **14** | **★★ A THIRD REPLY IS NOW OWED TO `pdfceGUI` — the addendum asks a direct question and says which answer it prefers** | `D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\request_a_dimension_group_can_be_created_and_never_renamed_or_deleted.md` | Verbatim: *"If a `rename_dimension_group` lands, `set_group_unit` (or an explicit statement that recalibration **is** the sanctioned route, which I would then say on screen) belongs beside it. **I would rather be told the second than guess it.**"* ⇒ **The answer is now known and is the second option** (item 12). It is one sentence and it unblocks a GUI surface — *the cheapest owed item in any of these three boxes.* |
+| **15** | **The 187th filing's `Group::unit` reasoning is quoted in `SESSION_LOG.md` (append-only) and cannot be corrected there** | `docs/SESSION_LOG.md`, 187th entry | Recorded so a reader who reaches the 187th entry first is not misled: its *"no setter anywhere"* / *"a refusal they cannot clear short of delete-and-redraw"* passage is **superseded by item 12**. The 188th entry carries the correction; the 187th entry keeps its text, per hard rule 1. |
+
+#### ★ WHAT THE 188TH SWEEP DID *NOT* FIND — stated, because a sweep that reports only hits leaves "clean" indistinguishable from "not looked at"
+
+- **`docs/ROADMAP.md:2973`** (167th/168th filing material) describes the
+  gate's exemption by **quoting the code comment**, which was already
+  correct. **Accurate; no edit.** The contrast with the `bea3cb1` entry is
+  instructive — same subject, one quoted the *comment beside the logic* and
+  one quoted the *docstring at the top of the file*, and only the second was
+  wrong.
+- **The *Standing rules* entry "Librarian filing commits stay docs-only"**
+  describes the exemption as resting on *"a docs-only filing cannot cite a
+  hash that does not exist yet"* and says it *"correctly does not extend to a
+  commit that also touches `crates/`"*. **True under both the old prose and
+  the current code.** Amended only to point at `R198`, which now numbers it.
+- **`tools/check-passes-filed.py`** genuinely *does* still exempt docs-only
+  commits (`is_docs_only`, line 192). **The two gates differ on purpose** and
+  the older `ARCHITECTURE.md` §-references to a docs-only exemption are about
+  *that* gate. **Checked; no correction owed.**
+- **`FEATURES.md:180` and `:259`** (the outline rows) — re-checked, still
+  accurate (*"No authoring"*, *"No `EditSession` outline verb exists at
+  all"*). **No edit**, for the second consecutive filing.
 
 ### ★★ INBOUND FROM `pdfceGUI` 2026-08-18 19:22–19:23 — TWO NEW ce-DIMENSION REQUESTS, ARRIVING *THREE MINUTES AFTER* `5d8eab5` AND UNSEEN BY ANY EARLIER FILING — **NO PASS ID CLAIMED; the parse is the engineer's act. Ceiling stays 103 (highest `103.3`), next free 104.**
 
@@ -74403,6 +74750,53 @@ proposal), **`R194` claimed by this proposal**; next genuinely free is
   > `path:line` citations**, which need symbol resolution rather than
   > arithmetic and are now named as out of scope in the gate's own header.
 
+- **R198 — A LIBRARIAN FILING COMMIT TOUCHES `docs/` ONLY. Engineering
+  work found *while* filing goes in its own commit, never folded into the
+  commit that writes the filing's prose (2026-08-18; librarian-minted,
+  hundred-and-eighty-eighth filing — a PROMOTION of the flagged practice
+  recorded by the 168th filing, pulled by that practice's own stated
+  trigger).**
+  **What it costs: one `git commit` boundary.** What it buys is
+  **termination**.
+  **THE MECHANISM, which is why this is not tidiness.**
+  `check-commits-filed.py` skips a commit containing **no code** — that
+  is the only reason a filing commit is exempt from citing its own
+  not-yet-existent hash. **Add one `crates/` or `tools/` file and the
+  filing commit becomes a new unfiled CODE commit**, so the filing closes
+  one obligation and opens another *in the same act*. Iterate and the
+  session cannot end.
+  **THE WARRANT — five occurrences, four of them in one session, with a
+  measured cost rather than an aesthetic one:**
+
+  | commit | filing carried | code also carried |
+  |---|---|---|
+  | `75fa497` | 167th | `crates/pdfce-render/src/color.rs`, `interpret.rs` |
+  | `85c9cb4` | 182nd–183rd | `tools/check-ledger-numbers.py` |
+  | `5d8eab5` | 186th | `tools/check-core-api-verbs.py` |
+  | `bea3cb1` | 187th | `tools/check-core-api-verbs.py` |
+  | `3cfc5d4` | 187th (final) | three `tools/check-*.py` |
+
+  **Cost paid: SIX filings on 2026-08-18 that tried to terminate and could
+  not.** The 187th filing diagnosed the non-termination correctly as
+  *structural rather than a failure of will* — and attributed the
+  structure to the gate's (misdescribed) `docs/` exemption rather than to
+  this practice, which was already written down two sections below and
+  simply had no number.
+  **★ WHY THE PROMOTION IS THE FINDING, not the rule.** The practice was
+  **correct**, was **in the *Standing rules* section**, was phrased as an
+  imperative — and was violated four times in one session by authors who
+  had the file open. ⇒ ***A flagged practice is not a rule; the
+  difference is that a filing checks itself against numbers.*** The
+  two-occurrence bar governs **minting**, not how long a known-correct
+  practice may sit unenforceable while instances accumulate.
+  **Checkable after the fact:** `git show --stat <filing commit>` lists
+  `docs/` paths only. **A gate is possible here and is deliberately not
+  proposed** — the predicate ("is this commit a filing?") is not
+  mechanically decidable, and `check-commits-filed.py` already produces
+  the right failure one step later, loudly, by going red.
+  **Ceiling moves `R197` → `R198`; next free `R199`.** `R193`/`R194`
+  remain claimed by their existing declined-but-intact proposals.
+
 ### RULED 2026-08-18 — `docs/core-api/` is a MAINTAINED artefact owned by `pdfce-engineer`, named rather than owned by default — **ACCEPTED BY THE ENGINEER IN `5d8eab5`, essentially as drafted. STILL NOT A NUMBERED RULE, AND NO NUMBER IS CLAIMED: ceiling stays `R197`, next free is still `R198`.**
 
 > **Provenance of this heading.** Filed by the 185th filing as
@@ -74836,3 +75230,20 @@ record — this is the first. This project's own bar is two occurrences
 before a shape earns an `R` number (see `2a75be1`'s ledger effects,
 above, for the same promotion discipline applied to a different shape).
 Watch for a second instance before minting one here.
+
+> **★★★ PROMOTED 2026-08-18 (188th filing) — THIS IS NOW `R198`.** The
+> trigger this entry set for itself (*"watch for a second instance"*)
+> fired **four** more times: `85c9cb4` (182nd–183rd filings), `5d8eab5`
+> (186th), `bea3cb1` (187th) and `3cfc5d4` (187th, final) each bundled a
+> filing with `tools/` code. **Five occurrences total, four of them on
+> 2026-08-18**, and the cost is measured rather than argued: **six filings
+> that day tried to terminate and could not**, because each such commit is
+> by construction a new unfiled code commit.
+>
+> ⇒ **The finding is about the record, not about commits.** This paragraph
+> was correct, sat in the *Standing rules* section, was written as an
+> imperative — and did not bind. ***A flagged practice is not a rule.***
+> The two-occurrence bar is a bar for minting; it is not a licence to leave
+> a known-correct practice unenforceable while instances pile up. **This
+> entry is kept in place** (hard rule 1) as the promotion's own provenance.
+> Full text and warrant table: `R198`, above.
