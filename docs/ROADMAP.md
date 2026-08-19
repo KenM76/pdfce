@@ -96,6 +96,113 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+> ### ★★★★★ THE 197TH FILING — `docs/FEATURES.md`'S `gui` COLUMN RE-BASED FROM `crates/pdfce-gui` TO `D:\dev\pdfceGUI` — DECISION 073, STANDING RULE `R202` MINTED — NO PASS, NO SHELL, DOCUMENTATION-ONLY
+
+>
+> **Operator instruction, verbatim (2026-08-19):** *"We are no longer
+> using the GUI in your project folder. D:\dev\pdfceGUI is the
+> replacement and lives in its own project now. Not yet, but eventually
+> your project folder GUI will be removed. What you should do is update
+> your features.md list for the GUI checklist to match what is in
+> pdfceGUI from now on."*
+>
+> **This is a correction, not a policy change** — `pdfceGUI`'s own
+> `FEATURES.md` header had stated since bootstrap that this project's
+> `gui` column *"is this project's acceptance criteria."* This librarian
+> had, in the same window, been dispatched with the opposite reading on
+> at least the `adopt_widget` row (`Pass 103.1`'s filing), marking it
+> `[ ]` on the reasoning that the consumer is a separate project outside
+> this repo's `gui` column. **Full derivation: decision 073,
+> `ARCHITECTURE.md` §12; the general finding: `R202`, *Standing rules*.**
+>
+> **`docs/FEATURES.md` header** now states the `gui` column's referent
+> and authority directly, adopting `pdfceGUI`'s own ticking bar: *a row is
+> ticked only when an operator can reach it in a real `pdfceGUI` build.*
+>
+> **Rows changed, this filing — promotions (gui `[ ]`/◐ → `[x]`, or
+> sentence corrected):**
+>
+> | row (Implemented unless noted) | change |
+> |---|---|
+> | Adopt an existing widget into an `/AcroForm` field (Forms) | `[ ]` → `[x]` — wired via the Tab-order section (confirmed by `pdfceGUI` directly) |
+> | Add a bookmark (Reading/navigation) | `[ ]` → `[x]` — Bookmarks panel authors (confirmed by `pdfceGUI` directly) |
+> | True in-place page insertion, `EditSession::insert_pages` (moved Planned → Implemented, Document & pages) | `[ ]` → `[x]` — its disclosure fields (`orphaned_widgets`, `source_page_labels_dropped`, `page_labels_stale`) are surfaced (confirmed by `pdfceGUI` directly); `cli` stays `—` (a one-shot invocation has no open session), so with `core` and `gui` both `[x]` the whole applicable-shell set now lands and the row moves out of *Planned* |
+> | Select text on the canvas and copy it (Text) | `[ ]` → `[x]` |
+> | ce-dimension style, per-property override (ce dimensions) | `[ ]` → `[x]` |
+> | ce-dimension tolerance (ce dimensions) | `[ ]` → `[x]` |
+> | ce-dimension style AND tolerance, one GUI panel (Planned) | row **deleted** — superseded by the two rows above, both now `[x]` |
+> | Preview an image placement before committing (Fonts & rendering) | `[ ]` → `[x]` |
+> | Printer paper selection / properties / input tray / per-page orientation (Reading/navigation, four rows) | `[ ]` → `[x]` each |
+>
+> **Rows changed — demotions or corrected sentences (gui `[x]`/◐ → `[ ]`/◐):**
+>
+> | row | change |
+> |---|---|
+> | Merge several files into one (Document & pages) | `[x]` → `[ ]` — `pages.merge_into` inert in `pdfceGUI`, blocked on a decision about `pageops::insert`'s return-a-new-document shape |
+> | Split a document (Document & pages) | `[x]` → `[ ]` — `pages.split` inert, no boundary-chooser decision made |
+> | Rotate/delete/reorder/extract + insert-from-file (Document & pages) | `[x]` → `◐` — first four reachable, insert-from-file is not (same `pageops::insert` block as Merge) |
+> | Reflow within a block (Text) | `[x]` → `[ ]` — `pdfceGUI`'s own file: "Untouched" |
+> | Add new page text (Text) | `[x]` → `[ ]` — `edit.add_text` has no font/size/colour surface yet |
+> | Import/export form data, FDF/XFDF/CSV (Forms) | `[x]` → `[ ]` |
+> | Create a field (Forms) | `◐` → `[ ]` — field creation not yet reachable at all, not even partially |
+> | Insert an image (Fonts & rendering) | sentence corrected — no drag-and-drop in `pdfceGUI`, numeric-rectangle placement instead |
+> | Author geometric markup (Annotations) | sentence corrected — placed markup is now selectable and deletable (2026-08-18) but still not movable/resizable |
+> | Author a named destination (Reading/navigation) | sentence corrected — shipped and **deliberately not wired**, not merely unbuilt (page-reorder hazard named by `pdfceGUI` itself) |
+>
+> **Rows explicitly NOT changed, flagged to the engineer as unresolved
+> rather than guessed** (full reasoning in the dispatch reply, not
+> reproduced here — this project's own rule against growing history onto
+> a scan applies to `FEATURES.md`, not to `ROADMAP.md`): recover-damaged-
+> xref auto-behavior; keep-preseparated-file-sets; edit document metadata;
+> three-way close prompt specifically; Bézier handle editing; multi-node
+> select-and-move; modeless select/edit; nested object-tree sidebar;
+> restyle a placed markup annotation (distinct from select/delete, above);
+> delete/rename a field, reset a form (Forms — plausible but not
+> confirmed, given field *creation* is confirmed absent); redaction mark
+> appearance (overlay text/`/RO`/`/Repeat` controls); the entire render-
+> diagnostics counter cluster (rows 158–167, colour spaces through soft
+> masks) — `pdfceGUI` has landed **some** render-diagnostics reporting
+> surface ("Render diagnostics is a report... both read the same
+> derivation") but which of the twelve counters it actually reads was not
+> confirmed; remove/embed an embedded font's program (the Fonts panel
+> reads as a report, not confirmed as an editor); DXF export; theming
+> preset picker — **flagged as an apparent internal contradiction in
+> `pdfceGUI`'s own file**, not merely unconfirmed: its Shell/chrome section
+> states the preset "is not yet choosable," dated to before the Settings
+> dialog was salvaged (2026-08-17), while a later entry in the same file
+> references live-previewing "like the theme" from Settings ▸ Appearance,
+> which implies it became choosable and the earlier line was never
+> updated — worth relaying back to `pdfceGUI` directly rather than
+> guessing which is current; add non-Latin text via donor font (built on
+> the same `add_text` path just confirmed absent, but not independently
+> verified).
+>
+> **Two ROADMAP-side gaps found and closed this filing, unrelated to the
+> `FEATURES.md` sweep itself:** `ARCHITECTURE.md` §12 was checked for
+> decision 072's actual presence (it is present — a case-sensitive grep
+> false alarm, not a real gap) before any backfill was attempted, so none
+> was needed. The GUI-pause box (*In progress*) is amended in place to
+> distinguish two facts this filing's own instruction could otherwise be
+> misread as conflating: the pause on doing engineering work in
+> `crates/pdfce-gui` is UNCHANGED and still standing; only the `FEATURES.md`
+> `gui` column's REFERENT moved.
+>
+> **`ROADMAP.md` Backlog gains two items** (above the existing top entry):
+> a check that `pdfceGUI` carries an equivalent to
+> `settings_panel::tests::every_setting_the_store_carries_can_be_reached_from_this_window`
+> before `crates/pdfce-gui` is removed, and an inventory of
+> `tools/gui-drive.ps1`/`gui-shot.ps1`/`gui-click.ps1` against `pdfceGUI`'s
+> own `ui-verify` harness for the same reason.
+>
+> **Ledger effects.** No Pass minted — documentation-only filing, Pass
+> family ceiling stays **105**, next free family **106**. **One decision
+> minted — 073** (`ARCHITECTURE.md` §12, amending decision 058's "does not
+> change `FEATURES.md`" clause with a forward pointer, struck through per
+> the append-only convention); decision ceiling **072 → 073**, next free
+> **074**. **One standing rule minted — `R202`** (*Standing rules*,
+> above); ceiling **`R201` → `R202`**, next free **`R203`**. No operator
+> question minted.
+
 > ### ★★★★★ THE 196TH FILING — `Pass 103.4` SHIPS `adopt_preview`, VERB 124 OF 124 — `adopt_refusal` REQUESTED AND DELIBERATELY NOT BUILT BECAUSE THE PREVIEW SUBSUMES IT — AND A SECOND, IDENTICAL-SHAPE GIT-WORKFLOW HAZARD PROMOTES TO STANDING RULE `R201` — no shell this filing
 >
 > **This filing has no shell.** Hard rule 8's no-shell branch applies: the
@@ -52018,6 +52125,25 @@ to a dedicated `oxidize-pdf` audit that remains the gate before Pass 1.
 >    replaced" note to those rows** — that file's own header forbids
 >    growing history onto a scan.
 >
+> ---
+>
+> **★ AMENDMENT 2026-08-19 (hundred-and-ninety-seventh filing) — consequence
+> 5 HAS NOW HAPPENED, and it is worth stating precisely because it is a
+> DIFFERENT fact from the one this box otherwise carries.** The operator has
+> ruled directly: *"What you should do is update your features.md list for
+> the GUI checklist to match what is in pdfceGUI from now on."* `docs/
+> FEATURES.md`'s `gui` column now tracks `D:\dev\pdfceGUI`, decision **073**
+> (`ARCHITECTURE.md` §12). **This box's own pause is a SEPARATE fact and does
+> not move**: nobody may resume engineering work in `crates/pdfce-gui`
+> without a further instruction, and that crate is **not removed** — the
+> operator's own words are *"not yet, but eventually."* What changed is only
+> which shell the `gui` column's checkbox is a claim ABOUT. Do not read the
+> re-basing as a lift of the pause, and do not read the pause as a reason to
+> leave the `gui` column stale against `pdfceGUI`'s real state — they are
+> two different questions and this project has now hit the cost of
+> conflating an artefact's *content* with its *authorship pause* once
+> already (`R202`, *Standing rules*, below).
+>
 > #### ★ The shape of the earlier error, because it recurs
 >
 > ***"He gave no reason"*** **and** ***"no reason has been given yet"***
@@ -62125,6 +62251,35 @@ overrides the image dictionary; `/ColorSpace` optional,
 Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
+
+- **A gate dies with `crates/pdfce-gui` unless `pdfceGUI` carries an
+  equivalent.** Filed 2026-08-19 (hundred-and-ninety-seventh filing),
+  from the `docs/FEATURES.md` `gui`-column re-basing dispatch.
+  `crates/pdfce-gui/src/settings_panel.rs` carries
+  `settings_panel::tests::every_setting_the_store_carries_can_be_reached_from_this_window`,
+  a property test that caught a real gap the day it was written (a new
+  setting shipped with no operator control). The moment `crates/pdfce-gui`
+  is actually removed, that property becomes unenforced from this side of
+  the boundary unless `pdfceGUI` already checks it. **Not necessarily a
+  gap** — `pdfceGUI`'s own `FEATURES.md` describes a comparable, and in one
+  respect stricter, `syn`-based check (`every_setting_states_its_silence_and_its_radius`
+  plus a parser that counts `widgets::header` calls against the settings
+  catalog, so a scanned-nothing pass cannot be mistaken for a
+  found-nothing pass) — but that has not been confirmed to cover the same
+  property from this side. **Scope: before `crates/pdfce-gui` is removed,
+  confirm (via the `pdfceGUI` request channel) that an equivalent gate
+  exists there; if not, port one.** Do not remove the crate on the
+  assumption the property is already covered.
+
+- **Inventory `crates/pdfce-gui`'s driving tooling before removal.** Filed
+  2026-08-19 (hundred-and-ninety-seventh filing), same dispatch as above.
+  `tools/gui-drive.ps1`, `tools/gui-shot.ps1` and `tools/gui-click.ps1`
+  drive and screenshot the old shell for verification; nothing has
+  confirmed whether `pdfceGUI`'s own `ui-verify` harness (144 tests per its
+  own `FEATURES.md`) already subsumes everything these three scripts do.
+  **Scope: before removal, diff what these three scripts can do against
+  `ui-verify`'s coverage and file anything genuinely lost, rather than
+  discovering the gap after the crate is gone.**
 
 - **Thread `CmykIntent` through `vector::decompose`.** Filed 2026-08-19
   (hundred-and-ninety-sixth filing), from `Pass 103.4`'s finding (B).
@@ -76982,6 +77137,45 @@ proposal), **`R194` claimed by this proposal**; next genuinely free is
   interleaved with a dispatch still writing.
   **Ceiling moves `R200` → `R201`; next free `R202`.** `R193`/`R194`
   remain claimed by their existing declined-but-intact proposals.
+
+- **R202 — A SHARED CROSS-PROJECT ARTEFACT MUST STATE, IN ITS OWN TEXT,
+  WHAT EACH SHARED COLUMN/SECTION MEANS AND WHICH SIDE IS AUTHORITATIVE
+  FOR IT. AN UNSTATED CONVENTION IS ONE READING AWAY FROM BEING WRONG
+  (2026-08-19; librarian-minted, hundred-and-ninety-seventh filing;
+  decision **073**, `ARCHITECTURE.md` §12, is the full derivation).**
+  **THE WARRANT:** `docs/FEATURES.md`'s `gui` column and
+  `D:\dev\pdfceGUI\FEATURES.md`'s own header disagreed about what the
+  former meant, for **six days**, without either side detecting a
+  contradiction. `pdfceGUI`'s header had stated since bootstrap that the
+  column *"is this project's acceptance criteria."* This repository's own
+  librarian was, in the same window, dispatched with the reasoning that
+  *"the consumer is the separate `pdfceGUI` project, which is not this
+  repo's `gui` column"* — the opposite reading — and complied. **Neither
+  reading was internally inconsistent**, which is exactly why nothing
+  caught it: each side reasoned locally to a coherent conclusion, and
+  divergence between two locally-coherent readings is invisible from
+  either side alone. It surfaced only because the operator compared the
+  two documents directly.
+  **Scope — binding on any document this project shares across a project
+  boundary** (currently: `docs/FEATURES.md`'s `gui` column against
+  `pdfceGUI`; potentially any future cross-project artefact). When such a
+  document is created or when ownership of a part of it changes hands,
+  **state the ownership and the acceptance bar in the document's own
+  header**, not only in a decision record or a dispatch instruction that
+  the other side has no reason to read. The statement must survive being
+  read in isolation — a reader of `docs/FEATURES.md` alone, with no
+  access to `ARCHITECTURE.md` §12 or to `pdfceGUI`'s own tree, should be
+  able to tell what the `gui` column claims and who is answerable for it
+  being wrong.
+  **No gate is proposed.** This is not a mechanically checkable property
+  — nothing can verify that a header's *prose* correctly states an
+  ownership fact, only that a header exists (which invites exactly the
+  vacuous-gate failure this project has already named elsewhere,
+  `D:\dev\rag\rust\ci_gate_red_at_baseline_enforces_nothing.md`). The
+  obligation is procedural, on whichever agent next creates or re-scopes
+  a shared artefact: write the ownership statement, and treat its absence
+  as license for the next reader to derive their own.
+  **Ceiling moves `R201` → `R202`; next free `R203`.**
 
 - **R199 — A RECORDED BLOCKER IS A DATED READING, NOT A STANDING FACT. A
   sentence saying work is gated, needs, requires or awaits something

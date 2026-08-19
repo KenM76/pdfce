@@ -21001,8 +21001,15 @@ scope** and no code path in this decision reaches them.
   record — *keep the workspace layout mergeable, do not let GUI
   assumptions spread into core crates* — is a discipline, not a
   procedure. A real merge, if it happens, earns its own decision.
-- **It does not change `FEATURES.md`.** No capability moved; see the
-  filing record for why the correct edit there was **none**.
+- ~~**It does not change `FEATURES.md`.** No capability moved; see the
+  filing record for why the correct edit there was **none**.~~
+  **SUPERSEDED 2026-08-19 by decision 073, below.** No capability moved
+  *that day*, which is why the clause was true when written — but the
+  clause described a state of affairs, not a standing exemption, and the
+  operator has since ruled that `FEATURES.md`'s `gui` column tracks
+  `D:\dev\pdfceGUI`, not `crates/pdfce-gui`. Kept struck-through rather
+  than deleted, per this project's own append-only convention for a
+  superseded entry.
 
 **Body section updated in the same filing:** **§3's invariant statement**
 gains the independent-implementation paragraph, so a reader who lands on
@@ -23044,3 +23051,87 @@ free 072.**
   list.
   **No standing rule minted** — a single behavioral-policy decision, not
   a recurring pattern. **Ceiling moves 071 → 072; next free 073.**
+
+---
+
+- **2026-08-19 — Decision 073. `docs/FEATURES.md`'s `gui` column tracks
+  `D:\dev\pdfceGUI`, not `crates/pdfce-gui` — and the column's own header
+  now says so, because its silence is what let two projects read it two
+  different ways for six days.** Operator, verbatim: *"We are no longer
+  using the GUI in your project folder. D:\dev\pdfceGUI is the
+  replacement and lives in its own project now. Not yet, but eventually
+  your project folder GUI will be removed. What you should do is update
+  your features.md list for the GUI checklist to match what is in
+  pdfceGUI from now on."*
+  **Why this is a decision and not a housekeeping edit.** Decision 058
+  (2026-08-13) already established that `crates/pdfce-gui` MAY be
+  replaced by `D:\dev\pdfceGUI` and explicitly declined to change
+  `FEATURES.md` at the time, on the grounds that no capability had moved.
+  This entry is the sequel decision 058 named as a possibility and
+  reserved judgement on: **the column's REFERENT has now moved**, ahead
+  of the crate itself being removed (*"not yet"*, his words, still
+  standing). `crates/pdfce-gui` is not deleted and this decision does not
+  delete it; the acceptance criterion the `gui` column reports on has
+  changed while the code both columns could theoretically describe still
+  sits in the tree.
+  **The correction this decision is filed to prevent recurring.**
+  `D:\dev\pdfceGUI\FEATURES.md`'s own header had stated, since project
+  bootstrap, that *"`pdfce-core` and `pdfce-cli` capabilities live in
+  `D:\Dev\pdfce\docs\FEATURES.md`, whose `gui` column is this project's
+  acceptance criteria — nothing there may regress at fold-in."* This
+  repository's own `pdfce-librarian` was, in the same window, dispatched
+  with the OPPOSITE reading — instructed to mark rows `[ ]` on the
+  reasoning that *"the consumer is the separate pdfceGUI project, which
+  is not this repo's gui column"* — and complied, for six days, without
+  either side detecting a contradiction, because **neither reading was
+  internally inconsistent** and nothing forced the two to be compared.
+  **The general form, worth carrying past this file:** a shared artefact
+  with no stated owner does not fail loudly — each consuming party
+  reasons locally, reaches an internally coherent conclusion, and the
+  divergence sits latent until something forces a comparison. The fix is
+  not merely correcting the affected rows (see `ROADMAP.md`'s filing
+  record for the corrected set); it is that the artefact must **say, in
+  its own text, what it means and who is authoritative for each part of
+  it** — an unstated convention is a convention exactly one reading away
+  from being wrong. `docs/FEATURES.md`'s own header now states the `gui`
+  column's referent and the acceptance bar it inherits from
+  `D:\dev\pdfceGUI\FEATURES.md` (*"a row is ticked only when an operator
+  can reach it in a real build, not when the code exists"*) directly,
+  rather than leaving it to be inferred from this decision or from
+  `ROADMAP.md`'s GUI-pause block.
+  **What this does NOT settle** (same restraint decision 058 exercised,
+  for the same reason — an externally-developed sibling is not this
+  repository's to describe): it does not adopt, endorse or describe
+  `D:\dev\pdfceGUI`'s design; it does not schedule the removal of
+  `crates/pdfce-gui`, which the operator explicitly deferred (*"not
+  yet"*); and it does not relieve `crates/pdfce-gui` of the GUI-core
+  separation invariant (§3) for as long as the crate remains in the
+  workspace — decision 058's consequence 4 (*"keep the workspace layout
+  mergeable, do not let GUI assumptions spread into core crates"*)
+  stands unchanged.
+  **Consequence flagged, not yet actioned:** `crates/pdfce-gui` carries
+  at least one test
+  (`settings_panel::tests::every_setting_the_store_carries_can_be_reached_from_this_window`)
+  and at least two driving scripts (`tools/gui-drive.ps1`,
+  `tools/gui-shot.ps1`, plus the related `tools/gui-click.ps1`) whose
+  property has no analogue filed against `D:\dev\pdfceGUI` from this
+  side of the boundary. Filed as a `ROADMAP.md` Backlog item (below) so
+  the property is not silently lost the day `crates/pdfce-gui` is
+  actually removed — a live-but-unenforced concern is not the same as an
+  enforced one, and `D:\dev\pdfceGUI`'s own `FEATURES.md` already
+  describes a comparable, and in one respect stricter, `syn`-based
+  coverage check of its own, so this may already be a non-issue on their
+  side; it is filed as owed verification, not as an assumed gap.
+  **Body section updated in the same filing:** `docs/FEATURES.md`'s own
+  header, which now states the `gui` column's referent and authority
+  directly (this is the correct location for that statement — see the
+  reasoning above — not a new ARCHITECTURE.md body section, since
+  `FEATURES.md` is not itself an ARCHITECTURE.md-governed structure).
+  **No standing rule minted for the decision's substance** (a single
+  cross-project ownership ruling, not a recurring pattern in itself) —
+  **but the GENERALISED finding it demonstrates (an unstated artefact
+  owner produces silent divergence) is minted separately as `R202`**,
+  see *Standing rules* in `ROADMAP.md`, because that finding is not
+  specific to `FEATURES.md` and is worth catching the next time this
+  project shares a document across a project boundary. **Ceiling moves
+  072 → 073; next free 074.**

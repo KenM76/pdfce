@@ -50920,3 +50920,122 @@ above); no body section went stale.
 
 **Terminology (rule 15):** no ce dimension or pdf dimension appears
 anywhere in this filing.
+
+## 2026-08-19 (hundred-and-ninety-seventh filing) — `docs/FEATURES.md`'S `gui` COLUMN RE-BASED FROM `crates/pdfce-gui` TO `D:\dev\pdfceGUI`; DECISION 073 AND STANDING RULE `R202` MINTED; NO PASS, NO SHELL, DOCUMENTATION-ONLY
+
+**Filed by `pdfce-librarian`, no shell.** Pure documentation dispatch —
+no commit, no code, nothing to relay from an engineer's `git log`.
+
+**Operator instruction, verbatim:** *"We are no longer using the GUI in
+your project folder. D:\dev\pdfceGUI is the replacement and lives in its
+own project now. Not yet, but eventually your project folder GUI will be
+removed. What you should do is update your features.md list for the GUI
+checklist to match what is in pdfceGUI from now on."*
+
+**Shipped:** nothing coded — this filing is the correction itself.
+
+**Decisions made this session:**
+- **`docs/FEATURES.md`'s `gui` column now tracks `D:\dev\pdfceGUI`, not
+  `crates/pdfce-gui`.** Filed as **decision 073**, `ARCHITECTURE.md` §12,
+  amending decision 058's "does not change `FEATURES.md`" clause with a
+  forward pointer (struck through, not deleted, per the append-only
+  convention). `docs/FEATURES.md`'s own header now states the column's
+  referent and adopts `pdfceGUI`'s own ticking bar (*"a row is ticked
+  only when an operator can reach it in a real build"*).
+- **One standing rule minted — `R202`.** A shared cross-project artefact
+  must state, in its own text, what each shared column means and which
+  side is authoritative for it. `pdfceGUI`'s `FEATURES.md` header had
+  said the `gui` column was its acceptance criteria since bootstrap;
+  this librarian had, in the same window, been dispatched with the
+  opposite reading on at least the `adopt_widget` row. Neither reading
+  was internally inconsistent, which is why six days passed before the
+  contradiction surfaced — it took the operator comparing both documents
+  directly. No gate proposed (a header's *correctness* is not
+  mechanically checkable, only its presence, which invites a vacuous
+  gate). Ceiling `R201` → `R202`, next free `R203`.
+
+**Findings + decisions:**
+
+**`docs/FEATURES.md` rows re-based against `D:\dev\pdfceGUI\FEATURES.md`
+(read in full, ~360 lines).** Four rows confirmed directly by `pdfceGUI`
+via the request-channel note
+`note_all_four_wired_and_one_symmetry_ask.md`: `adopt_widget` and
+`add_outline_item` now `[x]` gui; the `insert_pages` disclosure fields
+now `[x]` gui; `add_named_destination` stays `[ ]` but is now recorded as
+**shipped and deliberately not wired** (page-reorder hazard), not merely
+unbuilt. A further nine rows promoted and eight demoted or sentence-
+corrected from reading `pdfceGUI`'s own Complete/Planned lists directly —
+full table in `ROADMAP.md`'s hundred-and-ninety-seventh filing entry.
+Two of the demotions (Merge, Split) are real regressions in what the
+`gui` column now reports, not new defects: `pageops::insert`'s
+return-a-new-document shape blocks wiring both in `pdfceGUI` without
+discarding its undo log, which is a design question there, not a bug
+here.
+
+**A meaningful cluster left explicitly unresolved rather than guessed**
+— the twelve render-diagnostic counters (colour spaces through soft
+masks), several Forms management verbs (delete/rename a field, reset),
+font removal/embedding as an *editor* rather than a report, and an
+apparent internal contradiction in `pdfceGUI`'s own file about whether
+its theme-preset picker is reachable (one section says no, dated before
+the Settings dialog was salvaged; a later section implies yes). All
+flagged back to the engineer rather than ticked or un-ticked on
+inference.
+
+**No gap found in `ARCHITECTURE.md` §12 that needed backfilling** — a
+case-sensitive grep for "decision 072" initially returned nothing and
+was corrected before being reported: the entry exists, capitalised
+("Decision 072"), so no correction was needed there. Recorded because it
+is exactly the kind of unverified claim hard rule 8 exists to catch,
+caught before filing rather than after.
+
+**`ROADMAP.md`'s GUI-pause box amended in place** to state a
+distinction this filing's own instruction could otherwise blur: the
+pause on doing engineering work in `crates/pdfce-gui` is unchanged and
+still standing; only the `FEATURES.md` `gui` column's referent moved.
+Two new Backlog items filed: confirm `pdfceGUI` carries an equivalent to
+`settings_panel::tests::every_setting_the_store_carries_can_be_reached_from_this_window`
+before `crates/pdfce-gui` is removed, and inventory
+`tools/gui-drive.ps1`/`gui-shot.ps1`/`gui-click.ps1` against `pdfceGUI`'s
+own `ui-verify` harness for the same reason.
+
+**Still in flight:** all items carried from the 196th filing are
+unaffected by this one (`Pass 102.1`, the n-channel compositing buffer
+question, the `iccce` clause-10.3.2 answer, the `PDF_Spec` clause-10
+dispatch).
+
+**For next session:**
+1. Relay the unresolved-rows list to `pdfceGUI` via the request channel
+   and re-file once answered.
+2. Confirm whether `pdfceGUI` has an equivalent to the settings-coverage
+   test before `crates/pdfce-gui` is ever removed.
+3. Everything carried from the 196th filing's own "For next session"
+   list is still open.
+
+**Ledger effects:**
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **105** | **105** (unchanged) |
+| decision records | **072** | **073** |
+| standing rules | **R201** | **R202** |
+| `SESSION_LOG` filings | **196** | **197** |
+| `personal_rag/pdf` lessons | **+0** | **+0** (no PDF-domain empirical finding this filing) |
+
+**`FEATURES.md` — CHANGED.** Header gains the ownership statement; **22
+rows touched over 22 total = 11 promoted to `[x]`, 7 demoted (6 to `[ ]`,
+1 to `◐`), 3 sentence-only corrections with the checkbox unchanged, 1
+row deleted as superseded** (the ce-dimension style+tolerance panel,
+subsumed once both its constituent rows landed `[x]`). One promoted row
+(`insert_pages`'s disclosure fields) also moved section, *Planned* →
+*Implemented*, since `core`/`gui` both now land and `cli` is a deliberate
+`—`. Three of the eleven promotions and none of the demotions were
+confirmed directly by `pdfceGUI` via the request-channel note; the rest
+were read from `pdfceGUI`'s own `FEATURES.md`. Full table in `ROADMAP.md`.
+
+**`ARCHITECTURE.md` — CHANGED.** Decision 073 added to §12; decision 058
+amended in place with a struck-through, superseded clause and a forward
+pointer.
+
+**Terminology (rule 15):** no ce dimension or pdf dimension appears
+anywhere in this filing.
