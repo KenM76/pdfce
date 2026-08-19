@@ -34,13 +34,32 @@
 //! claim-bearing-copy rule applied to a version string.
 //!
 //! What this script does instead is emit `PDFCE_ICCCE_PROVENANCE` as the
-//! literal string `not-linked`, so the version output **answers the
+//! literal string `not-linked-yet`, so the version output **answers the
 //! operator's question every time he asks it** rather than leaving it
 //! silently unaddressed. `Pass 101.1` replaces that with the real
 //! revision, date and time on the day the dependency lands — and the
 //! detection is deliberately structural (see `iccce_provenance`), so it
 //! starts reporting the moment that happens rather than waiting for
 //! somebody to remember this file.
+//!
+//! # ★ `not-linked-YET`, and the suffix is a correction
+//!
+//! This first read `not-linked`, and the prose around it called the absence
+//! architectural — *"a boundary is a decision, not a dependency edge"*. The
+//! operator challenged that within the day, and he was right.
+//!
+//! `iccce` was **created for pdfce**. Its README's second sentence is *"Its
+//! first consumer is `pdfce`"*, and it names four things pdfce cannot do
+//! without it: `ICCBased` spaces rendered better than their `/Alternate`,
+//! `Separation`/`DeviceN` spot colours through a real colorimetric path,
+//! PDF/X output intents, and soft-proofing. None of those is a one-time
+//! reference; all four are permanent capabilities pdfce has not got.
+//! Decision 064's own status line says **"DECIDED (boundary), NOT STARTED
+//! (either consumer)"**.
+//!
+//! So the honest word is **pending**, not *separate*. An unfinished
+//! integration and an architectural separation look identical in a one-word
+//! banner, and only one of them is a thing somebody still has to do.
 //!
 //! # Reproducibility — the trade this makes, stated rather than buried
 //!
@@ -212,7 +231,7 @@ fn locate_git_dir() -> Option<std::path::PathBuf> {
 /// Cargo sets `DEP_<links>_*` variables only for crates that declare a
 /// `links` key, which `iccce` does not, so the reliable structural signal is
 /// `CARGO_PKG_*` on the dependency itself. Until pdfce actually depends on
-/// `iccce`, there is nothing to read, and this returns `not-linked` — which
+/// `iccce`, there is nothing to read, and this returns `not-linked-yet` — which
 /// is a true statement rather than an omission.
 ///
 /// `Pass 101.1` fills this in when the dependency lands. It is written as a
@@ -228,5 +247,5 @@ fn iccce_provenance() -> String {
     {
         return v.trim().to_owned();
     }
-    "not-linked".to_owned()
+    "not-linked-yet".to_owned()
 }

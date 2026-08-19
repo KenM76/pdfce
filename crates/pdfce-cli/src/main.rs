@@ -411,10 +411,11 @@ mod exit {
 /// six-week-old commit is a different situation from one off this morning's,
 /// and only the pair distinguishes them.
 ///
-/// The `iccce` line reports `not-linked` today because pdfce does not depend
-/// on `iccce`. It is printed anyway, with the reason, because the operator
-/// asked for that revision by name: an omitted line reads as an oversight, a
-/// stated absence answers the question.
+/// The `iccce` line reports `not-linked-yet` because the integration is
+/// **unstarted work, not a decision to stay apart** — `iccce` was created for
+/// pdfce and names it as its first consumer. It is printed anyway, with the
+/// reason, because the operator asked for that revision by name: an omitted
+/// line reads as an oversight, a stated pending answers the question.
 fn build_banner() -> &'static str {
     let b = pdfce_core::build::BuildInfo::current();
     // The FIRST line is the version alone, because clap already prints the
@@ -427,8 +428,8 @@ fn build_banner() -> &'static str {
         "{}\n  built:     {}\n  revision:  {}\n  committed: {}\n  iccce:     {}",
         b.version, b.built_at, b.revision, b.committed_at, b.iccce
     );
-    if b.iccce == "not-linked" {
-        text.push_str(" (pdfce does not depend on iccce; see ARCHITECTURE.md decision 064)");
+    if b.iccce == "not-linked-yet" {
+        text.push_str(" (integration pending -- Pass 97.x; see ARCHITECTURE.md decision 064)");
     }
     if b.is_dirty() {
         text.push_str(

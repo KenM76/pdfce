@@ -20,14 +20,26 @@
 //! shipped in the same folder disagree about which build they are, which is
 //! the one thing a provenance banner exists to prevent.
 //!
-//! # ★ `iccce` is NOT reported as a version, and that is deliberate
+//! # ★ `iccce` is reported as `not-linked-yet` — PENDING, not decided against
 //!
-//! pdfce does not depend on `iccce`. Measured, not assumed: nothing in any
-//! `Cargo.toml` or any source file in the workspace references it.
-//! `ARCHITECTURE.md`'s decision 064 records the *boundary* — `iccce` owns
-//! colour conversion — but a boundary is a decision, not a dependency edge.
+//! pdfce does not depend on `iccce` **yet**. Measured, not assumed: nothing
+//! in any `Cargo.toml` or source file references it.
 //!
-//! So [`BuildInfo::iccce`] reads `not-linked`, and the version output says
+//! ★ **The `-yet` is load-bearing and was missing at first.** `iccce` exists
+//! *because of* pdfce — its README names pdfce as its first consumer, and
+//! lists four capabilities pdfce cannot deliver without it (`ICCBased` beyond
+//! `/Alternate`, colorimetric `Separation`/`DeviceN`, PDF/X output intents,
+//! soft-proofing). Decision 064's status line is **"DECIDED (boundary), NOT
+//! STARTED (either consumer)"**, and the Pass that wires it is `Pass 97.x`,
+//! the colorant compositor — currently top of the queue, and worth ~16 of
+//! the 18 remaining Ghent failures. `iccce` has already shipped the exact
+//! call that Pass needs.
+//!
+//! Reporting this as a settled architectural boundary — which the first
+//! version of these docs did — makes an **unfinished integration** read as a
+//! **completed separation**. Those need opposite things from a reader.
+//!
+//! So [`BuildInfo::iccce`] reads `not-linked-yet`, and the version output says
 //! so out loud. The alternative — reading the sibling checkout's `git
 //! describe` off disk — would answer *"which iccce is on this machine"*
 //! while appearing to answer *"which iccce is in this binary"*. Those
@@ -75,10 +87,10 @@ pub struct BuildInfo {
     /// different situation from one built today from this morning's commit,
     /// and only the two timestamps side by side distinguish them.
     pub committed_at: &'static str,
-    /// The `iccce` build linked into this one, or `not-linked`.
+    /// The `iccce` build linked into this one, or `not-linked-yet`.
     ///
-    /// Reads `not-linked` today because pdfce does not depend on `iccce` —
-    /// see the module docs for why that is reported rather than omitted.
+    /// Reads `not-linked-yet` today because the integration **has not been
+    /// done**, not because it was decided against — see the module docs.
     pub iccce: &'static str,
 }
 
@@ -103,7 +115,7 @@ impl BuildInfo {
     /// say "this build cannot identify itself" instead of quietly printing
     /// the word `unknown` three times and hoping somebody notices.
     ///
-    /// Note that [`Self::iccce`] is **not** part of this: `not-linked` is a
+    /// Note that [`Self::iccce`] is **not** part of this: `not-linked-yet` is a
     /// determined answer, not a missing one.
     #[must_use]
     pub fn is_complete(&self) -> bool {
@@ -135,14 +147,17 @@ impl std::fmt::Display for BuildInfo {
         writeln!(f, "  revision:  {}", self.revision)?;
         writeln!(f, "  committed: {}", self.committed_at)?;
         write!(f, "  iccce:     {}", self.iccce)?;
-        if self.iccce == "not-linked" {
+        if self.iccce == "not-linked-yet" {
             // The operator asked for iccce's revision by name, so the answer
-            // has to say WHY there is not one -- otherwise "not-linked"
-            // reads as a defect in the stamp rather than as a fact about
-            // the build.
+            // has to say WHY there is not one -- otherwise it reads as a
+            // defect in the stamp rather than as a fact about the build.
+            //
+            // And it says PENDING rather than merely absent, because iccce
+            // exists for pdfce and the integration is unstarted work, not a
+            // decision to stay apart. See the module docs.
             write!(
                 f,
-                " (pdfce does not depend on iccce; see ARCHITECTURE.md decision 064)"
+                " (integration pending -- Pass 97.x; see ARCHITECTURE.md decision 064)"
             )?;
         }
         if self.is_dirty() {
