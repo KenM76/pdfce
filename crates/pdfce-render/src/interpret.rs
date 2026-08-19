@@ -244,16 +244,30 @@ pub struct Diagnostics {
     /// `/BBox` into device space against the governing `/ExtGState`, not
     /// by cell-pitch arithmetic.
     ///
-    /// **★ CORRECTION, same day.** An earlier revision of this doc also
+    /// **★ CORRECTION, 2026-08-18.** An earlier revision of this doc also
     /// blamed §11.3.5.3 here and cited `1_GWG160`'s `Hue`/`Saturation`/
-    /// `Color` failures as proof. **Those cannot reach this counter.**
-    /// [`crate::gstate::blend_mode_from_name`] returns `None` for all four
-    /// nonseparable modes, so they land in
-    /// [`Self::blend_modes_ignored`] — which already documents the
-    /// shortfall correctly. Caught by the librarian on filing. The
-    /// evidence was real and the counter it was attached to was wrong,
+    /// `Color` failures as proof. Those did not reach this counter: at the
+    /// time [`crate::gstate::blend_mode_from_name`] returned `None` for all
+    /// four nonseparable modes, so they landed in
+    /// [`Self::blend_modes_ignored`]. Caught by the librarian on filing.
+    /// The evidence was real and the counter it was attached to was wrong,
     /// which is the harder error to notice: a citation makes a claim look
     /// checked.
+    ///
+    /// **★★ AND THAT CORRECTION IS ITSELF SUPERSEDED, 2026-08-19.** It said
+    /// *"**Those cannot reach this counter**"* in the present tense, and
+    /// they can now: the four nonseparable modes ship
+    /// ([`crate::blend_nonsep`]), `blend_mode_from_name` is no longer the
+    /// route they take, and they DO increment this counter — with their
+    /// composites additionally counted on
+    /// [`Self::nonseparable_composited`]. `1_GWG160` now passes.
+    ///
+    /// Two corrections deep on one paragraph, so the shape is worth naming
+    /// rather than just fixing again: **a correction written in the present
+    /// tense about a mechanism becomes false when the mechanism changes,
+    /// and it is MORE durable than the error it fixed**, because it reads
+    /// as settled. Dating each layer is what keeps the third reader from
+    /// trusting the second.
     ///
     /// Separate from [`Self::blend_modes_ignored`] because those two
     /// numbers answer different questions and used to be one. Before
@@ -265,20 +279,9 @@ pub struct Diagnostics {
     /// `gs` operators naming a blend mode pdfce did NOT apply. Those marks
     /// were composited as `Normal`.
     ///
-    /// **Two distinct reasons reach this counter**, and conflating them
-    /// would misdescribe the commoner one:
-    ///
-    /// 1. A name outside Tables 136 and 137 — a typo, or a mode from an
-    ///    extension pdfce does not know.
-    /// 2. One of the four NON-SEPARABLE modes of Table 137 (`Hue`,
-    ///    `Saturation`, `Color`, `Luminosity`), which pdfce recognises
-    ///    perfectly well and **deliberately declines to composite**,
-    ///    because the available implementation is measurably wrong (see
-    ///    [`crate::gstate::blend_mode_from_name`]).
-    ///
-    /// Reason 2 is by far the likelier on a real print-oriented file, so
-    /// a reader who assumes this counter means "malformed PDF" will draw
-    /// the wrong conclusion about their document.
+    /// **One reason reaches this counter**: a `/BM` name outside ISO
+    /// 32000-1 Tables 136 and 137 — a typo, or a mode from an extension
+    /// pdfce does not know. Those marks composite as `Normal`.
     ///
     /// Counted because the result is WRONG rather than missing, and
     /// wrongness of this shape is invisible: a blend that composited as
@@ -286,31 +289,44 @@ pub struct Diagnostics {
     /// missing image leaves a hole somebody notices; a wrong compositing
     /// rule just looks like a different document.
     ///
-    /// **★ MEASURED CONSEQUENCE, 2026-08-18 — this is where `1_GWG160`'s
-    /// failures actually live**, not on [`Self::blend_modes_applied`]
-    /// where they were briefly mis-filed. Every Ghent transparency patch
-    /// reports `applied=11, ignored=4`, and the 4 are these modes. Cells
-    /// resolved from each form XObject's `/Matrix` and `/BBox` against its
-    /// governing `/ExtGState`:
+    /// # ★ THIS COUNTER USED TO MEAN TWO THINGS, and the second is gone
     ///
-    /// | patch | `Hue` | `Saturation` | `Color` | `Luminosity` |
-    /// |---|---|---|---|---|
-    /// | `1_GWG160` | trap | trap | trap | **clean** |
-    /// | `3_GWG164` | trap | trap | trap | **clean** |
+    /// Until 2026-08-19 it also counted the four **non-separable** modes of
+    /// Table 137 (`Hue`, `Saturation`, `Color`, `Luminosity`), which pdfce
+    /// recognised and **deliberately declined** to composite because the
+    /// rasteriser's implementations are measurably wrong. This block said
+    /// *"Reason 2 is by far the likelier on a real print-oriented file"* —
+    /// and that was true right up until those modes shipped.
     ///
-    /// **Three of four declined modes trap and the fourth does not**, in
-    /// both patches independently. So "declined" does not imply "visibly
-    /// wrong" — on this artwork `Luminosity`'s correct result and its
-    /// Normal stand-in coincide closely enough to stay under the suite's
-    /// clear-X threshold. Do not read the clean cell as evidence
-    /// `Luminosity` is implemented; it is declined exactly like the other
-    /// three.
+    /// They now render, computed by pdfce against the clause
+    /// ([`crate::blend_nonsep`]) and counted on
+    /// [`Self::nonseparable_composited`]. **A non-zero value here no longer
+    /// implicates them.**
     ///
-    /// Implementing them needs Table 137's formulas **and** §11.3.5.3's
-    /// CMYK detour, in which K is **selected** by mode rather than blended
-    /// — backdrop's K for `Hue`/`Saturation`/`Color`, source's K for
-    /// `Luminosity`. Both need a backdrop this crate can read, which is
-    /// `Pass 97.0`'s buffer.
+    /// # ★★ AND THIS BLOCK NAMED A BLOCKER THAT SHIPPING FALSIFIED
+    ///
+    /// It closed: *"Implementing them needs Table 137's formulas **and**
+    /// §11.3.5.3's CMYK detour, in which K is selected by mode rather than
+    /// blended … Both need a backdrop this crate can read, which is
+    /// `Pass 97.0`'s buffer."*
+    ///
+    /// **They shipped with no CMYK buffer and no `Pass 97.0`.** The backdrop
+    /// a non-separable blend needs is the destination pixmap, which
+    /// `Pass 85.5` had already made readable per paint — the same machinery
+    /// overprint composites through. The CMYK detour governs a `DeviceCMYK`
+    /// *blending colour space*, which is a separate obligation and remains
+    /// `Pass 97.x`'s.
+    ///
+    /// Worth leaving on the page rather than deleting, because the shape
+    /// recurs: a blocker recorded once, in a doc comment, outlives the
+    /// design that motivated it and then argues against work that has
+    /// become cheap. The `Pass 85.5` row carried the same defect — *"gated
+    /// on `iccce`"* — and was falsified the same way, by someone trying it.
+    ///
+    /// The per-cell trap table that used to sit here (`1_GWG160` and
+    /// `3_GWG164`, three of four modes trapping) is **deleted rather than
+    /// corrected**: `1_GWG160` now PASSES, so a table of which of its cells
+    /// trap describes a document state that no longer exists.
     pub blend_modes_ignored: usize,
     /// Form XObjects carrying `/Group << /S /Transparency >>` (§11.4.7,
     /// Table 147) that pdfce painted **straight onto the page** instead of

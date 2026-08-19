@@ -16984,6 +16984,44 @@ impl EditSession {
     /// A follow-up Pass can add the document-level halves one at a time,
     /// each with its own name in the undo log.
     ///
+    /// # ★★ TWO VERBS ARE CALLED "INSERT PAGES" AND THEY BEHAVE DIFFERENTLY
+    ///
+    /// This is the one thing to read before choosing between them, and the
+    /// names do not help.
+    ///
+    /// | | `EditSession::insert_pages` (this) | `pageops::insert` |
+    /// |---|---|---|
+    /// | saves | **incrementally**, into an open session | a **new document** |
+    /// | undo | one entry, session history intact | n/a |
+    /// | `/AcroForm` | **NOT merged** — widgets arrive orphaned | **merged** |
+    /// | outlines, named dests, page labels, `/OCProperties` | not merged | merged |
+    /// | `pdfce-cli insert-pages` | — | **this is the one the CLI calls** |
+    ///
+    /// Measured 2026-08-19, inserting the same 12-field form page:
+    /// `pdfce-cli insert-pages` produces a file **with** an `/AcroForm` and
+    /// 13 widgets, reporting `fields_renamed=0 fields_dropped=0`. This verb
+    /// produces 13 widgets and **no** `/AcroForm`.
+    ///
+    /// **Neither is the "better" one.** They are the incremental/full-rewrite
+    /// trade (`ARCHITECTURE.md` §5) with a merge attached to the rewrite
+    /// half: a document-level merge rewrites objects an incremental save
+    /// exists in order not to touch. Choose by whether you need the session
+    /// preserved or the structures merged; you cannot have both today.
+    ///
+    /// # Rule 11 (the CLI-surface obligation) — RULED `—`, not a gap
+    ///
+    /// `Pass 102.0` shipped `InsertOutcome::orphaned_widgets` on this verb
+    /// with **no CLI subcommand**, and that is correct rather than
+    /// outstanding: a one-shot CLI invocation has no open session to insert
+    /// into incrementally, and `pdfce-cli insert-pages` already exposes the
+    /// operation an out-of-process caller actually wants — the merging one,
+    /// which does not orphan anything and therefore has no count to report.
+    ///
+    /// Recorded here because "no CLI subcommand" and "a CLI subcommand
+    /// nobody wrote yet" look identical from `FEATURES.md`, and the whole
+    /// point of that file's `—` versus `[ ]` distinction is to tell them
+    /// apart.
+    ///
     /// # ★ THE WIDGETS DO ARRIVE. Only their FIELDS do not — and the
     /// paragraph above was read as saying the opposite
     ///

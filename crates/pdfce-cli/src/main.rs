@@ -7330,14 +7330,7 @@ when comparing against another renderer",
     }
     if d.blend_modes_ignored > 0 {
         eprintln!(
-            "pdfce-cli: note: {} graphics-state(s) selected a blend mode pdfce did NOT apply; \
-those marks were composited as Normal. TWO reasons reach this number and the second is far the \
-likelier on a print-oriented file: (a) a name outside ISO 32000-1 Tables 136/137, or (b) one of \
-the four NON-SEPARABLE modes — Hue, Saturation, Color, Luminosity — which pdfce recognises and \
-deliberately DECLINES to composite because the available implementation is measurably wrong \
-(up to 107/255 error). Either way the page is not blank where those marks are, it is WRONG \
-there, which is harder to notice: a blend composited as Normal looks like an ordinary opaque \
-overlay",
+            "pdfce-cli: note: {} graphics-state(s) named a blend mode outside ISO 32000-1 Tables 136/137, so those marks were composited as Normal. The page is not blank where they are, it is WRONG there, which is harder to notice: a blend composited as Normal looks like an ordinary opaque overlay",
             d.blend_modes_ignored
         );
     }
@@ -22867,6 +22860,18 @@ fn cmd_merge(inputs: &[PathBuf], output: &Path, bookmarks: bool) -> u8 {
 }
 
 /// Implement `pdfce-cli insert-pages`.
+///
+/// ★ **This calls `pageops::insert`, NOT `EditSession::insert_pages`**, and
+/// the two differ in a way an operator can see: this one **merges**
+/// `/AcroForm`, outlines, named destinations and page labels and writes a
+/// new document; the session verb saves incrementally and merges none of
+/// them, so form fields arrive as widgets nobody owns.
+///
+/// Measured 2026-08-19 on the same 12-field source: this route produces an
+/// `/AcroForm` with 13 widgets and `fields_dropped=0`.
+///
+/// Named here because the two verbs share a name and a reader arriving from
+/// either side will assume there is only one.
 fn cmd_insert_pages(
     input: &Path,
     source: &Path,
