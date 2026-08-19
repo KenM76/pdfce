@@ -576,7 +576,7 @@ no name for `list-fields` to show. Note that **`pdfce-cli insert-pages` does
 not produce orphans**: it calls `pageops::assemble`, which merges `/AcroForm`
 (and reports `fields_renamed=` / `fields_dropped=`). Only
 `EditSession::insert_pages` orphans.
-#### ★★ `merge_document` — the merge that keeps the undo log (`Pass 104.0`)
+#### ★★ `merge_document` — the merge that keeps the undo log (`Pass 106.0`)
 
 | I want to… | Call |
 |---|---|

@@ -1,5 +1,11 @@
-//! `EditSession::merge_document` (`Pass 104.0`) — a merge that preserves the
+//! `EditSession::merge_document` (`Pass 106.0`) — a merge that preserves the
 //! undo log, and carries the field tree `insert_pages` must leave behind.
+//!
+//! ★ **Commit `9f663f9` calls this "Pass 104.0" and is wrong.** `104.0` was
+//! already taken by the ce-dimension group verbs, shipped the same day. The
+//! ID was asserted from memory rather than grepped against the ledger, and
+//! the collision was caught at filing time. The commit subject cannot be
+//! rewritten; `ROADMAP.md` is authoritative.
 //!
 //! # What these are actually testing
 //!

@@ -96,6 +96,186 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+> ### ★★★★★ THE 198TH FILING — `Pass 106.0` SHIPS `EditSession::merge_document`, VERB 125 OF 125 — ★ THE DISPATCH'S OWN "Pass 104.0" LABEL WAS A COLLISION AND IS CORRECTED HERE, NOT FILED AS RELAYED — no shell this filing
+>
+> **This filing has no shell.** Commit hash `9f663f9` and the test/gate
+> results below are relayed from the dispatching engineer. Per hard rule 8
+> and this role's own memory (*"dispatch should carry git evidence when
+> this librarian has no shell"*), the relayed hash is not independently
+> confirmed against `git log`/`main` here — **what IS independently
+> confirmed, by `Grep` against the live tree**: `pub fn merge_document`,
+> `struct MergeOutcome` and a `merge-document` CLI subcommand all exist in
+> `crates/pdfce-core/src/edit.rs`, `crates/pdfce-core/tests/merge_document.rs`
+> and `crates/pdfce-cli/src/main.rs` respectively. Current-tree claims are
+> checked; commit-history claims are relayed and labelled as such.
+>
+> **★★ THE DISPATCH ARRIVED SELF-LABELLED "`Pass 104.0`." THAT ID IS
+> ALREADY TAKEN** — `Pass 104.0` is the ce-dimension group verbs
+> (`rename_dimension_group`/`delete_dimension_group`/`set_dimension_group`,
+> commit `ad960f2`, hundred-and-eighty-ninth filing), filed **and shipped**
+> before this session. Grepped before filing (`grep -n "Pass 104"
+> docs/ROADMAP.md` → line 1579, ce-dimension entry, not this one) per this
+> role's own memory record on exactly this failure mode (*"Pass-ID minted
+> from assumption, not the live ledger"*) and hard rule 2 (*Pass IDs are
+> stable, never reused for a different feature*). The roadmap's own last
+> ledger line (197th filing, immediately below) already states the correct
+> figure — **"family ceiling stays 105, next free family 106"** — so the
+> free ID was one line-read away. **Filed as `Pass 106.0`.** No document
+> outside this dispatch ever asserted "104.0" for `merge_document`, so
+> nothing else needs correcting — this is a catch, not a repair.
+>
+> ### Pass 106.0 — commit `9f663f9` (relayed, no shell) — **`EditSession::merge_document` — A MERGE THAT PRESERVES THE UNDO LOG, VERB 125 OF 125**
+>
+> **Requested by the operator directly** (*"work on the EditSession-shaped
+> merge that preserves undo"*), arising from a blocker `pdfceGUI` had been
+> working around rather than reporting: they drew Merge on their Pages tab
+> and wired it to `command-unimplemented`, because the only merge pdfce
+> offered (`pageops::insert`) returns a whole new document's bytes — wiring
+> it into an open editor would have discarded the undo log. **They shipped
+> an inert button rather than silently eat the operator's history.**
+>
+> **★ How this was found is worth recording alongside the Pass itself.**
+> It surfaced only because the 197th filing's `FEATURES.md` `gui`-column
+> re-base landed the Merge row's demotion the same day — a capability
+> marked present against a crate nobody uses (`crates/pdfce-gui`) had been
+> hiding a real API-shape gap on the side that matters (`pdfceGUI`). **The
+> demotion is what found the gap**, worth carrying against any future
+> instinct that a row moving `[x]`→`[ ]` is only bad news.
+>
+> **What shipped:**
+>
+> - `pdfce-core`: `EditSession::merge_document(source: &DocumentView,
+>   position: InsertPosition) -> Result<MergeOutcome, EditError>`. Every
+>   page of the source, plus the `/AcroForm` field tree, as ONE undoable
+>   command. **Verb 125 of 125.**
+> - New public `MergeOutcome { pages_merged, fields_merged, fields_renamed,
+>   acroform_created }`, `#[non_exhaustive]`.
+> - New `CommandKind::MergeDocument { count }`.
+> - Internal refactor: `insert_pages`'s copy+splice extracted into
+>   `copy_and_splice` (new private `PageSplice`), shared by both verbs.
+>   Behaviour-neutral — the existing `insert_pages` and `widget_adoption`
+>   suites passed unchanged immediately after the extraction, before any
+>   new code landed.
+> - `pdfce-cli`: new `merge-document` subcommand (`--source`,
+>   `--before`/`--after`/`--at-start`, `--output`, `--mode`,
+>   `--verify-undo`).
+> - New `crates/pdfce-core/tests/merge_document.rs`, 10 tests.
+> - Docs: a `★★ merge_document` section in
+>   `docs/core-api/02-editing-and-saving.md`; verb count 124 → 125 in three
+>   places plus `index.md` (engineer's own remit, `docs/core-api/`, not
+>   independently re-verified here — see this session's own "Owed to the
+>   next session" boxes on that directory's citation currency).
+>
+> **Test results (relayed).** 4,009 workspace tests pass, 0 fail — up 14
+> from `Pass 103.4`'s 3,995 (the 10 new `merge_document.rs` tests plus 4
+> elsewhere, total filed beside the per-item form per hard rule 10).
+> `cargo tree -p pdfce-core` / `-p pdfce-render`: zero GUI, zero network
+> deps. All six named gates clean. Driven end to end: 12 fields arrive
+> `fillable=1` with values intact, `undo_identical=1`; merging the corpus
+> form into itself yields 24 distinct field names with 12 renamed.
+>
+> #### Findings
+>
+> **(A) ★★ A WHOLE-document merge is structurally EASIER than a page
+> subset, inverting an assumption implicit in the roadmap.** `insert_pages`
+> cannot carry `/AcroForm` because a field's `/Kids` may reach widgets on
+> pages *not* being inserted (`Pass 102.1`'s hard problem;
+> `orphaned_widgets`/`orphaned_widgets_unrecoverable` are documented as
+> permanent for exactly that reason). Merging *every* page makes the
+> straddle case impossible — no field can reach outside its own source
+> document. Same copy path, differing only in taking every page.
+> **RAG'd**:
+> `C:\personal_rag\pdf\lesson_20260819_whole_document_merge_cannot_orphan_a_widget_because_no_page_subset_boundary_exists.md`.
+> Attached to `Pass 102.1`'s own entry below, since it means the *subset*
+> case remains the hard one and the whole-document case was reachable all
+> along.
+>
+> **(B) The merge order is load-bearing and its failure mode is
+> invisible.** Pages first, then the field tree, through the SAME mapping
+> table — so a field's `/Kids` resolve to the widgets the pages already
+> brought across. A second, independent mapping for the fields would
+> silently double every widget while still rendering correctly, which is
+> how it would survive review undetected. `merge_document.rs` now asserts
+> object *identity* between a page's `/Annots` and the fields' `/Kids`,
+> not merely equal counts — the assertion this finding required, folded
+> into finding (A)'s RAG file rather than a separate one.
+>
+> **(C) ★ FOUR OF SIX SABOTAGES SURVIVED THE FIRST BATTERY — two genuine
+> test weaknesses, both the same shape this project has now named `R200`
+> and its neighbouring "fixture too narrow" pattern.**
+> - `parse_acroform` walks DOWNWARD (`/Fields`→`/Kids`) and never reads
+>   `/Parent`, so a merge dropping every back-link passed every assertion
+>   routed through it — widget counts, radio-group check, all of it. A
+>   **further** instance of `R200` (*an independent reader used as a test
+>   oracle only proves what it touches*) — recorded here, no new rule
+>   minted, `R200`'s ceiling is unchanged. Now verified against raw bytes
+>   instead.
+> - `need_appearances_is_carried_as_a_logical_or` was vacuous: the corpus
+>   form never sets the flag, so both sides were `false` regardless of the
+>   merge. Fixed with a byte-authored form that sets it. **RAG'd as an
+>   addendum**, not a new file, per the no-duplication rule:
+>   `C:\personal_rag\pdf\lesson_20260819_green_sabotage_can_signal_fixture_insufficiency_not_just_untested_or_equivalent_code.md`.
+>
+>   The other two survivors were **not** test weaknesses: one sabotage was
+>   a no-op against a second guard (`src_fields.is_empty()` is a
+>   *performance* guard, now labelled as one in the code so nobody reasons
+>   from it as correctness), and one had a stale anchor after `cargo fmt`.
+>
+> **(D) Found by reading the command's own output — `R174` again.**
+> `pdfce-cli list-fields` reported `sig_flags=0x1` on the corpus form and
+> `0x0` on the merged result — `/SigFlags` (Table 219) was not carried,
+> so a viewer would not offer signing UI for a document that *does*
+> contain a `/Sig` field. Fixed as a bitwise OR. **The flag claims
+> structure, not validity** — a signature's own `/ByteRange` is already
+> broken by the merge's object renumbering, but the flag says the document
+> *has* signature fields, which remains true. **RAG'd**:
+> `C:\personal_rag\pdf\lesson_20260819_sigflags_merge_is_bitwise_or_because_the_flag_claims_structure_not_signature_validity.md`.
+>
+> **(E) A deliberate divergence between two verbs in the same crate,
+> recorded so a future session does not "fix" it into consistency.**
+> `merge_document` **renames** a colliding field name; `adopt_widget`
+> **refuses** the same collision. Both are correct — the difference is the
+> caller's knowledge: adopting one widget is a decision an operator is
+> making right now and can be asked about; merging a hundred-field
+> document is not, and refusing the whole merge over one name is worse
+> than a suffix. §12.7.3.1's fully-qualified-name-is-identity rule is what
+> makes leaving the duplicate unacceptable in both cases. Project-internal
+> design rationale — not RAG'd, does not generalise past this project's
+> own two verbs.
+>
+> **`FEATURES.md` — CHANGED, same filing.** The **Merge** row: `core`/
+> `cli` unchanged (`[x]`/`[x]`, both already ticked against `pageops::
+> insert`); `gui` stays **`[ ]`** — `pdfceGUI` has not wired
+> `merge_document` yet, only the blocker that stalled it is gone. Sentence
+> replaced to name `merge_document` as a third verb sharing this
+> neighbourhood (with `pageops::insert`/CLI `insert-pages`), cross-
+> referencing owed item 29's naming-collision tracking rather than
+> restating it.
+>
+> **Still open:**
+> - `merge_document` carries pages + `/AcroForm` only — outlines, named
+>   destinations, page labels and `/OCProperties` are **not** merged yet.
+>   `add_outline_item` (`Pass 103.0`) and `add_named_destination`
+>   (`Pass 103.3`) both shipped this session and make the first two
+>   substantially cheaper than they would have been a week ago. **Filed as
+>   a new Backlog item, below.**
+> - `Pass 102.1` — carry field definitions for a page-*subset* insert.
+>   Still the hard case; see finding (A). Unaffected by this Pass.
+> - `v0.7.0` bumped, not tagged.
+> - The n-channel compositor (`Pass 97.1`) remains scoped and researched,
+>   not begun; carried forward unchanged — the operator asked for
+>   `pdfceGUI`-facing requests to take precedence, which this Pass did.
+>
+> **Ledger effects.**
+>
+> | ledger | before | after |
+> |---|---|---|
+> | Pass family ceiling | **105** | **106** |
+> | decision records | **073** | **073** (unchanged — no new architectural decision; the rename-vs-refuse divergence in finding (E) is recorded rationale, not a crate-boundary/library/invariant decision) |
+> | standing rules | **R202** | **R202** (unchanged — findings (C)/(D) corroborate `R200`/`R174`, neither newly minted) |
+> | `SESSION_LOG` filings | **197** | **198** |
+> | `personal_rag/pdf` lessons | **+2** new, **+1** addendum footer | see above |
+
 > ### ★★★★★ THE 197TH FILING — `docs/FEATURES.md`'S `gui` COLUMN RE-BASED FROM `crates/pdfce-gui` TO `D:\dev\pdfceGUI` — DECISION 073, STANDING RULE `R202` MINTED — NO PASS, NO SHELL, DOCUMENTATION-ONLY
 
 >
@@ -62251,6 +62431,23 @@ overrides the image dictionary; `/ColorSpace` optional,
 Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
+
+- **`merge_document` carries pages + `/AcroForm` only — outlines, named
+  destinations, page labels and `/OCProperties` are not merged.** Filed
+  2026-08-19 (hundred-and-ninety-eighth filing), `Pass 106.0`'s own "Still
+  open" list. `EditSession::merge_document` (verb 125) merges every page
+  of a source document plus its `/AcroForm` field tree as one undoable
+  command, but does not yet carry the source's outline/bookmark tree
+  (`add_outline_item`, `Pass 103.0`), named destinations
+  (`add_named_destination`, `Pass 103.3`), `/PageLabels`, or optional-
+  content group configuration. **Scope note: the first two are
+  substantially cheaper now than they would have been a week ago**,
+  since both authoring verbs already exist and merging is closer to
+  "call the existing verb once per source entry, remapped through the
+  same object-ID table `merge_document` already builds" than to new
+  design. Page labels have a documented precedent to reuse or diverge
+  from deliberately (`Pass 103.2`'s Acrobat-measured-and-not-matched
+  ruling, decision 072).
 
 - **A gate dies with `crates/pdfce-gui` unless `pdfceGUI` carries an
   equivalent.** Filed 2026-08-19 (hundred-and-ninety-seventh filing),

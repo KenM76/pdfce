@@ -51039,3 +51039,141 @@ pointer.
 
 **Terminology (rule 15):** no ce dimension or pdf dimension appears
 anywhere in this filing.
+
+## 2026-08-19 (hundred-and-ninety-eighth filing) — `Pass 106.0` (`9f663f9`) SHIPS `EditSession::merge_document`, VERB 125 OF 125; A DISPATCH-SUPPLIED PASS ID COLLIDED WITH THE EXISTING `Pass 104.0` AND WAS CORRECTED, NOT FILED AS RELAYED; TWO NEW `personal_rag\pdf` LESSONS PLUS ONE ADDENDUM
+
+**Filed by `pdfce-librarian`, no shell.** Commit hash `9f663f9` and the
+test/gate counts are relayed from the dispatching engineer, per hard rule
+8's no-shell branch. Independently confirmed against the live tree by
+`Grep` (not relayed): `pub fn merge_document`, `struct MergeOutcome`, and
+a `merge-document` CLI subcommand all exist in `crates/pdfce-core/src/
+edit.rs`, `crates/pdfce-core/tests/merge_document.rs` and `crates/
+pdfce-cli/src/main.rs` respectively.
+
+**★★ The dispatch's own filing request self-labelled this work
+"`Pass 104.0`." That ID was already taken** — by the ce-dimension group
+verbs (`ad960f2`, hundred-and-eighty-ninth filing), filed and shipped
+earlier this session. Caught by grepping `docs/ROADMAP.md` for `Pass 104`
+before filing (this role's own memory record names exactly this failure
+mode) and by reading the 197th filing's own ledger line, which already
+stated the correct free ID: "family ceiling stays 105, next free family
+106." **Filed as `Pass 106.0` instead of the relayed label.** Nothing
+else needed correcting — no other document had asserted "104.0" for this
+work, so this is a catch made before publication, not a repair of a
+published error.
+
+**Shipped:**
+- Pass 106.0 — `EditSession::merge_document(source, position) ->
+  Result<MergeOutcome, EditError>`: merges every page of a source
+  document plus its `/AcroForm` field tree into an open session as ONE
+  undoable command. New `MergeOutcome` (`#[non_exhaustive]`), new
+  `CommandKind::MergeDocument`. `pdfce-cli merge-document` subcommand.
+  Internal refactor shares `insert_pages`'s copy+splice logic
+  (`copy_and_splice`/`PageSplice`) between both verbs, verified
+  behaviour-neutral by the pre-existing suites passing unchanged
+  immediately after the extraction. 10 new tests
+  (`crates/pdfce-core/tests/merge_document.rs`).
+
+**Decisions made this session:**
+- **No new architectural decision minted.** Finding (E) below (rename-
+  vs-refuse divergence between `merge_document` and `adopt_widget`) is
+  recorded engineering rationale in `ROADMAP.md`, not a crate-boundary/
+  library/invariant decision — same disposition `Pass 103.4` used for its
+  own guard-sharing rationale.
+- **Why this was requested at all:** the operator asked directly for
+  "the `EditSession`-shaped merge that preserves undo," arising from a
+  blocker `pdfceGUI` had been silently working around — they wired their
+  Merge button to `command-unimplemented` rather than risk discarding the
+  open session's undo log by calling `pageops::insert`. **The gap was
+  found by a `FEATURES.md` row going DOWN**, not up: the 197th filing's
+  `gui`-column re-base demoted the Merge row from `[x]` to `[ ]`, and that
+  demotion is what surfaced a real API-shape gap that a stale `[x]`
+  (measured against the paused `crates/pdfce-gui`) had been hiding.
+
+**Findings + decisions:**
+- **(A) A whole-document merge is structurally EASIER than a page
+  subset, not just smaller** — `insert_pages` cannot carry `/AcroForm`
+  because a field's `/Kids` may reach widgets outside the inserted
+  subset (`Pass 102.1`'s permanent hard problem); taking every page
+  removes the straddle case entirely, since no field can reach outside
+  its own source document. RAG'd.
+- **(B) Merge order is load-bearing**: pages first, then fields, through
+  ONE shared ID-mapping table, so a second independent mapping could
+  silently double every widget while still rendering correctly. Now
+  asserted by object identity, not merely count, in the new test file.
+- **(C) Four of six injected sabotages survived the first battery.** Two
+  were genuine test weaknesses, both matching already-named patterns:
+  `parse_acroform` never reads `/Parent` (a further `R200` instance — no
+  new rule minted), and `need_appearances_is_carried_as_a_logical_or` was
+  vacuous against a corpus that never sets the flag (an addendum to the
+  existing fixture-insufficiency lesson, not a new file). The other two
+  survivors were a no-op against a *performance*-only guard and a stale
+  patch anchor after `cargo fmt` — neither a test defect.
+- **(D) Found by reading the CLI's own output — `R174` again.**
+  `pdfce-cli list-fields` reported `sig_flags=0x1` on the source and
+  `0x0` on the merged output; `/SigFlags` (Table 219) needed a bitwise
+  OR, not a silent drop — the flag claims structural presence of
+  signature fields, independent of whether any one signature's
+  `/ByteRange` still validates after the merge's renumbering. RAG'd.
+- **(E) A deliberate, recorded divergence**: `merge_document` renames a
+  colliding field name; `adopt_widget` refuses the same collision. Both
+  correct — the difference is whether the caller (an operator, one
+  widget at a time, vs. a hundred-field batch merge) can sensibly be
+  asked. Project-internal; not RAG'd.
+
+**`personal_rag/pdf` — CHANGED.** Two new lessons plus one addendum:
+- `lesson_20260819_whole_document_merge_cannot_orphan_a_widget_because_no_page_subset_boundary_exists.md`
+  (finding A)
+- `lesson_20260819_sigflags_merge_is_bitwise_or_because_the_flag_claims_structure_not_signature_validity.md`
+  (finding D)
+- Addendum footer on
+  `lesson_20260819_green_sabotage_can_signal_fixture_insufficiency_not_just_untested_or_equivalent_code.md`
+  (finding C's `NeedAppearances` case — a further instance of the same
+  already-catalogued pattern, not a new mechanism)
+
+Both subject `index.md` and the master `personal_rag/index.md` updated
+in the same filing.
+
+**`FEATURES.md` — CHANGED.** The **Merge** row: sentence replaced to
+name `merge_document` as a third verb sharing the insert/merge
+neighbourhood (cross-referencing owed item 29 rather than restating it);
+`core`/`cli` unchanged (`[x]`/`[x]`, already ticked against `pageops::
+insert`); `gui` stays `[ ]` — the blocker is resolved, the wiring is not.
+
+**Hard-rule-11-style sweep, reported not fixed where outside remit.**
+Searched for the claim "no session-preserving merge exists" rather than
+for the string `merge_document`. One match outside this role's remit:
+`crates/pdfce-gui/src/main.rs:10451-10455`'s doc comment describing
+`pageops::insert`'s own return-a-new-document shape remains accurate —
+it describes that function, not the absence of any alternative — so it
+is **not** a survivor and nothing is owed there.
+
+**Still in flight:**
+- `Pass 102.1` — carry field definitions across `insert_pages`'s
+  page-*subset* copy boundary. Unaffected by this Pass; still the hard
+  case (finding A explains why).
+- New Backlog item filed: extend `merge_document` to outlines/named
+  destinations/page labels/`/OCProperties`, noting the first two are now
+  cheaper given `Pass 103.0`/`103.3` already shipped the authoring verbs.
+- `v0.7.0` bumped, not tagged.
+- The n-channel compositor (`Pass 97.1`) — scoped, not begun, carried
+  forward unchanged.
+
+**For next session:**
+1. `pdfceGUI` still needs to wire `merge_document` — the blocker that
+   stalled it is gone; report this back via the request channel.
+2. Everything carried from the 197th filing's own "For next session"
+   list is still open.
+
+**Ledger effects:**
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **105** | **106** |
+| decision records | **073** | **073** (unchanged) |
+| standing rules | **R202** | **R202** (unchanged — `R200`/`R174` corroborated, not newly minted) |
+| `SESSION_LOG` filings | **197** | **198** |
+| `personal_rag/pdf` lessons | **+2** new, **+1** addendum | see above |
+
+**Terminology (rule 15):** no ce dimension or pdf dimension appears
+anywhere in this filing.

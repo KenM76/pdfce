@@ -249,7 +249,15 @@ pub enum CommandKind {
     /// (§12.7.3). Undoing it de-registers the field; the widget itself
     /// stays on the page, which is where it was before.
     AdoptWidget,
-    /// An entire document was merged into this one (`Pass 104.0`).
+    /// An entire document was merged into this one (`Pass 106.0`).
+    ///
+    /// ★ Filed as `106.0`, though commit `9f663f9`'s subject line says
+    /// "Pass 104.0" and cannot be changed. `104.0` was already the
+    /// ce-dimension group verbs (`ad960f2`), shipped earlier the same day —
+    /// the engineer asserted a Pass ID from memory instead of grepping the
+    /// ledger, and the librarian caught the collision at filing time.
+    /// **`git log` and `ROADMAP.md` therefore disagree about this one Pass;
+    /// the ROADMAP is right.**
     ///
     /// Distinct from [`Self::InsertPages`] because undoing it removes the
     /// merged field tree as well as the pages, and an undo label that said
