@@ -122,6 +122,29 @@ impl DestinationResolver {
         self.named.len()
     }
 
+    /// The destination value a key names, from **either** namespace, or
+    /// `None` if nothing defines it.
+    ///
+    /// # Why this is not [`Self::resolve_destination`]
+    ///
+    /// That one answers *"which page?"* and folds three different situations
+    /// into `None`: undefined, defined-but-dangling, and remote. Correct for
+    /// its callers — a destination that already pointed nowhere is not newly
+    /// broken by a delete.
+    ///
+    /// A **writer** asking "may I define this key?" needs the three kept
+    /// apart. A key that is defined but points at a deleted page would
+    /// answer `None` there, and silently overwriting it is exactly the
+    /// collision `EditError::NamedDestinationTaken` exists to refuse. This
+    /// asks the membership question directly.
+    ///
+    /// Keys are compared **byte-for-byte** (§7.9.6), across both the PDF 1.1
+    /// catalog `/Dests` dictionary and the PDF 1.2 `/Names` tree, because
+    /// this type flattens both at construction.
+    #[must_use]
+    pub fn lookup(&self, key: &[u8]) -> Option<&Object> {
+        self.named.get(key)
+    }
     /// Every named destination whose target page is in `pages`.
     ///
     /// Used by the delete census (to count the ones about to dangle) and

@@ -353,18 +353,16 @@ fn a_document_with_no_outline_gets_one() {
 /// a bookmark that appears in the panel, looks clickable and does nothing.
 ///
 /// Each variant is checked separately rather than as a class, because they
-/// reach the refusal by two different routes — `Named`/`Remote` are rejected
-/// on the `Destination` enum, `Unknown`/`Absent` inside the array builder —
-/// and testing one of each pair would leave the other route unmeasured.
+/// reach the refusal by two different routes — `Remote` is rejected on the
+/// `Destination` enum, `Unknown`/`Absent` inside the array builder — and
+/// testing one of each pair would leave the other route unmeasured.
+///
+/// `Named` is **not** in this list any more: `Pass 103.3` made it authorable.
+/// Its own refusal — an *undefined* key — is
+/// [`a_bookmark_naming_an_undefined_destination_is_refused`].
 #[test]
 fn destinations_pdfce_cannot_author_are_refused_by_name() {
     let cases: &[(Destination, &str)] = &[
-        (
-            Destination::Named {
-                name: b"chapter1".to_vec(),
-            },
-            "named",
-        ),
         (
             Destination::Remote {
                 file: Some(b"other.pdf".to_vec()),
@@ -564,4 +562,405 @@ fn the_sibling_chain_is_walkable_backward_from_last_to_first() {
         forward, reversed,
         "walking forward and walking backward must visit the same items"
     );
+}
+
+/// The **raw** `/Dest` value of the last top-level bookmark in the saved
+/// bytes, resolved one reference level but not interpreted.
+///
+/// ## Why the reader cannot answer the question this exists for
+///
+/// `read_outline` **resolves** a defined name through §12.3.2.3 and reports
+/// it as `Destination::Page` — deliberately, because a shell wants to know
+/// which page a bookmark reaches. `Destination::Named` in reader output means
+/// the key resolved to *nothing*; it is exactly what
+/// `OutlineDiagnostics::unresolved_names` counts.
+///
+/// So a writer that **resolved the name at author time** and baked in
+/// `[page /Fit]`, and a writer that correctly wrote the key, produce
+/// **identical reader output**. The distinction is invisible to the oracle —
+/// the same blindness as the `/Prev` case earlier in this file, found the same
+/// way (a sabotage that stayed green), and the reason two tests below read
+/// dictionaries directly instead.
+///
+/// The distinction is not academic. Baking the destination defeats precisely
+/// what §12.3.2.3 exists for: the indirection is what lets a document's links
+/// survive a page reorder. A baked bookmark is correct today and silently
+/// wrong after the next one, which is the worst failure timing available.
+fn raw_last_bookmark_dest(session: &EditSession) -> Object {
+    let (bytes, _) = session
+        .to_incremental_bytes(&SaveOptions::identity())
+        .expect("save must succeed");
+    let doc = Document::from_bytes(bytes).expect("pdfce's own output must reparse");
+    let Some(Object::Dict(catalog)) = doc
+        .catalog_id()
+        .and_then(|id| doc.get(id).map(|io| &io.value))
+    else {
+        panic!("no catalog")
+    };
+    let Some(Object::Dict(root)) = catalog.get(b"Outlines").map(|o| doc.resolve(o)) else {
+        panic!("no /Outlines")
+    };
+    let Some(Object::Reference(last)) = root.get(b"Last") else {
+        panic!("outline root has no /Last")
+    };
+    let Some(Object::Dict(item)) = doc.get(*last).map(|io| &io.value) else {
+        panic!("last bookmark is not a dict")
+    };
+    item.get(b"Dest")
+        .map(|d| doc.resolve(d).clone())
+        .unwrap_or(Object::Null)
+}
+
+// ---------------------------------------------------------------------------
+// Named destinations (§12.3.2.3) — `Pass 103.3`
+// ---------------------------------------------------------------------------
+
+/// Would catch: a bookmark being written with a key nothing defines.
+///
+/// The result would appear in the panel, look clickable and do nothing —
+/// which an operator reads as a viewer bug rather than as a document
+/// assembled in the wrong order. Refusing makes the ordering constraint
+/// explicit at the moment it is violated.
+#[test]
+fn a_bookmark_naming_an_undefined_destination_is_refused() {
+    let mut s = session("basic-tree.pdf");
+    match s.add_outline_item(
+        None,
+        "Appendix",
+        Some(Destination::Named {
+            name: b"nowhere".to_vec(),
+        }),
+    ) {
+        Err(EditError::NamedDestinationNotFound { name }) => assert_eq!(name, "nowhere"),
+        other => panic!("an undefined key must be refused, got {other:?}"),
+    }
+    assert_eq!(
+        saved_outline(&s).items.len(),
+        2,
+        "a refusal must leave no bookmark behind"
+    );
+}
+
+/// Would catch: **the whole point of named destinations being defeated** —
+/// the key being resolved to a page at authoring time and baked in as an
+/// explicit `[page /Fit]` array.
+///
+/// That version passes every "does the bookmark reach page 2" test and is
+/// wrong in the way that matters: §12.3.2.3's indirection exists so that
+/// moving pages does not break every referrer. A baked destination is correct
+/// today and silently wrong after the next reorder.
+///
+/// So this asserts the **shape** as well as the target: the saved `/Dest`
+/// must still be `Destination::Named`, not `Destination::Page`, and it must
+/// resolve to the right page through the tree.
+#[test]
+fn a_named_destination_stays_a_name_rather_than_being_resolved_and_baked() {
+    let mut s = session("basic-tree.pdf");
+    s.add_named_destination(
+        b"appendix-a",
+        Destination::Page {
+            page_index: 2,
+            view: DestView::Fit,
+        },
+    )
+    .expect("defining the name must succeed");
+    s.add_outline_item(
+        None,
+        "Appendix A",
+        Some(Destination::Named {
+            name: b"appendix-a".to_vec(),
+        }),
+    )
+    .expect("a defined name must be accepted");
+
+    // The SHAPE, read raw — see `raw_last_bookmark_dest` for why the reader
+    // cannot answer this question at all.
+    match raw_last_bookmark_dest(&s) {
+        Object::String(written) => assert_eq!(
+            written, b"appendix-a",
+            "the key must be written byte-for-byte, and as a STRING — that type \
+IS the PDF 1.2 tree namespace; a name object would select the PDF 1.1 \
+dictionary instead"
+        ),
+        Object::Array(_) => panic!(
+            "the destination was RESOLVED at author time and baked in as an explicit \
+array; it must stay a name so a later page reorder does not break it"
+        ),
+        other => panic!("unexpected raw /Dest: {other:?}"),
+    }
+
+    // And it must actually reach the page — a key that survives but resolves
+    // to nothing is the other half of the failure, and only the reader can
+    // confirm that half.
+    let outline = saved_outline(&s);
+    let added = outline.items.last().expect("the bookmark must be there");
+    assert_eq!(
+        added.page_index(),
+        Some(2),
+        "the name must resolve through the tree to the page it was defined for"
+    );
+    assert_eq!(
+        outline.diagnostics.unresolved_names, 0,
+        "no bookmark may be left naming something the document does not define"
+    );
+}
+
+/// Would catch: keys being written unsorted.
+///
+/// §7.9.6 requires `Names` *"sorted in lexical order"*, byte-by-byte, shorter
+/// keys before longer ones with the same prefix. A reader doing binary
+/// descent over an unsorted array silently **misses keys that are present** —
+/// and pdfce's own reader does a linear scan (its `NT-A1` tolerance policy),
+/// so pdfce would not notice its own bad output. Another viewer would.
+///
+/// So this asserts the raw array order in the **saved bytes**, not through
+/// any reader. The insertion order is deliberately reverse-sorted, and
+/// includes a prefix pair (`ch` before `chapter`) to pin the tie-break rule
+/// rather than just alphabetical order.
+#[test]
+fn name_tree_keys_are_written_in_the_order_7_9_6_requires() {
+    let mut s = session("basic-tree.pdf");
+    for key in [&b"zulu"[..], b"chapter", b"ch", b"alpha"] {
+        s.add_named_destination(
+            key,
+            Destination::Page {
+                page_index: 0,
+                view: DestView::Fit,
+            },
+        )
+        .expect("each name must be definable");
+    }
+
+    let (bytes, _) = s
+        .to_incremental_bytes(&SaveOptions::identity())
+        .expect("save must succeed");
+    let doc = Document::from_bytes(bytes).expect("pdfce's own output must reparse");
+    let Some(Object::Dict(catalog)) = doc
+        .catalog_id()
+        .and_then(|id| doc.get(id).map(|io| &io.value))
+    else {
+        panic!("no catalog")
+    };
+    let Some(Object::Dict(names)) = catalog.get(b"Names").map(|o| doc.resolve(o)) else {
+        panic!("no /Names")
+    };
+    let Some(Object::Dict(dests)) = names.get(b"Dests").map(|o| doc.resolve(o)) else {
+        panic!("no /Dests")
+    };
+    assert!(
+        !dests.contains_key(b"Limits"),
+        "Table 36 scopes /Limits to intermediate and leaf nodes; a root with \
+one is the malformed shape NT-A1 records"
+    );
+    let Some(Object::Array(arr)) = dests.get(b"Names").map(|o| doc.resolve(o)) else {
+        panic!("no /Names array")
+    };
+    let keys: Vec<Vec<u8>> = arr
+        .chunks_exact(2)
+        .filter_map(|p| match &p[0] {
+            Object::String(k) => Some(k.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        keys,
+        vec![
+            b"alpha".to_vec(),
+            b"ch".to_vec(),
+            b"chapter".to_vec(),
+            b"zulu".to_vec(),
+        ],
+        "keys must be byte-sorted, with the shorter prefix first"
+    );
+}
+
+/// Would catch: a second definition silently replacing the first, or a
+/// collision being allowed with a key that exists but currently resolves
+/// nowhere.
+///
+/// The second half is the subtle one. `resolve_destination` folds
+/// "undefined", "dangling" and "remote" together into `None` — correct for
+/// its own callers — and a writer that used it as the collision check would
+/// happily overwrite a key whose target page had been deleted. The check has
+/// to be membership, not reachability.
+#[test]
+fn defining_the_same_name_twice_is_refused() {
+    let mut s = session("basic-tree.pdf");
+    let dest = || Destination::Page {
+        page_index: 0,
+        view: DestView::Fit,
+    };
+    s.add_named_destination(b"intro", dest())
+        .expect("first definition must succeed");
+    match s.add_named_destination(b"intro", dest()) {
+        Err(EditError::NamedDestinationTaken { name }) => assert_eq!(name, "intro"),
+        other => panic!("a duplicate key must be refused, got {other:?}"),
+    }
+}
+
+/// Would catch: keys being round-tripped through UTF-8.
+///
+/// §7.9.6 imposes **no** encoding on name-tree keys — *"any encoding of the
+/// keys may be used as long as it is self-consistent"* — and real files use
+/// UTF-16BE-with-BOM, PDFDocEncoding and opaque bytes. A `&str` API, or a
+/// lossy decode anywhere in the path, would mangle a key read out of another
+/// document and make it un-matchable against the file it came from.
+///
+/// The key here is deliberately **not valid UTF-8**.
+#[test]
+fn a_non_utf8_key_survives_byte_for_byte() {
+    let mut s = session("basic-tree.pdf");
+    // Built at runtime rather than as a literal: `invalid_from_utf8` fires at
+    // COMPILE time on a `from_utf8` over a const slice, and the lint is right
+    // in general — here the invalidity is the entire premise, so the check has
+    // to stay and the value has to be opaque to the linter.
+    let key: Vec<u8> = vec![0xFE, 0xFF, 0x00, 0x63, 0x00, 0xE9, 0xFF, 0xFE];
+    let key: &[u8] = &key;
+    assert!(
+        std::str::from_utf8(key).is_err(),
+        "the test premise: this key is not valid UTF-8"
+    );
+    s.add_named_destination(
+        key,
+        Destination::Page {
+            page_index: 1,
+            view: DestView::Fit,
+        },
+    )
+    .expect("an opaque key must be definable");
+    s.add_outline_item(
+        None,
+        "Chapitre",
+        Some(Destination::Named { name: key.to_vec() }),
+    )
+    .expect("and referable");
+
+    match raw_last_bookmark_dest(&s) {
+        Object::String(written) => assert_eq!(
+            written, key,
+            "the key must come back byte-identical, not UTF-8-repaired"
+        ),
+        other => panic!("unexpected raw /Dest: {other:?}"),
+    }
+    // And it still resolves, which is the proof the written bytes match the
+    // tree's key rather than merely surviving somewhere.
+    let outline = saved_outline(&s);
+    assert_eq!(outline.diagnostics.unresolved_names, 0);
+    assert_eq!(
+        outline.items.last().expect("bookmark").page_index(),
+        Some(1)
+    );
+}
+
+/// Would catch: undo leaving the name defined, so a redefinition is then
+/// refused for a name the operator cannot see and did not keep.
+#[test]
+fn undo_removes_a_named_destination() {
+    let mut s = session("basic-tree.pdf");
+    let dest = || Destination::Page {
+        page_index: 0,
+        view: DestView::Fit,
+    };
+    s.add_named_destination(b"intro", dest()).expect("defines");
+    assert!(s.undo().is_some(), "one undo entry must exist");
+    s.add_named_destination(b"intro", dest())
+        .expect("after undo the name must be free again");
+}
+
+/// Would catch: the collision check asking *"does this name reach a page?"*
+/// instead of *"is this name defined?"*
+///
+/// ## The two questions differ exactly where it is dangerous
+///
+/// `DestinationResolver::resolve_destination` answers reachability and folds
+/// **undefined**, **dangling** and **remote** all into `None` — correct for
+/// its own callers, since a destination that already pointed nowhere is not
+/// newly broken by a page delete. A writer that reused it as its collision
+/// check would see `None` for a **defined but dangling** key and silently
+/// overwrite it. That is why `DestinationResolver::lookup` exists as a
+/// separate membership query.
+///
+/// Nothing in the rest of this file can distinguish the two, because every
+/// destination it defines resolves. This fixture defines `ghost` as
+/// `[null /Fit]` — present, and reaching nothing.
+///
+/// `[null /Fit]` rather than `[99 0 R /Fit]` with object 99 absent, which was
+/// the first attempt: `resolve_destination` returns element 0 **as a
+/// reference** without checking that the object exists, so a reference to a
+/// missing object still answers `Some`. Only a non-reference element 0 makes
+/// it answer `None`. That shape is not contrived — it is exactly what
+/// `pageops::assemble`'s page barrier produces when a destination's target
+/// page was not copied.
+///
+/// Silently overwriting would be the worst of the available failures: every
+/// existing link and bookmark naming `ghost` would be re-aimed at a page
+/// nobody chose, and nothing would report it.
+#[test]
+fn a_defined_but_dangling_name_still_collides() {
+    let doc = build(&[
+        (
+            1,
+            "<< /Type /Catalog /Pages 2 0 R /Names << /Dests << /Names \
+             [(ghost) [null /Fit]] >> >> >>",
+        ),
+        (
+            2,
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 200 100] /Resources << >> >>",
+        ),
+        (3, "<< /Type /Page /Parent 2 0 R >>"),
+    ]);
+    let mut s = EditSession::new(Document::from_bytes(doc).expect("fixture must parse"));
+
+    // Premise: the key is present and reaches nothing.
+    let resolver = pdfce_core::pageops::references::DestinationResolver::new(&s.graph());
+    assert!(
+        resolver.lookup(b"ghost").is_some(),
+        "the key must be DEFINED — otherwise this tests nothing"
+    );
+    assert!(
+        resolver
+            .resolve_destination(&s.graph(), &Object::String(b"ghost".to_vec()))
+            .is_none(),
+        "and it must reach NO page — that gap is the whole point"
+    );
+
+    match s.add_named_destination(
+        b"ghost",
+        Destination::Page {
+            page_index: 0,
+            view: DestView::Fit,
+        },
+    ) {
+        Err(EditError::NamedDestinationTaken { name }) => assert_eq!(name, "ghost"),
+        other => panic!("a defined-but-dangling key must still collide, got {other:?}"),
+    }
+}
+
+/// Byte-author a minimal PDF, so a shape no corpus file happens to contain can
+/// still be tested. Same construction as `tests/page_ops.rs`.
+fn build(objects: &[(u32, &str)]) -> Vec<u8> {
+    let mut buf = b"%PDF-1.7\n%\xE2\xE3\xCF\xD3\n".to_vec();
+    let mut offsets: Vec<(u32, usize)> = Vec::new();
+    for (num, body) in objects {
+        offsets.push((*num, buf.len()));
+        buf.extend_from_slice(format!("{num} 0 obj\n{body}\nendobj\n").as_bytes());
+    }
+    let xref_at = buf.len();
+    let max_num = objects.iter().map(|(n, _)| *n).max().unwrap_or(0);
+    buf.extend_from_slice(format!("xref\n0 {}\n", max_num + 1).as_bytes());
+    buf.extend_from_slice(b"0000000000 65535 f \n");
+    for num in 1..=max_num {
+        match offsets.iter().find(|(n, _)| *n == num) {
+            Some((_, off)) => buf.extend_from_slice(format!("{off:010} 00000 n \n").as_bytes()),
+            None => buf.extend_from_slice(b"0000000000 65535 f \n"),
+        }
+    }
+    buf.extend_from_slice(
+        format!(
+            "trailer\n<< /Size {} /Root 1 0 R /ID [<0102> <0304>] >>\nstartxref\n{xref_at}\n%%EOF\n",
+            max_num + 1
+        )
+        .as_bytes(),
+    );
+    buf
 }

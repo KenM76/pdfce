@@ -50519,3 +50519,122 @@ are indistinguishable in an append-only record.
 
 **Terminology (rule 15):** no ce dimension or pdf dimension appears
 anywhere in this filing's shipped work.
+
+## 2026-08-19 (hundred-and-ninety-third filing) — `Pass 103.1`'S OWED HASH FILLED (`afa53d5`) WITH FULL VERIFICATION NUMBERS; OWED ITEM 35 CLOSED, VERIFIED DIRECTLY; A BENIGN GIT-WORKFLOW HAZARD FLAGGED, NOT MINTED
+
+**Filed by `pdfce-librarian` with partial shell coverage.** The commit hash
+and its verification numbers are relayed from the dispatching engineer, who
+states running `git log --oneline -1` immediately after committing — the
+accepted no-shell pattern (hard rule 8). **Owed item 35's closure is
+independently verified by this filing**, by reading `docs/NEXT_SESSION.md`
+directly rather than taking the engineer's word for it.
+
+**Shipped:** nothing new — this is a bookkeeping filing discharging two
+items left open by the 192nd filing.
+
+**Decisions made this session:**
+- No decision record minted. Ceiling stays **071**.
+- No standing rule minted. The git-workflow hazard below is a single,
+  benign occurrence, under this project's own two-occurrence promotion
+  bar.
+- No Pass ID minted. Pass family ceiling stays **105**.
+
+**Findings + decisions:**
+
+**★★ `Pass 103.1`'s OWED commit hash — FILLED: `afa53d5`.** Verified
+present on `main` by the engineer via `git log --oneline -1` immediately
+after committing (relayed, per hard rule 8's no-shell pattern). Both
+editable locations that named the OWED hash — `Pass 103.1`'s own entry
+heading/body and `Pass 102.1`'s dependency note — corrected together in
+`ROADMAP.md`, per the same-filing propagation duty.
+
+**★★ Verification numbers supplied, filed per hard rule 10 (total beside
+per-item form):**
+- **3,981 workspace tests pass, 0 fail** — up 11 from `Pass 103.0`'s 3,970
+  (the 11 new `widget_adoption.rs` tests).
+- **Sabotage battery: 9 injected defects, 9 caught.**
+- **Invariants:** `cargo tree -p pdfce-core` / `-p pdfce-render` — zero
+  matches for GUI/network crates.
+- **Gates clean:** `cargo fmt --all`, `cargo clippy --workspace
+  --all-targets -D warnings`, `check-ui-strings.sh`, `check-string-gaps.sh`,
+  `check-ledger-numbers.py`, `check-core-api-verbs.py`.
+- **Round-trip verified empirically:** `pdfce-cli adopt-widget
+  --verify-undo` reported `undo_identical=1`.
+
+**★ Owed item 35 — CLOSED, verified directly against
+`docs/NEXT_SESSION.md`.** The stale "no verb exists" claim for
+`add_outline_item` is gone. The four-ask list now reads:
+`add_outline_item` struck through / **SHIPPED** `Pass 103.0`;
+adopt-a-widget struck through / **SHIPPED** `Pass 103.1`, with a ★
+partial-answer note (11 of 13 orphans adopt, 2 cannot, per
+`orphan_probe`); page labels **STILL OPEN** `Pass 103.2`, with the
+`pdfce-acrobat-librarian` dispatch prerequisite named; named destinations
+**STILL OPEN** `Pass 103.3`, with a note that `add_outline_item` refuses
+`Destination::Named` by name today.
+
+**A git-workflow hazard, flagged rather than minted.** Commit `559da6d`
+carries this project's own doc edits for `Pass 103.1` (`ROADMAP.md` /
+`SESSION_LOG.md` / `FEATURES.md`), landing one commit **after**
+`afa53d5` (the Pass's own code commit) — because the engineer committed
+while the 192nd-filing dispatch was still writing. **Single, benign
+occurrence, reported and left unpromoted** per this project's own
+two-occurrence bar for minting a standing rule. Named risk for the next
+occurrence to attach to: staging/committing the whole tree while a
+librarian dispatch is in flight can separate a Pass's code commit from
+its own documentation commit, making `git log` alone misleading about
+whether a shipped Pass was filed when it looks like it was. If this
+recurs, it may also be worth a `personal_rag/claude_code` lesson (via
+`troubleshooting-librarian`, whose territory that subject is) — not
+written there by this filing, since one occurrence doesn't clear this
+project's own bar and the finding is currently pdfce-workflow-specific
+rather than confirmed general.
+
+**Also noted, not acted on:** the engineer reports dispatching
+`pdfce-acrobat-librarian` for `Pass 103.2` (page labels on inserted
+pages), instructed to mark unsourced sub-answers `UNVERIFIED — no primary
+source found` rather than fill plausibly. `Pass 103.2` stays **BLOCKED**
+until that returns — no `ROADMAP.md` entry moves. `Pass 103.3` (named
+destinations) is reported as next and unblocked.
+
+**Still in flight:**
+- **Owed items 1, 3, 4, 6, 7, 10, 15, 17, 18, 19, 20, 28-remainder, 29–33,
+  36** carry forward unchanged. **Owed item 35 is CLOSED** as of this
+  filing (34 closed last filing).
+- **`Pass 102.1`, `Pass 103.2`, `Pass 103.3`** — all unstarted;
+  `Pass 102.1`'s dependency on `Pass 103.1` remains satisfied.
+- The `pdfce-acrobat-librarian` dispatch for `Pass 103.2` is in flight —
+  next filing should confirm its result and whether `Pass 103.2` unblocks.
+
+**For next session:**
+1. Confirm the `pdfce-acrobat-librarian` dispatch result for `Pass 103.2`
+   and scope it (or record it as still blocked with a stated reason) once
+   it returns.
+2. `Pass 103.3` (named destinations) is reported unblocked and next —
+   expect a filing for it before `103.2`.
+3. Carried unchanged: close owed 26 first among remaining claim-sweep
+   work; rule on the `insert-pages` name collision (owed 29); answer owed
+   31 in `blend_nonsep.rs`'s module doc; re-run and re-cluster Ghent
+   (owed 20); scope `Pass 102.1` from `Pass 103.1`'s finding 1 (13
+   orphaned, 2 unrecoverable).
+4. If a second git-workflow-hazard occurrence like `559da6d` is seen,
+   propose a standing-rule number rather than leaving it a bare note —
+   the two-occurrence bar is now cleared to one instance recorded.
+
+**Ledger effects:**
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **105** | **105** (unchanged) |
+| decision records | **071** | **071** (unchanged) |
+| standing rules | **R199** | **R199** (unchanged) |
+| `SESSION_LOG` filings | **192** | **193** |
+| `personal_rag/pdf` lessons | **+2** (192nd filing) | **+0** this filing |
+
+**`FEATURES.md` — UNCHANGED.** No new capability shipped this filing.
+
+**`ARCHITECTURE.md` — UNCHANGED.** No architectural decision made this
+filing and no body section went stale. Stated explicitly, per this role's
+own standing practice.
+
+**Terminology (rule 15):** no ce dimension or pdf dimension appears
+anywhere in this filing.

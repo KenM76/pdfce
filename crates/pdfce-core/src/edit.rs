@@ -242,6 +242,9 @@ pub enum CommandKind {
     /// and the title is a `String`, which `CommandKind`'s `Copy + Eq`
     /// bound does not allow.
     AddOutlineItem,
+    /// A named destination was defined in the `/Names` `/Dests` name tree
+    /// (§12.3.2.3).
+    AddNamedDestination,
     /// An existing widget annotation was registered as a form field
     /// (§12.7.3). Undoing it de-registers the field; the widget itself
     /// stays on the page, which is where it was before.
@@ -3859,6 +3862,43 @@ pub enum EditError {
     #[error("a field named {name:?} already exists — supply a different name")]
     FieldNameTaken {
         /// The colliding fully qualified name.
+        name: String,
+    },
+    /// The destination name is already defined (§12.3.2.3).
+    ///
+    /// Checked against **both** namespaces — the PDF 1.1 catalog `/Dests`
+    /// dictionary and the PDF 1.2 `/Names` name tree — even though pdfce
+    /// only ever writes the latter. The two have no defined precedence, so
+    /// a key present in both is an anomaly this refusal exists to avoid
+    /// manufacturing.
+    #[error("a destination named {name:?} already exists in this document")]
+    NamedDestinationTaken {
+        /// The colliding key, lossily decoded for display. The real key is
+        /// bytes; §7.9.6 imposes no encoding on it.
+        name: String,
+    },
+    /// The name tree being written to has `/Kids` — a multi-node tree
+    /// (§7.9.6 Table 36).
+    ///
+    /// pdfce READS these; it will not restructure one. Inserting correctly
+    /// means splitting a leaf and repairing every ancestor node's
+    /// `/Limits`, and getting it wrong yields a tree whose binary descent
+    /// silently misses keys that are present — a failure that looks like a
+    /// missing destination rather than like a damaged tree.
+    #[error(
+        "this document's name tree spans multiple nodes; pdfce reads those but will not rebuild one"
+    )]
+    NameTreeUnsupported,
+    /// A bookmark or link referred to a named destination nothing defines
+    /// (§12.3.2.3).
+    ///
+    /// Refused rather than written, because the alternative is a bookmark
+    /// that appears in the panel, looks clickable, and does nothing — which
+    /// reads to an operator as a viewer bug rather than as a document that
+    /// was assembled in the wrong order.
+    #[error("no destination named {name:?} is defined in this document")]
+    NamedDestinationNotFound {
+        /// The key, lossily decoded for display; the real key is bytes.
         name: String,
     },
     /// A ce-dimension operation named a group the sidecar model does not
@@ -18511,6 +18551,201 @@ impl EditSession {
         })
     }
 
+    /// Define a **named destination** in the catalog's `/Names` `/Dests`
+    /// name tree (§12.3.2.3, §7.9.6), creating the tree if absent. One undo
+    /// entry.
+    ///
+    /// A named destination is a level of indirection: a bookmark, link or
+    /// action refers to the *name*, and the name resolves to an explicit
+    /// `[page /Fit …]` array. That is what lets a document's internal links
+    /// survive page reordering — the name moves with the destination, and
+    /// nothing that points at it has to be rewritten.
+    ///
+    /// # Keys are BYTES, deliberately, and not `&str`
+    ///
+    /// §7.9.6 imposes **no character encoding** on name-tree keys at this
+    /// level: *"any encoding of the keys may be used as long as it is
+    /// self-consistent."* Real keys are UTF-16BE-with-BOM, PDFDocEncoded, a
+    /// legacy platform encoding, or opaque. Taking `&str` would force a
+    /// lossy round trip through UTF-8 and destroy pdfce's ability to match a
+    /// key byte-for-byte against one already in the file — so a caller with
+    /// ASCII passes `b"chapter1"` or `s.as_bytes()`, and a caller carrying a
+    /// key read out of another document passes it through untouched.
+    ///
+    /// # Which namespace, and why only one
+    ///
+    /// §12.3.2.3 defines **two**: the PDF 1.1 catalog `/Dests` *dictionary*
+    /// (keys are name objects) and the PDF 1.2 `/Names` → `/Dests` *name
+    /// tree* (keys are strings). pdfce's reader searches both, because
+    /// real files put keys in the wrong one and a type-strict resolver fails
+    /// on documents other readers open.
+    ///
+    /// The **writer** authors only the name tree. Adding to the PDF 1.1
+    /// dictionary would put new content in a form deprecated since 1996, and
+    /// — the operative reason — the two namespaces have **no defined
+    /// precedence**, so a document with the same key in both is one pdfce's
+    /// own reader already reports as an anomaly through
+    /// `cross_namespace_resolutions`. Writing into the legacy dictionary
+    /// would be pdfce manufacturing that anomaly.
+    ///
+    /// So a collision is checked against **both** namespaces and refused,
+    /// even though only one is written to.
+    ///
+    /// # The tree pdfce writes
+    ///
+    /// A **single root node** carrying `Names` only — legal per Table 36
+    /// (*"present in the root node if and only if `Kids` is not present"*),
+    /// and the shape every reader handles.
+    ///
+    /// No `/Limits` is written. Table 36 scopes that key to *"intermediate
+    /// and leaf nodes"*, and the spec digest's `NT-A1` lists **a root with
+    /// `Limits`** among the malformed shapes readers have to tolerate.
+    /// Writing one would be emitting a shape pdfce's own reader classifies
+    /// as an anomaly.
+    ///
+    /// Entries are re-sorted on every insert. §7.9.6 requires keys *"sorted
+    /// in lexical order"*, byte-by-byte, *"shorter keys shall appear before
+    /// longer ones beginning with the same byte sequence"* — which is
+    /// exactly `[u8]`'s own `Ord`, so the sort needs no comparator and
+    /// cannot drift from the spec's rule.
+    ///
+    /// # Errors
+    ///
+    /// - [`EditError::NamedDestinationTaken`] — the key already resolves, in
+    ///   either namespace.
+    /// - [`EditError::FieldNameEmpty`] — an empty key. §7.9.6 does not forbid
+    ///   one, but a destination nothing can name is a destination nothing can
+    ///   reach.
+    /// - [`EditError::UnsupportedDestination`] — as
+    ///   [`Self::add_outline_item`]; only explicit page destinations are
+    ///   authored, and a named destination that resolved to *another* named
+    ///   destination would be a chain the spec does not define.
+    /// - [`EditError::NameTreeUnsupported`] — the existing `/Dests` tree has
+    ///   `/Kids`. pdfce reads a multi-node tree and will not restructure one:
+    ///   inserting correctly means splitting a leaf and fixing every
+    ///   ancestor's `/Limits`, and doing it wrong yields a tree whose lookups
+    ///   silently miss. Refused rather than attempted.
+    /// - The encryption and certification guards.
+    pub fn add_named_destination(
+        &mut self,
+        name: &[u8],
+        destination: crate::outline::Destination,
+    ) -> Result<(), EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+        if name.is_empty() {
+            return Err(EditError::FieldNameEmpty);
+        }
+
+        // Resolve and refuse before allocating, so a refusal leaves the
+        // session untouched — same order as `add_outline_item`.
+        let crate::outline::Destination::Page { page_index, view } = &destination else {
+            return Err(EditError::UnsupportedDestination {
+                kind: destination_kind(&destination),
+            });
+        };
+        let slots = self.page_slots().map_err(|_| EditError::PageOutOfRange {
+            index: *page_index,
+            count: 0,
+        })?;
+        let slot = slots.get(*page_index).ok_or(EditError::PageOutOfRange {
+            index: *page_index,
+            count: slots.len(),
+        })?;
+        let array =
+            dest_array(slot.id, view).map_err(|kind| EditError::UnsupportedDestination { kind })?;
+
+        // Both namespaces, because the reader searches both.
+        if crate::pageops::references::DestinationResolver::new(&self.graph())
+            .lookup(name)
+            .is_some()
+        {
+            return Err(EditError::NamedDestinationTaken {
+                name: String::from_utf8_lossy(name).into_owned(),
+            });
+        }
+
+        let catalog_id = self.graph().catalog_id().ok_or(EditError::NotADictionary {
+            id: ObjId::new(0, 0),
+            key: "Root",
+        })?;
+        let Some(Object::Dict(catalog)) = self.value(catalog_id).cloned() else {
+            return Err(EditError::NotADictionary {
+                id: catalog_id,
+                key: "Root",
+            });
+        };
+
+        let names_dict = self.deref_dict(catalog.get(b"Names")).unwrap_or_default();
+        let existing = names_dict.get(b"Dests").cloned();
+        let mut entries: Vec<(Vec<u8>, Object)> = Vec::new();
+        if let Some(obj) = &existing {
+            let node = self
+                .deref_dict(Some(obj))
+                .ok_or(EditError::NameTreeUnsupported)?;
+            if node.contains_key(b"Kids") {
+                return Err(EditError::NameTreeUnsupported);
+            }
+            if let Some(Object::Array(arr)) = self.deref_value(node.get(b"Names")) {
+                // Pairs per §7.9.6. `NT-N2` records that the standard never
+                // states the array has even length, so a trailing orphan key
+                // is possible; `chunks_exact` drops it, which is the
+                // digest's recommended handling.
+                for pair in arr.chunks_exact(2) {
+                    if let [Object::String(k), value] = pair {
+                        entries.push((k.clone(), value.clone()));
+                    }
+                }
+            }
+        }
+
+        entries.push((name.to_vec(), Object::Array(array)));
+        // `[u8]`'s own Ord IS §7.9.6's rule — unsigned byte comparison with
+        // shorter-prefix-first. A hand-written comparator here could only
+        // diverge from it.
+        entries.sort_by(|a, b| a.0.cmp(&b.0));
+
+        let mut flat = Vec::with_capacity(entries.len() * 2);
+        for (key, value) in entries {
+            flat.push(Object::String(key));
+            flat.push(value);
+        }
+        let mut tree_node = Dict::new();
+        tree_node.insert(Name::from(b"Names"), Object::Array(flat));
+
+        // Written back the way it was found — an indirect node stays
+        // indirect, an inline one stays inline. Rule 3: never restructure a
+        // document to suit pdfce's preference.
+        let mut objects = Vec::new();
+        let mut new_names = names_dict.clone();
+        if let Some(Object::Reference(node_id)) = existing {
+            objects.push(ObjectWrite {
+                id: node_id,
+                before: self.state.get(&node_id).cloned(),
+                after: Some(Object::Dict(tree_node)),
+            });
+        } else {
+            new_names.insert(Name::from(b"Dests"), Object::Dict(tree_node));
+        }
+        let mut new_catalog = catalog;
+        new_catalog.insert(Name::from(b"Names"), Object::Dict(new_names));
+        objects.push(ObjectWrite {
+            id: catalog_id,
+            before: self.state.get(&catalog_id).cloned(),
+            after: Some(Object::Dict(new_catalog)),
+        });
+
+        self.commit(Command {
+            kind: CommandKind::AddNamedDestination,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(())
+    }
+
     /// Append a bookmark to the document outline (§12.3.3), creating the
     /// outline itself if the document has none. Returns the new item's
     /// [`ObjId`]. One undo entry.
@@ -18568,10 +18803,16 @@ impl EditSession {
     ///   in this document. Refused rather than silently re-parented to the
     ///   root, which would put the bookmark somewhere nobody asked for.
     /// - [`EditError::UnsupportedDestination`] — a destination pdfce cannot
-    ///   author. Only [`Destination::Page`](crate::outline::Destination::Page)
-    ///   is written today; the rest are refused **by name** rather than
-    ///   dropped, because a bookmark that scrolls nowhere still looks like a
-    ///   working bookmark.
+    ///   author. [`Destination::Page`](crate::outline::Destination::Page) and
+    ///   [`Destination::Named`](crate::outline::Destination::Named) are
+    ///   written; `Remote`, `UnmappedPage` and `NonNavigation` are refused
+    ///   **by name** rather than dropped, because a bookmark that scrolls
+    ///   nowhere still looks like a working bookmark.
+    /// - [`EditError::NamedDestinationNotFound`] — a `Named` destination
+    ///   whose key nothing defines. Define it first with
+    ///   [`Self::add_named_destination`]; the order is the caller's to
+    ///   choose, and refusing a forward reference is what keeps a bookmark
+    ///   from silently pointing at nothing.
     /// - [`EditError::PageOutOfRange`] — the destination names a page the
     ///   document does not have.
     /// - The encryption and certification guards.
@@ -18602,6 +18843,31 @@ impl EditSession {
                 let array = dest_array(slot.id, view)
                     .map_err(|kind| EditError::UnsupportedDestination { kind })?;
                 Some(Object::Array(array))
+            }
+            // ★ A named destination is written as the KEY, not resolved to
+            // the page it currently points at.
+            //
+            // Resolving here would defeat the entire purpose of the
+            // indirection: §12.3.2.3's named destinations exist so that
+            // reordering pages does not break every link, because the name
+            // moves with the destination and the referrers never change.
+            // Baking `[7 0 R /Fit]` into the bookmark would produce a link
+            // that is correct today and silently wrong after the next page
+            // move — the failure named destinations were invented to prevent.
+            Some(crate::outline::Destination::Named { name }) => {
+                if crate::pageops::references::DestinationResolver::new(&self.view())
+                    .lookup(name)
+                    .is_none()
+                {
+                    return Err(EditError::NamedDestinationNotFound {
+                        name: String::from_utf8_lossy(name).into_owned(),
+                    });
+                }
+                // A STRING, keying the PDF 1.2 `/Names` tree — not a name
+                // object, which §12.3.2.3 assigns to the PDF 1.1 catalog
+                // `/Dests` dictionary. The type IS the namespace selector,
+                // and it is the only one the standard gives.
+                Some(Object::String(name.clone()))
             }
             Some(other) => {
                 return Err(EditError::UnsupportedDestination {

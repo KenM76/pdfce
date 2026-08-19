@@ -1434,6 +1434,12 @@ enum Command {
         /// `list-outline`. Omit for a top-level bookmark.
         #[arg(long)]
         under: Option<usize>,
+        /// Point at a NAMED destination instead of a page (§12.3.2.3).
+        /// Mutually exclusive with `--page`. Define it first with
+        /// `add-named-dest`; an undefined name is refused, because a
+        /// bookmark that scrolls nowhere still looks like a working one.
+        #[arg(long, conflicts_with_all = ["page", "top"])]
+        dest_name: Option<String>,
         /// Output PDF.
         #[arg(long)]
         output: PathBuf,
@@ -1482,6 +1488,44 @@ enum Command {
         /// widget that has none, and the way to resolve a name collision.
         #[arg(long)]
         name: Option<String>,
+        /// Output PDF.
+        #[arg(long)]
+        output: PathBuf,
+        /// Save mode.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Round-trip the undo stack before saving and report whether the
+        /// document returned to its original bytes.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+
+    /// **Define a named destination** (ISO 32000-1 §12.3.2.3, §7.9.6).
+    ///
+    /// A named destination is a level of indirection: bookmarks and links
+    /// refer to the NAME, and the name resolves to a page and view. That is
+    /// what lets a document's internal links survive a page reorder — the
+    /// name moves with the destination and nothing pointing at it has to be
+    /// rewritten.
+    ///
+    /// Written into the PDF 1.2 `/Names` → `/Dests` name tree. A collision
+    /// is checked against **both** namespaces (the tree and the legacy PDF
+    /// 1.1 catalog `/Dests` dictionary) and refused, because the two have no
+    /// defined precedence and a key in both is an anomaly.
+    AddNamedDest {
+        /// Input PDF.
+        input: PathBuf,
+        /// The destination name. Interpreted as bytes; §7.9.6 imposes no
+        /// encoding on name-tree keys.
+        #[arg(long)]
+        name: String,
+        /// Destination page, 1-based.
+        #[arg(long)]
+        page: u32,
+        /// Scroll so this user-space Y coordinate is at the top of the
+        /// window, instead of fitting the whole page.
+        #[arg(long)]
+        top: Option<f64>,
         /// Output PDF.
         #[arg(long)]
         output: PathBuf,
@@ -5337,6 +5381,15 @@ fn run() -> ExitCode {
         Command::ValidatePdfa { .. } => unimplemented_stub("validate-pdfa"),
         Command::Sign { .. } => unimplemented_stub("sign"),
         Command::ListOutline { input, flat } => cmd_list_outline(&input, flat),
+        Command::AddNamedDest {
+            input,
+            name,
+            page,
+            top,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_add_named_dest(&input, &name, page, top, &output, mode, verify_undo),
         Command::AdoptWidget {
             input,
             page,
@@ -5360,10 +5413,21 @@ fn run() -> ExitCode {
             page,
             top,
             under,
+            dest_name,
             output,
             mode,
             verify_undo,
-        } => cmd_add_bookmark(&input, &title, page, top, under, &output, mode, verify_undo),
+        } => cmd_add_bookmark(
+            &input,
+            &title,
+            page,
+            top,
+            under,
+            dest_name.as_deref(),
+            &output,
+            mode,
+            verify_undo,
+        ),
         Command::ListAttachments { input } => cmd_list_attachments(&input),
         Command::ExtractAttachment {
             input,
@@ -8129,6 +8193,7 @@ fn cmd_add_bookmark(
     page: Option<u32>,
     top: Option<f64>,
     under: Option<usize>,
+    dest_name: Option<&str>,
     output: &Path,
     mode: SaveMode,
     verify_undo: bool,
@@ -8153,6 +8218,12 @@ fn cmd_add_bookmark(
     // no view to capture would make the jump depend on where the reader
     // happened to be. /Fit always shows the page the operator named.
     let destination = match page {
+        // clap enforces the mutual exclusion, so reaching here with both is
+        // impossible; a named destination therefore only competes with the
+        // no-destination case.
+        None if dest_name.is_some() => dest_name.map(|n| pdfce_core::outline::Destination::Named {
+            name: n.as_bytes().to_vec(),
+        }),
         None => None,
         Some(p) => {
             let Some(index) = p.checked_sub(1).map(|i| i as usize) else {
@@ -8399,6 +8470,106 @@ undo_identical={} delinearized={}",
         );
     }
     finish_edit(input, &saved)
+}
+
+/// `add-named-dest` — define a named destination (§12.3.2.3).
+///
+/// # `--name` is a `String` here and bytes in the engine, deliberately
+///
+/// §7.9.6 imposes no encoding on name-tree keys, and
+/// `EditSession::add_named_destination` therefore takes `&[u8]` so a caller
+/// carrying a key read out of another document can pass it through
+/// untouched. A **command line** cannot carry arbitrary bytes portably, so
+/// this shell takes text and hands over its UTF-8. That is a narrowing, and
+/// it is the right one to make here rather than in the engine: a key typed
+/// at a shell prompt is text by construction, while a key copied between
+/// documents is not, and only the engine sees the second case.
+#[allow(clippy::too_many_arguments)]
+fn cmd_add_named_dest(
+    input: &Path,
+    name: &str,
+    page: u32,
+    top: Option<f64>,
+    output: &Path,
+    mode: SaveMode,
+    verify_undo: bool,
+) -> u8 {
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let Some(index) = page.checked_sub(1).map(|i| i as usize) else {
+        eprintln!(
+            "pdfce-cli: {}: --page is 1-based; 0 is not a page",
+            input.display()
+        );
+        return exit::EDIT_REFUSED;
+    };
+    // `--page` alone means /Fit rather than /XYZ with nulls, for the same
+    // reason as `add-bookmark`: /XYZ null null null means "keep whatever the
+    // viewer is showing", which makes a scripted destination depend on where
+    // the reader happened to be.
+    let view = match top {
+        Some(y) => pdfce_core::outline::DestView::Xyz {
+            left: None,
+            top: Some(y),
+            zoom: None,
+        },
+        None => pdfce_core::outline::DestView::Fit,
+    };
+    if let Err(err) = session.add_named_destination(
+        name.as_bytes(),
+        pdfce_core::outline::Destination::Page {
+            page_index: index,
+            view,
+        },
+    ) {
+        return report_edit_error(input, &err);
+    }
+
+    // ★ Read BEFORE the save, not after.
+    //
+    // `save_edited` with `--verify-undo` runs `while session.undo().is_some()
+    // {}` and never redoes, so the session it hands back holds the document as
+    // it was BEFORE any edit. Any state read from it afterwards is pre-edit
+    // state. This command reported `names=0` immediately after successfully
+    // defining a destination — exactly what a document with none would print,
+    // which is why it survived until the command's own output was read with
+    // and without the flag side by side (R174).
+    let names =
+        pdfce_core::pageops::references::DestinationResolver::new(&session.graph()).named_count();
+
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+
+    let r = &outcome.report;
+    println!(
+        "add-named-dest {} name={name:?} page={page} mode={} -> {}; \
+names={names} changed={} objects={} verbatim={} reserialized={} appended={} \
+out_bytes={} undo_verified={} undo_identical={} delinearized={}",
+        input.display(),
+        mode.name(),
+        output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.objects_verbatim,
+        r.objects_reserialized,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+        u32::from(r.delinearized),
+    );
+    finish_edit(input, &outcome)
 }
 
 /// `list-outline` — the document's bookmarks, as a tree.
@@ -13544,6 +13715,24 @@ fn open_for_edit(input: &Path) -> Result<(Vec<u8>, pdfce_core::edit::EditSession
 /// deliberate rather than tidied up: the output file has already been
 /// written, and re-applying the history only to throw the session away
 /// would be motion without meaning.
+/// ★ **With `verify_undo`, this leaves the session UNDONE.**
+///
+/// The verification is `while session.undo().is_some() {}` followed by a save
+/// of the emptied stack, and there is no redo afterwards — so on return the
+/// session holds the document as it was **before** any edit. That is fine for
+/// the verification itself, and it is a trap for the caller: **any state a
+/// command reports must be read before this call, not after it.**
+///
+/// It bites quietly rather than loudly. `add-named-dest` printed `names=0`
+/// immediately after successfully defining a destination, which is exactly
+/// what a document with no destinations would print — no panic, no wrong
+/// type, just a plausible number that was silently the pre-edit one. It was
+/// found only by running the command with and without the flag and comparing
+/// the two lines (R174).
+///
+/// Most commands are *accidentally* safe, because they report the verb's own
+/// return value and that is computed before saving. A command that queries
+/// the session for a summary figure is the shape that is not.
 fn save_edited(
     session: &mut pdfce_core::edit::EditSession,
     source: &[u8],

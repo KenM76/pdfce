@@ -96,6 +96,63 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+> ### ★★★★★ THE 193RD FILING — `Pass 103.1`'S OWED HASH FILLED (`afa53d5`) WITH FULL VERIFICATION NUMBERS; OWED ITEM 35 CLOSED, VERIFIED DIRECTLY AGAINST `docs/NEXT_SESSION.md`; A BENIGN GIT-WORKFLOW HAZARD FLAGGED, NOT MINTED (SINGLE OCCURRENCE)
+>
+> **This filing has partial shell coverage, relayed not independent.** The
+> commit hash and its verification numbers (test totals, sabotage count,
+> `cargo tree` output, gate results, round-trip check) are reported by the
+> dispatching engineer, who states running `git log --oneline -1`
+> immediately after committing `afa53d5` — the accepted no-shell pattern
+> (hard rule 8; this role's own memory: *"Dispatch should carry git
+> evidence when this librarian has no shell"*). **Owed item 35's closure,
+> by contrast, IS independently verified by this filing** —
+> `docs/NEXT_SESSION.md` was read directly and its four-ask list confirmed
+> struck through for `add_outline_item` and adopt-a-widget, both marked
+> SHIPPED with their Pass IDs, with page labels and named destinations
+> still open exactly as stated below.
+>
+> **`Pass 103.1`'s commit hash — FILLED: `afa53d5`.** See that entry, its
+> header note, and `Pass 102.1`'s dependency note — both editable locations
+> that named the OWED hash are corrected together in this filing, per the
+> same-filing propagation duty (*Update protocol*, below).
+>
+> **Owed item 35 — CLOSED.** `docs/NEXT_SESSION.md`'s stale "no verb
+> exists" claim for `add_outline_item` is gone; the four-ask list now
+> reads `add_outline_item` struck through / **SHIPPED** `Pass 103.0`,
+> adopt-a-widget struck through / **SHIPPED** `Pass 103.1` (with its own
+> ★ partial-answer note — 11 of 13 orphans adopt, 2 cannot, per
+> `orphan_probe`), page labels **STILL OPEN** `Pass 103.2` (with the
+> `pdfce-acrobat-librarian` dispatch named as prerequisite), named
+> destinations **STILL OPEN** `Pass 103.3` (with a note that
+> `add_outline_item` refuses `Destination::Named` by name today).
+>
+> **A git-workflow hazard, flagged rather than minted.** Commit `559da6d`
+> carries this project's own `ROADMAP.md`/`SESSION_LOG.md`/`FEATURES.md`
+> edits for `Pass 103.1`, landing **one commit after** `afa53d5` (the
+> Pass's own code commit) because the engineer committed while this
+> librarian's prior (192nd) dispatch was still writing. Reported as a
+> single, benign occurrence — **under this project's own two-occurrence
+> promotion bar, so no standing rule is minted here.** Carried as a named
+> risk for a second occurrence to attach to: **staging/committing the
+> whole tree (`git add -A` or equivalent) while a librarian dispatch is in
+> flight** can separate a Pass's code commit from its own documentation
+> commit, which makes `git log` alone misleading about whether a shipped
+> Pass was filed at the time it looks like it was.
+>
+> **`Pass 103.2` (page labels) — BLOCKED, unchanged.** The engineer reports
+> dispatching `pdfce-acrobat-librarian`, instructed to mark unsourced
+> sub-answers `UNVERIFIED — no primary source found` rather than fill
+> plausibly, and told that "not documented anywhere findable" is a
+> complete and acceptable result. `Pass 103.2` does not move until that
+> dispatch returns. `Pass 103.3` (named destinations) is unblocked and
+> next.
+>
+> **`FEATURES.md` — UNCHANGED this filing.** No new capability shipped;
+> this filing only fills a previously-OWED hash and closes a stale-claim
+> flag. **`ARCHITECTURE.md` — UNCHANGED this filing**, stated explicitly
+> per this role's own standing practice (*"unchanged"* and *"not looked
+> at"* are indistinguishable in an append-only record otherwise).
+
 > ### ★★★★★ THE 192ND FILING — OWED ITEM 34 CLOSED FROM THE COMMIT BODIES THEMSELVES, NOT FROM JUDGMENT; `Pass 103.1` FILED WITH ITS HASH OWED
 >
 > **This filing has no shell.** Hard rule 8's no-shell branch applies:
@@ -145,7 +202,7 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 > provisional Pass number (`Pass 99.0`/`100.0`/`104.0`/`105.0`'s
 > precedent) applied to a hash instead of an ID.
 
-### Pass 103.1 — commit hash **OWED** — **WIDGET ADOPTION: `EditSession::adopt_widget`, PLUS THE UNRECOVERABLE-ORPHAN DISCLOSURE** — filed 2026-08-19 (hundred-and-ninety-second filing)
+### Pass 103.1 — commit `afa53d5` — **WIDGET ADOPTION: `EditSession::adopt_widget`, PLUS THE UNRECOVERABLE-ORPHAN DISCLOSURE** — filed 2026-08-19 (hundred-and-ninety-second filing; hash filled 193rd filing)
 
 **Commit hash deliberately left OWED, at the engineer's explicit
 instruction** (see this filing's header box, above) — the engineer is
@@ -154,6 +211,13 @@ hash not be invented or inferred. **Do not treat this entry as unverified
 in the disqualifying sense** — it is filed from the engineer's own
 same-session report, the normal dispatch channel; only the hash slot is
 outstanding, to be supplied by a follow-up filing.
+
+**★ HASH SUPPLIED, 193RD FILING (2026-08-19): `afa53d5`.** Reported by the
+engineer as verified present on `main` via `git log --oneline -1`
+immediately after committing — this filing has no shell of its own and
+relays that check per the accepted no-shell pattern (hard rule 8; this
+role's own memory: *"Dispatch should carry git evidence when this
+librarian has no shell"*).
 
 **Requested by `pdfceGUI`**, same request file as `Pass 103.0`, part 2 ask
 2, verbatim: *"`add_text_field` and friends **author a new widget**; we
@@ -188,11 +252,23 @@ need to register an **existing** widget into `/AcroForm`."*
   **26,034 → 26,402**.
 
 **Test results.** **11 new tests, all green; all 9 injected sabotages
-caught** (per the dispatch). **Full workspace test totals and the
-`cargo tree` invariant-check result are OWED** — the dispatch stated it
-would send them with the hash rather than have this filing state a number
-it did not run (hard rule 10: a total is only filed beside the per-item
-form that produced it, and this filing has neither).
+caught** (per the dispatch).
+
+**★ FULL RESULTS SUPPLIED, 193RD FILING (2026-08-19), relayed from the
+engineer (no shell this filing):**
+- **3,981 workspace tests pass, 0 fail** — up 11 from `Pass 103.0`'s 3,970
+  (the 11 new `widget_adoption.rs` tests; per hard rule 10, the total is
+  filed beside the per-item form that produced it).
+- **Sabotage battery: 9 injected defects, 9 caught.**
+- **Invariants:** `cargo tree -p pdfce-core` and `-p pdfce-render` both
+  report **zero** matches for GUI/network crates (egui, eframe, winit,
+  wgpu, reqwest, hyper, tokio, ureq).
+- **Gates clean:** `cargo fmt --all`, `cargo clippy --workspace
+  --all-targets -D warnings`, `tools/check-ui-strings.sh`,
+  `tools/check-string-gaps.sh`, `tools/check-ledger-numbers.py`,
+  `tools/check-core-api-verbs.py`.
+- **Round-trip verified empirically, not only by the test suite:** a real
+  `pdfce-cli adopt-widget --verify-undo` run reported `undo_identical=1`.
 
 **`FEATURES.md` rows affected** — edited in the same filing, see below:
 new Implemented row for **adopting an existing widget into a field**,
@@ -53539,8 +53615,8 @@ to show the reduction happened.
 Pass is that verb applied automatically at insert time, for the subset
 where the answer is unambiguous. Building the automatic case first would
 mean building the verb inside `insert_pages` and then extracting it.
-**That dependency is now satisfied** — `Pass 103.1` shipped (commit hash
-owed, 192nd filing) as `EditSession::adopt_widget`, and its own scoping
+**That dependency is now satisfied** — `Pass 103.1` shipped (commit
+`afa53d5`) as `EditSession::adopt_widget`, and its own scoping
 measurement (13 orphaned widgets, 2 structurally unrecoverable without a
 field-carrying fix) is this Pass's scoping input — see
 `C:\personal_rag\pdf\lesson_20260819_import_dict_strips_parent_from_every_dict_reasoning_only_covered_pages.md`.

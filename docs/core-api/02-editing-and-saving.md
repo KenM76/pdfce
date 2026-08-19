@@ -9,8 +9,8 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 |---|---|
 | **Date** | 2026-08-13 |
 | **Verified against** | `7031296` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
-| **Primary subject** | `crates/pdfce-core/src/edit.rs` (26,402 lines) |
-| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 122 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
+| **Primary subject** | `crates/pdfce-core/src/edit.rs` (26668 lines) |
+| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 123 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
 
@@ -61,9 +61,9 @@ Five consequences a GUI author must internalise before writing any code:
 
 ---
 
-## 1. Verb index — all 122 public `EditSession` methods
+## 1. Verb index — all 123 public `EditSession` methods
 
-**Count: 122.** Established by brace-matched extraction of the four
+**Count: 123.** Established by brace-matched extraction of the four
 `impl EditSession` blocks, matching `pub fn` / `pub const fn`, and checked
 on every run by `tools/check-core-api-verbs.py` — which is what caught this
 figure at 120 when `add_outline_item` landed.
@@ -170,7 +170,7 @@ need their own policy).
 |---|---|---|---|
 | Set one page's absolute rotation | `set_page_rotation(&mut self, page_index, degrees: i32) -> Result<(), EditError>` | 3848 | Refuses non-multiples of 90 (`RotationNotMultipleOf90`). |
 | Turn one page relative to its current rotation | `rotate_page_by(&mut self, page_index, delta: i32) -> Result<(), EditError>` | 3981 | Delegates to `set_page_rotation`. |
-| Delete pages | `delete_pages(&mut self, indices: &[usize]) -> Result<DeleteOutcome, EditError>` | 14644 | See `DeleteOutcome`, §1.24. |
+| Delete pages | `delete_pages(&mut self, indices: &[usize]) -> Result<DeleteOutcome, EditError>` | 14644 | See `DeleteOutcome`, §1.25. |
 | Delete pages, answering the pre-separation question | `delete_pages_with(&mut self, indices, separations: SeparationPolicy) -> Result<DeleteOutcome, EditError>` | 14663 | |
 | Reorder pages | `reorder_pages(&mut self, new_order: &[usize]) -> Result<(), EditError>` | 14944 | `NotAPermutation` if `new_order` is not one. ONE undo entry. |
 | Rotate several pages | `rotate_pages(&mut self, indices: &[usize], delta: i32) -> Result<usize, EditError>` | 15063 | Count of pages turned. ONE undo entry. |
@@ -576,7 +576,101 @@ no name for `list-fields` to show. Note that **`pdfce-cli insert-pages` does
 not produce orphans**: it calls `pageops::assemble`, which merges `/AcroForm`
 (and reports `fields_renamed=` / `fields_dropped=`). Only
 `EditSession::insert_pages` orphans.
-### 1.21 ce dimensions (18) — detail in part 3
+### 1.21 Named destinations (1)
+
+> #### ★ Added 2026-08-19 — `Pass 103.3`
+>
+> Requested by `pdfceGUI` so a carried bookmark that points at a named
+> destination resolves. `add_outline_item` shipped one Pass earlier refusing
+> `Destination::Named` **by name**, which was the honest interim — CAD and
+> Word exports use named destinations often enough that any real outline
+> carry hits it.
+
+| I want to… | Call | Returns |
+|---|---|---|
+| Define a named destination | `add_named_destination(&mut self, name: &[u8], destination: Destination) -> Result<(), EditError>` | Creates the `/Names` `/Dests` tree if absent. ONE undo entry. |
+
+`add_outline_item` now **accepts** `Destination::Named`, so the pair is:
+define the name, then point a bookmark at it.
+
+#### ★★ Keys are BYTES, and the verb takes `&[u8]` for a reason
+
+§7.9.6 imposes **no** character encoding on name-tree keys — *"any encoding
+of the keys may be used as long as it is self-consistent."* Real keys are
+UTF-16BE-with-BOM, PDFDocEncoded, a legacy platform encoding, or opaque. A
+`&str` API would force a lossy round trip and destroy the ability to match a
+key byte-for-byte against one already in a file.
+
+ASCII callers pass `b"chapter1"` or `s.as_bytes()`. A caller **carrying a key
+read out of another document** — which is the whole point of `Pass 103.3` —
+passes it through untouched.
+
+`pdfce-cli add-named-dest --name` takes text and hands over its UTF-8. That
+narrowing belongs in the shell, not the engine: a key typed at a prompt is
+text by construction; a key copied between documents is not.
+
+#### The bookmark keeps the NAME — it is not resolved and baked
+
+The single most important property, and the one a test cannot see through
+the reader. `read_outline` **resolves** a defined name and reports
+`Destination::Page`; `Destination::Named` in reader output means the key
+resolved to *nothing*. So a writer that baked `[page /Fit]` in at author time
+and a correct writer produce **identical reader output**.
+
+Baking defeats exactly what §12.3.2.3 exists for: the indirection is what
+lets links survive a page reorder. A baked bookmark is correct today and
+silently wrong after the next one.
+
+#### Which namespace, and why the collision check spans both
+
+§12.3.2.3 defines two: the PDF 1.1 catalog `/Dests` **dictionary** (name-object
+keys) and the PDF 1.2 `/Names` → `/Dests` **name tree** (string keys). The
+type of the `/Dest` value *is* the namespace selector — the only discriminator
+the standard gives.
+
+pdfce **reads both** and **writes only the tree**. The two have no defined
+precedence, so a key present in both is an anomaly pdfce's own reader already
+reports (`cross_namespace_resolutions`); writing to the legacy dictionary
+would be manufacturing it. The collision check therefore spans **both**
+namespaces even though only one is ever written.
+
+#### What is refused
+
+| Case | Error |
+|---|---|
+| key already defined, either namespace | `NamedDestinationTaken { name }` |
+| bookmark names an undefined key | `NamedDestinationNotFound { name }` |
+| empty key | `FieldNameEmpty` |
+| existing `/Dests` tree has `/Kids` | `NameTreeUnsupported` |
+| non-explicit destination | `UnsupportedDestination { kind }` |
+
+`NamedDestinationTaken` is checked by **membership, not reachability.**
+`resolve_destination` folds undefined / dangling / remote all into `None` —
+correct for its callers — so a writer reusing it would silently overwrite a
+**defined but dangling** key, re-aiming every existing link that names it at
+a page nobody chose. `DestinationResolver::lookup` exists as the separate
+membership query, added in this Pass.
+
+`NameTreeUnsupported` is a multi-node tree. pdfce reads those; it will not
+rebuild one. Inserting correctly means splitting a leaf and repairing every
+ancestor's `/Limits`, and getting it wrong yields a tree whose binary descent
+**silently misses keys that are present** — a failure that looks like a
+missing destination rather than a damaged tree.
+
+#### The tree pdfce writes
+
+A **single root node with `Names` only** — legal per Table 36, and the shape
+every reader handles. **No `/Limits`**: Table 36 scopes that key to
+intermediate and leaf nodes, and a root carrying one is among the malformed
+shapes the spec digest's `NT-A1` records.
+
+Keys are re-sorted on every insert using `[u8]`'s own `Ord`, which **is**
+§7.9.6's rule (unsigned byte comparison, shorter prefix first) — so the sort
+needs no comparator and cannot drift from the standard.
+
+CLI: `pdfce-cli add-named-dest --name X --page N [--top Y]`, then
+`add-bookmark --dest-name X` (mutually exclusive with `--page`).
+### 1.22 ce dimensions (18) — detail in part 3
 
 > #### ★ Group membership, renaming and deletion — added 2026-08-19
 >
@@ -629,7 +723,7 @@ not produce orphans**: it calls `pageops::assemble`, which merges `/AcroForm`
 | Delete a ce dimension | `delete_dimension(&mut self, dimension) -> Result<(), EditError>` | 16178 | `/Annots` ref + dict + `/AP` + sidecar record. Group survives. |
 | **Translate** a ce dimension | `move_dimension(&mut self, dimension, dx, dy) -> Result<(), EditError>` | 16779 | ⚠️ Translates the **measured points** — takes the ce dimension off the feature it was measuring. |
 
-### 1.22 Fonts (6)
+### 1.23 Fonts (6)
 
 | I want to… | Call | Line | Returns |
 |---|---|---|---|
@@ -640,7 +734,7 @@ not produce orphans**: it calls `pageops::assemble`, which merges `/AcroForm`
 | Ask whether embedding is refused | `embed_refusal(&self) -> Option<EditError>` | 16553 | ✅ Load-bearing. |
 | Add missing font programs | `embed_fonts(&mut self, &EmbedRequest) -> Result<EmbedPlan, EditError>` | 16625 | ONE undo entry. **The file gets bigger, and the save mode does not change that.** |
 
-### 1.23 Images (1 session verb + 3 pure previews on `NewImage`)
+### 1.24 Images (1 session verb + 3 pure previews on `NewImage`)
 
 | I want to… | Call | Line | Returns |
 |---|---|---|---|
@@ -649,7 +743,7 @@ not produce orphans**: it calls `pageops::assemble`, which merges `/AcroForm`
 #### ★ The pure preview trio on `NewImage` — call these, do not re-derive them
 
 `&self`, no session, no side effects. The same relationship
-`preview_group_scale` (§1.21) has to `set_group_scale`: **a front end drawing
+`preview_group_scale` (§1.22) has to `set_group_scale`: **a front end drawing
 a preview must show the number the edit will produce.**
 
 | I want to preview… | Call | Returns |
@@ -680,7 +774,7 @@ number beside it. A 12 dpi placement is a legitimate deliberate act; the
 requester asked for the number *before* commit, not for something that stops
 them.
 
-### 1.24 Outcome structs — field reference
+### 1.25 Outcome structs — field reference
 
 Grep target for "what does this return actually contain".
 
