@@ -236,6 +236,12 @@ impl InfoField {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum CommandKind {
+    /// A bookmark was appended to the document outline (§12.3.3).
+    ///
+    /// Carries nothing: an undo-control label wants *"add bookmark"*,
+    /// and the title is a `String`, which `CommandKind`'s `Copy + Eq`
+    /// bound does not allow.
+    AddOutlineItem,
     /// A document-information field was given a value.
     SetInfoField(InfoField),
     /// A document-information field was removed.
@@ -769,6 +775,141 @@ struct ObjectWrite {
     id: ObjId,
     before: Option<Object>,
     after: Option<Object>,
+}
+
+/// Add one visible item to `d`'s `/Count`, returning **whether `d` is open**
+/// afterwards — which is what tells the caller whether to keep walking up.
+///
+/// # ★ One function for two quantities, and why that is not the trap
+///
+/// [`EditSession::add_outline_item`] opens by warning that a root's `/Count`
+/// and an item's count **different things**. It would follow that they need
+/// different code, and this function deliberately does not provide it. The
+/// arithmetic coincides:
+///
+/// - **absent** — an item with no `/Count` is a leaf, a root with no
+///   `/Count` has no open items; both gain `1`;
+/// - **positive** — both increment;
+/// - **negative** — meaningful only on an item, where the sign is the
+///   closed flag. A negative *root* count is malformed (a root has no
+///   open/closed state), and the item rule handles it in the direction
+///   minimal-diff wants: the magnitude grows and the file's own sign is
+///   preserved, rather than pdfce silently normalising a value it did not
+///   author. The reader takes the same posture — `lying-counts.pdf` is
+///   *reported* through `root_count_disagreement`, never repaired.
+///
+/// So the distinction lives where it belongs — in the **caller deciding
+/// whether to call this at all** for a given node, which is the entire
+/// content of the propagation rule — and not in a branch here that no
+/// well-formed document could tell apart. An earlier version did take an
+/// `is_item` flag; sabotaging that flag left the whole suite green, which is
+/// the measurement that removed it.
+fn bump_outline_count(d: &mut Dict) -> bool {
+    let current = match d.get(b"Count") {
+        Some(Object::Integer(n)) => *n,
+        _ => 0,
+    };
+    let (next, open) = if current < 0 {
+        // Closed: magnitude grows, sign preserved. The subtree stays
+        // collapsed and contributes exactly 1 to the level above.
+        (current.saturating_sub(1), false)
+    } else {
+        (current.saturating_add(1), true)
+    };
+    d.insert(Name::from(b"Count"), Object::Integer(next));
+    open
+}
+
+/// Build an **explicit** destination array (§12.3.2.2 Table 151) from a page
+/// and a parsed view.
+///
+/// The inverse of the reader in [`crate::outline`], and deliberately written
+/// as its mirror: each arm emits exactly the array the corresponding arm
+/// parses, so a read-modify-write round trip through pdfce is lossless for
+/// every view type.
+///
+/// Returns the refusal word for [`EditError::UnsupportedDestination`] on the
+/// two shapes the reader produces but the writer must not emit — see the
+/// comment on those arms.
+///
+/// `None` parameters are written as `null` rather than omitted. Table 151's
+/// arrays are **positional** — `[page /FitR left bottom right top]` — so
+/// dropping a `None` would shift every later parameter into the wrong slot,
+/// turning "fit this rectangle, leave the top alone" into a different
+/// rectangle entirely.
+fn dest_array(page: ObjId, view: &crate::outline::DestView) -> Result<Vec<Object>, &'static str> {
+    use crate::outline::DestView;
+    fn num(v: Option<f64>) -> Object {
+        v.map_or(Object::Null, Object::Real)
+    }
+    let mut out = vec![Object::Reference(page)];
+    match view {
+        DestView::Xyz { left, top, zoom } => {
+            out.push(Object::Name(Name::from(b"XYZ")));
+            out.push(num(*left));
+            out.push(num(*top));
+            out.push(num(*zoom));
+        }
+        DestView::Fit => out.push(Object::Name(Name::from(b"Fit"))),
+        DestView::FitH { top } => {
+            out.push(Object::Name(Name::from(b"FitH")));
+            out.push(num(*top));
+        }
+        DestView::FitV { left } => {
+            out.push(Object::Name(Name::from(b"FitV")));
+            out.push(num(*left));
+        }
+        DestView::FitR {
+            left,
+            bottom,
+            right,
+            top,
+        } => {
+            out.push(Object::Name(Name::from(b"FitR")));
+            out.push(num(*left));
+            out.push(num(*bottom));
+            out.push(num(*right));
+            out.push(num(*top));
+        }
+        DestView::FitB => out.push(Object::Name(Name::from(b"FitB"))),
+        DestView::FitBH { top } => {
+            out.push(Object::Name(Name::from(b"FitBH")));
+            out.push(num(*top));
+        }
+        DestView::FitBV { left } => {
+            out.push(Object::Name(Name::from(b"FitBV")));
+            out.push(num(*left));
+        }
+        // The two reader-only shapes, refused rather than written.
+        //
+        // `Unknown` is the one that looks writable and is not: the reader
+        // keeps the extension's fit NAME but discards its parameters, so
+        // re-emitting it would produce `[page /FitSomething]` with the
+        // arguments silently gone. A destination that jumps to the right
+        // page with the wrong view is worse than a refusal, because nothing
+        // about it looks broken.
+        DestView::Unknown { .. } => return Err("unknown-fit"),
+        DestView::Absent => return Err("no-fit-style"),
+    }
+    Ok(out)
+}
+
+/// A stable, operator-showable word for a destination pdfce cannot author,
+/// carried in [`EditError::UnsupportedDestination`].
+///
+/// Named rather than numbered so a shell can put the refusal in front of a
+/// person without a lookup table, and so the four refusals stay
+/// distinguishable in a log: they fail for different reasons and only two of
+/// them are ever likely to become supported.
+fn destination_kind(d: &crate::outline::Destination) -> &'static str {
+    use crate::outline::Destination;
+    match d {
+        Destination::Page { .. } => "explicit",
+        Destination::Named { .. } => "named",
+        Destination::Remote { .. } => "remote",
+        Destination::UnmappedPage { .. } => "unmapped-page",
+        Destination::NonNavigation { .. } => "non-navigation",
+    }
 }
 
 /// Build a `/BS` border-style dictionary (§12.5.4 Table 166).
@@ -3561,6 +3702,31 @@ pub enum EditError {
     /// could later fill, export or delete it by name.
     #[error("a new field needs a name — without one it cannot be filled, exported or referred to")]
     FieldNameEmpty,
+    /// [`EditSession::add_outline_item`] was given a `parent` that is not an
+    /// outline item in this document (§12.3.3).
+    ///
+    /// Refused rather than re-parented to the root, because a stale handle
+    /// and a deliberate top-level bookmark are indistinguishable once the
+    /// item has landed — and `parent: None` already says "top level".
+    #[error("object {id} is not an outline item in this document")]
+    OutlineItemNotFound {
+        /// The object number that was passed as the parent.
+        id: u32,
+    },
+    /// A destination pdfce cannot author was passed to
+    /// [`EditSession::add_outline_item`] (§12.3.2.2).
+    ///
+    /// Only an **explicit** destination is written today. The rest are
+    /// refused **by name** rather than dropped, because a bookmark with no
+    /// destination still appears in the panel and still looks clickable —
+    /// the failure would surface as "this bookmark does nothing", which
+    /// reads as a viewer bug rather than as pdfce declining to write it.
+    #[error("pdfce cannot author a {kind} destination yet — only explicit page destinations")]
+    UnsupportedDestination {
+        /// Which kind was refused: `named`, `remote`, `unmapped-page` or
+        /// `non-navigation`.
+        kind: &'static str,
+    },
     /// A ce-dimension operation named a group the sidecar model does not
     /// contain (Pass 25.5).
     #[error("no ce dimension group with id {id} exists in this document")]
@@ -17977,6 +18143,316 @@ impl EditSession {
         Ok(id)
     }
 
+    /// Append a bookmark to the document outline (§12.3.3), creating the
+    /// outline itself if the document has none. Returns the new item's
+    /// [`ObjId`]. One undo entry.
+    ///
+    /// `parent` is `None` for a top-level bookmark, or an existing item's id
+    /// to nest under. The item is appended **last** among its siblings, which
+    /// is the order a shell rebuilding a subtree top-down reads them in.
+    ///
+    /// # Why this exists
+    ///
+    /// pdfce could read outlines and never write one — `read_outline`,
+    /// `parse_outline` and the walk have existed since the reader passes,
+    /// with **zero** authoring verbs opposite them. `pdfceGUI` hit the gap
+    /// carrying bookmarks across `insert_pages` (2026-08-18): it can read the
+    /// source's outline and derive the page mapping itself, and had nowhere
+    /// to put the result.
+    ///
+    /// # ★★ `/Count` IS TWO DIFFERENT QUANTITIES
+    ///
+    /// The spec digest opens with this because it is the single easiest
+    /// thing here to get wrong:
+    ///
+    /// | | root `/Outlines` | an item |
+    /// |---|---|---|
+    /// | `/Count` counts | visible items at **every** level, **including** top-level | visible **descendants**, **excluding** itself |
+    /// | absent means | no open items | the item is a **leaf** |
+    ///
+    /// On an item the **sign carries the open/closed state** — there is no
+    /// `/Open` key, so the sign is the only carrier. Positive is open;
+    /// negative is closed, the magnitude being the count it *would* have if
+    /// opened, which is how a file preserves a collapsed subtree's expansion
+    /// state across a save.
+    ///
+    /// # What that means for propagation, which is the whole of the work
+    ///
+    /// A new item is visible only if **every** ancestor is open, so the count
+    /// does not simply increment all the way to the root:
+    ///
+    /// - the immediate parent's **magnitude** always gains 1 — a closed
+    ///   parent's count is what it *would* be, so it grows too;
+    /// - an ancestor above gains 1 only while every node **between** it and
+    ///   the new item is open — a closed node contributes exactly 1 (itself)
+    ///   to its own parent no matter how large its subtree becomes, so the
+    ///   walk stops at the first closed node;
+    /// - the root gains 1 on that same condition.
+    ///
+    /// A parent that was a **leaf** gains `/Count 1` and so becomes **open**.
+    /// That is an authoring choice, not a spec requirement: the alternative
+    /// is adding a child into a collapsed parent, which hides the thing the
+    /// operator just made.
+    ///
+    /// # Errors
+    ///
+    /// - [`EditError::OutlineItemNotFound`] — `parent` is not an outline item
+    ///   in this document. Refused rather than silently re-parented to the
+    ///   root, which would put the bookmark somewhere nobody asked for.
+    /// - [`EditError::UnsupportedDestination`] — a destination pdfce cannot
+    ///   author. Only [`Destination::Page`](crate::outline::Destination::Page)
+    ///   is written today; the rest are refused **by name** rather than
+    ///   dropped, because a bookmark that scrolls nowhere still looks like a
+    ///   working bookmark.
+    /// - [`EditError::PageOutOfRange`] — the destination names a page the
+    ///   document does not have.
+    /// - The encryption and certification guards.
+    pub fn add_outline_item(
+        &mut self,
+        parent: Option<ObjId>,
+        title: &str,
+        destination: Option<crate::outline::Destination>,
+    ) -> Result<ObjId, EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+
+        // Resolve and refuse BEFORE allocating anything, so a refusal leaves
+        // the session byte-for-byte untouched.
+        let dest_obj = match &destination {
+            None => None,
+            Some(crate::outline::Destination::Page { page_index, view }) => {
+                let slots = self.page_slots().map_err(|_| EditError::PageOutOfRange {
+                    index: *page_index,
+                    count: 0,
+                })?;
+                let slot = slots.get(*page_index).ok_or(EditError::PageOutOfRange {
+                    index: *page_index,
+                    count: slots.len(),
+                })?;
+                let array = dest_array(slot.id, view)
+                    .map_err(|kind| EditError::UnsupportedDestination { kind })?;
+                Some(Object::Array(array))
+            }
+            Some(other) => {
+                return Err(EditError::UnsupportedDestination {
+                    kind: destination_kind(other),
+                });
+            }
+        };
+
+        let mut writes: BTreeMap<ObjId, Object> = BTreeMap::new();
+
+        // The root outline dictionary, created if the document has none.
+        // `<< /Type /Outlines >>` with no /First, /Last or /Count is a legal
+        // empty outline, so the created-from-nothing case needs no further
+        // special-casing below.
+        let catalog_id = self.graph().catalog_id().ok_or(EditError::NotADictionary {
+            id: ObjId::new(0, 0),
+            key: "Root",
+        })?;
+        let mut root_dirty = false;
+        let (root_id, mut root) = match self.outline_root() {
+            Some(pair) => pair,
+            None => {
+                let Some(Object::Dict(mut catalog)) = self.value(catalog_id).cloned() else {
+                    return Err(EditError::NotADictionary {
+                        id: catalog_id,
+                        key: "Root",
+                    });
+                };
+                let id = ObjId::new(self.alloc_number()?, 0);
+                catalog.insert(Name::from(b"Outlines"), Object::Reference(id));
+                writes.insert(catalog_id, Object::Dict(catalog));
+                let mut d = Dict::new();
+                d.insert(Name::from(b"Type"), Object::Name(Name::from(b"Outlines")));
+                root_dirty = true;
+                (id, d)
+            }
+        };
+
+        let new_id = ObjId::new(self.alloc_number()?, 0);
+        let parent_id = parent.unwrap_or(root_id);
+        let parent_is_root = parent_id == root_id;
+
+        let mut parent_dict = if parent_is_root {
+            root.clone()
+        } else {
+            match self.value(parent_id).cloned() {
+                Some(Object::Dict(d)) if self.is_under_outline_root(parent_id, root_id) => d,
+                _ => return Err(EditError::OutlineItemNotFound { id: parent_id.num }),
+            }
+        };
+
+        // --- splice in as the LAST sibling --------------------------------
+        let prev_last = match parent_dict.get(b"Last") {
+            Some(Object::Reference(r)) => Some(*r),
+            _ => None,
+        };
+        let mut item = Dict::new();
+        item.insert(
+            Name::from(b"Title"),
+            Object::String(encode_text_string(title)),
+        );
+        item.insert(Name::from(b"Parent"), Object::Reference(parent_id));
+        if let Some(d) = dest_obj {
+            item.insert(Name::from(b"Dest"), d);
+        }
+        if let Some(prev) = prev_last {
+            item.insert(Name::from(b"Prev"), Object::Reference(prev));
+            let Some(Object::Dict(mut pd)) = self.value(prev).cloned() else {
+                return Err(EditError::OutlineItemNotFound { id: prev.num });
+            };
+            pd.insert(Name::from(b"Next"), Object::Reference(new_id));
+            writes.insert(prev, Object::Dict(pd));
+        } else {
+            parent_dict.insert(Name::from(b"First"), Object::Reference(new_id));
+        }
+        parent_dict.insert(Name::from(b"Last"), Object::Reference(new_id));
+        writes.insert(new_id, Object::Dict(item));
+
+        // --- /Count up the chain, per this method's docs -------------------
+        let parent_open = bump_outline_count(&mut parent_dict);
+        if parent_is_root {
+            root = parent_dict;
+            root_dirty = true;
+        } else {
+            let mut cursor = match parent_dict.get(b"Parent") {
+                Some(Object::Reference(r)) => Some(*r),
+                _ => None,
+            };
+            writes.insert(parent_id, Object::Dict(parent_dict));
+            // Stop at the first closed node: above it nothing changes, and
+            // writing an unchanged object would violate minimal-diff.
+            //
+            // `guard` is the cycle guard, not a nesting policy. A `/Parent`
+            // chain in a damaged or hostile file can be a **cycle**, and this
+            // walk follows `/Parent` unconditionally — `ARCHITECTURE.md`
+            // §10's recursive-walker rule, almost verbatim.
+            //
+            // It reuses `outline::MAX_OUTLINE_DEPTH` rather than introducing
+            // a third value. There are already two constants of that name,
+            // in `outline` and `pageops::outline`, deliberately kept equal
+            // because a tree one can display and the other flattens is worse
+            // than either limit alone. A writer that walked further than the
+            // reader can see would extend that same disagreement by one more
+            // party, and the counts it wrote past the cap would describe
+            // items pdfce itself never reports.
+            let mut visible = parent_open;
+            let mut guard = 0usize;
+            while visible {
+                let Some(id) = cursor else { break };
+                guard += 1;
+                if guard > crate::outline::MAX_OUTLINE_DEPTH {
+                    break;
+                }
+                if id == root_id {
+                    bump_outline_count(&mut root);
+                    root_dirty = true;
+                    break;
+                }
+                let Some(Object::Dict(mut d)) = self.value(id).cloned() else {
+                    break;
+                };
+                visible = bump_outline_count(&mut d);
+                cursor = match d.get(b"Parent") {
+                    Some(Object::Reference(r)) => Some(*r),
+                    _ => None,
+                };
+                writes.insert(id, Object::Dict(d));
+            }
+        }
+        if root_dirty {
+            writes.insert(root_id, Object::Dict(root));
+        }
+
+        let objects: Vec<ObjectWrite> = writes
+            .into_iter()
+            .map(|(id, value)| ObjectWrite {
+                id,
+                before: self.state.get(&id).cloned(),
+                after: Some(value),
+            })
+            .collect();
+        self.commit(Command {
+            kind: CommandKind::AddOutlineItem,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(new_id)
+    }
+
+    /// Whether `candidate` is genuinely an outline item — that is, whether
+    /// its `/Parent` chain reaches `root_id`.
+    ///
+    /// # ★ Why reachability, and not a key-presence check
+    ///
+    /// The obvious test is structural: §12.3.3 Table 153 gives outline items
+    /// **no `/Type` key at all**, so there is nothing to match on, and both
+    /// `/Title` and `/Parent` are required on an item and absent from the
+    /// root. That was the first implementation here, and it was wrong in a
+    /// way worth recording: **every page also has `/Parent`**, so passing a
+    /// page object as the bookmark parent was accepted, and the bookmark was
+    /// spliced into the page tree — where a viewer never looks for it and
+    /// pdfce's own reader never finds it. The save succeeded and the
+    /// bookmark simply did not exist.
+    ///
+    /// A tightened heuristic (reject anything carrying a `/Type`, require a
+    /// link key) would have closed that specific hole and left the shape of
+    /// the bug intact: guessing at identity from keys, in a format where
+    /// dictionaries are structurally interchangeable. Walking `/Parent` to
+    /// the outline root answers the actual question — *is this in the
+    /// outline?* — costs O(depth) over a chain the verb is about to walk
+    /// anyway, and cannot be fooled by a dictionary that merely resembles an
+    /// item.
+    ///
+    /// A broken chain (missing `/Parent`, a non-dictionary, a cycle, or more
+    /// than [`crate::outline::MAX_OUTLINE_DEPTH`] links) reads as **not
+    /// reachable**, which refuses the add. That is the safe direction: an
+    /// item pdfce cannot prove is in the outline is one whose `/Count`
+    /// propagation it cannot get right either.
+    fn is_under_outline_root(&self, candidate: ObjId, root_id: ObjId) -> bool {
+        let mut cursor = candidate;
+        for _ in 0..crate::outline::MAX_OUTLINE_DEPTH {
+            let Some(Object::Dict(d)) = self.value(cursor) else {
+                return false;
+            };
+            let Some(Object::Reference(parent)) = d.get(b"Parent") else {
+                return false;
+            };
+            if *parent == root_id {
+                return true;
+            }
+            if *parent == cursor {
+                return false;
+            }
+            cursor = *parent;
+        }
+        false
+    }
+    /// The document's outline root — `(id, dict)` — or `None` if the catalog
+    /// has no `/Outlines`, or has one that does not resolve to a dictionary.
+    ///
+    /// A non-dictionary `/Outlines` is treated as **absent** rather than as
+    /// an error, because the caller's next move is to create one: refusing to
+    /// add a bookmark because a damaged file carries `/Outlines 7` is a worse
+    /// outcome than replacing that 7 with a real outline.
+    fn outline_root(&self) -> Option<(ObjId, Dict)> {
+        let catalog_id = self.graph().catalog_id()?;
+        let Some(Object::Dict(catalog)) = self.value(catalog_id) else {
+            return None;
+        };
+        let Some(Object::Reference(id)) = catalog.get(b"Outlines") else {
+            return None;
+        };
+        let id = *id;
+        match self.value(id) {
+            Some(Object::Dict(d)) => Some((id, d.clone())),
+            _ => None,
+        }
+    }
     /// Rename a dimension group. One undo entry.
     ///
     /// The group name is operator-facing metadata — it labels the group in a

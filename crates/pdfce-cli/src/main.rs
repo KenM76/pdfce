@@ -1398,6 +1398,54 @@ enum Command {
         flat: bool,
     },
 
+    /// **Add a bookmark to the document outline** (ISO 32000-1 §12.3.3).
+    ///
+    /// Appends one item as the LAST child of its parent — the top level by
+    /// default, or under an existing bookmark with `--under`.
+    ///
+    /// `--under` takes the `n=` number `list-outline` prints, so the two
+    /// commands compose directly: read the tree, pick a row, nest under it.
+    /// Depth-first document order, 1-based.
+    ///
+    /// # `/Count` is maintained for you, and that is the whole difficulty
+    ///
+    /// A bookmark is not just a dictionary: every ancestor carries a count
+    /// of the items visible beneath it, and a viewer's panel disagrees with
+    /// the file if those are wrong. pdfce propagates them per §12.3.3,
+    /// stopping at the first CLOSED ancestor because nothing below one is
+    /// visible. Adding under a collapsed bookmark therefore leaves the
+    /// document's total unchanged — correct, and worth knowing before you
+    /// read the `root_count=` field and think it failed.
+    AddBookmark {
+        /// Input PDF.
+        input: PathBuf,
+        /// The bookmark's text.
+        #[arg(long)]
+        title: String,
+        /// Destination page, 1-based. Omit for a heading — a bookmark with
+        /// no destination is legal and common for a container row.
+        #[arg(long)]
+        page: Option<u32>,
+        /// Scroll so this user-space Y coordinate is at the top of the
+        /// window, instead of fitting the whole page. Requires `--page`.
+        #[arg(long)]
+        top: Option<f64>,
+        /// Nest under the bookmark with this `n=` number from
+        /// `list-outline`. Omit for a top-level bookmark.
+        #[arg(long)]
+        under: Option<usize>,
+        /// Output PDF.
+        #[arg(long)]
+        output: PathBuf,
+        /// Save mode.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Round-trip the undo stack before saving and report whether the
+        /// document returned to its original bytes.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+
     /// **Report what each signature COVERS** — not whether it is valid.
     ///
     /// pdfce performs no cryptographic verification. This measures each
@@ -5241,6 +5289,16 @@ fn run() -> ExitCode {
         Command::ValidatePdfa { .. } => unimplemented_stub("validate-pdfa"),
         Command::Sign { .. } => unimplemented_stub("sign"),
         Command::ListOutline { input, flat } => cmd_list_outline(&input, flat),
+        Command::AddBookmark {
+            input,
+            title,
+            page,
+            top,
+            under,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_add_bookmark(&input, &title, page, top, under, &output, mode, verify_undo),
         Command::ListAttachments { input } => cmd_list_attachments(&input),
         Command::ExtractAttachment {
             input,
@@ -7975,6 +8033,185 @@ with_note={with_note} with_author={with_author} need_appearances={need_appearanc
 /// Read-only. One `field …` line per terminal field, then a `list-fields …`
 /// summary line carrying the document-level form disclosures. The value is
 /// emitted as a sanitised token so the line stays field-splittable.
+/// `add-bookmark` — append one item to the document outline (§12.3.3).
+///
+/// # Resolving `--under`, and why it is an index rather than a title
+///
+/// The obvious interface is `--under "Chapter 1"`, and it is the wrong one:
+/// outline titles are **not unique** — "Introduction" under each of three
+/// parts is ordinary — so a title selects an ambiguous set, and the command
+/// would have to either refuse the common case or silently pick one. The
+/// `n=` index `list-outline` prints is unambiguous by construction, and the
+/// two commands compose without the operator inventing a path syntax.
+///
+/// The index is resolved through the **reader**, not by counting objects, so
+/// `--under` names exactly the row the operator saw. A tree pdfce truncated
+/// at `MAX_OUTLINE_DEPTH` or cut short on its item budget therefore has no
+/// reachable indices past that point — which is right: an index into a row
+/// the operator was never shown would nest the bookmark somewhere invisible.
+///
+/// # What it prints
+///
+/// `root_count=` is the outline root's `/Count` after the add — the number
+/// of *visible* items at every level. It does **not** always increase: an
+/// item added under a collapsed ancestor is not visible, so the count is
+/// unchanged and the command says `visible=0`. Reporting the count without
+/// that flag would make a correct save look like a failed one.
+#[allow(clippy::too_many_arguments)]
+fn cmd_add_bookmark(
+    input: &Path,
+    title: &str,
+    page: Option<u32>,
+    top: Option<f64>,
+    under: Option<usize>,
+    output: &Path,
+    mode: SaveMode,
+    verify_undo: bool,
+) -> u8 {
+    if top.is_some() && page.is_none() {
+        eprintln!(
+            "pdfce-cli: {}: --top positions a view WITHIN a page; it needs --page",
+            input.display()
+        );
+        return exit::EDIT_REFUSED;
+    }
+
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    // The destination. `--page` alone means /Fit — fit the whole page —
+    // rather than /XYZ with null parameters. Both are legal and the
+    // difference is real: /XYZ null null null means "keep whatever the
+    // viewer is showing", which for a bookmark authored from a script with
+    // no view to capture would make the jump depend on where the reader
+    // happened to be. /Fit always shows the page the operator named.
+    let destination = match page {
+        None => None,
+        Some(p) => {
+            let Some(index) = p.checked_sub(1).map(|i| i as usize) else {
+                eprintln!(
+                    "pdfce-cli: {}: --page is 1-based; 0 is not a page",
+                    input.display()
+                );
+                return exit::EDIT_REFUSED;
+            };
+            let view = match top {
+                Some(y) => pdfce_core::outline::DestView::Xyz {
+                    left: None,
+                    top: Some(y),
+                    zoom: None,
+                },
+                None => pdfce_core::outline::DestView::Fit,
+            };
+            Some(pdfce_core::outline::Destination::Page {
+                page_index: index,
+                view,
+            })
+        }
+    };
+
+    // The parent, resolved through the reader in the same depth-first order
+    // `list-outline` prints.
+    let before = pdfce_core::outline::read_outline(&session.graph());
+    let parent = match under {
+        None => None,
+        Some(n) => {
+            let Some(id) = nth_outline_item(&before.items, n) else {
+                eprintln!(
+                    "pdfce-cli: {}: --under {n}: this document has {} bookmark(s); \
+run list-outline to see their n= numbers",
+                    input.display(),
+                    count_outline_items(&before.items),
+                );
+                return exit::EDIT_REFUSED;
+            };
+            Some(id)
+        }
+    };
+
+    let before_root = before.diagnostics.declared_root_count.unwrap_or(0);
+    if let Err(err) = session.add_outline_item(parent, title, destination) {
+        return report_edit_error(input, &err);
+    }
+    let after = pdfce_core::outline::read_outline(&session.graph());
+    let after_root = after.diagnostics.declared_root_count.unwrap_or(0);
+
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+
+    let r = &outcome.report;
+    println!(
+        "add-bookmark {} title={title:?} mode={} -> {}; \
+bookmarks={} root_count={after_root} visible={} changed={} objects={} \
+verbatim={} reserialized={} appended={} out_bytes={} undo_verified={} \
+undo_identical={} delinearized={}",
+        input.display(),
+        mode.name(),
+        output.display(),
+        count_outline_items(&after.items),
+        u32::from(after_root != before_root),
+        outcome.changed,
+        r.objects_written,
+        r.objects_verbatim,
+        r.objects_reserialized,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+        u32::from(r.delinearized),
+    );
+    finish_edit(input, &outcome)
+}
+
+/// The `n`th item (1-based) in depth-first document order — the order
+/// `list-outline` prints and `--under` indexes.
+///
+/// Written as an explicit stack rather than a recursive walk with a counter,
+/// because the recursive form needs the counter threaded by `&mut` through
+/// every frame and a missed increment produces an off-by-one that only shows
+/// on nested trees. The reader has already applied its own depth cap, so the
+/// tree handed here is finite.
+fn nth_outline_item(
+    items: &[pdfce_core::outline::OutlineItem],
+    n: usize,
+) -> Option<pdfce_core::object::ObjId> {
+    let mut seen = 0usize;
+    let mut stack: Vec<&pdfce_core::outline::OutlineItem> = items.iter().rev().collect();
+    while let Some(item) = stack.pop() {
+        seen += 1;
+        if seen == n {
+            return Some(item.id);
+        }
+        stack.extend(item.children.iter().rev());
+    }
+    None
+}
+
+/// How many items the whole tree holds, for the refusal message and the
+/// success line. Shares [`nth_outline_item`]'s traversal shape deliberately:
+/// a count that disagreed with the indexing would make the refusal message
+/// name a range that does not work.
+fn count_outline_items(items: &[pdfce_core::outline::OutlineItem]) -> usize {
+    let mut n = 0usize;
+    let mut stack: Vec<&pdfce_core::outline::OutlineItem> = items.iter().collect();
+    while let Some(item) = stack.pop() {
+        n += 1;
+        stack.extend(item.children.iter());
+    }
+    n
+}
+
 /// `list-outline` — the document's bookmarks, as a tree.
 ///
 /// # Why the indentation is real output and not decoration
@@ -8002,10 +8239,15 @@ fn cmd_list_outline(input: &Path, flat: bool) -> u8 {
     let session = pdfce_core::edit::EditSession::new(doc);
     let outline = pdfce_core::outline::read_outline(&session.graph());
 
-    fn emit(items: &[pdfce_core::outline::OutlineItem], flat: bool) -> usize {
-        let mut n = 0;
+    // `n` is threaded through rather than counted per-level so it is the
+    // DOCUMENT-order index, which is what `add-bookmark --under` takes. A
+    // per-level counter would print 1,2,1,2 and silently mean something
+    // else on a nested tree.
+    fn emit(items: &[pdfce_core::outline::OutlineItem], flat: bool, n: &mut usize) -> usize {
+        let mut shown = 0;
         for it in items {
-            n += 1;
+            *n += 1;
+            shown += 1;
             let dest = match &it.destination {
                 Some(d) => format!("{d:?}"),
                 // Distinguished from a destination pdfce could not
@@ -8019,16 +8261,16 @@ fn cmd_list_outline(input: &Path, flat: bool) -> u8 {
                 "  ".repeat(it.level)
             };
             println!(
-                "{indent}bookmark level={} open={} title={:?} dest={dest}",
+                "{indent}bookmark n={n} level={} open={} title={:?} dest={dest}",
                 it.level,
                 u32::from(it.open),
                 it.title,
             );
-            n += emit(&it.children, flat);
+            shown += emit(&it.children, flat, n);
         }
-        n
+        shown
     }
-    let shown = emit(&outline.items, flat);
+    let shown = emit(&outline.items, flat, &mut 0);
 
     // The diagnostics are not a footnote. A truncated tree looks exactly
     // like a short one from the outside, and only this line distinguishes
@@ -13247,6 +13489,31 @@ against the base revision, not the union of every command run).",
 /// from a broken file.
 fn report_edit_error(input: &Path, err: &pdfce_core::edit::EditError) -> u8 {
     use pdfce_core::edit::EditError;
+    // ★ Translate the ONE error whose text is in the engine's units rather
+    // than the operator's.
+    //
+    // `pdfce-core` is 0-based throughout and `EditError::PageOutOfRange`
+    // formats itself that way, correctly — it has no idea what a caller
+    // typed. Every `--page` flag in this binary is **1-based**, so passing
+    // that message straight through answers `--page 99` with *"page index 98
+    // is out of range"*, and the operator has to work out that the tool
+    // subtracted one before deciding whether they made a mistake or pdfce
+    // did. Found by reading this command's own output on a deliberate
+    // out-of-range run (R174); it applies to all eight 1-based callers, so
+    // it is fixed once here at the boundary rather than in each of them.
+    //
+    // Only `--page` is 1-based. Sub-page indices (`--index` into `/Annots`,
+    // `--object`, `--run`, `--node`) are 0-based in both the flag and the
+    // engine, and none of them raises this variant — so there is no caller
+    // for which this translation would be wrong.
+    if let EditError::PageOutOfRange { index, count } = err {
+        eprintln!(
+            "pdfce-cli: {}: page {} is out of range (the document has {count} page(s))",
+            input.display(),
+            index.saturating_add(1),
+        );
+        return exit::EDIT_REFUSED;
+    }
     eprintln!("pdfce-cli: {}: {err}", input.display());
     match err {
         EditError::PageTree(_) => exit::RUNTIME_ERROR,

@@ -9,8 +9,8 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 |---|---|
 | **Date** | 2026-08-13 |
 | **Verified against** | `7031296` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
-| **Primary subject** | `crates/pdfce-core/src/edit.rs` (25,544 lines) |
-| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 120 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
+| **Primary subject** | `crates/pdfce-core/src/edit.rs` (26,034 lines) |
+| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 121 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
 
@@ -61,11 +61,12 @@ Five consequences a GUI author must internalise before writing any code:
 
 ---
 
-## 1. Verb index — all 120 public `EditSession` methods
+## 1. Verb index — all 121 public `EditSession` methods
 
-**Count: 120.** Established by brace-matched extraction of the four
-`impl EditSession` blocks at `edit.rs:4313`, `edit.rs:8252`, `edit.rs:17642`,
-`edit.rs:19935`, matching `pub fn` / `pub const fn` (43 + 51 + 25 + 1 = 120).
+**Count: 121.** Established by brace-matched extraction of the four
+`impl EditSession` blocks, matching `pub fn` / `pub const fn`, and checked
+on every run by `tools/check-core-api-verbs.py` — which is what caught this
+figure at 120 when `add_outline_item` landed.
 There are no `EditSession` methods in any other file
 (`grep -rn "impl EditSession" crates/pdfce-core/src/` returns those four lines only).
 
@@ -169,7 +170,7 @@ need their own policy).
 |---|---|---|---|
 | Set one page's absolute rotation | `set_page_rotation(&mut self, page_index, degrees: i32) -> Result<(), EditError>` | 3848 | Refuses non-multiples of 90 (`RotationNotMultipleOf90`). |
 | Turn one page relative to its current rotation | `rotate_page_by(&mut self, page_index, delta: i32) -> Result<(), EditError>` | 3981 | Delegates to `set_page_rotation`. |
-| Delete pages | `delete_pages(&mut self, indices: &[usize]) -> Result<DeleteOutcome, EditError>` | 14644 | See `DeleteOutcome`, §1.22. |
+| Delete pages | `delete_pages(&mut self, indices: &[usize]) -> Result<DeleteOutcome, EditError>` | 14644 | See `DeleteOutcome`, §1.23. |
 | Delete pages, answering the pre-separation question | `delete_pages_with(&mut self, indices, separations: SeparationPolicy) -> Result<DeleteOutcome, EditError>` | 14663 | |
 | Reorder pages | `reorder_pages(&mut self, new_order: &[usize]) -> Result<(), EditError>` | 14944 | `NotAPermutation` if `new_order` is not one. ONE undo entry. |
 | Rotate several pages | `rotate_pages(&mut self, indices: &[usize], delta: i32) -> Result<usize, EditError>` | 15063 | Count of pages turned. ONE undo entry. |
@@ -427,7 +428,73 @@ Both take `&mut self` despite changing nothing (they read `self.view()`).
 `AttachmentTreeUnsupported` (`edit.rs:2374`) is a refused name-tree shape;
 `AttachmentNotFound` (`edit.rs:2386`) is an unknown key.
 
-### 1.19 ce dimensions (18) — detail in part 3
+### 1.19 Outline / bookmarks (1)
+
+> #### ★ Added 2026-08-19 — `Pass 103.0`
+>
+> Requested by `pdfceGUI`, which needed to carry a source document's
+> bookmarks across `insert_pages` and found that pdfce **could read outlines
+> and not write them**: `read_outline`, `parse_outline` and the walk have
+> existed since the reader passes with zero authoring verbs opposite them.
+
+| I want to… | Call | Returns |
+|---|---|---|
+| Add a bookmark | `add_outline_item(&mut self, parent: Option<ObjId>, title: &str, destination: Option<Destination>) -> Result<ObjId, EditError>` | The new item's id. Creates `/Outlines` if absent. ONE undo entry. |
+
+`parent: None` means top level; otherwise the id of an existing item, which
+you get from `read_outline`. The item is appended **last** among its
+siblings. `/Prev`, `/Next`, `/First` and `/Last` are maintained for you.
+
+#### ★★ `/Count` is two different quantities, and you will read it wrong once
+
+This is the one thing to carry away from this section, and it is the reason
+the verb exists rather than the shell assembling the dictionaries itself.
+
+| | root `/Outlines` | an item |
+|---|---|---|
+| `/Count` counts | visible items at **every** level, **including** top-level | visible **descendants**, **excluding** itself |
+| absent means | no open items | the item is a **leaf** |
+
+On an item the **sign is the open/closed flag** — §12.3.3 defines no `/Open`
+key, so the sign is the only carrier. Negative means collapsed, and the
+magnitude is the count it *would* have if expanded.
+
+pdfce propagates all of this. What the shell must know is that **the total
+does not always go up**: an item added under a collapsed ancestor is not
+visible, so the root count is unchanged. That is correct, and a UI that
+reported "1 bookmark added" by diffing the root count would report zero.
+
+#### What is refused, and why by name
+
+| Case | Error |
+|---|---|
+| `parent` is not an outline item | `OutlineItemNotFound { id }` |
+| `Destination::Named` / `Remote` | `UnsupportedDestination { kind: "named" \| "remote" }` |
+| `DestView::Unknown` / `Absent` | `UnsupportedDestination { kind: "unknown-fit" \| "no-fit-style" }` |
+| destination page past the end | `PageOutOfRange { index, count }` |
+
+Only an **explicit** page destination is authored today. The rest are refused
+rather than dropped because a bookmark with no destination still appears in
+the panel and still looks clickable — the failure would reach the operator as
+*"this bookmark does nothing"*, which reads as a viewer bug.
+
+`DestView::Unknown` is the one that looks writable and is not: the reader
+keeps an extension's fit **name** but discards its parameters, so re-emitting
+it would produce `[page /FitSomething]` with the arguments silently gone.
+
+A bad `parent` is refused rather than re-parented to the root, because a
+stale handle and a deliberate top-level bookmark are indistinguishable once
+the item has landed — and `parent: None` already says "top level".
+`parent` validity is decided by **walking `/Parent` to the outline root**,
+not by inspecting keys: every *page* also has `/Parent`, so a key-presence
+check accepts a page and splices the bookmark into the page tree, where no
+viewer looks for it. That save succeeds and the bookmark does not exist.
+
+CLI: `pdfce-cli add-bookmark --title … [--page N] [--top Y] [--under n]`,
+where `--under` takes the `n=` number `list-outline` prints. **The indices
+shift after every add** — they are positions in the current tree, not stable
+handles — so a batch of adds must re-list between them.
+### 1.20 ce dimensions (18) — detail in part 3
 
 > #### ★ Group membership, renaming and deletion — added 2026-08-19
 >
@@ -480,7 +547,7 @@ Both take `&mut self` despite changing nothing (they read `self.view()`).
 | Delete a ce dimension | `delete_dimension(&mut self, dimension) -> Result<(), EditError>` | 16178 | `/Annots` ref + dict + `/AP` + sidecar record. Group survives. |
 | **Translate** a ce dimension | `move_dimension(&mut self, dimension, dx, dy) -> Result<(), EditError>` | 16779 | ⚠️ Translates the **measured points** — takes the ce dimension off the feature it was measuring. |
 
-### 1.20 Fonts (6)
+### 1.21 Fonts (6)
 
 | I want to… | Call | Line | Returns |
 |---|---|---|---|
@@ -491,7 +558,7 @@ Both take `&mut self` despite changing nothing (they read `self.view()`).
 | Ask whether embedding is refused | `embed_refusal(&self) -> Option<EditError>` | 16553 | ✅ Load-bearing. |
 | Add missing font programs | `embed_fonts(&mut self, &EmbedRequest) -> Result<EmbedPlan, EditError>` | 16625 | ONE undo entry. **The file gets bigger, and the save mode does not change that.** |
 
-### 1.21 Images (1 session verb + 3 pure previews on `NewImage`)
+### 1.22 Images (1 session verb + 3 pure previews on `NewImage`)
 
 | I want to… | Call | Line | Returns |
 |---|---|---|---|
@@ -500,7 +567,7 @@ Both take `&mut self` despite changing nothing (they read `self.view()`).
 #### ★ The pure preview trio on `NewImage` — call these, do not re-derive them
 
 `&self`, no session, no side effects. The same relationship
-`preview_group_scale` (§1.19) has to `set_group_scale`: **a front end drawing
+`preview_group_scale` (§1.20) has to `set_group_scale`: **a front end drawing
 a preview must show the number the edit will produce.**
 
 | I want to preview… | Call | Returns |
@@ -531,7 +598,7 @@ number beside it. A 12 dpi placement is a legitimate deliberate act; the
 requester asked for the number *before* commit, not for something that stops
 them.
 
-### 1.22 Outcome structs — field reference
+### 1.23 Outcome structs — field reference
 
 Grep target for "what does this return actually contain".
 
