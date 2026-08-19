@@ -9,8 +9,8 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 |---|---|
 | **Date** | 2026-08-13 |
 | **Verified against** | `7031296` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
-| **Primary subject** | `crates/pdfce-core/src/edit.rs` (26848 lines) |
-| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 124 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
+| **Primary subject** | `crates/pdfce-core/src/edit.rs` (27326 lines) |
+| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 125 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
 
@@ -61,9 +61,9 @@ Five consequences a GUI author must internalise before writing any code:
 
 ---
 
-## 1. Verb index — all 124 public `EditSession` methods
+## 1. Verb index — all 125 public `EditSession` methods
 
-**Count: 124.** Established by brace-matched extraction of the four
+**Count: 125.** Established by brace-matched extraction of the four
 `impl EditSession` blocks, matching `pub fn` / `pub const fn`, and checked
 on every run by `tools/check-core-api-verbs.py` — which is what caught this
 figure at 120 when `add_outline_item` landed.
@@ -576,6 +576,76 @@ no name for `list-fields` to show. Note that **`pdfce-cli insert-pages` does
 not produce orphans**: it calls `pageops::assemble`, which merges `/AcroForm`
 (and reports `fields_renamed=` / `fields_dropped=`). Only
 `EditSession::insert_pages` orphans.
+#### ★★ `merge_document` — the merge that keeps the undo log (`Pass 104.0`)
+
+| I want to… | Call |
+|---|---|
+| Merge a whole document in | `merge_document(&mut self, source: &DocumentView, position: InsertPosition) -> Result<MergeOutcome, EditError>` |
+
+`MergeOutcome { pages_merged, fields_merged, fields_renamed, acroform_created }`.
+ONE undo entry, `CommandKind::MergeDocument`.
+
+**Why it exists.** `pdfceGUI` drew Merge and wired it to
+`command-unimplemented`, because the only merge pdfce offered
+(`pageops::insert`) **returns a whole new document's bytes** — wiring that
+into an open editor discards the undo log. They shipped an inert button and
+said so rather than silently eat the operator's history. That was right, and
+this is the answer.
+
+★ **It surfaced only when `FEATURES.md`'s `gui` column was re-based onto
+their build and the Merge row went DOWN.** A capability marked present
+against a crate nobody used had been hiding a real API-shape gap here.
+
+#### ★ Why a WHOLE-document merge is strictly easier than a page subset
+
+The observation the verb is built on, and it is not obvious.
+
+`insert_pages` cannot carry `/AcroForm` because a field's `/Kids` may reach
+widgets on pages that are **not** being inserted — carrying it would either
+fracture the field or drag in widgets nobody asked for. That is `Pass 102.1`,
+and it is why `InsertOutcome::orphaned_widgets` is permanent rather than
+interim.
+
+**Merging every page makes that case impossible.** No field can straddle a
+boundary when there is no boundary. Same copy path, differing only in taking
+every page.
+
+#### The ordering that makes it work
+
+Pages first, **then** the field tree, through the **same mapping table**. A
+field's `/Kids` then resolve to the widgets the pages already brought across.
+Importing fields first — or with a second mapping — silently **doubles every
+widget**, and the result renders correctly, which is how it would survive
+review. There is a test asserting object *identity* between the page's
+`/Annots` and the fields' `/Kids` for exactly this reason.
+
+Each merged widget then gets `/Parent` written back to its field. `/Parent`
+is dropped on the way in (see `import_dict`), and §12.7.3.2 resolves `/FT`,
+`/Ff`, `/V` and `/DA` by walking **up** — a viewer hit-testing a click lands
+on the *widget*. Without `/Parent` the control draws, accepts a click and
+belongs to nothing.
+
+⚠ **`parse_acroform` cannot see this.** It walks downward (`/Fields` →
+`/Kids`) and never reads `/Parent`, so a merge with the back-links missing
+passes every assertion routed through it. Verified against raw bytes instead.
+
+#### Collisions are RENAMED, not merged — and that differs from `adopt_widget`
+
+§12.7.3.1 makes the fully qualified name the field's identity, so two
+top-level `Address` fields are **one** field with two widgets and filling
+either fills both. On a merge that is almost never meant: two documents that
+each have an `Address` have two different addresses. So an arrival is renamed
+(`Address` → `Address_2`) and counted in `fields_renamed`.
+
+`adopt_widget` **refuses** the same collision. The difference is the caller's
+knowledge: adopting one widget is a decision an operator is making now and
+can be asked about; merging a hundred-field document is not, and refusing the
+whole merge over one name is worse than a suffix.
+
+`/NeedAppearances` is carried as a **logical OR**, never overwritten — it
+means *"the appearances here may be stale"*, so if either document says so,
+the result must. `/DR` merges key-by-key with the **target winning**, because
+a target entry is already referenced by fields that were here first.
 #### ★ `adopt_preview` — ask before pressing (`Pass 103.4`)
 
 | I want to… | Call |

@@ -249,6 +249,15 @@ pub enum CommandKind {
     /// (§12.7.3). Undoing it de-registers the field; the widget itself
     /// stays on the page, which is where it was before.
     AdoptWidget,
+    /// An entire document was merged into this one (`Pass 104.0`).
+    ///
+    /// Distinct from [`Self::InsertPages`] because undoing it removes the
+    /// merged field tree as well as the pages, and an undo label that said
+    /// "insert pages" would understate what is about to be reversed.
+    MergeDocument {
+        /// How many pages arrived.
+        count: usize,
+    },
     /// A document-information field was given a value.
     SetInfoField(InfoField),
     /// A document-information field was removed.
@@ -2980,6 +2989,59 @@ pub struct InsertOutcome {
     pub page_labels_stale: bool,
 }
 
+/// What [`EditSession::merge_document`] did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub struct MergeOutcome {
+    /// Pages brought across. Every page of the source, by definition.
+    pub pages_merged: usize,
+    /// Top-level form fields carried into this document's `/AcroForm`.
+    ///
+    /// Unlike [`InsertOutcome::orphaned_widgets`], a merged field arrives
+    /// **fillable** — its widgets are re-parented to it, so `/FT`, `/Ff`,
+    /// `/V` and `/DA` inherit (§12.7.3.2). That is the whole point of the
+    /// verb, and the number to show an operator.
+    pub fields_merged: usize,
+    /// How many of those were **renamed** because their name was already
+    /// taken in this document (§12.7.3.1).
+    ///
+    /// Worth disclosing rather than counting silently: the operator now has
+    /// a field whose name is not the one the source document showed them,
+    /// and any script, FDF or calculation keyed on the old name no longer
+    /// matches it. Renaming is still better than the alternative — two
+    /// fields sharing a fully qualified name are ONE field, and filling
+    /// either fills both.
+    pub fields_renamed: usize,
+    /// Whether this document had no `/AcroForm` and the merge created one.
+    pub acroform_created: bool,
+}
+
+/// Internal result of the `/AcroForm` half of a merge.
+#[derive(Debug, Clone, Copy, Default)]
+struct AcroFormMerge {
+    merged: usize,
+    renamed: usize,
+    created: bool,
+}
+
+/// A field name not already in `taken`, derived from `base`.
+///
+/// `Address` → `Address_2` → `Address_3`. The suffix starts at 2 because the
+/// unsuffixed name is conceptually the first, and an `Address_1` beside a
+/// bare `Address` reads as though a numbering scheme was intended.
+///
+/// Bounded by a counter rather than looping forever: a document that somehow
+/// holds every candidate falls back to appending the field index, which is
+/// unique by construction.
+fn unique_field_name(base: &str, taken: &BTreeSet<String>) -> String {
+    for n in 2..10_000u32 {
+        let candidate = format!("{base}_{n}");
+        if !taken.contains(&candidate) {
+            return candidate;
+        }
+    }
+    format!("{base}_{}", taken.len())
+}
 /// What [`EditSession::adopt_widget`] did — returned rather than inferred,
 /// because two of these facts are invisible from the widget afterwards.
 ///
@@ -4798,6 +4860,38 @@ pub struct EditSession {
     staging: Vec<u8>,
     undo: Vec<Command>,
     redo: Vec<Command>,
+}
+
+/// What [`EditSession::copy_and_splice`] produced, before any command is
+/// committed.
+///
+/// Exists so `insert_pages` and `merge_document` share one copy path.
+/// They differ only in what happens NEXT — the second merges
+/// document-level structures into the same `scratch` before committing —
+/// and two implementations of a page copy would be two things that must
+/// agree about object identity, which is the one thing a copy cannot get
+/// slightly wrong.
+struct PageSplice {
+    /// Objects this operation will write, keyed by their NEW id.
+    scratch: BTreeMap<ObjId, Object>,
+    /// Source id → new id for everything copied so far.
+    ///
+    /// ★ The load-bearing field for `merge_document`. Importing a field
+    /// dictionary AFTER the pages reuses this table, so the field's
+    /// `/Kids` resolve to the widgets the pages already brought across
+    /// rather than to fresh duplicates. Copying the field first, or with a
+    /// second mapping, would silently double every widget.
+    mapping: BTreeMap<ObjId, ObjId>,
+    /// The source's page slots, carried rather than recomputed.
+    ///
+    /// `insert_pages` needs them again for its unrecoverable-orphan count,
+    /// and a second `page_slots` walk could in principle disagree with the
+    /// one the copy used — same document, but a re-derivation is a second
+    /// opinion, and the count must describe the pages that were ACTUALLY
+    /// copied.
+    source_slots: Vec<page_tree::PageSlot>,
+    /// The new page objects, in the order they were spliced.
+    new_page_ids: Vec<ObjId>,
 }
 
 impl EditSession {
@@ -17380,6 +17474,461 @@ impl EditSession {
         Ok(())
     }
 
+    /// Merge an entire document into this one **as one undoable command**,
+    /// carrying the document-level structures [`Self::insert_pages`]
+    /// deliberately leaves behind.
+    ///
+    /// # Why this exists — a workaround reported rather than absorbed
+    ///
+    /// `pdfceGUI` drew Merge on its Pages tab and wired it to
+    /// `command-unimplemented`, because the only merge pdfce offered was
+    /// [`crate::pageops::insert`], which **returns a whole new document's
+    /// bytes**. Wiring that into an open editor would have discarded the
+    /// undo log — so they left the button inert and said so, rather than
+    /// shipping a Merge that silently ate the operator's history.
+    ///
+    /// That was the right call, and it surfaced only when `FEATURES.md`'s
+    /// `gui` column was re-based onto their build (2026-08-19) and the row
+    /// went **down**. A capability marked present on a crate nobody used had
+    /// been hiding a real API-shape gap on this side.
+    ///
+    /// # ★★ Why a WHOLE-document merge is strictly easier than a page subset
+    ///
+    /// This is the observation the verb is built on, and it is not obvious.
+    ///
+    /// `insert_pages` cannot carry `/AcroForm` because a field's `/Kids` may
+    /// reach widgets on pages that are **not** being inserted — carrying the
+    /// field would either fracture it or drag in widgets nobody asked for.
+    /// That is `Pass 102.1`'s hard problem, and it is why
+    /// [`InsertOutcome::orphaned_widgets`] is permanent rather than interim.
+    ///
+    /// **Merging every page makes that case impossible.** No field can
+    /// straddle a boundary when there is no boundary. So the structures
+    /// `insert_pages` must refuse, this verb can carry wholesale — and it is
+    /// the same code path, differing only in taking every page.
+    ///
+    /// # What is carried, and the ordering that makes it work
+    ///
+    /// Pages first, then the field tree. That order is load-bearing: the
+    /// field dictionaries are imported through the **same mapping table**
+    /// the pages used ([`PageSplice::mapping`]), so a field's `/Kids`
+    /// resolve to the widgets already copied rather than to fresh
+    /// duplicates. Importing fields first — or with a second mapping —
+    /// silently doubles every widget, and the result renders correctly,
+    /// which is how it would survive review.
+    ///
+    /// Each merged widget then gets its `/Parent` written to point at the
+    /// imported field. The copy drops `/Parent` on the way in (see
+    /// `import_dict`, and the reasoning there), so this verb re-establishes
+    /// it deliberately rather than relying on the copy to preserve a
+    /// reference whose target it could not see.
+    ///
+    /// # Field-name collisions are RENAMED, not merged
+    ///
+    /// §12.7.3.1 makes a field's fully qualified name its **identity**, so
+    /// two top-level fields called `Address` are not two fields — they are
+    /// one field with two widgets, and filling either fills both. On a merge
+    /// that is almost never what the operator meant: two documents that each
+    /// have an `Address` field have two different addresses.
+    ///
+    /// So a colliding arrival is renamed, and the count is reported in
+    /// [`MergeOutcome::fields_renamed`]. This differs from
+    /// [`Self::adopt_widget`], which **refuses** a collision — deliberately,
+    /// and the difference is the caller's knowledge. Adopting one widget is
+    /// a decision an operator is making right now and can be asked about;
+    /// merging a hundred-field document is not, and refusing the whole merge
+    /// over one name would be worse than a suffix.
+    ///
+    /// # Errors
+    ///
+    /// - [`EditError::CertificationForbidsChange`] — merging is a structural
+    ///   change, which `/DocMDP` `P=1` forbids.
+    /// - [`EditError::PageTree`] — either page tree is unwalkable.
+    /// - [`EditError::ObjectNumbersExhausted`].
+    /// - The encryption guard.
+    pub fn merge_document(
+        &mut self,
+        source: &DocumentView<'_>,
+        position: crate::pageops::InsertPosition,
+    ) -> Result<MergeOutcome, EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+
+        let source_count = crate::page_tree::page_slots(source.graph())
+            .map_err(EditError::PageTree)?
+            .len();
+        if source_count == 0 {
+            return Ok(MergeOutcome::default());
+        }
+        let all: Vec<usize> = (0..source_count).collect();
+
+        let Some(PageSplice {
+            mut scratch,
+            mut mapping,
+            new_page_ids,
+            ..
+        }) = self.copy_and_splice(source, &all, position)?
+        else {
+            return Ok(MergeOutcome::default());
+        };
+        let pages_merged = new_page_ids.len();
+
+        let form = self.merge_acroform(source, &mut mapping, &mut scratch)?;
+
+        let objects: Vec<ObjectWrite> = scratch
+            .into_iter()
+            .map(|(id, value)| ObjectWrite {
+                id,
+                before: self.state.get(&id).cloned(),
+                after: Some(value),
+            })
+            .collect();
+        self.commit(Command {
+            kind: CommandKind::MergeDocument {
+                count: pages_merged,
+            },
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(MergeOutcome {
+            pages_merged,
+            fields_merged: form.merged,
+            fields_renamed: form.renamed,
+            acroform_created: form.created,
+        })
+    }
+
+    /// Merge the source's `/AcroForm` field tree into this document's,
+    /// renaming top-level collisions. Writes into `scratch`; commits nothing.
+    ///
+    /// Returns what happened, for [`MergeOutcome`].
+    fn merge_acroform(
+        &mut self,
+        source: &DocumentView<'_>,
+        mapping: &mut BTreeMap<ObjId, ObjId>,
+        scratch: &mut BTreeMap<ObjId, Object>,
+    ) -> Result<AcroFormMerge, EditError> {
+        let Some(src_form) = source
+            .graph()
+            .catalog_dict()
+            .and_then(|c| {
+                c.get(b"AcroForm")
+                    .map(|o| source.graph().resolve(o).clone())
+            })
+            .and_then(|o| o.as_dict().cloned())
+        else {
+            return Ok(AcroFormMerge::default());
+        };
+        let Some(Object::Array(src_fields)) = src_form
+            .get(b"Fields")
+            .map(|o| source.graph().resolve(o).clone())
+        else {
+            return Ok(AcroFormMerge::default());
+        };
+        // A PERFORMANCE guard, not a correctness one — said plainly because a
+        // sabotage run proved it: deleting this changes no observable
+        // behaviour, since the `new_field_ids.is_empty()` check below already
+        // declines to touch the catalog. What it saves is building `taken`,
+        // which parses the whole target AcroForm. Kept, and labelled, so the
+        // next reader does not mistake a redundant branch for a load-bearing
+        // one and reason from it.
+        if src_fields.is_empty() {
+            return Ok(AcroFormMerge::default());
+        }
+
+        // Names already spoken for in the TARGET. Read before anything is
+        // imported, so an arrival cannot collide with another arrival's
+        // renamed form and produce a second round of suffixes.
+        let mut taken: BTreeSet<String> = forms::parse_acroform(&self.graph())
+            .map(|f| {
+                f.fields
+                    .iter()
+                    .map(|x| x.fully_qualified_name.clone())
+                    .chain(f.groups.iter().map(|g| g.fully_qualified_name.clone()))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        let mut out = AcroFormMerge::default();
+        let mut new_field_ids: Vec<Object> = Vec::new();
+        for entry in &src_fields {
+            let Object::Reference(src_id) = entry else {
+                continue;
+            };
+            let new_id = self.import_object(source, *src_id, mapping, scratch)?;
+            let Some(Object::Dict(mut field)) = scratch.get(&new_id).cloned() else {
+                continue;
+            };
+
+            // Rename on collision. §12.7.3.1: the fully qualified name IS the
+            // identity, so leaving a duplicate makes one field with two
+            // widgets and filling either fills both.
+            if let Some(Object::String(bytes)) = field.get(b"T") {
+                let original = decode_text_string(bytes).text;
+                if taken.contains(&original) {
+                    let renamed = unique_field_name(&original, &taken);
+                    field.insert(
+                        Name::from(b"T"),
+                        Object::String(encode_text_string(&renamed)),
+                    );
+                    taken.insert(renamed);
+                    out.renamed += 1;
+                } else {
+                    taken.insert(original);
+                }
+            }
+
+            // The copy drops `/Parent` (see `import_dict`), so a merged
+            // top-level field has none — which is correct, it IS top level.
+            field.remove(b"Parent");
+
+            // Re-establish every kid's `/Parent`. Without this the widgets
+            // are reachable from the field and the field is not reachable
+            // from them, which breaks inheritance of `/FT`, `/Ff`, `/V` and
+            // `/DA` (§12.7.3.2) — a form that lists its fields correctly and
+            // cannot fill them.
+            if let Some(Object::Array(kids)) = field.get(b"Kids").cloned() {
+                for kid in &kids {
+                    let Object::Reference(kid_id) = kid else {
+                        continue;
+                    };
+                    if let Some(Object::Dict(mut widget)) = scratch.get(kid_id).cloned() {
+                        widget.insert(Name::from(b"Parent"), Object::Reference(new_id));
+                        scratch.insert(*kid_id, Object::Dict(widget));
+                    }
+                }
+            }
+
+            scratch.insert(new_id, Object::Dict(field));
+            new_field_ids.push(Object::Reference(new_id));
+            out.merged += 1;
+        }
+        if new_field_ids.is_empty() {
+            return Ok(out);
+        }
+
+        // Splice into the target's `/AcroForm` `/Fields`, creating the
+        // dictionary when the target has none — a document that gains its
+        // first form field also becomes a form document, which is why this
+        // is reported rather than assumed.
+        let catalog_id = self.graph().catalog_id().ok_or(EditError::NotADictionary {
+            id: ObjId::new(0, 0),
+            key: "Root",
+        })?;
+        let Some(Object::Dict(catalog)) = self.value(catalog_id).cloned() else {
+            return Err(EditError::NotADictionary {
+                id: catalog_id,
+                key: "Root",
+            });
+        };
+        let existing = catalog.get(b"AcroForm").cloned();
+        let mut form_dict = match &existing {
+            Some(obj) => self.deref_dict(Some(obj)).unwrap_or_default(),
+            None => {
+                out.created = true;
+                Dict::new()
+            }
+        };
+        let mut fields = form_dict
+            .get(b"Fields")
+            .map(|o| self.resolve_value(o))
+            .and_then(Object::as_array)
+            .map(<[Object]>::to_vec)
+            .unwrap_or_default();
+        fields.extend(new_field_ids);
+        form_dict.insert(Name::from(b"Fields"), Object::Array(fields));
+
+        // `/NeedAppearances` is carried as a LOGICAL OR, not overwritten.
+        // It means "the appearances in this file may be stale, regenerate
+        // them" — so if either document said so, the merged document must,
+        // or the arriving fields render from appearance streams their own
+        // producer already declared untrustworthy.
+        if matches!(
+            src_form.get(b"NeedAppearances"),
+            Some(Object::Boolean(true))
+        ) {
+            form_dict.insert(Name::from(b"NeedAppearances"), Object::Boolean(true));
+        }
+        // `/SigFlags` (Table 219) — a BITWISE OR, for the same reason as
+        // `/NeedAppearances` above. Bit 1 `SignaturesExist` says the document
+        // contains at least one signature field; bit 2 `AppendOnly` says it
+        // must only be written by incremental update. After a merge the
+        // document contains the union of both documents' fields, so it must
+        // declare the union of both flags.
+        //
+        // Found by reading this command's own output (R174): the corpus form
+        // reports `sig_flags=0x1` and the merged file reported `0x0`, so a
+        // viewer would not have offered its signing UI for a document that
+        // does contain a `/Sig` field.
+        //
+        // ★ What this does NOT claim. Carrying the flag says the merged
+        // document HAS signature fields; it says nothing about their
+        // validity. A signature covers a byte range, and the merge renumbers
+        // and re-emits the source's objects — so any signature VALUE that
+        // came across is already broken by arithmetic, flag or no flag. The
+        // flag describes structure, and the structure is real.
+        let src_sig = match src_form.get(b"SigFlags") {
+            Some(Object::Integer(n)) => *n,
+            _ => 0,
+        };
+        if src_sig != 0 {
+            let existing_sig = form_dict
+                .get(b"SigFlags")
+                .and_then(|o| match self.resolve_value(o) {
+                    Object::Integer(n) => Some(*n),
+                    _ => None,
+                })
+                .unwrap_or(0);
+            form_dict.insert(
+                Name::from(b"SigFlags"),
+                Object::Integer(existing_sig | src_sig),
+            );
+        }
+        // `/DR` — the default resources a field's `/DA` names (§12.7.3.3).
+        // Merged key-by-key with the TARGET winning, because a target entry
+        // is already referenced by fields that were here first; dropping it
+        // would break them to fix the arrivals.
+        if let Some(src_dr) = src_form
+            .get(b"DR")
+            .map(|o| source.graph().resolve(o).clone())
+            .and_then(|o| o.as_dict().cloned())
+        {
+            let mut dr = form_dict
+                .get(b"DR")
+                .and_then(|o| self.deref_dict(Some(o)))
+                .unwrap_or_default();
+            for (key, value) in src_dr.iter() {
+                if !dr.contains_key(key.as_bytes()) {
+                    let imported = self.import_value(source, value, mapping, scratch)?;
+                    dr.insert(key.clone(), imported);
+                }
+            }
+            form_dict.insert(Name::from(b"DR"), Object::Dict(dr));
+        }
+        if !form_dict.contains_key(b"DA")
+            && let Some(da) = src_form.get(b"DA")
+        {
+            form_dict.insert(Name::from(b"DA"), da.clone());
+        }
+
+        match existing {
+            Some(Object::Reference(form_id)) => {
+                scratch.insert(form_id, Object::Dict(form_dict));
+            }
+            _ => {
+                let mut catalog = catalog;
+                catalog.insert(Name::from(b"AcroForm"), Object::Dict(form_dict));
+                scratch.insert(catalog_id, Object::Dict(catalog));
+            }
+        }
+        Ok(out)
+    }
+
+    /// Copy `source_pages` into this document and splice them into the page
+    /// tree, WITHOUT committing. Returns `None` when nothing was inserted.
+    ///
+    /// The shared body of [`Self::insert_pages`] and
+    /// [`Self::merge_document`]. See [`PageSplice`] for why they share it
+    /// rather than each owning a copy path.
+    fn copy_and_splice(
+        &mut self,
+        source: &DocumentView<'_>,
+        source_pages: &[usize],
+        position: crate::pageops::InsertPosition,
+    ) -> Result<Option<PageSplice>, EditError> {
+        if source_pages.is_empty() {
+            return Ok(None);
+        }
+
+        let source_slots =
+            crate::page_tree::page_slots(source.graph()).map_err(EditError::PageTree)?;
+        let source_count = source_slots.len();
+        if let Some(&past) = source_pages.iter().find(|i| **i >= source_count) {
+            return Err(EditError::PageOutOfRange {
+                index: past,
+                count: source_count,
+            });
+        }
+
+        let target_slots = self.page_slots()?;
+        let target_count = target_slots.len();
+        let at = position.slot(target_count);
+
+        // The node that will own the arrivals, and where in its /Kids they
+        // go. Splicing beside an existing sibling keeps the tree's shape:
+        // minting a new intermediate /Pages node would be a structural
+        // change to objects this operation was not asked to touch.
+        let (parent_id, kids_index) = Self::insertion_point(&target_slots, at)?;
+
+        let mut scratch: BTreeMap<ObjId, Object> = BTreeMap::new();
+        let mut mapping: BTreeMap<ObjId, ObjId> = BTreeMap::new();
+        let mut new_page_ids: Vec<ObjId> = Vec::with_capacity(source_pages.len());
+
+        for index in source_pages {
+            let Some(slot) = source_slots.get(*index) else {
+                continue;
+            };
+            let new_id = self.import_object(source, slot.id, &mut mapping, &mut scratch)?;
+            if let Some(Object::Dict(page)) = scratch.get(&new_id).cloned() {
+                let mut page = page;
+                // Re-point /Parent at the target's node. The source's
+                // parent is meaningless here, and following it during the
+                // copy would have dragged the whole source page tree over.
+                page.insert(Name::from(b"Parent"), Object::Reference(parent_id));
+                // An attribute the source page INHERITED but its new
+                // parent does not supply would silently change the page's
+                // size or resources, so it is written onto the page
+                // itself. Same rule `reorder_pages` applies when a page
+                // changes parent.
+                let landing = crate::page_tree::InheritedRaw::default();
+                for (key, replacement) in preserve_inherited(&page, &slot.inherited, &landing) {
+                    page.insert(Name::from(key), replacement);
+                }
+                scratch.insert(new_id, Object::Dict(page));
+            }
+            new_page_ids.push(new_id);
+        }
+        if new_page_ids.is_empty() {
+            return Ok(None);
+        }
+
+        // Splice into the owning node's /Kids.
+        let parent = scratch
+            .get(&parent_id)
+            .and_then(Object::as_dict)
+            .cloned()
+            .or_else(|| self.value(parent_id).and_then(Object::as_dict).cloned())
+            .ok_or(EditError::PageTree(PageTreeError::NoPageTreeRoot))?;
+        let mut kids = parent
+            .get(b"Kids")
+            .map(|o| self.resolve_value(o))
+            .and_then(Object::as_array)
+            .map(<[Object]>::to_vec)
+            .unwrap_or_default();
+        let cut = kids_index.min(kids.len());
+        for (offset, id) in new_page_ids.iter().enumerate() {
+            kids.insert(cut + offset, Object::Reference(*id));
+        }
+        let mut parent = parent;
+        parent.insert(Name::from(b"Kids"), Object::Array(kids));
+        scratch.insert(parent_id, Object::Dict(parent));
+
+        // /Count on the owning node and every ancestor above it. Nodes off
+        // this chain are untouched, which is what keeps the incremental
+        // save minimal.
+        let added = new_page_ids.len();
+        self.bump_counts(&target_slots, at, parent_id, added, &mut scratch);
+        Ok(Some(PageSplice {
+            scratch,
+            mapping,
+            source_slots,
+            new_page_ids,
+        }))
+    }
+
     /// Insert pages from **another document** into this session, as
     /// **one** undoable operation.
     ///
@@ -17515,88 +18064,17 @@ impl EditSession {
         position: crate::pageops::InsertPosition,
     ) -> Result<InsertOutcome, EditError> {
         self.check_certification()?;
-        if source_pages.is_empty() {
+        let Some(PageSplice {
+            scratch,
+            mapping,
+            source_slots,
+            new_page_ids,
+        }) = self.copy_and_splice(source, source_pages, position)?
+        else {
             return Ok(InsertOutcome::default());
-        }
-
-        let source_slots =
-            crate::page_tree::page_slots(source.graph()).map_err(EditError::PageTree)?;
-        let source_count = source_slots.len();
-        if let Some(&past) = source_pages.iter().find(|i| **i >= source_count) {
-            return Err(EditError::PageOutOfRange {
-                index: past,
-                count: source_count,
-            });
-        }
-
-        let target_slots = self.page_slots()?;
-        let target_count = target_slots.len();
-        let at = position.slot(target_count);
-
-        // The node that will own the arrivals, and where in its /Kids they
-        // go. Splicing beside an existing sibling keeps the tree's shape:
-        // minting a new intermediate /Pages node would be a structural
-        // change to objects this operation was not asked to touch.
-        let (parent_id, kids_index) = Self::insertion_point(&target_slots, at)?;
-
-        let mut scratch: BTreeMap<ObjId, Object> = BTreeMap::new();
-        let mut mapping: BTreeMap<ObjId, ObjId> = BTreeMap::new();
-        let mut new_page_ids: Vec<ObjId> = Vec::with_capacity(source_pages.len());
-
-        for index in source_pages {
-            let Some(slot) = source_slots.get(*index) else {
-                continue;
-            };
-            let new_id = self.import_object(source, slot.id, &mut mapping, &mut scratch)?;
-            if let Some(Object::Dict(page)) = scratch.get(&new_id).cloned() {
-                let mut page = page;
-                // Re-point /Parent at the target's node. The source's
-                // parent is meaningless here, and following it during the
-                // copy would have dragged the whole source page tree over.
-                page.insert(Name::from(b"Parent"), Object::Reference(parent_id));
-                // An attribute the source page INHERITED but its new
-                // parent does not supply would silently change the page's
-                // size or resources, so it is written onto the page
-                // itself. Same rule `reorder_pages` applies when a page
-                // changes parent.
-                let landing = crate::page_tree::InheritedRaw::default();
-                for (key, replacement) in preserve_inherited(&page, &slot.inherited, &landing) {
-                    page.insert(Name::from(key), replacement);
-                }
-                scratch.insert(new_id, Object::Dict(page));
-            }
-            new_page_ids.push(new_id);
-        }
-        if new_page_ids.is_empty() {
-            return Ok(InsertOutcome::default());
-        }
-
-        // Splice into the owning node's /Kids.
-        let parent = scratch
-            .get(&parent_id)
-            .and_then(Object::as_dict)
-            .cloned()
-            .or_else(|| self.value(parent_id).and_then(Object::as_dict).cloned())
-            .ok_or(EditError::PageTree(PageTreeError::NoPageTreeRoot))?;
-        let mut kids = parent
-            .get(b"Kids")
-            .map(|o| self.resolve_value(o))
-            .and_then(Object::as_array)
-            .map(<[Object]>::to_vec)
-            .unwrap_or_default();
-        let cut = kids_index.min(kids.len());
-        for (offset, id) in new_page_ids.iter().enumerate() {
-            kids.insert(cut + offset, Object::Reference(*id));
-        }
-        let mut parent = parent;
-        parent.insert(Name::from(b"Kids"), Object::Array(kids));
-        scratch.insert(parent_id, Object::Dict(parent));
-
-        // /Count on the owning node and every ancestor above it. Nodes off
-        // this chain are untouched, which is what keeps the incremental
-        // save minimal.
+        };
+        let _ = &mapping;
         let added = new_page_ids.len();
-        self.bump_counts(&target_slots, at, parent_id, added, &mut scratch);
 
         // ★ COUNT THE ORPHANS (`Pass 102.0`).
         //

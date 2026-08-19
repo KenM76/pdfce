@@ -1544,6 +1544,44 @@ enum Command {
         verify_undo: bool,
     },
 
+    /// **Merge a whole document into this one**, preserving the session
+    /// (ISO 32000-1 §12.7.3 for the form half).
+    ///
+    /// Unlike `insert-pages`, which builds a NEW document, this edits the
+    /// input incrementally and carries the source's form fields across so
+    /// they arrive **fillable** rather than as boxes nothing can fill.
+    ///
+    /// Field-name collisions are RENAMED (`Address` -> `Address_2`) and
+    /// counted. §12.7.3.1 makes the fully qualified name a field's identity,
+    /// so leaving a duplicate would make one field with two widgets, where
+    /// filling either fills both.
+    MergeDocument {
+        /// The document to merge INTO. Edited incrementally.
+        input: PathBuf,
+        /// The document to merge in. Every page of it comes across.
+        #[arg(long)]
+        source: PathBuf,
+        /// Put the merged pages before this 1-based target page.
+        #[arg(long, conflicts_with_all = ["after", "at_start"])]
+        before: Option<usize>,
+        /// Put the merged pages after this 1-based target page.
+        #[arg(long, conflicts_with_all = ["before", "at_start"])]
+        after: Option<usize>,
+        /// Put the merged pages at the very front.
+        #[arg(long, conflicts_with_all = ["before", "after"])]
+        at_start: bool,
+        /// Output PDF.
+        #[arg(long)]
+        output: PathBuf,
+        /// Save mode.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Round-trip the undo stack before saving and report whether the
+        /// document returned to its original bytes.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+
     /// **Report what each signature COVERS** — not whether it is valid.
     ///
     /// pdfce performs no cryptographic verification. This measures each
@@ -5387,6 +5425,25 @@ fn run() -> ExitCode {
         Command::ValidatePdfa { .. } => unimplemented_stub("validate-pdfa"),
         Command::Sign { .. } => unimplemented_stub("sign"),
         Command::ListOutline { input, flat } => cmd_list_outline(&input, flat),
+        Command::MergeDocument {
+            input,
+            source,
+            before,
+            after,
+            at_start,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_merge_document(
+            &input,
+            &source,
+            before,
+            after,
+            at_start,
+            &output,
+            mode,
+            verify_undo,
+        ),
         Command::AddNamedDest {
             input,
             name,
@@ -8620,6 +8677,131 @@ out_bytes={} undo_verified={} undo_identical={} delinearized={}",
         u32::from(r.delinearized),
     );
     finish_edit(input, &outcome)
+}
+
+/// `merge-document` — merge a whole document into the input, incrementally.
+///
+/// # Why this exists beside `insert-pages`
+///
+/// `insert-pages` calls `pageops::insert`, which assembles a **new**
+/// document. That is fine for a one-shot CLI invocation and fatal for an
+/// editor, which is why `pdfceGUI` could not wire Merge to it. This calls
+/// `EditSession::merge_document`, the incremental verb built for them —
+/// exposed here too because a CLI operator benefits from the same property
+/// in a different way: the output is an **incremental save**, so an existing
+/// signature over the input's byte range stays intact.
+#[allow(clippy::too_many_arguments)]
+fn cmd_merge_document(
+    input: &Path,
+    source_path: &Path,
+    before: Option<usize>,
+    after: Option<usize>,
+    at_start: bool,
+    output: &Path,
+    mode: SaveMode,
+    verify_undo: bool,
+) -> u8 {
+    let (source_bytes, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let merged = match std::fs::read(source_path) {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", source_path.display());
+            return exit::IO_ERROR;
+        }
+    };
+    let merged = match pdfce_core::document::Document::from_bytes(merged) {
+        Ok(doc) => doc,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", source_path.display());
+            return exit::NOT_A_PDF;
+        }
+    };
+
+    // 1-based on the command line, 0-based in the engine. `checked_sub`
+    // handles `--before 0` without wrapping.
+    let position = if at_start {
+        pdfce_core::pageops::InsertPosition::Start
+    } else if let Some(n) = before {
+        match n.checked_sub(1) {
+            Some(i) => pdfce_core::pageops::InsertPosition::Before(i),
+            None => {
+                eprintln!(
+                    "pdfce-cli: {}: --before is 1-based; 0 is not a page (use --at-start)",
+                    input.display()
+                );
+                return exit::EDIT_REFUSED;
+            }
+        }
+    } else if let Some(n) = after {
+        match n.checked_sub(1) {
+            Some(i) => pdfce_core::pageops::InsertPosition::After(i),
+            None => {
+                eprintln!(
+                    "pdfce-cli: {}: --after is 1-based; 0 is not a page (use --at-start)",
+                    input.display()
+                );
+                return exit::EDIT_REFUSED;
+            }
+        }
+    } else {
+        pdfce_core::pageops::InsertPosition::End
+    };
+
+    let outcome = match session.merge_document(&merged.view(), position) {
+        Ok(outcome) => outcome,
+        Err(err) => return report_edit_error(input, &err),
+    };
+
+    let saved = match save_edited(
+        &mut session,
+        &source_bytes,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        verify_undo,
+    ) {
+        Ok(saved) => saved,
+        Err(code) => return code,
+    };
+
+    let r = &saved.report;
+    println!(
+        "merge-document {} + {} mode={} -> {}; \
+pages={} fields={} renamed={} acroform_created={} changed={} objects={} \
+verbatim={} reserialized={} appended={} out_bytes={} undo_verified={} \
+undo_identical={} delinearized={}",
+        input.display(),
+        source_path.display(),
+        mode.name(),
+        output.display(),
+        outcome.pages_merged,
+        outcome.fields_merged,
+        outcome.fields_renamed,
+        u32::from(outcome.acroform_created),
+        saved.changed,
+        r.objects_written,
+        r.objects_verbatim,
+        r.objects_reserialized,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(saved.undo_verified),
+        u32::from(saved.undo_identical),
+        u32::from(r.delinearized),
+    );
+    if outcome.fields_renamed > 0 {
+        // Named rather than left in a token, because a renamed field breaks
+        // any script, FDF or calculation keyed on the old name -- and the
+        // operator has no other way to learn it happened.
+        eprintln!(
+            "pdfce-cli: {}: {} field(s) were renamed because the name was already taken; scripts or FDF keyed on the old names will no longer match",
+            input.display(),
+            outcome.fields_renamed,
+        );
+    }
+    finish_edit(input, &saved)
 }
 
 /// `list-outline` — the document's bookmarks, as a tree.
