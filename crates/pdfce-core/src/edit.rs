@@ -551,6 +551,19 @@ pub enum CommandKind {
     /// A dimension group's scale/units/format changed and every wired
     /// member's baked `/AP` label was regenerated (Pass 12.M2, the Pass 7.1
     /// regenerate pattern) — ONE undo entry however many members updated.
+    /// A dimension group was renamed. Metadata only — no appearance is
+    /// regenerated, because the name is not drawn.
+    RenameDimensionGroup,
+    /// A dimension group was deleted, carrying `members` reassigned
+    /// dimensions with it. ONE undo entry: a half-undone group deletion
+    /// would leave dimensions pointing at an id that no longer resolves.
+    DeleteDimensionGroup {
+        /// How many member dimensions moved to another group.
+        members: usize,
+    },
+    /// A placed ce dimension moved to another group and was RE-MEASURED
+    /// against that group's scale and format.
+    SetDimensionGroup,
     SetGroupScale {
         /// How many member dimensions had their appearance regenerated.
         members: usize,
@@ -2641,6 +2654,59 @@ fn apply_markup_style(
     }
 }
 
+/// What becomes of a dimension group's members when the group is deleted.
+///
+/// # Why this is a parameter and not a default
+///
+/// Because it is the **orphan question**, and pdfce has now met it twice: it
+/// is the same shape as `insert_pages` leaving widgets whose fields did not
+/// come with them. The answer in both places is the same — **report and
+/// refuse to guess**, rather than silently picking a fate for the dependents.
+///
+/// A ce dimension without a group has no scale, no number format and no
+/// unit; it cannot be measured or drawn. So "just unparent them" is not
+/// available as a quiet default, and an operator who deletes a group holding
+/// forty dimensions should be told that before it happens, not after.
+///
+/// [`EditSession::delete_dimension_group`] takes [`Self::Refuse`]; the
+/// `_with` variant takes whichever the operator chose, which is the same
+/// pairing `delete_pages` / `delete_pages_with` already uses for the
+/// separation question.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum GroupDeletion {
+    /// Refuse if the group still has members, naming how many
+    /// ([`EditError::DimensionGroupNotEmpty`]). **The default.**
+    #[default]
+    Refuse,
+    /// Move the members to another group first.
+    ///
+    /// The members are re-measured and their appearances regenerated against
+    /// the destination's scale and format, exactly as
+    /// [`EditSession::set_dimension_group`] does — a dimension that changed
+    /// group without changing what it reads would be showing a measurement
+    /// its own group does not agree with.
+    Reassign(crate::dimension::GroupId),
+    // ★ `DeleteMembers` IS DELIBERATELY ABSENT, and its absence is a scoping
+    // decision rather than an oversight.
+    //
+    // Deleting a dimension is not "drop the record": `delete_dimension` also
+    // removes the annotation from its page's `/Annots` array, which it finds
+    // through the annotation's own `/P` (§12.5.2). Doing that here would
+    // mean a SECOND implementation of that removal, and two paths for one
+    // operation is the defect class this project keeps writing down.
+    //
+    // Calling `delete_dimension` in a loop is the other tempting shape and
+    // is also wrong: it produces one undo entry per member, so undoing a
+    // group deletion would take forty presses and could stop halfway with
+    // the group already gone.
+    //
+    // The honest version needs `delete_dimension`'s core factored into a
+    // helper that returns writes and removals without committing. That is a
+    // real refactor of a shipped verb, not a clause in this one, and
+    // `Reassign` covers the case an operator actually reaches for.
+}
+
 /// Everything the original annotation expressed that the regenerated
 /// appearance does not reproduce.
 ///
@@ -3091,6 +3157,37 @@ pub enum EditError {
     #[error("no ce dimension with id {id} exists in this document")]
     DimensionNotFound {
         /// The dimension id that was asked for.
+        id: u32,
+    },
+    /// A dimension group still has members and the deletion policy is
+    /// [`GroupDeletion::Refuse`].
+    ///
+    /// Refused rather than cascaded because a ce dimension without a group
+    /// has no scale, no number format and no unit — it cannot be measured or
+    /// drawn — so there is no quiet default for what should happen to them.
+    /// The count is in the message because "this group is not empty" and
+    /// "this group holds forty dimensions" prompt different decisions.
+    // ONE LINE, no backslash continuation: `rustfmt` and patch tooling both
+    // eat the backslash and bake the indentation in as literal spaces.
+    // `tools/check-string-gaps.sh` caught this within seconds of it being
+    // written -- which is the whole difference the gate makes.
+    #[error(
+        "dimension group {id} still has {members} member(s); reassign them or choose a deletion policy"
+    )]
+    DimensionGroupNotEmpty {
+        /// The group that was asked to be deleted.
+        id: u32,
+        /// How many dimensions still belong to it.
+        members: usize,
+    },
+    /// [`GroupDeletion::Reassign`] named the group being deleted.
+    ///
+    /// Its own error rather than a silent no-op: the members would be moved
+    /// into a group that is removed in the same command, which is a request
+    /// that cannot be honoured in any reading.
+    #[error("cannot reassign dimension group {id}'s members to itself")]
+    DimensionGroupSelfReassign {
+        /// The group named as both source and destination.
         id: u32,
     },
     /// This document's ce-dimension sidecar was written by a **newer** pdfce
@@ -17725,6 +17822,232 @@ impl EditSession {
             trailer: None,
         });
         Ok(id)
+    }
+
+    /// Rename a dimension group. One undo entry.
+    ///
+    /// The group name is operator-facing metadata — it labels the group in a
+    /// shell's *Manage dimension groups* surface and appears nowhere on the
+    /// page — so **no appearance is regenerated**. That is the whole
+    /// difference between this and [`Self::set_group_scale`], and it is why
+    /// this verb is cheap: nothing it changes is drawn.
+    ///
+    /// # Names are not required to be unique, and that is deliberate
+    ///
+    /// Two groups may share a name. `GroupId` is the identity; the name is a
+    /// label. Refusing a duplicate would mean inventing a constraint the
+    /// sidecar format does not carry and the operator did not ask for — and
+    /// it would refuse a rename that is merely *in progress*, which is
+    /// exactly when a shell calls this.
+    ///
+    /// **The consequence belongs to the shell** and is stated so it is not
+    /// discovered: a list showing two identically-named groups is confusing,
+    /// and only the shell knows whether to disambiguate, warn, or leave it.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::DimensionGroupNotFound`] for an unknown group, plus the
+    /// encryption / certification / sidecar guards every dimension verb
+    /// carries.
+    pub fn rename_dimension_group(
+        &mut self,
+        group: crate::dimension::GroupId,
+        name: &str,
+    ) -> Result<(), EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+        self.check_dimension_sidecar()?;
+        let mut model = self.read_dimension_model();
+        let Some(g) = model.group_mut(group) else {
+            return Err(EditError::DimensionGroupNotFound { id: group.0 });
+        };
+        g.name = name.to_owned();
+        let catalog_write = self.catalog_dimension_write(&model)?;
+        self.commit(Command {
+            kind: CommandKind::RenameDimensionGroup,
+            objects: vec![catalog_write],
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(())
+    }
+
+    /// Delete a dimension group, refusing if it still has members.
+    ///
+    /// The safe door. [`Self::delete_dimension_group_with`] is the one that
+    /// takes a [`GroupDeletion`] policy — see that type for why the fate of
+    /// the members is a decision and not a default.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::DimensionGroupNotEmpty`] naming the member count, and
+    /// everything `delete_dimension_group_with` returns.
+    pub fn delete_dimension_group(
+        &mut self,
+        group: crate::dimension::GroupId,
+    ) -> Result<(), EditError> {
+        // The count is discarded here BECAUSE the default policy refuses a
+        // non-empty group -- so a success from this door always means zero
+        // members moved, and returning a number that is always 0 would
+        // invite a caller to branch on it.
+        self.delete_dimension_group_with(group, GroupDeletion::default())?;
+        Ok(())
+    }
+
+    /// Delete a dimension group, answering the what-about-the-members
+    /// question explicitly.
+    ///
+    /// Returns how many member dimensions were deleted or reassigned.
+    /// One undo entry covering the group, its members and every regenerated
+    /// appearance — a half-undone group deletion would leave dimensions
+    /// pointing at an id that no longer resolves.
+    ///
+    /// # Errors
+    ///
+    /// - [`EditError::DimensionGroupNotFound`] — unknown group, or an
+    ///   unknown destination for [`GroupDeletion::Reassign`].
+    /// - [`EditError::DimensionGroupNotEmpty`] — members exist and the policy
+    ///   is [`GroupDeletion::Refuse`].
+    /// - [`EditError::DimensionGroupSelfReassign`] — reassigning a group's
+    ///   members to itself, which would delete the group they were just put
+    ///   into.
+    /// - The encryption / certification / sidecar guards.
+    pub fn delete_dimension_group_with(
+        &mut self,
+        group: crate::dimension::GroupId,
+        policy: GroupDeletion,
+    ) -> Result<usize, EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+        self.check_dimension_sidecar()?;
+        let mut model = self.read_dimension_model();
+        if model.group(group).is_none() {
+            return Err(EditError::DimensionGroupNotFound { id: group.0 });
+        }
+
+        let members: Vec<crate::dimension::DimensionId> =
+            model.members(group).map(|d| d.id).collect();
+
+        // Validate BEFORE mutating anything, so a refusal leaves the model
+        // exactly as it was rather than half-applied.
+        match policy {
+            GroupDeletion::Refuse if !members.is_empty() => {
+                return Err(EditError::DimensionGroupNotEmpty {
+                    id: group.0,
+                    members: members.len(),
+                });
+            }
+            GroupDeletion::Reassign(dest) => {
+                if dest == group {
+                    return Err(EditError::DimensionGroupSelfReassign { id: group.0 });
+                }
+                if model.group(dest).is_none() {
+                    return Err(EditError::DimensionGroupNotFound { id: dest.0 });
+                }
+            }
+            GroupDeletion::Refuse => {}
+        }
+
+        let mut objects = Vec::new();
+        let moved = members.len();
+
+        match policy {
+            GroupDeletion::Reassign(dest) => {
+                for id in &members {
+                    if let Some(d) = model.dimension_mut(*id) {
+                        d.group = dest;
+                    }
+                }
+                // Re-measured against the destination's scale and format --
+                // the same shared regenerate path `set_group_scale` uses
+                // (R92), never a second one.
+                let wired: Vec<crate::dimension::DimensionId> = members
+                    .iter()
+                    .copied()
+                    .filter(|id| {
+                        model
+                            .dimension(*id)
+                            .is_some_and(|d| d.annot.is_some() && d.ap.is_some())
+                    })
+                    .collect();
+                objects = self.regenerate_dimension_writes(&model, &wired)?;
+            }
+            GroupDeletion::Refuse => {}
+        }
+
+        model.remove_group(group);
+        let catalog_write = self.catalog_dimension_write(&model)?;
+        objects.push(catalog_write);
+        self.commit(Command {
+            kind: CommandKind::DeleteDimensionGroup { members: moved },
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(moved)
+    }
+
+    /// Move a placed ce dimension into another group, **re-measuring it**.
+    ///
+    /// Returns `Ok(())`. One undo entry.
+    ///
+    /// # ★ This is not a field assignment, and that is the whole of it
+    ///
+    /// A ce dimension's *appearance* is derived from its group: the scale it
+    /// is measured at, the precision and unit it is formatted with, and the
+    /// standard it is drawn to all live on the group, not on the dimension
+    /// (decision 011 §2.3's cascade). So re-parenting changes what the
+    /// dimension **reads**, not merely which list it appears in.
+    ///
+    /// A version of this verb that wrote `d.group = dest` and stopped would
+    /// leave a dimension displaying a measurement its own group disagrees
+    /// with — the number would be right for the group it left. The
+    /// regeneration goes through the one shared path (R92), so `/Rect`,
+    /// `/Contents`, `/Measure` and `/L` all move together.
+    ///
+    /// # Errors
+    ///
+    /// - [`EditError::DimensionNotFound`] / [`EditError::DimensionGroupNotFound`].
+    /// - The encryption / certification / sidecar guards.
+    pub fn set_dimension_group(
+        &mut self,
+        dimension: crate::dimension::DimensionId,
+        group: crate::dimension::GroupId,
+    ) -> Result<(), EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+        self.check_dimension_sidecar()?;
+        let mut model = self.read_dimension_model();
+        if model.group(group).is_none() {
+            return Err(EditError::DimensionGroupNotFound { id: group.0 });
+        }
+        let Some(d) = model.dimension_mut(dimension) else {
+            return Err(EditError::DimensionNotFound { id: dimension.0 });
+        };
+        d.group = group;
+
+        let wired: Vec<crate::dimension::DimensionId> = model
+            .dimension(dimension)
+            .filter(|d| d.annot.is_some() && d.ap.is_some())
+            .map(|d| d.id)
+            .into_iter()
+            .collect::<Vec<_>>();
+        let mut objects = self.regenerate_dimension_writes(&model, &wired)?;
+        let catalog_write = self.catalog_dimension_write(&model)?;
+        objects.push(catalog_write);
+        self.commit(Command {
+            kind: CommandKind::SetDimensionGroup,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(())
     }
 
     /// Set a dimension group's scale + number format and **regenerate every

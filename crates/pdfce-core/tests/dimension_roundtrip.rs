@@ -16,10 +16,11 @@
 )]
 
 use pdfce_core::dimension::{
-    DEFAULT_GROUP_ID, DimensionKind, FitCircle, NumberFormat, ScaleState, Unit, deserialize_model,
+    DEFAULT_GROUP_ID, DimensionId, DimensionKind, FitCircle, GroupId, NumberFormat, ScaleState,
+    Unit, deserialize_model,
 };
 use pdfce_core::document::Document;
-use pdfce_core::edit::EditSession;
+use pdfce_core::edit::{EditError, EditSession, GroupDeletion};
 use pdfce_core::graph::ObjectGraph;
 use pdfce_core::object::{ObjId, Object};
 use pdfce_core::vector::{AxisConstraint, Point};
@@ -1459,4 +1460,190 @@ fn a_display_change_round_trips_through_the_sidecar() {
         show_diameter,
         "the diameter choice must survive save-and-reopen"
     );
+}
+
+/// Renaming a group changes the label and nothing else.
+#[test]
+fn a_dimension_group_can_be_renamed() {
+    let (_orig, mut s) = session();
+    let g = s
+        .add_dimension_group("Floor Plan", Unit::Millimeter)
+        .unwrap();
+    s.rename_dimension_group(g, "Ground Floor").unwrap();
+    let model = s.dimension_model();
+    assert_eq!(model.group(g).unwrap().name, "Ground Floor");
+    // Undo restores the old label -- one entry, like every other verb.
+    s.undo().unwrap();
+    assert_eq!(s.dimension_model().group(g).unwrap().name, "Floor Plan");
+}
+
+/// Names are NOT unique, deliberately -- see the verb's docs.
+#[test]
+fn two_groups_may_share_a_name() {
+    let (_orig, mut s) = session();
+    let a = s.add_dimension_group("Plan", Unit::Millimeter).unwrap();
+    let b = s.add_dimension_group("Other", Unit::Millimeter).unwrap();
+    s.rename_dimension_group(b, "Plan")
+        .expect("a duplicate name is a label collision, not an error");
+    let m = s.dimension_model();
+    assert_eq!(m.group(a).unwrap().name, m.group(b).unwrap().name);
+}
+
+/// An empty group deletes; a populated one REFUSES and says how many.
+///
+/// The refusal is the interesting half: it is the orphan question, and
+/// the count is in the error because "not empty" and "holds forty"
+/// prompt different decisions.
+#[test]
+fn deleting_a_populated_group_refuses_by_name() {
+    let (_orig, mut s) = session();
+    let empty = s.add_dimension_group("Empty", Unit::Millimeter).unwrap();
+    s.delete_dimension_group(empty)
+        .expect("an empty group deletes");
+    assert!(s.dimension_model().group(empty).is_none());
+
+    let g = s.add_dimension_group("Held", Unit::Millimeter).unwrap();
+    s.add_dimension(0, g, linear()).unwrap();
+    match s.delete_dimension_group(g) {
+        Err(EditError::DimensionGroupNotEmpty { members, .. }) => {
+            assert_eq!(members, 1);
+        }
+        other => panic!("a populated group must refuse by name; got {other:?}"),
+    }
+    // And the refusal left the model ALONE -- validated before mutating.
+    assert!(s.dimension_model().group(g).is_some());
+}
+
+/// Reassigning moves the members and then deletes the group.
+#[test]
+fn deleting_with_reassign_moves_the_members() {
+    let (_orig, mut s) = session();
+    let from = s.add_dimension_group("From", Unit::Millimeter).unwrap();
+    let to = s.add_dimension_group("To", Unit::Millimeter).unwrap();
+    let (_a, d) = s.add_dimension(0, from, linear()).unwrap();
+
+    let moved = s
+        .delete_dimension_group_with(from, GroupDeletion::Reassign(to))
+        .unwrap();
+    assert_eq!(moved, 1);
+    let m = s.dimension_model();
+    assert!(m.group(from).is_none(), "the group is gone");
+    assert_eq!(m.dimension(d).unwrap().group, to, "the member moved");
+}
+
+/// Reassigning to the group being deleted is refused by name.
+#[test]
+fn reassigning_a_group_to_itself_is_refused() {
+    let (_orig, mut s) = session();
+    let g = s.add_dimension_group("G", Unit::Millimeter).unwrap();
+    s.add_dimension(0, g, linear()).unwrap();
+    assert!(matches!(
+        s.delete_dimension_group_with(g, GroupDeletion::Reassign(g)),
+        Err(EditError::DimensionGroupSelfReassign { .. })
+    ));
+}
+
+/// An unknown destination is refused before anything is touched.
+#[test]
+fn reassigning_to_an_unknown_group_is_refused_and_changes_nothing() {
+    let (_orig, mut s) = session();
+    let g = s.add_dimension_group("G", Unit::Millimeter).unwrap();
+    s.add_dimension(0, g, linear()).unwrap();
+    assert!(matches!(
+        s.delete_dimension_group_with(g, GroupDeletion::Reassign(GroupId(9999))),
+        Err(EditError::DimensionGroupNotFound { .. })
+    ));
+    assert!(
+        s.dimension_model().group(g).is_some(),
+        "a refused deletion must leave the group in place"
+    );
+}
+
+/// ★ Moving a dimension between groups RE-MEASURES it.
+///
+/// # The assertion that makes this verb more than a field write
+///
+/// A ce dimension's label is derived from its GROUP's scale and number
+/// format, not from the dimension. So the two groups here are given
+/// deliberately different ones — 1:1 in millimetres, and 1 cm per point in
+/// metres — and the same geometry must therefore READ differently in each.
+///
+/// ★★ The first version of this test asserted only that `d.group` changed
+/// and that undo put it back. **That passes against an implementation that
+/// does nothing but write the field**, which is precisely the wrong version
+/// of this verb — a dimension displaying a measurement its own group
+/// disagrees with. It is the same mistake made an hour earlier in
+/// `a_foreign_revision_cloud_survives_a_restyle`, where a dictionary
+/// assertion could not see an appearance defect.
+///
+/// So this compares the annotation's `/Contents` — the label an operator
+/// actually reads — across the move.
+#[test]
+fn moving_a_dimension_between_groups_re_measures_it() {
+    let (_orig, mut s) = session();
+    let a = s.add_dimension_group("A", Unit::Millimeter).unwrap();
+    let b = s.add_dimension_group("B", Unit::Millimeter).unwrap();
+    s.set_group_scale(
+        a,
+        ScaleState::OneToOne,
+        NumberFormat::decimal(Unit::Millimeter, 1),
+    )
+    .unwrap();
+    s.set_group_scale(
+        b,
+        ScaleState::Calibrated { scale: 0.01 },
+        NumberFormat::decimal(Unit::Meter, 2),
+    )
+    .unwrap();
+
+    let (annot, d) = s.add_dimension(0, a, linear()).unwrap();
+
+    let label = |s: &EditSession| -> String {
+        let view = s.view();
+        let Object::Dict(dict) = view.resolved(annot) else {
+            panic!("the dimension annotation must resolve");
+        };
+        match dict.get(b"Contents").map(|o| view.resolve(o)) {
+            Some(Object::String(t)) => String::from_utf8_lossy(t).into_owned(),
+            other => panic!("/Contents must be a string; got {other:?}"),
+        }
+    };
+
+    let before = label(&s);
+    s.set_dimension_group(d, b).unwrap();
+    let after = label(&s);
+
+    assert_eq!(s.dimension_model().dimension(d).unwrap().group, b);
+    assert_ne!(
+        before, after,
+        "the label must be RE-MEASURED against the destination group: {before:?} \
+         and {after:?} are the same, which means the verb wrote a field and \
+         left the dimension reading its old group's scale"
+    );
+
+    // Undo restores both the group AND the label -- a half-undone move would
+    // leave the right group with the wrong number on it.
+    s.undo().unwrap();
+    assert_eq!(s.dimension_model().dimension(d).unwrap().group, a);
+    assert_eq!(
+        label(&s),
+        before,
+        "undo must restore the label, not only the group id"
+    );
+}
+
+/// A stale handle is refused rather than ignored, on both arguments.
+#[test]
+fn set_dimension_group_refuses_unknown_ids() {
+    let (_orig, mut s) = session();
+    let g = s.add_dimension_group("G", Unit::Millimeter).unwrap();
+    let (_a, d) = s.add_dimension(0, g, linear()).unwrap();
+    assert!(matches!(
+        s.set_dimension_group(d, GroupId(9999)),
+        Err(EditError::DimensionGroupNotFound { .. })
+    ));
+    assert!(matches!(
+        s.set_dimension_group(DimensionId(9999), g),
+        Err(EditError::DimensionNotFound { .. })
+    ));
 }

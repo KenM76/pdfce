@@ -668,6 +668,20 @@ impl DimensionModel {
         id
     }
 
+    /// Remove the group with `id`, returning whether it existed.
+    ///
+    /// **Does not touch its members.** Callers decide what happens to them
+    /// — see `EditSession::delete_dimension_group_with` and `GroupDeletion`,
+    /// where that decision is the operator's rather than this model's. A
+    /// remover that silently orphaned dimensions would leave records whose
+    /// `group` resolves to nothing, and every reader of this model would
+    /// then need a "what if the group is missing" branch.
+    pub fn remove_group(&mut self, id: GroupId) -> bool {
+        let before = self.groups.len();
+        self.groups.retain(|g| g.id != id);
+        self.groups.len() != before
+    }
+
     /// Insert a group with a caller-supplied id (used by the sidecar
     /// deserializer to reconstruct exact ids). Keeps `next_group` ahead of any
     /// inserted id. Does nothing if the id already exists.

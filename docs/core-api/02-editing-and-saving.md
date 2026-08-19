@@ -9,8 +9,8 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 |---|---|
 | **Date** | 2026-08-13 |
 | **Verified against** | `7031296` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
-| **Primary subject** | `crates/pdfce-core/src/edit.rs` (24,826 lines) |
-| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 116 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
+| **Primary subject** | `crates/pdfce-core/src/edit.rs` (25,324 lines) |
+| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 120 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
 
@@ -61,11 +61,11 @@ Five consequences a GUI author must internalise before writing any code:
 
 ---
 
-## 1. Verb index — all 116 public `EditSession` methods
+## 1. Verb index — all 120 public `EditSession` methods
 
-**Count: 116.** Established by brace-matched extraction of the four
-`impl EditSession` blocks at `edit.rs:4196`, `edit.rs:8135`, `edit.rs:17525`,
-`edit.rs:19592`, matching `pub fn` / `pub const fn` (43 + 51 + 21 + 1 = 116).
+**Count: 120.** Established by brace-matched extraction of the four
+`impl EditSession` blocks at `edit.rs:4313`, `edit.rs:8252`, `edit.rs:17642`,
+`edit.rs:19935`, matching `pub fn` / `pub const fn` (43 + 51 + 25 + 1 = 120).
 There are no `EditSession` methods in any other file
 (`grep -rn "impl EditSession" crates/pdfce-core/src/` returns those four lines only).
 
@@ -421,7 +421,41 @@ Both take `&mut self` despite changing nothing (they read `self.view()`).
 `AttachmentTreeUnsupported` (`edit.rs:2374`) is a refused name-tree shape;
 `AttachmentNotFound` (`edit.rs:2386`) is an unknown key.
 
-### 1.19 ce dimensions (14) — detail in part 3
+### 1.19 ce dimensions (18) — detail in part 3
+
+> #### ★ Group membership, renaming and deletion — added 2026-08-19
+>
+> Requested by `pdfceGUI` for the *Manage dimension groups* window and the
+> Format tab's **Group** control, both of which had no verb behind them: a
+> group could be created and never renamed or deleted, and a placed ce
+> dimension took its `GroupId` at creation with no way to change it.
+>
+> | I want to… | Call | Returns |
+> |---|---|---|
+> | Rename a group | `rename_dimension_group(&mut self, group: GroupId, name: &str) -> Result<(), EditError>` | Metadata only — **no appearance is regenerated**, because the name is not drawn. Names are **not** required to be unique; `GroupId` is the identity. |
+> | Delete an empty group | `delete_dimension_group(&mut self, group: GroupId) -> Result<(), EditError>` | Refuses a populated group with `DimensionGroupNotEmpty { members }`. |
+> | Delete, answering the members question | `delete_dimension_group_with(&mut self, group: GroupId, policy: GroupDeletion) -> Result<usize, EditError>` | Count of members reassigned. ONE undo entry. |
+> | **Move a dimension to another group** | `set_dimension_group(&mut self, dimension: DimensionId, group: GroupId) -> Result<(), EditError>` | ★ **RE-MEASURES it** — see below. |
+>
+> ★★ **`set_dimension_group` is not a field assignment, and a shell must not
+> treat it as one.** A ce dimension's label is derived from its GROUP's scale,
+> precision, unit and standard (the decision 011 §2.3 cascade). Re-parenting
+> therefore changes what the dimension **reads**, and the verb regenerates the
+> baked `/AP`, `/Rect`, `/Contents`, `/Measure` and `/L` through the one shared
+> path. Undo restores the label as well as the group id.
+>
+> ★ **`GroupDeletion` has no `DeleteMembers`, deliberately.** Deleting a
+> dimension also removes its annotation from the page's `/Annots` array, and
+> doing that here would mean a second implementation of `delete_dimension`'s
+> removal — while calling it in a loop would produce one undo entry per
+> member, so undoing a group deletion would take forty presses and could stop
+> halfway with the group already gone. `Reassign` covers the case an operator
+> reaches for; the rest is a follow-on that factors `delete_dimension`'s core
+> into a helper.
+>
+> **A ce dimension without a group cannot be measured or drawn** — it has no
+> scale, format or unit — which is why the members question has no quiet
+> default and the deletion refuses rather than orphaning them.
 
 | I want to… | Call | Line | Returns |
 |---|---|---|---|
