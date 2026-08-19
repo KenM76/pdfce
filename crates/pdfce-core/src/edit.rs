@@ -2901,6 +2901,64 @@ pub struct InsertOutcome {
     /// carries that barrier, dropping the key is the safe behaviour and
     /// this counter is the honesty owed for it.
     pub orphaned_widgets_unrecoverable: usize,
+    /// Whether the SOURCE carried a `/PageLabels` number tree (§12.4.2)
+    /// whose labels did **not** come across with the pages.
+    ///
+    /// # ★ pdfce deliberately does NOT match Acrobat here
+    ///
+    /// This is a measured divergence, not an omission.
+    /// `Acrobat_Features/core_ops__page_labels_and_bates_interaction.md`
+    /// (2026-08-19, three independent Adobe Community threads, 2024–2025)
+    /// establishes that Acrobat does something neither obvious option would
+    /// predict: it **actively overwrites** every inserted page with a static
+    /// copy of the label already displayed on the target page immediately
+    /// *preceding* the insertion point. Not the source's label, and not an
+    /// incrementing continuation — the same single string on all of them.
+    /// The sourced example: a twelve-page chapter labelled `10-1`…`10-12`,
+    /// inserted after a page labelled `9-45`, came out with all twelve
+    /// pages displaying `9-45`.
+    ///
+    /// That is a **wrong label on every inserted page**, written silently,
+    /// and the threads it is sourced from are complaints about it. Matching
+    /// it would be matching a defect. pdfce writes nothing to `/PageLabels`
+    /// on an insert, so the inserted pages simply continue whatever range
+    /// already covered that position — the outcome §12.4.2's per-page
+    /// computation gives on its own — and reports the two facts an operator
+    /// needs instead (this field and [`Self::page_labels_stale`]).
+    ///
+    /// The operator's standing instruction is that parity with Acrobat is a
+    /// floor rather than a target, and that a divergence gets recorded
+    /// rather than hidden. This is the record.
+    ///
+    /// # Why the labels are not carried either
+    ///
+    /// The same reason `pageops::assemble` gives for
+    /// `AssembleReport::page_labels_dropped`: a label tree describes
+    /// *physical page positions*, so carrying one onto a subset inserted at
+    /// an arbitrary offset produces labels confidently wrong about pages
+    /// that are not in the file. `assemble` exposes
+    /// `AssembleOptions::carry_page_labels` for callers who want the other
+    /// answer with their eyes open; this verb has no options parameter and
+    /// takes the conservative one.
+    pub source_page_labels_dropped: bool,
+    /// Whether the TARGET has a `/PageLabels` tree whose ranges now
+    /// describe different physical pages than before (§12.4.2).
+    ///
+    /// A label range is keyed by physical page index, so inserting pages
+    /// anywhere except the very end shifts every later page out from under
+    /// its range. pdfce does not renumber — matching the ruling already
+    /// recorded for `delete_pages`, which `Acrobat_Features` confirms is
+    /// Acrobat's behaviour for every structural operation — **and says so**,
+    /// which is the parity-plus half: Acrobat leaves them stale and silent.
+    ///
+    /// Distinct from [`Self::source_page_labels_dropped`] because the
+    /// operator's next action differs. A stale tree wants renumbering; a
+    /// dropped one wants creating. Reporting a single merged "something is
+    /// wrong with page labels" would name neither remedy.
+    ///
+    /// `false` when the target has no label tree at all — nothing can be
+    /// stale that was never stated.
+    pub page_labels_stale: bool,
 }
 
 /// What [`EditSession::adopt_widget`] did — returned rather than inferred,
@@ -17593,6 +17651,20 @@ impl EditSession {
             })
             .count();
 
+        // Page labels (§12.4.2). pdfce writes NOTHING here — see the two
+        // fields' docs for why Acrobat's actual behaviour is not matched.
+        // Both are read from the catalogs rather than inferred from the
+        // page count, because "has a label tree" is the only thing that
+        // makes either statement true.
+        let source_page_labels_dropped = source
+            .graph()
+            .catalog_dict()
+            .is_some_and(|c| c.contains_key(b"PageLabels"));
+        let page_labels_stale = self
+            .graph()
+            .catalog_dict()
+            .is_some_and(|c| c.contains_key(b"PageLabels"));
+
         let objects: Vec<ObjectWrite> = scratch
             .into_iter()
             .map(|(id, value)| ObjectWrite {
@@ -17611,6 +17683,8 @@ impl EditSession {
             pages_inserted: added,
             orphaned_widgets,
             orphaned_widgets_unrecoverable,
+            source_page_labels_dropped,
+            page_labels_stale,
         })
     }
 

@@ -507,3 +507,160 @@ counting by /FT would say 1"
     }
     assert!(session.adopt_widget(named[0], None).is_ok());
 }
+
+// ---------------------------------------------------------------------------
+// Page labels (§12.4.2) — `Pass 103.2`
+// ---------------------------------------------------------------------------
+
+/// A document with a `/PageLabels` number tree over `pages` pages, labelled
+/// `i, ii, iii…` — a shape byte-authored because no fixture carries one.
+fn labelled_doc(pages: usize) -> Vec<u8> {
+    let kids: Vec<String> = (0..pages).map(|i| format!("{} 0 R", i + 3)).collect();
+    let mut objects: Vec<(u32, String)> = vec![
+        (
+            1,
+            "<< /Type /Catalog /Pages 2 0 R /PageLabels << /Nums [0 << /S /r >>] >> >>".to_owned(),
+        ),
+        (
+            2,
+            format!(
+                "<< /Type /Pages /Kids [{}] /Count {pages} /MediaBox [0 0 200 100] \
+/Resources << >> >>",
+                kids.join(" ")
+            ),
+        ),
+    ];
+    for i in 0..pages {
+        objects.push((
+            u32::try_from(i + 3).expect("small"),
+            "<< /Type /Page /Parent 2 0 R >>".to_owned(),
+        ));
+    }
+    let refs: Vec<(u32, &str)> = objects.iter().map(|(n, b)| (*n, b.as_str())).collect();
+    build(&refs)
+}
+
+/// A document with no `/PageLabels` at all.
+fn unlabelled_doc(pages: usize) -> Vec<u8> {
+    let kids: Vec<String> = (0..pages).map(|i| format!("{} 0 R", i + 3)).collect();
+    let mut objects: Vec<(u32, String)> = vec![
+        (1, "<< /Type /Catalog /Pages 2 0 R >>".to_owned()),
+        (
+            2,
+            format!(
+                "<< /Type /Pages /Kids [{}] /Count {pages} /MediaBox [0 0 200 100] \
+/Resources << >> >>",
+                kids.join(" ")
+            ),
+        ),
+    ];
+    for i in 0..pages {
+        objects.push((
+            u32::try_from(i + 3).expect("small"),
+            "<< /Type /Page /Parent 2 0 R >>".to_owned(),
+        ));
+    }
+    let refs: Vec<(u32, &str)> = objects.iter().map(|(n, b)| (*n, b.as_str())).collect();
+    build(&refs)
+}
+
+fn insert(target: Vec<u8>, source: Vec<u8>) -> (EditSession, pdfce_core::edit::InsertOutcome) {
+    let src = Document::from_bytes(source).expect("source must parse");
+    let mut session = EditSession::new(Document::from_bytes(target).expect("target must parse"));
+    let outcome = session
+        .insert_pages(&src.view(), &[0], InsertPosition::End)
+        .expect("insert must succeed");
+    (session, outcome)
+}
+
+/// Would catch: the two page-label facts being conflated, or either being
+/// reported when it is not true.
+///
+/// They are separate because the operator's next action differs — a stale
+/// tree wants renumbering, a dropped one wants creating — so all four
+/// combinations of "source has labels" × "target has labels" are checked
+/// rather than the one case that happens to be handy.
+#[test]
+fn the_two_page_label_facts_are_reported_independently() {
+    let cases = [
+        // (target labelled, source labelled, expect_dropped, expect_stale)
+        (true, true, true, true),
+        (true, false, false, true),
+        (false, true, true, false),
+        (false, false, false, false),
+    ];
+    for (t, s, want_dropped, want_stale) in cases {
+        let target = if t {
+            labelled_doc(2)
+        } else {
+            unlabelled_doc(2)
+        };
+        let source = if s {
+            labelled_doc(1)
+        } else {
+            unlabelled_doc(1)
+        };
+        let (_, outcome) = insert(target, source);
+        assert_eq!(
+            outcome.source_page_labels_dropped, want_dropped,
+            "target_labelled={t} source_labelled={s}: dropped flag"
+        );
+        assert_eq!(
+            outcome.page_labels_stale, want_stale,
+            "target_labelled={t} source_labelled={s}: stale flag"
+        );
+    }
+}
+
+/// Would catch: pdfce acquiring Acrobat's behaviour — writing a label for the
+/// inserted range.
+///
+/// `Acrobat_Features/core_ops__page_labels_and_bates_interaction.md` records
+/// that Acrobat overwrites every inserted page with a static copy of the
+/// label on the target page preceding the insertion point: a twelve-page
+/// chapter labelled `10-1`…`10-12`, inserted after a page labelled `9-45`,
+/// came out with all twelve showing `9-45`. That is a wrong label on every
+/// inserted page, written silently, and the threads documenting it are
+/// complaints.
+///
+/// So this asserts the target's `/PageLabels` tree is **byte-identical**
+/// after the insert. Not "still present" — identical, because a writer that
+/// appended a new static range for the inserted pages would leave it present
+/// and changed, and that is precisely the behaviour being refused.
+#[test]
+fn an_insert_does_not_touch_the_targets_page_label_tree() {
+    let target = labelled_doc(2);
+    let before = {
+        let doc = Document::from_bytes(target.clone()).expect("parse");
+        let Some(Object::Dict(catalog)) = doc
+            .catalog_id()
+            .and_then(|id| doc.get(id).map(|io| &io.value))
+        else {
+            panic!("no catalog")
+        };
+        catalog.get(b"PageLabels").map(|o| doc.resolve(o).clone())
+    };
+    assert!(before.is_some(), "fixture premise: the target IS labelled");
+
+    let (session, outcome) = insert(target, labelled_doc(1));
+    assert!(outcome.source_page_labels_dropped);
+    assert!(outcome.page_labels_stale);
+
+    let (bytes, _) = session
+        .to_incremental_bytes(&SaveOptions::identity())
+        .expect("save must succeed");
+    let doc = Document::from_bytes(bytes).expect("pdfce's own output must reparse");
+    let Some(Object::Dict(catalog)) = doc
+        .catalog_id()
+        .and_then(|id| doc.get(id).map(|io| &io.value))
+    else {
+        panic!("no catalog")
+    };
+    let after = catalog.get(b"PageLabels").map(|o| doc.resolve(o).clone());
+    assert_eq!(
+        after, before,
+        "the label tree must be untouched — pdfce does not write a label it \
+cannot justify, and specifically does not copy the anchor page's label onto \
+the inserted range the way Acrobat does"
+    );
+}

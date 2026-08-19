@@ -9,7 +9,7 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 |---|---|
 | **Date** | 2026-08-13 |
 | **Verified against** | `7031296` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
-| **Primary subject** | `crates/pdfce-core/src/edit.rs` (26668 lines) |
+| **Primary subject** | `crates/pdfce-core/src/edit.rs` (26,742 lines) |
 | **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 123 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
@@ -576,6 +576,45 @@ no name for `list-fields` to show. Note that **`pdfce-cli insert-pages` does
 not produce orphans**: it calls `pageops::assemble`, which merges `/AcroForm`
 (and reports `fields_renamed=` / `fields_dropped=`). Only
 `EditSession::insert_pages` orphans.
+#### ★ Page labels on insert — `Pass 103.2`, a measured divergence from Acrobat
+
+`InsertOutcome` gained two more fields (both additive, `#[non_exhaustive]`):
+
+| field | means |
+|---|---|
+| `source_page_labels_dropped` | the source had a `/PageLabels` tree; its labels did not come across |
+| `page_labels_stale` | the target has one, and its ranges now describe different physical pages |
+
+**pdfce writes nothing to `/PageLabels` on an insert.** That is deliberate,
+and it is not what Acrobat does.
+
+`Acrobat_Features/core_ops__page_labels_and_bates_interaction.md`
+(2026-08-19; three independent Adobe Community threads, 2024–2025) found a
+third behaviour neither obvious option predicts: Acrobat **actively
+overwrites** every inserted page with a static copy of the label displayed on
+the target page immediately *preceding* the insertion point — not the
+source's label, not an incrementing continuation, the same single string on
+all of them. The sourced case: a twelve-page chapter labelled `10-1`…`10-12`,
+inserted after a page labelled `9-45`, came out with all twelve showing
+`9-45`.
+
+That is a wrong label on every inserted page, written silently, and the
+threads it is sourced from are complaints about it. Matching it would be
+matching a defect. pdfce leaves the tree alone — so inserted pages continue
+whatever range already covered that position, which is what §12.4.2's
+per-page computation gives on its own — and reports the two facts instead.
+
+The labels are not **carried** either, for the reason
+`pageops::assemble` already gives for its `page_labels_dropped`: a label tree
+describes *physical page positions*, so carrying one onto a subset inserted
+at an arbitrary offset yields labels confidently wrong about pages that are
+not in the file. `pageops::assemble` exposes `carry_page_labels` for callers
+who want the other answer with their eyes open; `EditSession::insert_pages`
+has no options parameter and takes the conservative one.
+
+The two flags are separate because **the remedies differ** — a stale tree
+wants renumbering, a dropped one wants creating. A merged "something is wrong
+with page labels" would name neither.
 ### 1.21 Named destinations (1)
 
 > #### ★ Added 2026-08-19 — `Pass 103.3`
