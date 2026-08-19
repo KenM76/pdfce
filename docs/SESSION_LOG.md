@@ -49985,3 +49985,222 @@ left** — dated sub-entries, frozen by construction.
 dimensions** — the objects pdfce authors (`Group`, `GroupId`,
 `set_dimension_group`, `DimensionGroupNotEmpty`). **No pdf dimension is
 involved anywhere in this filing.**
+
+## 2026-08-19 (hundred-and-ninetieth filing) — **★ THE COMMIT THAT FIXED THE STALE CLAIMS DID NOT FIX THE ONE ITS SUBJECT LINE NAMES: `b1ea628` closed TWO of the 189th filing's six survivors, not three, and item 23 — the survivor sitting inside the comment headed *"★ SEVENTH copy … corrected 2026-08-18"* — is BYTE-IDENTICAL at the same line numbers. ★★ `R199` MINTED: a recorded blocker is a dated reading, and it is self-sealing because its function is to stop the person who would refute it. ★★★ `Pass 105.0` — a request whose arithmetic the requester could have written in four lines, filed anyway to buy a SINGLE IMPLEMENTATION, request-to-ship in 31 minutes.**
+
+**Shipped:**
+- **`Pass 105.0`** (`301c162`) — **PASS ID MINTED BY THIS FILING**, family
+  105 confirmed free (ceiling was 104). `NewImage::effective_dpi() ->
+  (f64, f64)` and `NewImage::below_screen_resolution() -> bool`, pure
+  `&self`, measured on the **placed** rectangle. `image_disclosures`' own
+  copy of the formula **deleted**; it calls `spec.effective_dpi()`.
+  3 tests added, `tests/image_placement.rs` now **52** total.
+- **`b1ea628`** — no Pass ID. Three stale claims cleared, a stated blocker
+  falsified, `Pass 102.0`'s CLI gap ruled **`—`** on a measurement.
+- **`01fbdc5`** — no Pass ID, **docs-only and therefore gate-exempt, but
+  not filing-exempt.** Amends `docs/compositor-plan.md`, the plan of
+  record `Pass 97.x` is scoped from. Discharges owed items 21 and 22.
+
+**Decisions made this session:**
+- **`R199` MINTED** (librarian's act, precedent `R197`): *a recorded
+  blocker is a dated reading, not a standing fact.* Ceiling **`R198` →
+  `R199`**, next free **`R200`**. Warrant is in *Standing rules* and turns
+  on **mechanism**, not on the two-instance count — see *Findings*.
+- **`Pass 102.0`'s CLI box ruled `—`, not `[ ]`**, on a measurement rather
+  than an assumption. The 189th filing's owed item 16 is **closed** and
+  its `[ ]` was the over-report.
+- **`Pass 105.0`'s CLI box ruled `—`, gui ruled `[ ]`** — the dispatch
+  delegated this call explicitly. Warrant in `ROADMAP.md`'s 190th owed
+  box; overturnable if a `--dry-run` on `add-image` is wanted.
+- **No decision record minted.** Ceiling stays **071**, next free **072**.
+- **Pass ceiling 104 → 105**, next free **106**.
+
+**Findings + decisions:**
+
+**★★ A SWEEP'S REPORT AND A SWEEP'S DISCHARGE ARE DIFFERENT ACTS, AND THE
+SECOND IS THE ONE NOBODY CHECKS.** The 189th filing reported six rule-11
+survivors. `b1ea628`'s message says three were closed. **Checked against
+live source rather than against the commit message: TWO closed (24, 25),
+THREE untouched (23, 26, 27), one partly (28).** Item 23 —
+`main.rs:7102-7103` — is byte-identical at the same line numbers, and
+`git show b1ea628 -- crates/pdfce-cli/src/main.rs` touches only
+`@@ -7330,14` and `@@ -22867,6`. So **the commit whose subject is *"the
+correction of the seventh stale claim became the eighth"* did not fix the
+eighth.** The three untouched are precisely the three where **every
+individual fact is still true and only the conclusion is false** (26), the
+subject is a *variant's applicability* rather than a named counter (27),
+or the stale text sits inside a comment block *about staleness* (23).
+**Recommendation, filed as method rather than as a rule:** every future
+rule-11 sweep opens by re-verifying the PREVIOUS sweep's items against
+live source before adding new ones. It cost four `sed` commands here.
+
+**★★★ `R199` — AND THE WARRANT IS THE MECHANISM, NOT THE COUNT OF TWO.**
+A stale **figure** misleads and dies the next time somebody measures. A
+stale **blocker** is never re-measured, **because its entire function is
+to stop the person who would have measured it.** Self-sealing: the record
+suppresses the check that would refute it, so it dies only by somebody
+**ignoring** it. Both instances died by accident —
+*"needs `Pass 97.0`'s buffer"* falsified by `972ddbb` shipping without
+one, *"gated on `iccce`"* falsified by `bd9d5ef` shipping without it.
+**In both cases the blocker named a REAL obligation and attached it to the
+WRONG work**, so neither was a mistake when written. **Measured
+consequence, not hypothetical:** instance 1 propagated into
+`docs/compositor-plan.md` and helped support the *"16 of the 18"* thesis
+that `Pass 97.x` is scoped from. So **a stale blocker did not merely sit
+there; it ranked work.** `R197` cannot absorb this — its scope is
+exhaustively enumerated as counts, ratios, headroom figures, coverage
+fractions and tallies, and widening it would destroy that enumeration.
+**A third live instance is on disk right now** (`gstate.rs:476`,
+*"is a Pass of its own"* — that Pass shipped as `85.4b`), which is the
+rule's first test.
+
+**★ THE COROLLARY IS THE CHEAPER HALF, and `b1ea628` already performed
+it:** when a blocker is falsified, **keep it on the page with the
+falsification beside it.** A deleted blocker teaches nobody; a struck one
+teaches the next reader to distrust the next blocker.
+
+**★★ A CORRECTION WRITTEN IN THE PRESENT TENSE IS MORE DURABLE THAN THE
+ERROR IT FIXED.** `blend_modes_applied` carried a *"★ CORRECTION, same
+day"* asserting the four modes *"cannot reach this counter"* — true
+2026-08-18, false 2026-08-19. **Two corrections deep on one paragraph.**
+Fix: every layer now carries its date. This is `R197`'s *"carry the date"*
+branch arriving at a **claim** rather than a **figure**, and hard rule
+10's corollary — *a correction is a claim* — arriving from the other side.
+**Recorded, not minted:** the fix it wants is `R197`'s clause by analogy,
+and `R199` already covers the blocker-shaped subset.
+
+**★★★ THE ARITHMETIC WAS NOT THE ASK — `Pass 105.0`.** The requester
+stated they could write `display_size_px().0 / (placed_width_pt / 72.0)`
+in four lines and be right today, and filed a request anyway, quoting
+`placed_rect()`'s own doc comment back: *"re-deriving the arithmetic in
+the GUI is how a preview and a result drift apart."* Then named the kill
+condition: *"I would rather have nothing than have two implementations."*
+So **the outcome's copy of the formula was DELETED rather than the preview
+being added beside it.** ★ **And the two copies were already one edit from
+being a divergence:** the caller was *already* passing
+`spec.placed_rect()` into the disclosure builder, so outcome and preview
+were reading the same rectangle through two copies of one formula.
+Nothing was wrong; nothing had drifted. **That is the only moment this
+class is cheap to remove**, and it is the argument for honouring a request
+whose arithmetic is trivial.
+
+**★ A ZERO-AREA PLACEMENT RETURNS `(0.0, 0.0)`, AND THE REASON IS ABOUT
+THE TEST.** `NaN != NaN`, so an `inf`/`NaN` return would have made the
+preview-equals-outcome assertion **pass vacuously** — the one test whose
+whole job is to catch a second implementation would have stopped being
+able to. Sabotage-verified with the **plausible** wrong implementation
+(re-deriving from `spec.rect`, which is what the requester's own sketch
+would have produced); `contain, letterboxed` fails immediately.
+
+**★★ `R151`'s QUALIFIER IS NOW MEASURED THREE TIMES IN EIGHT DAYS, ALL
+FROM ONE SHELL, ALL THE SAME SHAPE: A MISSING MEMBER OF A SHIPPED
+CLUSTER.** `placed_rect()` without `effective_dpi()`;
+`add_dimension_group` without rename/delete; `delete_pages` returning a
+`DeleteOutcome` while `insert_pages` returned nothing. **None is a missing
+FEATURE; each is a missing SIBLING**, and in all three cases pdfce did not
+notice and the consuming shell did.
+
+**★ `pdfce-cli insert-pages` IS A DIFFERENT VERB, MEASURED.** Same
+12-field source page: CLI route gives `/AcroForm` **present**, 13 widgets,
+`fields_dropped=0`; `EditSession::insert_pages` gives 13 widgets and
+**no** `/AcroForm`. So the CLI route merges and has no count to report,
+and a one-shot CLI has no open session to insert into. **`—`, not
+`[ ]`.** The **collision is a hazard in its own right and is NOT closed by
+documenting it** (owed 29) — it is the one item reported back to the
+engineer under the dispatch's *"actively wrong in shipped code"*
+exception, because the next session-verb subcommand written without a
+ruling is where it bites.
+
+**★★ `R196`, SIXTH EXERCISE — AND THE DISPATCH WAS WRONG ABOUT THE
+CHANNEL FOR THE SECOND CONSECUTIVE FILING, IN THE SAME DIRECTION.** It
+reported *"three replies now sit in the channel's open folder"*; `ls -la`
+on both directories shows **two** — the third
+(`2026-08-19-ce-dimension-group-verbs-reply.md`) is in `archive\`,
+correctly paired, **which is exactly what the 189th filing found and
+recorded one filing earlier.** So **a correction filed in `ROADMAP.md`
+does not reach a monitoring loop's working memory.** Nothing mechanical
+closes that gap; the only carrier is running `ls` again. Also found: the
+open folder now holds **4 files, of which 2 are a CLOSED PAIR awaiting
+archival** — a future listing reading "4 files" must not be read as "4
+open requests".
+
+**★ `01fbdc5` IS GATE-EXEMPT AND NOT FILING-EXEMPT**, and the distinction
+is now written into the *Shipped* header. It is docs-only so
+`check-commits-filed.py` never asks for it — the same exemption `R198`
+protects — but it amends the **plan of record `Pass 97.x` is scoped
+from**. So **the set of commits a filing owes is not the set a gate can
+see.** It was committed at 02:15, eighteen minutes after the 189th
+filing's own commit, so no earlier filing could have caught it.
+
+**★ AND `01fbdc5` LEAVES A SURVIVOR, which is owed 28's remainder.**
+Its preservation ruling is right — amend at the head, freeze §1/§1.1 as
+dated — but §1.1's body at `:104-106` still asserts present-tense and
+undated that pdfce *"declines them outright"* and reports
+`applied=11, ignored=4` *"in every one"*. **A reader arriving at §1.1 by
+grep or section link never sees the head amendment.** Same delivery
+failure `R197` records for figures, here for a claim.
+
+**Still in flight:**
+- **Owed items 23, 26, 27** — the three rule-11 survivors `b1ea628` did
+  not touch. **26 is also `R199`'s third live instance.**
+- **Owed items 20, 28-remainder, 29–33** — new or carried; full table in
+  `ROADMAP.md`'s 190th owed box.
+- **Owed items 1, 3, 4, 6, 7, 10, 15, 17, 18, 19** carry forward
+  unchanged. **16, 21, 22 are CLOSED this filing; 5 stays partly
+  discharged (1 of 5).**
+- **`Pass 97.x`, the colorant compositor** — still top of the queue, and
+  its plan now carries the amendment but **not** the re-derived share.
+  **Owed 20 (re-run and re-cluster Ghent) is the prerequisite**, and it is
+  unchanged from the 189th filing's *For next session* item 1.
+- **`Pass 102.1`, `Pass 103.0`–`103.3`, `Pass 101.1`** — all unchanged
+  from the 189th filing.
+- **`pdfceGUI` reply owed:** items 2–5 of the five-part `insert_pages`
+  reply. The image-DPI request is answered and shipped.
+
+**For next session:**
+1. **Close owed 23, 26, 27 — and 26 first**, because it is the one a
+   reader of `blend_mode_from_name` still concludes pdfce cannot render
+   Hue/Saturation/Color/Luminosity from. All three are in `crates/`,
+   outside this role's remit.
+2. **Rule on the `insert-pages` name collision (owed 29) before writing
+   any session-verb CLI subcommand.** Documenting it is not resolving it.
+3. **Answer owed 31 in `blend_nonsep.rs`'s module doc** — one sentence
+   saying whether §11.3.5.3's K-selection is inside it. Two documents
+   currently answer differently about two different obligations wearing
+   one clause number.
+4. **Re-run and re-cluster Ghent (owed 20).** Unchanged, and now blocking
+   the compositor plan's re-derivation.
+5. **Archive the image-DPI request/reply pair** if that channel's
+   convention wants it (owed 32) — not this project's call to make.
+
+**Ledger effects (all read from `tools/check-ledger-numbers.py`, run this
+filing — `clean — no duplicate Pass, rule, or decision numbers`):**
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **104** | **105** (`Pass 105.0`, minted here) |
+| decision records | **071** | **071** (none minted) |
+| standing rules | **R198** | **R199** (`R199` minted here) |
+| `SESSION_LOG` filings | **189** | **190** |
+
+**`FEATURES.md` — CHANGED, two rows.** A **new** *Implemented* row for the
+pure preview trio (`[x]` core / `—` cli / `[ ]` gui / `?` Acrobat), placed
+directly beneath image insertion. And the true-in-place-page-insertion row
+moved its cli box `[ ]` to **`—`** with the measured collision stated in
+the sentence itself (replaced, not appended, per that file's header).
+**A separate row rather than folding into image insertion** — folding it
+into a `[x] [x] [x]` row would have rounded away exactly the `R151` signal
+the librarian brief calls *"a genuinely valuable signal, not an
+embarrassment to round up"*.
+
+**`ARCHITECTURE.md` — UNCHANGED.** No architectural decision was made this
+filing and no body section went stale: `R199` is a standing rule, not a
+decision record, and it lives in `ROADMAP.md` where the other 198 do.
+Stated explicitly because *"unchanged"* and *"not looked at"* are
+indistinguishable in an append-only record.
+
+**Terminology (rule 15):** no dimension of either kind is involved in
+`Pass 105.0`. `preview_group_scale` is cited only as the **shape**
+precedent for a pure `&self` preview; the **ce dimension** feature it
+belongs to is untouched, and no **pdf dimension** appears anywhere in this
+filing.
