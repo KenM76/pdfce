@@ -2980,6 +2980,44 @@ and meaningless for stamps."
 
 // --- File-writing details -------------------------------------------------
 
+/// Heading for the `/QuadPoints` corner-order setting (ambiguity `QP-A1`).
+pub fn setting_quad_order_title() -> &'static str {
+    "Corner order for highlight and redaction marks"
+}
+
+/// What the standard does not settle here.
+pub fn setting_quad_order_silence() -> &'static str {
+    "The standard describes one corner order and almost every program writes \
+a different one. Both are in wide use."
+}
+
+/// What changing it affects.
+pub fn setting_quad_order_radius() -> &'static str {
+    "Changes how OTHER programs read the shape of a mark pdfce made. Nothing \
+about how pdfce draws it."
+}
+
+/// Reading-order label.
+pub fn setting_quad_order_reading() -> &'static str {
+    "Match other programs"
+}
+
+/// Reading-order explanation.
+pub fn setting_quad_order_reading_note() -> &'static str {
+    "What Acrobat and most viewers write and expect. Choose this unless you \
+are preparing a file for a conformance checker."
+}
+
+/// Counterclockwise label.
+pub fn setting_quad_order_ccw() -> &'static str {
+    "Match the standard's wording"
+}
+
+/// Counterclockwise explanation.
+pub fn setting_quad_order_ccw_note() -> &'static str {
+    "The order the standard spells out. Some viewers will draw the marked \
+area as a bow-tie instead of a rectangle."
+}
 /// Heading for the xref EOL setting.
 pub fn setting_xref_eol_title() -> &'static str {
     "Line endings inside the file's index"

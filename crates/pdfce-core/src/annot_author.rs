@@ -75,6 +75,7 @@
 use crate::graph::ObjectGraph;
 use crate::object::{Dict, Name, Object};
 use crate::page_tree::Rect;
+use crate::settings::QuadPointOrder;
 use crate::writer::content::{ContentBuilder, LineCap, LineJoin, Paint};
 
 /// A device colour for a markup annotation's stroke/fill and its `/C` /
@@ -154,9 +155,19 @@ impl Quad {
 
     /// The eight `/QuadPoints` numbers in the authored (Z-order) sequence:
     /// `x1 y1 x2 y2 x3 y3 x4 y4` = UL, UR, LL, LR.
-    fn points(self) -> [f64; 8] {
+    /// The eight numbers `/QuadPoints` carries, in `order` (§12.5.6.10).
+    ///
+    /// The two orders differ **only in the last two corners** — reading order
+    /// ends `LL, LR`, the counterclockwise walk ends `LR, LL`. That is the
+    /// whole of ambiguity `QP-A1`, and it is why the wrong one draws a
+    /// bow-tie: swapping the bottom pair crosses the edges.
+    fn points(self, order: QuadPointOrder) -> [f64; 8] {
+        let (a, b) = match order {
+            QuadPointOrder::ReadingOrder => (self.ll, self.lr),
+            QuadPointOrder::Counterclockwise => (self.lr, self.ll),
+        };
         [
-            self.ul.0, self.ul.1, self.ur.0, self.ur.1, self.ll.0, self.ll.1, self.lr.0, self.lr.1,
+            self.ul.0, self.ul.1, self.ur.0, self.ur.1, a.0, a.1, b.0, b.1,
         ]
     }
 
@@ -819,6 +830,30 @@ const MIN_EXTENT: f64 = 1.0;
 /// never touches a page, and never emits page content (R47).
 #[must_use]
 pub fn build_appearance(spec: &MarkupSpec) -> AuthoredAppearance {
+    build_appearance_with(spec, QuadPointOrder::default())
+}
+
+/// As [`build_appearance`], with an explicit `/QuadPoints` corner order
+/// (§12.5.6.10, ambiguity **`QP-A1`**).
+///
+/// Only the text-markup family reads `order`; every other subtype ignores it,
+/// because only `/Highlight`, `/Underline`, `/StrikeOut` and `/Squiggly`
+/// carry `/QuadPoints`.
+///
+/// # Why the order is a caller's choice at all
+///
+/// pdfce bakes a full `/AP` (R44), so **its own rendering never consults**
+/// **`/QuadPoints`** and the order is invisible in pdfce. It matters to a
+/// third-party consumer that re-derives geometry from the array — where the
+/// wrong order produces a bow-tie instead of a rectangle — and the two
+/// candidate orders serve different consumers: Acrobat, PDFBox and pdf.js
+/// emit and expect reading order, while §12.5.6.10 describes a
+/// counterclockwise walk. See [`QuadPointOrder`].
+///
+/// That invisibility is exactly why the ambiguity register rates `QP-A1` its
+/// worst case: a deliberate divergence from a `shall`-adjacent statement,
+/// with no runtime symptom in the tool that made it.
+pub fn build_appearance_with(spec: &MarkupSpec, order: QuadPointOrder) -> AuthoredAppearance {
     match spec {
         MarkupSpec::Square {
             rect,
@@ -907,7 +942,7 @@ pub fn build_appearance(spec: &MarkupSpec) -> AuthoredAppearance {
             // cannot carry one.
             None,
         ),
-        MarkupSpec::TextMarkup { kind, quads, color } => text_markup(*kind, quads, *color),
+        MarkupSpec::TextMarkup { kind, quads, color } => text_markup(*kind, quads, *color, order),
     }
 }
 
@@ -1552,7 +1587,12 @@ fn polygon_like(
 
 /// The text-markup family. Rect bounds all quads; the appearance draws the
 /// per-subtype mark over each quad.
-fn text_markup(kind: TextMarkupKind, quads: &[Quad], color: Color) -> AuthoredAppearance {
+fn text_markup(
+    kind: TextMarkupKind,
+    quads: &[Quad],
+    color: Color,
+    order: QuadPointOrder,
+) -> AuthoredAppearance {
     let rect = bounds_of(
         quads
             .iter()
@@ -1560,7 +1600,10 @@ fn text_markup(kind: TextMarkupKind, quads: &[Quad], color: Color) -> AuthoredAp
         1.0,
     );
     let mut annot = base_annot(kind.subtype(), rect);
-    annot.insert(Name::from(b"QuadPoints"), text_markup_quad_object(quads));
+    annot.insert(
+        Name::from(b"QuadPoints"),
+        text_markup_quad_object(quads, order),
+    );
     annot.insert(Name::from(b"C"), color.to_array());
 
     // Highlight is painted Multiply so overlaps do not darken; the annot
@@ -1751,6 +1794,21 @@ impl RedactAppearance {
 /// reads as "marked, not done".
 #[must_use]
 pub fn build_redact_mark(spec: &RedactSpec) -> AuthoredAppearance {
+    build_redact_mark_with(spec, QuadPointOrder::default())
+}
+
+/// As [`build_redact_mark`], with an explicit `/QuadPoints` corner order.
+///
+/// `/Redact` carries `/QuadPoints` in §12.5.6.10's format, so ambiguity
+/// `QP-A1` applies here identically — and with one extra consequence worth
+/// naming: a redaction mark whose quads a third-party tool re-derives in the
+/// wrong order describes a **bow-tie region**, and a tool that then applied
+/// the redaction from that geometry would remove the wrong area. pdfce
+/// applies its own redactions from the parsed quads rather than from the
+/// emitted order, so this cannot mis-redact in pdfce; it is a hazard for
+/// hand-off to another tool.
+#[must_use]
+pub fn build_redact_mark_with(spec: &RedactSpec, order: QuadPointOrder) -> AuthoredAppearance {
     let rect = bounds_of(
         spec.quads
             .iter()
@@ -1760,7 +1818,7 @@ pub fn build_redact_mark(spec: &RedactSpec) -> AuthoredAppearance {
     let mut annot = base_annot(b"Redact", rect);
     annot.insert(
         Name::from(b"QuadPoints"),
-        text_markup_quad_object(&spec.quads),
+        text_markup_quad_object(&spec.quads, order),
     );
     if let Some(fill) = spec.fill {
         annot.insert(Name::from(b"IC"), fill.to_array());
@@ -1799,11 +1857,11 @@ pub fn build_redact_mark(spec: &RedactSpec) -> AuthoredAppearance {
 
 /// The `/QuadPoints` array object for a quad list, in the authored Z-order
 /// (module docs). Flat `x1 y1 … x4 y4` per quad, concatenated.
-fn text_markup_quad_object(quads: &[Quad]) -> Object {
+fn text_markup_quad_object(quads: &[Quad], order: QuadPointOrder) -> Object {
     Object::Array(
         quads
             .iter()
-            .flat_map(|q| q.points())
+            .flat_map(|q| q.points(order))
             .map(Object::Real)
             .collect(),
     )

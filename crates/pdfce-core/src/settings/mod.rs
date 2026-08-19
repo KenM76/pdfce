@@ -698,6 +698,50 @@ pub enum MissingAppearanceState {
     OffElseNothing,
 }
 
+/// Which corner order pdfce writes into `/QuadPoints` (§12.5.6.10) —
+/// ambiguity **`QP-A1`**.
+///
+/// # The ambiguity
+///
+/// §12.5.6.10 states a corner order, and **essentially no producer follows
+/// it.** Acrobat, PDFBox and pdf.js all emit `Z` / reading order — upper-left,
+/// upper-right, lower-left, lower-right — while the clause describes a
+/// counterclockwise walk, which swaps the last two corners.
+///
+/// The ambiguity register calls this the **worst case in its table**, and
+/// the reason is worth keeping: it is a deliberate divergence from a
+/// `shall`-adjacent normative statement, and it is **invisible at runtime**.
+/// pdfce bakes a full `/AP` (R44), so its own rendering never consults
+/// `/QuadPoints` — the order matters only to a *third-party* consumer that
+/// re-derives geometry from it, and a wrong order there produces a bow-tie
+/// rather than a rectangle.
+///
+/// # Why this is a setting rather than a fixed choice
+///
+/// The two readings serve genuinely different operators. Someone marking up
+/// a document for colleagues wants it to look right in **Acrobat**; someone
+/// producing a file for conformance checking wants it to match **the clause**.
+/// Neither is wrong, and the standard does not adjudicate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum QuadPointOrder {
+    /// `UL, UR, LL, LR` — what Acrobat, PDFBox and pdf.js emit and expect.
+    ///
+    /// **The shipped default**, chosen for interoperability: a markup
+    /// annotation is read by whatever the recipient already has, and that is
+    /// overwhelmingly one of these three. A file that is spec-literal and
+    /// draws a bow-tie in the reader the recipient actually opened has
+    /// helped nobody.
+    #[default]
+    ReadingOrder,
+    /// `UL, UR, LR, LL` — the counterclockwise walk §12.5.6.10 describes.
+    ///
+    /// For output destined for a conformance checker or a consumer that
+    /// implements the clause literally. Expect Acrobat to render markup
+    /// geometry re-derived from these quads incorrectly.
+    Counterclockwise,
+}
+
 /// Which of §7.5.4's three permitted two-byte terminators ends a classic
 /// cross-reference **entry** (spec ambiguity `EOL-A1`).
 ///
@@ -926,6 +970,9 @@ pub struct Settings {
     pub missing_as: MissingAppearanceState,
     /// The two-byte terminator on a classic cross-reference entry
     /// (`EOL-A1`, §7.5.4). **BYTES radius.**
+    /// `/QuadPoints` corner order for authored text markup — ambiguity
+    /// `QP-A1`. Key `quad_point_order`.
+    pub quad_point_order: QuadPointOrder,
     pub xref_entry_eol: XrefEntryEol,
     /// Whether a byte follows the final `%%EOF` (`EOL-A2`, §7.5.5).
     /// **BYTES radius** — one byte.
@@ -979,6 +1026,7 @@ impl Default for Settings {
             unmappable_code: crate::text_extract::ExtractOptions::default().unmappable_code,
             actual_text: crate::text_extract::ExtractOptions::default().actual_text,
             missing_as: MissingAppearanceState::default(),
+            quad_point_order: QuadPointOrder::default(),
             xref_entry_eol: crate::writer::SaveOptions::default().xref_entry_eol,
             trailing_eol: crate::writer::SaveOptions::default().trailing_eol,
         }
@@ -1097,6 +1145,13 @@ const fn missing_as_token(policy: MissingAppearanceState) -> &'static str {
 
 /// The settings-file token for a cross-reference entry terminator. See
 /// [`separation_token`].
+/// The settings-file token for a [`QuadPointOrder`].
+const fn quad_point_order_token(order: QuadPointOrder) -> &'static str {
+    match order {
+        QuadPointOrder::ReadingOrder => "reading_order",
+        QuadPointOrder::Counterclockwise => "counterclockwise",
+    }
+}
 const fn xref_entry_eol_token(eol: XrefEntryEol) -> &'static str {
     match eol {
         XrefEntryEol::MatchSource => "match_source",
@@ -1328,6 +1383,18 @@ impl Settings {
                     value: value.to_owned(),
                     line,
                     using: missing_as_token(Self::default().missing_as).to_owned(),
+                }),
+            },
+            "quad_point_order" => match value {
+                "reading_order" => self.quad_point_order = QuadPointOrder::ReadingOrder,
+                "counterclockwise" => {
+                    self.quad_point_order = QuadPointOrder::Counterclockwise;
+                }
+                _ => notes.push(SettingNote::BadValue {
+                    key: key.to_owned(),
+                    value: value.to_owned(),
+                    line,
+                    using: quad_point_order_token(self.quad_point_order).to_owned(),
                 }),
             },
             "xref_entry_eol" => match value {
@@ -1595,6 +1662,27 @@ impl Settings {
             xref_entry_eol_token(self.xref_entry_eol)
         );
 
+        out.push_str(
+            "# Corner order for the /QuadPoints array pdfce writes on highlight,\n\
+             # underline, strike-out, squiggly and redaction annotations.\n\
+             #\n\
+             # The standard describes a counterclockwise walk; Acrobat, PDFBox and\n\
+             # pdf.js all emit and expect reading order instead. pdfce bakes a full\n\
+             # appearance, so this never affects how pdfce itself draws the mark --\n\
+             # only how another tool reads the geometry back. The wrong order there\n\
+             # describes a bow-tie instead of a rectangle.\n\
+             #   reading_order    = upper-left, upper-right, lower-left, lower-right\n\
+             #                      (default). What the readers most files are opened\n\
+             #                      in expect.\n\
+             #   counterclockwise = upper-left, upper-right, lower-right, lower-left.\n\
+             #                      The letter of the standard, for output going to a\n\
+             #                      conformance checker.\n",
+        );
+        let _ = writeln!(
+            out,
+            "quad_point_order = {}\n",
+            quad_point_order_token(self.quad_point_order)
+        );
         out.push_str(
             "# Whether a saved file ends with a line break after its final end-of-file\n\
              # marker. The standard requires every line to be terminated AND says the\n\
@@ -2103,6 +2191,7 @@ mod tests {
             unmappable_code: UnmappableCode::Omit,
             actual_text: ActualTextPrecedence::Glyphs,
             missing_as: MissingAppearanceState::FirstEntry,
+            quad_point_order: QuadPointOrder::Counterclockwise,
             xref_entry_eol: XrefEntryEol::CrLf,
             trailing_eol: TrailingEol::None,
             // A token core does NOT know, on purpose: this pins that the

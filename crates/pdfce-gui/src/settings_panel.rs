@@ -86,7 +86,8 @@ use eframe::egui;
 use pdfce_core::pageops::SeparationPolicy;
 use pdfce_core::settings::{
     ActualTextPrecedence, CmykIntent, CmykJpegPolarity, MaskResample, MinifyFilter,
-    MissingAppearanceState, Settings, StoreLocation, TrailingEol, UnmappableCode, XrefEntryEol,
+    MissingAppearanceState, QuadPointOrder, Settings, StoreLocation, TrailingEol, UnmappableCode,
+    XrefEntryEol,
 };
 
 use crate::ui_text;
@@ -253,6 +254,7 @@ pub fn show(
                         missing_as_setting(ui, draft);
                     });
                     group(ui, ui_text::settings_group_saving(), false, |ui| {
+                        quad_order_setting(ui, draft);
                         xref_eol_setting(ui, draft);
                         ui.add_space(10.0);
                         trailing_eol_setting(ui, draft);
@@ -734,6 +736,35 @@ fn missing_as_setting(ui: &mut egui::Ui, draft: &mut Draft) {
 // Saving files
 // ---------------------------------------------------------------------------
 
+/// `/QuadPoints` corner order — ambiguity `QP-A1`.
+///
+/// Lives beside the file-writing settings rather than with the markup tools
+/// because it changes bytes rather than appearance: pdfce bakes a full
+/// appearance stream, so this never alters what pdfce draws. It only decides
+/// what another program reads back out of the annotation.
+fn quad_order_setting(ui: &mut egui::Ui, draft: &mut Draft) {
+    header(
+        ui,
+        ui_text::setting_quad_order_title(),
+        ui_text::setting_quad_order_silence(),
+        ui_text::setting_quad_order_radius(),
+    );
+    let v = &mut draft.working.quad_point_order;
+    option(
+        ui,
+        v,
+        QuadPointOrder::ReadingOrder,
+        ui_text::setting_quad_order_reading(),
+        Some(ui_text::setting_quad_order_reading_note()),
+    );
+    option(
+        ui,
+        v,
+        QuadPointOrder::Counterclockwise,
+        ui_text::setting_quad_order_ccw(),
+        Some(ui_text::setting_quad_order_ccw_note()),
+    );
+}
 fn xref_eol_setting(ui: &mut egui::Ui, draft: &mut Draft) {
     header(
         ui,
