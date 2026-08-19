@@ -214,7 +214,14 @@ forty.
 5. **`Pass 101.1`** — iccce provenance, **BLOCKED** until pdfce actually
    depends on iccce. See §4.
 
-**Ghent standing unchanged: 25 pass / 18 FAIL / 8 UNRESOLVED of 51.** The GWG
+**★ Ghent standing 2026-08-19: 26 pass / 14 FAIL / 11 UNRESOLVED of 51** —
+measured, not quoted. The previously-recorded `25 / 18 / 8` was already stale
+before this session: `18+8 = 15+11` with `pass` unchanged at 25, so three
+patches had crossed the FAIL/UNRESOLVED classifier line without any patch
+changing outcome. The one real gain is `1_GWG160`, flipped by the
+non-separable blend modes. **`docs/compositor-plan.md`'s "16 of the 18"
+thesis is amended and owes a re-derivation before `Pass 97.x` is scoped from
+it.** The GWG
 Reference file is still not on this machine.
 
 ---

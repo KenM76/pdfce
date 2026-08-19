@@ -5,12 +5,61 @@ Companion to `docs/overprint-architecture-survey.md` (the sourcing record for
 the colorant half) and `docs/ghent-patch-reference.md` (the per-patch expected
 appearance for the overprint patches).
 
+> ## ★★ AMENDMENT 2026-08-19 — THE DENOMINATOR MOVED AND ONE PROBED PATCH
+> ## NOW PASSES. Re-derive the thesis before scoping `Pass 97.x` from it.
+>
+> This plan is a **live plan**, not a dated record, and `Pass 97.x` is scoped
+> from it — so its arithmetic being stale is a live problem rather than a
+> historical footnote.
+>
+> **The standing is now `26 pass · 14 FAIL · 11 UNRESOLVED`**, not the
+> `25 · 18 · 8` in §1 below. Two independent things moved it:
+>
+> 1. **A classifier shift that predates this session.** `18+8 = 15+11 = 26`
+>    and `pass` was 25 either way, so **three patches crossed the
+>    FAIL/UNRESOLVED line without any patch changing outcome.** Found by
+>    building the previous commit in a worktree rather than quoting the board.
+>    Filed as a reading, not a verified cause.
+> 2. **`1_GWG160` genuinely passes now** — the non-separable blend modes
+>    (`Pass 85.4b`, `972ddbb`) shipped, and it was the patch they flipped.
+>
+> ★ **Point 2 is the one that touches this document's argument, not just its
+> numbers.** `1_GWG160` is one of the five transparency-group failures §1.1
+> probes cell by cell, and it was resolved by **Table 137 arithmetic, not by
+> a compositor** — with no CMYK buffer, no non-transparent initial backdrop
+> and no `Pass 97.0`. So the claim that these failures "do not decompose"
+> has one counter-example, and **"16 of the 18" cannot be re-stated as
+> "16 of the 14"**.
+>
+> **What that does NOT mean:** the compositor case is not refuted. Overprint
+> still needs per-colorant planes, and the measured negative result behind
+> that (`ac15158` — a spot-ink multiplier plate built, ablated and reverted)
+> stands untouched.
+>
+> **What it does mean:** the share is unknown until someone re-derives it,
+> and this plan should not be quoted for a figure until they have. The
+> current fourteen, measured today:
+>
+> ```text
+> overprint / colorant   1_GWG011  1_GWG190  1_GWG191  1_GWG192
+>                        2_GWG020  2_GWG030  2_GWG040
+> transparency groups    1_GWG161  1_GWG162  3_GWG161  3_GWG164
+> soft masks             1_GWG1611
+> shading                1_GWG060
+> ICC                    3_GWG130
+> ```
+>
+> §1's baseline block and §1.1's `1_GWG160` probe are **left as written** —
+> they are the measurement this plan was built on and rewriting them would
+> destroy the record of what was true at `e618d67`. Read them as dated.
+
 This document exists to answer one question with evidence rather than
-intuition: **what single build clears the largest share of the 18 remaining
+intuition: **what single build clears the largest share of the remaining
 Ghent failures, and why is it one build rather than five?**
 
-The answer is that **16 of the 18** failures are downstream of the same
-missing thing — pdfce has no compositor of its own. It delegates every
+The answer given here, **at the time of writing and now owed a re-derivation
+(see the amendment above)**, is that **16 of the then-18** failures are
+downstream of the same missing thing — pdfce has no compositor of its own. It delegates every
 per-pixel blend to `tiny_skia`, which composites **8-bit premultiplied sRGB**
 with **Porter-Duff over a transparent-initialised buffer**. ISO 32000-1
 clause 11 requires compositing **in the group's colour space**, over a
