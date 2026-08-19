@@ -3005,17 +3005,31 @@ pub enum DroppedProperty {
     /// unaffected, because its intensity is in the spec it was built
     /// from.
     ///
-    /// The restyle path is dropped for a second, independent reason:
-    /// [`MarkupStyle`] carries colour and width and has no
-    /// `border_effect` field, so `set_markup_style` cannot express one.
-    /// **`Pass 82.0` deliberately made restyling PRESERVE an existing
-    /// intensity rather than clear it** — cloudiness is geometry, not
-    /// style — so this variant reports a foreign `/BE` that was never in
-    /// a pdfce spec to begin with.
+    /// ★ **NARROWED BY `Pass 98.0` (2026-08-19) — this is no longer
+    /// reported for the case it was written about.**
     ///
-    /// The `/BE` key is left in the dictionary, so a reader that
-    /// synthesizes from properties still sees it — but pdfce's own `/AP`
-    /// no longer draws it, and under R43 that is what gets painted.
+    /// A cloudy `/BE << /S /C >>` on a `/Square` or a `/Polygon` is now
+    /// **read back** into the spec and re-baked, so nothing is dropped and
+    /// nothing is disclosed. This variant now fires only where pdfce
+    /// genuinely cannot carry the effect: on `/Circle`, `/PolyLine`,
+    /// `/Line` and `/Ink`, whose specs have no border-effect field, and on
+    /// a `/BE` whose `/S` is not `/C` (Table 167's solid default, or a name
+    /// from a future extension).
+    ///
+    /// The superseded reasoning is kept because it explains the shape of
+    /// the fix rather than merely being wrong: *"`MarkupStyle` carries
+    /// colour and width and has no `border_effect` field, so
+    /// `set_markup_style` cannot express one … so this variant reports a
+    /// foreign `/BE` that was never in a pdfce spec to begin with."* That
+    /// was exactly right, and `Pass 98.0` closed it from the other end —
+    /// by putting the `/BE` **into the spec** on the way in, so the
+    /// restyle re-authors it without `MarkupStyle` ever needing a field
+    /// for it.
+    ///
+    /// Where it still fires, the old consequence still holds: the `/BE`
+    /// key is left in the dictionary, so a reader that synthesizes from
+    /// properties still sees it — but pdfce's own `/AP` does not draw it,
+    /// and under R43 that is what gets painted.
     BorderEffect,
     /// `/BS` `/S` named a border style other than solid — `/D` dashed,
     /// `/B` beveled, `/I` inset or `/U` underline (§12.5.4, Table 166).

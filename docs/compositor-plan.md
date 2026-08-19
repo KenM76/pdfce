@@ -100,13 +100,25 @@ discriminator falling on the correct side"*, and therefore that §11.3.5.3's
 K-selection rule was the cause. **That inference was wrong, and it was wrong
 in the most persuasive direction — it fit.**
 
-What the counters actually say, measured with `pdfce-cli render-page` on all
-four transparency patches: **`blend_modes_applied=11, blend_modes_ignored=4`**
-in every one. `blend_mode_from_name` returns `None` for all four nonseparable
-modes, so pdfce **declines them outright** and composites them as `Normal`.
-They never reach the applied path at all, so nothing about them can be
-evidence for *how* the applied path computes. Caught by the librarian while
-filing, from the code rather than from the pixels.
+What the counters said at the time, measured with `pdfce-cli render-page` on
+all four transparency patches: **`blend_modes_applied=11,
+blend_modes_ignored=4`** in every one. `blend_mode_from_name` returned `None`
+for all four nonseparable modes, so pdfce **declined them outright** and
+composited them as `Normal`. They never reached the applied path at all, so
+nothing about them could be evidence for *how* the applied path computes.
+Caught by the librarian while filing, from the code rather than from the
+pixels.
+
+> **★ PAST TENSE AS OF 2026-08-19, and the tense is the point.** The four
+> nonseparable modes ship (`Pass 85.4b`, `972ddbb`) — pdfce computes Table 137
+> itself, they no longer touch `blend_modes_ignored`, and `1_GWG160` passes.
+> The paragraph above is a **dated measurement**, still correct about
+> `e618d67` and still load-bearing for the reasoning that follows it.
+>
+> Restated here rather than only in the head amendment because **a reader
+> arriving by grep lands in the body, not at the top.** A correction that only
+> exists in a document's preamble is a correction the person who most needs it
+> will not see.
 
 The corrected reading, and the cell identities are now **resolved** rather
 than inferred — `tools/ghent-cellmap.py` walks the content stream, tracks the

@@ -7097,10 +7097,18 @@ overprint_composited={} overprint_refused={} overprint_pixels={} nonseparable_co
         //
         // Where they actually stand, and neither is "implemented" without
         // a qualifier:
-        //  * BLEND MODES — the 11 separable modes are applied, but in
-        //    device sRGB rather than the group's colour space (§11.3.4).
-        //    The 4 NONSEPARABLE modes are recognised and DECLINED, so they
-        //    land in `blend_modes_ignored`, not here.
+        //  * BLEND MODES — all 15 of Table 136 and Table 137 are applied,
+        //    but in device sRGB rather than the group's colour space
+        //    (§11.3.4). The 4 NONSEPARABLE modes are computed by pdfce
+        //    itself (`pdfce_render::blend_nonsep`) and counted separately on
+        //    `nonseparable_composited`, because they take a different code
+        //    path and the two can fail independently.
+        //
+        //    This bullet said they were "recognised and DECLINED, so they
+        //    land in `blend_modes_ignored`" until 2026-08-19. That was the
+        //    EIGHTH copy of the claim, and it survived the commit that
+        //    announced it was fixing the eighth — the sweep report and the
+        //    sweep discharge drifted apart.
         //  * SOFT MASKS — built correctly, but folded into the clip rather
         //    than applied to the group's RESULT (§11.4.5), and `/TR` is
         //    counted and never evaluated.

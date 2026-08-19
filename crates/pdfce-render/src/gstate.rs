@@ -473,29 +473,42 @@ pub fn blend_mode_from_name(name: &[u8]) -> Option<tiny_skia::BlendMode> {
         b"SoftLight" => B::SoftLight,
         b"Difference" => B::Difference,
         b"Exclusion" => B::Exclusion,
-        // ★ THE FOUR NON-SEPARABLE MODES (Table 137) ARE DELIBERATELY
-        // ABSENT, and this is the opposite of an oversight.
+        // ★ THE FOUR NON-SEPARABLE MODES (Table 137) ARE ABSENT FROM THIS
+        // FUNCTION, and they are absent because they are IMPLEMENTED
+        // ELSEWHERE — not because they are refused.
+        //
+        // `Hue`, `Saturation`, `Color` and `Luminosity` are computed by
+        // pdfce in `crate::blend_nonsep`, resolved by
+        // `NonSeparableBlend::from_name`, and carried on
+        // `GraphicsState::nonseparable` rather than here. This function
+        // returns a `tiny_skia::BlendMode`, and the whole point is that
+        // these four must never be expressible as one:
         //
         // `tiny_skia` 0.11.4 HAS `BlendMode::Hue`/`Saturation`/`Color`/
-        // `Luminosity`, and routing to them is the obvious one-line move.
-        // They are MEASURABLY WRONG against both ISO 32000-1 and W3C
-        // Compositing-1 — up to 107/255 error on 9.4–15.5% of random colour
-        // pairs, measured over 60,000 pixels on 2026-08-17.
+        // `Luminosity`, routing to them is a one-line move, and they are
+        // MEASURABLY WRONG against both ISO 32000-1 and W3C Compositing-1 —
+        // up to 107/255 error on 9.4–15.5% of random colour pairs, over
+        // 60,000 measured pixels. Root cause, reproduced rather than
+        // inferred: the crate's `clip_color` gates its low-gamut rescale on
+        // `mx >= 0` where the standard and upstream Skia use `mn < 0`, so
+        // the branch is dead and negative channels are hard-clamped instead
+        // of rescaled at constant luminosity. Keeping them out of this
+        // function's return type makes that mistake unrepresentable.
         //
-        // Root cause, proven by reproduction rather than inferred: the
-        // crate's `clip_color` gates its low-gamut rescale on `mx >= 0`
-        // where the standard (and upstream Skia) use `mn < 0`, so the
-        // branch is dead and negative channels produced by `SetLum` are
-        // hard-clamped instead of rescaled at constant luminosity.
-        // Canonical demonstration: `Luminosity` of a BLACK source over pure
-        // blue must give black; the crate returns `(0, 0, 227)`.
+        // ★★ CORRECTED 2026-08-19, and the previous wording is the reason
+        // `R199` exists. It read:
         //
-        // Returning `None` costs a correct rendering of four modes. Routing
-        // to the crate would cost a WRONG one, silently, in exactly the
-        // colours print work cares about. The caller counts and discloses.
-        // See `iso32000__ref__blend_mode_interop.md` §3.3; implementing
-        // them properly means compositing Table 137 by hand against
-        // §11.3.6 NOTE 2, which is a Pass of its own.
+        //   "Returning `None` costs a correct rendering of four modes …
+        //    implementing them properly means compositing Table 137 by hand
+        //    against §11.3.6 NOTE 2, WHICH IS A PASS OF ITS OWN."
+        //
+        // That Pass is `85.4b`, and it took an afternoon — because
+        // `Pass 85.5` had already built the per-paint destination read the
+        // work needed. **A recorded blocker is a dated reading, not a
+        // standing fact** (`R199`): a stale figure dies when someone
+        // re-measures it and a stale contract dies when a caller hits it,
+        // but a stale blocker dies never, because its function is to stop
+        // the person who would have checked.
         _ => return None,
     })
 }
