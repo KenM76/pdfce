@@ -220,6 +220,15 @@ pub(crate) struct LayerPaint {
     /// The blend mode in force at the composite (§11.4.5: the outer
     /// state applies to the group's *result*, not to its contents).
     pub blend: BlendMode,
+    /// A §11.3.5.3 **non-separable** outer mode, if the state carries one.
+    ///
+    /// Separate from [`Self::blend`] for the same reason
+    /// [`crate::gstate::GraphicsState::nonseparable`] is separate from
+    /// `blend_mode`: these four cannot be expressed as a
+    /// `tiny_skia::BlendMode` without being computed wrongly. When this is
+    /// `Some`, [`Self::blend`] is `SourceOver` and the composite goes per
+    /// pixel through [`crate::blend_nonsep`].
+    pub nonseparable: Option<crate::blend_nonsep::NonSeparableBlend>,
 }
 
 /// The clip in force at a paint, in **both** the representations the two
@@ -494,22 +503,40 @@ impl<'a> Canvas<'a> {
                     let mut sub = Canvas::Paint(&mut buf);
                     f(&mut sub)
                 };
-                p.draw_pixmap(
-                    0,
-                    0,
-                    buf.as_ref(),
-                    &PixmapPaint {
-                        opacity: paint.opacity.clamp(0.0, 1.0),
-                        blend_mode: paint.blend,
-                        quality: FilterQuality::Nearest,
-                    },
-                    Transform::identity(),
-                    // No mask: the contents were already clipped while
-                    // being drawn, so re-applying the clip here would
-                    // double-multiply its anti-aliased edge and darken
-                    // every clipped boundary by one pass.
-                    None,
-                );
+                if let Some(mode) = paint.nonseparable {
+                    // ★ §11.4.5's composite, through Table 137, per pixel.
+                    //
+                    // `draw_pixmap` cannot carry these four — that is the
+                    // whole of decision 066 — so the group's RESULT is
+                    // blended here instead. This is the case Ghent's
+                    // `Transp_Basic_BM` patches are made of: every one of
+                    // their non-separable modes sits at a group `Do`, not at
+                    // a paint, so without this the feature reaches no Ghent
+                    // pixel at all.
+                    crate::blend_nonsep::composite_layer(
+                        p,
+                        &buf,
+                        mode,
+                        paint.opacity.clamp(0.0, 1.0),
+                    );
+                } else {
+                    p.draw_pixmap(
+                        0,
+                        0,
+                        buf.as_ref(),
+                        &PixmapPaint {
+                            opacity: paint.opacity.clamp(0.0, 1.0),
+                            blend_mode: paint.blend,
+                            quality: FilterQuality::Nearest,
+                        },
+                        Transform::identity(),
+                        // No mask: the contents were already clipped while
+                        // being drawn, so re-applying the clip here would
+                        // double-multiply its anti-aliased edge and darken
+                        // every clipped boundary by one pass.
+                        None,
+                    );
+                }
                 Some(result)
             }
             Self::Record(r) => {

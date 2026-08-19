@@ -372,6 +372,9 @@ pub enum PoisonReason {
     SoftMask,
     /// A tiling pattern (§8.7.3).
     TilingPattern,
+    /// One of §11.3.5.3's four non-separable blend modes, which pdfce
+    /// composites per pixel against the destination (`crate::blend_nonsep`).
+    NonSeparableBlend,
     /// The recording exceeded [`MAX_DISPLAY_LIST_BYTES`].
     ///
     /// Unlike the others this is not a *capability* limit — the page is
@@ -389,6 +392,7 @@ impl PoisonReason {
             Self::Overprint => "overprint composite",
             Self::SoftMask => "soft mask",
             Self::TilingPattern => "tiling pattern",
+            Self::NonSeparableBlend => "non-separable blend mode",
             Self::TooLarge => "recording exceeded MAX_DISPLAY_LIST_BYTES",
         }
     }
@@ -1218,6 +1222,7 @@ mod tests {
             paint: LayerPaint {
                 opacity: 1.0,
                 blend: BlendMode::SourceOver,
+                nonseparable: None,
             },
             ops: Vec::new(),
         });
@@ -1225,6 +1230,7 @@ mod tests {
             paint: LayerPaint {
                 opacity: 1.0,
                 blend: BlendMode::SourceOver,
+                nonseparable: None,
             },
             ops: vec![unit_fill(), unit_fill()],
         });

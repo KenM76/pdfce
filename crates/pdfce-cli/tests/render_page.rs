@@ -484,6 +484,14 @@ fn renders_a_single_page_to_png_with_the_stable_stdout_line() {
             "overprint_composited",
             "overprint_refused",
             "overprint_pixels",
+            // The four NON-SEPARABLE blend modes take their own code path
+            // (pdfce computes Table 137 per pixel; decision 066), so they
+            // get their own counters rather than folding into
+            // `blend_modes_applied`. APPENDED, never inserted -- a script
+            // reading this line positionally must keep working, which is
+            // what makes the order a contract rather than a convention.
+            "nonseparable_composited",
+            "nonseparable_pixels",
         ],
         "metrics key order is part of the stable contract"
     );

@@ -423,6 +423,23 @@ pub struct Diagnostics {
     /// as its own counter rather than derived, because a derived number
     /// cannot disagree with reality and therefore cannot report a bug.
     pub overprint_composited: usize,
+    /// Paints composited through one of §11.3.5.3's four **non-separable**
+    /// blend modes (`Hue`/`Saturation`/`Color`/`Luminosity`).
+    ///
+    /// Counted separately from [`Self::blend_modes_applied`] because these
+    /// four take a **different code path** — pdfce computes Table 137 per
+    /// pixel rather than handing the mode to the rasteriser, whose
+    /// implementations are measurably wrong (`ARCHITECTURE.md` §12 decision
+    /// 066). A single counter would hide which of the two paths a page
+    /// actually exercised, and they can fail independently.
+    pub nonseparable_composited: usize,
+    /// Pixels changed by those composites.
+    ///
+    /// The companion to the count, for the same reason `overprint_pixels`
+    /// exists: a composite that ran on zero pixels and one that repainted a
+    /// swatch are both "1" on the counter above, and only this distinguishes
+    /// them.
+    pub nonseparable_pixels: u64,
     /// Paints where overprint applied but the composite could not run, so
     /// the paint fell back to a normal blend.
     ///
@@ -998,6 +1015,8 @@ polarity unverifiable (decision 006 R30)",
         self.overprint_requested += other.overprint_requested;
         self.overprint_effective += other.overprint_effective;
         self.overprint_composited += other.overprint_composited;
+        self.nonseparable_composited += other.nonseparable_composited;
+        self.nonseparable_pixels += other.nonseparable_pixels;
         self.overprint_refused += other.overprint_refused;
         self.overprint_pixels += other.overprint_pixels;
         self.overprint_mode1_requested += other.overprint_mode1_requested;
@@ -2378,7 +2397,20 @@ impl Interpreter<'_> {
             self.diag.overprint_effective += 1;
         }
 
-        if !skip_paint && self.gs.current.text.fills() && self.color.paints(false) && !op_fill {
+        // See the note above `paint_nonseparable`: text takes the same
+        // composite as a path, and forgetting it is a documented past defect
+        // rather than a hypothetical one.
+        let ns_glyph = if skip_paint {
+            None
+        } else {
+            self.gs.current.nonseparable
+        };
+        if !skip_paint
+            && ns_glyph.is_none()
+            && self.gs.current.text.fills()
+            && self.color.paints(false)
+            && !op_fill
+        {
             let paint = solid(
                 self.gs.current.fill_color,
                 self.gs.current.fill_alpha,
@@ -2390,13 +2422,40 @@ impl Interpreter<'_> {
             // the opposite direction by the font, not by even-odd).
             canvas.fill(&path, &paint, FillRule::Winding, ctm, clip);
         }
-        if !skip_paint && self.gs.current.text.strokes() && self.color.paints(true) && !op_stroke {
+        if !skip_paint
+            && ns_glyph.is_none()
+            && self.gs.current.text.strokes()
+            && self.color.paints(true)
+            && !op_stroke
+        {
             let paint = solid(
                 self.gs.current.stroke_color,
                 self.gs.current.stroke_alpha,
                 self.gs.current.blend_mode,
             );
             canvas.stroke(&path, &paint, &self.stroke_params(), ctm, clip);
+        }
+
+        if let Some(mode) = ns_glyph {
+            let mut done = false;
+            if self.gs.current.text.fills()
+                && self.color.paints(false)
+                && self.paint_nonseparable(&path, mode, Some(FillRule::Winding), false, canvas)
+            {
+                done = true;
+            }
+            if self.gs.current.text.strokes()
+                && self.color.paints(true)
+                && self.paint_nonseparable(&path, mode, None, true, canvas)
+            {
+                done = true;
+            }
+            if done {
+                return;
+            }
+            // Fell through: the composite could not run. Paint normally and
+            // disclose, never paint nothing.
+            self.diag.blend_modes_ignored += 1;
         }
 
         // After the `clip` borrow ends, for the same reason `paint_path`
@@ -2602,32 +2661,45 @@ impl Interpreter<'_> {
                 _ => None,
             };
             if let Some(name) = first {
-                match crate::gstate::blend_mode_from_name(&name) {
-                    Some(mode) => {
-                        self.gs.current.blend_mode = mode;
-                        // Census counts the modes that CHANGE something.
-                        // Counting `Normal` too would put a large number on
-                        // ordinary documents — producers emit `/BM /Normal`
-                        // constantly to reset inherited state — and train
-                        // every reader to ignore the counter.
-                        if mode != tiny_skia::BlendMode::SourceOver {
-                            self.diag.blend_modes_applied += 1;
+                // ★ THE FOUR NON-SEPARABLE MODES ARE RESOLVED FIRST, and
+                // they never reach `blend_mode_from_name` — which cannot
+                // express them, by design (decision 066). pdfce computes
+                // these itself in `crate::blend_nonsep` because the
+                // rasteriser's are wrong by up to 107/255.
+                if let Some(ns) = crate::blend_nonsep::NonSeparableBlend::from_name(&name) {
+                    self.gs.current.nonseparable = Some(ns);
+                    // Left at `SourceOver` on purpose — see the field docs.
+                    self.gs.current.blend_mode = tiny_skia::BlendMode::SourceOver;
+                    self.diag.blend_modes_applied += 1;
+                } else {
+                    self.gs.current.nonseparable = None;
+                    match crate::gstate::blend_mode_from_name(&name) {
+                        Some(mode) => {
+                            self.gs.current.blend_mode = mode;
+                            // Census counts the modes that CHANGE something.
+                            // Counting `Normal` too would put a large number on
+                            // ordinary documents — producers emit `/BM /Normal`
+                            // constantly to reset inherited state — and train
+                            // every reader to ignore the counter.
+                            if mode != tiny_skia::BlendMode::SourceOver {
+                                self.diag.blend_modes_applied += 1;
+                            }
                         }
-                    }
-                    None => {
-                        // An unknown name is NOT a reason to refuse the
-                        // paint: the marks belong on the page and only the
-                        // compositing rule is in doubt. Fall back to
-                        // Normal, and say so.
-                        self.gs.current.blend_mode = tiny_skia::BlendMode::SourceOver;
-                        self.diag.blend_modes_ignored += 1;
-                        self.diag.note(
-                            format!(
-                                "gs /BM /{}: blend mode not applied; composited as Normal",
-                                String::from_utf8_lossy(&name)
-                            )
-                            .as_bytes(),
-                        );
+                        None => {
+                            // An unknown name is NOT a reason to refuse the
+                            // paint: the marks belong on the page and only the
+                            // compositing rule is in doubt. Fall back to
+                            // Normal, and say so.
+                            self.gs.current.blend_mode = tiny_skia::BlendMode::SourceOver;
+                            self.diag.blend_modes_ignored += 1;
+                            self.diag.note(
+                                format!(
+                                    "gs /BM /{}: blend mode not applied; composited as Normal",
+                                    String::from_utf8_lossy(&name)
+                                )
+                                .as_bytes(),
+                            );
+                        }
                     }
                 }
             }
@@ -3581,6 +3653,111 @@ impl Interpreter<'_> {
         true
     }
 
+    /// Composite a path through one of §11.3.5.3's four **non-separable**
+    /// blend modes, per pixel.
+    ///
+    /// # Why this is a separate path and not a `tiny_skia::BlendMode`
+    ///
+    /// The rasteriser's four are measurably wrong (decision 066), so pdfce
+    /// computes Table 137 itself in [`crate::blend_nonsep`]. The shape here
+    /// is [`Self::paint_overprint`]'s, deliberately: **rasterise the paint
+    /// to a coverage mask with the SAME rasteriser a normal paint uses**,
+    /// intersect the clip into it, then blend per pixel inside the path's
+    /// own device bounds. Sharing the rasteriser is what keeps a
+    /// non-separably-blended edge the same SHAPE as an ordinary one.
+    ///
+    /// That machinery did not exist when these modes were refused. It
+    /// arrived with `Pass 85.5`, which is why this became cheap rather than
+    /// architectural.
+    ///
+    /// # Returns
+    ///
+    /// `true` if the composite ran. `false` if it could not, in which case
+    /// the caller paints normally **and discloses** — never paints nothing,
+    /// the same contract [`Self::paint_overprint`] has.
+    fn paint_nonseparable(
+        &mut self,
+        path: &Path,
+        mode: crate::blend_nonsep::NonSeparableBlend,
+        rule: Option<FillRule>,
+        stroking: bool,
+        canvas: &mut Canvas<'_>,
+    ) -> bool {
+        let colour = if stroking {
+            self.gs.current.stroke_color
+        } else {
+            self.gs.current.fill_color
+        };
+        let ctm = self.gs.current.ctm;
+
+        // Coverage, rasterised exactly as a normal paint would be.
+        let Some(mut coverage) = Mask::new(canvas.width(), canvas.height()) else {
+            return false;
+        };
+        if let Some(r) = rule {
+            coverage.fill_path(path, r, true, ctm);
+        } else {
+            let Some(stroked) = path.clone().stroke(&self.stroke_params(), 1.0) else {
+                return false;
+            };
+            coverage.fill_path(&stroked, FillRule::Winding, true, ctm);
+        }
+        if let Some(old) = self.gs.current.clip.as_deref() {
+            let old_data = old.data().to_vec();
+            for (n, o) in coverage.data_mut().iter_mut().zip(old_data.iter()) {
+                *n = u8::try_from((u16::from(*n) * u16::from(*o)) / 255).unwrap_or(255);
+            }
+        }
+
+        // Restrict the scan to the path's device bounds — outside them the
+        // coverage is zero and the per-pixel work is waste.
+        let Some(device_path) = path.clone().transform(ctm) else {
+            return false;
+        };
+        let b = device_path.bounds();
+        let pad = if rule.is_some() {
+            1.0
+        } else {
+            self.gs.current.line_width.mul_add(0.5, 2.0)
+        };
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let region = (
+            (b.left() - pad).floor().max(0.0) as u32,
+            (b.top() - pad).floor().max(0.0) as u32,
+            ((b.right() + pad).ceil().max(0.0) as u32).min(canvas.width()),
+            ((b.bottom() + pad).ceil().max(0.0) as u32).min(canvas.height()),
+        );
+        if region.0 >= region.2 || region.1 >= region.3 {
+            // Entirely off-page: ran correctly, touched nothing.
+            return true;
+        }
+
+        let alpha = if stroking {
+            self.gs.current.stroke_alpha
+        } else {
+            self.gs.current.fill_alpha
+        };
+
+        // Reads the destination back, so it needs real pixels — a recording
+        // canvas cannot reproduce it and must refuse BY NAME rather than
+        // silently record a normally-blended paint.
+        canvas.refuse(PoisonReason::NonSeparableBlend);
+        let Some(dest) = canvas.pixmap_mut() else {
+            return false;
+        };
+        let changed = crate::blend_nonsep::composite(
+            dest,
+            &coverage,
+            mode,
+            [colour.r, colour.g, colour.b],
+            alpha.clamp(0.0, 1.0),
+            region,
+        );
+        self.diag.nonseparable_composited += 1;
+        self.diag.nonseparable_pixels += u64::from(changed);
+        true
+    }
+
     fn paint_with_pattern(
         &mut self,
         path: &Path,
@@ -4053,7 +4230,19 @@ impl Interpreter<'_> {
         // page backdrop — precisely what painting inline does. Buffering
         // unconditionally gets those wrong in the opposite direction from
         // flattening, and costs a page-sized allocation to do it.
+        // ★ `nonseparable` MUST be part of this test. It was not when the
+        // field was added, and the consequence was silent: a non-separable
+        // outer mode parks `blend_mode` at `SourceOver` (see the field docs),
+        // so a group under `/BM /Hue` LOOKED neutral, skipped its buffer, and
+        // painted inline — the one path where the outer mode can never be
+        // applied to the group's result at all.
+        //
+        // The general shape is worth naming, because it is how the same bug
+        // arrives twice: a new graphics-state field has to be added to every
+        // predicate that asks "is the state still default?", and nothing
+        // makes those sites findable from the field.
         let outer_is_neutral = self.gs.current.blend_mode == tiny_skia::BlendMode::SourceOver
+            && self.gs.current.nonseparable.is_none()
             && self.gs.current.fill_alpha >= 1.0;
         // KNOCKOUT is unconditional, and the neutral-outer-state shortcut is
         // not available to it. §11.4.4 NOTE 5's inline fast path requires
@@ -4092,9 +4281,21 @@ impl Interpreter<'_> {
             group_state.blend_mode = tiny_skia::BlendMode::SourceOver;
             group_state.fill_alpha = 1.0;
             group_state.stroke_alpha = 1.0;
+            // ★ AND THE NON-SEPARABLE MODE, for the same §11.4.5 reason as
+            // the three above — a bug the moment `nonseparable` was added,
+            // because the reset list is the kind of thing a new field is
+            // silently absent from. Contents that inherited it would blend
+            // against the group's own TRANSPARENT buffer, which is not what
+            // the outer mode means: the outer mode applies to the group's
+            // RESULT.
+            group_state.nonseparable = None;
             let paint = LayerPaint {
                 opacity: self.gs.current.fill_alpha.clamp(0.0, 1.0),
                 blend: self.gs.current.blend_mode,
+                // §11.4.5 through Table 137 when the outer mode is one of
+                // the four -- `Canvas::layer` composites the group RESULT
+                // per pixel, because `draw_pixmap` cannot carry these.
+                nonseparable: self.gs.current.nonseparable,
             };
             let nested_active = active.clone();
             canvas.layer(paint, |sub| {
@@ -4586,6 +4787,15 @@ impl Interpreter<'_> {
         // and the pending clip below is applied exactly as if it had
         // been painted (§8.11.3.1).
         let skip_paint = crate::profile::skip_paint() || self.oc_hidden();
+        // ★ A NON-SEPARABLE BLEND MODE REPLACES the ordinary paint, exactly
+        // as overprint does — it is a different compositing rule, not a
+        // post-pass over a normal one. Painting normally first would knock
+        // out the backdrop the blend function needs to read.
+        let nonsep = if skip_paint {
+            None
+        } else {
+            self.gs.current.nonseparable
+        };
         // `self.color.paints(_)` is false only where the standard or
         // pdfce's own limits say nothing is drawn: a `Pattern` space
         // (unpainted, and counted), `Separation /None` and an all-`/None`
@@ -4626,6 +4836,8 @@ impl Interpreter<'_> {
                 // have already knocked out the backdrop this must preserve.
                 if overprint_fill {
                     overprint_fill_pending = true;
+                } else if nonsep.is_some() {
+                    // Deferred below with the other composites.
                 } else {
                     let paint = solid(
                         self.gs.current.fill_color,
@@ -4647,12 +4859,51 @@ impl Interpreter<'_> {
         if !skip_paint && stroke && self.color.paints(true) {
             if overprint_stroke {
                 overprint_stroke_pending = true;
+            } else if nonsep.is_some() {
+                // Deferred below with the other composites.
             } else {
                 let paint = solid(
                     self.gs.current.stroke_color,
                     self.gs.current.stroke_alpha,
                     self.gs.current.blend_mode,
                 );
+                canvas.stroke(&path, &paint, &self.stroke_params(), ctm, clip);
+            }
+        }
+
+        // The non-separable composites, after the `clip` borrow ends — same
+        // reason the overprint ones are here. Fill before stroke, matching
+        // the order the ordinary paints above would have used.
+        if let Some(mode) = nonsep {
+            if fill
+                && let Some(rule) = fill_rule
+                && self.color.paints(false)
+                && !self.paint_nonseparable(&path, mode, Some(rule), false, canvas)
+            {
+                // Could not composite — paint normally rather than paint
+                // nothing, and SAY SO. A silent fallback would leave the
+                // operator with a Normal-blended mark and a diagnostic
+                // claiming the mode was applied.
+                self.diag.blend_modes_ignored += 1;
+                let paint = solid(
+                    self.gs.current.fill_color,
+                    self.gs.current.fill_alpha,
+                    tiny_skia::BlendMode::SourceOver,
+                );
+                let clip = self.gs.current.clip_ref();
+                canvas.fill(&path, &paint, rule, ctm, clip);
+            }
+            if stroke
+                && self.color.paints(true)
+                && !self.paint_nonseparable(&path, mode, None, true, canvas)
+            {
+                self.diag.blend_modes_ignored += 1;
+                let paint = solid(
+                    self.gs.current.stroke_color,
+                    self.gs.current.stroke_alpha,
+                    tiny_skia::BlendMode::SourceOver,
+                );
+                let clip = self.gs.current.clip_ref();
                 canvas.stroke(&path, &paint, &self.stroke_params(), ctm, clip);
             }
         }

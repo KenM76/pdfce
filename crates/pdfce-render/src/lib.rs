@@ -52,6 +52,10 @@
 #![forbid(unsafe_code)]
 
 pub mod annot;
+/// The four NON-SEPARABLE blend modes (ISO 32000-1 §11.3.5.3, Table 137),
+/// computed by pdfce because the rasteriser's are measurably wrong —
+/// see the module docs and `ARCHITECTURE.md` §12 decision 066.
+pub mod blend_nonsep;
 pub mod cancel;
 pub(crate) mod canvas;
 /// Reuse of identical clip masks within one render — see the module's

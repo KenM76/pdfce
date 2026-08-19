@@ -318,6 +318,21 @@ pub struct GraphicsState {
     /// one), and the failure mode of letting them diverge is a recorded
     /// paint that ignores its clip — visible only on replay.
     pub clip_id: Option<crate::display_list::ClipId>,
+    /// The §11.3.5.3 **non-separable** blend mode in force, if any.
+    ///
+    /// Carried BESIDE [`Self::blend_mode`] rather than inside it, because the
+    /// two are computed by different machinery and must not be
+    /// interchangeable: [`Self::blend_mode`] is handed to the rasteriser, and
+    /// these four are exactly the ones the rasteriser gets wrong
+    /// (`ARCHITECTURE.md` §12 decision 066). One field would make routing a
+    /// non-separable mode to `tiny_skia` a type-correct mistake.
+    ///
+    /// When this is `Some`, [`Self::blend_mode`] stays `SourceOver` and the
+    /// paint path composites per pixel through [`crate::blend_nonsep`]. That
+    /// pairing is deliberate: a paint site that has not been taught about
+    /// this field composites NORMALLY rather than with a wrong rule, which
+    /// is the same fail-safe direction the old refusal had.
+    pub nonseparable: Option<crate::blend_nonsep::NonSeparableBlend>,
     /// The nine §9.3 text-state parameters (module docs: they ARE
     /// graphics-state parameters, so `q`/`Q` save and restore them).
     pub text: crate::text::TextState,
@@ -350,6 +365,7 @@ impl GraphicsState {
             clips_since_smask: 0,
             clip_bbox: None,
             clip_id: None,
+            nonseparable: None,
             text: crate::text::TextState::default(),
         }
     }

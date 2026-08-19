@@ -731,6 +731,9 @@ fn paint_appearance(
         let paint = crate::canvas::LayerPaint {
             opacity: alpha as f32,
             blend: tiny_skia::BlendMode::SourceOver,
+            // An annotation's `/CA` composite is a constant-alpha composite,
+            // not a blend-mode one -- §12.5.5 has no `/BM` at this level.
+            nonseparable: None,
         };
         let painted = canvas.layer(paint, |sub_canvas| {
             interpret::run_form_at_on(

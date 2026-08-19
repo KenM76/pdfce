@@ -501,25 +501,38 @@ fn a_group_that_is_not_a_transparency_group_is_not_counted() {
     assert_eq!(d.transparency_groups_flattened, 0);
 }
 
-/// The FOUR NON-SEPARABLE modes are recognised names that pdfce
-/// deliberately declines to composite, so they land in the shortfall
-/// counter rather than the census — the same bucket as a typo, for a
-/// completely different reason.
+/// The FOUR NON-SEPARABLE modes are APPLIED, and applied by **pdfce's own**
+/// Table 137 rather than by the rasteriser.
 ///
-/// Pinned because the alternative is worse in a way that is easy to talk
-/// yourself into: `tiny_skia` HAS these four modes and mapping to them is
-/// one line. They are wrong by up to 107/255 on 9.4–15.5% of colour pairs
-/// (its `clip_color` gates the low-gamut rescale on `mx >= 0` where the
-/// standard uses `mn < 0`, leaving the branch dead). A wrong rendering
-/// that looks plausible is worse than a disclosed one that does not.
+/// ★ THIS TEST USED TO ASSERT THE OPPOSITE, and the history is the point.
+/// It was `the_non_separable_modes_are_refused_not_silently_wrong`, and it
+/// pinned decision 066's refusal: `tiny_skia` HAS these four modes, mapping
+/// to them is one line, and they are wrong by up to 107/255 on 9.4–15.5 % of
+/// colour pairs (its `clip_color` gates the low-gamut rescale on `mx >= 0`
+/// where the standard uses `mn < 0`, leaving the branch dead).
+///
+/// **Decision 066 refused TRUSTING the dependency. It never refused the
+/// feature**, and the modes are now computed in `pdfce_render::blend_nonsep`
+/// against the clause. So the assertion flips — but *what it protects does
+/// not*: these must never be **silently wrong**, and "applied" is only an
+/// improvement on "refused" if the thing applied is right.
+///
+/// That second half is why this test checks a counter and
+/// `tests/nonseparable_blend_differential.rs` checks the pixels: a counter
+/// saying `applied` while the composite is wrong is precisely the outcome
+/// decision 066 exists to prevent, and it is exactly what the old
+/// one-line-mapping would have produced.
 #[test]
-fn the_non_separable_modes_are_refused_not_silently_wrong() {
+fn the_non_separable_modes_are_applied_by_pdfces_own_table_137() {
     for name in ["Hue", "Saturation", "Color", "Luminosity"] {
         let d = render(page(&format!("<< /Type /ExtGState /BM /{name} >>"))).diagnostics;
-        assert_eq!(d.blend_modes_ignored, 1, "/BM /{name} must be refused");
         assert_eq!(
-            d.blend_modes_applied, 0,
-            "/BM /{name} must not count as applied"
+            d.blend_modes_applied, 1,
+            "/BM /{name} must be APPLIED now that pdfce computes Table 137"
+        );
+        assert_eq!(
+            d.blend_modes_ignored, 0,
+            "/BM /{name} must no longer land in the shortfall counter"
         );
     }
 }

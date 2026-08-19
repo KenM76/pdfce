@@ -6945,7 +6945,7 @@ soft_masks_applied={} soft_mask_tr_ignored={} soft_masks_reset_stale={} \
 groups_flattened={} groups_special={} \
 groups_composited={} groups_knockout_approx={} \
 overprint_requested={} overprint_opm1={} overprint_effective={} \
-overprint_composited={} overprint_refused={} overprint_pixels={}",
+overprint_composited={} overprint_refused={} overprint_pixels={} nonseparable_composited={} nonseparable_pixels={}",
         input.display(),
         output.display(),
         rendered.pixmap.width(),
@@ -7173,6 +7173,13 @@ overprint_composited={} overprint_refused={} overprint_pixels={}",
         d.overprint_composited,
         d.overprint_refused,
         d.overprint_pixels,
+        // The four NON-SEPARABLE blend modes take their own code path --
+        // pdfce computes Table 137 per pixel because the rasteriser's
+        // versions are wrong (decision 066). They are counted separately
+        // from `blend_modes_applied` because the two paths fail
+        // independently, and a page can exercise one without the other.
+        d.nonseparable_composited,
+        d.nonseparable_pixels,
     );
     report_diagnostics(d);
 
