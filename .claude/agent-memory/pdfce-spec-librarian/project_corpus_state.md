@@ -3071,3 +3071,126 @@ error, and it is not wrong so much as LOSSY."**
   without naming the destination loses the triage work.** And **a settled
   negative (`BE-N1`) is deliberately NOT in the register** — it is an answer, not
   an ambiguity.
+
+
+---
+
+## 51. The TWO-GAPS-NAMED-FROM-OUTSIDE dispatch (2026-08-19, clause 10 + §8.6.5.6/§8.6.5.7)
+
+**Shape:** two gaps, neither found by me — one **declared by a corpus file about
+itself** (`iso32000__s__8.6.md`'s own "GAP (still open)" list), one found by a
+**sibling project** (`iccce`/`ICC_Spec`) that tried to cross-reference PDF_Spec
+and could not. Both blocking-adjacent to a pdfce Pass about to start.
+Deliverable: 4 new files + `index.md` + the declaring file's gap list + 3
+downstream files carrying stale claims.
+
+- **A dispatch's "clause X is ENTIRELY ABSENT" is a COVERAGE HYPOTHESIS, and it
+  was half wrong.** No clause-10 *file* existed, but clause-10 *content* did —
+  `color__cie_based.md` §6 (`CIE-N5`) had §10.1's pipeline, §10.2's delegation
+  and one-line summaries of §10.3.2–.3.5, and `iso32000__s__11.5.md` cited
+  §10.3.3. **Test the premise, then state the precise residue** ("no file; and
+  genuinely absent: every clause body, the renumbering map, 2.0's §10.2/§10.3.1/
+  §10.3.2/§10.4.2.1/§10.8"). Content filed under a *neighbouring* clause's file
+  name is invisible to a `Glob` for the clause number — that is *why* the
+  dispatch believed it absent, and it is an argument for clause-numbered file
+  names.
+- **★ WHEN A DISPATCH HANDS YOU AN ID MINTED BY A SIBLING CORPUS, GO READ THE
+  SIBLING'S ROW FIRST.** `A52` was `ICC_Spec/icc/icc__ref__ambiguity_register.md`
+  row A52 + `icc__ref__black_preservation.md` §2.2. Reading them cost 2 commands
+  and supplied: the exact question, the sibling's own uncertainty ("what would
+  settle it: **ask `pdfce` which reading it implements**"), and the leg that
+  turned out to be **wrong**. Adopt the foreign ID **and** mint a corpus-native
+  one (`REND-A1`), indexing both strings so either grep lands.
+- **★ THE EVIDENCE THAT SETTLES A MODALITY DISPUTE IS USUALLY IN A THIRD CLAUSE
+  NOBODY CITED.** §10.3.2 vs §10.4.2.1 are both `should`, so neither outranks the
+  other. The decisive corroboration was **§10.5 (Transfer functions)**, a
+  different top-level subclause, **in both editions**, calling `c=m=y=0` "**the
+  normal conversion** from `DeviceGray` to `DeviceCMYK`" and hanging a `shall
+  not` on it. Neither the dispatch nor the sibling corpus had it. **When two
+  clauses tie on modality, grep the FORMULA's own terms document-wide and read
+  every other clause that presupposes it.**
+- **★ AND THE OTHER HALF: CHECK THE OLDER EDITION.** The sibling's row said
+  "ISO 32000-1:2008 has no §10.3.2 equivalent, **so PDF 1.7 files carry no such
+  steer**." First half right, second half wrong — **1.7 carries a STRONGER steer
+  than 2.0, as a `shall`**: §10.2's "The CIE-based gamut and colour mapping
+  functions **shall be applied only to** colour values presented in a CIE-based
+  colour space." ⇒ the ambiguity is **created by the newer edition**, not
+  inherited. Item 47 says a later edition can change an *answer*; this is the
+  mirror — **an EARLIER edition can answer a question the later one reopened.**
+- **A DISPATCH'S CLAUSE TITLES CAN BE WRONG WHILE ITS QUOTES ARE EXACT.** Both
+  verbatim quotes matched glyph-for-glyph, but "cl. 10.3 **Colour-managed
+  workflow**" is actually "CIE-Based colour to device colour", and "cl. 10.3.1 —
+  `DeviceCMYK` passthrough" is **1.7** §10.3.1; **2.0 §10.3.1 is "General" under
+  the CIE branch and 2.0 DELETED the passthrough sentence entirely**. Verify
+  titles with a heading grep (`grep -n '^10\(\.[0-9]\)* '`) before writing any
+  clause map — it is one command and it produced the whole §1 edition table.
+- **★ A "DOES X EXIST IN THE OLD EDITION?" NEGATIVE CAN BE TRUE OF THE SENTENCE
+  AND FALSE OF THE CONCEPT.** Asked to verify *"Cyan, Magenta, Yellow and Black
+  … reserved to name the process colourants"* exists **only** in 2.0:
+  `reserved to name` = **0 hits 1.7 / 2 hits 2.0** ✅ — but `reserved name` =
+  **1 hit in EACH**. 1.7 already reserves those names, scoped to §8.6.6.5's
+  **`NChannel` `/Process` bullet list**; 2.0 **hoists** the reservation to every
+  `Separation` `name` and every `DeviceN` component name. **Always re-grep a
+  looser variant of the phrase before recording a version-delta negative** —
+  same class as the ligature and `Annex<2 spaces>` false negatives, but caused by
+  *wording drift* rather than extraction. The wrong form was already circulating
+  in the sibling corpus **and** in the dispatch.
+- **RE-CHECK EVERY RECORDED NEGATIVE AGAINST THE NEWER EDITION BEFORE REPEATING
+  IT.** `OP-N1` said overprint simulation is "not in the standard — **no
+  ingestion closes it**". True for 1.7 (`simulat*` = 7 hits, all unrelated,
+  re-measured), **false for 2.0**, which has a whole clause (§10.8), a four-step
+  algorithm, a `/Requirements` capability name and a NOTE calling it "**Overprint
+  Preview**". **RESCOPE, don't retract** — keep the 1.7 negative legible and
+  bound it to its edition. A "no ingestion closes it" clause in a negative is a
+  **prediction**, and predictions expire.
+- **CLAUSE RENUMBERING CAN FOLLOW TWO DIFFERENT RULES INSIDE ONE CLAUSE.**
+  Clause 10: top level is **1.7 §10.N → 2.0 §10.(N+1) for N≥2** (2.0 inserts a
+  new §10.2), but the device-conversion family is **1.7 §10.3.x → 2.0
+  §10.4.2.x** (a level deeper, because 2.0 wrapped them in a new "Classic colour
+  conversion methods" subclause). A single-offset rule of thumb would have
+  mis-mapped every formula. **Write the map as a table, not as a rule.**
+- **UNREMEDIED ≠ PERMANENT, and the cheap evidence is TWO negatives:** (1) the
+  public per-clause errata page (`pdf-issues.pdfa.org/32000-2-2020/clause10.html`,
+  note its "Page last modified" date) lists no change to the disputed sentences;
+  (2) the staged EC3 copy carries **zero annotations** on those pages. Both are
+  one command. Say **UNREMEDIED** — a future amendment can still close it.
+- **PER-QUOTE LICENCE PICKING when a sentence exists in BOTH editions.** §8.6.5.7
+  NOTE 2's black-fidelity sentence is in 1.7 (`free_primary`, Adobe's public PDF)
+  **and** 2.0 (licensed). **Quote the 1.7 form and say so in the file**, because
+  the engineer's next move is pasting it into a doc comment in a **public** repo.
+  Cite the 2.0 clause **by number** alongside. File header line used:
+  *"the 1.7 form is `free_primary` ⇒ QUOTABLE IN PUBLIC pdfce CODE"*.
+- **SEPARATE THE INFORMATIVE QUOTE FROM ITS NORMATIVE SIBLING.** The famous
+  4→3→4 sentence is a **NOTE**. The clause body says the same thing as a
+  `should` ("a process that **loses critical colour information**"). A file that
+  offers only the NOTE invites someone to cite an informative sentence as a
+  requirement. Give both, labelled (`IMP-2`).
+- **ONE FILE vs FOUR, and the recorded reason.** Split clause 10 into
+  `iso32000__s__10.md` (both editions, mostly `free_primary`, the conversion
+  path) and `iso32000__s__10.8.md` (**2.0-only**, `licensed_primary_private_rag`,
+  a different question — how to *preview* separations). §8.6.5.6/§8.6.5.7 went to
+  `iso32000__s__*` rather than `color__*` because the `color__` prefix holds
+  colour-space **families** and these are **mechanisms** — the same reason
+  §8.6.7 (overprint) is already there. **Different `license_basis` is on its own
+  a sufficient reason to split a file.**
+- **CLOSING A DECLARED GAP TOUCHES MORE FILES THAN THE DECLARER.** Edited: the
+  declaring file's scope banner **and** its inline "not ingested" bullet **and**
+  its closing gap list (three separate places in one file); `index.md` (prefix
+  row + count, 4 manifest rows, a new trigger-topic block, search recipes, the
+  prepress gap table ×2, the ambiguity table, the triage pointer, a Status
+  entry); `color__cie_based.md` (a **SUPERSEDED-IN-DEPTH banner scoped to its
+  clause-10 content only** — `CIE-N5` itself stands); `iso32000__s__8.6.7.md`
+  (×3 — OP-A4, the OP-N1 banner, the simulation row);
+  `iso32000__ref__spot_colour_overprint.md` (×2); and the ambiguity register
+  (×2). **Grep the gap's own vocabulary corpus-wide** (`clause 10`, `§10.`,
+  `not ingested`) — that is what found the three downstream files.
+- **REPORT corrections owed to a corpus you do NOT own; never edit it.**
+  `ICC_Spec` needs two fixes (A52's 1.7 leg; §2.4's reserved-names claim). Both
+  were written into *my* files as "correction owed — report it, do not edit it"
+  and surfaced in the final message.
+- **TOOLING:** a Bash heredoc (`<<'PY'`) broke on content containing the
+  standard's punctuation — "unexpected EOF while looking for matching `''`".
+  **Write the Python script with the Write tool and run it by path.** Also:
+  a multi-`rep()` script that `assert`s and writes only at the end means **one
+  bad anchor discards every good replacement** — either write after each
+  replacement or split the script.

@@ -1,5 +1,36 @@
 # The N-plane → sRGB collapse: sourcing record
 
+> ## ★★ AMENDMENT 2026-08-19 — THE CENTRAL CLAIM IS EDITION-SCOPED AND THIS SURVEY DOES NOT SAY SO
+>
+> This survey concludes that **"there is no consensus formula to find"** and
+> that *"match Acrobat" is not an available specification*. Both statements
+> are **true of the thirteen engines it measured** and the engine findings
+> stand unamended.
+>
+> **What does not follow, and what this survey was read as licensing, is that
+> no formula is SPECIFIED.** ISO 32000-2:2020 **§10.8.3 "Separation
+> simulation"** specifies one — convert each separation to "flat XYZ" (no
+> gamma) against an all-white background matte, combine with a multiply blend
+> — and **§12.11.2 Table 275 NOTE 5** names it: *"This is sometimes referred
+> to as "Overprint Preview"."*
+>
+> ★ **The reason this was invisible is worth more than the correction:
+> pdfce's spec corpus held NO CLAUSE 10 AT ALL** until 2026-08-19, and clause
+> 10 is the colour-conversion chapter. The gap was found from **outside** the
+> corpus, by a sibling project that tried to cross-reference us and could
+> not. A survey of implementations cannot detect a specification its own
+> reference corpus is missing — it will conclude "unspecified" from silence
+> that is the library's, not the standard's.
+>
+> **Read `iso32000__s__10.8.md` before citing this file.** §10.8.3 is a
+> `should` on the OUTCOME with three registered ambiguities of its own
+> (`SEP-A2` a mis-citation, `SEP-A3` "flat XYZ" undefined, `SEP-A4` the
+> ink→XYZ map unspecified), so it is a constrained target rather than a
+> complete recipe — but it is a target, and this survey concluded there was
+> none. The consequences for `Pass 97.2` are worked through in
+> `docs/compositor-plan.md` Stage C.
+
+
 **Written 2026-08-18**, engineer-owned. Commissioned research pass, all claims
 URL-cited below. Companion to `docs/overprint-architecture-survey.md` (which
 established *why* the N-plane buffer is required) and `docs/compositor-plan.md`

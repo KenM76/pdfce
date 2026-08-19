@@ -23,10 +23,38 @@
 //! (`iso32000__ref__spot_colour_overprint.md`) records two sourced facts
 //! that between them make overprint simulation entirely optional:
 //!
-//! - **`OP-N1` (a negative result, not a gap):** ISO 32000-1 *never
-//!   describes* overprint preview or simulation on a non-separating device.
-//!   The phrase "overprint preview" has **zero** occurrences in the 756-page
-//!   source.
+//! - **`OP-N1` (a negative result, not a gap) — ★ EDITION-SCOPED, corrected
+//!   2026-08-19:** **ISO 32000-1** never describes overprint preview or
+//!   simulation on a non-separating device. Confirmed by measurement rather
+//!   than by absence of memory: `simulat*` returns **7 hits in all 756
+//!   pages** and every one is unrelated (ink `/Solidities`, an
+//!   obsolete-masking NOTE, halftone "patterns of pixels", two annotation
+//!   border styles, one mouse-device sentence); `overprint preview` returns
+//!   **zero**.
+//!
+//!   **This paragraph previously said "the standard", unqualified, and that
+//!   is wrong for PDF 2.0.** `OP-N1` is **rescoped, not retracted**:
+//!   **ISO 32000-2:2020 §10.8.3 "Separation simulation"** specifies a
+//!   four-step algorithm for exactly this, and **§12.11.2 Table 275**'s
+//!   `SeparationSimulation` requirement row carries **NOTE 5**: *"This is
+//!   sometimes referred to as "Overprint Preview"."* So in 2.0 the feature
+//!   has a standard name, a standard algorithm and a standard capability
+//!   flag. See `iso32000__s__10.8.md`.
+//!
+//!   ★ **What survives, and what does not.** The *conclusion* survives — §10.8.3
+//!   is a `should`, so a compositor without it is still conformant, and this
+//!   module is still a policy choice. What does not survive is the reason
+//!   given: "the standard is silent" was load-bearing for the claim that
+//!   pdfce may pick **any** plausible behaviour. Under 2.0 it may not —
+//!   §10.8.3 is a `should` **on the outcome**, so shipping a simulation that
+//!   does not match its four-step result is worse-placed than shipping none.
+//!   That constrains `Pass 97.2` (the collapse), not this module's Table 149
+//!   arithmetic, which §10.8.3 does not touch.
+//!
+//!   Note the shape of the original error, because it is the expensive kind:
+//!   a measured negative result over **one edition** was written down as a
+//!   fact about **the format**. The measurement was sound; the scope on it
+//!   was not stated, so it read as universal.
 //! - **§8.6.7 directly:** *"If overprinting is not supported, the value of
 //!   the overprint parameter shall be ignored."* Ignoring `/OP` and `/op`
 //!   is **conformant**, and it is what pdfce did until this module existed.

@@ -387,6 +387,108 @@ function for every non-linear mode.
 `α_i = Union(α_0, α_gi)` is derivable and `α_0` is the parent buffer's alpha,
 so **one extra scalar per pixel** is the whole cost over a plain RGBA buffer.
 
+#### ★★ AMENDMENT 2026-08-19 — §3.2 IS WRONG IN TWO WAYS. Both measured, both cheap to fix now and expensive later.
+
+Sourced from `D:\Dev\Rag-Specialized\Compositor\` (new subject, 21 files +
+an archived benchmark, deliberately outside every git repo).
+
+##### 1. The pixel is one scalar short, and our own corpus said so first
+
+`alpha` and `alpha_g` are not enough. §11.4 requires **three**: shape
+`f_gn`, group alpha `α_gn`, and complete alpha `α_n`. Shape and opacity are
+separate quantities and only their *product* is alpha — collapsing them is
+exactly what knockout groups cannot tolerate.
+
+**This is not new sourcing — it is in `iso32000__s__11.4.md` §6.5, written
+the day before this plan**, as two numbered obligations:
+
+| id | obligation | strength |
+|---|---|---|
+| `KO-S1` | a knockout group needs `f_si` and `q_si` as **separate** quantities — they appear in different places in the formulas and never only as their product | implied by the formulas |
+| `KO-S2` | *"The separate shape value **shall** be computed in any group that is subsequently used as an element of a knockout group"* | **`shall`** |
+
+That file already states the consequence in the plan's own terms — **"+1
+plane"** — and it is not an edge case: **`/TK` defaults to `true`, so every
+text object is an implicit knockout group.**
+
+★ **The trap that comes with it**, quoted because a fixture built without it
+proves nothing: *"A fixture built from opaque fills cannot distinguish a
+correct knockout implementation from a wrong one. Build the test with
+`/ca < 1`."* Shape and alpha are equal when opacity is 1, so an all-opaque
+test passes under both the correct and the collapsed model.
+
+Cost: one more f32 per pixel. §3.2's closing claim that *"one extra scalar
+per pixel is the whole cost"* becomes **two**.
+
+##### 2. Store PLANE-major. The struct as written is the slow layout.
+
+`Pixel<const N>` is an interleaved (array-of-structs) layout. Measured
+against plane-major (structure-of-arrays) on i9-10900KF / rustc 1.97.1, with
+source and raw output archived in `Compositor\bench\`:
+
+| kernel | plane-major speed-up |
+|---|---|
+| fill | **3.0 – 5.4×** |
+| group composite | **2.6 – 3.7×** |
+| whole-plane op | **3.8 – 10.3×** |
+
+Every kernel, every N, every working-set size. **The folk rule — "per-pixel
+operations want interleaved" — does not survive a runtime N**, because the
+compiler cannot unroll or vectorise across a stride it does not know.
+
+⇒ Keep `Pixel<const N>` as an **accessor view**; store `N + 3` contiguous
+planes.
+
+And a corollary that redirects effort: **compile-time N is the wrong axis.**
+Specialising N ∈ {1,3,4} buys 5–18 %; the layout buys 200–300 %. Precedent
+decides nothing here — Ghostscript is planar with 64 planes, MuPDF is
+interleaved 8-bit — so the measurement is the only evidence available, which
+is why it was taken.
+
+##### Three more from the same survey, not amendments but constraints
+
+- **Never `memset(0)` a subtractive buffer.** `DeviceCMYK`'s initial colour
+  is `[0 0 0 1]` and soft-mask `/BC` defaults to black, so a zero fill yields
+  **white** and **inverts every luminosity mask**. It is correct in sRGB and
+  wrong in CMYK, so it appears precisely at the Stage A → Stage B boundary.
+  Worse: §8.6.8 gives `ICCBased` spaces all-zeros, so the *same ink set* gets
+  **opposite** defaults depending on `DeviceCMYK` vs `ICCBased`. A genuine
+  spec contradiction needing an explicit, disclosed call.
+- **ICC cannot exceed 15 colorants** — 4 bits in the pixel-format encoding,
+  confirmed in three implementations. The decided collapse is immune; an
+  `nCLR` shortcut is not.
+- **`Mask::from_path` (§3.1) does not exist**, and the coverage-only design
+  as written allocates a page-sized mask per fill — a cost pdfce has already
+  measured at **259 µs** (`clip_cache.rs`). Bbox-sized + 2 px, reused scratch.
+
+##### Crate landscape — verified, not relayed
+
+**No Rust crate does this.** Three named, and the licences were checked
+against the crates.io API directly rather than taken from the survey,
+because two of them are hard blockers and a wrong licence is not a
+recoverable error:
+
+| crate | version | licence | standing |
+|---|---|---|---|
+| `stet` | 0.4.1 | **Apache-2.0 OR MIT** | usable. Implemented overprint and chose 4 plates + a spot flag — read as a map of where that breaks |
+| `rustybara` | 0.1.9 | **LGPL-3.0-only** | weak copyleft ⇒ operator call required (rule 13); a trap on the obvious search terms |
+| `zenblend` | 0.1.3 | **AGPL-3.0-only** | categorically unusable for an MIT project |
+
+##### What the survey could NOT establish — measure these, do not assume
+
+- **Hand-written SIMD.** The benchmark is autovectorisation on one
+  microarchitecture. A hand-vectorised interleaved N=4 might narrow the gap;
+  nobody has published the comparison.
+- **Const-generic vs runtime trip count in Rust** — no public A/B exists.
+  The LLVM mechanism evidence predicts a *larger* win than was measured, and
+  the survey records that disagreement rather than resolving it.
+- **AA between two different spot colorants**, and AA edges where backdrop
+  removal divides by a small `α_gn`. No treatment found anywhere.
+- **Deep nesting with a page-sized group `/BBox`.** Harlequin says only that
+  it *"uses different strategies to try to recover memory for such pages"* —
+  a refusal to say.
+- ⚠ *"RIPs disable AA for separations"* is **explicitly not established** —
+  no vendor source exists. Do not repeat it.
 ### 3.3 N is chosen per page, not per build
 
 Pre-scan the page's resources for `/Separation` and `/DeviceN` colorant names
@@ -506,6 +608,71 @@ an ISO TC171 participant who went looking. Headlines:
   **~1.4 Mpix/s ≈ 6 s/page against pdfce's ~0.6 s render**, so the collapse
   cannot be an unconditional per-frame step.
 
+#### ★★ AMENDMENT 2026-08-19 — THE COLLAPSE IS SPECIFIED IN PDF 2.0. Re-read Stage C before scoping it.
+
+Everything above rests on *"there is no consensus formula to find"*, sourced
+from `docs/collapse-model-survey.md`'s thirteen-engine survey. **That is true
+of the engines and false of the standard**, and the difference was invisible
+because pdfce's spec corpus held **no clause 10 at all** until today.
+
+`iso32000__s__10.8.md` (new, `pdfce-spec-librarian`, 2026-08-19):
+
+- **ISO 32000-2:2020 §10.8.3 "Separation simulation"** specifies a four-step
+  algorithm: convert each separation to **"flat XYZ" (no gamma)** against a
+  **background matte of all white**, then combine with a **multiply blend**.
+- **§12.11.2 Table 275** gives it a requirement-handler name,
+  `SeparationSimulation`, whose **NOTE 5** reads verbatim: *"This is
+  sometimes referred to as "Overprint Preview"."*
+- `OP-N1` — the negative result this plan and `overprint.rs` both lean on —
+  is **rescoped to ISO 32000-1, not retracted**. For 1.7 it is confirmed by
+  measurement (`simulat*` = 7 hits, all unrelated). For 2.0 it is simply
+  wrong.
+
+**What changes, and what does not.**
+
+It does **not** make the collapse mandatory: §10.8.3 is a `should`, so a
+compositor without it stays conformant. What it changes is the *freedom*.
+The survey's conclusion licensed pdfce to pick any defensible formula because
+none was specified. One is. It is a **`should` on the OUTCOME**, which means
+**shipping a simulation that does not match its four-step result is a worse
+position than shipping none at all** — a documented deviation rather than a
+documented absence.
+
+★ **And it constrains the architecture, not just the arithmetic.** The new
+file states the consequence directly: *a compositor that implements §10.8.3
+as a final RGB pass will disagree with a conforming implementation wherever a
+blend mode or a transparency group is present.* Stage C is currently written
+as "collapse N planes to sRGB **once, at the end**" — that phrasing is
+exactly the final-pass shape being warned about. **Reconcile before
+scoping**: either the collapse happens inside the group-composite step, or
+Stage C must state why the end-pass is acceptable for pdfce and disclose the
+deviation.
+
+**Do not treat §10.8.3 as a complete specification.** Three of its own
+ambiguities are registered in the same file and two are load-bearing:
+
+| id | what is unspecified |
+|---|---|
+| `SEP-A3` | **"flat XYZ (no gamma)" is defined nowhere** — one occurrence document-wide. The adopted reading (linear-light CIE 1931 XYZ, no transfer curve) is **DERIVED**, labelled as such |
+| `SEP-A4` | **the per-separation ink→XYZ map is unspecified.** Step (b) says "convert each separation into flat XYZ" without saying by what. ⇒ pdfce's choice, disclosed under rule 4 |
+| `SEP-A2` | step (c) cites **"Table 133"** for the multiply blend, but Table 133 is the compositing-**variables** table; the blend functions are Table 134. Loose citation or erratum; **none filed.** Read as `B(cb, cs) = cb × cs` |
+
+So Stage C now has a specified *target* with three holes in it, rather than
+no target at all. That is a better position and a more constrained one, and
+the settings enumerated above stay — they now record deviations from a
+known outcome rather than choices among equals.
+
+`SEP-N2` is worth carrying too: **§10.8 says nothing about spot-colourant
+overprint order, ink solidity or dot gain.** Those live in `DeviceN`'s mixing
+hints (`/Solidities`, `/PrintingOrder`, `/DotGain`) and §10.8 does not
+reference them. The multiply in step (c) is order-independent, so
+`/PrintingOrder` has **no role** in the simulation as specified — which is
+itself a useful negative result for anyone tempted to honour it.
+
+**`docs/collapse-model-survey.md` has not been amended** and still asserts
+the un-scoped "no consensus formula" claim. It is a dated survey of engines,
+and its engine findings stand; this amendment is the correction to what was
+inferred *from* them. Amend it there before citing it again.
 ### Out of scope for 97.x
 
 `Pass 85.1` mesh shadings (`1_GWG060`) and ICC source profiles (`3_GWG130`).
