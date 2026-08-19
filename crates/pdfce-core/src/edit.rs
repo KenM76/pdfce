@@ -2666,8 +2666,28 @@ fn dropped_properties<G: ObjectGraph + ?Sized>(
 ) -> Vec<DroppedProperty> {
     let mut out = Vec::new();
 
+    // ★ `/BE` IS NO LONGER ALWAYS A LOSS (`Pass 98.0`). A cloudy border on
+    // a `/Square` or a `/Polygon` is now read back into the spec and
+    // re-baked, so disclosing it as dropped would be a FALSE disclosure —
+    // and rule 4 cuts both ways: a report of a loss that did not happen
+    // trains the operator to discount the ones that did.
+    //
+    // Still dropped, and still reported: `/BE` on any other subtype
+    // (`/Circle`, `/PolyLine`, `/Line`, `/Ink` — pdfce's specs for those
+    // carry no border effect), and a `/BE` whose `/S` is not `/C` (Table
+    // 167's solid default, or a name from a future extension), which
+    // `read_border_effect` declines to interpret rather than guess at.
     if annot.get(b"BE").is_some() {
-        out.push(DroppedProperty::BorderEffect);
+        let subtype = annot.get(b"Subtype").map(|o| graph.resolve(o));
+        let cloud_capable = matches!(
+            subtype,
+            Some(Object::Name(n)) if n.as_bytes() == b"Square" || n.as_bytes() == b"Polygon"
+        );
+        let preserved =
+            cloud_capable && crate::annot_author::read_border_effect(graph, annot).is_some();
+        if !preserved {
+            out.push(DroppedProperty::BorderEffect);
+        }
     }
     if annot.get(b"RD").is_some() {
         out.push(DroppedProperty::RectDifferences);
@@ -22131,7 +22151,6 @@ endstream",
             .unwrap();
 
         for expected in [
-            DroppedProperty::BorderEffect,
             DroppedProperty::RectDifferences,
             DroppedProperty::BorderStyle,
             DroppedProperty::DashPattern,
@@ -22143,6 +22162,162 @@ endstream",
                 change.dropped
             );
         }
+        // ★ `BorderEffect` USED TO BE IN THAT LIST, and its removal is the
+        // point of `Pass 98.0`. This fixture's `/BE << /S /C /I 2 >>` on a
+        // `/Square` is now READ BACK and re-baked, so disclosing it as
+        // dropped would be a FALSE disclosure.
+        //
+        // Rule 4 cuts both ways: a reported loss that did not happen trains
+        // the operator to discount the four above, which did.
+        assert!(
+            !change.dropped.contains(&DroppedProperty::BorderEffect),
+            "a cloudy /BE on a /Square is preserved now, so it must NOT be \
+             reported as dropped; got {:?}",
+            change.dropped
+        );
+    }
+
+    /// The cases where `/BE` is still genuinely lost, so the disclosure is
+    /// still owed.
+    ///
+    /// The companion to the assertion above, and the reason it is a separate
+    /// test rather than another line in that one: "we stopped reporting a
+    /// loss" is only correct if we still report the losses that remain.
+    /// Removing a disclosure is the kind of change that is easy to take too
+    /// far, and this is what bounds it.
+    #[test]
+    fn a_border_effect_pdfce_cannot_carry_is_still_disclosed() {
+        // A `/Circle` has no `border_effect` in pdfce's spec at all, and a
+        // `/Square` whose `/S` is the Table 167 SOLID default is not a cloud
+        // — reading one as a cloud would invent a shape the file does not
+        // describe.
+        for (subtype, be) in [
+            ("Circle", "<< /S /C /I 1 >>"),
+            ("Square", "<< /S /S >>"),
+            ("Square", "<< /S /Something /I 1 >>"),
+        ] {
+            let bytes = build(
+                &[
+                    "<< /Type /Catalog /Pages 2 0 R >>",
+                    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Resources << >> \
+                     /Annots [4 0 R] >>",
+                    &format!(
+                        "<< /Type /Annot /Subtype /{subtype} /Rect [10 10 100 40] \
+                         /C [1 0 0] /BE {be} >>"
+                    ),
+                ],
+                "",
+            );
+            let mut s = session(bytes);
+            let change = s
+                .set_markup_style(
+                    ObjId::new(4, 0),
+                    &MarkupStyle {
+                        stroke: Some(StyleEdit::Set(Color::Rgb(0.0, 0.0, 1.0))),
+                        ..MarkupStyle::default()
+                    },
+                )
+                .unwrap();
+            assert!(
+                change.dropped.contains(&DroppedProperty::BorderEffect),
+                "/{subtype} with /BE {be} loses the effect and must SAY so; \
+                 got {:?}",
+                change.dropped
+            );
+        }
+    }
+
+    /// ★ THE ROUND TRIP the Pass was scoped on: a foreign revision cloud,
+    /// restyled, still LOOKS like a cloud.
+    ///
+    /// # ★★ THIS TEST ASSERTED THE WRONG THING FIRST, and a sabotage run is
+    /// what caught it
+    ///
+    /// The Pass's own acceptance sketch said *"verify `/BE` survives"*, and
+    /// the first version of this test did exactly that — read `/BE` back out
+    /// of the dictionary and checked `/S /C` and `/I`.
+    ///
+    /// **It passed with the reader stubbed out to return `None`.** Of course
+    /// it did: `set_markup_style` patches the properties it edits, so `/BE`
+    /// was never being deleted. The defect was never a missing key — it was
+    /// that *the annotation said cloud and the appearance drew flat*. A
+    /// dictionary assertion cannot see that, which is exactly why the
+    /// operator's report would have been "why did my cloud go flat?" and not
+    /// "why did my `/BE` vanish?".
+    ///
+    /// So this checks the APPEARANCE, differentially: the same polygon with
+    /// and without `/BE` must restyle to **different** appearance streams,
+    /// and the cloudy one must be drawn with curves. Either assertion alone
+    /// is weak — a curve could come from elsewhere, and two streams could
+    /// differ for a trivial reason — and together they are hard to satisfy
+    /// by accident.
+    #[test]
+    fn a_foreign_revision_cloud_survives_a_restyle() {
+        fn restyled_appearance(be: &str) -> Vec<u8> {
+            let annot = format!(
+                "<< /Type /Annot /Subtype /Polygon /Rect [10 10 200 120] \
+                 /Vertices [20 20 180 20 180 100 20 100] /C [1 0 0] {be} >>"
+            );
+            let bytes = build(
+                &[
+                    "<< /Type /Catalog /Pages 2 0 R >>",
+                    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] \
+                     /Resources << >> /Annots [4 0 R] >>",
+                    &annot,
+                ],
+                "",
+            );
+            let mut s = session(bytes);
+            s.set_markup_style(
+                ObjId::new(4, 0),
+                &MarkupStyle {
+                    stroke: Some(StyleEdit::Set(Color::Rgb(0.0, 0.0, 1.0))),
+                    ..MarkupStyle::default()
+                },
+            )
+            .expect("restyle succeeds");
+
+            let view = s.view();
+            let Object::Dict(a) = view.resolved(ObjId::new(4, 0)) else {
+                panic!("the annotation must still be a dictionary");
+            };
+            let Some(Object::Dict(ap)) = a.get(b"AP").map(|o| view.resolve(o)) else {
+                panic!("a restyle must leave a baked /AP (R43)");
+            };
+            let Some(Object::Reference(n_ref)) = ap.get(b"N") else {
+                panic!("/AP /N must be an indirect stream");
+            };
+            let Object::Stream(st) = view.resolved(*n_ref) else {
+                panic!("/AP /N must resolve to a stream");
+            };
+            view.slice(st.data_span).expect("appearance bytes").to_vec()
+        }
+
+        let cloudy = restyled_appearance("/BE << /S /C /I 1.5 >>");
+        let plain = restyled_appearance("");
+
+        assert_ne!(
+            cloudy, plain,
+            "a cloudy polygon and a plain one must NOT restyle to the same \
+             appearance — identical bytes mean the cloud was flattened, which \
+             is the whole defect Pass 98.0 fixes"
+        );
+
+        // A scalloped border is drawn with curves; a straight outline is not.
+        // Matched as a whole operator (space-c-newline or space-c-space) so a
+        // `c` inside a name or a number cannot satisfy it.
+        let curves = cloudy
+            .windows(3)
+            .filter(|w| w[0] == b' ' && w[1] == b'c' && (w[2] == b'\n' || w[2] == b' '))
+            .count();
+        assert!(
+            curves > 8,
+            "a cloudy border must be drawn with curve operators; found \
+             {curves} in {} bytes of appearance",
+            cloudy.len()
+        );
     }
 
     #[test]

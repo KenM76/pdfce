@@ -476,14 +476,18 @@ pub fn spec_from_dict<G: ObjectGraph + ?Sized>(
                     border,
                     interior,
                     border_width: width,
-                    // `/BE` is deliberately NOT read back here. This
-                    // function reconstructs a spec for RE-AUTHORING, and
-                    // a round-tripped border effect would have to carry
-                    // the intensity pdfce would then re-bake — see the
-                    // `read_spec` docs on what this reader is for. Read
-                    // support for a foreign `/BE` is a separate concern
-                    // from authoring one.
-                    border_effect: None,
+                    // ★ READ BACK as of `Pass 98.0`. This used to be a hard
+                    // `None` with a comment calling a foreign `/BE` "a
+                    // separate concern from authoring one" — and the
+                    // consequence was that an Acrobat-authored cloudy
+                    // square, opened in pdfce and merely RESTYLED (a colour
+                    // or width change), came back a plain rectangle.
+                    //
+                    // Disclosed, never silent — `DroppedProperty::BorderEffect`
+                    // said so — but "why did my cloud go flat?" is a
+                    // question the operator should not have to ask, and the
+                    // fix is one already-open dictionary key.
+                    border_effect: read_border_effect(graph, annot),
                 }
             })
         }
@@ -530,11 +534,32 @@ pub fn spec_from_dict<G: ObjectGraph + ?Sized>(
                 return Err(SpecReadError::BadGeometry { key: "Vertices" });
             }
             Ok(if subtype == b"Polygon" {
-                MarkupSpec::Polygon {
-                    vertices,
-                    border: color(b"C"),
-                    interior: color(b"IC"),
-                    width,
+                // ★ A CLOUDY POLYGON RECONSTRUCTS AS A CLOUD, not as a
+                // polygon that happens to have lost its border effect
+                // (`Pass 98.0`).
+                //
+                // The distinction matters because the two take different
+                // authoring paths downstream: `MarkupSpec::Polygon` bakes a
+                // straight outline, so restyling a foreign revision cloud
+                // used to FLATTEN it. There is no `/Cloud` subtype in ISO
+                // 32000 — a cloud *is* a `/Polygon` with `/BE << /S /C >>`
+                // (Table 181's "meaningful only for polygon annotations") —
+                // so the shape is only recoverable by reading `/BE`.
+                if let Some(intensity) = read_border_effect(graph, annot) {
+                    MarkupSpec::Cloud {
+                        vertices,
+                        border: color(b"C"),
+                        interior: color(b"IC"),
+                        width,
+                        intensity,
+                    }
+                } else {
+                    MarkupSpec::Polygon {
+                        vertices,
+                        border: color(b"C"),
+                        interior: color(b"IC"),
+                        width,
+                    }
                 }
             } else {
                 MarkupSpec::PolyLine {
@@ -628,6 +653,52 @@ fn read_border_width<G: ObjectGraph + ?Sized>(graph: &G, annot: &Dict) -> f64 {
 /// Degrading rather than failing: see [`spec_from_dict`]'s note — this is
 /// the one lossy step, and it is lossy in a direction the caller can
 /// disclose.
+/// Read a cloudy border effect back out of an annotation dictionary —
+/// `/BE << /S /C /I n >>` (§12.5.4, Table 167).
+///
+/// Returns `Some(intensity)` when the annotation carries a **cloudy** effect,
+/// and `None` when it carries none, carries `/S /S` (the "no effect" default,
+/// which Table 167 defines and which is why writing it would be noise), or
+/// carries a style pdfce does not author.
+///
+/// # Why the intensity is clamped rather than refused
+///
+/// This is a READER. `EditSession`'s authoring path refuses an out-of-range
+/// `/I` by name (`EditError::BorderEffectIntensityOutOfRange`), because an
+/// operator asking for 5.0 has made a mistake worth telling them about. A
+/// FILE saying 5.0 is a different situation: the annotation exists, some
+/// other producer wrote it, and refusing to read it would mean pdfce turns a
+/// non-conforming cloud into a plain polygon — losing MORE than the file got
+/// wrong.
+///
+/// Table 167 constrains `/I` to `0..2`, so clamping to that range is the
+/// standard's own answer to what the value means. The default when `/I` is
+/// absent is `0`, per the same table.
+///
+/// # `/S` is checked, not assumed
+///
+/// Table 167 gives `/S` two values — `/S` (solid, i.e. no effect) and `/C`
+/// (cloudy). A `/BE` present with `/S /S`, or with a name from a future
+/// extension, is **not** a cloud, and reporting one would invent a shape the
+/// file does not describe.
+pub(crate) fn read_border_effect<G: ObjectGraph + ?Sized>(graph: &G, annot: &Dict) -> Option<f64> {
+    let Object::Dict(be) = annot.get(b"BE").map(|o| graph.resolve(o))? else {
+        return None;
+    };
+    // Table 167: /S defaults to /S (solid). Only /C is a cloud.
+    match be.get(b"S").map(|o| graph.resolve(o)) {
+        Some(Object::Name(n)) if n.as_bytes() == b"C" => {}
+        _ => return None,
+    }
+    let intensity = be
+        .get(b"I")
+        .map(|o| graph.resolve(o))
+        .and_then(|o| o.as_number())
+        .filter(|v| v.is_finite())
+        .unwrap_or(0.0);
+    Some(intensity.clamp(0.0, 2.0))
+}
+
 fn read_line_endings<G: ObjectGraph + ?Sized>(graph: &G, annot: &Dict) -> (LineEnding, LineEnding) {
     let Some(Object::Array(items)) = annot.get(b"LE").map(|o| graph.resolve(o)) else {
         return (LineEnding::None, LineEnding::None);
