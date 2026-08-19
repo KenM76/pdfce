@@ -652,3 +652,336 @@ fn sig_flags_survive_a_merge() {
         "every bit the source set must survive; got {merged_flags:#x} from {src_flags:#x}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Navigation structures — named destinations and outlines
+// ---------------------------------------------------------------------------
+
+const OUTLINED: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../fixtures/synthetic/outline/basic-tree.pdf"
+);
+
+/// Would catch: the source's bookmarks not arriving, or arriving nested under
+/// an invented heading.
+///
+/// `basic-tree.pdf` has 5 items over 2 top-level chapters. Merged into a
+/// document with no outline, all 5 must appear and the 2 must be **top
+/// level** — pdfce does not invent a "merged document" heading to nest them
+/// under, because that heading would be a bookmark pdfce authored sitting in
+/// the panel beside bookmarks the authors wrote.
+#[test]
+fn a_merged_documents_bookmarks_arrive_as_top_level_siblings() {
+    let src = Document::from_bytes(std::fs::read(OUTLINED).expect("fixture")).expect("parse");
+    let mut session = blank_session();
+    let out = session
+        .merge_document(&src.view(), InsertPosition::End)
+        .expect("merge");
+    assert_eq!(out.outline_items_carried, 5, "every item, at every level");
+
+    let (bytes, _) = session
+        .to_incremental_bytes(&SaveOptions::identity())
+        .expect("save");
+    let merged = Document::from_bytes(bytes).expect("reparse");
+    let outline = pdfce_core::outline::read_outline(&merged);
+    assert_eq!(
+        outline.items.len(),
+        2,
+        "the two chapters must be TOP LEVEL, not under an invented heading"
+    );
+    assert_eq!(outline.items[0].title, "Chapter 1");
+    assert_eq!(outline.items[0].children.len(), 2);
+    assert_eq!(outline.items[1].title, "Chapter 2");
+    assert_eq!(outline.diagnostics.items, 5);
+    assert!(
+        outline.diagnostics.is_faithful(),
+        "a carried outline must not introduce a diagnostic: {:?}",
+        outline.diagnostics
+    );
+}
+
+/// Would catch: carried bookmarks pointing at the SOURCE's page numbers, or
+/// at the target's.
+///
+/// This is the property a merge exists to preserve and the easiest to get
+/// silently wrong: the copy remaps object numbers, so a destination that was
+/// not remapped still *resolves* — to whatever object now holds that number in
+/// the target. The bookmark works, and points at the wrong page.
+///
+/// Merging into a **one-page** target puts the source's pages at index 1
+/// onward, so every carried destination must have shifted by exactly one.
+#[test]
+fn carried_bookmarks_point_at_the_pages_that_actually_arrived() {
+    let src = Document::from_bytes(std::fs::read(OUTLINED).expect("fixture")).expect("parse");
+    let before = pdfce_core::outline::read_outline(&src);
+    let src_pages: Vec<Option<usize>> = before.items.iter().map(|i| i.page_index()).collect();
+    assert_eq!(
+        src_pages,
+        vec![Some(0), Some(2)],
+        "premise: the source's chapters point at pages 0 and 2"
+    );
+
+    let mut session = blank_session();
+    let target_pages = session.page_slots().expect("pages").len();
+    assert_eq!(target_pages, 1, "premise: the target has one page");
+    session
+        .merge_document(&src.view(), InsertPosition::End)
+        .expect("merge");
+
+    let (bytes, _) = session
+        .to_incremental_bytes(&SaveOptions::identity())
+        .expect("save");
+    let merged = Document::from_bytes(bytes).expect("reparse");
+    let after = pdfce_core::outline::read_outline(&merged);
+    let got: Vec<Option<usize>> = after.items.iter().map(|i| i.page_index()).collect();
+    assert_eq!(
+        got,
+        vec![Some(1), Some(3)],
+        "every destination must shift by the target's page count; unshifted \
+values would mean the copy's remapping was bypassed and the bookmarks now \
+point at the TARGET's pages"
+    );
+    assert_eq!(
+        after.diagnostics.unresolved_names, 0,
+        "no carried bookmark may be left pointing at nothing"
+    );
+}
+
+/// Would catch: a colliding destination key being silently merged, or being
+/// renamed **without** the carried bookmarks following it.
+///
+/// ## ★ The first version of this test could not fail
+///
+/// It used `basic-tree.pdf`, whose bookmarks carry **explicit** `/Dest`
+/// arrays — so the source defined no named destinations, nothing collided,
+/// nothing was renamed, and the rewrite path never ran. Three separate
+/// sabotages (drop the rewrite, reverse the carry order, let a collision
+/// overwrite) all left it green. Fixture too narrow to express the
+/// distinction, for the fourth time this session.
+///
+/// `named-dests.pdf` is the fixture that exercises it: its bookmarks point at
+/// keys in both §12.3.2.3 namespaces.
+///
+/// ## Why the carry ORDER is what this really pins
+///
+/// Destinations are carried before outlines precisely so a suffixed key can
+/// be rewritten onto the bookmarks that name it. Run it the other way and
+/// the bookmark keeps a key nothing defines — which renders as a bookmark
+/// that does nothing, the exact failure `add_outline_item` refuses a
+/// forward reference to avoid.
+#[test]
+fn a_renamed_destination_takes_its_bookmarks_with_it() {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../fixtures/synthetic/outline/named-dests.pdf"
+    );
+    let src = Document::from_bytes(std::fs::read(path).expect("fixture")).expect("parse");
+    let src_names = pdfce_core::pageops::references::DestinationResolver::new(&src).named_count();
+    assert!(
+        src_names > 0,
+        "premise: the source DEFINES named destinations — without this the \
+test cannot fail"
+    );
+    let src_resolved = pdfce_core::outline::read_outline(&src)
+        .items
+        .iter()
+        .filter(|i| i.page_index().is_some())
+        .count();
+    assert!(
+        src_resolved > 0,
+        "premise: at least one bookmark RESOLVES through a named destination"
+    );
+
+    let mut session = blank_session();
+    let first = session
+        .merge_document(&src.view(), InsertPosition::End)
+        .expect("first merge");
+    assert_eq!(
+        first.named_destinations_renamed, 0,
+        "nothing to collide with yet"
+    );
+
+    // The same document again: every key now collides with the first
+    // merge's arrivals, so every one must be suffixed AND its bookmarks
+    // rewritten.
+    let second = session
+        .merge_document(&src.view(), InsertPosition::End)
+        .expect("second merge");
+    assert_eq!(
+        second.named_destinations_renamed, src_names,
+        "every key from the first merge is taken, so every arrival must be renamed"
+    );
+
+    let (bytes, _) = session
+        .to_incremental_bytes(&SaveOptions::identity())
+        .expect("save");
+    let merged = Document::from_bytes(bytes).expect("reparse");
+    let outline = pdfce_core::outline::read_outline(&merged);
+
+    // ★ The property. Both merges' bookmarks must still resolve to a page.
+    let resolved = outline
+        .items
+        .iter()
+        .filter(|i| i.page_index().is_some())
+        .count();
+    assert_eq!(
+        resolved,
+        src_resolved * 2,
+        "every bookmark from BOTH merges must still resolve; a shortfall means \
+a suffixed key left its bookmarks behind pointing at a name nothing defines"
+    );
+
+    // And the two merges point at DIFFERENT pages — the second merge's
+    // bookmarks must not have been re-aimed at the first merge's copies.
+    let pages: Vec<usize> = outline
+        .items
+        .iter()
+        .filter_map(|i| i.page_index())
+        .collect();
+    let mut uniq = pages.clone();
+    uniq.sort_unstable();
+    uniq.dedup();
+    assert!(
+        uniq.len() > src_resolved,
+        "the second merge's bookmarks resolve to the same pages as the first, \
+so a colliding key overwrote rather than renamed: {pages:?}"
+    );
+
+    // No two destinations may share a key.
+    let keys: Vec<Vec<u8>> = pdfce_core::pageops::references::DestinationResolver::new(&merged)
+        .iter()
+        .map(|(k, _)| k.to_vec())
+        .collect();
+    let mut sorted = keys.clone();
+    sorted.sort();
+    let n = sorted.len();
+    sorted.dedup();
+    assert_eq!(sorted.len(), n, "two destinations share a key");
+    assert_eq!(
+        n,
+        src_names * 2,
+        "both merges' destinations must survive as distinct keys"
+    );
+}
+
+/// Would catch: carried outline items not being re-pointed at the target's
+/// outline root.
+///
+/// ## Why every other outline test here is blind to it
+///
+/// `read_outline` walks **downward** from the root's `/First`, following
+/// `/First` and `/Next`. It never reads an item's `/Parent`. So a carried
+/// subtree whose items still name the SOURCE's outline root — an object that
+/// does not exist in this document — reads back perfectly.
+///
+/// §12.3.3 requires `/Parent` on every item, and a viewer walking upward from
+/// a selected bookmark (to collapse its ancestor, or to find its siblings)
+/// lands on a dangling reference. This is the **fourth** property today whose
+/// only witness is the raw bytes, after `/Prev`, `/QuadPoints` and the
+/// widgets' own `/Parent`.
+#[test]
+fn carried_outline_items_point_at_this_documents_root() {
+    let src = Document::from_bytes(std::fs::read(OUTLINED).expect("fixture")).expect("parse");
+    let mut session = blank_session();
+    session
+        .merge_document(&src.view(), InsertPosition::End)
+        .expect("merge");
+
+    let (bytes, _) = session
+        .to_incremental_bytes(&SaveOptions::identity())
+        .expect("save");
+    let merged = Document::from_bytes(bytes).expect("reparse");
+    let Some(Object::Reference(root_id)) = merged
+        .catalog_dict()
+        .and_then(|c| c.get(b"Outlines").cloned())
+    else {
+        panic!("the merged document must have an /Outlines reference")
+    };
+
+    // Every TOP-LEVEL item must name this root.
+    let Object::Dict(root) = merged.resolved(root_id) else {
+        panic!("outline root is not a dict")
+    };
+    let mut cursor = match root.get(b"First") {
+        Some(Object::Reference(r)) => Some(*r),
+        _ => None,
+    };
+    let mut checked = 0usize;
+    while let Some(id) = cursor {
+        let Object::Dict(item) = merged.resolved(id) else {
+            panic!("outline item {id:?} is not a dict")
+        };
+        assert_eq!(
+            item.get(b"Parent").and_then(Object::as_reference),
+            Some(root_id),
+            "carried item {id:?} does not name this document's outline root; a \
+viewer walking up from it lands on an object that is not here"
+        );
+        checked += 1;
+        cursor = match item.get(b"Next") {
+            Some(Object::Reference(r)) => Some(*r),
+            _ => None,
+        };
+    }
+    assert_eq!(checked, 2, "both carried chapters must have been checked");
+}
+/// Would catch: the merge reporting counts it did not achieve.
+///
+/// Cheap, and it is the number a shell will put in front of an operator — a
+/// disclosure that overstates is worse than none, because it is believed.
+#[test]
+fn the_reported_counts_match_what_landed() {
+    let src = Document::from_bytes(std::fs::read(OUTLINED).expect("fixture")).expect("parse");
+    let mut session = blank_session();
+    let out = session
+        .merge_document(&src.view(), InsertPosition::End)
+        .expect("merge");
+
+    let (bytes, _) = session
+        .to_incremental_bytes(&SaveOptions::identity())
+        .expect("save");
+    let merged = Document::from_bytes(bytes).expect("reparse");
+
+    assert_eq!(
+        out.outline_items_carried,
+        pdfce_core::outline::read_outline(&merged).diagnostics.items,
+        "outline_items_carried must equal what the reader finds"
+    );
+    assert_eq!(
+        out.named_destinations_carried,
+        pdfce_core::pageops::references::DestinationResolver::new(&merged).named_count(),
+        "named_destinations_carried must equal what the merged document defines"
+    );
+    assert_eq!(out.named_destinations_renamed, 0, "nothing to collide with");
+    assert_eq!(out.pages_merged, 5, "basic-tree.pdf has five pages");
+}
+
+/// Would catch: undo leaving the carried navigation behind.
+///
+/// The `/AcroForm` half is already covered; this pins that adding two more
+/// document-level writes to the same command did not break its atomicity —
+/// which is the specific risk of growing a command by writing the catalog
+/// from three places.
+#[test]
+fn undo_removes_the_carried_navigation_too() {
+    let src = Document::from_bytes(std::fs::read(OUTLINED).expect("fixture")).expect("parse");
+    let mut session = blank_session();
+    let before = session
+        .to_incremental_bytes(&SaveOptions::identity())
+        .expect("save")
+        .0;
+
+    session
+        .merge_document(&src.view(), InsertPosition::End)
+        .expect("merge");
+    assert!(session.undo().is_some(), "exactly one undo entry");
+
+    let after = session
+        .to_incremental_bytes(&SaveOptions::identity())
+        .expect("save")
+        .0;
+    assert_eq!(
+        before, after,
+        "pages, fields, destinations and outline must all reverse together"
+    );
+}

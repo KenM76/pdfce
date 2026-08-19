@@ -145,6 +145,22 @@ impl DestinationResolver {
     pub fn lookup(&self, key: &[u8]) -> Option<&Object> {
         self.named.get(key)
     }
+    /// Every named destination this document defines, as
+    /// `(key bytes, destination value)`.
+    ///
+    /// Flattened across **both** namespaces (§12.3.2.3) — the PDF 1.1 catalog
+    /// `/Dests` dictionary and the PDF 1.2 `/Names` tree — because this type
+    /// merges them at construction and a consumer copying destinations into
+    /// another document wants all of them, not the ones that happen to live
+    /// in the namespace it thought to look in.
+    ///
+    /// Order is unspecified: the flattening is a `HashMap`, and §7.9.6's
+    /// lexical ordering is a property of the name TREE, not of a set of
+    /// destinations. A caller writing a tree must sort (see
+    /// `EditSession::add_named_destination`, which does).
+    pub fn iter(&self) -> impl Iterator<Item = (&[u8], &Object)> {
+        self.named.iter().map(|(k, v)| (k.as_slice(), v))
+    }
     /// Every named destination whose target page is in `pages`.
     ///
     /// Used by the delete census (to count the ones about to dangle) and

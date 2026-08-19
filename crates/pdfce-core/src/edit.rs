@@ -3022,6 +3022,42 @@ pub struct MergeOutcome {
     pub fields_renamed: usize,
     /// Whether this document had no `/AcroForm` and the merge created one.
     pub acroform_created: bool,
+    /// Named destinations (§12.3.2.3) carried from the source.
+    pub named_destinations_carried: usize,
+    /// How many of those were **renamed** because the key was already
+    /// defined here.
+    ///
+    /// Worth surfacing for the same reason as `fields_renamed`, and one more:
+    /// pdfce rewrites the *carried* bookmarks to the new keys, but **cannot
+    /// rewrite a link in the source document it did not copy** — and it
+    /// copies only what pages reach. An outside reference to the old key,
+    /// from a `/GoToR` in a third file, now resolves to this document's own
+    /// destination rather than the source's.
+    pub named_destinations_renamed: usize,
+    /// Outline items (bookmarks) carried from the source, at every level.
+    ///
+    /// The source's top-level bookmarks are appended after this document's,
+    /// as siblings. pdfce does **not** invent a "merged document" heading to
+    /// nest them under: that heading would be a bookmark pdfce authored,
+    /// appearing beside bookmarks the documents' authors wrote.
+    pub outline_items_carried: usize,
+}
+
+/// Internal result of the named-destination half of a merge.
+///
+/// A struct rather than the `(usize, usize, BTreeMap<..>)` it started as —
+/// clippy called that out and was right for a better reason than length: the
+/// third element is not a count like the other two, it is the **rename map
+/// the outline carry must be given**, and a positional tuple said nothing
+/// about that dependency.
+#[derive(Debug, Default)]
+struct DestMerge {
+    carried: usize,
+    renamed: usize,
+    /// Old key → new key, for every destination that had to be suffixed.
+    /// Empty is the common case and means the outline carry has nothing to
+    /// rewrite.
+    renames: BTreeMap<Vec<u8>, Vec<u8>>,
 }
 
 /// Internal result of the `/AcroForm` half of a merge.
@@ -3030,6 +3066,33 @@ struct AcroFormMerge {
     merged: usize,
     renamed: usize,
     created: bool,
+}
+
+/// How many outline items a single merge will walk while rewriting
+/// destinations.
+///
+/// A cap rather than trust: §12.3.3 forbids no `/First`/`/Next` cycle, and
+/// this walk follows both. `ARCHITECTURE.md` §10's recursive-walker rule.
+/// 100,000 is far past any authored outline and still bounds a hostile one.
+const MAX_MERGED_OUTLINE_ITEMS: usize = 100_000;
+
+/// A destination key not already in `taken`, derived from `base`.
+///
+/// Bytes, not text — §7.9.6 imposes no encoding on name-tree keys, so the
+/// suffix is appended to the raw bytes. A UTF-16BE key stays UTF-16BE-ish
+/// with an ASCII tail, which is not pretty and is **matchable**, which is the
+/// only property a key needs.
+fn unique_dest_key(base: &[u8], taken: &BTreeSet<Vec<u8>>) -> Vec<u8> {
+    for n in 2..10_000u32 {
+        let mut candidate = base.to_vec();
+        candidate.extend_from_slice(format!("_{n}").as_bytes());
+        if !taken.contains(&candidate) {
+            return candidate;
+        }
+    }
+    let mut candidate = base.to_vec();
+    candidate.extend_from_slice(format!("_{}", taken.len()).as_bytes());
+    candidate
 }
 
 /// A field name not already in `taken`, derived from `base`.
@@ -17584,6 +17647,13 @@ impl EditSession {
         let pages_merged = new_page_ids.len();
 
         let form = self.merge_acroform(source, &mut mapping, &mut scratch)?;
+        // ★ Destinations BEFORE outlines. A carried bookmark may point at a
+        // named destination whose key had to be suffixed, and only the map
+        // this returns can rewrite it — run the other way round and the
+        // bookmark keeps a key that no longer exists.
+        let dests = self.merge_named_destinations(source, &mut mapping, &mut scratch)?;
+        let outline_items =
+            self.merge_outline(source, &dests.renames, &mut mapping, &mut scratch)?;
 
         let objects: Vec<ObjectWrite> = scratch
             .into_iter()
@@ -17606,7 +17676,360 @@ impl EditSession {
             fields_merged: form.merged,
             fields_renamed: form.renamed,
             acroform_created: form.created,
+            named_destinations_carried: dests.carried,
+            named_destinations_renamed: dests.renamed,
+            outline_items_carried: outline_items,
         })
+    }
+
+    /// The catalog as this operation has it — **preferring `scratch`** over
+    /// the committed session.
+    ///
+    /// # ★ Why this exists, and the bug it fixes
+    ///
+    /// A merge writes the catalog from **three** places: `/AcroForm`,
+    /// `/Names` → `/Dests`, and `/Outlines`. Each read `self.value(catalog_id)`
+    /// — the *pre-merge* catalog — so the second silently discarded the
+    /// first's work and the third discarded the second's. The symptom was a
+    /// merged document with zero form fields, and the cause was not in the
+    /// form code at all.
+    ///
+    /// Caught immediately by the `Pass 106.0` tests when the destination
+    /// carry landed, which is the argument for having written them against
+    /// **saved bytes**: a test asserting on the session overlay would have
+    /// seen the fields the whole time.
+    fn staged_catalog(&self, catalog_id: ObjId, scratch: &BTreeMap<ObjId, Object>) -> Option<Dict> {
+        scratch
+            .get(&catalog_id)
+            .or_else(|| self.value(catalog_id))
+            .and_then(Object::as_dict)
+            .cloned()
+    }
+    /// Carry the source's named destinations (§12.3.2.3) into this document's
+    /// `/Names` → `/Dests` tree, renaming collisions.
+    ///
+    /// Returns a [`DestMerge`]. Its `renames` map is **the reason this
+    /// runs before the outline carry**: a source bookmark may point at a name
+    /// that had to be suffixed here, and rewriting the bookmark to the new key
+    /// is the only thing that keeps it pointing anywhere.
+    ///
+    /// # Why collisions are renamed rather than refused or merged
+    ///
+    /// Two documents can each define `chapter1` for different pages. Keeping
+    /// one silently re-aims every bookmark and link in the other document at
+    /// a page nobody chose — the same class of harm
+    /// [`Self::add_named_destination`] refuses a single collision to avoid,
+    /// and for the same §12.3.2.3 reason. But a merge is not a single
+    /// deliberate act an operator can be asked about, so it renames and
+    /// reports, exactly as the `/AcroForm` half does.
+    fn merge_named_destinations(
+        &mut self,
+        source: &DocumentView<'_>,
+        mapping: &mut BTreeMap<ObjId, ObjId>,
+        scratch: &mut BTreeMap<ObjId, Object>,
+    ) -> Result<DestMerge, EditError> {
+        let src = crate::pageops::references::DestinationResolver::new(source.graph());
+        // Sorted, so a rename suffix does not depend on hash order — two runs
+        // over the same pair of documents must produce the same names.
+        let mut src_names: Vec<(Vec<u8>, Object)> =
+            src.iter().map(|(k, v)| (k.to_vec(), v.clone())).collect();
+        if src_names.is_empty() {
+            return Ok(DestMerge::default());
+        }
+        src_names.sort_by(|a, b| a.0.cmp(&b.0));
+
+        let mut taken: BTreeSet<Vec<u8>> =
+            crate::pageops::references::DestinationResolver::new(&self.graph())
+                .iter()
+                .map(|(k, _)| k.to_vec())
+                .collect();
+
+        let mut renames: BTreeMap<Vec<u8>, Vec<u8>> = BTreeMap::new();
+        let mut entries: Vec<(Vec<u8>, Object)> = Vec::new();
+        let mut renamed = 0usize;
+        for (key, value) in src_names {
+            let imported = self.import_value(source, &value, mapping, scratch)?;
+            let final_key = if taken.contains(&key) {
+                let k = unique_dest_key(&key, &taken);
+                renames.insert(key.clone(), k.clone());
+                renamed += 1;
+                k
+            } else {
+                key.clone()
+            };
+            taken.insert(final_key.clone());
+            entries.push((final_key, imported));
+        }
+        let carried = entries.len();
+        self.append_named_destinations(entries, scratch)?;
+        Ok(DestMerge {
+            carried,
+            renamed,
+            renames,
+        })
+    }
+
+    /// Append `entries` to this document's `/Names` → `/Dests` tree, keeping
+    /// §7.9.6's lexical ordering. Writes into `scratch`.
+    ///
+    /// Refuses nothing: a multi-node tree in the TARGET is flattened into the
+    /// single root node this writes, which is legal (Table 36 permits a root
+    /// carrying `Names` alone) and is the one place a merge is allowed to
+    /// restructure — because it is already rewriting the tree, so leaving the
+    /// old node shape would mean maintaining two.
+    fn append_named_destinations(
+        &mut self,
+        new_entries: Vec<(Vec<u8>, Object)>,
+        scratch: &mut BTreeMap<ObjId, Object>,
+    ) -> Result<(), EditError> {
+        if new_entries.is_empty() {
+            return Ok(());
+        }
+        let catalog_id = self.graph().catalog_id().ok_or(EditError::NotADictionary {
+            id: ObjId::new(0, 0),
+            key: "Root",
+        })?;
+        let Some(catalog) = self.staged_catalog(catalog_id, scratch) else {
+            return Err(EditError::NotADictionary {
+                id: catalog_id,
+                key: "Root",
+            });
+        };
+        let names_dict = self.deref_dict(catalog.get(b"Names")).unwrap_or_default();
+        let existing = names_dict.get(b"Dests").cloned();
+
+        // Everything already in the target, read through the resolver so a
+        // multi-node tree is flattened rather than refused.
+        let mut entries: Vec<(Vec<u8>, Object)> =
+            crate::pageops::references::DestinationResolver::new(&self.graph())
+                .iter()
+                .map(|(k, v)| (k.to_vec(), v.clone()))
+                .collect();
+        entries.extend(new_entries);
+        entries.sort_by(|a, b| a.0.cmp(&b.0));
+        entries.dedup_by(|a, b| a.0 == b.0);
+
+        let mut flat = Vec::with_capacity(entries.len() * 2);
+        for (key, value) in entries {
+            flat.push(Object::String(key));
+            flat.push(value);
+        }
+        let mut tree_node = Dict::new();
+        tree_node.insert(Name::from(b"Names"), Object::Array(flat));
+
+        let mut new_names = names_dict.clone();
+        if let Some(Object::Reference(node_id)) = existing {
+            scratch.insert(node_id, Object::Dict(tree_node));
+        } else {
+            new_names.insert(Name::from(b"Dests"), Object::Dict(tree_node));
+        }
+        let mut new_catalog = catalog;
+        new_catalog.insert(Name::from(b"Names"), Object::Dict(new_names));
+        scratch.insert(catalog_id, Object::Dict(new_catalog));
+        Ok(())
+    }
+
+    /// Carry the source's outline (§12.3.3) in as additional **top-level**
+    /// bookmarks, appended after this document's own.
+    ///
+    /// Returns how many items arrived.
+    ///
+    /// # Why the source's tree becomes a sibling, not a child
+    ///
+    /// A merge could nest the arrivals under a generated "merged document"
+    /// heading, and `pageops::assemble` has an `OutlinePolicy` that does
+    /// something like it. This does not, because the heading would be a
+    /// bookmark **pdfce invented** appearing in the operator's panel beside
+    /// bookmarks the authors wrote — an inference presented as content, which
+    /// is rule 4's whole subject. Appending the source's own top-level items
+    /// adds nothing that was not already in one of the two documents.
+    ///
+    /// # `/Dest` rewriting, and why it needs `renames`
+    ///
+    /// A carried bookmark's destination is one of two shapes. An **explicit**
+    /// array's page reference is remapped by the copy, for free. A **named**
+    /// destination is a key, and the key may have been suffixed by
+    /// [`Self::merge_named_destinations`] — so it is rewritten here through
+    /// that map. Skipping the rewrite leaves a bookmark pointing at a name
+    /// that no longer exists, which renders as a bookmark that does nothing.
+    fn merge_outline(
+        &mut self,
+        source: &DocumentView<'_>,
+        renames: &BTreeMap<Vec<u8>, Vec<u8>>,
+        mapping: &mut BTreeMap<ObjId, ObjId>,
+        scratch: &mut BTreeMap<ObjId, Object>,
+    ) -> Result<usize, EditError> {
+        let Some(src_root) = source
+            .graph()
+            .catalog_dict()
+            .and_then(|c| c.get(b"Outlines").cloned())
+        else {
+            return Ok(0);
+        };
+        let Object::Dict(src_root) = source.graph().resolve(&src_root).clone() else {
+            return Ok(0);
+        };
+
+        // The source's top-level chain, walked forward. Depth-capped for the
+        // same reason the reader is: nothing in §12.3.3 forbids a `/Next`
+        // cycle.
+        let mut src_top: Vec<ObjId> = Vec::new();
+        let mut cursor = match src_root.get(b"First") {
+            Some(Object::Reference(r)) => Some(*r),
+            _ => None,
+        };
+        let mut seen: BTreeSet<ObjId> = BTreeSet::new();
+        while let Some(id) = cursor {
+            if !seen.insert(id) {
+                break;
+            }
+            let Object::Dict(item) = source.graph().resolved(id) else {
+                break;
+            };
+            src_top.push(id);
+            cursor = match item.get(b"Next") {
+                Some(Object::Reference(r)) => Some(*r),
+                _ => None,
+            };
+        }
+        if src_top.is_empty() {
+            return Ok(0);
+        }
+
+        // Import each top-level item. The copy follows `/First`/`/Next`, so a
+        // whole subtree arrives with one call.
+        let mut new_top: Vec<ObjId> = Vec::with_capacity(src_top.len());
+        for id in &src_top {
+            new_top.push(self.import_object(source, *id, mapping, scratch)?);
+        }
+
+        // Rewrite named destinations, and count what actually arrived, by
+        // walking the imported subtrees.
+        let mut carried = 0usize;
+        let mut stack: Vec<ObjId> = new_top.clone();
+        let mut visited: BTreeSet<ObjId> = BTreeSet::new();
+        let mut guard = 0usize;
+        while let Some(id) = stack.pop() {
+            guard += 1;
+            if guard > MAX_MERGED_OUTLINE_ITEMS || !visited.insert(id) {
+                continue;
+            }
+            let Some(Object::Dict(mut item)) = scratch.get(&id).cloned() else {
+                continue;
+            };
+            carried += 1;
+            if let Some(Object::String(key)) = item.get(b"Dest").cloned()
+                && let Some(new_key) = renames.get(&key)
+            {
+                item.insert(Name::from(b"Dest"), Object::String(new_key.clone()));
+            }
+            for key in [&b"First"[..], b"Next"] {
+                if let Some(Object::Reference(r)) = item.get(key) {
+                    stack.push(*r);
+                }
+            }
+            scratch.insert(id, Object::Dict(item));
+        }
+
+        self.append_outline_items(&new_top, carried, scratch)
+            .map(|()| carried)
+    }
+
+    /// Splice `new_top` onto the end of this document's top-level outline
+    /// chain, creating `/Outlines` if absent, and add `carried` to the root's
+    /// `/Count`.
+    fn append_outline_items(
+        &mut self,
+        new_top: &[ObjId],
+        carried: usize,
+        scratch: &mut BTreeMap<ObjId, Object>,
+    ) -> Result<(), EditError> {
+        let Some(&first_new) = new_top.first() else {
+            return Ok(());
+        };
+        let catalog_id = self.graph().catalog_id().ok_or(EditError::NotADictionary {
+            id: ObjId::new(0, 0),
+            key: "Root",
+        })?;
+        let (root_id, mut root) = match self.outline_root() {
+            Some(pair) => pair,
+            None => {
+                let Some(mut catalog) = self.staged_catalog(catalog_id, scratch) else {
+                    return Err(EditError::NotADictionary {
+                        id: catalog_id,
+                        key: "Root",
+                    });
+                };
+                let id = ObjId::new(self.alloc_number()?, 0);
+                catalog.insert(Name::from(b"Outlines"), Object::Reference(id));
+                scratch.insert(catalog_id, Object::Dict(catalog));
+                let mut d = Dict::new();
+                d.insert(Name::from(b"Type"), Object::Name(Name::from(b"Outlines")));
+                (id, d)
+            }
+        };
+
+        // Link the arrivals after the existing last sibling, and re-point
+        // each arrival's `/Parent` at this root — the source's root is not
+        // this one, and the copy drops `/Parent` anyway.
+        let prev_last = match root.get(b"Last") {
+            Some(Object::Reference(r)) => Some(*r),
+            _ => None,
+        };
+        if let Some(prev) = prev_last {
+            if let Some(Object::Dict(mut pd)) = scratch
+                .get(&prev)
+                .cloned()
+                .or_else(|| self.value(prev).cloned())
+            {
+                pd.insert(Name::from(b"Next"), Object::Reference(first_new));
+                scratch.insert(prev, Object::Dict(pd));
+            }
+            if let Some(Object::Dict(mut fd)) = scratch.get(&first_new).cloned() {
+                fd.insert(Name::from(b"Prev"), Object::Reference(prev));
+                scratch.insert(first_new, Object::Dict(fd));
+            }
+        } else {
+            root.insert(Name::from(b"First"), Object::Reference(first_new));
+        }
+        for id in new_top {
+            if let Some(Object::Dict(mut d)) = scratch.get(id).cloned() {
+                d.insert(Name::from(b"Parent"), Object::Reference(root_id));
+                scratch.insert(*id, Object::Dict(d));
+            }
+        }
+        if let Some(&last_new) = new_top.last() {
+            root.insert(Name::from(b"Last"), Object::Reference(last_new));
+        }
+
+        // The root's `/Count` counts VISIBLE items at every level (§12.3.3),
+        // and `carried` is every item in the arriving subtrees — including
+        // ones under a collapsed parent, which are not visible. Rather than
+        // re-derive visibility here, the count is recomputed from the tree by
+        // the reader's own rule at save time... which pdfce does not do. So
+        // it is set from the arrivals' own declared counts instead, which is
+        // what the source already computed for the same subtrees.
+        let mut visible = 0i64;
+        for id in new_top {
+            visible += 1;
+            if let Some(Object::Dict(d)) = scratch.get(id)
+                && let Some(Object::Integer(n)) = d.get(b"Count")
+                && *n > 0
+            {
+                visible += *n;
+            }
+        }
+        let existing = match root.get(b"Count") {
+            Some(Object::Integer(n)) => *n,
+            _ => 0,
+        };
+        root.insert(
+            Name::from(b"Count"),
+            Object::Integer(existing.saturating_add(visible)),
+        );
+        let _ = carried;
+        scratch.insert(root_id, Object::Dict(root));
+        Ok(())
     }
 
     /// Merge the source's `/AcroForm` field tree into this document's,
@@ -17726,7 +18149,7 @@ impl EditSession {
             id: ObjId::new(0, 0),
             key: "Root",
         })?;
-        let Some(Object::Dict(catalog)) = self.value(catalog_id).cloned() else {
+        let Some(catalog) = self.staged_catalog(catalog_id, scratch) else {
             return Err(EditError::NotADictionary {
                 id: catalog_id,
                 key: "Root",
