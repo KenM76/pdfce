@@ -50376,3 +50376,146 @@ are indistinguishable in an append-only record.
 
 **Terminology (rule 15):** no ce dimension or pdf dimension appears
 anywhere in this filing's shipped work.
+
+## 2026-08-19 (hundred-and-ninety-second filing) — OWED ITEM 34 CLOSED FROM THE COMMIT BODIES THEMSELVES; `Pass 103.1` (`EditSession::adopt_widget`) FILED WITH ITS HASH DELIBERATELY LEFT OWED; TWO NEW `personal_rag\pdf` LESSONS
+
+**Filed by `pdfce-librarian` WITHOUT a shell this filing** — hard rule 8's
+no-shell branch. The one piece of evidence that would normally need
+independent `git show` (owed item 34's resolution) is instead quoted
+verbatim from the dispatching engineer, who ran `git show -s --format=%B`
+directly — the accepted no-shell pattern for this project, not a gap.
+
+**Shipped:**
+- **`Pass 103.1`** — commit hash **OWED**, at the engineer's explicit
+  instruction (the commit did not exist at dispatch time; not invented,
+  not guessed). `EditSession::adopt_widget(widget, name) ->
+  Result<AdoptOutcome, EditError>` — registers an existing widget
+  annotation into `/AcroForm` per ISO 32000-1 §12.7.3, writing no
+  geometry/appearance/value. Verb **122 of 122**. `pdfce-cli adopt-widget`
+  same session. `InsertOutcome` gained a second, additive counter,
+  `orphaned_widgets_unrecoverable`. Requested by `pdfceGUI`, part 2 ask 2
+  of the `insert_pages`-orphans request (ask 1 shipped as `Pass 103.0`).
+
+**Decisions made this session:**
+- **No decision record minted.** Ceiling stays **071**.
+- **No standing rule minted.** The methodology finding below (green
+  sabotage as fixture-insufficiency signal) is a first instance of its
+  specific shape and was filed as a `personal_rag/pdf` lesson rather than
+  promoted, per the two-instance bar.
+- **`FEATURES.md`'s new "Adopt an existing widget" row ruled `[x]` core /
+  `[x]` cli / `[ ]` gui**, not `—` — `pdfce-gui` work is paused (Ken,
+  2026-08-13) and the actual consumer is the out-of-tree `pdfceGUI`
+  project; same `R151`-adjacent reasoning reached independently a third
+  time this week (`Pass 103.0`'s bookmark row, `Pass 105.0`'s preview
+  row, now this one).
+- **Pass ceiling stays 105** — `Pass 103.1` already held its ID from the
+  184th filing; its *Next up* stub is deleted outright (all of its stated
+  acceptance criteria were met), not left as a pointer, since it carries
+  no unmet criterion the way `Pass 102.0`'s stub does.
+- **`SESSION_LOG` filings 191 → 192.**
+
+**Findings + decisions:**
+
+**★★ OWED ITEM 34 — CLOSED, FROM THE COMMIT BODIES THEMSELVES, NOT FROM
+JUDGMENT.** The 191st filing flagged that the dispatch's prose ("`b1ea628`
+closed 2 of 3 Ghent survivors") did not match this project's own
+item-by-item table ("2 of the six claim-sweep survivors"), and declined to
+guess which the engineer meant. The engineer has now read both commit
+bodies directly: `b1ea628`'s own body states the sweep "returned **six
+survivors**"; `9a5d8b9`'s subject is "the three survivors the last commit
+claimed and did not fix," itemising **23, 26, 27**. **This confirms the
+project's own table was correct all along** — the dispatch's "2 of 3" was
+a wording slip in the dispatch's own prose, not a genuine second
+denominator to reconcile. **Worth carrying past this one item: when a
+dispatch's figure and a git-derived figure disagree, the dispatch is the
+suspect party** — the same discipline hard rule 8 states for backup/git
+claims, now confirmed from the engineer's own side, and the second time
+in one session a confident recollection lost to a shell-derived figure.
+
+**Owed item 35 — still open, unchanged.** `docs/NEXT_SESSION.md:67`'s
+stale outline-verb claim is engineer-owned; stated as being fixed "in this
+session's next commit," not yet true on disk as of this filing.
+
+**★ TWO NEW `personal_rag/pdf` LESSONS, BOTH FROM `Pass 103.1`'s OWN
+DEVELOPMENT, RAG'D BECAUSE BOTH GENERALISE PAST THIS PROJECT.**
+
+1. **A `/Parent`-stripping rule justified for pages silently applies to
+   every dictionary type, including widgets whose `/Parent` IS their field
+   identity.** `import_dict`'s page-copy reasoning never considered
+   widgets; measured on a real AcroForm, 2 of 13 orphaned widgets (bare
+   radio-group kids) lose their name/type/value with nothing pointing
+   back to any of them, while 11 self-describing merged field-widgets are
+   unaffected. `C:\personal_rag\pdf\lesson_20260819_import_dict_strips_parent_from_every_dict_reasoning_only_covered_pages.md`.
+2. **A green sabotage can mean the fixture, not the code, is wrong** — a
+   third shape distinct from "untested field" and "equivalent branch that
+   should be deleted." Swapping a refusal predicate from `/T`-absence to
+   `/FT`-absence stayed fully green because every corpus fixture's bare
+   widget kids lack both keys together; fixed by byte-authoring a fixture
+   that separates the two.
+   `C:\personal_rag\pdf\lesson_20260819_green_sabotage_can_signal_fixture_insufficiency_not_just_untested_or_equivalent_code.md`.
+
+**Two further findings, project-internal, not RAG'd (recorded in
+`ROADMAP.md`'s `Pass 103.1` entry only):** `pdfce-cli insert-pages`
+(`pageops::assemble`) does not share the orphaning defect — confirmed by
+driving the CLI, 12/12 fields survived; and a draft refusal message
+asserted a widget provenance pdfce cannot actually know, caught by reading
+the command's own output rather than by inspection (R174 shape, same
+species already covered).
+
+**Still in flight:**
+- **Owed items 1, 3, 4, 6, 7, 10, 15, 17, 18, 19, 20, 28-remainder, 29–33,
+  35, 36** carry forward unchanged. **Owed item 34 is CLOSED** as of this
+  filing.
+- **`Pass 103.1`'s commit hash** — owed to a follow-up filing; the
+  engineer stated it would arrive with full workspace test totals and the
+  `cargo tree` invariant-check result, none of which this filing states
+  because none were run here.
+- **`Pass 102.1`, `Pass 103.2`, `Pass 103.3`** — all unstarted.
+  `Pass 102.1`'s dependency on `Pass 103.1` is now satisfied; its scoping
+  input is finding 1 above (13 orphaned, 2 unrecoverable).
+- **`pdfceGUI` reply owed:** part 2 ask 2 of the five-part `insert_pages`
+  reply is now answered and shipped as `Pass 103.1` — a reply may be owed
+  for that specific ask, not tracked as a separate numbered item since the
+  shipped Pass is itself the answer (same disposition as ask 1 / `Pass
+  103.0` in the 191st filing).
+
+**For next session:**
+1. **Confirm `Pass 103.1`'s commit hash and workspace test totals** once
+   the engineer sends them; file as a short follow-up rather than folding
+   silently into a later filing, so the "hash owed" flag in `ROADMAP.md`
+   has a clear discharge point.
+2. **When a shell is available, confirm `9a5d8b9`** against live source
+   (owed item 36, unchanged) and confirm `docs/NEXT_SESSION.md:67`'s
+   correction actually landed (owed item 35).
+3. Carried unchanged: close owed 26 first among remaining claim-sweep
+   work; rule on the `insert-pages` name collision (owed 29) before
+   writing any further session-verb CLI subcommand; answer owed 31 in
+   `blend_nonsep.rs`'s module doc; re-run and re-cluster Ghent (owed 20);
+   scope `Pass 102.1` from finding 1 above once the hash lands.
+
+**Ledger effects (relayed from the dispatch; NOT re-run this filing — no
+shell):**
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **105** | **105** (no mint — `Pass 103.1` already held its ID) |
+| decision records | **071** | **071** (none minted) |
+| standing rules | **R199** | **R199** (none minted) |
+| `SESSION_LOG` filings | **191** | **192** |
+| `personal_rag/pdf` lessons | **[prior count not re-verified]** | **+2** (`lesson_20260819_import_dict_strips_parent…`, `lesson_20260819_green_sabotage_can_signal_fixture_insufficiency…`) |
+
+**`FEATURES.md` — CHANGED, two rows.** The Planned "Adopt an existing
+widget into an `/AcroForm` field" row is deleted and replaced by a new
+Implemented row under *Forms (AcroForm)*: `[x]` core / `[x]` cli / `[ ]`
+gui. The existing "True in-place page insertion" Implemented row's
+`InsertOutcome` description is widened from one counter to two
+(`orphaned_widgets`, `orphaned_widgets_unrecoverable`) — replaced in
+place, per that file's own header rule, not appended.
+
+**`ARCHITECTURE.md` — UNCHANGED.** No architectural decision was made
+this filing and no body section went stale. Stated explicitly, per this
+role's own standing practice, because *"unchanged"* and *"not looked at"*
+are indistinguishable in an append-only record.
+
+**Terminology (rule 15):** no ce dimension or pdf dimension appears
+anywhere in this filing's shipped work.

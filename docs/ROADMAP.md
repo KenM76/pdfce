@@ -53554,30 +53554,6 @@ parallel one).
 
 ---
 
-### Pass 103.1 — **ADOPT AN EXISTING WIDGET INTO A FIELD** — the verb `add_text_field` and its siblings cannot express, because they AUTHOR a new widget — filed 2026-08-18 (hundred-and-eighty-fourth filing) — **UNSTARTED**
-
-**The gap in one sentence, theirs:** *"`add_text_field` and friends
-**author a new widget**; we need to register an **existing** widget into
-`/AcroForm`."*
-
-The geometry is **already correct** — it arrived with the page. Every
-existing authoring verb would re-author it, which means a second `/Rect`,
-a second appearance stream, and two widgets where the operator can see
-one.
-
-**This is the verb `Pass 102.1` is built on**, and it is separately
-useful: any widget that exists without a field — from an insert, from a
-malformed producer, from a repair pass — currently has no route into an
-`/AcroForm`.
-
-**Acceptance:** takes an existing annotation reference plus the field
-identity to register it under; **refuses by name** if the annotation is
-not a widget or is already claimed (**R96** — a named refusal must be
-reachable and tested firing); one undoable command; CLI subcommand same
-session.
-
----
-
 ### Pass 103.2 — **PAGE LABELS FOR INSERTED PAGES — a DIFFERENT QUESTION from `edit.rs:16339`'s ruling, and the requester says so first** — filed 2026-08-18 (hundred-and-eighty-fourth filing) — **UNSTARTED · NEEDS AN `Acrobat_Features` DISPATCH BEFORE IT IS SCOPED**
 
 **★ Read the distinction before answering this, because the adjacent
