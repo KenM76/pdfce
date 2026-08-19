@@ -96,6 +96,197 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+> ### ★★★★★ THE 192ND FILING — OWED ITEM 34 CLOSED FROM THE COMMIT BODIES THEMSELVES, NOT FROM JUDGMENT; `Pass 103.1` FILED WITH ITS HASH OWED
+>
+> **This filing has no shell.** Hard rule 8's no-shell branch applies:
+> nothing below is independently `git show`n by this filing. The evidence
+> for owed item 34's resolution is **quoted verbatim from the dispatching
+> engineer, who ran `git show -s --format=%B` directly** — the accepted
+> no-shell pattern (this role's own memory: *"Dispatch should carry git
+> evidence when this librarian has no shell"*), not a gap in discipline.
+>
+> **Owed item 34 — CLOSED.** The 191st filing flagged that the dispatch's
+> prose ("closed 2 of 3 Ghent survivors") did not match this page's own
+> item-by-item table ("2 of the six claim-sweep survivors"), and did not
+> guess which the engineer meant. The engineer has now read both commit
+> bodies directly rather than recalled them:
+>
+> - `b1ea628` body, first paragraph, verbatim: *"The librarian's rule-11
+>   sweep on filing 189 returned **six survivors**, four findable by no
+>   grep."*
+> - `9a5d8b9` subject: *"the three survivors the last commit claimed and
+>   did not fix"*; body itemises **owed 23** (`main.rs`), **owed 26**
+>   (`gstate.rs`), **owed 27** (`edit.rs`).
+>
+> **This confirms — from the commits' own words, not from anyone's
+> recollection — that this page's own item-by-item table was the correct
+> account all along**: six survivors in the sweep, three left byte-identical
+> by `b1ea628` (23, 26, 27), those three closed by `9a5d8b9`. The dispatch's
+> "2 of 3" was a wording slip in the dispatch's own prose, not a second,
+> competing denominator to reconcile. **Worth carrying as a general
+> caution rather than only a closed item: when a dispatch's figure and a
+> git-derived figure disagree, the dispatch is the suspect party** —
+> exactly the discipline hard rule 8 already states for backup/git claims,
+> now confirmed from the other side (a confident recollection lost to a
+> shell-derived figure, for the second time in one session; the
+> `4e75337e`-adjacent 190th-filing episode was the first).
+>
+> **Owed item 35 — still open, unchanged.** `docs/NEXT_SESSION.md:67`'s
+> stale "no verb exists" claim is engineer-owned; the engineer states it
+> will be fixed in a commit after this one. Not yet true on disk as of
+> this filing, so not marked closed — the next filing to see the
+> corrected line is the one that closes it.
+>
+> **`Pass 103.1` filed below with its commit hash marked OWED, at the
+> engineer's explicit instruction** rather than guessed or left
+> unfiled — the dispatch stated the commit does not exist yet at
+> dispatch time and asked that the hash slot be left for a follow-up
+> rather than invented. This is the same discipline as filing a
+> provisional Pass number (`Pass 99.0`/`100.0`/`104.0`/`105.0`'s
+> precedent) applied to a hash instead of an ID.
+
+### Pass 103.1 — commit hash **OWED** — **WIDGET ADOPTION: `EditSession::adopt_widget`, PLUS THE UNRECOVERABLE-ORPHAN DISCLOSURE** — filed 2026-08-19 (hundred-and-ninety-second filing)
+
+**Commit hash deliberately left OWED, at the engineer's explicit
+instruction** (see this filing's header box, above) — the engineer is
+committing immediately after dispatching this filing and asked that the
+hash not be invented or inferred. **Do not treat this entry as unverified
+in the disqualifying sense** — it is filed from the engineer's own
+same-session report, the normal dispatch channel; only the hash slot is
+outstanding, to be supplied by a follow-up filing.
+
+**Requested by `pdfceGUI`**, same request file as `Pass 103.0`, part 2 ask
+2, verbatim: *"`add_text_field` and friends **author a new widget**; we
+need to register an **existing** widget into `/AcroForm`."*
+
+**What shipped, per the dispatch:**
+
+- `pdfce-core`: `EditSession::adopt_widget(widget: ObjId, name: Option<&str>)
+  -> Result<AdoptOutcome, EditError>` — registers an existing widget
+  annotation as a form field per ISO 32000-1 §12.7.3, creating `/AcroForm`
+  if absent. Writes **no** geometry, appearance or value — only the
+  registration plus `/T` on a rename. One undo entry. **Verb 122 of 122.**
+- New public struct `AdoptOutcome { field_id, name, field_type, renamed,
+  acroform_created }`, `#[non_exhaustive]`.
+- Four new `EditError` variants: `NotAWidget`, `WidgetHasNoFieldIdentity`,
+  `WidgetAlreadyOwned`, `FieldNameTaken`.
+- New `CommandKind::AdoptWidget`.
+- **New field on `InsertOutcome`: `orphaned_widgets_unrecoverable`** —
+  additive, not a second breaking change to the struct `pdfceGUI` wired to
+  yesterday. See the RAG'd finding below for what it counts and why.
+- `pdfce-cli`: new `adopt-widget` subcommand (`--page`, `--index`, `--name`,
+  `--output`, `--mode`, `--verify-undo`), addressed by the `page=`/`index=`
+  pair `list-annotations` already prints.
+- New `crates/pdfce-core/examples/orphan_probe.rs` — a re-runnable
+  measurement, referenced by name from three doc comments and from the two
+  new `personal_rag/pdf` lessons below.
+- New test file `crates/pdfce-core/tests/widget_adoption.rs`, **11 tests**.
+- Docs: `docs/core-api/02-editing-and-saving.md` gained §1.20 "Form-field
+  adoption (1)"; sections renumbered again (1.20→1.21 ce dimensions,
+  1.21→1.22 Fonts, 1.22→1.23 Images, 1.23→1.24 Outcome structs); verb count
+  **121 → 122** in three places plus `index.md`; stated `edit.rs` size
+  **26,034 → 26,402**.
+
+**Test results.** **11 new tests, all green; all 9 injected sabotages
+caught** (per the dispatch). **Full workspace test totals and the
+`cargo tree` invariant-check result are OWED** — the dispatch stated it
+would send them with the hash rather than have this filing state a number
+it did not run (hard rule 10: a total is only filed beside the per-item
+form that produced it, and this filing has neither).
+
+**`FEATURES.md` rows affected** — edited in the same filing, see below:
+new Implemented row for **adopting an existing widget into a field**,
+`[x]` core / `[x]` cli / `[ ]` gui (`pdfce-gui` work is PAUSED per Ken
+2026-08-13; the actual consumer is the separate `pdfceGUI` project — same
+`R151`-adjacent ruling as `Pass 103.0`'s bookmark row and `Pass 105.0`'s
+preview row, reached independently a third time). The `insert_pages`
+disclosure row's description is updated to note it now reports **two**
+counts, not one.
+
+#### Findings, in the order the dispatch gave them
+
+**(A) — RAG'd**, `C:\personal_rag\pdf\lesson_20260819_import_dict_strips_parent_from_every_dict_reasoning_only_covered_pages.md`.
+`import_dict` drops `/Parent` from every imported dictionary on
+page-tree reasoning alone; measured on a real AcroForm that this silently
+orphans 2 of 13 widgets (bare radio-group kids, which carry their name/
+type/value only via `/Parent`) while leaving 11 merged field-widgets
+intact. Net-correct today (the field dictionary itself is never imported,
+so the orphaning does not cascade), but latent — `adopt_widget` now
+correctly *refuses* the two orphans rather than mis-registering them. The
+structural fix is scoped as `Pass 102.1`; this measurement is its scoping
+input. `pdfce-cli insert-pages` (`pageops::assemble`, a different verb
+sharing the name — owed item 29) does **not** share the defect, confirmed
+by driving the CLI directly: 12/12 fields survived, `fields_dropped=0`.
+
+**(B) — RAG'd**, `C:\personal_rag\pdf\lesson_20260819_green_sabotage_can_signal_fixture_insufficiency_not_just_untested_or_equivalent_code.md`.
+Swapping the refusal predicate from `/T`-absence to `/FT`-absence (`/FT` is
+inheritable per §12.7.3.1, `/T` is not) left the whole suite green, because
+the real corpus fixture's bare kids carry **neither** key — the two
+predicates could not disagree on any fixture that existed. Fixed by
+byte-authoring a fixture with `/FT` present and `/T` absent (2 vs 1
+widgets flagged). Third distinct green-sabotage shape seen this session
+(untested field / equivalent branch that should be deleted / **fixture
+cannot express the distinction**) — not minted as a standing rule, filed
+as a lesson per the two-instance promotion bar (this is a first instance
+of the third shape specifically, even though "green sabotage" as a topic
+has appeared twice before today).
+
+**(C) — project-internal, not RAG'd** (closes ambiguity already tracked as
+owed item 29, does not generalise past this project's own naming
+collision). Driving the CLI confirmed `pdfce-cli insert-pages` produces
+**no** orphans — it calls `pageops::assemble`, which merges `/AcroForm`
+directly. Only the session verb `EditSession::insert_pages` orphans.
+`adopt-widget` correctly refused `WidgetAlreadyOwned` against a CLI-merged
+file. The CLI's own help text now states this explicitly.
+
+**(D) — project-internal, not RAG'd** (R174 instance, same species already
+covered by that rule; recorded for the session record only). A draft
+refusal message asserted a provenance pdfce cannot know (*"it was a kid of
+a field that did not come with it"*); driving the CLI on a hand-built file
+showed it printed for a widget that had never been a kid of anything.
+Reworded to the fact (`no /T`) with the typical cause moved to the verb's
+own doc comment. Found by reading the command's own output, not by
+inspection — same discipline as the 1-based page-number bug caught in
+`Pass 103.0`.
+
+**Terminology (rule 15):** no ce dimension or pdf dimension appears
+anywhere in this Pass.
+
+**Still open, carried forward from the dispatch:** `Pass 103.2` page
+labels (needs a `pdfce-acrobat-librarian` dispatch first), `Pass 103.3`
+named destinations, `Pass 102.1` carrying field definitions across the
+`insert_pages` copy boundary (scoping input is finding (A) above),
+`note_gray_black_routing_is_yours.md` (13.5 KB, iccce channel) still
+unread, `v0.7.0` bumped but not tagged.
+
+> ### ★★★★★ THE 191ST FILING — NO SHELL THIS TIME, AND THE DISPATCH'S OWN SUMMARY OF `b1ea628` DOES NOT MATCH THE ROADMAP'S OWN ITEM-BY-ITEM RECORD OF IT — flagged, not silently reconciled
+>
+> **This filing has no shell.** Hard rule 8's no-shell branch applies:
+> hash reachability, working-tree state and the exact diff content of
+> `9a5d8b9` are **relayed from the dispatching engineer, not independently
+> checked** by this filing. This is the accepted pattern for a no-shell
+> invocation (see this role's own memory:
+> *"Dispatch should carry git evidence when this librarian has no
+> shell"*), not a gap in discipline — but it is stated so a reader does
+> not read the `9a5d8b9` entry below as verified the way the 190th
+> filing's `b1ea628` entry was (that one had a shell and ran `sed`/
+> `git show` directly).
+>
+> **★ The dispatch's own framing of `b1ea628` disagrees with the figure
+> already on this page.** The dispatch describes it as having *"closed 2
+> of 3 Ghent survivors"*, naming items 23, 26, 27 as *"the three files it
+> OWED"* that came out byte-identical. **The 190th filing's own
+> item-by-item table** (this file, immediately below in *Shipped*) counts
+> **2 of the SIX claim-sweep survivors** closed by `b1ea628` (items 24 and
+> 25), with 23/26/27 untouched and 28 partly discharged — not "2 of 3."
+> Both framings agree on the operative fact this filing needs (23, 26, 27
+> were byte-identical after `b1ea628` and are what `9a5d8b9` must close),
+> so the discrepancy does not block filing `9a5d8b9` below. **It is not
+> silently reconciled either** — the two counts describe different
+> denominators (six claim-sweep survivors vs. three specifically-owed
+> files) and nobody has stated which framing the engineer intended.
+> Carried as owed item **34**.
+
 > ### ★★★★★ THE 190TH FILING — THE DISPATCH'S COMMIT SET WAS RIGHT AND ITS ACCOUNT OF WHAT ONE COMMIT FIXED WAS NOT — read this before the three entries below
 >
 > **The gate and the dispatch AGREE this time, and both were checked
@@ -141,6 +332,172 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 > commit whose subject is *"the correction of the seventh stale claim
 > became the eighth"* did not fix the eighth.** Dispositioned
 > item-by-item in the owed box below — reported, not rounded.
+
+### Pass 103.0 — `d32872a` — **`EditSession::add_outline_item` — OUTLINE AUTHORING SHIPS, VERB 121 OF 121 — AND THE PASS'S OWN TEST SUITE PASSED A DEFECT IN EACH OF TWO DIRECTIONS, CAUGHT BY SABOTAGE RATHER THAN BY REVIEW** — filed 2026-08-19 (hundred-and-ninety-first filing)
+
+**Requested by `pdfceGUI`**,
+`D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\request_insert_pages_leaves_orphaned_widgets_and_has_no_route_back_for_outlines.md`
+(part 2, ask 1) — they needed to carry a source document's bookmarks
+across `insert_pages` and found no verb to put one with.
+
+**What shipped.**
+`EditSession::add_outline_item(parent: Option<ObjId>, title: &str,
+destination: Option<outline::Destination>) -> Result<ObjId, EditError>`.
+Creates `/Outlines` in the catalog if absent; appends the new item **last**
+among its siblings; maintains `/Prev`/`/Next`/`/First`/`/Last`; propagates
+`/Count` per ISO 32000-1 §12.3.3; one undo entry per item, per the
+requester's own stated preference. **Verb 121 of 121** — see
+`docs/core-api/index.md`, corrected in the same commit (this is the
+document rule 5 of the engineer's own file now owns, so its currency is
+this Pass's own obligation, not a separate filing).
+
+Two new `EditError` variants — `OutlineItemNotFound { id: u32 }`,
+`UnsupportedDestination { kind: &'static str }` — and a new
+`CommandKind::AddOutlineItem`.
+
+**`pdfce-cli`**: new `add-bookmark` subcommand (`--title`, `--page`,
+`--top`, `--under`, `--output`, `--mode`, `--verify-undo`), satisfying
+rule 11 the same session. Reports `root_count=` and `visible=`.
+**`list-outline`'s output format CHANGED** — every bookmark line gained an
+`n=` document-order index so `--under` can address one — an
+operator-visible format change, worth carrying here rather than only in a
+commit message.
+
+**Docs:** `docs/core-api/02-editing-and-saving.md` gained §1.19 "Outline /
+bookmarks (1)"; former §§1.19–1.22 renumbered §§1.20–1.23; verb count
+120 → 121 in three places plus `docs/core-api/index.md`; the stated
+`edit.rs` size corrected 25,544 → 26,034 lines.
+
+#### Tests — `crates/pdfce-core/tests/outline_authoring.rs`, 11 tests, 9 deliberate defects injected, 9 caught
+
+**Two of the nine caught defects are worth carrying as their own findings
+rather than a bare pass count**, because both are cases where the FIRST
+version of the test suite passed against a real bug and only a sabotage
+run exposed it:
+
+1. **The reader-as-oracle only walks `/First`→`/Next`.** Ten of the
+   eleven tests routed their assertions through
+   `outline::read_outline`, which never dereferences `/Prev` — deleting
+   the `/Prev` write from `add_outline_item` left **every one of those
+   ten green**, including one whose own doc comment claimed it "checks
+   the link in both directions." Fixed by adding a test that walks raw
+   dictionaries `/Last`→`/Prev` directly, bypassing the reader. **RAG'd**
+   as `C:\personal_rag\pdf\lesson_20260819_outline_reader_walking_first_next_only_is_blind_to_prev_writes.md`
+   — the general lesson (enumerate what a reader-as-oracle actually
+   touches before trusting it) outlives this specific field.
+2. **`/Parent` is not an outline-item signal.** §12.3.3 Table 153 gives
+   outline items **no `/Type` key**, so the first parent-validity check
+   (does the target have `/Title` or `/Parent`?) was satisfied by a
+   **page** object — every page has `/Parent`. The bookmark spliced into
+   the page tree, `save` returned `Ok`, and no reader ever found it.
+   Fixed with a bounded reachability walk up `/Parent` to
+   `/Root /Outlines`, cycle-guarded per `ARCHITECTURE.md` §10. **RAG'd**
+   as `C:\personal_rag\pdf\lesson_20260819_outline_items_have_no_type_key_so_parent_alone_is_not_an_identity_signal.md`
+   — a tightened key heuristic would have closed this specific hole and
+   preserved the bug's shape; only reachability is sound in a dictionary
+   class with no `/Type`.
+
+**A third defect is a methodology note rather than a RAG-worthy finding,
+because it does not generalise beyond this project's own existing
+discipline (`R92`/`R43`):** `bump_outline_count` took an `is_item: bool`
+selecting between the outline root's `/Count` rule and an item's; the
+two rules coincide arithmetically for any well-formed document (they
+differ only on a negative ROOT count, which is malformed), so sabotaging
+the flag left the suite green and the branch was **removed**, not left
+untested. The meaning-level distinction is real and lives in the
+*caller's* choice to invoke the item path vs. the root path, not in
+observable function behaviour — recorded here, not RAG'd, on the same
+"trivially derivable / already-covered" bar the librarian brief sets.
+
+**A fourth item is a CLI bug, fixed at the boundary, also not RAG'd (project-
+internal, does not generalise):** `--page 99` answered *"page index 98 is
+out of range"* — `EditError::PageOutOfRange` formats in the engine's
+0-based units correctly, since the engine cannot know what a caller typed.
+Fixed once in `report_edit_error`, covering all eight 1-based `--page`
+callers; verified `--index`/`--object`/`--run`/`--node` are 0-based in
+both flag and engine and none raises that variant. Found by reading the
+command's own output on a deliberate out-of-range run (R174).
+
+**★ The dispatch's own header undercounted its findings — flagged for the
+same reason this project flags every other undercount.** It read *"Three
+findings from this Pass worth recording"* and then listed four
+(lettered (A)–(D)). Not corrected by omission: this entry carries all
+four, and the two that are RAG-worthy are RAG'd; the count in the
+dispatch's own header is one short of its own list, the same species of
+error hard rule 10 exists to catch, just in a dispatch prompt rather than
+a filed figure.
+
+**Test results.** 3,970 workspace tests pass, 0 fail (per the dispatch;
+not independently re-run — no shell this filing).
+
+**Invariant checks (per the dispatch).** `cargo tree -p pdfce-core` /
+`-p pdfce-render` — zero GUI and zero network dependencies. Round-trip
+verified empirically: a real CLI run with `--verify-undo` reported
+`undo_identical=1` — the add round-trips to the original bytes on undo.
+
+**Gates (per the dispatch).** `cargo fmt --all`, `cargo clippy --workspace
+--all-targets -D warnings`, `tools/check-ui-strings.sh`,
+`tools/check-string-gaps.sh`, `tools/check-ledger-numbers.py`,
+`tools/check-core-api-verbs.py` — all reported clean. **Not independently
+re-run by this filing — no shell.**
+
+**`FEATURES.md` — CHANGED, two rows, one split into two.** The read-only
+bookmark row (Implemented) dropped its now-inaccurate "**No authoring**"
+clause; a new Implemented row for `add_outline_item` sits beneath it
+(`[x]` core / `[x]` cli / `[ ]` gui — **gui is a genuine gap, not a
+shape mismatch: `pdfce-gui` work is PAUSED per Ken 2026-08-13, and the
+consumer wiring this verb up is the separate `pdfceGUI` project, which
+is not this repo's gui column**, so the box stays `[ ]` rather than
+being rounded to `—`). The Planned "Links and bookmarks authoring" row
+is narrowed to what remains — rename/reorder/delete/re-parent, links,
+named destinations (`Pass 103.3`) — and its "no `EditSession` outline
+verb exists at all" clause is retired, since one now does.
+
+**Rule-11 sweep of the retired claim (search for the claim, not the
+string).** Grepped `docs/` and `crates/` for "No authoring" / "no verb
+that creates one" / "outline verb exists" variants. **One survivor
+found, engineer-owned, reported not edited:** `docs/NEXT_SESSION.md:67`
+still reads *"`EditSession::add_outline_item(parent, title, dest)` — no
+verb exists"* — carried as owed item **35**, same disposition as every
+prior `NEXT_SESSION.md` survivor (owed item 22 in the 190th filing):
+cheap, short-lived, overwritten each session, listed only so the handoff
+is not the last document quoting a retired claim as current. No survivor
+found inside `crates/` doc comments.
+
+**Terminology (rule 15):** no ce dimension or pdf dimension appears
+anywhere in this Pass.
+
+### `9a5d8b9` — **THE ACTUAL FIX FOR `b1ea628`'s SUBJECT LINE — closes owed items 23, 26, 27, THE THREE RULE-11 SURVIVORS `b1ea628` LEFT BYTE-IDENTICAL** — no Pass ID; filed 2026-08-19 (hundred-and-ninety-first filing)
+
+**⚠ Filed from the dispatching engineer's report, not from an
+independent read of the diff — no shell this filing (see this filing's
+header box).** The disposition below states what the engineer reported
+`9a5d8b9` closes; it has not been re-verified against live source the
+way the 190th filing verified `b1ea628` (`sed`/`git show`). **Recommend
+the next shelled filing confirm this entry against live source before
+treating items 23/26/27 as settled** — this is exactly the 190th
+filing's own recommendation (*"every future rule-11 sweep opens by
+re-verifying the PREVIOUS sweep's items against live source before
+adding new ones"*) applied to itself, one filing later, by the one
+filing that cannot perform the check.
+
+**What it is, per the dispatch.** `b1ea628`'s subject line claimed to be
+"the correction of the seventh stale claim" and, per the 190th filing's
+own item-by-item table, left three of the six rule-11 claim-sweep
+survivors — items **23** (`main.rs:7102–7103`, the non-separable-modes
+claim sitting inside the comment block headed *"★ SEVENTH copy … corrected
+2026-08-18"*), **26** (`gstate.rs:476–498`, `blend_mode_from_name`'s
+refusal comment) and **27** (`edit.rs:3013–3019`,
+`DroppedProperty::BorderEffect`'s rustdoc) — byte-identical. `9a5d8b9` is
+reported as the commit that actually rewrites those three sites.
+
+**Sweep disposition, carried forward pending independent verification:**
+owed items **23, 26, 27** are provisionally **CLOSED** by this commit,
+subject to the confirmation flagged above. Owed item **28**
+(`docs/compositor-plan.md`'s non-separable analysis, §1.1's body text)
+was already only **partly** discharged by `01fbdc5` in the 190th filing
+and is **unaffected** by `9a5d8b9`, which the dispatch does not claim
+touches it — carried forward unchanged.
 
 ### Pass 105.0 — `301c162` — **THE PURE DPI PREVIEW, AND THE REQUEST'S REAL ASK WAS THAT THE OUTCOME *CALL* IT — a request whose arithmetic the requester could have written in four lines, filed anyway to buy a SINGLE IMPLEMENTATION** — filed 2026-08-19 (hundred-and-ninetieth filing)
 
@@ -52752,7 +53109,21 @@ ceremony** — and the thing to overturn it on is whether a `--dry-run`/
 `--explain` mode on `add-image` is wanted, which is a product question
 this role cannot answer.
 
-### ★★ INBOUND FROM `pdfceGUI` 2026-08-19 02:26 — **THE PURE DPI PREVIEW REQUEST, ARRIVED AND ANSWERED WITHIN 31 MINUTES** — `Pass 105.0` minted by this filing; ceiling **104 → 105**, next free **106**
+### ★★★★★ OWED TO THE NEXT SESSION — the 191st filing's sweep, items **34–36**. Same rule as the five boxes above: **REPORTED, not fixed**; nothing here holds a filing open — opened 2026-08-19 (hundred-and-ninety-first filing)
+
+**This filing has no shell.** Every item below that would normally be
+settled by `sed`/`git show`/`grep` against live source is instead flagged
+for the next shelled filing to confirm. **Numbering continues** 1–7
+(186th) → 8–11 (187th) → 12–15 (188th) → 16–28 (189th) → 29–33 (190th) →
+**34–36 (191st)**.
+
+| # | owed | where | evidence |
+|---|---|---|---|
+| **34** | **The dispatch's framing of `b1ea628` ("closed 2 of 3 Ghent survivors") does not match this page's own item-by-item count ("2 of the six claim-sweep survivors")** | `ROADMAP.md`'s 191st-filing header box; the 190th filing's item-by-item table | Both framings agree on the operative fact (23/26/27 were byte-identical) so this did not block filing `9a5d8b9`, but the two counts use different denominators and nobody has said which the engineer intended. Reconcile or discard as a wording slip. → **RESOLVED, 192nd filing** — see the new header box above this table's own filing box: `git show -s --format=%B` on both commits (relayed by the engineer, not independently reachability-checked here) confirms the sweep returned **six**, `b1ea628` left **23, 26, 27** untouched despite its subject line, and `9a5d8b9` is titled *"the three survivors the last commit claimed and did not fix."* This page's own item-by-item table was the correct account; the dispatch's "2 of 3" was a wording error in the dispatch, not a genuine second denominator. |
+| **35** | **`docs/NEXT_SESSION.md:67` still states `add_outline_item` — "no verb exists"**, now false | `docs/NEXT_SESSION.md:67` | Engineer-owned by explicit rule (*"do not touch"*) and overwritten each session regardless — same disposition as owed item 22 in the 190th filing. Listed so the handoff is not the last document quoting a retired claim as current. |
+| **36** | **`9a5d8b9`'s disposition (closes owed items 23, 26, 27) is filed from the dispatching engineer's report, not from an independent read of the diff** | `crates/pdfce-cli/src/main.rs:7102–7103`, `crates/pdfce-render/src/gstate.rs:476–498`, `crates/pdfce-core/src/edit.rs:3013–3019` | No shell this filing. **Recommend the next shelled filing `sed`/`git show` these three sites against `9a5d8b9` before treating 23/26/27 as settled** — the exact discipline the 190th filing itself recommended, applied here by the one filing unable to perform it. |
+
+ — **THE PURE DPI PREVIEW REQUEST, ARRIVED AND ANSWERED WITHIN 31 MINUTES** — `Pass 105.0` minted by this filing; ceiling **104 → 105**, next free **106**
 
 **`request_no_pure_way_to_preview_an_image_placements_effective_dpi.md`**,
 2026-08-19 02:26, found by the engineer's loop on its next tick and
@@ -53095,7 +53466,7 @@ it. **Until then this box stays in *Next up*.**
 > | # | item | status |
 > |---|---|---|
 > | **1** | the orphan-widget ruling, incl. **why (3) is permanent** | **DISCHARGED** — with the two-line breaking-change diff |
-> | **2** | the four verbs, `Pass 103.0`–`103.3` | **STILL OWED** |
+> | **2** | the four verbs, `Pass 103.0`–`103.3` | **STILL OWED — but `Pass 103.0` itself SHIPPED 2026-08-19 (`d32872a`, hundred-and-ninety-first filing); the reply can now report one of the four DONE rather than merely accepted.** |
 > | **3** | the `R151` qualifier their operator's argument produced | **STILL OWED** — verify against the reply before re-asserting |
 > | **4** | the page-label question, **not** to be answered from `edit.rs:16339` | **STILL OWED** (`Pass 103.2` needs an `Acrobat_Features` dispatch first) |
 > | **5** | their own disclosure error, and the point that survives it | **STILL OWED** |
@@ -53164,10 +53535,15 @@ ruling: split fields leave a residue no merge can absorb.
 be tested before anything starts reducing it, or there is no instrument
 to show the reduction happened.
 
-**Depends on `Pass 103.1`** (adopt an existing widget into a field): this
+**Depended on `Pass 103.1`** (adopt an existing widget into a field): this
 Pass is that verb applied automatically at insert time, for the subset
 where the answer is unambiguous. Building the automatic case first would
 mean building the verb inside `insert_pages` and then extracting it.
+**That dependency is now satisfied** — `Pass 103.1` shipped (commit hash
+owed, 192nd filing) as `EditSession::adopt_widget`, and its own scoping
+measurement (13 orphaned widgets, 2 structurally unrecoverable without a
+field-carrying fix) is this Pass's scoping input — see
+`C:\personal_rag\pdf\lesson_20260819_import_dict_strips_parent_from_every_dict_reasoning_only_covered_pages.md`.
 
 **Named collision hazard, flagged not solved:** `pageops::insert` already
 has `/AcroForm` name-collision machinery for the whole-document merge
@@ -53175,30 +53551,6 @@ path. **The requester says explicitly they do not have it and pdfce
 does.** Reuse it; do not write a second one (**R151**'s 2026-08-10
 addendum — grep for the existing uncalled capability before writing a
 parallel one).
-
----
-
-### Pass 103.0 — **`EditSession::add_outline_item` — THERE IS NO OUTLINE-AUTHORING VERB AT ALL** — inbound `pdfceGUI` request 2026-08-18, §2 — filed 2026-08-18 (hundred-and-eighty-fourth filing) — **UNSTARTED**
-
-**Read is solved; write does not exist.** `outline::read_outline` /
-`parse_outline` give `OutlineItem` and `Destination`. **`EditSession` has
-no verb that creates one** — so a shell that has read a source
-document's bookmark subtree has nowhere to put it.
-
-`FEATURES.md` has carried this asymmetry visibly for some time: *"Read
-and navigate an existing bookmark tree. **No authoring.**"*
-
-**Shape requested:** `add_outline_item(parent, title, dest)`, *"or
-whatever shape suits"* — the requester is explicitly not specifying the
-signature. **The page mapping is theirs, not ours:** they insert every
-page of a chosen file in order at a known position, so source page `i` is
-target page `after_page + 1 + i`, and **no new API is needed to translate
-a destination.** Do not build one.
-
-**Acceptance:** one undoable command per item (their own stated
-preference, and the engineer's prior offer — *"each with its own name in
-the undo log, rather than as one all-or-nothing merge"*); a `pdfce-cli`
-subcommand the same session (rule 11); round-trip discipline per rule 3.
 
 ---
 

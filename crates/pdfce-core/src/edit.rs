@@ -242,6 +242,10 @@ pub enum CommandKind {
     /// and the title is a `String`, which `CommandKind`'s `Copy + Eq`
     /// bound does not allow.
     AddOutlineItem,
+    /// An existing widget annotation was registered as a form field
+    /// (§12.7.3). Undoing it de-registers the field; the widget itself
+    /// stays on the page, which is where it was before.
+    AdoptWidget,
     /// A document-information field was given a value.
     SetInfoField(InfoField),
     /// A document-information field was removed.
@@ -2852,6 +2856,88 @@ pub struct InsertOutcome {
     /// The requesting shell framed this as *"(3) now and (1) later"*. It is
     /// (3) **always**, with (1) layered on top.
     pub orphaned_widgets: usize,
+    /// How many of [`Self::orphaned_widgets`] lost **every trace** of what
+    /// field they belonged to, and so cannot be adopted back into one
+    /// without re-reading the source document.
+    ///
+    /// # ★ Two orphans that look identical and are not
+    ///
+    /// Measured, not assumed — `examples/orphan_probe.rs` against a real
+    /// AcroForm (12 fields over 13 widgets, pdfbox corpus). Of the 13
+    /// widgets the insert orphans:
+    ///
+    /// - **11 are self-describing.** They are *merged field-widgets*: one
+    ///   dictionary that is both the field and its widget, carrying its own
+    ///   `/FT`, `/T`, `/V`, `/DA`. Everything needed to register it in
+    ///   `/AcroForm` came across with it, and
+    ///   [`EditSession::adopt_widget`] restores it losslessly.
+    /// - **2 are bare kids.** A radio group is *one* field with *two* kid
+    ///   widgets, and a kid carries no field keys at all — its only link to
+    ///   its identity is `/Parent`. The copy does not follow `/Parent`
+    ///   (see `import_dict`, which explains why), so the key is dropped and
+    ///   the widget arrives with **no name, no type, no value and no**
+    ///   **pointer to anything that has them**. In the probe those two lost
+    ///   the name `GroupOption`, the type `/Btn`, the radio flags `0xC000`
+    ///   and the value `Option2`.
+    ///
+    /// The distinction matters to a shell because the two are different
+    /// situations for an operator, and the undifferentiated total reads as
+    /// the milder one. *"11 controls need re-registering"* is a chore;
+    /// *"2 controls have lost their identity and the only copy is in the
+    /// file you inserted from"* is a decision. A disclosure built on
+    /// `orphaned_widgets` alone states the chore and omits the decision.
+    ///
+    /// # What would reduce it
+    ///
+    /// `Pass 102.1` — carrying the field definitions — is what fixes this,
+    /// and it is genuinely harder than it looks. Following a widget's
+    /// `/Parent` reaches the field dictionary, whose `/Kids` reach its
+    /// *sibling* widgets, whose `/P` entries reach **pages that were not
+    /// inserted**. That is precisely the whole-document drag the page
+    /// barrier in `pageops::assemble` exists to stop. Until `insert_pages`
+    /// carries that barrier, dropping the key is the safe behaviour and
+    /// this counter is the honesty owed for it.
+    pub orphaned_widgets_unrecoverable: usize,
+}
+
+/// What [`EditSession::adopt_widget`] did — returned rather than inferred,
+/// because two of these facts are invisible from the widget afterwards.
+///
+/// `renamed` and `acroform_created` cannot be recovered by re-reading the
+/// document: a widget whose `/T` was changed looks exactly like one that
+/// always had that name, and an `/AcroForm` pdfce just created looks exactly
+/// like one that was always there. A shell that wants to tell the operator
+/// *"this control was renamed to avoid a clash"* has only this struct to
+/// learn it from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct AdoptOutcome {
+    /// The adopted field's object id.
+    ///
+    /// The **same id as the widget**, and that is not an oversight: a merged
+    /// field-widget (§12.7.3.1) is one dictionary serving as both, so there
+    /// is no separate field object to return. A shell holding a widget id
+    /// and a field id for this control is holding the same number twice.
+    pub field_id: ObjId,
+    /// The field's fully qualified name after adoption.
+    pub name: String,
+    /// `/FT` as a bare name — `"Tx"`, `"Btn"`, `"Ch"`, `"Sig"`.
+    ///
+    /// `None` means the widget carries no `/FT`. Legal (§12.7.3.1 makes the
+    /// key inheritable) but consequential once adopted at the top level,
+    /// where there is no ancestor left to inherit from: the field has no
+    /// type at all, and a viewer cannot decide how to render or fill it.
+    /// Worth surfacing.
+    pub field_type: Option<String>,
+    /// Whether `/T` was changed — i.e. the caller supplied a `name` that
+    /// differed from the widget's own.
+    pub renamed: bool,
+    /// Whether the document had no `/AcroForm` and pdfce created one.
+    ///
+    /// A document that gains its first form field also gains `/DR` and
+    /// `/DA`, and becomes a form document in a way a shell may want to
+    /// mention — it changes what other tools will offer to do with the file.
+    pub acroform_created: bool,
 }
 
 /// What becomes of a dimension group's members when the group is deleted.
@@ -3726,6 +3812,54 @@ pub enum EditError {
         /// Which kind was refused: `named`, `remote`, `unmapped-page` or
         /// `non-navigation`.
         kind: &'static str,
+    },
+    /// [`EditSession::adopt_widget`] was given an object that is not a
+    /// `/Subtype /Widget` annotation in this document.
+    #[error("object {id} is not a widget annotation in this document")]
+    NotAWidget {
+        /// The object number that was passed.
+        id: u32,
+    },
+    /// The widget carries no `/T`, so there is no field identity to adopt
+    /// and no `name` was supplied to give it one (§12.7.3.1).
+    ///
+    /// This is the **kid-widget** case — how a radio group is represented,
+    /// one field with several widgets. A kid holds no field keys at all;
+    /// its only link to its name, type and value is `/Parent`, which
+    /// `insert_pages` does not copy. Refused rather than guessed: naming it
+    /// would pick a name the source did not use, and for a radio group it
+    /// would turn one mutually-exclusive field into several independent
+    /// ones — a form that looks right and behaves wrong.
+    // States the FACT (no /T) rather than the usual CAUSE (it was a kid
+    // whose parent did not come with it). The first draft said the cause,
+    // and driving the CLI on a hand-built file showed it asserting a
+    // history pdfce cannot know: a widget with no /T may never have been a
+    // kid of anything. The cause belongs in the verb's docs, where it is
+    // framed as typical; in an error message it reads as a determination.
+    #[error(
+        "widget {id} carries no field name of its own (/T); supply a name to adopt it as a new field"
+    )]
+    WidgetHasNoFieldIdentity {
+        /// The widget's object number.
+        id: u32,
+    },
+    /// The widget is already reachable from `/AcroForm` `/Fields`, so
+    /// adopting it again would list it twice.
+    #[error("widget {id} already belongs to a form field")]
+    WidgetAlreadyOwned {
+        /// The widget's object number.
+        id: u32,
+    },
+    /// The name would collide with an existing field (§12.7.3.1).
+    ///
+    /// Not a cosmetic clash: the fully qualified name **is** the field's
+    /// identity, so two top-level fields with one name are one field with
+    /// two widgets, and filling either fills both. No viewer reports this;
+    /// the operator finds it by typing.
+    #[error("a field named {name:?} already exists — supply a different name")]
+    FieldNameTaken {
+        /// The colliding fully qualified name.
+        name: String,
     },
     /// A ce-dimension operation named a group the sidecar model does not
     /// contain (Pass 25.5).
@@ -17381,6 +17515,44 @@ impl EditSession {
             })
             .count();
 
+        // Counted from the SOURCE, because the copy is what destroys the
+        // evidence: by the time a widget is in `scratch` its `/Parent` is
+        // already gone and a bare kid is indistinguishable from a widget
+        // that never had a field. A source widget with no `/T` of its own
+        // has its name, type and value only in an ancestor, and the ancestor
+        // is not coming.
+        let orphaned_widgets_unrecoverable = source_pages
+            .iter()
+            .filter_map(|i| source_slots.get(*i))
+            .filter_map(|slot| match source.graph().resolved(slot.id) {
+                Object::Dict(page) => page.get(b"Annots").cloned(),
+                _ => None,
+            })
+            .filter_map(|annots| match source.graph().resolve(&annots) {
+                Object::Array(list) => Some(list.clone()),
+                _ => None,
+            })
+            .flatten()
+            .filter(|entry| {
+                let Object::Reference(r) = entry else {
+                    return false;
+                };
+                let Object::Dict(a) = source.graph().resolved(*r) else {
+                    return false;
+                };
+                let is_widget = matches!(
+                    a.get(b"Subtype"),
+                    Some(Object::Name(n)) if n.as_bytes() == b"Widget"
+                );
+                // `/T` is the test, not `/FT`: §12.7.3.1 makes `/FT`
+                // INHERITABLE, so a kid can resolve a type through its
+                // parent and still have no name of its own — and a field
+                // with no name cannot be referred to, filled or exported.
+                // Checking `/FT` would call a nameless kid recoverable.
+                is_widget && !a.contains_key(b"T")
+            })
+            .count();
+
         let objects: Vec<ObjectWrite> = scratch
             .into_iter()
             .map(|(id, value)| ObjectWrite {
@@ -17398,6 +17570,7 @@ impl EditSession {
         Ok(InsertOutcome {
             pages_inserted: added,
             orphaned_widgets,
+            orphaned_widgets_unrecoverable,
         })
     }
 
@@ -17560,10 +17733,32 @@ impl EditSession {
     ) -> Result<Dict, EditError> {
         let mut out = Dict::new();
         for (key, item) in dict.iter() {
-            // /Parent points UP the source's page tree. Following it would
-            // drag that tree across and produce a page owned by a node
-            // this document does not contain. The caller re-points it at
-            // the target's node after the copy.
+            // ★ `/Parent` is dropped from EVERY dictionary, and the reason
+            // is only half about pages.
+            //
+            // On a **page** it points up the source's page tree; following
+            // it would drag that tree across and produce a page owned by a
+            // node this document does not contain. The caller re-points it
+            // at the target's node after the copy. That is the case this
+            // rule was written for, and for that case it is simply correct.
+            //
+            // On a **widget annotation** (§12.7.3.1) it points at the
+            // widget's FIELD, and dropping it destroys the widget's only
+            // link to its name, type and value. That is not free, and the
+            // comment here used to justify the rule entirely in page-tree
+            // terms while silently governing this case too — which is how a
+            // measurement (`examples/orphan_probe.rs`) found two widgets
+            // arriving with no identity and nothing in the code admitting
+            // it.
+            //
+            // It is still the right behaviour TODAY, because following it
+            // reaches the field dictionary, whose `/Kids` reach sibling
+            // widgets, whose `/P` entries reach pages that were not
+            // inserted — the whole-document drag `pageops::assemble`'s page
+            // barrier exists to stop, and which this verb does not carry.
+            // The honesty owed is
+            // `InsertOutcome::orphaned_widgets_unrecoverable`; the fix is
+            // `Pass 102.1`.
             if key.as_bytes() == b"Parent" {
                 continue;
             }
@@ -18141,6 +18336,179 @@ impl EditSession {
             trailer: None,
         });
         Ok(id)
+    }
+
+    /// Register an **existing** widget annotation as a form field in
+    /// `/AcroForm` (§12.7.3), creating `/AcroForm` if the document has none.
+    /// One undo entry.
+    ///
+    /// The inverse of the orphaning `insert_pages` reports through
+    /// [`InsertOutcome::orphaned_widgets`]: the widget is already on the
+    /// page, already the right size, already carrying its own appearance
+    /// stream — everything except an owner. This gives it one **without
+    /// re-authoring any geometry**, which is the whole point.
+    /// `add_text_field` and its siblings all *author* a new widget and
+    /// cannot be used for this.
+    ///
+    /// # Why this works at all: the merged field-widget
+    ///
+    /// §12.7.3.1 permits a field and its single widget to be **one
+    /// dictionary** rather than a field with a `/Kids` array, and producers
+    /// overwhelmingly take that option — measured at 11 of 13 widgets in
+    /// `examples/orphan_probe.rs`'s real AcroForm. Such a widget already
+    /// carries `/FT`, `/T`, `/V` and `/DA`; the only thing missing is an
+    /// entry in `/AcroForm` `/Fields`. So adoption is genuinely lossless for
+    /// it, and this verb writes **no new geometry, appearance or value** —
+    /// only the registration, and `/T` when you rename.
+    ///
+    /// # ★ The other kind of orphan cannot be adopted, and is refused
+    ///
+    /// A widget that is a **kid** of a field — how a radio group is
+    /// represented, one field with several widgets — carries *no* field
+    /// keys. Its only link to its name, type and value is `/Parent`, and
+    /// `insert_pages` does not copy that (see `import_dict`). Such a widget
+    /// arrives with nothing to adopt, and this verb returns
+    /// [`EditError::WidgetHasNoFieldIdentity`] rather than inventing a name.
+    ///
+    /// That refusal is the point rather than a limitation. Guessing here
+    /// would mean choosing a name the source did not use, and for a radio
+    /// group it would additionally mean turning one mutually-exclusive field
+    /// into several independent ones — a form that looks right and behaves
+    /// wrong. Use [`InsertOutcome::orphaned_widgets_unrecoverable`] to warn
+    /// about these **before** the operator starts adopting the others.
+    ///
+    /// # Naming
+    ///
+    /// `name: None` keeps the widget's own `/T`. `Some(n)` sets it, which is
+    /// how you resolve a collision.
+    ///
+    /// A collision is **refused, not silently merged**, and that is the
+    /// non-obvious hazard this verb guards. §12.7.3.1 makes the *fully
+    /// qualified name* the field's identity: two top-level fields both named
+    /// `Address` are not two fields, they are **one field with two widgets**,
+    /// so typing in either fills both. A viewer shows no error; the operator
+    /// discovers it by typing. `pageops::assemble` meets the same problem on
+    /// merge and answers it by renaming, counted in `form_fields_renamed` —
+    /// here the caller renames instead, because a shell adopting one widget
+    /// at a time can ask, and an auto-generated `Address_2` is a name nobody
+    /// chose.
+    ///
+    /// # Errors
+    ///
+    /// - [`EditError::WidgetHasNoFieldIdentity`] — no `/T` to adopt, and no
+    ///   `name` supplied to give it one.
+    /// - [`EditError::NotAWidget`] — `widget` is not a `/Subtype /Widget`
+    ///   annotation, or is not in this document.
+    /// - [`EditError::WidgetAlreadyOwned`] — it is already reachable from
+    ///   `/AcroForm` `/Fields`, so adopting it again would list it twice.
+    /// - [`EditError::FieldNameTaken`] — the resulting name already names a
+    ///   field in this document.
+    /// - [`EditError::FieldNameEmpty`] — an empty `name`.
+    /// - The encryption and certification guards.
+    pub fn adopt_widget(
+        &mut self,
+        widget: ObjId,
+        name: Option<&str>,
+    ) -> Result<AdoptOutcome, EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+
+        let Some(Object::Dict(mut dict)) = self.value(widget).cloned() else {
+            return Err(EditError::NotAWidget { id: widget.num });
+        };
+        if !matches!(dict.get(b"Subtype"), Some(Object::Name(n)) if n.as_bytes() == b"Widget") {
+            return Err(EditError::NotAWidget { id: widget.num });
+        }
+
+        // Already owned? Checked through the parsed form rather than by
+        // looking for a `/Parent`, because a merged field-widget that IS
+        // registered has no `/Parent` either — the two states are
+        // indistinguishable from the widget's own dictionary, and only the
+        // `/AcroForm` side can tell them apart.
+        let form = forms::parse_acroform(&self.graph());
+        if let Some(form) = &form
+            && form
+                .fields
+                .iter()
+                .any(|f| f.widgets.iter().any(|w| w.id == widget))
+        {
+            return Err(EditError::WidgetAlreadyOwned { id: widget.num });
+        }
+
+        // The name: the caller's, or the widget's own. A kid widget has
+        // neither, and that is the unrecoverable case.
+        let existing = match dict.get(b"T") {
+            Some(Object::String(bytes)) => Some(decode_text_string(bytes).text),
+            _ => None,
+        };
+        let final_name = match (name, existing.clone()) {
+            (Some(""), _) => return Err(EditError::FieldNameEmpty),
+            (Some(n), _) => n.to_owned(),
+            (None, Some(t)) if !t.is_empty() => t,
+            (None, _) => return Err(EditError::WidgetHasNoFieldIdentity { id: widget.num }),
+        };
+
+        // §12.7.3.1: the fully qualified name IS the identity. A top-level
+        // field's FQN is just its `/T`, which is what a newly adopted widget
+        // gets, so comparing against every existing FQN is the right test —
+        // a nested `Address.City` cannot collide with a top-level `Address`.
+        if let Some(form) = &form
+            && (form
+                .fields
+                .iter()
+                .any(|f| f.fully_qualified_name == final_name)
+                || form
+                    .groups
+                    .iter()
+                    .any(|g| g.fully_qualified_name == final_name))
+        {
+            return Err(EditError::FieldNameTaken {
+                name: final_name.clone(),
+            });
+        }
+
+        let renamed = existing.as_deref() != Some(final_name.as_str());
+        let mut objects = Vec::new();
+        if renamed {
+            dict.insert(
+                Name::from(b"T"),
+                Object::String(encode_text_string(&final_name)),
+            );
+            objects.push(ObjectWrite {
+                id: widget,
+                before: self.state.get(&widget).cloned(),
+                after: Some(Object::Dict(dict.clone())),
+            });
+        }
+
+        // `/FT` is read AFTER any rename so the reported type is the one the
+        // adopted field will actually have. Absent is legal here and means
+        // the widget inherits its type — which, with no `/Parent`, means it
+        // has none. Reported rather than refused: a typeless field is a shape
+        // §12.7.3.1 permits and some producers emit, and refusing a document
+        // pdfce can otherwise handle would be worse than saying so.
+        let field_type = match dict.get(b"FT") {
+            Some(Object::Name(n)) => Some(String::from_utf8_lossy(n.as_bytes()).into_owned()),
+            _ => None,
+        };
+
+        let had_acroform = form.is_some();
+        objects.push(self.acroform_register_write(widget)?);
+        self.commit(Command {
+            kind: CommandKind::AdoptWidget,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(AdoptOutcome {
+            field_id: widget,
+            name: final_name,
+            field_type,
+            renamed,
+            acroform_created: !had_acroform,
+        })
     }
 
     /// Append a bookmark to the document outline (§12.3.3), creating the

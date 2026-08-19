@@ -64,12 +64,25 @@ condition into a refusal.
 
 ### The four API asks in part 2
 
-- `EditSession::add_outline_item(parent, title, dest)` — **no verb exists**
-- **adopt an existing widget into a field** — today's `add_text_field` and
-  friends author a *new* widget; they need to register geometry already correct
-- **page labels for inserted pages** — they explicitly ask this NOT be answered
-  by the existing `/PageLabels`-stays-stale ruling at `edit.rs:16339`
-- **named destinations**, so a carried bookmark resolves
+- ~~`EditSession::add_outline_item(parent, title, dest)`~~ — **SHIPPED**
+  2026-08-19, `Pass 103.0`. Also `pdfce-cli add-bookmark`; `list-outline` now
+  prints `n=` so `--under` composes with it.
+- ~~**adopt an existing widget into a field**~~ — **SHIPPED** 2026-08-19,
+  `Pass 103.1`, as `EditSession::adopt_widget` + `pdfce-cli adopt-widget`.
+  ★ **Partly.** Measured with `examples/orphan_probe.rs`: of 13 orphans in a
+  real AcroForm, **11 adopt losslessly and 2 cannot be adopted at all** —
+  bare radio kids whose `/Parent` the copy drops, leaving no name, type or
+  value anywhere. Counted by the new
+  `InsertOutcome::orphaned_widgets_unrecoverable`; the fix is `Pass 102.1`.
+- **page labels for inserted pages** — STILL OPEN (`Pass 103.2`). They
+  explicitly ask this NOT be answered by the existing
+  `/PageLabels`-stays-stale ruling at `edit.rs:16339`. **Needs a**
+  **`pdfce-acrobat-librarian` dispatch before it is scoped** — nobody has
+  measured what Acrobat does with page labels on an insert.
+- **named destinations** — STILL OPEN (`Pass 103.3`), so a carried bookmark
+  resolves. `add_outline_item` refuses `Destination::Named` **by name**
+  today, which is the honest interim: CAD and Word exports use named
+  destinations often, so a shell carrying a real outline will hit it.
 
 ### ★ The part worth carrying into our own rules
 

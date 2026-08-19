@@ -1446,6 +1446,54 @@ enum Command {
         verify_undo: bool,
     },
 
+    /// **Register an existing widget annotation as a form field**
+    /// (ISO 32000-1 §12.7.3).
+    ///
+    /// For controls that are drawn on a page but belong to no field — the
+    /// state `insert-pages` leaves behind, because it copies the page and
+    /// its annotations without merging the document-level `/AcroForm`.
+    /// The widget keeps its geometry, appearance and value; only the
+    /// registration is written.
+    ///
+    /// Addressed by the `page=`/`index=` pair `list-annotations` prints,
+    /// because an unregistered widget has no name for `list-fields` to
+    /// show.
+    ///
+    /// # Two widgets that look identical and are not
+    ///
+    /// §12.7.3.1 allows a field and its single widget to be ONE dictionary,
+    /// and most producers take that option — such a widget carries its own
+    /// `/T`, `/FT` and `/V`, and adopts losslessly. A widget that was a KID
+    /// of a field (how a radio group is represented) carries none of those,
+    /// and its `/Parent` did not survive the copy. It is refused unless you
+    /// supply `--name`, because anything pdfce chose would be a name the
+    /// source never used.
+    AdoptWidget {
+        /// Input PDF.
+        input: PathBuf,
+        /// Page, 1-BASED — the `page=` value `list-annotations` prints.
+        #[arg(long)]
+        page: usize,
+        /// Index within that page's `/Annots`, 0-BASED — the `index=`
+        /// value `list-annotations` prints.
+        #[arg(long)]
+        index: usize,
+        /// Field name. Omit to keep the widget's own `/T`. Required for a
+        /// widget that has none, and the way to resolve a name collision.
+        #[arg(long)]
+        name: Option<String>,
+        /// Output PDF.
+        #[arg(long)]
+        output: PathBuf,
+        /// Save mode.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Round-trip the undo stack before saving and report whether the
+        /// document returned to its original bytes.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+
     /// **Report what each signature COVERS** — not whether it is valid.
     ///
     /// pdfce performs no cryptographic verification. This measures each
@@ -5289,6 +5337,23 @@ fn run() -> ExitCode {
         Command::ValidatePdfa { .. } => unimplemented_stub("validate-pdfa"),
         Command::Sign { .. } => unimplemented_stub("sign"),
         Command::ListOutline { input, flat } => cmd_list_outline(&input, flat),
+        Command::AdoptWidget {
+            input,
+            page,
+            index,
+            name,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_adopt_widget(
+            &input,
+            page,
+            index,
+            name.as_deref(),
+            &output,
+            mode,
+            verify_undo,
+        ),
         Command::AddBookmark {
             input,
             title,
@@ -8210,6 +8275,130 @@ fn count_outline_items(items: &[pdfce_core::outline::OutlineItem]) -> usize {
         stack.extend(item.children.iter());
     }
     n
+}
+
+/// `adopt-widget` — register an existing widget annotation as a form field
+/// (§12.7.3).
+///
+/// # Why this is addressed by page + index rather than by name
+///
+/// Because the widgets it exists for **have no name** — that is the whole
+/// condition. An orphan left by `insert-pages` is not in `/AcroForm`, so
+/// `list-fields` cannot show it and no name-based selector can reach it.
+/// `list-annotations` can, and its `page=`/`index=` pair is what this takes,
+/// so the two compose the way `list-outline` and `add-bookmark` do.
+///
+/// # What it prints
+///
+/// `renamed=` and `acroform_created=` are reported because **neither is
+/// visible in the result**. A widget whose `/T` was changed looks exactly
+/// like one that always had that name, and a fresh `/AcroForm` looks exactly
+/// like an old one — so an operator re-reading the file afterwards cannot
+/// discover either. This line is the only disclosure.
+#[allow(clippy::too_many_arguments)]
+fn cmd_adopt_widget(
+    input: &Path,
+    page: usize,
+    index: usize,
+    name: Option<&str>,
+    output: &Path,
+    mode: SaveMode,
+    verify_undo: bool,
+) -> u8 {
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    // Resolved inside a block so the session borrow ends before the mutable
+    // call below.
+    let widget_id = {
+        let slots = match session.page_slots() {
+            Ok(slots) => slots,
+            Err(err) => {
+                eprintln!("pdfce-cli: {}: {err}", input.display());
+                return exit::RUNTIME_ERROR;
+            }
+        };
+        let Some(slot) = slots.get(page.saturating_sub(1)) else {
+            eprintln!(
+                "pdfce-cli: {}: no page {page} — the document has {} page(s)",
+                input.display(),
+                slots.len()
+            );
+            return exit::RUNTIME_ERROR;
+        };
+        let annots = pdfce_core::annot::page_annotations(&session.graph(), slot.id);
+        let Some(annot) = annots.get(index) else {
+            eprintln!(
+                "pdfce-cli: {}: page {page} has no annotation at index {index} — it has {}",
+                input.display(),
+                annots.len(),
+            );
+            return exit::RUNTIME_ERROR;
+        };
+        let Some(id) = annot.id else {
+            eprintln!(
+                "pdfce-cli: {}: page {page} index {index} is a direct dictionary inside /Annots, not an indirect object — a form field must be an indirect object to be referenced from /AcroForm",
+                input.display()
+            );
+            return exit::EDIT_REFUSED;
+        };
+        id
+    };
+
+    let outcome = match session.adopt_widget(widget_id, name) {
+        Ok(outcome) => outcome,
+        Err(err) => return report_edit_error(input, &err),
+    };
+
+    let saved = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        verify_undo,
+    ) {
+        Ok(saved) => saved,
+        Err(code) => return code,
+    };
+
+    let r = &saved.report;
+    println!(
+        "adopt-widget {} page {page} index {index} mode={} -> {}; \
+field={:?} type={} renamed={} acroform_created={} changed={} objects={} \
+verbatim={} reserialized={} appended={} out_bytes={} undo_verified={} \
+undo_identical={} delinearized={}",
+        input.display(),
+        mode.name(),
+        output.display(),
+        outcome.name,
+        outcome.field_type.as_deref().unwrap_or("none"),
+        u32::from(outcome.renamed),
+        u32::from(outcome.acroform_created),
+        saved.changed,
+        r.objects_written,
+        r.objects_verbatim,
+        r.objects_reserialized,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(saved.undo_verified),
+        u32::from(saved.undo_identical),
+        u32::from(r.delinearized),
+    );
+    if outcome.field_type.is_none() {
+        // §12.7.3.1 makes `/FT` inheritable, and a top-level field has
+        // nothing left to inherit from — so this field has no type at all
+        // and no viewer can decide how to render or fill it. Said out loud
+        // rather than left in a `type=none` token nobody reads.
+        eprintln!(
+            "pdfce-cli: {}: {:?} has no field type (/FT) and is now top-level, so it inherits none — viewers will not know how to fill it",
+            input.display(),
+            outcome.name,
+        );
+    }
+    finish_edit(input, &saved)
 }
 
 /// `list-outline` — the document's bookmarks, as a tree.

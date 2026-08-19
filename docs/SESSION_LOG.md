@@ -50204,3 +50204,175 @@ indistinguishable in an append-only record.
 precedent for a pure `&self` preview; the **ce dimension** feature it
 belongs to is untouched, and no **pdf dimension** appears anywhere in this
 filing.
+
+## 2026-08-19 (hundred-and-ninety-first filing) — **`Pass 103.0` (`d32872a`) SHIPS OUTLINE AUTHORING, VERB 121 OF 121 — ITS OWN TEST SUITE PASSED A DEFECT IN EACH OF TWO DIRECTIONS UNTIL SABOTAGED. ★ `9a5d8b9` FILED AS THE ACTUAL FIX FOR `b1ea628`'S SUBJECT LINE, closing owed items 23/26/27 — BUT THIS FILING HAS NO SHELL, SO THAT CLOSURE IS RELAYED, NOT RE-VERIFIED. ★★ TWO NEW `personal_rag\pdf` LESSONS; ONE DISPATCH-HEADER UNDERCOUNT CAUGHT.**
+
+**Filed by `pdfce-librarian` WITHOUT a shell this filing** — hard rule 8's
+no-shell branch. Two commits filed, both real and on `main` per the
+dispatching engineer, neither independently reachability-checked here
+(no `git branch -a --contains` available). Flagged at the top of
+`ROADMAP.md`'s new *Shipped* box rather than left implicit.
+
+**Shipped:**
+- **`Pass 103.0`** (`d32872a`) — `EditSession::add_outline_item(parent:
+  Option<ObjId>, title: &str, destination: Option<outline::Destination>)
+  -> Result<ObjId, EditError>`. Creates `/Outlines` if absent, appends
+  last among siblings, maintains `/Prev`/`/Next`/`/First`/`/Last`/
+  `/Count` per ISO 32000-1 §12.3.3, one undo entry per item. Verb **121
+  of 121**. New `pdfce-cli add-bookmark` subcommand (rule 11, same
+  session); `list-outline`'s output format **changed** — every line
+  gained an `n=` index. Requested by `pdfceGUI`, part 2 ask 1 of the
+  `insert_pages`-orphans request.
+- **`9a5d8b9`** — no Pass ID. Per the dispatching engineer, the actual
+  fix for the three rule-11 claim-sweep survivors (`23`, `26`, `27`) that
+  `b1ea628` left byte-identical despite its subject line — **filed from
+  the dispatch's report, not independently confirmed against live
+  source.**
+
+**Decisions made this session:**
+- **No decision record minted.** Ceiling stays **071**, next free
+  **072**.
+- **No standing rule minted.** Ceiling stays **R199**, next free
+  **R200**. (The reader-as-oracle and key-presence findings below were
+  weighed against the two-instance promotion bar and filed as
+  `personal_rag/pdf` lessons instead — each is a first instance in this
+  codebase, not a second occurrence of an existing rule's shape.)
+- **`FEATURES.md`'s "Add a bookmark" row ruled `[ ] gui`, not `—`.**
+  `pdfce-gui` work is paused (Ken, 2026-08-13) and the actual consumer is
+  the separate `pdfceGUI` project, which is not this repo's gui column —
+  same `R151`-adjacent reasoning as `Pass 105.0`'s ruling one filing
+  earlier, reached independently: a real gap behind a pause is `[ ]`,
+  not a shape mismatch.
+- **Pass ceiling stays 105**, next free 106 — `Pass 103.0` already held
+  its ID from the 184th filing; nothing new minted.
+- **`SESSION_LOG` filings 190 → 191.**
+
+**Findings + decisions:**
+
+**★ TWO CAUGHT DEFECTS FROM `Pass 103.0`'s OWN TEST SUITE, BOTH RAG'D TO
+`C:\personal_rag\pdf\`, BECAUSE BOTH GENERALISE PAST THIS PROJECT.**
+
+1. **A test oracle can be blind to a field by construction.** pdfce's
+   outline reader (`outline::read_outline`) walks `/First` then `/Next`
+   only, never `/Prev`. Ten of eleven new tests routed through that
+   reader — including one whose own doc comment claimed "checks the link
+   in both directions" — **all stayed green** when the `/Prev` write was
+   deleted from `add_outline_item`. Caught by adding a raw-dictionary
+   `/Last`→`/Prev` walk that bypasses the reader entirely. RAG'd:
+   `C:\personal_rag\pdf\lesson_20260819_outline_reader_walking_first_next_only_is_blind_to_prev_writes.md`
+   — general lesson: enumerate what a reader-as-oracle actually touches
+   before trusting it.
+2. **`/Parent` alone is not an outline-item identity signal.** ISO
+   32000-1 §12.3.3 Table 153 gives outline items **no `/Type` key** —
+   unlike almost every other structural PDF dictionary. The first parent-
+   validity check (`/Title` or `/Parent` present?) was satisfied by a
+   **page** object, since every page has `/Parent`; the bookmark spliced
+   into the page tree, `save` returned `Ok`, and no reader ever found it.
+   Fixed with a bounded, cycle-guarded reachability walk to
+   `/Root /Outlines` instead of a key-presence heuristic. RAG'd:
+   `C:\personal_rag\pdf\lesson_20260819_outline_items_have_no_type_key_so_parent_alone_is_not_an_identity_signal.md`
+   — a tighter key heuristic would have closed this specific hole and
+   preserved the bug's shape; only reachability is sound.
+
+**★ TWO MORE CAUGHT DEFECTS, RECORDED HERE AND IN `ROADMAP.md`, NOT RAG'D
+— they don't generalise past this project's own existing discipline.**
+Sabotaging `bump_outline_count`'s `is_item: bool` selector left the suite
+green (the root and item `/Count` rules coincide arithmetically for any
+well-formed document); the branch was removed rather than left
+untested — a sabotage failing to go red was evidence about the *code*,
+not the test, and it is already `R92`/`R43`'s discipline rather than a
+new finding. Separately, a CLI units bug: `--page 99` reported "page
+index 98 is out of range" because `PageOutOfRange` formats in the
+engine's 0-based units and the CLI's `--page` is 1-based — fixed once at
+the `report_edit_error` boundary, covering all eight 1-based `--page`
+callers; `--index`/`--object`/`--run`/`--node` confirmed 0-based
+throughout and unaffected.
+
+**★★ THE DISPATCH'S OWN HEADER UNDERCOUNTED ITS FINDINGS.** It read
+*"Three findings from this Pass worth recording"* and then listed four,
+lettered (A)–(D). Not silently absorbed: noted in `ROADMAP.md`'s
+`Pass 103.0` entry as the same species of error hard rule 10 exists to
+catch, occurring in a dispatch prompt rather than a filed figure — a
+cheap, harmless instance, recorded because the project's own convention
+is to record the shape wherever it appears, not only where it costs
+something.
+
+**★★★ A FLAGGED DISCREPANCY, NOT RECONCILED: the dispatch describes
+`b1ea628` as having "closed 2 of 3 Ghent survivors"; `ROADMAP.md`'s own
+190th-filing table counts 2 of the SIX claim-sweep survivors closed
+(items 24, 25), naming 23/26/27 as the three left byte-identical.** Both
+framings agree on the fact this filing needed (23/26/27 were untouched,
+which is exactly what `9a5d8b9` is filed as fixing), so the discrepancy
+did not block this filing — but the two counts use different
+denominators and nobody has said which the engineer intended. Carried as
+`ROADMAP.md` owed item **34**, not resolved here.
+
+**★ RULE-11 SWEEP OF THE RETIRED "no outline verb exists" CLAIM.**
+Grepped `docs/` and `crates/` for the claim (not only the string) that
+pdfce has no outline-authoring verb. **One survivor, engineer-owned,
+reported not edited:** `docs/NEXT_SESSION.md:67` still reads
+*"`EditSession::add_outline_item(parent, title, dest)` — no verb
+exists"*. Same disposition as every prior `NEXT_SESSION.md` survivor —
+cheap, overwritten each session, listed so the handoff is not the last
+document quoting a retired claim as current. No survivor found inside
+`crates/` doc comments. `docs/core-api/02-editing-and-saving.md` was
+already correct (updated in `d32872a` itself).
+
+**Still in flight:**
+- **Owed items 23, 26, 27** — provisionally closed by `9a5d8b9` per the
+  engineer's report; **unverified by this filing (no shell)**. See owed
+  item 36.
+- **Owed items 1, 3, 4, 6, 7, 10, 15, 17, 18, 19, 20, 28-remainder,
+  29–33, 34–36** carry forward unchanged (29–33 from the 190th filing;
+  34–36 opened this filing).
+- **`Pass 97.x`, the colorant compositor** — still top of the queue;
+  owed item 20 (re-run and re-cluster Ghent) is still its prerequisite,
+  unchanged.
+- **`Pass 102.1`, `Pass 103.1`–`103.3`, `Pass 101.1`** — all unstarted,
+  unchanged from the 190th filing.
+- **`pdfceGUI` reply owed:** items 2–5 of the five-part `insert_pages`
+  reply; the outline-authoring ask (part 2, ask 1) is answered and
+  shipped as `Pass 103.0` — a reply may be owed for that specific ask,
+  not tracked as a separate numbered item because the shipped Pass is
+  itself the answer.
+
+**For next session:**
+1. **When a shell is available, confirm `9a5d8b9` against live source**
+   at `main.rs:7102–7103`, `gstate.rs:476–498`, `edit.rs:3013–3019`
+   before treating owed items 23/26/27 as settled (owed item 36).
+2. **Reconcile or discard the "2 of 3" vs "2 of 6" framing of `b1ea628`**
+   (owed item 34) — a wording question, not a blocking one.
+3. Carried unchanged from the 190th filing: close owed 26 first among
+   any remaining claim-sweep work (it is the one a reader of
+   `blend_mode_from_name` still concludes pdfce cannot render four blend
+   modes from); rule on the `insert-pages` name collision (owed 29)
+   before writing any session-verb CLI subcommand; answer owed 31 in
+   `blend_nonsep.rs`'s module doc; re-run and re-cluster Ghent (owed 20).
+
+**Ledger effects (relayed/read from documents already on disk — NOT
+re-run this filing; no shell):**
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **105** | **105** (no mint — `Pass 103.0` already held its ID) |
+| decision records | **071** | **071** (none minted) |
+| standing rules | **R199** | **R199** (none minted) |
+| `SESSION_LOG` filings | **190** | **191** |
+| `personal_rag/pdf` lessons | **[prior count not re-verified]** | **+2** (`lesson_20260819_outline_reader_…`, `lesson_20260819_outline_items_have_no_type_key_…`) |
+
+**`FEATURES.md` — CHANGED, two rows, one split into two.** The read-only
+bookmark row dropped its now-false "**No authoring**" clause. A new
+Implemented row for `add_outline_item` sits beneath it: `[x]` core /
+`[x]` cli / `[ ]` gui (gui ruled a genuine gap behind the pause, not `—`
+— see *Decisions*). The Planned "Links and bookmarks authoring" row is
+narrowed to what remains (rename/reorder/delete/re-parent, links, named
+destinations) and its "no `EditSession` outline verb exists at all"
+clause retired.
+
+**`ARCHITECTURE.md` — UNCHANGED.** No architectural decision was made
+this filing and no body section went stale. Stated explicitly, per this
+role's own standing practice, because *"unchanged"* and *"not looked at"*
+are indistinguishable in an append-only record.
+
+**Terminology (rule 15):** no ce dimension or pdf dimension appears
+anywhere in this filing's shipped work.

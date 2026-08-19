@@ -9,8 +9,8 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 |---|---|
 | **Date** | 2026-08-13 |
 | **Verified against** | `7031296` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
-| **Primary subject** | `crates/pdfce-core/src/edit.rs` (26,034 lines) |
-| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 121 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
+| **Primary subject** | `crates/pdfce-core/src/edit.rs` (26,402 lines) |
+| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 122 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
 
@@ -61,9 +61,9 @@ Five consequences a GUI author must internalise before writing any code:
 
 ---
 
-## 1. Verb index — all 121 public `EditSession` methods
+## 1. Verb index — all 122 public `EditSession` methods
 
-**Count: 121.** Established by brace-matched extraction of the four
+**Count: 122.** Established by brace-matched extraction of the four
 `impl EditSession` blocks, matching `pub fn` / `pub const fn`, and checked
 on every run by `tools/check-core-api-verbs.py` — which is what caught this
 figure at 120 when `add_outline_item` landed.
@@ -170,7 +170,7 @@ need their own policy).
 |---|---|---|---|
 | Set one page's absolute rotation | `set_page_rotation(&mut self, page_index, degrees: i32) -> Result<(), EditError>` | 3848 | Refuses non-multiples of 90 (`RotationNotMultipleOf90`). |
 | Turn one page relative to its current rotation | `rotate_page_by(&mut self, page_index, delta: i32) -> Result<(), EditError>` | 3981 | Delegates to `set_page_rotation`. |
-| Delete pages | `delete_pages(&mut self, indices: &[usize]) -> Result<DeleteOutcome, EditError>` | 14644 | See `DeleteOutcome`, §1.23. |
+| Delete pages | `delete_pages(&mut self, indices: &[usize]) -> Result<DeleteOutcome, EditError>` | 14644 | See `DeleteOutcome`, §1.24. |
 | Delete pages, answering the pre-separation question | `delete_pages_with(&mut self, indices, separations: SeparationPolicy) -> Result<DeleteOutcome, EditError>` | 14663 | |
 | Reorder pages | `reorder_pages(&mut self, new_order: &[usize]) -> Result<(), EditError>` | 14944 | `NotAPermutation` if `new_order` is not one. ONE undo entry. |
 | Rotate several pages | `rotate_pages(&mut self, indices: &[usize], delta: i32) -> Result<usize, EditError>` | 15063 | Count of pages turned. ONE undo entry. |
@@ -494,7 +494,89 @@ CLI: `pdfce-cli add-bookmark --title … [--page N] [--top Y] [--under n]`,
 where `--under` takes the `n=` number `list-outline` prints. **The indices
 shift after every add** — they are positions in the current tree, not stable
 handles — so a batch of adds must re-list between them.
-### 1.20 ce dimensions (18) — detail in part 3
+### 1.20 Form-field adoption (1)
+
+> #### ★ Added 2026-08-19 — `Pass 103.1`
+>
+> Requested by `pdfceGUI`: *"`add_text_field` and friends **author a new**
+> **widget**; we need to register an **existing** widget into `/AcroForm`."*
+> The orphans `insert_pages` reports had correct geometry, correct
+> appearance and correct values — everything except an owner.
+
+| I want to… | Call | Returns |
+|---|---|---|
+| Adopt a widget | `adopt_widget(&mut self, widget: ObjId, name: Option<&str>) -> Result<AdoptOutcome, EditError>` | `AdoptOutcome { field_id, name, field_type, renamed, acroform_created }`. Creates `/AcroForm` if absent. ONE undo entry. |
+
+**It writes no geometry, appearance or value** — only the `/AcroForm`
+registration, plus `/T` when you rename. That is the point; the widget is
+already correct.
+
+`field_id` is **the same id as the widget**. Not an oversight: a merged
+field-widget is one dictionary serving as both, so there is no separate
+field object.
+
+#### ★★ Two orphans that look identical and are not
+
+Measured against a real AcroForm (`examples/orphan_probe.rs`, pdfbox corpus,
+12 fields over 13 widgets). Of the 13 widgets an insert orphans:
+
+| shape | count | what it carries | outcome |
+|---|---|---|---|
+| **merged field-widget** | 11 | its own `/FT`, `/T`, `/V`, `/DA` | adopts **losslessly** |
+| **bare kid** (radio group) | 2 | no field keys at all; only `/Parent`, which the copy drops | **cannot** be adopted |
+
+`InsertOutcome::orphaned_widgets_unrecoverable` counts the second row — new
+in this Pass, and additive, so it does not break the struct you already
+wired. **Warn on it before the operator starts adopting the others**, because
+*"11 controls need re-registering"* is a chore and *"2 controls have lost
+their identity and the only copy is in the file you inserted from"* is a
+decision, and the undifferentiated total states only the chore.
+
+A bare kid is refused with `WidgetHasNoFieldIdentity` unless you supply a
+`name`. Guessing would pick a name the source never used — and for a radio
+group it would turn one mutually-exclusive field into several independent
+ones, a form that looks right and behaves wrong.
+
+The predicate is **`/T`, not `/FT`**. §12.7.3.1 makes `/FT` *inheritable*, so
+a widget can resolve a type through an ancestor and still have no name; once
+adopted at the top level there is no ancestor left. A field with no name
+cannot be filled, exported or referred to, so surviving `/FT` is decoration
+on something unaddressable, not partial recovery.
+
+#### What is refused
+
+| Case | Error |
+|---|---|
+| no `/T` and no `name` | `WidgetHasNoFieldIdentity { id }` |
+| not a `/Subtype /Widget` in this document | `NotAWidget { id }` |
+| already reachable from `/AcroForm` `/Fields` | `WidgetAlreadyOwned { id }` |
+| resulting name already exists | `FieldNameTaken { name }` |
+| empty `name` | `FieldNameEmpty` |
+
+**The collision refusal is the non-obvious one.** §12.7.3.1 makes the fully
+qualified name the field's *identity*, so two top-level fields called
+`Address` are **one field with two widgets** — typing in either fills both.
+No viewer reports it; the operator finds it by typing. `pageops::assemble`
+meets the same problem on merge and auto-renames (`form_fields_renamed`);
+here the caller renames, because a shell adopting one widget at a time can
+ask, and `Address_2` is a name nobody chose.
+
+`field_type: None` means no `/FT` at all — legal, but once top-level there is
+nothing to inherit from, so no viewer knows how to render or fill it. Worth
+surfacing.
+
+`renamed` and `acroform_created` **cannot be recovered by re-reading the**
+**document**: a renamed widget looks like one that always had that name, and
+a fresh `/AcroForm` looks like an old one. This struct is the only
+disclosure.
+
+CLI: `pdfce-cli adopt-widget --page N --index I [--name X]`, addressed by the
+`page=`/`index=` pair `list-annotations` prints — an unregistered widget has
+no name for `list-fields` to show. Note that **`pdfce-cli insert-pages` does
+not produce orphans**: it calls `pageops::assemble`, which merges `/AcroForm`
+(and reports `fields_renamed=` / `fields_dropped=`). Only
+`EditSession::insert_pages` orphans.
+### 1.21 ce dimensions (18) — detail in part 3
 
 > #### ★ Group membership, renaming and deletion — added 2026-08-19
 >
@@ -547,7 +629,7 @@ handles — so a batch of adds must re-list between them.
 | Delete a ce dimension | `delete_dimension(&mut self, dimension) -> Result<(), EditError>` | 16178 | `/Annots` ref + dict + `/AP` + sidecar record. Group survives. |
 | **Translate** a ce dimension | `move_dimension(&mut self, dimension, dx, dy) -> Result<(), EditError>` | 16779 | ⚠️ Translates the **measured points** — takes the ce dimension off the feature it was measuring. |
 
-### 1.21 Fonts (6)
+### 1.22 Fonts (6)
 
 | I want to… | Call | Line | Returns |
 |---|---|---|---|
@@ -558,7 +640,7 @@ handles — so a batch of adds must re-list between them.
 | Ask whether embedding is refused | `embed_refusal(&self) -> Option<EditError>` | 16553 | ✅ Load-bearing. |
 | Add missing font programs | `embed_fonts(&mut self, &EmbedRequest) -> Result<EmbedPlan, EditError>` | 16625 | ONE undo entry. **The file gets bigger, and the save mode does not change that.** |
 
-### 1.22 Images (1 session verb + 3 pure previews on `NewImage`)
+### 1.23 Images (1 session verb + 3 pure previews on `NewImage`)
 
 | I want to… | Call | Line | Returns |
 |---|---|---|---|
@@ -567,7 +649,7 @@ handles — so a batch of adds must re-list between them.
 #### ★ The pure preview trio on `NewImage` — call these, do not re-derive them
 
 `&self`, no session, no side effects. The same relationship
-`preview_group_scale` (§1.20) has to `set_group_scale`: **a front end drawing
+`preview_group_scale` (§1.21) has to `set_group_scale`: **a front end drawing
 a preview must show the number the edit will produce.**
 
 | I want to preview… | Call | Returns |
@@ -598,7 +680,7 @@ number beside it. A 12 dpi placement is a legitimate deliberate act; the
 requester asked for the number *before* commit, not for something that stops
 them.
 
-### 1.23 Outcome structs — field reference
+### 1.24 Outcome structs — field reference
 
 Grep target for "what does this return actually contain".
 
