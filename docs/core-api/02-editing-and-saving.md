@@ -9,7 +9,7 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 |---|---|
 | **Date** | 2026-08-13 |
 | **Verified against** | `7031296` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
-| **Primary subject** | `crates/pdfce-core/src/edit.rs` (25,324 lines) |
+| **Primary subject** | `crates/pdfce-core/src/edit.rs` (25,425 lines) |
 | **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 120 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
@@ -175,7 +175,7 @@ need their own policy).
 | Rotate several pages | `rotate_pages(&mut self, indices: &[usize], delta: i32) -> Result<usize, EditError>` | 15063 | Count of pages turned. ONE undo entry. |
 | Set one page's `/MediaBox` | `set_media_box(&mut self, page_index: usize, rect: page_tree::Rect) -> Result<MediaBoxChange, EditError>` | 5013 | |
 | Set several pages' `/MediaBox` | `set_media_boxes(&mut self, indices: &[usize], rect: page_tree::Rect) -> Result<Vec<MediaBoxChange>, EditError>` | 5061 | |
-| **Insert pages from another document** | `insert_pages(&mut self, source: &DocumentView<'_>, source_pages: &[usize], position: pageops::InsertPosition) -> Result<usize, EditError>` | 16861 | Count of pages that arrived. **Read the warning below before writing a disclosure about it.** |
+| **Insert pages from another document** | `insert_pages(&mut self, source: &DocumentView<'_>, source_pages: &[usize], position: pageops::InsertPosition) -> Result<InsertOutcome, EditError>` | 16978 | `InsertOutcome { pages_inserted, orphaned_widgets }`. **Read the warning below before writing a disclosure about it.** |
 
 > #### ★★ `insert_pages`: THE WIDGETS ARRIVE, THEIR FIELDS DO NOT — and one
 > consumer has already shipped the wrong sentence about it
@@ -207,11 +207,17 @@ need their own policy).
 > [`pageops::insert`] merges all of it and returns a new document; the
 > difference is the cost of staying incremental.
 >
-> `Pass 102.0` adds a count of orphaned widgets so a shell can say this
-> precisely; `Pass 102.1` carries field definitions for fields whose widgets
-> are *wholly* on inserted pages. **102.1 does not retire 102.0** — a field
-> whose widgets are split across inserted and non-inserted pages leaves a
-> residue no merge can absorb, so the count is permanent.
+> **`Pass 102.0` SHIPPED 2026-08-19** — `InsertOutcome::orphaned_widgets` is
+> that count, so a shell can say *"three controls arrived that cannot be
+> filled"* instead of warning unconditionally. It is **exact, not
+> conservative**: `/AcroForm` is not merged and the copy remaps every object
+> number, so no field in the target can be claiming a widget that just
+> arrived.
+>
+> `Pass 102.1` will carry field definitions for fields whose widgets are
+> *wholly* on inserted pages. **102.1 does not retire 102.0** — a field whose
+> widgets are split across inserted and non-inserted pages leaves a residue
+> no merge can absorb, so the count is permanent.
 
 ### 1.9 Page-text editing (5) — detail in part 3
 

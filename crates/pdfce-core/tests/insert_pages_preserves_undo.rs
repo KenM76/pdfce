@@ -100,7 +100,11 @@ fn inserting_pages_leaves_earlier_history_undoable() {
     let added = session
         .insert_pages(&src_view, &[0], InsertPosition::End)
         .expect("insert succeeds");
-    assert_eq!(added, 1);
+    assert_eq!(added.pages_inserted, 1);
+    assert_eq!(
+        added.orphaned_widgets, 0,
+        "this fixture's page carries no widgets, so nothing is orphaned"
+    );
     assert_eq!(page_count(&session), 3);
 
     // Undo the insert.
@@ -232,7 +236,7 @@ fn inserting_no_pages_records_no_command() {
         session
             .insert_pages(&src_view, &[], InsertPosition::End)
             .expect("an empty insert is not an error"),
-        0
+        pdfce_core::edit::InsertOutcome::default()
     );
     assert!(
         session.undo().is_none(),
@@ -269,5 +273,69 @@ fn the_saved_file_carries_the_inserted_page_and_reloads() {
         slots.len(),
         3,
         "the saved file must carry all three pages, not just the session"
+    );
+}
+
+/// ★ `Pass 102.0` — inserting a page of form fields reports the widgets that
+/// arrived without them.
+///
+/// # The defect this number exists to let a shell describe
+///
+/// `insert_pages` copies everything reachable from a page, and a page's
+/// `/Annots` reaches its widget annotations. A form **field** is
+/// document-level — `/AcroForm` `/Fields` — and is reachable from no page at
+/// all. So the widgets arrive and the fields do not, and what the operator
+/// gets is **boxes that draw exactly like form fields, that they will click
+/// on, and that nothing can fill.**
+///
+/// Reported by the `pdfceGUI` session, who shipped a disclosure saying "the
+/// form fields did not come across" — which names the wrong failure, and
+/// sends an operator looking for missing fields instead of at the inert ones
+/// in front of them.
+///
+/// # Why the fixture is a real form and not a synthetic widget
+///
+/// Because the count has to be exercised against a document somebody else
+/// authored. A hand-built page with one `/Widget` would confirm the loop
+/// reads `/Annots`; it would not confirm that a real AcroForm's widgets are
+/// reachable the way this code assumes.
+#[test]
+fn inserting_a_form_page_reports_its_orphaned_widgets() {
+    let form = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(
+        "../../fixtures/external/pdfbox/pdfbox/src/test/resources/input/compression/acroform.pdf",
+    );
+    if !form.exists() {
+        eprintln!("SKIP: the external pdfbox corpus is not present");
+        return;
+    }
+    let src = Document::load(&form).expect("the form fixture loads");
+    let src_view = src.view();
+    let src_fields = pdfce_core::forms::parse_acroform(&src_view).map(|f| f.fields.len());
+    assert!(
+        src_fields.is_some_and(|n| n > 0),
+        "the fixture must actually carry an AcroForm, or this test proves nothing"
+    );
+
+    let target = doc_with_pages("target", 2);
+    let mut session = EditSession::new(target);
+    let out = session
+        .insert_pages(&src_view, &[0], InsertPosition::End)
+        .expect("insert succeeds");
+
+    assert_eq!(out.pages_inserted, 1);
+    assert!(
+        out.orphaned_widgets > 0,
+        "the source page carries widgets and the target has no /AcroForm, so \
+         every one of them is orphaned; got {}",
+        out.orphaned_widgets
+    );
+
+    // And the count is EXACT rather than conservative: the target genuinely
+    // has no field tree, so there is nothing that could be claiming them.
+    let after = session.view();
+    assert!(
+        pdfce_core::forms::parse_acroform(&after).is_none(),
+        "the target must still have no /AcroForm -- if it gained one, this \
+         count is measuring the wrong thing"
     );
 }

@@ -2654,6 +2654,65 @@ fn apply_markup_style(
     }
 }
 
+/// What [`EditSession::insert_pages`] brought across, and what it could not
+/// claim.
+///
+/// # Why this is a struct and not a page count
+///
+/// Because the page count was never the whole answer, and a bare `usize`
+/// made the rest of it invisible. `insert_pages` copies everything reachable
+/// from a page, and a page's `/Annots` reaches its **widget annotations** —
+/// but a form **field** is document-level, in `/AcroForm` `/Fields`, and is
+/// not reachable from any page. So the two halves of a form field separate.
+///
+/// Reported by the `pdfceGUI` session on 2026-08-18, measured on their side:
+///
+/// ```text
+/// SOURCE  fields=Some(12)
+/// TARGET  fields=None   annots=13   widgets=13
+/// ```
+///
+/// ★ **The result is not "the form fields did not come across".** It is
+/// **boxes that draw exactly like form fields, that an operator will click
+/// on, and that nothing can fill, because no field claims them.** That is
+/// worse than absence, and worse in a way this project already has a name
+/// for: a visible control that is silently inert.
+///
+/// They shipped a disclosure derived from a chat reply of mine that said
+/// only "the field tree does not come across", and it named the wrong
+/// failure — so an operator meeting it goes looking for missing fields
+/// rather than at the inert ones in front of them. *A disclosure that names
+/// the wrong failure is worse than none, because it is believed.*
+///
+/// Following [`DeleteOutcome`]'s shape: the verb that can surprise you
+/// returns what happened, not just how much.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub struct InsertOutcome {
+    /// How many pages arrived.
+    pub pages_inserted: usize,
+    /// Widget annotations that arrived **without the field that owns them**.
+    ///
+    /// Non-zero means the inserted pages carry controls that draw like form
+    /// fields and cannot be filled. A shell should say so **specifically** —
+    /// naming the count — rather than warning unconditionally that "form
+    /// fields may not have come across", which is both vaguer and wrong.
+    ///
+    /// # ★ This count is PERMANENT, not an interim measure
+    ///
+    /// The obvious next step is to carry the field definitions across for
+    /// fields whose widgets are all on inserted pages (`Pass 102.1`), and it
+    /// is worth doing. **It does not retire this number.** A field's widgets
+    /// can be **split** across inserted and non-inserted pages, and such a
+    /// field cannot be carried without either fracturing it or dragging in
+    /// widgets nobody asked to insert. A residue survives any merge, so the
+    /// count has to exist forever.
+    ///
+    /// The requesting shell framed this as *"(3) now and (1) later"*. It is
+    /// (3) **always**, with (1) layered on top.
+    pub orphaned_widgets: usize,
+}
+
 /// What becomes of a dimension group's members when the group is deleted.
 ///
 /// # Why this is a parameter and not a default
@@ -16980,10 +17039,10 @@ impl EditSession {
         source: &DocumentView<'_>,
         source_pages: &[usize],
         position: crate::pageops::InsertPosition,
-    ) -> Result<usize, EditError> {
+    ) -> Result<InsertOutcome, EditError> {
         self.check_certification()?;
         if source_pages.is_empty() {
-            return Ok(0);
+            return Ok(InsertOutcome::default());
         }
 
         let source_slots =
@@ -17035,7 +17094,7 @@ impl EditSession {
             new_page_ids.push(new_id);
         }
         if new_page_ids.is_empty() {
-            return Ok(0);
+            return Ok(InsertOutcome::default());
         }
 
         // Splice into the owning node's /Kids.
@@ -17065,6 +17124,45 @@ impl EditSession {
         let added = new_page_ids.len();
         self.bump_counts(&target_slots, at, parent_id, added, &mut scratch);
 
+        // ★ COUNT THE ORPHANS (`Pass 102.0`).
+        //
+        // Every widget on an inserted page is orphaned, and that is not a
+        // conservative estimate — it is exact. `/AcroForm` is document-level
+        // and is not merged by this verb, and the copy remaps every object
+        // number, so no field in the TARGET can be claiming a widget that
+        // just arrived from the SOURCE.
+        //
+        // Counted from `scratch` — the objects this insert is about to
+        // write — rather than by re-reading the pages afterwards, because
+        // the pages do not exist in `self.state` until the commit below and
+        // a post-hoc walk would have to duplicate the mapping to find them.
+        let orphaned_widgets = new_page_ids
+            .iter()
+            .filter_map(|id| match scratch.get(id) {
+                Some(Object::Dict(page)) => page.get(b"Annots"),
+                _ => None,
+            })
+            .filter_map(|annots| match annots {
+                Object::Array(list) => Some(list.clone()),
+                Object::Reference(r) => match scratch.get(r) {
+                    Some(Object::Array(list)) => Some(list.clone()),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .flatten()
+            .filter(|entry| {
+                let Object::Reference(r) = entry else {
+                    return false;
+                };
+                matches!(
+                    scratch.get(r),
+                    Some(Object::Dict(a))
+                        if matches!(a.get(b"Subtype"), Some(Object::Name(n)) if n.as_bytes() == b"Widget")
+                )
+            })
+            .count();
+
         let objects: Vec<ObjectWrite> = scratch
             .into_iter()
             .map(|(id, value)| ObjectWrite {
@@ -17079,7 +17177,10 @@ impl EditSession {
             removals: Vec::new(),
             trailer: None,
         });
-        Ok(added)
+        Ok(InsertOutcome {
+            pages_inserted: added,
+            orphaned_widgets,
+        })
     }
 
     /// Which `/Pages` node receives the arrivals, and at which `/Kids`
